@@ -3,6 +3,7 @@ package ca.bc.gov.mof.lexis.service.exemption;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.CALLS_REAL_METHODS;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -581,7 +582,20 @@ class OracleExemptionDetailsRpcServiceTest {
         .thenReturn(
             List.of(
                 new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
-                    1000456L, 95.04d, 94.96d, "00077881", "P", "T"),
+                    1000456L,
+                    95.04d,
+                    94.96d,
+                    "00077881",
+                    "00002176",
+                    "03",
+                    "12",
+                    "A",
+                    "BOB TURMEL",
+                    "EXPORT PERSON",
+                    "NORSKE SKOG CANADA LIMITED",
+                    "INTERNATIONAL FOREST PRODUCTS",
+                    "P",
+                    "T"),
                 new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
                     1000457L, 11.0d, 11.0d, "00077881", "P", "S")));
 
@@ -590,6 +604,21 @@ class OracleExemptionDetailsRpcServiceTest {
 
     assertThat(response.applications()).hasSize(2);
     assertThat(response.applications().get(0).requestedVolume()).isEqualTo("95.0");
+    assertThat(response.applications().get(0))
+        .satisfies(
+            application -> {
+              assertThat(application.ownerClientNumber()).isEqualTo("00077881");
+              assertThat(application.agentClientNumber()).isEqualTo("00002176");
+              assertThat(application.ownerClientLocationCode()).isEqualTo("03");
+              assertThat(application.agentClientLocationCode()).isEqualTo("12");
+              assertThat(application.applicantTypeCode()).isEqualTo("A");
+              assertThat(application.ownerContactName()).isEqualTo("BOB TURMEL");
+              assertThat(application.agentContactName()).isEqualTo("EXPORT PERSON");
+              assertThat(application.ownerCompanyName())
+                  .isEqualTo("NORSKE SKOG CANADA LIMITED");
+              assertThat(application.agentCompanyName())
+                  .isEqualTo("INTERNATIONAL FOREST PRODUCTS");
+            });
     assertThat(response.containsUnmanu()).isTrue();
     assertThat(response.ownerNumber()).isEqualTo("00077881");
   }
@@ -724,7 +753,8 @@ class OracleExemptionDetailsRpcServiceTest {
                     "00055667")));
 
     List<ExemptionDetailsRpcService.PermitItem> response =
-        service.getPermits("EX-205", permitNumber -> permitNumber == 7000123L);
+        service.getPermits(
+            "EX-205", permit -> permit.permitNumber() == 7000123L);
 
     assertThat(response).hasSize(1);
     assertThat(response.get(0).permitVolume()).isEqualTo("12.4");
@@ -745,7 +775,8 @@ class OracleExemptionDetailsRpcServiceTest {
                     7000124L, 12.0d, 0.0d, "Complete", "COM", null, null, null)));
 
     List<ExemptionDetailsRpcService.PermitItem> response =
-        service.getPermits("EX-205", permitNumber -> permitNumber == 7000123L);
+        service.getPermits(
+            "EX-205", permit -> permit.permitNumber() == 7000123L);
 
     assertThat(response)
         .extracting(
@@ -757,39 +788,73 @@ class OracleExemptionDetailsRpcServiceTest {
   }
 
   @Test
+  void largeBlanketOicPermitListShouldUseCursorOwnershipWithoutPerPermitReloads() {
+    List<ExemptionDetailsRpcRepository.PermitSummaryRow> permitRows =
+        java.util.stream.LongStream.range(7_000_000L, 7_001_000L)
+            .mapToObj(
+                permitNumber ->
+                    new ExemptionDetailsRpcRepository.PermitSummaryRow(
+                        permitNumber,
+                        10.0d,
+                        5.0d,
+                        "Active",
+                        "ACT",
+                        null,
+                        permitNumber % 2 == 0 ? "00012345" : "00099999",
+                        ""))
+            .toList();
+    when(repository.findExemptionTypeCodeByExemptionNumber("BO-LARGE"))
+        .thenReturn(Optional.of("B"));
+    when(repository.findPermitsByExemptionNumber("BO-LARGE"))
+        .thenReturn(permitRows);
+
+    List<ExemptionDetailsRpcService.PermitItem> response =
+        service.getPermits(
+            "BO-LARGE",
+            permit ->
+                permit.oicLike()
+                    && "00012345".equals(permit.ownerClientNumber()));
+
+    assertThat(response).hasSize(1_000);
+    assertThat(response.stream().filter(ExemptionDetailsRpcService.PermitItem::canViewPermit))
+        .hasSize(500);
+    verify(repository).findExemptionTypeCodeByExemptionNumber("BO-LARGE");
+    verify(repository).findPermitsByExemptionNumber("BO-LARGE");
+  }
+
+  @Test
   void getBlanketTotalsShouldSumRequestedAndCompletedVolume() {
-    when(repository.findPermitsByExemptionNumber("EX-205"))
-        .thenReturn(
-            List.of(
-                new ExemptionDetailsRpcRepository.PermitSummaryRow(
-                    1L, 20.0d, 0.0d, "Complete", "COM", null, "", ""),
-                new ExemptionDetailsRpcRepository.PermitSummaryRow(
-                    2L, 35.0d, 0.0d, "Active", "ACT", null, "", "")));
+    when(repository.findBlanketOicTotals("EX-205"))
+        .thenReturn(new ExemptionDetailsRpcRepository.BlanketOicTotalsRow(55.0d, 20.0d));
 
     ExemptionDetailsRpcService.BlanketOicTotalsResponse response =
         service.getBlanketOicTotals("EX-205");
 
     assertThat(response.requestedVolume()).isEqualTo("55.0");
     assertThat(response.completedVolume()).isEqualTo("20.0");
+    verify(repository).findBlanketOicTotals("EX-205");
+    verify(repository, never()).findPermitsByExemptionNumber("EX-205");
   }
 
   @Test
   void getDocumentDetailsShouldMergeExemptionAndApplicationDocs() {
-    when(repository.findExemptionDocumentDetailsByExemptionNumber("EX-205"))
+    when(repository.findExemptionDocumentContextRows("EX-205"))
         .thenReturn(
             List.of(
-                new ExemptionDetailsRpcRepository.DocumentRow(
-                    10L, "exemption.pdf", "", "UPLOAD")));
-    when(repository.findApplicationSummariesByExemptionNumber("EX-205"))
-        .thenReturn(
-            List.of(
-                new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
-                    1000456L, 0.0d, 0.0d, "00077881", "P", "S")));
-    when(repository.findApplicationDocumentDetailsByApplicationNumber(1000456L))
-        .thenReturn(
-            List.of(
-                new ExemptionDetailsRpcRepository.DocumentRow(20L, "application.pdf", "desc", "UPLOAD")));
-    when(repository.findAttachmentTypeDescription("UPLOAD")).thenReturn(Optional.of("Uploaded document"));
+                new ExemptionDetailsRpcRepository.ExemptionDocumentContextRow(
+                    new ExemptionDetailsRpcRepository.DocumentRow(
+                        10L, "exemption.pdf", "", "UPLOAD"),
+                    "Uploaded document",
+                    "exemption",
+                    null,
+                    true),
+                new ExemptionDetailsRpcRepository.ExemptionDocumentContextRow(
+                    new ExemptionDetailsRpcRepository.DocumentRow(
+                        20L, "application.pdf", "desc", "UPLOAD"),
+                    "Uploaded document",
+                    "application",
+                    1000456L,
+                    false)));
 
     List<ExemptionDetailsRpcService.DocumentItem> response = service.getDocumentDetails("EX-205");
 
@@ -804,7 +869,10 @@ class OracleExemptionDetailsRpcServiceTest {
     assertThat(response.get(1).deletable()).isFalse();
     assertThat(service.documentCanBeRemovedFromExemption(10L, "EX-205")).isTrue();
     assertThat(service.documentCanBeRemovedFromExemption(20L, "EX-205")).isFalse();
-    verify(repository, times(3)).findApplicationDocumentDetailsByApplicationNumber(1000456L);
+    verify(repository, times(3)).findExemptionDocumentContextRows("EX-205");
+    verify(repository, never()).findApplicationSummariesByExemptionNumber("EX-205");
+    verify(repository, never()).findApplicationDocumentDetailsByApplicationNumber(anyLong());
+    verify(repository, never()).findAttachmentTypeDescription(any());
   }
 
   @Test

@@ -388,13 +388,12 @@ export const fetchApplicationSummarySnapshot = async (
   applicationNumber: string,
 ): Promise<ApplicationSummarySnapshot | null> => {
   try {
-    const response = await apiService.getCachedResponse<unknown>(
-      '/lexis/rpc/application-details/application-summary',
-      {
-        params: { applicationNumber },
-      },
-      { ttlMs: ITEMS_CACHE_TTL_MS },
-    )
+    const path = '/lexis/rpc/application-details/application-summary'
+    const config = { params: { applicationNumber } }
+    const response = await apiService.getCachedResponse<unknown>(path, config, {
+      ttlMs: ITEMS_CACHE_TTL_MS,
+    })
+    apiService.registerRecordVersion('application', applicationNumber, response, path, config)
     return normalizeApplicationSummarySnapshot(response.data)
   } catch (error) {
     throw toSearchServiceError('Unable to load application summary fields.', error)

@@ -13,9 +13,6 @@ import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResultDto;
 import ca.bc.gov.mof.lexis.repository.application.LexisApplicationRepository;
 import ca.bc.gov.mof.lexis.repository.report.LexisReportScheduleRepository;
-import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
-import java.time.Clock;
-import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
@@ -33,21 +30,12 @@ public class OracleLexisApplicationService implements LexisApplicationService {
 
   private final LexisApplicationRepository repository;
   private final LexisReportScheduleRepository scheduleRepository;
-  private final Clock clock;
 
   @Autowired
   public OracleLexisApplicationService(
       LexisApplicationRepository repository, LexisReportScheduleRepository scheduleRepository) {
-    this(repository, scheduleRepository, LexisBusinessTime.systemClock());
-  }
-
-  OracleLexisApplicationService(
-      LexisApplicationRepository repository,
-      LexisReportScheduleRepository scheduleRepository,
-      Clock clock) {
     this.repository = repository;
     this.scheduleRepository = scheduleRepository;
-    this.clock = clock == null ? LexisBusinessTime.systemClock() : clock;
   }
 
   @Override
@@ -59,7 +47,8 @@ public class OracleLexisApplicationService implements LexisApplicationService {
         safeList(repository.loadProductTypeOptions()),
         safeList(repository.loadGrowthTypeOptions()),
         safeList(repository.loadRegionOptions()),
-        currentScheduleOptions());
+        currentScheduleOptions(),
+        nextScheduleOptions());
   }
 
   @Override
@@ -158,18 +147,30 @@ public class OracleLexisApplicationService implements LexisApplicationService {
 
   private List<CodeNameDto> currentScheduleOptions() {
     List<CodeNameDto> options = new ArrayList<>();
-    LocalDate today = LocalDate.now(clock);
     options.addAll(
-        safeList(scheduleRepository.findUpcomingExportSchedules()).stream()
-        .filter(row -> row.exportScheduleId() != null && row.advertisingDate() != null)
-        .filter(row -> !row.advertisingDate().isBefore(today))
-        .limit(2)
-        .map(
-            row ->
-                new CodeNameDto(
-                    String.valueOf(row.exportScheduleId()),
-                    row.advertisingDate().format(DISPLAY_DATE_FORMATTER)))
-        .toList());
+        safeList(scheduleRepository.findCurrentSchedulesRequired()).stream()
+            .filter(row -> row.exportScheduleId() != null && row.advertisingDate() != null)
+            .map(
+                row ->
+                    new CodeNameDto(
+                        String.valueOf(row.exportScheduleId()),
+                        row.advertisingDate().format(DISPLAY_DATE_FORMATTER)))
+            .toList());
+    options.add(new CodeNameDto("", "Blank"));
+    return options;
+  }
+
+  private List<CodeNameDto> nextScheduleOptions() {
+    List<CodeNameDto> options = new ArrayList<>();
+    options.addAll(
+        safeList(scheduleRepository.findNextSchedulesRequired()).stream()
+            .filter(row -> row.exportScheduleId() != null && row.advertisingDate() != null)
+            .map(
+                row ->
+                    new CodeNameDto(
+                        String.valueOf(row.exportScheduleId()),
+                        row.advertisingDate().format(DISPLAY_DATE_FORMATTER)))
+            .toList());
     options.add(new CodeNameDto("", "Blank"));
     return options;
   }

@@ -13,11 +13,14 @@ import {
   updateApplicationPackage,
 } from '@/service/provincial-application-items-service'
 
-const { deleteMock, getCachedResponseMock, postMock } = vi.hoisted(() => ({
-  deleteMock: vi.fn(),
-  getCachedResponseMock: vi.fn(),
-  postMock: vi.fn(),
-}))
+const { deleteMock, getCachedResponseMock, postMock, registerRecordVersionMock } = vi.hoisted(
+  () => ({
+    deleteMock: vi.fn(),
+    getCachedResponseMock: vi.fn(),
+    postMock: vi.fn(),
+    registerRecordVersionMock: vi.fn(),
+  }),
+)
 
 vi.mock('@/service/api-service', () => ({
   default: {
@@ -26,6 +29,7 @@ vi.mock('@/service/api-service', () => ({
       post: postMock,
     }),
     getCachedResponse: getCachedResponseMock,
+    registerRecordVersion: registerRecordVersionMock,
   },
 }))
 
@@ -413,6 +417,15 @@ describe('provincial-application-items-service', () => {
         params: { applicationNumber: '321' },
       },
       { ttlMs: 30000 },
+    )
+    expect(registerRecordVersionMock).toHaveBeenCalledWith(
+      'application',
+      '321',
+      expect.objectContaining({ data: expect.any(Object) }),
+      '/lexis/rpc/application-details/application-summary',
+      {
+        params: { applicationNumber: '321' },
+      },
     )
   })
 

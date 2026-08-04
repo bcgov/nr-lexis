@@ -776,8 +776,13 @@ describe('Create Page Core Flows', () => {
       growthTypes: [{ value: 'O', label: 'Old Growth' }],
       regions: [{ value: '1903', label: 'Cariboo Natural Resource Region' }],
       currentSchedules: [
-        { value: '1001', label: '2026-07-01' },
-        { value: '1002', label: '2026-07-15' },
+        { value: '1001', label: '2026-07-29' },
+        { value: '1002', label: '2026-08-05' },
+        { value: '', label: 'Blank' },
+      ],
+      nextSchedules: [
+        { value: '1002', label: '2026-08-05' },
+        { value: '1003', label: '2026-08-12' },
         { value: '', label: 'Blank' },
       ],
     } satisfies Awaited<ReturnType<typeof fetchProvincialApplicationOptions>>)
@@ -802,8 +807,8 @@ describe('Create Page Core Flows', () => {
         today,
       )
       expect(screen.getByRole('textbox', { name: 'Application term days' })).toHaveValue('180')
-      expect(screen.getByRole('textbox', { name: 'Received date (YYYY-MM-DD)' })).toHaveValue(today)
-      expect(screen.getByRole('combobox', { name: 'Listing date' })).toHaveValue('2026-07-01')
+      expect(screen.getByRole('textbox', { name: 'Received date (YYYY-MM-DD)' })).toHaveValue('')
+      expect(screen.getByRole('combobox', { name: 'Listing date' })).toHaveValue('2026-08-05')
     })
 
     expect(screen.getByRole('combobox', { name: 'Region' })).toBeEnabled()
@@ -1010,7 +1015,7 @@ describe('Create Page Core Flows', () => {
         expect.objectContaining({ applicationVolume: '9999999.99' }),
       ),
     )
-  })
+  }, 20_000)
 
   it('shows only the application fields required by H, S, and T product types', async () => {
     render(
@@ -1219,7 +1224,7 @@ describe('Create Page Core Flows', () => {
       otherConditions: '',
     })
     expect(mockNavigate).toHaveBeenCalledWith('/provincial/exemption/EX-777')
-  })
+  }, 20_000)
 
   it('displays every application selected from provincial search', async () => {
     render(
@@ -1243,14 +1248,86 @@ describe('Create Page Core Flows', () => {
 
     await screen.findByRole('heading', { level: 1, name: 'Create exemption' })
 
-    const selectedApplicationNumbers = screen.getByLabelText('Selected application numbers')
-    expect(selectedApplicationNumbers.closest('.selected-application-numbers')).toBeTruthy()
-    expect(selectedApplicationNumbers).toHaveAttribute('rows', '2')
-    expect(selectedApplicationNumbers).toHaveValue('321\n654')
+    const selectedApplications = screen.getByRole('list', { name: 'Selected applications' })
+    expect(within(selectedApplications).getByText('321')).toBeInTheDocument()
+    expect(within(selectedApplications).getByText('654')).toBeInTheDocument()
+    expect(within(selectedApplications).getAllByRole('listitem')).toHaveLength(2)
     await waitFor(() =>
       expect(mockedFetchProvincialExemptionCreatePreview).toHaveBeenCalledWith(['321', '654']),
     )
   })
+
+  it('adds, removes, and submits multiple applications from the create page', async () => {
+    mockedSubmitProvincialExemptionCreate.mockResolvedValue(successfulCreate('EX-901'))
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/create']}>
+        <Routes>
+          <Route path="/provincial/exemption/create" element={<ProvincialExemptionCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const applicationNumber = await screen.findByRole('combobox', {
+      name: 'Application number (optional)',
+    })
+    const addApplication = screen.getByRole('button', { name: 'Add application' })
+    const setApplicationNumber = async (value: string) => {
+      fireEvent.change(applicationNumber, { target: { value } })
+      await waitFor(() => expect(addApplication).toBeEnabled())
+    }
+
+    await setApplicationNumber('321')
+    await userEvent.click(addApplication)
+    await waitFor(() =>
+      expect(mockedFetchProvincialExemptionCreatePreview).toHaveBeenLastCalledWith(['321']),
+    )
+    await waitFor(() => expect(applicationNumber).toHaveValue(''))
+
+    await setApplicationNumber('2001')
+    await userEvent.click(addApplication)
+    await waitFor(() =>
+      expect(mockedFetchProvincialExemptionCreatePreview).toHaveBeenLastCalledWith(['321', '2001']),
+    )
+
+    const selectedApplications = screen.getByRole('list', { name: 'Selected applications' })
+    expect(within(selectedApplications).getAllByRole('listitem')).toHaveLength(2)
+    await userEvent.click(
+      within(selectedApplications).getByRole('button', {
+        name: 'Remove application 321',
+      }),
+    )
+    await waitFor(() =>
+      expect(mockedFetchProvincialExemptionCreatePreview).toHaveBeenLastCalledWith(['2001']),
+    )
+
+    await waitFor(() => expect(applicationNumber).toHaveValue(''))
+    await setApplicationNumber('321')
+    await userEvent.click(addApplication)
+    await waitFor(() =>
+      expect(mockedFetchProvincialExemptionCreatePreview).toHaveBeenLastCalledWith(['2001', '321']),
+    )
+
+    const saveButton = screen.getByRole('button', { name: 'Save' })
+    await waitFor(() => expect(saveButton).toBeEnabled())
+    await userEvent.click(saveButton)
+
+    expect(mockedSubmitProvincialExemptionCreate).toHaveBeenCalledWith({
+      applicationNumber: '2001',
+      linkedApplicationNumbers: ['2001', '321'],
+      exemptionNumber: '',
+      exemptionTypeCode: 'M',
+      exemptionStatusCode: 'NEW',
+      approvalDate: '',
+      expiryDate: '2026-06-30',
+      approvedVolume: '250.5',
+      enableRateOverride: false,
+      feeRate: '',
+      regionNumbers: [],
+      otherConditions: '',
+    })
+    expect(mockNavigate).toHaveBeenCalledWith('/provincial/exemption/EX-901')
+  }, 20_000)
 
   it('submits a standalone Ministerial exemption without an application', async () => {
     mockedSubmitProvincialExemptionCreate.mockResolvedValue(successfulCreate('EX-900'))

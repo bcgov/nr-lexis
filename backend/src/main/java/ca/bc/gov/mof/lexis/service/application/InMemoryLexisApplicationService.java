@@ -204,6 +204,7 @@ public class InMemoryLexisApplicationService implements LexisApplicationService 
         PRODUCT_TYPES,
         GROWTH_TYPES,
         REGIONS,
+        List.of(),
         List.of());
   }
 

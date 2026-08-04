@@ -76,6 +76,7 @@ const exemptionDetail: ProvincialExemptionDetail = {
   exemptionTypeDescription: 'Blanket Order in Council',
   exemptionStatusCode: 'ACT',
   exemptionStatusDescription: 'Active',
+  author: 'idir\\exemption-author',
   ownerClientNumber: '',
   agentClientNumber: '',
   applicationNumber: null,
@@ -201,6 +202,10 @@ describe('Provincial exemption edit context', () => {
     ).closest('.cds--tile')
     expect(summaryCard).toBeTruthy()
     expect(within(summaryCard as HTMLElement).queryByText('Status')).not.toBeInTheDocument()
+    expect(within(summaryCard as HTMLElement).getByText('Author')).toBeInTheDocument()
+    expect(
+      within(summaryCard as HTMLElement).getByText('idir\\exemption-author'),
+    ).toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: 'Applications' })).not.toBeInTheDocument()
 
     await userEvent.click(await screen.findByRole('tab', { name: 'Fees' }))
@@ -996,6 +1001,7 @@ describe('Provincial exemption edit context', () => {
     expect(screen.getAllByText('Expired')).not.toHaveLength(0)
     expect(screen.queryByRole('button', { name: 'Edit exemption' })).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('tab', { name: 'Documents' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit documents' }))
     expect(await screen.findByRole('button', { name: 'Add document' })).toBeInTheDocument()
     expect(vi.mocked(updateExemption)).not.toHaveBeenCalled()
   })

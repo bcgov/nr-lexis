@@ -1,6 +1,10 @@
 package ca.bc.gov.mof.lexis.service.session;
 
+import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
+
+import ca.bc.gov.mof.lexis.dto.application.ApplicationAccessContextDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
+import ca.bc.gov.mof.lexis.dto.exemption.ExemptionAccessDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferDetailDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitAccessDto;
@@ -8,7 +12,6 @@ import ca.bc.gov.mof.lexis.dto.permit.PermitDetailDto;
 import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
-import ca.bc.gov.mof.lexis.service.exemption.ExemptionDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.exemption.ExemptionService;
 import ca.bc.gov.mof.lexis.service.offer.PurchaseOfferService;
 import ca.bc.gov.mof.lexis.service.permit.PermitService;
@@ -16,7 +19,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.dao.DataRetrievalFailureException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
@@ -36,7 +38,6 @@ public class ProvincialAuthorizationService {
   private final ObjectProvider<LexisApplicationService> applicationServiceProvider;
   private final ObjectProvider<ApplicationDetailsRpcService> applicationDetailsServiceProvider;
   private final ObjectProvider<ExemptionService> exemptionServiceProvider;
-  private final ObjectProvider<ExemptionDetailsRpcService> exemptionDetailsServiceProvider;
   private final ObjectProvider<PermitService> permitServiceProvider;
   private final ObjectProvider<PurchaseOfferService> offerServiceProvider;
 
@@ -46,7 +47,6 @@ public class ProvincialAuthorizationService {
       ObjectProvider<LexisApplicationService> applicationServiceProvider,
       ObjectProvider<ApplicationDetailsRpcService> applicationDetailsServiceProvider,
       ObjectProvider<ExemptionService> exemptionServiceProvider,
-      ObjectProvider<ExemptionDetailsRpcService> exemptionDetailsServiceProvider,
       ObjectProvider<PermitService> permitServiceProvider,
       ObjectProvider<PurchaseOfferService> offerServiceProvider) {
     this.sessionService = sessionService;
@@ -54,7 +54,6 @@ public class ProvincialAuthorizationService {
     this.applicationServiceProvider = applicationServiceProvider;
     this.applicationDetailsServiceProvider = applicationDetailsServiceProvider;
     this.exemptionServiceProvider = exemptionServiceProvider;
-    this.exemptionDetailsServiceProvider = exemptionDetailsServiceProvider;
     this.permitServiceProvider = permitServiceProvider;
     this.offerServiceProvider = offerServiceProvider;
   }
@@ -72,6 +71,45 @@ public class ProvincialAuthorizationService {
             .findByApplicationNumber(applicationNumber)
             .map(detail -> canAccessApplication(authentication, detail))
             .orElse(false);
+  }
+
+  /** Authorizes a preloaded application projection without another application lookup. */
+  public boolean canAccessApplication(
+      Authentication authentication, ApplicationAccessContextDto application) {
+    if (application == null || application.applicationNumber() == null
+        || application.applicationNumber() < 1) {
+      return false;
+    }
+    Set<String> currentRoles = roles(authentication);
+    if (currentRoles.contains(ROLE_ADMIN)) {
+      return true;
+    }
+    if ("F".equalsIgnoreCase(application.jurisdictionCode())) {
+      return currentRoles.contains(ROLE_APPLICATION_APPROVER)
+          || (currentRoles.contains(ROLE_READ_ONLY)
+              && canAccessOrgUnits(
+                  authentication,
+                  application.orgUnitNumber() == null
+                      ? List.of()
+                      : List.of(application.orgUnitNumber()),
+                  OrgUnitSurface.FEDERAL_APPLICATION_SEARCH));
+    }
+    if (!"P".equalsIgnoreCase(application.jurisdictionCode())) {
+      return false;
+    }
+    String scopedClientNumber = scopedClientNumber(authentication);
+    if (scopedClientNumber != null) {
+      return matchesClient(
+          scopedClientNumber,
+          application.ownerClientNumber(),
+          application.agentClientNumber());
+    }
+    return canAccessOrgUnits(
+        authentication,
+        application.orgUnitNumber() == null
+            ? List.of()
+            : List.of(application.orgUnitNumber()),
+        OrgUnitSurface.APPLICATION_DETAIL);
   }
 
   public boolean canAccessApplication(
@@ -99,6 +137,28 @@ public class ProvincialAuthorizationService {
             ? List.of()
             : List.of(application.orgUnitNumber()),
         OrgUnitSurface.APPLICATION_DETAIL);
+  }
+
+  public boolean canAccessApplicationClientLookup(
+      Authentication authentication, Long applicationNumber, String clientNumber) {
+    String requestedClientNumber = trimToNull(clientNumber);
+    LexisApplicationService service = applicationServiceProvider.getIfAvailable();
+    if (service == null
+        || applicationNumber == null
+        || applicationNumber < 1
+        || requestedClientNumber == null) {
+      return false;
+    }
+    return service
+        .findByApplicationNumber(applicationNumber)
+        .filter(application -> canAccessApplication(authentication, application))
+        .map(
+            application ->
+                matchesClient(
+                    requestedClientNumber,
+                    application.ownerClientNumber(),
+                    application.agentClientNumber()))
+        .orElse(false);
   }
 
   public boolean canReviewApplication(Authentication authentication, Long applicationNumber) {
@@ -140,9 +200,40 @@ public class ProvincialAuthorizationService {
       return false;
     }
     return service
-        .findByExemptionNumber(exemptionNumber.trim())
-        .map(detail -> canAccessExemption(authentication, detail))
+        .findAccessByExemptionNumber(exemptionNumber.trim())
+        .map(access -> canAccessExemption(authentication, access))
         .orElse(false);
+  }
+
+  private boolean canAccessExemption(
+      Authentication authentication, ExemptionAccessDto exemption) {
+    Set<String> currentRoles = roles(authentication);
+    if (!canViewBlanketOic(currentRoles) && exemption.blanketOic()) {
+      return false;
+    }
+
+    String scopedClientNumber = scopedClientNumber(authentication);
+    if (scopedClientNumber != null) {
+      if ("NEW".equalsIgnoreCase(exemption.exemptionStatusCode())) {
+        return false;
+      }
+      if (exemption.blanketOic()) {
+        return true;
+      }
+      ExemptionService service = exemptionServiceProvider.getIfAvailable();
+      return service != null
+          && service.hasLinkedProvincialApplicationForClient(
+              exemption.exemptionNumber(), scopedClientNumber);
+    }
+    if (!isOrgUnitRestricted(currentRoles, OrgUnitSurface.EXEMPTION_DETAIL)) {
+      return true;
+    }
+    ExemptionService service = exemptionServiceProvider.getIfAvailable();
+    return service != null
+        && canAccessOrgUnits(
+            authentication,
+            service.findOrgUnitNumbers(exemption.exemptionNumber()),
+            OrgUnitSurface.EXEMPTION_DETAIL);
   }
 
   public boolean canAccessExemption(
@@ -210,6 +301,28 @@ public class ProvincialAuthorizationService {
         permit.orgUnitNumber());
   }
 
+  public boolean canAccessPermitClientLookup(
+      Authentication authentication, Long permitNumber, String clientNumber) {
+    String requestedClientNumber = trimToNull(clientNumber);
+    PermitService service = permitServiceProvider.getIfAvailable();
+    if (service == null
+        || permitNumber == null
+        || permitNumber < 1
+        || requestedClientNumber == null) {
+      return false;
+    }
+    return service
+        .findAccessByPermitNumber(permitNumber)
+        .filter(permit -> canAccessPermit(authentication, permit))
+        .map(
+            permit ->
+                matchesClient(
+                    requestedClientNumber,
+                    permit.ownerClientNumber(),
+                    permit.applicantClientNumber()))
+        .orElse(false);
+  }
+
   private boolean canAccessPermit(Authentication authentication, PermitAccessDto permit) {
     return canAccessPermit(
         authentication,
@@ -217,6 +330,26 @@ public class ProvincialAuthorizationService {
         permit.ownerClientNumber(),
         permit.applicantClientNumber(),
         permit.orgUnitNumber());
+  }
+
+  /**
+   * Legacy OIC and Blanket OIC permit lists authorize industry users from the permit owner/agent
+   * fields only. The supplied projection avoids reloading each permit while rendering an
+   * exemption's permit table.
+   */
+  public boolean canAccessExemptionPermit(
+      Authentication authentication, PermitAccessDto permit, boolean oicLike) {
+    if (permit == null) {
+      return false;
+    }
+    String scopedClientNumber = scopedClientNumber(authentication);
+    if (oicLike && scopedClientNumber != null) {
+      return matchesClient(
+          scopedClientNumber,
+          permit.ownerClientNumber(),
+          permit.applicantClientNumber());
+    }
+    return canAccessPermit(authentication, permit);
   }
 
   private boolean canAccessPermit(
@@ -529,68 +662,21 @@ public class ProvincialAuthorizationService {
       return false;
     }
     PermitService permitService = permitServiceProvider.getIfAvailable();
-    LexisApplicationService applicationService = applicationServiceProvider.getIfAvailable();
-    if (permitService == null || applicationService == null) {
+    if (permitService == null) {
       return false;
     }
-
-    List<Long> applicationNumbers =
-        permitService.findLinkedApplicationNumbers(permitNumber);
-    if (applicationNumbers == null) {
-      throw new DataRetrievalFailureException(
-          "Linked permit applications could not be loaded.");
-    }
-    for (Long applicationNumber : applicationNumbers) {
-      if (applicationNumber == null || applicationNumber < 1) {
-        continue;
-      }
-      if (applicationService
-          .findByApplicationNumber(applicationNumber)
-          .map(
-              application ->
-                  "P".equalsIgnoreCase(application.jurisdictionCode())
-                      && matchesApplicationClient(scopedClientNumber, application))
-          .orElse(false)) {
-        return true;
-      }
-    }
-    return false;
+    return permitService.hasLinkedProvincialApplicationForClient(
+        permitNumber, scopedClientNumber);
   }
 
   private boolean canAccessLinkedExemptionApplication(
       String scopedClientNumber, String exemptionNumber) {
-    ExemptionDetailsRpcService exemptionDetailsService =
-        exemptionDetailsServiceProvider.getIfAvailable();
-    LexisApplicationService applicationService = applicationServiceProvider.getIfAvailable();
-    if (exemptionDetailsService == null || applicationService == null) {
+    ExemptionService exemptionService = exemptionServiceProvider.getIfAvailable();
+    if (exemptionService == null) {
       return false;
     }
-
-    List<Long> applicationNumbers =
-        exemptionDetailsService.getApplicationNumbersForMutation(exemptionNumber);
-    if (applicationNumbers == null) {
-      throw new DataRetrievalFailureException(
-          "Linked exemption applications could not be loaded.");
-    }
-    boolean matched = false;
-    for (Long applicationNumber : applicationNumbers) {
-      if (applicationNumber == null || applicationNumber < 1) {
-        throw new DataRetrievalFailureException(
-            "A linked exemption application has an invalid application number.");
-      }
-      LexisApplicationDetailDto application =
-          applicationService
-              .findByApplicationNumber(applicationNumber)
-              .orElseThrow(
-                  () ->
-                      new DataRetrievalFailureException(
-                          "A linked exemption application could not be loaded."));
-      if ("P".equalsIgnoreCase(application.jurisdictionCode())
-          && matchesApplicationClient(scopedClientNumber, application)) {
-        matched = true;
-      }
-    }
-    return matched;
+    return exemptionService.hasLinkedProvincialApplicationForClient(
+        exemptionNumber, scopedClientNumber);
   }
 
   private boolean canAccessFederalApplication(
@@ -640,7 +726,7 @@ public class ProvincialAuthorizationService {
   private String scopedClientNumber(Authentication authentication) {
     LexisSessionService.ForestClientScope scope =
         sessionService.resolveForestClientScope(authentication);
-    if (scope.invalid()) {
+    if (scope.invalid() || scope.selectionRequired()) {
       throw new AccessDeniedException(scope.failureReason());
     }
     return scope.clientNumber();

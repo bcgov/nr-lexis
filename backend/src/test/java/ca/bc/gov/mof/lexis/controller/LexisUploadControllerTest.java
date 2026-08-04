@@ -17,7 +17,6 @@ import static org.mockito.Mockito.when;
 import ca.bc.gov.mof.lexis.dto.application.ApplicationEditLockDto;
 import ca.bc.gov.mof.lexis.dto.upload.ApplicationSubmissionImportResultDto;
 import ca.bc.gov.mof.lexis.dto.upload.LexisUploadResultDto;
-import ca.bc.gov.mof.lexis.security.CognitoUserInfoService;
 import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationEditLockService;
 import ca.bc.gov.mof.lexis.service.permit.OracleAggregateRowLockService;
@@ -3502,8 +3501,7 @@ class LexisUploadControllerTest {
             applicationEditLockService);
     controller.setProvincialAuthorizationService(provincialAuthorizationService);
     controller.setDocumentUploadMutationPolicy(documentUploadMutationPolicy);
-    controller.setLexisPrincipalService(
-        new LexisPrincipalService(new CognitoUserInfoService("")));
+    controller.setLexisPrincipalService(new LexisPrincipalService());
     return controller;
   }
 

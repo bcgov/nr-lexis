@@ -22,6 +22,10 @@ vi.mock('@/pages/Federal', () => ({
   default: () => <h1>Federal application search</h1>,
 }))
 
+vi.mock('@/pages/ProvincialSummary', () => ({
+  default: () => <h1>Summary</h1>,
+}))
+
 const mockedUseAuth = vi.mocked(useAuth)
 
 const renderWithPath = (path: string) => {
@@ -163,6 +167,64 @@ describe('Protected route guard access', () => {
     expect(screen.getByLabelText('Application submission file')).toBeInTheDocument()
   })
 
+  it('allows provincial submitters to open the client summary', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({
+          principal: 'bceid\\submitter',
+          roles: ['LEXIS_PROVINCIAL_SUBMITTER_00012345'],
+          grantedActions: ['/summary'],
+          forestClientNumber: '00012345',
+        }),
+        defaultRoute: '/provincial/summary',
+        canPerform: (action: string) => action === '/summary',
+      }),
+    )
+
+    renderWithPath('/provincial/summary')
+
+    expect(await findLazyPageHeading('Summary')).toBeInTheDocument()
+  })
+
+  it('blocks IDIR administrators from the client summary', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({
+          principal: 'idir\\admin',
+          roles: ['ADMIN'],
+          grantedActions: ['/summary'],
+        }),
+        canPerform: () => true,
+      }),
+    )
+
+    renderWithPath('/provincial/summary')
+
+    expect(
+      await screen.findByRole('heading', { name: "You don't have access to view this page" }),
+    ).toBeInTheDocument()
+  })
+
+  it('keeps the client summary blocked when an administrator also has a submitter role', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({
+          principal: 'idir\\admin',
+          roles: ['ADMIN', 'PROVINCIAL_SUBMITTER_00012345'],
+          grantedActions: ['/summary'],
+          forestClientNumber: '00012345',
+        }),
+        canPerform: () => true,
+      }),
+    )
+
+    renderWithPath('/provincial/summary')
+
+    expect(
+      await screen.findByRole('heading', { name: "You don't have access to view this page" }),
+    ).toBeInTheDocument()
+  })
+
   it('blocks unknown roles from the provincial application submission upload route', async () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
@@ -224,7 +286,7 @@ describe('Protected route guard access', () => {
       }),
     )
 
-    renderWithPath('/admin')
+    renderWithPath('/admin/policies/fee')
 
     expect(
       await screen.findByRole('heading', { name: "You don't have access to view this page" }),

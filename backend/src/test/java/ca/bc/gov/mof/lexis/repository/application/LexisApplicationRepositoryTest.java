@@ -18,9 +18,12 @@ import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 
 @DisplayName("Unit Test | LexisApplicationRepository")
 class LexisApplicationRepositoryTest {
@@ -36,7 +39,7 @@ class LexisApplicationRepositoryTest {
   }
 
   @Test
-  void searchShouldUseProvincialApplicationViewAliasForDynamicCriteria() {
+  void searchShouldUseDirectQueryForEveryFilter() {
     TestLexisApplicationRepository repository = new TestLexisApplicationRepository();
 
     repository.search(
@@ -61,15 +64,37 @@ class LexisApplicationRepositoryTest {
             10));
 
     assertThat(repository.whereSql())
-        .contains("v.APPLICATION_NUMBER")
-        .contains("v.PACKAGE_NUMBER")
-        .contains("v.ADVERTISING_DATE")
-        .contains("v.EXPORT_SCHEDULE_ID")
+        .contains("TO_CHAR(v.APPLICATION_NUMBER) LIKE '%' || ? || '%'")
+        .contains("v.PACKAGE_NUMBER LIKE '%' || ? || '%'")
+        .contains("v.EXEMPTION_NUMBER LIKE '%' || ? || '%'")
+        .contains("v.EXPORT_APPLICATION_STATUS_CODE = ?")
+        .contains("v.EXPORT_PRODUCT_TYPE_CODE = ?")
+        .contains("v.RECEIVED_DATE >= ?")
+        .contains("v.RECEIVED_DATE <= ?")
+        .contains("v.ADVERTISING_DATE >= ?")
+        .contains("v.ADVERTISING_DATE <= ?")
+        .contains("v.EXPORT_SCHEDULE_ID = ?")
+        .contains("v.OWNER_CLIENT_NUMBER LIKE '%' || ? || '%'")
+        .contains("v.ORG_UNIT_NO IN (?, ?)")
+        .contains("v.EXPORT_EXEMPTION_TYPE_CODE = ?")
+        .contains("v.AGENT_CLIENT_NUMBER LIKE '%' || ? || '%'")
         .contains("v.EXPORT_JURISDICTION_CODE <> 'F'")
+        .contains("v.OIC_INDICATOR = ?")
         .contains("ORDER BY v.ADVERTISING_DATE DESC, v.APPLICATION_NUMBER ASC")
         .doesNotContain("EEA.")
         .doesNotContain("EP.")
-        .doesNotContain("ES.");
+        .doesNotContain("ES.")
+        .doesNotContain(":1");
+    assertThat(repository.pageSelectSql())
+        .contains("FROM EXPORT_EXEMPTION_APPLICATION EEA")
+        .contains("LISTAGG(EP.PACKAGE_NUMBER, ',')")
+        .contains("INNER JOIN EXPORT_APPLICATION_STATUS_CODE EASC")
+        .contains("INNER JOIN EXPORT_EXEMPTION_REASON_CODE EERC")
+        .contains("INNER JOIN EXPORT_APPLICANT_TYPE_CODE EATC")
+        .contains("FROM EXPORT_PURCHASE_OFFER EPO")
+        .contains("EPO.VALID_OFFER_INDICATOR = 'Y'")
+        .contains("EPO.OFFER_WITHDRAWAL_DATE IS NULL")
+        .doesNotContain("FIND_APPLICATIONS_BY_CRITERIA");
     assertThat(repository.bindValues())
         .containsExactly(
             "900123",
@@ -77,15 +102,15 @@ class LexisApplicationRepositoryTest {
             "EX-1",
             "APP",
             "H",
-            "2026-01-01",
-            "2026-01-31",
-            "2026-02-01",
-            "2026-02-28",
-            "31916",
+            java.sql.Date.valueOf("2026-01-01"),
+            java.sql.Date.valueOf("2026-01-31"),
+            java.sql.Date.valueOf("2026-02-01"),
+            java.sql.Date.valueOf("2026-02-28"),
+            31916L,
             "00077881",
             "N",
-            "1904",
-            "1905",
+            1904L,
+            1905L,
             "B",
             "00055667",
             "00055667");
@@ -136,14 +161,12 @@ class LexisApplicationRepositoryTest {
   }
 
   @Test
-  void searchShouldLoadRequestedLegacyPageWithCountTotal() {
-    List<LexisApplicationSearchResultDto> firstPage =
-        java.util.stream.LongStream.rangeClosed(900101L, 900110L)
+  void searchShouldLoadRequestedDirectPageWithCountTotal() {
+    List<LexisApplicationSearchResultDto> rows =
+        java.util.stream.LongStream.rangeClosed(900101L, 900111L)
             .mapToObj(LexisApplicationRepositoryTest::applicationResult)
             .toList();
-    TestLexisApplicationRepository repository =
-        new TestLexisApplicationRepository(
-            List.<List<?>>of(firstPage, List.of(applicationResult(900111L))));
+    TestLexisApplicationRepository repository = new TestLexisApplicationRepository(rows);
 
     Page<LexisApplicationSearchResultDto> results =
         repository.search(
@@ -154,6 +177,116 @@ class LexisApplicationRepositoryTest {
         .extracting(LexisApplicationSearchResultDto::application)
         .containsExactly(900101L, 900102L, 900103L, 900104L, 900105L, 900106L, 900107L, 900108L, 900109L, 900110L);
     assertThat(results.getTotalElements()).isEqualTo(11);
+    assertThat(repository.countCalls()).isEqualTo(1);
+    assertThat(repository.pageCalls()).isEqualTo(1);
+  }
+
+  @ParameterizedTest
+  @ValueSource(ints = {1, 10, 25, 50, 100, 200})
+  void searchShouldUseTwoDatabaseCallsForPageSizesThroughTwoHundred(int pageSize) {
+    List<LexisApplicationSearchResultDto> rows =
+        java.util.stream.LongStream.rangeClosed(900001L, 900200L)
+            .mapToObj(LexisApplicationRepositoryTest::applicationResult)
+            .toList();
+    TestLexisApplicationRepository repository = new TestLexisApplicationRepository(rows);
+
+    Page<LexisApplicationSearchResultDto> results =
+        repository.search(emptyCriteria(null, 0, pageSize));
+
+    assertThat(results.getNumberOfElements()).isEqualTo(pageSize);
+    assertThat(repository.countCalls()).isEqualTo(1);
+    assertThat(repository.pageCalls()).isEqualTo(1);
+  }
+
+  @ParameterizedTest
+  @CsvSource(
+      delimiter = '|',
+      textBlock = """
+          applicationNumber DESC|ORDER BY v.APPLICATION_NUMBER DESC
+          application DESC|ORDER BY v.APPLICATION_NUMBER DESC
+          applicantClientNumber ASC|ORDER BY v.OWNER_CLIENT_NUMBER ASC, v.APPLICATION_NUMBER ASC
+          displayOwnerClientNumber DESC|ORDER BY v.OWNER_CLIENT_NUMBER DESC, v.APPLICATION_NUMBER ASC
+          ownerClientNumber ASC|ORDER BY v.OWNER_CLIENT_NUMBER ASC, v.APPLICATION_NUMBER ASC
+          exemptionNumber DESC|ORDER BY v.EXEMPTION_NUMBER DESC, v.APPLICATION_NUMBER ASC
+          listingDate ASC|ORDER BY v.ADVERTISING_DATE ASC, v.APPLICATION_NUMBER ASC
+          regionCode DESC|ORDER BY v.REGION_CODE DESC, v.APPLICATION_NUMBER ASC
+          region ASC|ORDER BY v.REGION_CODE ASC, v.APPLICATION_NUMBER ASC
+          """)
+  void searchShouldWhitelistEverySupportedSort(String sortField, String expectedOrder) {
+    TestLexisApplicationRepository repository = new TestLexisApplicationRepository();
+
+    repository.search(emptyCriteria(sortField, 0, 10));
+
+    assertThat(repository.whereSql()).contains(expectedOrder);
+  }
+
+  @Test
+  void searchShouldRejectUnrecognizedSortExpressions() {
+    TestLexisApplicationRepository repository = new TestLexisApplicationRepository();
+
+    repository.search(emptyCriteria("applicationNumber DESC NULLS FIRST; DELETE", 0, 10));
+
+    assertThat(repository.whereSql())
+        .endsWith("ORDER BY v.APPLICATION_NUMBER ASC")
+        .doesNotContain("DELETE")
+        .doesNotContain("NULLS FIRST");
+  }
+
+  @Test
+  void countShouldUseTheSameFiltersWithoutPageSortOrOfferLookup() {
+    TestLexisApplicationRepository repository =
+        new TestLexisApplicationRepository(List.of(applicationResult(900001L)));
+    LexisApplicationSearchCriteria criteria =
+        new LexisApplicationSearchCriteria(
+            null,
+            "PKG-1",
+            null,
+            null,
+            null,
+            null,
+            "00012345",
+            null,
+            null,
+            null,
+            null,
+            null,
+            List.of(1904L),
+            true,
+            "listingDate DESC",
+            0,
+            10);
+
+    repository.search(criteria);
+    String pageWhere = repository.whereSql();
+    List<Object> pageBinds = repository.bindValues();
+    repository.count(criteria);
+
+    assertThat(repository.countSelectSql())
+        .contains("SELECT COUNT(*)")
+        .contains("FROM EXPORT_EXEMPTION_APPLICATION EEA")
+        .doesNotContain("EXPORT_PURCHASE_OFFER");
+    assertThat(repository.countWhereSql())
+        .isEqualTo(pageWhere.substring(0, pageWhere.indexOf(" ORDER BY")))
+        .doesNotContain("OFFSET")
+        .doesNotContain("FETCH NEXT");
+    assertThat(repository.countBindValues()).isEqualTo(pageBinds);
+  }
+
+  @Test
+  void searchShouldUseKnownTotalWithoutCallingCount() {
+    TestLexisApplicationRepository repository =
+        new TestLexisApplicationRepository(
+            java.util.stream.LongStream.rangeClosed(900001L, 900011L)
+                .mapToObj(LexisApplicationRepositoryTest::applicationResult)
+                .toList());
+
+    Page<LexisApplicationSearchResultDto> results =
+        repository.search(emptyCriteria(null, 1, 10), 11);
+
+    assertThat(results.getContent())
+        .extracting(LexisApplicationSearchResultDto::application)
+        .containsExactly(900011L);
+    assertThat(repository.countCalls()).isZero();
     assertThat(repository.pageCalls()).isEqualTo(1);
   }
 
@@ -263,33 +396,114 @@ class LexisApplicationRepositoryTest {
     assertThat(repository.hasValidOffer(List.of(900123L))).isFalse();
   }
 
+  @Test
+  void searchMappingShouldUseInlineOfferFlagWithoutPerRowProcedureCalls() throws SQLException {
+    ResultSet noOffer = applicationSearchResultSet(900101L, 0L);
+    ResultSet activeOffer = applicationSearchResultSet(900102L, 1L);
+    MappingLexisApplicationRepository repository =
+        new MappingLexisApplicationRepository(List.of(noOffer, activeOffer));
+
+    Page<LexisApplicationSearchResultDto> results =
+        repository.search(emptyCriteria(null, 0, 200));
+
+    assertThat(results.getContent())
+        .extracting(
+            LexisApplicationSearchResultDto::application,
+            LexisApplicationSearchResultDto::showCheckbox)
+        .containsExactly(
+            org.assertj.core.groups.Tuple.tuple(900101L, true),
+            org.assertj.core.groups.Tuple.tuple(900102L, false));
+    assertThat(repository.cursorCalls()).isZero();
+    assertThat(repository.databaseCalls()).isEqualTo(2);
+  }
+
+  private static LexisApplicationSearchCriteria emptyCriteria(
+      String sortField, int page, int size) {
+    return new LexisApplicationSearchCriteria(
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        List.of(),
+        false,
+        sortField,
+        page,
+        size);
+  }
+
   private static LexisApplicationSearchResultDto applicationResult(long applicationNumber) {
     return new LexisApplicationSearchResultDto(
         applicationNumber, "New", "Client", "00000001", null, null, "Region", 100d, true, false);
   }
 
+  private static ResultSet applicationSearchResultSet(long applicationNumber, long activeOffer)
+      throws SQLException {
+    ResultSet resultSet = org.mockito.Mockito.mock(ResultSet.class);
+    when(resultSet.getLong("APPLICATION_NUMBER")).thenReturn(applicationNumber);
+    when(resultSet.getLong("HAS_ACTIVE_VALID_OFFER")).thenReturn(activeOffer);
+    when(resultSet.wasNull()).thenReturn(false);
+    when(resultSet.getString("EXPORT_APPLICATION_STATUS_CODE")).thenReturn("APP");
+    when(resultSet.getString("EXPORT_PRODUCT_TYPE_CODE")).thenReturn("H");
+    when(resultSet.getString("OWNER_CLIENT_NUMBER")).thenReturn("00000001");
+    when(resultSet.getString("STATUS_DESCRIPTION")).thenReturn("Approved");
+    return resultSet;
+  }
+
   private static final class TestLexisApplicationRepository extends LexisApplicationRepository {
-    private final List<List<?>> pages;
+    private final List<?> rows;
     private String whereSql;
-    private List<String> bindValues;
+    private List<Object> bindValues;
+    private String pageSelectSql;
+    private String countSelectSql;
+    private String countWhereSql;
+    private List<Object> countBindValues;
     private String codeNameProcedureSignature;
+    private int countCalls;
     private int pageCalls;
 
     TestLexisApplicationRepository() {
       this(List.of());
     }
 
-    TestLexisApplicationRepository(List<List<?>> pages) {
+    TestLexisApplicationRepository(List<?> rows) {
       super(null);
-      this.pages = pages;
+      this.rows = rows;
     }
 
     String whereSql() {
       return whereSql;
     }
 
-    List<String> bindValues() {
+    List<Object> bindValues() {
       return bindValues;
+    }
+
+    String pageSelectSql() {
+      return pageSelectSql;
+    }
+
+    String countSelectSql() {
+      return countSelectSql;
+    }
+
+    String countWhereSql() {
+      return countWhereSql;
+    }
+
+    List<Object> countBindValues() {
+      return countBindValues;
+    }
+
+    int countCalls() {
+      return countCalls;
     }
 
     int pageCalls() {
@@ -312,30 +526,93 @@ class LexisApplicationRepositoryTest {
     }
 
     @Override
-    protected int queryLegacyDynamicCountProcedure(
-        String procedureSignature,
-        String whereSql,
-        List<String> bindValues) {
-      this.whereSql = whereSql;
-      this.bindValues = bindValues;
-      return pages.stream().mapToInt(List::size).sum();
+    protected int queryDirectCount(String selectSql, DirectSql where) {
+      countSelectSql = selectSql;
+      countWhereSql = where.sql();
+      countBindValues = where.bindValues();
+      countCalls++;
+      return rows.size();
     }
 
     @Override
     @SuppressWarnings("unchecked")
-    protected <T> List<T> queryLegacyDynamicPagedProcedure(
-        String procedureSignature,
-        String whereSql,
-        List<String> bindValues,
+    protected <T> Page<T> queryDirectPage(
+        String selectSql,
+        DirectSql whereAndOrder,
         int page,
+        int size,
+        int totalElements,
         SqlRowMapper<T> rowMapper) {
-      this.whereSql = whereSql;
-      this.bindValues = bindValues;
+      pageSelectSql = selectSql;
+      whereSql = whereAndOrder.sql();
+      bindValues = whereAndOrder.bindValues();
       pageCalls++;
-      if (page >= pages.size()) {
-        return List.of();
-      }
-      return (List<T>) pages.get(page);
+      int normalizedPage = Math.max(0, page);
+      int normalizedSize = Math.max(1, size);
+      int fromIndex = Math.min(rows.size(), normalizedPage * normalizedSize);
+      int toIndex = Math.min(rows.size(), fromIndex + normalizedSize);
+      List<T> content = (List<T>) rows.subList(fromIndex, toIndex);
+      return new PageImpl<>(
+          content, PageRequest.of(normalizedPage, normalizedSize), totalElements);
+    }
+  }
+
+  private static final class MappingLexisApplicationRepository
+      extends LexisApplicationRepository {
+    private final List<ResultSet> resultSets;
+    private int databaseCalls;
+    private int cursorCalls;
+
+    MappingLexisApplicationRepository(List<ResultSet> resultSets) {
+      super(null);
+      this.resultSets = resultSets;
+    }
+
+    int databaseCalls() {
+      return databaseCalls;
+    }
+
+    int cursorCalls() {
+      return cursorCalls;
+    }
+
+    @Override
+    protected int queryDirectCount(String selectSql, DirectSql where) {
+      databaseCalls++;
+      return resultSets.size();
+    }
+
+    @Override
+    protected <T> Page<T> queryDirectPage(
+        String selectSql,
+        DirectSql whereAndOrder,
+        int page,
+        int size,
+        int totalElements,
+        SqlRowMapper<T> rowMapper) {
+      databaseCalls++;
+      List<T> mapped =
+          resultSets.stream()
+              .map(
+                  resultSet -> {
+                    try {
+                      return rowMapper.map(resultSet);
+                    } catch (SQLException exception) {
+                      throw new AssertionError(exception);
+                    }
+                  })
+              .toList();
+      return new PageImpl<>(mapped, PageRequest.of(page, size), totalElements);
+    }
+
+    @Override
+    protected <T> List<T> queryCursorProcedureFailClosed(
+        String procedureSignature,
+        SqlConsumer<CallableStatement> binder,
+        int cursorOutIndex,
+        SqlRowMapper<T> rowMapper) {
+      cursorCalls++;
+      return List.of();
     }
   }
 

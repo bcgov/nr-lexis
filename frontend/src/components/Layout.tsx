@@ -6,14 +6,16 @@ import {
   ChevronLeft,
   Close,
   DataBase,
+  Dashboard,
   DocumentAdd,
   Finance,
   Logout,
   Moon,
+  Notification,
   Report,
   Search,
-  Settings,
   Sun,
+  Switcher,
   Tag,
   TaskComplete,
   Upload,
@@ -22,17 +24,14 @@ import {
 } from '@carbon/icons-react'
 import { HeaderMenuButton, IconButton, SkipToContent } from '@carbon/react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
-import {
-  hasFederalSubmitterRole,
-  hasProvincialSubmitterRole,
-  hasRole,
-} from '@/context/auth/role-utils'
+import { hasProvincialSubmitterRole, hasRole } from '@/context/auth/role-utils'
 import OptimisticConflictModal from '@/components/OptimisticConflictModal'
 import UserRegionPreference from '@/components/UserRegionPreference'
 import { isProdRtmOnlyPathAllowed } from '@/config/features'
 import { useAuth } from '@/context/auth/useAuth'
 import { useTheme } from '@/context/theme/useTheme'
 import type { NavigationRoleScope, RouteActionMatch } from '@/routes/routeAccessTypes'
+import { fetchNotifications } from '@/service/notification-service'
 
 export type LayoutProps = {
   children: ReactNode
@@ -50,6 +49,7 @@ type NavigationLink = {
 type NavigationSection = {
   label: string
   links: NavigationLink[]
+  standalone?: boolean
 }
 
 const UI_PREFERENCE_KEYS = {
@@ -61,20 +61,16 @@ const ROLE_LABELS: Record<string, string> = {
   ADMIN: 'Administrator',
   APPLICATION_APPROVER: 'Application Approver',
   EXEMPTION_APPROVER: 'Exemption Approver',
-  DELEGATED_ADMIN: 'Delegated Administrator',
   READ_ONLY: 'Read Only',
   PROVINCIAL_SUBMITTER: 'Provincial Submitter',
-  FEDERAL_SUBMITTER: 'Federal Submitter',
 }
 
 const ROLE_DISPLAY_PRIORITY = [
   'ADMIN',
   'APPLICATION_APPROVER',
   'EXEMPTION_APPROVER',
-  'DELEGATED_ADMIN',
   'READ_ONLY',
   'PROVINCIAL_SUBMITTER',
-  'FEDERAL_SUBMITTER',
 ] as const
 
 const MOBILE_NAVIGATION_MEDIA_QUERY = '(max-width: 671px)'
@@ -89,11 +85,29 @@ const isMobileNavigationViewport = (): boolean => {
 
 const NAVIGATION_SECTIONS: NavigationSection[] = [
   {
+    label: 'Notifications',
+    standalone: true,
+    links: [
+      {
+        to: '/notifications',
+        label: 'Notifications',
+        icon: Notification,
+      },
+    ],
+  },
+  {
     label: 'Provincial',
     links: [
       {
+        to: '/provincial/summary',
+        label: 'Summary',
+        icon: Dashboard,
+        requiredActions: ['/summary'],
+        roleScope: 'provincialSubmitter',
+      },
+      {
         to: '/provincial/review',
-        label: 'Review',
+        label: 'Application review',
         icon: TaskComplete,
         requiredActions: ['/applicationsReview'],
       },
@@ -231,12 +245,6 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
     label: 'Admin',
     links: [
       {
-        to: '/admin',
-        label: 'Users & Access',
-        icon: Settings,
-        requiredActions: ['/lexisAgentAdmin'],
-      },
-      {
         to: '/admin/policies/fee',
         label: 'Fee Policy',
         icon: Finance,
@@ -342,9 +350,6 @@ const getPrimaryRoleLabel = (roles: string[] | null | undefined): string | null 
   if (normalizedRoles.some((role) => role.startsWith('PROVINCIAL_SUBMITTER_'))) {
     return ROLE_LABELS.PROVINCIAL_SUBMITTER
   }
-  if (normalizedRoles.some((role) => role.startsWith('FEDERAL_SUBMITTER_'))) {
-    return ROLE_LABELS.FEDERAL_SUBMITTER
-  }
   return normalizedRoles[0]?.replaceAll('_', ' ') ?? null
 }
 
@@ -360,18 +365,21 @@ const canShowRoleScopedLink = (
     return true
   }
 
+  if (link.roleScope === 'provincialSubmitter') {
+    return hasProvincialSubmitterRole(roles) && !hasRole(roles, 'ADMIN')
+  }
+
   if (hasRole(roles, 'ADMIN')) {
     return true
   }
 
-  const hasFederalSubmitter = hasFederalSubmitterRole(roles)
   const hasProvincialSubmitter = hasProvincialSubmitterRole(roles)
   const hasProvincialStaffRole =
     hasRole(roles, 'READ_ONLY') ||
     hasRole(roles, 'APPLICATION_APPROVER') ||
     hasRole(roles, 'EXEMPTION_APPROVER')
 
-  return !hasFederalSubmitter || hasProvincialSubmitter || hasProvincialStaffRole
+  return hasProvincialSubmitter || hasProvincialStaffRole
 }
 
 function Layout({ children }: LayoutProps) {
@@ -383,12 +391,14 @@ function Layout({ children }: LayoutProps) {
   const [isSideNavCollapsed, setIsSideNavCollapsed] = useState(readSideNavCollapsedPreference)
   const [isMobileViewport, setIsMobileViewport] = useState(isMobileNavigationViewport)
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false)
+  const [hasActiveNotifications, setHasActiveNotifications] = useState(false)
   const previousPathRef = useRef(location.pathname)
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>(
     readCollapsedSectionsPreference,
   )
   const isDarkTheme = theme === 'g100'
   const isDesktopSideNavCollapsed = isSideNavCollapsed && !isMobileViewport
+  const notificationAudienceKey = `${capabilities.principal ?? ''}:${capabilities.roles?.join('|') ?? ''}`
   const profileInitials = useMemo(
     () => getProfileInitials(capabilities.principal),
     [capabilities.principal],
@@ -469,6 +479,11 @@ function Layout({ children }: LayoutProps) {
     },
     [focusProfileToggle],
   )
+
+  const handleOrganizationSelection = () => {
+    closeProfile()
+    navigate('/select-organization')
+  }
 
   const toggleMobileNavigation = (): void => {
     setIsProfileOpen(false)
@@ -562,12 +577,79 @@ function Layout({ children }: LayoutProps) {
   }, [closeProfile, isProfileOpen])
 
   useEffect(() => {
+    let isCurrent = true
+
+    const loadNotificationIndicator = async (): Promise<void> => {
+      if (!capabilities.authenticated || !capabilities.principal) {
+        if (isCurrent) {
+          setHasActiveNotifications(false)
+        }
+        return
+      }
+
+      try {
+        const notifications = await fetchNotifications()
+        if (isCurrent) {
+          setHasActiveNotifications(notifications.length > 0)
+        }
+      } catch {
+        if (isCurrent) {
+          setHasActiveNotifications(false)
+        }
+      }
+    }
+
+    void loadNotificationIndicator()
+    return () => {
+      isCurrent = false
+    }
+  }, [capabilities.authenticated, capabilities.principal, notificationAudienceKey])
+
+  useEffect(() => {
     writeUiPreference(UI_PREFERENCE_KEYS.sideNavCollapsed, String(isSideNavCollapsed))
   }, [isSideNavCollapsed])
 
   useEffect(() => {
     writeUiPreference(UI_PREFERENCE_KEYS.collapsedSections, JSON.stringify(collapsedSections))
   }, [collapsedSections])
+
+  const renderNavigationLink = (link: NavigationLink, nested = true) => {
+    const LinkIcon = link.icon
+    const showNotificationIndicator = link.to === '/notifications' && hasActiveNotifications
+    const accessibleLabel = showNotificationIndicator
+      ? 'Notifications, active updates available'
+      : isDesktopSideNavCollapsed
+        ? link.label
+        : undefined
+    const nestedClassName = nested ? ' cds--side-nav__link--nested' : ''
+
+    return (
+      <li key={link.to}>
+        <NavLink
+          end
+          to={link.to}
+          className={({ isActive }) =>
+            `cds--side-nav__link${nestedClassName} csp-side-nav__link${
+              isActive ? ' cds--side-nav__link--active' : ''
+            }`
+          }
+          aria-current={location.pathname === link.to ? 'page' : undefined}
+          aria-label={accessibleLabel}
+          title={isDesktopSideNavCollapsed ? link.label : undefined}
+          data-label={link.label}
+          onClick={() => closeMobileNavigation()}
+        >
+          <span className="cds--side-nav__icon csp-side-nav__icon" aria-hidden="true">
+            <LinkIcon size={20} />
+            {showNotificationIndicator && (
+              <span className="csp-side-nav__notification-indicator" aria-hidden="true" />
+            )}
+          </span>
+          <span className="cds--side-nav__link-text csp-side-nav__link-text">{link.label}</span>
+        </NavLink>
+      </li>
+    )
+  }
 
   return (
     <>
@@ -676,6 +758,17 @@ function Layout({ children }: LayoutProps) {
 
           <hr className="profile-panel__divider" role="separator" />
 
+          {capabilities.availableForestClientNumbers.length > 1 && (
+            <button
+              className="profile-panel__action"
+              type="button"
+              onClick={handleOrganizationSelection}
+            >
+              <Switcher size={16} />
+              Switch organization
+            </button>
+          )}
+
           <button className="profile-panel__signout" type="button" onClick={handleLogout}>
             <Logout size={16} />
             Sign out
@@ -708,6 +801,19 @@ function Layout({ children }: LayoutProps) {
 
           <ul id="side-navigation-list" className="cds--side-nav__items csp-side-nav__items">
             {visibleNavigationSections.map((section) => {
+              if (section.standalone) {
+                return (
+                  <li
+                    key={section.label}
+                    className="csp-side-nav__section csp-side-nav__section--standalone"
+                  >
+                    <ul className="csp-side-nav__section-list">
+                      {section.links.map((link) => renderNavigationLink(link, false))}
+                    </ul>
+                  </li>
+                )
+              }
+
               const sectionListId = getSectionListId(section.label)
               const isSectionCollapsed =
                 section.label !== activeSectionLabel &&
@@ -738,37 +844,7 @@ function Layout({ children }: LayoutProps) {
                   )}
                   {!isSectionCollapsed && (
                     <ul id={sectionListId} className="csp-side-nav__section-list">
-                      {section.links.map((link) => {
-                        const LinkIcon = link.icon
-                        return (
-                          <li key={link.to}>
-                            <NavLink
-                              end
-                              to={link.to}
-                              className={({ isActive }) =>
-                                isActive
-                                  ? 'cds--side-nav__link cds--side-nav__link--nested csp-side-nav__link cds--side-nav__link--active'
-                                  : 'cds--side-nav__link cds--side-nav__link--nested csp-side-nav__link'
-                              }
-                              aria-current={location.pathname === link.to ? 'page' : undefined}
-                              aria-label={isDesktopSideNavCollapsed ? link.label : undefined}
-                              title={isDesktopSideNavCollapsed ? link.label : undefined}
-                              data-label={link.label}
-                              onClick={() => closeMobileNavigation()}
-                            >
-                              <span
-                                className="cds--side-nav__icon csp-side-nav__icon"
-                                aria-hidden="true"
-                              >
-                                <LinkIcon size={20} />
-                              </span>
-                              <span className="cds--side-nav__link-text csp-side-nav__link-text">
-                                {link.label}
-                              </span>
-                            </NavLink>
-                          </li>
-                        )
-                      })}
+                      {section.links.map((link) => renderNavigationLink(link))}
                     </ul>
                   )}
                 </li>

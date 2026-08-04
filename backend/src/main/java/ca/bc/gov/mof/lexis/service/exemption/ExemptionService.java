@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.service.exemption;
 
+import ca.bc.gov.mof.lexis.dto.exemption.ExemptionAccessDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchOptionsDto;
@@ -20,6 +21,11 @@ public interface ExemptionService {
   int count(ExemptionSearchCriteria criteria);
 
   Optional<ExemptionDetailDto> findByExemptionNumber(String exemptionNumber);
+
+  Optional<ExemptionAccessDto> findAccessByExemptionNumber(String exemptionNumber);
+
+  boolean hasLinkedProvincialApplicationForClient(
+      String exemptionNumber, String clientNumber);
 
   default List<Long> findOrgUnitNumbers(String exemptionNumber) {
     return List.of();

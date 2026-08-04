@@ -3,7 +3,6 @@ package ca.bc.gov.mof.lexis.service.permit;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
-import ca.bc.gov.mof.lexis.configuration.OracleLegacyDynamicFetchExecutorConfiguration;
 import ca.bc.gov.mof.lexis.configuration.PermitInvoiceModeConfiguration;
 import ca.bc.gov.mof.lexis.repository.permit.PermitInvoiceRepository;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository;
@@ -20,7 +19,6 @@ class OracleCanadianPermitInvoiceConfigurationTest {
               OracleGbmsPermitInvoiceService.class,
               () -> mock(OracleGbmsPermitInvoiceService.class))
           .withUserConfiguration(
-              OracleLegacyDynamicFetchExecutorConfiguration.class,
               PermitInvoiceModeConfiguration.class,
               OracleCanadianPermitInvoiceOrchestrationService.class,
               OracleLegacyPermitInvoiceOrchestrationService.class)

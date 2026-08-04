@@ -14,6 +14,7 @@ import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.application.ApplicationEditLockDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
+import ca.bc.gov.mof.lexis.dto.permit.PermitAccessDto;
 import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationEditLockService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
@@ -181,7 +182,20 @@ class ExemptionDetailsRpcControllerTest {
             new ExemptionDetailsRpcService.ExemptionApplicationsResponse(
                 List.of(
                     new ExemptionDetailsRpcService.ApplicationItem(
-                        1000456L, "95.0", "94.0", false, "P")),
+                        1000456L,
+                        "95.0",
+                        "94.0",
+                        false,
+                        "P",
+                        "00001074",
+                        "00002176",
+                        "03",
+                        "12",
+                        "A",
+                        "BOB TURMEL",
+                        "EXPORT PERSON",
+                        "NORSKE SKOG CANADA LIMITED",
+                        "INTERNATIONAL FOREST PRODUCTS")),
                 false,
                 "00077881"));
 
@@ -191,7 +205,22 @@ class ExemptionDetailsRpcControllerTest {
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isNotNull();
     assertThat(response.getBody().applications()).hasSize(1);
-    assertThat(response.getBody().applications().get(0).applicationNumber()).isEqualTo(1000456L);
+    assertThat(response.getBody().applications().get(0))
+        .satisfies(
+            application -> {
+              assertThat(application.applicationNumber()).isEqualTo(1000456L);
+              assertThat(application.ownerClientNumber()).isEqualTo("00001074");
+              assertThat(application.agentClientNumber()).isEqualTo("00002176");
+              assertThat(application.ownerClientLocationCode()).isEqualTo("03");
+              assertThat(application.agentClientLocationCode()).isEqualTo("12");
+              assertThat(application.applicantTypeCode()).isEqualTo("A");
+              assertThat(application.ownerContactName()).isEqualTo("BOB TURMEL");
+              assertThat(application.agentContactName()).isEqualTo("EXPORT PERSON");
+              assertThat(application.ownerCompanyName())
+                  .isEqualTo("NORSKE SKOG CANADA LIMITED");
+              assertThat(application.agentCompanyName())
+                  .isEqualTo("INTERNATIONAL FOREST PRODUCTS");
+            });
     @SuppressWarnings("unchecked")
     ArgumentCaptor<Predicate<Long>> accessCaptor =
         ArgumentCaptor.forClass(Predicate.class);
@@ -236,16 +265,36 @@ class ExemptionDetailsRpcControllerTest {
         .extracting(ExemptionDetailsRpcController.PermitItemDto::permitNumber)
         .doesNotContain(7000124L);
     @SuppressWarnings("unchecked")
-    ArgumentCaptor<Predicate<Long>> accessCaptor =
+    ArgumentCaptor<Predicate<ExemptionDetailsRpcService.PermitAccessContext>> accessCaptor =
         ArgumentCaptor.forClass(Predicate.class);
     verify(service).getPermits(
         org.mockito.ArgumentMatchers.eq("EX-205"), accessCaptor.capture());
-    when(provincialAuthorizationService.canAccessPermit(authentication, 7000123L))
+    PermitAccessDto accessiblePermit =
+        new PermitAccessDto(7000123L, "00055667", "00077881", null);
+    PermitAccessDto inaccessiblePermit =
+        new PermitAccessDto(7000124L, "00099999", "00088888", null);
+    when(
+            provincialAuthorizationService.canAccessExemptionPermit(
+                authentication, accessiblePermit, false))
         .thenReturn(true);
-    when(provincialAuthorizationService.canAccessPermit(authentication, 7000124L))
+    when(
+            provincialAuthorizationService.canAccessExemptionPermit(
+                authentication, inaccessiblePermit, false))
         .thenReturn(false);
-    assertThat(accessCaptor.getValue().test(7000123L)).isTrue();
-    assertThat(accessCaptor.getValue().test(7000124L)).isFalse();
+    assertThat(
+            accessCaptor
+                .getValue()
+                .test(
+                    new ExemptionDetailsRpcService.PermitAccessContext(
+                        7000123L, "00055667", "00077881", false)))
+        .isTrue();
+    assertThat(
+            accessCaptor
+                .getValue()
+                .test(
+                    new ExemptionDetailsRpcService.PermitAccessContext(
+                        7000124L, "00099999", "00088888", false)))
+        .isFalse();
   }
 
   @Test
@@ -302,13 +351,22 @@ class ExemptionDetailsRpcControllerTest {
 
     assertThat(response.getBody()).isEmpty();
     @SuppressWarnings("unchecked")
-    ArgumentCaptor<Predicate<Long>> accessCaptor =
+    ArgumentCaptor<Predicate<ExemptionDetailsRpcService.PermitAccessContext>> accessCaptor =
         ArgumentCaptor.forClass(Predicate.class);
     verify(service).getPermits(
         org.mockito.ArgumentMatchers.eq("EX-205"), accessCaptor.capture());
-    assertThat(accessCaptor.getValue().test(7000123L)).isFalse();
+    assertThat(
+            accessCaptor
+                .getValue()
+                .test(
+                    new ExemptionDetailsRpcService.PermitAccessContext(
+                        7000123L, "00055667", "00077881", false)))
+        .isFalse();
     verify(provincialAuthorizationService, never())
-        .canAccessPermit(authentication, 7000123L);
+        .canAccessExemptionPermit(
+            org.mockito.ArgumentMatchers.eq(authentication),
+            org.mockito.ArgumentMatchers.any(PermitAccessDto.class),
+            org.mockito.ArgumentMatchers.anyBoolean());
   }
 
   @Test

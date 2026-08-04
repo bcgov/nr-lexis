@@ -2,6 +2,7 @@ import '@testing-library/jest-dom'
 import { afterAll, afterEach, beforeAll } from 'vitest'
 import { setupServer } from 'msw/node'
 import { clearAllPageDataCache } from '@/pages/shared/page-data-cache'
+import { clearPersistedSearchState } from '@/pages/shared/usePersistedSearchParams'
 
 const server = setupServer()
 
@@ -96,4 +97,5 @@ afterAll(() => server.close())
 afterEach(() => {
   server.resetHandlers()
   clearAllPageDataCache()
+  clearPersistedSearchState()
 })

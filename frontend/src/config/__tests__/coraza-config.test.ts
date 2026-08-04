@@ -61,7 +61,6 @@ describe('Coraza WAF config', () => {
   it('allows LEXIS SPA admin routes through document navigation', () => {
     const pattern = sensitivePathPattern()
 
-    expect(pattern.test('/admin')).toBe(false)
     expect(pattern.test('/admin/policies/fee')).toBe(false)
     expect(pattern.test('/admin/schedules')).toBe(false)
     expect(pattern.test('/admin/rtm/emslogamv')).toBe(false)

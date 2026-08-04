@@ -25,6 +25,7 @@ import ca.bc.gov.mof.lexis.dto.permit.PermitSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchResultDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitTotalFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.summary.SummaryApplicationsResponseDto;
 import ca.bc.gov.mof.lexis.dto.summary.SummaryExemptionsResponseDto;
 import ca.bc.gov.mof.lexis.dto.summary.SummaryFeesResponseDto;
@@ -33,6 +34,7 @@ import ca.bc.gov.mof.lexis.dto.summary.SummaryPermitsResponseDto;
 import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
 import ca.bc.gov.mof.lexis.service.exemption.ExemptionService;
 import ca.bc.gov.mof.lexis.service.offer.PurchaseOfferService;
+import ca.bc.gov.mof.lexis.service.permit.PermitDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.permit.PermitService;
 import java.time.LocalDate;
 import java.util.List;
@@ -53,6 +55,7 @@ class OracleLexisSummaryServiceTest {
   @Mock private PurchaseOfferService offerService;
   @Mock private ExemptionService exemptionService;
   @Mock private PermitService permitService;
+  @Mock private PermitDetailsRpcService permitDetailsRpcService;
 
   @InjectMocks private OracleLexisSummaryService service;
 
@@ -77,6 +80,7 @@ class OracleLexisSummaryServiceTest {
                 List.of(),
                 List.of(),
                 List.of(new CodeNameDto("12", "Coast"), new CodeNameDto("24", "Skeena")),
+                List.of(),
                 List.of()));
 
     when(applicationService.search(any(LexisApplicationSearchCriteria.class)))
@@ -139,6 +143,7 @@ class OracleLexisSummaryServiceTest {
     LexisApplicationSearchCriteria criteria = criteriaCaptor.getValue();
     assertThat(criteria.ownerClientNumber()).isNull();
     assertThat(criteria.agentClientNumber()).isEqualTo("00077881");
+    assertThat(criteria.broadClientMatch()).isTrue();
     assertThat(criteria.regionNumbers()).containsExactly(12L, 24L);
     assertThat(criteria.sortField()).isEqualTo("applicationNumber DESC");
 
@@ -319,7 +324,6 @@ class OracleLexisSummaryServiceTest {
                     "",
                     null,
                     "R2")));
-
     SummaryPermitsResponseDto response = service.permits("00077881", 0, 10, null);
 
     ArgumentCaptor<PermitSearchCriteria> criteriaCaptor =
@@ -327,8 +331,9 @@ class OracleLexisSummaryServiceTest {
     verify(permitService).search(criteriaCaptor.capture());
 
     PermitSearchCriteria criteria = criteriaCaptor.getValue();
-    assertThat(criteria.ownerClientNumber()).isEqualTo("00077881");
+    assertThat(criteria.ownerClientNumber()).isNull();
     assertThat(criteria.applicantClientNumber()).isNull();
+    assertThat(criteria.accessClientNumber()).isEqualTo("00077881");
     assertThat(criteria.requireScalePermit()).isTrue();
     assertThat(criteria.regionNumbers()).containsExactly(12L, 24L);
     assertThat(criteria.sortField()).isEqualTo("permitNumber DESC");
@@ -398,6 +403,8 @@ class OracleLexisSummaryServiceTest {
                     "",
                     null,
                     "R2")));
+    when(permitDetailsRpcService.getTotalFeesForPermit(7000123L, null, null))
+        .thenReturn(new PermitTotalFeesRpcResponseDto("$1,234.50"));
 
     SummaryFeesResponseDto response = service.fees("00077881", 0, 10, null);
 
@@ -406,8 +413,9 @@ class OracleLexisSummaryServiceTest {
     verify(permitService).search(criteriaCaptor.capture());
 
     PermitSearchCriteria criteria = criteriaCaptor.getValue();
-    assertThat(criteria.ownerClientNumber()).isEqualTo("00077881");
+    assertThat(criteria.ownerClientNumber()).isNull();
     assertThat(criteria.applicantClientNumber()).isNull();
+    assertThat(criteria.accessClientNumber()).isEqualTo("00077881");
     assertThat(criteria.requireScalePermit()).isFalse();
     assertThat(criteria.sortField()).isEqualTo("permitNumber DESC");
     assertThat(criteria.page()).isZero();
@@ -416,7 +424,7 @@ class OracleLexisSummaryServiceTest {
     assertThat(response.total()).isEqualTo(1);
     assertThat(response.results()).hasSize(1);
     assertThat(response.results().get(0).permit()).isEqualTo(7000123L);
-    assertThat(response.results().get(0).fees()).isEqualTo(95.0);
+    assertThat(response.results().get(0).fees()).isEqualTo(1234.5);
     assertThat(response.results().get(0).receipt()).isEqualTo("RCT-991");
   }
 

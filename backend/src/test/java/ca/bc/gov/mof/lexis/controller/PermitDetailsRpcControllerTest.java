@@ -16,7 +16,9 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.application.ApplicationEditLockDto;
+import ca.bc.gov.mof.lexis.dto.application.ApplicationAccessContextDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitDetailDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAllScaleFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCountryItemRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCountryListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitConversionRateRpcResponseDto;
@@ -360,6 +362,22 @@ class PermitDetailsRpcControllerTest {
   }
 
   @Test
+  void allScaleFeesShouldAuthorizePermitAndForwardRequestOnce() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    PermitAllScaleFeesRpcResponseDto dto = new PermitAllScaleFeesRpcResponseDto(List.of());
+    when(service.getAllScaleFees(7000123L, true)).thenReturn(dto);
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+
+    ResponseEntity<PermitAllScaleFeesRpcResponseDto> response =
+        controller.getAllScaleFees(7000123L, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isEqualTo(dto);
+    verify(provincialAuthorizationService).requirePermit(authentication, 7000123L);
+    verify(service).getAllScaleFees(7000123L, true);
+  }
+
+  @Test
   void scalesForPackageShouldForwardRequestToService() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     PermitScalesForPackageRpcResponseDto dto =
@@ -491,12 +509,14 @@ class PermitDetailsRpcControllerTest {
     assertThat(response.getBody()).isEqualTo(dto);
     verify(provincialAuthorizationService).requirePermit(authentication, 7000123L);
     @SuppressWarnings("unchecked")
-    org.mockito.ArgumentCaptor<Predicate<Long>> accessCaptor =
+    org.mockito.ArgumentCaptor<Predicate<ApplicationAccessContextDto>> accessCaptor =
         org.mockito.ArgumentCaptor.forClass(Predicate.class);
     verify(service).getCoreTabs(eq(7000123L), eq(true), accessCaptor.capture());
-    when(provincialAuthorizationService.canAccessApplication(authentication, 1000456L))
+    ApplicationAccessContextDto application =
+        new ApplicationAccessContextDto(1000456L, "P", 1835L, "00000001", "00000002");
+    when(provincialAuthorizationService.canAccessApplication(authentication, application))
         .thenReturn(true);
-    assertThat(accessCaptor.getValue().test(1000456L)).isTrue();
+    assertThat(accessCaptor.getValue().test(application)).isTrue();
   }
 
   @Test
@@ -1123,20 +1143,36 @@ class PermitDetailsRpcControllerTest {
   }
 
   @Test
-  void createPermitFromExemptionShouldRejectProvincialSubmitterEvenIfActionIsGranted() {
+  void createPermitFromExemptionShouldAllowProvincialSubmitterWhenActionIsGranted() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    PermitMutationRpcResponseDto dto =
+        new PermitMutationRpcResponseDto(
+            true,
+            "The permit was created successfully.",
+            List.of(),
+            List.of(),
+            7000123L,
+            "ACT",
+            null,
+            false,
+            false,
+            null);
     TestingAuthenticationToken authentication =
         authenticationWithRoles(
             "bceid\\submitter", List.of("LEXIS_PROVINCIAL_SUBMITTER"));
     when(authorizationService.canPerformAction(
             List.of("LEXIS_PROVINCIAL_SUBMITTER"), "createPermit"))
         .thenReturn(true);
+    when(service.createPermitFromExemption("EX-700", "bceid\\submitter")).thenReturn(dto);
 
     ResponseEntity<PermitMutationRpcResponseDto> response =
         controller.createPermitFromExemption("EX-700", authentication);
 
-    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
-    verify(serviceProvider, never()).getIfAvailable();
-    verifyNoInteractions(service);
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isEqualTo(dto);
+    verify(provincialAuthorizationService, times(2))
+        .requireExemption(authentication, "EX-700");
+    verify(service).createPermitFromExemption("EX-700", "bceid\\submitter");
   }
 
   @Test

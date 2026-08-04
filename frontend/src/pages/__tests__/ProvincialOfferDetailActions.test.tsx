@@ -53,6 +53,7 @@ const offerDetail: ProvincialOfferDetail = {
   speciesGradeCode: 'FI/HE/LUM',
   offerVolume: 99.99,
   region: '12',
+  author: 'idir\\offer-author',
   canEditScheduleDates: true,
   canEditOfferRemarks: true,
   canEditOfferDetails: true,
@@ -114,6 +115,8 @@ describe('Provincial Offer Detail Actions', () => {
     expect(
       within(pageHeader as HTMLElement).getByRole('button', { name: 'Edit' }),
     ).toBeInTheDocument()
+    expect(screen.getByText('Author')).toBeInTheDocument()
+    expect(screen.getByText('idir\\offer-author')).toBeInTheDocument()
   })
 
   it('groups each offer form area in a distinct section', async () => {
@@ -226,6 +229,33 @@ describe('Provincial Offer Detail Actions', () => {
     })
   })
 
+  it('allows a ministry-created legacy offer with no offering client to be updated', async () => {
+    mockedFetchProvincialOfferDetail.mockResolvedValue({
+      ...offerDetail,
+      offeringClientNumber: null,
+    })
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'Offer 81001' })
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    await userEvent.clear(screen.getByLabelText('Offer conditions / remarks'))
+    await userEvent.type(
+      screen.getByLabelText('Offer conditions / remarks'),
+      'Reviewed by ministry',
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => {
+      expect(mockedSubmitProvincialOfferUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          offeringClientNumber: '',
+          pickupLocation: 'Port Moody',
+          offerCondition: 'Reviewed by ministry',
+        }),
+      )
+    })
+  })
+
   it('preserves the form when the backend rejects a stale offer lock', async () => {
     mockedSubmitProvincialOfferUpdate.mockResolvedValue({
       success: false,
@@ -317,6 +347,10 @@ describe('Provincial Offer Detail Actions', () => {
   it('shows the legacy application or package volume on the offer detail page', async () => {
     renderPage()
 
+    expect(await screen.findByRole('link', { name: '1000456' })).toHaveAttribute(
+      'href',
+      '/provincial/application/1000456',
+    )
     expect(await screen.findByLabelText('Application/package volume (m³)')).toHaveDisplayValue(
       '45.5',
     )
@@ -327,6 +361,10 @@ describe('Provincial Offer Detail Actions', () => {
     renderPage()
 
     await screen.findByRole('heading', { name: 'Offer 81001' })
+    expect(screen.getByRole('link', { name: '1000456' })).toHaveAttribute(
+      'href',
+      '/provincial/application/1000456',
+    )
     await userEvent.click(screen.getByRole('button', { name: 'See Scale Detail' }))
 
     expect(screen.getByTestId('location')).toHaveTextContent(
@@ -342,6 +380,10 @@ describe('Provincial Offer Detail Actions', () => {
     renderPage()
 
     await screen.findByRole('heading', { name: 'Offer 81001' })
+    expect(screen.getByRole('link', { name: '1000456' })).toHaveAttribute(
+      'href',
+      '/federal/application/1000456',
+    )
     await userEvent.click(screen.getByRole('button', { name: 'See Scale Detail' }))
 
     expect(screen.getByTestId('location')).toHaveTextContent(

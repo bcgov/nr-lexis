@@ -2,7 +2,6 @@ package ca.bc.gov.mof.lexis.security;
 
 import java.security.Principal;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -17,12 +16,6 @@ import org.springframework.stereotype.Service;
 public class LexisPrincipalService {
 
   private static final String SERVICE_PRINCIPAL_PREFIX = "SERVICE\\";
-
-  private final CognitoUserInfoService userInfoService;
-
-  public LexisPrincipalService(CognitoUserInfoService userInfoService) {
-    this.userInfoService = userInfoService;
-  }
 
   public String resolvePrincipalName(Principal principal) {
     if (principal == null) {
@@ -45,7 +38,7 @@ public class LexisPrincipalService {
       return List.of();
     }
 
-    Map<String, Object> claims = resolveJwtClaims(jwtAuthentication);
+    Map<String, Object> claims = jwtAuthentication.getToken().getClaims();
     LinkedHashSet<Long> orgUnits = new LinkedHashSet<>();
     Stream.of(
             claims.get("custom:org_unit_no"),
@@ -85,7 +78,7 @@ public class LexisPrincipalService {
       return SERVICE_PRINCIPAL_PREFIX + serviceClientId;
     }
 
-    Map<String, Object> claims = resolveJwtClaims(authentication);
+    Map<String, Object> claims = accessTokenClaims;
 
     String userId = resolveUserId(claims);
     if (userId != null) {
@@ -94,13 +87,6 @@ public class LexisPrincipalService {
 
     throw new AccessDeniedException(
         "Authenticated JWT does not contain a stable audit identity.");
-  }
-
-  private Map<String, Object> resolveJwtClaims(JwtAuthenticationToken authentication) {
-    Jwt accessToken = authentication.getToken();
-    Map<String, Object> claims = new HashMap<>(userInfoService.getUserInfo(accessToken));
-    claims.putAll(accessToken.getClaims());
-    return claims;
   }
 
   private String resolveUserId(Map<String, Object> claims) {

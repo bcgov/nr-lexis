@@ -189,6 +189,7 @@ class OptimisticRecordVersionWebSupportTest {
         null,
         null,
         null,
+        null,
         null);
   }
 

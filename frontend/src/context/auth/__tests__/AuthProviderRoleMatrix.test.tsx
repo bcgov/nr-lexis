@@ -4,6 +4,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthProvider } from '../AuthProvider'
 import { useAuth } from '@/context/auth/useAuth'
 import { fetchSessionCapabilities } from '@/service/session-service'
+import {
+  clearActiveForestClientNumber,
+  getActiveForestClientNumber,
+} from '@/service/forest-client-selection'
 
 vi.mock('@/service/session-service', () => ({
   fetchSessionCapabilities: vi.fn(),
@@ -13,14 +17,18 @@ const mockedFetchSessionCapabilities = vi.mocked(fetchSessionCapabilities)
 
 type SessionCapabilitiesWithoutClient = Omit<
   Awaited<ReturnType<typeof fetchSessionCapabilities>>,
-  'forestClientNumber'
+  'availableForestClientNumbers' | 'forestClientNumber' | 'forestClientSelectionRequired'
 > & {
+  availableForestClientNumbers?: string[]
   forestClientNumber?: string | null
+  forestClientSelectionRequired?: boolean
 }
 
 const mockSessionCapabilities = (capabilities: SessionCapabilitiesWithoutClient): void => {
   mockedFetchSessionCapabilities.mockResolvedValue({
+    availableForestClientNumbers: [],
     forestClientNumber: null,
+    forestClientSelectionRequired: false,
     ...capabilities,
   })
 }
@@ -39,6 +47,7 @@ function AuthProbe({ actionChecks }: ProbeProps) {
     isLoggedIn,
     logout,
     refresh,
+    selectForestClient,
   } = useAuth()
 
   return (
@@ -48,6 +57,12 @@ function AuthProbe({ actionChecks }: ProbeProps) {
       <div data-testid="has-any-role">{String(hasAnyRole)}</div>
       <div data-testid="roles">{capabilities.roles.join(',')}</div>
       <div data-testid="forest-client">{capabilities.forestClientNumber ?? ''}</div>
+      <div data-testid="available-forest-clients">
+        {capabilities.availableForestClientNumbers.join(',')}
+      </div>
+      <div data-testid="forest-client-selection-required">
+        {String(capabilities.forestClientSelectionRequired)}
+      </div>
       <div data-testid="default-route">{defaultRoute}</div>
       {actionChecks.map((action) => (
         <div key={action} data-testid={`action-${action}`}>
@@ -56,6 +71,9 @@ function AuthProbe({ actionChecks }: ProbeProps) {
       ))}
       <button type="button" onClick={() => void refresh()}>
         Refresh Session
+      </button>
+      <button type="button" onClick={() => void selectForestClient('00067890')}>
+        Select Forest Client
       </button>
       <button type="button" onClick={() => void logout()}>
         Logout
@@ -82,12 +100,13 @@ describe('Auth Provider Role Matrix', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     window.config = {}
+    clearActiveForestClientNumber()
   })
 
-  it('does not normalize unknown submitter roles', async () => {
+  it('normalizes the scoped submitter role without normalizing unknown roles', async () => {
     mockSessionCapabilities({
       authenticated: true,
-      principal: 'idir\\tester',
+      principal: 'bceid\\tester',
       roles: ['LEXIS_PROVINCIAL_SUBMITTER_00012345', 'LEXIS_UNKNOWN_SUBMITTER'],
       welcomeTarget: null,
       legacyPath: null,
@@ -102,8 +121,49 @@ describe('Auth Provider Role Matrix', () => {
       'PROVINCIAL_SUBMITTER_00012345,LEXIS_UNKNOWN_SUBMITTER',
     )
     expect(screen.getByTestId('forest-client')).toHaveTextContent('00012345')
-    expect(screen.getByTestId('default-route')).toHaveTextContent('/unauthorized')
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/provincial/summary')
     expect(screen.getByTestId('action-/summary')).toHaveTextContent('true')
+  })
+
+  it('activates one of multiple assigned forest clients for the session', async () => {
+    mockedFetchSessionCapabilities
+      .mockResolvedValueOnce({
+        authenticated: true,
+        principal: 'bceid\\submitter',
+        roles: ['LEXIS_PROVINCIAL_SUBMITTER'],
+        welcomeTarget: 'provincialSubmitter',
+        legacyPath: '/provincial/summary',
+        grantedActions: ['/summary', '/applicationSearch'],
+        forestClientNumber: null,
+        availableForestClientNumbers: ['00012345', '00067890'],
+        forestClientSelectionRequired: true,
+      })
+      .mockResolvedValueOnce({
+        authenticated: true,
+        principal: 'bceid\\submitter',
+        roles: ['LEXIS_PROVINCIAL_SUBMITTER'],
+        welcomeTarget: 'provincialSubmitter',
+        legacyPath: '/provincial/summary',
+        grantedActions: ['/summary', '/applicationSearch'],
+        forestClientNumber: '00067890',
+        availableForestClientNumbers: ['00012345', '00067890'],
+        forestClientSelectionRequired: false,
+      })
+
+    renderProbe()
+    await waitForAuthLoad()
+
+    expect(screen.getByTestId('available-forest-clients')).toHaveTextContent('00012345,00067890')
+    expect(screen.getByTestId('forest-client-selection-required')).toHaveTextContent('true')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Select Forest Client' }))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('forest-client')).toHaveTextContent('00067890')
+    })
+    expect(screen.getByTestId('forest-client-selection-required')).toHaveTextContent('false')
+    expect(getActiveForestClientNumber()).toBe('00067890')
+    expect(mockedFetchSessionCapabilities).toHaveBeenCalledTimes(2)
   })
 
   it('does not route modern submitter roles to summary without a summary grant', async () => {
@@ -298,7 +358,7 @@ describe('Auth Provider Role Matrix', () => {
     expect(screen.getByTestId('action-mofrListing')).toHaveTextContent('true')
   })
 
-  it('routes delegated admin without LEXIS actions to unauthorized', async () => {
+  it('ignores FAM delegated administration when resolving LEXIS access', async () => {
     mockSessionCapabilities({
       authenticated: true,
       principal: 'bceid\\delegated',
@@ -311,7 +371,7 @@ describe('Auth Provider Role Matrix', () => {
     renderProbe(['/applicationsReview'])
     await waitForAuthLoad()
 
-    expect(screen.getByTestId('roles')).toHaveTextContent('DELEGATED_ADMIN')
+    expect(screen.getByTestId('roles')).toBeEmptyDOMElement()
     expect(screen.getByTestId('default-route')).toHaveTextContent('/unauthorized')
     expect(screen.getByTestId('action-/applicationsReview')).toHaveTextContent('false')
   })
@@ -334,7 +394,7 @@ describe('Auth Provider Role Matrix', () => {
     expect(screen.getByTestId('action-/applicationSearch')).toHaveTextContent('false')
   })
 
-  it('prioritizes the review queue over retired summary when both actions are granted', async () => {
+  it('keeps roleless reviewers on the review queue when both actions are granted', async () => {
     mockSessionCapabilities({
       authenticated: true,
       principal: 'idir\\reviewer',
@@ -352,7 +412,7 @@ describe('Auth Provider Role Matrix', () => {
     expect(screen.getByTestId('action-/applicationsReview')).toHaveTextContent('true')
   })
 
-  it('routes provincial submitters with application access to application search before upload', async () => {
+  it('routes provincial submitters with summary access to their client summary', async () => {
     mockSessionCapabilities({
       authenticated: true,
       principal: 'bceid\\submitter',
@@ -360,6 +420,7 @@ describe('Auth Provider Role Matrix', () => {
       welcomeTarget: null,
       legacyPath: null,
       grantedActions: [
+        '/summary',
         '/applicationSearch',
         '/applicationDetails',
         'createApplication',
@@ -367,10 +428,16 @@ describe('Auth Provider Role Matrix', () => {
       ],
     })
 
-    renderProbe(['uploadApplicationSubmission', 'createApplication', '/applicationSearch'])
+    renderProbe([
+      '/summary',
+      'uploadApplicationSubmission',
+      'createApplication',
+      '/applicationSearch',
+    ])
     await waitForAuthLoad()
 
-    expect(screen.getByTestId('default-route')).toHaveTextContent('/provincial/application')
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/provincial/summary')
+    expect(screen.getByTestId('action-/summary')).toHaveTextContent('true')
     expect(screen.getByTestId('action-uploadApplicationSubmission')).toHaveTextContent('true')
     expect(screen.getByTestId('action-createApplication')).toHaveTextContent('true')
     expect(screen.getByTestId('action-/applicationSearch')).toHaveTextContent('true')
@@ -469,6 +536,8 @@ describe('Auth Provider Role Matrix', () => {
         legacyPath: null,
         grantedActions: ['/applicationsReview'],
         forestClientNumber: null,
+        availableForestClientNumbers: [],
+        forestClientSelectionRequired: false,
       })
     })
 
@@ -506,6 +575,8 @@ describe('Auth Provider Role Matrix', () => {
         legacyPath: null,
         grantedActions: ['/lexisAgentAdmin'],
         forestClientNumber: null,
+        availableForestClientNumbers: [],
+        forestClientSelectionRequired: false,
       })
     })
 

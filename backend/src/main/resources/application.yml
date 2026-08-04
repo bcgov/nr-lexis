@@ -56,13 +56,6 @@ management:
       exposure:
         include: health,info,prometheus
 
-ca:
-  bc:
-    gov:
-      nrs:
-        identity-lookup:
-          base-url: ${IDENTITY_LOOKUP_BASE_URL:}
-
 lexis:
   runtime:
     require-oracle-profile: ${LEXIS_REQUIRE_ORACLE_PROFILE:false}
@@ -97,8 +90,6 @@ lexis:
     region-rni-address: ${LEXIS_MAIL_REGION_RNI_ADDRESS:}
     region-rsi-address: ${LEXIS_MAIL_REGION_RSI_ADDRESS:}
   auth:
-    cognito:
-      userinfo-uri: ${COGNITO_USERINFO_URI:}
     keycloak:
       # Optional second JWT issuer for machine-to-machine clients such as NEXCOL.
       issuer-uri: ${KEYCLOAK_ISSUER_URI:}
@@ -144,7 +135,6 @@ lexis:
         - "/federalApplicationDetails"
         - "viewFederalApplication"
         - "manageFederalApplication"
-        - "/applicationReport"
         - "/offerReport"
         - "/teacReport"
         - "/exemptionReport"
@@ -154,7 +144,6 @@ lexis:
         - "/speciesGradeReport"
         - "/feeReport"
         - "/tenureReport"
-        - "/approvedExemptionReport"
         - "mofrListing"
         - "approveExemption"
         - "createApplication"
@@ -174,6 +163,7 @@ lexis:
         - "approveExemption"
         - "saveExemption"
       LEXIS_PROVINCIAL_SUBMITTER:
+        - "/summary"
         - "/applicationSearch"
         - "/applicationDetails"
         - "/exemptionSearch"
@@ -182,14 +172,16 @@ lexis:
         - "/offerDetails"
         - "/permitSearch"
         - "/permitDetails"
+        - "/permitReport"
         - "/fileApplicationUpload"
         - "/fileExemptionUpload"
         - "/filePermitUpload"
         - "/fileInvoiceUpload"
         - "createApplication"
         - "createOffer"
+        - "createPermit"
+        - "savePermit"
         - "uploadApplicationSubmission"
-      LEXIS_DELEGATED_ADMIN: []
   federal-submission:
     require-request-id: false
     require-user-reference: false

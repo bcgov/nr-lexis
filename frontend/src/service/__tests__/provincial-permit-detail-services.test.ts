@@ -81,6 +81,7 @@ describe('provincial permit detail services', () => {
                     {
                       id: 'SCALE-1',
                       timbermark: 'TM-1',
+                      cascadeSplitCode: 'W',
                       species: 'Fir',
                       grade: 'A',
                       pieces: 12,
@@ -90,6 +91,7 @@ describe('provincial permit detail services', () => {
                     {
                       id: 'SCALE-2',
                       timbermark: 'TM-2',
+                      cascadeSplitCode: 'E',
                       species: 'Cedar',
                       grade: 'B',
                       pieces: 4,
@@ -110,22 +112,27 @@ describe('provincial permit detail services', () => {
               ],
             }),
           )
-        case '/lexis/rpc/permit-details/scale-fees-for-package':
+        case '/lexis/rpc/permit-details/all-scale-fees':
           return Promise.resolve(
             response({
-              scaleList: [
+              packageList: [
                 {
-                  id: 'SCALE-1',
-                  timbermark: 'TM-1',
-                  species: 'Fir',
-                  grade: 'A',
-                  amv: '$125.00',
-                  volume: '34.5',
-                  ministryUser: true,
-                  ewb: '$100.00',
-                  fil: '12%',
-                  mf: '1.5',
-                  fee: '$123.45',
+                  packageNumber: 'PKG-100',
+                  scaleList: [
+                    {
+                      id: 'SCALE-1',
+                      timbermark: 'TM-1',
+                      species: 'Fir',
+                      grade: 'A',
+                      amv: '$125.00',
+                      volume: '34.5',
+                      ministryUser: true,
+                      ewb: '$100.00',
+                      fil: '12%',
+                      mf: '1.5',
+                      fee: '$123.45',
+                    },
+                  ],
                 },
               ],
             }),
@@ -161,10 +168,9 @@ describe('provincial permit detail services', () => {
       { ttlMs: 30_000 },
     )
     expect(getCachedResponseMock).toHaveBeenCalledWith(
-      '/lexis/rpc/permit-details/scale-fees-for-package',
+      '/lexis/rpc/permit-details/all-scale-fees',
       {
         params: {
-          packageNumber: 'PKG-100',
           permitNumber: 'P-777',
         },
       },
@@ -202,6 +208,7 @@ describe('provincial permit detail services', () => {
         {
           id: 'SCALE-1',
           timberMark: 'TM-1',
+          scaleType: 'C',
           species: 'Fir',
           grade: 'A',
           pieces: 12,
@@ -213,6 +220,7 @@ describe('provincial permit detail services', () => {
         {
           id: 'SCALE-2',
           timberMark: 'TM-2',
+          scaleType: 'I',
           species: 'Cedar',
           grade: 'B',
           pieces: 4,
@@ -234,7 +242,7 @@ describe('provincial permit detail services', () => {
           ministryUser: true,
           ewb: '$100.00',
           filPercent: '12%',
-          mfPercent: '1.5',
+          mfPercent: '1.5%',
           amount: 123.45,
           amountDisplay: '$123.45',
         },
@@ -278,8 +286,8 @@ describe('provincial permit detail services', () => {
         })
       }
       switch (path) {
-        case '/lexis/rpc/permit-details/scale-fees-for-package':
-          return Promise.resolve(response({ scaleList: [] }))
+        case '/lexis/rpc/permit-details/all-scale-fees':
+          return Promise.resolve(response({ packageList: [] }))
         case '/lexis/rpc/permit-details/gbms-invoice-history':
           return Promise.resolve(response([]))
         default:
@@ -329,18 +337,23 @@ describe('provincial permit detail services', () => {
           )
         case '/lexis/rpc/permit-details/gbms-invoice-history':
           return Promise.resolve(response([]))
-        case '/lexis/rpc/permit-details/scale-fees-for-package':
+        case '/lexis/rpc/permit-details/all-scale-fees':
           return Promise.resolve(
             response({
-              scaleList: [
+              packageList: [
                 {
-                  id: 'SCALE-1',
-                  timbermark: 'TM-1',
-                  species: 'Fir',
-                  grade: 'A',
-                  amv: '$125.00',
-                  volume: '34.5',
-                  fee: '$123.45',
+                  packageNumber: 'PKG-100',
+                  scaleList: [
+                    {
+                      id: 'SCALE-1',
+                      timbermark: 'TM-1',
+                      species: 'Fir',
+                      grade: 'A',
+                      amv: '$125.00',
+                      volume: '34.5',
+                      fee: '$123.45',
+                    },
+                  ],
                 },
               ],
             }),
@@ -364,7 +377,7 @@ describe('provincial permit detail services', () => {
       { ttlMs: 30_000 },
     )
     expect(getCachedResponseMock).not.toHaveBeenCalledWith(
-      '/lexis/rpc/permit-details/scale-fees-for-package',
+      '/lexis/rpc/permit-details/all-scale-fees',
       expect.anything(),
       expect.anything(),
     )
@@ -403,15 +416,25 @@ describe('provincial permit detail services', () => {
       }),
     ])
     expect(getCachedResponseMock).toHaveBeenLastCalledWith(
-      '/lexis/rpc/permit-details/scale-fees-for-package',
+      '/lexis/rpc/permit-details/all-scale-fees',
       {
         params: {
-          packageNumber: 'PKG-100',
           permitNumber: 'P-777',
         },
       },
       { ttlMs: 30_000 },
     )
+  })
+
+  it('skips the bulk fee request for an explicitly empty package selection', async () => {
+    await expect(
+      fetchProvincialPermitFees({
+        permitNumber: 'P-777',
+        packageNumbers: [],
+      }),
+    ).resolves.toEqual([])
+
+    expect(getCachedResponseMock).not.toHaveBeenCalled()
   })
 
   it('loads Blanket OIC package rows from the aggregate permit endpoint', async () => {
@@ -455,21 +478,26 @@ describe('provincial permit detail services', () => {
               ],
             }),
           )
-        case '/lexis/rpc/permit-details/scale-fees-for-package':
+        case '/lexis/rpc/permit-details/all-scale-fees':
           return Promise.resolve(
             response({
-              scaleList: [
+              packageList: [
                 {
-                  id: 'OIC-FEE-1',
-                  timbermark: 'TM-OIC',
-                  species: 'Hemlock',
-                  grade: 'B',
-                  amv: '$80.00',
-                  volume: '12.5',
-                  ministryUser: false,
-                  fil: '10%',
-                  mf: '2.0',
-                  fee: '$10.50',
+                  packageNumber: 'BOIC-100',
+                  scaleList: [
+                    {
+                      id: 'OIC-FEE-1',
+                      timbermark: 'TM-OIC',
+                      species: 'Hemlock',
+                      grade: 'B',
+                      amv: '$80.00',
+                      volume: '12.5',
+                      ministryUser: false,
+                      fil: '10%',
+                      mf: 0,
+                      fee: '$10.50',
+                    },
+                  ],
                 },
               ],
             }),
@@ -493,10 +521,9 @@ describe('provincial permit detail services', () => {
       { ttlMs: 30_000 },
     )
     expect(getCachedResponseMock).toHaveBeenCalledWith(
-      '/lexis/rpc/permit-details/scale-fees-for-package',
+      '/lexis/rpc/permit-details/all-scale-fees',
       {
         params: {
-          packageNumber: 'BOIC-100',
           permitNumber: 'P-888',
         },
       },
@@ -527,6 +554,7 @@ describe('provincial permit detail services', () => {
       {
         id: 'OIC-SCALE-1',
         timberMark: 'TM-OIC',
+        scaleType: '',
         species: 'Hemlock',
         grade: 'B',
         pieces: 5,
@@ -548,7 +576,7 @@ describe('provincial permit detail services', () => {
         ministryUser: false,
         ewb: '',
         filPercent: '10%',
-        mfPercent: '2.0',
+        mfPercent: '0%',
         amount: 10.5,
         amountDisplay: '$10.50',
       },
@@ -569,8 +597,8 @@ describe('provincial permit detail services', () => {
             },
           ],
         })
-      case '/lexis/rpc/permit-details/scale-fees-for-package':
-        return response({ scaleList: [] })
+      case '/lexis/rpc/permit-details/all-scale-fees':
+        return response({ packageList: [] })
       case '/lexis/rpc/permit-details/gbms-invoice-history':
         return response([])
       default:
@@ -585,8 +613,8 @@ describe('provincial permit detail services', () => {
       blanketOic: false,
     },
     {
-      label: 'scale fee list',
-      path: '/lexis/rpc/permit-details/scale-fees-for-package',
+      label: 'bulk scale fee list',
+      path: '/lexis/rpc/permit-details/all-scale-fees',
       blanketOic: false,
     },
   ]
@@ -630,18 +658,18 @@ describe('provincial permit detail services', () => {
     },
   )
 
-  it.each([
-    '/lexis/rpc/permit-details/core-tabs',
-    '/lexis/rpc/permit-details/scale-fees-for-package',
-  ])('rejects malformed required permit tab data from %s', async (malformedPath) => {
-    getCachedResponseMock.mockImplementation((path: string) => {
-      return Promise.resolve(
-        path === malformedPath ? response({}) : requiredPermitTabResponse(path),
-      )
-    })
+  it.each(['/lexis/rpc/permit-details/core-tabs', '/lexis/rpc/permit-details/all-scale-fees'])(
+    'rejects malformed required permit tab data from %s',
+    async (malformedPath) => {
+      getCachedResponseMock.mockImplementation((path: string) => {
+        return Promise.resolve(
+          path === malformedPath ? response({}) : requiredPermitTabResponse(path),
+        )
+      })
 
-    await expect(fetchProvincialPermitDetailTabs('P-777')).rejects.toThrow('Invalid')
-  })
+      await expect(fetchProvincialPermitDetailTabs('P-777')).rejects.toThrow('Invalid')
+    },
+  )
 
   it('rejects malformed aggregate package data', async () => {
     getCachedResponseMock.mockImplementation((path: string) =>

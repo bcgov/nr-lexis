@@ -7,6 +7,8 @@ import { useAuth } from '@/context/auth/useAuth'
 import ThemeProvider from '@/context/theme/ThemeProvider'
 import type { LexisSessionCapabilities } from '@/interfaces/LexisSession'
 import { fetchUserPreferences, updateUserPreferences } from '@/service/user-preference-service'
+import type { LexisNotification } from '@/interfaces/LexisNotification'
+import { fetchNotifications } from '@/service/notification-service'
 import { createTestAuthContext, createTestCapabilities } from '@/test-utils/auth'
 
 vi.mock('@/context/auth/useAuth', () => ({
@@ -26,10 +28,29 @@ vi.mock('@/service/user-preference-service', () => ({
 const mockedUseAuth = vi.mocked(useAuth)
 const mockedFetchUserPreferences = vi.mocked(fetchUserPreferences)
 const mockedUpdateUserPreferences = vi.mocked(updateUserPreferences)
+
+vi.mock('@/service/notification-service', () => ({
+  fetchNotifications: vi.fn(),
+}))
+
+const mockedFetchNotifications = vi.mocked(fetchNotifications)
 const THEME_PREFERENCE_KEY = 'lexis.ui.theme'
 const SIDE_NAV_PREFERENCE_KEY = 'lexis.ui.sideNavCollapsed'
 const COLLAPSED_SECTIONS_PREFERENCE_KEY = 'lexis.ui.collapsedSections'
 const NOTIFICATION_REGION_ID = 'lexis-toast-notification-region'
+const activeNotification: LexisNotification = {
+  id: 1,
+  title: 'System update',
+  contentHtml: '<p>System update</p>',
+  notificationLevel: 'INFORMATION',
+  displayStartDate: '2026-07-21',
+  displayEndDate: '2026-07-28',
+  createUser: 'IDIR\\ADMIN',
+  createTimestamp: '2026-07-21T00:00:00',
+  updateUserId: 'IDIR\\ADMIN',
+  updateTimestamp: '2026-07-21T00:00:00',
+  audienceRoles: [],
+}
 
 const mockMobileViewport = (): void => {
   vi.spyOn(window, 'matchMedia').mockImplementation(
@@ -77,6 +98,7 @@ describe('Layout shell', () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext())
     mockedFetchUserPreferences.mockResolvedValue({ defaultRegion: null })
     mockedUpdateUserPreferences.mockImplementation(async (defaultRegion) => ({ defaultRegion }))
+    mockedFetchNotifications.mockResolvedValue([])
   })
 
   afterEach(() => {
@@ -100,6 +122,73 @@ describe('Layout shell', () => {
     expect(window.localStorage.getItem(THEME_PREFERENCE_KEY)).toBe('white')
     expect(window.localStorage.getItem(SIDE_NAV_PREFERENCE_KEY)).toBe('false')
     expect(window.localStorage.getItem(COLLAPSED_SECTIONS_PREFERENCE_KEY)).toBe('{}')
+  })
+
+  it('shows an active-updates indicator only when the visible notifications endpoint returns data', async () => {
+    mockedFetchNotifications.mockResolvedValue([activeNotification])
+
+    renderLayout('/provincial/application')
+
+    const notificationsLink = await screen.findByRole('link', {
+      name: 'Notifications, active updates available',
+    })
+
+    expect(mockedFetchNotifications).toHaveBeenCalledOnce()
+    expect(notificationsLink).toHaveAttribute('href', '/notifications')
+    expect(
+      notificationsLink.querySelector('.csp-side-nav__notification-indicator'),
+    ).toBeInTheDocument()
+  })
+
+  it('does not show an active-updates indicator when no visible notifications exist', async () => {
+    renderLayout('/provincial/application')
+
+    await waitFor(() => expect(mockedFetchNotifications).toHaveBeenCalledOnce())
+
+    const notificationsLink = screen.getByRole('link', { name: 'Notifications' })
+    expect(screen.getAllByText('Notifications')).toHaveLength(1)
+    expect(screen.queryByRole('button', { name: 'Notifications' })).not.toBeInTheDocument()
+    expect(notificationsLink).not.toHaveClass('cds--side-nav__link--nested')
+    expect(
+      notificationsLink.querySelector('.csp-side-nav__notification-indicator'),
+    ).not.toBeInTheDocument()
+  })
+
+  it('labels the provincial review navigation as application review', () => {
+    renderLayout('/provincial/review')
+
+    expect(screen.getByRole('link', { name: 'Application review' })).toHaveAttribute(
+      'href',
+      '/provincial/review',
+    )
+    expect(screen.queryByRole('link', { name: 'Review' })).not.toBeInTheDocument()
+  })
+
+  it('shows Summary navigation only to provincial submitters', () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({
+          principal: 'bceid\\submitter',
+          roles: ['PROVINCIAL_SUBMITTER'],
+          grantedActions: ['/summary'],
+          forestClientNumber: '00012345',
+        }),
+        defaultRoute: '/provincial/summary',
+        canPerform: (action: string) => action === '/summary',
+      }),
+    )
+
+    const submitterView = renderLayout('/provincial/summary')
+    expect(screen.getByRole('link', { name: 'Summary' })).toHaveAttribute(
+      'href',
+      '/provincial/summary',
+    )
+
+    submitterView.unmount()
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
+    renderLayout('/provincial/review')
+
+    expect(screen.queryByRole('link', { name: 'Summary' })).not.toBeInTheDocument()
   })
 
   it('restores persisted theme, side-nav, and collapsed sections', async () => {
@@ -214,7 +303,6 @@ describe('Layout shell', () => {
   it('marks only the exact side-nav route as active', () => {
     renderLayout('/admin/rtm/emslogamv')
 
-    const adminLink = screen.getByRole('link', { name: /Users & Access/i })
     const averageMonthlyValuesLink = screen.getByRole('link', {
       name: /Average Monthly Values/i,
     })
@@ -224,8 +312,6 @@ describe('Layout shell', () => {
     expect(activeLinks).toHaveLength(1)
     expect(averageMonthlyValuesLink).toHaveClass('cds--side-nav__link--active')
     expect(averageMonthlyValuesLink).toHaveAttribute('aria-current', 'page')
-    expect(adminLink).not.toHaveClass('cds--side-nav__link--active')
-    expect(adminLink).not.toHaveAttribute('aria-current')
   })
 
   it('renders split admin side-nav areas with distinct active routes', () => {
@@ -299,7 +385,7 @@ describe('Layout shell', () => {
     expect(uploadLinks.map((link) => link.getAttribute('href'))).toEqual([
       '/provincial/application/upload',
     ])
-    expect(screen.getByRole('link', { name: /Users & Access/i })).toBeVisible()
+    expect(screen.queryByRole('link', { name: /Users & Access/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /^Uploads$/i })).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Average Monthly Values/i })).toBeVisible()
     const navLinks = sideNav.querySelectorAll('.csp-side-nav__link')
@@ -317,7 +403,7 @@ describe('Layout shell', () => {
     expect(screen.queryByRole('link', { name: 'Dashboard' })).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Go to your landing page' }))
 
-    expect(screen.getByTestId('current-path')).toHaveTextContent('/admin')
+    expect(screen.getByTestId('current-path')).toHaveTextContent('/provincial/review')
   })
 
   it('lets pages own the only visible page title', () => {
@@ -365,7 +451,9 @@ describe('Layout shell', () => {
       legacyPath: null,
       grantedActions: ['/applicationReport', 'mofrListing'],
       forestClientNumber: null,
-    } as LexisSessionCapabilities
+      availableForestClientNumbers: [],
+      forestClientSelectionRequired: false,
+    } as unknown as LexisSessionCapabilities
 
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
@@ -522,6 +610,7 @@ describe('Layout shell', () => {
           roles: ['READ_ONLY'],
           orgUnitNo: '1903',
           forestClientNumber: '00012345',
+          availableForestClientNumbers: ['00012345', '00067890'],
         }),
       }),
     )
@@ -533,6 +622,11 @@ describe('Layout shell', () => {
     expect(within(profilePanel).getByText('idir\\analyst (Read Only)')).toBeVisible()
     expect(within(profilePanel).getByText('Organization unit: 1903')).toBeVisible()
     expect(within(profilePanel).getByText('Forest client: 00012345')).toBeVisible()
+
+    await userEvent.click(within(profilePanel).getByRole('button', { name: 'Switch organization' }))
+
+    expect(screen.getByTestId('current-path')).toHaveTextContent('/select-organization')
+    expect(document.getElementById('profile-panel')).toHaveAttribute('aria-hidden', 'true')
   })
 
   it('loads and saves the default region from the profile panel', async () => {
@@ -617,7 +711,7 @@ describe('Layout shell', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Open navigation menu' }))
     await waitFor(() => {
-      expect(screen.getByRole('link', { name: /^Review$/i })).toHaveFocus()
+      expect(screen.getByRole('link', { name: /^Notifications$/i })).toHaveFocus()
     })
 
     await userEvent.keyboard('{Escape}')

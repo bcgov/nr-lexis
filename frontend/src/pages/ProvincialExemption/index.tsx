@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import {
   Button,
   Checkbox,
@@ -70,6 +70,7 @@ import {
   type IdTextOption,
 } from '@/pages/shared/search-query-utils'
 import { useSearchFilterDraft } from '@/pages/shared/useSearchFilterDraft'
+import { usePersistedSearchParams } from '@/pages/shared/usePersistedSearchParams'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import {
   loadSearchWithDeferredTotal,
@@ -223,7 +224,7 @@ const buildSearchParams = (
 
 const ProvincialExemptionPage = () => {
   const { capabilities, canPerform } = useAuth()
-  const [searchParams, setSearchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = usePersistedSearchParams('provincial-exemptions')
   const [regionOptions, setRegionOptions] = useState<IdTextOption[]>([])
   const [exemptionTypeOptions, setExemptionTypeOptions] = useState<SearchOption[]>([])
   const [exemptionStatusOptions, setExemptionStatusOptions] = useState<SearchOption[]>([])
@@ -303,8 +304,7 @@ const ProvincialExemptionPage = () => {
   const sortDirection = urlState.sortDirection
   const pageSize = urlState.pageSize
   const requestFilters = appliedFilters
-  const awaitingDefaultApprovalFilters =
-    shouldDefaultApprovalFilters && searchParams.toString().length === 0
+  const hasSearchQuery = searchParams.toString().length > 0
   const clearSelection = useCallback(() => {
     setSelectedRowsById({})
     setApprovalStatus(null)
@@ -416,9 +416,6 @@ const ProvincialExemptionPage = () => {
           cachedTotal,
           search: searchProvincialExemptions,
           count: countProvincialExemptions,
-          isLatestRequest,
-          onExactTotal: (resolvedResponse) => commitSearchResponse(resolvedResponse, true),
-          onCountError: console.error,
         })
         if (isLatestRequest()) {
           commitSearchResponse(response, totalIsExact)
@@ -439,7 +436,7 @@ const ProvincialExemptionPage = () => {
   )
 
   useEffect(() => {
-    if (awaitingDefaultApprovalFilters) {
+    if (!hasSearchQuery) {
       return
     }
 
@@ -451,7 +448,7 @@ const ProvincialExemptionPage = () => {
       sortDirection: urlState.sortDirection,
     })
   }, [
-    awaitingDefaultApprovalFilters,
+    hasSearchQuery,
     requestFilters,
     runSearch,
     urlState.page,
@@ -461,24 +458,18 @@ const ProvincialExemptionPage = () => {
   ])
 
   useEffect(() => {
-    const hasSearchQuery = searchParams.toString().length > 0
     if (!hasSearchQuery && shouldDefaultApprovalFilters) {
-      setSearchParams(
-        buildSearchParams(
-          {
-            ...INITIAL_FILTERS,
-            exemptionStatusCode: 'NEW',
-            exemptionTypeCode: 'M',
-          },
-          DEFAULT_SORT_FIELD,
-          DEFAULT_SORT_DIRECTION,
-          DEFAULT_SEARCH_PAGE,
-          DEFAULT_SEARCH_PAGE_SIZE,
-        ),
-        { replace: true },
+      setFilters((currentFilters) =>
+        currentFilters.exemptionStatusCode === 'NEW' && currentFilters.exemptionTypeCode === 'M'
+          ? currentFilters
+          : {
+              ...currentFilters,
+              exemptionStatusCode: 'NEW',
+              exemptionTypeCode: 'M',
+            },
       )
     }
-  }, [searchParams, setSearchParams, shouldDefaultApprovalFilters])
+  }, [hasSearchQuery, setFilters, shouldDefaultApprovalFilters])
 
   useEffect(() => {
     const loadOptions = async () => {
@@ -498,6 +489,53 @@ const ProvincialExemptionPage = () => {
 
     void loadOptions()
   }, [])
+
+  useEffect(() => {
+    if (
+      optionsLoading ||
+      optionsUnavailable ||
+      searchParams.has('region') ||
+      regionOptions.length === 0
+    ) {
+      return
+    }
+
+    const defaultRegions = regionOptions.map((region) => region.id)
+    if (hasSearchQuery) {
+      setSearchParams(
+        buildSearchParams(
+          {
+            ...urlState.filters,
+            region: defaultRegions,
+          },
+          urlState.sortField,
+          urlState.sortDirection,
+          urlState.page,
+          urlState.pageSize,
+        ),
+        { replace: true },
+      )
+      return
+    }
+
+    setFilters((currentFilters) =>
+      currentFilters.region.length > 0
+        ? currentFilters
+        : {
+            ...currentFilters,
+            region: defaultRegions,
+          },
+    )
+  }, [
+    hasSearchQuery,
+    optionsLoading,
+    optionsUnavailable,
+    regionOptions,
+    searchParams,
+    setFilters,
+    setSearchParams,
+    urlState,
+  ])
 
   const onSearch = () => {
     if (loading || hasDateValidationError) {
@@ -529,10 +567,14 @@ const ProvincialExemptionPage = () => {
 
   const onClearFilters = () => {
     clearSelection()
-    setFilters(INITIAL_FILTERS)
+    const defaultFilters = {
+      ...INITIAL_FILTERS,
+      region: regionOptions.map((region) => region.id),
+    }
+    setFilters(defaultFilters)
     setSearchParams(
       buildSearchParams(
-        INITIAL_FILTERS,
+        defaultFilters,
         DEFAULT_SORT_FIELD,
         DEFAULT_SORT_DIRECTION,
         DEFAULT_SEARCH_PAGE,
@@ -880,6 +922,8 @@ const ProvincialExemptionPage = () => {
                   value={filters.ownerClientNumber}
                   onChange={(event) => updateFilter('ownerClientNumber', event.target.value)}
                 />
+                {/* INTENTIONAL_LEGACY_DIVERGENCE(SEARCH_FILTER_EXPANSION):
+                    Modern exemption search exposes approval-date criteria not shown in legacy. */}
                 <IsoDatePicker
                   id="approvalFromDate"
                   labelText="Approval from date"
@@ -971,7 +1015,7 @@ const ProvincialExemptionPage = () => {
         </section>
       </Column>
 
-      <Column sm={4} md={8} lg={16}>
+      <Column sm={4} md={8} lg={16} hidden={!hasSearchQuery}>
         <section
           className="legacy-search-section legacy-search-section--results"
           aria-label="Search results"

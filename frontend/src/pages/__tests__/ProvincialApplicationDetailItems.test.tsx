@@ -38,6 +38,8 @@ import {
   mockedUpdateApplicationPackage,
   mockedUpdateApplicationSummary,
   selectApplicationDetailTab,
+  selectApplicationItemsForEditing,
+  selectApplicationSummaryTile,
 } from './ProvincialApplicationDetailActions.support'
 import ProvincialApplicationDetailsPage from '@/pages/ProvincialApplicationDetails'
 
@@ -128,6 +130,38 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     })
   })
 
+  it('keeps package mutation controls behind the Items edit mode', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationDetailTab('Items')
+    expect(await screen.findByRole('button', { name: 'Edit items' })).toBeInTheDocument()
+    expect(screen.queryByLabelText('Package Comments')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save Package' })).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Edit items' }))
+    expect(await screen.findByLabelText('Package Comments')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save Package' })).toBeInTheDocument()
+
+    await userEvent.click(
+      within(
+        document.querySelector(
+          '#application-items .application-items-panel__header',
+        ) as HTMLElement,
+      ).getByRole('button', { name: 'Cancel' }),
+    )
+    expect(screen.queryByLabelText('Package Comments')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Edit items' })).toBeInTheDocument()
+  })
+
   it('keeps a manual package selection after handling a deep-link package focus', async () => {
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
       ...applicationDetail,
@@ -170,6 +204,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       expect(mockedFetchApplicationPackageDetails).toHaveBeenCalledWith('PKG-1')
     })
 
+    await selectApplicationItemsForEditing()
     await chooseComboBoxOption(packageSelector, 'PKG-2')
     await waitFor(() => {
       expect(packageSelector).toHaveValue('PKG-2')
@@ -214,10 +249,11 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
 
     await selectApplicationDetailTab('Items')
     expect(await screen.findByText('Package Details')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Save Package' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Delete Package' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Create Package' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Add Scale' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Edit items' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save Package' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Delete Package' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Create Package' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add Scale' })).not.toBeInTheDocument()
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
     expect(mockedUpdateApplicationPackage).not.toHaveBeenCalled()
     expect(mockedAddApplicationPackage).not.toHaveBeenCalled()
@@ -263,10 +299,11 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
 
       await selectApplicationDetailTab('Items')
       expect(await screen.findByText('Package Details')).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: 'Save Package' })).toBeDisabled()
-      expect(screen.getByRole('button', { name: 'Delete Package' })).toBeDisabled()
-      expect(screen.getByRole('button', { name: 'Create Package' })).toBeDisabled()
-      expect(screen.getByRole('button', { name: 'Add Scale' })).toBeDisabled()
+      expect(screen.queryByRole('button', { name: 'Edit items' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Save Package' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Delete Package' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Create Package' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Add Scale' })).not.toBeInTheDocument()
       expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
       expect(mockedUpdateApplicationPackage).not.toHaveBeenCalled()
       expect(mockedAddApplicationPackage).not.toHaveBeenCalled()
@@ -308,7 +345,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     expect(within(getApplicationSummaryTile()).queryByLabelText('Exemption reason')).toBeNull()
     expect(screen.queryByText('Application summary options unavailable')).not.toBeInTheDocument()
 
-    await selectApplicationDetailTab('Items')
+    await selectApplicationItemsForEditing()
     await waitFor(() => {
       expect(mockedFetchProvincialApplicationOptions).toHaveBeenCalled()
       expect(mockedFetchApplicationPackageDetails).toHaveBeenCalledWith('PKG-1')
@@ -341,7 +378,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationDetailTab('Application')
+    await selectApplicationSummaryTile()
     expect(
       await within(getApplicationSummaryTile()).findByRole('combobox', {
         name: 'Exemption reason',
@@ -349,9 +386,10 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     ).toBeEnabled()
 
     await selectApplicationDetailTab('Items')
-    expect(await screen.findByRole('button', { name: 'Save Package' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Create Package' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Add Scale' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Edit items' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save Package' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Create Package' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add Scale' })).not.toBeInTheDocument()
   })
 
   it('hides package and scale mutations for standing timber applications', async () => {
@@ -398,7 +436,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationDetailTab('Items')
+    await selectApplicationItemsForEditing()
     await waitFor(() => {
       expect(mockedFetchApplicationRemainingSpecies).toHaveBeenCalled()
     })
@@ -426,7 +464,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationDetailTab('Items')
+    await selectApplicationItemsForEditing()
     expect(await screen.findByText('Package Details')).toBeInTheDocument()
     await waitFor(() => {
       expect(mockedFetchApplicationPackageDetails).toHaveBeenCalledWith('PKG-1')
@@ -478,6 +516,51 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     expect(await screen.findByText('Package PKG-1 saved.')).toBeInTheDocument()
   })
 
+  it('displays legacy scale types for cascade split codes', async () => {
+    mockedFetchApplicationPackageScales.mockResolvedValue([
+      {
+        permitted: false,
+        timberMark: 'TM-WATER',
+        species: 'Douglas-fir',
+        grade: 'Sawlog',
+        pieces: 5,
+        volume: '20.0',
+        id: '55',
+        cascadeSplitCode: 'W',
+      },
+      {
+        permitted: false,
+        timberMark: 'TM-ESTIMATE',
+        species: 'Cedar',
+        grade: 'Sawlog',
+        pieces: 2,
+        volume: '8.0',
+        id: '56',
+        cascadeSplitCode: 'E',
+      },
+    ])
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationDetailTab('Items')
+
+    const waterScaleRow = (await screen.findByText('TM-WATER')).closest('tr')
+    const estimatedScaleRow = screen.getByText('TM-ESTIMATE').closest('tr')
+    expect(waterScaleRow).toBeTruthy()
+    expect(estimatedScaleRow).toBeTruthy()
+    expect(within(waterScaleRow as HTMLElement).getByText('C')).toBeInTheDocument()
+    expect(within(estimatedScaleRow as HTMLElement).getByText('I')).toBeInTheDocument()
+  })
+
   it('guards package drafts and provides an explicit local reset', async () => {
     const router = createMemoryRouter(
       [
@@ -496,7 +579,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     )
     render(<RouterProvider router={router} />)
 
-    await selectApplicationDetailTab('Items')
+    await selectApplicationItemsForEditing()
     const comments = await screen.findByLabelText('Package Comments')
     fireEvent.change(comments, { target: { value: 'Unsaved package draft' } })
     await userEvent.click(screen.getByRole('link', { name: 'Leave application' }))
@@ -531,7 +614,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationDetailTab('Items')
+    await selectApplicationItemsForEditing()
 
     expect(
       await screen.findByText('Unable to retrieve application item details.'),
@@ -565,7 +648,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationDetailTab('Items')
+    await selectApplicationItemsForEditing()
 
     expect(await screen.findByText('Item options unavailable')).toBeInTheDocument()
     await waitFor(() => {
@@ -595,7 +678,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationDetailTab('Items')
+    await selectApplicationItemsForEditing()
     expect(await screen.findByRole('button', { name: 'Create Package' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Create Package' }))
 
@@ -615,7 +698,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationDetailTab('Items')
+    await selectApplicationItemsForEditing()
     const createPackageSection = (
       await screen.findByRole('heading', { name: 'Create Package' })
     ).closest('section')
@@ -645,7 +728,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationDetailTab('Items')
+    await selectApplicationItemsForEditing()
     const createPackageSection = (
       await screen.findByRole('heading', { name: 'Create Package' })
     ).closest('section')
@@ -687,7 +770,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationDetailTab('Items')
+    await selectApplicationItemsForEditing()
     const createPackageSection = (
       await screen.findByRole('heading', { name: 'Create Package' })
     ).closest('section')
@@ -733,7 +816,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationDetailTab('Items')
+    await selectApplicationItemsForEditing()
     const createPackageSection = (
       await screen.findByRole('heading', { name: 'Create Package' })
     ).closest('section')
@@ -834,7 +917,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationDetailTab('Items')
+    await selectApplicationItemsForEditing()
     const packageDetailsSection = (
       await screen.findByRole('heading', { name: 'Package Details' })
     ).closest('section')
@@ -881,7 +964,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationDetailTab('Items')
+    await selectApplicationItemsForEditing()
     const packageDetailsSection = (
       await screen.findByRole('heading', { name: 'Package Details' })
     ).closest('section')
@@ -976,7 +1059,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationDetailTab('Items')
+    await selectApplicationItemsForEditing()
     await waitFor(() => {
       expect(mockedFetchApplicationPackageDetails).toHaveBeenCalledWith('PKG-1')
     })
@@ -1068,7 +1151,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationDetailTab('Items')
+    await selectApplicationItemsForEditing()
     await waitFor(() =>
       expect(screen.getByLabelText('Package Comments')).toHaveValue('PKG-1 comments'),
     )
@@ -1086,7 +1169,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       name: 'Discard package drafts?',
     })
     expect(confirmation).toHaveAccessibleDescription(/discard unsaved package, species, and scale/)
-    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    await userEvent.click(within(confirmation).getByRole('button', { name: 'Cancel' }))
     expect(screen.getByRole('combobox', { name: 'Selected Package' })).toHaveValue('PKG-1')
     expect(
       within(packagesSection as HTMLElement).getByRole('radio', {
@@ -1143,7 +1226,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationDetailTab('Items')
+    await selectApplicationItemsForEditing()
     expect(await screen.findByText('TM001')).toBeInTheDocument()
     const detailFetchCountAfterInitialLoad =
       mockedFetchProvincialApplicationDetail.mock.calls.length
@@ -1186,7 +1269,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
 
     const scaleRow = screen.getByText('TM001').closest('tr')
     expect(scaleRow).toBeTruthy()
-    expect(within(scaleRow as HTMLElement).getByText('S')).toBeInTheDocument()
+    expect(within(scaleRow as HTMLElement).getByText('-')).toBeInTheDocument()
     fireEvent.click(within(scaleRow as HTMLElement).getByRole('button', { name: 'Delete' }))
     await waitFor(() => {
       expect(mockedDeleteApplicationScale).toHaveBeenCalledWith('55', '321')
@@ -1205,7 +1288,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationDetailTab('Items')
+    await selectApplicationItemsForEditing()
     expect(await screen.findByText('TM001')).toBeInTheDocument()
 
     fireEvent.change(screen.getByLabelText('Scale ID or timber mark'), {
@@ -1239,7 +1322,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationDetailTab('Items')
+    await selectApplicationItemsForEditing()
     expect(await screen.findByText('TM001')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Add Scale' }))
 
@@ -1263,7 +1346,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationDetailTab('Items')
+    await selectApplicationItemsForEditing()
     expect(await screen.findByText('TM001')).toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('Timber Mark'), {
       target: { value: 'TM002' },
@@ -1298,7 +1381,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationDetailTab('Items')
+    await selectApplicationItemsForEditing()
     expect(await screen.findByText('TM001')).toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('Timber Mark'), {
       target: { value: 'TM002' },
@@ -1334,7 +1417,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationDetailTab('Application')
+    await selectApplicationSummaryTile()
     await screen.findByLabelText('Application volume (m³)')
 
     await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))

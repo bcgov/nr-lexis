@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import {
   Button,
   Column,
@@ -59,6 +59,7 @@ import {
   type IdTextOption,
 } from '@/pages/shared/search-query-utils'
 import { useSearchFilterDraft } from '@/pages/shared/useSearchFilterDraft'
+import { usePersistedSearchParams } from '@/pages/shared/usePersistedSearchParams'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import {
   loadSearchWithDeferredTotal,
@@ -129,7 +130,7 @@ const buildSearchParams = (
 
 const ProvincialOffersPage = () => {
   const { capabilities, canPerform } = useAuth()
-  const [searchParams, setSearchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = usePersistedSearchParams('provincial-offers')
   const [regionOptions, setRegionOptions] = useState<IdTextOption[]>([])
   const [results, setResults] = useState<ProvincialOfferSearchResponse>(EMPTY_RESULTS)
   const [loading, setLoading] = useState(false)
@@ -294,9 +295,6 @@ const ProvincialOffersPage = () => {
           cachedTotal,
           search: searchProvincialOffers,
           count: countProvincialOffers,
-          isLatestRequest,
-          onExactTotal: (resolvedResponse) => commitSearchResponse(resolvedResponse, true),
-          onCountError: console.error,
         })
         if (isLatestRequest()) {
           commitSearchResponse(response, totalIsExact)
@@ -371,23 +369,64 @@ const ProvincialOffersPage = () => {
       return
     }
 
-    const hasSearchQuery = searchParams.toString().length > 0
     if (!hasSearchQuery) {
+      setFilters((currentFilters) =>
+        currentFilters.listingToDate === defaultListingToDate
+          ? currentFilters
+          : {
+              ...currentFilters,
+              listingToDate: defaultListingToDate,
+            },
+      )
+    }
+  }, [defaultListingToDate, hasSearchQuery, isOptionsLoaded, setFilters])
+
+  useEffect(() => {
+    if (
+      !isOptionsLoaded ||
+      offerOptionsUnavailable ||
+      searchParams.has('region') ||
+      regionOptions.length === 0
+    ) {
+      return
+    }
+
+    const defaultRegions = regionOptions.map((region) => region.id)
+    if (hasSearchQuery) {
       setSearchParams(
         buildSearchParams(
           {
-            ...INITIAL_FILTERS,
-            listingToDate: defaultListingToDate,
+            ...urlState.filters,
+            region: defaultRegions,
           },
-          DEFAULT_SORT_FIELD,
-          DEFAULT_SORT_DIRECTION,
-          DEFAULT_SEARCH_PAGE,
-          DEFAULT_SEARCH_PAGE_SIZE,
+          urlState.sortField,
+          urlState.sortDirection,
+          urlState.page,
+          urlState.pageSize,
         ),
         { replace: true },
       )
+      return
     }
-  }, [defaultListingToDate, isOptionsLoaded, searchParams, setSearchParams])
+
+    setFilters((currentFilters) =>
+      currentFilters.region.length > 0
+        ? currentFilters
+        : {
+            ...currentFilters,
+            region: defaultRegions,
+          },
+    )
+  }, [
+    hasSearchQuery,
+    isOptionsLoaded,
+    offerOptionsUnavailable,
+    regionOptions,
+    searchParams,
+    setFilters,
+    setSearchParams,
+    urlState,
+  ])
 
   const onSearch = () => {
     if (loading || hasDateValidationError) {
@@ -417,10 +456,15 @@ const ProvincialOffersPage = () => {
   }
 
   const onClearFilters = () => {
-    setFilters(INITIAL_FILTERS)
+    const defaultFilters = {
+      ...INITIAL_FILTERS,
+      listingToDate: defaultListingToDate,
+      region: regionOptions.map((region) => region.id),
+    }
+    setFilters(defaultFilters)
     setSearchParams(
       buildSearchParams(
-        INITIAL_FILTERS,
+        defaultFilters,
         DEFAULT_SORT_FIELD,
         DEFAULT_SORT_DIRECTION,
         DEFAULT_SEARCH_PAGE,
@@ -547,7 +591,7 @@ const ProvincialOffersPage = () => {
         </section>
       </Column>
 
-      <Column sm={4} md={8} lg={16}>
+      <Column sm={4} md={8} lg={16} hidden={!hasSearchQuery}>
         <section
           className="legacy-search-section legacy-search-section--results"
           aria-label="Search results"

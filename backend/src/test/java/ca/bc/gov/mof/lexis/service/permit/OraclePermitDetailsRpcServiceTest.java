@@ -19,7 +19,9 @@ import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
+import ca.bc.gov.mof.lexis.dto.application.ApplicationAccessContextDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAllScaleFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitApplicationListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitApprovedExemptionVolumeRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAvailableApplicationListRpcResponseDto;
@@ -59,8 +61,12 @@ import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PackageDetailsR
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PackageCandidateRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PackageInfoRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitFeeOverrideRow;
+import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitFeeScaleRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitMutationRow;
+import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitDocumentContextRow;
+import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitCorePackageContextRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitCorePackageRow;
+import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitCoreScaleRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitPolicyContextRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitScaleDetailRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.SalesInvoiceRow;
@@ -85,6 +91,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -693,6 +700,50 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
+  void allScaleFeesShouldUseBulkScaleContextWithoutPerRowOracleLookups() {
+    PermitScaleDetailRow firstScale =
+        scale("101", "TM1", "HEM", "J", 7.60d, 11L, "7000123", "PKG-903");
+    PermitScaleDetailRow secondScale =
+        scale("102", "TM2", "FIR", "K", 3.40d, 5L, "7000123", "PKG-999", 1000457L);
+    when(repository.findPermitFeeScaleRows(7000123L))
+        .thenReturn(
+            List.of(
+                new PermitFeeScaleRow(
+                    firstScale,
+                    "T",
+                    "Hemlock",
+                    "Grade J",
+                    "S",
+                    "Second Growth",
+                    BigDecimal.valueOf(125.0d)),
+                new PermitFeeScaleRow(
+                    secondScale,
+                    "T",
+                    "Fir",
+                    "Grade K",
+                    "O",
+                    "Old Growth",
+                    BigDecimal.valueOf(95.0d))));
+
+    PermitAllScaleFeesRpcResponseDto response = service.getAllScaleFees(7000123L, true);
+
+    assertThat(response.packageList())
+        .extracting("packageNumber", "totalFeeForPackage", "growthType")
+        .containsExactly(
+            tuple("PKG-903", "$7.60", "Second Growth"),
+            tuple("PKG-999", "$3.40", "Old Growth"));
+    assertThat(response.packageList().get(0).scaleList().get(0).species()).isEqualTo("Hemlock");
+    assertThat(response.packageList().get(0).scaleList().get(0).grade()).isEqualTo("Grade J");
+    assertThat(response.packageList().get(0).scaleList().get(0).amv()).isEqualTo("$125.00");
+    verify(repository, times(1)).findPermitFeeScaleRows(7000123L);
+    verify(repository, never()).findAverageMarketValueByScaleId(any());
+    verify(repository, never()).isApplicationUnmanufactured(anyLong());
+    verify(repository, never()).findSpeciesDescription(any());
+    verify(repository, never()).findGradeDescription(any());
+    verifyNoInteractions(applicationService);
+  }
+
+  @Test
   void scalesForPackageShouldMapScaleDetailsDescriptionsAndRegion() {
     when(repository.findScaleDetailsByPackageNumber("PKG-903"))
         .thenReturn(List.of(scale("101", "TM1", "HEM", "J", 7.60d, 11L, "7000123", "PKG-903")));
@@ -916,22 +967,29 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
-  void coreTabsShouldReuseNormalPackageAndApplicationScaleCursors() {
-    service.setPermitCoreTabsExecutor(Runnable::run);
-    when(repository.findCorePackageRowsByPermitNumberRequired(7000123L))
+  void coreTabsShouldUseThreeBulkReadsForNormalPermit() {
+    when(repository.findCorePackageContexts(7000123L, false))
         .thenReturn(
             List.of(
-                corePackage("PKG-100", 1000456L), corePackage("PKG-200", 1000456L)));
-    when(repository.findPermitScaleDetailsByApplicationNumber(1000456L))
+                coreContext("PKG-100", 1000456L, true),
+                coreContext("PKG-200", 1000456L, true)));
+    when(repository.findCoreScaleRows(List.of("PKG-100", "PKG-200"), 7000123L, false))
         .thenReturn(
             List.of(
-                scale("200-current", "TM1", null, null, 1.0d, 1L, "7000123", "PKG-200", null),
-                scale("200-unassigned", "TM2", null, null, 2.0d, 2L, null, "PKG-200", null),
-                scale("200-other", "TM3", null, null, 3.0d, 3L, "7000999", "PKG-200", null),
-                scale("100-current", "TM4", null, null, 4.0d, 4L, "7000123", "PKG-100", null)));
+                coreScale(scale("200-current", "TM1", null, null, 1.0d, 1L, "7000123", "PKG-200", 1000456L)),
+                coreScale(scale("200-unassigned", "TM2", null, null, 2.0d, 2L, null, "PKG-200", 1000456L)),
+                coreScale(scale("200-other", "TM3", null, null, 3.0d, 3L, "7000999", "PKG-200", 1000456L)),
+                coreScale(scale("100-current", "TM4", null, null, 4.0d, 4L, "7000123", "PKG-100", 1000456L))));
 
+    AtomicReference<ApplicationAccessContextDto> accessContext = new AtomicReference<>();
     PermitCoreTabsRpcResponseDto response =
-        service.getCoreTabs(7000123L, false, applicationNumber -> applicationNumber == 1000456L);
+        service.getCoreTabs(
+            7000123L,
+            false,
+            application -> {
+              accessContext.set(application);
+              return application.applicationNumber() == 1000456L;
+            });
 
     assertThat(response.applicationList()).containsExactly("1000456");
     assertThat(response.packageList())
@@ -944,8 +1002,17 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(response.packageList().get(0).scaleList())
         .extracting(scale -> scale.id())
         .containsExactly("100-current");
-    verify(repository).findCorePackageRowsByPermitNumberRequired(7000123L);
-    verify(repository).findPermitScaleDetailsByApplicationNumber(1000456L);
+    assertThat(accessContext.get())
+        .extracting(
+            ApplicationAccessContextDto::applicationNumber,
+            ApplicationAccessContextDto::jurisdictionCode,
+            ApplicationAccessContextDto::orgUnitNumber,
+            ApplicationAccessContextDto::ownerClientNumber,
+            ApplicationAccessContextDto::agentClientNumber)
+        .containsExactly(1000456L, "P", 1835L, "00000001", "00000002");
+    verify(repository).findCorePackageContexts(7000123L, false);
+    verify(repository).findCoreScaleRows(List.of("PKG-100", "PKG-200"), 7000123L, false);
+    verify(repository).findCoreEndUseRows(List.of(1000456L), List.of("PKG-100", "PKG-200"));
     verify(repository, never()).findPackageNumbersByPermitNumberRequired(7000123L);
     verify(repository, never()).findApplicationNumbersByPermitNumberRequired(7000123L);
     verify(repository, never()).findPackageNumbersByOicPermitNumber(7000123L);
@@ -955,19 +1022,57 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
-  void coreTabsShouldReuseOicPackageAndApplicationScaleCursors() {
-    service.setPermitCoreTabsExecutor(Runnable::run);
-    when(repository.findCorePackageRowsByOicPermitNumber(7000123L))
+  void coreTabsShouldKeepThreeReadsForHundredsOfPackages() {
+    List<PermitCorePackageContextRow> packageRows =
+        java.util.stream.IntStream.range(0, 250)
+            .mapToObj(index -> coreContext("PKG-" + index, 1000456L, true))
+            .toList();
+    List<PermitCoreScaleRow> scaleRows =
+        java.util.stream.IntStream.range(0, 250)
+            .mapToObj(
+                index ->
+                    coreScale(scale(
+                        "scale-" + index,
+                        "TM-" + index,
+                        null,
+                        null,
+                        1.0d,
+                        1L,
+                        "7000123",
+                        "PKG-" + index,
+                        1000456L)))
+            .toList();
+    List<String> packageNumbers =
+        java.util.stream.IntStream.range(0, 250).mapToObj(index -> "PKG-" + index).sorted().toList();
+    when(repository.findCorePackageContexts(7000123L, false))
+        .thenReturn(packageRows);
+    when(repository.findCoreScaleRows(packageNumbers, 7000123L, false))
+        .thenReturn(scaleRows);
+
+    PermitCoreTabsRpcResponseDto response =
+        service.getCoreTabs(7000123L, false, ignored -> true);
+
+    assertThat(response.packageList()).hasSize(250);
+    assertThat(response.packageList())
+        .allSatisfy(packageRow -> assertThat(packageRow.scaleList()).hasSize(1));
+    verify(repository, times(1)).findCorePackageContexts(7000123L, false);
+    verify(repository, times(1)).findCoreScaleRows(packageNumbers, 7000123L, false);
+    verify(repository, times(1)).findCoreEndUseRows(List.of(1000456L), packageNumbers);
+    verify(repository, never()).findScaleDetailsByPackageNumber(any());
+  }
+
+  @Test
+  void coreTabsShouldUseThreeBulkReadsForBlanketOicPermit() {
+    when(repository.findCorePackageContexts(7000123L, true))
         .thenReturn(
             List.of(
-                corePackage("PKG-OIC-1", 1000456L), corePackage("PKG-OIC-2", 1000456L)));
-    when(repository.findApplicationNumbersByPermitNumberRequired(7000123L))
-        .thenReturn(List.of(1000456L));
-    when(repository.findPermitScaleDetailsByApplicationNumber(1000456L))
+                coreContext("PKG-OIC-1", 1000456L, true),
+                coreContext("PKG-OIC-2", 1000456L, true)));
+    when(repository.findCoreScaleRows(List.of("PKG-OIC-1", "PKG-OIC-2"), 7000123L, true))
         .thenReturn(
             List.of(
-                scale("oic-other", "TM1", null, null, 1.0d, 1L, "7000999", "PKG-OIC-2", null),
-                scale("oic-current", "TM2", null, null, 2.0d, 2L, "7000123", "PKG-OIC-1", null)));
+                coreScale(scale("oic-other", "TM1", null, null, 1.0d, 1L, "7000999", "PKG-OIC-2", 1000456L)),
+                coreScale(scale("oic-current", "TM2", null, null, 2.0d, 2L, "7000123", "PKG-OIC-1", 1000456L))));
 
     PermitCoreTabsRpcResponseDto response =
         service.getCoreTabs(7000123L, true, ignored -> true);
@@ -981,8 +1086,9 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(response.packageList().get(1).scaleList())
         .extracting(scale -> scale.id())
         .containsExactly("oic-other");
-    verify(repository).findCorePackageRowsByOicPermitNumber(7000123L);
-    verify(repository).findPermitScaleDetailsByApplicationNumber(1000456L);
+    verify(repository).findCorePackageContexts(7000123L, true);
+    verify(repository).findCoreScaleRows(List.of("PKG-OIC-1", "PKG-OIC-2"), 7000123L, true);
+    verify(repository).findCoreEndUseRows(List.of(1000456L), List.of("PKG-OIC-1", "PKG-OIC-2"));
     verify(repository, never()).findPackageNumbersByPermitNumberRequired(7000123L);
     verify(repository, never()).findPackageInfoByPackageNumber(any());
     verify(repository, never()).findPackageDetailsByPackageNumberRequired(any());
@@ -4518,15 +4624,23 @@ class OraclePermitDetailsRpcServiceTest {
 
   @Test
   void documentDetailsShouldIncludePermitAndApplicationDocuments() {
-    when(repository.findPermitDocumentDetailsByPermitNumber(7000123L))
-        .thenReturn(List.of(new DocumentRow(50L, "permit.pdf", "", "INV")));
-    when(repository.isPermitFileAttachmentRequired(50L)).thenReturn(false);
-    when(repository.findApplicationNumbersByPermitNumberRequired(7000123L))
-        .thenReturn(List.of(1000456L, 1000456L));
-    when(repository.findApplicationDocumentDetailsByApplicationNumber(1000456L))
-        .thenReturn(List.of(new DocumentRow(75L, "application.pdf", "", "INS")));
-    when(repository.findAttachmentTypeDescription("INV")).thenReturn(Optional.of("Invoice"));
-    when(repository.findAttachmentTypeDescription("INS")).thenReturn(Optional.of("Insurance"));
+    when(repository.findPermitDocumentContextRows(7000123L))
+        .thenReturn(
+            List.of(
+                new PermitDocumentContextRow(
+                    new DocumentRow(50L, "permit.pdf", "", "INV"),
+                    "Invoice",
+                    "invoice",
+                    null,
+                    7000123L,
+                    true),
+                new PermitDocumentContextRow(
+                    new DocumentRow(75L, "application.pdf", "", "INS"),
+                    "Insurance",
+                    "application",
+                    1000456L,
+                    null,
+                    false)));
 
     List<PermitDocumentItemRpcResponseDto> response = service.getDocumentDetails(7000123L);
 
@@ -4541,23 +4655,39 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(response.get(1).source()).isEqualTo("application");
     assertThat(response.get(1).sourceApplicationNumber()).isEqualTo(1000456L);
     assertThat(response.get(1).deletable()).isFalse();
-    verify(repository, never()).findScaleDetailsByPermitNumber(7000123L);
-    verify(repository, times(1)).findApplicationDocumentDetailsByApplicationNumber(1000456L);
+    verify(repository, times(1)).findPermitDocumentContextRows(7000123L);
+    verify(repository, never()).findPermitDocumentDetailsByPermitNumber(7000123L);
+    verify(repository, never()).findApplicationDocumentDetailsByApplicationNumber(anyLong());
+    verify(repository, never()).isPermitFileAttachmentRequired(anyLong());
+    verify(repository, never()).findAttachmentTypeDescription(any());
   }
 
   @Test
   void documentDetailsShouldFailClosedOnRelationshipTypeMismatch() {
-    when(repository.findApplicationNumbersByPermitNumberRequired(7000123L))
-        .thenReturn(List.of());
-    when(repository.findPermitDocumentDetailsByPermitNumber(7000123L))
+    when(repository.findPermitDocumentContextRows(7000123L))
         .thenReturn(
             List.of(
-                new DocumentRow(50L, "valid-permit.pdf", "", "PMT"),
-                new DocumentRow(51L, "invoice-code-on-permit-row.pdf", "", "INV"),
-                new DocumentRow(52L, "permit-code-on-invoice-row.pdf", "", "PMT")));
-    when(repository.isPermitFileAttachmentRequired(50L)).thenReturn(true);
-    when(repository.isPermitFileAttachmentRequired(51L)).thenReturn(true);
-    when(repository.isPermitFileAttachmentRequired(52L)).thenReturn(false);
+                new PermitDocumentContextRow(
+                    new DocumentRow(50L, "valid-permit.pdf", "", "PMT"),
+                    "Permit",
+                    "permit",
+                    null,
+                    7000123L,
+                    true),
+                new PermitDocumentContextRow(
+                    new DocumentRow(51L, "invoice-code-on-permit-row.pdf", "", "INV"),
+                    "Invoice",
+                    "unknown",
+                    null,
+                    7000123L,
+                    false),
+                new PermitDocumentContextRow(
+                    new DocumentRow(52L, "permit-code-on-invoice-row.pdf", "", "PMT"),
+                    "Permit",
+                    "unknown",
+                    null,
+                    7000123L,
+                    false)));
 
     List<PermitDocumentItemRpcResponseDto> response =
         service.getDocumentDetails(7000123L);
@@ -4576,11 +4706,7 @@ class OraclePermitDetailsRpcServiceTest {
   void documentDetailsShouldPropagatePermitRelationshipLookupFailure() {
     DataAccessResourceFailureException failure =
         new DataAccessResourceFailureException("permit attachment lookup unavailable");
-    when(repository.findApplicationNumbersByPermitNumberRequired(7000123L))
-        .thenReturn(List.of());
-    when(repository.findPermitDocumentDetailsByPermitNumber(7000123L))
-        .thenReturn(List.of(new DocumentRow(50L, "invoice.pdf", "", "INV")));
-    when(repository.isPermitFileAttachmentRequired(50L)).thenThrow(failure);
+    when(repository.findPermitDocumentContextRows(7000123L)).thenThrow(failure);
 
     assertThatThrownBy(() -> service.getDocumentDetails(7000123L)).isSameAs(failure);
   }
@@ -4589,7 +4715,7 @@ class OraclePermitDetailsRpcServiceTest {
   void documentDetailsShouldPropagateApplicationRelationshipLookupFailure() {
     DataAccessResourceFailureException failure =
         new DataAccessResourceFailureException("application relationship lookup unavailable");
-    when(repository.findApplicationNumbersByPermitNumberRequired(7000123L)).thenThrow(failure);
+    when(repository.findPermitDocumentContextRows(7000123L)).thenThrow(failure);
 
     assertThatThrownBy(() -> service.getDocumentDetails(7000123L)).isSameAs(failure);
   }
@@ -6136,6 +6262,39 @@ class OraclePermitDetailsRpcServiceTest {
         "N",
         "S",
         "T");
+  }
+
+  private PermitCorePackageContextRow coreContext(
+      String packageNumber, Long applicationNumber, boolean assignedToPermit) {
+    ApplicationInfoRow applicationInfo =
+        new ApplicationInfoRow(
+            applicationNumber,
+            "EX-700",
+            1835L,
+            "Coast Region",
+            "T",
+            "S",
+            null,
+            "00000001",
+            "00",
+            "00000002",
+            "00",
+            "N");
+    return new PermitCorePackageContextRow(
+        corePackage(packageNumber, applicationNumber),
+        applicationInfo,
+        "P",
+        "M",
+        "Unmanufactured Timber",
+        "Unmanufactured Timber",
+        "Second Growth",
+        "Second Growth",
+        "Active",
+        assignedToPermit);
+  }
+
+  private PermitCoreScaleRow coreScale(PermitScaleDetailRow scale) {
+    return new PermitCoreScaleRow(scale, scale.exportSpeciesCode(), scale.exportGradeCode());
   }
 
   private ScaleMutationRow scaleMutation(

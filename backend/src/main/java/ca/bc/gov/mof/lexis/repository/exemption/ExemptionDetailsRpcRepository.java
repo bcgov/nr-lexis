@@ -38,8 +38,30 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
       LEXIS_GROUP_5_PACKAGE + "FIND_APPLICATION_BY_EXEMPTION(?,?)";
   private static final String FIND_PERMITS_BY_EXEMPTION =
       LEXIS_GROUP_5_PACKAGE + "FIND_PERMIT_DET_BY_EXMP(?,?)";
+  private static final String FIND_BLANKET_OIC_TOTALS =
+      """
+      SELECT
+        NVL(SUM(PERMIT_VOLUME), 0) AS REQUESTED_VOLUME,
+        NVL(
+          SUM(
+            CASE
+              WHEN EXPORT_PERMIT_STATUS_CODE = 'COM' THEN PERMIT_VOLUME
+              ELSE 0
+            END
+          ),
+          0
+        ) AS COMPLETED_VOLUME
+      FROM EXPORT_PERMIT_DETAIL
+      WHERE EXEMPTION_NUMBER = ?
+      """;
   private static final String FIND_EXEMPTION_BY_NUMBER =
       LEXIS_GROUP_5_PACKAGE + "FIND_EXEMPTION_BY_NUMBER(?,?)";
+  private static final String FIND_EXEMPTION_TYPE_BY_NUMBER =
+      """
+      SELECT EXPORT_EXEMPTION_TYPE_CODE
+      FROM EXPORT_EXEMPTION
+      WHERE EXEMPTION_NUMBER = ?
+      """;
   private static final String FIND_ALL_EXPIRING_EXEMPTIONS =
       LEXIS_GROUP_11_PACKAGE + "FIND_ALL_EXPIRING_EXEMPTIONS(?)";
   private static final String FIND_EXEMPTION_FILE_DETAILS =
@@ -52,6 +74,45 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
       LEXIS_GROUP_5_PACKAGE + "FIND_PERMIT_DET_BY_APP(?,?)";
   private static final String FIND_APPLICATION_FILE_DETAILS =
       LEXIS_GROUP_5_PACKAGE + "FIND_APPL_FILE_DETAILS(?,?)";
+  private static final String FIND_EXEMPTION_DOCUMENT_CONTEXT_ROWS =
+      """
+      WITH DOCUMENT_REFERENCES AS (
+        SELECT
+          EEFA.EXPORT_ATTACHMENT_ID,
+          CAST(NULL AS NUMBER(10)) AS SOURCE_APPLICATION_NUMBER,
+          'exemption' AS DOCUMENT_SOURCE,
+          1 AS DELETABLE,
+          0 AS SOURCE_ORDER
+        FROM EXPORT_EXEMPT_FILE_ATTCHMNT EEFA
+        WHERE EEFA.EXEMPTION_NUMBER = ?
+        UNION ALL
+        SELECT
+          EAFA.EXPORT_ATTACHMENT_ID,
+          EEA.APPLICATION_NUMBER AS SOURCE_APPLICATION_NUMBER,
+          'application' AS DOCUMENT_SOURCE,
+          0 AS DELETABLE,
+          1 AS SOURCE_ORDER
+        FROM EXPORT_EXEMPTION_APPLICATION EEA
+        INNER JOIN EXPORT_APPL_FILE_ATTCHMNT EAFA
+          ON EAFA.APPLICATION_NUMBER = EEA.APPLICATION_NUMBER
+        WHERE EEA.EXEMPTION_NUMBER = ?
+      )
+      SELECT
+        EFA.EXPORT_ATTACHMENT_ID,
+        EFA.FILE_NAME,
+        EFA.DESCRIPTION,
+        EFA.EXPORT_ATTACHMENT_TYPE_CODE,
+        EATC.DESCRIPTION AS ATTACHMENT_TYPE_DESCRIPTION,
+        DR.DOCUMENT_SOURCE,
+        DR.SOURCE_APPLICATION_NUMBER,
+        DR.DELETABLE
+      FROM DOCUMENT_REFERENCES DR
+      INNER JOIN EXPORT_FILE_ATTACHMENT EFA
+        ON EFA.EXPORT_ATTACHMENT_ID = DR.EXPORT_ATTACHMENT_ID
+      LEFT JOIN EXPORT_ATTACHMENT_TYPE_CODE EATC
+        ON EATC.EXPORT_ATTACHMENT_TYPE_CODE = EFA.EXPORT_ATTACHMENT_TYPE_CODE
+      ORDER BY DR.SOURCE_ORDER, DR.SOURCE_APPLICATION_NUMBER, EFA.EXPORT_ATTACHMENT_ID
+      """;
   private static final String FIND_FILE_ATTACHMENT = LEXIS_GROUP_5_PACKAGE + "FIND_FILE_ATTACHMENT(?,?)";
   private static final String FIND_ATTACHMENT_TYPE_CODE =
       LEXIS_CODES_PACKAGE + "FIND_ATTACH_TYPE_CODE(?,?)";
@@ -112,16 +173,37 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
         this::mapPermitSummaryRow);
   }
 
+  public BlanketOicTotalsRow findBlanketOicTotals(String exemptionNumber) {
+    String normalized = trim(exemptionNumber);
+    if (normalized == null) {
+      return new BlanketOicTotalsRow(0.0d, 0.0d);
+    }
+    return jdbcTemplate
+        .query(
+            FIND_BLANKET_OIC_TOTALS,
+            (rs, rowNumber) ->
+                new BlanketOicTotalsRow(
+                    coalesce(getDouble(rs, "REQUESTED_VOLUME"), 0.0d),
+                    coalesce(getDouble(rs, "COMPLETED_VOLUME"), 0.0d)),
+            normalized)
+        .stream()
+        .findFirst()
+        .orElse(new BlanketOicTotalsRow(0.0d, 0.0d));
+  }
+
   public Optional<String> findExemptionTypeCodeByExemptionNumber(String exemptionNumber) {
     String normalized = trim(exemptionNumber);
     if (normalized == null) {
       return Optional.empty();
     }
-    return queryCursorSingleRequired(
-            FIND_EXEMPTION_BY_NUMBER,
-            cs -> cs.setString(1, normalized),
-            2,
-            rs -> trim(getString(rs, "EXPORT_EXEMPTION_TYPE_CODE")))
+    return jdbcTemplate
+        .query(
+            FIND_EXEMPTION_TYPE_BY_NUMBER,
+            (rs, rowNumber) ->
+                trim(getString(rs, "EXPORT_EXEMPTION_TYPE_CODE")),
+            normalized)
+        .stream()
+        .findFirst()
         .filter(value -> value != null && !value.isBlank());
   }
 
@@ -225,12 +307,15 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
         FIND_PERMITS_BY_APPLICATION,
         cs -> cs.setString(1, applicationNumber.toString()),
         2,
-        rs ->
-            new ApplicationPermitRow(
-                coalesce(
-                    getLong(rs, "EXPORT_PERMIT_DETAIL_NUMBER"),
-                    getLong(rs, "EXPORT_PERMIT_NUMBER")),
-                trim(getString(rs, "EXEMPTION_NUMBER"))));
+        rs -> {
+          // The deployed legacy cursor uses EXPORT_PERMIT_DETAIL_NUMBER. Keep the fallback lazy
+          // because reading a missing Oracle cursor column raises JDBC error 17006.
+          Long permitNumber =
+              Optional.ofNullable(getLong(rs, "EXPORT_PERMIT_DETAIL_NUMBER"))
+                  .orElseGet(() -> getLong(rs, "EXPORT_PERMIT_NUMBER"));
+          return new ApplicationPermitRow(
+              coalesce(permitNumber, 0L), trim(getString(rs, "EXEMPTION_NUMBER")));
+        });
   }
 
   public boolean isExemptionTypeCodeValidRequired(String code) {
@@ -284,6 +369,26 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
         cs -> cs.setLong(1, applicationNumber),
         2,
         this::mapDocumentRow);
+  }
+
+  /** Loads exemption and linked-application document metadata in one direct query. */
+  public List<ExemptionDocumentContextRow> findExemptionDocumentContextRows(
+      String exemptionNumber) {
+    String normalized = trim(exemptionNumber);
+    if (normalized == null) {
+      return List.of();
+    }
+    return jdbcTemplate.query(
+        FIND_EXEMPTION_DOCUMENT_CONTEXT_ROWS,
+        (rs, rowNumber) ->
+            new ExemptionDocumentContextRow(
+                mapDocumentRow(rs),
+                getString(rs, "ATTACHMENT_TYPE_DESCRIPTION"),
+                getString(rs, "DOCUMENT_SOURCE"),
+                getLong(rs, "SOURCE_APPLICATION_NUMBER"),
+                coalesce(getLong(rs, "DELETABLE"), 0L) > 0),
+        normalized,
+        normalized);
   }
 
   public Optional<String> findAttachmentTypeDescription(String attachmentTypeCode) {
@@ -526,6 +631,14 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
         // The legacy cursor does not return aggregate scale volume; legacy leaves it blank.
         Double.NaN,
         valueOrEmpty(getString(rs, "OWNER_CLIENT_NUMBER")),
+        valueOrEmpty(getString(rs, "AGENT_CLIENT_NUMBER")),
+        valueOrEmpty(getString(rs, "OWNER_CLIENT_LOCATION_CODE")),
+        valueOrEmpty(getString(rs, "AGENT_CLIENT_LOCATION_CODE")),
+        valueOrEmpty(getString(rs, "EXPORT_APPLICANT_TYPE_CODE")),
+        valueOrEmpty(getString(rs, "OWNER_CONTACT_NAME")),
+        valueOrEmpty(getString(rs, "AGENT_CONTACT_NAME")),
+        valueOrEmpty(getString(rs, "OWNER_COMPANY_NAME")),
+        valueOrEmpty(getString(rs, "AGENT_COMPANY_NAME")),
         valueOrEmpty(getString(rs, "EXPORT_JURISDICTION_CODE")),
         valueOrEmpty(getString(rs, "EXPORT_PRODUCT_TYPE_CODE")));
   }
@@ -533,7 +646,7 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
   private PermitSummaryRow mapPermitSummaryRow(ResultSet rs) {
     Long permitNumber =
         Optional.ofNullable(getLong(rs, "EXPORT_PERMIT_DETAIL_NUMBER"))
-            .orElse(getLong(rs, "EXPORT_PERMIT_NUMBER"));
+            .orElseGet(() -> getLong(rs, "EXPORT_PERMIT_NUMBER"));
     return new PermitSummaryRow(
         coalesce(permitNumber, 0L),
         coalesce(getDouble(rs, "PERMIT_VOLUME"), 0.0d),
@@ -682,8 +795,40 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
       double requestedVolume,
       double scaleVolume,
       String ownerClientNumber,
+      String agentClientNumber,
+      String ownerClientLocationCode,
+      String agentClientLocationCode,
+      String applicantTypeCode,
+      String ownerContactName,
+      String agentContactName,
+      String ownerCompanyName,
+      String agentCompanyName,
       String jurisdictionCode,
-      String productTypeCode) {}
+      String productTypeCode) {
+    public ApplicationSummaryRow(
+        long applicationNumber,
+        double requestedVolume,
+        double scaleVolume,
+        String ownerClientNumber,
+        String jurisdictionCode,
+        String productTypeCode) {
+      this(
+          applicationNumber,
+          requestedVolume,
+          scaleVolume,
+          ownerClientNumber,
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          jurisdictionCode,
+          productTypeCode);
+    }
+  }
 
   public record PermitSummaryRow(
       long permitNumber,
@@ -695,10 +840,19 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
       String clientNumber,
       String agentNumber) {}
 
+  public record BlanketOicTotalsRow(double requestedVolume, double completedVolume) {}
+
   public record ApplicationPermitRow(Long permitNumber, String exemptionNumber) {}
 
   public record DocumentRow(
       long id, String fileName, String description, String attachmentTypeCode) {}
+
+  public record ExemptionDocumentContextRow(
+      DocumentRow documentRow,
+      String attachmentTypeDescription,
+      String source,
+      Long sourceApplicationNumber,
+      boolean deletable) {}
 
   public record ExemptionInsertRecord(
       String exemptionNumber,

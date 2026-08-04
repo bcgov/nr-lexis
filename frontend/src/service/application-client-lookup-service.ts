@@ -34,6 +34,11 @@ export type ApplicationClientData = {
 
 const CLIENT_LOCATION_CACHE_TTL_MS = 5 * 60_000
 
+type ClientLookupContext = {
+  applicationNumber?: string
+  permitNumber?: string
+}
+
 const parseClientData = (input: unknown): ApplicationClientData | null => {
   if (!isRecord(input)) {
     return null
@@ -93,27 +98,43 @@ const parseClientContacts = (input: unknown): ApplicationClientContact[] => {
   })
 }
 
+// INTENTIONAL_LEGACY_DIVERGENCE(AUTHORITATIVE_CLIENT_LOCATION_LOOKUP):
+// Always resolve contact data with the persisted location instead of legacy's default-location view.
 export const fetchApplicationClientData = async (
   clientNumber: string,
   clientLocationCode: string,
+  context: ClientLookupContext = {},
 ): Promise<ApplicationClientData | null> => {
   const normalizedClientNumber = clientNumber.trim()
   const normalizedClientLocationCode = clientLocationCode.trim()
+  const normalizedApplicationNumber = context.applicationNumber?.trim() ?? ''
+  const normalizedPermitNumber = context.permitNumber?.trim() ?? ''
   if (!normalizedClientNumber || !normalizedClientLocationCode) {
     return null
   }
+
+  const contextParams = {
+    ...(normalizedApplicationNumber ? { applicationNumber: normalizedApplicationNumber } : {}),
+    ...(normalizedPermitNumber ? { permitNumber: normalizedPermitNumber } : {}),
+  }
+  const contextCacheKey = normalizedApplicationNumber
+    ? `:application:${normalizedApplicationNumber}`
+    : normalizedPermitNumber
+      ? `:permit:${normalizedPermitNumber}`
+      : ''
 
   try {
     const data = await apiService.getCachedData<unknown>(
       '/lexis/rpc/application-details/client-data',
       {
         params: {
+          ...contextParams,
           clientLocationCode: normalizedClientLocationCode,
           clientNumber: normalizedClientNumber,
         },
       },
       {
-        cacheKey: `application-client-data:${normalizedClientNumber}:${normalizedClientLocationCode}`,
+        cacheKey: `application-client-data:${normalizedClientNumber}:${normalizedClientLocationCode}${contextCacheKey}`,
         ttlMs: CLIENT_LOCATION_CACHE_TTL_MS,
       },
     )
@@ -130,8 +151,10 @@ export const fetchApplicationClientData = async (
 export const fetchApplicationClientLocations = async (
   clientNumber: string,
   applicantType: 'owner' | 'agent' = 'owner',
+  applicationNumber = '',
 ): Promise<ApplicationClientLocation[]> => {
   const normalizedClientNumber = clientNumber.trim()
+  const normalizedApplicationNumber = applicationNumber.trim()
   if (!normalizedClientNumber) {
     return []
   }
@@ -142,11 +165,21 @@ export const fetchApplicationClientLocations = async (
       {
         params: {
           applicantType,
+          ...(normalizedApplicationNumber
+            ? { applicationNumber: normalizedApplicationNumber }
+            : {}),
           clientNumber: normalizedClientNumber,
         },
       },
       {
-        cacheKey: `application-client-locations:${applicantType}:${normalizedClientNumber}`,
+        cacheKey: [
+          'application-client-locations',
+          applicantType,
+          normalizedClientNumber,
+          normalizedApplicationNumber,
+        ]
+          .filter(Boolean)
+          .join(':'),
         ttlMs: CLIENT_LOCATION_CACHE_TTL_MS,
       },
     )

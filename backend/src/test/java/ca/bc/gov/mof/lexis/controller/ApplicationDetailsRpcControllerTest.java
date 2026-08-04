@@ -1456,6 +1456,40 @@ class ApplicationDetailsRpcControllerTest {
   }
 
   @Test
+  void getClientDataShouldAllowRelatedApplicationClientLookupContext() {
+    when(clientLookupServiceProvider.getIfAvailable()).thenReturn(clientLookupService);
+    when(provincialAuthorizationService.canCreateForClient(null, "22222", null))
+        .thenReturn(false);
+    when(
+            provincialAuthorizationService.canAccessApplicationClientLookup(
+                null, 1000456L, "22222"))
+        .thenReturn(true);
+    when(clientLookupService.getClientData("22222", "01"))
+        .thenReturn(
+            Optional.of(
+                new ClientLookupService.ClientData(
+                    "00022222",
+                    "Agent Forestry",
+                    "789 Mill Rd",
+                    "Campbell River",
+                    "BC",
+                    "V9W 1A1",
+                    "CA",
+                    "250-555-0300",
+                    null,
+                    "agent@example.com")));
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationClientDataResponseDto> response =
+        controller.getClientData("22222", "01", "1000456", null);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().clientNumber()).isEqualTo("00022222");
+    verify(provincialAuthorizationService)
+        .canAccessApplicationClientLookup(null, 1000456L, "22222");
+  }
+
+  @Test
   void getClientLocationsLegacyShouldMarkSavedLocationSelected() {
     when(clientLookupServiceProvider.getIfAvailable()).thenReturn(clientLookupService);
     when(serviceProvider.getIfAvailable()).thenReturn(service);

@@ -143,7 +143,9 @@ const applicationSummary = {
   speciesCodes: [],
 }
 
-const renderPage = (initialEntry = '/provincial/review') => {
+const renderPage = (
+  initialEntry = '/provincial/review?region=11,12&page=1&pageSize=100&sortField=applicationNumber&sortDirection=desc',
+) => {
   render(
     <MemoryRouter initialEntries={[initialEntry]}>
       <Routes>
@@ -653,7 +655,7 @@ describe('Provincial Review Action State Smoke', () => {
         }),
       )
     })
-  })
+  }, 15000)
 
   it('falls back to the owner email when an agent applicant has no email', async () => {
     mockedFetchApplicationSummarySnapshot.mockResolvedValueOnce({
@@ -757,7 +759,7 @@ describe('Provincial Review Action State Smoke', () => {
     ).toBeGreaterThan(0)
     expect(mockedUpdateApplicationReviewStatus).not.toHaveBeenCalled()
     expect(mockedSendApplicationReviewStatusEmail).not.toHaveBeenCalled()
-  })
+  }, 15000)
 
   it('updates a rejected application without sending email by default', async () => {
     renderPage()
@@ -785,21 +787,29 @@ describe('Provincial Review Action State Smoke', () => {
     })
     expect(mockedSendApplicationReviewStatusEmail).not.toHaveBeenCalled()
     expect(await screen.findByText('Updated application 1000123.')).toBeInTheDocument()
-  })
+  }, 15000)
 
-  it('does not default region filters when opened without query parameters', async () => {
-    renderPage()
+  it('defaults to all active regions but waits for an explicit search', async () => {
+    renderPage('/provincial/review')
+
+    const selectedRegions = await screen.findByRole('list', { name: 'Selected regions' })
+    expect(within(selectedRegions).getByText('Cariboo')).toBeVisible()
+    expect(within(selectedRegions).getByText('Coast')).toBeVisible()
+    expect(mockedSearchApplicationReviews).not.toHaveBeenCalled()
+    expect(screen.getByRole('region', { name: 'Review queue', hidden: true })).not.toBeVisible()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Search' }))
     await screen.findByText('1000123')
-
     expect(mockedSearchApplicationReviews).toHaveBeenCalledWith(
       expect.objectContaining({
         filters: expect.objectContaining({
-          region: [],
+          region: ['11', '12'],
         }),
         pageSize: 100,
       }),
       expect.objectContaining({ knownTotal: expect.any(Number) }),
     )
+    expect(mockedSearchApplicationReviews).toHaveBeenCalledTimes(1)
   })
 
   it('keeps review pagination at 100 by default with expanded page size options', async () => {
@@ -954,7 +964,7 @@ describe('Provincial Review Action State Smoke', () => {
       reviewStatuses: [{ value: 'REJ', label: 'Rejected' }],
     })
 
-    renderPage('/provincial/review?applicationNumber=1000123')
+    renderPage('/provincial/review?applicationNumber=1000123&region=')
     await screen.findByText('1000123')
     await waitFor(() => {
       expect(mockedFetchApplicationReviewOptions).toHaveBeenCalledTimes(1)

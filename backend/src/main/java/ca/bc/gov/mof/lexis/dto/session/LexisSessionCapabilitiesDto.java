@@ -10,4 +10,6 @@ public record LexisSessionCapabilitiesDto(
     String legacyPath,
     List<String> grantedActions,
     String forestClientNumber,
+    List<String> availableForestClientNumbers,
+    boolean forestClientSelectionRequired,
     String orgUnitNo) {}

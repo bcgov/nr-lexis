@@ -265,6 +265,22 @@ class PermitOracleServiceTest {
   }
 
   @Test
+  void linkedClientAccessShouldUseSingleRepositoryPredicate() {
+    when(
+            permitRpcRepository.hasLinkedProvincialApplicationForClient(
+                9000123L, "00012345"))
+        .thenReturn(true);
+
+    assertThat(
+            service.hasLinkedProvincialApplicationForClient(
+                9000123L, "00012345"))
+        .isTrue();
+
+    verify(permitRpcRepository)
+        .hasLinkedProvincialApplicationForClient(9000123L, "00012345");
+  }
+
+  @Test
   void linkedApplicationLookupShouldPropagateOracleFailure() {
     when(permitRpcRepository.findApplicationNumbersByPermitNumberRequired(9000123L))
         .thenThrow(new DataAccessResourceFailureException("Oracle unavailable"));

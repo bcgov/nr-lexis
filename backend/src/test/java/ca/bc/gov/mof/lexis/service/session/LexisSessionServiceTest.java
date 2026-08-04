@@ -28,31 +28,32 @@ class LexisSessionServiceTest {
   }
 
   @Test
-  void shouldRouteAdminsToAdminLandingWhenOtherRolesArePresent() {
+  void shouldRouteAdminsToApplicationReviewWhenOtherRolesArePresent() {
     LexisSessionWelcomeDto response =
         service.resolveWelcomeRoute("idir\\admin", List.of("lexis_admin", "lexis_read_only"));
 
-    assertThat(response.welcomeTarget()).isEqualTo("adminUser");
-    assertThat(response.legacyPath()).isEqualTo("/admin");
+    assertThat(response.welcomeTarget()).isEqualTo("administrator");
+    assertThat(response.legacyPath()).isEqualTo("/provincial/review");
     assertThat(response.roles()).containsExactly("LEXIS_ADMIN", "LEXIS_READ_ONLY");
   }
 
   @Test
-  void shouldRouteProvincialSubmittersToApplicationSearch() {
+  void shouldRouteProvincialSubmittersToSummary() {
     LexisSessionWelcomeDto response =
-        service.resolveWelcomeRoute("idir\\jsmith", List.of("lexis_provincial_submitter"));
+        service.resolveWelcomeRoute("bceid\\submitter", List.of("lexis_provincial_submitter"));
 
-    assertThat(response.welcomeTarget()).isEqualTo("industryUser");
-    assertThat(response.legacyPath()).isEqualTo("/provincial/application");
+    assertThat(response.welcomeTarget()).isEqualTo("provincialSubmitter");
+    assertThat(response.legacyPath()).isEqualTo("/provincial/summary");
   }
 
   @Test
-  void shouldRouteForestClientScopedProvincialSubmittersToApplicationSearch() {
+  void shouldRouteForestClientScopedProvincialSubmittersToSummary() {
     LexisSessionWelcomeDto response =
-        service.resolveWelcomeRoute("idir\\jsmith", List.of("lexis_provincial_submitter_00001234"));
+        service.resolveWelcomeRoute(
+            "bceid\\submitter", List.of("lexis_provincial_submitter_00001234"));
 
-    assertThat(response.welcomeTarget()).isEqualTo("industryUser");
-    assertThat(response.legacyPath()).isEqualTo("/provincial/application");
+    assertThat(response.welcomeTarget()).isEqualTo("provincialSubmitter");
+    assertThat(response.legacyPath()).isEqualTo("/provincial/summary");
     assertThat(response.roles()).containsExactly("LEXIS_PROVINCIAL_SUBMITTER");
   }
 
@@ -96,12 +97,12 @@ class LexisSessionServiceTest {
   }
 
   @Test
-  void shouldRouteSingleAdminToAdminLanding() {
+  void shouldRouteSingleAdminToApplicationReview() {
     LexisSessionWelcomeDto response =
         service.resolveWelcomeRoute("idir\\admin", List.of("lexis_admin"));
 
-    assertThat(response.welcomeTarget()).isEqualTo("adminUser");
-    assertThat(response.legacyPath()).isEqualTo("/admin");
+    assertThat(response.welcomeTarget()).isEqualTo("administrator");
+    assertThat(response.legacyPath()).isEqualTo("/provincial/review");
     assertThat(response.roles()).containsExactly("LEXIS_ADMIN");
   }
 
@@ -116,23 +117,33 @@ class LexisSessionServiceTest {
   }
 
   @Test
-  void shouldDefaultToMofrLanding() {
+  void shouldRouteApplicationApproversToApplicationReview() {
     LexisSessionWelcomeDto response =
         service.resolveWelcomeRoute("idir\\staff", List.of("lexis_application_approver"));
 
-    assertThat(response.welcomeTarget()).isEqualTo("mofrUser");
+    assertThat(response.welcomeTarget()).isEqualTo("applicationApprover");
     assertThat(response.legacyPath()).isEqualTo("/provincial/review");
     assertThat(response.roles()).containsExactly("LEXIS_APPLICATION_APPROVER");
   }
 
   @Test
-  void shouldRecognizeDelegatedAdminWithoutRoutingToUiLanding() {
+  void shouldIgnoreFamDelegatedAdministrationAsAnApplicationRole() {
     LexisSessionWelcomeDto response =
         service.resolveWelcomeRoute("idir\\delegated", List.of("lexis_delegated_admin"));
 
     assertThat(response.welcomeTarget()).isEqualTo("noAccess");
     assertThat(response.legacyPath()).isNull();
-    assertThat(response.roles()).containsExactly("LEXIS_DELEGATED_ADMIN");
+    assertThat(response.roles()).isEmpty();
+  }
+
+  @Test
+  void shouldNotRouteAuthenticatedUsersWithoutALexisRole() {
+    LexisSessionWelcomeDto response =
+        service.resolveWelcomeRoute("idir\\staff", List.of());
+
+    assertThat(response.welcomeTarget()).isEqualTo("noAccess");
+    assertThat(response.legacyPath()).isNull();
+    assertThat(response.roles()).isEmpty();
   }
 
   @Test
@@ -156,14 +167,11 @@ class LexisSessionServiceTest {
             List.of(
                 new SimpleGrantedAuthority("lexis_read_only"),
                 new SimpleGrantedAuthority("lexis_delegated_admin"),
+                new SimpleGrantedAuthority("delegated_admin"),
                 new SimpleGrantedAuthority("LEXIS_ADMIN"),
                 new SimpleGrantedAuthority("lexis_admin")));
 
-    assertThat(roles)
-        .containsExactly(
-            "LEXIS_READ_ONLY",
-            "LEXIS_DELEGATED_ADMIN",
-            "LEXIS_ADMIN");
+    assertThat(roles).containsExactly("LEXIS_READ_ONLY", "LEXIS_ADMIN");
   }
 
   @Test
@@ -323,7 +331,18 @@ class LexisSessionServiceTest {
   }
 
   @Test
-  void shouldFailClosedWhenProvincialSubmitterScopesAreAmbiguous() {
+  void shouldRequireAnActiveSelectionWhenProvincialSubmitterHasMultipleScopes() {
+    LexisSessionService.ForestClientScope scope =
+        service.resolveForestClientScope(
+            List.of(
+                "LEXIS_PROVINCIAL_SUBMITTER_00067890",
+                "LEXIS_PROVINCIAL_SUBMITTER_00012345"));
+
+    assertThat(scope.clientNumber()).isNull();
+    assertThat(scope.availableClientNumbers()).containsExactly("00012345", "00067890");
+    assertThat(scope.selectionRequired()).isTrue();
+    assertThat(scope.invalid()).isFalse();
+
     assertThatThrownBy(
             () ->
                 service.resolveForestClientNumber(
@@ -332,6 +351,47 @@ class LexisSessionServiceTest {
                         "LEXIS_PROVINCIAL_SUBMITTER_00067890")))
         .isInstanceOf(AccessDeniedException.class)
         .hasMessageContaining("multiple");
+  }
+
+  @Test
+  void shouldResolveTheSelectedClientFromMultipleAssignedScopes() {
+    LexisSessionService.ForestClientScope scope =
+        service.resolveForestClientScope(
+            List.of(
+                "LEXIS_PROVINCIAL_SUBMITTER_00012345",
+                "LEXIS_PROVINCIAL_SUBMITTER_00067890"),
+            "00067890");
+
+    assertThat(scope.clientNumber()).isEqualTo("00067890");
+    assertThat(scope.availableClientNumbers()).containsExactly("00012345", "00067890");
+    assertThat(scope.selectionRequired()).isFalse();
+    assertThat(scope.invalid()).isFalse();
+  }
+
+  @Test
+  void shouldRejectASelectedClientThatIsNotAssigned() {
+    LexisSessionService.ForestClientScope scope =
+        service.resolveForestClientScope(
+            List.of(
+                "LEXIS_PROVINCIAL_SUBMITTER_00012345",
+                "LEXIS_PROVINCIAL_SUBMITTER_00067890"),
+            "00099999");
+
+    assertThat(scope.clientNumber()).isNull();
+    assertThat(scope.availableClientNumbers()).containsExactly("00012345", "00067890");
+    assertThat(scope.selectionRequired()).isFalse();
+    assertThat(scope.invalid()).isTrue();
+    assertThat(scope.failureReason()).contains("not assigned");
+  }
+
+  @Test
+  void shouldRejectAConflictingSelectionForASingleAssignedClient() {
+    LexisSessionService.ForestClientScope scope =
+        service.resolveForestClientScope(
+            List.of("LEXIS_PROVINCIAL_SUBMITTER_00012345"), "00099999");
+
+    assertThat(scope.invalid()).isTrue();
+    assertThat(scope.availableClientNumbers()).containsExactly("00012345");
   }
 
   @Test

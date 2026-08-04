@@ -7,7 +7,6 @@ import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferDetailDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchResultDto;
-import org.springframework.data.domain.Page;
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import java.sql.CallableStatement;
 import java.sql.Date;
@@ -18,9 +17,11 @@ import java.sql.Types;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Profile;
+import org.springframework.data.domain.Page;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
@@ -29,10 +30,38 @@ import org.springframework.stereotype.Repository;
 public class PurchaseOfferRepository extends OracleRepositorySupport {
 
   private static final String MANUFACTURING_FACILITY_DEFAULT = " ";
-  private static final String FIND_PURCHASE_OFFERS_BY_CRITERIA =
-      LEXIS_GROUP_5_PACKAGE + "FIND_POS_BY_CRITERIA(?,?,?,?,?)";
-  private static final String COUNT_PURCHASE_OFFERS_BY_CRITERIA =
-      LEXIS_GROUP_5_PACKAGE + "COUNT_POS_BY_CRITERIA(?,?,?,?)";
+  private static final String PURCHASE_OFFER_SEARCH_FROM =
+      """
+      FROM EXPORT_PURCHASE_OFFER PO
+      INNER JOIN EXPORT_EXEMPTION_APPLICATION EEA
+        ON EEA.APPLICATION_NUMBER = PO.APPLICATION_NUMBER
+      LEFT JOIN EXPORT_SCHEDULE ES
+        ON ES.EXPORT_SCHEDULE_ID = EEA.EXPORT_SCHEDULE_ID
+      LEFT JOIN ORG_UNIT OU
+        ON OU.ORG_UNIT_NO = EEA.ORG_UNIT_NO
+      """;
+  private static final String SEARCH_PURCHASE_OFFERS =
+      """
+      SELECT
+        PO.EXPORT_PURCHASE_OFFER_NUMBER,
+        EEA.APPLICATION_NUMBER,
+        PO.PACKAGE_NUMBER,
+        ES.ADVERTISING_DATE,
+        OU.ORG_UNIT_CODE AS REGION,
+        PO.OFFER_WITHDRAWAL_DATE
+      """
+          + PURCHASE_OFFER_SEARCH_FROM;
+  private static final String COUNT_PURCHASE_OFFERS =
+      "SELECT COUNT(*)\n" + PURCHASE_OFFER_SEARCH_FROM;
+  private static final Map<String, String> SEARCH_SORT_COLUMNS =
+      Map.ofEntries(
+          Map.entry("applicationNumber", "EEA.APPLICATION_NUMBER"),
+          Map.entry("packageNumber", "PO.PACKAGE_NUMBER"),
+          Map.entry("offerNumber", "PO.EXPORT_PURCHASE_OFFER_NUMBER"),
+          Map.entry("listingDate", "ES.ADVERTISING_DATE"),
+          Map.entry("offerWithdrawalDate", "PO.OFFER_WITHDRAWAL_DATE"),
+          Map.entry("region", "OU.ORG_UNIT_NAME"),
+          Map.entry("offeringClientNumber", "PO.OFFERING_CLIENT_NUMBER"));
   private static final String FIND_PURCHASE_OFFER_BY_NUMBER =
       LEXIS_GROUP_5_PACKAGE + "FIND_PURCHASE_OFFERS_BY_NUM(?,?)";
   private static final String FIND_APPLICATION_BY_NUMBER =
@@ -58,16 +87,15 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
 
   public Page<PurchaseOfferSearchResultDto> search(
       PurchaseOfferSearchCriteria criteria, Integer knownTotal) {
-    SqlWhere sqlWhere = buildSearchWhere(criteria);
+    DirectSql countCriteria = buildSearchWhere(criteria, false);
+    DirectSql pageCriteria = buildSearchWhere(criteria, true);
     int totalElements =
         knownTotal == null
-            ? queryLegacyDynamicCountProcedure(
-                COUNT_PURCHASE_OFFERS_BY_CRITERIA, sqlWhere.sql(), sqlWhere.bindValues())
+            ? queryDirectCount(COUNT_PURCHASE_OFFERS, countCriteria)
             : Math.max(0, knownTotal);
-    return queryLegacyDynamicPage(
-        FIND_PURCHASE_OFFERS_BY_CRITERIA,
-        sqlWhere.sql(),
-        sqlWhere.bindValues(),
+    return queryDirectPage(
+        SEARCH_PURCHASE_OFFERS,
+        pageCriteria,
         criteria.page(),
         criteria.size(),
         totalElements,
@@ -82,17 +110,14 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
   }
 
   public int count(PurchaseOfferSearchCriteria criteria) {
-    SqlWhere sqlWhere = buildSearchWhere(criteria);
-    return queryLegacyDynamicCountProcedure(
-        COUNT_PURCHASE_OFFERS_BY_CRITERIA,
-        sqlWhere.sql(),
-        sqlWhere.bindValues());
+    return queryDirectCount(COUNT_PURCHASE_OFFERS, buildSearchWhere(criteria, false));
   }
 
-  private SqlWhere buildSearchWhere(PurchaseOfferSearchCriteria criteria) {
-    SqlWhereBuilder where = newWhereBuilder();
+  private DirectSql buildSearchWhere(
+      PurchaseOfferSearchCriteria criteria, boolean includeOrderBy) {
+    DirectSqlBuilder where = newDirectSqlBuilder();
 
-    where.addLike("EEA.APPLICATION_NUMBER", criteria.applicationNumber());
+    where.addNumberLike("EEA.APPLICATION_NUMBER", criteria.applicationNumber());
     where.addLike("PO.PACKAGE_NUMBER", criteria.packageNumber());
     where.addDateGte("ES.ADVERTISING_DATE", criteria.listingFromDate());
     where.addDateLte("ES.ADVERTISING_DATE", criteria.listingToDate());
@@ -104,31 +129,19 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
 
     String clientNumber = trim(criteria.clientNumber());
     if (clientNumber != null) {
-      int idx1 = where.nextBindIndex();
-      int idx2 = idx1 + 1;
       where.addRawWithBinds(
-          " AND (EEA.OWNER_CLIENT_NUMBER LIKE '%' || :"
-              + idx1
-              + " || '%' OR EEA.AGENT_CLIENT_NUMBER LIKE '%' || :"
-              + idx2
-              + " || '%')",
+          " AND (EEA.OWNER_CLIENT_NUMBER LIKE '%' || ? || '%'"
+              + " OR EEA.AGENT_CLIENT_NUMBER LIKE '%' || ? || '%')",
           clientNumber,
           clientNumber);
     }
     where.addLike("PO.OFFERING_CLIENT_NUMBER", criteria.offeringClientNumber());
     String accessClientNumber = trim(criteria.accessClientNumber());
     if (accessClientNumber != null) {
-      int ownerBind = where.nextBindIndex();
-      int agentBind = ownerBind + 1;
-      int offeringBind = ownerBind + 2;
       where.addRawWithBinds(
-          " AND (EEA.OWNER_CLIENT_NUMBER = :"
-              + ownerBind
-              + " OR EEA.AGENT_CLIENT_NUMBER = :"
-              + agentBind
-              + " OR PO.OFFERING_CLIENT_NUMBER = :"
-              + offeringBind
-              + ")",
+          " AND (EEA.OWNER_CLIENT_NUMBER = ?"
+              + " OR EEA.AGENT_CLIENT_NUMBER = ?"
+              + " OR PO.OFFERING_CLIENT_NUMBER = ?)",
           accessClientNumber,
           accessClientNumber,
           accessClientNumber);
@@ -144,19 +157,12 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
     String orderBy =
         sanitizedSort(
             criteria.sortField(),
-            mapOf(
-                "applicationNumber", "EEA.APPLICATION_NUMBER",
-                "packageNumber", "PO.PACKAGE_NUMBER",
-                "offerNumber", "PO.EXPORT_PURCHASE_OFFER_NUMBER",
-                "listingDate", "ES.ADVERTISING_DATE",
-                "offerWithdrawalDate", "PO.OFFER_WITHDRAWAL_DATE",
-                "region", "OU.ORG_UNIT_NAME",
-                "offeringClientNumber", "PO.OFFERING_CLIENT_NUMBER"),
+            SEARCH_SORT_COLUMNS,
             "offerNumber",
             "DESC",
             "offerNumber");
 
-    return where.build(orderBy);
+    return where.build(includeOrderBy ? orderBy : "");
   }
 
   public Optional<PurchaseOfferDetailDto> findByOfferNumber(Long offerNumber) {
@@ -194,7 +200,15 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
                 getLocalDate(rs, "ADVERTISING_DATE"),
                 getLocalDate(rs, "OFFER_END_DATE"),
                 getDouble(rs, "EXPORT_PURCHASE_VOLUME"),
-                getString(rs, "REGION")));
+                getString(rs, "REGION"),
+                false,
+                false,
+                false,
+                false,
+                false,
+                null,
+                null,
+                firstNonNull(getString(rs, "UPDATE_USERID"), getString(rs, "ENTRY_USERID"))));
   }
 
   public Optional<PurchaseOfferInsertRow> insertOffer(PurchaseOfferInsertRecord record) {

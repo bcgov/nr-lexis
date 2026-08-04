@@ -10,6 +10,7 @@ import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.sanitizeFileN
 import static ca.bc.gov.mof.lexis.util.TextUtils.firstTrimmedNonBlank;
 
 import ca.bc.gov.mof.lexis.dto.application.ApplicationEditLockDto;
+import ca.bc.gov.mof.lexis.dto.permit.PermitAccessDto;
 import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationEditLockService;
@@ -225,11 +226,17 @@ public class ExemptionDetailsRpcController {
         service
             .getPermits(
                 exemptionNumber,
-                permitNumber ->
+                permit ->
                     canViewPermitDetails
                         && provincialAuthorizationService != null
-                        && provincialAuthorizationService.canAccessPermit(
-                            authentication, permitNumber))
+                        && provincialAuthorizationService.canAccessExemptionPermit(
+                            authentication,
+                            new PermitAccessDto(
+                                permit.permitNumber(),
+                                permit.applicantClientNumber(),
+                                permit.ownerClientNumber(),
+                                null),
+                            permit.oicLike()))
             .stream()
             .filter(ExemptionDetailsRpcService.PermitItem::canViewPermit)
             .map(
@@ -1016,7 +1023,16 @@ public class ExemptionDetailsRpcController {
                         row.requestedVolume(),
                         row.scaleVolume(),
                         row.locked(),
-                        row.jurisdiction()))
+                        row.jurisdiction(),
+                        row.ownerClientNumber(),
+                        row.agentClientNumber(),
+                        row.ownerClientLocationCode(),
+                        row.agentClientLocationCode(),
+                        row.applicantTypeCode(),
+                        row.ownerContactName(),
+                        row.agentContactName(),
+                        row.ownerCompanyName(),
+                        row.agentCompanyName()))
             .toList();
 
     return new ExemptionApplicationsResponseDto(
@@ -1496,7 +1512,16 @@ public class ExemptionDetailsRpcController {
       String requestedVolume,
       String scaleVolume,
       boolean locked,
-      String jurisdiction) {}
+      String jurisdiction,
+      String ownerClientNumber,
+      String agentClientNumber,
+      String ownerClientLocationCode,
+      String agentClientLocationCode,
+      String applicantTypeCode,
+      String ownerContactName,
+      String agentContactName,
+      String ownerCompanyName,
+      String agentCompanyName) {}
 
   public record PermitItemDto(
       long permitNumber,

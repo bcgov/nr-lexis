@@ -183,28 +183,6 @@ const reportOptions = {
   portsOfExport: [{ code: '', name: 'All' }],
 }
 
-const famIdentitySearchResponse = {
-  results: [
-    {
-      assignmentId: null,
-      userId: null,
-      userName: 'JSMITH',
-      userTypeCode: 'IDIR',
-      userTypeDescription: 'IDIR',
-      firstName: 'Jane',
-      lastName: 'Smith',
-      fullName: 'Jane Smith',
-      email: 'jane.smith@example.test',
-    },
-  ],
-  total: 1,
-  pageNumber: 1,
-  pageSize: 10,
-  pageCount: 1,
-  configured: true,
-  message: null,
-}
-
 const exportSchedulePage = {
   rows: [
     {
@@ -263,9 +241,6 @@ const installSyntheticLexisApi = async (page: Page) => {
       case '/api/lexis/rtm/emslogamv':
         body = []
         break
-      case '/api/lexis/admin/fam-users':
-        body = famIdentitySearchResponse
-        break
       case '/api/lexis/admin/schedules':
         body = exportSchedulePage
         break
@@ -279,6 +254,13 @@ const installSyntheticLexisApi = async (page: Page) => {
       body: JSON.stringify(body),
     })
   })
+}
+
+const submitApplicationSearch = async (page: Page) => {
+  const searchButton = page.getByRole('button', { name: 'Search', exact: true })
+  await expect(searchButton).toBeVisible()
+  await searchButton.click()
+  await expect(page.getByText('2 results found', { exact: true })).toBeVisible()
 }
 
 test.describe('FSPTS-aligned LEXIS shell', () => {
@@ -336,8 +318,8 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(page.locator('.lexis-page-header__subtitle')).toContainText(
       'Find provincial applications',
     )
+    await submitApplicationSearch(page)
     await expect(page.locator('.lexis-status-tag')).toHaveCount(2)
-    await expect(page.getByText('2 results found', { exact: true })).toBeVisible()
     const resultCountToolbar = page.locator('.legacy-search-table-toolbar .cds--toolbar-content')
     await expect(resultCountToolbar).toHaveCSS('align-items', 'center')
     await expect(resultCountToolbar).toHaveCSS('padding-left', '16px')
@@ -350,8 +332,8 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       '400',
     )
     await expect(
-      page.locator('a.csp-side-nav__link[data-label="Applications Report"]'),
-    ).toHaveCount(0)
+      page.locator('a.csp-side-nav__link[data-label="Application Report"]'),
+    ).toBeVisible()
     await expect(page.getByRole('button', { name: 'Reports', exact: true })).toBeVisible()
 
     const typographyFoundation = await page.evaluate(() => {
@@ -417,6 +399,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
   test('uses accessible dark interactions and stable FSPTS table rows', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
     await page.goto('/provincial/application', { waitUntil: 'domcontentloaded' })
+    await submitApplicationSearch(page)
 
     const resultsRegion = page.getByRole('region', { name: 'Search results table' })
     const table = resultsRegion.getByRole('table')
@@ -502,7 +485,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(
       page.getByRole('heading', { level: 1, name: 'Provincial application search' }),
     ).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Search' })).toBeVisible()
+    await submitApplicationSearch(page)
     await expect(page.locator('.lexis-status-tag')).toHaveCount(2)
     await expect(page.getByRole('region', { name: 'Search results table' })).toHaveAttribute(
       'tabindex',
@@ -695,6 +678,13 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(formCard).toBeVisible()
     await expect(sections).toHaveCount(5)
     await expect(sections.nth(1)).toHaveCSS('border-top-width', '1px')
+    await expect(sections.first()).toHaveCSS('border-color', 'rgb(198, 198, 198)')
+    const firstSectionTitleInset = await sections.first().evaluate((section) => {
+      const title = section.querySelector('legend')
+      if (!(title instanceof HTMLElement)) throw new Error('Offer section title not found')
+      return title.getBoundingClientRect().top - section.getBoundingClientRect().top
+    })
+    expect(firstSectionTitleInset).toBeGreaterThanOrEqual(16)
     await expect(page.getByRole('group', { name: 'Offer form actions' })).toBeVisible()
 
     await page.setViewportSize({ width: 390, height: 844 })
@@ -734,50 +724,6 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
         () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
       ),
     ).toBe(false)
-  })
-
-  test('connects the IDIR lookup count, table, and pagination', async ({ page }) => {
-    await page.setViewportSize({ width: 1440, height: 900 })
-    await page.goto('/admin', { waitUntil: 'domcontentloaded' })
-
-    const workspace = page.locator('.admin-identity-workspace')
-    await expect(workspace).toBeVisible()
-    await page.getByLabel('IDIR username').fill('smith')
-    await page.getByRole('button', { name: 'Search IDIR' }).click()
-
-    await expect(page.getByText('1 IDIR identity found')).toBeVisible()
-    const resultsRegion = page.getByRole('region', { name: 'Search results table' })
-    await expect(resultsRegion.getByText('JSMITH')).toBeVisible()
-    await expect(workspace.locator('.cds--pagination')).toBeVisible()
-    await expect(resultsRegion).not.toHaveAttribute('tabindex')
-
-    await page.setViewportSize({ width: 390, height: 844 })
-    await expect(resultsRegion).toBeVisible()
-    const resultWidths = await resultsRegion.evaluate((region) => ({
-      clientWidth: region.clientWidth,
-      scrollWidth: region.scrollWidth,
-    }))
-    expect(resultWidths.scrollWidth).toBeLessThanOrEqual(resultWidths.clientWidth + 1)
-    await expect(resultsRegion).not.toHaveAttribute('tabindex')
-    const mobileBounds = await page.evaluate(() => {
-      const workspace = document.querySelector('.admin-identity-workspace')
-      const manageLink = Array.from(document.querySelectorAll('a')).find(
-        (link) => link.textContent?.trim() === 'Manage in FAM',
-      )
-      if (!(workspace instanceof HTMLElement) || !(manageLink instanceof HTMLElement)) {
-        throw new Error('Admin identity workspace controls not found')
-      }
-
-      return {
-        viewportWidth: document.documentElement.clientWidth,
-        pageScrollWidth: document.documentElement.scrollWidth,
-        workspaceRight: workspace.getBoundingClientRect().right,
-        manageLinkRight: manageLink.getBoundingClientRect().right,
-      }
-    })
-    expect(mobileBounds.pageScrollWidth).toBe(mobileBounds.viewportWidth)
-    expect(mobileBounds.workspaceRight).toBeLessThanOrEqual(mobileBounds.viewportWidth)
-    expect(mobileBounds.manageLinkRight).toBeLessThanOrEqual(mobileBounds.viewportWidth)
   })
 
   test('contains the provincial workflow table on mobile', async ({ page }) => {
@@ -850,6 +796,75 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
         () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
       ),
     ).toBe(false)
+  })
+
+  test('places policy add actions above their tables and uses focused add dialogs', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.goto('/admin/policies/fee', { waitUntil: 'domcontentloaded' })
+
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'Fee policy administration' }),
+    ).toBeVisible()
+    const feeAddButton = page.getByRole('button', { name: 'Add fee policy' })
+    await expect(feeAddButton).toBeEnabled()
+    const feeLayout = await page.locator('.admin-policy-workspace').evaluate((workspace) => {
+      const button = workspace.querySelector('.admin-policy-table-actions .cds--btn')
+      const tableFrame = workspace.querySelector('.legacy-search-table-frame')
+      if (!(button instanceof HTMLElement) || !(tableFrame instanceof HTMLElement)) {
+        throw new Error('Fee policy add action or results table not found')
+      }
+
+      const buttonRect = button.getBoundingClientRect()
+      const tableRect = tableFrame.getBoundingClientRect()
+      return {
+        buttonBottom: buttonRect.bottom,
+        buttonRight: buttonRect.right,
+        tableRight: tableRect.right,
+        tableTop: tableRect.top,
+      }
+    })
+    expect(feeLayout.buttonBottom).toBeLessThanOrEqual(feeLayout.tableTop)
+    expect(Math.abs(feeLayout.buttonRight - feeLayout.tableRight)).toBeLessThanOrEqual(1)
+
+    await feeAddButton.click()
+    const feeDialog = page.getByRole('dialog', { name: 'Add fee policy' })
+    await expect(feeDialog).toBeVisible()
+    await expect(
+      feeDialog.getByText(
+        'Set the fee increase for one region from a given effective date onward.',
+      ),
+    ).toBeVisible()
+    await expect(feeDialog.getByLabel('Policy effective date')).toBeVisible()
+    await expect(feeDialog.getByLabel('Region')).toBeVisible()
+    await expect(feeDialog.getByLabel('Fee increase percentage')).toBeVisible()
+    await feeDialog.getByRole('button', { name: 'Cancel' }).click()
+    await expect(feeDialog).toBeHidden()
+
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.goto('/admin/policies/fil', { waitUntil: 'domcontentloaded' })
+    const filAddButton = page.getByRole('button', { name: 'Add fee in lieu policy' })
+    await expect(filAddButton).toBeEnabled()
+    await filAddButton.click()
+    const filDialog = page.getByRole('dialog', { name: 'Add fee in lieu policy' })
+    await expect(filDialog).toBeVisible()
+    await expect(filDialog.getByLabel('Policy effective date')).toBeVisible()
+    await expect(filDialog.getByLabel('Fee in lieu percentage')).toBeVisible()
+
+    const mobileDialog = await filDialog.evaluate((dialog) => {
+      const fields = dialog.querySelector('.admin-policy-modal__fields')
+      if (!(fields instanceof HTMLElement)) {
+        throw new Error('Fee in lieu fields not found')
+      }
+      return {
+        dialogClientWidth: dialog.clientWidth,
+        dialogScrollWidth: dialog.scrollWidth,
+        gridColumns: getComputedStyle(fields).gridTemplateColumns,
+      }
+    })
+    expect(mobileDialog.dialogScrollWidth).toBeLessThanOrEqual(mobileDialog.dialogClientWidth)
+    expect(mobileDialog.gridColumns.split(' ')).toHaveLength(1)
   })
 
   test('keeps FSPTS upload surfaces coherent in dark mode', async ({ page }) => {

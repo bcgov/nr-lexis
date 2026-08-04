@@ -24,5 +24,7 @@ public interface PermitService {
 
   Optional<PermitAccessDto> findAccessByPermitNumber(Long permitNumber);
 
+  boolean hasLinkedProvincialApplicationForClient(Long permitNumber, String clientNumber);
+
   List<Long> findLinkedApplicationNumbers(Long permitNumber);
 }

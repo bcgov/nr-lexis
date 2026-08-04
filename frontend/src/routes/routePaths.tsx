@@ -1,6 +1,6 @@
 import { Loading } from '@carbon/react'
 import { lazy, Suspense, type ReactNode } from 'react'
-import { Navigate, type RouteObject } from 'react-router-dom'
+import { Navigate, useNavigate, type RouteObject } from 'react-router-dom'
 import AppLayout from '../components/Layout'
 import { hasProvincialSubmitterRole, hasRole } from '@/context/auth/role-utils'
 import { isProdRtmOnlyPathAllowed } from '@/config/features'
@@ -8,14 +8,15 @@ import { useAuth } from '@/context/auth/useAuth'
 import LandingPage from '@/pages/Landing'
 import NotFoundPage from '@/pages/NotFound'
 import ForbiddenPage from '@/pages/Forbidden'
+import ForestClientSelectionPage from '@/pages/ForestClientSelection'
 import UnauthorizedPage from '@/pages/Unauthorized'
 import type { RouteActionMatch, RouteRoleScope } from '@/routes/routeAccessTypes'
 
-const AdminPage = lazy(() => import('@/pages/Admin'))
 const AdminPoliciesPage = lazy(() => import('@/pages/AdminPolicies'))
 const AdminUploadsPage = lazy(() => import('@/pages/AdminUploads'))
 const FederalPage = lazy(() => import('@/pages/Federal'))
 const FederalApplicationDetailsPage = lazy(() => import('@/pages/FederalApplicationDetails'))
+const NotificationsPage = lazy(() => import('@/pages/Notifications'))
 const ProvincialApplicationPage = lazy(() => import('@/pages/ProvincialApplication'))
 const ProvincialApplicationCreatePage = lazy(() => import('@/pages/ProvincialApplicationCreate'))
 const ProvincialApplicationDetailsPage = lazy(() => import('@/pages/ProvincialApplicationDetails'))
@@ -29,6 +30,7 @@ const ProvincialPage = lazy(() => import('@/pages/Provincial'))
 const ProvincialPermitPage = lazy(() => import('@/pages/ProvincialPermit'))
 const ProvincialPermitDetailsPage = lazy(() => import('@/pages/ProvincialPermitDetails'))
 const ProvincialReviewPage = lazy(() => import('@/pages/ProvincialReview'))
+const ProvincialSummaryPage = lazy(() => import('@/pages/ProvincialSummary'))
 const ReportsPage = lazy(() => import('@/pages/Reports'))
 const RTMEmsLogAmvPage = lazy(() => import('@/pages/RTMEmsLogAmv'))
 
@@ -53,6 +55,17 @@ function ProtectedRootRedirect() {
   return <Navigate to={defaultRoute} replace />
 }
 
+function ForestClientSelectionRoute() {
+  const { capabilities, defaultRoute } = useAuth()
+  const navigate = useNavigate()
+
+  if (capabilities.availableForestClientNumbers.length < 2) {
+    return <Navigate to={defaultRoute} replace />
+  }
+
+  return <ForestClientSelectionPage onSelected={() => navigate(defaultRoute, { replace: true })} />
+}
+
 export type RouteGuardProps = {
   path: string
   requiredActions?: string[]
@@ -67,6 +80,10 @@ const canAccessRoleScope = (
 ): boolean => {
   if (!roleScope) {
     return true
+  }
+
+  if (roleScope === 'provincialSubmitter') {
+    return hasProvincialSubmitterRole(roles) && !hasRole(roles, 'ADMIN')
   }
 
   const hasAdminRole = hasRole(roles, 'ADMIN')
@@ -153,6 +170,10 @@ export const PUBLIC_ROUTES: RouteDescription[] = [
   },
 ]
 
+// INTENTIONAL_LEGACY_DIVERGENCE(ADMIN_PAGE_RETIREMENT):
+// The Users & Access landing page and IDIR lookup are deliberately absent from protected routes.
+// INTENTIONAL_LEGACY_DIVERGENCE(INDIGENOUS_RESERVE_MODULE_RETIREMENT):
+// Legacy Indian/Indigenous Reserve search, create, and detail pages are deliberately not routed.
 export const PROTECTED_ROUTES: RouteDescription[] = [
   {
     path: '/',
@@ -161,10 +182,28 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
     isNavigation: false,
   },
   {
+    path: '/select-organization',
+    id: 'Select Organization',
+    element: <ForestClientSelectionRoute />,
+    isNavigation: false,
+  },
+  {
     path: '/dashboard',
     id: 'Legacy Callback Redirect',
     element: <ProtectedRootRedirect />,
     isNavigation: false,
+  },
+  {
+    // INTENTIONAL_LEGACY_DIVERGENCE(NOTIFICATION_MODULE_ADDITION):
+    // Modern LEXIS provides role-targeted operational notices with no legacy screen equivalent.
+    path: '/notifications',
+    id: 'Notifications',
+    element: (
+      <Layout>
+        <NotificationsPage />
+      </Layout>
+    ),
+    isNavigation: true,
   },
   {
     path: '/provincial',
@@ -184,6 +223,18 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
       </Layout>
     ),
     isNavigation: true,
+  },
+  {
+    path: '/provincial/summary',
+    id: 'Provincial Summary',
+    roleScope: 'provincialSubmitter',
+    requiredActions: ['/summary'],
+    element: (
+      <Layout>
+        <ProvincialSummaryPage />
+      </Layout>
+    ),
+    isNavigation: false,
   },
   {
     path: '/provincial/application',
@@ -396,17 +447,6 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
       </Layout>
     ),
     isNavigation: false,
-  },
-  {
-    path: '/admin',
-    id: 'Admin',
-    requiredActions: ['/lexisAgentAdmin'],
-    element: (
-      <Layout>
-        <AdminPage />
-      </Layout>
-    ),
-    isNavigation: true,
   },
   {
     path: '/admin/rtm/emslogamv',

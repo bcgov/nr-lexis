@@ -15,6 +15,7 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.sql.Types;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -32,6 +33,7 @@ import org.springframework.stereotype.Repository;
 @Profile("oracle")
 public class PermitRpcRepository extends OracleRepositorySupport {
 
+  private static final int ORACLE_NO_DATA_FOUND = 1403;
   private static final String FIND_SCALE_DETAIL_BY_PACKAGE =
       LEXIS_GROUP_5_PACKAGE + "FIND_SCALE_DETAIL_BY_PKG(?,?)";
   private static final String FIND_SCALE_DETAIL_BY_APPLICATION =
@@ -44,6 +46,198 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       LEXIS_GROUP_5_PACKAGE + "FIND_PACKAGES_BY_PERMIT(?,?)";
   private static final String FIND_PACKAGES_BY_OIC_PERMIT =
       LEXIS_GROUP_5_PACKAGE + "FIND_PACKAGES_BY_OIC_PERMIT(?,?)";
+  private static final String CORE_PACKAGE_SELECT =
+      """
+      SELECT
+        P.PACKAGE_NUMBER,
+        P.APPLICATION_NUMBER,
+        P.PACKAGE_VOLUME,
+        P.AVERAGE_LENGTH,
+        P.AVERAGE_DIAMETER,
+        P.EXPORT_PACKAGE_STATUS_CODE,
+        P.COMMENTS,
+        P.PACKAGE_REPROCESSED_INDICATOR,
+        P.EXPORT_GROWTH_TYPE_CODE,
+        P.EXPORT_PRODUCT_TYPE_CODE,
+        CASE WHEN EXISTS (
+          SELECT 1
+          FROM EXPORT_SCALE_DETAIL ASSIGNED_SCALE
+          WHERE ASSIGNED_SCALE.PACKAGE_NUMBER = P.PACKAGE_NUMBER
+            AND ASSIGNED_SCALE.EXPORT_PERMIT_DETAIL_NUMBER = ?
+        ) THEN 1 ELSE 0 END AS ASSIGNED_TO_PERMIT,
+        EEA.EXEMPTION_NUMBER,
+        EEA.ORG_UNIT_NO,
+        OU.ORG_UNIT_NAME AS REGION,
+        EEA.EXPORT_PRODUCT_TYPE_CODE AS APPLICATION_PRODUCT_TYPE_CODE,
+        EEA.EXPORT_GROWTH_TYPE_CODE AS APPLICATION_GROWTH_TYPE_CODE,
+        EEA.OWNER_CLIENT_NUMBER,
+        EEA.OWNER_CLIENT_LOCATION_CODE,
+        EEA.AGENT_CLIENT_NUMBER,
+        EEA.AGENT_CLIENT_LOCATION_CODE,
+        EEA.OIC_INDICATOR,
+        EEA.EXPORT_JURISDICTION_CODE,
+        EE.EXPORT_EXEMPTION_TYPE_CODE,
+        APTC.DESCRIPTION AS APPLICATION_PRODUCT_TYPE_DESCRIPTION,
+        PPTC.DESCRIPTION AS PACKAGE_PRODUCT_TYPE_DESCRIPTION,
+        AGTC.DESCRIPTION AS APPLICATION_GROWTH_TYPE_DESCRIPTION,
+        PGTC.DESCRIPTION AS PACKAGE_GROWTH_TYPE_DESCRIPTION,
+        EPSC.DESCRIPTION AS PACKAGE_STATUS_DESCRIPTION
+      FROM EXPORT_PACKAGE P
+      LEFT JOIN EXPORT_EXEMPTION_APPLICATION EEA
+        ON EEA.APPLICATION_NUMBER = P.APPLICATION_NUMBER
+      LEFT JOIN EXPORT_EXEMPTION EE
+        ON EE.EXEMPTION_NUMBER = EEA.EXEMPTION_NUMBER
+      LEFT JOIN ORG_UNIT OU
+        ON OU.ORG_UNIT_NO = EEA.ORG_UNIT_NO
+      LEFT JOIN EXPORT_PRODUCT_TYPE_CODE APTC
+        ON APTC.EXPORT_PRODUCT_TYPE_CODE = EEA.EXPORT_PRODUCT_TYPE_CODE
+      LEFT JOIN EXPORT_PRODUCT_TYPE_CODE PPTC
+        ON PPTC.EXPORT_PRODUCT_TYPE_CODE = P.EXPORT_PRODUCT_TYPE_CODE
+      LEFT JOIN EXPORT_GROWTH_TYPE_CODE AGTC
+        ON AGTC.EXPORT_GROWTH_TYPE_CODE = EEA.EXPORT_GROWTH_TYPE_CODE
+      LEFT JOIN EXPORT_GROWTH_TYPE_CODE PGTC
+        ON PGTC.EXPORT_GROWTH_TYPE_CODE = P.EXPORT_GROWTH_TYPE_CODE
+      LEFT JOIN EXPORT_PACKAGE_STATUS_CODE EPSC
+        ON EPSC.EXPORT_PACKAGE_STATUS_CODE = P.EXPORT_PACKAGE_STATUS_CODE
+      """;
+  private static final String FIND_CORE_PACKAGES_BY_PERMIT =
+      CORE_PACKAGE_SELECT
+          + " WHERE EXISTS ("
+          + "SELECT 1 FROM EXPORT_SCALE_DETAIL TARGET_SCALE "
+          + "WHERE TARGET_SCALE.PACKAGE_NUMBER = P.PACKAGE_NUMBER "
+          + "AND TARGET_SCALE.EXPORT_PERMIT_DETAIL_NUMBER = ?)"
+          + " ORDER BY P.PACKAGE_NUMBER";
+  private static final String FIND_CORE_PACKAGES_BY_OIC_PERMIT =
+      CORE_PACKAGE_SELECT
+          + " WHERE EXISTS ("
+          + "SELECT 1 FROM EXPORT_PERMIT_DETAIL TARGET_PERMIT "
+          + "WHERE TARGET_PERMIT.EXPORT_PERMIT_DETAIL_NUMBER = ? "
+          + "AND TARGET_PERMIT.OIC_APPLICATION_NUMBER = P.APPLICATION_NUMBER)"
+          + " OR EXISTS ("
+          + "SELECT 1 FROM EXPORT_SCALE_DETAIL TARGET_SCALE "
+          + "WHERE TARGET_SCALE.PACKAGE_NUMBER = P.PACKAGE_NUMBER "
+          + "AND TARGET_SCALE.EXPORT_PERMIT_DETAIL_NUMBER = ?)"
+          + " ORDER BY P.PACKAGE_NUMBER";
+  private static final String CORE_SCALE_SELECT =
+      """
+      SELECT
+        SD.EXPORT_SCALE_DETAIL_ID,
+        SD.PIECES_COUNT,
+        SD.SPECIES_GRADE_VOLUME,
+        SD.TIMBER_MARK,
+        SD.EXPORT_SPECIES_CODE,
+        SD.EXPORT_GRADE_CODE,
+        P.APPLICATION_NUMBER,
+        SD.PACKAGE_NUMBER,
+        SD.EXPORT_PERMIT_DETAIL_NUMBER,
+        HVA.CASCADE_SPLIT_CODE,
+        SD.ESTIMATED_WINNING_BID AS EWB,
+        SD.FEE_IN_LIEU AS FIL,
+        SD.MULTIPLICATION_FACTOR AS MF,
+        ESC.DESCRIPTION AS SPECIES_DESCRIPTION,
+        EGC.DESCRIPTION AS GRADE_DESCRIPTION
+      FROM EXPORT_SCALE_DETAIL SD
+      INNER JOIN EXPORT_PACKAGE P
+        ON P.PACKAGE_NUMBER = SD.PACKAGE_NUMBER
+      LEFT JOIN HARVESTING_HAULING_XREF HHX
+        ON HHX.TIMBER_MARK = SD.TIMBER_MARK
+      LEFT JOIN HARVESTING_AUTHORITY HVA
+        ON HVA.HVA_SKEY = HHX.HVA_SKEY
+      LEFT JOIN EXPORT_SPECIES_CODE ESC
+        ON ESC.EXPORT_SPECIES_CODE = SD.EXPORT_SPECIES_CODE
+      LEFT JOIN EXPORT_GRADE_CODE EGC
+        ON EGC.EXPORT_GRADE_CODE = SD.EXPORT_GRADE_CODE
+      WHERE SD.PACKAGE_NUMBER IN (%s)
+      """;
+  private static final String FIND_PERMIT_FEE_SCALE_ROWS =
+      """
+      WITH SCALE_CONTEXT AS (
+        SELECT
+          SD.EXPORT_SCALE_DETAIL_ID,
+          SD.PIECES_COUNT,
+          SD.SPECIES_GRADE_VOLUME,
+          SD.TIMBER_MARK,
+          SD.EXPORT_SPECIES_CODE,
+          SD.EXPORT_GRADE_CODE,
+          NVL(SD.EXPORT_GRADE_CODE, ' ') AS AMV_GRADE_CODE,
+          P.APPLICATION_NUMBER,
+          SD.PACKAGE_NUMBER,
+          SD.EXPORT_PERMIT_DETAIL_NUMBER,
+          HVA.CASCADE_SPLIT_CODE,
+          SD.ESTIMATED_WINNING_BID AS EWB,
+          SD.FEE_IN_LIEU AS FIL,
+          SD.MULTIPLICATION_FACTOR AS MF,
+          EEA.EXPORT_PRODUCT_TYPE_CODE AS APPLICATION_PRODUCT_TYPE_CODE,
+          ESC.DESCRIPTION AS SPECIES_DESCRIPTION,
+          EGC.DESCRIPTION AS GRADE_DESCRIPTION,
+          P.EXPORT_GROWTH_TYPE_CODE AS PACKAGE_GROWTH_TYPE_CODE,
+          EGTC.DESCRIPTION AS PACKAGE_GROWTH_TYPE_DESCRIPTION,
+          EPD.APPLICATION_DATE AS PERMIT_APPLICATION_DATE,
+          CASE
+            WHEN P.APPLICATION_NUMBER IS NULL THEN EPD.EXPORT_GROWTH_TYPE_CODE
+            ELSE EEA.EXPORT_GROWTH_TYPE_CODE
+          END AS AMV_GROWTH_TYPE_CODE
+        FROM EXPORT_SCALE_DETAIL SD
+        INNER JOIN EXPORT_PACKAGE P
+          ON P.PACKAGE_NUMBER = SD.PACKAGE_NUMBER
+        INNER JOIN EXPORT_PERMIT_DETAIL EPD
+          ON EPD.EXPORT_PERMIT_DETAIL_NUMBER = SD.EXPORT_PERMIT_DETAIL_NUMBER
+        LEFT JOIN EXPORT_EXEMPTION_APPLICATION EEA
+          ON EEA.APPLICATION_NUMBER = P.APPLICATION_NUMBER
+        LEFT JOIN HARVESTING_HAULING_XREF HHX
+          ON HHX.TIMBER_MARK = SD.TIMBER_MARK
+        LEFT JOIN HARVESTING_AUTHORITY HVA
+          ON HVA.HVA_SKEY = HHX.HVA_SKEY
+        LEFT JOIN EXPORT_SPECIES_CODE ESC
+          ON ESC.EXPORT_SPECIES_CODE = SD.EXPORT_SPECIES_CODE
+        LEFT JOIN EXPORT_GRADE_CODE EGC
+          ON EGC.EXPORT_GRADE_CODE = SD.EXPORT_GRADE_CODE
+        LEFT JOIN EXPORT_GROWTH_TYPE_CODE EGTC
+          ON EGTC.EXPORT_GROWTH_TYPE_CODE = P.EXPORT_GROWTH_TYPE_CODE
+        WHERE SD.EXPORT_PERMIT_DETAIL_NUMBER = ?
+      ),
+      SCALE_AMV_DATE AS (
+        SELECT
+          SC.EXPORT_SCALE_DETAIL_ID,
+          MAX(ELA.EFFECTIVE_DATE) AS EFFECTIVE_DATE
+        FROM SCALE_CONTEXT SC
+        LEFT JOIN EXPORT_LOG_AMV ELA
+          ON ELA.EXPORT_SPECIES_CODE = SC.EXPORT_SPECIES_CODE
+          AND ELA.EXPORT_GRADE_CODE = SC.AMV_GRADE_CODE
+          AND ELA.EFFECTIVE_DATE <= SC.PERMIT_APPLICATION_DATE
+        GROUP BY SC.EXPORT_SCALE_DETAIL_ID
+      )
+      SELECT DISTINCT
+        SC.EXPORT_SCALE_DETAIL_ID,
+        SC.PIECES_COUNT,
+        SC.SPECIES_GRADE_VOLUME,
+        SC.TIMBER_MARK,
+        SC.EXPORT_SPECIES_CODE,
+        SC.EXPORT_GRADE_CODE,
+        SC.APPLICATION_NUMBER,
+        SC.PACKAGE_NUMBER,
+        SC.EXPORT_PERMIT_DETAIL_NUMBER,
+        SC.CASCADE_SPLIT_CODE,
+        SC.EWB,
+        SC.FIL,
+        SC.MF,
+        SC.APPLICATION_PRODUCT_TYPE_CODE,
+        SC.SPECIES_DESCRIPTION,
+        SC.GRADE_DESCRIPTION,
+        SC.PACKAGE_GROWTH_TYPE_CODE,
+        SC.PACKAGE_GROWTH_TYPE_DESCRIPTION,
+        ELA.AVERAGE_MARKET_PRICE
+      FROM SCALE_CONTEXT SC
+      LEFT JOIN SCALE_AMV_DATE SAD
+        ON SAD.EXPORT_SCALE_DETAIL_ID = SC.EXPORT_SCALE_DETAIL_ID
+      LEFT JOIN EXPORT_LOG_AMV ELA
+        ON ELA.EFFECTIVE_DATE = SAD.EFFECTIVE_DATE
+        AND ELA.EFFECTIVE_DATE <= TRUNC(SC.PERMIT_APPLICATION_DATE, 'MONTH')
+        AND ELA.EXPORT_SPECIES_CODE = SC.EXPORT_SPECIES_CODE
+        AND ELA.EXPORT_GRADE_CODE = SC.AMV_GRADE_CODE
+        AND ELA.EXPORT_GROWTH_TYPE_CODE = SC.AMV_GROWTH_TYPE_CODE
+      ORDER BY SC.PACKAGE_NUMBER, SC.TIMBER_MARK, SC.EXPORT_GRADE_CODE
+      """;
   private static final String PACKAGE_BELONGS_TO_PERMIT =
       """
       SELECT CASE
@@ -60,6 +254,27 @@ public class PermitRpcRepository extends OracleRepositorySupport {
             AND (
               EPD.EXPORT_PERMIT_DETAIL_NUMBER = ?
               OR ESD.EXPORT_PERMIT_DETAIL_NUMBER = ?
+            )
+        ) THEN 1
+        ELSE 0
+      END
+      FROM DUAL
+      """;
+  private static final String LINKED_PROVINCIAL_APPLICATION_BELONGS_TO_CLIENT =
+      """
+      SELECT CASE
+        WHEN EXISTS (
+          SELECT 1
+          FROM EXPORT_SCALE_DETAIL ESD
+          INNER JOIN EXPORT_PACKAGE P
+            ON P.PACKAGE_NUMBER = ESD.PACKAGE_NUMBER
+          INNER JOIN EXPORT_EXEMPTION_APPLICATION EEA
+            ON EEA.APPLICATION_NUMBER = P.APPLICATION_NUMBER
+          WHERE ESD.EXPORT_PERMIT_DETAIL_NUMBER = ?
+            AND EEA.EXPORT_JURISDICTION_CODE = 'P'
+            AND (
+              EEA.OWNER_CLIENT_NUMBER = ?
+              OR EEA.AGENT_CLIENT_NUMBER = ?
             )
         ) THEN 1
         ELSE 0
@@ -92,6 +307,111 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       LEXIS_GROUP_5_PACKAGE + "FIND_PERMIT_FILE_ATTACHMENT(?,?)";
   private static final String FIND_APPLICATION_FILE_DETAILS =
       LEXIS_GROUP_5_PACKAGE + "FIND_APPL_FILE_DETAILS(?,?)";
+  private static final String FIND_PERMIT_DOCUMENT_CONTEXT_ROWS =
+      """
+      WITH PERMIT_APPLICATIONS AS (
+        SELECT DISTINCT P.APPLICATION_NUMBER
+        FROM EXPORT_SCALE_DETAIL SD
+        INNER JOIN EXPORT_PACKAGE P
+          ON P.PACKAGE_NUMBER = SD.PACKAGE_NUMBER
+        WHERE SD.EXPORT_PERMIT_DETAIL_NUMBER = ?
+      ),
+      PERMIT_ATTACHMENT_REFERENCES AS (
+        SELECT
+          EPFA.EXPORT_ATTACHMENT_ID,
+          EPFA.EXPORT_PERMIT_DETAIL_NUMBER,
+          1 AS HAS_PERMIT_RELATIONSHIP
+        FROM EXPORT_PERMIT_FILE_ATTACHMENT EPFA
+        WHERE EPFA.EXPORT_PERMIT_DETAIL_NUMBER = ?
+        UNION ALL
+        SELECT
+          ESIFA.EXPORT_ATTACHMENT_ID,
+          ESIFA.EXPORT_PERMIT_DETAIL_NUMBER,
+          0 AS HAS_PERMIT_RELATIONSHIP
+        FROM EXPORT_SALES_INVCE_FILE_ATTACH ESIFA
+        WHERE ESIFA.EXPORT_PERMIT_DETAIL_NUMBER = ?
+      ),
+      PERMIT_ATTACHMENTS AS (
+        SELECT
+          EXPORT_ATTACHMENT_ID,
+          EXPORT_PERMIT_DETAIL_NUMBER,
+          MAX(HAS_PERMIT_RELATIONSHIP) AS HAS_PERMIT_RELATIONSHIP
+        FROM PERMIT_ATTACHMENT_REFERENCES
+        GROUP BY EXPORT_ATTACHMENT_ID, EXPORT_PERMIT_DETAIL_NUMBER
+      ),
+      DOCUMENT_REFERENCES AS (
+        SELECT
+          PA.EXPORT_ATTACHMENT_ID,
+          CAST(NULL AS NUMBER(10)) AS SOURCE_APPLICATION_NUMBER,
+          PA.EXPORT_PERMIT_DETAIL_NUMBER AS SOURCE_PERMIT_NUMBER,
+          PA.HAS_PERMIT_RELATIONSHIP,
+          0 AS SOURCE_ORDER
+        FROM PERMIT_ATTACHMENTS PA
+        UNION ALL
+        SELECT DISTINCT
+          EAFA.EXPORT_ATTACHMENT_ID,
+          PA.APPLICATION_NUMBER AS SOURCE_APPLICATION_NUMBER,
+          CAST(NULL AS NUMBER(10)) AS SOURCE_PERMIT_NUMBER,
+          -1 AS HAS_PERMIT_RELATIONSHIP,
+          1 AS SOURCE_ORDER
+        FROM PERMIT_APPLICATIONS PA
+        INNER JOIN EXPORT_APPL_FILE_ATTCHMNT EAFA
+          ON EAFA.APPLICATION_NUMBER = PA.APPLICATION_NUMBER
+        WHERE PA.APPLICATION_NUMBER IS NOT NULL
+          AND PA.APPLICATION_NUMBER > 0
+      )
+      SELECT
+        EFA.EXPORT_ATTACHMENT_ID,
+        EFA.FILE_NAME,
+        EFA.DESCRIPTION,
+        EFA.EXPORT_ATTACHMENT_TYPE_CODE,
+        EATC.DESCRIPTION AS ATTACHMENT_TYPE_DESCRIPTION,
+        CASE
+          WHEN DR.SOURCE_ORDER = 1 THEN 'application'
+          WHEN DR.HAS_PERMIT_RELATIONSHIP = 1
+            AND EFA.EXPORT_ATTACHMENT_TYPE_CODE = 'PMT' THEN 'permit'
+          WHEN DR.HAS_PERMIT_RELATIONSHIP = 0
+            AND EFA.EXPORT_ATTACHMENT_TYPE_CODE = 'INV' THEN 'invoice'
+          ELSE 'unknown'
+        END AS DOCUMENT_SOURCE,
+        DR.SOURCE_APPLICATION_NUMBER,
+        DR.SOURCE_PERMIT_NUMBER,
+        CASE
+          WHEN DR.SOURCE_ORDER = 0
+            AND (
+              (DR.HAS_PERMIT_RELATIONSHIP = 1
+                AND EFA.EXPORT_ATTACHMENT_TYPE_CODE = 'PMT')
+              OR (DR.HAS_PERMIT_RELATIONSHIP = 0
+                AND EFA.EXPORT_ATTACHMENT_TYPE_CODE = 'INV')
+            ) THEN 1
+          ELSE 0
+        END AS DELETABLE,
+        DR.SOURCE_ORDER
+      FROM DOCUMENT_REFERENCES DR
+      INNER JOIN EXPORT_FILE_ATTACHMENT EFA
+        ON EFA.EXPORT_ATTACHMENT_ID = DR.EXPORT_ATTACHMENT_ID
+      LEFT JOIN EXPORT_ATTACHMENT_TYPE_CODE EATC
+        ON EATC.EXPORT_ATTACHMENT_TYPE_CODE = EFA.EXPORT_ATTACHMENT_TYPE_CODE
+      UNION ALL
+      SELECT
+        0 AS EXPORT_ATTACHMENT_ID,
+        CAST(NULL AS VARCHAR2(250)) AS FILE_NAME,
+        CAST(NULL AS VARCHAR2(250)) AS DESCRIPTION,
+        CAST(NULL AS VARCHAR2(3)) AS EXPORT_ATTACHMENT_TYPE_CODE,
+        CAST(NULL AS VARCHAR2(120)) AS ATTACHMENT_TYPE_DESCRIPTION,
+        'INVALID_APPLICATION_RELATIONSHIP' AS DOCUMENT_SOURCE,
+        CAST(NULL AS NUMBER(10)) AS SOURCE_APPLICATION_NUMBER,
+        CAST(NULL AS NUMBER(10)) AS SOURCE_PERMIT_NUMBER,
+        0 AS DELETABLE,
+        2 AS SOURCE_ORDER
+      FROM DUAL
+      WHERE EXISTS (
+        SELECT 1
+        FROM PERMIT_APPLICATIONS PA
+        WHERE PA.APPLICATION_NUMBER IS NULL OR PA.APPLICATION_NUMBER < 1
+      )
+      ORDER BY SOURCE_ORDER, SOURCE_APPLICATION_NUMBER, EXPORT_ATTACHMENT_ID
+      """;
   private static final String FIND_INVOICE_BY_ID = LEXIS_GROUP_5_PACKAGE + "FIND_INVOICE_BY_ID(?,?,?)";
   private static final String FIND_INVOICES_BY_PERMIT = LEXIS_GROUP_5_PACKAGE + "FIND_INVOICES_BY_PERMIT(?,?)";
   private static final String INSERT_PERMIT_DETAIL =
@@ -162,6 +482,29 @@ public class PermitRpcRepository extends OracleRepositorySupport {
         cs -> cs.setString(1, permitNumber.toString()),
         2,
         this::mapPermitScaleDetailRow);
+  }
+
+  /**
+   * Loads all fee-display inputs for a permit in one query. The set-based AMV join deliberately
+   * mirrors {@code LEXIS.FIND_LOG_AMV(scaleId)}, including its effective-month cutoff and growth
+   * type selection.
+   */
+  public List<PermitFeeScaleRow> findPermitFeeScaleRows(Long permitNumber) {
+    if (permitNumber == null || permitNumber < 1) {
+      return List.of();
+    }
+    return jdbcTemplate.query(
+        FIND_PERMIT_FEE_SCALE_ROWS,
+        (rs, rowNumber) ->
+            new PermitFeeScaleRow(
+                mapPermitScaleDetailRow(rs),
+                getString(rs, "APPLICATION_PRODUCT_TYPE_CODE"),
+                getString(rs, "SPECIES_DESCRIPTION"),
+                getString(rs, "GRADE_DESCRIPTION"),
+                getString(rs, "PACKAGE_GROWTH_TYPE_CODE"),
+                getString(rs, "PACKAGE_GROWTH_TYPE_DESCRIPTION"),
+                rs.getBigDecimal("AVERAGE_MARKET_PRICE")),
+        permitNumber);
   }
 
   /**
@@ -406,6 +749,196 @@ public class PermitRpcRepository extends OracleRepositorySupport {
         permitNumber, FIND_PACKAGES_BY_OIC_PERMIT, false, "Blanket OIC permit " + permitNumber);
   }
 
+  /**
+   * Loads every package and its application/code context in one direct query. The result replaces
+   * the package cursor plus one application and several code lookups per distinct application.
+   */
+  public List<PermitCorePackageContextRow> findCorePackageContexts(
+      Long permitNumber, boolean blanketOic) {
+    if (permitNumber == null || permitNumber < 1) {
+      return List.of();
+    }
+
+    String sql = blanketOic ? FIND_CORE_PACKAGES_BY_OIC_PERMIT : FIND_CORE_PACKAGES_BY_PERMIT;
+    Object[] bindValues =
+        blanketOic
+            ? new Object[] {permitNumber, permitNumber, permitNumber}
+            : new Object[] {permitNumber, permitNumber};
+    List<PermitCorePackageContextRow> rows =
+        jdbcTemplate.query(sql, (rs, rowNumber) -> mapPermitCorePackageContextRow(rs), bindValues);
+
+    Map<String, PermitCorePackageContextRow> packagesByNumber = new TreeMap<>();
+    for (PermitCorePackageContextRow row : rows) {
+      String packageNumber = trim(row.packageRow().packageNumber());
+      if (packageNumber == null) {
+        continue;
+      }
+      PermitCorePackageRow normalizedPackage = row.packageRow().withPackageNumber(packageNumber);
+      packagesByNumber.putIfAbsent(packageNumber, row.withPackageRow(normalizedPackage));
+    }
+    if (!blanketOic
+        && packagesByNumber.values().stream()
+            .anyMatch(row -> row.packageRow().applicationNumber() == null
+                || row.packageRow().applicationNumber() < 1)) {
+      throw new DataRetrievalFailureException(
+          "An invalid application relationship was returned for permit " + permitNumber + ".");
+    }
+    return List.copyOf(packagesByNumber.values());
+  }
+
+  /** Loads all scale rows for the selected core-tab packages in one parameterized query. */
+  public List<PermitCoreScaleRow> findCoreScaleRows(
+      List<String> packageNumbers, Long permitNumber, boolean blanketOic) {
+    List<String> normalizedPackages =
+        packageNumbers == null
+            ? List.of()
+            : packageNumbers.stream()
+                .map(this::trim)
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .sorted()
+                .toList();
+    if (normalizedPackages.isEmpty() || permitNumber == null || permitNumber < 1) {
+      return List.of();
+    }
+
+    String sql = CORE_SCALE_SELECT.formatted(placeholders(normalizedPackages.size()));
+    List<Object> bindValues = new ArrayList<>(normalizedPackages);
+    if (!blanketOic) {
+      sql += " AND (SD.EXPORT_PERMIT_DETAIL_NUMBER IS NULL "
+          + "OR SD.EXPORT_PERMIT_DETAIL_NUMBER = ?)";
+      bindValues.add(permitNumber);
+    }
+    sql += " ORDER BY SD.PACKAGE_NUMBER, SD.TIMBER_MARK, SD.EXPORT_GRADE_CODE";
+    return jdbcTemplate.query(
+        sql,
+        (rs, rowNumber) ->
+            new PermitCoreScaleRow(
+                mapPermitScaleDetailRow(rs),
+                getString(rs, "SPECIES_DESCRIPTION"),
+                getString(rs, "GRADE_DESCRIPTION")),
+        bindValues.toArray());
+  }
+
+  /**
+   * Loads application end uses, package end uses, and every candidate EXCOL translation in one
+   * query. Java keeps the existing candidate-selection rule when assembling the response.
+   */
+  public List<PermitCoreEndUseRow> findCoreEndUseRows(
+      List<Long> applicationNumbers, List<String> packageNumbers) {
+    List<Long> normalizedApplications =
+        applicationNumbers == null
+            ? List.of()
+            : applicationNumbers.stream()
+                .filter(value -> value != null && value > 0)
+                .distinct()
+                .sorted()
+                .toList();
+    List<String> normalizedPackages =
+        packageNumbers == null
+            ? List.of()
+            : packageNumbers.stream()
+                .map(this::trim)
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .sorted()
+                .toList();
+    if (normalizedApplications.isEmpty() && normalizedPackages.isEmpty()) {
+      return List.of();
+    }
+
+    String applicationFilter =
+        normalizedApplications.isEmpty()
+            ? "1=0"
+            : "EEASE.APPLICATION_NUMBER IN (" + placeholders(normalizedApplications.size()) + ")";
+    String packageFilter =
+        normalizedPackages.isEmpty()
+            ? "1=0"
+            : "EEASE.PACKAGE_NUMBER IN (" + placeholders(normalizedPackages.size()) + ")";
+    String sql =
+        """
+        WITH APPLICATION_END_USES AS (
+          SELECT
+            EEASE.APPLICATION_NUMBER,
+            EEASE.PACKAGE_NUMBER,
+            EEASE.EXPORT_SPECIES_CODE,
+            EEASE.EXPORT_END_USE_CODE,
+            ROW_NUMBER() OVER (
+              PARTITION BY EEASE.APPLICATION_NUMBER
+              ORDER BY EEASE.EXPORT_SPECIES_CODE, EEASE.EXPORT_END_USE_CODE,
+                EEASE.PACKAGE_NUMBER NULLS FIRST
+            ) AS END_USE_ORDER,
+            COUNT(*) OVER (PARTITION BY EEASE.APPLICATION_NUMBER) AS SPECIES_COUNT
+          FROM EXPORT_EXMPTN_APPL_SPCS_ENDUSE EEASE
+          WHERE %s
+        ),
+        APPLICATION_END_USE_CONTEXT AS (
+          SELECT
+            APPLICATION_NUMBER,
+            MAX(CASE WHEN END_USE_ORDER = 1 THEN EXPORT_SPECIES_CODE END) AS FIRST_SPECIES_CODE,
+            MAX(CASE WHEN END_USE_ORDER = 1 THEN EXPORT_END_USE_CODE END) AS FIRST_END_USE_CODE,
+            MAX(SPECIES_COUNT) AS SPECIES_COUNT
+          FROM APPLICATION_END_USES
+          GROUP BY APPLICATION_NUMBER
+        )
+        SELECT
+          'APPLICATION' AS ROW_KIND,
+          AE.APPLICATION_NUMBER,
+          AE.PACKAGE_NUMBER,
+          AE.EXPORT_SPECIES_CODE,
+          AE.EXPORT_END_USE_CODE,
+          CAST(NULL AS VARCHAR2(100)) AS EXCOL_TRANSLATION_VALUE
+        FROM APPLICATION_END_USES AE
+        UNION ALL
+        SELECT
+          'PACKAGE' AS ROW_KIND,
+          EEASE.APPLICATION_NUMBER,
+          EEASE.PACKAGE_NUMBER,
+          EEASE.EXPORT_SPECIES_CODE,
+          EEASE.EXPORT_END_USE_CODE,
+          CAST(NULL AS VARCHAR2(100)) AS EXCOL_TRANSLATION_VALUE
+        FROM EXPORT_EXMPTN_APPL_SPCS_ENDUSE EEASE
+        WHERE %s
+        UNION ALL
+        SELECT DISTINCT
+          'CANDIDATE' AS ROW_KIND,
+          AEC.APPLICATION_NUMBER,
+          CAST(NULL AS VARCHAR2(20)) AS PACKAGE_NUMBER,
+          AEC.FIRST_SPECIES_CODE AS EXPORT_SPECIES_CODE,
+          AEC.FIRST_END_USE_CODE AS EXPORT_END_USE_CODE,
+          SGE.EXCOL_TRANSLATION_VALUE
+        FROM APPLICATION_END_USE_CONTEXT AEC
+        INNER JOIN EXPORT_EXEMPTION_APPLICATION EEA
+          ON EEA.APPLICATION_NUMBER = AEC.APPLICATION_NUMBER
+        INNER JOIN SPECIES_GRADE_ENDUSE_RGN_XREF SGE
+          ON SGE.ORG_UNIT_NO = EEA.ORG_UNIT_NO
+          AND SGE.EXPORT_SPECIES_CODE = AEC.FIRST_SPECIES_CODE
+          AND SGE.EXPORT_END_USE_CODE = AEC.FIRST_END_USE_CODE
+        WHERE SGE.EXCOL_TRANSLATION_VALUE LIKE
+              RPAD('__/', 3 * AEC.SPECIES_COUNT, '__/') || '__'
+           OR SGE.EXCOL_TRANSLATION_VALUE LIKE
+              RPAD('__/', 3 * AEC.SPECIES_COUNT, '__/') || '__ %%'
+        ORDER BY ROW_KIND, APPLICATION_NUMBER, PACKAGE_NUMBER,
+          EXPORT_SPECIES_CODE, EXPORT_END_USE_CODE, EXCOL_TRANSLATION_VALUE
+        """
+            .formatted(applicationFilter, packageFilter);
+
+    List<Object> bindValues = new ArrayList<>(normalizedApplications.size() + normalizedPackages.size());
+    bindValues.addAll(normalizedApplications);
+    bindValues.addAll(normalizedPackages);
+    return jdbcTemplate.query(
+        sql,
+        (rs, rowNumber) ->
+            new PermitCoreEndUseRow(
+                getString(rs, "ROW_KIND"),
+                getLong(rs, "APPLICATION_NUMBER"),
+                getString(rs, "PACKAGE_NUMBER"),
+                getString(rs, "EXPORT_SPECIES_CODE"),
+                getString(rs, "EXPORT_END_USE_CODE"),
+                getString(rs, "EXCOL_TRANSLATION_VALUE")),
+        bindValues.toArray());
+  }
+
   private List<PermitCorePackageRow> findCorePackageRows(
       Long permitNumber,
       String procedure,
@@ -456,6 +989,25 @@ public class PermitRpcRepository extends OracleRepositorySupport {
             normalizedPackageNumber,
             permitNumber,
             permitNumber);
+    return matches != null && matches > 0;
+  }
+
+  public boolean hasLinkedProvincialApplicationForClient(
+      Long permitNumber, String clientNumber) {
+    String normalizedClientNumber = trim(clientNumber);
+    if (permitNumber == null
+        || permitNumber < 1
+        || normalizedClientNumber == null) {
+      return false;
+    }
+
+    Long matches =
+        jdbcTemplate.queryForObject(
+            LINKED_PROVINCIAL_APPLICATION_BELONGS_TO_CLIENT,
+            Long.class,
+            permitNumber,
+            normalizedClientNumber,
+            normalizedClientNumber);
     return matches != null && matches > 0;
   }
 
@@ -583,6 +1135,38 @@ public class PermitRpcRepository extends OracleRepositorySupport {
         cs -> cs.setLong(1, permitNumber),
         2,
         this::mapDocumentRow);
+  }
+
+  /** Loads permit, invoice, and linked-application document metadata in one direct query. */
+  public List<PermitDocumentContextRow> findPermitDocumentContextRows(Long permitNumber) {
+    if (permitNumber == null || permitNumber < 1) {
+      return List.of();
+    }
+    List<PermitDocumentContextRow> rows =
+        jdbcTemplate.query(
+            FIND_PERMIT_DOCUMENT_CONTEXT_ROWS,
+            (rs, rowNumber) ->
+                new PermitDocumentContextRow(
+                    new DocumentRow(
+                        coalesce(getLong(rs, "EXPORT_ATTACHMENT_ID"), 0L),
+                        getString(rs, "FILE_NAME"),
+                        getString(rs, "DESCRIPTION"),
+                        getString(rs, "EXPORT_ATTACHMENT_TYPE_CODE")),
+                    getString(rs, "ATTACHMENT_TYPE_DESCRIPTION"),
+                    getString(rs, "DOCUMENT_SOURCE"),
+                    getLong(rs, "SOURCE_APPLICATION_NUMBER"),
+                    getLong(rs, "SOURCE_PERMIT_NUMBER"),
+                    coalesce(getLong(rs, "DELETABLE"), 0L) > 0),
+            permitNumber,
+            permitNumber,
+            permitNumber);
+    if (rows.stream()
+        .anyMatch(
+            row -> "INVALID_APPLICATION_RELATIONSHIP".equals(row.source()))) {
+      throw new DataRetrievalFailureException(
+          "An invalid application relationship was returned for permit " + permitNumber + ".");
+    }
+    return rows;
   }
 
   /** Verifies the subtype-table relationship used by the permit delete procedure. */
@@ -1401,26 +1985,45 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       return BigDecimal.ZERO;
     }
 
-    return queryCursorSingleRequired(
-            GET_POLICY_FACTOR,
-            cs -> {
-              cs.setDate(1, java.sql.Date.valueOf(applicationDate));
-              cs.setLong(2, orgUnitNo);
-            },
-            3,
-            rs -> {
-              String percent = trim(rs.getString("PERCENT_INCREASE"));
-              if (percent == null) {
-                return BigDecimal.ZERO;
-              }
-              try {
-                return new BigDecimal(percent);
-              } catch (NumberFormatException ex) {
-                throw new DataRetrievalFailureException(
-                    "Oracle fee policy factor was not numeric", ex);
-              }
-            })
-        .orElse(BigDecimal.ZERO);
+    try {
+      return queryCursorSingleRequired(
+              GET_POLICY_FACTOR,
+              cs -> {
+                cs.setDate(1, java.sql.Date.valueOf(applicationDate));
+                cs.setLong(2, orgUnitNo);
+              },
+              3,
+              rs -> {
+                String percent = trim(rs.getString("PERCENT_INCREASE"));
+                if (percent == null) {
+                  return BigDecimal.ZERO;
+                }
+                try {
+                  return new BigDecimal(percent);
+                } catch (NumberFormatException ex) {
+                  throw new DataRetrievalFailureException(
+                      "Oracle fee policy factor was not numeric", ex);
+                }
+              })
+          .orElse(BigDecimal.ZERO);
+    } catch (DataAccessException ex) {
+      if (hasDatabaseErrorCode(ex, ORACLE_NO_DATA_FOUND)) {
+        return BigDecimal.ZERO;
+      }
+      throw ex;
+    }
+  }
+
+  private boolean hasDatabaseErrorCode(Throwable failure, int expectedErrorCode) {
+    for (Throwable current = failure;
+        current != null && current.getCause() != current;
+        current = current.getCause()) {
+      if (current instanceof SQLException sqlException
+          && sqlException.getErrorCode() == expectedErrorCode) {
+        return true;
+      }
+    }
+    return false;
   }
 
   public Optional<BigDecimal> findAverageMarketValueByScaleId(String scaleDetailId) {
@@ -1591,6 +2194,42 @@ public class PermitRpcRepository extends OracleRepositorySupport {
         getString(rs, "EXPORT_PRODUCT_TYPE_CODE"));
   }
 
+  private PermitCorePackageContextRow mapPermitCorePackageContextRow(ResultSet rs) {
+    PermitCorePackageRow packageRow = mapPermitCorePackageRow(rs);
+    Long applicationNumber = getLong(rs, "APPLICATION_NUMBER");
+    ApplicationInfoRow applicationInfo =
+        applicationNumber == null
+            ? null
+            : new ApplicationInfoRow(
+                applicationNumber,
+                getString(rs, "EXEMPTION_NUMBER"),
+                getLong(rs, "ORG_UNIT_NO"),
+                getString(rs, "REGION"),
+                getString(rs, "APPLICATION_PRODUCT_TYPE_CODE"),
+                getString(rs, "APPLICATION_GROWTH_TYPE_CODE"),
+                null,
+                getString(rs, "OWNER_CLIENT_NUMBER"),
+                getString(rs, "OWNER_CLIENT_LOCATION_CODE"),
+                getString(rs, "AGENT_CLIENT_NUMBER"),
+                getString(rs, "AGENT_CLIENT_LOCATION_CODE"),
+                getString(rs, "OIC_INDICATOR"));
+    return new PermitCorePackageContextRow(
+        packageRow,
+        applicationInfo,
+        getString(rs, "EXPORT_JURISDICTION_CODE"),
+        getString(rs, "EXPORT_EXEMPTION_TYPE_CODE"),
+        getString(rs, "APPLICATION_PRODUCT_TYPE_DESCRIPTION"),
+        getString(rs, "PACKAGE_PRODUCT_TYPE_DESCRIPTION"),
+        getString(rs, "APPLICATION_GROWTH_TYPE_DESCRIPTION"),
+        getString(rs, "PACKAGE_GROWTH_TYPE_DESCRIPTION"),
+        getString(rs, "PACKAGE_STATUS_DESCRIPTION"),
+        coalesce(getLong(rs, "ASSIGNED_TO_PERMIT"), 0L) > 0);
+  }
+
+  private static String placeholders(int count) {
+    return String.join(", ", java.util.Collections.nCopies(Math.max(0, count), "?"));
+  }
+
   private Timestamp getTimestamp(ResultSet rs, String column) {
     try {
       return rs.getTimestamp(column);
@@ -1667,6 +2306,14 @@ public class PermitRpcRepository extends OracleRepositorySupport {
   }
 
   public record DocumentRow(long id, String fileName, String description, String attachmentTypeCode) {}
+
+  public record PermitDocumentContextRow(
+      DocumentRow documentRow,
+      String attachmentTypeDescription,
+      String source,
+      Long sourceApplicationNumber,
+      Long sourcePermitNumber,
+      boolean deletable) {}
 
   public record CountryCodeRow(String code, String description, long groupBy, long orderBy) {}
 
@@ -1769,6 +2416,53 @@ public class PermitRpcRepository extends OracleRepositorySupport {
           productTypeCode);
     }
   }
+
+  public record PermitCorePackageContextRow(
+      PermitCorePackageRow packageRow,
+      ApplicationInfoRow applicationInfo,
+      String jurisdictionCode,
+      String exemptionTypeCode,
+      String applicationProductTypeDescription,
+      String packageProductTypeDescription,
+      String applicationGrowthTypeDescription,
+      String packageGrowthTypeDescription,
+      String packageStatusDescription,
+      boolean assignedToPermit) {
+
+    PermitCorePackageContextRow withPackageRow(PermitCorePackageRow value) {
+      return new PermitCorePackageContextRow(
+          value,
+          applicationInfo,
+          jurisdictionCode,
+          exemptionTypeCode,
+          applicationProductTypeDescription,
+          packageProductTypeDescription,
+          applicationGrowthTypeDescription,
+          packageGrowthTypeDescription,
+          packageStatusDescription,
+          assignedToPermit);
+    }
+  }
+
+  public record PermitCoreScaleRow(
+      PermitScaleDetailRow scaleRow, String speciesDescription, String gradeDescription) {}
+
+  public record PermitFeeScaleRow(
+      PermitScaleDetailRow scaleRow,
+      String applicationProductTypeCode,
+      String speciesDescription,
+      String gradeDescription,
+      String packageGrowthTypeCode,
+      String packageGrowthTypeDescription,
+      BigDecimal averageMarketValue) {}
+
+  public record PermitCoreEndUseRow(
+      String rowKind,
+      Long applicationNumber,
+      String packageNumber,
+      String speciesCode,
+      String endUseCode,
+      String candidateExcolCode) {}
 
   public record ApplicationInfoRow(
       Long applicationNumber,

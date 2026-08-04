@@ -34,7 +34,8 @@ public record PermitDetailDto(
     Long oicRequestPieces,
     Double oicRequestVolume,
     Long orgUnitNumber,
-    String region) {
+    String region,
+    String author) {
 
   public PermitDetailDto(
       Long permitNumber,
@@ -98,7 +99,8 @@ public record PermitDetailDto(
         null,
         null,
         orgUnitNumber,
-        region);
+        region,
+        null);
   }
 
   public PermitDetailDto(
@@ -162,6 +164,7 @@ public record PermitDetailDto(
         null,
         null,
         null,
-        region);
+        region,
+        null);
   }
 }

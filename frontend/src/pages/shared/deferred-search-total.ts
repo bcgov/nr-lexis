@@ -82,17 +82,11 @@ export const loadSearchWithDeferredTotal = async <
   cachedTotal,
   search,
   count,
-  isLatestRequest,
-  onExactTotal,
-  onCountError,
 }: {
   request: TRequest
   cachedTotal?: number
   search: (request: TRequest, options?: KnownTotalSearchOptions) => Promise<TResponse>
   count: (request: TRequest) => Promise<number>
-  isLatestRequest: () => boolean
-  onExactTotal: (response: TResponse) => void
-  onCountError?: (error: unknown) => void
 }): Promise<DeferredSearchResult<TResponse>> => {
   if (cachedTotal !== undefined) {
     const response = await search(request, { knownTotal: cachedTotal })
@@ -119,21 +113,11 @@ export const loadSearchWithDeferredTotal = async <
     }
   }
 
-  void count(request)
-    .then((total) => {
-      if (isLatestRequest()) {
-        onExactTotal(withTotal(response, total))
-      }
-    })
-    .catch((error) => {
-      if (isLatestRequest()) {
-        onCountError?.(error)
-      }
-    })
+  const total = await count(request)
 
   return {
-    response: withTotal(response, optimisticTotal),
-    totalIsExact: false,
+    response: withTotal(response, total),
+    totalIsExact: true,
   }
 }
 

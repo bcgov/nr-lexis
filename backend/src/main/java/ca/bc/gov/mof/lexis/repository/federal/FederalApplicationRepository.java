@@ -8,13 +8,14 @@ import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationOfferDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationPermitDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchResultDto;
-import org.springframework.data.domain.Page;
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Profile;
 import org.springframework.dao.IncorrectResultSizeDataAccessException;
+import org.springframework.data.domain.Page;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
@@ -27,10 +28,64 @@ public class FederalApplicationRepository extends OracleRepositorySupport {
   private static final String FIND_ALL_EXEMPTION_TYPE_CODES =
       LEXIS_CODES_PACKAGE + "FIND_ALL_EXEMPTION_TYPE_CODES(?)";
 
-  private static final String FIND_APPLICATIONS_BY_CRITERIA =
-      LEXIS_GROUP_5_PACKAGE + "FIND_APPLICATIONS_BY_CRITERIA(?,?,?,?,?)";
-  private static final String COUNT_APPLICATIONS_BY_CRITERIA =
-      LEXIS_GROUP_5_PACKAGE + "COUNT_APPLICATIONS_BY_CRITERIA(?,?,?,?)";
+  private static final String FEDERAL_APPLICATION_SEARCH_SOURCE =
+      """
+      (
+        SELECT
+          EEA.APPLICATION_NUMBER,
+          EEA.FED_APPLICATION_NUMBER,
+          EEA.FED_APPLICATION_NUMBER AS FEDERAL_APPLICATION_NUMBER,
+          EEA.OWNER_CLIENT_NUMBER,
+          EEA.AGENT_CLIENT_NUMBER,
+          EEA.EXEMPTION_NUMBER,
+          EEA.EXPORT_APPLICATION_STATUS_CODE,
+          EEA.EXPORT_JURISDICTION_CODE,
+          EEA.ORG_UNIT_NO,
+          EEA.RECEIVED_DATE,
+          ES.ADVERTISING_DATE,
+          EASC.DESCRIPTION AS STATUS_DESCRIPTION,
+          EERC.DESCRIPTION AS REASON_DESCRIPTION,
+          EE.EXPORT_EXEMPTION_TYPE_CODE,
+          EETC.DESCRIPTION AS TYPE_DESCRIPTION,
+          APK.PACKAGE_NUMBER
+        FROM EXPORT_EXEMPTION_APPLICATION EEA
+        LEFT JOIN EXPORT_EXEMPTION EE
+          ON EE.EXEMPTION_NUMBER = EEA.EXEMPTION_NUMBER
+        LEFT JOIN EXPORT_SCHEDULE ES
+          ON ES.EXPORT_SCHEDULE_ID = EEA.EXPORT_SCHEDULE_ID
+        INNER JOIN EXPORT_APPLICATION_STATUS_CODE EASC
+          ON EASC.EXPORT_APPLICATION_STATUS_CODE = EEA.EXPORT_APPLICATION_STATUS_CODE
+        INNER JOIN EXPORT_EXEMPTION_REASON_CODE EERC
+          ON EERC.EXPORT_EXEMPTION_REASON_CODE = EEA.EXPORT_EXEMPTION_REASON_CODE
+        INNER JOIN EXPORT_APPLICANT_TYPE_CODE EATC
+          ON EATC.EXPORT_APPLICANT_TYPE_CODE = EEA.EXPORT_APPLICANT_TYPE_CODE
+        LEFT JOIN EXPORT_EXEMPTION_TYPE_CODE EETC
+          ON EETC.EXPORT_EXEMPTION_TYPE_CODE = EE.EXPORT_EXEMPTION_TYPE_CODE
+        LEFT JOIN (
+          SELECT
+            EP.APPLICATION_NUMBER,
+            LISTAGG(EP.PACKAGE_NUMBER, ',')
+              WITHIN GROUP (ORDER BY EP.PACKAGE_NUMBER) AS PACKAGE_NUMBER
+          FROM EXPORT_PACKAGE EP
+          GROUP BY EP.APPLICATION_NUMBER
+        ) APK
+          ON APK.APPLICATION_NUMBER = EEA.APPLICATION_NUMBER
+      ) v
+      """;
+  private static final String SEARCH_FEDERAL_APPLICATIONS =
+      """
+      SELECT v.*
+      FROM
+      """
+          + FEDERAL_APPLICATION_SEARCH_SOURCE;
+  private static final String COUNT_FEDERAL_APPLICATIONS =
+      """
+      SELECT COUNT(*)
+      FROM
+      """
+          + FEDERAL_APPLICATION_SEARCH_SOURCE;
+  private static final Map<String, String> SEARCH_SORT_COLUMNS =
+      Map.of("applicationNumber", "v.APPLICATION_NUMBER");
   private static final String FIND_APPLICATION_BY_NUMBER =
       LEXIS_GROUP_5_PACKAGE + "FIND_APPLICATION_BY_NUMBER(?,?)";
   private static final String FIND_PACKAGES_BY_APPLICATION =
@@ -62,16 +117,15 @@ public class FederalApplicationRepository extends OracleRepositorySupport {
 
   public Page<FederalApplicationSearchResultDto> search(
       FederalApplicationSearchCriteria criteria, Integer knownTotal) {
-    SqlWhere sqlWhere = buildSearchWhere(criteria);
+    DirectSql countCriteria = buildSearchWhere(criteria, false);
+    DirectSql pageCriteria = buildSearchWhere(criteria, true);
     int totalElements =
         knownTotal == null
-            ? queryLegacyDynamicCountProcedure(
-                COUNT_APPLICATIONS_BY_CRITERIA, sqlWhere.sql(), sqlWhere.bindValues())
+            ? queryDirectCount(COUNT_FEDERAL_APPLICATIONS, countCriteria)
             : Math.max(0, knownTotal);
-    return queryLegacyDynamicPage(
-        FIND_APPLICATIONS_BY_CRITERIA,
-        sqlWhere.sql(),
-        sqlWhere.bindValues(),
+    return queryDirectPage(
+        SEARCH_FEDERAL_APPLICATIONS,
+        pageCriteria,
         criteria.page(),
         criteria.size(),
         totalElements,
@@ -97,12 +151,12 @@ public class FederalApplicationRepository extends OracleRepositorySupport {
   }
 
   public int count(FederalApplicationSearchCriteria criteria) {
-    SqlWhere sqlWhere = buildSearchWhere(criteria);
-    return queryLegacyDynamicCountProcedure(COUNT_APPLICATIONS_BY_CRITERIA, sqlWhere.sql(), sqlWhere.bindValues());
+    return queryDirectCount(COUNT_FEDERAL_APPLICATIONS, buildSearchWhere(criteria, false));
   }
 
-  private SqlWhere buildSearchWhere(FederalApplicationSearchCriteria criteria) {
-    SqlWhereBuilder where = newWhereBuilder();
+  private DirectSql buildSearchWhere(
+      FederalApplicationSearchCriteria criteria, boolean includeOrderBy) {
+    DirectSqlBuilder where = newDirectSqlBuilder();
 
     where.addLike("v.FED_APPLICATION_NUMBER", criteria.federalApplicationNumber());
     where.addLike("v.PACKAGE_NUMBER", criteria.packageNumber());
@@ -119,21 +173,23 @@ public class FederalApplicationRepository extends OracleRepositorySupport {
 
     String ownerClientNumber = trim(criteria.ownerClientNumber());
     if (ownerClientNumber != null) {
-      int idx1 = where.nextBindIndex();
-      int idx2 = idx1 + 1;
       where.addRawWithBinds(
-          " AND (v.OWNER_CLIENT_NUMBER LIKE '%' || :"
-              + idx1
-              + " || '%' OR v.AGENT_CLIENT_NUMBER LIKE '%' || :"
-              + idx2
-              + " || '%')",
+          " AND (v.OWNER_CLIENT_NUMBER LIKE '%' || ? || '%'"
+              + " OR v.AGENT_CLIENT_NUMBER LIKE '%' || ? || '%')",
           ownerClientNumber,
           ownerClientNumber);
     }
 
     where.addLike("v.AGENT_CLIENT_NUMBER", criteria.agentClientNumber());
 
-    return where.build(" ORDER BY v.APPLICATION_NUMBER DESC");
+    String orderBy =
+        sanitizedSort(
+            null,
+            SEARCH_SORT_COLUMNS,
+            "applicationNumber",
+            "DESC",
+            "applicationNumber");
+    return where.build(includeOrderBy ? orderBy : "");
   }
 
   public Optional<FederalApplicationDetailDto> findByApplicationNumber(Long applicationNumber) {

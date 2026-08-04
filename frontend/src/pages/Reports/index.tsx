@@ -100,7 +100,7 @@ const TENURE_OUTPUT_FORMAT_FIELD: ReportFieldDefinition = {
   ...OUTPUT_FORMAT_FIELD,
   options: [
     { value: 'PDF', label: 'PDF' },
-    { value: 'XLSX', label: 'XLSX' },
+    { value: 'XLS', label: 'XLS' },
   ],
 }
 
@@ -480,7 +480,6 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
       { value: 'generatePermitReport', label: 'Permit details report' },
       { value: 'generateTenureReport', label: 'Tenure types report' },
       { value: 'generateMarkReport', label: 'Timber marks report' },
-      { value: 'generateFileReport', label: 'Forest file report' },
     ],
     fields: [
       {
@@ -585,6 +584,8 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
       TENURE_OUTPUT_FORMAT_FIELD,
     ],
   },
+  // INTENTIONAL_LEGACY_DIVERGENCE(ADVERTISING_REPORT_VARIANT_RETIREMENT):
+  // Legacy generateIndustryPDF/CSV shortcuts are consolidated into this filtered report.
   {
     id: 'biweeklyListing',
     title: 'Advertising List',
@@ -810,6 +811,12 @@ const buildEffectiveReportValues = (
     ) {
       if (defaultRegion) {
         effectiveValues[field.key] = defaultRegion
+      } else {
+        const options = optionsByKey[field.optionKey ?? field.key] ?? []
+        effectiveValues[field.key] = options
+          .map((option) => option.value.trim())
+          .filter(Boolean)
+          .join(',')
       }
       return
     }

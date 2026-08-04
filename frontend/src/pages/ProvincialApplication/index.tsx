@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import {
   Button,
   Checkbox,
@@ -65,6 +65,7 @@ import {
   type IdTextOption,
 } from '@/pages/shared/search-query-utils'
 import { useSearchFilterDraft } from '@/pages/shared/useSearchFilterDraft'
+import { usePersistedSearchParams } from '@/pages/shared/usePersistedSearchParams'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import {
   loadSearchWithDeferredTotal,
@@ -175,7 +176,7 @@ const buildSearchParams = (
 const ProvincialApplicationPage = () => {
   const navigate = useNavigate()
   const { capabilities, canPerform } = useAuth()
-  const [searchParams, setSearchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = usePersistedSearchParams('provincial-applications')
   const [regionOptions, setRegionOptions] = useState<IdTextOption[]>([])
   const [exemptionTypeOptions, setExemptionTypeOptions] = useState<SearchOption[]>([])
   const [applicationStatusOptions, setApplicationStatusOptions] = useState<SearchOption[]>([])
@@ -244,6 +245,7 @@ const ProvincialApplicationPage = () => {
   const sortDirection = urlState.sortDirection
   const pageSize = urlState.pageSize
   const requestFilters = appliedFilters
+  const hasSearchQuery = searchParams.toString().length > 0
   const clearSelection = useCallback(() => {
     setSelectedRowsById({})
     setExemptionStatus(null)
@@ -359,9 +361,6 @@ const ProvincialApplicationPage = () => {
           cachedTotal,
           search: searchProvincialApplications,
           count: countProvincialApplications,
-          isLatestRequest,
-          onExactTotal: (resolvedResponse) => commitSearchResponse(resolvedResponse, true),
-          onCountError: console.error,
         })
         if (isLatestRequest()) {
           commitSearchResponse(response, totalIsExact)
@@ -382,6 +381,10 @@ const ProvincialApplicationPage = () => {
   )
 
   useEffect(() => {
+    if (!hasSearchQuery) {
+      return
+    }
+
     void runSearch({
       filters: requestFilters,
       page: urlState.page - 1,
@@ -390,6 +393,7 @@ const ProvincialApplicationPage = () => {
       sortDirection: urlState.sortDirection,
     })
   }, [
+    hasSearchQuery,
     requestFilters,
     runSearch,
     urlState.page,
@@ -417,6 +421,53 @@ const ProvincialApplicationPage = () => {
 
     void loadOptions()
   }, [])
+
+  useEffect(() => {
+    if (
+      optionsLoading ||
+      optionsUnavailable ||
+      searchParams.has('region') ||
+      regionOptions.length === 0
+    ) {
+      return
+    }
+
+    const defaultRegions = regionOptions.map((region) => region.id)
+    if (hasSearchQuery) {
+      setSearchParams(
+        buildSearchParams(
+          {
+            ...urlState.filters,
+            region: defaultRegions,
+          },
+          urlState.sortField,
+          urlState.sortDirection,
+          urlState.page,
+          urlState.pageSize,
+        ),
+        { replace: true },
+      )
+      return
+    }
+
+    setFilters((currentFilters) =>
+      currentFilters.region.length > 0
+        ? currentFilters
+        : {
+            ...currentFilters,
+            region: defaultRegions,
+          },
+    )
+  }, [
+    hasSearchQuery,
+    optionsLoading,
+    optionsUnavailable,
+    regionOptions,
+    searchParams,
+    setFilters,
+    setSearchParams,
+    urlState,
+  ])
 
   const onSearch = () => {
     if (loading || hasDateValidationError) {
@@ -448,10 +499,14 @@ const ProvincialApplicationPage = () => {
 
   const onClearFilters = () => {
     clearSelection()
-    setFilters(INITIAL_FILTERS)
+    const defaultFilters = {
+      ...INITIAL_FILTERS,
+      region: regionOptions.map((region) => region.id),
+    }
+    setFilters(defaultFilters)
     setSearchParams(
       buildSearchParams(
-        INITIAL_FILTERS,
+        defaultFilters,
         DEFAULT_SORT_FIELD,
         DEFAULT_SORT_DIRECTION,
         DEFAULT_SEARCH_PAGE,
@@ -659,6 +714,8 @@ const ProvincialApplicationPage = () => {
                     />
                   </>
                 )}
+                {/* INTENTIONAL_LEGACY_DIVERGENCE(SEARCH_FILTER_EXPANSION):
+                    Modern application search exposes received-date criteria not shown in legacy. */}
                 <IsoDatePicker
                   id="receivedFromDate"
                   labelText="Received from date"
@@ -741,7 +798,7 @@ const ProvincialApplicationPage = () => {
         </section>
       </Column>
 
-      <Column sm={4} md={8} lg={16}>
+      <Column sm={4} md={8} lg={16} hidden={!hasSearchQuery}>
         <section
           className="legacy-search-section legacy-search-section--results"
           aria-label="Search results"

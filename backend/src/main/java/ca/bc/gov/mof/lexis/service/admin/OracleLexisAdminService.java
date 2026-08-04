@@ -11,15 +11,6 @@ import org.springframework.stereotype.Service;
 public class OracleLexisAdminService implements LexisAdminService {
 
   @Override
-  public Optional<LexisAdminPageDto> agentAdminPage() {
-    return Optional.of(
-        new LexisAdminPageDto(
-            "agent",
-            "/lexisAgentAdmin.do?actionMapping=view",
-            Map.of("section", "agent", "mode", "oracle")));
-  }
-
-  @Override
   public Optional<LexisAdminPageDto> feePolicyAdminPage() {
     return Optional.of(
         new LexisAdminPageDto(

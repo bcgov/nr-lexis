@@ -6,21 +6,20 @@ export type DetailField = {
   value: ReactNode
 }
 
-export type DetailListItem = {
-  key: string
-  content: ReactNode
-}
-
 export type DetailFieldTileProps = {
   title: string
   fields: DetailField[]
+  headerAction?: ReactNode
 }
 
-export function DetailFieldTile({ title, fields }: DetailFieldTileProps) {
+// INTENTIONAL_LEGACY_DIVERGENCE(DETAIL_VIEW_EDIT_MODES):
+// Detail fields render as values until an authorized user explicitly enters edit mode.
+export function DetailFieldTile({ title, fields, headerAction }: DetailFieldTileProps) {
   return (
     <Tile className="detail-section-card">
       <div className="detail-section-card__header">
         <h2 className="detail-tile-title">{title}</h2>
+        {headerAction}
       </div>
       <dl className="detail-field-grid">
         {fields.map((field) => (
@@ -33,29 +32,6 @@ export function DetailFieldTile({ title, fields }: DetailFieldTileProps) {
           </div>
         ))}
       </dl>
-    </Tile>
-  )
-}
-
-export type DetailListTileProps = {
-  title: string
-  items: DetailListItem[]
-  emptyLabel: string
-}
-
-export function DetailListTile({ title, items, emptyLabel }: DetailListTileProps) {
-  return (
-    <Tile>
-      <h2 className="detail-tile-title">{title}</h2>
-      {items.length === 0 ? (
-        <p>{emptyLabel}</p>
-      ) : (
-        <ul className="detail-list">
-          {items.map((item) => (
-            <li key={item.key}>{item.content}</li>
-          ))}
-        </ul>
-      )}
     </Tile>
   )
 }

@@ -98,16 +98,12 @@ parameters:
     value: ""
   - name: AWS_COGNITO_ISSUER_URI
     required: true
-  - name: COGNITO_USERINFO_URI
-    required: true
   - name: KEYCLOAK_ISSUER_URI
     description: Optional Keycloak realm issuer URI for machine-to-machine service clients
     value: ""
   - name: ALLOWED_ORIGINS
     description: Comma-separated browser origins allowed to call the backend
     value: https://openapi.apps.gov.bc.ca
-  - name: IDENTITY_LOOKUP_BASE_URL
-    required: true
   - name: DATABASE_HOST
     required: true
   - name: DATABASE_SERVICE_NAME
@@ -220,14 +216,10 @@ objects:
                   value: /tmp/.cache
                 - name: AWS_COGNITO_ISSUER_URI
                   value: ${AWS_COGNITO_ISSUER_URI}
-                - name: COGNITO_USERINFO_URI
-                  value: ${COGNITO_USERINFO_URI}
                 - name: KEYCLOAK_ISSUER_URI
                   value: ${KEYCLOAK_ISSUER_URI}
                 - name: ALLOWED_ORIGINS
                   value: ${ALLOWED_ORIGINS}
-                - name: IDENTITY_LOOKUP_BASE_URL
-                  value: ${IDENTITY_LOOKUP_BASE_URL}
                 - name: DATABASE_HOST
                   value: ${DATABASE_HOST}
                 - name: DATABASE_SERVICE_NAME

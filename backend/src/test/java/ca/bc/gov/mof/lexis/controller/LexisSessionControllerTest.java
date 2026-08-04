@@ -13,6 +13,7 @@ import ca.bc.gov.mof.lexis.dto.session.LexisSessionWelcomeDto;
 import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
 import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
+import ca.bc.gov.mof.lexis.service.session.LexisSessionService.ForestClientScope;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
@@ -45,22 +46,23 @@ class LexisSessionControllerTest {
   void welcomeShouldUseTokenRolesWhenAvailable() {
     MockHttpServletRequest request = new MockHttpServletRequest();
     TestingAuthenticationToken authentication =
-        new TestingAuthenticationToken("idir\\jsmith", "n/a", "LEXIS_PROVINCIAL_SUBMITTER");
+        new TestingAuthenticationToken("bceid\\submitter", "n/a", "LEXIS_PROVINCIAL_SUBMITTER");
     request.setUserPrincipal(authentication);
 
-    when(principalService.resolvePrincipalName(authentication)).thenReturn("idir\\jsmith");
+    when(principalService.resolvePrincipalName(authentication)).thenReturn("bceid\\submitter");
     when(sessionService.parseRolesFromPrincipal(authentication))
         .thenReturn(List.of("LEXIS_PROVINCIAL_SUBMITTER"));
 
     LexisSessionWelcomeDto dto =
         new LexisSessionWelcomeDto(
             true,
-            "idir\\jsmith",
+            "bceid\\submitter",
             List.of("LEXIS_PROVINCIAL_SUBMITTER"),
-            "industryUser",
-            "/provincial/application");
+            "provincialSubmitter",
+            "/provincial/summary");
 
-    when(sessionService.resolveWelcomeRoute("idir\\jsmith", List.of("LEXIS_PROVINCIAL_SUBMITTER")))
+    when(sessionService.resolveWelcomeRoute(
+            "bceid\\submitter", List.of("LEXIS_PROVINCIAL_SUBMITTER")))
         .thenReturn(dto);
 
     ResponseEntity<LexisSessionWelcomeDto> response = controller.showWelcome(request);
@@ -68,7 +70,8 @@ class LexisSessionControllerTest {
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(dto);
     verify(sessionService).parseRolesFromPrincipal(authentication);
-    verify(sessionService).resolveWelcomeRoute("idir\\jsmith", List.of("LEXIS_PROVINCIAL_SUBMITTER"));
+    verify(sessionService)
+        .resolveWelcomeRoute("bceid\\submitter", List.of("LEXIS_PROVINCIAL_SUBMITTER"));
   }
 
   @Test
@@ -82,8 +85,8 @@ class LexisSessionControllerTest {
             true,
             "idir\\jsmith",
             List.of(),
-            "mofrUser",
-            "/provincial/review");
+            "noAccess",
+            null);
 
     when(principalService.resolvePrincipalName(principal)).thenReturn("idir\\jsmith");
     when(sessionService.resolveWelcomeRoute("idir\\jsmith", List.of())).thenReturn(dto);
@@ -119,6 +122,8 @@ class LexisSessionControllerTest {
         .thenReturn(welcome);
     when(authorizationService.resolveGrantedActions(List.of("LEXIS_READ_ONLY", "LEXIS_ADMIN")))
         .thenReturn(List.of("/applicationSearch", "/applicationDetails"));
+    when(sessionService.resolveForestClientScope(authentication))
+        .thenReturn(new ForestClientScope(null, List.of(), false, false, null));
     when(principalService.resolveOrgUnitNo(authentication)).thenReturn("76");
 
     ResponseEntity<LexisSessionCapabilitiesDto> response = controller.capabilities(request);
@@ -134,12 +139,14 @@ class LexisSessionControllerTest {
                 "/provincial/application",
                 List.of("/applicationSearch", "/applicationDetails"),
                 null,
+                List.of(),
+                false,
                 "76"));
 
     verify(sessionService).parseRolesFromPrincipal(authentication);
     verify(sessionService).resolveWelcomeRoute("idir\\jsmith", List.of("LEXIS_READ_ONLY", "LEXIS_ADMIN"));
     verify(authorizationService).resolveGrantedActions(List.of("LEXIS_READ_ONLY", "LEXIS_ADMIN"));
-    verify(sessionService).resolveForestClientNumber(authentication);
+    verify(sessionService).resolveForestClientScope(authentication);
     verify(principalService).resolveOrgUnitNo(authentication);
     assertThat(output.getAll()).doesNotContain("Resolved LEXIS session capabilities");
   }
@@ -161,19 +168,70 @@ class LexisSessionControllerTest {
             "bceid\\buyer",
             List.of("LEXIS_PROVINCIAL_SUBMITTER"),
             "provincialSubmitter",
-            "/provincial/application");
+            "/provincial/summary");
     when(sessionService.resolveWelcomeRoute(
             "bceid\\buyer", List.of("LEXIS_PROVINCIAL_SUBMITTER")))
         .thenReturn(welcome);
     when(authorizationService.resolveGrantedActions(List.of("LEXIS_PROVINCIAL_SUBMITTER")))
         .thenReturn(List.of("createOffer"));
-    when(sessionService.resolveForestClientNumber(authentication)).thenReturn("00077881");
+    when(sessionService.resolveForestClientScope(authentication))
+        .thenReturn(
+            new ForestClientScope(
+                "00077881", List.of("00077881"), false, false, null));
 
     ResponseEntity<LexisSessionCapabilitiesDto> response = controller.capabilities(request);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isNotNull();
     assertThat(response.getBody().forestClientNumber()).isEqualTo("00077881");
+    assertThat(response.getBody().availableForestClientNumbers())
+        .containsExactly("00077881");
+    assertThat(response.getBody().forestClientSelectionRequired()).isFalse();
+  }
+
+  @Test
+  void capabilitiesShouldRequestSelectionForMultipleForestClients() {
+    MockHttpServletRequest request = new MockHttpServletRequest();
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken(
+            "bceid\\buyer",
+            "n/a",
+            "LEXIS_PROVINCIAL_SUBMITTER_00012345",
+            "LEXIS_PROVINCIAL_SUBMITTER_00067890");
+    request.setUserPrincipal(authentication);
+
+    when(principalService.resolvePrincipalName(authentication)).thenReturn("bceid\\buyer");
+    when(sessionService.parseRolesFromPrincipal(authentication))
+        .thenReturn(List.of("LEXIS_PROVINCIAL_SUBMITTER"));
+    LexisSessionWelcomeDto welcome =
+        new LexisSessionWelcomeDto(
+            true,
+            "bceid\\buyer",
+            List.of("LEXIS_PROVINCIAL_SUBMITTER"),
+            "provincialSubmitter",
+            "/provincial/summary");
+    when(sessionService.resolveWelcomeRoute(
+            "bceid\\buyer", List.of("LEXIS_PROVINCIAL_SUBMITTER")))
+        .thenReturn(welcome);
+    when(authorizationService.resolveGrantedActions(List.of("LEXIS_PROVINCIAL_SUBMITTER")))
+        .thenReturn(List.of("/applicationSearch"));
+    when(sessionService.resolveForestClientScope(authentication))
+        .thenReturn(
+            new ForestClientScope(
+                null,
+                List.of("00012345", "00067890"),
+                true,
+                false,
+                "Select an active forest client."));
+
+    ResponseEntity<LexisSessionCapabilitiesDto> response = controller.capabilities(request);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().forestClientNumber()).isNull();
+    assertThat(response.getBody().availableForestClientNumbers())
+        .containsExactly("00012345", "00067890");
+    assertThat(response.getBody().forestClientSelectionRequired()).isTrue();
   }
 
   @Test

@@ -27,6 +27,8 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
   private static final String RETIRED_INDIAN_RESERVE_JURISDICTION_CODE = "I";
   private static final String FIND_CURRENT_SCHEDULES =
       LEXIS_CODES_PACKAGE + "FIND_CURRENT_SCHEDULES(?)";
+  private static final String FIND_NEXT_SCHEDULES =
+      LEXIS_CODES_PACKAGE + "FIND_NEXT_SCHEDULES(?)";
   private static final String FIND_ALL_JURISDICTION_CODES =
       LEXIS_CODES_PACKAGE + "FIND_ALL_JURISDICTION_CODES(?)";
   private static final String FIND_ALL_EXEMPTION_TYPE_CODES =
@@ -146,6 +148,17 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
   public List<CurrentScheduleRow> findCurrentSchedulesRequired() {
     return queryCursorProcedureRequired(
         FIND_CURRENT_SCHEDULES,
+        null,
+        1,
+        rs ->
+            new CurrentScheduleRow(
+                getLong(rs, "EXPORT_SCHEDULE_ID"), toLocalDate(rs.getDate("ADVERTISING_DATE"))));
+  }
+
+  /** Loads the same upcoming listing-date choices used by legacy application creation. */
+  public List<CurrentScheduleRow> findNextSchedulesRequired() {
+    return queryCursorProcedureRequired(
+        FIND_NEXT_SCHEDULES,
         null,
         1,
         rs ->

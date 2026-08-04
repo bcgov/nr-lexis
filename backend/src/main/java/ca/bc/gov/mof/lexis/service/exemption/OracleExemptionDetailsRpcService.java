@@ -52,7 +52,6 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
   private static final String EXEMPTION_TYPE_MINISTERIAL = "M";
   private static final String APPLICATION_STATUS_APPROVED = "APP";
   private static final String APPLICATION_STATUS_EXEMPTED = "EXE";
-  private static final String EXPORT_PERMIT_STATUS_COMPLETE = "COM";
   private static final String EXPORT_PRODUCT_TYPE_UNMANUFACTURED = "T";
   private static final String EXEMPTION_NUMBER_ASSIGNED_MESSAGE =
       "* - this exemption number has already been assigned";
@@ -125,7 +124,16 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
               formatVolume(row.requestedVolume()),
               formatAvailableVolume(row.scaleVolume()),
               false,
-              row.jurisdictionCode()));
+              row.jurisdictionCode(),
+              row.ownerClientNumber(),
+              row.agentClientNumber(),
+              row.ownerClientLocationCode(),
+              row.agentClientLocationCode(),
+              row.applicantTypeCode(),
+              row.ownerContactName(),
+              row.agentContactName(),
+              row.ownerCompanyName(),
+              row.agentCompanyName()));
     }
 
     String ownerNumber = blanketOic ? "Blanket OIC" : Optional.ofNullable(previousOwnerClientNumber).orElse("");
@@ -173,7 +181,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
 
   @Override
   public List<PermitItem> getPermits(
-      String exemptionNumber, Predicate<Long> permitAccess) {
+      String exemptionNumber, Predicate<PermitAccessContext> permitAccess) {
     String exemptionTypeCode =
         repository.findExemptionTypeCodeByExemptionNumber(exemptionNumber).orElse("");
     boolean oicLike =
@@ -183,7 +191,13 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
     return repository.findPermitsByExemptionNumber(exemptionNumber).stream()
         .map(
             row -> {
-              boolean canViewPermit = permitAccess.test(row.permitNumber());
+              boolean canViewPermit =
+                  permitAccess.test(
+                      new PermitAccessContext(
+                          row.permitNumber(),
+                          row.agentNumber(),
+                          row.clientNumber(),
+                          oicLike));
               double displayedVolume = oicLike ? row.oicRequestVolume() : row.permitVolume();
               return new PermitItem(
                   row.permitNumber(),
@@ -197,19 +211,11 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
 
   @Override
   public BlanketOicTotalsResponse getBlanketOicTotals(String exemptionNumber) {
-    double requestedVolume = 0.0d;
-    double completedVolume = 0.0d;
-
-    for (ExemptionDetailsRpcRepository.PermitSummaryRow row :
-        repository.findPermitsByExemptionNumber(exemptionNumber)) {
-      requestedVolume += row.permitVolume();
-      if (EXPORT_PERMIT_STATUS_COMPLETE.equalsIgnoreCase(row.statusCode())) {
-        completedVolume += row.permitVolume();
-      }
-    }
-
+    ExemptionDetailsRpcRepository.BlanketOicTotalsRow totals =
+        repository.findBlanketOicTotals(exemptionNumber);
     return new BlanketOicTotalsResponse(
-        formatVolume(requestedVolume), formatVolume(completedVolume));
+        formatVolume(totals.requestedVolume()),
+        formatVolume(totals.completedVolume()));
   }
 
   @Override
@@ -224,56 +230,28 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
 
   @Override
   public List<DocumentItem> getDocumentDetails(String exemptionNumber) {
-    Map<String, String> attachmentTypeByCode = new LinkedHashMap<>();
-    List<DocumentItem> documents = new ArrayList<>();
-    repository.findExemptionDocumentDetailsByExemptionNumber(exemptionNumber).stream()
-        .map(
-            row ->
-                toDocumentItem(
-                    row,
-                    "exemption",
-                    exemptionNumber,
-                    null,
-                    true,
-                    attachmentTypeByCode))
-        .forEach(documents::add);
-
-    for (ExemptionDetailsRpcRepository.ApplicationSummaryRow application :
-        repository.findApplicationSummariesByExemptionNumber(exemptionNumber)) {
-      repository
-          .findApplicationDocumentDetailsByApplicationNumber(application.applicationNumber())
-          .stream()
-          .map(
-              row ->
-                  toDocumentItem(
-                      row,
-                      "application",
-                      null,
-                      application.applicationNumber(),
-                      false,
-                      attachmentTypeByCode))
-          .forEach(documents::add);
-    }
-
-    return List.copyOf(documents);
+    return repository.findExemptionDocumentContextRows(exemptionNumber).stream()
+        .map(context -> toDocumentItem(exemptionNumber, context))
+        .toList();
   }
 
   private DocumentItem toDocumentItem(
-      ExemptionDetailsRpcRepository.DocumentRow row,
-      String source,
-      String sourceExemptionNumber,
-      Long sourceApplicationNumber,
-      boolean deletable,
-      Map<String, String> attachmentTypeByCode) {
+      String exemptionNumber,
+      ExemptionDetailsRpcRepository.ExemptionDocumentContextRow context) {
+    ExemptionDetailsRpcRepository.DocumentRow row = context.documentRow();
+    String source = trimToNull(context.source());
+    String attachmentTypeCode = trimToNull(row.attachmentTypeCode());
     return new DocumentItem(
         row.id(),
         row.fileName(),
         normalizeDescription(row.description()),
-        resolveAttachmentTypeDescription(row.attachmentTypeCode(), attachmentTypeByCode),
-        source,
-        sourceExemptionNumber,
-        sourceApplicationNumber,
-        deletable);
+        Objects.requireNonNullElse(
+            trimToNull(context.attachmentTypeDescription()),
+            Objects.requireNonNullElse(attachmentTypeCode, "")),
+        Objects.requireNonNullElse(source, ""),
+        "exemption".equals(source) ? exemptionNumber : null,
+        context.sourceApplicationNumber(),
+        context.deletable());
   }
 
   @Override
@@ -830,22 +808,6 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
     return true;
   }
 
-  private String resolveAttachmentTypeDescription(
-      String attachmentTypeCode, Map<String, String> attachmentTypeByCode) {
-    String normalizedCode = trimToNull(attachmentTypeCode);
-    if (normalizedCode == null) {
-      return "";
-    }
-    String cached = attachmentTypeByCode.get(normalizedCode);
-    if (cached != null) {
-      return cached;
-    }
-    String resolved =
-        repository.findAttachmentTypeDescription(normalizedCode).orElse(normalizedCode);
-    attachmentTypeByCode.put(normalizedCode, resolved);
-    return resolved;
-  }
-
   private String normalizeDescription(String description) {
     String normalized = trimToNull(description);
     return normalized == null ? "Not on file" : normalized;
@@ -1316,6 +1278,8 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
     if (trimToNull(request.exemptionStatusCode()) == null) {
       errors.add(required("exemption status code"));
     } else {
+      // INTENTIONAL_LEGACY_DIVERGENCE(SAFE_EXEMPTION_INITIAL_STATUS):
+      // Reject unsafe initial states instead of accepting the legacy screen's user-selected status.
       String expectedStatus = initialExemptionStatus(request.exemptionTypeCode());
       if (expectedStatus != null
           && !expectedStatus.equalsIgnoreCase(request.exemptionStatusCode())) {

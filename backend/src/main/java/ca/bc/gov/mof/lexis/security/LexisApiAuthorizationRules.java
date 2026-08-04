@@ -54,7 +54,7 @@ final class LexisApiAuthorizationRules {
   private static final String ACTION_UPLOAD_FEDERAL_SUBMISSION = "uploadFederalSubmission";
   private static final String ACTION_MANAGE_FEDERAL_APPLICATION = "manageFederalApplication";
 
-  private static final List<String> REPORT_ACTIONS =
+  private static final List<String> REPORT_WORKSPACE_ACTIONS =
       List.of(
           ACTION_APPLICATION_REPORT,
           ACTION_APPROVED_EXEMPTION_REPORT,
@@ -63,7 +63,6 @@ final class LexisApiAuthorizationRules {
           ACTION_MOFR_LISTING,
           ACTION_OFFER_REPORT,
           ACTION_PERMIT_LEDGER_REPORT,
-          ACTION_PERMIT_REPORT,
           ACTION_SPECIES_GRADE_REPORT,
           ACTION_TEAC_REPORT,
           ACTION_TENURE_REPORT,
@@ -190,6 +189,9 @@ final class LexisApiAuthorizationRules {
           adminAuthority("/actuator/**"),
           knownRole("/error"),
           knownRole("/api/lexis/session/**"),
+          knownRole("/api/lexis/notifications"),
+          adminAuthority(
+              "/api/lexis/admin/notifications", "/api/lexis/admin/notifications/**"),
           knownRole(
               "/api/lexis/showWelcome",
               "/api/lexis/showWelcome.do",
@@ -199,7 +201,7 @@ final class LexisApiAuthorizationRules {
               "/api/lexis/accessDenied.do",
               "/api/lexis/errorPage",
               "/api/lexis/errorPage.do"),
-          anyAction(HttpMethod.GET, REPORT_ACTIONS, "/api/lexis/reports/options"),
+          anyAction(HttpMethod.GET, REPORT_WORKSPACE_ACTIONS, "/api/lexis/reports/options"),
           action(
               HttpMethod.GET,
               "/applicationSearch",
@@ -315,17 +317,6 @@ final class LexisApiAuthorizationRules {
               "/api/lexis/application-reviews/*/approve",
               "/api/lexis/application-reviews/*/status",
               "/api/lexis/application-reviews/*/status-email"),
-          adminAuthority("/api/lexis/admin/fam-users"),
-          action(
-              HttpMethod.GET,
-              ACTION_LEXIS_AGENT_ADMIN,
-              "/api/lexis/admin/agent",
-              "/api/lexis/admin/lexisAgentAdmin"),
-          action(
-              HttpMethod.GET,
-              ACTION_LEXIS_AGENT_ADMIN,
-              "/api/lexis/lexisAgentAdmin",
-              "/api/lexis/lexisAgentAdmin.do"),
           action(
               HttpMethod.GET,
               ACTION_LEXIS_POLICY_ADMIN,

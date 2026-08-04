@@ -460,7 +460,7 @@ export const submitProvincialOfferUpdate = async (
 ): Promise<CreateSubmissionResult> => {
   try {
     const payload = await postLegacyForm(
-      withQueryParam(getProvincialOfferCreatePath(), 'actionMapping', 'updateOffer'),
+      getProvincialOfferCreatePath(),
       withCreateActionMapping('updateOffer', {
         ...buildProvincialOfferPayload(form),
         purchaseOfferDate: form.purchaseOfferDate,

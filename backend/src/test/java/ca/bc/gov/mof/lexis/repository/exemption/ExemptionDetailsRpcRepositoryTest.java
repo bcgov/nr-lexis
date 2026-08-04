@@ -18,12 +18,105 @@ import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.jdbc.core.CallableStatementCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
 
 @DisplayName("Unit Test | ExemptionDetailsRpcRepository")
 class ExemptionDetailsRpcRepositoryTest {
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void blanketOicTotalsShouldMatchLegacyBySummingPermitVolume() throws SQLException {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    ResultSet resultSet = mock(ResultSet.class);
+    when(resultSet.getDouble("REQUESTED_VOLUME")).thenReturn(1250.5d);
+    when(resultSet.getDouble("COMPLETED_VOLUME")).thenReturn(800.25d);
+    when(resultSet.wasNull()).thenReturn(false);
+    when(
+            jdbcTemplate.query(
+                any(String.class),
+                any(RowMapper.class),
+                eq("BO-001")))
+        .thenAnswer(
+            invocation ->
+                List.of(
+                    ((RowMapper<ExemptionDetailsRpcRepository.BlanketOicTotalsRow>)
+                            invocation.getArgument(1))
+                        .mapRow(resultSet, 0)));
+    ExemptionDetailsRpcRepository repository =
+        new ExemptionDetailsRpcRepository(jdbcTemplate);
+
+    ExemptionDetailsRpcRepository.BlanketOicTotalsRow totals =
+        repository.findBlanketOicTotals(" BO-001 ");
+
+    assertThat(totals.requestedVolume()).isEqualTo(1250.5d);
+    assertThat(totals.completedVolume()).isEqualTo(800.25d);
+    ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+    verify(jdbcTemplate)
+        .query(sql.capture(), any(RowMapper.class), eq("BO-001"));
+    assertThat(sql.getValue())
+        .contains("SUM(PERMIT_VOLUME)")
+        .contains("EXPORT_PERMIT_STATUS_CODE = 'COM'")
+        .contains("WHERE EXEMPTION_NUMBER = ?");
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void documentContextShouldLoadAllLinkedDocumentsInOneDirectQuery() throws SQLException {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    ResultSet resultSet = mock(ResultSet.class);
+    when(resultSet.getLong("EXPORT_ATTACHMENT_ID")).thenReturn(20L);
+    when(resultSet.getLong("SOURCE_APPLICATION_NUMBER")).thenReturn(1000456L);
+    when(resultSet.getLong("DELETABLE")).thenReturn(0L);
+    when(resultSet.getString("FILE_NAME")).thenReturn("application.pdf");
+    when(resultSet.getString("DESCRIPTION")).thenReturn("desc");
+    when(resultSet.getString("EXPORT_ATTACHMENT_TYPE_CODE")).thenReturn("UPLOAD");
+    when(resultSet.getString("ATTACHMENT_TYPE_DESCRIPTION"))
+        .thenReturn("Uploaded document");
+    when(resultSet.getString("DOCUMENT_SOURCE")).thenReturn("application");
+    when(resultSet.wasNull()).thenReturn(false);
+    when(
+            jdbcTemplate.query(
+                any(String.class),
+                any(RowMapper.class),
+                eq("EX-205"),
+                eq("EX-205")))
+        .thenAnswer(
+            invocation ->
+                List.of(
+                    ((RowMapper<ExemptionDetailsRpcRepository.ExemptionDocumentContextRow>)
+                            invocation.getArgument(1))
+                        .mapRow(resultSet, 0)));
+    ExemptionDetailsRpcRepository repository =
+        new ExemptionDetailsRpcRepository(jdbcTemplate);
+
+    assertThat(repository.findExemptionDocumentContextRows(" EX-205 "))
+        .singleElement()
+        .satisfies(
+            document -> {
+              assertThat(document.documentRow().id()).isEqualTo(20L);
+              assertThat(document.attachmentTypeDescription())
+                  .isEqualTo("Uploaded document");
+              assertThat(document.source()).isEqualTo("application");
+              assertThat(document.sourceApplicationNumber()).isEqualTo(1000456L);
+              assertThat(document.deletable()).isFalse();
+            });
+    ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+    verify(jdbcTemplate)
+        .query(
+            sql.capture(),
+            any(RowMapper.class),
+            eq("EX-205"),
+            eq("EX-205"));
+    assertThat(sql.getValue())
+        .contains("FROM EXPORT_EXEMPT_FILE_ATTCHMNT EEFA")
+        .contains("INNER JOIN EXPORT_APPL_FILE_ATTCHMNT EAFA")
+        .contains("LEFT JOIN EXPORT_ATTACHMENT_TYPE_CODE EATC")
+        .contains("ORDER BY DR.SOURCE_ORDER");
+  }
 
   @Test
   void fileDeleteShouldPropagateOracleFailure() {
@@ -50,6 +143,38 @@ class ExemptionDetailsRpcRepositoryTest {
     assertThatThrownBy(() -> repository.findPermitsByApplicationNumberRequired(1000456L))
         .isInstanceOf(DataAccessResourceFailureException.class)
         .hasMessage("Oracle unavailable");
+  }
+
+  @Test
+  @SuppressWarnings({"rawtypes", "unchecked"})
+  void applicationPermitLookupShouldUseDeployedLegacyPermitNumberColumn() throws Exception {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    CallableStatement statement = mock(CallableStatement.class);
+    ResultSet cursor = mock(ResultSet.class);
+    when(cursor.next()).thenReturn(true, false);
+    when(cursor.getLong("EXPORT_PERMIT_DETAIL_NUMBER")).thenReturn(7000123L);
+    when(cursor.getString("EXEMPTION_NUMBER")).thenReturn("26-8757");
+    when(cursor.wasNull()).thenReturn(false);
+    when(
+            jdbcTemplate.execute(
+                eq("{ call LEXIS_GROUP_5.FIND_PERMIT_DET_BY_APP(?,?) }"),
+                any(CallableStatementCallback.class)))
+        .thenAnswer(
+            invocation ->
+                ((CallableStatementCallback) invocation.getArgument(1))
+                    .doInCallableStatement(statement));
+    when(statement.getObject(2)).thenReturn(cursor);
+    ExemptionDetailsRpcRepository repository =
+        new ExemptionDetailsRpcRepository(jdbcTemplate);
+
+    assertThat(repository.findPermitsByApplicationNumberRequired(1000456L))
+        .singleElement()
+        .satisfies(
+            permit -> {
+              assertThat(permit.permitNumber()).isEqualTo(7000123L);
+              assertThat(permit.exemptionNumber()).isEqualTo("26-8757");
+            });
+    verify(cursor, never()).getLong("EXPORT_PERMIT_NUMBER");
   }
 
   @Test
@@ -157,10 +282,54 @@ class ExemptionDetailsRpcRepositoryTest {
               assertThat(application.applicationNumber()).isEqualTo(108653L);
               assertThat(application.requestedVolume()).isEqualTo(847.7d);
               assertThat(application.scaleVolume()).isNaN();
+              assertThat(application.ownerClientNumber()).isEqualTo("00001074");
+              assertThat(application.agentClientNumber()).isEqualTo("00002176");
+              assertThat(application.ownerClientLocationCode()).isEqualTo("03");
+              assertThat(application.agentClientLocationCode()).isEqualTo("12");
+              assertThat(application.applicantTypeCode()).isEqualTo("A");
+              assertThat(application.ownerContactName()).isEqualTo("BOB TURMEL");
+              assertThat(application.agentContactName()).isEqualTo("EXPORT PERSON");
+              assertThat(application.ownerCompanyName())
+                  .isEqualTo("NORSKE SKOG CANADA LIMITED");
+              assertThat(application.agentCompanyName())
+                  .isEqualTo("INTERNATIONAL FOREST PRODUCTS");
             });
 
     verify(cursor, never()).getDouble("TOTAL_SCALE_VOLUME");
     verify(cursor, never()).getDouble("SCALE_VOLUME");
+  }
+
+  @Test
+  @SuppressWarnings({"rawtypes", "unchecked"})
+  void permitSummaryLookupShouldUseOnlyColumnsAvailableFromDeployedLegacyCursor()
+      throws Exception {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    CallableStatement statement = mock(CallableStatement.class);
+    ResultSet cursor = mock(ResultSet.class);
+    when(cursor.next()).thenReturn(true, false);
+    when(cursor.getLong("EXPORT_PERMIT_DETAIL_NUMBER")).thenReturn(7000123L);
+    when(cursor.getDouble("PERMIT_VOLUME")).thenReturn(80.0d);
+    when(cursor.wasNull()).thenReturn(false);
+    when(
+            jdbcTemplate.execute(
+                eq("{ call LEXIS_GROUP_5.FIND_PERMIT_DET_BY_EXMP(?,?) }"),
+                any(CallableStatementCallback.class)))
+        .thenAnswer(
+            invocation ->
+                ((CallableStatementCallback) invocation.getArgument(1))
+                    .doInCallableStatement(statement));
+    when(statement.getObject(2)).thenReturn(cursor);
+    ExemptionDetailsRpcRepository repository =
+        new ExemptionDetailsRpcRepository(jdbcTemplate);
+
+    List<ExemptionDetailsRpcRepository.PermitSummaryRow> permits =
+        repository.findPermitsByExemptionNumber("BO-001");
+
+    assertThat(permits).hasSize(1);
+    assertThat(permits.get(0).permitNumber()).isEqualTo(7000123L);
+    assertThat(permits.get(0).permitVolume()).isEqualTo(80.0d);
+    verify(cursor, never()).getLong("EXPORT_PERMIT_NUMBER");
+    verify(cursor, never()).getLong("ORG_UNIT_NO");
   }
 
   private static ResultSet applicationLinkCursor(long applicationNumber, double applicationVolume)
@@ -182,7 +351,16 @@ class ExemptionDetailsRpcRepositoryTest {
     when(cursor.next()).thenReturn(true, false);
     when(cursor.getLong("APPLICATION_NUMBER")).thenReturn(applicationNumber);
     when(cursor.getDouble("EXEMPTION_APPLICATION_VOLUME")).thenReturn(applicationVolume);
-    when(cursor.getString("OWNER_CLIENT_NUMBER")).thenReturn("00162575");
+    when(cursor.getString("OWNER_CLIENT_NUMBER")).thenReturn("00001074");
+    when(cursor.getString("AGENT_CLIENT_NUMBER")).thenReturn("00002176");
+    when(cursor.getString("OWNER_CLIENT_LOCATION_CODE")).thenReturn("03");
+    when(cursor.getString("AGENT_CLIENT_LOCATION_CODE")).thenReturn("12");
+    when(cursor.getString("EXPORT_APPLICANT_TYPE_CODE")).thenReturn("A");
+    when(cursor.getString("OWNER_CONTACT_NAME")).thenReturn("BOB TURMEL");
+    when(cursor.getString("AGENT_CONTACT_NAME")).thenReturn("EXPORT PERSON");
+    when(cursor.getString("OWNER_COMPANY_NAME")).thenReturn("NORSKE SKOG CANADA LIMITED");
+    when(cursor.getString("AGENT_COMPANY_NAME"))
+        .thenReturn("INTERNATIONAL FOREST PRODUCTS");
     when(cursor.getString("EXPORT_JURISDICTION_CODE")).thenReturn("P");
     when(cursor.getString("EXPORT_PRODUCT_TYPE_CODE")).thenReturn("T");
     return cursor;

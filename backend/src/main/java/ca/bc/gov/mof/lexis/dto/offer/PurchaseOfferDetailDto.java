@@ -34,7 +34,8 @@ public record PurchaseOfferDetailDto(
     boolean canEditWithdrawFields,
     boolean locked,
     String lockedBy,
-    String lockMessage) {
+    String lockMessage,
+    String author) {
 
   public PurchaseOfferDetailDto(
       Long offerNumber,
@@ -98,6 +99,7 @@ public record PurchaseOfferDetailDto(
         canEditWithdrawFields,
         false,
         null,
+        null,
         null);
   }
 
@@ -159,6 +161,7 @@ public record PurchaseOfferDetailDto(
         false,
         false,
         null,
+        null,
         null);
   }
 
@@ -196,7 +199,8 @@ public record PurchaseOfferDetailDto(
         canEditWithdrawFields,
         locked,
         lockedBy,
-        lockMessage);
+        lockMessage,
+        author);
   }
 
   public PurchaseOfferDetailDto withEditPermissions(
@@ -236,7 +240,8 @@ public record PurchaseOfferDetailDto(
         canEditWithdrawFields,
         locked,
         lockedBy,
-        lockMessage);
+        lockMessage,
+        author);
   }
 
   public PurchaseOfferDetailDto withEditLock(
@@ -273,6 +278,7 @@ public record PurchaseOfferDetailDto(
         canEditWithdrawFields,
         locked,
         lockedBy,
-        lockMessage);
+        lockMessage,
+        author);
   }
 }

@@ -10,6 +10,11 @@ import {
 } from '@/pages/shared/page-data-cache'
 import apiService from '@/service/api-service'
 import {
+  clearActiveForestClientNumber,
+  FOREST_CLIENT_SELECTION_HEADER,
+  setActiveForestClientNumber,
+} from '@/service/forest-client-selection'
+import {
   OPTIMISTIC_CONFLICT_EVENT,
   RECORD_VERSION_HEADER,
   type OptimisticConflictEvent,
@@ -27,6 +32,7 @@ const {
   getRegisteredResponseResolvedInterceptor,
   getRegisteredResponseRejectedInterceptor,
   getMock,
+  reloadPageIgnoringUnsavedChangesMock,
   requestMock,
 } = vi.hoisted(() => {
   const getMock = vi.fn()
@@ -55,6 +61,7 @@ const {
     getRegisteredResponseResolvedInterceptor: () => registeredResponseResolvedInterceptor,
     getRegisteredResponseRejectedInterceptor: () => registeredResponseRejectedInterceptor,
     getMock,
+    reloadPageIgnoringUnsavedChangesMock: vi.fn(),
     requestMock,
     axiosClientMock: {
       get: getMock,
@@ -79,6 +86,10 @@ vi.mock('axios', () => ({
 
 vi.mock('aws-amplify/auth', () => ({
   fetchAuthSession: fetchAuthSessionMock,
+}))
+
+vi.mock('@/utils/page-unload', () => ({
+  reloadPageIgnoringUnsavedChanges: reloadPageIgnoringUnsavedChangesMock,
 }))
 
 const buildResponse = (data: unknown) => ({
@@ -152,6 +163,7 @@ describe('api-service cached GET support', () => {
     apiService.clearCachedGetData()
     apiService.clearRecordVersions()
     clearAllPageDataCache()
+    clearActiveForestClientNumber()
     fetchAuthSessionMock.mockResolvedValue(buildSession())
   })
 
@@ -576,7 +588,7 @@ describe('api-service cached GET support', () => {
       'permit',
       '777',
       {
-        headers: { [RECORD_VERSION_HEADER]: 'supplemental-version-2' },
+        headers: {},
         data: { overrideEnabled: true },
       } as unknown as AxiosResponse<unknown>,
       '/lexis/rpc/permit-details/edit-context',
@@ -813,6 +825,43 @@ describe('api-service cached GET support', () => {
     )
   })
 
+  it('adds the active forest client to every API request', async () => {
+    setActiveForestClientNumber('00067890')
+
+    const result = await registeredRequestInterceptor()({
+      method: 'get',
+      headers: {},
+    })
+
+    expect(result.headers).toEqual(
+      expect.objectContaining({
+        [FOREST_CLIENT_SELECTION_HEADER]: '00067890',
+      }),
+    )
+  })
+
+  it('keeps cached GET responses separated by active forest client', async () => {
+    getMock
+      .mockResolvedValueOnce(buildResponse({ client: '00012345' }))
+      .mockResolvedValueOnce(buildResponse({ client: '00067890' }))
+
+    setActiveForestClientNumber('00012345')
+    await expect(
+      apiService.getCachedData<{ client: string }>('/lexis/example', undefined, {
+        cacheKey: 'client-scoped',
+      }),
+    ).resolves.toEqual({ client: '00012345' })
+
+    setActiveForestClientNumber('00067890')
+    await expect(
+      apiService.getCachedData<{ client: string }>('/lexis/example', undefined, {
+        cacheKey: 'client-scoped',
+      }),
+    ).resolves.toEqual({ client: '00067890' })
+
+    expect(getMock).toHaveBeenCalledTimes(2)
+  })
+
   it('emits a session-expired event when an auth token cannot be resolved', async () => {
     const listener = vi.fn()
     window.addEventListener(SESSION_EXPIRED_EVENT, listener)
@@ -912,7 +961,7 @@ describe('api-service cached GET support', () => {
       },
     }
 
-    void registeredResponseRejectedInterceptor()(staleError)
+    const conflictPromise = registeredResponseRejectedInterceptor()(staleError)
 
     await vi.waitFor(() => expect(receivedConflict).toBeDefined())
     expect(receivedConflict?.problem).toEqual(
@@ -924,6 +973,11 @@ describe('api-service cached GET support', () => {
     expect(receivedConflict).not.toHaveProperty('overwrite')
     expect(receivedConflict?.refresh).toBeTypeOf('function')
     expect(requestMock).not.toHaveBeenCalled()
+
+    const rejectedConflict = expect(conflictPromise).rejects.toBe(staleError)
+    receivedConflict?.refresh()
+    await rejectedConflict
+    expect(reloadPageIgnoringUnsavedChangesMock).toHaveBeenCalledTimes(1)
 
     window.removeEventListener(OPTIMISTIC_CONFLICT_EVENT, conflictListener)
   })
@@ -1017,6 +1071,7 @@ describe('api-service cached GET support', () => {
 
     expect(getMock).toHaveBeenCalledWith('/lexis/applications/999000001', {
       headers: { 'Cache-Control': 'no-cache' },
+      signal: expect.any(AbortSignal),
     })
     expect(receivedProblem).toEqual(
       expect.objectContaining({
@@ -1031,6 +1086,84 @@ describe('api-service cached GET support', () => {
 
     window.removeEventListener(OPTIMISTIC_CONFLICT_EVENT, conflictListener)
     window.history.replaceState({}, '', previousPath)
+  })
+
+  it('allows a slow DEV detail response to summarize a conflict before the deadline', async () => {
+    vi.useFakeTimers()
+    const previousPath = window.location.pathname
+    window.history.replaceState({}, '', '/provincial/application/999000001')
+    let receivedProblem: OptimisticConflictEvent['detail']['problem'] | undefined
+    const conflictListener = (event: Event) => {
+      const conflictEvent = event as OptimisticConflictEvent
+      event.preventDefault()
+      receivedProblem = conflictEvent.detail.problem
+    }
+    window.addEventListener(OPTIMISTIC_CONFLICT_EVENT, conflictListener)
+
+    try {
+      apiService.registerRecordVersion(
+        'application',
+        '999000001',
+        {
+          headers: { [RECORD_VERSION_HEADER]: 'version-1' },
+          data: { applicationNumber: '999000001', remarks: 'Original remarks' },
+        } as unknown as AxiosResponse<unknown>,
+        '/lexis/applications/999000001',
+      )
+      getMock.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            window.setTimeout(
+              () =>
+                resolve({
+                  ...buildResponse({
+                    applicationNumber: '999000001',
+                    remarks: 'Newer remarks',
+                  }),
+                  headers: { [RECORD_VERSION_HEADER]: 'version-2' },
+                }),
+              4_000,
+            )
+          }),
+      )
+
+      void registeredResponseRejectedInterceptor()({
+        config: {
+          method: 'put',
+          url: '/lexis/applications/999000001',
+          headers: {
+            [RECORD_VERSION_HEADER]: 'version-1',
+            Authorization: 'Bearer existing-request-token',
+          },
+        },
+        response: {
+          status: 409,
+          data: { code: 'STALE_RECORD', currentVersion: 'version-1.5' },
+        },
+      })
+
+      await vi.advanceTimersByTimeAsync(4_000)
+
+      expect(receivedProblem).toEqual(
+        expect.objectContaining({
+          currentVersion: 'version-2',
+          changedFields: expect.arrayContaining([
+            { field: 'remarks', currentValue: 'Newer remarks' },
+          ]),
+        }),
+      )
+      expect(getMock).toHaveBeenCalledWith('/lexis/applications/999000001', {
+        headers: {
+          Authorization: 'Bearer existing-request-token',
+          'Cache-Control': 'no-cache',
+        },
+        signal: expect.any(AbortSignal),
+      })
+    } finally {
+      window.removeEventListener(OPTIMISTIC_CONFLICT_EVENT, conflictListener)
+      window.history.replaceState({}, '', previousPath)
+      vi.useRealTimers()
+    }
   })
 
   it('includes newer values from a supplemental edit-context snapshot', async () => {
@@ -1049,7 +1182,7 @@ describe('api-service cached GET support', () => {
       'permit',
       '777',
       {
-        headers: { [RECORD_VERSION_HEADER]: 'version-1' },
+        headers: {},
         data: { overrideEnabled: false, overrideComment: '' },
       } as unknown as AxiosResponse<unknown>,
       '/lexis/rpc/permit-details/edit-context',
@@ -1100,10 +1233,12 @@ describe('api-service cached GET support', () => {
 
     expect(getMock).toHaveBeenNthCalledWith(1, '/lexis/permits/777', {
       headers: { 'Cache-Control': 'no-cache' },
+      signal: expect.any(AbortSignal),
     })
     expect(getMock).toHaveBeenNthCalledWith(2, '/lexis/rpc/permit-details/edit-context', {
       params: { permitNumber: '777' },
       headers: { 'Cache-Control': 'no-cache' },
+      signal: expect.any(AbortSignal),
     })
     expect(receivedProblem?.currentVersion).toBe('primary-version-2')
     expect(receivedProblem?.changedFields).toEqual(
@@ -1115,6 +1250,72 @@ describe('api-service cached GET support', () => {
 
     window.removeEventListener(OPTIMISTIC_CONFLICT_EVENT, conflictListener)
     window.history.replaceState({}, '', previousPath)
+  })
+
+  it('falls back to the server conflict when detail enrichment exceeds its deadline', async () => {
+    vi.useFakeTimers()
+    const previousPath = window.location.pathname
+    window.history.replaceState({}, '', '/provincial/application/999000001')
+    let receivedProblem: OptimisticConflictEvent['detail']['problem'] | undefined
+    const conflictListener = (event: Event) => {
+      const conflictEvent = event as OptimisticConflictEvent
+      event.preventDefault()
+      receivedProblem = conflictEvent.detail.problem
+    }
+    window.addEventListener(OPTIMISTIC_CONFLICT_EVENT, conflictListener)
+
+    try {
+      apiService.registerRecordVersion(
+        'application',
+        '999000001',
+        {
+          headers: { [RECORD_VERSION_HEADER]: 'version-1' },
+          data: { applicationNumber: '999000001', remarks: 'Original remarks' },
+        } as unknown as AxiosResponse<unknown>,
+        '/lexis/applications/999000001',
+      )
+      getMock.mockImplementationOnce(
+        () =>
+          new Promise(() => {
+            // Simulates work that stalls before Axios can observe the AbortSignal,
+            // such as an asynchronous request interceptor.
+          }),
+      )
+
+      void registeredResponseRejectedInterceptor()({
+        config: {
+          method: 'put',
+          url: '/lexis/applications/999000001',
+          headers: { [RECORD_VERSION_HEADER]: 'version-1' },
+        },
+        response: {
+          status: 409,
+          data: {
+            code: 'STALE_RECORD',
+            detail: 'This application was changed by another user.',
+            currentVersion: 'version-2',
+          },
+        },
+      })
+
+      await vi.advanceTimersByTimeAsync(10_000)
+
+      expect(receivedProblem).toEqual(
+        expect.objectContaining({
+          code: 'STALE_RECORD',
+          detail: 'This application was changed by another user.',
+          currentVersion: 'version-2',
+        }),
+      )
+      expect(getMock).toHaveBeenCalledWith(
+        '/lexis/applications/999000001',
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      )
+    } finally {
+      window.removeEventListener(OPTIMISTIC_CONFLICT_EVENT, conflictListener)
+      window.history.replaceState({}, '', previousPath)
+      vi.useRealTimers()
+    }
   })
 
   it('leaves ordinary 409 responses on the existing error path', async () => {

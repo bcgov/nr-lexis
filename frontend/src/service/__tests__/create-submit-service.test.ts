@@ -273,8 +273,10 @@ describe('create-submit-service', () => {
       offerCondition: '',
     })
 
-    const [, body] = postMock.mock.calls[0]
+    const [path, body] = postMock.mock.calls[0]
+    expect(path).toBe('/lexis/offerDetailsRPC')
     expect(body).toBeInstanceOf(URLSearchParams)
+    expect(body.getAll('actionMapping')).toEqual(['updateOffer'])
     for (const key of [
       'offerWithdrawalDate',
       'withdrawReason',

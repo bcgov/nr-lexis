@@ -10,12 +10,11 @@ import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationOfferDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationPermitDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchResultDto;
-import org.springframework.data.domain.Page;
 import java.sql.CallableStatement;
 import java.sql.ResultSet;
 import java.sql.Timestamp;
-import java.util.ArrayList;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
@@ -24,12 +23,15 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.dao.IncorrectResultSizeDataAccessException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 
 @DisplayName("Unit Test | FederalApplicationRepository")
 class FederalApplicationRepositoryTest {
 
   @Test
-  void searchShouldUseFederalViewAliasForDynamicCriteria() {
+  void searchShouldUseDirectQueryForEveryFilterAndRegionConstraint() {
     TestFederalApplicationRepository repository = new TestFederalApplicationRepository();
 
     repository.search(
@@ -44,14 +46,33 @@ class FederalApplicationRepositoryTest {
             LocalDate.of(2026, 2, 28),
             "00077881",
             "00055667",
+            List.of(1904L, 1905L),
             0,
             10));
 
     assertThat(repository.whereSql())
-        .contains("v.FED_APPLICATION_NUMBER")
-        .contains("v.EXPORT_JURISDICTION_CODE")
+        .contains("v.FED_APPLICATION_NUMBER LIKE '%' || ? || '%'")
+        .contains("v.PACKAGE_NUMBER LIKE '%' || ? || '%'")
+        .contains("v.EXPORT_JURISDICTION_CODE = ?")
+        .contains("v.EXEMPTION_NUMBER LIKE '%' || ? || '%'")
+        .contains("v.EXPORT_APPLICATION_STATUS_CODE = ?")
+        .contains("v.RECEIVED_DATE >= ?")
+        .contains("v.RECEIVED_DATE <= ?")
+        .contains("v.ADVERTISING_DATE >= ?")
+        .contains("v.ADVERTISING_DATE <= ?")
+        .contains("v.ORG_UNIT_NO IN (?, ?)")
+        .contains("v.OWNER_CLIENT_NUMBER LIKE '%' || ? || '%'")
+        .contains("v.AGENT_CLIENT_NUMBER LIKE '%' || ? || '%'")
         .contains("ORDER BY v.APPLICATION_NUMBER DESC")
-        .doesNotContain("EEA.");
+        .doesNotContain("EEA.")
+        .doesNotContain(":1");
+    assertThat(repository.pageSelectSql())
+        .contains("FROM EXPORT_EXEMPTION_APPLICATION EEA")
+        .contains("LISTAGG(EP.PACKAGE_NUMBER, ',')")
+        .contains("INNER JOIN EXPORT_APPLICATION_STATUS_CODE EASC")
+        .contains("INNER JOIN EXPORT_EXEMPTION_REASON_CODE EERC")
+        .contains("INNER JOIN EXPORT_APPLICANT_TYPE_CODE EATC")
+        .doesNotContain("FIND_APPLICATIONS_BY_CRITERIA");
     assertThat(repository.bindValues())
         .containsExactly(
             "900123",
@@ -59,34 +80,123 @@ class FederalApplicationRepositoryTest {
             "F",
             "EX-1",
             "APP",
-            "2026-01-01",
-            "2026-01-31",
-            "2026-02-01",
-            "2026-02-28",
+            java.sql.Date.valueOf("2026-01-01"),
+            java.sql.Date.valueOf("2026-01-31"),
+            java.sql.Date.valueOf("2026-02-01"),
+            java.sql.Date.valueOf("2026-02-28"),
+            1904L,
+            1905L,
             "00077881",
             "00077881",
             "00055667");
   }
 
   @Test
-  void searchShouldLoadRequestedLegacyPageWithCountTotal() {
-    List<FederalApplicationSearchResultDto> firstPage =
-        java.util.stream.LongStream.rangeClosed(900101L, 900110L)
+  void searchShouldNotConstrainRegionWhenNoRegionIsSelected() {
+    TestFederalApplicationRepository repository = new TestFederalApplicationRepository();
+
+    repository.search(emptyCriteria(0, 10));
+
+    assertThat(repository.whereSql()).doesNotContain("v.ORG_UNIT_NO IN");
+    assertThat(repository.bindValues()).containsExactly("F");
+  }
+
+  @Test
+  void searchShouldUseTheWhitelistedApplicationNumberSort() {
+    TestFederalApplicationRepository repository = new TestFederalApplicationRepository();
+
+    repository.search(emptyCriteria(0, 10));
+
+    assertThat(repository.whereSql()).endsWith("ORDER BY v.APPLICATION_NUMBER DESC");
+  }
+
+  @Test
+  void searchShouldLoadRequestedDirectPageWithCountTotal() {
+    List<FederalApplicationSearchResultDto> rows =
+        java.util.stream.LongStream.rangeClosed(900101L, 900111L)
             .mapToObj(FederalApplicationRepositoryTest::federalResult)
             .toList();
-    TestFederalApplicationRepository repository =
-        new TestFederalApplicationRepository(
-            List.<List<?>>of(firstPage, List.of(federalResult(900111L))));
+    TestFederalApplicationRepository repository = new TestFederalApplicationRepository(rows);
 
-    Page<FederalApplicationSearchResultDto> results =
-        repository.search(
-            new FederalApplicationSearchCriteria(
-                null, null, null, null, null, null, null, null, null, null, 0, 10));
+    Page<FederalApplicationSearchResultDto> results = repository.search(emptyCriteria(0, 10));
 
     assertThat(results.getContent())
         .extracting(FederalApplicationSearchResultDto::applicationNumber)
         .containsExactly(900101L, 900102L, 900103L, 900104L, 900105L, 900106L, 900107L, 900108L, 900109L, 900110L);
     assertThat(results.getTotalElements()).isEqualTo(11);
+    assertThat(repository.countCalls()).isEqualTo(1);
+    assertThat(repository.pageCalls()).isEqualTo(1);
+  }
+
+  @ParameterizedTest
+  @ValueSource(ints = {1, 10, 25, 50, 100, 200})
+  void searchShouldUseTwoDatabaseCallsForPageSizesThroughTwoHundred(int pageSize) {
+    List<FederalApplicationSearchResultDto> rows =
+        java.util.stream.LongStream.rangeClosed(900001L, 900200L)
+            .mapToObj(FederalApplicationRepositoryTest::federalResult)
+            .toList();
+    TestFederalApplicationRepository repository = new TestFederalApplicationRepository(rows);
+
+    Page<FederalApplicationSearchResultDto> results =
+        repository.search(emptyCriteria(0, pageSize));
+
+    assertThat(results.getNumberOfElements()).isEqualTo(pageSize);
+    assertThat(repository.countCalls()).isEqualTo(1);
+    assertThat(repository.pageCalls()).isEqualTo(1);
+  }
+
+  @Test
+  void countShouldUseTheSameFiltersWithoutPageSort() {
+    TestFederalApplicationRepository repository =
+        new TestFederalApplicationRepository(List.of(federalResult(900001L)));
+    FederalApplicationSearchCriteria criteria =
+        new FederalApplicationSearchCriteria(
+            null,
+            "PKG-1",
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            "00012345",
+            null,
+            List.of(1904L),
+            0,
+            10);
+
+    repository.search(criteria);
+    String pageWhere = repository.whereSql();
+    List<Object> pageBinds = repository.bindValues();
+    repository.count(criteria);
+
+    assertThat(repository.countSelectSql())
+        .contains("SELECT COUNT(*)")
+        .contains("FROM EXPORT_EXEMPTION_APPLICATION EEA")
+        .doesNotContain("FIND_APPLICATIONS_BY_CRITERIA");
+    assertThat(repository.countWhereSql())
+        .isEqualTo(pageWhere.substring(0, pageWhere.indexOf(" ORDER BY")))
+        .doesNotContain("OFFSET")
+        .doesNotContain("FETCH NEXT");
+    assertThat(repository.countBindValues()).isEqualTo(pageBinds);
+  }
+
+  @Test
+  void searchShouldUseKnownTotalWithoutCallingCount() {
+    TestFederalApplicationRepository repository =
+        new TestFederalApplicationRepository(
+            java.util.stream.LongStream.rangeClosed(900001L, 900011L)
+                .mapToObj(FederalApplicationRepositoryTest::federalResult)
+                .toList());
+
+    Page<FederalApplicationSearchResultDto> results =
+        repository.search(emptyCriteria(1, 10), 11);
+
+    assertThat(results.getContent())
+        .extracting(FederalApplicationSearchResultDto::applicationNumber)
+        .containsExactly(900011L);
+    assertThat(results.getTotalElements()).isEqualTo(11);
+    assertThat(repository.countCalls()).isZero();
     assertThat(repository.pageCalls()).isEqualTo(1);
   }
 
@@ -253,6 +363,23 @@ class FederalApplicationRepositoryTest {
         .hasMessage("Federal client lookup unavailable");
   }
 
+  private static FederalApplicationSearchCriteria emptyCriteria(int page, int size) {
+    return new FederalApplicationSearchCriteria(
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        List.of(),
+        page,
+        size);
+  }
+
   private static FederalApplicationSearchResultDto federalResult(long applicationNumber) {
     return new FederalApplicationSearchResultDto(
         applicationNumber,
@@ -291,27 +418,52 @@ class FederalApplicationRepositoryTest {
   }
 
   private static final class TestFederalApplicationRepository extends FederalApplicationRepository {
-    private final List<List<?>> pages;
+    private final List<?> rows;
     private final List<String> cursorProcedureSignatures = new ArrayList<>();
     private String whereSql;
-    private List<String> bindValues;
+    private List<Object> bindValues;
+    private String pageSelectSql;
+    private String countSelectSql;
+    private String countWhereSql;
+    private List<Object> countBindValues;
+    private int countCalls;
     private int pageCalls;
 
     TestFederalApplicationRepository() {
       this(List.of());
     }
 
-    TestFederalApplicationRepository(List<List<?>> pages) {
+    TestFederalApplicationRepository(List<?> rows) {
       super(null);
-      this.pages = pages;
+      this.rows = rows;
     }
 
     String whereSql() {
       return whereSql;
     }
 
-    List<String> bindValues() {
+    List<Object> bindValues() {
       return bindValues;
+    }
+
+    String pageSelectSql() {
+      return pageSelectSql;
+    }
+
+    String countSelectSql() {
+      return countSelectSql;
+    }
+
+    String countWhereSql() {
+      return countWhereSql;
+    }
+
+    List<Object> countBindValues() {
+      return countBindValues;
+    }
+
+    int countCalls() {
+      return countCalls;
     }
 
     int pageCalls() {
@@ -360,30 +512,34 @@ class FederalApplicationRepositoryTest {
     }
 
     @Override
-    protected int queryLegacyDynamicCountProcedure(
-        String procedureSignature,
-        String whereSql,
-        List<String> bindValues) {
-      this.whereSql = whereSql;
-      this.bindValues = bindValues;
-      return pages.stream().mapToInt(List::size).sum();
+    protected int queryDirectCount(String selectSql, DirectSql where) {
+      countSelectSql = selectSql;
+      countWhereSql = where.sql();
+      countBindValues = where.bindValues();
+      countCalls++;
+      return rows.size();
     }
 
     @Override
     @SuppressWarnings("unchecked")
-    protected <T> List<T> queryLegacyDynamicPagedProcedure(
-        String procedureSignature,
-        String whereSql,
-        List<String> bindValues,
+    protected <T> Page<T> queryDirectPage(
+        String selectSql,
+        DirectSql whereAndOrder,
         int page,
+        int size,
+        int totalElements,
         SqlRowMapper<T> rowMapper) {
-      this.whereSql = whereSql;
-      this.bindValues = bindValues;
+      pageSelectSql = selectSql;
+      whereSql = whereAndOrder.sql();
+      bindValues = whereAndOrder.bindValues();
       pageCalls++;
-      if (page >= pages.size()) {
-        return List.of();
-      }
-      return (List<T>) pages.get(page);
+      int normalizedPage = Math.max(0, page);
+      int normalizedSize = Math.max(1, size);
+      int fromIndex = Math.min(rows.size(), normalizedPage * normalizedSize);
+      int toIndex = Math.min(rows.size(), fromIndex + normalizedSize);
+      List<T> content = (List<T>) rows.subList(fromIndex, toIndex);
+      return new PageImpl<>(
+          content, PageRequest.of(normalizedPage, normalizedSize), totalElements);
     }
   }
 

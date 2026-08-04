@@ -463,15 +463,6 @@ public class LegacyRouteController {
     return permitController.getByPermitNumber(permitNumber, authentication);
   }
 
-  @GetMapping({"/lexisAgentAdmin", "/lexisAgentAdmin.do"})
-  public ResponseEntity<?> lexisAgentAdmin(
-      @RequestParam(name = "actionMapping", required = false) String actionMapping) {
-    if (actionMapping == null || actionMapping.isBlank() || ACTION_VIEW.equalsIgnoreCase(actionMapping)) {
-      return adminController.agentAdmin();
-    }
-    return ResponseEntity.noContent().build();
-  }
-
   @GetMapping({"/lexisPolicyAdmin", "/lexisPolicyAdmin.do"})
   public ResponseEntity<?> lexisPolicyAdmin(
       @RequestParam(name = "actionMapping", required = false) String actionMapping) {

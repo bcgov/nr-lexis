@@ -4,11 +4,16 @@ import { fetchAuthSession } from 'aws-amplify/auth'
 import { notifySessionExpired } from '@/context/auth/session-expiry'
 import { clearAllPageDataCache } from '@/pages/shared/page-data-cache'
 import {
+  FOREST_CLIENT_SELECTION_HEADER,
+  getActiveForestClientNumber,
+} from '@/service/forest-client-selection'
+import {
   RECORD_VERSION_HEADER,
   createOptimisticConflictEvent,
   type OptimisticConflictProblem,
   type OptimisticRecordType,
 } from '@/service/optimistic-conflict'
+import { reloadPageIgnoringUnsavedChanges } from '@/utils/page-unload'
 
 type CachedGetOptions = {
   ttlMs?: number
@@ -51,8 +56,11 @@ type HeaderAccessors = {
 
 const RESPONSE_CACHE_MAX_ENTRIES = 150
 const CONFLICT_CHANGED_FIELD_LIMIT = 5
+const CONFLICT_ENRICHMENT_TIMEOUT_MS = 10_000
 const CACHE_INVALIDATING_METHODS = new Set(['post', 'put', 'patch', 'delete'])
 const CONFLICT_DIFF_IGNORED_FIELDS = new Set([
+  'createTimestamp',
+  'createUser',
   'entryTimestamp',
   'entryUserId',
   'entryUserid',
@@ -136,6 +144,18 @@ class APIService {
         }
       }
 
+      const activeForestClientNumber = getActiveForestClientNumber()
+      if (
+        activeForestClientNumber &&
+        !this.hasHeader(requestConfig.headers, FOREST_CLIENT_SELECTION_HEADER)
+      ) {
+        this.setHeader(
+          requestConfig.headers,
+          FOREST_CLIENT_SELECTION_HEADER,
+          activeForestClientNumber,
+        )
+      }
+
       const csrfCookie = document.cookie.match(/(?:^|;\s*)XSRF-TOKEN=([^;]*)/)
       if (csrfCookie?.[1]) {
         this.setHeader(requestConfig.headers, 'X-XSRF-TOKEN', decodeURIComponent(csrfCookie[1]))
@@ -186,12 +206,13 @@ class APIService {
     detailUrl: string,
     detailConfig?: AxiosRequestConfig,
   ): void {
-    const version = this.getHeader(response.headers, RECORD_VERSION_HEADER)
-    if (typeof version !== 'string' || !version.trim()) {
-      return
-    }
     const key = this.recordVersionKey(recordType, recordId)
     const existing = this.recordSnapshots.get(key)
+    const version = this.getHeader(response.headers, RECORD_VERSION_HEADER)
+    const normalizedVersion = typeof version === 'string' ? version.trim() : ''
+    if (!normalizedVersion && !existing) {
+      return
+    }
     const source: RecordSnapshotSource = { detailUrl, detailConfig, data: response.data }
     const sourceKey = this.snapshotSourceKey(source)
     const primarySourceKey = existing?.primarySourceKey ?? sourceKey
@@ -205,7 +226,10 @@ class APIService {
       sources.push(source)
     }
     this.recordSnapshots.set(key, {
-      version: !existing || sourceKey === primarySourceKey ? version.trim() : existing.version,
+      version:
+        normalizedVersion && (!existing || sourceKey === primarySourceKey)
+          ? normalizedVersion
+          : (existing?.version ?? normalizedVersion),
       primarySourceKey,
       sources,
     })
@@ -329,14 +353,19 @@ class APIService {
       const username = this.asCachePart(payload?.username)
       const identityProvider = this.asCachePart(payload?.identity_provider)
       const clientId = this.asCachePart(payload?.client_id)
-      const scopeParts = [subject, username, identityProvider, clientId].filter(Boolean)
+      const forestClientNumber = getActiveForestClientNumber()
+      const identityScopeParts = [subject, username, identityProvider, clientId].filter(Boolean)
+      const identityScope =
+        identityScopeParts.length > 0
+          ? identityScopeParts.join(':')
+          : accessToken
+            ? `token:${this.hashCacheScope(accessToken)}`
+            : 'anonymous'
+      const forestClientScope = forestClientNumber
+        ? `forest-client:${forestClientNumber}`
+        : 'forest-client:unselected'
       return {
-        cacheScope:
-          scopeParts.length > 0
-            ? scopeParts.join(':')
-            : accessToken
-              ? `token:${this.hashCacheScope(accessToken)}`
-              : 'anonymous',
+        cacheScope: `${identityScope}:${forestClientScope}`,
         authorizationHeader: accessToken ? `Bearer ${accessToken}` : undefined,
       }
     } catch {
@@ -456,7 +485,11 @@ class APIService {
       return Promise.reject(error)
     }
 
-    return this.enrichOptimisticConflict(problem).then(
+    const authorizationHeader = this.getHeader(originalConfig.headers, 'authorization')
+    return this.enrichOptimisticConflictWithinTimeout(
+      problem,
+      typeof authorizationHeader === 'string' ? authorizationHeader : undefined,
+    ).then(
       (enrichedProblem) =>
         new Promise<AxiosResponse<unknown>>((_, reject) => {
           const event = createOptimisticConflictEvent({
@@ -466,7 +499,7 @@ class APIService {
               this.clearRecordVersions()
               clearAllPageDataCache()
               reject(error)
-              window.location.reload()
+              reloadPageIgnoringUnsavedChanges()
             },
           })
 
@@ -476,6 +509,31 @@ class APIService {
           }
         }),
     )
+  }
+
+  private async enrichOptimisticConflictWithinTimeout(
+    problem: OptimisticConflictProblem,
+    authorizationHeader?: string,
+  ): Promise<OptimisticConflictProblem> {
+    const controller = new AbortController()
+    let timeoutId: number | undefined
+    const timeout = new Promise<OptimisticConflictProblem>((resolve) => {
+      timeoutId = window.setTimeout(() => {
+        controller.abort()
+        resolve(problem)
+      }, CONFLICT_ENRICHMENT_TIMEOUT_MS)
+    })
+
+    try {
+      return await Promise.race([
+        this.enrichOptimisticConflict(problem, controller.signal, authorizationHeader),
+        timeout,
+      ])
+    } finally {
+      if (timeoutId !== undefined) {
+        window.clearTimeout(timeoutId)
+      }
+    }
   }
 
   private registerSuccessfulMutationVersion(response: AxiosResponse<unknown>): void {
@@ -509,6 +567,8 @@ class APIService {
 
   private async enrichOptimisticConflict(
     problem: OptimisticConflictProblem,
+    signal: AbortSignal,
+    authorizationHeader?: string,
   ): Promise<OptimisticConflictProblem> {
     const activeRecord = this.activeRecord()
     if (!activeRecord) {
@@ -525,14 +585,23 @@ class APIService {
       const latestSources: unknown[] = []
       const changedFields: unknown[] = []
       let latestVersion: unknown
-      for (const source of snapshot.sources) {
-        const latestResponse = await this.client.get<unknown>(source.detailUrl, {
-          ...source.detailConfig,
-          headers: {
-            ...this.toHeaderRecord(source.detailConfig?.headers),
-            'Cache-Control': 'no-cache',
-          },
-        })
+      const sourceResults = await Promise.allSettled(
+        snapshot.sources.map(async (source) => ({
+          source,
+          latestResponse: await this.client.get<unknown>(source.detailUrl, {
+            ...source.detailConfig,
+            headers: {
+              ...this.toHeaderRecord(source.detailConfig?.headers),
+              ...(authorizationHeader ? { Authorization: authorizationHeader } : {}),
+              'Cache-Control': 'no-cache',
+            },
+            signal,
+          }),
+        })),
+      )
+      for (const sourceResult of sourceResults) {
+        if (sourceResult.status === 'rejected') continue
+        const { source, latestResponse } = sourceResult.value
         latestSources.push(latestResponse.data)
         if (this.snapshotSourceKey(source) === snapshot.primarySourceKey) {
           latestVersion = this.getHeader(latestResponse.headers, RECORD_VERSION_HEADER)

@@ -43,7 +43,7 @@ const redirectSignOut = env.VITE_REDIRECT_SIGN_OUT?.trim() || `${window.location
 const scopes = resolveScopes(splitScopes(env.VITE_COGNITO_SCOPES))
 
 const zone = (env.VITE_ZONE ?? 'DEV').trim().toUpperCase()
-const providerPrefix = zone === 'PROD' ? '' : `${zone}-`
+const providerPrefix = `${zone}-`
 
 export const idirProviderName = `${providerPrefix}IDIR`
 export const businessBceidProviderName = `${providerPrefix}BCEIDBUSINESS`

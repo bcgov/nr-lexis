@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import {
   Button,
   Column,
@@ -61,6 +61,7 @@ import {
 } from '@/pages/shared/search-total-cache'
 import IsoDatePicker from '../../components/IsoDatePicker'
 import { useSearchFilterDraft } from '@/pages/shared/useSearchFilterDraft'
+import { usePersistedSearchParams } from '@/pages/shared/usePersistedSearchParams'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import {
   loadSearchWithDeferredTotal,
@@ -71,6 +72,7 @@ import {
   searchProvincialPermits,
 } from '@/service/provincial-permit-search-service'
 import { fetchProvincialPermitOptions, type SearchOption } from '@/service/search-options-service'
+import { formatPermitNumber } from '@/utils/permit'
 
 const INITIAL_FILTERS: ProvincialPermitSearchFilters = {
   applicationNumber: '',
@@ -132,7 +134,7 @@ const buildSearchParams = (
 
 const ProvincialPermitPage = () => {
   const { capabilities } = useAuth()
-  const [searchParams, setSearchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = usePersistedSearchParams('provincial-permits')
   const [regionOptions, setRegionOptions] = useState<IdTextOption[]>([])
   const [permitStatusOptions, setPermitStatusOptions] = useState<SearchOption[]>([])
   const [optionsLoading, setOptionsLoading] = useState(true)
@@ -185,6 +187,7 @@ const ProvincialPermitPage = () => {
   const sortDirection = urlState.sortDirection
   const pageSize = urlState.pageSize
   const requestFilters = appliedFilters
+  const hasSearchQuery = searchParams.toString().length > 0
   const updateFilter = useCallback(
     <K extends keyof ProvincialPermitSearchFilters>(
       key: K,
@@ -278,9 +281,6 @@ const ProvincialPermitPage = () => {
           cachedTotal,
           search: searchProvincialPermits,
           count: countProvincialPermits,
-          isLatestRequest,
-          onExactTotal: (resolvedResponse) => commitSearchResponse(resolvedResponse, true),
-          onCountError: console.error,
         })
         if (isLatestRequest()) {
           commitSearchResponse(response, totalIsExact)
@@ -301,6 +301,10 @@ const ProvincialPermitPage = () => {
   )
 
   useEffect(() => {
+    if (!hasSearchQuery) {
+      return
+    }
+
     void runSearch({
       filters: requestFilters,
       page: urlState.page - 1,
@@ -309,6 +313,7 @@ const ProvincialPermitPage = () => {
       sortDirection: urlState.sortDirection,
     })
   }, [
+    hasSearchQuery,
     requestFilters,
     runSearch,
     urlState.page,
@@ -333,6 +338,53 @@ const ProvincialPermitPage = () => {
 
     void loadOptions()
   }, [])
+
+  useEffect(() => {
+    if (
+      optionsLoading ||
+      optionsUnavailable ||
+      searchParams.has('region') ||
+      regionOptions.length === 0
+    ) {
+      return
+    }
+
+    const defaultRegions = regionOptions.map((region) => region.id)
+    if (hasSearchQuery) {
+      setSearchParams(
+        buildSearchParams(
+          {
+            ...urlState.filters,
+            region: defaultRegions,
+          },
+          urlState.sortField,
+          urlState.sortDirection,
+          urlState.page,
+          urlState.pageSize,
+        ),
+        { replace: true },
+      )
+      return
+    }
+
+    setFilters((currentFilters) =>
+      currentFilters.region.length > 0
+        ? currentFilters
+        : {
+            ...currentFilters,
+            region: defaultRegions,
+          },
+    )
+  }, [
+    hasSearchQuery,
+    optionsLoading,
+    optionsUnavailable,
+    regionOptions,
+    searchParams,
+    setFilters,
+    setSearchParams,
+    urlState,
+  ])
 
   const onSearch = () => {
     if (loading || hasDateValidationError) {
@@ -362,10 +414,14 @@ const ProvincialPermitPage = () => {
   }
 
   const onClearFilters = () => {
-    setFilters(INITIAL_FILTERS)
+    const defaultFilters = {
+      ...INITIAL_FILTERS,
+      region: regionOptions.map((region) => region.id),
+    }
+    setFilters(defaultFilters)
     setSearchParams(
       buildSearchParams(
-        INITIAL_FILTERS,
+        defaultFilters,
         DEFAULT_SORT_FIELD,
         DEFAULT_SORT_DIRECTION,
         DEFAULT_SEARCH_PAGE,
@@ -430,6 +486,8 @@ const ProvincialPermitPage = () => {
                   value={filters.permitNumber}
                   onChange={(event) => updateFilter('permitNumber', event.target.value)}
                 />
+                {/* INTENTIONAL_LEGACY_DIVERGENCE(SEARCH_FILTER_EXPANSION):
+                    Modern permit search makes the existing invoice-number criterion visible. */}
                 <TextInput
                   id="invoiceNumber"
                   labelText="Invoice number"
@@ -496,7 +554,7 @@ const ProvincialPermitPage = () => {
         </section>
       </Column>
 
-      <Column sm={4} md={8} lg={16}>
+      <Column sm={4} md={8} lg={16} hidden={!hasSearchQuery}>
         <section
           className="legacy-search-section legacy-search-section--results"
           aria-label="Search results"
@@ -541,7 +599,7 @@ const ProvincialPermitPage = () => {
                           className="cds--link"
                           to={withCurrentSearch(`/provincial/permit/${row.permitNumber}`)}
                         >
-                          {row.permitNumber}
+                          {formatPermitNumber(row.permitNumber, row.status)}
                         </Link>
                       </TableCell>
                       <TableCell>
