@@ -796,7 +796,9 @@ describe('Provincial Review Action State Smoke', () => {
     expect(within(selectedRegions).getByText('Cariboo')).toBeVisible()
     expect(within(selectedRegions).getByText('Coast')).toBeVisible()
     expect(mockedSearchApplicationReviews).not.toHaveBeenCalled()
-    expect(screen.getByRole('region', { name: 'Review queue', hidden: true })).not.toBeVisible()
+    const reviewQueue = screen.getByRole('region', { name: 'Review queue', hidden: true })
+    expect(reviewQueue.closest('[hidden]')).toHaveStyle({ display: 'none' })
+    expect(reviewQueue).not.toBeVisible()
 
     await userEvent.click(screen.getByRole('button', { name: 'Search' }))
     await screen.findByText('1000123')

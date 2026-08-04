@@ -141,9 +141,9 @@ describe('Provincial Permit Search Actions', () => {
     const selectedRegions = await screen.findByRole('list', { name: 'Selected regions' })
     expect(within(selectedRegions).getByText('Cariboo')).toBeVisible()
     expect(mockedSearchProvincialPermits).not.toHaveBeenCalled()
-    expect(
-      screen.getByRole('region', { name: 'Search results table', hidden: true }),
-    ).not.toBeVisible()
+    const resultsTable = screen.getByRole('region', { name: 'Search results table', hidden: true })
+    expect(resultsTable.closest('[hidden]')).toHaveStyle({ display: 'none' })
+    expect(resultsTable).not.toBeVisible()
   })
 
   it('keeps the table loading until the exact result count is available', async () => {

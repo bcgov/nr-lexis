@@ -106,9 +106,36 @@ describe('Federal Search Actions', () => {
     })
 
     expect(mockedSearchFederalApplications).not.toHaveBeenCalled()
-    expect(
-      screen.getByRole('region', { name: 'Search results table', hidden: true }),
-    ).not.toBeVisible()
+    const resultsTable = screen.getByRole('region', { name: 'Search results table', hidden: true })
+    expect(resultsTable.closest('[hidden]')).toHaveStyle({ display: 'none' })
+    expect(resultsTable).not.toBeVisible()
+  })
+
+  it('applies the legacy Approved default on the first search', async () => {
+    mockedFetchFederalApplicationOptions.mockResolvedValueOnce({
+      applicationStatuses: [
+        { value: 'NEW', label: 'New' },
+        { value: 'APP', label: 'Approved' },
+      ],
+    })
+
+    renderPage('/federal')
+
+    await waitFor(() => {
+      expect(screen.getByRole('combobox', { name: 'Application status' })).toHaveValue('Approved')
+    })
+    expect(mockedSearchFederalApplications).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Search' }))
+
+    await waitFor(() => {
+      expect(mockedSearchFederalApplications).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({ applicationStatus: 'APP' }),
+        }),
+        expect.any(Object),
+      )
+    })
   })
 
   it('only allows eligible federal applications to be selected for exemption creation', async () => {

@@ -703,9 +703,9 @@ describe('Provincial Exemption Search Actions', () => {
     })
 
     expect(mockedSearchProvincialExemptions).not.toHaveBeenCalled()
-    expect(
-      screen.getByRole('region', { name: 'Search results table', hidden: true }),
-    ).not.toBeVisible()
+    const resultsTable = screen.getByRole('region', { name: 'Search results table', hidden: true })
+    expect(resultsTable.closest('[hidden]')).toHaveStyle({ display: 'none' })
+    expect(resultsTable).not.toBeVisible()
     const selectedRegions = await screen.findByRole('list', { name: 'Selected regions' })
     expect(within(selectedRegions).getByText('Cariboo')).toBeVisible()
 
