@@ -340,9 +340,9 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       const rootStyle = getComputedStyle(document.documentElement)
       const bodyStyle = getComputedStyle(document.body)
       const grid = document.querySelector('.default-grid')
-      const label = document.querySelector('label.cds--label')
       const dateInput = document.querySelector('.cds--date-picker__input')
       if (!(grid instanceof HTMLElement)) throw new Error('Default grid not found')
+      const label = grid.querySelector('label.cds--label')
       if (!(label instanceof HTMLElement)) throw new Error('Carbon field label not found')
       if (!(dateInput instanceof HTMLElement)) throw new Error('Carbon date input not found')
 
