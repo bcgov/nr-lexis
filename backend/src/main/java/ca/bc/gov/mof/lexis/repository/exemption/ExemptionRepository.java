@@ -14,7 +14,6 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -38,9 +37,32 @@ public class ExemptionRepository extends OracleRepositorySupport {
       LEXIS_CODES_PACKAGE + "FIND_ALL_EXEMPTION_TYPE_CODES(?)";
   private static final String FIND_ALL_EXEMPTION_STATUS_CODES =
       LEXIS_CODES_PACKAGE + "FIND_ALL_EXEMPT_STS_CODES(?)";
-  private static final String SEARCH_EXEMPTIONS =
+  private static final String CANONICAL_EXEMPTION_APPLICATION_CTE =
       """
-      WITH PERMIT_VOLUME_BY_EXEMPTION AS (
+      CANONICAL_EXEMPTION_APPLICATION AS (
+        SELECT
+          CANON_EEA.APPLICATION_NUMBER,
+          CANON_EEA.EXEMPTION_NUMBER,
+          CANON_EEA.EXPORT_SCHEDULE_ID,
+          CANON_EEA.ORG_UNIT_NO,
+          CANON_EEA.OIC_INDICATOR,
+          CANON_EEA.AGENT_CLIENT_NUMBER,
+          CANON_EEA.OWNER_CLIENT_NUMBER,
+          ROW_NUMBER() OVER (
+            PARTITION BY CANON_EEA.EXEMPTION_NUMBER
+            ORDER BY CANON_ES.ADVERTISING_DATE DESC NULLS LAST,
+                     CANON_EEA.APPLICATION_NUMBER DESC
+          ) AS CANONICAL_RANK
+        FROM EXPORT_EXEMPTION_APPLICATION CANON_EEA
+        LEFT JOIN EXPORT_SCHEDULE CANON_ES
+          ON CANON_ES.EXPORT_SCHEDULE_ID = CANON_EEA.EXPORT_SCHEDULE_ID
+      )
+      """;
+  private static final String SEARCH_EXEMPTIONS =
+      "WITH "
+          + CANONICAL_EXEMPTION_APPLICATION_CTE
+          + """
+      , PERMIT_VOLUME_BY_EXEMPTION AS (
         SELECT EXEMPTION_NUMBER, SUM(PERMIT_VOLUME) AS USED_VOLUME
         FROM EXPORT_PERMIT_DETAIL
         GROUP BY EXEMPTION_NUMBER
@@ -70,7 +92,7 @@ public class ExemptionRepository extends OracleRepositorySupport {
         )
         GROUP BY EXEMPTION_NUMBER
       )
-      SELECT DISTINCT
+      SELECT
         EE.EXEMPTION_NUMBER,
         EE.APPROVED_VOLUME,
         EE.APPROVAL_DATE,
@@ -96,8 +118,9 @@ public class ExemptionRepository extends OracleRepositorySupport {
           ELSE ''
         END AS OWNER_CLIENT_NUMBER
       FROM EXPORT_EXEMPTION EE
-      LEFT JOIN EXPORT_EXEMPTION_APPLICATION EEA
+      LEFT JOIN CANONICAL_EXEMPTION_APPLICATION EEA
         ON EEA.EXEMPTION_NUMBER = EE.EXEMPTION_NUMBER
+       AND EEA.CANONICAL_RANK = 1
       INNER JOIN EXPORT_EXEMPTION_STATUS_CODE EESC
         ON EESC.EXPORT_EXEMPTION_STATUS_CODE = EE.EXPORT_EXEMPTION_STATUS_CODE
       LEFT JOIN EXPORT_SCHEDULE ES
@@ -108,33 +131,18 @@ public class ExemptionRepository extends OracleRepositorySupport {
         ON EO.EXEMPTION_NUMBER = EE.EXEMPTION_NUMBER
       """;
   private static final String COUNT_EXEMPTIONS =
-      """
+      "WITH "
+          + CANONICAL_EXEMPTION_APPLICATION_CTE
+          + """
       SELECT COUNT(*)
-      FROM (
-        SELECT DISTINCT
-          EE.EXEMPTION_NUMBER,
-          CASE
-            WHEN EE.EXPORT_EXEMPTION_TYPE_CODE NOT IN ('B', 'O')
-              THEN COALESCE(EEA.AGENT_CLIENT_NUMBER, '')
-            ELSE ''
-          END AS AGENT_CLIENT_NUMBER,
-          CASE
-            WHEN EE.EXPORT_EXEMPTION_TYPE_CODE NOT IN ('B', 'O')
-              THEN COALESCE(EEA.OWNER_CLIENT_NUMBER, '')
-            ELSE ''
-          END AS OWNER_CLIENT_NUMBER,
-          CASE
-            WHEN EE.EXPORT_EXEMPTION_TYPE_CODE NOT IN ('B', 'O')
-              THEN ES.ADVERTISING_DATE
-            ELSE NULL
-          END AS ADVERTISING_DATE
-        FROM EXPORT_EXEMPTION EE
-        LEFT JOIN EXPORT_EXEMPTION_APPLICATION EEA
-          ON EEA.EXEMPTION_NUMBER = EE.EXEMPTION_NUMBER
-        INNER JOIN EXPORT_EXEMPTION_STATUS_CODE EESC
-          ON EESC.EXPORT_EXEMPTION_STATUS_CODE = EE.EXPORT_EXEMPTION_STATUS_CODE
-        LEFT JOIN EXPORT_SCHEDULE ES
-          ON ES.EXPORT_SCHEDULE_ID = EEA.EXPORT_SCHEDULE_ID
+      FROM EXPORT_EXEMPTION EE
+      LEFT JOIN CANONICAL_EXEMPTION_APPLICATION EEA
+        ON EEA.EXEMPTION_NUMBER = EE.EXEMPTION_NUMBER
+       AND EEA.CANONICAL_RANK = 1
+      INNER JOIN EXPORT_EXEMPTION_STATUS_CODE EESC
+        ON EESC.EXPORT_EXEMPTION_STATUS_CODE = EE.EXPORT_EXEMPTION_STATUS_CODE
+      LEFT JOIN EXPORT_SCHEDULE ES
+        ON ES.EXPORT_SCHEDULE_ID = EEA.EXPORT_SCHEDULE_ID
       """;
   private static final String FIND_EXEMPTION_BY_NUMBER =
       LEXIS_GROUP_5_PACKAGE + "FIND_EXEMPTION_BY_NUMBER(?,?)";
@@ -224,7 +232,7 @@ public class ExemptionRepository extends OracleRepositorySupport {
 
   public Page<ExemptionSearchResultDto> search(
       ExemptionSearchCriteria criteria, Integer knownTotal) {
-    DirectSql countSqlWhere = buildSearchWhere(criteria, ")");
+    DirectSql countSqlWhere = buildSearchWhere(criteria, "");
     DirectSql pageSqlWhere = buildSearchWhere(criteria, buildSearchOrder(criteria.sortField()));
     int totalElements =
         knownTotal == null
@@ -240,7 +248,7 @@ public class ExemptionRepository extends OracleRepositorySupport {
   }
 
   public int count(ExemptionSearchCriteria criteria) {
-    return queryDirectCount(COUNT_EXEMPTIONS, buildSearchWhere(criteria, ")"));
+    return queryDirectCount(COUNT_EXEMPTIONS, buildSearchWhere(criteria, ""));
   }
 
   private DirectSql buildSearchWhere(ExemptionSearchCriteria criteria, String suffix) {
@@ -287,78 +295,7 @@ public class ExemptionRepository extends OracleRepositorySupport {
     if (criteria.regionNumbers() != null && !criteria.regionNumbers().isEmpty()) {
       addRegionFilter(where, criteria.regionNumbers(), criteria.includeBlanketOic());
     }
-    addCanonicalApplicationFilter(where, criteria);
-
     return where.build(suffix);
-  }
-
-  private void addCanonicalApplicationFilter(
-      DirectSqlBuilder where, ExemptionSearchCriteria criteria) {
-    StringBuilder clause =
-        new StringBuilder(
-            """
-             AND (
-               EEA.APPLICATION_NUMBER IS NULL
-               OR EEA.APPLICATION_NUMBER = (
-                 SELECT MAX(CANON_EEA.APPLICATION_NUMBER)
-                          KEEP (
-                            DENSE_RANK FIRST
-                            ORDER BY CANON_ES.ADVERTISING_DATE DESC NULLS LAST,
-                                     CANON_EEA.APPLICATION_NUMBER DESC
-                          )
-                 FROM EXPORT_EXEMPTION_APPLICATION CANON_EEA
-                 LEFT JOIN EXPORT_PACKAGE CANON_EP
-                   ON CANON_EP.APPLICATION_NUMBER = CANON_EEA.APPLICATION_NUMBER
-                 LEFT JOIN EXPORT_SCHEDULE CANON_ES
-                   ON CANON_ES.EXPORT_SCHEDULE_ID = CANON_EEA.EXPORT_SCHEDULE_ID
-                 WHERE CANON_EEA.EXEMPTION_NUMBER = EE.EXEMPTION_NUMBER
-            """);
-    List<Object> bindValues = new ArrayList<>();
-
-    String applicationNumber = trim(criteria.applicationNumber());
-    if (applicationNumber != null) {
-      clause.append(" AND TO_CHAR(CANON_EEA.APPLICATION_NUMBER) LIKE '%' || ? || '%'");
-      bindValues.add(applicationNumber);
-    }
-
-    String packageNumber = trim(criteria.packageNumber());
-    if (packageNumber != null) {
-      clause.append(" AND CANON_EP.PACKAGE_NUMBER LIKE '%' || ? || '%'");
-      bindValues.add(packageNumber);
-    }
-
-    String ownerClientNumber = trim(criteria.ownerClientNumber());
-    if (ownerClientNumber != null) {
-      clause.append(" AND CANON_EEA.OWNER_CLIENT_NUMBER LIKE '%' || ? || '%'");
-      bindValues.add(ownerClientNumber);
-    }
-
-    String applicantClientNumber = trim(criteria.applicantClientNumber());
-    if (applicantClientNumber != null) {
-      clause
-          .append(" AND (CANON_EEA.AGENT_CLIENT_NUMBER LIKE '%' || ? || '%' ")
-          .append("OR CANON_EEA.OWNER_CLIENT_NUMBER LIKE '%' || ? || '%'");
-      if (!criteria.includeBlanketOic()) {
-        clause.append(" AND CANON_EEA.AGENT_CLIENT_NUMBER IS NULL");
-      } else {
-        clause.append(" OR EE.EXPORT_EXEMPTION_TYPE_CODE = 'B'");
-      }
-      clause.append(")");
-      bindValues.add(applicantClientNumber);
-      bindValues.add(applicantClientNumber);
-    }
-
-    if (criteria.listingFromDate() != null) {
-      clause.append(" AND CANON_ES.ADVERTISING_DATE >= ?");
-      bindValues.add(java.sql.Date.valueOf(criteria.listingFromDate()));
-    }
-    if (criteria.listingToDate() != null) {
-      clause.append(" AND CANON_ES.ADVERTISING_DATE <= ?");
-      bindValues.add(java.sql.Date.valueOf(criteria.listingToDate()));
-    }
-
-    clause.append("))");
-    where.addRawWithBinds(clause.toString(), bindValues.toArray());
   }
 
   private ExemptionSearchResultDto mapSearchResult(ResultSet rs) throws SQLException {

@@ -1015,7 +1015,13 @@ const ProvincialExemptionPage = () => {
         </section>
       </Column>
 
-      <Column sm={4} md={8} lg={16} hidden={!hasSearchQuery}>
+      <Column
+        sm={4}
+        md={8}
+        lg={16}
+        hidden={!hasSearchQuery}
+        style={{ display: hasSearchQuery ? undefined : 'none' }}
+      >
         <section
           className="legacy-search-section legacy-search-section--results"
           aria-label="Search results"
