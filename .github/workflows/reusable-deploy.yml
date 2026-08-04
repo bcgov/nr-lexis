@@ -203,7 +203,6 @@ jobs:
             -p MAX_CPU="${{ inputs.backend_cpu_limit }}"
             -p MAX_MEM="${{ inputs.backend_memory_limit }}"
             -p AWS_COGNITO_ISSUER_URI="${{ vars.AWS_COGNITO_ISSUER_URI }}"
-            -p COGNITO_USERINFO_URI="${{ vars.COGNITO_USERINFO_URI }}"
             -p KEYCLOAK_ISSUER_URI="${{ vars.KEYCLOAK_ISSUER_URI }}"
             -p ALLOWED_ORIGINS="${{ vars.ALLOWED_ORIGINS || 'https://openapi.apps.gov.bc.ca' }}"
             -p DATABASE_HOST="$DATABASE_HOST"

@@ -90,8 +90,6 @@ lexis:
     region-rni-address: ${LEXIS_MAIL_REGION_RNI_ADDRESS:}
     region-rsi-address: ${LEXIS_MAIL_REGION_RSI_ADDRESS:}
   auth:
-    cognito:
-      userinfo-uri: ${COGNITO_USERINFO_URI:}
     keycloak:
       # Optional second JWT issuer for machine-to-machine clients such as NEXCOL.
       issuer-uri: ${KEYCLOAK_ISSUER_URI:}
