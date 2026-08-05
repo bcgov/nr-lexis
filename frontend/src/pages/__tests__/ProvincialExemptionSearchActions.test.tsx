@@ -669,30 +669,6 @@ describe('Provincial Exemption Search Actions', () => {
     ).not.toBeInTheDocument()
   })
 
-  it('keeps bulk approval controls hidden for application approvers like legacy', async () => {
-    mockedUseAuth.mockReturnValue(
-      createTestAuthContext({
-        capabilities: createTestCapabilities({
-          roles: ['LEXIS_APPLICATION_APPROVER'],
-        }),
-        canPerform: (action: string) =>
-          action === 'approveExemption' || action === '/createExemption',
-      }),
-    )
-
-    renderPage()
-    await screen.findByText('EX-1001')
-
-    expect(screen.getByRole('link', { name: 'Add Exemption' })).toBeInTheDocument()
-    expect(screen.queryByRole('checkbox', { name: 'Select EX-1001' })).not.toBeInTheDocument()
-    expect(
-      screen.queryByRole('checkbox', { name: 'Select all rows on this page' }),
-    ).not.toBeInTheDocument()
-    expect(
-      screen.queryByRole('button', { name: 'Approve Selected Exemption' }),
-    ).not.toBeInTheDocument()
-  })
-
   it('does not link NEW exemptions for provincial submitters', async () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({

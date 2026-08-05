@@ -2325,14 +2325,14 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
-  void sessionCanPerformActionShouldAllowApproveExemptionForApplicationApprover()
+  void sessionCanPerformActionShouldRejectApproveExemptionForApplicationApprover()
       throws Exception {
     mockMvc.perform(
             get("/api/lexis/session/canPerformAction")
                 .param("action", "approveExemption")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_APPLICATION_APPROVER"))))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.granted").value(true));
+        .andExpect(jsonPath("$.granted").value(false));
   }
 
   @Test

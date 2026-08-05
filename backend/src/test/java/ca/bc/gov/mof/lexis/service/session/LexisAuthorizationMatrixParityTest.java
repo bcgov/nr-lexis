@@ -249,7 +249,6 @@ class LexisAuthorizationMatrixParityTest {
             "/editCompletedApplications",
             "/createExemption",
             "/permitsReview",
-            "approveExemption",
             "createApplication",
             "createOffer",
             "createPermit",
@@ -267,7 +266,8 @@ class LexisAuthorizationMatrixParityTest {
             "/approvedExemptionReport",
             "/lexisAgentAdmin",
             "/lexisFILAdmin",
-            "/lexisPolicyAdmin");
+            "/lexisPolicyAdmin",
+            "approveExemption");
   }
 
   @Test

@@ -145,7 +145,6 @@ lexis:
         - "/feeReport"
         - "/tenureReport"
         - "mofrListing"
-        - "approveExemption"
         - "createApplication"
         - "createOffer"
         - "createPermit"
