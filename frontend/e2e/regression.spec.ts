@@ -1723,28 +1723,7 @@ test.describe('TEST IDIR admin regression', () => {
       `/federal?applicationNumber=${missingApplicationNumber}`,
       /federal application search/i,
     )
-    const provincialSection = page.locator(sideNavSection('Provincial'))
-    const applicationsLink = provincialSection.getByRole('link', {
-      name: 'Applications',
-      exact: true,
-    })
-    const expandSideNavigation = page.getByRole('button', {
-      name: 'Expand side navigation',
-      exact: true,
-    })
-    if (await expandSideNavigation.isVisible()) {
-      await expandSideNavigation.click()
-    }
-    const provincialSectionToggle = provincialSection.getByRole('button', {
-      name: 'Provincial',
-      exact: true,
-    })
-    if ((await provincialSectionToggle.getAttribute('aria-expanded')) === 'false') {
-      await provincialSectionToggle.click()
-    }
-    await expect(provincialSectionToggle).toHaveAttribute('aria-expanded', 'true')
-    await expect(applicationsLink).toBeVisible()
-    await applicationsLink.click()
+    await expectAccessiblePage(page, '/provincial/application', /provincial application search/i)
 
     await expect.poll(() => new URL(page.url()).pathname).toBe('/provincial/application')
     await expect
