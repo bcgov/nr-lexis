@@ -2325,6 +2325,17 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
+  void sessionCanPerformActionShouldRejectApproveExemptionForApplicationApprover()
+      throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/session/canPerformAction")
+                .param("action", "approveExemption")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_APPLICATION_APPROVER"))))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.granted").value(false));
+  }
+
+  @Test
   void legacySummaryRouteShouldAllowProvincialSubmitter() throws Exception {
     mockMvc.perform(
             post("/api/lexis/summary")

@@ -827,6 +827,7 @@ const ProvincialExemptionCreatePage = () => {
                 id="approvalDate"
                 labelText="Approval date (YYYY-MM-DD)"
                 value={form.approvalDate}
+                disabled={normalizedTypeCode === 'M'}
                 invalid={!!fieldError('approvalDate')}
                 invalidText={fieldError('approvalDate')}
                 onBlur={() => markFieldTouched('approvalDate')}

@@ -166,16 +166,18 @@ public class PermitRepository extends OracleRepositorySupport {
               + "AND ESI.EXPORT_SALES_INVOICE_NUMBER LIKE '%' || ? || '%')",
           invoiceNumber);
     }
-    where.addLike("EPD.CLIENT_NUMBER", criteria.ownerClientNumber());
+    // Preserve the deployed legacy search wiring: the applicant filter targets the stored
+    // client number, while the owner filter targets the displayed applicant (agent or client).
+    where.addLike("EPD.CLIENT_NUMBER", criteria.applicantClientNumber());
 
-    String applicantClientNumber = trim(criteria.applicantClientNumber());
-    if (applicantClientNumber != null) {
+    String ownerClientNumber = trim(criteria.ownerClientNumber());
+    if (ownerClientNumber != null) {
       where.addRawWithBinds(
           " AND (EPD.AGENT_NUMBER LIKE '%' || ? || '%' "
               + "OR (EPD.CLIENT_NUMBER LIKE '%' || ? || '%' "
               + "AND EPD.AGENT_NUMBER IS NULL))",
-          applicantClientNumber,
-          applicantClientNumber);
+          ownerClientNumber,
+          ownerClientNumber);
     }
 
     String accessClientNumber = trim(criteria.accessClientNumber());
