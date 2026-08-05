@@ -1829,11 +1829,6 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
             firstNonNull(submittedOicRequestVolume, current.oicRequestVolume()),
             mergeSubmittedText(request.packageProductType(), current.productTypeCode()));
 
-    if (EXPORT_PERMIT_STATUS_EXPIRED.equalsIgnoreCase(updated.permitStatusCode())) {
-      return failureMutationResponse(
-          List.of("Permit expiry is managed by the expiry process."), permitNumber);
-    }
-
     List<String> oicBindingErrors = new ArrayList<>();
     validateOicApplicationBinding(
         targetExemption, current.oicApplicationNumber(), true, oicBindingErrors);

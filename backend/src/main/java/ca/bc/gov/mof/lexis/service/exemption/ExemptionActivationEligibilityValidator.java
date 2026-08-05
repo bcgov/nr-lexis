@@ -50,6 +50,8 @@ public class ExemptionActivationEligibilityValidator {
     validateAuthoritativeCodes(exemptionTypeCode, exemptionStatusCode, errors);
     validateDates(candidate.approvalDate(), candidate.expiryDate(), errors);
 
+    // Legacy exempts OIC/BOIC activation from the approval role check. The dedicated permission
+    // applies only when a Ministerial exemption transitions to Active.
     if (!oicLike
         && candidate.activationTransition()
         && !candidate.canApproveExemption()) {
