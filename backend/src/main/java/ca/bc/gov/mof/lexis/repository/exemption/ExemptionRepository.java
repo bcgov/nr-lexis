@@ -202,7 +202,7 @@ public class ExemptionRepository extends OracleRepositorySupport {
 
   public List<CodeNameDto> loadExemptionStatusOptions() {
     return loadCodeNameOptionsRequired(FIND_ALL_EXEMPTION_STATUS_CODES).stream()
-        .filter(option -> option.code() != null && !"EXP".equalsIgnoreCase(option.code()))
+        .filter(option -> option.code() != null)
         .toList();
   }
 

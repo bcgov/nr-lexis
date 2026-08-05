@@ -3,6 +3,8 @@ import {
   fetchApplicationClientData,
   fetchApplicationClientContacts,
   fetchApplicationClientLocations,
+  fetchExemptionClientData,
+  fetchExemptionClientLocations,
 } from '@/service/application-client-lookup-service'
 
 const { getCachedDataMock } = vi.hoisted(() => ({
@@ -140,6 +142,48 @@ describe('application-client-lookup-service', () => {
       email: 'contact@example.test',
       notfound: '',
     })
+  })
+
+  it('uses exemption-authorized endpoints for exemption client details', async () => {
+    getCachedDataMock
+      .mockResolvedValueOnce({
+        clientNumber: '00011111',
+        companyName: 'Example Lumber',
+      })
+      .mockResolvedValueOnce([
+        { locationCode: '03', locationName: '03 - WOODLANDS', selected: true },
+      ])
+
+    await fetchExemptionClientData(' 00011111 ', ' 03 ')
+    await fetchExemptionClientLocations(' 00011111 ')
+
+    expect(getCachedDataMock).toHaveBeenNthCalledWith(
+      1,
+      '/lexis/rpc/exemption-details/client-data',
+      {
+        params: {
+          clientLocationCode: '03',
+          clientNumber: '00011111',
+        },
+      },
+      {
+        cacheKey: 'exemption-client-data:00011111:03',
+        ttlMs: 300000,
+      },
+    )
+    expect(getCachedDataMock).toHaveBeenNthCalledWith(
+      2,
+      '/lexis/rpc/exemption-details/client-locations',
+      {
+        params: {
+          clientNumber: '00011111',
+        },
+      },
+      {
+        cacheKey: 'exemption-client-locations:00011111',
+        ttlMs: 300000,
+      },
+    )
   })
 
   it('does not call the client data API without a client number and location code', async () => {

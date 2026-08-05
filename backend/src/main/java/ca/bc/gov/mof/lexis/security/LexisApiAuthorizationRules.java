@@ -118,7 +118,7 @@ final class LexisApiAuthorizationRules {
           Map.entry("checkExemptionNumber", ACTION_SAVE_EXEMPTION),
           Map.entry("addApplicationToExemption", ACTION_SAVE_EXEMPTION),
           Map.entry("removeApplicationFromExemption", ACTION_SAVE_EXEMPTION),
-          Map.entry("addExemption", ACTION_SAVE_EXEMPTION),
+          Map.entry("addExemption", ACTION_CREATE_EXEMPTION),
           Map.entry("updateExemption", ACTION_SAVE_EXEMPTION),
           Map.entry("approveExemptions", ACTION_APPROVE_EXEMPTION),
           Map.entry("sendExemptionApprovalEmail", ACTION_APPROVE_EXEMPTION),

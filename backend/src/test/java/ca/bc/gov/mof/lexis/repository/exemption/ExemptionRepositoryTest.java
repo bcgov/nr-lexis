@@ -10,6 +10,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionAccessDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchResultDto;
@@ -36,6 +37,23 @@ import org.springframework.jdbc.core.RowMapper;
 
 @DisplayName("Unit Test | ExemptionRepository")
 class ExemptionRepositoryTest {
+
+  @Test
+  void exemptionStatusOptionsShouldIncludeExpired() {
+    ExemptionRepository repository =
+        new ExemptionRepository(null) {
+          @Override
+          protected List<CodeNameDto> loadCodeNameOptionsRequired(String procedureSignature) {
+            return List.of(
+                new CodeNameDto("NEW", "New"),
+                new CodeNameDto("EXP", "Expired"));
+          }
+        };
+
+    assertThat(repository.loadExemptionStatusOptions())
+        .extracting(CodeNameDto::code)
+        .containsExactly("NEW", "EXP");
+  }
 
   @Test
   @SuppressWarnings("unchecked")

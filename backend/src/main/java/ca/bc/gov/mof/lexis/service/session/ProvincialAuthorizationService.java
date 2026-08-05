@@ -737,16 +737,22 @@ public class ProvincialAuthorizationService {
   }
 
   private boolean canViewBlanketOic(Set<String> roles) {
-    return !roles.contains(ROLE_EXEMPTION_APPROVER)
-        || roles.contains(ROLE_ADMIN)
-        || roles.contains(ROLE_APPLICATION_APPROVER)
-        || roles.contains(ROLE_READ_ONLY)
-        || roles.contains(ROLE_PROVINCIAL_SUBMITTER);
+    return !isPureExemptionApprover(roles);
   }
 
   private boolean isOrgUnitRestricted(Set<String> roles, OrgUnitSurface surface) {
-    // Current FAM staff roles are global and are not organization-unit restricted.
-    return false;
+    // Legacy restricts Exemption Approver search results to the user's organization units while
+    // leaving direct detail/edit access available. Broader mixed-role identities retain their
+    // broader scope.
+    return surface == OrgUnitSurface.EXEMPTION_SEARCH && isPureExemptionApprover(roles);
+  }
+
+  private boolean isPureExemptionApprover(Set<String> roles) {
+    return roles.contains(ROLE_EXEMPTION_APPROVER)
+        && !roles.contains(ROLE_ADMIN)
+        && !roles.contains(ROLE_APPLICATION_APPROVER)
+        && !roles.contains(ROLE_READ_ONLY)
+        && !roles.contains(ROLE_PROVINCIAL_SUBMITTER);
   }
 
   private boolean canAccessOrgUnits(

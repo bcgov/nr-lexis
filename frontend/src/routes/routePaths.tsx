@@ -262,8 +262,7 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
   {
     path: '/provincial/application/:applicationNumber',
     id: 'Provincial Application Details',
-    requiredActions: ['/applicationSearch', '/applicationDetails'],
-    requiredActionsMatch: 'all',
+    requiredActions: ['/applicationDetails'],
     element: (
       <Layout>
         <ProvincialApplicationDetailsPage />
