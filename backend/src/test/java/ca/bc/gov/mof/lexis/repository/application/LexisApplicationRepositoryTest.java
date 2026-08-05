@@ -409,10 +409,11 @@ class LexisApplicationRepositoryTest {
     assertThat(results.getContent())
         .extracting(
             LexisApplicationSearchResultDto::application,
-            LexisApplicationSearchResultDto::showCheckbox)
+            LexisApplicationSearchResultDto::showCheckbox,
+            LexisApplicationSearchResultDto::exemptionTypeDescription)
         .containsExactly(
-            org.assertj.core.groups.Tuple.tuple(900101L, true),
-            org.assertj.core.groups.Tuple.tuple(900102L, false));
+            org.assertj.core.groups.Tuple.tuple(900101L, true, "Ministerial"),
+            org.assertj.core.groups.Tuple.tuple(900102L, false, "Ministerial"));
     assertThat(repository.cursorCalls()).isZero();
     assertThat(repository.databaseCalls()).isEqualTo(2);
   }
@@ -441,7 +442,17 @@ class LexisApplicationRepositoryTest {
 
   private static LexisApplicationSearchResultDto applicationResult(long applicationNumber) {
     return new LexisApplicationSearchResultDto(
-        applicationNumber, "New", "Client", "00000001", null, null, "Region", 100d, true, false);
+        applicationNumber,
+        "New",
+        "Client",
+        "00000001",
+        null,
+        null,
+        "Region",
+        100d,
+        true,
+        false,
+        null);
   }
 
   private static ResultSet applicationSearchResultSet(long applicationNumber, long activeOffer)
@@ -454,6 +465,7 @@ class LexisApplicationRepositoryTest {
     when(resultSet.getString("EXPORT_PRODUCT_TYPE_CODE")).thenReturn("H");
     when(resultSet.getString("OWNER_CLIENT_NUMBER")).thenReturn("00000001");
     when(resultSet.getString("STATUS_DESCRIPTION")).thenReturn("Approved");
+    when(resultSet.getString("EXEMPTION_TYPE_DESCRIPTION")).thenReturn("Ministerial");
     return resultSet;
   }
 

@@ -354,7 +354,8 @@ public class LexisApplicationController {
         row.region(),
         row.applicationVolume(),
         row.showCheckbox(),
-        true);
+        true,
+        row.exemptionTypeDescription());
   }
 
   private String auditUser(Authentication authentication) {

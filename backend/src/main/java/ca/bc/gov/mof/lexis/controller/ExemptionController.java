@@ -72,7 +72,11 @@ public class ExemptionController {
     return ResponseEntity.ok(
         new ExemptionSearchOptionsDto(
             options.exemptionTypes().stream()
-                .filter(option -> option.code() == null || !"B".equalsIgnoreCase(option.code()))
+                .filter(
+                    option ->
+                        option.code() == null
+                            || (!"B".equalsIgnoreCase(option.code())
+                                && !"O".equalsIgnoreCase(option.code())))
                 .toList(),
             options.exemptionStatuses(),
             options.regions()));
@@ -116,6 +120,12 @@ public class ExemptionController {
       applicantClientNumber = scopedClientNumber;
       ownerClientNumber = null;
     }
+    boolean canSearchOicExemptions =
+        provincialAuthorizationService.canViewBlanketOic(authentication);
+    if (!canSearchOicExemptions) {
+      exemptionType = "M";
+      exemptionTypeCode = null;
+    }
     OrgUnitConstraint orgUnits =
         provincialAuthorizationService.constrainOrgUnits(
             authentication, regionNumbers, OrgUnitSurface.EXEMPTION_SEARCH);
@@ -143,7 +153,7 @@ public class ExemptionController {
             ownerClientNumber,
             regionNumbers,
             scopedClientNumber != null,
-            !provincialAuthorizationService.canViewBlanketOic(authentication),
+            !canSearchOicExemptions,
             scopedClientNumber != null,
             sortField,
             page,
@@ -192,6 +202,12 @@ public class ExemptionController {
       applicantClientNumber = scopedClientNumber;
       ownerClientNumber = null;
     }
+    boolean canSearchOicExemptions =
+        provincialAuthorizationService.canViewBlanketOic(authentication);
+    if (!canSearchOicExemptions) {
+      exemptionType = "M";
+      exemptionTypeCode = null;
+    }
     OrgUnitConstraint orgUnits =
         provincialAuthorizationService.constrainOrgUnits(
             authentication, regionNumbers, OrgUnitSurface.EXEMPTION_SEARCH);
@@ -219,7 +235,7 @@ public class ExemptionController {
             ownerClientNumber,
             regionNumbers,
             scopedClientNumber != null,
-            !provincialAuthorizationService.canViewBlanketOic(authentication),
+            !canSearchOicExemptions,
             scopedClientNumber != null,
             null,
             0,

@@ -274,7 +274,7 @@ class LexisAuthorizationMatrixParityTest {
   void exemptionApproverShouldManageExemptionsWithoutFederalAccess() {
     assertThat(authorizationService.resolveGrantedActions(List.of("LEXIS_EXEMPTION_APPROVER")))
         .contains(
-            "/createExemption",
+            "/applicationDetails",
             "/exemptionSearch",
             "/exemptionDetails",
             "approveExemption",
@@ -282,7 +282,7 @@ class LexisAuthorizationMatrixParityTest {
         .doesNotContain(
             "/applicationsReview",
             "/applicationSearch",
-            "/applicationDetails",
+            "/createExemption",
             "/offersSearch",
             "/permitSearch",
             "createApplication",

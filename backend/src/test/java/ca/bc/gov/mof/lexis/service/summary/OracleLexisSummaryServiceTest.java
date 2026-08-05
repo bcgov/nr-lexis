@@ -3,6 +3,7 @@ package ca.bc.gov.mof.lexis.service.summary;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
@@ -80,7 +81,8 @@ class OracleLexisSummaryServiceTest {
                         "R2",
                         95.0,
                         false,
-                        false)),
+                        false,
+                        "Ministerial")),
                 1,
                 0,
                 10));
@@ -116,7 +118,6 @@ class OracleLexisSummaryServiceTest {
                     List.of(new LexisApplicationDetailDto.LexisPackageDto("PKG-903", 95.0, 28)),
                     List.of(),
                     List.of())));
-
     SummaryApplicationsResponseDto response = service.applications("00077881", 0, 10, null);
 
     ArgumentCaptor<LexisApplicationSearchCriteria> criteriaCaptor =
@@ -134,8 +135,9 @@ class OracleLexisSummaryServiceTest {
     assertThat(response.results()).hasSize(1);
     assertThat(response.results().get(0).application()).isEqualTo(1000456L);
     assertThat(response.results().get(0).reason()).isEqualTo("ER02");
-    assertThat(response.results().get(0).exemptionType()).isEqualTo("LUM");
+    assertThat(response.results().get(0).exemptionType()).isEqualTo("Ministerial");
     assertThat(response.results().get(0).packageNumberAry()).containsExactly("PKG-903");
+    verifyNoInteractions(exemptionService);
   }
 
   @Test
@@ -240,7 +242,7 @@ class OracleLexisSummaryServiceTest {
     assertThat(response.results()).hasSize(1);
     assertThat(response.results().get(0).exemption()).isEqualTo("EX-205");
     assertThat(response.results().get(0).exemptionType()).isEqualTo("Ministerial");
-    assertThat(response.results().get(0).balanceRemaining()).isEqualTo(55.0);
+    assertThat(response.results().get(0).balanceRemaining()).isEqualTo(83.0);
   }
 
   @Test

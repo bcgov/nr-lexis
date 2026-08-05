@@ -2,6 +2,7 @@ package ca.bc.gov.mof.lexis.security;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -99,15 +100,15 @@ class LexisProdRtmOnlyAuthorizationIntegrationTest {
 
     mockMvc
         .perform(
-            post("/api/lexis/rtm/emslogamv/preview")
+            multipart("/api/lexis/rtm/emslogamv/preview")
                 .with(jwt().authorities(admin)))
-        .andExpect(status().isForbidden());
+        .andExpect(status().isUnprocessableEntity());
 
     mockMvc
         .perform(
-            post("/api/lexis/rtm/emslogamv/upload")
+            multipart("/api/lexis/rtm/emslogamv/upload")
                 .with(jwt().authorities(admin)))
-        .andExpect(status().isForbidden());
+        .andExpect(status().isUnprocessableEntity());
 
     mockMvc
         .perform(
@@ -144,6 +145,18 @@ class LexisProdRtmOnlyAuthorizationIntegrationTest {
             post("/api/lexis/rtm/emslogamv/batch")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"values\":[]}")
+                .with(jwt().authorities(readOnly)))
+        .andExpect(status().isForbidden());
+
+    mockMvc
+        .perform(
+            multipart("/api/lexis/rtm/emslogamv/preview")
+                .with(jwt().authorities(readOnly)))
+        .andExpect(status().isForbidden());
+
+    mockMvc
+        .perform(
+            multipart("/api/lexis/rtm/emslogamv/upload")
                 .with(jwt().authorities(readOnly)))
         .andExpect(status().isForbidden());
   }

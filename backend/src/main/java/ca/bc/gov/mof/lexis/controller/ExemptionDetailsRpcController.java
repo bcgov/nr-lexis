@@ -645,7 +645,7 @@ public class ExemptionDetailsRpcController {
   private ResponseEntity<ExemptionPersistenceResponseDto> addExemption(
       MultiValueMap<String, String> parameters,
       Authentication authentication) {
-    if (!canPerform(authentication, LEGACY_ACTION_SAVE_EXEMPTION)) {
+    if (!canPerform(authentication, LEGACY_ACTION_CREATE_EXEMPTION)) {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
 

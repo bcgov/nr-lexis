@@ -89,7 +89,7 @@ describe('rtm-emslogamv-service', () => {
     expect(result).toEqual(expect.objectContaining({ status: 'accepted' }))
   })
 
-  it('retains the dormant AMV upload preview client contract', async () => {
+  it('uses the AMV upload preview client contract', async () => {
     postMock.mockResolvedValue({
       data: {
         status: 'accepted',
@@ -125,7 +125,7 @@ describe('rtm-emslogamv-service', () => {
     expect(result).toEqual(expect.objectContaining({ status: 'accepted', rowCount: 2 }))
   })
 
-  it('retains the dormant AMV workbook submission client contract', async () => {
+  it('uses the AMV workbook submission client contract', async () => {
     postMock.mockResolvedValue({
       data: {
         status: 'validation_failed',

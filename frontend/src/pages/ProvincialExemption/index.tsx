@@ -569,6 +569,7 @@ const ProvincialExemptionPage = () => {
     clearSelection()
     const defaultFilters = {
       ...INITIAL_FILTERS,
+      exemptionTypeCode: shouldDefaultApprovalFilters ? 'M' : INITIAL_FILTERS.exemptionTypeCode,
       region: regionOptions.map((region) => region.id),
     }
     setFilters(defaultFilters)
@@ -1153,7 +1154,6 @@ const ProvincialExemptionPage = () => {
                 pageSizes={[...SEARCH_PAGE_SIZE_OPTIONS]}
                 totalItems={results.page.totalElements}
                 onChange={({ page, pageSize: nextPageSize }) => {
-                  clearSelection()
                   setSearchParams(
                     buildSearchParams(appliedFilters, sortField, sortDirection, page, nextPageSize),
                   )

@@ -547,6 +547,7 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
             List.of());
       }
 
+      List<RtmEmsLogAmvRowDto> originalRows = new ArrayList<>(rows);
       List<RtmEmsLogAmvRowDto> uploadedRows = new ArrayList<>();
       int uploadedCount = 0;
       for (UploadTarget row : rowsToUpload) {
@@ -582,13 +583,24 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
         errors.addAll(mutationResult.errors());
       }
 
+      if (!errors.isEmpty()) {
+        rows.clear();
+        rows.addAll(originalRows);
+        return buildUploadResult(
+            RETURN_FAILURE,
+            "Upload did not complete; no values were saved.",
+            fileName,
+            fileSize,
+            rowsToUpload.size(),
+            0,
+            errors,
+            warnings,
+            List.of());
+      }
+
       return buildUploadResult(
-          errors.isEmpty() ? RETURN_SUCCESS : (uploadedCount > 0 ? RETURN_VALIDATION : RETURN_FAILURE),
-          errors.isEmpty()
-              ? "Upload completed."
-              : uploadedCount > 0
-                  ? "Upload partially completed; review the saved and failed rows."
-                  : "Upload did not complete; review the row errors.",
+          RETURN_SUCCESS,
+          "Upload completed.",
           fileName,
           fileSize,
           rowsToUpload.size(),

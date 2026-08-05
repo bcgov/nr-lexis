@@ -103,7 +103,7 @@ class ExemptionControllerTest {
   }
 
   @Test
-  void optionsShouldHideBlanketOicFromPureExemptionApprover() {
+  void optionsShouldHideAllOicTypesFromPureExemptionApprover() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(provincialAuthorizationService.canViewBlanketOic(authentication)).thenReturn(false);
     when(service.searchOptions())
@@ -111,6 +111,7 @@ class ExemptionControllerTest {
             new ExemptionSearchOptionsDto(
                 List.of(
                     new CodeNameDto("M", "Ministerial"),
+                    new CodeNameDto("O", "Order in Council"),
                     new CodeNameDto("B", "Blanket OIC")),
                 List.of(new CodeNameDto("NEW", "New")),
                 List.of()));
@@ -270,7 +271,7 @@ class ExemptionControllerTest {
   }
 
   @Test
-  void searchShouldExcludeBlanketOicForPureExemptionApprover() {
+  void searchShouldForceMinisterialTypeForPureExemptionApprover() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(provincialAuthorizationService.canViewBlanketOic(authentication)).thenReturn(false);
     when(service.search(any(ExemptionSearchCriteria.class)))
@@ -280,7 +281,7 @@ class ExemptionControllerTest {
         null,
         null,
         null,
-        null,
+        "O",
         null,
         null,
         null,
@@ -303,9 +304,45 @@ class ExemptionControllerTest {
         ArgumentCaptor.forClass(ExemptionSearchCriteria.class);
     verify(service).search(criteriaCaptor.capture());
 
-    assertThat(criteriaCaptor.getValue().includeBlanketOic()).isFalse();
-    assertThat(criteriaCaptor.getValue().excludeBlanketOic()).isTrue();
-    assertThat(criteriaCaptor.getValue().broadClientMatch()).isFalse();
+    ExemptionSearchCriteria criteria = criteriaCaptor.getValue();
+    assertThat(criteria.exemptionType()).isEqualTo("M");
+    assertThat(criteria.includeBlanketOic()).isFalse();
+    assertThat(criteria.excludeBlanketOic()).isTrue();
+    assertThat(criteria.broadClientMatch()).isFalse();
+  }
+
+  @Test
+  void countShouldForceMinisterialTypeForPureExemptionApprover() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(provincialAuthorizationService.canViewBlanketOic(authentication)).thenReturn(false);
+    when(service.count(any(ExemptionSearchCriteria.class))).thenReturn(0);
+
+    controller.count(
+        null,
+        null,
+        null,
+        "O",
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        List.of(76L),
+        authentication);
+
+    ArgumentCaptor<ExemptionSearchCriteria> criteriaCaptor =
+        ArgumentCaptor.forClass(ExemptionSearchCriteria.class);
+    verify(service).count(criteriaCaptor.capture());
+
+    ExemptionSearchCriteria criteria = criteriaCaptor.getValue();
+    assertThat(criteria.exemptionType()).isEqualTo("M");
+    assertThat(criteria.excludeBlanketOic()).isTrue();
   }
 
   @Test

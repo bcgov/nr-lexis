@@ -50,8 +50,8 @@ import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { useReloadPreservedTab } from '@/pages/shared/useReloadPreservedTab'
 import { fetchProvincialExemptionDetail } from '@/service/lexis-detail-service'
 import {
-  fetchApplicationClientData,
-  fetchApplicationClientLocations,
+  fetchExemptionClientData,
+  fetchExemptionClientLocations,
   type ApplicationClientData,
   type ApplicationClientLocation,
 } from '@/service/application-client-lookup-service'
@@ -390,28 +390,16 @@ const ProvincialExemptionDetailsPage = () => {
         const [nextOwnerData, nextAgentData, nextOwnerLocations, nextAgentLocations] =
           await Promise.all([
             exemptionOwnerClientNumber && ownerClientLocationCode
-              ? fetchApplicationClientData(exemptionOwnerClientNumber, ownerClientLocationCode, {
-                  applicationNumber: linkedApplicationNumber,
-                })
+              ? fetchExemptionClientData(exemptionOwnerClientNumber, ownerClientLocationCode)
               : Promise.resolve(null),
             clientContextHasAgent && exemptionAgentClientNumber && agentClientLocationCode
-              ? fetchApplicationClientData(exemptionAgentClientNumber, agentClientLocationCode, {
-                  applicationNumber: linkedApplicationNumber,
-                })
+              ? fetchExemptionClientData(exemptionAgentClientNumber, agentClientLocationCode)
               : Promise.resolve(null),
             exemptionOwnerClientNumber
-              ? fetchApplicationClientLocations(
-                  exemptionOwnerClientNumber,
-                  'owner',
-                  linkedApplicationNumber,
-                )
+              ? fetchExemptionClientLocations(exemptionOwnerClientNumber)
               : Promise.resolve([]),
             clientContextHasAgent && exemptionAgentClientNumber
-              ? fetchApplicationClientLocations(
-                  exemptionAgentClientNumber,
-                  'agent',
-                  linkedApplicationNumber,
-                )
+              ? fetchExemptionClientLocations(exemptionAgentClientNumber)
               : Promise.resolve([]),
           ])
 

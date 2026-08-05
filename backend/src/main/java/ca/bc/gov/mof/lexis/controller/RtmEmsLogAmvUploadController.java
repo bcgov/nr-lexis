@@ -10,7 +10,6 @@ import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -22,13 +21,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
-/**
- * Retains the previous AMV workbook workflow without exposing it by default.
- * Set {@code lexis.rtm.amv.upload.enabled=true} only when the upload experience is intentionally
- * restored.
- */
+/** Exposes the AMV workbook validation, review, and atomic upload workflow. */
 @RestController
-@ConditionalOnProperty(prefix = "lexis.rtm.amv.upload", name = "enabled", havingValue = "true")
 @RequestMapping("/api/lexis/rtm")
 @Validated
 public class RtmEmsLogAmvUploadController {

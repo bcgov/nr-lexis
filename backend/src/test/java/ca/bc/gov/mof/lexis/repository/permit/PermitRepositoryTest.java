@@ -206,7 +206,7 @@ class PermitRepositoryTest {
   }
 
   @Test
-  void scopedAccessShouldMatchDirectPermitClientsAndLinkedApplicationAgents() {
+  void scopedAccessShouldUseLegacyDirectAndLinkedApplicationBranches() {
     TestPermitRepository repository = new TestPermitRepository();
     PermitSearchCriteria criteria =
         new PermitSearchCriteria(
@@ -220,7 +220,7 @@ class PermitRepositoryTest {
             "00099999",
             "00088888",
             "00012345",
-            false,
+            true,
             List.of(),
             null,
             0,
@@ -235,23 +235,62 @@ class PermitRepositoryTest {
     assertThat(searchSql)
         .contains("EPD.CLIENT_NUMBER LIKE")
         .contains("EPD.AGENT_NUMBER LIKE")
-        .contains("EPD.CLIENT_NUMBER =")
-        .contains("EPD.AGENT_NUMBER =")
-        .contains("EP_ACCESS.AGENT_CLIENT_NUMBER =")
+        .doesNotContain("EP_ACCESS");
+    assertThat(repository.pageSelectSql())
+        .contains("WITH ACCESSIBLE_PERMITS AS")
+        .contains("OWNER_PERMIT.CLIENT_NUMBER = ?")
+        .contains("AGENT_PERMIT.AGENT_NUMBER = ?")
+        .contains("EP_ACCESS.AGENT_CLIENT_NUMBER = ?")
         .doesNotContain("EP_ACCESS.OWNER_CLIENT_NUMBER =")
-        .doesNotContain("EP_ACCESS.EXPORT_JURISDICTION_CODE")
-        .doesNotContain("NOT EXISTS (SELECT 1 FROM EXPORT_EXEMPTION_APPLICATION EP_ANY")
-        .doesNotContain("EXISTS (SELECT 1 FROM EXPORT_SCALE_DETAIL");
+        .contains("EP_ACCESS.EXPORT_JURISDICTION_CODE = 'P'")
+        .contains("EP_ACCESS.EXPORT_JURISDICTION_CODE IS NULL")
+        .contains("EXISTS (\n    SELECT 1 FROM EXPORT_SCALE_DETAIL ESD_REQUIRED")
+        .contains("INNER JOIN ACCESSIBLE_PERMITS AP");
     assertThat(searchBinds)
         .containsExactly(
+            "00012345",
+            "00012345",
+            "00012345",
             "00099999",
             "00088888",
-            "00088888",
-            "00012345",
-            "00012345",
-            "00012345");
+            "00088888");
     assertThat(repository.countWhereSql()).isEqualTo(searchSql.substring(0, searchSql.indexOf(" ORDER BY")));
     assertThat(repository.countBindValues()).isEqualTo(searchBinds);
+    assertThat(repository.countSelectSql())
+        .contains("WITH ACCESSIBLE_PERMITS AS")
+        .contains("INNER JOIN ACCESSIBLE_PERMITS AP");
+    assertThat(repository.countCalls()).isEqualTo(2);
+    assertThat(repository.pageCalls()).isEqualTo(1);
+  }
+
+  @Test
+  void scopedFeeAccessShouldNotRequireScaleOnTheLinkedApplicationBranch() {
+    TestPermitRepository repository = new TestPermitRepository();
+
+    repository.search(
+        new PermitSearchCriteria(
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            "00012345",
+            false,
+            List.of(),
+            null,
+            0,
+            10));
+
+    assertThat(repository.pageSelectSql())
+        .contains("WITH ACCESSIBLE_PERMITS AS")
+        .contains("EP_ACCESS.EXPORT_JURISDICTION_CODE = 'P'")
+        .doesNotContain("EXPORT_SCALE_DETAIL ESD_REQUIRED");
+    assertThat(repository.bindValues())
+        .containsExactly("00012345", "00012345", "00012345");
   }
 
   @Test

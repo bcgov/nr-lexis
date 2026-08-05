@@ -808,6 +808,21 @@ class ExemptionDetailsRpcControllerTest {
   }
 
   @Test
+  void addExemptionShouldRequireCreateAuthorityInsteadOfExistingExemptionSaveAuthority() {
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken("idir\\exemption-approver", "n/a");
+    List<String> roles = List.of("LEXIS_EXEMPTION_APPROVER");
+    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(roles);
+    when(authorizationService.canPerformAction(roles, "/createExemption")).thenReturn(false);
+
+    ResponseEntity<ExemptionDetailsRpcController.ExemptionPersistenceResponseDto> response =
+        controller.addExemptionLegacy(new LinkedMultiValueMap<>(), authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    verifyNoInteractions(service);
+  }
+
+  @Test
   void addExemptionLegacyShouldMapAliasesAndReturnPersistencePayload() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     controller.setProvincialAuthorizationService(provincialAuthorizationService);
@@ -835,12 +850,12 @@ class ExemptionDetailsRpcControllerTest {
 
     TestingAuthenticationToken authentication = new TestingAuthenticationToken("idir\\jsmith", "n/a");
     when(principalService.resolvePrincipalName(authentication)).thenReturn("IDIR\\JSMITH");
-    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(List.of("LEXIS_EXEMPTION_APPROVER"));
-    when(authorizationService.canPerformAction(List.of("LEXIS_EXEMPTION_APPROVER"), "saveExemption"))
+    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(List.of("LEXIS_APPLICATION_APPROVER"));
+    when(authorizationService.canPerformAction(List.of("LEXIS_APPLICATION_APPROVER"), "/createExemption"))
         .thenReturn(true);
-    when(authorizationService.canPerformAction(List.of("LEXIS_EXEMPTION_APPROVER"), "viewFederalApplication"))
+    when(authorizationService.canPerformAction(List.of("LEXIS_APPLICATION_APPROVER"), "viewFederalApplication"))
         .thenReturn(true);
-    when(authorizationService.canPerformAction(List.of("LEXIS_EXEMPTION_APPROVER"), "approveExemption"))
+    when(authorizationService.canPerformAction(List.of("LEXIS_APPLICATION_APPROVER"), "approveExemption"))
         .thenReturn(true);
     when(provincialAuthorizationService.canViewBlanketOic(authentication)).thenReturn(true);
     ResponseEntity<ExemptionDetailsRpcController.ExemptionPersistenceResponseDto> response =
@@ -887,7 +902,7 @@ class ExemptionDetailsRpcControllerTest {
         new TestingAuthenticationToken("idir\\approver", "n/a");
     List<String> roles = List.of("LEXIS_APPLICATION_APPROVER");
     when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(roles);
-    when(authorizationService.canPerformAction(roles, "saveExemption")).thenReturn(true);
+    when(authorizationService.canPerformAction(roles, "/createExemption")).thenReturn(true);
     when(authorizationService.canPerformAction(roles, "viewFederalApplication"))
         .thenReturn(true);
     doThrow(new AccessDeniedException("outside org scope"))
@@ -918,7 +933,7 @@ class ExemptionDetailsRpcControllerTest {
         new TestingAuthenticationToken("idir\\jsmith", "n/a");
     List<String> roles = List.of("LEXIS_APPLICATION_APPROVER");
     when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(roles);
-    when(authorizationService.canPerformAction(roles, "saveExemption")).thenReturn(true);
+    when(authorizationService.canPerformAction(roles, "/createExemption")).thenReturn(true);
     MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
     params.add("applications", "1000456,not-a-number");
 
@@ -940,7 +955,7 @@ class ExemptionDetailsRpcControllerTest {
     when(sessionService.parseRolesFromPrincipal(authentication))
         .thenReturn(List.of("LEXIS_EXEMPTION_APPROVER"));
     when(authorizationService.canPerformAction(
-            List.of("LEXIS_EXEMPTION_APPROVER"), "saveExemption"))
+            List.of("LEXIS_EXEMPTION_APPROVER"), "/createExemption"))
         .thenReturn(true);
 
     MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
@@ -964,7 +979,7 @@ class ExemptionDetailsRpcControllerTest {
     when(sessionService.parseRolesFromPrincipal(authentication))
         .thenReturn(List.of("LEXIS_APPLICATION_APPROVER"));
     when(authorizationService.canPerformAction(
-            List.of("LEXIS_APPLICATION_APPROVER"), "saveExemption"))
+            List.of("LEXIS_APPLICATION_APPROVER"), "/createExemption"))
         .thenReturn(true);
     when(editLockService.snapshot(1000456L, "IDIR\\JSMITH", false))
         .thenReturn(new ApplicationEditLockDto(false, false, null, null, null));
@@ -1001,7 +1016,7 @@ class ExemptionDetailsRpcControllerTest {
     List<String> roles = List.of("LEXIS_APPLICATION_APPROVER");
     when(principalService.resolvePrincipalName(authentication)).thenReturn("IDIR\\SUBMITTER");
     when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(roles);
-    when(authorizationService.canPerformAction(roles, "saveExemption")).thenReturn(true);
+    when(authorizationService.canPerformAction(roles, "/createExemption")).thenReturn(true);
     when(authorizationService.canPerformAction(roles, "viewFederalApplication")).thenReturn(false);
     when(authorizationService.canPerformAction(roles, "approveExemption")).thenReturn(false);
     when(service.addExemption(

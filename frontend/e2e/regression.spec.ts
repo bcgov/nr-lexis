@@ -2457,6 +2457,41 @@ test.describe('TEST IDIR admin regression', () => {
     expect(federalCount.total).toEqual(expect.any(Number))
   })
 
+  test('exposes linked exemption descriptions used by the client summary', async () => {
+    const page = await authenticatedIdirPage()
+
+    const exemptionSearch = await readJsonResponse<GenericSearchResponse>(
+      await getWithAuth(page, '/api/lexis/exemptions/search', {
+        params: {
+          exemptionType: 'M',
+          page: '0',
+          size: '1',
+        },
+      }),
+    )
+    const exemptionNumber = requiredString(
+      asRecordArray(exemptionSearch.results)[0]?.exemptionNumber,
+      'Ministerial exemption number',
+    )
+
+    const applicationSearch = await readJsonResponse<GenericSearchResponse>(
+      await getWithAuth(page, '/api/lexis/applications/search', {
+        params: {
+          exemptionNumber,
+          page: '0',
+          size: '2',
+        },
+      }),
+    )
+    const linkedApplications = asRecordArray(applicationSearch.results)
+    const exactLinkedApplication = linkedApplications.find(
+      (application) => String(application.exemptionNumber ?? '').trim() === exemptionNumber,
+    )
+
+    expect(exactLinkedApplication).toBeDefined()
+    expect(exactLinkedApplication?.exemptionTypeDescription).toBe('Ministerial')
+  })
+
   test('can query exemption, offer, and permit search contracts', async () => {
     const page = await authenticatedIdirPage()
 

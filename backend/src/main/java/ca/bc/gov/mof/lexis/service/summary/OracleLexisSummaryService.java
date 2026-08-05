@@ -309,7 +309,8 @@ public class OracleLexisSummaryService implements LexisSummaryService {
         applicationService.findByApplicationNumber(result.application());
 
     String reason = detail.map(LexisApplicationDetailDto::exemptionReasonCode).orElse(null);
-    String exemptionType = detail.map(LexisApplicationDetailDto::productTypeCode).orElse(null);
+    String exemptionNumber = trimToNull(result.exemptionNumber());
+    String exemptionType = trimToNull(result.exemptionTypeDescription());
     List<String> packageNumbers =
         detail
             .map(LexisApplicationDetailDto::packages)
@@ -323,7 +324,7 @@ public class OracleLexisSummaryService implements LexisSummaryService {
         result.status(),
         reason,
         exemptionType,
-        trimToNull(result.exemptionNumber()),
+        exemptionNumber,
         detail.map(LexisApplicationDetailDto::receivedDate).orElse(null),
         result.listingDate(),
         packageNumbers);
@@ -348,7 +349,7 @@ public class OracleLexisSummaryService implements LexisSummaryService {
         detail.map(ExemptionDetailDto::agentClientNumber).orElse(result.applicantClientNumber()),
         detail.map(ExemptionDetailDto::exemptionStatusDescription).orElse(result.status()),
         detail.map(ExemptionDetailDto::approvedVolume).orElse(result.approvedVolume()),
-        detail.map(ExemptionDetailDto::remainingVolume).orElse(result.balanceRemaining()),
+        result.balanceRemaining(),
         detail.map(ExemptionDetailDto::approvalDate).orElse(result.approvalDate()),
         detail.map(ExemptionDetailDto::expiryDate).orElse(result.expiryDate()));
   }

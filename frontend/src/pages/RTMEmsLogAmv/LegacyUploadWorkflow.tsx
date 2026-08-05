@@ -1,9 +1,6 @@
 /**
- * Retained AMV workbook upload and review workflow.
- *
- * The table workflow in index.tsx is the active route. This module is deliberately
- * not routed. Reactivation requires restoring server-side authorization and an
- * atomic-save review before it can be exposed again.
+ * AMV workbook upload and review workflow, exposed beside the editable grid during
+ * the client evaluation period.
  */
 
 import {
@@ -559,7 +556,7 @@ const ReviewUploadContent = ({
   )
 }
 
-const LegacyRtmEmsLogAmvUploadWorkflow = () => {
+const RtmEmsLogAmvUploadPage = () => {
   const { canPerform } = useAuth()
   const canManage = canPerform('/lexisAgentAdmin')
   const validationRequestRef = useRef(0)
@@ -804,7 +801,7 @@ const LegacyRtmEmsLogAmvUploadWorkflow = () => {
   return (
     <Grid fullWidth className="default-grid admin-upload-fspts-page">
       <Column sm={4} md={8} lg={16} className="admin-upload-fspts-header">
-        <h1>Average Monthly Values</h1>
+        <h1>AMV Spreadsheet Upload</h1>
         <p>{RTM_UPLOAD_ONLY_DESCRIPTION}</p>
         <UploadWorkflowProgress
           steps={RTM_UPLOAD_REVIEW_STEPS}
@@ -981,4 +978,4 @@ const LegacyRtmEmsLogAmvUploadWorkflow = () => {
   )
 }
 
-export default LegacyRtmEmsLogAmvUploadWorkflow
+export default RtmEmsLogAmvUploadPage

@@ -6,8 +6,8 @@ import { useAuth } from '@/context/auth/useAuth'
 import type { ProvincialExemptionDetail } from '@/interfaces/LexisDetails'
 import ProvincialExemptionDetailsPage from '@/pages/ProvincialExemptionDetails'
 import {
-  fetchApplicationClientData,
-  fetchApplicationClientLocations,
+  fetchExemptionClientData,
+  fetchExemptionClientLocations,
 } from '@/service/application-client-lookup-service'
 import { fetchProvincialExemptionDetail } from '@/service/lexis-detail-service'
 import {
@@ -26,8 +26,8 @@ vi.mock('@/service/lexis-detail-service', () => ({
 }))
 
 vi.mock('@/service/application-client-lookup-service', () => ({
-  fetchApplicationClientData: vi.fn(),
-  fetchApplicationClientLocations: vi.fn(),
+  fetchExemptionClientData: vi.fn(),
+  fetchExemptionClientLocations: vi.fn(),
 }))
 
 vi.mock('@/service/provincial-exemption-documents-service', () => ({
@@ -113,12 +113,12 @@ describe('Provincial exemption client parity', () => {
       lockMessage: '',
     })
     vi.mocked(fetchExemptionPermits).mockResolvedValue([])
-    vi.mocked(fetchApplicationClientLocations).mockImplementation(async (_, applicantType) =>
-      applicantType === 'owner'
+    vi.mocked(fetchExemptionClientLocations).mockImplementation(async (clientNumber) =>
+      clientNumber === '00001074'
         ? [{ locationCode: '03', locationName: 'WOODLANDS SERVICES', selected: true }]
         : [{ locationCode: '12', locationName: 'EXPORT BILLING', selected: true }],
     )
-    vi.mocked(fetchApplicationClientData).mockImplementation(async (clientNumber) =>
+    vi.mocked(fetchExemptionClientData).mockImplementation(async (clientNumber) =>
       clientNumber === '00001074'
         ? {
             clientNumber,
@@ -201,14 +201,10 @@ describe('Provincial exemption client parity', () => {
     ).toBeInTheDocument()
 
     await waitFor(() => {
-      expect(fetchApplicationClientData).toHaveBeenCalledWith('00001074', '03', {
-        applicationNumber: '45242',
-      })
-      expect(fetchApplicationClientData).toHaveBeenCalledWith('00002176', '12', {
-        applicationNumber: '45242',
-      })
-      expect(fetchApplicationClientLocations).toHaveBeenCalledWith('00001074', 'owner', '45242')
-      expect(fetchApplicationClientLocations).toHaveBeenCalledWith('00002176', 'agent', '45242')
+      expect(fetchExemptionClientData).toHaveBeenCalledWith('00001074', '03')
+      expect(fetchExemptionClientData).toHaveBeenCalledWith('00002176', '12')
+      expect(fetchExemptionClientLocations).toHaveBeenCalledWith('00001074')
+      expect(fetchExemptionClientLocations).toHaveBeenCalledWith('00002176')
     })
   })
 
@@ -256,13 +252,9 @@ describe('Provincial exemption client parity', () => {
     expect(screen.queryByText('Agent client number')).not.toBeInTheDocument()
 
     await waitFor(() => {
-      expect(fetchApplicationClientData).toHaveBeenCalledWith('00001074', '03', {
-        applicationNumber: '45242',
-      })
+      expect(fetchExemptionClientData).toHaveBeenCalledWith('00001074', '03')
     })
-    expect(fetchApplicationClientData).not.toHaveBeenCalledWith('00002176', '12', {
-      applicationNumber: '45242',
-    })
-    expect(fetchApplicationClientLocations).not.toHaveBeenCalledWith('00002176', 'agent', '45242')
+    expect(fetchExemptionClientData).not.toHaveBeenCalledWith('00002176', '12')
+    expect(fetchExemptionClientLocations).not.toHaveBeenCalledWith('00002176')
   })
 })

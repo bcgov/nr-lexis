@@ -118,7 +118,7 @@ final class LexisApiAuthorizationRules {
           Map.entry("checkExemptionNumber", ACTION_SAVE_EXEMPTION),
           Map.entry("addApplicationToExemption", ACTION_SAVE_EXEMPTION),
           Map.entry("removeApplicationFromExemption", ACTION_SAVE_EXEMPTION),
-          Map.entry("addExemption", ACTION_SAVE_EXEMPTION),
+          Map.entry("addExemption", ACTION_CREATE_EXEMPTION),
           Map.entry("updateExemption", ACTION_SAVE_EXEMPTION),
           Map.entry("approveExemptions", ACTION_APPROVE_EXEMPTION),
           Map.entry("sendExemptionApprovalEmail", ACTION_APPROVE_EXEMPTION),
@@ -432,7 +432,12 @@ final class LexisApiAuthorizationRules {
               "/api/lexis/federal/submissions",
               "/api/lexis/federal/submissions/validation"),
           action(HttpMethod.GET, ACTION_LEXIS_AGENT_ADMIN, "/api/lexis/rtm/emslogamv"),
-          action(HttpMethod.POST, ACTION_LEXIS_AGENT_ADMIN, "/api/lexis/rtm/emslogamv/batch"),
+          action(
+              HttpMethod.POST,
+              ACTION_LEXIS_AGENT_ADMIN,
+              "/api/lexis/rtm/emslogamv/batch",
+              "/api/lexis/rtm/emslogamv/preview",
+              "/api/lexis/rtm/emslogamv/upload"),
           action(
               HttpMethod.GET,
               ACTION_APPLICATION_DETAILS,

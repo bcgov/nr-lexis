@@ -30,7 +30,7 @@ public class PermitRepository extends OracleRepositorySupport {
   private static final String FIND_ALL_PERMIT_STATUS_CODES =
       LEXIS_CODES_PACKAGE + "FIND_ALL_PERMIT_STATUS_CODES(?)";
 
-  private static final String SEARCH_PERMITS =
+  private static final String SEARCH_PERMIT_COLUMNS =
       """
       SELECT
         EPD.EXPORT_PERMIT_DETAIL_NUMBER,
@@ -41,18 +41,53 @@ public class PermitRepository extends OracleRepositorySupport {
         EPD.PERMIT_VOLUME,
         EPD.EXPORT_PERMIT_ISSUE_DATE,
         OU.ORG_UNIT_CODE AS REGION
+      """;
+  private static final String PERMIT_FROM =
+      """
       FROM EXPORT_PERMIT_DETAIL EPD
+      """;
+  private static final String PERMIT_LOOKUP_JOINS =
+      """
       INNER JOIN EXPORT_PERMIT_STATUS_CODE EPSC
         ON EPSC.EXPORT_PERMIT_STATUS_CODE = EPD.EXPORT_PERMIT_STATUS_CODE
       LEFT JOIN ORG_UNIT OU
         ON OU.ORG_UNIT_NO = EPD.ORG_UNIT_NO
       """;
+  private static final String ACCESSIBLE_PERMIT_JOIN =
+      """
+      INNER JOIN ACCESSIBLE_PERMITS AP
+        ON AP.EXPORT_PERMIT_DETAIL_NUMBER = EPD.EXPORT_PERMIT_DETAIL_NUMBER
+      """;
+  private static final String SEARCH_PERMITS =
+      SEARCH_PERMIT_COLUMNS + PERMIT_FROM + PERMIT_LOOKUP_JOINS;
   private static final String COUNT_PERMITS =
       """
       SELECT COUNT(*)
       FROM EXPORT_PERMIT_DETAIL EPD
       INNER JOIN EXPORT_PERMIT_STATUS_CODE EPSC
         ON EPSC.EXPORT_PERMIT_STATUS_CODE = EPD.EXPORT_PERMIT_STATUS_CODE
+      """;
+  private static final String ACCESSIBLE_PERMITS_CTE =
+      """
+      WITH ACCESSIBLE_PERMITS AS (
+        SELECT OWNER_PERMIT.EXPORT_PERMIT_DETAIL_NUMBER
+        FROM EXPORT_PERMIT_DETAIL OWNER_PERMIT
+        WHERE OWNER_PERMIT.CLIENT_NUMBER = ?
+        UNION
+        SELECT AGENT_PERMIT.EXPORT_PERMIT_DETAIL_NUMBER
+        FROM EXPORT_PERMIT_DETAIL AGENT_PERMIT
+        WHERE AGENT_PERMIT.AGENT_NUMBER = ?
+        UNION
+        SELECT LINKED_PERMIT.EXPORT_PERMIT_DETAIL_NUMBER
+        FROM EXPORT_PERMIT_DETAIL LINKED_PERMIT
+        INNER JOIN EXPORT_EXEMPTION_APPLICATION EP_ACCESS
+          ON EP_ACCESS.EXEMPTION_NUMBER = LINKED_PERMIT.EXEMPTION_NUMBER
+        WHERE EP_ACCESS.AGENT_CLIENT_NUMBER = ?
+          AND (
+            EP_ACCESS.EXPORT_JURISDICTION_CODE = 'P'
+            OR EP_ACCESS.EXPORT_JURISDICTION_CODE IS NULL
+          )
+      %s)
       """;
   private static final Map<String, String> SEARCH_SORT_COLUMNS =
       Map.ofEntries(
@@ -107,12 +142,14 @@ public class PermitRepository extends OracleRepositorySupport {
   public Page<PermitSearchResultDto> search(PermitSearchCriteria criteria, Integer knownTotal) {
     DirectSql countCriteria = buildSearchWhere(criteria, false);
     DirectSql pageCriteria = buildSearchWhere(criteria, true);
+    String countSelect = buildCountSelect(criteria);
+    String pageSelect = buildPageSelect(criteria);
     int totalElements =
         knownTotal == null
-            ? queryDirectCount(COUNT_PERMITS, countCriteria)
+            ? queryDirectCount(countSelect, countCriteria)
             : Math.max(0, knownTotal);
     return queryDirectPage(
-        SEARCH_PERMITS,
+        pageSelect,
         pageCriteria,
         criteria.page(),
         criteria.size(),
@@ -129,7 +166,7 @@ public class PermitRepository extends OracleRepositorySupport {
   }
 
   public int count(PermitSearchCriteria criteria) {
-    return queryDirectCount(COUNT_PERMITS, buildSearchWhere(criteria, false));
+    return queryDirectCount(buildCountSelect(criteria), buildSearchWhere(criteria, false));
   }
 
   private DirectSql buildSearchWhere(PermitSearchCriteria criteria, boolean includeOrderBy) {
@@ -182,12 +219,8 @@ public class PermitRepository extends OracleRepositorySupport {
 
     String accessClientNumber = trim(criteria.accessClientNumber());
     if (accessClientNumber != null) {
-      // Legacy permit scope is the permit owner, permit agent, or linked application agent.
-      where.addRawWithBinds(
-          " AND (EPD.CLIENT_NUMBER = ? OR EPD.AGENT_NUMBER = ? "
-              + "OR EXISTS (SELECT 1 FROM EXPORT_EXEMPTION_APPLICATION EP_ACCESS "
-              + "WHERE EP_ACCESS.EXEMPTION_NUMBER = EPD.EXEMPTION_NUMBER "
-              + "AND EP_ACCESS.AGENT_CLIENT_NUMBER = ?))",
+      // The scoped CTE appears before the ordinary WHERE predicates in the final SQL.
+      where.addLeadingBinds(
           accessClientNumber,
           accessClientNumber,
           accessClientNumber);
@@ -196,7 +229,7 @@ public class PermitRepository extends OracleRepositorySupport {
     if (criteria.regionNumbers() != null && !criteria.regionNumbers().isEmpty()) {
       where.addInEqualsNumberOrNoResults("EPD.ORG_UNIT_NO", criteria.regionNumbers());
     }
-    if (criteria.requireScalePermit()) {
+    if (criteria.requireScalePermit() && accessClientNumber == null) {
       where.addRaw(
           " AND EXISTS (SELECT 1 FROM EXPORT_SCALE_DETAIL ESD_REQUIRED "
               + "WHERE ESD_REQUIRED.EXPORT_PERMIT_DETAIL_NUMBER = "
@@ -204,6 +237,41 @@ public class PermitRepository extends OracleRepositorySupport {
     }
 
     return where.build(includeOrderBy ? buildSearchOrder(criteria.sortField()) : "");
+  }
+
+  private String buildPageSelect(PermitSearchCriteria criteria) {
+    if (trim(criteria.accessClientNumber()) == null) {
+      return SEARCH_PERMITS;
+    }
+    return buildAccessiblePermitsCte(criteria.requireScalePermit())
+        + SEARCH_PERMIT_COLUMNS
+        + PERMIT_FROM
+        + ACCESSIBLE_PERMIT_JOIN
+        + PERMIT_LOOKUP_JOINS;
+  }
+
+  private String buildCountSelect(PermitSearchCriteria criteria) {
+    if (trim(criteria.accessClientNumber()) == null) {
+      return COUNT_PERMITS;
+    }
+    return buildAccessiblePermitsCte(criteria.requireScalePermit())
+        + "SELECT COUNT(*)\n"
+        + PERMIT_FROM
+        + ACCESSIBLE_PERMIT_JOIN
+        + "INNER JOIN EXPORT_PERMIT_STATUS_CODE EPSC\n"
+        + "  ON EPSC.EXPORT_PERMIT_STATUS_CODE = EPD.EXPORT_PERMIT_STATUS_CODE\n";
+  }
+
+  private String buildAccessiblePermitsCte(boolean requireScalePermit) {
+    String scaleRequirement =
+        requireScalePermit
+            ? "  AND EXISTS (\n"
+                + "    SELECT 1 FROM EXPORT_SCALE_DETAIL ESD_REQUIRED\n"
+                + "    WHERE ESD_REQUIRED.EXPORT_PERMIT_DETAIL_NUMBER = "
+                + "LINKED_PERMIT.EXPORT_PERMIT_DETAIL_NUMBER\n"
+                + "  )\n"
+            : "";
+    return ACCESSIBLE_PERMITS_CTE.formatted(scaleRequirement);
   }
 
   private String buildSearchOrder(String requestedSort) {

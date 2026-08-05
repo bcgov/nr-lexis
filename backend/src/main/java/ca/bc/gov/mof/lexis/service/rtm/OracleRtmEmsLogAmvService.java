@@ -361,6 +361,7 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
   }
 
   @Override
+  @Transactional
   public RtmEmsLogAmvUploadResultDto upload(MultipartFile file) {
     List<String> validationErrors = validateUploadRequest(file);
     if (!validationErrors.isEmpty()) {
@@ -427,63 +428,57 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
             List.of());
       }
 
-      List<RtmEmsLogAmvRowDto> uploadedRows = new ArrayList<>();
-      int uploadedCount = 0;
-      for (UploadTarget row : rowsToUpload) {
-        String species = trimToNull(row.species());
-        String grade = trimToNull(row.grade());
-        String normalizedGrowthIndicator = trimToNull(row.growthIndicator());
-        BigDecimal newValue = row.newValue();
-
-        final RtmEmsLogAmvMutationResultDto mutationResult;
-        try {
-          mutationResult =
-              save(
-                  new RtmEmsLogAmvSaveRequestDto(
-                      species,
-                      grade,
-                      normalizedGrowthIndicator,
-                      formatDate(parsedRetrievalDate),
-                      formatDate(parsedUpdateDate),
-                      newValue,
-                      SAVE_MODE_UPDATE));
-        } catch (DataAccessException ex) {
-          LOGGER.warn(
-              "event=lexis_rtm_amv operation=upload_row outcome=database_unavailable failureType={}",
-              exceptionType(ex));
-          errors.add(
-              ("The outcome could not be confirmed for species '%s', grade '%s' "
-                      + "(source row %d, source column %s); remaining rows were not attempted.")
-                  .formatted(
-                      species, grade, row.sourceRow(), columnToLetter(row.sourceColumn())));
-          break;
-        }
-
-        if ("accepted".equalsIgnoreCase(mutationResult.status())) {
-          uploadedCount++;
-          uploadedRows.addAll(mutationResult.rows());
-          continue;
-        }
-
-        errors.add(
-            "Unable to save row for species '%s', grade '%s' (source row %d, source column %s)."
-                .formatted(
-                    species, grade, row.sourceRow(), columnToLetter(row.sourceColumn())));
-        errors.addAll(mutationResult.errors());
+      LocalDate effectiveDate =
+          effectiveDateForSave(SAVE_MODE_UPDATE, parsedRetrievalDate, parsedUpdateDate);
+      List<OracleRtmEmsLogAmvRepository.AtomicWriteTarget> targets =
+          rowsToUpload.stream()
+              .map(
+                  row ->
+                      new OracleRtmEmsLogAmvRepository.AtomicWriteTarget(
+                          RtmEmsLogAmvDimensionValidator.normalize(row.species()),
+                          RtmEmsLogAmvDimensionValidator.normalize(row.grade()),
+                          RtmEmsLogAmvDimensionValidator.normalize(row.growthIndicator()),
+                          effectiveDate,
+                          row.newValue()))
+              .toList();
+      int[] updateCounts = repository.upsertAtomically(targets);
+      if (!allWritesApplied(updateCounts, targets.size())) {
+        markRollbackOnly();
+        return buildUploadResult(
+            RETURN_FAILURE,
+            "Upload did not complete; no values were saved.",
+            fileName,
+            fileSize,
+            rowsToUpload.size(),
+            0,
+            List.of("The full AMV workbook submission was not applied."),
+            warnings,
+            List.of());
       }
 
+      List<RtmEmsLogAmvRowDto> uploadedRows =
+          targets.stream()
+              .map(
+                  target ->
+                      new RtmEmsLogAmvRowDto(
+                          target.species(),
+                          target.grade(),
+                          target.growthIndicator(),
+                          formatDate(parsedRetrievalDate),
+                          formatDate(parsedUpdateDate),
+                          null,
+                          target.newValue(),
+                          "0"))
+              .toList();
+
       return buildUploadResult(
-          errors.isEmpty() ? RETURN_SUCCESS : (uploadedCount > 0 ? RETURN_VALIDATION : RETURN_FAILURE),
-          errors.isEmpty()
-              ? "Upload completed."
-              : uploadedCount > 0
-                  ? "Upload partially completed; review the saved and failed rows."
-                  : "Upload did not complete; review the row errors.",
+          RETURN_SUCCESS,
+          "Upload completed.",
           fileName,
           fileSize,
           rowsToUpload.size(),
-          uploadedCount,
-          errors,
+          uploadedRows.size(),
+          List.of(),
           warnings,
           uploadedRows);
     } catch (IOException ex) {

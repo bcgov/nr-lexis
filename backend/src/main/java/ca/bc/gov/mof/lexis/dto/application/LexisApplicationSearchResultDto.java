@@ -12,4 +12,5 @@ public record LexisApplicationSearchResultDto(
     String region,
     double applicationVolume,
     boolean showCheckbox,
-    boolean locked) {}
+    boolean locked,
+    String exemptionTypeDescription) {}
