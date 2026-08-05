@@ -144,6 +144,7 @@ public class ExemptionController {
             regionNumbers,
             scopedClientNumber != null,
             !provincialAuthorizationService.canViewBlanketOic(authentication),
+            scopedClientNumber != null,
             sortField,
             page,
             size);
@@ -219,6 +220,7 @@ public class ExemptionController {
             regionNumbers,
             scopedClientNumber != null,
             !provincialAuthorizationService.canViewBlanketOic(authentication),
+            scopedClientNumber != null,
             null,
             0,
             1);
@@ -322,6 +324,7 @@ public class ExemptionController {
       List<Long> regionNumbers,
       boolean includeBlanketOic,
       boolean excludeBlanketOic,
+      boolean broadClientMatch,
       String sortField,
       Integer page,
       Integer size) {
@@ -340,6 +343,7 @@ public class ExemptionController {
         regionNumbers == null ? List.of() : regionNumbers,
         includeBlanketOic,
         excludeBlanketOic,
+        broadClientMatch,
         sortField,
         page,
         size);

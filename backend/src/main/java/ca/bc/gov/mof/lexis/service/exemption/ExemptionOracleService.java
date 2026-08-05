@@ -167,6 +167,7 @@ public class ExemptionOracleService implements ExemptionService {
     // Legacy parity: searching by applicant/owner implies ministerial exemptions.
     if (exemptionType == null
         && !input.includeBlanketOic()
+        && !input.broadClientMatch()
         && (applicantClientNumber != null || ownerClientNumber != null)) {
       exemptionType = EXEMPTION_TYPE_MINISTERIAL;
     }
@@ -186,6 +187,7 @@ public class ExemptionOracleService implements ExemptionService {
         regionNumbers,
         input.includeBlanketOic(),
         input.excludeBlanketOic(),
+        input.broadClientMatch(),
         trimToNull(input.sortField()),
         page,
         size);

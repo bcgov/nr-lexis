@@ -206,7 +206,7 @@ class PermitRepositoryTest {
   }
 
   @Test
-  void scopedAccessShouldIncludeDirectAndLinkedApplicationClientsForSearchAndCount() {
+  void scopedAccessShouldMatchDirectPermitClientsAndLinkedApplicationAgents() {
     TestPermitRepository repository = new TestPermitRepository();
     PermitSearchCriteria criteria =
         new PermitSearchCriteria(
@@ -237,20 +237,16 @@ class PermitRepositoryTest {
         .contains("EPD.AGENT_NUMBER LIKE")
         .contains("EPD.CLIENT_NUMBER =")
         .contains("EPD.AGENT_NUMBER =")
-        .contains("EP_ACCESS.OWNER_CLIENT_NUMBER =")
         .contains("EP_ACCESS.AGENT_CLIENT_NUMBER =")
-        .contains("EP_ACCESS.EXPORT_JURISDICTION_CODE = 'P'")
-        .contains("EP_ACCESS.EXPORT_JURISDICTION_CODE IS NULL")
-        .contains("NOT EXISTS (SELECT 1 FROM EXPORT_EXEMPTION_APPLICATION EP_ANY")
+        .doesNotContain("EP_ACCESS.OWNER_CLIENT_NUMBER =")
+        .doesNotContain("EP_ACCESS.EXPORT_JURISDICTION_CODE")
+        .doesNotContain("NOT EXISTS (SELECT 1 FROM EXPORT_EXEMPTION_APPLICATION EP_ANY")
         .doesNotContain("EXISTS (SELECT 1 FROM EXPORT_SCALE_DETAIL");
     assertThat(searchBinds)
         .containsExactly(
             "00099999",
             "00088888",
             "00088888",
-            "00012345",
-            "00012345",
-            "00012345",
             "00012345",
             "00012345",
             "00012345");

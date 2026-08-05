@@ -266,6 +266,7 @@ class ExemptionControllerTest {
     assertThat(criteria.applicantClientNumber()).isEqualTo("00077881");
     assertThat(criteria.ownerClientNumber()).isNull();
     assertThat(criteria.includeBlanketOic()).isTrue();
+    assertThat(criteria.broadClientMatch()).isTrue();
   }
 
   @Test
@@ -304,6 +305,7 @@ class ExemptionControllerTest {
 
     assertThat(criteriaCaptor.getValue().includeBlanketOic()).isFalse();
     assertThat(criteriaCaptor.getValue().excludeBlanketOic()).isTrue();
+    assertThat(criteriaCaptor.getValue().broadClientMatch()).isFalse();
   }
 
   @Test
