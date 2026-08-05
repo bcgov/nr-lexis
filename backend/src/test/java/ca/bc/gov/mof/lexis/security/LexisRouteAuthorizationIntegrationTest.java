@@ -363,6 +363,17 @@ class LexisRouteAuthorizationIntegrationTest {
                 "/permitDetails"),
             expected(HttpMethod.POST, "/api/lexis/lexisPolicyAdminRPC.do", null, "/lexisPolicyAdmin"),
             expected(HttpMethod.POST, "/api/lexis/lexisFILAdminRPC.do", null, "/lexisFILAdmin"),
+            expected(HttpMethod.GET, "/api/lexis/rtm/emslogamv", null, "/lexisAgentAdmin"),
+            expected(
+                HttpMethod.POST,
+                "/api/lexis/rtm/emslogamv/preview",
+                null,
+                "/lexisAgentAdmin"),
+            expected(
+                HttpMethod.POST,
+                "/api/lexis/rtm/emslogamv/upload",
+                null,
+                "/lexisAgentAdmin"),
             expected(HttpMethod.GET, "/api/lexis/offerReport.do", "view", "/offerReport"),
             expected(HttpMethod.POST, "/api/lexis/reports/biweeklyListing", null, "mofrListing"))
         .forEach(ExpectedAuthorizationRoute::assertResolved);

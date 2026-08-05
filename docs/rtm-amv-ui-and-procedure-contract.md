@@ -1,12 +1,11 @@
 # RTM AMV UI And Persistence Contract
 
-This note records the active RTM Average Monthly Values contract at
-`/admin/rtm/emslogamv`. It documents the current single-table implementation while
-preserving the legacy `THE.EMS_LOG_AMV` schema and its downstream synchronization trigger.
-The legacy workbook upload controller is disabled unless
-`lexis.rtm.amv.upload.enabled=true`; it is not part of the active workflow.
+This note records the active RTM Average Monthly Values contract. Administrators can maintain
+values through the editable grid at `/admin/rtm/emslogamv` or the transitional workbook workflow
+at `/admin/rtm/emslogamv/upload`. Both preserve the legacy `THE.EMS_LOG_AMV` schema and its
+downstream synchronization trigger.
 
-## Unified AMV table
+## Editable AMV grid
 
 - The page shows one editable table. It has no old-growth/second-growth control.
 - The displayed value is the old-growth (`O`) baseline. When saved, the same value is written to
@@ -78,6 +77,20 @@ batch is reported as rejected; a database failure uses the API's normal service-
 response. A successful response is therefore the confirmation that the complete grid submission
 was accepted.
 
+## Atomic workbook uploads
+
+The separate workbook page retains the XLSX template, validation, preview, and review flow so the
+client can compare it with the editable grid during the transition period. Preview calls
+`POST /api/lexis/rtm/emslogamv/preview`; final submission calls
+`POST /api/lexis/rtm/emslogamv/upload`. Both routes require `/lexisAgentAdmin`, including when the
+application runs in PROD RTM-only mode.
+
+The backend scans the workbook for malware, validates its shape, dates, dimensions, and values,
+and retains only workbook keys that exist for the retrieval month. Final submission converts all
+eligible workbook rows to direct `MERGE` targets and writes them in one Spring transaction. It does
+not call the legacy row procedures. If any target is not applied or the database write fails, the
+complete workbook transaction rolls back and the upload reports zero saved rows.
+
 ## Batch audit event
 
 After the controller resolves a batch outcome, it writes one structured
@@ -99,10 +112,10 @@ change can claim that every report, integration, and query is unaffected.
 ## Legacy procedure boundary
 
 `RTM_EMS_LOG_AMV_INSERT` and `RTM_EMS_LOG_AMV_UPDATE` are retained in the database for legacy
-compatibility. Both issue `COMMIT`, which makes them unsuitable for the active multi-row UI save.
-The active UI does not expose a single-row or workbook mutation route. The optional legacy upload
-controller is disabled by default. The read path can still use the direct effective-date query
-because the legacy select procedure requires an exact species and growth type.
+compatibility. Both issue `COMMIT`, which makes them unsuitable for either active multi-row save.
+The grid and workbook upload therefore use the same direct transactional `MERGE` implementation;
+no single-row mutation route is exposed. The read path can still use the direct effective-date
+query because the legacy select procedure requires an exact species and growth type.
 
 The table has no user/timestamp audit columns. This change preserves the schema and trigger; it
 does not claim to add audit metadata that the legacy data model cannot store.
@@ -120,7 +133,7 @@ does not claim to add audit metadata that the legacy data model cannot store.
 | FR-13           | Implemented                | No blank flag is rendered or accepted from the UI.                                                                                                  |
 | FR-15           | Implemented                | The editable grade set is `A` through `M`, `U`, `X`, `Y`, `Z`, and `1` through `6`; `W` and blank are hidden.                                       |
 | FR-16           | Implemented                | A legacy empty `NEWVAL` is a no-op: clearing an existing cell restores its loaded value on blur and omits it from the batch; a single dash is treated as the same blank marker; blank cells with no stored value remain omitted. |
-| FR-17           | Implemented                | The batch service validates before direct `MERGE` writes inside one transaction.                                                                    |
+| FR-17           | Implemented                | Grid batches and workbook submissions validate before direct `MERGE` writes inside one transaction.                                                 |
 | FR-18           | Partially implemented      | Structured application audit events record the authenticated actor, server timestamp, batch outcome/status, and logical/physical row counts; durable persisted audit still requires an approved table or schema change. |
 | FR-19 to FR-20  | Implemented                | Numeric non-negative validation occurs before save; accepted and rejected batch outcomes are returned to the user.                                  |
 | FR-21           | Live verification required | The trigger mirrors to `EXPORT_LOG_AMV`, but reports, integrations, and queries still require TEST/downstream validation.                           |

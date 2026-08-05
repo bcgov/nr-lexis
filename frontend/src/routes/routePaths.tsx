@@ -33,6 +33,7 @@ const ProvincialReviewPage = lazy(() => import('@/pages/ProvincialReview'))
 const ProvincialSummaryPage = lazy(() => import('@/pages/ProvincialSummary'))
 const ReportsPage = lazy(() => import('@/pages/Reports'))
 const RTMEmsLogAmvPage = lazy(() => import('@/pages/RTMEmsLogAmv'))
+const RTMEmsLogAmvUploadPage = lazy(() => import('@/pages/RTMEmsLogAmv/LegacyUploadWorkflow'))
 
 const Layout = ({ children }: { children: ReactNode }) => (
   <AppLayout>
@@ -454,6 +455,19 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
     element: (
       <Layout>
         <RTMEmsLogAmvPage />
+      </Layout>
+    ),
+    isNavigation: false,
+  },
+  {
+    // INTENTIONAL_LEGACY_DIVERGENCE(RTM_AMV_TRANSITIONAL_UPLOAD):
+    // The workbook workflow is temporarily available beside the modern grid for client evaluation.
+    path: '/admin/rtm/emslogamv/upload',
+    id: 'Admin - AMV Spreadsheet Upload',
+    requiredActions: ['/lexisAgentAdmin'],
+    element: (
+      <Layout>
+        <RTMEmsLogAmvUploadPage />
       </Layout>
     ),
     isNavigation: false,

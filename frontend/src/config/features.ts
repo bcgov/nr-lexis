@@ -3,11 +3,13 @@ import { env } from '@/env'
 const TRUE_VALUES = new Set(['1', 'true', 'yes', 'y', 'on'])
 
 export const PROD_RTM_ONLY_ROUTE = '/admin/rtm/emslogamv'
+export const PROD_RTM_ONLY_UPLOAD_ROUTE = '/admin/rtm/emslogamv/upload'
 
 const PROD_RTM_ONLY_ALLOWED_PATHS = new Set([
   '/',
   '/dashboard',
   PROD_RTM_ONLY_ROUTE,
+  PROD_RTM_ONLY_UPLOAD_ROUTE,
   '/unauthorized',
   '*',
 ])

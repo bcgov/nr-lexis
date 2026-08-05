@@ -321,16 +321,8 @@ class OracleRtmEmsLogAmvServiceTest {
   }
 
   @Test
-  void shouldUploadMatrixWorkbookWithLegacyUpdateProcedure() throws IOException {
+  void shouldUploadMatrixWorkbookAtomically() throws IOException {
     OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
-    when(repository.update(
-            anyString(),
-            anyString(),
-            anyString(),
-            any(LocalDate.class),
-            any(LocalDate.class),
-            any(BigDecimal.class)))
-        .thenReturn("0");
     stubAppliedFixtureValues(repository);
     OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository);
 
@@ -340,13 +332,22 @@ class OracleRtmEmsLogAmvServiceTest {
     assertThat(result.warnings()).isEmpty();
     assertThat(result.attemptedRowCount()).isEqualTo(6);
     assertThat(result.uploadedRowCount()).isEqualTo(6);
-    verify(repository, times(6))
+    verify(repository)
+        .upsertAtomically(
+            argThat(
+                targets ->
+                    targets.size() == 6
+                        && targets.stream()
+                            .allMatch(
+                                target ->
+                                    target.effectiveDate().equals(LocalDate.of(2026, 6, 1)))));
+    verify(repository, never())
         .update(
             anyString(),
             anyString(),
             anyString(),
-            eq(LocalDate.of(2026, 6, 1)),
-            eq(LocalDate.of(2026, 6, 1)),
+            any(LocalDate.class),
+            any(LocalDate.class),
             any(BigDecimal.class));
     verify(repository, never())
         .insert(
@@ -360,35 +361,26 @@ class OracleRtmEmsLogAmvServiceTest {
   @Test
   void shouldUploadPhysicalPineColumnsWithoutSpeciesOrGrowthFanout() throws IOException {
     OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
-    when(repository.update(
-            anyString(),
-            anyString(),
-            anyString(),
-            any(LocalDate.class),
-            any(LocalDate.class),
-            any(BigDecimal.class)))
-        .thenReturn("0");
     stubAppliedFixtureValues(repository);
     OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository);
 
     RtmEmsLogAmvUploadResultDto result = service.upload(matrixWorkbook());
 
-    ArgumentCaptor<String> speciesCaptor = ArgumentCaptor.forClass(String.class);
-    ArgumentCaptor<String> growthCaptor = ArgumentCaptor.forClass(String.class);
     assertThat(result.status()).isEqualTo("accepted");
     assertThat(result.warnings()).isEmpty();
-    verify(repository, times(6))
-        .update(
-            speciesCaptor.capture(),
-            anyString(),
-            growthCaptor.capture(),
-            eq(LocalDate.of(2026, 6, 1)),
-            eq(LocalDate.of(2026, 6, 1)),
-            any(BigDecimal.class));
-    assertThat(speciesCaptor.getAllValues())
-        .contains("WH", "LO", "YE")
-        .doesNotContain("PL", "PW", "PY");
-    assertThat(growthCaptor.getAllValues()).containsOnly("O");
+    verify(repository)
+        .upsertAtomically(
+            argThat(
+                targets ->
+                    targets.stream().anyMatch(target -> target.species().equals("WH"))
+                        && targets.stream().anyMatch(target -> target.species().equals("LO"))
+                        && targets.stream().anyMatch(target -> target.species().equals("YE"))
+                        && targets.stream()
+                            .noneMatch(
+                                target ->
+                                    List.of("PL", "PW", "PY").contains(target.species()))
+                        && targets.stream()
+                            .allMatch(target -> target.growthIndicator().equals("O"))));
   }
 
   @Test
@@ -476,17 +468,7 @@ class OracleRtmEmsLogAmvServiceTest {
     LocalDate updateDate = LocalDate.of(2026, 6, 1);
     when(repository.existsExact(eq("BA"), eq("A"), eq("O"), eq(updateDate))).thenReturn(true);
     when(repository.existsExact(eq("BA"), eq("A"), eq("S"), eq(updateDate))).thenReturn(false);
-    when(repository.update(
-            eq("BA"),
-            eq("A"),
-            eq("O"),
-            eq(updateDate),
-            eq(updateDate),
-            eq(new BigDecimal("10.25"))))
-        .thenReturn("0");
-    when(repository.hasExactValue(
-            eq("BA"), eq("A"), eq("O"), eq(updateDate), eq(new BigDecimal("10.25"))))
-        .thenReturn(true);
+    when(repository.upsertAtomically(any())).thenReturn(new int[] {1});
     OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository);
 
     RtmEmsLogAmvUploadResultDto result = service.upload(singleBalsamWorkbook());
@@ -496,21 +478,15 @@ class OracleRtmEmsLogAmvServiceTest {
     assertThat(result.attemptedRowCount()).isEqualTo(1);
     assertThat(result.uploadedRowCount()).isEqualTo(1);
     verify(repository)
-        .update(
-            eq("BA"),
-            eq("A"),
-            eq("O"),
-            eq(updateDate),
-            eq(updateDate),
-            eq(new BigDecimal("10.25")));
-    verify(repository, never())
-        .update(
-            eq("BA"),
-            eq("A"),
-            eq("S"),
-            any(LocalDate.class),
-            any(LocalDate.class),
-            any(BigDecimal.class));
+        .upsertAtomically(
+            argThat(
+                targets ->
+                    targets.size() == 1
+                        && targets.getFirst().species().equals("BA")
+                        && targets.getFirst().grade().equals("A")
+                        && targets.getFirst().growthIndicator().equals("O")
+                        && targets.getFirst().effectiveDate().equals(updateDate)
+                        && targets.getFirst().newValue().compareTo(new BigDecimal("10.25")) == 0));
     verify(repository, never())
         .insert(
             anyString(),
@@ -530,14 +506,7 @@ class OracleRtmEmsLogAmvServiceTest {
     MultipartFile workbook = singleBalsamWorkbook();
     assertThatThrownBy(() -> service.upload(workbook))
         .isInstanceOf(DataAccessResourceFailureException.class);
-    verify(repository, never())
-        .update(
-            anyString(),
-            anyString(),
-            anyString(),
-            any(LocalDate.class),
-            any(LocalDate.class),
-            any(BigDecimal.class));
+    verify(repository, never()).upsertAtomically(any());
   }
 
   @Test
@@ -546,10 +515,7 @@ class OracleRtmEmsLogAmvServiceTest {
     LocalDate effectiveDate = LocalDate.of(2026, 8, 1);
     BigDecimal newValue = new BigDecimal("10.25");
     when(repository.existsExact(eq("BA"), eq("A"), eq("O"), eq(effectiveDate))).thenReturn(true);
-    when(repository.update(eq("BA"), eq("A"), eq("O"), eq(effectiveDate), eq(effectiveDate), eq(newValue)))
-        .thenReturn("0");
-    when(repository.hasExactValue(eq("BA"), eq("A"), eq("O"), eq(effectiveDate), eq(newValue)))
-        .thenReturn(true);
+    when(repository.upsertAtomically(any())).thenReturn(new int[] {1});
     OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository);
 
     RtmEmsLogAmvUploadResultDto result = service.upload(futureSingleBalsamWorkbook());
@@ -559,15 +525,12 @@ class OracleRtmEmsLogAmvServiceTest {
     assertThat(result.attemptedRowCount()).isEqualTo(1);
     assertThat(result.uploadedRowCount()).isEqualTo(1);
     verify(repository)
-        .update(eq("BA"), eq("A"), eq("O"), eq(effectiveDate), eq(effectiveDate), eq(newValue));
-    verify(repository, never())
-        .update(
-            eq("BA"),
-            eq("A"),
-            eq("S"),
-            any(LocalDate.class),
-            any(LocalDate.class),
-            any(BigDecimal.class));
+        .upsertAtomically(
+            argThat(
+                targets ->
+                    targets.size() == 1
+                        && targets.getFirst().effectiveDate().equals(effectiveDate)
+                        && targets.getFirst().newValue().compareTo(newValue) == 0));
   }
 
   @Test
@@ -576,10 +539,7 @@ class OracleRtmEmsLogAmvServiceTest {
     LocalDate effectiveDate = LocalDate.of(2026, 8, 1);
     BigDecimal newValue = new BigDecimal("10.25");
     when(repository.existsExact(eq("BA"), eq("A"), eq("O"), eq(effectiveDate))).thenReturn(true);
-    when(repository.update(anyString(), anyString(), anyString(), eq(effectiveDate), eq(effectiveDate), eq(newValue)))
-        .thenReturn("0");
-    when(repository.hasExactValue(anyString(), anyString(), anyString(), eq(effectiveDate), eq(newValue)))
-        .thenReturn(true);
+    when(repository.upsertAtomically(any())).thenReturn(new int[] {1});
     OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository);
 
     RtmEmsLogAmvUploadResultDto result = service.upload(futureSingleBalsamWorkbook());
@@ -589,9 +549,14 @@ class OracleRtmEmsLogAmvServiceTest {
     assertThat(result.attemptedRowCount()).isEqualTo(1);
     assertThat(result.uploadedRowCount()).isEqualTo(1);
     verify(repository)
-        .update(eq("BA"), eq("A"), eq("O"), eq(effectiveDate), eq(effectiveDate), eq(newValue));
-    verify(repository, never())
-        .update(eq("BA"), eq("A"), eq("S"), eq(effectiveDate), eq(effectiveDate), eq(newValue));
+        .upsertAtomically(
+            argThat(
+                targets ->
+                    targets.size() == 1
+                        && targets.getFirst().species().equals("BA")
+                        && targets.getFirst().growthIndicator().equals("O")
+                        && targets.getFirst().effectiveDate().equals(effectiveDate)
+                        && targets.getFirst().newValue().compareTo(newValue) == 0));
   }
 
   @Test
@@ -610,14 +575,7 @@ class OracleRtmEmsLogAmvServiceTest {
     assertThat(result.errors())
         .contains("No eligible existing AMV rows were found in the uploaded file.");
     assertThat(result.warnings()).anyMatch(warning -> warning.contains("exact existing AMV key"));
-    verify(repository, never())
-        .update(
-            anyString(),
-            anyString(),
-            anyString(),
-            any(LocalDate.class),
-            any(LocalDate.class),
-            any(BigDecimal.class));
+    verify(repository, never()).upsertAtomically(any());
   }
 
   @Test
@@ -645,54 +603,23 @@ class OracleRtmEmsLogAmvServiceTest {
   }
 
   @Test
-  void shouldReportPartialUploadWithoutDiscardingConfirmedRows() throws IOException {
+  void shouldRollBackTheFullUploadWhenAnyAtomicWriteIsNotApplied() throws IOException {
     OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
-    when(repository.existsExact(anyString(), anyString(), anyString(), any(LocalDate.class)))
-        .thenReturn(true);
-    when(repository.update(
-            anyString(),
-            anyString(),
-            anyString(),
-            any(LocalDate.class),
-            any(LocalDate.class),
-            any(BigDecimal.class)))
-        .thenReturn("0")
-        .thenThrow(new DataAccessResourceFailureException("outcome unavailable"));
-    when(repository.hasExactValue(
-            anyString(),
-            anyString(),
-            anyString(),
-            any(LocalDate.class),
-            any(BigDecimal.class)))
-        .thenReturn(true);
-    OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository);
+    stubAppliedFixtureValues(repository);
+    when(repository.upsertAtomically(any())).thenReturn(new int[] {1, 1, 1, 1, 1, 0});
+    RecordingTransactionManager transactionManager = new RecordingTransactionManager();
+    RtmEmsLogAmvService service = transactionalService(repository, transactionManager);
 
     RtmEmsLogAmvUploadResultDto result = service.upload(matrixWorkbook());
 
-    assertThat(result.status()).isEqualTo("validation_failed");
-    assertThat(result.message())
-        .isEqualTo("Upload partially completed; review the saved and failed rows.");
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.message()).isEqualTo("Upload did not complete; no values were saved.");
     assertThat(result.attemptedRowCount()).isEqualTo(6);
-    assertThat(result.uploadedRowCount()).isOne();
-    assertThat(result.rows()).hasSize(1);
-    assertThat(result.rows().getFirst())
-        .extracting(
-            RtmEmsLogAmvRowDto::species,
-            RtmEmsLogAmvRowDto::grade,
-            RtmEmsLogAmvRowDto::newValue)
-        .containsExactly("BA", "A", new BigDecimal("10.25"));
-    assertThat(result.errors())
-        .anyMatch(error -> error.contains("outcome could not be confirmed"));
-    assertThat(String.join(" ", result.errors()).toLowerCase())
-        .doesNotContain("no rows were saved");
-    verify(repository, times(2))
-        .update(
-            anyString(),
-            anyString(),
-            anyString(),
-            any(LocalDate.class),
-            any(LocalDate.class),
-            any(BigDecimal.class));
+    assertThat(result.uploadedRowCount()).isZero();
+    assertThat(result.rows()).isEmpty();
+    assertThat(result.errors()).containsExactly("The full AMV workbook submission was not applied.");
+    assertThat(transactionManager.rollbacks).isEqualTo(1);
+    assertThat(transactionManager.commits).isZero();
   }
 
   @Test
@@ -1117,6 +1044,19 @@ class OracleRtmEmsLogAmvServiceTest {
   }
 
   private static void stubAppliedFixtureValues(OracleRtmEmsLogAmvRepository repository) {
+    when(repository.upsertAtomically(any()))
+        .thenAnswer(
+            invocation -> {
+              List<?> targets = invocation.getArgument(0);
+              if (targets == null) {
+                return new int[0];
+              }
+              int[] updateCounts = new int[targets.size()];
+              for (int index = 0; index < updateCounts.length; index++) {
+                updateCounts[index] = 1;
+              }
+              return updateCounts;
+            });
     when(repository.find(
             anyString(),
             anyString(),

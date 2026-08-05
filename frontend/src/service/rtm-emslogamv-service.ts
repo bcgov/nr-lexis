@@ -39,11 +39,6 @@ export type RtmEmsLogAmvBatchSaveRequest = {
   values: RtmEmsLogAmvSaveRequest[]
 }
 
-/**
- * Retained only for a future, explicitly authorized legacy AMV workbook workflow.
- * The active AMV route uses the editable table; reactivation also requires
- * server-side authorization and an atomic-save review.
- */
 export type RtmEmsLogAmvUploadPreview = {
   status: string
   fileName?: string
@@ -143,9 +138,6 @@ export const saveRtmEmsLogAmvBatch = async (
   return response.data ?? { status: 'failed', message: '', errors: [], rows: [] }
 }
 
-/**
- * Dormant until the server-side AMV upload feature is deliberately re-enabled.
- */
 export const previewRtmEmsLogAmvUpload = async (file: File): Promise<RtmEmsLogAmvUploadPreview> => {
   const payload = new FormData()
   payload.append('file', file)
@@ -173,9 +165,6 @@ export const previewRtmEmsLogAmvUpload = async (file: File): Promise<RtmEmsLogAm
   )
 }
 
-/**
- * Dormant until the server-side AMV upload feature is deliberately re-enabled.
- */
 export const uploadRtmEmsLogAmv = async (
   request: RtmEmsLogAmvUploadRequest,
 ): Promise<RtmEmsLogAmvUploadResult> => {
