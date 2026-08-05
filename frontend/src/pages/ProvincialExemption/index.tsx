@@ -38,7 +38,7 @@ import type {
   ProvincialExemptionSearchSortField,
 } from '@/interfaces/ProvincialExemptionSearch'
 import { useAuth } from '@/context/auth/useAuth'
-import { hasProvincialSubmitterRole } from '@/context/auth/role-utils'
+import { hasProvincialSubmitterRole, hasRole } from '@/context/auth/role-utils'
 import { hasInvalidIsoDateValue, isValidIsoDate } from '@/pages/shared/create-form-utils'
 import {
   buildPageDataCacheKey,
@@ -250,7 +250,8 @@ const ProvincialExemptionPage = () => {
   const [sendingApprovalEmail, setSendingApprovalEmail] = useState(false)
   const totalCacheRef = useRef<SearchTotalCache>(new Map())
   const canCreateExemption = canPerform('/createExemption')
-  const canApproveExemption = canPerform('approveExemption')
+  const isApplicationApprover = hasRole(capabilities.roles, 'APPLICATION_APPROVER')
+  const canApproveExemption = canPerform('approveExemption') && !isApplicationApprover
   const isIndustryUser = hasProvincialSubmitterRole(capabilities.roles)
   const shouldDefaultApprovalFilters =
     capabilities?.roles.includes('EXEMPTION_APPROVER') ||
