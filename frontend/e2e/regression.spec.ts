@@ -3502,8 +3502,10 @@ test.describe('TEST IDIR admin regression', () => {
     throwRegressionFailures('Provincial CRUD regression and cleanup failed.', failures)
   })
 
-  test('returns an expired IDIR admin session to the login shell', async () => {
-    const page = await authenticatedIdirPage()
+  // Logout mutates auth and session storage, so these checks must not reuse the suite's page.
+  test('returns an expired IDIR admin session to the login shell', async ({ page }) => {
+    await redirectExternalLogoutToLoginShell(page)
+    await loginWithIdir(page)
 
     await expectAccessiblePage(page, '/provincial/review', /provincial application review/i)
     await expectLogoutRoundTrip(page, 'Expired IDIR admin session', () =>
@@ -3518,8 +3520,9 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(page.getByText('You’ve been logged out', { exact: true })).toBeVisible()
   })
 
-  test('signs out to the login shell without an expired-session warning', async () => {
-    const page = await authenticatedIdirPage()
+  test('signs out to the login shell without an expired-session warning', async ({ page }) => {
+    await redirectExternalLogoutToLoginShell(page)
+    await loginWithIdir(page)
 
     await expectAccessiblePage(page, '/provincial/review', /provincial application review/i)
     const profileButton = page.locator('button[aria-controls="profile-panel"]')

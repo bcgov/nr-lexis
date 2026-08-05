@@ -182,20 +182,12 @@ public class PermitRepository extends OracleRepositorySupport {
 
     String accessClientNumber = trim(criteria.accessClientNumber());
     if (accessClientNumber != null) {
+      // Legacy permit scope is the permit owner, permit agent, or linked application agent.
       where.addRawWithBinds(
-          " AND (((EPD.CLIENT_NUMBER = ? OR EPD.AGENT_NUMBER = ?) "
-              + "AND NOT EXISTS (SELECT 1 FROM EXPORT_EXEMPTION_APPLICATION EP_ANY "
-              + "WHERE EP_ANY.EXEMPTION_NUMBER = EPD.EXEMPTION_NUMBER)) "
+          " AND (EPD.CLIENT_NUMBER = ? OR EPD.AGENT_NUMBER = ? "
               + "OR EXISTS (SELECT 1 FROM EXPORT_EXEMPTION_APPLICATION EP_ACCESS "
               + "WHERE EP_ACCESS.EXEMPTION_NUMBER = EPD.EXEMPTION_NUMBER "
-              + "AND (EP_ACCESS.EXPORT_JURISDICTION_CODE = 'P' "
-              + "OR EP_ACCESS.EXPORT_JURISDICTION_CODE IS NULL) "
-              + "AND (EPD.CLIENT_NUMBER = ? OR EPD.AGENT_NUMBER = ? "
-              + "OR EP_ACCESS.OWNER_CLIENT_NUMBER = ? "
-              + "OR EP_ACCESS.AGENT_CLIENT_NUMBER = ?)))",
-          accessClientNumber,
-          accessClientNumber,
-          accessClientNumber,
+              + "AND EP_ACCESS.AGENT_CLIENT_NUMBER = ?))",
           accessClientNumber,
           accessClientNumber,
           accessClientNumber);

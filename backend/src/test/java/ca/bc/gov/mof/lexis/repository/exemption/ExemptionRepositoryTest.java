@@ -203,7 +203,7 @@ class ExemptionRepositoryTest {
   }
 
   @Test
-  void scopedIndustrySearchShouldIncludeBlanketOicOutsideClientAndRegionMatches() {
+  void scopedIndustrySearchShouldIncludeBothOicTypesOutsideClientMatches() {
     TestExemptionRepository repository = new TestExemptionRepository();
 
     repository.search(
@@ -221,15 +221,18 @@ class ExemptionRepositoryTest {
             null,
             List.of(76L, 1826L),
             true,
+            false,
+            true,
+            null,
             0,
             10));
 
     assertThat(repository.whereSql())
-        .contains("EEA.AGENT_CLIENT_NUMBER")
-        .contains("EEA.OWNER_CLIENT_NUMBER")
+        .contains("EEA_ACCESS.AGENT_CLIENT_NUMBER")
+        .contains("EEA_ACCESS.OWNER_CLIENT_NUMBER")
         .contains("EEA_REGION.ORG_UNIT_NO")
         .contains("OEO_REGION.ORG_UNIT_NO")
-        .contains("OR EE.EXPORT_EXEMPTION_TYPE_CODE = 'B'")
+        .contains("OR EE.EXPORT_EXEMPTION_TYPE_CODE IN ('B', 'O')")
         .doesNotContain("EEA.AGENT_CLIENT_NUMBER IS NULL");
     assertThat(repository.bindValues())
         .containsExactly(
@@ -239,6 +242,38 @@ class ExemptionRepositoryTest {
             1826L,
             76L,
             1826L);
+  }
+
+  @Test
+  void broadClientSummaryScopeShouldExcludeBothOicTypes() {
+    TestExemptionRepository repository = new TestExemptionRepository();
+
+    repository.search(
+        new ExemptionSearchCriteria(
+            null,
+            null,
+            null,
+            null,
+            null,
+            "00012345",
+            null,
+            null,
+            null,
+            null,
+            null,
+            List.of(),
+            false,
+            false,
+            true,
+            null,
+            0,
+            10));
+
+    assertThat(repository.whereSql())
+        .contains("EE.EXPORT_EXEMPTION_TYPE_CODE NOT IN ('B', 'O')")
+        .contains("EXISTS (SELECT 1 FROM EXPORT_EXEMPTION_APPLICATION EEA_ACCESS")
+        .doesNotContain("OR EE.EXPORT_EXEMPTION_TYPE_CODE IN ('B', 'O')");
+    assertThat(repository.bindValues()).containsExactly("00012345", "00012345");
   }
 
   @Test

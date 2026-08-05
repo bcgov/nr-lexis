@@ -274,18 +274,31 @@ public class ExemptionRepository extends OracleRepositorySupport {
 
     String applicantClientNumber = trim(criteria.applicantClientNumber());
     if (applicantClientNumber != null) {
-      // Scoped industry searches retain legacy owner-or-agent visibility. For an explicit staff
-      // Applicant filter, the owner is the applicant only when no agent is recorded.
-      where.addRawWithBinds(
-          " AND (EEA.AGENT_CLIENT_NUMBER LIKE '%' || ? || '%' "
-              + "OR EEA.OWNER_CLIENT_NUMBER LIKE '%' || ? || '%'"
-              + (criteria.includeBlanketOic() ? "" : " AND EEA.AGENT_CLIENT_NUMBER IS NULL")
-              + (criteria.includeBlanketOic()
-                  ? " OR EE.EXPORT_EXEMPTION_TYPE_CODE = 'B'"
-                  : "")
-              + ")",
-          applicantClientNumber,
-          applicantClientNumber);
+      if (criteria.broadClientMatch()) {
+        // Industry visibility is based on any linked application, while the selected canonical
+        // application remains the single display row. Legacy search also exposes both OIC types.
+        where.addRawWithBinds(
+            " AND ((EE.EXPORT_EXEMPTION_TYPE_CODE NOT IN ('B', 'O') "
+                + "AND EXISTS (SELECT 1 FROM EXPORT_EXEMPTION_APPLICATION EEA_ACCESS "
+                + "WHERE EEA_ACCESS.EXEMPTION_NUMBER = EE.EXEMPTION_NUMBER "
+                + "AND (EEA_ACCESS.OWNER_CLIENT_NUMBER = ? "
+                + "OR EEA_ACCESS.AGENT_CLIENT_NUMBER = ?)))"
+                + (criteria.includeBlanketOic()
+                    ? " OR EE.EXPORT_EXEMPTION_TYPE_CODE IN ('B', 'O')"
+                    : "")
+                + ")",
+            applicantClientNumber,
+            applicantClientNumber);
+      } else {
+        // For an explicit staff Applicant filter, the owner is the applicant only when no agent
+        // is recorded.
+        where.addRawWithBinds(
+            " AND (EEA.AGENT_CLIENT_NUMBER LIKE '%' || ? || '%' "
+                + "OR EEA.OWNER_CLIENT_NUMBER LIKE '%' || ? || '%' "
+                + "AND EEA.AGENT_CLIENT_NUMBER IS NULL)",
+            applicantClientNumber,
+            applicantClientNumber);
+      }
     }
 
     where.addDateGte("EE.APPROVAL_DATE", criteria.approvalFromDate());

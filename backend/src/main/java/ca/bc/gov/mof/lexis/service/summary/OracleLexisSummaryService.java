@@ -2,7 +2,6 @@ package ca.bc.gov.mof.lexis.service.summary;
 
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
-import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResultDto;
@@ -45,8 +44,11 @@ public class OracleLexisSummaryService implements LexisSummaryService {
   private static final int MAX_SIZE = 200;
   private static final String APPLICATION_SORT_DEFAULT = "applicationNumber DESC";
   private static final String OFFER_SORT_DEFAULT = "offerNumber DESC";
+  private static final String EXEMPTION_SORT_DEFAULT = "exemptionNumber DESC";
   private static final String PERMIT_SORT_DEFAULT = "permitNumber DESC";
   private static final String FEE_SORT_DEFAULT = "permitNumber DESC";
+  // Legacy summary panels are client-scoped and do not inherit search-form region selections.
+  private static final List<Long> NO_REGION_FILTER = List.of();
 
   private final LexisApplicationService applicationService;
   private final PurchaseOfferService offerService;
@@ -81,11 +83,6 @@ public class OracleLexisSummaryService implements LexisSummaryService {
       return new SummaryApplicationsResponseDto(List.of(), 0, normalizedPage, normalizedSize);
     }
 
-    List<Long> regions = toRegionNumbers(applicationService.searchOptions().regions());
-    if (regions.isEmpty()) {
-      return new SummaryApplicationsResponseDto(List.of(), 0, normalizedPage, normalizedSize);
-    }
-
     LexisApplicationSearchCriteria criteria =
         new LexisApplicationSearchCriteria(
             null,
@@ -100,7 +97,7 @@ public class OracleLexisSummaryService implements LexisSummaryService {
             null,
             null,
             null,
-            regions,
+            NO_REGION_FILTER,
             true,
             firstPresent(sortField, APPLICATION_SORT_DEFAULT),
             normalizedPage,
@@ -127,11 +124,6 @@ public class OracleLexisSummaryService implements LexisSummaryService {
       return new SummaryOffersResponseDto(List.of(), 0, normalizedPage, normalizedSize);
     }
 
-    List<Long> regions = toRegionNumbers(offerService.searchOptions().regions());
-    if (regions.isEmpty()) {
-      return new SummaryOffersResponseDto(List.of(), 0, normalizedPage, normalizedSize);
-    }
-
     PurchaseOfferSearchCriteria criteria =
         new PurchaseOfferSearchCriteria(
             null,
@@ -144,7 +136,7 @@ public class OracleLexisSummaryService implements LexisSummaryService {
             null,
             true,
             true,
-            regions,
+            NO_REGION_FILTER,
             firstPresent(sortField, OFFER_SORT_DEFAULT),
             normalizedPage,
             normalizedSize);
@@ -169,11 +161,6 @@ public class OracleLexisSummaryService implements LexisSummaryService {
       return new SummaryExemptionsResponseDto(List.of(), 0, normalizedPage, normalizedSize);
     }
 
-    List<Long> regions = toRegionNumbers(exemptionService.searchOptions().regions());
-    if (regions.isEmpty()) {
-      return new SummaryExemptionsResponseDto(List.of(), 0, normalizedPage, normalizedSize);
-    }
-
     ExemptionSearchCriteria criteria =
         new ExemptionSearchCriteria(
             null,
@@ -187,8 +174,11 @@ public class OracleLexisSummaryService implements LexisSummaryService {
             null,
             null,
             null,
-            regions,
+            NO_REGION_FILTER,
+            false,
+            false,
             true,
+            firstPresent(sortField, EXEMPTION_SORT_DEFAULT),
             normalizedPage,
             normalizedSize);
 
@@ -213,11 +203,6 @@ public class OracleLexisSummaryService implements LexisSummaryService {
       return new SummaryPermitsResponseDto(List.of(), 0, normalizedPage, normalizedSize);
     }
 
-    List<Long> regions = toRegionNumbers(permitService.searchOptions().regions());
-    if (regions.isEmpty()) {
-      return new SummaryPermitsResponseDto(List.of(), 0, normalizedPage, normalizedSize);
-    }
-
     PermitSearchCriteria criteria =
         new PermitSearchCriteria(
             null,
@@ -231,7 +216,7 @@ public class OracleLexisSummaryService implements LexisSummaryService {
             null,
             normalizedClientNumber,
             true,
-            regions,
+            NO_REGION_FILTER,
             firstPresent(sortField, PERMIT_SORT_DEFAULT),
             normalizedPage,
             normalizedSize);
@@ -257,11 +242,6 @@ public class OracleLexisSummaryService implements LexisSummaryService {
       return new SummaryFeesResponseDto(List.of(), 0, normalizedPage, normalizedSize);
     }
 
-    List<Long> regions = toRegionNumbers(permitService.searchOptions().regions());
-    if (regions.isEmpty()) {
-      return new SummaryFeesResponseDto(List.of(), 0, normalizedPage, normalizedSize);
-    }
-
     PermitSearchCriteria criteria =
         new PermitSearchCriteria(
             null,
@@ -275,7 +255,7 @@ public class OracleLexisSummaryService implements LexisSummaryService {
             null,
             normalizedClientNumber,
             false,
-            regions,
+            NO_REGION_FILTER,
             firstPresent(sortField, FEE_SORT_DEFAULT),
             normalizedPage,
             normalizedSize);
@@ -300,11 +280,6 @@ public class OracleLexisSummaryService implements LexisSummaryService {
       return new SummaryOffersResponseDto(List.of(), 0, normalizedPage, normalizedSize);
     }
 
-    List<Long> regions = toRegionNumbers(offerService.searchOptions().regions());
-    if (regions.isEmpty()) {
-      return new SummaryOffersResponseDto(List.of(), 0, normalizedPage, normalizedSize);
-    }
-
     PurchaseOfferSearchCriteria criteria =
         new PurchaseOfferSearchCriteria(
             null,
@@ -317,7 +292,7 @@ public class OracleLexisSummaryService implements LexisSummaryService {
             normalizedClientNumber,
             true,
             false,
-            regions,
+            NO_REGION_FILTER,
             firstPresent(sortField, OFFER_SORT_DEFAULT),
             normalizedPage,
             normalizedSize);
@@ -425,19 +400,6 @@ public class OracleLexisSummaryService implements LexisSummaryService {
     }
   }
 
-  private List<Long> toRegionNumbers(List<CodeNameDto> regions) {
-    if (regions == null || regions.isEmpty()) {
-      return List.of();
-    }
-
-    return regions.stream()
-        .map(CodeNameDto::code)
-        .map(this::tryParseLong)
-        .filter(value -> value != null && value > 0)
-        .distinct()
-        .toList();
-  }
-
   private int normalizePage(Integer page) {
     if (page == null) {
       return DEFAULT_PAGE;
@@ -450,19 +412,6 @@ public class OracleLexisSummaryService implements LexisSummaryService {
       return DEFAULT_SIZE;
     }
     return Math.min(MAX_SIZE, Math.max(1, size));
-  }
-
-  private Long tryParseLong(String value) {
-    String normalized = trimToNull(value);
-    if (normalized == null) {
-      return null;
-    }
-
-    try {
-      return Long.parseLong(normalized);
-    } catch (NumberFormatException ex) {
-      return null;
-    }
   }
 
   private String firstPresent(String first, String fallback) {

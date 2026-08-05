@@ -18,9 +18,49 @@ public record ExemptionSearchCriteria(
     List<Long> regionNumbers,
     boolean includeBlanketOic,
     boolean excludeBlanketOic,
+    boolean broadClientMatch,
     String sortField,
     int page,
     int size) {
+
+  public ExemptionSearchCriteria(
+      String applicationNumber,
+      String packageNumber,
+      String exemptionNumber,
+      String exemptionType,
+      String exemptionStatus,
+      String applicantClientNumber,
+      String ownerClientNumber,
+      LocalDate approvalFromDate,
+      LocalDate approvalToDate,
+      LocalDate listingFromDate,
+      LocalDate listingToDate,
+      List<Long> regionNumbers,
+      boolean includeBlanketOic,
+      boolean excludeBlanketOic,
+      String sortField,
+      int page,
+      int size) {
+    this(
+        applicationNumber,
+        packageNumber,
+        exemptionNumber,
+        exemptionType,
+        exemptionStatus,
+        applicantClientNumber,
+        ownerClientNumber,
+        approvalFromDate,
+        approvalToDate,
+        listingFromDate,
+        listingToDate,
+        regionNumbers,
+        includeBlanketOic,
+        excludeBlanketOic,
+        false,
+        sortField,
+        page,
+        size);
+  }
 
   public ExemptionSearchCriteria(
       String applicationNumber,
@@ -54,6 +94,7 @@ public record ExemptionSearchCriteria(
         regionNumbers,
         includeBlanketOic,
         excludeBlanketOic,
+        false,
         null,
         page,
         size);
@@ -90,6 +131,7 @@ public record ExemptionSearchCriteria(
         regionNumbers,
         includeBlanketOic,
         false,
+        false,
         null,
         page,
         size);
@@ -123,6 +165,7 @@ public record ExemptionSearchCriteria(
         listingFromDate,
         listingToDate,
         regionNumbers,
+        false,
         false,
         false,
         null,

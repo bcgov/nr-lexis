@@ -5,24 +5,19 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchCriteria;
-import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResultDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchCriteria;
-import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchResultDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchCriteria;
-import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchResultDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitDetailDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchCriteria;
-import ca.bc.gov.mof.lexis.dto.permit.PermitSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchResultDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitTotalFeesRpcResponseDto;
@@ -71,18 +66,6 @@ class OracleLexisSummaryServiceTest {
 
   @Test
   void applicationsShouldBuildScopedCriteriaAndMapLegacyFields() {
-    when(applicationService.searchOptions())
-        .thenReturn(
-            new LexisApplicationSearchOptionsDto(
-                List.of(),
-                List.of(),
-                List.of(),
-                List.of(),
-                List.of(),
-                List.of(new CodeNameDto("12", "Coast"), new CodeNameDto("24", "Skeena")),
-                List.of(),
-                List.of()));
-
     when(applicationService.search(any(LexisApplicationSearchCriteria.class)))
         .thenReturn(
             new LexisApplicationSearchResponseDto(
@@ -144,7 +127,7 @@ class OracleLexisSummaryServiceTest {
     assertThat(criteria.ownerClientNumber()).isNull();
     assertThat(criteria.agentClientNumber()).isEqualTo("00077881");
     assertThat(criteria.broadClientMatch()).isTrue();
-    assertThat(criteria.regionNumbers()).containsExactly(12L, 24L);
+    assertThat(criteria.regionNumbers()).isEmpty();
     assertThat(criteria.sortField()).isEqualTo("applicationNumber DESC");
 
     assertThat(response.total()).isEqualTo(1);
@@ -157,9 +140,6 @@ class OracleLexisSummaryServiceTest {
 
   @Test
   void offersShouldBuildScopedCriteria() {
-    when(offerService.searchOptions())
-        .thenReturn(new PurchaseOfferSearchOptionsDto(List.of(new CodeNameDto("12", "Coast"))));
-
     when(offerService.search(any(PurchaseOfferSearchCriteria.class)))
         .thenReturn(
             new PurchaseOfferSearchResponseDto(
@@ -186,7 +166,7 @@ class OracleLexisSummaryServiceTest {
     assertThat(criteria.offeringClientNumber()).isNull();
     assertThat(criteria.excludeWithdrawn()).isTrue();
     assertThat(criteria.restrictToProvincialOrNullJurisdiction()).isTrue();
-    assertThat(criteria.regionNumbers()).containsExactly(12L);
+    assertThat(criteria.regionNumbers()).isEmpty();
     assertThat(criteria.sortField()).isEqualTo("offerNumber DESC");
 
     assertThat(response.total()).isEqualTo(1);
@@ -196,13 +176,6 @@ class OracleLexisSummaryServiceTest {
 
   @Test
   void exemptionsShouldBuildScopedCriteriaAndMapLegacyFields() {
-    when(exemptionService.searchOptions())
-        .thenReturn(
-            new ExemptionSearchOptionsDto(
-                List.of(),
-                List.of(),
-                List.of(new CodeNameDto("12", "Coast"), new CodeNameDto("24", "Skeena"))));
-
     when(exemptionService.search(any(ExemptionSearchCriteria.class)))
         .thenReturn(
             new ExemptionSearchResponseDto(
@@ -257,9 +230,11 @@ class OracleLexisSummaryServiceTest {
     ExemptionSearchCriteria criteria = criteriaCaptor.getValue();
     assertThat(criteria.applicantClientNumber()).isEqualTo("00077881");
     assertThat(criteria.ownerClientNumber()).isNull();
-    assertThat(criteria.regionNumbers()).containsExactly(12L, 24L);
-    assertThat(criteria.includeBlanketOic()).isTrue();
+    assertThat(criteria.regionNumbers()).isEmpty();
+    assertThat(criteria.includeBlanketOic()).isFalse();
     assertThat(criteria.excludeBlanketOic()).isFalse();
+    assertThat(criteria.broadClientMatch()).isTrue();
+    assertThat(criteria.sortField()).isEqualTo("exemptionNumber DESC");
 
     assertThat(response.total()).isEqualTo(1);
     assertThat(response.results()).hasSize(1);
@@ -270,12 +245,6 @@ class OracleLexisSummaryServiceTest {
 
   @Test
   void permitsShouldBuildScopedCriteriaAndMapLegacyFields() {
-    when(permitService.searchOptions())
-        .thenReturn(
-            new PermitSearchOptionsDto(
-                List.of(),
-                List.of(new CodeNameDto("12", "Coast"), new CodeNameDto("24", "Skeena"))));
-
     when(permitService.search(any(PermitSearchCriteria.class)))
         .thenReturn(
             new PermitSearchResponseDto(
@@ -335,7 +304,7 @@ class OracleLexisSummaryServiceTest {
     assertThat(criteria.applicantClientNumber()).isNull();
     assertThat(criteria.accessClientNumber()).isEqualTo("00077881");
     assertThat(criteria.requireScalePermit()).isTrue();
-    assertThat(criteria.regionNumbers()).containsExactly(12L, 24L);
+    assertThat(criteria.regionNumbers()).isEmpty();
     assertThat(criteria.sortField()).isEqualTo("permitNumber DESC");
     assertThat(criteria.page()).isZero();
     assertThat(criteria.size()).isEqualTo(10);
@@ -349,12 +318,6 @@ class OracleLexisSummaryServiceTest {
 
   @Test
   void feesShouldBuildScopedCriteriaAndMapFeeRows() {
-    when(permitService.searchOptions())
-        .thenReturn(
-            new PermitSearchOptionsDto(
-                List.of(),
-                List.of(new CodeNameDto("12", "Coast"), new CodeNameDto("24", "Skeena"))));
-
     when(permitService.search(any(PermitSearchCriteria.class)))
         .thenReturn(
             new PermitSearchResponseDto(
@@ -417,6 +380,7 @@ class OracleLexisSummaryServiceTest {
     assertThat(criteria.applicantClientNumber()).isNull();
     assertThat(criteria.accessClientNumber()).isEqualTo("00077881");
     assertThat(criteria.requireScalePermit()).isFalse();
+    assertThat(criteria.regionNumbers()).isEmpty();
     assertThat(criteria.sortField()).isEqualTo("permitNumber DESC");
     assertThat(criteria.page()).isZero();
     assertThat(criteria.size()).isEqualTo(10);
@@ -430,9 +394,6 @@ class OracleLexisSummaryServiceTest {
 
   @Test
   void offersPlacedShouldUseOfferingClientScopeAndExcludeWithdrawn() {
-    when(offerService.searchOptions())
-        .thenReturn(new PurchaseOfferSearchOptionsDto(List.of(new CodeNameDto("12", "Coast"))));
-
     when(offerService.search(any(PurchaseOfferSearchCriteria.class)))
         .thenReturn(
             new PurchaseOfferSearchResponseDto(
@@ -459,6 +420,7 @@ class OracleLexisSummaryServiceTest {
     assertThat(criteria.offeringClientNumber()).isEqualTo("00077881");
     assertThat(criteria.excludeWithdrawn()).isTrue();
     assertThat(criteria.restrictToProvincialOrNullJurisdiction()).isFalse();
+    assertThat(criteria.regionNumbers()).isEmpty();
     assertThat(criteria.page()).isEqualTo(1);
     assertThat(criteria.size()).isEqualTo(1);
 
