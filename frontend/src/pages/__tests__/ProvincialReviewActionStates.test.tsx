@@ -158,7 +158,7 @@ const renderPage = (
 const confirmSelectedApplicationApproval = async () => {
   await userEvent.click(screen.getByRole('button', { name: 'Approve Selected Applications' }))
   const dialog = await screen.findByRole('dialog', { name: 'Approve applications' })
-  await userEvent.click(within(dialog).getByRole('button', { name: 'Approve', exact: true }))
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Approve' }))
 }
 
 Element.prototype.scrollIntoView = vi.fn()
@@ -409,7 +409,7 @@ describe('Provincial Review Action State Smoke', () => {
       '1000456',
     )
     expect(mockedApproveApplicationReview).not.toHaveBeenCalled()
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Approve', exact: true }))
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Approve' }))
 
     await waitFor(() => {
       expect(mockedApproveApplicationReview).toHaveBeenCalledTimes(1)
