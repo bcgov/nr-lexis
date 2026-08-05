@@ -245,12 +245,22 @@ class ExemptionRepositoryTest {
             0,
             10));
 
-    assertThat(repository.whereSql())
+    assertThat(repository.pageSelectSql())
+        .contains("WITH ACCESSIBLE_EXEMPTIONS AS")
         .contains("EEA_ACCESS.AGENT_CLIENT_NUMBER")
         .contains("EEA_ACCESS.OWNER_CLIENT_NUMBER")
+        .contains("EE_ACCESS.EXPORT_EXEMPTION_TYPE_CODE NOT IN ('B', 'O')")
+        .contains("EE_OIC.EXPORT_EXEMPTION_TYPE_CODE IN ('B', 'O')")
+        .contains("INNER JOIN ACCESSIBLE_EXEMPTIONS AE_CANON")
+        .contains("INNER JOIN ACCESSIBLE_EXEMPTIONS AE_VOLUME")
+        .contains("INNER JOIN ACCESSIBLE_EXEMPTIONS AE_IEEA")
+        .contains("INNER JOIN ACCESSIBLE_EXEMPTIONS AE_OEO")
+        .contains("INNER JOIN ACCESSIBLE_EXEMPTIONS AE")
+        .doesNotContain("OR EE.EXPORT_EXEMPTION_TYPE_CODE IN ('B', 'O')");
+    assertThat(repository.whereSql())
         .contains("EEA_REGION.ORG_UNIT_NO")
         .contains("OEO_REGION.ORG_UNIT_NO")
-        .contains("OR EE.EXPORT_EXEMPTION_TYPE_CODE IN ('B', 'O')")
+        .doesNotContain("EEA_ACCESS")
         .doesNotContain("EEA.AGENT_CLIENT_NUMBER IS NULL");
     assertThat(repository.bindValues())
         .containsExactly(
@@ -260,6 +270,8 @@ class ExemptionRepositoryTest {
             1826L,
             76L,
             1826L);
+    assertThat(repository.countCalls()).isEqualTo(1);
+    assertThat(repository.pageCalls()).isEqualTo(1);
   }
 
   @Test
@@ -287,10 +299,16 @@ class ExemptionRepositoryTest {
             0,
             10));
 
-    assertThat(repository.whereSql())
-        .contains("EE.EXPORT_EXEMPTION_TYPE_CODE NOT IN ('B', 'O')")
-        .contains("EXISTS (SELECT 1 FROM EXPORT_EXEMPTION_APPLICATION EEA_ACCESS")
-        .doesNotContain("OR EE.EXPORT_EXEMPTION_TYPE_CODE IN ('B', 'O')");
+    assertThat(repository.pageSelectSql())
+        .contains("WITH ACCESSIBLE_EXEMPTIONS AS")
+        .contains("EE_ACCESS.EXPORT_EXEMPTION_TYPE_CODE NOT IN ('B', 'O')")
+        .doesNotContain("EE_OIC.EXPORT_EXEMPTION_TYPE_CODE IN ('B', 'O')");
+    assertThat(repository.countSelectSql())
+        .contains("WITH ACCESSIBLE_EXEMPTIONS AS")
+        .contains("INNER JOIN ACCESSIBLE_EXEMPTIONS AE_CANON")
+        .contains("INNER JOIN ACCESSIBLE_EXEMPTIONS AE")
+        .doesNotContain("PERMIT_VOLUME_BY_EXEMPTION", "EXEMPTION_ORG_UNIT");
+    assertThat(repository.whereSql()).doesNotContain("EEA_ACCESS");
     assertThat(repository.bindValues()).containsExactly("00012345", "00012345");
   }
 
@@ -350,12 +368,14 @@ class ExemptionRepositoryTest {
     repository.search(criteria);
     assertThat(repository.whereSql())
         .contains("EE.EXPORT_EXEMPTION_TYPE_CODE != 'B'");
+    assertThat(repository.pageSelectSql()).doesNotContain("ACCESSIBLE_EXEMPTIONS");
 
     repository.count(criteria);
     assertThat(repository.whereSql())
         .contains("EE.EXPORT_EXEMPTION_TYPE_CODE != 'B'")
         .doesNotContain("GROUP BY")
         .doesNotContain("ORDER BY EE.");
+    assertThat(repository.countSelectSql()).doesNotContain("ACCESSIBLE_EXEMPTIONS");
   }
 
   @Test

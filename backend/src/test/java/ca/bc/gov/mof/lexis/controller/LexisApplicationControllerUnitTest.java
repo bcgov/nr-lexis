@@ -350,6 +350,7 @@ class LexisApplicationControllerUnitTest {
         "R2",
         95.0,
         true,
-        false);
+        false,
+        null);
   }
 }

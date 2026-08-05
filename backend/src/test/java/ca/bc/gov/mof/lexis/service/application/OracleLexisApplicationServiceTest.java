@@ -290,7 +290,8 @@ class OracleLexisApplicationServiceTest {
         "R2",
         95.0,
         false,
-        false);
+        false,
+        null);
   }
 
   private static <T> Page<T> page(List<T> content, long total) {

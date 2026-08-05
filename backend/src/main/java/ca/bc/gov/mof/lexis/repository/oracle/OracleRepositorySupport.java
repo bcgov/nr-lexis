@@ -624,6 +624,14 @@ public abstract class OracleRepositorySupport {
     private final StringBuilder sql = new StringBuilder(" WHERE 1=1");
     private final List<Object> bindValues = new ArrayList<>();
 
+    /** Adds bind values for placeholders declared in the base SELECT before this WHERE clause. */
+    public DirectSqlBuilder addLeadingBinds(Object... values) {
+      if (values != null) {
+        bindValues.addAll(0, List.of(values));
+      }
+      return this;
+    }
+
     public DirectSqlBuilder addLike(String column, String value) {
       String normalized = trim(value);
       if (normalized != null) {
