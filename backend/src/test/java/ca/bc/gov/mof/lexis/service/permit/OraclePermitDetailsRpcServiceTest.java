@@ -2798,19 +2798,27 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
-  void updatePermitShouldRejectInteractiveExpiryTransition() {
+  void updatePermitShouldAllowInteractiveExpiryTransitionLikeLegacy() {
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(permitMutationRow("ACT")));
     stubTargetMinisterialExemption("EX-700");
+    when(repository.updatePermitDetail(
+            any(PermitMutationRow.class),
+            eq("idir\\jsmith"),
+            eq(FEE_MASK_EFFECTIVE_DATE)))
+        .thenReturn(true);
 
     PermitMutationRpcResponseDto response =
         service.updatePermit(
             formCheckRequest("EXP", "42", "Legacy notes"), "idir\\jsmith");
 
-    assertThat(response.success()).isFalse();
-    assertThat(response.errors())
-        .containsExactly("Permit expiry is managed by the expiry process.");
-    verify(repository, never()).updatePermitDetail(any(), any(), any());
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<PermitMutationRow> permitCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository)
+        .updatePermitDetail(
+            permitCaptor.capture(), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE));
+    assertThat(permitCaptor.getValue().permitStatusCode()).isEqualTo("EXP");
   }
 
   @Test

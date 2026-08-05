@@ -175,7 +175,8 @@ type PermitFeeOverrideForm = PermitFeeOverrideContext
 
 const MAX_OIC_REQUEST_PIECES = 9_999_999_999
 const MAX_OIC_REQUEST_VOLUME_LENGTH = 9
-const EDITABLE_PERMIT_STATUS_CODES = new Set(['ACT', 'COM', 'CAN'])
+// Legacy allows an approver to move a permit to EXP; once expired, the record is read-only.
+const EDITABLE_PERMIT_STATUS_CODES = new Set(['ACT', 'COM', 'CAN', 'EXP'])
 const SERVER_ASSIGNED_PAYMENT_PENDING_STATUS = 'PPD'
 const SHIPPING_PERMIT_FIELDS = new Set<PermitDetailFormField>([
   'destinationCompanyName',
