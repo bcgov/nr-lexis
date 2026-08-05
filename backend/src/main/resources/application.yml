@@ -148,6 +148,8 @@ lexis:
         - "createApplication"
         - "createOffer"
         - "createPermit"
+        # Legacy parity: Application Approvers can save exemptions, including Active OIC/BOIC,
+        # but approveExemption remains reserved for Ministerial approval by Exemption Approvers.
         - "saveExemption"
         - "savePermit"
         - "uploadApplicationSubmission"
