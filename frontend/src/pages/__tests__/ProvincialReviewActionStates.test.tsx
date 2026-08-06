@@ -815,9 +815,10 @@ describe('Provincial Review Action State Smoke', () => {
   it('defaults to all active regions but waits for an explicit search', async () => {
     renderPage('/provincial/review')
 
-    const selectedRegions = await screen.findByRole('list', { name: 'Selected regions' })
-    expect(within(selectedRegions).getByText('Cariboo')).toBeVisible()
-    expect(within(selectedRegions).getByText('Coast')).toBeVisible()
+    expect(
+      await screen.findByRole('combobox', { name: /^Region\s*Total items selected:\s*2/ }),
+    ).toBeVisible()
+    expect(screen.queryByRole('list', { name: 'Selected regions' })).not.toBeInTheDocument()
     expect(mockedSearchApplicationReviews).not.toHaveBeenCalled()
     const reviewQueue = screen.getByRole('region', { name: 'Review queue', hidden: true })
     expect(reviewQueue.closest('[hidden]')).toHaveStyle({ display: 'none' })
@@ -855,11 +856,10 @@ describe('Provincial Review Action State Smoke', () => {
 
     renderPage('/provincial/review')
 
-    const selectedRegions = await screen.findByRole('list', { name: 'Selected regions' })
-    expect(within(selectedRegions).getByText('Northeast')).toBeVisible()
-    expect(within(selectedRegions).getByText('Omineca')).toBeVisible()
-    expect(within(selectedRegions).getByText('Skeena')).toBeVisible()
-    expect(within(selectedRegions).queryByText('Cariboo')).not.toBeInTheDocument()
+    expect(
+      await screen.findByRole('combobox', { name: /^Region\s*Total items selected:\s*3/ }),
+    ).toBeVisible()
+    expect(screen.queryByRole('list', { name: 'Selected regions' })).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Search' }))
     await waitFor(() => {
@@ -1052,7 +1052,7 @@ describe('Provincial Review Action State Smoke', () => {
     })
   })
 
-  it('shows selected review search regions as removable pills', async () => {
+  it('shows selected review search regions in the default Carbon multi-select', async () => {
     mockedFetchApplicationReviewOptions.mockResolvedValueOnce({
       productTypes: [{ value: 'LOG', label: 'Logs' }],
       regions: [
@@ -1065,9 +1065,10 @@ describe('Provincial Review Action State Smoke', () => {
     renderPage('/provincial/review?region=1903,1908')
     await screen.findByText('1000123')
 
-    const selectedRegions = await screen.findByRole('list', { name: 'Selected regions' })
-    expect(within(selectedRegions).getByText('Cariboo Natural Resource Region')).toBeVisible()
-    expect(within(selectedRegions).getByText('Skeena Natural Resource Region')).toBeVisible()
+    expect(
+      await screen.findByRole('combobox', { name: /^Region\s*Total items selected:\s*2/ }),
+    ).toBeVisible()
+    expect(screen.queryByRole('list', { name: 'Selected regions' })).not.toBeInTheDocument()
   })
 
   it('disables selection and action buttons when user lacks review permission', async () => {

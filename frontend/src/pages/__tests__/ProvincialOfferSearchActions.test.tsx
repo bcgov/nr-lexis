@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -237,9 +237,10 @@ describe('Provincial Offer Search Actions', () => {
     await waitFor(() => {
       expect(screen.getByLabelText('Listing to date')).toHaveValue('2026-07-11')
     })
-    const selectedRegions = screen.getByRole('list', { name: 'Selected regions' })
-    expect(within(selectedRegions).getByText('Cariboo')).toBeVisible()
-    expect(within(selectedRegions).getByText('Coast')).toBeVisible()
+    expect(
+      screen.getByRole('combobox', { name: /^Region\s*Total items selected:\s*2/ }),
+    ).toBeVisible()
+    expect(screen.queryByRole('list', { name: 'Selected regions' })).not.toBeInTheDocument()
     expect(mockedSearchProvincialOffers).not.toHaveBeenCalled()
 
     await userEvent.click(screen.getByRole('button', { name: 'Search' }))
@@ -273,10 +274,10 @@ describe('Provincial Offer Search Actions', () => {
 
     renderPage('/provincial/offers')
 
-    const selectedRegions = await screen.findByRole('list', { name: 'Selected regions' })
-    expect(within(selectedRegions).getByText('South Coast')).toBeVisible()
-    expect(within(selectedRegions).getByText('West Coast')).toBeVisible()
-    expect(within(selectedRegions).queryByText('Cariboo')).not.toBeInTheDocument()
+    expect(
+      await screen.findByRole('combobox', { name: /^Region\s*Total items selected:\s*2/ }),
+    ).toBeVisible()
+    expect(screen.queryByRole('list', { name: 'Selected regions' })).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Search' }))
     await waitFor(() => {
@@ -326,7 +327,7 @@ describe('Provincial Offer Search Actions', () => {
     })
   })
 
-  it('shows selected offer search regions as removable pills', async () => {
+  it('shows selected offer search regions in the default Carbon multi-select', async () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
     mockedFetchProvincialOfferOptions.mockResolvedValueOnce({
       regions: [
@@ -338,9 +339,10 @@ describe('Provincial Offer Search Actions', () => {
     renderPage('/provincial/offers?region=1903,1908')
     await screen.findByText('OFF-1001')
 
-    const selectedRegions = await screen.findByRole('list', { name: 'Selected regions' })
-    expect(within(selectedRegions).getByText('Cariboo Natural Resource Region')).toBeVisible()
-    expect(within(selectedRegions).getByText('Skeena Natural Resource Region')).toBeVisible()
+    expect(
+      await screen.findByRole('combobox', { name: /^Region\s*Total items selected:\s*2/ }),
+    ).toBeVisible()
+    expect(screen.queryByRole('list', { name: 'Selected regions' })).not.toBeInTheDocument()
   })
 
   it('disables search for invalid dates and updates search sort direction from header click', async () => {

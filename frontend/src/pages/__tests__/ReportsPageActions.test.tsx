@@ -547,7 +547,7 @@ describe('Reports Page Actions', () => {
     })
   })
 
-  it('shows selected report regions as removable pills', async () => {
+  it('shows selected report regions in the default Carbon multi-select', async () => {
     mockReportPermissions()
     mockedFetchReportOptions.mockResolvedValueOnce({
       ...emptyReportOptions(),
@@ -570,11 +570,10 @@ describe('Reports Page Actions', () => {
     await chooseComboBoxOption('Region', 'Cariboo Natural Resource Region')
     await chooseComboBoxOption('Region', 'Kootenay-Boundary Natural Resource Region')
 
-    const selectedRegions = await screen.findByRole('list', { name: 'Selected regions' })
-    expect(within(selectedRegions).getByText('Cariboo Natural Resource Region')).toBeVisible()
     expect(
-      within(selectedRegions).getByText('Kootenay-Boundary Natural Resource Region'),
+      await screen.findByRole('combobox', { name: /^Region\s*Total items selected:\s*2/ }),
     ).toBeVisible()
+    expect(screen.queryByRole('list', { name: 'Selected regions' })).not.toBeInTheDocument()
   })
 
   it('defaults species and grade permit status to complete like legacy Struts', async () => {

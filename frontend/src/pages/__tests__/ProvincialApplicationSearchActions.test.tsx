@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -484,8 +484,10 @@ describe('Provincial Application Search Actions', () => {
       expect(mockedFetchProvincialApplicationOptions).toHaveBeenCalledOnce()
     })
 
-    const selectedRegions = await screen.findByRole('list', { name: 'Selected regions' })
-    expect(within(selectedRegions).getByText('Cariboo')).toBeVisible()
+    expect(
+      await screen.findByRole('combobox', { name: /^Region\s*Total items selected:\s*1/ }),
+    ).toBeVisible()
+    expect(screen.queryByRole('list', { name: 'Selected regions' })).not.toBeInTheDocument()
     expect(mockedSearchProvincialApplications).not.toHaveBeenCalled()
     const resultsTable = screen.getByRole('region', { name: 'Search results table', hidden: true })
     expect(resultsTable.closest('[hidden]')).toHaveStyle({ display: 'none' })
@@ -513,10 +515,10 @@ describe('Provincial Application Search Actions', () => {
 
     renderPage('/provincial/application')
 
-    const selectedRegions = await screen.findByRole('list', { name: 'Selected regions' })
-    expect(within(selectedRegions).getByText('South Coast')).toBeVisible()
-    expect(within(selectedRegions).getByText('West Coast')).toBeVisible()
-    expect(within(selectedRegions).queryByText('Cariboo')).not.toBeInTheDocument()
+    expect(
+      await screen.findByRole('combobox', { name: /^Region\s*Total items selected:\s*2/ }),
+    ).toBeVisible()
+    expect(screen.queryByRole('list', { name: 'Selected regions' })).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Search' }))
     await waitFor(() => {
@@ -645,7 +647,7 @@ describe('Provincial Application Search Actions', () => {
     })
   })
 
-  it('shows selected application search regions as removable pills', async () => {
+  it('shows selected application search regions in the default Carbon multi-select', async () => {
     mockedFetchProvincialApplicationOptions.mockResolvedValueOnce({
       exemptionTypes: [{ value: 'FEE', label: 'Fee in Lieu' }],
       exemptionReasons: [],
@@ -662,14 +664,10 @@ describe('Provincial Application Search Actions', () => {
     renderPage('/provincial/application?region=1903,1908')
     await screen.findByText('321')
 
-    const selectedRegions = await screen.findByRole('list', { name: 'Selected regions' })
-    expect(within(selectedRegions).getByText('Cariboo Natural Resource Region')).toBeVisible()
-    expect(within(selectedRegions).getByText('Skeena Natural Resource Region')).toBeVisible()
     expect(
-      within(selectedRegions).getByRole('button', {
-        name: 'Remove Cariboo Natural Resource Region',
-      }),
-    ).toBeEnabled()
+      await screen.findByRole('combobox', { name: /^Region\s*Total items selected:\s*2/ }),
+    ).toBeVisible()
+    expect(screen.queryByRole('list', { name: 'Selected regions' })).not.toBeInTheDocument()
   })
 
   it('prevents duplicate submissions while a search is in flight', async () => {

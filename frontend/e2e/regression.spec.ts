@@ -442,10 +442,6 @@ const missingApplicationNumber = '999999999'
 const virusScanRejectionMessage = 'The uploaded file failed virus scanning.'
 const regressionClientEmail = 'lexis-regression@example.test'
 const naturalResourceRegionCodes = ['1903', '1904', '1905', '1906', '1907', '1908', '1909', '1910']
-const selectedNaturalResourceRegionNames = [
-  'Cariboo Natural Resource Region',
-  'Skeena Natural Resource Region',
-]
 const sessionExpiredEventName = 'lexis:session-expired'
 const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/
 const landingSubtitle = 'Create and manage applications, view offers and permits'
@@ -2140,21 +2136,16 @@ test.describe('TEST IDIR admin regression', () => {
     ])
   })
 
-  test('shows selected natural resource region names across search filters', async () => {
+  test('uses the default Carbon region multi-select across search filters', async () => {
     const page = await authenticatedIdirPage()
 
     for (const [path, heading] of regionFilterPages) {
       await expectAccessiblePage(page, path, heading)
-      const selectedRegions = page.getByRole('list', { name: 'Selected regions' })
-      await expect(selectedRegions, `${path} should show its selected regions`).toBeVisible({
-        timeout: 30_000,
-      })
-      for (const regionName of selectedNaturalResourceRegionNames) {
-        await expect(
-          selectedRegions.getByText(regionName, { exact: true }),
-          `${path} should show ${regionName}`,
-        ).toBeVisible()
-      }
+      await expect(
+        page.getByRole('combobox', { name: /^Region\s*Total items selected:\s*2/ }),
+        `${path} should expose Carbon's selected-item summary`,
+      ).toBeVisible({ timeout: 30_000 })
+      await expect(page.getByRole('list', { name: 'Selected regions' })).toHaveCount(0)
     }
   })
 

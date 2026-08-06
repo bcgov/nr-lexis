@@ -323,12 +323,11 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(page.locator('.lexis-page-header__subtitle')).toContainText(
       'Find provincial applications',
     )
-    const selectedRegions = page.getByRole('list', { name: 'Selected regions' })
-    await expect(selectedRegions.getByText('Cariboo', { exact: true })).toBeVisible()
-    await expect(selectedRegions.getByText('Kootenay-Boundary', { exact: true })).toBeVisible()
-    await expect(selectedRegions.getByText('Thompson-Okanagan', { exact: true })).toBeVisible()
-    await expect(selectedRegions.getByText('Northeast', { exact: true })).toHaveCount(0)
-
+    await expect(
+      page.getByRole('combobox', { name: /^Region\s*Total items selected:\s*3/ }),
+    ).toBeVisible()
+    await expect(page.locator('.region-multi-select .cds--tag--filter')).toHaveText('3')
+    await expect(page.getByRole('list', { name: 'Selected regions' })).toHaveCount(0)
     const applicationSearchRequest = page.waitForRequest(
       (request) => new URL(request.url()).pathname === '/api/lexis/applications/search',
     )
@@ -336,6 +335,27 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     const submittedRegionParams = new URL((await applicationSearchRequest).url()).searchParams
     expect(submittedRegionParams.getAll('region')).toEqual(['1903', '1904', '1907'])
     await expect(page.locator('.lexis-status-tag')).toHaveCount(2)
+    const fullWidthResults = await page
+      .getByRole('region', { name: 'Search results table' })
+      .evaluate((results) => {
+        const main = document.querySelector('main.app-main')
+        if (!(main instanceof HTMLElement)) throw new Error('Application content not found')
+
+        const resultsBounds = results.getBoundingClientRect()
+        const mainBounds = main.getBoundingClientRect()
+        return {
+          resultsLeft: resultsBounds.left,
+          resultsRight: resultsBounds.right,
+          mainLeft: mainBounds.left,
+          mainRight: mainBounds.right,
+        }
+      })
+    expect(Math.abs(fullWidthResults.resultsLeft - fullWidthResults.mainLeft)).toBeLessThanOrEqual(
+      1,
+    )
+    expect(
+      Math.abs(fullWidthResults.resultsRight - fullWidthResults.mainRight),
+    ).toBeLessThanOrEqual(1)
     const resultCountToolbar = page.locator('.legacy-search-table-toolbar .cds--toolbar-content')
     await expect(resultCountToolbar).toHaveCSS('align-items', 'center')
     await expect(resultCountToolbar).toHaveCSS('padding-left', '16px')
@@ -432,6 +452,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       'white-space',
       'nowrap',
     )
+    await expect(table.locator('.lexis-status-tag').first()).toHaveCSS('white-space', 'nowrap')
     await expect(firstRowCell).toHaveCSS('background-color', 'rgb(255, 255, 255)')
     await expect(secondRowCell).toHaveCSS('background-color', 'rgb(243, 243, 245)')
 
@@ -507,6 +528,27 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       'tabindex',
       '0',
     )
+    const mobileResultsBounds = await page
+      .getByRole('region', { name: 'Search results table' })
+      .evaluate((results) => {
+        const main = document.querySelector('main.app-main')
+        if (!(main instanceof HTMLElement)) throw new Error('Application content not found')
+
+        const resultsBounds = results.getBoundingClientRect()
+        const mainBounds = main.getBoundingClientRect()
+        return {
+          resultsLeft: resultsBounds.left,
+          resultsRight: resultsBounds.right,
+          mainLeft: mainBounds.left,
+          mainRight: mainBounds.right,
+        }
+      })
+    expect(
+      Math.abs(mobileResultsBounds.resultsLeft - mobileResultsBounds.mainLeft),
+    ).toBeLessThanOrEqual(1)
+    expect(
+      Math.abs(mobileResultsBounds.resultsRight - mobileResultsBounds.mainRight),
+    ).toBeLessThanOrEqual(1)
 
     await openNavigation.click()
 

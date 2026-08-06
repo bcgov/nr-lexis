@@ -779,8 +779,10 @@ describe('Provincial Exemption Search Actions', () => {
     const resultsTable = screen.getByRole('region', { name: 'Search results table', hidden: true })
     expect(resultsTable.closest('[hidden]')).toHaveStyle({ display: 'none' })
     expect(resultsTable).not.toBeVisible()
-    const selectedRegions = await screen.findByRole('list', { name: 'Selected regions' })
-    expect(within(selectedRegions).getByText('Cariboo')).toBeVisible()
+    expect(
+      await screen.findByRole('combobox', { name: /^Region\s*Total items selected:\s*1/ }),
+    ).toBeVisible()
+    expect(screen.queryByRole('list', { name: 'Selected regions' })).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Search' }))
     await waitFor(() => {
@@ -825,11 +827,10 @@ describe('Provincial Exemption Search Actions', () => {
 
     renderPage('/provincial/exemption')
 
-    const selectedRegions = await screen.findByRole('list', { name: 'Selected regions' })
-    expect(within(selectedRegions).getByText('Northeast')).toBeVisible()
-    expect(within(selectedRegions).getByText('Omineca')).toBeVisible()
-    expect(within(selectedRegions).getByText('Skeena')).toBeVisible()
-    expect(within(selectedRegions).queryByText('Cariboo')).not.toBeInTheDocument()
+    expect(
+      await screen.findByRole('combobox', { name: /^Region\s*Total items selected:\s*3/ }),
+    ).toBeVisible()
+    expect(screen.queryByRole('list', { name: 'Selected regions' })).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Search' }))
     await waitFor(() => {
@@ -842,7 +843,7 @@ describe('Provincial Exemption Search Actions', () => {
     })
   })
 
-  it('shows selected exemption search regions as removable pills', async () => {
+  it('shows selected exemption search regions in the default Carbon multi-select', async () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
     mockedFetchProvincialExemptionOptions.mockResolvedValueOnce({
       exemptionTypes: [{ value: 'SECTION_1', label: 'Section 1' }],
@@ -856,9 +857,10 @@ describe('Provincial Exemption Search Actions', () => {
     renderPage('/provincial/exemption?region=1903,1908')
     await screen.findByText('EX-1001')
 
-    const selectedRegions = await screen.findByRole('list', { name: 'Selected regions' })
-    expect(within(selectedRegions).getByText('Cariboo Natural Resource Region')).toBeVisible()
-    expect(within(selectedRegions).getByText('Skeena Natural Resource Region')).toBeVisible()
+    expect(
+      await screen.findByRole('combobox', { name: /^Region\s*Total items selected:\s*2/ }),
+    ).toBeVisible()
+    expect(screen.queryByRole('list', { name: 'Selected regions' })).not.toBeInTheDocument()
   })
 
   it('uses the application search filter order and labels', async () => {
