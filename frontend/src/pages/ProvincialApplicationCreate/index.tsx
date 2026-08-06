@@ -5,7 +5,6 @@ import {
   Column,
   DismissibleTag,
   Grid,
-  Modal,
   Tab,
   TabList,
   TabPanel,
@@ -17,6 +16,7 @@ import {
 } from '@carbon/react'
 import SearchableSelect from '../../components/SearchableSelect'
 import { AppNotification } from '../../components/AppNotification'
+import Modal from '@/components/Modal'
 import DetailDocumentUploadPanel from '../../components/uploads/DetailDocumentUploadPanel'
 import PageHeader from '@/components/PageHeader'
 import AuthoritativeOptionsUnavailableNotification from '@/components/AuthoritativeOptionsUnavailableNotification'

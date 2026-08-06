@@ -323,6 +323,43 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(page.locator('.lexis-page-header__subtitle')).toContainText(
       'Find provincial applications',
     )
+    const initialShellLayout = await page.evaluate(() => {
+      const sideNav = document.querySelector('.csp-side-nav')
+      const main = document.querySelector('main.app-main')
+      const heading = document.querySelector('.lexis-page-header')
+      const filters = document.querySelector('.provincial-application-search-filters')
+      const criteria = document.querySelector('.provincial-application-search-grid')
+      const actions = filters?.querySelector('.legacy-search-actions')
+      if (!(sideNav instanceof HTMLElement)) throw new Error('Side navigation not found')
+      if (!(main instanceof HTMLElement)) throw new Error('Application content not found')
+      if (!(heading instanceof HTMLElement)) throw new Error('Page heading not found')
+      if (!(filters instanceof HTMLElement)) throw new Error('Search filters not found')
+      if (!(criteria instanceof HTMLElement)) throw new Error('Search criteria not found')
+      if (!(actions instanceof HTMLElement)) throw new Error('Search actions not found')
+
+      const sideNavBounds = sideNav.getBoundingClientRect()
+      const mainBounds = main.getBoundingClientRect()
+      const headingBounds = heading.getBoundingClientRect()
+      const filterBounds = filters.getBoundingClientRect()
+      const criteriaBounds = criteria.getBoundingClientRect()
+      const actionBounds = actions.getBoundingClientRect()
+      return {
+        sideNavWidth: sideNavBounds.width,
+        mainLeft: mainBounds.left,
+        headingLeft: headingBounds.left,
+        filterLeft: filterBounds.left,
+        criteriaActionGap: actionBounds.top - criteriaBounds.bottom,
+        sideNavTransitionMs: Number.parseFloat(getComputedStyle(sideNav).transitionDuration) * 1000,
+        mainTransitionMs: Number.parseFloat(getComputedStyle(main).transitionDuration) * 1000,
+      }
+    })
+    expect(initialShellLayout.sideNavWidth).toBe(256)
+    expect(initialShellLayout.mainLeft).toBe(256)
+    expect(initialShellLayout.headingLeft - initialShellLayout.mainLeft).toBe(24)
+    expect(initialShellLayout.filterLeft).toBe(initialShellLayout.headingLeft)
+    expect(initialShellLayout.criteriaActionGap).toBe(12)
+    expect(initialShellLayout.sideNavTransitionMs).toBe(320)
+    expect(initialShellLayout.mainTransitionMs).toBe(320)
     await expect(
       page.getByRole('combobox', { name: /^Region\s*Total items selected:\s*3/ }),
     ).toBeVisible()
@@ -339,15 +376,23 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       .getByRole('region', { name: 'Search results table' })
       .evaluate((results) => {
         const main = document.querySelector('main.app-main')
+        const filters = document.querySelector('.provincial-application-search-filters')
+        const resultsSection = results.closest('.legacy-search-section--results')
         if (!(main instanceof HTMLElement)) throw new Error('Application content not found')
+        if (!(filters instanceof HTMLElement)) throw new Error('Search filters not found')
+        if (!(resultsSection instanceof HTMLElement)) throw new Error('Results section not found')
 
         const resultsBounds = results.getBoundingClientRect()
         const mainBounds = main.getBoundingClientRect()
+        const filterBounds = filters.getBoundingClientRect()
+        const resultsSectionBounds = resultsSection.getBoundingClientRect()
         return {
           resultsLeft: resultsBounds.left,
           resultsRight: resultsBounds.right,
           mainLeft: mainBounds.left,
           mainRight: mainBounds.right,
+          headingLeft: document.querySelector('.lexis-page-header')?.getBoundingClientRect().left,
+          filterResultsGap: resultsSectionBounds.top - filterBounds.bottom,
         }
       })
     expect(Math.abs(fullWidthResults.resultsLeft - fullWidthResults.mainLeft)).toBeLessThanOrEqual(
@@ -356,6 +401,8 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     expect(
       Math.abs(fullWidthResults.resultsRight - fullWidthResults.mainRight),
     ).toBeLessThanOrEqual(1)
+    expect(fullWidthResults.headingLeft).toBe(initialShellLayout.headingLeft)
+    expect(fullWidthResults.filterResultsGap).toBe(32)
     const resultCountToolbar = page.locator('.legacy-search-table-toolbar .cds--toolbar-content')
     await expect(resultCountToolbar).toHaveCSS('align-items', 'center')
     await expect(resultCountToolbar).toHaveCSS('padding-left', '16px')
@@ -405,7 +452,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
         secondaryText: '#606062',
         textRendering: 'optimizespeed',
         fontFeatureSettings: 'normal',
-        rowGap: '40px',
+        rowGap: '24px',
         columnGap: '32px',
         flexGrow: '1',
         labelColor: 'rgb(19, 19, 21)',
@@ -415,12 +462,72 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     expect(typographyFoundation.dateFontFamily).toContain('BC Sans')
 
     const themeSwitch = page.getByRole('switch', { name: 'Toggle dark mode' })
+    await expect(themeSwitch).toHaveCSS('width', '48px')
+    await expect(themeSwitch).toHaveCSS('height', '24px')
+    await expect(page.locator('.csp-theme-switch__thumb')).toHaveCSS('width', '18px')
+    await expect(page.locator('.csp-theme-switch__thumb')).toHaveCSS('height', '18px')
+
+    await page.getByRole('button', { name: 'Open profile panel' }).click()
+    const profilePanel = page.getByRole('dialog', { name: 'Profile' })
+    await expect(profilePanel).toHaveClass(/is-open/)
+    const profileLayout = await profilePanel.evaluate((panel) => {
+      const avatar = panel.querySelector('.profile-avatar')
+      if (!(avatar instanceof HTMLElement)) throw new Error('Profile avatar not found')
+      return {
+        panelWidth: panel.getBoundingClientRect().width,
+        avatarWidth: avatar.getBoundingClientRect().width,
+        avatarHeight: avatar.getBoundingClientRect().height,
+        backgroundColor: getComputedStyle(panel).backgroundColor,
+      }
+    })
+    expect(profileLayout).toEqual({
+      panelWidth: 384,
+      avatarWidth: 64,
+      avatarHeight: 64,
+      backgroundColor: 'rgb(255, 255, 255)',
+    })
+    await profilePanel.getByRole('button', { name: 'Close profile panel' }).click()
+    await expect(page.locator('#profile-panel')).toHaveAttribute('aria-hidden', 'true')
+
     await themeSwitch.click()
     await expect(themeSwitch).toHaveAttribute('aria-checked', 'true')
+    await expect(themeSwitch).toHaveCSS('background-color', 'rgb(22, 22, 22)')
+    await expect(page.locator('.csp-theme-switch__thumb')).toHaveCSS(
+      'transform',
+      'matrix(1, 0, 0, 1, 24, 0)',
+    )
+    await expect(page.locator('.csp-theme-switch__thumb')).toHaveCSS(
+      'background-color',
+      'rgb(255, 255, 255)',
+    )
     await expect(page.locator('html')).toHaveAttribute('data-carbon-theme', 'g100')
 
     await page.getByRole('button', { name: 'Collapse side navigation' }).click()
     await expect(page.locator('.app-shell')).toHaveClass(/is-side-nav-collapsed/)
+    const collapsedNav = page.locator('.csp-side-nav')
+    await expect(collapsedNav).toHaveCSS('width', '48px')
+    const collapsedLinkLayout = await page
+      .locator('a.csp-side-nav__link[data-label="Applications"]')
+      .evaluate((link) => {
+        const nav = document.querySelector('.csp-side-nav')
+        const icon = link.querySelector('.csp-side-nav__icon')
+        if (!(nav instanceof HTMLElement)) throw new Error('Side navigation not found')
+        if (!(icon instanceof HTMLElement)) throw new Error('Navigation icon not found')
+        const navBounds = nav.getBoundingClientRect()
+        const iconBounds = icon.getBoundingClientRect()
+        const tooltipStyle = getComputedStyle(link, '::after')
+        return {
+          centerOffset:
+            iconBounds.left + iconBounds.width / 2 - (navBounds.left + navBounds.width / 2),
+          tooltipBackground: tooltipStyle.backgroundColor,
+          tooltipRadius: tooltipStyle.borderRadius,
+          tooltipPaddingBlockStart: tooltipStyle.paddingBlockStart,
+        }
+      })
+    expect(Math.abs(collapsedLinkLayout.centerOffset)).toBeLessThanOrEqual(2)
+    expect(collapsedLinkLayout.tooltipBackground).toBe('rgb(19, 19, 21)')
+    expect(collapsedLinkLayout.tooltipRadius).toBe('4px')
+    expect(collapsedLinkLayout.tooltipPaddingBlockStart).toBe('6px')
 
     await page.reload({ waitUntil: 'domcontentloaded' })
 
@@ -430,6 +537,60 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     )
     await expect(page.locator('html')).toHaveAttribute('data-carbon-theme', 'g100')
     await expect(page.locator('.app-shell')).toHaveClass(/is-side-nav-collapsed/)
+  })
+
+  test('uses the same FSPTS list-page foundation on every primary search route', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+
+    for (const route of [
+      '/provincial/application',
+      '/provincial/exemption',
+      '/provincial/offers',
+      '/provincial/permit',
+      '/provincial/review',
+      '/federal',
+    ]) {
+      await page.goto(route, { waitUntil: 'domcontentloaded' })
+      const pageGrid = page.locator('.default-grid.fullbleed-table-page')
+      await expect(pageGrid).toBeVisible()
+      await expect(page.locator('.legacy-search-section--filters')).toBeVisible()
+
+      const alignment = await page.evaluate(() => {
+        const main = document.querySelector('main.app-main')
+        const heading = document.querySelector('.lexis-page-header')
+        const filters = document.querySelector('.legacy-search-section--filters')
+        const grid = document.querySelector('.default-grid.fullbleed-table-page')
+        if (!(main instanceof HTMLElement)) throw new Error('Application content not found')
+        if (!(heading instanceof HTMLElement)) throw new Error('Page heading not found')
+        if (!(filters instanceof HTMLElement)) throw new Error('Search filters not found')
+        if (!(grid instanceof HTMLElement)) throw new Error('List page grid not found')
+
+        const mainBounds = main.getBoundingClientRect()
+        const headingBounds = heading.getBoundingClientRect()
+        const filterBounds = filters.getBoundingClientRect()
+        const gridStyle = getComputedStyle(grid)
+        return {
+          headingInset: headingBounds.left - mainBounds.left,
+          filterLeft: filterBounds.left,
+          headingLeft: headingBounds.left,
+          paddingBlockStart: gridStyle.paddingBlockStart,
+          paddingInlineStart: gridStyle.paddingInlineStart,
+          rowGap: gridStyle.rowGap,
+        }
+      })
+
+      expect(alignment.filterLeft).toBe(alignment.headingLeft)
+      expect(alignment).toEqual(
+        expect.objectContaining({
+          headingInset: 24,
+          paddingBlockStart: '16px',
+          paddingInlineStart: '0px',
+          rowGap: '24px',
+        }),
+      )
+    }
   })
 
   test('uses accessible dark interactions and stable FSPTS table rows', async ({ page }) => {
@@ -444,6 +605,10 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     const secondRowCell = rows.nth(1).locator('td').first()
 
     await expect(rows).toHaveCount(2)
+    await expect(table).toHaveClass(/cds--data-table--md/)
+    const firstRowHeight = await rows.first().evaluate((row) => row.getBoundingClientRect().height)
+    expect(firstRowHeight).toBeGreaterThanOrEqual(40)
+    expect(firstRowHeight).toBeLessThanOrEqual(64)
     await expect(table.getByRole('columnheader', { name: 'Application', exact: true })).toHaveCSS(
       'white-space',
       'nowrap',
@@ -475,6 +640,10 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     )
     await expect(firstRowCell).toHaveCSS('background-color', 'rgb(38, 38, 38)')
     await expect(secondRowCell).toHaveCSS('background-color', 'rgb(57, 57, 57)')
+    await expect(table.locator('.lexis-status-tag').first()).toHaveCSS(
+      'background-color',
+      'rgb(194, 224, 255)',
+    )
 
     await rows.nth(0).hover()
     await expect(firstRowCell).toHaveCSS('background-color', 'rgb(38, 38, 38)')
@@ -686,6 +855,33 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       .locator('.detail-field-grid')
     await expect(ownerFields).toBeVisible()
 
+    const detailCanvas = await page.evaluate(() => {
+      const main = document.querySelector('main.app-main')
+      const tabList = document.querySelector('.application-detail-tab-list')
+      const panel = document.querySelector('.application-detail-tab-panel')
+      const tile = panel?.querySelector('.cds--tile')
+      if (!(main instanceof HTMLElement)) throw new Error('Application content not found')
+      if (!(tabList instanceof HTMLElement)) throw new Error('Detail tab list not found')
+      if (!(panel instanceof HTMLElement)) throw new Error('Detail tab panel not found')
+      if (!(tile instanceof HTMLElement)) throw new Error('Detail card not found')
+
+      const mainBounds = main.getBoundingClientRect()
+      const tabListBounds = tabList.getBoundingClientRect()
+      const panelBounds = panel.getBoundingClientRect()
+      const tileBounds = tile.getBoundingClientRect()
+      return {
+        mainLeft: mainBounds.left,
+        mainRight: mainBounds.right,
+        panelLeft: panelBounds.left,
+        panelRight: panelBounds.right,
+        tabListLeft: tabListBounds.left,
+        tileLeft: tileBounds.left,
+      }
+    })
+    expect(Math.abs(detailCanvas.panelLeft - detailCanvas.mainLeft)).toBeLessThanOrEqual(1)
+    expect(Math.abs(detailCanvas.panelRight - detailCanvas.mainRight)).toBeLessThanOrEqual(1)
+    expect(Math.abs(detailCanvas.tileLeft - detailCanvas.tabListLeft)).toBeLessThanOrEqual(1)
+
     const columnCount = async () =>
       ownerFields.evaluate((grid) => getComputedStyle(grid).gridTemplateColumns.split(' ').length)
 
@@ -840,6 +1036,25 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(page.getByText('1 result found')).toBeVisible()
     const resultsRegion = page.getByRole('region', { name: 'Search results table' })
     await expect(resultsRegion.getByText('1001')).toBeVisible()
+    await expect(resultsRegion.getByRole('table')).toHaveClass(/cds--data-table--md/)
+    const desktopResultsBounds = await resultsRegion.evaluate((region) => {
+      const main = document.querySelector('main.app-main')
+      if (!(main instanceof HTMLElement)) throw new Error('Application content not found')
+      const regionBounds = region.getBoundingClientRect()
+      const mainBounds = main.getBoundingClientRect()
+      return {
+        regionLeft: regionBounds.left,
+        regionRight: regionBounds.right,
+        mainLeft: mainBounds.left,
+        mainRight: mainBounds.right,
+      }
+    })
+    expect(
+      Math.abs(desktopResultsBounds.regionLeft - desktopResultsBounds.mainLeft),
+    ).toBeLessThanOrEqual(1)
+    expect(
+      Math.abs(desktopResultsBounds.regionRight - desktopResultsBounds.mainRight),
+    ).toBeLessThanOrEqual(1)
 
     await page.setViewportSize({ width: 390, height: 844 })
     const overflow = await resultsRegion.evaluate((region) => ({
@@ -884,7 +1099,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       }
     })
     expect(feeLayout.buttonBottom).toBeLessThanOrEqual(feeLayout.tableTop)
-    expect(Math.abs(feeLayout.buttonRight - feeLayout.tableRight)).toBeLessThanOrEqual(1)
+    expect(Math.abs(feeLayout.tableRight - feeLayout.buttonRight - 16)).toBeLessThanOrEqual(1)
 
     await feeAddButton.click()
     const feeDialog = page.getByRole('dialog', { name: 'Add fee policy' })
@@ -895,6 +1110,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       ),
     ).toBeVisible()
     await expect(feeDialog.getByLabel('Policy effective date')).toBeVisible()
+    await expect(feeDialog.getByLabel('Policy effective date')).toBeFocused()
     await expect(feeDialog.getByLabel('Region')).toBeVisible()
     await expect(feeDialog.getByLabel('Fee increase percentage')).toBeVisible()
     await feeDialog.getByRole('button', { name: 'Cancel' }).click()
@@ -908,6 +1124,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     const filDialog = page.getByRole('dialog', { name: 'Add fee in lieu policy' })
     await expect(filDialog).toBeVisible()
     await expect(filDialog.getByLabel('Policy effective date')).toBeVisible()
+    await expect(filDialog.getByLabel('Policy effective date')).toBeFocused()
     await expect(filDialog.getByLabel('Fee in lieu percentage')).toBeVisible()
 
     const mobileDialog = await filDialog.evaluate((dialog) => {

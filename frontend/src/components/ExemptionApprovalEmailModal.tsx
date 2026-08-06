@@ -1,5 +1,6 @@
-import { Button, Loading, Modal, TextInput } from '@carbon/react'
+import { Button, Loading, TextInput } from '@carbon/react'
 import { useId } from 'react'
+import Modal from '@/components/Modal'
 import { isValidEmail, normalizeTrimmedText } from '@/utils/text'
 
 import './ConfirmationModal/ConfirmationModal.css'

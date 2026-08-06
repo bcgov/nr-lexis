@@ -1,6 +1,6 @@
 import { WarningFilled } from '@carbon/icons-react'
-import { Modal } from '@carbon/react'
 import { useEffect, useLayoutEffect, useRef, type RefObject } from 'react'
+import Modal from '@/components/Modal'
 
 import './SessionTimeoutWarning.css'
 

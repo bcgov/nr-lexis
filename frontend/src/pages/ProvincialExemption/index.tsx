@@ -854,7 +854,7 @@ const ProvincialExemptionPage = () => {
   }
 
   return (
-    <Grid fullWidth className="default-grid provincial-exemption-search-page">
+    <Grid fullWidth className="default-grid fullbleed-table-page provincial-exemption-search-page">
       <Column sm={4} md={8} lg={16}>
         <PageHeader
           title="Provincial exemption search"
@@ -1057,7 +1057,7 @@ const ProvincialExemptionPage = () => {
                 description={errorMessage}
               />
             ) : results.content.length > 0 ? (
-              <Table useZebraStyles>
+              <Table size="md" useZebraStyles>
                 <TableHead>
                   <TableRow>
                     {canApproveExemption && (

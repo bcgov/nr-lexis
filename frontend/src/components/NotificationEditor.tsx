@@ -7,12 +7,13 @@ import {
   TextStrikethrough,
   Unlink,
 } from '@carbon/icons-react'
-import { Button, Modal, TextInput } from '@carbon/react'
+import { Button, TextInput } from '@carbon/react'
 import { EditorContent, useEditor } from '@tiptap/react'
 import LinkExtension from '@tiptap/extension-link'
 import StarterKit from '@tiptap/starter-kit'
 import { useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import Modal from '@/components/Modal'
 import './NotificationEditor.scss'
 
 type NotificationEditorProps = {

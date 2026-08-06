@@ -6,7 +6,6 @@ import {
   Column,
   Grid,
   InlineLoading,
-  Modal,
   Tab,
   TabList,
   TabPanel,
@@ -26,6 +25,7 @@ import {
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import ContentLoadingOverlay from '@/components/ContentLoadingOverlay'
 import ConfirmationModal from '@/components/ConfirmationModal'
+import Modal from '@/components/Modal'
 import EmptyState from '@/components/EmptyState'
 import DetailBreadcrumb from '@/components/DetailBreadcrumb'
 import DisabledButtonTooltip from '@/components/DisabledButtonTooltip'
@@ -1878,7 +1878,7 @@ const ProvincialExemptionDetailsPage = () => {
                             />
                           ) : applications.length > 0 ? (
                             <TableFrame ariaLabel="Associated exemption applications">
-                              <Table useZebraStyles>
+                              <Table size="md" useZebraStyles>
                                 <TableHead>
                                   <TableRow>
                                     <TableHeader>Application</TableHeader>
@@ -2072,7 +2072,7 @@ const ProvincialExemptionDetailsPage = () => {
                           />
                         ) : filteredPermitRows.length > 0 ? (
                           <TableFrame ariaLabel="Related exemption permits">
-                            <Table useZebraStyles>
+                            <Table size="md" useZebraStyles>
                               <TableHead>
                                 <TableRow>
                                   <TableHeader>Permit number</TableHeader>
@@ -2091,7 +2091,12 @@ const ProvincialExemptionDetailsPage = () => {
                                         : row.permitNumber}
                                     </TableCell>
                                     <TableCell>{displayValue(row.permitVolume)}</TableCell>
-                                    <TableCell>{displayValue(row.permitStatus)}</TableCell>
+                                    <TableCell>
+                                      <StatusTag
+                                        status={row.permitStatus}
+                                        fallbackLabel="Not provided"
+                                      />
+                                    </TableCell>
                                     <TableCell>{displayValue(row.permitIssueDate)}</TableCell>
                                     <TableCell>
                                       <Button
@@ -2266,7 +2271,7 @@ const ProvincialExemptionDetailsPage = () => {
                           />
                         ) : filteredDocumentRows.length > 0 ? (
                           <TableFrame ariaLabel="Exemption document rows">
-                            <Table useZebraStyles>
+                            <Table size="md" useZebraStyles>
                               <TableHead>
                                 <TableRow>
                                   <TableHeader>File Name</TableHeader>

@@ -1,7 +1,8 @@
 import { use, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
-import { Button, Checkbox, InlineNotification, Modal } from '@carbon/react'
+import { Button, Checkbox, InlineNotification } from '@carbon/react'
 import { UNSAFE_DataRouterContext, useBeforeUnload, useBlocker } from 'react-router-dom'
 import type { BlockerFunction } from 'react-router-dom'
+import Modal from '@/components/Modal'
 import { isPageUnloadAuthorized } from '@/utils/page-unload'
 
 import './UnsavedChangesGuard.css'

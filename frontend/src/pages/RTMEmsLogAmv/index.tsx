@@ -12,7 +12,6 @@ import {
   Column,
   Grid,
   InlineLoading,
-  Modal,
   Table,
   TableBody,
   TableCell,
@@ -22,6 +21,7 @@ import {
   TextInput,
 } from '@carbon/react'
 import { AppNotification } from '../../components/AppNotification'
+import Modal from '@/components/Modal'
 import PageHeader from '@/components/PageHeader'
 import TableFrame from '@/components/TableFrame'
 import { useAuth } from '@/context/auth/useAuth'

@@ -470,7 +470,7 @@ const FederalPage = () => {
   }
 
   return (
-    <Grid fullWidth className="default-grid federal-application-search-page">
+    <Grid fullWidth className="default-grid fullbleed-table-page federal-application-search-page">
       <Column sm={4} md={8} lg={16}>
         <PageHeader
           title="Federal application search"
@@ -622,7 +622,7 @@ const FederalPage = () => {
                 description={errorMessage}
               />
             ) : results.content.length > 0 ? (
-              <Table useZebraStyles>
+              <Table size="md" useZebraStyles>
                 <TableHead>
                   <TableRow>
                     {canCreateFederalExemption && (

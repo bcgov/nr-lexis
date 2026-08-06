@@ -1,5 +1,6 @@
-import { Button, Loading, Modal } from '@carbon/react'
+import { Button, Loading } from '@carbon/react'
 import { useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import Modal from '@/components/Modal'
 
 import './ConfirmationModal.css'
 

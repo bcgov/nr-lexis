@@ -452,7 +452,7 @@ const ProvincialPermitPage = () => {
   }
 
   return (
-    <Grid fullWidth className="default-grid provincial-permit-search-page">
+    <Grid fullWidth className="default-grid fullbleed-table-page provincial-permit-search-page">
       <Column sm={4} md={8} lg={16}>
         <PageHeader
           title="Provincial permit search"
@@ -595,7 +595,7 @@ const ProvincialPermitPage = () => {
                 description={errorMessage}
               />
             ) : results.content.length > 0 ? (
-              <Table useZebraStyles>
+              <Table size="md" useZebraStyles>
                 <TableHead>
                   <TableRow>
                     {SORT_COLUMNS.map((column) => (

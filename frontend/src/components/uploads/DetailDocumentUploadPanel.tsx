@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Button, Modal, TextArea, TextInput } from '@carbon/react'
+import { Button, TextArea, TextInput } from '@carbon/react'
 import { Add, ArrowRight } from '@carbon/icons-react'
 import { AppNotification } from '../AppNotification'
+import Modal from '@/components/Modal'
 import {
   buildUploadResultMessage,
   buildUploadReviewDetails,

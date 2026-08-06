@@ -397,7 +397,7 @@ const ProvincialPage = () => {
         <Tile>
           {visibleWorkflows.length > 0 ? (
             <TableFrame ariaLabel="Provincial workflows table">
-              <Table useZebraStyles className="dashboard-data-table">
+              <Table size="md" useZebraStyles className="dashboard-data-table">
                 <TableHead>
                   <TableRow>
                     <TableHeader>Area</TableHeader>

@@ -2,7 +2,7 @@
   display: inline-flex;
   align-items: center;
   flex-shrink: 0;
-  min-block-size: 1.5rem;
+  block-size: 1.5rem;
   padding-inline: 0.625rem;
   border: 0;
   border-radius: 1rem;
@@ -48,9 +48,14 @@
   color: #801701;
 }
 
-.lexis-status-tag[data-status-variant='inactive'] {
-  background: #d5d8e7;
-  color: #151d47;
+.lexis-status-tag[data-status-variant='retired'] {
+  background: #a6afdd;
+  color: #071140;
+}
+
+.lexis-status-tag[data-status-variant='deleted'] {
+  background: #dfcddf;
+  color: #3f123f;
 }
 
 .lexis-status-tag[data-status-variant='updated'] {
@@ -61,54 +66,4 @@
 .lexis-status-tag[data-status-variant='neutral'] {
   background: #e0e0e0;
   color: #393939;
-}
-
-.cds--g100 .lexis-status-tag[data-status-variant='positive'] {
-  background: #0e6027;
-  color: #defbe6;
-}
-
-.cds--g100 .lexis-status-tag[data-status-variant='informative'] {
-  background: #004f9e;
-  color: #edf5ff;
-}
-
-.cds--g100 .lexis-status-tag[data-status-variant='draft'] {
-  background: #6929c4;
-  color: #f6f2ff;
-}
-
-.cds--g100 .lexis-status-tag[data-status-variant='pending'] {
-  background: #594e05;
-  color: #fff8e1;
-}
-
-.cds--g100 .lexis-status-tag[data-status-variant='negative'] {
-  background: #9f1853;
-  color: #fff0f7;
-}
-
-.cds--g100 .lexis-status-tag[data-status-variant='expired'] {
-  background: #6f4e37;
-  color: #f7f3f0;
-}
-
-.cds--g100 .lexis-status-tag[data-status-variant='cancelled'] {
-  background: #a2191f;
-  color: #fff1f1;
-}
-
-.cds--g100 .lexis-status-tag[data-status-variant='inactive'] {
-  background: #525252;
-  color: #f4f4f4;
-}
-
-.cds--g100 .lexis-status-tag[data-status-variant='updated'] {
-  background: #005d5d;
-  color: #d9fbfb;
-}
-
-.cds--g100 .lexis-status-tag[data-status-variant='neutral'] {
-  background: #525252;
-  color: #f4f4f4;
 }

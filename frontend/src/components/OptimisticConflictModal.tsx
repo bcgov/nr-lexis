@@ -1,5 +1,6 @@
-import { Button, Modal } from '@carbon/react'
+import { Button } from '@carbon/react'
 import { useEffect, useMemo, useState } from 'react'
+import Modal from '@/components/Modal'
 import {
   OPTIMISTIC_CONFLICT_EVENT,
   type OptimisticConflictEvent,

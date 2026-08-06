@@ -6,7 +6,6 @@ import {
   Column,
   Grid,
   InlineNotification,
-  Modal,
   Pagination,
   Table,
   TableBody,
@@ -19,6 +18,7 @@ import {
 } from '@carbon/react'
 import SearchResultsTableFrame from '../../components/SearchResultsTableFrame'
 import { AppNotification } from '../../components/AppNotification'
+import Modal from '@/components/Modal'
 import EmptyState from '@/components/EmptyState'
 import DisabledButtonTooltip from '@/components/DisabledButtonTooltip'
 import PageHeader from '@/components/PageHeader'
@@ -928,7 +928,7 @@ const ProvincialReviewPage = () => {
   }
 
   return (
-    <Grid fullWidth className="default-grid">
+    <Grid fullWidth className="default-grid fullbleed-table-page provincial-review-search-page">
       <Column sm={4} md={8} lg={16}>
         <PageHeader
           title="Provincial application review"
@@ -1218,7 +1218,7 @@ const ProvincialReviewPage = () => {
                 description={errorMessage}
               />
             ) : results.content.length > 0 ? (
-              <Table useZebraStyles>
+              <Table size="md" useZebraStyles>
                 <TableHead>
                   <TableRow>
                     <TableHeader>

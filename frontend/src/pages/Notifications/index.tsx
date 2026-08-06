@@ -14,13 +14,13 @@ import {
   Checkbox,
   InlineLoading,
   InlineNotification,
-  Modal,
   RadioButton,
   RadioButtonGroup,
   TextInput,
 } from '@carbon/react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ConfirmationModal from '@/components/ConfirmationModal'
+import Modal from '@/components/Modal'
 import NotificationEditor from '@/components/NotificationEditor'
 import { hasRole } from '@/context/auth/role-utils'
 import { useAuth } from '@/context/auth/useAuth'

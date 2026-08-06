@@ -1248,7 +1248,7 @@ const FederalApplicationDetailsPage = () => {
                         <h2 className="detail-tile-title">Packages</h2>
                         {detail.packages.length > 0 ? (
                           <TableFrame ariaLabel="Federal application packages">
-                            <Table useZebraStyles>
+                            <Table size="md" useZebraStyles>
                               <TableHead>
                                 <TableRow>
                                   <TableHeader>Package number</TableHeader>
@@ -1284,7 +1284,7 @@ const FederalApplicationDetailsPage = () => {
                           />
                         ) : scaleRows.length > 0 ? (
                           <TableFrame ariaLabel="Federal application scale details">
-                            <Table useZebraStyles>
+                            <Table size="md" useZebraStyles>
                               <TableHead>
                                 <TableRow>
                                   <TableHeader>Package</TableHeader>
@@ -1328,7 +1328,7 @@ const FederalApplicationDetailsPage = () => {
                         <h2 className="detail-tile-title">Offers</h2>
                         {detail.offers.length > 0 ? (
                           <TableFrame ariaLabel="Federal application offers">
-                            <Table useZebraStyles>
+                            <Table size="md" useZebraStyles>
                               <TableHead>
                                 <TableRow>
                                   <TableHeader>Offer number</TableHeader>
@@ -1450,7 +1450,7 @@ const FederalApplicationDetailsPage = () => {
                             />
                           ) : remarkRows.length > 0 ? (
                             <TableFrame ariaLabel="Federal application remarks">
-                              <Table useZebraStyles>
+                              <Table size="md" useZebraStyles>
                                 <TableHead>
                                   <TableRow>
                                     <TableHeader>Date</TableHeader>
@@ -1551,7 +1551,7 @@ const FederalApplicationDetailsPage = () => {
                           />
                         ) : documentRows.length > 0 ? (
                           <TableFrame ariaLabel="Federal application documents">
-                            <Table useZebraStyles>
+                            <Table size="md" useZebraStyles>
                               <TableHead>
                                 <TableRow>
                                   <TableHeader>File Name</TableHeader>

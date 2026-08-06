@@ -3002,7 +3002,7 @@ const ProvincialApplicationDetailsPage = () => {
         <InlineLoading description="Loading application permits..." />
       ) : permitRows.length > 0 ? (
         <TableFrame ariaLabel="Application permits">
-          <Table useZebraStyles>
+          <Table size="md" useZebraStyles>
             <TableHead>
               <TableRow>
                 <TableHeader>Permit</TableHeader>
@@ -3064,7 +3064,7 @@ const ProvincialApplicationDetailsPage = () => {
             placeholder="Filter by company, offer number, received date, validity, or withdrawal date"
           />
           <TableFrame ariaLabel="Application offers">
-            <Table useZebraStyles>
+            <Table size="md" useZebraStyles>
               <TableHead>
                 <TableRow>
                   <TableHeader>Offer</TableHeader>
@@ -4425,7 +4425,7 @@ const ProvincialApplicationDetailsPage = () => {
                               placeholder="Filter by package, pieces, or volume"
                             />
                             <TableFrame ariaLabel="Application packages">
-                              <Table useZebraStyles>
+                              <Table size="md" useZebraStyles>
                                 <TableHead>
                                   <TableRow>
                                     <TableHeader aria-label="Package selection" />
@@ -4579,7 +4579,7 @@ const ProvincialApplicationDetailsPage = () => {
                               placeholder="Filter by file name, description, type, source, or id"
                             />
                             <TableFrame ariaLabel="Application document rows">
-                              <Table useZebraStyles>
+                              <Table size="md" useZebraStyles>
                                 <TableHead>
                                   <TableRow>
                                     <TableHeader>File Name</TableHeader>
@@ -4728,7 +4728,7 @@ const ProvincialApplicationDetailsPage = () => {
                                 placeholder="Filter by title or remark text"
                               />
                               <TableFrame ariaLabel="Application remarks">
-                                <Table useZebraStyles>
+                                <Table size="md" useZebraStyles>
                                   <TableHead>
                                     <TableRow>
                                       <TableHeader>Date</TableHeader>

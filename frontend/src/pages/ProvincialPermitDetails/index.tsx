@@ -3327,7 +3327,7 @@ const ProvincialPermitDetailsPage = () => {
                             !permitTablesErrorMessage &&
                             (associatedPermitApplications.length > 0 ? (
                               <TableFrame ariaLabel="Associated permit applications">
-                                <Table useZebraStyles>
+                                <Table size="md" useZebraStyles>
                                   <TableHead>
                                     <TableRow>
                                       <TableHeader>Application number</TableHeader>
@@ -3726,7 +3726,7 @@ const ProvincialPermitDetailsPage = () => {
                             !permitTablesErrorMessage &&
                             ((tabsData?.packages ?? []).length > 0 ? (
                               <TableFrame ariaLabel="Permit packages">
-                                <Table useZebraStyles>
+                                <Table size="md" useZebraStyles>
                                   <TableHead>
                                     <TableRow>
                                       <TableHeader>Package number</TableHeader>
@@ -4086,7 +4086,7 @@ const ProvincialPermitDetailsPage = () => {
                           {!permitTablesErrorMessage &&
                             (filteredItems.length > 0 ? (
                               <TableFrame ariaLabel="Permit item rows">
-                                <Table useZebraStyles>
+                                <Table size="md" useZebraStyles>
                                   <TableHead>
                                     <TableRow>
                                       {canDisplayNormalPermitScaleMembership && (
@@ -4346,7 +4346,7 @@ const ProvincialPermitDetailsPage = () => {
                           !permitTablesErrorMessage &&
                           (filteredFees.length > 0 ? (
                             <TableFrame ariaLabel="Permit fee rows">
-                              <Table useZebraStyles>
+                              <Table size="md" useZebraStyles>
                                 <TableHead>
                                   <TableRow>
                                     <TableHeader>Package</TableHeader>
@@ -4413,7 +4413,7 @@ const ProvincialPermitDetailsPage = () => {
                           <h2 className="detail-tile-title">GBMS invoice history</h2>
                           {!permitTablesErrorMessage && (
                             <TableFrame ariaLabel="GBMS invoice history">
-                              <Table useZebraStyles>
+                              <Table size="md" useZebraStyles>
                                 <TableHead>
                                   <TableRow>
                                     <TableHeader>GBMS Invoice Number</TableHeader>
@@ -4505,7 +4505,7 @@ const ProvincialPermitDetailsPage = () => {
                           />
                         ) : filteredDocumentRows.length > 0 ? (
                           <TableFrame ariaLabel="Permit document rows">
-                            <Table useZebraStyles>
+                            <Table size="md" useZebraStyles>
                               <TableHead>
                                 <TableRow>
                                   <TableHeader>File Name</TableHeader>
@@ -4644,7 +4644,7 @@ const ProvincialPermitDetailsPage = () => {
                           />
                         ) : filteredInvoiceRows.length > 0 ? (
                           <TableFrame ariaLabel="Permit invoice rows">
-                            <Table useZebraStyles>
+                            <Table size="md" useZebraStyles>
                               <TableHead>
                                 <TableRow>
                                   <TableHeader>Invoice number</TableHeader>

@@ -1696,7 +1696,7 @@ function ProvincialApplicationItemsPanel({
                 </div>
               )}
               <div className="application-items-table-scroll">
-                <Table useZebraStyles>
+                <Table size="md" useZebraStyles>
                   <TableHead>
                     <TableRow>
                       <TableHeader>Species</TableHeader>
@@ -1743,7 +1743,7 @@ function ProvincialApplicationItemsPanel({
             <div className="application-items-timber-marks-panel">
               <h4>Timber Marks</h4>
               <div className="application-items-table-scroll">
-                <Table useZebraStyles>
+                <Table size="md" useZebraStyles>
                   <TableHead>
                     <TableRow>
                       <TableHeader>Timber mark</TableHeader>
@@ -1898,7 +1898,7 @@ function ProvincialApplicationItemsPanel({
               </Button>
             </div>
             <div className="application-items-table-scroll">
-              <Table useZebraStyles>
+              <Table size="md" useZebraStyles>
                 <TableHead>
                   <TableRow>
                     <TableHeader>Species</TableHeader>
@@ -2081,7 +2081,7 @@ function ProvincialApplicationItemsPanel({
             </>
           )}
           <div className="application-items-table-scroll application-items-table-scroll--scales">
-            <Table useZebraStyles>
+            <Table size="md" useZebraStyles>
               <TableHead>
                 <TableRow>
                   <TableHeader>Timber mark</TableHeader>

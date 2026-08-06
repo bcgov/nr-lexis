@@ -509,7 +509,7 @@ const ReviewUploadContent = ({
     <div className="admin-upload-review admin-upload-review--rtm">
       {matrixRows.length > 0 ? (
         <div className="admin-upload-review-table">
-          <Table useZebraStyles aria-label="Average monthly value upload review">
+          <Table size="md" useZebraStyles aria-label="Average monthly value upload review">
             <TableHead>
               <TableRow>
                 <TableHeader>Grade</TableHeader>

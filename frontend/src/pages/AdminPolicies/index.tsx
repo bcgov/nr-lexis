@@ -5,7 +5,6 @@ import {
   Column,
   Grid,
   InlineNotification,
-  Modal,
   Pagination,
   Select,
   SelectItem,
@@ -23,6 +22,7 @@ import { useAuth } from '@/context/auth/useAuth'
 import { AppNotification } from '../../components/AppNotification'
 import ConfirmationModal from '@/components/ConfirmationModal'
 import EmptyState from '@/components/EmptyState'
+import Modal from '@/components/Modal'
 import PageHeader from '@/components/PageHeader'
 import SearchResultsTableFrame from '@/components/SearchResultsTableFrame'
 import {
@@ -817,7 +817,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
   )
 
   return (
-    <Grid fullWidth className="default-grid admin-policy-page">
+    <Grid fullWidth className="default-grid fullbleed-table-page admin-policy-page">
       <Column sm={4} md={8} lg={16}>
         <PageHeader title={pageTitle} subtitle={pageSubtitle} />
       </Column>
@@ -1053,7 +1053,10 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
 
       {area === 'fee' && (
         <Column sm={4} md={8} lg={16}>
-          <div className="admin-policy-workspace">
+          <section
+            className="admin-policy-workspace legacy-search-section legacy-search-section--results"
+            aria-label="Fee policies"
+          >
             <div className="admin-policy-table-actions">
               <Button
                 kind="primary"
@@ -1077,7 +1080,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
               totalItems={isLoadingPolicies && feePolicies.length === 0 ? undefined : totalRows}
             >
               {feePolicies.length > 0 ? (
-                <Table useZebraStyles>
+                <Table size="md" useZebraStyles>
                   <TableHead>
                     <TableRow>
                       {FEE_POLICY_SORT_COLUMNS.map((column) => (
@@ -1159,13 +1162,16 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
               ) : null}
               {totalRows > 0 && renderPagination()}
             </SearchResultsTableFrame>
-          </div>
+          </section>
         </Column>
       )}
 
       {area === 'fil' && (
         <Column sm={4} md={8} lg={16}>
-          <div className="admin-policy-workspace">
+          <section
+            className="admin-policy-workspace legacy-search-section legacy-search-section--results"
+            aria-label="Fee in lieu policies"
+          >
             <div className="admin-policy-table-actions">
               <Button
                 kind="primary"
@@ -1182,7 +1188,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
               totalItems={isLoadingPolicies && filPolicies.length === 0 ? undefined : totalRows}
             >
               {filPolicies.length > 0 ? (
-                <Table useZebraStyles>
+                <Table size="md" useZebraStyles>
                   <TableHead>
                     <TableRow>
                       {FIL_POLICY_SORT_COLUMNS.map((column) => (
@@ -1255,7 +1261,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
               ) : null}
               {totalRows > 0 && renderPagination()}
             </SearchResultsTableFrame>
-          </div>
+          </section>
         </Column>
       )}
 
@@ -1338,96 +1344,103 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
               </div>
             </Tile>
 
-            <SearchResultsTableFrame
-              loading={isLoadingPolicies}
-              loadingDescription={loadingDescription}
-              totalItems={isLoadingPolicies && exportSchedules.length === 0 ? undefined : totalRows}
+            <section
+              className="legacy-search-section legacy-search-section--results"
+              aria-label="Export schedules"
             >
-              {exportSchedules.length > 0 ? (
-                <Table useZebraStyles className="admin-export-schedule-table">
-                  <TableHead>
-                    <TableRow>
-                      {SCHEDULE_SORT_COLUMNS.map((column) => (
-                        <TableHeader key={column.id}>
-                          <button
-                            type="button"
-                            className="legacy-sort-button"
-                            onClick={() => onScheduleSort(column.id)}
-                          >
-                            {column.label}
-                          </button>
-                        </TableHeader>
-                      ))}
-                      <TableHeader>Actions</TableHeader>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {exportSchedules.map((row) => (
-                      <TableRow key={row.exportScheduleId || row.advertisingDate}>
-                        <TableCell>{row.exportScheduleId}</TableCell>
-                        <TableCell className="legacy-search-table-date">
-                          {row.advertisingDate}
-                        </TableCell>
-                        <TableCell className="legacy-search-table-date">
-                          {row.applicationReceiptDate}
-                        </TableCell>
-                        <TableCell className="legacy-search-table-date">
-                          {row.offerReceiptDate}
-                        </TableCell>
-                        <TableCell className="legacy-search-table-date">
-                          {row.offerEndDate}
-                        </TableCell>
-                        <TableCell className="legacy-search-table-date">
-                          {row.offerWithdrawalDate}
-                        </TableCell>
-                        <TableCell className="legacy-search-table-date">
-                          {row.teacMeetingDate}
-                        </TableCell>
-                        <TableCell>
-                          {canSearchApplications ? (
-                            <Link
-                              to={applicationSearchPathForExportSchedule(row.exportScheduleId)}
-                              aria-label={`View ${row.provincialApplicationCount ?? row.applicationCount} provincial applications assigned to export schedule ${row.exportScheduleId}`}
+              <SearchResultsTableFrame
+                loading={isLoadingPolicies}
+                loadingDescription={loadingDescription}
+                totalItems={
+                  isLoadingPolicies && exportSchedules.length === 0 ? undefined : totalRows
+                }
+              >
+                {exportSchedules.length > 0 ? (
+                  <Table size="md" useZebraStyles className="admin-export-schedule-table">
+                    <TableHead>
+                      <TableRow>
+                        {SCHEDULE_SORT_COLUMNS.map((column) => (
+                          <TableHeader key={column.id}>
+                            <button
+                              type="button"
+                              className="legacy-sort-button"
+                              onClick={() => onScheduleSort(column.id)}
                             >
-                              {row.provincialApplicationCount ?? row.applicationCount}
-                            </Link>
-                          ) : (
-                            (row.provincialApplicationCount ?? row.applicationCount)
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <div className="admin-policy-row-actions">
-                            <Button
-                              kind="ghost"
-                              size="sm"
-                              onClick={() => editExportSchedule(row)}
-                              disabled={isLoadingPolicies || isMutatingPolicies || !row.mutable}
-                            >
-                              Edit
-                            </Button>
-                            <Button
-                              kind="ghost"
-                              size="sm"
-                              onClick={() => void deleteExportSchedule(row)}
-                              disabled={isLoadingPolicies || isMutatingPolicies || !row.mutable}
-                            >
-                              Delete
-                            </Button>
-                          </div>
-                        </TableCell>
+                              {column.label}
+                            </button>
+                          </TableHeader>
+                        ))}
+                        <TableHeader>Actions</TableHeader>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              ) : !isLoadingPolicies ? (
-                <EmptyState
-                  title="No export schedules found"
-                  description="No export schedule rows are available."
-                  headingLevel={3}
-                />
-              ) : null}
-              {totalRows > 0 && renderPagination()}
-            </SearchResultsTableFrame>
+                    </TableHead>
+                    <TableBody>
+                      {exportSchedules.map((row) => (
+                        <TableRow key={row.exportScheduleId || row.advertisingDate}>
+                          <TableCell>{row.exportScheduleId}</TableCell>
+                          <TableCell className="legacy-search-table-date">
+                            {row.advertisingDate}
+                          </TableCell>
+                          <TableCell className="legacy-search-table-date">
+                            {row.applicationReceiptDate}
+                          </TableCell>
+                          <TableCell className="legacy-search-table-date">
+                            {row.offerReceiptDate}
+                          </TableCell>
+                          <TableCell className="legacy-search-table-date">
+                            {row.offerEndDate}
+                          </TableCell>
+                          <TableCell className="legacy-search-table-date">
+                            {row.offerWithdrawalDate}
+                          </TableCell>
+                          <TableCell className="legacy-search-table-date">
+                            {row.teacMeetingDate}
+                          </TableCell>
+                          <TableCell>
+                            {canSearchApplications ? (
+                              <Link
+                                to={applicationSearchPathForExportSchedule(row.exportScheduleId)}
+                                aria-label={`View ${row.provincialApplicationCount ?? row.applicationCount} provincial applications assigned to export schedule ${row.exportScheduleId}`}
+                              >
+                                {row.provincialApplicationCount ?? row.applicationCount}
+                              </Link>
+                            ) : (
+                              (row.provincialApplicationCount ?? row.applicationCount)
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <div className="admin-policy-row-actions">
+                              <Button
+                                kind="ghost"
+                                size="sm"
+                                onClick={() => editExportSchedule(row)}
+                                disabled={isLoadingPolicies || isMutatingPolicies || !row.mutable}
+                              >
+                                Edit
+                              </Button>
+                              <Button
+                                kind="ghost"
+                                size="sm"
+                                onClick={() => void deleteExportSchedule(row)}
+                                disabled={isLoadingPolicies || isMutatingPolicies || !row.mutable}
+                              >
+                                Delete
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                ) : !isLoadingPolicies ? (
+                  <EmptyState
+                    title="No export schedules found"
+                    description="No export schedule rows are available."
+                    headingLevel={3}
+                  />
+                ) : null}
+                {totalRows > 0 && renderPagination()}
+              </SearchResultsTableFrame>
+            </section>
           </div>
         </Column>
       )}
