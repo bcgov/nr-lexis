@@ -314,6 +314,21 @@ describe('Layout shell', () => {
     expect(averageMonthlyValuesLink).toHaveAttribute('aria-current', 'page')
   })
 
+  it('marks the spreadsheet upload route separately from the AMV grid', () => {
+    renderLayout('/admin/rtm/emslogamv/upload')
+
+    const averageMonthlyValuesLink = screen.getByRole('link', {
+      name: /Average Monthly Values/i,
+    })
+    const spreadsheetUploadLink = screen.getByRole('link', {
+      name: /AMV Spreadsheet Upload/i,
+    })
+
+    expect(spreadsheetUploadLink).toHaveClass('cds--side-nav__link--active')
+    expect(spreadsheetUploadLink).toHaveAttribute('aria-current', 'page')
+    expect(averageMonthlyValuesLink).not.toHaveClass('cds--side-nav__link--active')
+  })
+
   it('renders split admin side-nav areas with distinct active routes', () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
@@ -337,19 +352,24 @@ describe('Layout shell', () => {
     const averageMonthlyValuesLink = screen.getByRole('link', {
       name: /Average Monthly Values/i,
     })
+    const spreadsheetUploadLink = screen.getByRole('link', {
+      name: /AMV Spreadsheet Upload/i,
+    })
 
     expect(feePolicyLink).toHaveAttribute('href', '/admin/policies/fee')
     expect(filPolicyLink).toHaveAttribute('href', '/admin/policies/fil')
     expect(scheduleLink).toHaveAttribute('href', '/admin/schedules')
     expect(averageMonthlyValuesLink).toHaveAttribute('href', '/admin/rtm/emslogamv')
+    expect(spreadsheetUploadLink).toHaveAttribute('href', '/admin/rtm/emslogamv/upload')
     expect(scheduleLink).toHaveClass('cds--side-nav__link--active')
     expect(scheduleLink).toHaveAttribute('aria-current', 'page')
     expect(feePolicyLink).not.toHaveClass('cds--side-nav__link--active')
     expect(filPolicyLink).not.toHaveClass('cds--side-nav__link--active')
     expect(averageMonthlyValuesLink).not.toHaveClass('cds--side-nav__link--active')
+    expect(spreadsheetUploadLink).not.toHaveClass('cds--side-nav__link--active')
   })
 
-  it('shows only the RTM navigation link when PROD RTM-only mode is enabled', () => {
+  it('shows only the RTM navigation links when PROD RTM-only mode is enabled', () => {
     window.config = { VITE_LEXIS_PROD_RTM_ONLY: 'true' }
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
@@ -363,6 +383,10 @@ describe('Layout shell', () => {
     expect(screen.getByRole('link', { name: /Average Monthly Values/i })).toHaveAttribute(
       'href',
       '/admin/rtm/emslogamv',
+    )
+    expect(screen.getByRole('link', { name: /AMV Spreadsheet Upload/i })).toHaveAttribute(
+      'href',
+      '/admin/rtm/emslogamv/upload',
     )
     expect(screen.queryByRole('link', { name: /Users & Access/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /^Uploads$/i })).not.toBeInTheDocument()
@@ -388,12 +412,17 @@ describe('Layout shell', () => {
     expect(screen.queryByRole('link', { name: /Users & Access/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /^Uploads$/i })).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Average Monthly Values/i })).toBeVisible()
+    expect(screen.getByRole('link', { name: /AMV Spreadsheet Upload/i })).toBeVisible()
     const navLinks = sideNav.querySelectorAll('.csp-side-nav__link')
     const navIcons = sideNav.querySelectorAll('.csp-side-nav__link .csp-side-nav__icon svg')
     expect(navIcons).toHaveLength(navLinks.length)
     expect(screen.getByRole('link', { name: /Average Monthly Values/i })).toHaveAttribute(
       'data-label',
       'Average Monthly Values',
+    )
+    expect(screen.getByRole('link', { name: /AMV Spreadsheet Upload/i })).toHaveAttribute(
+      'data-label',
+      'AMV Spreadsheet Upload',
     )
   })
 

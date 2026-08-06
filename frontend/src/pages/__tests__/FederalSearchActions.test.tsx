@@ -6,7 +6,7 @@ import { useAuth } from '@/context/auth/useAuth'
 import FederalPage from '@/pages/Federal'
 import { searchFederalApplications } from '@/service/federal-application-search-service'
 import { fetchFederalApplicationOptions } from '@/service/search-options-service'
-import { createTestAuthContext } from '@/test-utils/auth'
+import { createTestAuthContext, createTestCapabilities } from '@/test-utils/auth'
 
 const mockNavigate = vi.fn()
 
@@ -106,9 +106,36 @@ describe('Federal Search Actions', () => {
     })
 
     expect(mockedSearchFederalApplications).not.toHaveBeenCalled()
-    expect(
-      screen.getByRole('region', { name: 'Search results table', hidden: true }),
-    ).not.toBeVisible()
+    const resultsTable = screen.getByRole('region', { name: 'Search results table', hidden: true })
+    expect(resultsTable.closest('[hidden]')).toHaveStyle({ display: 'none' })
+    expect(resultsTable).not.toBeVisible()
+  })
+
+  it('applies the legacy Approved default on the first search', async () => {
+    mockedFetchFederalApplicationOptions.mockResolvedValueOnce({
+      applicationStatuses: [
+        { value: 'NEW', label: 'New' },
+        { value: 'APP', label: 'Approved' },
+      ],
+    })
+
+    renderPage('/federal')
+
+    await waitFor(() => {
+      expect(screen.getByRole('combobox', { name: 'Application status' })).toHaveValue('Approved')
+    })
+    expect(mockedSearchFederalApplications).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Search' }))
+
+    await waitFor(() => {
+      expect(mockedSearchFederalApplications).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({ applicationStatus: 'APP' }),
+        }),
+        expect.any(Object),
+      )
+    })
   })
 
   it('only allows eligible federal applications to be selected for exemption creation', async () => {
@@ -329,6 +356,28 @@ describe('Federal Search Actions', () => {
       screen.queryByRole('checkbox', { name: /Select federal application/ }),
     ).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Client number')).not.toBeInTheDocument()
+  })
+
+  it('keeps federal search read-only for an application approver like legacy', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({
+          roles: ['APPLICATION_APPROVER'],
+          welcomeTarget: 'applicationApprover',
+        }),
+      }),
+    )
+
+    renderPage()
+    await screen.findByText('FED-1001')
+
+    expect(
+      screen.queryByRole('button', { name: 'Create exemption for Selected Applications' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('checkbox', { name: /Select federal application/ }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Client number')).toBeInTheDocument()
   })
 
   it('keeps repeated federal numbers linked to their distinct internal applications', async () => {

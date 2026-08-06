@@ -119,9 +119,9 @@ describe('Provincial Offer Search Actions', () => {
     })
 
     expect(mockedSearchProvincialOffers).not.toHaveBeenCalled()
-    expect(
-      screen.getByRole('region', { name: 'Search results table', hidden: true }),
-    ).not.toBeVisible()
+    const resultsTable = screen.getByRole('region', { name: 'Search results table', hidden: true })
+    expect(resultsTable.closest('[hidden]')).toHaveStyle({ display: 'none' })
+    expect(resultsTable).not.toBeVisible()
   })
 
   it('keeps the results loading while default search filters initialize', async () => {

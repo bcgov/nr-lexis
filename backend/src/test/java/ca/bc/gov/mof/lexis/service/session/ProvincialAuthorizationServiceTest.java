@@ -472,14 +472,12 @@ class ProvincialAuthorizationServiceTest {
   }
 
   @Test
-  void currentFamStaffRolesAreGlobalAcrossEveryOrganizationUnitSurface() {
+  void broaderFamStaffRolesRemainGlobalAcrossEveryOrganizationUnitSurface() {
     List<Authentication> staff =
         List.of(
             new TestingAuthenticationToken("admin", "n/a", "LEXIS_ADMIN"),
             new TestingAuthenticationToken(
                 "application-approver", "n/a", "LEXIS_APPLICATION_APPROVER"),
-            new TestingAuthenticationToken(
-                "exemption-approver", "n/a", "LEXIS_EXEMPTION_APPROVER"),
             new TestingAuthenticationToken("read-only", "n/a", "LEXIS_READ_ONLY"));
 
     for (Authentication authentication : staff) {
@@ -494,6 +492,64 @@ class ProvincialAuthorizationServiceTest {
       }
     }
 
+    verifyNoInteractions(principalService);
+  }
+
+  @Test
+  void pureExemptionApproverSearchTreatsRequestedRegionsAsFilters() {
+    Authentication authentication =
+        new TestingAuthenticationToken(
+            "exemption-approver", "n/a", "LEXIS_EXEMPTION_APPROVER");
+
+    ProvincialAuthorizationService.OrgUnitConstraint searchConstraint =
+        service.constrainOrgUnits(
+            authentication,
+            List.of(12L, 76L),
+            ProvincialAuthorizationService.OrgUnitSurface.EXEMPTION_SEARCH);
+    ProvincialAuthorizationService.OrgUnitConstraint detailConstraint =
+        service.constrainOrgUnits(
+            authentication,
+            List.of(12L, 76L),
+            ProvincialAuthorizationService.OrgUnitSurface.EXEMPTION_DETAIL);
+
+    assertThat(searchConstraint.restricted()).isFalse();
+    assertThat(searchConstraint.denied()).isFalse();
+    assertThat(searchConstraint.orgUnitNumbers()).containsExactly(12L, 76L);
+    assertThat(detailConstraint.restricted()).isFalse();
+    assertThat(detailConstraint.orgUnitNumbers()).containsExactly(12L, 76L);
+    verifyNoInteractions(principalService);
+  }
+
+  @Test
+  void pureExemptionApproverSearchRemainsGlobalWithoutRequestedRegionFilters() {
+    Authentication authentication =
+        new TestingAuthenticationToken(
+            "exemption-approver", "n/a", "LEXIS_EXEMPTION_APPROVER");
+
+    ProvincialAuthorizationService.OrgUnitConstraint constrained =
+        service.resolveOrgUnitConstraint(
+            authentication,
+            ProvincialAuthorizationService.OrgUnitSurface.EXEMPTION_SEARCH);
+
+    assertThat(constrained.restricted()).isFalse();
+    assertThat(constrained.denied()).isFalse();
+    assertThat(constrained.orgUnitNumbers()).isEmpty();
+    verifyNoInteractions(principalService);
+  }
+
+  @Test
+  void mixedExemptionApproverIdentityRetainsBroaderOrganizationScope() {
+    Authentication authentication =
+        new TestingAuthenticationToken(
+            "mixed-approver", "n/a", "LEXIS_EXEMPTION_APPROVER", "LEXIS_READ_ONLY");
+
+    ProvincialAuthorizationService.OrgUnitConstraint constrained =
+        service.resolveOrgUnitConstraint(
+            authentication,
+            ProvincialAuthorizationService.OrgUnitSurface.EXEMPTION_SEARCH);
+
+    assertThat(constrained.restricted()).isFalse();
+    assertThat(constrained.denied()).isFalse();
     verifyNoInteractions(principalService);
   }
 

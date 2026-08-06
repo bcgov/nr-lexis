@@ -39,6 +39,7 @@ import {
   OFFER_REMARK_MAX_LENGTH,
   OFFER_VOLUME_MAX,
   PURCHASE_OFFER_AMOUNT_MAX,
+  formatLegacyOfferVolume,
   offerDecimalStorageFieldError,
   offerTextStorageFieldError,
 } from '@/pages/shared/offer-storage-validation'
@@ -245,11 +246,10 @@ const ProvincialOfferCreatePage = () => {
   const isScopedProvincialSubmitter =
     hasProvincialSubmitterRole(capabilities.roles) &&
     Boolean(capabilities.forestClientNumber?.trim())
-  const canSelectOfferingClient = canManageOfferApproval && !isScopedProvincialSubmitter
   const authoritativeOfferingClientNumber = capabilities.forestClientNumber?.trim() ?? ''
-  const effectiveOfferingClientNumber = canSelectOfferingClient
-    ? form.offeringClientNumber
-    : authoritativeOfferingClientNumber
+  const effectiveOfferingClientNumber = isScopedProvincialSubmitter
+    ? authoritativeOfferingClientNumber
+    : ''
   const scopedClientContextIsCurrent =
     isScopedProvincialSubmitter &&
     scopedClientContext.clientNumber === authoritativeOfferingClientNumber
@@ -464,8 +464,9 @@ const ProvincialOfferCreatePage = () => {
             ? 'Select a package from this application.'
             : null,
       ),
-      offeringClientNumber:
-        requiredFieldError(effectiveOfferingClientNumber, 'Offering client number') ?? undefined,
+      offeringClientNumber: isScopedProvincialSubmitter
+        ? (requiredFieldError(effectiveOfferingClientNumber, 'Offering client number') ?? undefined)
+        : undefined,
       companyName:
         offerTextStorageFieldError(
           effectiveCompanyName,
@@ -519,6 +520,7 @@ const ProvincialOfferCreatePage = () => {
       effectiveOfferingClientNumber,
       form,
       isLoadingApplicationContext,
+      isScopedProvincialSubmitter,
       packageOptions,
     ],
   )
@@ -737,26 +739,17 @@ const ProvincialOfferCreatePage = () => {
           <fieldset className="legacy-form-fieldset create-form-section offer-form-section">
             <legend>Offering company details</legend>
             <div className="legacy-search-grid create-form-grid">
-              <TextInput
-                id="offeringClientNumber"
-                labelText="Offering client number"
-                value={effectiveOfferingClientNumber}
-                invalid={!!fieldError('offeringClientNumber')}
-                invalidText={fieldError('offeringClientNumber')}
-                readOnly={!canSelectOfferingClient}
-                helperText={
-                  isScopedProvincialSubmitter
-                    ? 'Loaded from your authenticated forest client access.'
-                    : !canSelectOfferingClient
-                      ? 'Authenticated forest client access is required.'
-                      : undefined
-                }
-                onBlur={() => markFieldTouched('offeringClientNumber')}
-                onChange={(event) => {
-                  markFormEdited()
-                  setForm((current) => ({ ...current, offeringClientNumber: event.target.value }))
-                }}
-              />
+              {isScopedProvincialSubmitter && (
+                <TextInput
+                  id="offeringClientNumber"
+                  labelText="Offering client number"
+                  value={effectiveOfferingClientNumber}
+                  invalid={!!fieldError('offeringClientNumber')}
+                  invalidText={fieldError('offeringClientNumber')}
+                  readOnly
+                  helperText="Loaded from your authenticated forest client access."
+                />
+              )}
               <TextInput
                 id="companyName"
                 labelText="Company"
@@ -818,7 +811,13 @@ const ProvincialOfferCreatePage = () => {
                 value={form.offerVolume}
                 invalid={!!fieldError('offerVolume')}
                 invalidText={fieldError('offerVolume')}
-                onBlur={() => markFieldTouched('offerVolume')}
+                onBlur={() => {
+                  markFieldTouched('offerVolume')
+                  setForm((current) => ({
+                    ...current,
+                    offerVolume: formatLegacyOfferVolume(current.offerVolume),
+                  }))
+                }}
                 onChange={(event) => {
                   markFormEdited()
                   setForm((current) => ({ ...current, offerVolume: event.target.value }))

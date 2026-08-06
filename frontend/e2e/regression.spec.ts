@@ -1318,7 +1318,7 @@ const permitMutationForm = (
   destinationCompanyName: 'LEXIS E2E REGRESSION',
   destinationCountry: 'CA',
   transportType: shipping.transportType,
-  transportName: marker,
+  transportName: marker.slice(0, 26),
   estimatedShippingDate: formatBusinessIsoDate(),
   portOfExport: shipping.portOfExport,
   otherPortOfExport: '',
@@ -1723,15 +1723,7 @@ test.describe('TEST IDIR admin regression', () => {
       `/federal?applicationNumber=${missingApplicationNumber}`,
       /federal application search/i,
     )
-    const provincialSection = page.locator(sideNavSection('Provincial'))
-    const applicationsLink = provincialSection.getByRole('link', {
-      name: 'Applications',
-      exact: true,
-    })
-    if ((await applicationsLink.count()) === 0) {
-      await provincialSection.getByRole('button', { name: 'Provincial', exact: true }).click()
-    }
-    await applicationsLink.click()
+    await expectAccessiblePage(page, '/provincial/application', /provincial application search/i)
 
     await expect.poll(() => new URL(page.url()).pathname).toBe('/provincial/application')
     await expect
@@ -2465,6 +2457,69 @@ test.describe('TEST IDIR admin regression', () => {
     expect(federalCount.total).toEqual(expect.any(Number))
   })
 
+  test('exposes linked exemption descriptions used by the client summary', async () => {
+    const page = await authenticatedIdirPage()
+
+    const exemptionSearch = await readJsonResponse<GenericSearchResponse>(
+      await getWithAuth(page, '/api/lexis/exemptions/search', {
+        params: {
+          exemptionType: 'M',
+          page: '0',
+          size: '1',
+        },
+      }),
+    )
+    const exemptionNumber = requiredString(
+      asRecordArray(exemptionSearch.results)[0]?.exemptionNumber,
+      'Ministerial exemption number',
+    )
+
+    const applicationSearch = await readJsonResponse<GenericSearchResponse>(
+      await getWithAuth(page, '/api/lexis/applications/search', {
+        params: {
+          exemptionNumber,
+          page: '0',
+          size: '2',
+        },
+      }),
+    )
+    const linkedApplications = asRecordArray(applicationSearch.results)
+    const exactLinkedApplication = linkedApplications.find(
+      (application) => String(application.exemptionNumber ?? '').trim() === exemptionNumber,
+    )
+
+    expect(exactLinkedApplication).toBeDefined()
+    expect(exactLinkedApplication?.exemptionTypeDescription).toBe('Ministerial')
+  })
+
+  test('returns one canonical row for exemptions duplicated by legacy joins', async () => {
+    const page = await authenticatedIdirPage()
+
+    for (const exemptionNumber of ['24-8706', '22-8606', '18-8483']) {
+      const search = await readJsonResponse<GenericSearchResponse>(
+        await getWithAuth(page, '/api/lexis/exemptions/search', {
+          params: {
+            exemptionNumber,
+            page: '0',
+            size: '10',
+          },
+        }),
+      )
+      const results = asRecordArray(search.results)
+
+      expect(search.total).toBe(1)
+      expect(results).toHaveLength(1)
+      expect(String(results[0]?.exemptionNumber ?? '').trim()).toBe(exemptionNumber)
+
+      const count = await readJsonResponse<SearchCountResponse>(
+        await getWithAuth(page, '/api/lexis/exemptions/search/count', {
+          params: { exemptionNumber },
+        }),
+      )
+      expect(count.total).toBe(1)
+    }
+  })
+
   test('can query exemption, offer, and permit search contracts', async () => {
     const page = await authenticatedIdirPage()
 
@@ -2953,9 +3008,7 @@ test.describe('TEST IDIR admin regression', () => {
       const warningLevel = editor.getByRole('radio', { name: /^Warning/ })
       await editor.locator('label[for="notification-level-warning"]').click()
       await expect(warningLevel).toBeChecked()
-      await expect(
-        editor.getByRole('checkbox', { name: 'All authenticated LEXIS roles' }),
-      ).toBeChecked()
+      await expect(editor.getByRole('checkbox', { name: 'All roles' })).toBeChecked()
 
       const createResponsePromise = page.waitForResponse(
         (response) =>
@@ -2976,7 +3029,6 @@ test.describe('TEST IDIR admin regression', () => {
       await expect(notification).toBeVisible()
       await expect(notification.getByText(notificationMessage, { exact: true })).toBeVisible()
       await expect(notification.getByText('Warning', { exact: true })).toBeVisible()
-      await expect(notification.getByText('Active', { exact: true })).toBeVisible()
 
       const deleteResponsePromise = page.waitForResponse(
         (response) =>
@@ -3141,7 +3193,7 @@ test.describe('TEST IDIR admin regression', () => {
               contactName: offerMarker,
               offeringClientNumber: regressionOwnerClientNumber,
               clientNumber: regressionOwnerClientNumber,
-              offerVolume: '1',
+              offerVolume: '1.24',
               purchaseOfferAmount: '100',
               teacReviewDate: '',
               fairOfferIndicator: 'N',
@@ -3170,6 +3222,7 @@ test.describe('TEST IDIR admin regression', () => {
         page,
         `/api/lexis/purchase-offers/${offerNumber}`,
       )
+      expect(Number(currentOffer.payload.offerVolume)).toBe(1.2)
       const offerUpdate = offerUpdateForm(offerNumber, {
         purchaseOfferAmount: '125',
         offerRemark: `${offerMarker} edited`,
@@ -3381,6 +3434,9 @@ test.describe('TEST IDIR admin regression', () => {
       const permitCleanup = cleanup.defer('cancel provincial permit', () =>
         cancelRegressionPermit(page, permitNumber, lifecycleMarker, schedule.shipping),
       )
+      const detachCleanup = cleanup.defer('detach lifecycle application from permit', () =>
+        detachRegressionPermitApplication(page, permitNumber, lifecycleApplicationNumber),
+      )
 
       await expectAccessiblePage(
         page,
@@ -3422,6 +3478,25 @@ test.describe('TEST IDIR admin regression', () => {
       )
       expectStaleRecordResponse(stalePermitUpdate, 'permit', String(permitNumber))
 
+      expect(await permitContainsApplication(page, permitNumber, lifecycleApplicationNumber)).toBe(
+        true,
+      )
+      const applicationAfterPermitCreation = await readVersionedJson<Record<string, unknown>>(
+        page,
+        `/api/lexis/applications/${lifecycleApplicationNumber}`,
+      )
+      expect(applicationAfterPermitCreation.payload.applicationStatusCode).toBe('EXE')
+
+      await detachRegressionPermitApplication(page, permitNumber, lifecycleApplicationNumber)
+      expect(await permitContainsApplication(page, permitNumber, lifecycleApplicationNumber)).toBe(
+        false,
+      )
+      const applicationBeforeAttach = await readVersionedJson<Record<string, unknown>>(
+        page,
+        `/api/lexis/applications/${lifecycleApplicationNumber}`,
+      )
+      expect(applicationBeforeAttach.payload.applicationStatusCode).toBe('EXE')
+
       const permitBeforeAttach = await readPermitVersionedJson<Record<string, unknown>>(
         page,
         permitNumber,
@@ -3437,9 +3512,6 @@ test.describe('TEST IDIR admin regression', () => {
       )
       expect(attachedApplication.success).toBe(true)
       expect(asStringArray(attachedApplication.errors)).toEqual([])
-      const detachCleanup = cleanup.defer('detach lifecycle application from permit', () =>
-        detachRegressionPermitApplication(page, permitNumber, lifecycleApplicationNumber),
-      )
       expect(await permitContainsApplication(page, permitNumber, lifecycleApplicationNumber)).toBe(
         true,
       )
@@ -3494,8 +3566,10 @@ test.describe('TEST IDIR admin regression', () => {
     throwRegressionFailures('Provincial CRUD regression and cleanup failed.', failures)
   })
 
-  test('returns an expired IDIR admin session to the login shell', async () => {
-    const page = await authenticatedIdirPage()
+  // Logout mutates auth and session storage, so these checks must not reuse the suite's page.
+  test('returns an expired IDIR admin session to the login shell', async ({ page }) => {
+    await redirectExternalLogoutToLoginShell(page)
+    await loginWithIdir(page)
 
     await expectAccessiblePage(page, '/provincial/review', /provincial application review/i)
     await expectLogoutRoundTrip(page, 'Expired IDIR admin session', () =>
@@ -3510,8 +3584,9 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(page.getByText('You’ve been logged out', { exact: true })).toBeVisible()
   })
 
-  test('signs out to the login shell without an expired-session warning', async () => {
-    const page = await authenticatedIdirPage()
+  test('signs out to the login shell without an expired-session warning', async ({ page }) => {
+    await redirectExternalLogoutToLoginShell(page)
+    await loginWithIdir(page)
 
     await expectAccessiblePage(page, '/provincial/review', /provincial application review/i)
     const profileButton = page.locator('button[aria-controls="profile-panel"]')

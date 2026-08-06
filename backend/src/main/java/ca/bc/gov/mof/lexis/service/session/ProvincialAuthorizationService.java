@@ -737,16 +737,22 @@ public class ProvincialAuthorizationService {
   }
 
   private boolean canViewBlanketOic(Set<String> roles) {
-    return !roles.contains(ROLE_EXEMPTION_APPROVER)
-        || roles.contains(ROLE_ADMIN)
-        || roles.contains(ROLE_APPLICATION_APPROVER)
-        || roles.contains(ROLE_READ_ONLY)
-        || roles.contains(ROLE_PROVINCIAL_SUBMITTER);
+    return !isPureExemptionApprover(roles);
   }
 
   private boolean isOrgUnitRestricted(Set<String> roles, OrgUnitSurface surface) {
-    // Current FAM staff roles are global and are not organization-unit restricted.
+    // INTENTIONAL_LEGACY_DIVERGENCE(EXEMPTION_APPROVER_GLOBAL_SEARCH): Cognito does not carry the
+    // legacy WebADE organization context. Region selection is a search filter, not an
+    // authorization boundary.
     return false;
+  }
+
+  private boolean isPureExemptionApprover(Set<String> roles) {
+    return roles.contains(ROLE_EXEMPTION_APPROVER)
+        && !roles.contains(ROLE_ADMIN)
+        && !roles.contains(ROLE_APPLICATION_APPROVER)
+        && !roles.contains(ROLE_READ_ONLY)
+        && !roles.contains(ROLE_PROVINCIAL_SUBMITTER);
   }
 
   private boolean canAccessOrgUnits(

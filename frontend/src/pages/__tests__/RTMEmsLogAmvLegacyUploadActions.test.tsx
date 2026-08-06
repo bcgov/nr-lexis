@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
-import LegacyRtmEmsLogAmvUploadWorkflow from '@/pages/RTMEmsLogAmv/LegacyUploadWorkflow'
+import RtmEmsLogAmvUploadPage from '@/pages/RTMEmsLogAmv/LegacyUploadWorkflow'
 import { previewRtmEmsLogAmvUpload, uploadRtmEmsLogAmv } from '@/service/rtm-emslogamv-service'
 import { createTestAuthContext } from '@/test-utils/auth'
 
@@ -19,14 +19,14 @@ const mockedUseAuth = vi.mocked(useAuth)
 const mockedPreviewUpload = vi.mocked(previewRtmEmsLogAmvUpload)
 const mockedUpload = vi.mocked(uploadRtmEmsLogAmv)
 
-describe('legacy RTM EMS Log AMV upload actions', () => {
+describe('RTM EMS Log AMV spreadsheet upload actions', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
   })
 
   it('rejects files above 20 MiB before requesting a server preview', async () => {
-    render(<LegacyRtmEmsLogAmvUploadWorkflow />)
+    render(<RtmEmsLogAmvUploadPage />)
     const oversized = new File(
       [new Uint8Array(20 * 1024 * 1024 + 1)],
       'oversized-rtm-template.xlsx',
@@ -117,7 +117,7 @@ describe('legacy RTM EMS Log AMV upload actions', () => {
       warnings: [],
       rows: [],
     })
-    render(<LegacyRtmEmsLogAmvUploadWorkflow />)
+    render(<RtmEmsLogAmvUploadPage />)
     const workbook = new File([new Uint8Array([1])], 'rtm-values.xlsx', {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     })

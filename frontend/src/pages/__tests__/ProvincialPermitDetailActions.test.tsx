@@ -2276,9 +2276,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(
       within(permitStatusSelect).queryByRole('option', { name: /Payment pending/ }),
     ).not.toBeInTheDocument()
-    expect(
-      within(permitStatusSelect).queryByRole('option', { name: /Expired/ }),
-    ).not.toBeInTheDocument()
+    expect(within(permitStatusSelect).getByRole('option', { name: /Expired/ })).toBeInTheDocument()
     await userEvent.selectOptions(permitStatusSelect, 'ACT')
     expect(screen.getByLabelText('Region')).toBeDisabled()
     expect(screen.getByLabelText('Region')).toHaveValue('Cariboo Natural Resource Region')
@@ -2304,6 +2302,24 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(mockedUpdatePermitDetail.mock.calls[0]?.[0]).not.toHaveProperty('permitSubmitDate')
     expect(await screen.findByText('The permit was updated successfully.')).toBeInTheDocument()
     expect(screen.getAllByText('Active').length).toBeGreaterThan(0)
+  })
+
+  it('allows an approver to expire a permit like legacy', async () => {
+    configureActivePermit()
+    renderPermitDetails()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    await userEvent.selectOptions(screen.getByLabelText('Permit status'), 'EXP')
+    await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
+
+    await waitFor(() => {
+      expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          permitNumber: '777',
+          permitStatus: 'EXP',
+        }),
+      )
+    })
   })
 
   it('does not submit hidden Blanket OIC request limits for a normal permit', async () => {

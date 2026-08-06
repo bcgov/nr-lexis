@@ -155,6 +155,12 @@ const renderPage = (
   )
 }
 
+const confirmSelectedApplicationApproval = async () => {
+  await userEvent.click(screen.getByRole('button', { name: 'Approve Selected Applications' }))
+  const dialog = await screen.findByRole('dialog', { name: 'Approve applications' })
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Approve' }))
+}
+
 Element.prototype.scrollIntoView = vi.fn()
 
 describe('Provincial Review Action State Smoke', () => {
@@ -397,6 +403,13 @@ describe('Provincial Review Action State Smoke', () => {
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select 1000456' }))
     await userEvent.click(screen.getByRole('button', { name: 'Approve Selected Applications' }))
+
+    const dialog = await screen.findByRole('dialog', { name: 'Approve applications' })
+    expect(within(dialog).getByRole('list', { name: 'Applications to approve' })).toHaveTextContent(
+      '1000456',
+    )
+    expect(mockedApproveApplicationReview).not.toHaveBeenCalled()
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Approve' }))
 
     await waitFor(() => {
       expect(mockedApproveApplicationReview).toHaveBeenCalledTimes(1)
@@ -796,7 +809,9 @@ describe('Provincial Review Action State Smoke', () => {
     expect(within(selectedRegions).getByText('Cariboo')).toBeVisible()
     expect(within(selectedRegions).getByText('Coast')).toBeVisible()
     expect(mockedSearchApplicationReviews).not.toHaveBeenCalled()
-    expect(screen.getByRole('region', { name: 'Review queue', hidden: true })).not.toBeVisible()
+    const reviewQueue = screen.getByRole('region', { name: 'Review queue', hidden: true })
+    expect(reviewQueue.closest('[hidden]')).toHaveStyle({ display: 'none' })
+    expect(reviewQueue).not.toBeVisible()
 
     await userEvent.click(screen.getByRole('button', { name: 'Search' }))
     await screen.findByText('1000123')
@@ -870,7 +885,7 @@ describe('Provincial Review Action State Smoke', () => {
     await screen.findByText('2000001')
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select all rows on this page' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Approve Selected Applications' }))
+    await confirmSelectedApplicationApproval()
 
     await waitFor(() => {
       expect(mockedApproveApplicationReview).toHaveBeenCalledTimes(1)
@@ -941,7 +956,7 @@ describe('Provincial Review Action State Smoke', () => {
     await screen.findByText('2000001')
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select all rows on this page' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Approve Selected Applications' }))
+    await confirmSelectedApplicationApproval()
 
     expect(
       await screen.findByText(
@@ -1022,11 +1037,12 @@ describe('Provincial Review Action State Smoke', () => {
     await screen.findByText('1000123')
 
     const rowCheckbox = screen.getByRole('checkbox', { name: 'Select 1000123' })
+    const reviewRow = screen.getByText('1000123').closest('tr') as HTMLTableRowElement
     expect(rowCheckbox).toBeDisabled()
     expect(screen.getByRole('checkbox', { name: 'Select all rows on this page' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Approve Selected Applications' })).toBeDisabled()
-    expect(screen.getAllByRole('button', { name: 'Approve' })[0]).toBeDisabled()
-    expect(screen.getAllByRole('button', { name: 'Disapprove' })[0]).toBeDisabled()
+    expect(within(reviewRow).getByRole('button', { name: 'Approve' })).toBeDisabled()
+    expect(within(reviewRow).getByRole('button', { name: 'Disapprove' })).toBeDisabled()
 
     const tooltipTrigger = rowCheckbox.closest('.disabled-button-tooltip') as HTMLElement
     expect(tooltipTrigger).toBeTruthy()

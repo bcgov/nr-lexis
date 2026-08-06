@@ -268,6 +268,12 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
         icon: DataBase,
         requiredActions: ['/lexisAgentAdmin'],
       },
+      {
+        to: '/admin/rtm/emslogamv/upload',
+        label: 'AMV Spreadsheet Upload',
+        icon: Upload,
+        requiredActions: ['/lexisAgentAdmin'],
+      },
     ],
   },
 ]

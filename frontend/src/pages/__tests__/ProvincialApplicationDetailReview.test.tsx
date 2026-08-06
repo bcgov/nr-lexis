@@ -101,6 +101,31 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     expect(review.queryByRole('combobox', { name: 'Application status' })).not.toBeInTheDocument()
   })
 
+  it('keeps remarks read-only when application detail editing is not allowed', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...reviewableApplicationDetail,
+      applicationStatusCode: 'PMT',
+      statusDescription: 'Permitted',
+      canEditApplicationDetails: false,
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationDetailTab('Remarks')
+    expect(screen.queryByRole('button', { name: 'Add remark' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
+    expect(await screen.findByText('ok')).toBeInTheDocument()
+  })
+
   it('preserves summary, remark, and review drafts when a package refreshes detail', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>

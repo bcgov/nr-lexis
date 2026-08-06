@@ -59,6 +59,10 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
           EEA.EXPORT_SCHEDULE_ID,
           EEA.AGENT_CLIENT_NUMBER,
           EEA.OWNER_CLIENT_NUMBER,
+          CASE
+            WHEN EEA.EXPORT_APPLICANT_TYPE_CODE = 'O' THEN EEA.OWNER_CLIENT_NUMBER
+            ELSE EEA.AGENT_CLIENT_NUMBER
+          END AS APPLICANT_CLIENT_NUMBER,
           EEA.EXEMPTION_NUMBER,
           EEA.EXPORT_APPLICATION_STATUS_CODE,
           EEA.EXPORT_APPLICANT_TYPE_CODE,
@@ -69,6 +73,7 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
           ES.ADVERTISING_DATE,
           EASC.DESCRIPTION AS STATUS_DESCRIPTION,
           EE.EXPORT_EXEMPTION_TYPE_CODE,
+          EETC.DESCRIPTION AS EXEMPTION_TYPE_DESCRIPTION,
           OU.ORG_UNIT_NAME AS REGION,
           OU.ORG_UNIT_CODE AS REGION_CODE,
           OU.ORG_UNIT_CODE,
@@ -77,6 +82,8 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
         FROM EXPORT_EXEMPTION_APPLICATION EEA
         LEFT JOIN EXPORT_EXEMPTION EE
           ON EE.EXEMPTION_NUMBER = EEA.EXEMPTION_NUMBER
+        LEFT JOIN EXPORT_EXEMPTION_TYPE_CODE EETC
+          ON EETC.EXPORT_EXEMPTION_TYPE_CODE = EE.EXPORT_EXEMPTION_TYPE_CODE
         LEFT JOIN EXPORT_SCHEDULE ES
           ON ES.EXPORT_SCHEDULE_ID = EEA.EXPORT_SCHEDULE_ID
         INNER JOIN EXPORT_APPLICATION_STATUS_CODE EASC
@@ -126,7 +133,7 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
       Map.ofEntries(
           Map.entry("applicationNumber", "v.APPLICATION_NUMBER"),
           Map.entry("application", "v.APPLICATION_NUMBER"),
-          Map.entry("applicantClientNumber", "v.OWNER_CLIENT_NUMBER"),
+          Map.entry("applicantClientNumber", "v.APPLICANT_CLIENT_NUMBER"),
           Map.entry("displayOwnerClientNumber", "v.OWNER_CLIENT_NUMBER"),
           Map.entry("ownerClientNumber", "v.OWNER_CLIENT_NUMBER"),
           Map.entry("exemptionNumber", "v.EXEMPTION_NUMBER"),
@@ -463,7 +470,8 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
         region,
         coalesce(applicationVolume, 0.0d),
         showCheckbox,
-        false);
+        false,
+        getString(rs, "EXEMPTION_TYPE_DESCRIPTION"));
   }
 
   private boolean canBeExempted(

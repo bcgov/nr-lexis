@@ -244,6 +244,69 @@ describe('Provincial Exemption Search Actions', () => {
     )
   }, 20_000)
 
+  it('preserves selected exemptions while paging through approval results', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({ canPerform: (action: string) => action === 'approveExemption' }),
+    )
+    const rows: ProvincialExemptionSearchResponse['content'] = [
+      {
+        exemptionNumber: 'EX-PAGE-1',
+        type: 'Ministerial',
+        typeCode: 'M',
+        status: 'New',
+        statusCode: 'NEW',
+        applicantClientNumber: '11111111',
+        ownerClientNumber: '22222222',
+        approvedVolume: 100,
+        balanceRemaining: 100,
+        listingDate: '2026-01-10',
+        expiryDate: '2026-12-31',
+        region: '11',
+        canApprove: true,
+        isLocked: false,
+        canViewExemption: true,
+      },
+      {
+        exemptionNumber: 'EX-PAGE-2',
+        type: 'Ministerial',
+        typeCode: 'M',
+        status: 'New',
+        statusCode: 'NEW',
+        applicantClientNumber: '33333333',
+        ownerClientNumber: '44444444',
+        approvedVolume: 200,
+        balanceRemaining: 200,
+        listingDate: '2026-01-11',
+        expiryDate: '2026-12-31',
+        region: '11',
+        canApprove: true,
+        isLocked: false,
+        canViewExemption: true,
+      },
+    ]
+    mockedSearchProvincialExemptions.mockImplementation(async (request) => ({
+      content: [rows[request.page]],
+      page: {
+        number: request.page,
+        size: request.pageSize,
+        totalElements: 20,
+        totalPages: 2,
+      },
+    }))
+
+    renderPage()
+    await screen.findByText('EX-PAGE-1')
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select EX-PAGE-1' }))
+
+    await userEvent.click(screen.getByLabelText('Next page'))
+    await screen.findByText('EX-PAGE-2')
+    expect(screen.getByRole('button', { name: 'Approve Selected Exemption' })).toBeEnabled()
+
+    await userEvent.click(screen.getByLabelText('Previous page'))
+    await screen.findByText('EX-PAGE-1')
+    expect(screen.getByRole('checkbox', { name: 'Select EX-PAGE-1' })).toBeChecked()
+  })
+
   it('blocks invalid approval recipients and keeps a skipped notification separate from approval', async () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({ canPerform: (action: string) => action === 'approveExemption' }),
@@ -703,9 +766,9 @@ describe('Provincial Exemption Search Actions', () => {
     })
 
     expect(mockedSearchProvincialExemptions).not.toHaveBeenCalled()
-    expect(
-      screen.getByRole('region', { name: 'Search results table', hidden: true }),
-    ).not.toBeVisible()
+    const resultsTable = screen.getByRole('region', { name: 'Search results table', hidden: true })
+    expect(resultsTable.closest('[hidden]')).toHaveStyle({ display: 'none' })
+    expect(resultsTable).not.toBeVisible()
     const selectedRegions = await screen.findByRole('list', { name: 'Selected regions' })
     expect(within(selectedRegions).getByText('Cariboo')).toBeVisible()
 
@@ -720,6 +783,16 @@ describe('Provincial Exemption Search Actions', () => {
           }),
         }),
         expect.objectContaining({ knownTotal: expect.any(Number) }),
+      )
+    })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Clear Filters' }))
+    await waitFor(() => {
+      expect(mockedSearchProvincialExemptions).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({ exemptionTypeCode: 'M' }),
+        }),
+        expect.any(Object),
       )
     })
   })

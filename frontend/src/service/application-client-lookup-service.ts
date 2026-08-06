@@ -148,6 +148,40 @@ export const fetchApplicationClientData = async (
   }
 }
 
+export const fetchExemptionClientData = async (
+  clientNumber: string,
+  clientLocationCode: string,
+): Promise<ApplicationClientData | null> => {
+  const normalizedClientNumber = clientNumber.trim()
+  const normalizedClientLocationCode = clientLocationCode.trim()
+  if (!normalizedClientNumber || !normalizedClientLocationCode) {
+    return null
+  }
+
+  try {
+    const data = await apiService.getCachedData<unknown>(
+      '/lexis/rpc/exemption-details/client-data',
+      {
+        params: {
+          clientLocationCode: normalizedClientLocationCode,
+          clientNumber: normalizedClientNumber,
+        },
+      },
+      {
+        cacheKey: `exemption-client-data:${normalizedClientNumber}:${normalizedClientLocationCode}`,
+        ttlMs: CLIENT_LOCATION_CACHE_TTL_MS,
+      },
+    )
+    return parseClientData(data)
+  } catch (error) {
+    console.warn(
+      `Unable to load exemption client data for client ${normalizedClientNumber} location ${normalizedClientLocationCode}.`,
+      error,
+    )
+    return null
+  }
+}
+
 export const fetchApplicationClientLocations = async (
   clientNumber: string,
   applicantType: 'owner' | 'agent' = 'owner',
@@ -189,6 +223,34 @@ export const fetchApplicationClientLocations = async (
       `Unable to load ${applicantType} locations for client ${normalizedClientNumber}.`,
       error,
     )
+    return []
+  }
+}
+
+export const fetchExemptionClientLocations = async (
+  clientNumber: string,
+): Promise<ApplicationClientLocation[]> => {
+  const normalizedClientNumber = clientNumber.trim()
+  if (!normalizedClientNumber) {
+    return []
+  }
+
+  try {
+    const data = await apiService.getCachedData<unknown>(
+      '/lexis/rpc/exemption-details/client-locations',
+      {
+        params: {
+          clientNumber: normalizedClientNumber,
+        },
+      },
+      {
+        cacheKey: `exemption-client-locations:${normalizedClientNumber}`,
+        ttlMs: CLIENT_LOCATION_CACHE_TTL_MS,
+      },
+    )
+    return parseClientLocations(data)
+  } catch (error) {
+    console.warn(`Unable to load exemption client locations for ${normalizedClientNumber}.`, error)
     return []
   }
 }

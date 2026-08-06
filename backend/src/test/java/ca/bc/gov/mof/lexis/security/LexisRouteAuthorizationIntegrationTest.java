@@ -363,6 +363,17 @@ class LexisRouteAuthorizationIntegrationTest {
                 "/permitDetails"),
             expected(HttpMethod.POST, "/api/lexis/lexisPolicyAdminRPC.do", null, "/lexisPolicyAdmin"),
             expected(HttpMethod.POST, "/api/lexis/lexisFILAdminRPC.do", null, "/lexisFILAdmin"),
+            expected(HttpMethod.GET, "/api/lexis/rtm/emslogamv", null, "/lexisAgentAdmin"),
+            expected(
+                HttpMethod.POST,
+                "/api/lexis/rtm/emslogamv/preview",
+                null,
+                "/lexisAgentAdmin"),
+            expected(
+                HttpMethod.POST,
+                "/api/lexis/rtm/emslogamv/upload",
+                null,
+                "/lexisAgentAdmin"),
             expected(HttpMethod.GET, "/api/lexis/offerReport.do", "view", "/offerReport"),
             expected(HttpMethod.POST, "/api/lexis/reports/biweeklyListing", null, "mofrListing"))
         .forEach(ExpectedAuthorizationRoute::assertResolved);
@@ -515,6 +526,17 @@ class LexisRouteAuthorizationIntegrationTest {
             get("/api/lexis/applications/search")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
         .andExpect(status().isOk());
+  }
+
+  @Test
+  void applicationDetailsShouldAllowReadOnlyExemptionApproverAccess() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/applications/1000123")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_EXEMPTION_APPROVER"))))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.applicationNumber").value(1000123))
+        .andExpect(jsonPath("$.exemptionApprover").value(true))
+        .andExpect(jsonPath("$.canEditApplicationDetails").value(false));
   }
 
   @Test
@@ -760,6 +782,17 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
+  void modernExemptionClientLookupShouldAllowExemptionApproverRole() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/rpc/exemption-details/client-locations")
+                .param("clientNumber", "77881")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_EXEMPTION_APPROVER"))))
+        .andExpect(status().isNoContent())
+        .andExpect(handler().handlerType(ExemptionDetailsRpcController.class))
+        .andExpect(handler().methodName("getClientLocations"));
+  }
+
+  @Test
   void legacyExemptionDetailsRpcReadActionShouldAllowReadOnlyRole() throws Exception {
     mockMvc.perform(
             post("/api/lexis/exemptionDetailsRPC")
@@ -770,13 +803,27 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
-  void legacyExemptionDetailsRpcSaveActionShouldRejectReadOnlyRole() throws Exception {
+  void legacyExemptionDetailsRpcCreateActionShouldRequireCreateAuthority() throws Exception {
     mockMvc.perform(
             post("/api/lexis/exemptionDetailsRPC")
                 .param("actionMapping", "addExemption")
                 .param("exemptionNumber", "EX-100")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
         .andExpect(status().isForbidden());
+    mockMvc.perform(
+            post("/api/lexis/exemptionDetailsRPC")
+                .param("actionMapping", "addExemption")
+                .param("exemptionNumber", "EX-100")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_EXEMPTION_APPROVER"))))
+        .andExpect(status().isForbidden());
+    mockMvc.perform(
+            post("/api/lexis/exemptionDetailsRPC")
+                .param("actionMapping", "addExemption")
+                .param("exemptionNumber", "EX-100")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_APPLICATION_APPROVER"))))
+        .andExpect(status().isNoContent())
+        .andExpect(handler().handlerType(ExemptionDetailsRpcController.class))
+        .andExpect(handler().methodName("addExemptionLegacy"));
   }
 
   @Test
@@ -1019,10 +1066,14 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
-  void modernApplicationDetailsWriteShouldRejectReadOnlyRole() throws Exception {
+  void modernApplicationDetailsWriteShouldRejectNonEditingRoles() throws Exception {
     mockMvc.perform(
             post("/api/lexis/rpc/application-details/application")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
+        .andExpect(status().isForbidden());
+    mockMvc.perform(
+            post("/api/lexis/rpc/application-details/application")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_EXEMPTION_APPROVER"))))
         .andExpect(status().isForbidden());
   }
 
@@ -1373,11 +1424,16 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
-  void legacyExemptionDetailsCreateShouldAllowExemptionApproverRole() throws Exception {
+  void legacyExemptionDetailsCreateShouldRequireCreateAuthority() throws Exception {
     mockMvc.perform(
             get("/api/lexis/exemptionDetails")
                 .param("actionMapping", "create")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_EXEMPTION_APPROVER"))))
+        .andExpect(status().isForbidden());
+    mockMvc.perform(
+            get("/api/lexis/exemptionDetails")
+                .param("actionMapping", "create")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_APPLICATION_APPROVER"))))
         .andExpect(status().isNoContent());
   }
 
@@ -2343,6 +2399,17 @@ class LexisRouteAuthorizationIntegrationTest {
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_EXEMPTION_APPROVER"))))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.granted").value(true));
+  }
+
+  @Test
+  void sessionCanPerformActionShouldRejectApproveExemptionForApplicationApprover()
+      throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/session/canPerformAction")
+                .param("action", "approveExemption")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_APPLICATION_APPROVER"))))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.granted").value(false));
   }
 
   @Test

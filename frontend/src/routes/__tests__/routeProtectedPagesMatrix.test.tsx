@@ -23,8 +23,7 @@ const EXPECTED_CORE_PAGES: RouteExpectation[] = [
   },
   {
     path: '/provincial/application/:applicationNumber',
-    requiredActions: ['/applicationSearch', '/applicationDetails'],
-    requiredActionsMatch: 'all',
+    requiredActions: ['/applicationDetails'],
   },
   {
     path: '/provincial/exemption',

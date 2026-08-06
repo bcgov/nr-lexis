@@ -248,6 +248,7 @@ const ProvincialReviewPage = () => {
   const [errorMessage, setErrorMessage] = useState('')
   const [selectedRowsById, setSelectedRowsById] = useState<Record<string, boolean>>({})
   const [submittingApproval, setSubmittingApproval] = useState(false)
+  const [approvalConfirmationNumbers, setApprovalConfirmationNumbers] = useState<string[]>([])
   const [rejectApplicationNumber, setRejectApplicationNumber] = useState('')
   const [rejectStatusCode, setRejectStatusCode] = useState(REJECT_STATUS_CODE)
   const [rejectEmailAddress, setRejectEmailAddress] = useState('')
@@ -880,7 +881,15 @@ const ProvincialReviewPage = () => {
       return
     }
 
-    await approveApplications(selectedNumbers)
+    setApprovalConfirmationNumbers(selectedNumbers)
+  }
+
+  const onConfirmApproveSelected = async () => {
+    const selectedNumbers = approvalConfirmationNumbers
+    setApprovalConfirmationNumbers([])
+    if (selectedNumbers.length > 0) {
+      await approveApplications(selectedNumbers)
+    }
   }
 
   const onApproveApplicationClick = async (applicationNumber: string, sourceStatus: string) => {
@@ -1013,6 +1022,30 @@ const ProvincialReviewPage = () => {
       </Column>
 
       <Modal
+        open={approvalConfirmationNumbers.length > 0}
+        size="sm"
+        modalHeading="Approve applications"
+        aria-label="Approve applications"
+        primaryButtonText="Approve"
+        secondaryButtonText="Cancel"
+        primaryButtonDisabled={submittingApproval}
+        preventCloseOnClickOutside
+        onRequestClose={() => {
+          if (!submittingApproval) {
+            setApprovalConfirmationNumbers([])
+          }
+        }}
+        onRequestSubmit={() => void onConfirmApproveSelected()}
+      >
+        <p>You are about to approve the following applications:</p>
+        <ul aria-label="Applications to approve">
+          {approvalConfirmationNumbers.map((applicationNumber) => (
+            <li key={applicationNumber}>{applicationNumber}</li>
+          ))}
+        </ul>
+      </Modal>
+
+      <Modal
         open={Boolean(rejectApplicationNumber)}
         passiveModal
         size="md"
@@ -1110,7 +1143,13 @@ const ProvincialReviewPage = () => {
         </div>
       </Modal>
 
-      <Column sm={4} md={8} lg={16} hidden={!hasSearchQuery}>
+      <Column
+        sm={4}
+        md={8}
+        lg={16}
+        hidden={!hasSearchQuery}
+        style={{ display: hasSearchQuery ? undefined : 'none' }}
+      >
         <section
           className="legacy-search-section legacy-search-section--results"
           aria-label="Review queue"

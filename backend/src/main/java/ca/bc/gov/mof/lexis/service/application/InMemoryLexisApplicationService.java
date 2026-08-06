@@ -365,7 +365,8 @@ public class InMemoryLexisApplicationService implements LexisApplicationService 
         record.regionCode(),
         record.applicationVolume(),
         record.showCheckbox(),
-        record.locked());
+        record.locked(),
+        record.exemptionType());
   }
 
   private LexisApplicationDetailDto toDetail(ApplicationRecord record) {

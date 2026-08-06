@@ -18,6 +18,10 @@ vi.mock('@/pages/RTMEmsLogAmv', () => ({
   default: () => <h1>Average Monthly Values</h1>,
 }))
 
+vi.mock('@/pages/RTMEmsLogAmv/LegacyUploadWorkflow', () => ({
+  default: () => <h1>AMV Spreadsheet Upload</h1>,
+}))
+
 vi.mock('@/pages/Federal', () => ({
   default: () => <h1>Federal application search</h1>,
 }))
@@ -305,6 +309,21 @@ describe('Protected route guard access', () => {
 
     expect(
       await screen.findByRole('heading', { name: 'Average Monthly Values' }),
+    ).toBeInTheDocument()
+  })
+
+  it('allows the AMV spreadsheet upload route when PROD RTM-only mode is enabled', async () => {
+    window.config = { VITE_LEXIS_PROD_RTM_ONLY: 'true' }
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        canPerform: (action: string) => action === '/lexisAgentAdmin',
+      }),
+    )
+
+    renderWithPath('/admin/rtm/emslogamv/upload')
+
+    expect(
+      await screen.findByRole('heading', { name: 'AMV Spreadsheet Upload' }),
     ).toBeInTheDocument()
   })
 })

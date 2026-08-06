@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
@@ -13,6 +14,11 @@ import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -70,18 +76,12 @@ class LexisReportOptionsControllerTest {
                 new CodeNameDto("", "All"),
                 new CodeNameDto("P", "Provincial"),
                 new CodeNameDto("F", "Federal")));
-    when(scheduleRepository.loadBiweeklyJurisdictionOptions())
+    when(scheduleRepository.loadReportExemptionTypeOptions())
         .thenReturn(
             List.of(
                 new CodeNameDto("", "All"),
-                new CodeNameDto("P", "Provincial"),
-                new CodeNameDto("F", "Federal")));
-    when(scheduleRepository.loadTeacJurisdictionOptions())
-        .thenReturn(List.of(new CodeNameDto("P", "Provincial"), new CodeNameDto("F", "Federal")));
-    when(scheduleRepository.loadReportExemptionTypeOptions())
-        .thenReturn(List.of(new CodeNameDto("", "All"), new CodeNameDto("OIC", "OIC")));
-    when(scheduleRepository.loadTenureExemptionTypeOptions())
-        .thenReturn(List.of(new CodeNameDto("M", "Ministerial"), new CodeNameDto("", "All")));
+                new CodeNameDto("M", "Ministerial"),
+                new CodeNameDto("OIC", "OIC")));
     when(scheduleRepository.loadReportExemptionReasonOptions())
         .thenReturn(List.of(new CodeNameDto("", "All"), new CodeNameDto("SEC128", "Section 128")));
     when(scheduleRepository.loadReportExemptionStatusOptions())
@@ -136,11 +136,13 @@ class LexisReportOptionsControllerTest {
         .extracting("code", "name")
         .containsExactly(
             org.assertj.core.groups.Tuple.tuple("", "All"),
+            org.assertj.core.groups.Tuple.tuple("M", "Ministerial"),
             org.assertj.core.groups.Tuple.tuple("OIC", "OIC"));
     assertThat(response.getBody().tenureExemptionTypes())
         .extracting("code", "name")
         .containsExactly(
             org.assertj.core.groups.Tuple.tuple("M", "Ministerial"),
+            org.assertj.core.groups.Tuple.tuple("OIC", "OIC"),
             org.assertj.core.groups.Tuple.tuple("", "All"));
     assertThat(response.getBody().exemptionReasons())
         .extracting("code", "name")
@@ -180,10 +182,7 @@ class LexisReportOptionsControllerTest {
     verify(scheduleRepository).findCurrentSchedulesRequired();
     verify(scheduleRepository).loadRegionOptions();
     verify(scheduleRepository).loadReportJurisdictionOptions();
-    verify(scheduleRepository).loadBiweeklyJurisdictionOptions();
-    verify(scheduleRepository).loadTeacJurisdictionOptions();
     verify(scheduleRepository).loadReportExemptionTypeOptions();
-    verify(scheduleRepository).loadTenureExemptionTypeOptions();
     verify(scheduleRepository).loadReportExemptionReasonOptions();
     verify(scheduleRepository).loadReportExemptionStatusOptions();
     verify(scheduleRepository).loadReportGrowthTypeOptions();
@@ -191,6 +190,54 @@ class LexisReportOptionsControllerTest {
     verify(scheduleRepository).loadReportDestinationCountryOptions();
     verify(scheduleRepository).loadAllReportDestinationCountryOptions();
     verify(scheduleRepository).loadReportPortOfExportOptions();
+    verifyNoMoreInteractions(scheduleRepository);
+  }
+
+  @Test
+  void optionsShouldLoadIndependentOracleLookupsConcurrently() throws Exception {
+    when(scheduleRepositoryProvider.getIfAvailable()).thenReturn(scheduleRepository);
+    CountDownLatch started = new CountDownLatch(4);
+    CountDownLatch release = new CountDownLatch(1);
+    when(scheduleRepository.findCurrentSchedulesRequired())
+        .thenAnswer(
+            invocation -> {
+              awaitLookup(started, release);
+              return List.of();
+            });
+    when(scheduleRepository.loadRegionOptions())
+        .thenAnswer(
+            invocation -> {
+              awaitLookup(started, release);
+              return List.of();
+            });
+    when(scheduleRepository.loadReportJurisdictionOptions())
+        .thenAnswer(
+            invocation -> {
+              awaitLookup(started, release);
+              return List.of();
+            });
+    when(scheduleRepository.loadReportExemptionTypeOptions())
+        .thenAnswer(
+            invocation -> {
+              awaitLookup(started, release);
+              return List.of();
+            });
+    ExecutorService executor = Executors.newFixedThreadPool(4);
+    LexisReportOptionsController controller =
+        new LexisReportOptionsController(
+            scheduleRepositoryProvider, sessionService, principalService, executor);
+
+    try {
+      CompletableFuture<ResponseEntity<LexisReportOptionsDto>> response =
+          CompletableFuture.supplyAsync(() -> controller.options(authentication));
+
+      assertThat(started.await(5, TimeUnit.SECONDS)).isTrue();
+      release.countDown();
+      assertThat(response.join().getStatusCode()).isEqualTo(HttpStatus.OK);
+    } finally {
+      release.countDown();
+      executor.shutdownNow();
+    }
   }
 
   @Test
@@ -266,7 +313,6 @@ class LexisReportOptionsControllerTest {
     when(scheduleRepository.loadRegionOptions())
         .thenReturn(List.of(new CodeNameDto("12", "Coast")));
     when(scheduleRepository.loadReportExemptionTypeOptions()).thenReturn(List.of());
-    when(scheduleRepository.loadTenureExemptionTypeOptions()).thenReturn(List.of());
     when(scheduleRepository.loadReportExemptionReasonOptions()).thenReturn(List.of());
     when(scheduleRepository.loadReportExemptionStatusOptions()).thenReturn(List.of());
     when(scheduleRepository.loadReportGrowthTypeOptions()).thenReturn(List.of());
@@ -297,7 +343,6 @@ class LexisReportOptionsControllerTest {
     when(scheduleRepository.findDefaultRegionForForestClientNumber("00077881"))
         .thenReturn(java.util.Optional.of("24"));
     when(scheduleRepository.loadReportExemptionTypeOptions()).thenReturn(List.of());
-    when(scheduleRepository.loadTenureExemptionTypeOptions()).thenReturn(List.of());
     when(scheduleRepository.loadReportExemptionReasonOptions()).thenReturn(List.of());
     when(scheduleRepository.loadReportExemptionStatusOptions()).thenReturn(List.of());
     when(scheduleRepository.loadReportGrowthTypeOptions()).thenReturn(List.of());
@@ -327,7 +372,6 @@ class LexisReportOptionsControllerTest {
     when(scheduleRepository.findDefaultRegionForForestClientNumber("00077881"))
         .thenReturn(java.util.Optional.of("99"));
     when(scheduleRepository.loadReportExemptionTypeOptions()).thenReturn(List.of());
-    when(scheduleRepository.loadTenureExemptionTypeOptions()).thenReturn(List.of());
     when(scheduleRepository.loadReportExemptionReasonOptions()).thenReturn(List.of());
     when(scheduleRepository.loadReportExemptionStatusOptions()).thenReturn(List.of());
     when(scheduleRepository.loadReportGrowthTypeOptions()).thenReturn(List.of());
@@ -343,5 +387,13 @@ class LexisReportOptionsControllerTest {
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isNotNull();
     assertThat(response.getBody().defaultRegion()).isNull();
+  }
+
+  private static void awaitLookup(CountDownLatch started, CountDownLatch release)
+      throws InterruptedException {
+    started.countDown();
+    if (!release.await(5, TimeUnit.SECONDS)) {
+      throw new AssertionError("Concurrent report option lookup was not released");
+    }
   }
 }

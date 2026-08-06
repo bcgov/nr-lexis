@@ -145,10 +145,11 @@ lexis:
         - "/feeReport"
         - "/tenureReport"
         - "mofrListing"
-        - "approveExemption"
         - "createApplication"
         - "createOffer"
         - "createPermit"
+        # Legacy parity: Application Approvers can save exemptions, including Active OIC/BOIC,
+        # but approveExemption remains reserved for Ministerial approval by Exemption Approvers.
         - "saveExemption"
         - "savePermit"
         - "uploadApplicationSubmission"
@@ -157,7 +158,9 @@ lexis:
         - "/filePermitUpload"
         - "/fileInvoiceUpload"
       LEXIS_EXEMPTION_APPROVER:
-        - "/createExemption"
+        # Legacy Exemption Approvers can open linked applications read-only, but cannot create
+        # exemptions. Editing an existing exemption remains governed by saveExemption.
+        - "/applicationDetails"
         - "/exemptionSearch"
         - "/exemptionDetails"
         - "approveExemption"

@@ -305,7 +305,7 @@ class PurchaseOfferOracleServiceTest {
                 " 00077881 ",
                 " Port Moody ",
                 " Condition notes ",
-                9_999_999.99d),
+                123.44d),
             "idir\\jsmith");
 
     assertThat(response.success()).isTrue();
@@ -333,7 +333,7 @@ class PurchaseOfferOracleServiceTest {
     assertThat(record.manufacturingFacilityInfo()).isEqualTo(" ");
     assertThat(record.entryUserId()).isEqualTo("idir\\jsmith");
     assertThat(record.applicationNumber()).isEqualTo(1000456L);
-    assertThat(record.offerVolume()).isEqualTo(9_999_999.99d);
+    assertThat(record.offerVolume()).isEqualTo(123.4d);
   }
 
   @Test
@@ -1199,7 +1199,7 @@ class PurchaseOfferOracleServiceTest {
     assertThat(record.entryUserId()).isEqualTo("creator");
     assertThat(record.entryTimestamp()).isEqualTo(entryTimestamp);
     assertThat(record.updateUserId()).isEqualTo("idir\\jsmith");
-    assertThat(record.offerVolume()).isEqualTo(99.99d);
+    assertThat(record.offerVolume()).isEqualTo(100.0d);
     verify(notificationService)
         .publish(
             new WorkflowEmailEvent.PurchaseOffer(
@@ -1316,12 +1316,15 @@ class PurchaseOfferOracleServiceTest {
                 null,
                 "port moody",
                 "EXISTING CONDITION",
-                null),
+                95.54d),
             "idir\\jsmith");
 
     assertThat(response.success()).isTrue();
     assertThat(response.sendEmail()).isFalse();
-    verify(repository).updateOffer(any(PurchaseOfferRepository.PurchaseOfferUpdateRecord.class));
+    ArgumentCaptor<PurchaseOfferRepository.PurchaseOfferUpdateRecord> recordCaptor =
+        ArgumentCaptor.forClass(PurchaseOfferRepository.PurchaseOfferUpdateRecord.class);
+    verify(repository).updateOffer(recordCaptor.capture());
+    assertThat(recordCaptor.getValue().offerVolume()).isEqualTo(95.5d);
     verifyNoInteractions(clientEmailResolver, notificationService);
   }
 

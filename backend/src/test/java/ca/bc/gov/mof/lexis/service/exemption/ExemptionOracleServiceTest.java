@@ -263,6 +263,42 @@ class ExemptionOracleServiceTest {
   }
 
   @Test
+  void broadClientScopeShouldPreserveAllNonOicExemptionTypes() {
+    ExemptionSearchCriteria criteria =
+        new ExemptionSearchCriteria(
+            null,
+            null,
+            null,
+            null,
+            null,
+            " 00055667 ",
+            null,
+            null,
+            null,
+            null,
+            null,
+            List.of(),
+            false,
+            false,
+            true,
+            null,
+            0,
+            25);
+    when(repository.search(any(ExemptionSearchCriteria.class)))
+        .thenReturn(page(List.of(), 0));
+
+    service.search(criteria);
+
+    ArgumentCaptor<ExemptionSearchCriteria> criteriaCaptor =
+        ArgumentCaptor.forClass(ExemptionSearchCriteria.class);
+    verify(repository).search(criteriaCaptor.capture());
+
+    ExemptionSearchCriteria normalized = criteriaCaptor.getValue();
+    assertThat(normalized.exemptionType()).isNull();
+    assertThat(normalized.broadClientMatch()).isTrue();
+  }
+
+  @Test
   void searchShouldNotOverrideExplicitExemptionType() {
     ExemptionSearchCriteria criteria =
         new ExemptionSearchCriteria(

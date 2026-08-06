@@ -569,6 +569,7 @@ const ProvincialExemptionPage = () => {
     clearSelection()
     const defaultFilters = {
       ...INITIAL_FILTERS,
+      exemptionTypeCode: shouldDefaultApprovalFilters ? 'M' : INITIAL_FILTERS.exemptionTypeCode,
       region: regionOptions.map((region) => region.id),
     }
     setFilters(defaultFilters)
@@ -1015,7 +1016,13 @@ const ProvincialExemptionPage = () => {
         </section>
       </Column>
 
-      <Column sm={4} md={8} lg={16} hidden={!hasSearchQuery}>
+      <Column
+        sm={4}
+        md={8}
+        lg={16}
+        hidden={!hasSearchQuery}
+        style={{ display: hasSearchQuery ? undefined : 'none' }}
+      >
         <section
           className="legacy-search-section legacy-search-section--results"
           aria-label="Search results"
@@ -1147,7 +1154,6 @@ const ProvincialExemptionPage = () => {
                 pageSizes={[...SEARCH_PAGE_SIZE_OPTIONS]}
                 totalItems={results.page.totalElements}
                 onChange={({ page, pageSize: nextPageSize }) => {
-                  clearSelection()
                   setSearchParams(
                     buildSearchParams(appliedFilters, sortField, sortDirection, page, nextPageSize),
                   )

@@ -490,6 +490,7 @@ const ProvincialExemptionCreatePage = () => {
     }
     markFormEdited()
     const typeCode = value.trim().toUpperCase()
+    // Legacy creates OIC/BOIC as Active without the separate Ministerial approval permission.
     const nextStatus = typeCode === 'M' ? 'NEW' : OIC_TYPES.has(typeCode) ? 'ACT' : ''
     setForm((current) => {
       const currentTypeCode = current.exemptionTypeCode.trim().toUpperCase()
@@ -827,6 +828,7 @@ const ProvincialExemptionCreatePage = () => {
                 id="approvalDate"
                 labelText="Approval date (YYYY-MM-DD)"
                 value={form.approvalDate}
+                disabled={normalizedTypeCode === 'M'}
                 invalid={!!fieldError('approvalDate')}
                 invalidText={fieldError('approvalDate')}
                 onBlur={() => markFieldTouched('approvalDate')}

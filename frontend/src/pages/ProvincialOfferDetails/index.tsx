@@ -33,6 +33,7 @@ import {
   OFFER_VOLUME_MAX,
   OFFER_WITHDRAW_REASON_MAX_LENGTH,
   PURCHASE_OFFER_AMOUNT_MAX,
+  formatLegacyOfferVolume,
   offerDecimalStorageFieldError,
   offerTextStorageFieldError,
 } from '@/pages/shared/offer-storage-validation'
@@ -552,7 +553,10 @@ const ProvincialOfferDetailsPage = () => {
                   readOnly={!canEditOfferDetailFields}
                   invalid={canEditOfferDetailFields && !!fieldError('offerVolume')}
                   invalidText={fieldError('offerVolume')}
-                  onBlur={() => markFieldTouched('offerVolume')}
+                  onBlur={() => {
+                    markFieldTouched('offerVolume')
+                    updateFormField('offerVolume', formatLegacyOfferVolume(form.offerVolume))
+                  }}
                   onChange={(event) => updateFormField('offerVolume', event.target.value)}
                 />
                 <TextInput

@@ -10,6 +10,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionAccessDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchResultDto;
@@ -36,6 +37,23 @@ import org.springframework.jdbc.core.RowMapper;
 
 @DisplayName("Unit Test | ExemptionRepository")
 class ExemptionRepositoryTest {
+
+  @Test
+  void exemptionStatusOptionsShouldIncludeExpired() {
+    ExemptionRepository repository =
+        new ExemptionRepository(null) {
+          @Override
+          protected List<CodeNameDto> loadCodeNameOptionsRequired(String procedureSignature) {
+            return List.of(
+                new CodeNameDto("NEW", "New"),
+                new CodeNameDto("EXP", "Expired"));
+          }
+        };
+
+    assertThat(repository.loadExemptionStatusOptions())
+        .extracting(CodeNameDto::code)
+        .containsExactly("NEW", "EXP");
+  }
 
   @Test
   @SuppressWarnings("unchecked")
@@ -117,7 +135,7 @@ class ExemptionRepositoryTest {
   }
 
   @Test
-  void searchShouldUseOneDirectQueryWithCorrelatedPackageAndRegionFilters() {
+  void searchShouldUseOneDirectQueryWithPackageAndRegionFilters() {
     TestExemptionRepository repository =
         new TestExemptionRepository(List.of(exemptionResult("EX-1")));
 
@@ -145,17 +163,23 @@ class ExemptionRepositoryTest {
         .contains("ES.ADVERTISING_DATE")
         .contains("EEA_REGION.ORG_UNIT_NO IN (?)")
         .contains("OEO_REGION.ORG_UNIT_NO IN (?)")
-        .contains("MAX(CANON_EEA.APPLICATION_NUMBER)")
-        .contains("CANON_ES.ADVERTISING_DATE DESC NULLS LAST")
         .contains("ORDER BY EE.EXEMPTION_NUMBER DESC")
         .doesNotContain(":1");
     assertThat(repository.whereSql().chars().filter(character -> character == '(').count())
         .isEqualTo(
             repository.whereSql().chars().filter(character -> character == ')').count());
     assertThat(repository.pageSelectSql())
-        .contains("WITH PERMIT_VOLUME_BY_EXEMPTION AS")
-        .contains("SELECT DISTINCT")
+        .contains("CANONICAL_EXEMPTION_APPLICATION AS")
+        .contains("ROW_NUMBER() OVER")
+        .contains("EEA.CANONICAL_RANK = 1")
+        .contains("PERMIT_VOLUME_BY_EXEMPTION AS")
+        .contains("SELECT\n  EE.EXEMPTION_NUMBER")
         .doesNotContain("FIND_EXEMPTIONS_BY_CRITERIA");
+    assertThat(repository.countSelectSql())
+        .contains("CANONICAL_EXEMPTION_APPLICATION AS")
+        .contains("ROW_NUMBER() OVER")
+        .contains("EEA.CANONICAL_RANK = 1")
+        .doesNotContain("PERMIT_VOLUME_BY_EXEMPTION");
     assertThat(repository.bindValues())
         .containsExactly(
             "900123",
@@ -171,14 +195,7 @@ class ExemptionRepositoryTest {
             java.sql.Date.valueOf("2026-02-01"),
             java.sql.Date.valueOf("2026-02-28"),
             1904L,
-            1904L,
-            "900123",
-            "PKG-1",
-            "00077881",
-            "00055667",
-            "00055667",
-            java.sql.Date.valueOf("2026-02-01"),
-            java.sql.Date.valueOf("2026-02-28"));
+            1904L);
   }
 
   @Test
@@ -197,7 +214,19 @@ class ExemptionRepositoryTest {
   }
 
   @Test
-  void scopedIndustrySearchShouldIncludeBlanketOicOutsideClientAndRegionMatches() {
+  void searchShouldNotJoinPackagesWhenThePackageFilterIsBlank() {
+    TestExemptionRepository repository = new TestExemptionRepository();
+
+    repository.search(
+        new ExemptionSearchCriteria(
+            null, null, null, null, null, null, null, null, null, null, null, List.of(), 0, 10));
+
+    assertThat(repository.whereSql()).doesNotContain("EXPORT_PACKAGE EP");
+    assertThat(repository.pageSelectSql()).doesNotContain("EXPORT_PACKAGE");
+  }
+
+  @Test
+  void scopedIndustrySearchShouldIncludeBothOicTypesOutsideClientMatches() {
     TestExemptionRepository repository = new TestExemptionRepository();
 
     repository.search(
@@ -215,15 +244,30 @@ class ExemptionRepositoryTest {
             null,
             List.of(76L, 1826L),
             true,
+            false,
+            true,
+            null,
             0,
             10));
 
+    assertThat(repository.pageSelectSql())
+        .contains("WITH ACCESSIBLE_EXEMPTIONS AS")
+        .contains("GROUP BY EEA_ACCESS.EXEMPTION_NUMBER")
+        .contains("EEA_ACCESS.AGENT_CLIENT_NUMBER")
+        .contains("EEA_ACCESS.OWNER_CLIENT_NUMBER")
+        .contains("EE_ACCESS.EXPORT_EXEMPTION_TYPE_CODE NOT IN ('B', 'O')")
+        .contains("EE_OIC.EXPORT_EXEMPTION_TYPE_CODE IN ('B', 'O')")
+        .contains("INNER JOIN ACCESSIBLE_EXEMPTIONS AE_CANON")
+        .contains("INNER JOIN ACCESSIBLE_EXEMPTIONS AE_VOLUME")
+        .contains("INNER JOIN ACCESSIBLE_EXEMPTIONS AE_IEEA")
+        .contains("INNER JOIN ACCESSIBLE_EXEMPTIONS AE_OEO")
+        .contains("INNER JOIN ACCESSIBLE_EXEMPTIONS AE")
+        .contains("EEA.CANONICAL_RANK = 1")
+        .doesNotContain("OR EE.EXPORT_EXEMPTION_TYPE_CODE IN ('B', 'O')");
     assertThat(repository.whereSql())
-        .contains("EEA.AGENT_CLIENT_NUMBER")
-        .contains("EEA.OWNER_CLIENT_NUMBER")
         .contains("EEA_REGION.ORG_UNIT_NO")
         .contains("OEO_REGION.ORG_UNIT_NO")
-        .contains("OR EE.EXPORT_EXEMPTION_TYPE_CODE = 'B'")
+        .doesNotContain("EEA_ACCESS")
         .doesNotContain("EEA.AGENT_CLIENT_NUMBER IS NULL");
     assertThat(repository.bindValues())
         .containsExactly(
@@ -232,9 +276,47 @@ class ExemptionRepositoryTest {
             76L,
             1826L,
             76L,
-            1826L,
+            1826L);
+    assertThat(repository.countCalls()).isEqualTo(1);
+    assertThat(repository.pageCalls()).isEqualTo(1);
+  }
+
+  @Test
+  void broadClientSummaryScopeShouldExcludeBothOicTypes() {
+    TestExemptionRepository repository = new TestExemptionRepository();
+
+    repository.search(
+        new ExemptionSearchCriteria(
+            null,
+            null,
+            null,
+            null,
+            null,
             "00012345",
-            "00012345");
+            null,
+            null,
+            null,
+            null,
+            null,
+            List.of(),
+            false,
+            false,
+            true,
+            null,
+            0,
+            10));
+
+    assertThat(repository.pageSelectSql())
+        .contains("WITH ACCESSIBLE_EXEMPTIONS AS")
+        .contains("EE_ACCESS.EXPORT_EXEMPTION_TYPE_CODE NOT IN ('B', 'O')")
+        .doesNotContain("EE_OIC.EXPORT_EXEMPTION_TYPE_CODE IN ('B', 'O')");
+    assertThat(repository.countSelectSql())
+        .contains("WITH ACCESSIBLE_EXEMPTIONS AS")
+        .contains("INNER JOIN ACCESSIBLE_EXEMPTIONS AE_CANON")
+        .contains("INNER JOIN ACCESSIBLE_EXEMPTIONS AE")
+        .doesNotContain("PERMIT_VOLUME_BY_EXEMPTION", "EXEMPTION_ORG_UNIT");
+    assertThat(repository.whereSql()).doesNotContain("EEA_ACCESS");
+    assertThat(repository.bindValues()).containsExactly("00012345", "00012345");
   }
 
   @Test
@@ -265,8 +347,7 @@ class ExemptionRepositoryTest {
         .contains("EEA.AGENT_CLIENT_NUMBER LIKE '%' || ? || '%'")
         .contains("EEA.OWNER_CLIENT_NUMBER LIKE '%' || ? || '%'")
         .contains("EEA.AGENT_CLIENT_NUMBER IS NULL");
-    assertThat(repository.bindValues())
-        .containsExactly("00055667", "00055667", "00055667", "00055667");
+    assertThat(repository.bindValues()).containsExactly("00055667", "00055667");
   }
 
   @Test
@@ -294,12 +375,14 @@ class ExemptionRepositoryTest {
     repository.search(criteria);
     assertThat(repository.whereSql())
         .contains("EE.EXPORT_EXEMPTION_TYPE_CODE != 'B'");
+    assertThat(repository.pageSelectSql()).doesNotContain("ACCESSIBLE_EXEMPTIONS");
 
     repository.count(criteria);
     assertThat(repository.whereSql())
         .contains("EE.EXPORT_EXEMPTION_TYPE_CODE != 'B'")
         .doesNotContain("GROUP BY")
         .doesNotContain("ORDER BY EE.");
+    assertThat(repository.countSelectSql()).doesNotContain("ACCESSIBLE_EXEMPTIONS");
   }
 
   @Test
@@ -316,14 +399,16 @@ class ExemptionRepositoryTest {
         .doesNotContain("ORDER BY EE.");
     assertThat(repository.countSelectSql())
         .contains("SELECT COUNT(*)")
-        .contains("SELECT DISTINCT")
+        .contains("CANONICAL_EXEMPTION_APPLICATION AS")
+        .contains("EEA.CANONICAL_RANK = 1")
+        .doesNotContain("SELECT DISTINCT")
         .doesNotContain("EXPORT_PERMIT_DETAIL")
         .doesNotContain("EXEMPTION_ORG_UNIT");
     assertThat(repository.bindValues()).containsExactly("EX-1");
   }
 
   @Test
-  void countShouldApplyTheSameCanonicalLinkedApplicationCriteriaAsSearch() {
+  void countShouldApplyFiltersToTheCanonicalLinkedApplication() {
     TestExemptionRepository repository = new TestExemptionRepository();
 
     repository.count(
@@ -346,15 +431,14 @@ class ExemptionRepositoryTest {
     assertThat(repository.whereSql())
         .contains("TO_CHAR(EEA.APPLICATION_NUMBER) LIKE '%' || ? || '%'")
         .contains("ES.ADVERTISING_DATE >= ?")
-        .contains("TO_CHAR(CANON_EEA.APPLICATION_NUMBER) LIKE '%' || ? || '%'")
-        .contains("CANON_ES.ADVERTISING_DATE >= ?")
+        .doesNotContain("CANON_EEA")
         .doesNotContain("GROUP BY", "ORDER BY EE.");
+    assertThat(repository.countSelectSql())
+        .contains("CANONICAL_EXEMPTION_APPLICATION AS")
+        .contains("CANON_ES.ADVERTISING_DATE DESC NULLS LAST")
+        .contains("EEA.CANONICAL_RANK = 1");
     assertThat(repository.bindValues())
-        .containsExactly(
-            "900123",
-            java.sql.Date.valueOf("2026-02-01"),
-            "900123",
-            java.sql.Date.valueOf("2026-02-01"));
+        .containsExactly("900123", java.sql.Date.valueOf("2026-02-01"));
   }
 
   @Test
@@ -426,11 +510,13 @@ class ExemptionRepositoryTest {
 
     repository.search(criteriaWithSort(null));
 
-    assertThat(repository.whereSql())
-        .contains("EEA.APPLICATION_NUMBER IS NULL")
-        .contains("MAX(CANON_EEA.APPLICATION_NUMBER)")
+    assertThat(repository.pageSelectSql())
+        .contains("ROW_NUMBER() OVER")
+        .contains("PARTITION BY CANON_EEA.EXEMPTION_NUMBER")
         .contains("CANON_ES.ADVERTISING_DATE DESC NULLS LAST")
-        .doesNotContain("GROUP BY");
+        .contains("CANON_EEA.APPLICATION_NUMBER DESC")
+        .contains("EEA.CANONICAL_RANK = 1");
+    assertThat(repository.whereSql()).doesNotContain("CANON_EEA", "GROUP BY");
   }
 
   @Test

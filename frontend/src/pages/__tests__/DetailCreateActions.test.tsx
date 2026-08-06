@@ -36,6 +36,8 @@ vi.mock('@/service/application-client-lookup-service', () => ({
   fetchApplicationClientData: vi.fn().mockResolvedValue(null),
   fetchApplicationClientContacts: vi.fn().mockResolvedValue([]),
   fetchApplicationClientLocations: vi.fn().mockResolvedValue([]),
+  fetchExemptionClientData: vi.fn().mockResolvedValue(null),
+  fetchExemptionClientLocations: vi.fn().mockResolvedValue([]),
 }))
 
 vi.mock('@/service/application-review-search-service', () => ({
@@ -260,7 +262,9 @@ describe('Detail Quick Action Smoke', () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
         canPerform: (action: string) =>
-          defaultCanPerform(action) || action === '/applicationRemarks',
+          defaultCanPerform(action) ||
+          action === 'createApplication' ||
+          action === '/applicationRemarks',
       }),
     )
     mockedFetchProvincialApplicationDetail.mockResolvedValue(applicationDetail)

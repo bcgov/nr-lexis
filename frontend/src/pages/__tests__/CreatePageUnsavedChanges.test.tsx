@@ -321,7 +321,7 @@ describe('create page unsaved changes', () => {
     const testCase = createCases[1]
     const router = renderCreatePage(testCase.createPath, testCase.targetPath, testCase.element)
     await screen.findByRole('heading', { level: 1, name: testCase.heading })
-    await userEvent.click(screen.getByLabelText('Approval date (YYYY-MM-DD)'))
+    await userEvent.click(screen.getByLabelText('Expiry date (YYYY-MM-DD)'))
     const calendarDay = await waitFor(() => {
       const day = document.querySelector<HTMLElement>(
         '.flatpickr-calendar.open .flatpickr-day:not(.flatpickr-disabled):not(.prevMonthDay):not(.nextMonthDay)',

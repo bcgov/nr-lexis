@@ -477,9 +477,9 @@ describe('Provincial Application Search Actions', () => {
     const selectedRegions = await screen.findByRole('list', { name: 'Selected regions' })
     expect(within(selectedRegions).getByText('Cariboo')).toBeVisible()
     expect(mockedSearchProvincialApplications).not.toHaveBeenCalled()
-    expect(
-      screen.getByRole('region', { name: 'Search results table', hidden: true }),
-    ).not.toBeVisible()
+    const resultsTable = screen.getByRole('region', { name: 'Search results table', hidden: true })
+    expect(resultsTable.closest('[hidden]')).toHaveStyle({ display: 'none' })
+    expect(resultsTable).not.toBeVisible()
   })
 
   it('loads an export schedule link and explicitly submits its removal', async () => {
