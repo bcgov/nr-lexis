@@ -346,6 +346,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       return {
         sideNavWidth: sideNavBounds.width,
         mainLeft: mainBounds.left,
+        mainTop: mainBounds.top,
         headingLeft: headingBounds.left,
         filterLeft: filterBounds.left,
         criteriaActionGap: actionBounds.top - criteriaBounds.bottom,
@@ -355,6 +356,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     })
     expect(initialShellLayout.sideNavWidth).toBe(256)
     expect(initialShellLayout.mainLeft).toBe(256)
+    expect(initialShellLayout.mainTop).toBe(64)
     expect(initialShellLayout.headingLeft - initialShellLayout.mainLeft).toBe(24)
     expect(initialShellLayout.filterLeft).toBe(initialShellLayout.headingLeft)
     expect(initialShellLayout.criteriaActionGap).toBe(12)
@@ -406,13 +408,20 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     const resultCountToolbar = page.locator('.legacy-search-table-toolbar .cds--toolbar-content')
     await expect(resultCountToolbar).toHaveCSS('align-items', 'center')
     await expect(resultCountToolbar).toHaveCSS('padding-left', '16px')
-    await expect(page.locator('a.csp-side-nav__link[data-label="Applications"]')).toHaveCSS(
-      'font-weight',
-      '400',
+    const activeNavLink = page.locator('a.csp-side-nav__link[data-label="Applications"]')
+    const inactiveNavLink = page.locator('a.csp-side-nav__link[data-label="Exemptions"]')
+    await expect(activeNavLink).toHaveCSS('height', '48px')
+    await expect(activeNavLink).toHaveCSS('font-weight', '600')
+    await expect(activeNavLink).toHaveCSS('background-color', 'rgb(232, 232, 232)')
+    await expect(activeNavLink.locator('.csp-side-nav__link-text')).toHaveCSS(
+      'color',
+      'rgb(19, 19, 21)',
     )
-    await expect(page.locator('a.csp-side-nav__link[data-label="Exemptions"]')).toHaveCSS(
-      'font-weight',
-      '400',
+    await expect(inactiveNavLink).toHaveCSS('height', '48px')
+    await expect(inactiveNavLink).toHaveCSS('font-weight', '400')
+    await expect(inactiveNavLink.locator('.csp-side-nav__link-text')).toHaveCSS(
+      'color',
+      'rgb(96, 96, 98)',
     )
     await expect(
       page.locator('a.csp-side-nav__link[data-label="Application Report"]'),
@@ -553,8 +562,8 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     const clearButton = page.getByRole('button', { name: 'Clear all', exact: true })
     await clearButton.hover()
     await expect(clearButton).toHaveCSS('background-color', 'rgb(235, 242, 252)')
-    await expect(clearButton).toHaveCSS('border-color', 'rgb(0, 115, 230)')
-    await expect(clearButton).toHaveCSS('color', 'rgb(0, 115, 230)')
+    await expect(clearButton).toHaveCSS('border-color', 'rgb(15, 98, 254)')
+    await expect(clearButton).toHaveCSS('color', 'rgb(15, 98, 254)')
 
     await expect(page.getByRole('link', { name: 'Add Application' })).toHaveCSS(
       'text-decoration-line',
@@ -565,7 +574,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(infoNotification).toContainText('Export schedule filter applied')
     await expect(infoNotification).toHaveCSS('background-color', 'rgb(194, 224, 255)')
     await expect(infoNotification).toHaveCSS('border-left-width', '4px')
-    await expect(infoNotification).toHaveCSS('border-left-color', 'rgb(0, 115, 230)')
+    await expect(infoNotification).toHaveCSS('border-left-color', 'rgb(15, 98, 254)')
 
     const iconTooltipPopovers = page.locator('.cds--icon-tooltip > .cds--popover')
     expect(await iconTooltipPopovers.count()).toBeGreaterThan(0)
@@ -717,10 +726,20 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     )
     await expect(page.getByRole('button', { name: 'Search', exact: true })).toHaveCSS(
       'background-color',
-      'rgb(0, 115, 230)',
+      'rgb(15, 98, 254)',
     )
+    await expect(page.locator('.csp-app-header')).toHaveCSS('background-color', 'rgb(15, 98, 254)')
+    await expect(page.locator('main.app-main')).toHaveCSS('background-color', 'rgb(22, 22, 22)')
+    await expect(page.locator('.csp-side-nav')).toHaveCSS('background-color', 'rgb(22, 22, 22)')
+    await expect(table.locator('thead th').first()).toHaveCSS('background-color', 'rgb(57, 57, 57)')
     await expect(firstRowCell).toHaveCSS('background-color', 'rgb(38, 38, 38)')
-    await expect(secondRowCell).toHaveCSS('background-color', 'rgb(57, 57, 57)')
+    await expect(secondRowCell).toHaveCSS('background-color', 'rgb(44, 44, 44)')
+    const darkActiveNavLink = page.locator('a.csp-side-nav__link[data-label="Applications"]')
+    await expect(darkActiveNavLink).toHaveCSS('background-color', 'rgb(51, 51, 51)')
+    await expect(darkActiveNavLink.locator('.csp-side-nav__link-text')).toHaveCSS(
+      'color',
+      'rgb(244, 244, 244)',
+    )
     const darkRowDividerStyles = await Promise.all(
       [firstRowCell, secondRowCell].map((cell) =>
         cell.evaluate((element) => {
@@ -935,18 +954,23 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(page.getByLabel('Offer highlights')).toHaveCount(0)
 
     const detailHeaderLayout = await page.evaluate(() => {
+      const main = document.querySelector('main.app-main')
       const breadcrumb = document.querySelector('.back-link')
       const pageHeader = document.querySelector('.lexis-page-header')
+      if (!(main instanceof HTMLElement)) throw new Error('Application content not found')
       if (!(breadcrumb instanceof HTMLElement)) throw new Error('Detail breadcrumb not found')
       if (!(pageHeader instanceof HTMLElement)) throw new Error('Detail page header not found')
 
+      const mainBounds = main.getBoundingClientRect()
       const breadcrumbBounds = breadcrumb.getBoundingClientRect()
       const pageHeaderBounds = pageHeader.getBoundingClientRect()
       return {
+        breadcrumbInset: breadcrumbBounds.left - mainBounds.left,
         breadcrumbGap: pageHeaderBounds.top - breadcrumbBounds.bottom,
       }
     })
 
+    expect(detailHeaderLayout.breadcrumbInset).toBe(44)
     expect(detailHeaderLayout.breadcrumbGap).toBeLessThanOrEqual(24)
 
     await page.setViewportSize({ width: 390, height: 844 })
