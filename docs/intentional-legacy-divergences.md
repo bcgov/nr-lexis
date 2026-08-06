@@ -30,3 +30,4 @@ The Advertising List change retired two legacy shortcuts, not two complete repor
 Exemption and Permit printable reports remain available from their respective detail pages.
 
 Keep markers next to the controlling code rather than on every consuming component.
+ 
