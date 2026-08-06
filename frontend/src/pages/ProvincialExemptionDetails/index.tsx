@@ -5,7 +5,7 @@ import {
   Checkbox,
   Column,
   Grid,
-  InlineLoading,
+  Loading,
   Tab,
   TabList,
   TabPanel,
@@ -1476,8 +1476,15 @@ const ProvincialExemptionDetailsPage = () => {
       </Column>
 
       {loading && !currentDetail && (
-        <Column sm={4} md={8} lg={16}>
-          <InlineLoading description="Loading provincial exemption detail..." />
+        <Column
+          sm={4}
+          md={8}
+          lg={16}
+          className="detail-page-loading"
+          role="status"
+          aria-live="polite"
+        >
+          <Loading description="Loading provincial exemption detail..." withOverlay={false} />
         </Column>
       )}
 

@@ -944,8 +944,17 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     const backLink = page.getByRole('link', { name: 'Back to Provincial offer search' })
     await expect(backLink).toHaveAttribute('href', '/provincial/offers')
     await expect(backLink.locator('svg')).toBeVisible()
+    await expect(backLink).toHaveCSS('column-gap', '4px')
+    await expect(backLink).toHaveCSS('padding-top', '4px')
+    await expect(backLink).toHaveCSS('text-decoration-line', 'none')
+    await backLink.hover()
+    await expect(backLink).toHaveCSS('text-decoration-line', 'underline')
     await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1)
     await expect(page.locator('.detail-page-grid')).toHaveCSS('row-gap', '16px')
+    await expect(page.locator('.detail-page-header .lexis-page-header')).toHaveCSS(
+      'row-gap',
+      '12px',
+    )
     const editOfferButton = page.getByRole('button', { name: 'Edit', exact: true })
     await expect(editOfferButton).toHaveClass(/cds--btn--tertiary/)
     await expect(editOfferButton).toHaveCSS('height', '32px')
@@ -981,6 +990,35 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     expect(hasHorizontalPageOverflow).toBe(false)
   })
 
+  test('centers initial detail loading and places toasts like FSPTS', async ({ page }) => {
+    await page.route('**/api/lexis/purchase-offers/81001', async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 750))
+      await route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({ message: 'Synthetic detail failure' }),
+      })
+    })
+
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.goto('/provincial/offers/81001', { waitUntil: 'domcontentloaded' })
+
+    const initialLoader = page.locator('.detail-page-loading')
+    await expect(initialLoader).toBeVisible()
+    await expect(initialLoader.locator('.cds--loading')).toBeVisible()
+    await expect(initialLoader).toHaveCSS('justify-content', 'center')
+    await expect(initialLoader).toHaveCSS('padding-top', '64px')
+
+    await expect(page.getByText('Detail unavailable')).toBeVisible()
+    const notificationRegion = page.locator('.app-notification-region')
+    const toast = notificationRegion.locator('.app-notification__toast')
+    await expect(notificationRegion).toHaveCSS('top', '16px')
+    await expect(notificationRegion).toHaveCSS('right', '16px')
+    await expect(notificationRegion).toHaveCSS('z-index', '12000')
+    await expect(toast).toHaveCSS('animation-name', 'app-notification-slide-in-right')
+    await expect(toast).toHaveCSS('animation-duration', '0.3s')
+  })
+
   test('bounds detail field cards to one, two, and three columns', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
     await page.goto('/federal/application/888', { waitUntil: 'domcontentloaded' })
@@ -1012,12 +1050,17 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
         panelLeft: panelBounds.left,
         panelRight: panelBounds.right,
         tabListLeft: tabListBounds.left,
+        tabListRight: tabListBounds.right,
+        tabListParentRight: tabList.parentElement?.getBoundingClientRect().right,
         tileLeft: tileBounds.left,
       }
     })
     expect(Math.abs(detailCanvas.panelLeft - detailCanvas.mainLeft)).toBeLessThanOrEqual(1)
     expect(Math.abs(detailCanvas.panelRight - detailCanvas.mainRight)).toBeLessThanOrEqual(1)
     expect(Math.abs(detailCanvas.tileLeft - detailCanvas.tabListLeft)).toBeLessThanOrEqual(1)
+    expect(
+      Math.abs(detailCanvas.tabListRight - (detailCanvas.tabListParentRight ?? 0)),
+    ).toBeLessThanOrEqual(1)
     await expect(page.locator('.detail-section-card').first()).toHaveCSS(
       'background-color',
       'rgb(255, 255, 255)',

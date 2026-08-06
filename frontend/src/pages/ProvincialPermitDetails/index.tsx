@@ -6,6 +6,7 @@ import {
   Column,
   Grid,
   InlineLoading,
+  Loading,
   Select,
   SelectItem,
   Tab,
@@ -2862,8 +2863,15 @@ const ProvincialPermitDetailsPage = () => {
       </Column>
 
       {loading && !detailMatchesRoute && (
-        <Column sm={4} md={8} lg={16}>
-          <InlineLoading description="Loading provincial permit detail..." />
+        <Column
+          sm={4}
+          md={8}
+          lg={16}
+          className="detail-page-loading"
+          role="status"
+          aria-live="polite"
+        >
+          <Loading description="Loading provincial permit detail..." withOverlay={false} />
         </Column>
       )}
 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Button, Column, Grid, InlineLoading, TextArea, TextInput, Tile } from '@carbon/react'
+import { Button, Column, Grid, Loading, TextArea, TextInput, Tile } from '@carbon/react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { AppNotification } from '../../components/AppNotification'
 import ContentLoadingOverlay from '@/components/ContentLoadingOverlay'
@@ -402,8 +402,15 @@ const ProvincialOfferDetailsPage = () => {
       </Column>
 
       {loading && !currentDetail && (
-        <Column sm={4} md={8} lg={16}>
-          <InlineLoading description="Loading provincial offer detail..." />
+        <Column
+          sm={4}
+          md={8}
+          lg={16}
+          className="detail-page-loading"
+          role="status"
+          aria-live="polite"
+        >
+          <Loading description="Loading provincial offer detail..." withOverlay={false} />
         </Column>
       )}
 

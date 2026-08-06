@@ -4,7 +4,7 @@ import {
   Button,
   Column,
   Grid,
-  InlineLoading,
+  Loading,
   Select,
   SelectItem,
   Tab,
@@ -823,8 +823,15 @@ const FederalApplicationDetailsPage = () => {
       </Column>
 
       {loading && !currentDetail && (
-        <Column sm={4} md={8} lg={16}>
-          <InlineLoading description="Loading federal application detail..." />
+        <Column
+          sm={4}
+          md={8}
+          lg={16}
+          className="detail-page-loading"
+          role="status"
+          aria-live="polite"
+        >
+          <Loading description="Loading federal application detail..." withOverlay={false} />
         </Column>
       )}
 

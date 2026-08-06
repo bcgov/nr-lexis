@@ -6,6 +6,7 @@ import {
   DismissibleTag,
   Grid,
   InlineLoading,
+  Loading,
   Tab,
   TabList,
   TabPanel,
@@ -3316,8 +3317,15 @@ const ProvincialApplicationDetailsPage = () => {
       </Column>
 
       {loading && !detailMatchesRoute && (
-        <Column sm={4} md={8} lg={16}>
-          <InlineLoading description="Loading provincial application detail..." />
+        <Column
+          sm={4}
+          md={8}
+          lg={16}
+          className="detail-page-loading"
+          role="status"
+          aria-live="polite"
+        >
+          <Loading description="Loading provincial application detail..." withOverlay={false} />
         </Column>
       )}
 
