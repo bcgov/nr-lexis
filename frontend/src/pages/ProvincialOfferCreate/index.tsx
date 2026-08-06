@@ -39,6 +39,7 @@ import {
   OFFER_REMARK_MAX_LENGTH,
   OFFER_VOLUME_MAX,
   PURCHASE_OFFER_AMOUNT_MAX,
+  formatLegacyOfferVolume,
   offerDecimalStorageFieldError,
   offerTextStorageFieldError,
 } from '@/pages/shared/offer-storage-validation'
@@ -810,7 +811,13 @@ const ProvincialOfferCreatePage = () => {
                 value={form.offerVolume}
                 invalid={!!fieldError('offerVolume')}
                 invalidText={fieldError('offerVolume')}
-                onBlur={() => markFieldTouched('offerVolume')}
+                onBlur={() => {
+                  markFieldTouched('offerVolume')
+                  setForm((current) => ({
+                    ...current,
+                    offerVolume: formatLegacyOfferVolume(current.offerVolume),
+                  }))
+                }}
                 onChange={(event) => {
                   markFormEdited()
                   setForm((current) => ({ ...current, offerVolume: event.target.value }))

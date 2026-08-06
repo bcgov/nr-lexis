@@ -496,11 +496,10 @@ class ProvincialAuthorizationServiceTest {
   }
 
   @Test
-  void pureExemptionApproverSearchIsRestrictedToIdentityOrganizationUnits() {
+  void pureExemptionApproverSearchTreatsRequestedRegionsAsFilters() {
     Authentication authentication =
         new TestingAuthenticationToken(
             "exemption-approver", "n/a", "LEXIS_EXEMPTION_APPROVER");
-    when(principalService.resolveOrgUnitNumbers(authentication)).thenReturn(List.of(12L));
 
     ProvincialAuthorizationService.OrgUnitConstraint searchConstraint =
         service.constrainOrgUnits(
@@ -513,28 +512,29 @@ class ProvincialAuthorizationServiceTest {
             List.of(12L, 76L),
             ProvincialAuthorizationService.OrgUnitSurface.EXEMPTION_DETAIL);
 
-    assertThat(searchConstraint.restricted()).isTrue();
+    assertThat(searchConstraint.restricted()).isFalse();
     assertThat(searchConstraint.denied()).isFalse();
-    assertThat(searchConstraint.orgUnitNumbers()).containsExactly(12L);
+    assertThat(searchConstraint.orgUnitNumbers()).containsExactly(12L, 76L);
     assertThat(detailConstraint.restricted()).isFalse();
     assertThat(detailConstraint.orgUnitNumbers()).containsExactly(12L, 76L);
+    verifyNoInteractions(principalService);
   }
 
   @Test
-  void pureExemptionApproverSearchFailsClosedWithoutIdentityOrganizationUnits() {
+  void pureExemptionApproverSearchRemainsGlobalWithoutRequestedRegionFilters() {
     Authentication authentication =
         new TestingAuthenticationToken(
             "exemption-approver", "n/a", "LEXIS_EXEMPTION_APPROVER");
-    when(principalService.resolveOrgUnitNumbers(authentication)).thenReturn(List.of());
 
     ProvincialAuthorizationService.OrgUnitConstraint constrained =
         service.resolveOrgUnitConstraint(
             authentication,
             ProvincialAuthorizationService.OrgUnitSurface.EXEMPTION_SEARCH);
 
-    assertThat(constrained.restricted()).isTrue();
-    assertThat(constrained.denied()).isTrue();
+    assertThat(constrained.restricted()).isFalse();
+    assertThat(constrained.denied()).isFalse();
     assertThat(constrained.orgUnitNumbers()).isEmpty();
+    verifyNoInteractions(principalService);
   }
 
   @Test

@@ -16,6 +16,16 @@ export const OFFER_VOLUME_MAX = 9_999_999.99
 const ORACLE_SCALE_TWO_DECIMAL_PATTERN = /^\d+(\.\d{1,2})?$/
 const ASCII_PATTERN = /^[\u0000-\u007f]*$/
 
+export const formatLegacyOfferVolume = (value: string): string => {
+  const normalized = value.trim()
+  if (!ORACLE_SCALE_TWO_DECIMAL_PATTERN.test(normalized)) {
+    return value
+  }
+
+  const parsed = Number(normalized)
+  return Number.isFinite(parsed) ? parsed.toFixed(1) : value
+}
+
 export const offerTextStorageFieldError = (
   value: string,
   maximumLength: number,

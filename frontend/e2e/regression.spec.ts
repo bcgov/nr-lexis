@@ -2492,6 +2492,34 @@ test.describe('TEST IDIR admin regression', () => {
     expect(exactLinkedApplication?.exemptionTypeDescription).toBe('Ministerial')
   })
 
+  test('returns one canonical row for exemptions duplicated by legacy joins', async () => {
+    const page = await authenticatedIdirPage()
+
+    for (const exemptionNumber of ['24-8706', '22-8606', '18-8483']) {
+      const search = await readJsonResponse<GenericSearchResponse>(
+        await getWithAuth(page, '/api/lexis/exemptions/search', {
+          params: {
+            exemptionNumber,
+            page: '0',
+            size: '10',
+          },
+        }),
+      )
+      const results = asRecordArray(search.results)
+
+      expect(search.total).toBe(1)
+      expect(results).toHaveLength(1)
+      expect(String(results[0]?.exemptionNumber ?? '').trim()).toBe(exemptionNumber)
+
+      const count = await readJsonResponse<SearchCountResponse>(
+        await getWithAuth(page, '/api/lexis/exemptions/search/count', {
+          params: { exemptionNumber },
+        }),
+      )
+      expect(count.total).toBe(1)
+    }
+  })
+
   test('can query exemption, offer, and permit search contracts', async () => {
     const page = await authenticatedIdirPage()
 
@@ -3165,7 +3193,7 @@ test.describe('TEST IDIR admin regression', () => {
               contactName: offerMarker,
               offeringClientNumber: regressionOwnerClientNumber,
               clientNumber: regressionOwnerClientNumber,
-              offerVolume: '1',
+              offerVolume: '1.24',
               purchaseOfferAmount: '100',
               teacReviewDate: '',
               fairOfferIndicator: 'N',
@@ -3194,6 +3222,7 @@ test.describe('TEST IDIR admin regression', () => {
         page,
         `/api/lexis/purchase-offers/${offerNumber}`,
       )
+      expect(Number(currentOffer.payload.offerVolume)).toBe(1.2)
       const offerUpdate = offerUpdateForm(offerNumber, {
         purchaseOfferAmount: '125',
         offerRemark: `${offerMarker} edited`,

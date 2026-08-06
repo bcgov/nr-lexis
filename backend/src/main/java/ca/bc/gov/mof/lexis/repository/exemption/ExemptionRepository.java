@@ -37,6 +37,8 @@ public class ExemptionRepository extends OracleRepositorySupport {
       LEXIS_CODES_PACKAGE + "FIND_ALL_EXEMPTION_TYPE_CODES(?)";
   private static final String FIND_ALL_EXEMPTION_STATUS_CODES =
       LEXIS_CODES_PACKAGE + "FIND_ALL_EXEMPT_STS_CODES(?)";
+  // INTENTIONAL_LEGACY_DIVERGENCE(CANONICAL_SEARCH_RESULTS): keep one application row per
+  // exemption so linked applications cannot duplicate results or multiply permit balances.
   private static final String CANONICAL_EXEMPTION_APPLICATION_CTE =
       """
       CANONICAL_EXEMPTION_APPLICATION AS (

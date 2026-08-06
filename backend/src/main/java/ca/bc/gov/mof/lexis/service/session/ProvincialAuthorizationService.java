@@ -741,10 +741,10 @@ public class ProvincialAuthorizationService {
   }
 
   private boolean isOrgUnitRestricted(Set<String> roles, OrgUnitSurface surface) {
-    // Legacy restricts Exemption Approver search results to the user's organization units while
-    // leaving direct detail/edit access available. Broader mixed-role identities retain their
-    // broader scope.
-    return surface == OrgUnitSurface.EXEMPTION_SEARCH && isPureExemptionApprover(roles);
+    // INTENTIONAL_LEGACY_DIVERGENCE(EXEMPTION_APPROVER_GLOBAL_SEARCH): Cognito does not carry the
+    // legacy WebADE organization context. Region selection is a search filter, not an
+    // authorization boundary.
+    return false;
   }
 
   private boolean isPureExemptionApprover(Set<String> roles) {
