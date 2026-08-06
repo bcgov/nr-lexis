@@ -270,7 +270,7 @@ describe('Provincial Review Action State Smoke', () => {
       within(searchActions)
         .getAllByRole('button')
         .map((button) => button.textContent?.trim()),
-    ).toEqual(['Clear Filters', 'Search'])
+    ).toEqual(['Clear all', 'Search'])
     expect(
       within(searchActions).getByRole('button', { name: 'Search' }).querySelector('svg'),
     ).not.toBeNull()

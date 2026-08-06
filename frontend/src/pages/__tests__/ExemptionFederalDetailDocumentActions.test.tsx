@@ -1056,10 +1056,9 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(
       within(federalHeader as HTMLElement).getByText('Check and manage this federal application'),
     ).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Federal application search' })).toHaveAttribute(
-      'href',
-      '/federal',
-    )
+    expect(
+      screen.getByRole('link', { name: 'Back to Federal application search' }),
+    ).toHaveAttribute('href', '/federal')
     expect(within(federalHeader as HTMLElement).getByText('Submitted')).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Actions' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Back to Federal Search results' })).toBeNull()
@@ -1851,7 +1850,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
 
     expect(await screen.findByRole('tab', { name: 'Owner' })).toBeInTheDocument()
     expect(
-      screen.queryByRole('link', { name: 'Federal application search' }),
+      screen.queryByRole('link', { name: 'Back to Federal application search' }),
     ).not.toBeInTheDocument()
     await selectDetailTab('Remarks')
     expect(await screen.findByText('Review note')).toBeInTheDocument()

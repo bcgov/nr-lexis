@@ -625,7 +625,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(
       within(pageHeader as HTMLElement).getByText('Check and manage this provincial permit'),
     ).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Provincial permit search' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'Back to Provincial permit search' })).toHaveAttribute(
       'href',
       '/provincial/permit',
     )

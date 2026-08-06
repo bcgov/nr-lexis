@@ -309,7 +309,7 @@ describe('Provincial Offer Search Actions', () => {
 
     await userEvent.type(screen.getByLabelText('Application number'), '46053')
     await userEvent.clear(screen.getByLabelText('Listing to date'))
-    await userEvent.click(screen.getByRole('button', { name: 'Clear Filters' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Clear all' }))
 
     await waitFor(() => {
       expect(screen.getByLabelText('Application number')).toHaveValue('')

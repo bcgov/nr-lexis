@@ -303,7 +303,7 @@ describe('Provincial Application Search Actions', () => {
       expect.any(Object),
     )
 
-    await userEvent.click(screen.getByRole('button', { name: 'Clear Filters' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Clear all' }))
 
     expect(screen.getByLabelText('Received from date')).toHaveValue('')
     expect(screen.getByLabelText('Received to date')).toHaveValue('')

@@ -939,6 +939,13 @@ a.csp-side-nav__link.cds--side-nav__link--active[aria-current='page'] {
   color: var(--csp-link-hover);
 }
 
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  width: fit-content;
+}
+
 /* Carbon component polish aligned with NR FSPTS. Keep this scoped so legacy-parity
    layouts stay intact while shared Carbon controls use the modern rounded styling. */
 .app-shell .cds--btn {
@@ -961,7 +968,7 @@ a.csp-side-nav__link.cds--side-nav__link--active[aria-current='page'] {
   align-self: center;
   inset-inline-end: auto;
   margin-inline-start: 0;
-  transform: none;
+  transform: translateY(1px);
 }
 
 .app-shell .cds--text-input,
@@ -1011,6 +1018,17 @@ legend.cds--label {
 
 .cds--modal-container {
   border-radius: 8px;
+}
+
+.cds--modal-close-button .cds--popover {
+  display: none;
+}
+
+.cds--modal-close:focus {
+  outline: 2px solid var(--cds-focus, #0f62fe);
+  outline-offset: -2px;
+  border-color: transparent;
+  box-shadow: none;
 }
 
 .app-shell .cds--table-header-label,
@@ -2046,7 +2064,7 @@ legend.cds--label {
   margin: 0;
   color: var(--csp-text-primary);
   font-size: 1rem;
-  font-weight: 600;
+  font-weight: 400;
   line-height: 1.5;
 }
 
@@ -2110,7 +2128,7 @@ legend.cds--label {
   font-size: 1rem;
   line-height: 1.4;
   letter-spacing: 0.01rem;
-  vertical-align: middle;
+  vertical-align: top;
 }
 
 .legacy-search-table-date {
@@ -2121,20 +2139,35 @@ legend.cds--label {
   background-color: var(--csp-table-header-bg);
   border: 0;
   border-block-start: 1px solid var(--csp-border-subtle-01);
+  border-block-end: 1px solid var(--csp-border-subtle-01);
   color: var(--csp-text-secondary);
   font-size: 0.875rem;
 }
 
-.legacy-search-table-frame .cds--pagination * {
-  border-color: transparent;
+.legacy-search-table-frame .cds--pagination .cds--select__item-count,
+.legacy-search-table-frame .cds--pagination .cds--select__page-number,
+.legacy-search-table-frame .cds--pagination .cds--pagination__button {
+  margin: 0;
+  border-radius: 0;
 }
 
-.legacy-search-table-frame .cds--pagination__left {
-  flex: 1 1 auto;
+.legacy-search-table-frame .cds--pagination .cds--select__item-count .cds--select-input {
+  border-inline-end: 0;
 }
 
-.legacy-search-table-frame .cds--pagination__items-count {
-  margin-inline-start: auto;
+.legacy-search-table-frame .cds--pagination .cds--select__item-count {
+  border-inline-end: 1px solid var(--csp-border-subtle-01);
+}
+
+.legacy-search-table-frame .cds--pagination__right {
+  border-inline-start: 1px solid var(--csp-border-subtle-01);
+}
+
+.legacy-search-table-frame .cds--pagination__control-buttons .cds--popover-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-inline-start: 1px solid var(--csp-border-subtle-01);
 }
 
 .legacy-search-table-frame
@@ -4121,11 +4154,6 @@ legend.cds--label {
   scroll-margin-top: 6rem;
 }
 
-.application-detail-section .cds--data-table tbody td,
-.application-detail-section .cds--data-table thead th {
-  font-size: 0.875rem;
-}
-
 .application-detail-tabs-column {
   min-width: 0;
 }
@@ -4617,15 +4645,31 @@ legend.cds--label {
     0 1px 2px rgb(0 0 0 / 4%);
 }
 
+.application-detail-tab-panel .cds--tile.detail-section-card {
+  padding: 1rem 1.5rem 1.5rem;
+  background-color: var(--cds-layer-02);
+  border: 1px solid #ececec;
+  box-shadow: none;
+}
+
+:root[data-carbon-theme='g100'] .application-detail-tab-panel .cds--tile.detail-section-card {
+  border-color: var(--csp-border-subtle-01);
+}
+
 @media (min-width: 672px) {
   .application-detail-tab-panel .cds--tile,
   .cds--tile.application-detail-section,
   .cds--tile.create-form-tile {
     padding: 1.5rem 2rem 1.75rem;
   }
+
+  .application-detail-tab-panel .cds--tile.detail-section-card {
+    padding: 1.25rem 2rem 1.75rem;
+  }
 }
 
 .cds--data-table {
+  --cds-text-secondary: var(--csp-text-primary);
   background-color: var(--csp-layer-01);
   border: 0;
   color: var(--csp-text-primary);
@@ -4711,9 +4755,21 @@ legend.cds--label {
   background: #3d1e21;
 }
 
-.cds--data-table tbody td,
-.cds--data-table thead th {
+.cds--data-table thead th,
+.cds--data-table thead th .cds--table-header-label,
+.cds--data-table thead th .cds--table-sort {
   font-size: 0.875rem;
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: 0.01rem;
+}
+
+.cds--data-table tbody td,
+.cds--data-table tbody td .cds--table-cell {
+  color: var(--csp-text-primary);
+  font-size: 1rem;
+  line-height: 1.4;
+  letter-spacing: 0.01rem;
 }
 
 .cds--data-table .legacy-search-actions {

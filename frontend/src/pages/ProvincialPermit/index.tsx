@@ -559,7 +559,7 @@ const ProvincialPermitPage = () => {
                   disabled={loading}
                   size="md"
                 >
-                  Clear Filters
+                  Clear all
                 </Button>
                 <SearchSubmitButton loading={loading} disabled={hasDateValidationError} />
               </div>

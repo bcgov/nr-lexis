@@ -1028,7 +1028,7 @@ const ProvincialReviewPage = () => {
             </div>
             <div className="legacy-search-actions" role="group" aria-label="Review search actions">
               <Button type="button" kind="tertiary" onClick={onClearFilters} disabled={loading}>
-                Clear Filters
+                Clear all
               </Button>
               <SearchSubmitButton loading={loading} disabled={hasDateValidationError} />
             </div>
@@ -1175,7 +1175,7 @@ const ProvincialReviewPage = () => {
                 ? 'Results unavailable'
                 : loading && results.content.length === 0
                   ? 'Loading results…'
-                  : `${results.page.totalElements} results found`}
+                  : `${new Intl.NumberFormat('en-CA').format(results.page.totalElements)} results found`}
             </p>
             <DisabledButtonTooltip
               disabled={

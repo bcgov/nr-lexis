@@ -169,10 +169,9 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(
       within(pageHeader as HTMLElement).getByText('Check and manage this provincial application'),
     ).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Provincial application search' })).toHaveAttribute(
-      'href',
-      '/provincial/application',
-    )
+    expect(
+      screen.getByRole('link', { name: 'Back to Provincial application search' }),
+    ).toHaveAttribute('href', '/provincial/application')
     const status = within(pageHeader as HTMLElement).getByText('Approved')
     expect(status).toHaveClass('lexis-status-tag')
     expect(status).toHaveAttribute('data-status-variant', 'positive')

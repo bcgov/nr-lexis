@@ -618,8 +618,23 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       'nowrap',
     )
     await expect(table.locator('.lexis-status-tag').first()).toHaveCSS('white-space', 'nowrap')
+    await expect(firstRowCell).toHaveCSS('font-size', '16px')
+    await expect(firstRowCell).toHaveCSS('vertical-align', 'top')
     await expect(firstRowCell).toHaveCSS('background-color', 'rgb(255, 255, 255)')
     await expect(secondRowCell).toHaveCSS('background-color', 'rgb(243, 243, 245)')
+    await expect(page.getByText('2 results found', { exact: true })).toHaveCSS('font-weight', '400')
+
+    const pagination = page.locator('.legacy-search-table-frame .cds--pagination')
+    await expect(pagination).toHaveCSS('border-top-width', '1px')
+    await expect(pagination).toHaveCSS('border-bottom-width', '1px')
+    await expect(pagination.locator('.cds--select__item-count')).toHaveCSS(
+      'border-right-width',
+      '1px',
+    )
+    await expect(pagination.locator('.cds--pagination__right')).toHaveCSS(
+      'border-left-width',
+      '1px',
+    )
 
     await rows.nth(0).hover()
     await expect(firstRowCell).toHaveCSS('background-color', 'rgb(255, 255, 255)')
@@ -630,7 +645,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       'color',
       'rgb(120, 169, 255)',
     )
-    await expect(page.getByRole('button', { name: 'Clear Filters' })).toHaveCSS(
+    await expect(page.getByRole('button', { name: 'Clear all', exact: true })).toHaveCSS(
       'color',
       'rgb(255, 255, 255)',
     )
@@ -811,17 +826,16 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
 
     await expect(page.getByRole('heading', { level: 1, name: 'Offer 81001' })).toBeVisible()
     await expect(page.getByText('Check and manage this provincial offer')).toBeVisible()
-    await expect(page.getByRole('link', { name: 'Provincial offer search' })).toHaveAttribute(
-      'href',
-      '/provincial/offers',
-    )
+    const backLink = page.getByRole('link', { name: 'Back to Provincial offer search' })
+    await expect(backLink).toHaveAttribute('href', '/provincial/offers')
+    await expect(backLink.locator('svg')).toBeVisible()
     await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1)
     await expect(page.locator('.detail-page-grid')).toHaveCSS('row-gap', '16px')
 
     await expect(page.getByLabel('Offer highlights')).toHaveCount(0)
 
     const detailHeaderLayout = await page.evaluate(() => {
-      const breadcrumb = document.querySelector('.cds--breadcrumb')
+      const breadcrumb = document.querySelector('.back-link')
       const pageHeader = document.querySelector('.lexis-page-header')
       if (!(breadcrumb instanceof HTMLElement)) throw new Error('Detail breadcrumb not found')
       if (!(pageHeader instanceof HTMLElement)) throw new Error('Detail page header not found')
@@ -881,6 +895,12 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     expect(Math.abs(detailCanvas.panelLeft - detailCanvas.mainLeft)).toBeLessThanOrEqual(1)
     expect(Math.abs(detailCanvas.panelRight - detailCanvas.mainRight)).toBeLessThanOrEqual(1)
     expect(Math.abs(detailCanvas.tileLeft - detailCanvas.tabListLeft)).toBeLessThanOrEqual(1)
+    await expect(page.locator('.detail-section-card').first()).toHaveCSS(
+      'background-color',
+      'rgb(255, 255, 255)',
+    )
+    await expect(page.locator('.detail-section-card').first()).toHaveCSS('box-shadow', 'none')
+    await expect(page.locator('.detail-section-card').first()).toHaveCSS('border-top-width', '1px')
 
     const columnCount = async () =>
       ownerFields.evaluate((grid) => getComputedStyle(grid).gridTemplateColumns.split(' ').length)
@@ -901,6 +921,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await page.getByRole('tab', { name: 'Items' }).click()
     const packageTable = page.getByRole('region', { name: 'Federal application packages' })
     await expect(packageTable).not.toHaveAttribute('tabindex')
+    await expect(packageTable.locator('tbody td').first()).toHaveCSS('font-size', '16px')
     expect(
       await packageTable.locator(':scope > .cds--data-table-content').evaluate((content) => {
         return getComputedStyle(content).overflowX

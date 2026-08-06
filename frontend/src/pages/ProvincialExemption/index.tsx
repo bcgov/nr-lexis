@@ -980,7 +980,7 @@ const ProvincialExemptionPage = () => {
                   disabled={loading}
                   size="md"
                 >
-                  Clear Filters
+                  Clear all
                 </Button>
                 <SearchSubmitButton loading={loading} disabled={hasDateValidationError} />
                 {canApproveExemption && (

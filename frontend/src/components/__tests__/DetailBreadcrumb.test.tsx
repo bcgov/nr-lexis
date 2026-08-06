@@ -20,11 +20,13 @@ describe('DetailBreadcrumb', () => {
       </MemoryRouter>,
     )
 
-    const navigation = screen.getByRole('navigation', { name: 'Breadcrumb' })
-    const parentLink = screen.getByRole('link', { name: 'Provincial application search' })
+    const parentLink = screen.getByRole('link', {
+      name: 'Back to Provincial application search',
+    })
 
-    expect(navigation).toContainElement(parentLink)
+    expect(parentLink).toHaveClass('back-link')
     expect(parentLink).toHaveAttribute('href', '/provincial/application')
+    expect(parentLink.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
 
     await userEvent.click(parentLink)
     expect(screen.getByTestId('location')).toHaveTextContent('/provincial/application')

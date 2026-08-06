@@ -798,7 +798,7 @@ describe('Provincial Exemption Search Actions', () => {
       )
     })
 
-    await userEvent.click(screen.getByRole('button', { name: 'Clear Filters' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Clear all' }))
     await waitFor(() => {
       expect(mockedSearchProvincialExemptions).toHaveBeenLastCalledWith(
         expect.objectContaining({
@@ -938,7 +938,7 @@ describe('Provincial Exemption Search Actions', () => {
       expect.any(Object),
     )
 
-    await userEvent.click(screen.getByRole('button', { name: 'Clear Filters' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Clear all' }))
 
     expect(screen.getByLabelText('Approval from date')).toHaveValue('')
     expect(screen.getByLabelText('Approval to date')).toHaveValue('')

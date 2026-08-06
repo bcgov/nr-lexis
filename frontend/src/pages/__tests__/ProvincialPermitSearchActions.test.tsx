@@ -301,7 +301,7 @@ describe('Provincial Permit Search Actions', () => {
       ).toBe(true)
     })
 
-    await userEvent.click(screen.getByRole('button', { name: 'Clear Filters' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Clear all' }))
 
     expect(invoiceNumber).toHaveValue('')
     await waitFor(() => {
