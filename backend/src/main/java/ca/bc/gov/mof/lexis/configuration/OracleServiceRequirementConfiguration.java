@@ -18,6 +18,7 @@ import ca.bc.gov.mof.lexis.service.reference.ShippingReferenceService;
 import ca.bc.gov.mof.lexis.service.report.LexisReportService;
 import ca.bc.gov.mof.lexis.service.review.ApplicationReviewService;
 import ca.bc.gov.mof.lexis.service.rtm.RtmEmsLogAmvService;
+import ca.bc.gov.mof.lexis.service.session.LexisUserPreferenceService;
 import ca.bc.gov.mof.lexis.service.summary.LexisSummaryService;
 import ca.bc.gov.mof.lexis.service.upload.ApplicationSubmissionImportService;
 import ca.bc.gov.mof.lexis.service.upload.LexisUploadService;
@@ -57,7 +58,8 @@ public class OracleServiceRequirementConfiguration {
           LexisReportScheduleRepository.class,
           ClientLookupService.class,
           BlanketOicPackageService.class,
-          ShippingReferenceService.class);
+          ShippingReferenceService.class,
+          LexisUserPreferenceService.class);
 
   @Bean
   SmartInitializingSingleton requiredOracleServiceGuard(ListableBeanFactory beanFactory) {

@@ -2371,6 +2371,27 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
+  void userPreferencesShouldRequireAKnownRoleAndValidateTheRegionContract() throws Exception {
+    String path = "/api/lexis/session/preferences";
+    SimpleGrantedAuthority readOnly = new SimpleGrantedAuthority("LEXIS_READ_ONLY");
+    SimpleGrantedAuthority unknown = new SimpleGrantedAuthority("LEXIS_UNKNOWN_ROLE");
+
+    mockMvc.perform(get(path)).andExpect(status().isUnauthorized());
+    mockMvc.perform(get(path).with(jwt().authorities(unknown))).andExpect(status().isForbidden());
+    mockMvc
+        .perform(get(path).with(jwt().authorities(readOnly)))
+        .andExpect(status().isServiceUnavailable());
+    mockMvc
+        .perform(
+            put(path)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"defaultRegion\":\"UNKNOWN\"}")
+                .with(csrf())
+                .with(jwt().authorities(readOnly)))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
   void sessionCanPerformActionShouldAllowApproveExemptionForExemptionApprover() throws Exception {
     mockMvc.perform(
             get("/api/lexis/session/canPerformAction")

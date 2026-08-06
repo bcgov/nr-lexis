@@ -12,6 +12,7 @@ import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.federal.FederalApplicationService;
 import ca.bc.gov.mof.lexis.service.permit.PermitDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.report.LexisReportService;
+import ca.bc.gov.mof.lexis.service.session.LexisUserPreferenceService;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ListableBeanFactory;
@@ -58,7 +59,8 @@ class OracleServiceRequirementConfigurationTest {
             ApplicationDetailsRpcService.class,
             PermitDetailsRpcService.class,
             FederalApplicationService.class,
-            LexisReportService.class)
+            LexisReportService.class,
+            LexisUserPreferenceService.class)
         .doesNotHaveDuplicates();
   }
 }

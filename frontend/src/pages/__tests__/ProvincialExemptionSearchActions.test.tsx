@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
+import { useDefaultRegionPreference } from '@/pages/shared/useDefaultRegionPreference'
 import type { ProvincialExemptionSearchResponse } from '@/interfaces/ProvincialExemptionSearch'
 import ProvincialExemptionPage from '@/pages/ProvincialExemption'
 import { searchProvincialExemptions } from '@/service/provincial-exemption-search-service'
@@ -16,6 +17,10 @@ import { createTestAuthContext, createTestCapabilities } from '@/test-utils/auth
 
 vi.mock('@/context/auth/useAuth', () => ({
   useAuth: vi.fn(),
+}))
+
+vi.mock('@/pages/shared/useDefaultRegionPreference', () => ({
+  useDefaultRegionPreference: vi.fn(),
 }))
 
 vi.mock('@/service/provincial-exemption-search-service', () => ({
@@ -37,6 +42,7 @@ vi.mock('@/service/record-version-service', () => ({
 }))
 
 const mockedUseAuth = vi.mocked(useAuth)
+const mockedUseDefaultRegionPreference = vi.mocked(useDefaultRegionPreference)
 const mockedSearchProvincialExemptions = vi.mocked(searchProvincialExemptions)
 const mockedFetchProvincialExemptionOptions = vi.mocked(fetchProvincialExemptionOptions)
 const mockedApproveExemptions = vi.mocked(approveExemptions)
@@ -70,6 +76,10 @@ const renderPage = (
 describe('Provincial Exemption Search Actions', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockedUseDefaultRegionPreference.mockReturnValue({
+      defaultRegion: null,
+      preferenceLoading: false,
+    })
     mockedFetchProvincialExemptionOptions.mockResolvedValue({
       exemptionTypes: [{ value: 'SECTION_1', label: 'Section 1' }],
       exemptionStatuses: [{ value: 'NEW', label: 'New' }],
@@ -793,6 +803,41 @@ describe('Provincial Exemption Search Actions', () => {
           filters: expect.objectContaining({ exemptionTypeCode: 'M' }),
         }),
         expect.any(Object),
+      )
+    })
+  })
+
+  it('uses the saved region to preselect exemption search areas', async () => {
+    mockedUseDefaultRegionPreference.mockReturnValue({
+      defaultRegion: 'RNI',
+      preferenceLoading: false,
+    })
+    mockedFetchProvincialExemptionOptions.mockResolvedValueOnce({
+      exemptionTypes: [{ value: 'M', label: 'Ministerial' }],
+      exemptionStatuses: [{ value: 'NEW', label: 'New' }],
+      regions: [
+        { value: '1903', label: 'Cariboo' },
+        { value: '1905', label: 'Northeast' },
+        { value: '1906', label: 'Omineca' },
+        { value: '1908', label: 'Skeena' },
+      ],
+    })
+
+    renderPage('/provincial/exemption')
+
+    const selectedRegions = await screen.findByRole('list', { name: 'Selected regions' })
+    expect(within(selectedRegions).getByText('Northeast')).toBeVisible()
+    expect(within(selectedRegions).getByText('Omineca')).toBeVisible()
+    expect(within(selectedRegions).getByText('Skeena')).toBeVisible()
+    expect(within(selectedRegions).queryByText('Cariboo')).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Search' }))
+    await waitFor(() => {
+      expect(mockedSearchProvincialExemptions).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({ region: ['1905', '1906', '1908'] }),
+        }),
+        expect.objectContaining({ knownTotal: expect.any(Number) }),
       )
     })
   })

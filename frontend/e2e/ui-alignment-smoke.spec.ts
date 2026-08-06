@@ -38,8 +38,10 @@ const applicationSearchOptions = {
   productTypes: [{ code: 'LOG', name: 'Logs' }],
   growthTypes: [{ code: 'OLD', name: 'Old growth' }],
   regions: [
-    { code: '1903', name: 'West Coast' },
-    { code: '1904', name: 'South Coast' },
+    { code: '1903', name: 'Cariboo' },
+    { code: '1904', name: 'Kootenay-Boundary' },
+    { code: '1905', name: 'Northeast' },
+    { code: '1907', name: 'Thompson-Okanagan' },
   ],
   currentSchedules: [{ code: '', name: 'Current schedule' }],
 }
@@ -211,6 +213,9 @@ const installSyntheticLexisApi = async (page: Page) => {
       case '/api/lexis/session/capabilities':
         body = authenticatedAdminSession
         break
+      case '/api/lexis/session/preferences':
+        body = { defaultRegion: 'RSI' }
+        break
       case '/api/lexis/applications/search/options':
         body = applicationSearchOptions
         break
@@ -318,7 +323,18 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(page.locator('.lexis-page-header__subtitle')).toContainText(
       'Find provincial applications',
     )
+    const selectedRegions = page.getByRole('list', { name: 'Selected regions' })
+    await expect(selectedRegions.getByText('Cariboo', { exact: true })).toBeVisible()
+    await expect(selectedRegions.getByText('Kootenay-Boundary', { exact: true })).toBeVisible()
+    await expect(selectedRegions.getByText('Thompson-Okanagan', { exact: true })).toBeVisible()
+    await expect(selectedRegions.getByText('Northeast', { exact: true })).toHaveCount(0)
+
+    const applicationSearchRequest = page.waitForRequest(
+      (request) => new URL(request.url()).pathname === '/api/lexis/applications/search',
+    )
     await submitApplicationSearch(page)
+    const submittedRegionParams = new URL((await applicationSearchRequest).url()).searchParams
+    expect(submittedRegionParams.getAll('region')).toEqual(['1903', '1904', '1907'])
     await expect(page.locator('.lexis-status-tag')).toHaveCount(2)
     const resultCountToolbar = page.locator('.legacy-search-table-toolbar .cds--toolbar-content')
     await expect(resultCountToolbar).toHaveCSS('align-items', 'center')
@@ -340,9 +356,9 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       const rootStyle = getComputedStyle(document.documentElement)
       const bodyStyle = getComputedStyle(document.body)
       const grid = document.querySelector('.default-grid')
-      const label = document.querySelector('label.cds--label')
       const dateInput = document.querySelector('.cds--date-picker__input')
       if (!(grid instanceof HTMLElement)) throw new Error('Default grid not found')
+      const label = grid.querySelector('label.cds--label')
       if (!(label instanceof HTMLElement)) throw new Error('Carbon field label not found')
       if (!(dateInput instanceof HTMLElement)) throw new Error('Carbon date input not found')
 
