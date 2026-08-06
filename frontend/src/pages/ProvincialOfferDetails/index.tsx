@@ -393,7 +393,7 @@ const ProvincialOfferDetailsPage = () => {
           subtitle="Check and manage this provincial offer"
           actions={
             !loading && !isEditing && currentDetail && form && canEditAnyOfferField ? (
-              <Button kind="primary" onClick={() => setIsEditing(true)}>
+              <Button kind="primary" size="sm" onClick={() => setIsEditing(true)}>
                 Edit
               </Button>
             ) : undefined

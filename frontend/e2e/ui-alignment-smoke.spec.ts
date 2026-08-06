@@ -667,6 +667,21 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(firstRowCell).toHaveCSS('vertical-align', 'top')
     await expect(firstRowCell).toHaveCSS('background-color', 'rgb(255, 255, 255)')
     await expect(secondRowCell).toHaveCSS('background-color', 'rgb(243, 243, 245)')
+    const rowDividerStyles = await Promise.all(
+      [firstRowCell, secondRowCell].map((cell) =>
+        cell.evaluate((element) => {
+          const style = getComputedStyle(element)
+          return {
+            backgroundColor: style.backgroundColor,
+            borderBlockEndColor: style.borderBlockEndColor,
+            borderBlockStartColor: style.borderBlockStartColor,
+          }
+        }),
+      ),
+    )
+    expect(rowDividerStyles[0]?.borderBlockEndColor).toBe(rowDividerStyles[0]?.backgroundColor)
+    expect(rowDividerStyles[1]?.borderBlockStartColor).toBe(rowDividerStyles[1]?.backgroundColor)
+    expect(rowDividerStyles[1]?.borderBlockEndColor).toBe(rowDividerStyles[1]?.backgroundColor)
     await expect(page.getByText('2 results found', { exact: true })).toHaveCSS('font-weight', '400')
 
     const pagination = page.locator('.legacy-search-table-frame .cds--pagination')
@@ -706,6 +721,27 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     )
     await expect(firstRowCell).toHaveCSS('background-color', 'rgb(38, 38, 38)')
     await expect(secondRowCell).toHaveCSS('background-color', 'rgb(57, 57, 57)')
+    const darkRowDividerStyles = await Promise.all(
+      [firstRowCell, secondRowCell].map((cell) =>
+        cell.evaluate((element) => {
+          const style = getComputedStyle(element)
+          return {
+            backgroundColor: style.backgroundColor,
+            borderBlockEndColor: style.borderBlockEndColor,
+            borderBlockStartColor: style.borderBlockStartColor,
+          }
+        }),
+      ),
+    )
+    expect(darkRowDividerStyles[0]?.borderBlockEndColor).toBe(
+      darkRowDividerStyles[0]?.backgroundColor,
+    )
+    expect(darkRowDividerStyles[1]?.borderBlockStartColor).toBe(
+      darkRowDividerStyles[1]?.backgroundColor,
+    )
+    expect(darkRowDividerStyles[1]?.borderBlockEndColor).toBe(
+      darkRowDividerStyles[1]?.backgroundColor,
+    )
     await expect(table.locator('.lexis-status-tag').first()).toHaveCSS(
       'background-color',
       'rgb(194, 224, 255)',
@@ -715,6 +751,15 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(firstRowCell).toHaveCSS('background-color', 'rgb(38, 38, 38)')
 
     await page.goto('/provincial/application/create', { waitUntil: 'domcontentloaded' })
+    await page.getByRole('tab', { name: 'Remarks' }).click()
+    const comments = page.getByRole('textbox', { name: 'Comments' })
+    const commentsHeight = await comments.evaluate(
+      (textarea) => textarea.getBoundingClientRect().height,
+    )
+    expect(commentsHeight).toBeGreaterThan(100)
+    await expect(comments).toHaveCSS('min-height', '40px')
+    await expect(comments).toHaveCSS('resize', 'vertical')
+
     await page.getByRole('tab', { name: 'Packages / Scales' }).click()
     const applicationItemsCard = page.locator('.application-items-card').first()
     await expect(applicationItemsCard).toBeVisible()
@@ -882,6 +927,10 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(backLink.locator('svg')).toBeVisible()
     await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1)
     await expect(page.locator('.detail-page-grid')).toHaveCSS('row-gap', '16px')
+    await expect(page.getByRole('button', { name: 'Edit', exact: true })).toHaveCSS(
+      'height',
+      '32px',
+    )
 
     await expect(page.getByLabel('Offer highlights')).toHaveCount(0)
 
@@ -978,6 +1027,14 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
         return getComputedStyle(content).overflowX
       }),
     ).toBe('visible')
+
+    await page.getByRole('tab', { name: 'Remarks' }).click()
+    const emptyState = page.getByRole('region', { name: 'No remarks found' })
+    await expect(emptyState).toHaveCSS('min-height', '320px')
+    await expect(emptyState.locator('.lexis-empty-state__default-pictogram')).toHaveCSS(
+      'width',
+      '48px',
+    )
   })
 
   test('left-aligns table row actions with their actions heading', async ({ page }) => {
