@@ -241,6 +241,9 @@ class PermitRepositoryTest {
         .contains("OWNER_PERMIT.CLIENT_NUMBER = ?")
         .contains("AGENT_PERMIT.AGENT_NUMBER = ?")
         .contains("EP_ACCESS.AGENT_CLIENT_NUMBER = ?")
+        .contains("UNION\n  SELECT AGENT_PERMIT.EXPORT_PERMIT_DETAIL_NUMBER")
+        .contains("UNION\n  SELECT LINKED_PERMIT.EXPORT_PERMIT_DETAIL_NUMBER")
+        .doesNotContain("UNION ALL")
         .doesNotContain("EP_ACCESS.OWNER_CLIENT_NUMBER =")
         .contains("EP_ACCESS.EXPORT_JURISDICTION_CODE = 'P'")
         .contains("EP_ACCESS.EXPORT_JURISDICTION_CODE IS NULL")
@@ -258,7 +261,8 @@ class PermitRepositoryTest {
     assertThat(repository.countBindValues()).isEqualTo(searchBinds);
     assertThat(repository.countSelectSql())
         .contains("WITH ACCESSIBLE_PERMITS AS")
-        .contains("INNER JOIN ACCESSIBLE_PERMITS AP");
+        .contains("INNER JOIN ACCESSIBLE_PERMITS AP")
+        .doesNotContain("UNION ALL");
     assertThat(repository.countCalls()).isEqualTo(2);
     assertThat(repository.pageCalls()).isEqualTo(1);
   }

@@ -67,6 +67,8 @@ public class PermitRepository extends OracleRepositorySupport {
       INNER JOIN EXPORT_PERMIT_STATUS_CODE EPSC
         ON EPSC.EXPORT_PERMIT_STATUS_CODE = EPD.EXPORT_PERMIT_STATUS_CODE
       """;
+  // INTENTIONAL_LEGACY_DIVERGENCE(CANONICAL_SEARCH_RESULTS): UNION the direct and linked
+  // access branches so page rows and counts share one candidate per permit.
   private static final String ACCESSIBLE_PERMITS_CTE =
       """
       WITH ACCESSIBLE_PERMITS AS (
