@@ -137,6 +137,10 @@
 .cds--g10 {
   --cds-text-primary: #131315;
   --cds-text-secondary: #606062;
+  --cds-notification-background-info: #c2e0ff;
+  --cds-tag-background-green: #cce5cc;
+  --cds-tag-color-green: #005500;
+  --cds-tag-hover-green: #99c999;
 }
 
 body {
@@ -939,6 +943,19 @@ a.csp-side-nav__link.cds--side-nav__link--active[aria-current='page'] {
   color: var(--csp-link-hover);
 }
 
+.cds--link {
+  text-decoration: underline;
+}
+
+.cds--breadcrumb .cds--link {
+  text-decoration: none;
+}
+
+strong,
+b {
+  font-weight: 700;
+}
+
 .back-link {
   display: inline-flex;
   align-items: center;
@@ -971,6 +988,12 @@ a.csp-side-nav__link.cds--side-nav__link--active[aria-current='page'] {
   transform: translateY(1px);
 }
 
+.cds--btn--tertiary:hover {
+  background-color: #ebf2fc;
+  border-color: var(--cds-button-tertiary);
+  color: var(--cds-button-tertiary);
+}
+
 .app-shell .cds--text-input,
 .app-shell .cds--text-area,
 .app-shell .cds--number,
@@ -996,6 +1019,21 @@ legend.cds--label {
   color: var(--cds-text-primary);
 }
 
+.cds--label {
+  font-size: 0.875rem;
+}
+
+.cds--text-input,
+.cds--text-area,
+.cds--select-input,
+.cds--date-picker__input,
+.cds--number__input,
+.cds--number input[type='number'],
+.cds--list-box__label,
+.cds--list-box__menu-item__option {
+  font-size: 1rem;
+}
+
 .app-shell .cds--date-picker__input {
   font-family: 'BC Sans', 'Noto Sans', Verdana, Arial, sans-serif;
   letter-spacing: 0.16px;
@@ -1010,10 +1048,55 @@ legend.cds--label {
 .app-shell .cds--data-table-header,
 .app-shell .cds--table-expand__button,
 .app-shell .cds--pagination,
-.app-shell .cds--pagination__button,
-.app-shell .cds--inline-notification,
-.app-shell .cds--toast-notification {
+.app-shell .cds--pagination__button {
   border-radius: 4px;
+}
+
+.cds--inline-notification,
+.cds--toast-notification {
+  border-radius: 4px;
+}
+
+.cds--pagination--sm {
+  .cds--pagination__control-buttons,
+  .cds--popover-container {
+    height: 2.5rem;
+  }
+}
+
+.cds--pagination--md {
+  .cds--pagination__control-buttons,
+  .cds--popover-container {
+    height: 3rem;
+  }
+}
+
+.cds--pagination--lg {
+  .cds--pagination__control-buttons,
+  .cds--popover-container {
+    height: 3.5rem;
+  }
+}
+
+.cds--pagination {
+  .cds--select__item-count,
+  .cds--select__page-number,
+  .cds--select-input__wrapper,
+  .cds--select-input {
+    border: 0;
+    border-radius: 4px;
+  }
+
+  .cds--select__item-count,
+  .cds--select__page-number,
+  .cds--select-input__wrapper {
+    margin: 0.25rem;
+  }
+
+  .cds--pagination__button {
+    margin: 0.25rem;
+    border: 0;
+  }
 }
 
 .cds--modal-container {
@@ -1031,20 +1114,53 @@ legend.cds--label {
   box-shadow: none;
 }
 
+.cds--icon-tooltip > .cds--popover {
+  display: none;
+}
+
 .app-shell .cds--table-header-label,
 .app-shell .cds--data-table thead th,
 .app-shell .cds--data-table thead .cds--table-header {
   font-weight: 700;
 }
 
-.app-shell .cds--inline-notification {
+.cds--inline-notification {
   inline-size: 100%;
   max-inline-size: 100%;
 }
 
-.app-shell .cds--inline-notification--low-contrast::before {
+div.cds--inline-notification--low-contrast::before {
   border-radius: 0 4px 4px 0;
   filter: none;
+}
+
+$notification-types: 'error', 'info', 'success', 'warning';
+
+@each $notification-type in $notification-types {
+  div.cds--inline-notification--#{$notification-type},
+  div.cds--toast-notification--#{$notification-type} {
+    border-left: 0.25rem solid var(--cds-support-#{$notification-type}-inverse);
+  }
+
+  div.cds--inline-notification--low-contrast.cds--inline-notification--#{$notification-type},
+  div.cds--toast-notification--low-contrast.cds--toast-notification--#{$notification-type} {
+    border-left: 0.25rem solid var(--cds-support-#{$notification-type});
+  }
+
+  div.cds--toast-notification--low-contrast.cds--toast-notification--#{$notification-type} {
+    border-top-color: var(--cds-notification-border-#{$notification-type});
+    border-right-color: var(--cds-notification-border-#{$notification-type});
+    border-bottom-color: var(--cds-notification-border-#{$notification-type});
+  }
+
+  div.cds--inline-notification--low-contrast.cds--inline-notification--#{$notification-type}::before {
+    border-color: var(--cds-notification-border-#{$notification-type});
+  }
+}
+
+.cds--toast-notification--low-contrast {
+  border-width: 0.063rem 0.063rem 0.063rem 0;
+  border-style: solid;
 }
 
 .app-header-nav-link {

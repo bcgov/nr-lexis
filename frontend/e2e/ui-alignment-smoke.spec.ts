@@ -539,6 +539,51 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(page.locator('.app-shell')).toHaveClass(/is-side-nav-collapsed/)
   })
 
+  test('uses the shared FSPTS Carbon interaction chrome', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.goto('/provincial/application?exportScheduleId=1002', {
+      waitUntil: 'domcontentloaded',
+    })
+
+    const fieldLabel = page.locator('label.cds--label').first()
+    const fieldInput = page.getByRole('textbox', { name: 'Application number' })
+    await expect(fieldLabel).toHaveCSS('font-size', '14px')
+    await expect(fieldInput).toHaveCSS('font-size', '16px')
+
+    const clearButton = page.getByRole('button', { name: 'Clear all', exact: true })
+    await clearButton.hover()
+    await expect(clearButton).toHaveCSS('background-color', 'rgb(235, 242, 252)')
+    await expect(clearButton).toHaveCSS('border-color', 'rgb(0, 115, 230)')
+    await expect(clearButton).toHaveCSS('color', 'rgb(0, 115, 230)')
+
+    await expect(page.getByRole('link', { name: 'Add Application' })).toHaveCSS(
+      'text-decoration-line',
+      'underline',
+    )
+
+    const infoNotification = page.locator('.cds--inline-notification--info')
+    await expect(infoNotification).toContainText('Export schedule filter applied')
+    await expect(infoNotification).toHaveCSS('background-color', 'rgb(194, 224, 255)')
+    await expect(infoNotification).toHaveCSS('border-left-width', '4px')
+    await expect(infoNotification).toHaveCSS('border-left-color', 'rgb(0, 115, 230)')
+
+    const iconTooltipPopovers = page.locator('.cds--icon-tooltip > .cds--popover')
+    expect(await iconTooltipPopovers.count()).toBeGreaterThan(0)
+    await expect(iconTooltipPopovers.first()).toHaveCSS('display', 'none')
+
+    const sharedTokens = await page.evaluate(() => {
+      const style = getComputedStyle(document.documentElement)
+      return {
+        greenTagBackground: style.getPropertyValue('--cds-tag-background-green').trim(),
+        greenTagColor: style.getPropertyValue('--cds-tag-color-green').trim(),
+      }
+    })
+    expect(sharedTokens).toEqual({
+      greenTagBackground: '#cce5cc',
+      greenTagColor: '#005500',
+    })
+  })
+
   test('uses the same FSPTS list-page foundation on every primary search route', async ({
     page,
   }) => {
@@ -627,14 +672,20 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     const pagination = page.locator('.legacy-search-table-frame .cds--pagination')
     await expect(pagination).toHaveCSS('border-top-width', '1px')
     await expect(pagination).toHaveCSS('border-bottom-width', '1px')
+    await expect(pagination.locator('.cds--pagination__control-buttons')).toHaveCSS(
+      'height',
+      '48px',
+    )
     await expect(pagination.locator('.cds--select__item-count')).toHaveCSS(
       'border-right-width',
       '1px',
     )
+    await expect(pagination.locator('.cds--select__item-count')).toHaveCSS('margin', '0px')
     await expect(pagination.locator('.cds--pagination__right')).toHaveCSS(
       'border-left-width',
       '1px',
     )
+    await expect(pagination.locator('.cds--pagination__button').first()).toHaveCSS('margin', '0px')
 
     await rows.nth(0).hover()
     await expect(firstRowCell).toHaveCSS('background-color', 'rgb(255, 255, 255)')
