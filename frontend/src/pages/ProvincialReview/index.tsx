@@ -89,7 +89,7 @@ import {
 } from '@/service/provincial-application-items-service'
 import { fetchApplicationReviewOptions, type SearchOption } from '@/service/search-options-service'
 import { fetchCurrentApplicationRecordVersion } from '@/service/record-version-service'
-import { resolveDefaultRegionAreaIds } from '@/service/user-preference-service'
+import { resolveDefaultZoneRegionIds } from '@/service/user-preference-service'
 import {
   isValidEmail,
   normalizeTrimmedText as normalizeEmail,
@@ -242,7 +242,7 @@ const ProvincialReviewPage = () => {
   const [searchParams, setSearchParams] = usePersistedSearchParams('provincial-review')
   const [productTypeOptions, setProductTypeOptions] = useState<SearchOption[]>([])
   const [regionOptions, setRegionOptions] = useState<IdTextOption[]>([])
-  const { defaultRegion, preferenceLoading } = useDefaultRegionPreference()
+  const { defaultRegion: defaultZone, preferenceLoading } = useDefaultRegionPreference()
   const [reviewStatusOptions, setReviewStatusOptions] = useState<SearchOption[]>([])
   const [optionsLoading, setOptionsLoading] = useState(true)
   const [optionsUnavailable, setOptionsUnavailable] = useState(false)
@@ -326,19 +326,19 @@ const ProvincialReviewPage = () => {
     () => mapSelectedOptionsById(filters.region, regionOptions, (id) => `Region ${id}`),
     [filters.region, regionOptions],
   )
-  const defaultRegionAreaIds = useMemo(
+  const defaultZoneRegionIds = useMemo(
     () =>
-      resolveDefaultRegionAreaIds(
-        defaultRegion,
+      resolveDefaultZoneRegionIds(
+        defaultZone,
         regionOptions.map((region) => region.id),
       ),
-    [defaultRegion, regionOptions],
+    [defaultZone, regionOptions],
   )
   const regionDefaultPending =
     !searchParams.has('region') &&
     (optionsLoading ||
       preferenceLoading ||
-      (!optionsUnavailable && defaultRegionAreaIds.length > 0))
+      (!optionsUnavailable && defaultZoneRegionIds.length > 0))
   const rejectStatusSelectOptions = reviewStatusOptions
   const rejectStatusAvailable = reviewStatusOptions.some(
     (option) => option.value === REJECT_STATUS_CODE,
@@ -532,7 +532,7 @@ const ProvincialReviewPage = () => {
       preferenceLoading ||
       optionsUnavailable ||
       searchParams.has('region') ||
-      defaultRegionAreaIds.length === 0
+      defaultZoneRegionIds.length === 0
     ) {
       return
     }
@@ -542,7 +542,7 @@ const ProvincialReviewPage = () => {
         buildSearchParams(
           {
             ...urlState.filters,
-            region: defaultRegionAreaIds,
+            region: defaultZoneRegionIds,
           },
           urlState.sortField,
           urlState.sortDirection,
@@ -556,10 +556,10 @@ const ProvincialReviewPage = () => {
 
     setFilters((currentFilters) => ({
       ...currentFilters,
-      region: defaultRegionAreaIds,
+      region: defaultZoneRegionIds,
     }))
   }, [
-    defaultRegionAreaIds,
+    defaultZoneRegionIds,
     hasSearchQuery,
     optionsLoading,
     optionsUnavailable,
@@ -602,7 +602,7 @@ const ProvincialReviewPage = () => {
     clearSelection()
     const defaultFilters = {
       ...INITIAL_FILTERS,
-      region: defaultRegionAreaIds,
+      region: defaultZoneRegionIds,
     }
     setFilters(defaultFilters)
     setSearchParams(

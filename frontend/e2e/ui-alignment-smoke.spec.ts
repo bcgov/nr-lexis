@@ -479,6 +479,10 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await page.getByRole('button', { name: 'Open profile panel' }).click()
     const profilePanel = page.getByRole('dialog', { name: 'Profile' })
     await expect(profilePanel).toHaveClass(/is-open/)
+    await expect(profilePanel.getByRole('combobox', { name: 'Default zone' })).toHaveValue('RSI')
+    await expect(profilePanel).toContainText(
+      'Preselects the Cariboo, Kootenay-Boundary, and Thompson-Okanagan Natural Resource Regions in search tables.',
+    )
     const profileLayout = await profilePanel.evaluate((panel) => {
       const avatar = panel.querySelector('.profile-avatar')
       if (!(avatar instanceof HTMLElement)) throw new Error('Profile avatar not found')

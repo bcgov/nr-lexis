@@ -802,9 +802,18 @@ a.csp-side-nav__link.cds--side-nav__link--active[aria-current='page'] {
 }
 
 .profile-panel__preferences {
+  // Keep explanatory copy within the standard 24rem drawer, including its 1px border.
+  inline-size: calc(var(--csp-profile-panel-width) - 2rem - 1px);
+  max-inline-size: 100%;
+  min-inline-size: 0;
   margin-top: 24px;
   padding-top: 20px;
   border-top: 1px solid var(--csp-border-subtle-01);
+}
+
+.profile-panel__preferences .cds--form__helper-text {
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .profile-panel__preferences-title {

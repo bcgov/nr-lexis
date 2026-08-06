@@ -1,25 +1,27 @@
 import { useEffect, useState } from 'react'
 import { Button, Select, SelectItem } from '@carbon/react'
 import {
-  DEFAULT_REGION_OPTIONS,
+  DEFAULT_ZONE_HELPER_TEXT,
+  DEFAULT_ZONE_OPTIONS,
   fetchUserPreferences,
   updateUserPreferences,
-  type DefaultRegion,
+  type DefaultZone,
 } from '@/service/user-preference-service'
 
 type UserRegionPreferenceProps = {
   active: boolean
 }
 
-const LOAD_ERROR = 'Your region preference could not be loaded.'
-const SAVE_ERROR = 'Your region preference could not be saved.'
+const LOAD_ERROR = 'Your default zone could not be loaded.'
+const SAVE_ERROR = 'Your default zone could not be saved.'
+const ALL_REGIONS_HELPER = 'Preselects all Natural Resource Regions in search tables.'
 
-const asDefaultRegion = (value: string): DefaultRegion | null =>
-  DEFAULT_REGION_OPTIONS.find((option) => option.value === value)?.value ?? null
+const asDefaultZone = (value: string): DefaultZone | null =>
+  DEFAULT_ZONE_OPTIONS.find((option) => option.value === value)?.value ?? null
 
 export default function UserRegionPreference({ active }: UserRegionPreferenceProps) {
-  const [savedRegion, setSavedRegion] = useState<DefaultRegion | null>(null)
-  const [selectedRegion, setSelectedRegion] = useState<DefaultRegion | null>(null)
+  const [savedZone, setSavedZone] = useState<DefaultZone | null>(null)
+  const [selectedZone, setSelectedZone] = useState<DefaultZone | null>(null)
   const [hasLoaded, setHasLoaded] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -41,8 +43,8 @@ export default function UserRegionPreference({ active }: UserRegionPreferencePro
         if (ignoreResult) {
           return
         }
-        setSavedRegion(preferences.defaultRegion)
-        setSelectedRegion(preferences.defaultRegion)
+        setSavedZone(preferences.defaultRegion)
+        setSelectedZone(preferences.defaultRegion)
         setHasLoaded(true)
       })
       .catch(() => {
@@ -67,9 +69,9 @@ export default function UserRegionPreference({ active }: UserRegionPreferencePro
     setMessage('')
     setHasError(false)
     try {
-      const preferences = await updateUserPreferences(selectedRegion)
-      setSavedRegion(preferences.defaultRegion)
-      setSelectedRegion(preferences.defaultRegion)
+      const preferences = await updateUserPreferences(selectedZone)
+      setSavedZone(preferences.defaultRegion)
+      setSelectedZone(preferences.defaultRegion)
       setMessage('Preference saved.')
     } catch {
       setMessage(SAVE_ERROR)
@@ -79,8 +81,8 @@ export default function UserRegionPreference({ active }: UserRegionPreferencePro
     }
   }
 
-  const handleRegionChange = (value: string): void => {
-    setSelectedRegion(asDefaultRegion(value))
+  const handleZoneChange = (value: string): void => {
+    setSelectedZone(asDefaultZone(value))
     setMessage('')
     setHasError(false)
   }
@@ -91,15 +93,15 @@ export default function UserRegionPreference({ active }: UserRegionPreferencePro
         Preferences
       </h3>
       <Select
-        id="profile-default-region"
-        labelText="Default region"
-        helperText="Used to preselect related areas when available."
-        value={selectedRegion ?? ''}
+        id="profile-default-zone"
+        labelText="Default zone"
+        helperText={selectedZone ? DEFAULT_ZONE_HELPER_TEXT[selectedZone] : ALL_REGIONS_HELPER}
+        value={selectedZone ?? ''}
         disabled={isLoading || isSaving || !hasLoaded}
-        onChange={(event) => handleRegionChange(event.target.value)}
+        onChange={(event) => handleZoneChange(event.target.value)}
       >
-        <SelectItem value="" text={isLoading ? 'Loading preference...' : 'No default region'} />
-        {DEFAULT_REGION_OPTIONS.map((option) => (
+        <SelectItem value="" text={isLoading ? 'Loading preference...' : 'No default zone'} />
+        {DEFAULT_ZONE_OPTIONS.map((option) => (
           <SelectItem key={option.value} value={option.value} text={option.label} />
         ))}
       </Select>
@@ -107,7 +109,7 @@ export default function UserRegionPreference({ active }: UserRegionPreferencePro
         <Button
           kind="primary"
           size="sm"
-          disabled={isLoading || isSaving || !hasLoaded || selectedRegion === savedRegion}
+          disabled={isLoading || isSaving || !hasLoaded || selectedZone === savedZone}
           onClick={() => void savePreference()}
         >
           {isSaving ? 'Saving...' : 'Save preference'}

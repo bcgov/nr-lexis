@@ -73,7 +73,7 @@ import {
   searchProvincialPermits,
 } from '@/service/provincial-permit-search-service'
 import { fetchProvincialPermitOptions, type SearchOption } from '@/service/search-options-service'
-import { resolveDefaultRegionAreaIds } from '@/service/user-preference-service'
+import { resolveDefaultZoneRegionIds } from '@/service/user-preference-service'
 import { formatPermitNumber } from '@/utils/permit'
 
 const INITIAL_FILTERS: ProvincialPermitSearchFilters = {
@@ -138,7 +138,7 @@ const ProvincialPermitPage = () => {
   const { capabilities } = useAuth()
   const [searchParams, setSearchParams] = usePersistedSearchParams('provincial-permits')
   const [regionOptions, setRegionOptions] = useState<IdTextOption[]>([])
-  const { defaultRegion, preferenceLoading } = useDefaultRegionPreference()
+  const { defaultRegion: defaultZone, preferenceLoading } = useDefaultRegionPreference()
   const [permitStatusOptions, setPermitStatusOptions] = useState<SearchOption[]>([])
   const [optionsLoading, setOptionsLoading] = useState(true)
   const [optionsUnavailable, setOptionsUnavailable] = useState(false)
@@ -205,19 +205,19 @@ const ProvincialPermitPage = () => {
     () => mapSelectedOptionsById(filters.region, regionOptions, (id) => `Region ${id}`),
     [filters.region, regionOptions],
   )
-  const defaultRegionAreaIds = useMemo(
+  const defaultZoneRegionIds = useMemo(
     () =>
-      resolveDefaultRegionAreaIds(
-        defaultRegion,
+      resolveDefaultZoneRegionIds(
+        defaultZone,
         regionOptions.map((region) => region.id),
       ),
-    [defaultRegion, regionOptions],
+    [defaultZone, regionOptions],
   )
   const regionDefaultPending =
     !searchParams.has('region') &&
     (optionsLoading ||
       preferenceLoading ||
-      (!optionsUnavailable && defaultRegionAreaIds.length > 0))
+      (!optionsUnavailable && defaultZoneRegionIds.length > 0))
 
   const hasDateValidationError = useMemo(() => {
     return hasInvalidIsoDateValue(filters.issuedFromDate, filters.issuedToDate)
@@ -362,7 +362,7 @@ const ProvincialPermitPage = () => {
       preferenceLoading ||
       optionsUnavailable ||
       searchParams.has('region') ||
-      defaultRegionAreaIds.length === 0
+      defaultZoneRegionIds.length === 0
     ) {
       return
     }
@@ -372,7 +372,7 @@ const ProvincialPermitPage = () => {
         buildSearchParams(
           {
             ...urlState.filters,
-            region: defaultRegionAreaIds,
+            region: defaultZoneRegionIds,
           },
           urlState.sortField,
           urlState.sortDirection,
@@ -386,10 +386,10 @@ const ProvincialPermitPage = () => {
 
     setFilters((currentFilters) => ({
       ...currentFilters,
-      region: defaultRegionAreaIds,
+      region: defaultZoneRegionIds,
     }))
   }, [
-    defaultRegionAreaIds,
+    defaultZoneRegionIds,
     hasSearchQuery,
     optionsLoading,
     optionsUnavailable,
@@ -430,7 +430,7 @@ const ProvincialPermitPage = () => {
   const onClearFilters = () => {
     const defaultFilters = {
       ...INITIAL_FILTERS,
-      region: defaultRegionAreaIds,
+      region: defaultZoneRegionIds,
     }
     setFilters(defaultFilters)
     setSearchParams(

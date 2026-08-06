@@ -2,14 +2,14 @@ import { useEffect, useState } from 'react'
 import {
   fetchUserPreferences,
   subscribeToUserPreferences,
-  type DefaultRegion,
+  type DefaultZone,
 } from '@/service/user-preference-service'
 
 export const useDefaultRegionPreference = (): {
-  defaultRegion: DefaultRegion | null
+  defaultRegion: DefaultZone | null
   preferenceLoading: boolean
 } => {
-  const [defaultRegion, setDefaultRegion] = useState<DefaultRegion | null>(null)
+  const [defaultRegion, setDefaultRegion] = useState<DefaultZone | null>(null)
   const [preferenceLoading, setPreferenceLoading] = useState(true)
 
   useEffect(() => {

@@ -16,11 +16,16 @@ vi.mock('@/context/auth/useAuth', () => ({
 }))
 
 vi.mock('@/service/user-preference-service', () => ({
-  DEFAULT_REGION_OPTIONS: [
+  DEFAULT_ZONE_OPTIONS: [
     { value: 'RCO', label: 'Coast (RCO)' },
     { value: 'RNI', label: 'Northern Interior (RNI)' },
     { value: 'RSI', label: 'Southern Interior (RSI)' },
   ],
+  DEFAULT_ZONE_HELPER_TEXT: {
+    RCO: 'Preselects the South Coast and West Coast Natural Resource Regions in search tables.',
+    RNI: 'Preselects the Northeast, Omineca, and Skeena Natural Resource Regions in search tables.',
+    RSI: 'Preselects the Cariboo, Kootenay-Boundary, and Thompson-Okanagan Natural Resource Regions in search tables.',
+  },
   fetchUserPreferences: vi.fn(),
   updateUserPreferences: vi.fn(),
 }))
@@ -664,10 +669,20 @@ describe('Layout shell', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Open profile panel' }))
 
-    const regionSelect = await screen.findByRole('combobox', { name: 'Default region' })
-    await waitFor(() => expect(regionSelect).toHaveValue('RCO'))
+    const zoneSelect = await screen.findByRole('combobox', { name: 'Default zone' })
+    await waitFor(() => expect(zoneSelect).toHaveValue('RCO'))
+    expect(
+      screen.getByText(
+        'Preselects the South Coast and West Coast Natural Resource Regions in search tables.',
+      ),
+    ).toBeVisible()
 
-    await userEvent.selectOptions(regionSelect, 'RNI')
+    await userEvent.selectOptions(zoneSelect, 'RNI')
+    expect(
+      screen.getByText(
+        'Preselects the Northeast, Omineca, and Skeena Natural Resource Regions in search tables.',
+      ),
+    ).toBeVisible()
     await userEvent.click(screen.getByRole('button', { name: 'Save preference' }))
 
     expect(mockedUpdateUserPreferences).toHaveBeenCalledWith('RNI')

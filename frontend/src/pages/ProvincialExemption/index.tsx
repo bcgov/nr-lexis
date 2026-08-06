@@ -95,7 +95,7 @@ import { fetchCurrentExemptionRecordVersion } from '@/service/record-version-ser
 import { formatLocalIsoDate } from '@/utils/date'
 import { sanitizeNotificationText } from '@/utils/notification-messages'
 import { firstStringField, isRecord } from '@/utils/record'
-import { resolveDefaultRegionAreaIds } from '@/service/user-preference-service'
+import { resolveDefaultZoneRegionIds } from '@/service/user-preference-service'
 
 type ApprovalStatus = {
   kind: 'error' | 'success' | 'warning'
@@ -228,7 +228,7 @@ const ProvincialExemptionPage = () => {
   const { capabilities, canPerform } = useAuth()
   const [searchParams, setSearchParams] = usePersistedSearchParams('provincial-exemptions')
   const [regionOptions, setRegionOptions] = useState<IdTextOption[]>([])
-  const { defaultRegion, preferenceLoading } = useDefaultRegionPreference()
+  const { defaultRegion: defaultZone, preferenceLoading } = useDefaultRegionPreference()
   const [exemptionTypeOptions, setExemptionTypeOptions] = useState<SearchOption[]>([])
   const [exemptionStatusOptions, setExemptionStatusOptions] = useState<SearchOption[]>([])
   const [optionsLoading, setOptionsLoading] = useState(true)
@@ -327,19 +327,19 @@ const ProvincialExemptionPage = () => {
     () => mapSelectedOptionsById(filters.region, regionOptions, (id) => `Region ${id}`),
     [filters.region, regionOptions],
   )
-  const defaultRegionAreaIds = useMemo(
+  const defaultZoneRegionIds = useMemo(
     () =>
-      resolveDefaultRegionAreaIds(
-        defaultRegion,
+      resolveDefaultZoneRegionIds(
+        defaultZone,
         regionOptions.map((region) => region.id),
       ),
-    [defaultRegion, regionOptions],
+    [defaultZone, regionOptions],
   )
   const regionDefaultPending =
     !searchParams.has('region') &&
     (optionsLoading ||
       preferenceLoading ||
-      (!optionsUnavailable && defaultRegionAreaIds.length > 0))
+      (!optionsUnavailable && defaultZoneRegionIds.length > 0))
 
   const hasDateValidationError = useMemo(() => {
     return hasInvalidIsoDateValue(
@@ -513,7 +513,7 @@ const ProvincialExemptionPage = () => {
       preferenceLoading ||
       optionsUnavailable ||
       searchParams.has('region') ||
-      defaultRegionAreaIds.length === 0
+      defaultZoneRegionIds.length === 0
     ) {
       return
     }
@@ -523,7 +523,7 @@ const ProvincialExemptionPage = () => {
         buildSearchParams(
           {
             ...urlState.filters,
-            region: defaultRegionAreaIds,
+            region: defaultZoneRegionIds,
           },
           urlState.sortField,
           urlState.sortDirection,
@@ -537,10 +537,10 @@ const ProvincialExemptionPage = () => {
 
     setFilters((currentFilters) => ({
       ...currentFilters,
-      region: defaultRegionAreaIds,
+      region: defaultZoneRegionIds,
     }))
   }, [
-    defaultRegionAreaIds,
+    defaultZoneRegionIds,
     hasSearchQuery,
     optionsLoading,
     optionsUnavailable,
@@ -584,7 +584,7 @@ const ProvincialExemptionPage = () => {
     const defaultFilters = {
       ...INITIAL_FILTERS,
       exemptionTypeCode: shouldDefaultApprovalFilters ? 'M' : INITIAL_FILTERS.exemptionTypeCode,
-      region: defaultRegionAreaIds,
+      region: defaultZoneRegionIds,
     }
     setFilters(defaultFilters)
     setSearchParams(
