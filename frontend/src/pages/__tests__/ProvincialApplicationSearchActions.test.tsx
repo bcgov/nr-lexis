@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
+import { useDefaultRegionPreference } from '@/pages/shared/useDefaultRegionPreference'
 import ProvincialApplicationPage from '@/pages/ProvincialApplication'
 import { searchProvincialApplications } from '@/service/provincial-application-search-service'
 import { fetchProvincialApplicationOptions } from '@/service/search-options-service'
@@ -22,6 +23,10 @@ vi.mock('@/context/auth/useAuth', () => ({
   useAuth: vi.fn(),
 }))
 
+vi.mock('@/pages/shared/useDefaultRegionPreference', () => ({
+  useDefaultRegionPreference: vi.fn(),
+}))
+
 vi.mock('@/service/provincial-application-search-service', () => ({
   countProvincialApplications: vi.fn(),
   searchProvincialApplications: vi.fn(),
@@ -32,6 +37,7 @@ vi.mock('@/service/search-options-service', () => ({
 }))
 
 const mockedUseAuth = vi.mocked(useAuth)
+const mockedUseDefaultRegionPreference = vi.mocked(useDefaultRegionPreference)
 const mockedSearchProvincialApplications = vi.mocked(searchProvincialApplications)
 const mockedFetchProvincialApplicationOptions = vi.mocked(fetchProvincialApplicationOptions)
 
@@ -81,6 +87,10 @@ const searchRowsWithMixedEligibility = [
 describe('Provincial Application Search Actions', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockedUseDefaultRegionPreference.mockReturnValue({
+      defaultRegion: null,
+      preferenceLoading: false,
+    })
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
         canPerform: (action: string) =>
@@ -480,6 +490,43 @@ describe('Provincial Application Search Actions', () => {
     const resultsTable = screen.getByRole('region', { name: 'Search results table', hidden: true })
     expect(resultsTable.closest('[hidden]')).toHaveStyle({ display: 'none' })
     expect(resultsTable).not.toBeVisible()
+  })
+
+  it('uses the saved region to preselect application search areas', async () => {
+    mockedUseDefaultRegionPreference.mockReturnValue({
+      defaultRegion: 'RCO',
+      preferenceLoading: false,
+    })
+    mockedFetchProvincialApplicationOptions.mockResolvedValueOnce({
+      exemptionTypes: [],
+      exemptionReasons: [],
+      applicationStatuses: [],
+      productTypes: [],
+      growthTypes: [],
+      regions: [
+        { value: '1903', label: 'Cariboo' },
+        { value: '1909', label: 'South Coast' },
+        { value: '1910', label: 'West Coast' },
+      ],
+      currentSchedules: [],
+    })
+
+    renderPage('/provincial/application')
+
+    const selectedRegions = await screen.findByRole('list', { name: 'Selected regions' })
+    expect(within(selectedRegions).getByText('South Coast')).toBeVisible()
+    expect(within(selectedRegions).getByText('West Coast')).toBeVisible()
+    expect(within(selectedRegions).queryByText('Cariboo')).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Search' }))
+    await waitFor(() => {
+      expect(mockedSearchProvincialApplications).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({ region: ['1909', '1910'] }),
+        }),
+        expect.objectContaining({ knownTotal: expect.any(Number) }),
+      )
+    })
   })
 
   it('loads an export schedule link and explicitly submits its removal', async () => {

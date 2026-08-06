@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
+import { useDefaultRegionPreference } from '@/pages/shared/useDefaultRegionPreference'
 import type { ProvincialPermitSearchResponse } from '@/interfaces/ProvincialPermitSearch'
 import ProvincialPermitPage from '@/pages/ProvincialPermit'
 import { clearAllPageDataCache } from '@/pages/shared/page-data-cache'
@@ -17,6 +18,10 @@ vi.mock('@/context/auth/useAuth', () => ({
   useAuth: vi.fn(),
 }))
 
+vi.mock('@/pages/shared/useDefaultRegionPreference', () => ({
+  useDefaultRegionPreference: vi.fn(),
+}))
+
 vi.mock('@/service/provincial-permit-search-service', () => ({
   countProvincialPermits: vi.fn(),
   searchProvincialPermits: vi.fn(),
@@ -27,6 +32,7 @@ vi.mock('@/service/search-options-service', () => ({
 }))
 
 const mockedUseAuth = vi.mocked(useAuth)
+const mockedUseDefaultRegionPreference = vi.mocked(useDefaultRegionPreference)
 const mockedCountProvincialPermits = vi.mocked(countProvincialPermits)
 const mockedSearchProvincialPermits = vi.mocked(searchProvincialPermits)
 const mockedFetchProvincialPermitOptions = vi.mocked(fetchProvincialPermitOptions)
@@ -73,6 +79,10 @@ const renderPage = (
 describe('Provincial Permit Search Actions', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockedUseDefaultRegionPreference.mockReturnValue({
+      defaultRegion: null,
+      preferenceLoading: false,
+    })
     clearAllPageDataCache()
     mockedSearchProvincialPermits.mockResolvedValue(
       permitSearchResponse([
@@ -144,6 +154,41 @@ describe('Provincial Permit Search Actions', () => {
     const resultsTable = screen.getByRole('region', { name: 'Search results table', hidden: true })
     expect(resultsTable.closest('[hidden]')).toHaveStyle({ display: 'none' })
     expect(resultsTable).not.toBeVisible()
+  })
+
+  it('uses the saved region to preselect permit search areas', async () => {
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => false }))
+    mockedUseDefaultRegionPreference.mockReturnValue({
+      defaultRegion: 'RSI',
+      preferenceLoading: false,
+    })
+    mockedFetchProvincialPermitOptions.mockResolvedValueOnce({
+      permitStatuses: [],
+      regions: [
+        { value: '1903', label: 'Cariboo' },
+        { value: '1904', label: 'Kootenay-Boundary' },
+        { value: '1905', label: 'Northeast' },
+        { value: '1907', label: 'Thompson-Okanagan' },
+      ],
+    })
+
+    renderPage('/provincial/permit')
+
+    const selectedRegions = await screen.findByRole('list', { name: 'Selected regions' })
+    expect(within(selectedRegions).getByText('Cariboo')).toBeVisible()
+    expect(within(selectedRegions).getByText('Kootenay-Boundary')).toBeVisible()
+    expect(within(selectedRegions).getByText('Thompson-Okanagan')).toBeVisible()
+    expect(within(selectedRegions).queryByText('Northeast')).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Search' }))
+    await waitFor(() => {
+      expect(mockedSearchProvincialPermits).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({ region: ['1903', '1904', '1907'] }),
+        }),
+        expect.objectContaining({ knownTotal: expect.any(Number) }),
+      )
+    })
   })
 
   it('keeps the table loading until the exact result count is available', async () => {

@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fetchUserPreferences, updateUserPreferences } from '@/service/user-preference-service'
+import {
+  fetchUserPreferences,
+  resolveDefaultRegionAreaIds,
+  subscribeToUserPreferences,
+  updateUserPreferences,
+} from '@/service/user-preference-service'
 
 const { getMock, putMock } = vi.hoisted(() => ({
   getMock: vi.fn(),
@@ -42,5 +47,31 @@ describe('user-preference-service', () => {
     await expect(fetchUserPreferences()).rejects.toThrow(
       'User preferences response is unavailable.',
     )
+  })
+
+  it.each([
+    ['RCO', ['1909', '1910']],
+    ['RNI', ['1905', '1906', '1908']],
+    ['RSI', ['1903', '1904', '1907']],
+  ] as const)('maps %s to its available natural resource areas', (region, expectedAreaIds) => {
+    const availableAreaIds = ['1903', '1904', '1905', '1906', '1907', '1908', '1909', '1910']
+
+    expect(resolveDefaultRegionAreaIds(region, availableAreaIds)).toEqual(expectedAreaIds)
+  })
+
+  it('falls back to every available area when no usable preference exists', () => {
+    expect(resolveDefaultRegionAreaIds(null, ['1903', '1904'])).toEqual(['1903', '1904'])
+    expect(resolveDefaultRegionAreaIds('RCO', ['1903', '1904'])).toEqual(['1903', '1904'])
+  })
+
+  it('notifies active consumers after a preference is saved', async () => {
+    putMock.mockResolvedValue({ data: { defaultRegion: 'RNI' } })
+    const listener = vi.fn()
+    const unsubscribe = subscribeToUserPreferences(listener)
+
+    await updateUserPreferences('RNI')
+
+    expect(listener).toHaveBeenCalledWith({ defaultRegion: 'RNI' })
+    unsubscribe()
   })
 })

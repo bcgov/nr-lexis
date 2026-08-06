@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
+import { useDefaultRegionPreference } from '@/pages/shared/useDefaultRegionPreference'
 import type { ApplicationReviewSearchResponse } from '@/interfaces/ApplicationReviewSearch'
 import ProvincialReviewPage from '@/pages/ProvincialReview'
 import { clearAllPageDataCache } from '@/pages/shared/page-data-cache'
@@ -20,6 +21,10 @@ import { createTestAuthContext } from '@/test-utils/auth'
 
 vi.mock('@/context/auth/useAuth', () => ({
   useAuth: vi.fn(),
+}))
+
+vi.mock('@/pages/shared/useDefaultRegionPreference', () => ({
+  useDefaultRegionPreference: vi.fn(),
 }))
 
 vi.mock('@/service/application-review-search-service', () => ({
@@ -47,6 +52,7 @@ vi.mock('@/service/record-version-service', () => ({
 }))
 
 const mockedUseAuth = vi.mocked(useAuth)
+const mockedUseDefaultRegionPreference = vi.mocked(useDefaultRegionPreference)
 const mockedSearchApplicationReviews = vi.mocked(searchApplicationReviews)
 const mockedApproveApplicationReview = vi.mocked(approveApplicationReview)
 const mockedUpdateApplicationReviewStatus = vi.mocked(updateApplicationReviewStatus)
@@ -166,6 +172,10 @@ Element.prototype.scrollIntoView = vi.fn()
 describe('Provincial Review Action State Smoke', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockedUseDefaultRegionPreference.mockReturnValue({
+      defaultRegion: null,
+      preferenceLoading: false,
+    })
     clearAllPageDataCache()
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
     mockedSearchApplicationReviews.mockResolvedValue(reviewResponse)
@@ -825,6 +835,41 @@ describe('Provincial Review Action State Smoke', () => {
       expect.objectContaining({ knownTotal: expect.any(Number) }),
     )
     expect(mockedSearchApplicationReviews).toHaveBeenCalledTimes(1)
+  })
+
+  it('uses the saved region to preselect review search areas', async () => {
+    mockedUseDefaultRegionPreference.mockReturnValue({
+      defaultRegion: 'RNI',
+      preferenceLoading: false,
+    })
+    mockedFetchApplicationReviewOptions.mockResolvedValueOnce({
+      productTypes: [],
+      regions: [
+        { value: '1903', label: 'Cariboo' },
+        { value: '1905', label: 'Northeast' },
+        { value: '1906', label: 'Omineca' },
+        { value: '1908', label: 'Skeena' },
+      ],
+      reviewStatuses: [],
+    })
+
+    renderPage('/provincial/review')
+
+    const selectedRegions = await screen.findByRole('list', { name: 'Selected regions' })
+    expect(within(selectedRegions).getByText('Northeast')).toBeVisible()
+    expect(within(selectedRegions).getByText('Omineca')).toBeVisible()
+    expect(within(selectedRegions).getByText('Skeena')).toBeVisible()
+    expect(within(selectedRegions).queryByText('Cariboo')).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Search' }))
+    await waitFor(() => {
+      expect(mockedSearchApplicationReviews).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({ region: ['1905', '1906', '1908'] }),
+        }),
+        expect.objectContaining({ knownTotal: expect.any(Number) }),
+      )
+    })
   })
 
   it('keeps review pagination at 100 by default with expanded page size options', async () => {

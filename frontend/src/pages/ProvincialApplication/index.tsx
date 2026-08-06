@@ -66,6 +66,7 @@ import {
 } from '@/pages/shared/search-query-utils'
 import { useSearchFilterDraft } from '@/pages/shared/useSearchFilterDraft'
 import { usePersistedSearchParams } from '@/pages/shared/usePersistedSearchParams'
+import { useDefaultRegionPreference } from '@/pages/shared/useDefaultRegionPreference'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import {
   loadSearchWithDeferredTotal,
@@ -79,6 +80,7 @@ import {
   fetchProvincialApplicationOptions,
   type SearchOption,
 } from '@/service/search-options-service'
+import { resolveDefaultRegionAreaIds } from '@/service/user-preference-service'
 import IsoDatePicker from '../../components/IsoDatePicker'
 
 type ExemptionStatus = {
@@ -178,6 +180,7 @@ const ProvincialApplicationPage = () => {
   const { capabilities, canPerform } = useAuth()
   const [searchParams, setSearchParams] = usePersistedSearchParams('provincial-applications')
   const [regionOptions, setRegionOptions] = useState<IdTextOption[]>([])
+  const { defaultRegion, preferenceLoading } = useDefaultRegionPreference()
   const [exemptionTypeOptions, setExemptionTypeOptions] = useState<SearchOption[]>([])
   const [applicationStatusOptions, setApplicationStatusOptions] = useState<SearchOption[]>([])
   const [productTypeOptions, setProductTypeOptions] = useState<SearchOption[]>([])
@@ -265,6 +268,19 @@ const ProvincialApplicationPage = () => {
     () => mapSelectedOptionsById(filters.region, regionOptions, (id) => `Region ${id}`),
     [filters.region, regionOptions],
   )
+  const defaultRegionAreaIds = useMemo(
+    () =>
+      resolveDefaultRegionAreaIds(
+        defaultRegion,
+        regionOptions.map((region) => region.id),
+      ),
+    [defaultRegion, regionOptions],
+  )
+  const regionDefaultPending =
+    !searchParams.has('region') &&
+    (optionsLoading ||
+      preferenceLoading ||
+      (!optionsUnavailable && defaultRegionAreaIds.length > 0))
 
   const hasDateValidationError = useMemo(() => {
     return hasInvalidIsoDateValue(
@@ -381,7 +397,7 @@ const ProvincialApplicationPage = () => {
   )
 
   useEffect(() => {
-    if (!hasSearchQuery) {
+    if (!hasSearchQuery || regionDefaultPending) {
       return
     }
 
@@ -394,6 +410,7 @@ const ProvincialApplicationPage = () => {
     })
   }, [
     hasSearchQuery,
+    regionDefaultPending,
     requestFilters,
     runSearch,
     urlState.page,
@@ -425,20 +442,20 @@ const ProvincialApplicationPage = () => {
   useEffect(() => {
     if (
       optionsLoading ||
+      preferenceLoading ||
       optionsUnavailable ||
       searchParams.has('region') ||
-      regionOptions.length === 0
+      defaultRegionAreaIds.length === 0
     ) {
       return
     }
 
-    const defaultRegions = regionOptions.map((region) => region.id)
     if (hasSearchQuery) {
       setSearchParams(
         buildSearchParams(
           {
             ...urlState.filters,
-            region: defaultRegions,
+            region: defaultRegionAreaIds,
           },
           urlState.sortField,
           urlState.sortDirection,
@@ -450,19 +467,16 @@ const ProvincialApplicationPage = () => {
       return
     }
 
-    setFilters((currentFilters) =>
-      currentFilters.region.length > 0
-        ? currentFilters
-        : {
-            ...currentFilters,
-            region: defaultRegions,
-          },
-    )
+    setFilters((currentFilters) => ({
+      ...currentFilters,
+      region: defaultRegionAreaIds,
+    }))
   }, [
+    defaultRegionAreaIds,
     hasSearchQuery,
     optionsLoading,
     optionsUnavailable,
-    regionOptions,
+    preferenceLoading,
     searchParams,
     setFilters,
     setSearchParams,
@@ -501,7 +515,7 @@ const ProvincialApplicationPage = () => {
     clearSelection()
     const defaultFilters = {
       ...INITIAL_FILTERS,
-      region: regionOptions.map((region) => region.id),
+      region: defaultRegionAreaIds,
     }
     setFilters(defaultFilters)
     setSearchParams(

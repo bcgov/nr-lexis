@@ -65,6 +65,7 @@ import {
 } from '@/pages/shared/search-query-utils'
 import { useSearchFilterDraft } from '@/pages/shared/useSearchFilterDraft'
 import { usePersistedSearchParams } from '@/pages/shared/usePersistedSearchParams'
+import { useDefaultRegionPreference } from '@/pages/shared/useDefaultRegionPreference'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { isAgentApplicant } from '@/pages/shared/application-form-utils'
 import {
@@ -88,6 +89,7 @@ import {
 } from '@/service/provincial-application-items-service'
 import { fetchApplicationReviewOptions, type SearchOption } from '@/service/search-options-service'
 import { fetchCurrentApplicationRecordVersion } from '@/service/record-version-service'
+import { resolveDefaultRegionAreaIds } from '@/service/user-preference-service'
 import {
   isValidEmail,
   normalizeTrimmedText as normalizeEmail,
@@ -240,6 +242,7 @@ const ProvincialReviewPage = () => {
   const [searchParams, setSearchParams] = usePersistedSearchParams('provincial-review')
   const [productTypeOptions, setProductTypeOptions] = useState<SearchOption[]>([])
   const [regionOptions, setRegionOptions] = useState<IdTextOption[]>([])
+  const { defaultRegion, preferenceLoading } = useDefaultRegionPreference()
   const [reviewStatusOptions, setReviewStatusOptions] = useState<SearchOption[]>([])
   const [optionsLoading, setOptionsLoading] = useState(true)
   const [optionsUnavailable, setOptionsUnavailable] = useState(false)
@@ -323,6 +326,19 @@ const ProvincialReviewPage = () => {
     () => mapSelectedOptionsById(filters.region, regionOptions, (id) => `Region ${id}`),
     [filters.region, regionOptions],
   )
+  const defaultRegionAreaIds = useMemo(
+    () =>
+      resolveDefaultRegionAreaIds(
+        defaultRegion,
+        regionOptions.map((region) => region.id),
+      ),
+    [defaultRegion, regionOptions],
+  )
+  const regionDefaultPending =
+    !searchParams.has('region') &&
+    (optionsLoading ||
+      preferenceLoading ||
+      (!optionsUnavailable && defaultRegionAreaIds.length > 0))
   const rejectStatusSelectOptions = reviewStatusOptions
   const rejectStatusAvailable = reviewStatusOptions.some(
     (option) => option.value === REJECT_STATUS_CODE,
@@ -465,7 +481,7 @@ const ProvincialReviewPage = () => {
   )
 
   useEffect(() => {
-    if (!filtersReady) {
+    if (!filtersReady || regionDefaultPending) {
       return
     }
     if (!hasSearchQuery) {
@@ -482,6 +498,7 @@ const ProvincialReviewPage = () => {
   }, [
     filtersReady,
     hasSearchQuery,
+    regionDefaultPending,
     requestFilters,
     runSearch,
     urlState.page,
@@ -512,9 +529,10 @@ const ProvincialReviewPage = () => {
   useEffect(() => {
     if (
       optionsLoading ||
+      preferenceLoading ||
       optionsUnavailable ||
       searchParams.has('region') ||
-      regionOptions.length === 0
+      defaultRegionAreaIds.length === 0
     ) {
       return
     }
@@ -524,7 +542,7 @@ const ProvincialReviewPage = () => {
         buildSearchParams(
           {
             ...urlState.filters,
-            region: regionOptions.map((region) => region.id),
+            region: defaultRegionAreaIds,
           },
           urlState.sortField,
           urlState.sortDirection,
@@ -536,19 +554,16 @@ const ProvincialReviewPage = () => {
       return
     }
 
-    setFilters((currentFilters) =>
-      currentFilters.region.length > 0
-        ? currentFilters
-        : {
-            ...currentFilters,
-            region: regionOptions.map((region) => region.id),
-          },
-    )
+    setFilters((currentFilters) => ({
+      ...currentFilters,
+      region: defaultRegionAreaIds,
+    }))
   }, [
+    defaultRegionAreaIds,
     hasSearchQuery,
     optionsLoading,
     optionsUnavailable,
-    regionOptions,
+    preferenceLoading,
     searchParams,
     setFilters,
     setSearchParams,
@@ -587,7 +602,7 @@ const ProvincialReviewPage = () => {
     clearSelection()
     const defaultFilters = {
       ...INITIAL_FILTERS,
-      region: regionOptions.map((region) => region.id),
+      region: defaultRegionAreaIds,
     }
     setFilters(defaultFilters)
     setSearchParams(

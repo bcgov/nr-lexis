@@ -13,6 +13,16 @@ export type UserPreferences = {
   defaultRegion: DefaultRegion | null
 }
 
+const DEFAULT_REGION_AREA_IDS: Record<DefaultRegion, readonly string[]> = {
+  RCO: ['1909', '1910'],
+  RNI: ['1905', '1906', '1908'],
+  RSI: ['1903', '1904', '1907'],
+}
+
+type UserPreferencesListener = (preferences: UserPreferences) => void
+
+const userPreferencesListeners = new Set<UserPreferencesListener>()
+
 const isDefaultRegion = (value: unknown): value is DefaultRegion =>
   DEFAULT_REGION_OPTIONS.some((option) => option.value === value)
 
@@ -34,11 +44,31 @@ export const fetchUserPreferences = async (): Promise<UserPreferences> => {
   return parsePreferences(response.data)
 }
 
+export const resolveDefaultRegionAreaIds = (
+  defaultRegion: DefaultRegion | null,
+  availableAreaIds: readonly string[],
+): string[] => {
+  if (!defaultRegion) {
+    return [...availableAreaIds]
+  }
+
+  const preferredAreaIds = new Set(DEFAULT_REGION_AREA_IDS[defaultRegion])
+  const matchingAreaIds = availableAreaIds.filter((areaId) => preferredAreaIds.has(areaId))
+  return matchingAreaIds.length > 0 ? matchingAreaIds : [...availableAreaIds]
+}
+
+export const subscribeToUserPreferences = (listener: UserPreferencesListener): (() => void) => {
+  userPreferencesListeners.add(listener)
+  return () => userPreferencesListeners.delete(listener)
+}
+
 export const updateUserPreferences = async (
   defaultRegion: DefaultRegion | null,
 ): Promise<UserPreferences> => {
   const response = await apiService
     .getAxiosInstance()
     .put<unknown>('/lexis/session/preferences', { defaultRegion })
-  return parsePreferences(response.data)
+  const preferences = parsePreferences(response.data)
+  userPreferencesListeners.forEach((listener) => listener(preferences))
+  return preferences
 }

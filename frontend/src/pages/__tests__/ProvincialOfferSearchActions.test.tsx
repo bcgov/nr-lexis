@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
+import { useDefaultRegionPreference } from '@/pages/shared/useDefaultRegionPreference'
 import type { ProvincialOfferSearchResponse } from '@/interfaces/ProvincialOfferSearch'
 import ProvincialOffersPage from '@/pages/ProvincialOffers'
 import { searchProvincialOffers } from '@/service/provincial-offer-search-service'
@@ -16,6 +17,10 @@ vi.mock('@/context/auth/useAuth', () => ({
   useAuth: vi.fn(),
 }))
 
+vi.mock('@/pages/shared/useDefaultRegionPreference', () => ({
+  useDefaultRegionPreference: vi.fn(),
+}))
+
 vi.mock('@/service/provincial-offer-search-service', () => ({
   countProvincialOffers: vi.fn(),
   searchProvincialOffers: vi.fn(),
@@ -27,6 +32,7 @@ vi.mock('@/service/search-options-service', () => ({
 }))
 
 const mockedUseAuth = vi.mocked(useAuth)
+const mockedUseDefaultRegionPreference = vi.mocked(useDefaultRegionPreference)
 const mockedSearchProvincialOffers = vi.mocked(searchProvincialOffers)
 const mockedFetchProvincialApplicationOptions = vi.mocked(fetchProvincialApplicationOptions)
 const mockedFetchProvincialOfferOptions = vi.mocked(fetchProvincialOfferOptions)
@@ -58,6 +64,10 @@ const renderPage = (
 describe('Provincial Offer Search Actions', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockedUseDefaultRegionPreference.mockReturnValue({
+      defaultRegion: null,
+      preferenceLoading: false,
+    })
     mockedFetchProvincialOfferOptions.mockResolvedValue({
       regions: [{ value: '11', label: 'Cariboo' }],
     })
@@ -241,6 +251,38 @@ describe('Provincial Offer Search Actions', () => {
             listingToDate: '2026-07-11',
             region: ['11', '22'],
           }),
+        }),
+        expect.objectContaining({ knownTotal: expect.any(Number) }),
+      )
+    })
+  })
+
+  it('uses the saved region to preselect offer search areas', async () => {
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => false }))
+    mockedUseDefaultRegionPreference.mockReturnValue({
+      defaultRegion: 'RCO',
+      preferenceLoading: false,
+    })
+    mockedFetchProvincialOfferOptions.mockResolvedValueOnce({
+      regions: [
+        { value: '1903', label: 'Cariboo' },
+        { value: '1909', label: 'South Coast' },
+        { value: '1910', label: 'West Coast' },
+      ],
+    })
+
+    renderPage('/provincial/offers')
+
+    const selectedRegions = await screen.findByRole('list', { name: 'Selected regions' })
+    expect(within(selectedRegions).getByText('South Coast')).toBeVisible()
+    expect(within(selectedRegions).getByText('West Coast')).toBeVisible()
+    expect(within(selectedRegions).queryByText('Cariboo')).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Search' }))
+    await waitFor(() => {
+      expect(mockedSearchProvincialOffers).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({ region: ['1909', '1910'] }),
         }),
         expect.objectContaining({ knownTotal: expect.any(Number) }),
       )
