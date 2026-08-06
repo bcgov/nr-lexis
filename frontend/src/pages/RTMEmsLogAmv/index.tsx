@@ -684,7 +684,7 @@ const RTMEmsLogAmvPage = () => {
               Previous month
             </Button>
             <Button
-              kind="secondary"
+              kind="tertiary"
               size="md"
               renderIcon={Renew}
               onClick={() => {
@@ -928,7 +928,7 @@ const RTMEmsLogAmvPage = () => {
           <div className="rtm-amv-confirm-modal__actions">
             <Button
               id="rtm-amv-confirm-cancel"
-              kind="secondary"
+              kind="tertiary"
               size="md"
               onClick={() => setShowWarningConfirmation(false)}
             >

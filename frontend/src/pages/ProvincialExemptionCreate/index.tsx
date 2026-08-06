@@ -744,7 +744,7 @@ const ProvincialExemptionCreatePage = () => {
                       />
                       <Button
                         type="button"
-                        kind="secondary"
+                        kind="tertiary"
                         size="sm"
                         disabled={!form.applicationNumber.trim()}
                         onClick={onAddApplication}
@@ -938,7 +938,8 @@ const ProvincialExemptionCreatePage = () => {
           >
             <Button
               type="button"
-              kind="secondary"
+              kind="tertiary"
+              size="md"
               onClick={() =>
                 navigate(isFederalApplicationPrefill ? '/federal' : '/provincial/exemption')
               }
@@ -948,6 +949,7 @@ const ProvincialExemptionCreatePage = () => {
             <Button
               type="button"
               kind="primary"
+              size="md"
               onClick={() => void onSave(true)}
               disabled={
                 !optionsLoaded ||

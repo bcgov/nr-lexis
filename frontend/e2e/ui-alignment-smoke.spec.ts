@@ -946,10 +946,9 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(backLink.locator('svg')).toBeVisible()
     await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1)
     await expect(page.locator('.detail-page-grid')).toHaveCSS('row-gap', '16px')
-    await expect(page.getByRole('button', { name: 'Edit', exact: true })).toHaveCSS(
-      'height',
-      '32px',
-    )
+    const editOfferButton = page.getByRole('button', { name: 'Edit', exact: true })
+    await expect(editOfferButton).toHaveClass(/cds--btn--tertiary/)
+    await expect(editOfferButton).toHaveCSS('height', '32px')
 
     await expect(page.getByLabel('Offer highlights')).toHaveCount(0)
 
@@ -1266,7 +1265,10 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(feeDialog.getByLabel('Policy effective date')).toBeFocused()
     await expect(feeDialog.getByLabel('Region')).toBeVisible()
     await expect(feeDialog.getByLabel('Fee increase percentage')).toBeVisible()
-    await feeDialog.getByRole('button', { name: 'Cancel' }).click()
+    const feeDialogCancel = feeDialog.getByRole('button', { name: 'Cancel' })
+    await expect(feeDialogCancel).toHaveClass(/cds--btn--tertiary/)
+    await expect(feeDialog.locator('.admin-policy-modal__actions')).toHaveCSS('gap', '8px')
+    await feeDialogCancel.click()
     await expect(feeDialog).toBeHidden()
 
     await page.setViewportSize({ width: 390, height: 844 })

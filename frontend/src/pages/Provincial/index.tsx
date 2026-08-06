@@ -348,7 +348,7 @@ const ProvincialPage = () => {
             />
           </div>
           <div className="legacy-search-actions">
-            <Button kind="secondary" onClick={() => void loadTotals()} disabled={loadingTotals}>
+            <Button kind="tertiary" onClick={() => void loadTotals()} disabled={loadingTotals}>
               Refresh Totals
             </Button>
           </div>

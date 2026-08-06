@@ -201,7 +201,7 @@ const RouterNavigationGuard = ({
         )}
       </div>
       <div className="lexis-unsaved-changes-modal__actions">
-        <Button id={stayButtonId} kind="secondary" disabled={isSaving} onClick={stay}>
+        <Button id={stayButtonId} kind="tertiary" disabled={isSaving} onClick={stay}>
           Stay
         </Button>
         {!busyWithoutDirtyChanges && (

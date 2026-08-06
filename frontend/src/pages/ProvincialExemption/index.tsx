@@ -994,7 +994,7 @@ const ProvincialExemptionPage = () => {
                   >
                     <Button
                       type="button"
-                      kind="secondary"
+                      kind="tertiary"
                       size="md"
                       onClick={onApproveSelectedClick}
                       disabled={selectedRowsCount === 0 || approving}

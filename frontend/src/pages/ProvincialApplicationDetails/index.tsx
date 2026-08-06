@@ -3210,7 +3210,7 @@ const ProvincialApplicationDetailsPage = () => {
                 Approve Application
               </Button>
               <Button
-                kind="secondary"
+                kind="tertiary"
                 size="sm"
                 disabled={
                   isSubmittingReviewAction ||
@@ -3596,7 +3596,7 @@ const ProvincialApplicationDetailsPage = () => {
                             />
                             <div className="legacy-search-actions">
                               <Button
-                                kind="secondary"
+                                kind="tertiary"
                                 size="sm"
                                 disabled={isSavingSummary}
                                 onClick={onCancelOwnerDetails}
@@ -3755,7 +3755,7 @@ const ProvincialApplicationDetailsPage = () => {
                               />
                               <div className="legacy-search-actions">
                                 <Button
-                                  kind="secondary"
+                                  kind="tertiary"
                                   size="sm"
                                   disabled={isSavingSummary}
                                   onClick={onCancelAgentDetails}
@@ -4270,7 +4270,7 @@ const ProvincialApplicationDetailsPage = () => {
                                 <div className="application-species-actions">
                                   <Button
                                     type="button"
-                                    kind="secondary"
+                                    kind="tertiary"
                                     size="sm"
                                     disabled={
                                       !applicationSpeciesCandidate ||
@@ -4327,7 +4327,7 @@ const ProvincialApplicationDetailsPage = () => {
                                 {isSavingSummary ? 'Saving...' : 'Save Summary'}
                               </Button>
                               <Button
-                                kind="secondary"
+                                kind="tertiary"
                                 size="sm"
                                 disabled={isSavingSummary}
                                 onClick={onCancelSummaryDetails}
@@ -4501,7 +4501,7 @@ const ProvincialApplicationDetailsPage = () => {
                           {canEditApplicationDocuments &&
                             (isEditingDocuments ? (
                               <Button
-                                kind="secondary"
+                                kind="tertiary"
                                 size="sm"
                                 disabled={documentUploadBusy || isRemovingDocumentId !== null}
                                 onClick={onCancelDocumentEditing}

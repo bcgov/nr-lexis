@@ -1801,7 +1801,7 @@ const ProvincialApplicationCreatePage = () => {
                       <div className="application-species-actions">
                         <Button
                           type="button"
-                          kind="secondary"
+                          kind="tertiary"
                           size="sm"
                           disabled={
                             !applicationSpeciesCandidate ||
@@ -1884,7 +1884,7 @@ const ProvincialApplicationCreatePage = () => {
                       <Button
                         ref={createPackageButtonRef}
                         type="button"
-                        kind="secondary"
+                        kind="tertiary"
                         size="sm"
                         onClick={() => setPackageSavePromptOpen(true)}
                       >
@@ -1972,7 +1972,8 @@ const ProvincialApplicationCreatePage = () => {
         >
           <Button
             type="button"
-            kind="secondary"
+            kind="tertiary"
+            size="md"
             onClick={() => {
               closeAccuracyConfirmation()
               navigate('/provincial/application')
@@ -1983,6 +1984,7 @@ const ProvincialApplicationCreatePage = () => {
           <Button
             type="button"
             kind="primary"
+            size="md"
             onClick={onRequestSave}
             disabled={
               !optionsLoaded ||

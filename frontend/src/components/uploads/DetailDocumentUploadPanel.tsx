@@ -743,7 +743,7 @@ const DetailDocumentUploadPanel = ({
           )}
 
           <div className="detail-document-upload-modal__actions">
-            <Button kind="secondary" disabled={isSubmitting} onClick={closeUploadModal}>
+            <Button kind="tertiary" disabled={isSubmitting} onClick={closeUploadModal}>
               Cancel
             </Button>
             {uploadStep === 'review' && (

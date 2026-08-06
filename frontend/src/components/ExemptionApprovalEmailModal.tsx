@@ -88,7 +88,7 @@ const ExemptionApprovalEmailModal = ({
         })}
       </div>
       <div className="lexis-confirmation-modal__actions">
-        <Button id={skipButtonId} kind="secondary" disabled={sending} onClick={onSkip}>
+        <Button id={skipButtonId} kind="tertiary" disabled={sending} onClick={onSkip}>
           {recipients.length === 1 ? 'Skip notification' : 'Skip notifications'}
         </Button>
         <Button

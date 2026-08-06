@@ -784,7 +784,7 @@ const ProvincialApplicationPage = () => {
                   >
                     <Button
                       type="button"
-                      kind="secondary"
+                      kind="tertiary"
                       size="md"
                       onClick={onCreateExemptionClick}
                       disabled={selectedRowsCount === 0}

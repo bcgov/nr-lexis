@@ -2818,7 +2818,7 @@ const ProvincialPermitDetailsPage = () => {
               <>
                 {canRequestPermitReview && (
                   <Button
-                    kind="secondary"
+                    kind="tertiary"
                     size="sm"
                     disabled={isSendingPermitEmail || !permitReviewReady}
                     title={
@@ -2837,7 +2837,7 @@ const ProvincialPermitDetailsPage = () => {
                     Modern permit detail supports previewing and resending the approval email. */}
                 {canSendPermitApproval && (
                   <Button
-                    kind="secondary"
+                    kind="tertiary"
                     size="sm"
                     disabled={isSendingPermitEmail}
                     onClick={() => void onOpenPermitApprovalEmail()}
@@ -3439,7 +3439,7 @@ const ProvincialPermitDetailsPage = () => {
                                 {isSavingPermit ? 'Saving...' : 'Save permit'}
                               </Button>
                               <Button
-                                kind="secondary"
+                                kind="tertiary"
                                 size="sm"
                                 disabled={isSavingPermit}
                                 onClick={() => {
@@ -3452,7 +3452,7 @@ const ProvincialPermitDetailsPage = () => {
                             </>
                           ) : (
                             <Button
-                              kind="secondary"
+                              kind="tertiary"
                               size="sm"
                               onClick={() => {
                                 resetPermitFormSection(false)
@@ -3682,7 +3682,7 @@ const ProvincialPermitDetailsPage = () => {
                                 {isSavingShipping ? 'Saving...' : 'Save shipping'}
                               </Button>
                               <Button
-                                kind="secondary"
+                                kind="tertiary"
                                 size="sm"
                                 disabled={isSavingShipping}
                                 onClick={() => {
@@ -3695,7 +3695,7 @@ const ProvincialPermitDetailsPage = () => {
                             </>
                           ) : (
                             <Button
-                              kind="secondary"
+                              kind="tertiary"
                               size="sm"
                               disabled={isShippingReferencesLoading || !shippingReferences}
                               onClick={() => {
@@ -4278,7 +4278,7 @@ const ProvincialPermitDetailsPage = () => {
                                   {isSavingFeeOverride ? 'Saving...' : 'Save fee override'}
                                 </Button>
                                 <Button
-                                  kind="secondary"
+                                  kind="tertiary"
                                   size="sm"
                                   disabled={isSavingFeeOverride}
                                   onClick={() => {
@@ -4315,7 +4315,7 @@ const ProvincialPermitDetailsPage = () => {
                               {canEditFeeOverride && (
                                 <div className="legacy-search-actions">
                                   <Button
-                                    kind="secondary"
+                                    kind="tertiary"
                                     size="sm"
                                     onClick={() => setIsEditingFeeOverride(true)}
                                   >
@@ -4455,7 +4455,7 @@ const ProvincialPermitDetailsPage = () => {
                           {canEditPermitDocuments &&
                             (isEditingPermitDocuments ? (
                               <Button
-                                kind="secondary"
+                                kind="tertiary"
                                 size="sm"
                                 disabled={permitDocumentUploadBusy || isRemovingDocumentId !== null}
                                 onClick={onCancelPermitDocumentEditing}
@@ -4594,7 +4594,7 @@ const ProvincialPermitDetailsPage = () => {
                           {canEditInvoiceDocuments &&
                             (isEditingInvoiceDocuments ? (
                               <Button
-                                kind="secondary"
+                                kind="tertiary"
                                 size="sm"
                                 disabled={invoiceDocumentUploadBusy}
                                 onClick={onCancelInvoiceDocumentEditing}

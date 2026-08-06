@@ -1404,7 +1404,7 @@ function ProvincialApplicationItemsPanel({
           </h2>
           {canManageItems &&
             (isEditingItems ? (
-              <Button kind="secondary" size="sm" disabled={itemsBusy} onClick={cancelItemEditing}>
+              <Button kind="tertiary" size="sm" disabled={itemsBusy} onClick={cancelItemEditing}>
                 Cancel
               </Button>
             ) : (
@@ -1651,7 +1651,7 @@ function ProvincialApplicationItemsPanel({
                     Save Package
                   </Button>
                   <Button
-                    kind="secondary"
+                    kind="tertiary"
                     size="sm"
                     disabled={!selectedPackageDraftDirty && !scaleDraftDirty}
                     onClick={resetSelectedPackageDrafts}
@@ -1686,7 +1686,7 @@ function ProvincialApplicationItemsPanel({
                     onChange={setSpeciesToAdd}
                   />
                   <Button
-                    kind="secondary"
+                    kind="tertiary"
                     size="sm"
                     disabled={!canSaveSelectedPackage || !speciesToAdd}
                     onClick={onAddSpecies}
@@ -1888,7 +1888,7 @@ function ProvincialApplicationItemsPanel({
                 onChange={setCreateSpeciesToAdd}
               />
               <Button
-                kind="secondary"
+                kind="tertiary"
                 size="sm"
                 aria-label="Add species to new package"
                 disabled={!canCreatePackages || !createSpeciesToAdd}
@@ -1931,7 +1931,7 @@ function ProvincialApplicationItemsPanel({
             </div>
             <div className="legacy-search-actions">
               <Button
-                kind="secondary"
+                kind="tertiary"
                 size="sm"
                 disabled={!canCreatePackages || isSavingPackage}
                 onClick={() => void onCreatePackage()}
@@ -2037,7 +2037,7 @@ function ProvincialApplicationItemsPanel({
               <div className="legacy-search-actions">
                 <Button
                   type="button"
-                  kind="secondary"
+                  kind="tertiary"
                   size="sm"
                   disabled={
                     !canAddScalesWithReferenceOptions ||

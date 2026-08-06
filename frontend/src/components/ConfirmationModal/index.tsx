@@ -101,7 +101,7 @@ const ConfirmationModal = ({
         {children}
       </div>
       <div className="lexis-confirmation-modal__actions">
-        <Button id={cancelButtonId} kind="secondary" disabled={pending} onClick={requestClose}>
+        <Button id={cancelButtonId} kind="tertiary" disabled={pending} onClick={requestClose}>
           {cancelLabel}
         </Button>
         <Button

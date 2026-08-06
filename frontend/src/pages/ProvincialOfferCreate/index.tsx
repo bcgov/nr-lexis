@@ -1015,12 +1015,18 @@ const ProvincialOfferCreatePage = () => {
               role="group"
               aria-label="Offer form actions"
             >
-              <Button type="button" kind="secondary" onClick={() => navigate('/provincial/offers')}>
+              <Button
+                type="button"
+                kind="tertiary"
+                size="md"
+                onClick={() => navigate('/provincial/offers')}
+              >
                 Cancel
               </Button>
               <Button
                 type="button"
                 kind="primary"
+                size="md"
                 onClick={() => void onSave(true)}
                 disabled={
                   isSubmitting ||

@@ -932,7 +932,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
             />
           </div>
           <div className="admin-policy-modal__actions">
-            <Button kind="secondary" disabled={isMutatingPolicies} onClick={closePolicyEditor}>
+            <Button kind="tertiary" disabled={isMutatingPolicies} onClick={closePolicyEditor}>
               Cancel
             </Button>
             <Button
@@ -1010,7 +1010,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
             />
           </div>
           <div className="admin-policy-modal__actions">
-            <Button kind="secondary" disabled={isMutatingPolicies} onClick={closePolicyEditor}>
+            <Button kind="tertiary" disabled={isMutatingPolicies} onClick={closePolicyEditor}>
               Cancel
             </Button>
             <Button
@@ -1329,6 +1329,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
               <div className="legacy-search-actions create-form-actions">
                 <Button
                   kind="primary"
+                  size="md"
                   onClick={() => void upsertExportSchedule()}
                   disabled={isLoadingPolicies || isMutatingPolicies || !canManageFeePolicy}
                 >
@@ -1336,6 +1337,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                 </Button>
                 <Button
                   kind="ghost"
+                  size="md"
                   onClick={resetScheduleForm}
                   disabled={isLoadingPolicies || isMutatingPolicies}
                 >

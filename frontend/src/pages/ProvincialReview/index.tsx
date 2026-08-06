@@ -1143,7 +1143,7 @@ const ProvincialReviewPage = () => {
             )}
         </div>
         <div className="review-reject-modal__actions">
-          <Button kind="secondary" disabled={submittingReject} onClick={closeRejectPanel}>
+          <Button kind="tertiary" disabled={submittingReject} onClick={closeRejectPanel}>
             Cancel
           </Button>
           <Button
@@ -1196,7 +1196,7 @@ const ProvincialReviewPage = () => {
               }
             >
               <Button
-                kind="secondary"
+                kind="tertiary"
                 onClick={() => void onApproveSelectedClick()}
                 disabled={
                   loading ||

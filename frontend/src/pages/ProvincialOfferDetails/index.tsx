@@ -393,7 +393,7 @@ const ProvincialOfferDetailsPage = () => {
           subtitle="Check and manage this provincial offer"
           actions={
             !loading && !isEditing && currentDetail && form && canEditAnyOfferField ? (
-              <Button kind="primary" size="sm" onClick={() => setIsEditing(true)}>
+              <Button kind="tertiary" size="sm" onClick={() => setIsEditing(true)}>
                 Edit
               </Button>
             ) : undefined
@@ -713,10 +713,20 @@ const ProvincialOfferDetailsPage = () => {
               <div className="legacy-search-actions">
                 {isEditing ? (
                   <>
-                    <Button kind="primary" onClick={() => void onSave()} disabled={isSubmitting}>
+                    <Button
+                      kind="primary"
+                      size="sm"
+                      onClick={() => void onSave()}
+                      disabled={isSubmitting}
+                    >
                       {isSubmitting ? 'Saving...' : 'Save'}
                     </Button>
-                    <Button kind="secondary" onClick={onCancelEdit} disabled={isSubmitting}>
+                    <Button
+                      kind="tertiary"
+                      size="sm"
+                      onClick={onCancelEdit}
+                      disabled={isSubmitting}
+                    >
                       Cancel
                     </Button>
                   </>

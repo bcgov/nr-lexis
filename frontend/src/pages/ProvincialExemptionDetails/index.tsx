@@ -1406,7 +1406,7 @@ const ProvincialExemptionDetailsPage = () => {
               <>
                 {!editing && canSaveExemption && (
                   <Button
-                    kind="secondary"
+                    kind="tertiary"
                     size="sm"
                     onClick={() => {
                       selectExemptionTab('summary')
@@ -1461,7 +1461,7 @@ const ProvincialExemptionDetailsPage = () => {
                 )}
                 {persistedStatusCode === 'ACT' && canPerform('/approvedExemptionReport') && (
                   <Button
-                    kind="secondary"
+                    kind="tertiary"
                     size="sm"
                     disabled={generatingReport}
                     onClick={() => void onGenerateApprovedReport()}
@@ -1857,7 +1857,7 @@ const ProvincialExemptionDetailsPage = () => {
                                 description={addApplicationDisabledDescription}
                               >
                                 <Button
-                                  kind="secondary"
+                                  kind="tertiary"
                                   size="sm"
                                   disabled={addApplicationDisabled}
                                   onClick={() => void onAddApplication()}
@@ -1985,7 +1985,7 @@ const ProvincialExemptionDetailsPage = () => {
                         {canCreateMinisterialPermit && (
                           <div className="legacy-search-actions">
                             <Button
-                              kind="secondary"
+                              kind="tertiary"
                               size="sm"
                               disabled={creatingPermit}
                               onClick={() => setPermitCreationConfirmationOpen(true)}
@@ -2221,7 +2221,7 @@ const ProvincialExemptionDetailsPage = () => {
                           {canEditExemptionDocuments &&
                             (isEditingDocuments ? (
                               <Button
-                                kind="secondary"
+                                kind="tertiary"
                                 size="sm"
                                 disabled={documentUploadBusy || isRemovingDocumentId !== null}
                                 onClick={onCancelDocumentEditing}
@@ -2406,7 +2406,7 @@ const ProvincialExemptionDetailsPage = () => {
           <p>Eligible application scales from this exemption will be added automatically.</p>
           <div className="permit-creation-confirmation-modal__actions">
             <Button
-              kind="secondary"
+              kind="tertiary"
               disabled={creatingPermit}
               onClick={closePermitCreationConfirmation}
             >

@@ -1510,7 +1510,7 @@ const FederalApplicationDetailsPage = () => {
                           {canEditApplicationDocuments &&
                             (isEditingFederalDocuments ? (
                               <Button
-                                kind="secondary"
+                                kind="tertiary"
                                 size="sm"
                                 disabled={documentUploadBusy || isRemovingDocumentId !== null}
                                 onClick={onCancelFederalDocumentEdit}
@@ -1763,7 +1763,7 @@ const FederalApplicationDetailsPage = () => {
                             </div>
                             <div className="federal-shipping-details__actions">
                               <Button
-                                kind="secondary"
+                                kind="tertiary"
                                 size="sm"
                                 disabled={isSavingMutation}
                                 onClick={onCancelFederalPermitEdit}

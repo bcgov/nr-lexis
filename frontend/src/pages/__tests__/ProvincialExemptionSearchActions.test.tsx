@@ -511,7 +511,7 @@ describe('Provincial Exemption Search Actions', () => {
       name: 'Skip notifications',
     })
     const sendAll = within(notificationDialog).getByRole('button', { name: 'Send all' })
-    expect(skipNotifications).toHaveClass('cds--btn--secondary')
+    expect(skipNotifications).toHaveClass('cds--btn--tertiary')
     expect(sendAll).toHaveClass('cds--btn--primary')
     expect(skipNotifications.parentElement).toHaveClass('lexis-confirmation-modal__actions')
     expect(notificationDialog.querySelector('.cds--modal-footer')).not.toBeInTheDocument()

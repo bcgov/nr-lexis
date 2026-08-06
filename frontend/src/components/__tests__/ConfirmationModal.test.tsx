@@ -37,6 +37,7 @@ describe('ConfirmationModal', () => {
     expect(dialog).toBeVisible()
     expect(dialog).toHaveAccessibleDescription('The application will be sent for review.')
     expect(screen.getByText('The application will be sent for review.')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Cancel' })).toHaveClass('cds--btn--tertiary')
 
     await user.click(screen.getByRole('button', { name: 'Confirm' }))
 
@@ -103,7 +104,7 @@ describe('ConfirmationModal', () => {
     expect(screen.getByRole('button', { name: 'Confirm' })).toBeEnabled()
   })
 
-  it('requests close from the secondary action without confirming', async () => {
+  it('requests close from the supporting action without confirming', async () => {
     const user = userEvent.setup()
     const onConfirm = vi.fn()
     const onClose = vi.fn()
