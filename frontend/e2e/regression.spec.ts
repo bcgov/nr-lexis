@@ -3193,7 +3193,7 @@ test.describe('TEST IDIR admin regression', () => {
               contactName: offerMarker,
               offeringClientNumber: regressionOwnerClientNumber,
               clientNumber: regressionOwnerClientNumber,
-              offerVolume: '1',
+              offerVolume: '1.24',
               purchaseOfferAmount: '100',
               teacReviewDate: '',
               fairOfferIndicator: 'N',
@@ -3222,6 +3222,7 @@ test.describe('TEST IDIR admin regression', () => {
         page,
         `/api/lexis/purchase-offers/${offerNumber}`,
       )
+      expect(Number(currentOffer.payload.offerVolume)).toBe(1.2)
       const offerUpdate = offerUpdateForm(offerNumber, {
         purchaseOfferAmount: '125',
         offerRemark: `${offerMarker} edited`,

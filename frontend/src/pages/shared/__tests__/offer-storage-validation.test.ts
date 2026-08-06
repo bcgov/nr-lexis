@@ -3,6 +3,7 @@ import {
   OFFER_COMPANY_NAME_MAX_LENGTH,
   OFFER_VOLUME_MAX,
   PURCHASE_OFFER_AMOUNT_MAX,
+  formatLegacyOfferVolume,
   offerDecimalStorageFieldError,
   offerTextStorageFieldError,
 } from '@/pages/shared/offer-storage-validation'
@@ -25,6 +26,12 @@ describe('offer storage validation', () => {
     expect(offerDecimalStorageFieldError('1.234', OFFER_VOLUME_MAX, 'Offer volume')).toBe(
       'Offer volume must be a number with up to two decimal places.',
     )
+  })
+
+  it('formats valid offer volumes to the legacy one-decimal scale', () => {
+    expect(formatLegacyOfferVolume('12.34')).toBe('12.3')
+    expect(formatLegacyOfferVolume('12.36')).toBe('12.4')
+    expect(formatLegacyOfferVolume('1.234')).toBe('1.234')
   })
 
   it('enforces US7ASCII and Oracle byte lengths for offer text', () => {

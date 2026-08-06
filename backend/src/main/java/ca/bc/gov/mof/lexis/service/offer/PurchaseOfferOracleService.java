@@ -24,6 +24,7 @@ import ca.bc.gov.mof.lexis.service.mail.RegionalMailRoute;
 import ca.bc.gov.mof.lexis.service.mail.WorkflowEmailEvent;
 import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -145,7 +146,11 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
   @Transactional
   public CreateOfferResult addOffer(CreateOfferRequest request, String userId) {
     CreateOfferRequest normalized = normalizeCreateOfferRequest(request);
+    Double normalizedOfferVolume = normalizeLegacyOfferVolume(normalized.offerVolume());
     List<String> errors = validateCreateOffer(normalized);
+    if (errors.isEmpty()) {
+      validateStorageNumber(errors, normalizedOfferVolume, OFFER_VOLUME_MAX, "Offer volume");
+    }
     if (errors.isEmpty()) {
       errors.addAll(validateCreateOfferReferences(normalized));
     }
@@ -157,7 +162,8 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
     }
 
     Optional<PurchaseOfferRepository.PurchaseOfferInsertRow> inserted =
-        repository.insertOffer(toInsertRecord(normalized, defaultMutationUser(userId)));
+        repository.insertOffer(
+            toInsertRecord(normalized, defaultMutationUser(userId), normalizedOfferVolume));
     Long offerNumber =
         inserted.map(PurchaseOfferRepository.PurchaseOfferInsertRow::exportPurchaseOfferNumber).orElse(null);
 
@@ -251,10 +257,14 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
         mergeMissingValues
             ? mergeUpdateRequest(normalizedInput, current)
             : snapshotUpdateRequest(normalizedInput, current);
+    Double normalizedOfferVolume = normalizeLegacyOfferVolume(updated.offerVolume());
     List<String> errors = validateUpdateIdentity(normalizedInput, current);
     errors.addAll(validateCreateOffer(updated));
     errors.addAll(
         validateChangedReceivedDate(updated.purchaseOfferDate(), current.purchaseOfferDate()));
+    if (errors.isEmpty()) {
+      validateStorageNumber(errors, normalizedOfferVolume, OFFER_VOLUME_MAX, "Offer volume");
+    }
     if (errors.isEmpty()) {
       errors.addAll(validateCreateOfferReferences(updated));
     }
@@ -275,7 +285,9 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
     }
 
     boolean persisted =
-        repository.updateOffer(toUpdateRecord(updated, current, defaultMutationUser(userId)));
+        repository.updateOffer(
+            toUpdateRecord(
+                updated, current, defaultMutationUser(userId), normalizedOfferVolume));
     if (!persisted) {
       return new CreateOfferResult(
           false,
@@ -291,7 +303,8 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
     }
 
     boolean withdrawn = current.offerWithdrawalDate() == null && updated.offerWithdrawalDate() != null;
-    boolean materialUpdate = hasLegacyNotificationUpdate(current, updated);
+    boolean materialUpdate =
+        hasLegacyNotificationUpdate(current, updated, normalizedOfferVolume);
     EmailResult email =
         materialUpdate
             ? sendOfferEmail(
@@ -636,7 +649,7 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
   }
 
   private PurchaseOfferRepository.PurchaseOfferInsertRecord toInsertRecord(
-      CreateOfferRequest request, String entryUserId) {
+      CreateOfferRequest request, String entryUserId, Double normalizedOfferVolume) {
     return new PurchaseOfferRepository.PurchaseOfferInsertRecord(
         request.packageNumber(),
         request.companyName(),
@@ -658,13 +671,14 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
         request.pickupLocation(),
         request.offerCondition(),
         request.applicationNumber(),
-        request.offerVolume());
+        normalizedOfferVolume);
   }
 
   private PurchaseOfferRepository.PurchaseOfferUpdateRecord toUpdateRecord(
       CreateOfferRequest request,
       PurchaseOfferRepository.PurchaseOfferUpdateSourceRow current,
-      String updateUserId) {
+      String updateUserId,
+      Double normalizedOfferVolume) {
     return new PurchaseOfferRepository.PurchaseOfferUpdateRecord(
         request.exportPurchaseOfferNumber(),
         request.packageNumber(),
@@ -686,7 +700,7 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
         current.entryUserId(),
         current.entryTimestamp(),
         updateUserId,
-        request.offerVolume());
+        normalizedOfferVolume);
   }
 
   private CreateOfferRequest mergeUpdateRequest(
@@ -798,14 +812,23 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
   }
 
   private boolean hasLegacyNotificationUpdate(
-      PurchaseOfferRepository.PurchaseOfferUpdateSourceRow current, CreateOfferRequest updated) {
+      PurchaseOfferRepository.PurchaseOfferUpdateSourceRow current,
+      CreateOfferRequest updated,
+      Double normalizedOfferVolume) {
     return legacyNumberChanged(current.purchaseOfferAmount(), updated.purchaseOfferAmount())
         || !equalsNullable(current.purchaseOfferDate(), updated.purchaseOfferDate())
         || !equalsNullable(current.offerWithdrawalDate(), updated.offerWithdrawalDate())
         || legacyTextChanged(current.withdrawReason(), updated.withdrawReason())
         || legacyTextChanged(current.pickupLocation(), updated.pickupLocation())
         || legacyTextChanged(current.offerCondition(), updated.offerCondition())
-        || legacyNumberChanged(current.offerVolume(), updated.offerVolume());
+        || legacyNumberChanged(current.offerVolume(), normalizedOfferVolume);
+  }
+
+  private Double normalizeLegacyOfferVolume(Double value) {
+    if (value == null || !Double.isFinite(value)) {
+      return value;
+    }
+    return BigDecimal.valueOf(value).setScale(1, RoundingMode.HALF_EVEN).doubleValue();
   }
 
   private boolean legacyNumberChanged(Double current, Double updated) {
