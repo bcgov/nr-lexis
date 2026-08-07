@@ -66,6 +66,26 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     expect(mockedPreviewUpload).not.toHaveBeenCalled()
   })
 
+  it('shows the compact filename loading row while the spreadsheet is validated', async () => {
+    mockedPreviewUpload.mockImplementation(() => new Promise(() => undefined))
+    render(<RtmEmsLogAmvUploadPage />)
+    const workbook = new File([new Uint8Array([1])], 'Filename.xlsx', {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    })
+
+    await userEvent.upload(
+      screen.getByLabelText('Average monthly values upload spreadsheet'),
+      workbook,
+    )
+
+    expect(screen.getByText('Filename.xlsx')).toBeVisible()
+    expect(screen.getByText('Validating Filename.xlsx')).toBeInTheDocument()
+    expect(
+      screen.queryByLabelText('Selected average monthly values upload file'),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Review' })).not.toBeInTheDocument()
+  })
+
   it('groups pine and hides fixed legacy grades while preserving the workbook submission', async () => {
     mockedPreviewUpload.mockResolvedValue({
       status: 'accepted',

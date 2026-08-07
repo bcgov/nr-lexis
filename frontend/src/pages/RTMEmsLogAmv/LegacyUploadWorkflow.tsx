@@ -22,6 +22,7 @@ import {
   Button,
   Column,
   Grid,
+  InlineLoading,
   Select,
   SelectItem,
   Table,
@@ -453,12 +454,10 @@ const ValidationIssuesTable = ({ errors }: { errors: string[] }) => {
 }
 
 const UploadValidationStatus = ({
-  isPreviewing,
   uploadError,
   previewResult,
   selectedUploadFile,
 }: {
-  isPreviewing: boolean
   uploadError: string
   previewResult: RtmEmsLogAmvUploadPreview | null
   selectedUploadFile: File | null
@@ -467,14 +466,6 @@ const UploadValidationStatus = ({
     return (
       <UploadValidationMessage kind="error" title="File not ready">
         <p>{uploadError}</p>
-      </UploadValidationMessage>
-    )
-  }
-
-  if (isPreviewing) {
-    return (
-      <UploadValidationMessage kind="info" title="Validating spreadsheet">
-        <p>Checking the uploaded workbook before review.</p>
       </UploadValidationMessage>
     )
   }
@@ -920,36 +911,46 @@ const RtmEmsLogAmvUploadPage = () => {
                 </div>
               </div>
 
-              {selectedUploadFile && (
-                <div
-                  className="admin-upload-file-chip"
-                  aria-label="Selected average monthly values upload file"
-                >
-                  <Document size={16} aria-hidden="true" />
-                  <span className="admin-upload-file-chip__name">{selectedUploadFile.name}</span>
-                  <span className="admin-upload-file-chip__size">
-                    {selectedUploadFile.size.toLocaleString()} bytes
-                  </span>
-                  <button
-                    type="button"
-                    className="admin-upload-file-chip__remove"
-                    aria-label="Clear selected file"
-                    onClick={clearUploadState}
+              {selectedUploadFile &&
+                (isPreviewing ? (
+                  <div className="rtm-amv-upload-loading" aria-busy="true">
+                    <span className="rtm-amv-upload-loading__name">{selectedUploadFile.name}</span>
+                    <InlineLoading
+                      className="rtm-amv-upload-loading__spinner"
+                      description={`Validating ${selectedUploadFile.name}`}
+                    />
+                  </div>
+                ) : (
+                  <div
+                    className="admin-upload-file-chip"
+                    aria-label="Selected average monthly values upload file"
                   >
-                    <Close size={16} />
-                  </button>
-                </div>
-              )}
+                    <Document size={16} aria-hidden="true" />
+                    <span className="admin-upload-file-chip__name">{selectedUploadFile.name}</span>
+                    <span className="admin-upload-file-chip__size">
+                      {selectedUploadFile.size.toLocaleString()} bytes
+                    </span>
+                    <button
+                      type="button"
+                      className="admin-upload-file-chip__remove"
+                      aria-label="Clear selected file"
+                      onClick={clearUploadState}
+                    >
+                      <Close size={16} />
+                    </button>
+                  </div>
+                ))}
 
-              <UploadValidationStatus
-                isPreviewing={isPreviewing}
-                uploadError={uploadError}
-                previewResult={previewResult}
-                selectedUploadFile={selectedUploadFile}
-              />
+              {!isPreviewing && (
+                <UploadValidationStatus
+                  uploadError={uploadError}
+                  previewResult={previewResult}
+                  selectedUploadFile={selectedUploadFile}
+                />
+              )}
             </section>
 
-            {selectedUploadFile && (
+            {isReviewReady && (
               <div className="admin-upload-fspts-button-row">
                 <Button
                   kind="primary"
