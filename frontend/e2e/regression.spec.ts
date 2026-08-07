@@ -2742,8 +2742,8 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(page.getByLabel('Listing from date')).toBeVisible()
     await expect(page.getByLabel('Listing to date')).toBeVisible()
     await expect(page.getByRole('combobox', { name: 'Output format' })).toHaveValue('PDF')
-    await expect(page.getByRole('button', { name: 'Generate Report' })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Reset Fields' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Generate report' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Clear all' })).toBeVisible()
   })
 
   test('generates advertising list PDF report', async () => {

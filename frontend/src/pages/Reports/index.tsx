@@ -3,9 +3,11 @@ import { useParams, useSearchParams } from 'react-router-dom'
 import { Button, Column, Grid, TextArea, TextInput, Tile } from '@carbon/react'
 import { AppNotification } from '../../components/AppNotification'
 import EmptyState from '@/components/EmptyState'
+import IsoDatePicker from '@/components/IsoDatePicker'
 import PageHeader from '@/components/PageHeader'
 import SearchableSelect from '../../components/SearchableSelect'
 import RegionMultiSelect from '@/components/RegionMultiSelect'
+import { isValidIsoDate } from '@/pages/shared/create-form-utils'
 import { setSearchParam } from '@/pages/shared/search-query-utils'
 import { useAuth } from '@/context/auth/useAuth'
 import { ReportRequestError, runReport } from '@/service/report-service'
@@ -1117,6 +1119,15 @@ const ReportsPage = () => {
   const reportGenerationDisabled = requiredReportOptionsLoading || requiredReportOptionsFailed
 
   const defaultReportRegion = reportOptionSourcesByKey.report?.defaultRegion ?? ''
+  const hasInvalidReportDate = selectedReport.fields.some(
+    (field) =>
+      field.type === 'date' &&
+      !isValidIsoDate(
+        (hasOwnValue(selectedReportValues, field.key)
+          ? selectedReportValues[field.key]
+          : field.defaultValue) ?? '',
+      ),
+  )
   const currentAdvertisingPeriod = useMemo(
     () => resolveCurrentAdvertisingPeriod(reportOptionSourcesByKey.report?.currentSchedules ?? []),
     [reportOptionSourcesByKey.report?.currentSchedules],
@@ -1513,11 +1524,25 @@ const ReportsPage = () => {
                     )
                   }
 
+                  if (field.type === 'date') {
+                    return (
+                      <IsoDatePicker
+                        key={field.key}
+                        id={`${selectedReport.id}-${field.key}`}
+                        labelText={field.label}
+                        value={resolvedCurrentValue}
+                        invalid={!isValidIsoDate(resolvedCurrentValue)}
+                        invalidText="Date must be YYYY-MM-DD"
+                        onChange={(value) => onUpdateField(field.key, value)}
+                      />
+                    )
+                  }
+
                   return (
                     <TextInput
                       key={field.key}
                       id={`${selectedReport.id}-${field.key}`}
-                      type={field.type === 'date' ? 'date' : 'text'}
+                      type="text"
                       labelText={field.label}
                       value={resolvedCurrentValue}
                       placeholder={field.placeholder}
@@ -1539,20 +1564,26 @@ const ReportsPage = () => {
                 role="group"
                 aria-label="Report actions"
               >
-                <Button kind="tertiary" onClick={onResetFields}>
-                  Reset Fields
+                <Button kind="tertiary" size="md" disabled={isGenerating} onClick={onResetFields}>
+                  Clear all
                 </Button>
                 {selectedReport.id === 'biweeklyListing' && currentAdvertisingPeriod && (
-                  <Button kind="tertiary" onClick={onUseCurrentAdvertisingPeriod}>
+                  <Button
+                    kind="tertiary"
+                    size="md"
+                    disabled={isGenerating}
+                    onClick={onUseCurrentAdvertisingPeriod}
+                  >
                     Use current advertising period
                   </Button>
                 )}
                 <Button
                   kind="primary"
+                  size="md"
                   onClick={() => void onOpenReportRequest()}
-                  disabled={isGenerating || reportGenerationDisabled}
+                  disabled={isGenerating || reportGenerationDisabled || hasInvalidReportDate}
                 >
-                  {isGenerating ? 'Generating Report...' : 'Generate Report'}
+                  {isGenerating ? 'Generating report…' : 'Generate report'}
                 </Button>
               </div>
               {launchErrorMessage && (

@@ -74,6 +74,10 @@ describe('Landing auth flow smoke', () => {
     ).toBeInTheDocument()
 
     const loginButton = screen.getByRole('button', { name: 'Log in with IDIR' })
+    expect(loginButton).toHaveClass('cds--btn--md')
+    expect(screen.getByRole('button', { name: 'Log in with Business BCeID' })).toHaveClass(
+      'cds--btn--md',
+    )
     await userEvent.click(loginButton)
 
     expect(login).toHaveBeenCalledWith('idir')

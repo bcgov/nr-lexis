@@ -77,6 +77,7 @@ const LandingPage = () => {
                 <>
                   <Button
                     kind="primary"
+                    size="md"
                     renderIcon={Login}
                     onClick={() => void onLogin('idir')}
                     disabled={isLoading || !usesExternalLogin}
@@ -86,6 +87,7 @@ const LandingPage = () => {
                   </Button>
                   <Button
                     kind="tertiary"
+                    size="md"
                     renderIcon={Login}
                     onClick={() => void onLogin('business-bceid')}
                     disabled={isLoading || !usesExternalLogin}

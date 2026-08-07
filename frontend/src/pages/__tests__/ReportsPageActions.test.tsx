@@ -152,7 +152,7 @@ describe('Reports Page Actions', () => {
       screen.getByText('No report actions are available for the current session.'),
     ).toBeVisible()
     expect(screen.queryByLabelText('Report variant')).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Generate Report' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Generate report' })).not.toBeInTheDocument()
     expect(screen.queryByText(/Accessible reports:/)).not.toBeInTheDocument()
     expect(screen.queryByText('Not Granted')).not.toBeInTheDocument()
   })
@@ -179,12 +179,14 @@ describe('Reports Page Actions', () => {
       within(reportActions)
         .getAllByRole('button')
         .map((button) => button.textContent),
-    ).toEqual(['Reset Fields', 'Generate Report'])
-    expect(within(reportActions).getByRole('button', { name: 'Reset Fields' })).toHaveClass(
+    ).toEqual(['Clear all', 'Generate report'])
+    expect(within(reportActions).getByRole('button', { name: 'Clear all' })).toHaveClass(
       'cds--btn--tertiary',
+      'cds--btn--md',
     )
-    expect(within(reportActions).getByRole('button', { name: 'Generate Report' })).toHaveClass(
+    expect(within(reportActions).getByRole('button', { name: 'Generate report' })).toHaveClass(
       'cds--btn--primary',
+      'cds--btn--md',
     )
     expect(screen.getByText('Exemption volumes, balances, and status.')).toBeVisible()
     expect(screen.queryByText('Application Report')).not.toBeInTheDocument()
@@ -210,6 +212,33 @@ describe('Reports Page Actions', () => {
     await screen.findByRole('region', { name: 'Exemption Report' })
     expect(screen.getByLabelText('Client number')).toHaveValue('00012345')
     expect(screen.getByLabelText('Listing from date')).toHaveValue('2026-01-15')
+    expect(screen.getByLabelText('Listing from date')).toHaveAttribute('placeholder', 'YYYY-MM-DD')
+  })
+
+  it('rejects invalid report dates in the shared Carbon date field', async () => {
+    mockReportPermissions((action: string) => action === '/exemptionReport')
+    const values = encodeURIComponent(JSON.stringify({ listingFromDate: '2026-02-30' }))
+
+    render(
+      <MemoryRouter initialEntries={[`/reports/exemptionReport?values=${values}`]}>
+        <Routes>
+          <Route path="/reports/:reportId" element={<ReportsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const listingFromDate = await screen.findByLabelText('Listing from date')
+    expect(listingFromDate).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByText('Date must be YYYY-MM-DD')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Generate report' })).toBeDisabled()
+
+    await userEvent.clear(listingFromDate)
+    await userEvent.type(listingFromDate, '2026-02-28')
+
+    await waitFor(() => {
+      expect(listingFromDate).not.toHaveAttribute('aria-invalid', 'true')
+      expect(screen.getByRole('button', { name: 'Generate report' })).toBeEnabled()
+    })
   })
 
   it('loads report field options from the report options endpoint only', async () => {
@@ -253,7 +282,7 @@ describe('Reports Page Actions', () => {
     expect(mockedFetchReportOptions).toHaveBeenCalledTimes(1)
     await chooseComboBoxOption('Exemption reason', 'Section 128')
     await chooseComboBoxOption('Growth type', 'Old Growth')
-    await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Generate report' }))
 
     await waitFor(() => {
       expect(mockedRunReport).toHaveBeenCalledWith({
@@ -293,7 +322,7 @@ describe('Reports Page Actions', () => {
     expect(getComboBox('Region')).toBeDisabled()
     expect(getComboBox('Exemption reason')).toBeDisabled()
     expect(getComboBox('Output format')).toBeEnabled()
-    expect(screen.getByRole('button', { name: 'Generate Report' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Generate report' })).toBeDisabled()
     expect(mockedRunReport).not.toHaveBeenCalled()
     warnSpy.mockRestore()
   })
@@ -317,8 +346,8 @@ describe('Reports Page Actions', () => {
     expect(getComboBox('Exemption reason')).toHaveValue('')
     expect(getComboBox('Growth type')).toBeDisabled()
     expect(screen.queryByText('Report options unavailable')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Generate Report' })).toBeEnabled()
-    await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
+    expect(screen.getByRole('button', { name: 'Generate report' })).toBeEnabled()
+    await userEvent.click(screen.getByRole('button', { name: 'Generate report' }))
     await waitFor(() => {
       expect(mockedRunReport).toHaveBeenCalledWith({
         reportId: 'exemptionReport',
@@ -360,7 +389,7 @@ describe('Reports Page Actions', () => {
     expect(screen.queryByRole('option', { name: 'All values' })).not.toBeInTheDocument()
     await chooseComboBoxOption('Jurisdiction', 'Federal Legacy')
     await chooseComboBoxOption('Advertising date', '2026-06-29')
-    await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Generate report' }))
 
     await waitFor(() => {
       expect(mockedRunReport).toHaveBeenCalledWith({
@@ -406,7 +435,7 @@ describe('Reports Page Actions', () => {
       expect(getComboBox('Advertising date')).toHaveValue('2026-06-15')
     })
     expect(getComboBox('Jurisdiction')).toHaveValue('Provincial')
-    await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Generate report' }))
 
     await waitFor(() => {
       expect(mockedRunReport).toHaveBeenCalledWith({
@@ -451,7 +480,7 @@ describe('Reports Page Actions', () => {
     await waitFor(() => {
       expect(getComboBox('Advertising date')).toHaveValue('2026-06-15')
     })
-    await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Generate report' }))
 
     await waitFor(() => {
       expect(mockedRunReport).toHaveBeenCalledWith({
@@ -498,7 +527,7 @@ describe('Reports Page Actions', () => {
     expect(
       screen.getByRole('option', { name: 'Kootenay-Boundary Natural Resource Region' }),
     ).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Generate report' }))
 
     await waitFor(() => {
       expect(
@@ -533,7 +562,7 @@ describe('Reports Page Actions', () => {
     await waitFor(() => {
       expect(mockedFetchReportOptions).toHaveBeenCalledTimes(1)
     })
-    await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Generate report' }))
 
     await waitFor(() => {
       expect(mockedRunReport).toHaveBeenCalledWith({
@@ -599,7 +628,7 @@ describe('Reports Page Actions', () => {
     await waitFor(() => {
       expect(getComboBox('Permit status')).toHaveValue('Complete')
     })
-    await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Generate report' }))
 
     await waitFor(() => {
       expect(mockedRunReport).toHaveBeenCalledWith({
@@ -639,7 +668,7 @@ describe('Reports Page Actions', () => {
     await waitFor(() => {
       expect(getComboBox('Permit status')).toHaveValue('Complete')
     })
-    await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Generate report' }))
 
     await waitFor(() => {
       expect(mockedRunReport).toHaveBeenCalledWith({
@@ -674,7 +703,7 @@ describe('Reports Page Actions', () => {
     await userEvent.type(screen.getByLabelText('Forest file ID'), 'ff456')
     expect(screen.getByLabelText('Timber mark')).toBeDisabled()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Generate report' }))
 
     await waitFor(() => {
       expect(mockedRunReport).toHaveBeenCalledWith({
@@ -735,7 +764,7 @@ describe('Reports Page Actions', () => {
     await chooseComboBoxOption('Final destination country', 'New Zealand')
     await chooseComboBoxOption('Customs port of export', 'Vancouver')
     await chooseComboBoxOption('Permit status', 'Complete')
-    await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Generate report' }))
 
     await waitFor(() => {
       expect(mockedRunReport).toHaveBeenCalledWith({
@@ -786,7 +815,7 @@ describe('Reports Page Actions', () => {
     expect(getComboBox('Client type')).toHaveValue('Permit holder')
     await chooseComboBoxOption('Exemption type', 'Ministerial')
     await chooseComboBoxOption('Output format', 'XLS')
-    await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Generate report' }))
 
     await waitFor(() => {
       expect(mockedRunReport).toHaveBeenCalledWith({
@@ -821,7 +850,7 @@ describe('Reports Page Actions', () => {
 
     expect(screen.getByLabelText('Issued to date')).toHaveValue('2027-02-14')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Generate report' }))
 
     await waitFor(() => {
       expect(mockedRunReport).toHaveBeenCalledWith({
@@ -860,7 +889,7 @@ describe('Reports Page Actions', () => {
     await chooseComboBoxOption('Report variant', 'Timber marks report')
     await userEvent.type(screen.getByLabelText('Timber mark 1'), 'tm-a')
     await userEvent.type(screen.getByLabelText('Timber mark 2'), 'tm-b')
-    await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Generate report' }))
 
     await waitFor(() => {
       expect(mockedRunReport).toHaveBeenCalledWith({
@@ -896,7 +925,7 @@ describe('Reports Page Actions', () => {
     if (variantLabel !== 'Permit details report') {
       await chooseComboBoxOption('Report variant', variantLabel)
     }
-    await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Generate report' }))
 
     await waitFor(() => {
       expect(mockedRunReport).toHaveBeenCalledWith(
@@ -936,7 +965,7 @@ describe('Reports Page Actions', () => {
     expect(screen.getByRole('option', { name: 'Federal Legacy' })).toBeInTheDocument()
 
     await chooseComboBoxOption('Jurisdiction', 'Federal Legacy')
-    await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Generate report' }))
 
     await waitFor(() => {
       expect(mockedRunReport).toHaveBeenCalledWith({
@@ -982,7 +1011,7 @@ describe('Reports Page Actions', () => {
     await chooseComboBoxOption('Output format', 'CSV')
     await userEvent.type(screen.getByLabelText('Listing from date'), '2026-06-01')
     await userEvent.type(screen.getByLabelText('Listing to date'), '2026-06-30')
-    await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Generate report' }))
 
     await waitFor(() => {
       expect(mockedRunReport).toHaveBeenCalledWith({
@@ -1029,7 +1058,7 @@ describe('Reports Page Actions', () => {
 
     expect(screen.getByLabelText('Listing from date')).toHaveValue('2026-07-02')
     expect(screen.getByLabelText('Listing to date')).toHaveValue('2026-07-07')
-    await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Generate report' }))
 
     await waitFor(() => {
       expect(mockedRunReport).toHaveBeenCalledWith({
@@ -1068,7 +1097,7 @@ describe('Reports Page Actions', () => {
     await userEvent.clear(fromDate)
     await userEvent.type(toDate, '2026-07-07')
     await userEvent.clear(toDate)
-    await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Generate report' }))
 
     await waitFor(() => {
       expect(mockedRunReport).toHaveBeenCalledWith({
@@ -1115,7 +1144,7 @@ describe('Reports Page Actions', () => {
 
     await chooseComboBoxOption('Output format', 'CSV')
     await userEvent.click(screen.getByRole('button', { name: 'Use current advertising period' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Generate report' }))
 
     await waitFor(() => {
       expect(mockedRunReport).toHaveBeenCalledWith({
@@ -1164,7 +1193,7 @@ describe('Reports Page Actions', () => {
     await chooseComboBoxOption('Jurisdiction', 'Federal')
     await userEvent.type(screen.getByLabelText('Listing from date'), '2026-06-01')
     await userEvent.type(screen.getByLabelText('Listing to date'), '2026-06-30')
-    await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Generate report' }))
 
     await waitFor(() => {
       expect(mockedRunReport).toHaveBeenCalledWith({
@@ -1198,7 +1227,7 @@ describe('Reports Page Actions', () => {
     )
 
     await screen.findByRole('heading', { name: 'Advertising List' })
-    await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Generate report' }))
 
     await waitFor(() => {
       expect(
@@ -1221,7 +1250,7 @@ describe('Reports Page Actions', () => {
     )
 
     await screen.findByRole('heading', { name: 'Advertising List' })
-    await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Generate report' }))
 
     expect(mockedRunReport).not.toHaveBeenCalled()
     expect(
@@ -1247,7 +1276,7 @@ describe('Reports Page Actions', () => {
     expect(screen.queryByLabelText('Approval To Date')).not.toBeInTheDocument()
     await userEvent.type(screen.getByLabelText('Listing from date'), '2026-01-01')
     await userEvent.type(screen.getByLabelText('Listing to date'), '2026-01-31')
-    await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Generate report' }))
 
     await waitFor(() => {
       expect(mockedRunReport).toHaveBeenCalledWith({
@@ -1274,7 +1303,7 @@ describe('Reports Page Actions', () => {
     await screen.findByRole('heading', { name: 'Application Report' })
     await userEvent.type(screen.getByLabelText('Received from date'), '2026-01-01')
     await chooseComboBoxOption('Output format', 'CSV')
-    await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Generate report' }))
 
     await waitFor(() => {
       expect(mockedRunReport).toHaveBeenCalledWith({
@@ -1303,7 +1332,7 @@ describe('Reports Page Actions', () => {
 
     await screen.findByRole('heading', { name: 'Application Report' })
     await userEvent.type(screen.getByLabelText('Received from date'), '2026-01-01')
-    await userEvent.click(screen.getByRole('button', { name: 'Generate Report' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Generate report' }))
 
     await waitFor(() => {
       expect(mockedTriggerBrowserDownload).toHaveBeenCalledWith(expect.any(Blob), 'report.pdf')

@@ -1060,6 +1060,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
             <div className="admin-policy-table-actions">
               <Button
                 kind="primary"
+                size="md"
                 renderIcon={Add}
                 onClick={openPolicyEditor}
                 disabled={
@@ -1175,6 +1176,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
             <div className="admin-policy-table-actions">
               <Button
                 kind="primary"
+                size="md"
                 renderIcon={Add}
                 onClick={openPolicyEditor}
                 disabled={isLoadingPolicies || isMutatingPolicies || !canManageFilPolicy}

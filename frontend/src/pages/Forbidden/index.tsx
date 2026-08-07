@@ -31,11 +31,17 @@ const ForbiddenPage = () => {
             </div>
 
             <div className="landing-actions">
-              <Button kind="primary" renderIcon={ArrowRight} onClick={() => navigate(defaultRoute)}>
+              <Button
+                kind="primary"
+                size="md"
+                renderIcon={ArrowRight}
+                onClick={() => navigate(defaultRoute)}
+              >
                 Go to my landing page
               </Button>
               <Button
                 kind="tertiary"
+                size="md"
                 renderIcon={Logout}
                 onClick={() => {
                   void logout()

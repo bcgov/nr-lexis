@@ -1217,10 +1217,10 @@ $notification-types: 'error', 'info', 'success', 'warning';
 }
 
 .landing-actions .cds--btn {
-  flex: 0 1 17rem;
-  width: 17rem;
+  flex: 0 1 18rem;
+  width: 18rem;
   max-width: 100%;
-  min-height: 3rem;
+  min-height: 2.5rem;
   border-radius: 4px;
   font-size: 0.875rem;
   justify-content: space-between;
@@ -1542,10 +1542,6 @@ $notification-types: 'error', 'info', 'success', 'warning';
 
 .offer-application-link-field .cds--label {
   color: var(--csp-text-primary);
-}
-
-.reports-page {
-  row-gap: 1.5rem;
 }
 
 .report-config-panel.cds--tile {

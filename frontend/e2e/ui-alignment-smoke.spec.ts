@@ -309,8 +309,11 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     ).toBeVisible()
     await expect(page.locator('.app-shell')).toBeVisible()
     await expect(page.getByTestId('forbidden-page')).toHaveClass(/landing-grid-container/)
-    await expect(page.getByRole('button', { name: 'Go to my landing page' })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Go to my landing page' })).toHaveCSS(
+      'height',
+      '40px',
+    )
+    await expect(page.getByRole('button', { name: 'Sign out' })).toHaveCSS('height', '40px')
     const pageWidth = await page.evaluate(() => ({
       clientWidth: document.documentElement.clientWidth,
       scrollWidth: document.documentElement.scrollWidth,
@@ -1221,9 +1224,20 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(page.getByRole('heading', { level: 1, name: 'Application Report' })).toBeVisible()
     const reportPanel = page.getByRole('region', { name: 'Application Report' })
     const reportFields = reportPanel.locator('.report-config-fields')
+    const reportActions = page.getByRole('group', { name: 'Report actions' })
     await expect(reportPanel).toHaveCSS('border-top-width', '1px')
     await expect(reportPanel).toHaveCSS('border-radius', '4px')
-    await expect(page.getByRole('group', { name: 'Report actions' })).toBeVisible()
+    await expect(page.locator('.reports-page')).toHaveCSS('row-gap', '40px')
+    await expect(reportActions).toBeVisible()
+    await expect(reportActions.getByRole('button', { name: 'Clear all' })).toHaveCSS(
+      'height',
+      '40px',
+    )
+    await expect(reportActions.getByRole('button', { name: 'Generate report' })).toHaveCSS(
+      'height',
+      '40px',
+    )
+    await expect(page.getByLabel('Received from date')).toHaveAttribute('placeholder', 'YYYY-MM-DD')
     expect(
       await reportFields.evaluate(
         (grid) => getComputedStyle(grid).gridTemplateColumns.split(' ').length,
@@ -1346,6 +1360,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     ).toBeVisible()
     const feeAddButton = page.getByRole('button', { name: 'Add fee policy' })
     await expect(feeAddButton).toBeEnabled()
+    await expect(feeAddButton).toHaveCSS('height', '40px')
     const feeLayout = await page.locator('.admin-policy-workspace').evaluate((workspace) => {
       const button = workspace.querySelector('.admin-policy-table-actions .cds--btn')
       const tableFrame = workspace.querySelector('.legacy-search-table-frame')
@@ -1387,6 +1402,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await page.goto('/admin/policies/fil', { waitUntil: 'domcontentloaded' })
     const filAddButton = page.getByRole('button', { name: 'Add fee in lieu policy' })
     await expect(filAddButton).toBeEnabled()
+    await expect(filAddButton).toHaveCSS('height', '40px')
     await filAddButton.click()
     const filDialog = page.getByRole('dialog', { name: 'Add fee in lieu policy' })
     await expect(filDialog).toBeVisible()
