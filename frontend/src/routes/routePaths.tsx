@@ -32,7 +32,6 @@ const ProvincialPermitDetailsPage = lazy(() => import('@/pages/ProvincialPermitD
 const ProvincialReviewPage = lazy(() => import('@/pages/ProvincialReview'))
 const ProvincialSummaryPage = lazy(() => import('@/pages/ProvincialSummary'))
 const ReportsPage = lazy(() => import('@/pages/Reports'))
-const RTMEmsLogAmvPage = lazy(() => import('@/pages/RTMEmsLogAmv'))
 const RTMEmsLogAmvUploadPage = lazy(() => import('@/pages/RTMEmsLogAmv/LegacyUploadWorkflow'))
 
 const Layout = ({ children }: { children: ReactNode }) => (
@@ -449,19 +448,17 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
     isNavigation: false,
   },
   {
+    // The GUI table is retained in source but intentionally not exposed while the
+    // spreadsheet upload workflow is the approved AMV experience.
     path: '/admin/rtm/emslogamv',
-    id: 'Admin - Average Monthly Values',
+    id: 'Legacy Average Market Values Redirect',
     requiredActions: ['/lexisAgentAdmin'],
-    element: (
-      <Layout>
-        <RTMEmsLogAmvPage />
-      </Layout>
-    ),
+    element: <Navigate to="/admin/rtm/emslogamv/upload" replace />,
     isNavigation: false,
   },
   {
-    // INTENTIONAL_LEGACY_DIVERGENCE(RTM_AMV_TRANSITIONAL_UPLOAD):
-    // The workbook workflow is temporarily available beside the modern grid for client evaluation.
+    // INTENTIONAL_LEGACY_DIVERGENCE(RTM_AMV_SPREADSHEET_UPLOAD):
+    // The approved AMV experience uses the workbook workflow while the GUI table is disabled.
     path: '/admin/rtm/emslogamv/upload',
     id: 'Admin - Average market values',
     requiredActions: ['/lexisAgentAdmin'],

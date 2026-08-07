@@ -1,7 +1,4 @@
-/**
- * AMV workbook upload and review workflow, exposed beside the editable grid during
- * the client evaluation period.
- */
+/** Spreadsheet-only AMV upload and review workflow. */
 
 import {
   useEffect,
