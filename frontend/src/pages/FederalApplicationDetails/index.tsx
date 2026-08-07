@@ -940,7 +940,6 @@ const FederalApplicationDetailsPage = () => {
               <TabList
                 aria-label="Federal application detail sections"
                 contained
-                size="md"
                 className="application-tabs__list application-detail-tab-list"
               >
                 <Tab>Owner</Tab>

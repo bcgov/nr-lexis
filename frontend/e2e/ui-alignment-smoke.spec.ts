@@ -328,6 +328,13 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       page.getByRole('heading', { level: 1, name: 'Provincial application search' }),
     ).toBeVisible()
     await expect(page.locator('.csp-header-prefix')).toHaveText('LEXIS')
+    const navigationToggle = page.getByRole('button', { name: 'Close menu' })
+    await expect(navigationToggle).toBeVisible()
+    await expect(navigationToggle).toHaveCSS('width', '48px')
+    await expect(navigationToggle).toHaveCSS('height', '48px')
+    await expect(page.locator('.csp-app-header > #navigation-toggle')).toHaveCount(1)
+    await expect(page.locator('.csp-side-nav > .csp-side-nav__toggle')).toHaveCount(0)
+    await expect(page.getByRole('link', { name: 'Applications', exact: true })).toBeVisible()
     await expect(page.locator('.lexis-page-header__subtitle')).toContainText(
       'Find provincial applications',
     )
@@ -547,7 +554,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     )
     await expect(page.locator('html')).toHaveAttribute('data-carbon-theme', 'g100')
 
-    await page.getByRole('button', { name: 'Collapse side navigation' }).click()
+    await page.getByRole('button', { name: 'Close menu' }).click()
     await expect(page.locator('.app-shell')).toHaveClass(/is-side-nav-collapsed/)
     const collapsedNav = page.locator('.csp-side-nav')
     await expect(collapsedNav).toHaveCSS('width', '48px')
@@ -596,6 +603,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(fieldInput).toHaveCSS('font-size', '16px')
 
     const clearButton = page.getByRole('button', { name: 'Clear all', exact: true })
+    await expect(clearButton).toHaveCSS('height', '40px')
     await clearButton.hover()
     await expect(clearButton).toHaveCSS('background-color', 'rgb(235, 242, 252)')
     await expect(clearButton).toHaveCSS('border-color', 'rgb(15, 98, 254)')
@@ -863,7 +871,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await page.goto('/provincial/application', { waitUntil: 'domcontentloaded' })
 
     const sideNav = page.getByRole('navigation', { name: 'Side navigation', includeHidden: true })
-    const openNavigation = page.getByRole('button', { name: 'Open navigation menu' })
+    const openNavigation = page.getByRole('button', { name: 'Open menu' })
 
     await expect(openNavigation).toBeVisible()
     await expect(openNavigation).toHaveAttribute('aria-expanded', 'false')
@@ -903,7 +911,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
 
     await openNavigation.click()
 
-    await expect(page.getByRole('button', { name: 'Close navigation menu' })).toHaveAttribute(
+    await expect(page.getByRole('button', { name: 'Close menu' })).toHaveAttribute(
       'aria-expanded',
       'true',
     )
@@ -914,9 +922,9 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       'page',
     )
 
-    await page.getByRole('button', { name: 'Close navigation menu' }).click()
+    await page.getByRole('button', { name: 'Close menu' }).click()
 
-    await expect(page.getByRole('button', { name: 'Open navigation menu' })).toHaveAttribute(
+    await expect(page.getByRole('button', { name: 'Open menu' })).toHaveAttribute(
       'aria-expanded',
       'false',
     )
@@ -1002,7 +1010,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await backLink.hover()
     await expect(backLink).toHaveCSS('text-decoration-line', 'underline')
     await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1)
-    await expect(page.locator('.detail-page-grid')).toHaveCSS('row-gap', '16px')
+    await expect(page.locator('.detail-page-grid')).toHaveCSS('row-gap', '40px')
     await expect(page.locator('.detail-page-header .lexis-page-header')).toHaveCSS(
       'row-gap',
       '12px',
@@ -1031,7 +1039,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     })
 
     expect(detailHeaderLayout.breadcrumbInset).toBe(44)
-    expect(detailHeaderLayout.breadcrumbGap).toBeLessThanOrEqual(24)
+    expect(detailHeaderLayout.breadcrumbGap).toBe(40)
 
     await page.setViewportSize({ width: 390, height: 844 })
     await expect(page.getByRole('heading', { level: 1, name: 'Offer 81001' })).toBeVisible()
@@ -1081,6 +1089,15 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       .locator('..')
       .locator('.detail-field-grid')
     await expect(ownerFields).toBeVisible()
+    await expect(page.locator('.application-detail-tab-list')).toHaveCSS('height', '48px')
+    await expect(page.locator('.application-detail-tab-list [role="tab"]').first()).toHaveCSS(
+      'height',
+      '48px',
+    )
+    await expect(page.locator('.application-detail-tab-panel .cds--tile').first()).toHaveCSS(
+      'padding-top',
+      '20px',
+    )
 
     const detailCanvas = await page.evaluate(() => {
       const main = document.querySelector('main.app-main')

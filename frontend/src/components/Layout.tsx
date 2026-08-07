@@ -3,7 +3,6 @@ import {
   Calendar,
   ChevronDown,
   Certificate,
-  ChevronLeft,
   Close,
   DataBase,
   Dashboard,
@@ -404,6 +403,7 @@ function Layout({ children }: LayoutProps) {
   )
   const isDarkTheme = theme === 'g100'
   const isDesktopSideNavCollapsed = isSideNavCollapsed && !isMobileViewport
+  const isNavigationOpen = isMobileViewport ? isMobileNavOpen : !isDesktopSideNavCollapsed
   const notificationAudienceKey = `${capabilities.principal ?? ''}:${capabilities.roles?.join('|') ?? ''}`
   const profileInitials = useMemo(
     () => getProfileInitials(capabilities.principal),
@@ -459,7 +459,7 @@ function Layout({ children }: LayoutProps) {
 
   const focusMobileNavigationToggle = (): void => {
     window.requestAnimationFrame(() => {
-      document.getElementById('mobile-navigation-toggle')?.focus()
+      document.getElementById('navigation-toggle')?.focus()
     })
   }
 
@@ -491,9 +491,14 @@ function Layout({ children }: LayoutProps) {
     navigate('/select-organization')
   }
 
-  const toggleMobileNavigation = (): void => {
+  const toggleNavigation = (): void => {
     setIsProfileOpen(false)
-    setIsMobileNavOpen((current) => !current)
+    if (isMobileViewport) {
+      setIsMobileNavOpen((current) => !current)
+      return
+    }
+
+    setIsSideNavCollapsed((current) => !current)
   }
 
   const toggleProfile = (): void => {
@@ -539,7 +544,7 @@ function Layout({ children }: LayoutProps) {
       if (event.key === 'Escape') {
         setIsMobileNavOpen(false)
         window.requestAnimationFrame(() => {
-          document.getElementById('mobile-navigation-toggle')?.focus()
+          document.getElementById('navigation-toggle')?.focus()
         })
       }
     }
@@ -666,14 +671,13 @@ function Layout({ children }: LayoutProps) {
         <SkipToContent />
         <header className="cds--header csp-app-header" aria-label="NR LEXIS">
           <HeaderMenuButton
-            id="mobile-navigation-toggle"
-            className="csp-mobile-nav-toggle"
-            aria-label={isMobileNavOpen ? 'Close navigation menu' : 'Open navigation menu'}
+            id="navigation-toggle"
+            className="csp-navigation-toggle"
+            aria-label={isNavigationOpen ? 'Close menu' : 'Open menu'}
             aria-controls="side-navigation"
-            aria-expanded={isMobileNavOpen}
-            isActive={isMobileNavOpen}
-            isCollapsible
-            onClick={toggleMobileNavigation}
+            aria-expanded={isNavigationOpen}
+            isActive={isNavigationOpen}
+            onClick={toggleNavigation}
           />
 
           <button
@@ -788,23 +792,6 @@ function Layout({ children }: LayoutProps) {
           aria-hidden={isMobileViewport && !isMobileNavOpen ? true : undefined}
           inert={isMobileViewport && !isMobileNavOpen ? true : undefined}
         >
-          <button
-            type="button"
-            className="csp-side-nav__toggle"
-            aria-controls="side-navigation-list"
-            aria-label={
-              isDesktopSideNavCollapsed ? 'Expand side navigation' : 'Collapse side navigation'
-            }
-            onClick={() => setIsSideNavCollapsed((current) => !current)}
-          >
-            <span className="csp-side-nav__toggle-icon" aria-hidden="true">
-              <ChevronLeft size={16} />
-            </span>
-            <span className="cds--side-nav__toggle-label csp-side-nav__toggle-text">
-              {isDesktopSideNavCollapsed ? 'Expand' : 'Collapse'}
-            </span>
-          </button>
-
           <ul id="side-navigation-list" className="cds--side-nav__items csp-side-nav__items">
             {visibleNavigationSections.map((section) => {
               if (section.standalone) {

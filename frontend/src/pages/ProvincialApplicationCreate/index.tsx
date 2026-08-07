@@ -1303,7 +1303,6 @@ const ProvincialApplicationCreatePage = () => {
           <TabList
             aria-label="Application create sections"
             contained
-            size="md"
             className="application-tabs__list application-detail-tab-list"
           >
             <Tab>Summary</Tab>

@@ -214,7 +214,7 @@ describe('Layout shell', () => {
     expect(document.querySelector('.app-shell')).toHaveClass('is-side-nav-collapsed')
     expect(document.getElementById(NOTIFICATION_REGION_ID)).toHaveClass('cds--g100')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Expand side navigation' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Open menu' }))
 
     expect(screen.getByRole('button', { name: 'Reports' })).toHaveAttribute(
       'aria-expanded',
@@ -228,7 +228,7 @@ describe('Layout shell', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Reports' }))
     await userEvent.click(screen.getByRole('switch', { name: 'Toggle dark mode' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Collapse side navigation' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Close menu' }))
 
     expect(window.localStorage.getItem(THEME_PREFERENCE_KEY)).toBe('g100')
     expect(window.localStorage.getItem(SIDE_NAV_PREFERENCE_KEY)).toBe('true')
@@ -271,7 +271,7 @@ describe('Layout shell', () => {
 
     await userEvent.click(screen.getByRole('switch', { name: 'Toggle dark mode' }))
     await userEvent.click(screen.getByRole('button', { name: 'Reports' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Collapse side navigation' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Close menu' }))
 
     expect(screen.getByRole('switch', { name: 'Toggle dark mode' })).toHaveAttribute(
       'aria-checked',
@@ -582,7 +582,7 @@ describe('Layout shell', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Reports' }))
     expect(screen.queryByRole('link', { name: /Advertising List/i })).not.toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Collapse side navigation' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Close menu' }))
 
     expect(screen.getByRole('link', { name: /Advertising List/i })).toBeVisible()
   })
@@ -592,19 +592,20 @@ describe('Layout shell', () => {
 
     const shell = document.querySelector('.app-shell')
     const sideNav = screen.getByRole('navigation', { name: 'Side navigation' })
-    const collapseButton = screen.getByRole('button', { name: 'Collapse side navigation' })
+    const collapseButton = screen.getByRole('button', { name: 'Close menu' })
 
     expect(shell).not.toHaveClass('is-side-nav-collapsed')
     expect(sideNav).not.toHaveClass('is-collapsed')
-    expect(collapseButton).toHaveAttribute('aria-controls', 'side-navigation-list')
-    expect(collapseButton).not.toHaveAttribute('aria-expanded')
+    expect(collapseButton).toHaveAttribute('aria-controls', 'side-navigation')
+    expect(collapseButton).toHaveAttribute('aria-expanded', 'true')
 
     await userEvent.click(collapseButton)
 
     expect(shell).toHaveClass('is-side-nav-collapsed')
     expect(sideNav).toHaveClass('is-collapsed')
-    expect(screen.getByRole('button', { name: 'Expand side navigation' })).not.toHaveAttribute(
+    expect(screen.getByRole('button', { name: 'Open menu' })).toHaveAttribute(
       'aria-expanded',
+      'false',
     )
   })
 
@@ -719,7 +720,7 @@ describe('Layout shell', () => {
 
     const sideNav = document.getElementById('side-navigation')
     const mainContent = document.getElementById('main-content')
-    const openMenuButton = screen.getByRole('button', { name: 'Open navigation menu' })
+    const openMenuButton = screen.getByRole('button', { name: 'Open menu' })
 
     expect(document.querySelector('.app-shell')).not.toHaveClass('is-side-nav-collapsed')
     expect(openMenuButton).toHaveAttribute('aria-expanded', 'false')
@@ -730,7 +731,7 @@ describe('Layout shell', () => {
 
     await userEvent.click(openMenuButton)
 
-    expect(screen.getByRole('button', { name: 'Close navigation menu' })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: 'Close menu' })).toHaveAttribute(
       'aria-expanded',
       'true',
     )
@@ -742,9 +743,9 @@ describe('Layout shell', () => {
     expect(screen.getByRole('button', { name: 'Dismiss navigation menu' })).toBeInTheDocument()
     expect(window.localStorage.getItem(SIDE_NAV_PREFERENCE_KEY)).toBe('true')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Close navigation menu' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Close menu' }))
 
-    expect(screen.getByRole('button', { name: 'Open navigation menu' })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: 'Open menu' })).toHaveAttribute(
       'aria-expanded',
       'false',
     )
@@ -760,7 +761,7 @@ describe('Layout shell', () => {
     mockMobileViewport()
     renderLayout('/admin/rtm/emslogamv')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Open navigation menu' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Open menu' }))
     await waitFor(() => {
       expect(screen.getByRole('link', { name: /^Notifications$/i })).toHaveFocus()
     })
@@ -768,15 +769,15 @@ describe('Layout shell', () => {
     await userEvent.keyboard('{Escape}')
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Open navigation menu' })).toHaveFocus()
+      expect(screen.getByRole('button', { name: 'Open menu' })).toHaveFocus()
     })
     expect(document.getElementById('side-navigation')).not.toHaveClass('is-mobile-open')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Open navigation menu' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Open menu' }))
     await userEvent.click(screen.getByRole('link', { name: /^Applications$/i }))
 
     expect(screen.getByTestId('current-path')).toHaveTextContent('/provincial/application')
-    expect(screen.getByRole('button', { name: 'Open navigation menu' })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: 'Open menu' })).toHaveAttribute(
       'aria-expanded',
       'false',
     )

@@ -3440,7 +3440,6 @@ const ProvincialApplicationDetailsPage = () => {
               <TabList
                 aria-label="Application detail sections"
                 contained
-                size="md"
                 className="application-tabs__list application-detail-tab-list"
               >
                 <Tab>Owner</Tab>

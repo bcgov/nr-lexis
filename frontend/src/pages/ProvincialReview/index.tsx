@@ -1027,7 +1027,13 @@ const ProvincialReviewPage = () => {
               />
             </div>
             <div className="legacy-search-actions" role="group" aria-label="Review search actions">
-              <Button type="button" kind="tertiary" onClick={onClearFilters} disabled={loading}>
+              <Button
+                type="button"
+                kind="tertiary"
+                size="md"
+                onClick={onClearFilters}
+                disabled={loading}
+              >
                 Clear all
               </Button>
               <SearchSubmitButton loading={loading} disabled={hasDateValidationError} />

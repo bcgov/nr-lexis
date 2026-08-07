@@ -1601,7 +1601,6 @@ const ProvincialExemptionDetailsPage = () => {
               <TabList
                 aria-label="Exemption detail sections"
                 contained
-                size="md"
                 className="application-tabs__list application-detail-tab-list"
               >
                 {exemptionDetailTabs.map((tab) => (

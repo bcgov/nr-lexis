@@ -1740,8 +1740,8 @@ test.describe('TEST IDIR admin regression', () => {
     await reportsSection.getByRole('button', { name: 'Reports' }).click()
     await expect(reportsSection.getByRole('link', { name: 'Advertising List' })).toBeVisible()
 
-    await page.getByRole('button', { name: 'Collapse side navigation' }).click()
-    await expect(page.getByRole('button', { name: 'Expand side navigation' })).toBeVisible()
+    await page.getByRole('button', { name: 'Close menu' }).click()
+    await expect(page.getByRole('button', { name: 'Open menu' })).toBeVisible()
     await expect(page.getByRole('link', { name: 'Application review' })).toHaveAttribute(
       'title',
       'Application review',
@@ -1750,7 +1750,7 @@ test.describe('TEST IDIR admin regression', () => {
       'title',
       'Advertising List',
     )
-    await page.getByRole('button', { name: 'Expand side navigation' }).click()
+    await page.getByRole('button', { name: 'Open menu' }).click()
   })
 
   test('keeps upload navigation scoped to provincial application submissions', async () => {

@@ -3019,7 +3019,6 @@ const ProvincialPermitDetailsPage = () => {
               <TabList
                 aria-label="Permit detail sections"
                 contained
-                size="md"
                 className="application-tabs__list application-detail-tab-list"
               >
                 {permitDetailTabs.map(({ id, label }) => (
