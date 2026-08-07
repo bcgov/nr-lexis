@@ -310,6 +310,8 @@ describe('Admin policy action states', () => {
       dialogName: 'Delete fee policy?',
       deleteRequest: mockedDeleteFeePolicy,
       successMessage: 'Fee policy deleted.',
+      description:
+        'This permanently deletes the RCO fee policy effective 2099-01-01 (4% increase). This cannot be undone.',
     },
     {
       area: 'fil' as const,
@@ -317,10 +319,12 @@ describe('Admin policy action states', () => {
       dialogName: 'Delete fee in lieu policy?',
       deleteRequest: mockedDeleteFilPolicy,
       successMessage: 'Fee in lieu policy deleted.',
+      description:
+        'This permanently deletes the fee in lieu policy effective 2099-01-01 (2%). This cannot be undone.',
     },
   ])(
     'confirms $area policy deletion before mutating',
-    async ({ area, rowId, dialogName, deleteRequest, successMessage }) => {
+    async ({ area, rowId, dialogName, deleteRequest, successMessage, description }) => {
       renderPage(area)
 
       const policyRow = (await screen.findByText('2099-01-01')).closest('tr')
@@ -330,6 +334,7 @@ describe('Admin policy action states', () => {
       )
 
       let dialog = screen.getByRole('dialog', { name: dialogName })
+      expect(dialog).toHaveTextContent(description)
       expect(deleteRequest).not.toHaveBeenCalled()
       await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
       expect(screen.queryByRole('dialog', { name: dialogName })).not.toBeInTheDocument()
@@ -799,10 +804,8 @@ describe('Admin policy action states', () => {
       )
       if (actionName) {
         const actionButton = screen.getByRole('button', { name: actionName })
-        expect(actionButton.closest('.admin-policy-table-actions')).not.toBeNull()
-        expect(actionButton.closest('.admin-policy-workspace')?.firstElementChild).toHaveClass(
-          'admin-policy-table-actions',
-        )
+        expect(actionButton.closest('.legacy-search-table-toolbar__actions')).not.toBeNull()
+        expect(actionButton.closest('.legacy-search-table-toolbar')).not.toBeNull()
       }
       for (const absentHeading of absentHeadings) {
         expect(
@@ -1389,6 +1392,13 @@ describe('Admin policy action states', () => {
     expect(updatedRow).not.toBeNull()
     await userEvent.click(within(updatedRow as HTMLElement).getByRole('button', { name: 'Delete' }))
 
+    const deleteDialog = screen.getByRole('dialog', { name: 'Delete export schedule?' })
+    expect(deleteDialog).toHaveTextContent(
+      'This permanently deletes export schedule 1001 with advertising date 2026-06-24. This cannot be undone.',
+    )
+    expect(mockedDeleteExportSchedule).not.toHaveBeenCalled()
+    await userEvent.click(within(deleteDialog).getByRole('button', { name: 'Delete' }))
+
     await waitFor(() => {
       expect(mockedDeleteExportSchedule).toHaveBeenCalledWith('1001')
     })
@@ -1400,12 +1410,13 @@ describe('Admin policy action states', () => {
 
     await screen.findByRole('heading', { level: 1, name: 'Fee policy administration' })
     const dialog = await openAddPolicyDialog('fee')
+    expect(within(dialog).getByText('Whole numbers from 0 to 100')).toBeInTheDocument()
     await userEvent.click(within(dialog).getByRole('button', { name: 'Add fee policy' }))
 
     await waitFor(() => {
       expect(screen.getByText('Policy error')).toBeInTheDocument()
       expect(
-        screen.getByText('Fee policy requires effective date, region, and percentage.'),
+        screen.getByText('Correct the highlighted fee policy fields before saving.'),
       ).toBeInTheDocument()
     })
     expect(screen.getByText('Policy effective date is required.')).toBeInTheDocument()

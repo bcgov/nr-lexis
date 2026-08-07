@@ -1315,6 +1315,15 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     const resultsRegion = page.getByRole('region', { name: 'Search results table' })
     await expect(resultsRegion.getByText('1001')).toBeVisible()
     await expect(resultsRegion.getByRole('table')).toHaveClass(/cds--data-table--md/)
+    const scheduleDeleteButton = resultsRegion.getByRole('button', { name: 'Delete' })
+    await expect(scheduleDeleteButton).toHaveClass(/cds--btn--danger--ghost/)
+    await scheduleDeleteButton.click()
+    const scheduleDeleteDialog = page.getByRole('dialog', { name: 'Delete export schedule?' })
+    await expect(scheduleDeleteDialog).toContainText(
+      'This permanently deletes export schedule 1001 with advertising date 2026-07-15.',
+    )
+    await scheduleDeleteDialog.getByRole('button', { name: 'Cancel' }).click()
+    await expect(scheduleDeleteDialog).toBeHidden()
     const desktopResultsBounds = await resultsRegion.evaluate((region) => {
       const main = document.querySelector('main.app-main')
       if (!(main instanceof HTMLElement)) throw new Error('Application content not found')
@@ -1349,7 +1358,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     ).toBe(false)
   })
 
-  test('places policy add actions above their tables and uses focused add dialogs', async ({
+  test('places policy add actions in result toolbars and uses focused add dialogs', async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
@@ -1362,22 +1371,36 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(feeAddButton).toBeEnabled()
     await expect(feeAddButton).toHaveCSS('height', '40px')
     const feeLayout = await page.locator('.admin-policy-workspace').evaluate((workspace) => {
-      const button = workspace.querySelector('.admin-policy-table-actions .cds--btn')
+      const toolbar = workspace.querySelector('.legacy-search-table-toolbar')
+      const button = workspace.querySelector('.legacy-search-table-toolbar__actions .cds--btn')
       const tableFrame = workspace.querySelector('.legacy-search-table-frame')
-      if (!(button instanceof HTMLElement) || !(tableFrame instanceof HTMLElement)) {
+      const tableContent = workspace.querySelector('.legacy-search-table-content')
+      if (
+        !(toolbar instanceof HTMLElement) ||
+        !(button instanceof HTMLElement) ||
+        !(tableFrame instanceof HTMLElement) ||
+        !(tableContent instanceof HTMLElement)
+      ) {
         throw new Error('Fee policy add action or results table not found')
       }
 
+      const toolbarRect = toolbar.getBoundingClientRect()
       const buttonRect = button.getBoundingClientRect()
       const tableRect = tableFrame.getBoundingClientRect()
+      const tableContentRect = tableContent.getBoundingClientRect()
       return {
+        buttonTop: buttonRect.top,
         buttonBottom: buttonRect.bottom,
         buttonRight: buttonRect.right,
+        toolbarTop: toolbarRect.top,
+        toolbarBottom: toolbarRect.bottom,
         tableRight: tableRect.right,
-        tableTop: tableRect.top,
+        tableContentTop: tableContentRect.top,
       }
     })
-    expect(feeLayout.buttonBottom).toBeLessThanOrEqual(feeLayout.tableTop)
+    expect(feeLayout.buttonTop).toBeGreaterThanOrEqual(feeLayout.toolbarTop)
+    expect(feeLayout.buttonBottom).toBeLessThanOrEqual(feeLayout.toolbarBottom)
+    expect(feeLayout.toolbarBottom).toBeLessThanOrEqual(feeLayout.tableContentTop)
     expect(Math.abs(feeLayout.tableRight - feeLayout.buttonRight - 16)).toBeLessThanOrEqual(1)
 
     await feeAddButton.click()
@@ -1392,6 +1415,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(feeDialog.getByLabel('Policy effective date')).toBeFocused()
     await expect(feeDialog.getByLabel('Region')).toBeVisible()
     await expect(feeDialog.getByLabel('Fee increase percentage')).toBeVisible()
+    await expect(feeDialog.getByText('Whole numbers from 0 to 100')).toBeVisible()
     const feeDialogCancel = feeDialog.getByRole('button', { name: 'Cancel' })
     await expect(feeDialogCancel).toHaveClass(/cds--btn--tertiary/)
     await expect(feeDialog.locator('.admin-policy-modal__actions')).toHaveCSS('gap', '8px')
@@ -1409,6 +1433,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(filDialog.getByLabel('Policy effective date')).toBeVisible()
     await expect(filDialog.getByLabel('Policy effective date')).toBeFocused()
     await expect(filDialog.getByLabel('Fee in lieu percentage')).toBeVisible()
+    await expect(filDialog.getByText('Whole numbers from 1 to 99')).toBeVisible()
 
     const mobileDialog = await filDialog.evaluate((dialog) => {
       const fields = dialog.querySelector('.admin-policy-modal__fields')

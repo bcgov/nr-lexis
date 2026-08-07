@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import SearchResultsTableFrame from '../SearchResultsTableFrame'
 
@@ -116,5 +116,28 @@ describe('SearchResultsTableFrame', () => {
     )
 
     expect(screen.getByText(expectedLabel)).toBeInTheDocument()
+  })
+
+  it('places page actions in the result-count toolbar', () => {
+    render(
+      <SearchResultsTableFrame
+        loading={false}
+        loadingDescription="Loading search results..."
+        totalItems={3}
+        actions={<button type="button">Add record</button>}
+      >
+        <table>
+          <tbody>
+            <tr>
+              <td>Rows</td>
+            </tr>
+          </tbody>
+        </table>
+      </SearchResultsTableFrame>,
+    )
+
+    const toolbar = screen.getByRole('group', { name: 'data table toolbar' })
+    expect(within(toolbar).getByText('3 results found')).toBeInTheDocument()
+    expect(within(toolbar).getByRole('button', { name: 'Add record' })).toBeInTheDocument()
   })
 })

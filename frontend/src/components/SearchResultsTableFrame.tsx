@@ -8,6 +8,7 @@ export type SearchResultsTableFrameProps = {
   loadingDescription: string
   totalItems?: number
   totalItemsLabel?: string
+  actions?: ReactNode
 }
 
 const formatSearchResultCount = (totalItems: number): string => {
@@ -21,22 +22,28 @@ function SearchResultsTableFrame({
   loadingDescription,
   totalItems,
   totalItemsLabel,
+  actions,
 }: SearchResultsTableFrameProps) {
   return (
     <div className="legacy-search-table-frame">
-      {(loading || totalItems !== undefined) && (
-        <div className="legacy-search-table-toolbar">
+      {(loading || totalItems !== undefined || actions) && (
+        <div
+          className={`legacy-search-table-toolbar${actions ? ' legacy-search-table-toolbar--with-actions' : ''}`}
+        >
           <TableToolbar>
             <TableToolbarContent>
               {loading ? (
                 <div className="legacy-search-result-loading">
                   <InlineLoading description={loadingDescription} />
                 </div>
-              ) : (
+              ) : totalItems !== undefined ? (
                 <p className="legacy-search-result-count">
-                  {totalItemsLabel ?? formatSearchResultCount(totalItems!)}
+                  {totalItemsLabel ?? formatSearchResultCount(totalItems)}
                 </p>
-              )}
+              ) : null}
+              {actions ? (
+                <div className="legacy-search-table-toolbar__actions">{actions}</div>
+              ) : null}
             </TableToolbarContent>
           </TableToolbar>
         </div>

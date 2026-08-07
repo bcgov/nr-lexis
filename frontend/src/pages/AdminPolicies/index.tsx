@@ -17,7 +17,7 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
-import { Add } from '@carbon/icons-react'
+import { Add, TrashCan } from '@carbon/icons-react'
 import { useAuth } from '@/context/auth/useAuth'
 import { AppNotification } from '../../components/AppNotification'
 import ConfirmationModal from '@/components/ConfirmationModal'
@@ -83,11 +83,24 @@ type AdminPoliciesPageProps = {
   area: AdminPolicyArea
 }
 
-type PendingPolicyDeletion = {
-  area: 'fee' | 'fil'
-  rowId: string
-  effectiveDate: string
-}
+type PendingDeletion =
+  | {
+      area: 'fee'
+      rowId: string
+      effectiveDate: string
+      regionLabel: string
+      percentage: string
+    }
+  | {
+      area: 'fil'
+      rowId: string
+      effectiveDate: string
+      percentage: string
+    }
+  | {
+      area: 'schedule'
+      row: ExportScheduleRow
+    }
 
 const ADMIN_PAGE_SIZES = [20, 50, 100, 200]
 const DEFAULT_ADMIN_PAGE_SIZE = 100
@@ -223,9 +236,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
   const [showFilValidationErrors, setShowFilValidationErrors] = useState(false)
   const [showScheduleValidationErrors, setShowScheduleValidationErrors] = useState(false)
   const [isPolicyEditorOpen, setIsPolicyEditorOpen] = useState(false)
-  const [policyPendingDeletion, setPolicyPendingDeletion] = useState<PendingPolicyDeletion | null>(
-    null,
-  )
+  const [pendingDeletion, setPendingDeletion] = useState<PendingDeletion | null>(null)
 
   const pageTitle =
     area === 'fee'
@@ -547,7 +558,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
 
     if (feeHasValidationError) {
       setShowFeeValidationErrors(true)
-      setErrorMessage('Fee policy requires effective date, region, and percentage.')
+      setErrorMessage('Correct the highlighted fee policy fields before saving.')
       return
     }
 
@@ -621,7 +632,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
 
     if (filHasValidationError) {
       setShowFilValidationErrors(true)
-      setErrorMessage('Fee in lieu policy requires an effective date and percentage.')
+      setErrorMessage('Correct the highlighted fee in lieu policy fields before saving.')
       return
     }
 
@@ -678,13 +689,9 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
     }
   }
 
-  const requestPolicyDelete = (
-    policyArea: 'fee' | 'fil',
-    rowId: string,
-    effectiveDate: string,
-  ): void => {
+  const requestDelete = (deletion: PendingDeletion): void => {
     clearNotifications()
-    setPolicyPendingDeletion({ area: policyArea, rowId, effectiveDate })
+    setPendingDeletion(deletion)
   }
 
   const handlePolicyDeleteError = (error: unknown, policyArea: 'fee' | 'fil'): void => {
@@ -700,7 +707,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
           : 'Unable to delete the fee in lieu policy. Please try again or contact support.',
       ),
     )
-    setPolicyPendingDeletion(null)
+    setPendingDeletion(null)
   }
 
   const editExportSchedule = (row: ExportScheduleRow): void => {
@@ -921,7 +928,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
             <TextInput
               id="feePolicyPercentage"
               labelText="Fee increase percentage"
-              helperText="0 to 100"
+              helperText="Whole numbers from 0 to 100"
               inputMode="numeric"
               value={feePolicyPercentage}
               invalid={!!feeFieldError('feePolicyPercentage')}
@@ -999,7 +1006,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
             <TextInput
               id="filPolicyPercentage"
               labelText="Fee in lieu percentage"
-              helperText="1 to 99"
+              helperText="Whole numbers from 1 to 99"
               inputMode="numeric"
               value={filPolicyPercentage}
               invalid={!!filFieldError('filPolicyPercentage')}
@@ -1029,25 +1036,41 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
         </Modal>
       )}
 
-      {policyPendingDeletion && (
+      {pendingDeletion && (
         <ConfirmationModal
           open
           title={
-            policyPendingDeletion.area === 'fee'
+            pendingDeletion.area === 'fee'
               ? 'Delete fee policy?'
-              : 'Delete fee in lieu policy?'
+              : pendingDeletion.area === 'fil'
+                ? 'Delete fee in lieu policy?'
+                : 'Delete export schedule?'
           }
-          description={`Policy effective date ${policyPendingDeletion.effectiveDate} will be permanently deleted. This cannot be undone.`}
+          description={
+            pendingDeletion.area === 'fee'
+              ? `This permanently deletes the ${pendingDeletion.regionLabel} fee policy effective ${pendingDeletion.effectiveDate} (${pendingDeletion.percentage}% increase). This cannot be undone.`
+              : pendingDeletion.area === 'fil'
+                ? `This permanently deletes the fee in lieu policy effective ${pendingDeletion.effectiveDate} (${pendingDeletion.percentage}%). This cannot be undone.`
+                : `This permanently deletes export schedule ${pendingDeletion.row.exportScheduleId} with advertising date ${pendingDeletion.row.advertisingDate}. This cannot be undone.`
+          }
           confirmLabel="Delete"
           pendingLabel="Deleting…"
           danger
-          onConfirm={() =>
-            policyPendingDeletion.area === 'fee'
-              ? deleteFeePolicy(policyPendingDeletion.rowId)
-              : deleteFilPolicy(policyPendingDeletion.rowId)
-          }
-          onClose={() => setPolicyPendingDeletion(null)}
-          onError={(error) => handlePolicyDeleteError(error, policyPendingDeletion.area)}
+          onConfirm={() => {
+            if (pendingDeletion.area === 'fee') {
+              return deleteFeePolicy(pendingDeletion.rowId)
+            }
+            if (pendingDeletion.area === 'fil') {
+              return deleteFilPolicy(pendingDeletion.rowId)
+            }
+            return deleteExportSchedule(pendingDeletion.row)
+          }}
+          onClose={() => setPendingDeletion(null)}
+          onError={(error) => {
+            if (pendingDeletion.area !== 'schedule') {
+              handlePolicyDeleteError(error, pendingDeletion.area)
+            }
+          }}
         />
       )}
 
@@ -1057,31 +1080,31 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
             className="admin-policy-workspace legacy-search-section legacy-search-section--results"
             aria-label="Fee policies"
           >
-            <div className="admin-policy-table-actions">
-              <Button
-                kind="primary"
-                size="md"
-                renderIcon={Add}
-                onClick={openPolicyEditor}
-                disabled={
-                  isLoadingPolicies ||
-                  isMutatingPolicies ||
-                  isLoadingFeeRegionOptions ||
-                  Boolean(feeRegionOptionsError) ||
-                  feeRegionOptions.length === 0 ||
-                  !canManageFeePolicy
-                }
-              >
-                Add fee policy
-              </Button>
-            </div>
             <SearchResultsTableFrame
               loading={isLoadingPolicies}
               loadingDescription={loadingDescription}
               totalItems={isLoadingPolicies && feePolicies.length === 0 ? undefined : totalRows}
+              actions={
+                <Button
+                  kind="primary"
+                  size="md"
+                  renderIcon={Add}
+                  onClick={openPolicyEditor}
+                  disabled={
+                    isLoadingPolicies ||
+                    isMutatingPolicies ||
+                    isLoadingFeeRegionOptions ||
+                    Boolean(feeRegionOptionsError) ||
+                    feeRegionOptions.length === 0 ||
+                    !canManageFeePolicy
+                  }
+                >
+                  Add fee policy
+                </Button>
+              }
             >
               {feePolicies.length > 0 ? (
-                <Table size="md" useZebraStyles>
+                <Table size="md" useZebraStyles className="admin-policy-table">
                   <TableHead>
                     <TableRow>
                       {FEE_POLICY_SORT_COLUMNS.map((column) => (
@@ -1138,10 +1161,17 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                                 Edit
                               </Button>
                               <Button
-                                kind="ghost"
+                                kind="danger--ghost"
                                 size="sm"
+                                renderIcon={TrashCan}
                                 onClick={() =>
-                                  requestPolicyDelete('fee', row.id, row.effectiveDate)
+                                  requestDelete({
+                                    area: 'fee',
+                                    rowId: row.id,
+                                    effectiveDate: row.effectiveDate,
+                                    regionLabel: row.orgUnitCode || row.orgUnitNo,
+                                    percentage: row.policyPercentage,
+                                  })
                                 }
                                 disabled={isLoadingPolicies || isMutatingPolicies}
                               >
@@ -1173,24 +1203,24 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
             className="admin-policy-workspace legacy-search-section legacy-search-section--results"
             aria-label="Fee in lieu policies"
           >
-            <div className="admin-policy-table-actions">
-              <Button
-                kind="primary"
-                size="md"
-                renderIcon={Add}
-                onClick={openPolicyEditor}
-                disabled={isLoadingPolicies || isMutatingPolicies || !canManageFilPolicy}
-              >
-                Add fee in lieu policy
-              </Button>
-            </div>
             <SearchResultsTableFrame
               loading={isLoadingPolicies}
               loadingDescription={loadingDescription}
               totalItems={isLoadingPolicies && filPolicies.length === 0 ? undefined : totalRows}
+              actions={
+                <Button
+                  kind="primary"
+                  size="md"
+                  renderIcon={Add}
+                  onClick={openPolicyEditor}
+                  disabled={isLoadingPolicies || isMutatingPolicies || !canManageFilPolicy}
+                >
+                  Add fee in lieu policy
+                </Button>
+              }
             >
               {filPolicies.length > 0 ? (
-                <Table size="md" useZebraStyles>
+                <Table size="md" useZebraStyles className="admin-policy-table">
                   <TableHead>
                     <TableRow>
                       {FIL_POLICY_SORT_COLUMNS.map((column) => (
@@ -1238,10 +1268,16 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                                 Edit
                               </Button>
                               <Button
-                                kind="ghost"
+                                kind="danger--ghost"
                                 size="sm"
+                                renderIcon={TrashCan}
                                 onClick={() =>
-                                  requestPolicyDelete('fil', row.id, row.effectiveDate)
+                                  requestDelete({
+                                    area: 'fil',
+                                    rowId: row.id,
+                                    effectiveDate: row.effectiveDate,
+                                    percentage: row.filPercentage,
+                                  })
                                 }
                                 disabled={isLoadingPolicies || isMutatingPolicies}
                               >
@@ -1360,7 +1396,11 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                 }
               >
                 {exportSchedules.length > 0 ? (
-                  <Table size="md" useZebraStyles className="admin-export-schedule-table">
+                  <Table
+                    size="md"
+                    useZebraStyles
+                    className="admin-policy-table admin-export-schedule-table"
+                  >
                     <TableHead>
                       <TableRow>
                         {SCHEDULE_SORT_COLUMNS.map((column) => (
@@ -1422,9 +1462,10 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                                 Edit
                               </Button>
                               <Button
-                                kind="ghost"
+                                kind="danger--ghost"
                                 size="sm"
-                                onClick={() => void deleteExportSchedule(row)}
+                                renderIcon={TrashCan}
+                                onClick={() => requestDelete({ area: 'schedule', row })}
                                 disabled={isLoadingPolicies || isMutatingPolicies || !row.mutable}
                               >
                                 Delete
