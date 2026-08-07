@@ -23,7 +23,7 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
-import { Edit } from '@carbon/icons-react'
+import { Edit, TrashCan } from '@carbon/icons-react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import EmptyState from '@/components/EmptyState'
 import DetailBreadcrumb from '@/components/DetailBreadcrumb'
@@ -37,6 +37,7 @@ import ApplicationAccuracyConfirmation, {
   APPLICATION_ACCURACY_ACKNOWLEDGEMENT,
 } from '@/components/ApplicationAccuracyConfirmation'
 import ContentLoadingOverlay from '@/components/ContentLoadingOverlay'
+import ConfirmationModal from '@/components/ConfirmationModal'
 import { useAuth } from '@/context/auth/useAuth'
 import { hasProvincialSubmitterRole } from '@/context/auth/role-utils'
 import type { ProvincialApplicationDetail } from '@/interfaces/LexisDetails'
@@ -582,6 +583,8 @@ const ProvincialApplicationDetailsPage = () => {
   )
   const [actionWarningMessage, setActionWarningMessage] = useState('')
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
+  const [documentPendingDeletion, setDocumentPendingDeletion] =
+    useState<ProvincialApplicationDocumentRow | null>(null)
   const [documentUploadDirty, setDocumentUploadDirty] = useState(false)
   const [documentUploadBusy, setDocumentUploadBusy] = useState(false)
   const [documentUploadResetKey, setDocumentUploadResetKey] = useState(0)
@@ -2098,7 +2101,7 @@ const ProvincialApplicationDetailsPage = () => {
   const onRemoveDocument = useCallback(
     async (row: ProvincialApplicationDocumentRow) => {
       if (!applicationNumber) {
-        return
+        throw new Error('Application number is unavailable.')
       }
 
       const isLatestRequest = beginDetailRequest()
@@ -2112,21 +2115,34 @@ const ProvincialApplicationDetailsPage = () => {
           return
         }
         if (!removeResult.success) {
-          setActionErrorMessage('Document removal failed. Refresh and try again.')
-          return
+          throw new Error('Document removal failed. Refresh and try again.')
         }
 
-        const documentsResult = await fetchApplicationDocuments(applicationNumber)
-        if (isLatestRequest()) {
-          setDocumentRows(documentsResult.rows)
-          setDocumentLookupAvailability('available')
+        try {
+          const documentsResult = await fetchApplicationDocuments(applicationNumber)
+          if (isLatestRequest()) {
+            setDocumentRows(documentsResult.rows)
+            setDocumentLookupAvailability('available')
+            setDocumentsErrorMessage('')
+            setActionInfoMessage(`${row.name || 'Document'} was deleted.`)
+          }
+        } catch (refreshError) {
+          if (isLatestRequest()) {
+            console.error(refreshError)
+            setDocumentLookupAvailability('unavailable')
+            setDocumentsErrorMessage(
+              'The document was deleted, but application documents could not be refreshed. Reload the page.',
+            )
+            setActionInfoMessage(
+              `${row.name || 'Document'} was deleted. Reload before changing documents again.`,
+            )
+          }
         }
-      } catch {
+      } catch (error) {
         if (isLatestRequest()) {
-          setDocumentLookupAvailability('unavailable')
-          setDocumentsErrorMessage('Unable to retrieve application documents.')
-          setActionErrorMessage('Unable to remove the selected document.')
+          console.error(error)
         }
+        throw error instanceof Error ? error : new Error('Unable to remove the selected document.')
       } finally {
         if (isLatestRequest()) {
           setIsRemovingDocumentId(null)
@@ -4630,7 +4646,8 @@ const ProvincialApplicationDetailsPage = () => {
                                                   ? `Delete this document from its ${row.source || 'source'} details page.`
                                                   : undefined
                                               }
-                                              onClick={() => void onRemoveDocument(row)}
+                                              renderIcon={TrashCan}
+                                              onClick={() => setDocumentPendingDeletion(row)}
                                             >
                                               {isRemovingDocumentId === row.id
                                                 ? 'Deleting...'
@@ -4833,6 +4850,24 @@ const ProvincialApplicationDetailsPage = () => {
             onClose={closeSummaryAccuracyConfirmation}
           />
         )}
+      {documentPendingDeletion && (
+        <ConfirmationModal
+          open
+          danger
+          title="Delete document"
+          description={
+            <>
+              Permanently delete <strong>{documentPendingDeletion.name || 'this document'}</strong>?
+              This cannot be undone.
+            </>
+          }
+          confirmLabel="Delete"
+          pendingLabel="Deleting…"
+          errorTitle="Failed to delete document"
+          onClose={() => setDocumentPendingDeletion(null)}
+          onConfirm={() => onRemoveDocument(documentPendingDeletion)}
+        />
+      )}
       <UnsavedChangesGuard
         isDirty={isApplicationDirty}
         isBusy={

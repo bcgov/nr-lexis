@@ -1419,6 +1419,12 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.click(
       within(associatedApplicationRow as HTMLElement).getByRole('button', { name: 'Remove' }),
     )
+    const removalConfirmation = await screen.findByRole('dialog', {
+      name: 'Remove associated application?',
+    })
+    expect(removalConfirmation).toHaveTextContent('1000456 will be removed from permit 777.')
+    expect(mockedRemoveApplicationFromPermit).not.toHaveBeenCalled()
+    await userEvent.click(within(removalConfirmation).getByRole('button', { name: 'Remove' }))
 
     await waitFor(() => {
       expect(mockedRemoveApplicationFromPermit).toHaveBeenCalledWith({
@@ -3532,6 +3538,12 @@ describe('Provincial Permit Detail Action Smoke', () => {
     const deleteButton = await screen.findByRole('button', { name: 'Delete' })
     expect(deleteButton).toBeEnabled()
     await userEvent.click(deleteButton)
+    const confirmation = await screen.findByRole('dialog', { name: 'Delete document' })
+    expect(confirmation).toHaveTextContent(
+      'Permanently delete permit-doc.pdf? This cannot be undone.',
+    )
+    expect(mockedRemovePermitInvoiceDocument).not.toHaveBeenCalled()
+    await userEvent.click(within(confirmation).getByRole('button', { name: 'Delete' }))
 
     await waitFor(() => {
       expect(mockedRemovePermitInvoiceDocument).toHaveBeenCalledWith('500', '777')

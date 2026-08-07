@@ -850,6 +850,12 @@ describe('Exemption and Federal Detail Document Actions', () => {
       name: 'Delete',
     })
     await userEvent.click(deleteButton)
+    const confirmation = await screen.findByRole('dialog', { name: 'Delete document' })
+    expect(confirmation).toHaveTextContent(
+      'Permanently delete exemption-doc.pdf? This cannot be undone.',
+    )
+    expect(mockedRemoveExemptionDocument).not.toHaveBeenCalled()
+    await userEvent.click(within(confirmation).getByRole('button', { name: 'Delete' }))
 
     await waitFor(() => {
       expect(mockedRemoveExemptionDocument).toHaveBeenCalledWith('700', 'EX-777')
@@ -1896,6 +1902,12 @@ describe('Exemption and Federal Detail Document Actions', () => {
       name: 'Delete',
     })
     await userEvent.click(deleteButton)
+    const confirmation = await screen.findByRole('dialog', { name: 'Delete document' })
+    expect(confirmation).toHaveTextContent(
+      'Permanently delete federal-doc.pdf? This cannot be undone.',
+    )
+    expect(mockedRemoveFederalApplicationDocument).not.toHaveBeenCalled()
+    await userEvent.click(within(confirmation).getByRole('button', { name: 'Delete' }))
 
     await waitFor(() => {
       expect(mockedRemoveFederalApplicationDocument).toHaveBeenCalledWith('800', '888')

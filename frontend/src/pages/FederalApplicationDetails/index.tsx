@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Edit } from '@carbon/icons-react'
+import { Edit, TrashCan } from '@carbon/icons-react'
 import {
   Button,
   Column,
@@ -24,6 +24,7 @@ import {
 } from '@carbon/react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import ContentLoadingOverlay from '@/components/ContentLoadingOverlay'
+import ConfirmationModal from '@/components/ConfirmationModal'
 import EmptyState from '@/components/EmptyState'
 import DetailBreadcrumb from '@/components/DetailBreadcrumb'
 import IsoDatePicker from '@/components/IsoDatePicker'
@@ -181,6 +182,8 @@ const FederalApplicationDetailsPage = () => {
   const [isSavingMutation, setIsSavingMutation] = useState(false)
   const [isSavingRemark, setIsSavingRemark] = useState(false)
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
+  const [documentPendingDeletion, setDocumentPendingDeletion] =
+    useState<FederalApplicationDocumentRow | null>(null)
   const [documentUploadDirty, setDocumentUploadDirty] = useState(false)
   const [documentUploadBusy, setDocumentUploadBusy] = useState(false)
   const [documentUploadResetKey, setDocumentUploadResetKey] = useState(0)
@@ -691,7 +694,7 @@ const FederalApplicationDetailsPage = () => {
   const onRemoveDocument = useCallback(
     async (row: FederalApplicationDocumentRow) => {
       if (!applicationNumber || federalApplicationLocked || !canDeleteApplicationDocuments) {
-        return
+        throw new Error('This document cannot be deleted from the current application.')
       }
 
       const isLatestRequest = beginDetailRequest()
@@ -704,19 +707,32 @@ const FederalApplicationDetailsPage = () => {
           return
         }
         if (!removeResult.success) {
-          setActionErrorMessage('Document removal failed. Refresh and try again.')
-          return
+          throw new Error('Document removal failed. Refresh and try again.')
         }
 
-        const documentsResult = await fetchFederalApplicationDocuments(applicationNumber)
-        if (isLatestRequest()) {
-          setDocumentRows(documentsResult.rows)
+        try {
+          const documentsResult = await fetchFederalApplicationDocuments(applicationNumber)
+          if (isLatestRequest()) {
+            setDocumentRows(documentsResult.rows)
+            setDocumentsErrorMessage('')
+            setActionInfoMessage(`${row.name || 'Document'} was deleted.`)
+          }
+        } catch (refreshError) {
+          if (isLatestRequest()) {
+            console.error(refreshError)
+            setDocumentsErrorMessage(
+              'The document was deleted, but federal application documents could not be refreshed. Reload the page.',
+            )
+            setActionInfoMessage(
+              `${row.name || 'Document'} was deleted. Reload before changing documents again.`,
+            )
+          }
         }
       } catch (error) {
         if (isLatestRequest()) {
           console.error(error)
-          setActionErrorMessage('Unable to remove the selected document.')
         }
+        throw error instanceof Error ? error : new Error('Unable to remove the selected document.')
       } finally {
         if (isLatestRequest()) {
           setIsRemovingDocumentId(null)
@@ -1594,7 +1610,8 @@ const FederalApplicationDetailsPage = () => {
                                                 !canDeleteApplicationDocuments ||
                                                 isRemovingDocumentId === row.id
                                               }
-                                              onClick={() => void onRemoveDocument(row)}
+                                              renderIcon={TrashCan}
+                                              onClick={() => setDocumentPendingDeletion(row)}
                                             >
                                               {isRemovingDocumentId === row.id
                                                 ? 'Deleting...'
@@ -1885,6 +1902,24 @@ const FederalApplicationDetailsPage = () => {
             </Tabs>
           </Column>
         </>
+      )}
+      {documentPendingDeletion && (
+        <ConfirmationModal
+          open
+          danger
+          title="Delete document"
+          description={
+            <>
+              Permanently delete <strong>{documentPendingDeletion.name || 'this document'}</strong>?
+              This cannot be undone.
+            </>
+          }
+          confirmLabel="Delete"
+          pendingLabel="Deleting…"
+          errorTitle="Failed to delete document"
+          onClose={() => setDocumentPendingDeletion(null)}
+          onConfirm={() => onRemoveDocument(documentPendingDeletion)}
+        />
       )}
       <UnsavedChangesGuard
         isDirty={isFederalApplicationDirty}

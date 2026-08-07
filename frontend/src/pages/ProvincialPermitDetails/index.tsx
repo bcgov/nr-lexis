@@ -1,5 +1,5 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Edit } from '@carbon/icons-react'
+import { Edit, TrashCan } from '@carbon/icons-react'
 import {
   Button,
   Checkbox,
@@ -580,6 +580,9 @@ const ProvincialPermitDetailsPage = () => {
   const [actionErrorMessage, setActionErrorMessage] = useState('')
   const [actionInfoMessage, setActionInfoMessage] = useState('')
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
+  const [documentPendingDeletion, setDocumentPendingDeletion] = useState<PermitDocumentRow | null>(
+    null,
+  )
   const [isUpdatingScaleId, setIsUpdatingScaleId] = useState<string | null>(null)
   const [isDeletingBoicScaleId, setIsDeletingBoicScaleId] = useState<string | null>(null)
   const [isSavingBoicScale, setIsSavingBoicScale] = useState(false)
@@ -607,6 +610,9 @@ const ProvincialPermitDetailsPage = () => {
   const [isRemovingPermitApplication, setIsRemovingPermitApplication] = useState<string | null>(
     null,
   )
+  const [permitApplicationPendingRemoval, setPermitApplicationPendingRemoval] = useState<
+    string | null
+  >(null)
   const [boicScaleForm, setBoicScaleForm] = useState<BlanketOicScaleForm>(
     EMPTY_BLANKET_OIC_SCALE_FORM,
   )
@@ -2061,7 +2067,7 @@ const ProvincialPermitDetailsPage = () => {
     async (applicationNumber: string) => {
       const resolvedPermitNumber = String(detail?.permitNumber ?? permitNumber ?? '').trim()
       if (!canEditPermitApplications || !resolvedPermitNumber || !applicationNumber) {
-        return
+        throw new Error('This application cannot be removed from the current permit.')
       }
 
       setActionErrorMessage('')
@@ -2073,10 +2079,9 @@ const ProvincialPermitDetailsPage = () => {
           applicationNumber,
         })
         if (!result.success) {
-          setActionErrorMessage(
+          throw new Error(
             result.errors[0] || result.message || 'Unable to remove application from the permit.',
           )
-          return
         }
 
         setTabsData((current) =>
@@ -2104,7 +2109,9 @@ const ProvincialPermitDetailsPage = () => {
         }
       } catch (error) {
         console.error(error)
-        setActionErrorMessage('Unable to remove application from the permit.')
+        throw error instanceof Error
+          ? error
+          : new Error('Unable to remove application from the permit.')
       } finally {
         setIsRemovingPermitApplication(null)
       }
@@ -2594,7 +2601,7 @@ const ProvincialPermitDetailsPage = () => {
     async (row: PermitDocumentRow) => {
       const resolvedPermitNumber = String(detail?.permitNumber ?? permitNumber ?? '').trim()
       if (!resolvedPermitNumber) {
-        return
+        throw new Error('Permit number is unavailable.')
       }
 
       const invoiceDocument = isInvoiceDocumentRow(row)
@@ -2603,7 +2610,7 @@ const ProvincialPermitDetailsPage = () => {
         !canDeletePermitDocuments ||
         (invoiceDocument && !canDeleteInvoiceDocuments)
       ) {
-        return
+        throw new Error('This document cannot be deleted from the current permit.')
       }
 
       const isLatestRequest = beginDocumentRefreshRequest()
@@ -2621,41 +2628,53 @@ const ProvincialPermitDetailsPage = () => {
           return
         }
         if (!removeResult.success) {
-          setActionErrorMessage('Unable to remove selected document.')
-          return
+          throw new Error('Document removal failed. Refresh and try again.')
         }
 
-        beginPermitDocumentsRequest()
-        beginPermitInvoicesRequest()
-        deferredPermitTabLoadsRef.current.delete('documents')
-        deferredPermitTabLoadsRef.current.delete('invoices')
-        setDeferredPermitTabLoading((current) => ({
-          ...current,
-          documents: false,
-          invoices: false,
-        }))
-        const [documentsResult, invoicesResult] = await Promise.all([
-          fetchPermitDocuments(resolvedPermitNumber),
-          fetchPermitInvoices(resolvedPermitNumber),
-        ])
-        if (isLatestRequest()) {
-          setDocumentRows(documentsResult.rows)
-          setInvoiceRows(invoicesResult.rows)
-          loadedDeferredPermitTabsRef.current.add('documents')
-          loadedDeferredPermitTabsRef.current.add('invoices')
-          setDeferredPermitTabLoaded((current) => ({
+        try {
+          beginPermitDocumentsRequest()
+          beginPermitInvoicesRequest()
+          deferredPermitTabLoadsRef.current.delete('documents')
+          deferredPermitTabLoadsRef.current.delete('invoices')
+          setDeferredPermitTabLoading((current) => ({
             ...current,
-            documents: true,
-            invoices: true,
+            documents: false,
+            invoices: false,
           }))
-          setDocumentsErrorMessage('')
-          setInvoicesErrorMessage('')
+          const [documentsResult, invoicesResult] = await Promise.all([
+            fetchPermitDocuments(resolvedPermitNumber),
+            fetchPermitInvoices(resolvedPermitNumber),
+          ])
+          if (isLatestRequest()) {
+            setDocumentRows(documentsResult.rows)
+            setInvoiceRows(invoicesResult.rows)
+            loadedDeferredPermitTabsRef.current.add('documents')
+            loadedDeferredPermitTabsRef.current.add('invoices')
+            setDeferredPermitTabLoaded((current) => ({
+              ...current,
+              documents: true,
+              invoices: true,
+            }))
+            setDocumentsErrorMessage('')
+            setInvoicesErrorMessage('')
+            setActionInfoMessage(`${row.name || 'Document'} was deleted.`)
+          }
+        } catch (refreshError) {
+          if (isLatestRequest()) {
+            console.error(refreshError)
+            setDocumentsErrorMessage(
+              'The document was deleted, but permit documents could not be refreshed. Reload the page.',
+            )
+            setActionInfoMessage(
+              `${row.name || 'Document'} was deleted. Reload before changing documents again.`,
+            )
+          }
         }
       } catch (error) {
         if (isLatestRequest()) {
           console.error(error)
-          setActionErrorMessage('Unable to remove selected document.')
         }
+        throw error instanceof Error ? error : new Error('Unable to remove selected document.')
       } finally {
         if (isLatestRequest()) {
           setIsRemovingDocumentId(null)
@@ -3365,8 +3384,11 @@ const ProvincialPermitDetailsPage = () => {
                                               disabled={
                                                 isRemovingPermitApplication === applicationNumber
                                               }
+                                              renderIcon={TrashCan}
                                               onClick={() =>
-                                                void onRemovePermitApplication(applicationNumber)
+                                                setPermitApplicationPendingRemoval(
+                                                  applicationNumber,
+                                                )
                                               }
                                             >
                                               {isRemovingPermitApplication === applicationNumber
@@ -4568,7 +4590,8 @@ const ProvincialPermitDetailsPage = () => {
                                                   ? 'The document source is not safe to delete from this page.'
                                                   : undefined
                                               }
-                                              onClick={() => void onRemoveDocument(row)}
+                                              renderIcon={TrashCan}
+                                              onClick={() => setDocumentPendingDeletion(row)}
                                             >
                                               {isRemovingDocumentId === row.id
                                                 ? 'Deleting...'
@@ -4739,6 +4762,42 @@ const ProvincialPermitDetailsPage = () => {
             onChange={(event) => setPermitApprovalEmailAddress(event.target.value)}
           />
         </ConfirmationModal>
+      )}
+      {permitApplicationPendingRemoval && (
+        <ConfirmationModal
+          open
+          danger
+          title="Remove associated application?"
+          description={
+            <>
+              <strong>{permitApplicationPendingRemoval}</strong> will be removed from permit{' '}
+              {detail?.permitNumber ?? permitNumber ?? ''}.
+            </>
+          }
+          confirmLabel="Remove"
+          pendingLabel="Removing…"
+          errorTitle="Failed to remove application"
+          onClose={() => setPermitApplicationPendingRemoval(null)}
+          onConfirm={() => onRemovePermitApplication(permitApplicationPendingRemoval)}
+        />
+      )}
+      {documentPendingDeletion && (
+        <ConfirmationModal
+          open
+          danger
+          title="Delete document"
+          description={
+            <>
+              Permanently delete <strong>{documentPendingDeletion.name || 'this document'}</strong>?
+              This cannot be undone.
+            </>
+          }
+          confirmLabel="Delete"
+          pendingLabel="Deleting…"
+          errorTitle="Failed to delete document"
+          onClose={() => setDocumentPendingDeletion(null)}
+          onConfirm={() => onRemoveDocument(documentPendingDeletion)}
+        />
       )}
       <ConfirmationModal
         open={boicPackageNumberPendingDeletion !== null}

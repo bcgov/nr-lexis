@@ -1,5 +1,5 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Edit } from '@carbon/icons-react'
+import { Edit, TrashCan } from '@carbon/icons-react'
 import {
   Button,
   Checkbox,
@@ -304,6 +304,7 @@ const ProvincialExemptionDetailsPage = () => {
   const [generatingReport, setGeneratingReport] = useState(false)
   const [applicationNumberToAdd, setApplicationNumberToAdd] = useState('')
   const [applicationMutationNumber, setApplicationMutationNumber] = useState<string | null>(null)
+  const [applicationPendingRemoval, setApplicationPendingRemoval] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
   const [documentsErrorMessage, setDocumentsErrorMessage] = useState('')
@@ -314,6 +315,8 @@ const ProvincialExemptionDetailsPage = () => {
   const [actionErrorMessage, setActionErrorMessage] = useState('')
   const [actionInfoMessage, setActionInfoMessage] = useState('')
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
+  const [documentPendingDeletion, setDocumentPendingDeletion] =
+    useState<ProvincialExemptionDocumentRow | null>(null)
   const [isEditingDocuments, setIsEditingDocuments] = useState(false)
   const [documentUploadDirty, setDocumentUploadDirty] = useState(false)
   const [documentUploadBusy, setDocumentUploadBusy] = useState(false)
@@ -1264,7 +1267,9 @@ const ProvincialExemptionDetailsPage = () => {
 
   const onRemoveApplication = useCallback(
     async (applicationNumber: string) => {
-      if (!detail || applicationMutationNumber) return
+      if (!detail || applicationMutationNumber) {
+        throw new Error('Application links are not available for removal right now.')
+      }
       setApplicationMutationNumber(applicationNumber)
       setActionErrorMessage('')
       try {
@@ -1273,8 +1278,7 @@ const ProvincialExemptionDetailsPage = () => {
           applicationNumber,
         )
         if (!result.success) {
-          setActionErrorMessage(result.errors.join(' ') || 'Unable to unlink the application.')
-          return
+          throw new Error(result.errors.join(' ') || 'Unable to unlink the application.')
         }
         try {
           await refreshEditableData(true)
@@ -1290,7 +1294,9 @@ const ProvincialExemptionDetailsPage = () => {
         }
       } catch (error) {
         console.error(error)
-        setActionErrorMessage(`Unable to remove application ${applicationNumber}.`)
+        throw error instanceof Error
+          ? error
+          : new Error(`Unable to remove application ${applicationNumber}.`)
       } finally {
         setApplicationMutationNumber(null)
       }
@@ -1339,7 +1345,7 @@ const ProvincialExemptionDetailsPage = () => {
   const onRemoveDocument = useCallback(
     async (row: ProvincialExemptionDocumentRow) => {
       if (!exemptionNumber) {
-        return
+        throw new Error('Exemption number is unavailable.')
       }
 
       const isLatestRequest = beginDetailRequest()
@@ -1353,19 +1359,32 @@ const ProvincialExemptionDetailsPage = () => {
           return
         }
         if (!removeResult.success) {
-          setActionErrorMessage('Document removal failed. Refresh and try again.')
-          return
+          throw new Error('Document removal failed. Refresh and try again.')
         }
 
-        const documentsResult = await fetchExemptionDocuments(exemptionNumber)
-        if (isLatestRequest()) {
-          setDocumentRows(documentsResult.rows)
+        try {
+          const documentsResult = await fetchExemptionDocuments(exemptionNumber)
+          if (isLatestRequest()) {
+            setDocumentRows(documentsResult.rows)
+            setDocumentsErrorMessage('')
+            setActionInfoMessage(`${row.name || 'Document'} was deleted.`)
+          }
+        } catch (refreshError) {
+          if (isLatestRequest()) {
+            console.error(refreshError)
+            setDocumentsErrorMessage(
+              'The document was deleted, but exemption documents could not be refreshed. Reload the page.',
+            )
+            setActionInfoMessage(
+              `${row.name || 'Document'} was deleted. Reload before changing documents again.`,
+            )
+          }
         }
       } catch (error) {
         if (isLatestRequest()) {
           console.error(error)
-          setActionErrorMessage('Unable to remove the selected document.')
         }
+        throw error instanceof Error ? error : new Error('Unable to remove the selected document.')
       } finally {
         if (isLatestRequest()) {
           setIsRemovingDocumentId(null)
@@ -1944,8 +1963,9 @@ const ProvincialExemptionDetailsPage = () => {
                                                     application.locked ||
                                                     Boolean(applicationMutationNumber)
                                                   }
+                                                  renderIcon={TrashCan}
                                                   onClick={() =>
-                                                    void onRemoveApplication(
+                                                    setApplicationPendingRemoval(
                                                       application.applicationNumber,
                                                     )
                                                   }
@@ -2319,7 +2339,8 @@ const ProvincialExemptionDetailsPage = () => {
                                                 ? `Delete this document from its ${row.source || 'source'} details page.`
                                                 : undefined
                                             }
-                                            onClick={() => void onRemoveDocument(row)}
+                                            renderIcon={TrashCan}
+                                            onClick={() => setDocumentPendingDeletion(row)}
                                           >
                                             {isRemovingDocumentId === row.id
                                               ? 'Deleting...'
@@ -2356,6 +2377,42 @@ const ProvincialExemptionDetailsPage = () => {
             </Tabs>
           </Column>
         </>
+      )}
+      {applicationPendingRemoval && (
+        <ConfirmationModal
+          open
+          danger
+          title="Remove associated application?"
+          description={
+            <>
+              <strong>{applicationPendingRemoval}</strong> will be removed from exemption{' '}
+              {currentDetail?.exemptionNumber ?? exemptionNumber ?? ''}.
+            </>
+          }
+          confirmLabel="Remove"
+          pendingLabel="Removing…"
+          errorTitle="Failed to remove application"
+          onClose={() => setApplicationPendingRemoval(null)}
+          onConfirm={() => onRemoveApplication(applicationPendingRemoval)}
+        />
+      )}
+      {documentPendingDeletion && (
+        <ConfirmationModal
+          open
+          danger
+          title="Delete document"
+          description={
+            <>
+              Permanently delete <strong>{documentPendingDeletion.name || 'this document'}</strong>?
+              This cannot be undone.
+            </>
+          }
+          confirmLabel="Delete"
+          pendingLabel="Deleting…"
+          errorTitle="Failed to delete document"
+          onClose={() => setDocumentPendingDeletion(null)}
+          onConfirm={() => onRemoveDocument(documentPendingDeletion)}
+        />
       )}
       {approvalConfirmationOpen &&
         approvalConfirmationTarget === currentDetail?.exemptionNumber && (
