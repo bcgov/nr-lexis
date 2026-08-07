@@ -993,7 +993,7 @@ const ProvincialExemptionPage = () => {
                       onClick={onApproveSelectedClick}
                       disabled={selectedRowsCount === 0 || approving}
                     >
-                      {approving ? 'Approving...' : 'Approve Selected Exemption'}
+                      {approving ? 'Approving…' : 'Approve Selected Exemption'}
                     </Button>
                   </DisabledButtonTooltip>
                 )}
@@ -1037,7 +1037,7 @@ const ProvincialExemptionPage = () => {
         >
           <SearchResultsTableFrame
             loading={loading}
-            loadingDescription="Loading exemption search results..."
+            loadingDescription="Loading exemption search results…"
             totalItems={
               errorMessage || (loading && results.content.length === 0)
                 ? undefined
@@ -1182,7 +1182,7 @@ const ProvincialExemptionPage = () => {
             selectedRowsCount === 1 ? 'exemption' : 'exemptions'
           }:`}
           confirmLabel="Approve exemptions"
-          pendingLabel="Approving..."
+          pendingLabel="Approving…"
           confirmDisabled={approving || !approvalCertified}
           onClose={closeApprovalConfirmation}
           onConfirm={onConfirmApproval}

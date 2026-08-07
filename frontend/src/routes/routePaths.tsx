@@ -37,7 +37,7 @@ const RTMEmsLogAmvUploadPage = lazy(() => import('@/pages/RTMEmsLogAmv/LegacyUpl
 
 const Layout = ({ children }: { children: ReactNode }) => (
   <AppLayout>
-    <Suspense fallback={<Loading withOverlay description="Loading page..." />}>{children}</Suspense>
+    <Suspense fallback={<Loading withOverlay description="Loading page…" />}>{children}</Suspense>
   </AppLayout>
 )
 

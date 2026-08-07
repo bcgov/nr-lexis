@@ -101,7 +101,7 @@ const ExemptionApprovalEmailModal = ({
             }
           }}
         >
-          {sending ? 'Sending...' : recipients.length === 1 ? 'Send' : 'Send all'}
+          {sending ? 'Sending…' : recipients.length === 1 ? 'Send' : 'Send all'}
         </Button>
       </div>
     </Modal>

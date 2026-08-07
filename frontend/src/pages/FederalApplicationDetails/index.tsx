@@ -848,7 +848,7 @@ const FederalApplicationDetailsPage = () => {
           role="status"
           aria-live="polite"
         >
-          <Loading description="Loading federal application detail..." withOverlay={false} />
+          <Loading description="Loading federal application detail…" withOverlay={false} />
         </Column>
       )}
 
@@ -944,7 +944,7 @@ const FederalApplicationDetailsPage = () => {
           >
             <ContentLoadingOverlay
               loading={isRefreshingDetail}
-              loadingDescription="Refreshing federal application detail..."
+              loadingDescription="Refreshing federal application detail…"
             />
             <Tabs
               selectedIndex={selectedFederalApplicationTabIndex}
@@ -1614,7 +1614,7 @@ const FederalApplicationDetailsPage = () => {
                                               onClick={() => setDocumentPendingDeletion(row)}
                                             >
                                               {isRemovingDocumentId === row.id
-                                                ? 'Deleting...'
+                                                ? 'Deleting…'
                                                 : 'Delete'}
                                             </Button>
                                           )}

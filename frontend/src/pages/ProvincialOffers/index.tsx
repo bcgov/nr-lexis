@@ -622,7 +622,7 @@ const ProvincialOffersPage = () => {
         >
           <SearchResultsTableFrame
             loading={loading}
-            loadingDescription="Loading offer search results..."
+            loadingDescription="Loading offer search results…"
             totalItems={
               errorMessage || (loading && results.content.length === 0)
                 ? undefined

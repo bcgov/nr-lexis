@@ -377,7 +377,7 @@ const ProvincialPage = () => {
 
       {loadingTotals && (
         <Column sm={4} md={8} lg={16}>
-          <InlineLoading description="Refreshing provincial totals..." />
+          <InlineLoading description="Refreshing provincial totals…" />
         </Column>
       )}
 

@@ -338,7 +338,7 @@ const DetailDocumentUploadPanel = ({
         workflowLabel: copy.workflowLabel,
         queuedAt,
         status: validationMessage ? ('invalid' as const) : ('validating' as const),
-        message: validationMessage || 'Validating file...',
+        message: validationMessage || 'Validating file…',
         targetSummary: lockedTargetSummary,
         details: validationMessage
           ? { summary: validationMessage, errors: [validationMessage] }
@@ -765,7 +765,7 @@ const DetailDocumentUploadPanel = ({
               }}
             >
               {isSubmitting
-                ? 'Submitting upload...'
+                ? 'Submitting upload…'
                 : uploadStep === 'review'
                   ? 'Submit upload'
                   : 'Review upload'}

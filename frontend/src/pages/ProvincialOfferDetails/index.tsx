@@ -411,7 +411,7 @@ const ProvincialOfferDetailsPage = () => {
           role="status"
           aria-live="polite"
         >
-          <Loading description="Loading provincial offer detail..." withOverlay={false} />
+          <Loading description="Loading provincial offer detail…" withOverlay={false} />
         </Column>
       )}
 
@@ -465,7 +465,7 @@ const ProvincialOfferDetailsPage = () => {
         >
           <ContentLoadingOverlay
             loading={isRefreshingDetail}
-            loadingDescription="Refreshing provincial offer detail..."
+            loadingDescription="Refreshing provincial offer detail…"
           />
           <Tile className="provincial-offer-create provincial-offer-sections">
             <fieldset className="legacy-form-fieldset offer-form-section">

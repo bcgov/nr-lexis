@@ -254,10 +254,10 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
         : 'Manage advertising, receipt, offer, and TEAC schedule dates.'
   const loadingDescription =
     area === 'schedule'
-      ? 'Loading export schedules...'
+      ? 'Loading export schedules…'
       : area === 'fil'
-        ? 'Loading fee in lieu policies...'
-        : 'Loading fee policies...'
+        ? 'Loading fee in lieu policies…'
+        : 'Loading fee policies…'
   const notificationTitle = area === 'schedule' ? 'Schedule update' : 'Policy update'
   const errorTitle = area === 'schedule' ? 'Schedule error' : 'Policy error'
   const fieldErrors = useMemo<FieldErrors<PolicyField>>(
@@ -915,7 +915,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
             >
               <SelectItem
                 value=""
-                text={isLoadingFeeRegionOptions ? 'Loading regions...' : 'Choose a region'}
+                text={isLoadingFeeRegionOptions ? 'Loading regions…' : 'Choose a region'}
               />
               {feeRegionOptions.map((option) => {
                 const knownCode = feePolicies.find(

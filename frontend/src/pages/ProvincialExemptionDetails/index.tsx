@@ -220,7 +220,7 @@ const ExemptionClientTile = ({
   const locationName =
     locations.find((location) => location.locationCode === locationCode)?.locationName ?? ''
   const loadingValue = (value: string | null | undefined) =>
-    isLoading ? 'Loading...' : displayValue(value)
+    isLoading ? 'Loading…' : displayValue(value)
 
   return (
     <DetailFieldTile
@@ -1477,7 +1477,7 @@ const ProvincialExemptionDetailsPage = () => {
                       setApprovalConfirmationOpen(true)
                     }}
                   >
-                    {approving ? 'Approving...' : 'Approve exemption'}
+                    {approving ? 'Approving…' : 'Approve exemption'}
                   </Button>
                 )}
                 {persistedStatusCode === 'ACT' && canPerform('/approvedExemptionReport') && (
@@ -1487,7 +1487,7 @@ const ProvincialExemptionDetailsPage = () => {
                     disabled={generatingReport}
                     onClick={() => void onGenerateApprovedReport()}
                   >
-                    {generatingReport ? 'Generating...' : 'Print approved exemption'}
+                    {generatingReport ? 'Generating…' : 'Print approved exemption'}
                   </Button>
                 )}
               </>
@@ -1505,7 +1505,7 @@ const ProvincialExemptionDetailsPage = () => {
           role="status"
           aria-live="polite"
         >
-          <Loading description="Loading provincial exemption detail..." withOverlay={false} />
+          <Loading description="Loading provincial exemption detail…" withOverlay={false} />
         </Column>
       )}
 
@@ -1611,7 +1611,7 @@ const ProvincialExemptionDetailsPage = () => {
           >
             <ContentLoadingOverlay
               loading={isRefreshingDetail}
-              loadingDescription="Refreshing provincial exemption detail..."
+              loadingDescription="Refreshing provincial exemption detail…"
             />
             <Tabs
               selectedIndex={selectedExemptionTabIndex}
@@ -1890,7 +1890,7 @@ const ProvincialExemptionDetailsPage = () => {
                                   onClick={() => void onAddApplication()}
                                 >
                                   {applicationMutationNumber === applicationNumberToAdd.trim()
-                                    ? 'Adding...'
+                                    ? 'Adding…'
                                     : 'Add application'}
                                 </Button>
                               </DisabledButtonTooltip>
@@ -1972,7 +1972,7 @@ const ProvincialExemptionDetailsPage = () => {
                                                 >
                                                   {applicationMutationNumber ===
                                                   application.applicationNumber
-                                                    ? 'Removing...'
+                                                    ? 'Removing…'
                                                     : application.locked
                                                       ? 'Locked'
                                                       : 'Remove'}
@@ -2018,7 +2018,7 @@ const ProvincialExemptionDetailsPage = () => {
                               disabled={creatingPermit}
                               onClick={() => setPermitCreationConfirmationOpen(true)}
                             >
-                              {creatingPermit ? 'Creating permit...' : 'Apply for new permit'}
+                              {creatingPermit ? 'Creating permit…' : 'Apply for new permit'}
                             </Button>
                           </div>
                         )}
@@ -2343,7 +2343,7 @@ const ProvincialExemptionDetailsPage = () => {
                                             onClick={() => setDocumentPendingDeletion(row)}
                                           >
                                             {isRemovingDocumentId === row.id
-                                              ? 'Deleting...'
+                                              ? 'Deleting…'
                                               : 'Delete'}
                                           </Button>
                                         )}
@@ -2423,7 +2423,7 @@ const ProvincialExemptionDetailsPage = () => {
               currentDetail?.exemptionNumber ?? exemptionNumber
             }.`}
             confirmLabel="Approve exemption"
-            pendingLabel="Approving..."
+            pendingLabel="Approving…"
             confirmDisabled={approving || !approvalCertified}
             onClose={closeApprovalConfirmation}
             onConfirm={() => {

@@ -349,7 +349,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     await waitFor(() => {
       expect(mockedFetchProvincialApplicationOptions).toHaveBeenCalled()
       expect(mockedFetchApplicationPackageDetails).toHaveBeenCalledWith('PKG-1')
-      expect(screen.queryByText('Loading authoritative item options...')).not.toBeInTheDocument()
+      expect(screen.queryByText('Loading authoritative item options…')).not.toBeInTheDocument()
       expect(screen.queryByText('Item options unavailable')).not.toBeInTheDocument()
       expect(screen.getByRole('button', { name: 'Save Package' })).toBeEnabled()
       expect(screen.getByRole('button', { name: 'Create Package' })).toBeEnabled()

@@ -1222,7 +1222,7 @@ const ProvincialReviewPage = () => {
               </Button>
             </DisabledButtonTooltip>
           </div>
-          <SearchResultsTableFrame loading={loading} loadingDescription="Loading review queue...">
+          <SearchResultsTableFrame loading={loading} loadingDescription="Loading review queue…">
             {errorMessage ? (
               <EmptyState
                 role="alert"

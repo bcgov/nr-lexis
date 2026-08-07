@@ -843,8 +843,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
 
     expect(await screen.findByRole('heading', { name: 'Permit summary' })).toBeInTheDocument()
-    expect(screen.queryByText('Loading provincial permit detail...')).not.toBeInTheDocument()
-    expect(screen.getByText('Loading associated permit applications...')).toBeInTheDocument()
+    expect(screen.queryByText('Loading provincial permit detail…')).not.toBeInTheDocument()
+    expect(screen.getByText('Loading associated permit applications…')).toBeInTheDocument()
     expect(
       screen.queryByText(
         'Permit edit settings could not be loaded. Editing is unavailable until the data can be retrieved.',
@@ -930,7 +930,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     renderPermitDetails()
 
     expect(await screen.findByRole('heading', { name: 'Permit summary' })).toBeInTheDocument()
-    expect(screen.queryByText('Loading provincial permit detail...')).not.toBeInTheDocument()
+    expect(screen.queryByText('Loading provincial permit detail…')).not.toBeInTheDocument()
     expect(mockedFetchProvincialPermitExemptionContext).toHaveBeenCalledWith('EX-9')
     expect(mockedFetchProvincialPermitDetailTabs).not.toHaveBeenCalled()
     expect(screen.queryByRole('button', { name: 'Edit permit' })).not.toBeInTheDocument()
@@ -1524,7 +1524,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       })
       expect(mockedFetchProvincialPermitDetailTabs).toHaveBeenCalledTimes(2)
     })
-    expect(screen.getByText('Loading associated permit applications...')).toBeInTheDocument()
+    expect(screen.getByText('Loading associated permit applications…')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Add application' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Email review request' })).toBeDisabled()
 
@@ -1923,7 +1923,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     const packageRow = (await screen.findByRole('cell', { name: 'BOIC-9' })).closest('tr')
     expect(packageRow).toBeTruthy()
     await userEvent.click(within(packageRow as HTMLElement).getByRole('button', { name: 'Edit' }))
-    expect(await screen.findByText('Loading package...')).toBeInTheDocument()
+    expect(await screen.findByText('Loading package…')).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Switch permit' }))
     await waitFor(() => expect(mockedFetchProvincialPermitDetail).toHaveBeenCalledWith('888'))

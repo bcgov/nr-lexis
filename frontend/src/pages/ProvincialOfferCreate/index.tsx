@@ -761,7 +761,7 @@ const ProvincialOfferCreatePage = () => {
                 helperText={
                   isScopedProvincialSubmitter
                     ? scopedClientLookupPending
-                      ? 'Loading from your authenticated forest client...'
+                      ? 'Loading from your authenticated forest client…'
                       : 'Loaded from your authenticated forest client.'
                     : undefined
                 }

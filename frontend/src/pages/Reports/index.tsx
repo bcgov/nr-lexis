@@ -1409,7 +1409,7 @@ const ReportsPage = () => {
                   const optionPlaceholder = optionSourceFailed
                     ? 'Options unavailable'
                     : !optionSourceLoaded
-                      ? 'Loading options...'
+                      ? 'Loading options…'
                       : optionControlDisabled
                         ? 'No options available'
                         : undefined

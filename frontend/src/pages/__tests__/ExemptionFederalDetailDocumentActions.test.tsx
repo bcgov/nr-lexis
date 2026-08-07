@@ -1153,14 +1153,14 @@ describe('Exemption and Federal Detail Document Actions', () => {
       expect(mockedFetchFederalApplicationDocuments).toHaveBeenCalledWith('888')
       expect(mockedFetchFederalApplicationRemarks).toHaveBeenCalledWith('888')
     })
-    expect(screen.getByText('Refreshing federal application detail...')).toBeInTheDocument()
+    expect(screen.getByText('Refreshing federal application detail…')).toBeInTheDocument()
 
     resolveScales?.()
     resolveDocuments?.()
     resolveRemarks?.()
 
     await waitFor(() => {
-      expect(screen.queryByText('Refreshing federal application detail...')).not.toBeInTheDocument()
+      expect(screen.queryByText('Refreshing federal application detail…')).not.toBeInTheDocument()
     })
   })
 

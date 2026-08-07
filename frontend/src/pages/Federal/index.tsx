@@ -609,7 +609,7 @@ const FederalPage = () => {
         >
           <SearchResultsTableFrame
             loading={loading}
-            loadingDescription="Loading federal application search results..."
+            loadingDescription="Loading federal application search results…"
             totalItems={
               errorMessage || (loading && results.content.length === 0)
                 ? undefined

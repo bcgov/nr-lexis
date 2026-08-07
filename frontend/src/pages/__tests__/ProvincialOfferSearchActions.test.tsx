@@ -152,7 +152,7 @@ describe('Provincial Offer Search Actions', () => {
       'aria-busy',
       'true',
     )
-    expect(screen.getByText('Loading offer search results...')).toBeVisible()
+    expect(screen.getByText('Loading offer search results…')).toBeVisible()
     expect(screen.queryByText('0 results found')).not.toBeInTheDocument()
 
     await act(async () => {

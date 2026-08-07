@@ -1434,11 +1434,11 @@ function ProvincialApplicationItemsPanel({
               </Button>
             ))}
         </header>
-        {itemsLoading && <InlineLoading description="Loading item data..." />}
+        {itemsLoading && <InlineLoading description="Loading item data…" />}
         {isEditingItems &&
           referenceOptionsLoading &&
           (canEditPackages || canAddPackages || canAddScales) && (
-            <InlineLoading description="Loading authoritative item options..." />
+            <InlineLoading description="Loading authoritative item options…" />
           )}
         {isEditingItems &&
           referenceOptionsUnavailable &&

@@ -298,7 +298,7 @@ function UploadTargetNumberSelect({
       shouldFilterItem={({ item, inputValue }) =>
         shouldFilterSearchableDropdownItem({ item, inputValue, optionCount: options.length })
       }
-      placeholder={isLoading ? 'Loading matches...' : 'Search by number'}
+      placeholder={isLoading ? 'Loading matches…' : 'Search by number'}
       allowCustomValue
       invalid={invalid}
       invalidText={invalidText}
@@ -743,17 +743,17 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
   const submitButtonLabel =
     selectedWorkflowType === 'applicationSubmission'
       ? hasValidatingLexisSubmissions
-        ? `Validating ${applicationSubmissionActionNoun}...`
+        ? `Validating ${applicationSubmissionActionNoun}…`
         : hasQueuedLexisSubmissions || !hasValidatedLexisSubmissions
           ? `Validate ${applicationSubmissionActionNoun}`
           : `Submit ${applicationSubmissionActionNoun}`
       : 'Submit upload'
   const submittingButtonLabel =
     selectedWorkflowType === 'applicationSubmission' && hasQueuedLexisSubmissions
-      ? `Validating ${applicationSubmissionActionNoun}...`
+      ? `Validating ${applicationSubmissionActionNoun}…`
       : selectedWorkflowType === 'applicationSubmission'
-        ? `Submitting ${applicationSubmissionActionNoun}...`
-        : 'Submitting upload...'
+        ? `Submitting ${applicationSubmissionActionNoun}…`
+        : 'Submitting upload…'
 
   const fieldErrors = useMemo<FieldErrors<UploadField>>(
     () => ({

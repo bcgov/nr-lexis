@@ -585,7 +585,7 @@ const ProvincialPermitPage = () => {
         >
           <SearchResultsTableFrame
             loading={loading}
-            loadingDescription="Loading permit search results..."
+            loadingDescription="Loading permit search results…"
             totalItems={
               errorMessage || (loading && results.content.length === 0)
                 ? undefined

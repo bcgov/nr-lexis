@@ -103,7 +103,7 @@ export default function UserRegionPreference({ active }: UserRegionPreferencePro
         disabled={isLoading || isSaving || !hasLoaded}
         onChange={(event) => handleZoneChange(event.target.value)}
       >
-        <SelectItem value="" text={isLoading ? 'Loading preference...' : 'No default zone'} />
+        <SelectItem value="" text={isLoading ? 'Loading preference…' : 'No default zone'} />
         {DEFAULT_ZONE_OPTIONS.map((option) => (
           <SelectItem key={option.value} value={option.value} text={option.label} />
         ))}

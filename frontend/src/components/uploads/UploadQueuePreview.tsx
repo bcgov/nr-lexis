@@ -78,7 +78,7 @@ function UploadQueuePreview({
   emptyStateDescription = 'Upload files to see them here.',
   itemNoun = 'file',
   submitLabel = 'Submit upload',
-  submittingLabel = 'Submitting upload...',
+  submittingLabel = 'Submitting upload…',
   removeLabel = 'Remove',
   pendingMessage = 'Not submitted yet.',
   canRemoveItem = () => true,

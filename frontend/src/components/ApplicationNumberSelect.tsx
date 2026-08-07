@@ -101,7 +101,7 @@ export default function ApplicationNumberSelect({
       shouldFilterItem={({ item, inputValue }) =>
         shouldFilterSearchableDropdownItem({ item, inputValue, optionCount: options.length })
       }
-      placeholder={isLoading ? 'Loading applications...' : 'Search application number'}
+      placeholder={isLoading ? 'Loading applications…' : 'Search application number'}
       allowCustomValue
       disabled={disabled}
       invalid={invalid}

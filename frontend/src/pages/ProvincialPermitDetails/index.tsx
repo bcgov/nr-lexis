@@ -276,19 +276,19 @@ const PermitClientTile = ({
       { label: 'Location', value: displayValue(locationCode) },
       {
         label: 'Company name',
-        value: isLoading ? 'Loading...' : displayValue(clientData?.companyName),
+        value: isLoading ? 'Loading…' : displayValue(clientData?.companyName),
       },
-      { label: 'Address', value: isLoading ? 'Loading...' : displayValue(clientData?.address) },
-      { label: 'City', value: isLoading ? 'Loading...' : displayValue(clientData?.city) },
-      { label: 'Province', value: isLoading ? 'Loading...' : displayValue(clientData?.province) },
+      { label: 'Address', value: isLoading ? 'Loading…' : displayValue(clientData?.address) },
+      { label: 'City', value: isLoading ? 'Loading…' : displayValue(clientData?.city) },
+      { label: 'Province', value: isLoading ? 'Loading…' : displayValue(clientData?.province) },
       {
         label: 'Postal code',
-        value: isLoading ? 'Loading...' : displayValue(clientData?.postalCode),
+        value: isLoading ? 'Loading…' : displayValue(clientData?.postalCode),
       },
-      { label: 'Country', value: isLoading ? 'Loading...' : displayValue(clientData?.country) },
-      { label: 'Phone', value: isLoading ? 'Loading...' : displayValue(clientData?.phone) },
-      { label: 'Fax', value: isLoading ? 'Loading...' : displayValue(clientData?.fax) },
-      { label: 'Email', value: isLoading ? 'Loading...' : displayValue(clientData?.email) },
+      { label: 'Country', value: isLoading ? 'Loading…' : displayValue(clientData?.country) },
+      { label: 'Phone', value: isLoading ? 'Loading…' : displayValue(clientData?.phone) },
+      { label: 'Fax', value: isLoading ? 'Loading…' : displayValue(clientData?.fax) },
+      { label: 'Email', value: isLoading ? 'Loading…' : displayValue(clientData?.email) },
     ]}
   />
 )
@@ -2833,7 +2833,7 @@ const ProvincialPermitDetailsPage = () => {
     >
       <ContentLoadingOverlay
         loading={isRefreshingDetail}
-        loadingDescription="Refreshing provincial permit detail..."
+        loadingDescription="Refreshing provincial permit detail…"
       />
       <Column sm={4} md={8} lg={16}>
         <DetailBreadcrumb label="Provincial permit search" to="/provincial/permit" />
@@ -2863,7 +2863,7 @@ const ProvincialPermitDetailsPage = () => {
                       permitReviewReady
                         ? undefined
                         : isPermitTablesLoading
-                          ? 'Checking permit review readiness...'
+                          ? 'Checking permit review readiness…'
                           : 'An active permit requires an application, package, and scale detail before review can be requested.'
                     }
                     onClick={() => void onSendPermitEmail('request')}
@@ -2890,7 +2890,7 @@ const ProvincialPermitDetailsPage = () => {
                     disabled={isOpeningPermitReport}
                     onClick={() => void onOpenPermitReport()}
                   >
-                    {isOpeningPermitReport ? 'Opening...' : 'Print permit'}
+                    {isOpeningPermitReport ? 'Opening…' : 'Print permit'}
                   </Button>
                 )}
               </>
@@ -2908,7 +2908,7 @@ const ProvincialPermitDetailsPage = () => {
           role="status"
           aria-live="polite"
         >
-          <Loading description="Loading provincial permit detail..." withOverlay={false} />
+          <Loading description="Loading provincial permit detail…" withOverlay={false} />
         </Column>
       )}
 
@@ -3366,7 +3366,7 @@ const ProvincialPermitDetailsPage = () => {
                         <Tile>
                           <h2 className="detail-tile-title">Associated applications</h2>
                           {isPermitTablesLoading ? (
-                            <InlineLoading description="Loading associated permit applications..." />
+                            <InlineLoading description="Loading associated permit applications…" />
                           ) : (
                             !permitTablesErrorMessage &&
                             (associatedPermitApplications.length > 0 ? (
@@ -3406,7 +3406,7 @@ const ProvincialPermitDetailsPage = () => {
                                               }
                                             >
                                               {isRemovingPermitApplication === applicationNumber
-                                                ? 'Removing...'
+                                                ? 'Removing…'
                                                 : 'Remove'}
                                             </Button>
                                           </TableCell>
@@ -3771,7 +3771,7 @@ const ProvincialPermitDetailsPage = () => {
                             {detail.blanketOic ? 'Blanket OIC package details' : 'Package details'}
                           </legend>
                           {isPermitTablesLoading ? (
-                            <InlineLoading description="Loading permit items..." />
+                            <InlineLoading description="Loading permit items…" />
                           ) : (
                             !permitTablesErrorMessage &&
                             ((tabsData?.packages ?? []).length > 0 ? (
@@ -3859,7 +3859,7 @@ const ProvincialPermitDetailsPage = () => {
                                               }
                                             >
                                               {isDeletingBoicPackageNumber === row.packageNumber
-                                                ? 'Deleting...'
+                                                ? 'Deleting…'
                                                 : 'Delete'}
                                             </Button>
                                           </TableCell>
@@ -3885,7 +3885,7 @@ const ProvincialPermitDetailsPage = () => {
                                   : 'Create Blanket OIC package'}
                               </h3>
                               {isLoadingBoicPackage && (
-                                <InlineLoading description="Loading package..." />
+                                <InlineLoading description="Loading package…" />
                               )}
                               <div className="legacy-search-grid">
                                 <TextInput
@@ -4199,7 +4199,7 @@ const ProvincialPermitDetailsPage = () => {
                                                 onClick={() => setBoicScalePendingRemoval(row)}
                                               >
                                                 {isDeletingBoicScaleId === row.id
-                                                  ? 'Removing...'
+                                                  ? 'Removing…'
                                                   : 'Remove'}
                                               </Button>
                                             ) : (
@@ -4274,7 +4274,7 @@ const ProvincialPermitDetailsPage = () => {
                             <p>
                               {editContextLoadFailed
                                 ? 'Fee override details are unavailable. No override changes can be saved.'
-                                : 'Loading fee override details...'}
+                                : 'Loading fee override details…'}
                             </p>
                           ) : isEditingFeeOverride ? (
                             <>
@@ -4395,7 +4395,7 @@ const ProvincialPermitDetailsPage = () => {
                             role="alert"
                           />
                         ) : deferredPermitTabLoading.fees ? (
-                          <InlineLoading description="Loading permit fee details..." />
+                          <InlineLoading description="Loading permit fee details…" />
                         ) : (
                           !permitTablesErrorMessage &&
                           (filteredFees.length > 0 ? (
@@ -4549,7 +4549,7 @@ const ProvincialPermitDetailsPage = () => {
                           placeholder="Filter by file name, description, type, source, or id"
                         />
                         {deferredPermitTabLoading.documents ? (
-                          <InlineLoading description="Loading permit documents..." />
+                          <InlineLoading description="Loading permit documents…" />
                         ) : documentsErrorMessage ? (
                           <EmptyState
                             title="Permit documents unavailable"
@@ -4609,7 +4609,7 @@ const ProvincialPermitDetailsPage = () => {
                                               onClick={() => setDocumentPendingDeletion(row)}
                                             >
                                               {isRemovingDocumentId === row.id
-                                                ? 'Deleting...'
+                                                ? 'Deleting…'
                                                 : 'Delete'}
                                             </Button>
                                           )}
@@ -4689,7 +4689,7 @@ const ProvincialPermitDetailsPage = () => {
                           placeholder="Filter by invoice number, value, rate, or fee-in-lieu"
                         />
                         {deferredPermitTabLoading.invoices ? (
-                          <InlineLoading description="Loading permit invoices..." />
+                          <InlineLoading description="Loading permit invoices…" />
                         ) : invoicesErrorMessage ? (
                           <EmptyState
                             title="Invoices unavailable"

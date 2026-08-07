@@ -832,7 +832,7 @@ const ProvincialApplicationPage = () => {
         >
           <SearchResultsTableFrame
             loading={loading}
-            loadingDescription="Loading application search results..."
+            loadingDescription="Loading application search results…"
             totalItems={
               errorMessage || (loading && results.content.length === 0)
                 ? undefined

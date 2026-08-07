@@ -3017,7 +3017,7 @@ const ProvincialApplicationDetailsPage = () => {
           role="alert"
         />
       ) : permitLookupAvailability === 'loading' ? (
-        <InlineLoading description="Loading application permits..." />
+        <InlineLoading description="Loading application permits…" />
       ) : permitRows.length > 0 ? (
         <TableFrame ariaLabel="Application permits">
           <Table size="md" useZebraStyles>
@@ -3314,7 +3314,7 @@ const ProvincialApplicationDetailsPage = () => {
     >
       <ContentLoadingOverlay
         loading={isRefreshingDetail}
-        loadingDescription="Refreshing provincial application detail..."
+        loadingDescription="Refreshing provincial application detail…"
       />
       <Column sm={4} md={8} lg={16}>
         <DetailBreadcrumb label="Provincial application search" to="/provincial/application" />
@@ -3342,7 +3342,7 @@ const ProvincialApplicationDetailsPage = () => {
           role="status"
           aria-live="polite"
         >
-          <Loading description="Loading provincial application detail..." withOverlay={false} />
+          <Loading description="Loading provincial application detail…" withOverlay={false} />
         </Column>
       )}
 
@@ -4582,7 +4582,7 @@ const ProvincialApplicationDetailsPage = () => {
                           />
                         )}
                         {documentLookupAvailability === 'loading' && (
-                          <InlineLoading description="Loading application documents..." />
+                          <InlineLoading description="Loading application documents…" />
                         )}
                         {documentLookupAvailability === 'available' && !hasApplicationDocuments && (
                           <EmptyState
@@ -4650,7 +4650,7 @@ const ProvincialApplicationDetailsPage = () => {
                                               onClick={() => setDocumentPendingDeletion(row)}
                                             >
                                               {isRemovingDocumentId === row.id
-                                                ? 'Deleting...'
+                                                ? 'Deleting…'
                                                 : 'Delete'}
                                             </Button>
                                           )}

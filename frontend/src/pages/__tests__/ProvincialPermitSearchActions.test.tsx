@@ -220,7 +220,7 @@ describe('Provincial Permit Search Actions', () => {
     renderPage()
 
     await waitFor(() => expect(mockedCountProvincialPermits).toHaveBeenCalledOnce())
-    expect(screen.getByText('Loading permit search results...')).toBeInTheDocument()
+    expect(screen.getByText('Loading permit search results…')).toBeInTheDocument()
     expect(screen.queryByText('11 results found')).not.toBeInTheDocument()
     expect(screen.queryByText('7001')).not.toBeInTheDocument()
 
