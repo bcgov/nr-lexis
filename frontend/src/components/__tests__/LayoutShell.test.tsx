@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -695,6 +695,34 @@ describe('Layout shell', () => {
     expect(window.sessionStorage.getItem('lexis.search-state.v1.provincial-review')).toBe(
       'status=SUBMITTED&page=3',
     )
+  })
+
+  it('locks the default zone controls while the preference is saving', async () => {
+    mockedFetchUserPreferences.mockResolvedValue({ defaultRegion: 'RCO' })
+    let resolveSave!: (preference: { defaultRegion: 'RNI' }) => void
+    mockedUpdateUserPreferences.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveSave = resolve
+        }),
+    )
+    renderLayout('/admin/rtm/emslogamv')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Open profile panel' }))
+    const zoneSelect = await screen.findByRole('combobox', { name: 'Default zone' })
+    await waitFor(() => expect(zoneSelect).toHaveValue('RCO'))
+    await userEvent.selectOptions(zoneSelect, 'RNI')
+    await userEvent.click(screen.getByRole('button', { name: 'Save preference' }))
+
+    const savingButton = screen.getByRole('button', { name: 'Saving…' })
+    expect(savingButton).toBeDisabled()
+    expect(savingButton.querySelector('.cds--loading')).toBeInTheDocument()
+    expect(zoneSelect).toBeDisabled()
+
+    await act(async () => resolveSave({ defaultRegion: 'RNI' }))
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Preference saved.')
+    expect(screen.getByRole('button', { name: 'Save preference' })).toBeDisabled()
   })
 
   it('does not offer region preferences to provincial submitters', async () => {

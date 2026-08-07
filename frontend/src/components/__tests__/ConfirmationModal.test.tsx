@@ -80,18 +80,42 @@ describe('ConfirmationModal', () => {
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1))
   })
 
-  it('keeps the dialog open and delegates rejected work to the caller', async () => {
+  it('shows rejected work, keeps the dialog open, and allows retry', async () => {
     const user = userEvent.setup()
     const error = new Error('database unavailable')
     const onClose = vi.fn()
+    const onConfirm = vi.fn().mockRejectedValueOnce(error).mockResolvedValueOnce(undefined)
+
+    render(
+      <ConfirmationModal open title="Approve exemption?" onConfirm={onConfirm} onClose={onClose} />,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+
+    expect(await screen.findByText('Action failed')).toBeVisible()
+    expect(screen.getByText('database unavailable')).toBeVisible()
+    expect(onClose).not.toHaveBeenCalled()
+    expect(screen.getByRole('dialog', { name: 'Approve exemption?' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Confirm' })).toBeEnabled()
+
+    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+
+    await waitFor(() => expect(onConfirm).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1))
+    expect(screen.queryByText('database unavailable')).not.toBeInTheDocument()
+  })
+
+  it('delegates rejected work when the caller owns error feedback', async () => {
+    const user = userEvent.setup()
+    const error = new Error('policy conflict')
     const onError = vi.fn()
 
     render(
       <ConfirmationModal
         open
-        title="Approve exemption?"
+        title="Delete policy?"
         onConfirm={() => Promise.reject(error)}
-        onClose={onClose}
+        onClose={vi.fn()}
         onError={onError}
       />,
     )
@@ -99,8 +123,8 @@ describe('ConfirmationModal', () => {
     await user.click(screen.getByRole('button', { name: 'Confirm' }))
 
     await waitFor(() => expect(onError).toHaveBeenCalledWith(error))
-    expect(onClose).not.toHaveBeenCalled()
-    expect(screen.getByRole('dialog', { name: 'Approve exemption?' })).toBeVisible()
+    expect(screen.queryByText('Action failed')).not.toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: 'Delete policy?' })).toBeVisible()
     expect(screen.getByRole('button', { name: 'Confirm' })).toBeEnabled()
   })
 

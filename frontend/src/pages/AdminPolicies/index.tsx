@@ -5,6 +5,7 @@ import {
   Column,
   Grid,
   InlineNotification,
+  Loading,
   Pagination,
   Select,
   SelectItem,
@@ -104,6 +105,7 @@ type PendingDeletion =
 
 const ADMIN_PAGE_SIZES = [20, 50, 100, 200]
 const DEFAULT_ADMIN_PAGE_SIZE = 100
+const PendingIcon = () => <Loading small withOverlay={false} description="" />
 const FEE_REGION_OPTIONS_ERROR =
   'Authoritative region options are unavailable. Fee policy saves are disabled.'
 
@@ -707,7 +709,6 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
           : 'Unable to delete the fee in lieu policy. Please try again or contact support.',
       ),
     )
-    setPendingDeletion(null)
   }
 
   const editExportSchedule = (row: ExportScheduleRow): void => {
@@ -778,12 +779,14 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
   const deleteExportSchedule = async (row: ExportScheduleRow): Promise<void> => {
     clearNotifications()
     setIsMutatingPolicies(true)
+    let failureMessage = ''
 
     try {
       const result = await deleteExportScheduleRequest(row.exportScheduleId)
       if (!result.success) {
-        setErrorMessage(result.message || 'Unable to delete export schedule.')
-        return
+        failureMessage = result.message || 'Unable to delete export schedule.'
+        setErrorMessage(failureMessage)
+        throw new Error(failureMessage)
       }
       await loadPolicies()
       if (editingScheduleId === row.exportScheduleId) {
@@ -791,17 +794,17 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
       }
       setSuccessMessage(result.message || 'Export schedule deleted.')
     } catch (error) {
-      console.error(error)
-      const status = getResponseStatus(error)
-      if (status) {
-        setErrorMessage(
-          'Unable to delete the export schedule. Refresh and try again, or contact support if the issue persists.',
-        )
-      } else {
-        setErrorMessage(
-          'Unable to delete the export schedule. Please try again or contact support.',
-        )
+      if (!failureMessage) {
+        console.error(error)
       }
+      const status = getResponseStatus(error)
+      failureMessage =
+        failureMessage ||
+        (status
+          ? 'Unable to delete the export schedule. Refresh and try again, or contact support if the issue persists.'
+          : 'Unable to delete the export schedule. Please try again or contact support.')
+      setErrorMessage(failureMessage)
+      throw new Error(failureMessage)
     } finally {
       setIsMutatingPolicies(false)
     }
@@ -943,7 +946,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
             </Button>
             <Button
               kind="primary"
-              renderIcon={editingFeePolicyId ? undefined : Add}
+              renderIcon={isMutatingPolicies ? PendingIcon : editingFeePolicyId ? undefined : Add}
               disabled={
                 isLoadingPolicies ||
                 isMutatingPolicies ||
@@ -955,7 +958,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
               onClick={() => void upsertFeePolicy()}
             >
               {isMutatingPolicies
-                ? 'Saving...'
+                ? 'Saving…'
                 : editingFeePolicyId
                   ? 'Update fee policy'
                   : 'Add fee policy'}
@@ -1021,12 +1024,12 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
             </Button>
             <Button
               kind="primary"
-              renderIcon={editingFilPolicyId ? undefined : Add}
+              renderIcon={isMutatingPolicies ? PendingIcon : editingFilPolicyId ? undefined : Add}
               disabled={isLoadingPolicies || isMutatingPolicies || !canManageFilPolicy}
               onClick={() => void upsertFilPolicy()}
             >
               {isMutatingPolicies
-                ? 'Saving...'
+                ? 'Saving…'
                 : editingFilPolicyId
                   ? 'Update fee in lieu policy'
                   : 'Add fee in lieu policy'}

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Button, Select, SelectItem } from '@carbon/react'
+import { Button, Loading, Select, SelectItem } from '@carbon/react'
 import { resetPersistedRegionSearchState } from '@/pages/shared/usePersistedSearchParams'
 import {
   DEFAULT_ZONE_HELPER_TEXT,
@@ -16,6 +16,7 @@ type UserRegionPreferenceProps = {
 const LOAD_ERROR = 'Your default zone could not be loaded.'
 const SAVE_ERROR = 'Your default zone could not be saved.'
 const ALL_REGIONS_HELPER = 'Preselects all Natural Resource Regions in search tables.'
+const PendingIcon = () => <Loading small withOverlay={false} description="" />
 
 const asDefaultZone = (value: string): DefaultZone | null =>
   DEFAULT_ZONE_OPTIONS.find((option) => option.value === value)?.value ?? null
@@ -112,9 +113,10 @@ export default function UserRegionPreference({ active }: UserRegionPreferencePro
           kind="primary"
           size="sm"
           disabled={isLoading || isSaving || !hasLoaded || selectedZone === savedZone}
+          renderIcon={isSaving ? PendingIcon : undefined}
           onClick={() => void savePreference()}
         >
-          {isSaving ? 'Saving...' : 'Save preference'}
+          {isSaving ? 'Saving…' : 'Save preference'}
         </Button>
         <p
           className={`profile-panel__preferences-status${hasError ? ' is-error' : ''}`}

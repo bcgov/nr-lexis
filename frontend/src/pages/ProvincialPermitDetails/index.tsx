@@ -2276,13 +2276,13 @@ const ProvincialPermitDetailsPage = () => {
       setActionErrorMessage('')
       setActionInfoMessage('')
       setIsDeletingBoicPackageNumber(packageNumberToDelete)
+      let failureMessage = ''
       try {
         const result = await deleteBlanketOicPackage(resolvedPermitNumber, packageNumberToDelete)
         if (!result.success) {
-          setActionErrorMessage(
-            result.errors[0] || result.message || 'Unable to delete the Blanket OIC package.',
-          )
-          return
+          failureMessage =
+            result.errors[0] || result.message || 'Unable to delete the Blanket OIC package.'
+          throw new Error(failureMessage)
         }
         if (editingBoicPackageNumber === packageNumberToDelete) {
           resetBlanketOicPackageForm()
@@ -2290,8 +2290,11 @@ const ProvincialPermitDetailsPage = () => {
         await reloadPermitTabs()
         setActionInfoMessage(result.message || 'Blanket OIC package was deleted.')
       } catch (error) {
-        console.error(error)
-        setActionErrorMessage('Unable to delete the Blanket OIC package.')
+        if (!failureMessage) {
+          console.error(error)
+          failureMessage = 'Unable to delete the Blanket OIC package.'
+        }
+        throw new Error(failureMessage)
       } finally {
         setIsDeletingBoicPackageNumber(null)
       }

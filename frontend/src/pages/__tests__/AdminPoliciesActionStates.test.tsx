@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -387,7 +387,38 @@ describe('Admin policy action states', () => {
     expect(
       await screen.findByText('Only future-dated fee policies can be deleted.'),
     ).toBeInTheDocument()
-    expect(screen.queryByRole('dialog', { name: 'Delete fee policy?' })).not.toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: 'Delete fee policy?' })).toBeVisible()
+    expect(within(dialog).getByRole('button', { name: 'Delete' })).toBeEnabled()
+  })
+
+  it('shows and locks the fee policy save state while the request is pending', async () => {
+    let resolveSave!: () => void
+    mockedUpsertFeePolicy.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveSave = resolve
+        }),
+    )
+    renderPage('fee')
+
+    const dialog = await openAddPolicyDialog('fee')
+    fireEvent.change(within(dialog).getByLabelText('Policy effective date'), {
+      target: { value: '2099-02-01' },
+    })
+    await userEvent.selectOptions(within(dialog).getByLabelText('Region'), '1904')
+    await userEvent.type(within(dialog).getByLabelText('Fee increase percentage'), '5')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Add fee policy' }))
+
+    const savingButton = within(dialog).getByRole('button', { name: 'Saving…' })
+    expect(savingButton).toBeDisabled()
+    expect(savingButton.querySelector('.cds--loading')).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeDisabled()
+
+    await act(async () => resolveSave())
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: 'Add fee policy' })).not.toBeInTheDocument()
+    })
   })
 
   it('submits fee policy add when required fields are valid', async () => {
@@ -1403,6 +1434,42 @@ describe('Admin policy action states', () => {
       expect(mockedDeleteExportSchedule).toHaveBeenCalledWith('1001')
     })
     expect(await screen.findByText('Export schedule deleted.')).toBeInTheDocument()
+  })
+
+  it('keeps a failed export schedule deletion open for retry', async () => {
+    mockedDeleteExportSchedule
+      .mockResolvedValueOnce({
+        success: false,
+        message: 'Export schedule is locked.',
+        schedule: null,
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        message: 'Export schedule deleted.',
+        schedule: null,
+      })
+    renderPage('schedule')
+
+    const scheduleRow = (await screen.findByText('1001')).closest('tr')
+    expect(scheduleRow).not.toBeNull()
+    await userEvent.click(
+      within(scheduleRow as HTMLElement).getByRole('button', { name: 'Delete' }),
+    )
+    const dialog = screen.getByRole('dialog', { name: 'Delete export schedule?' })
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
+
+    expect(await screen.findByText('Export schedule is locked.')).toBeInTheDocument()
+    expect(dialog).toBeVisible()
+    expect(within(dialog).getByRole('button', { name: 'Delete' })).toBeEnabled()
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
+
+    await waitFor(() => expect(mockedDeleteExportSchedule).toHaveBeenCalledTimes(2))
+    await waitFor(() => {
+      expect(
+        screen.queryByRole('dialog', { name: 'Delete export schedule?' }),
+      ).not.toBeInTheDocument()
+    })
   })
 
   it('shows validation contract when fee policy fields are incomplete', async () => {

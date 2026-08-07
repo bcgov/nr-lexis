@@ -1814,9 +1814,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(mockedDeleteBlanketOicPackage).toHaveBeenCalledTimes(1)
     expect(mockedFetchProvincialPermitDetailTabs).toHaveBeenCalledTimes(1)
     expect(screen.queryByText('Blanket OIC package was deleted.')).not.toBeInTheDocument()
-    expect(
-      screen.queryByRole('dialog', { name: 'Delete Blanket OIC package BOIC-9?' }),
-    ).not.toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: 'Delete Blanket OIC package BOIC-9?' })).toBeVisible()
+    expect(within(dialog).getByRole('button', { name: 'Delete package' })).toBeEnabled()
   })
 
   it('keeps Blanket OIC package editing closed when its edit context cannot be loaded', async () => {
