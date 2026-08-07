@@ -20,8 +20,11 @@ import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvRowDto;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvUploadResultDto;
 import ca.bc.gov.mof.lexis.repository.rtm.OracleRtmEmsLogAmvRepository;
 import ca.bc.gov.mof.lexis.service.scan.VirusScanService;
+import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import org.mockito.ArgumentCaptor;
@@ -386,18 +389,21 @@ class OracleRtmEmsLogAmvServiceTest {
   @Test
   void shouldApplyTheScreenMonthAndExpandTheGroupedPineColumn() throws IOException {
     OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
+    Clock clock =
+        Clock.fixed(Instant.parse("2026-06-15T19:00:00Z"), LexisBusinessTime.ZONE);
+    LocalDate retrievalMonth = LocalDate.of(2026, 6, 1);
     LocalDate effectiveMonth = LocalDate.of(2026, 7, 1);
-    when(repository.existsExact(anyString(), eq("A"), eq("O"), eq(effectiveMonth)))
-        .thenReturn(true);
     stubAppliedFixtureValues(repository);
-    OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository);
+    OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository, clock);
 
     var preview = service.previewUpload(groupedPineWorkbook(), "2026-07-01");
     RtmEmsLogAmvUploadResultDto upload =
         service.upload(groupedPineWorkbook(), "2026-07-01");
+    RtmEmsLogAmvUploadResultDto reupload =
+        service.upload(groupedPineWorkbook(), "2026-07-01");
 
     assertThat(preview.status()).isEqualTo("accepted");
-    assertThat(preview.retrievalDate()).isEqualTo("2026-07-01");
+    assertThat(preview.retrievalDate()).isEqualTo("2026-06-01");
     assertThat(preview.updateDate()).isEqualTo("2026-07-01");
     assertThat(preview.rows())
         .extracting(row -> List.of(row.species(), row.growthIndicator()))
@@ -411,7 +417,9 @@ class OracleRtmEmsLogAmvServiceTest {
     assertThat(upload.status()).isEqualTo("accepted");
     assertThat(upload.attemptedRowCount()).isEqualTo(6);
     assertThat(upload.uploadedRowCount()).isEqualTo(6);
-    verify(repository)
+    assertThat(reupload.status()).isEqualTo("accepted");
+    assertThat(reupload.uploadedRowCount()).isEqualTo(6);
+    verify(repository, times(2))
         .upsertAtomically(
             argThat(
                 targets ->
@@ -433,6 +441,33 @@ class OracleRtmEmsLogAmvServiceTest {
                             .allMatch(
                                 target ->
                                     target.effectiveDate().equals(effectiveMonth))));
+    verify(repository, times(18))
+        .existsExact(anyString(), eq("A"), anyString(), eq(retrievalMonth));
+  }
+
+  @Test
+  void shouldRejectEveryScreenMonthExceptTheImmediatelyUpcomingMonth() throws IOException {
+    OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
+    Clock clock =
+        Clock.fixed(Instant.parse("2026-06-15T19:00:00Z"), LexisBusinessTime.ZONE);
+    OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository, clock);
+
+    var currentMonth = service.previewUpload(groupedPineWorkbook(), "2026-06-01");
+    var previousMonth = service.upload(groupedPineWorkbook(), "2026-05-01");
+    var laterFutureMonth = service.previewUpload(groupedPineWorkbook(), "2026-08-01");
+    var midMonth = service.upload(groupedPineWorkbook(), "2026-07-15");
+    var missingMonth = service.previewUpload(groupedPineWorkbook(), null);
+
+    assertThat(currentMonth.status()).isEqualTo("validation_failed");
+    assertThat(previousMonth.status()).isEqualTo("validation_failed");
+    assertThat(laterFutureMonth.status()).isEqualTo("validation_failed");
+    assertThat(currentMonth.errors())
+        .containsExactly("Average market values can only be uploaded for the next month.");
+    assertThat(previousMonth.errors()).containsExactlyElementsOf(currentMonth.errors());
+    assertThat(laterFutureMonth.errors()).containsExactlyElementsOf(currentMonth.errors());
+    assertThat(midMonth.errors()).containsExactly("Select a valid effective month.");
+    assertThat(missingMonth.errors()).containsExactly("Select a valid effective month.");
+    verifyNoInteractions(repository);
   }
 
   @Test

@@ -116,7 +116,7 @@ class RtmEmsLogAmvUploadPreviewAnalyzerTest {
 
     assertThat(result.headerDetected()).isTrue();
     assertThat(result.updateDate()).isEqualTo(LocalDate.of(2026, 7, 1));
-    assertThat(result.retrievalDate()).isEqualTo(LocalDate.of(2026, 7, 1));
+    assertThat(result.retrievalDate()).isEqualTo(LocalDate.of(2026, 6, 1));
     assertThat(result.growthIndicator()).isEqualTo("O");
     assertThat(result.dataRowCount()).isEqualTo(16);
     assertThat(result.numericCellCount()).isZero();

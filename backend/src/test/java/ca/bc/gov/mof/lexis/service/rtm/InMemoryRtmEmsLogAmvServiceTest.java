@@ -5,8 +5,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvSaveRequestDto;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvUploadPreviewDto;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvUploadResultDto;
+import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockMultipartFile;
@@ -66,15 +69,17 @@ class InMemoryRtmEmsLogAmvServiceTest {
 
   @Test
   void shouldApplyScreenMonthToGroupedPineAndBothGrowthTypes() throws IOException {
-    InMemoryRtmEmsLogAmvService service = new InMemoryRtmEmsLogAmvService();
+    Clock clock =
+        Clock.fixed(Instant.parse("2026-06-15T19:00:00Z"), LexisBusinessTime.ZONE);
+    InMemoryRtmEmsLogAmvService service = new InMemoryRtmEmsLogAmvService(clock);
     service.saveBatch(
         List.of(
             new RtmEmsLogAmvSaveRequestDto(
                 "PINE",
                 "A",
                 "O",
-                "2026-07-01",
-                "2026-07-01",
+                "2026-06-01",
+                "2026-06-01",
                 BigDecimal.ZERO,
                 "update")));
 
@@ -82,8 +87,11 @@ class InMemoryRtmEmsLogAmvServiceTest {
         workbook("grouped-pine.xlsx", RtmEmsLogAmvWorkbookTestFixtures.ambiguousPineWorkbook());
     RtmEmsLogAmvUploadPreviewDto preview = service.previewUpload(workbook, "2026-07-01");
     RtmEmsLogAmvUploadResultDto upload = service.upload(workbook, "2026-07-01");
+    RtmEmsLogAmvUploadResultDto reupload = service.upload(workbook, "2026-07-01");
 
     assertThat(preview.status()).isEqualTo("accepted");
+    assertThat(preview.retrievalDate()).isEqualTo("2026-06-01");
+    assertThat(preview.updateDate()).isEqualTo("2026-07-01");
     assertThat(preview.rows())
         .extracting(row -> List.of(row.species(), row.growthIndicator()))
         .containsExactly(
@@ -96,6 +104,29 @@ class InMemoryRtmEmsLogAmvServiceTest {
     assertThat(upload.status()).isEqualTo("accepted");
     assertThat(upload.attemptedRowCount()).isEqualTo(6);
     assertThat(upload.uploadedRowCount()).isEqualTo(6);
+    assertThat(reupload.status()).isEqualTo("accepted");
+    assertThat(reupload.uploadedRowCount()).isEqualTo(6);
+  }
+
+  @Test
+  void shouldRejectCurrentPreviousAndLaterFutureScreenMonths() throws IOException {
+    Clock clock =
+        Clock.fixed(Instant.parse("2026-06-15T19:00:00Z"), LexisBusinessTime.ZONE);
+    InMemoryRtmEmsLogAmvService service = new InMemoryRtmEmsLogAmvService(clock);
+    MultipartFile workbook =
+        workbook("grouped-pine.xlsx", RtmEmsLogAmvWorkbookTestFixtures.ambiguousPineWorkbook());
+
+    var currentMonth = service.previewUpload(workbook, "2026-06-01");
+    var previousMonth = service.upload(workbook, "2026-05-01");
+    var laterFutureMonth = service.previewUpload(workbook, "2026-08-01");
+
+    assertThat(currentMonth.status()).isEqualTo("validation_failed");
+    assertThat(previousMonth.status()).isEqualTo("validation_failed");
+    assertThat(laterFutureMonth.status()).isEqualTo("validation_failed");
+    assertThat(currentMonth.errors())
+        .containsExactly("Average market values can only be uploaded for the next month.");
+    assertThat(previousMonth.errors()).containsExactlyElementsOf(currentMonth.errors());
+    assertThat(laterFutureMonth.errors()).containsExactlyElementsOf(currentMonth.errors());
   }
 
   @Test

@@ -30,7 +30,11 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
 
     expect(screen.getByRole('heading', { name: 'Average market values', level: 1 })).toBeVisible()
     expect(screen.getByText(/domestic log values that become the fee in lieu/i)).toBeVisible()
-    expect((screen.getByLabelText('Month') as HTMLSelectElement).value).toMatch(/^\d{4}-\d{2}-01$/)
+    const monthSelect = screen.getByLabelText('Month') as HTMLSelectElement
+    expect(monthSelect.value).toMatch(/^\d{4}-\d{2}-01$/)
+    expect(monthSelect).toBeDisabled()
+    expect(monthSelect.options).toHaveLength(1)
+    expect(monthSelect.selectedOptions[0]).toHaveTextContent(/, next month$/)
     expect(screen.getByText('Values take effect')).toBeVisible()
     expect(screen.getByText('Compared against')).toBeVisible()
     expect(screen.getByRole('heading', { name: 'Values', level: 2 })).toBeVisible()

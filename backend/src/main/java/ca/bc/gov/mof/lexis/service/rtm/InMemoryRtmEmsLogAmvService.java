@@ -1,6 +1,8 @@
 package ca.bc.gov.mof.lexis.service.rtm;
 
 import static ca.bc.gov.mof.lexis.service.rtm.RtmEmsLogAmvDateUtils.isFirstOfMonth;
+import static ca.bc.gov.mof.lexis.service.rtm.RtmEmsLogAmvDateUtils.isNextMonth;
+import static ca.bc.gov.mof.lexis.service.rtm.RtmEmsLogAmvDateUtils.parseMonthStartDate;
 import static ca.bc.gov.mof.lexis.service.rtm.RtmEmsLogAmvDateUtils.parseRetrievalDate;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
@@ -11,8 +13,10 @@ import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvUploadPreviewDto;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvUploadResultDto;
 import ca.bc.gov.mof.lexis.service.scan.VirusScanException;
 import ca.bc.gov.mof.lexis.service.scan.VirusScanService;
+import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -44,6 +48,7 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
           "PINE", List.of("WH", "LO", "YE"));
 
   private final VirusScanService virusScanService;
+  private final Clock clock;
 
   private final List<RtmEmsLogAmvRowDto> rows = new ArrayList<>(
       List.of(
@@ -80,7 +85,16 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
   }
 
   public InMemoryRtmEmsLogAmvService(VirusScanService virusScanService) {
+    this(virusScanService, LexisBusinessTime.systemClock());
+  }
+
+  InMemoryRtmEmsLogAmvService(Clock clock) {
+    this(VirusScanService.NO_OP, clock);
+  }
+
+  InMemoryRtmEmsLogAmvService(VirusScanService virusScanService, Clock clock) {
     this.virusScanService = virusScanService;
+    this.clock = clock == null ? LexisBusinessTime.systemClock() : clock;
   }
 
   @Override
@@ -160,28 +174,26 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
       LocalDate effectiveDate =
           updateDate != null && updateDate.isAfter(retrievalDate) ? updateDate : retrievalDate;
       if (updateDate != null && updateDate.isAfter(retrievalDate)) {
-        if (findMatchingRowIndex(
-                species, grade, growthIndicator, formatDate(effectiveDate))
-            >= 0) {
-          return buildMutationResult(
-              RETURN_FAILURE,
-              "Unable to create row; the exact AMV key already exists.",
-              List.of("A row already exists for species, grade, growth indicator and update date."),
-              List.of());
-        }
-        RtmEmsLogAmvRowDto inserted =
+        int targetIndex =
+            findMatchingRowIndex(species, grade, growthIndicator, formatDate(effectiveDate));
+        RtmEmsLogAmvRowDto currentTarget = targetIndex < 0 ? null : rows.get(targetIndex);
+        RtmEmsLogAmvRowDto upserted =
             new RtmEmsLogAmvRowDto(
                 species,
                 grade,
                 growthIndicator,
                 formatDate(effectiveDate),
-                null,
-                null,
+                formatDate(effectiveDate),
+                currentTarget == null ? null : currentTarget.newValue(),
                 request.newValue(),
                 "0");
-        rows.add(inserted);
+        if (targetIndex < 0) {
+          rows.add(upserted);
+        } else {
+          rows.set(targetIndex, upserted);
+        }
         return buildMutationResult(
-            RETURN_SUCCESS, "Save completed. Updated value.", List.of(), List.of(inserted));
+            RETURN_SUCCESS, "Save completed. Updated value.", List.of(), List.of(upserted));
       }
 
       RtmEmsLogAmvRowDto current =
@@ -316,11 +328,16 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
 
   @Override
   public RtmEmsLogAmvUploadPreviewDto previewUpload(MultipartFile file) {
-    return previewUpload(file, null);
+    return previewUpload(file, null, false);
   }
 
   @Override
   public RtmEmsLogAmvUploadPreviewDto previewUpload(MultipartFile file, String effectiveMonth) {
+    return previewUpload(file, effectiveMonth, true);
+  }
+
+  private RtmEmsLogAmvUploadPreviewDto previewUpload(
+      MultipartFile file, String effectiveMonth, boolean enforceNextMonth) {
     if (file == null || file.isEmpty()) {
       return buildPreview("rejected", "No file provided.", 0, List.of("Choose a .xlsx file."), List.of());
     }
@@ -345,13 +362,24 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
           file.getSize());
     }
 
-    LocalDate parsedEffectiveMonth = parseRetrievalDate(effectiveMonth);
-    if (trimToNull(effectiveMonth) != null && parsedEffectiveMonth == null) {
+    LocalDate parsedEffectiveMonth =
+        enforceNextMonth
+            ? parseMonthStartDate(effectiveMonth)
+            : parseRetrievalDate(effectiveMonth);
+    if (enforceNextMonth && parsedEffectiveMonth == null) {
       return buildPreview(
           RETURN_VALIDATION,
           "Upload template validation failed.",
           0,
           List.of("Select a valid effective month."),
+          List.of());
+    }
+    if (enforceNextMonth && !isNextMonth(parsedEffectiveMonth, clock)) {
+      return buildPreview(
+          RETURN_VALIDATION,
+          "Upload template validation failed.",
+          0,
+          List.of("Average market values can only be uploaded for the next month."),
           List.of());
     }
 
@@ -436,11 +464,16 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
 
   @Override
   public RtmEmsLogAmvUploadResultDto upload(MultipartFile file) {
-    return upload(file, null);
+    return upload(file, null, false);
   }
 
   @Override
   public RtmEmsLogAmvUploadResultDto upload(MultipartFile file, String effectiveMonth) {
+    return upload(file, effectiveMonth, true);
+  }
+
+  private RtmEmsLogAmvUploadResultDto upload(
+      MultipartFile file, String effectiveMonth, boolean enforceNextMonth) {
     List<String> validationErrors = validateUploadRequest(file);
     if (!validationErrors.isEmpty()) {
       return buildUploadResult(
@@ -457,8 +490,11 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
 
     String fileName = trimToNull(file.getOriginalFilename());
     long fileSize = file.getSize();
-    LocalDate parsedEffectiveMonth = parseRetrievalDate(effectiveMonth);
-    if (trimToNull(effectiveMonth) != null && parsedEffectiveMonth == null) {
+    LocalDate parsedEffectiveMonth =
+        enforceNextMonth
+            ? parseMonthStartDate(effectiveMonth)
+            : parseRetrievalDate(effectiveMonth);
+    if (enforceNextMonth && parsedEffectiveMonth == null) {
       return buildUploadResult(
           RETURN_VALIDATION,
           "Upload template validation failed.",
@@ -467,6 +503,18 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
           0,
           0,
           List.of("Select a valid effective month."),
+          List.of(),
+          List.of());
+    }
+    if (enforceNextMonth && !isNextMonth(parsedEffectiveMonth, clock)) {
+      return buildUploadResult(
+          RETURN_VALIDATION,
+          "Upload template validation failed.",
+          fileName,
+          fileSize,
+          0,
+          0,
+          List.of("Average market values can only be uploaded for the next month."),
           List.of(),
           List.of());
     }

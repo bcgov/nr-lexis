@@ -777,7 +777,7 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
     int headerRow = -1;
     UploadMetadata metadata = parseUploadMetadata(rows);
     LocalDate updateDate = effectiveMonth == null ? metadata.updateDate() : effectiveMonth;
-    LocalDate retrievalDate = updateDate;
+    LocalDate retrievalDate = effectiveMonth == null ? updateDate : effectiveMonth.minusMonths(1);
     String growthIndicator =
         defaultGrowthIndicator == null ? metadata.growthIndicator() : defaultGrowthIndicator;
     Map<String, String> speciesHeaderAliases = speciesHeaderAliases(effectiveMonth != null);

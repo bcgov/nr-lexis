@@ -130,17 +130,6 @@ const shiftEffectiveMonth = (dateValue: string, offset: number): string => {
   return shifted.toISOString().slice(0, 10)
 }
 
-const buildEffectiveMonthOptions = (currentMonth: string) => {
-  return [1, ...Array.from({ length: 13 }, (_, index) => -index)].map((offset) => {
-    const value = shiftEffectiveMonth(currentMonth, offset)
-    const label = formatUploadMonth(value) ?? value
-    return {
-      value,
-      label: offset === 0 ? `${label}, current month` : label,
-    }
-  })
-}
-
 const formatEffectiveDateRange = (dateValue: string): string => {
   const match = /^(\d{4})-(\d{2})-01$/.exec(dateValue)
   if (!match) {
@@ -589,10 +578,9 @@ const ReviewUploadContent = ({
 const RtmEmsLogAmvUploadPage = () => {
   const { canPerform } = useAuth()
   const canManage = canPerform('/lexisAgentAdmin')
-  const currentMonth = currentEffectiveMonth()
   const validationRequestRef = useRef(0)
   const uploadInputRef = useRef<HTMLInputElement>(null)
-  const [effectiveMonth, setEffectiveMonth] = useState(currentEffectiveMonth)
+  const [effectiveMonth] = useState(() => shiftEffectiveMonth(currentEffectiveMonth(), 1))
   const [uploadStep, setUploadStep] = useState<RtmUploadStep>('upload')
   const [isPreviewing, setIsPreviewing] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
@@ -609,7 +597,6 @@ const RtmEmsLogAmvUploadPage = () => {
   const [uploadResult, setUploadResult] = useState<RtmEmsLogAmvUploadResult | null>(null)
   const [uploadInputKey, setUploadInputKey] = useState(0)
   const [isDraggingUpload, setIsDraggingUpload] = useState(false)
-  const effectiveMonthOptions = buildEffectiveMonthOptions(currentMonth)
   const previousEffectiveMonth = shiftEffectiveMonth(effectiveMonth, -1)
 
   useEffect(() => {
@@ -851,15 +838,12 @@ const RtmEmsLogAmvUploadPage = () => {
             className="rtm-amv-month-select"
             labelText="Month"
             value={effectiveMonth}
-            disabled={isPreviewing || isUploading}
-            onChange={(event) => {
-              setEffectiveMonth(event.currentTarget.value)
-              clearUploadState()
-            }}
+            disabled
           >
-            {effectiveMonthOptions.map((option) => (
-              <SelectItem key={option.value} value={option.value} text={option.label} />
-            ))}
+            <SelectItem
+              value={effectiveMonth}
+              text={`${formatUploadMonth(effectiveMonth) ?? effectiveMonth}, next month`}
+            />
           </Select>
           <div className="rtm-amv-month-summary__item">
             <span>Values take effect</span>
