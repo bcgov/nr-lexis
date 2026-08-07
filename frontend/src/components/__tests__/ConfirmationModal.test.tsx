@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, vi } from 'vitest'
 
@@ -141,6 +141,24 @@ describe('ConfirmationModal', () => {
 
     expect(onClose).toHaveBeenCalledTimes(1)
     expect(onConfirm).not.toHaveBeenCalled()
+  })
+
+  it('keeps the confirmation open when the backdrop is clicked', () => {
+    const onClose = vi.fn()
+
+    render(
+      <ConfirmationModal open title="Delete application?" onConfirm={vi.fn()} onClose={onClose} />,
+    )
+
+    const modalRoot = screen
+      .getByRole('dialog', { name: 'Delete application?' })
+      .closest('.cds--modal')
+    expect(modalRoot).not.toBeNull()
+
+    fireEvent.click(modalRoot as HTMLElement)
+
+    expect(onClose).not.toHaveBeenCalled()
+    expect(screen.getByRole('dialog', { name: 'Delete application?' })).toBeVisible()
   })
 
   it('guards confirmation while the caller marks it disabled', async () => {

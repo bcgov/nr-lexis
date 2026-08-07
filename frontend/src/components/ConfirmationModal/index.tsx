@@ -105,7 +105,7 @@ const ConfirmationModal = ({
         aria-describedby={description ? descriptionId : undefined}
         className={['lexis-confirmation-modal', className].filter(Boolean).join(' ')}
         selectorPrimaryFocus={`#${cancelButtonId}`}
-        preventCloseOnClickOutside={pending}
+        preventCloseOnClickOutside
         onRequestClose={requestClose}
       >
         <div className="lexis-confirmation-modal__body">

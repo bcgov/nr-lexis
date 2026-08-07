@@ -4170,19 +4170,22 @@ $notification-types: 'error', 'info', 'success', 'warning';
   margin-block-start: 1rem;
 }
 
-.detail-section-card .detail-field-grid {
+.detail-section-card .detail-field-grid,
+.application-detail-clients .detail-field-grid {
   grid-template-columns: 1fr;
   gap: 1rem 1.5rem;
 }
 
 @media (min-width: 672px) {
-  .detail-section-card .detail-field-grid {
+  .detail-section-card .detail-field-grid,
+  .application-detail-clients .detail-field-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (min-width: 1312px) {
-  .detail-section-card .detail-field-grid {
+  .detail-section-card .detail-field-grid,
+  .application-detail-clients .detail-field-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }

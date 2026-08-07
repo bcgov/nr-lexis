@@ -1183,6 +1183,19 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       ),
     ).toBe(false)
 
+    await ownerFields.evaluate((grid) => {
+      const card = grid.closest('.detail-section-card')
+      if (!(card instanceof HTMLElement)) throw new Error('Owner detail card not found')
+      card.classList.remove('detail-section-card')
+      card.classList.add('application-detail-clients')
+    })
+    await page.setViewportSize({ width: 1440, height: 900 })
+    expect(await columnCount()).toBe(3)
+    await page.setViewportSize({ width: 768, height: 900 })
+    expect(await columnCount()).toBe(2)
+    await page.setViewportSize({ width: 390, height: 844 })
+    expect(await columnCount()).toBe(1)
+
     await page.getByRole('tab', { name: 'Items' }).click()
     const packageTable = page.getByRole('region', { name: 'Federal application packages' })
     await expect(packageTable).not.toHaveAttribute('tabindex')
