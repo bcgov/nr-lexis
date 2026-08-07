@@ -3,6 +3,8 @@ import { Button, Column, ComboBox, Grid, TextArea, TextInput } from '@carbon/rea
 import {
   ArrowRight,
   CheckmarkFilled,
+  Close,
+  Document,
   Download,
   ErrorFilled,
   InformationFilled,
@@ -24,11 +26,8 @@ import {
   DOCUMENT_UPLOAD_GUIDANCE,
   DOCUMENT_UPLOAD_READY_MESSAGE,
   extractUploadErrorDetails,
-  formatUploadFileSize,
-  formatUploadQueuedAt,
   GENERIC_SUBMISSION_FAILURE_MESSAGE,
   GENERIC_UPLOAD_FAILURE_MESSAGE,
-  getFileExtension,
   validateDocumentUploadDescription,
   validateDocumentUploadFile,
   validateUploadFileSize,
@@ -388,11 +387,9 @@ const uploadTargetSummary = (
 const defaultSuccessTitle = (workflowType: UploadWorkflowType): string =>
   workflowType === 'applicationSubmission' ? 'Application submission complete' : 'Upload submitted'
 
-type ApplicationSubmissionValidationPanelProps = {
+type ApplicationSubmissionValidationContentProps = {
   items: UploadQueueItem[]
-  canReview: boolean
   isSubmitting: boolean
-  onReview: () => void
   onRemove: (id: string) => void
 }
 
@@ -442,13 +439,11 @@ const buildApplicationSubmissionIssuesCsv = (
   return `data:text/csv;charset=utf-8,${encodeURIComponent(csv)}`
 }
 
-function ApplicationSubmissionValidationPanel({
+function ApplicationSubmissionValidationContent({
   items,
-  canReview,
   isSubmitting,
-  onReview,
   onRemove,
-}: ApplicationSubmissionValidationPanelProps) {
+}: ApplicationSubmissionValidationContentProps) {
   const validatingCount = items.filter((item) => item.status === 'validating').length
   const queuedCount = items.filter((item) => item.status === 'queued').length
   const validatedCount = items.filter((item) => item.status === 'validated').length
@@ -456,15 +451,33 @@ function ApplicationSubmissionValidationPanel({
   const errorCount = validationIssues.filter((issue) => issue.issue === 'Error').length
   const warningCount = validationIssues.length - errorCount
   const isValidating = validatingCount > 0 || queuedCount > 0
-  const reviewLabel = items.length === 1 ? 'Review submission' : 'Review submissions'
 
   return (
-    <section className="admin-upload-panel" aria-labelledby="applicationSubmissionValidateTitle">
-      <div className="admin-upload-panel__header">
-        <div>
-          <h2 id="applicationSubmissionValidateTitle">Validation status</h2>
-          <p>Application submissions validate automatically after selection.</p>
-        </div>
+    <div className="admin-upload-application-validation-content">
+      <div className="admin-upload-application-file-list" aria-label="Selected submission files">
+        {items.map((item) => (
+          <div className="admin-upload-application-file-list__item" key={item.id}>
+            <div className="admin-upload-file-chip">
+              <Document size={16} aria-hidden="true" />
+              <span className="admin-upload-file-chip__name">{item.file.name}</span>
+              <span className={`admin-upload-status-text admin-upload-status-text--${item.status}`}>
+                {uploadQueueStatusLabel(item.status)}
+              </span>
+              <button
+                type="button"
+                className="admin-upload-file-chip__remove"
+                aria-label={`Remove ${item.file.name}`}
+                onClick={() => onRemove(item.id)}
+                disabled={isSubmitting}
+              >
+                <Close size={16} aria-hidden="true" />
+              </button>
+            </div>
+            {item.message && (
+              <p className="admin-upload-application-file-list__message">{item.message}</p>
+            )}
+          </div>
+        ))}
       </div>
 
       {items.length > 0 &&
@@ -528,64 +541,6 @@ function ApplicationSubmissionValidationPanel({
           </div>
         ) : null)}
 
-      {items.length === 0 ? (
-        <div className="admin-upload-empty-state">
-          <p>No application submissions selected</p>
-          <p>Choose application submission files to validate.</p>
-        </div>
-      ) : (
-        <div className="admin-upload-fspts-table-wrap">
-          <table className="admin-upload-queue__table admin-upload-queue__table--submission">
-            <thead>
-              <tr>
-                <th>Submission file</th>
-                <th>Status</th>
-                <th>Validation message</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((item) => (
-                <tr key={item.id}>
-                  <td>
-                    <div className="admin-upload-file-cell">
-                      <span>{item.file.name}</span>
-                      <span>
-                        {getFileExtension(item.file.name).slice(1).toUpperCase() || item.file.type}{' '}
-                        | {formatUploadFileSize(item.file.size)} | Added{' '}
-                        {formatUploadQueuedAt(item.queuedAt)}
-                      </span>
-                    </div>
-                  </td>
-                  <td>
-                    <span
-                      className={`admin-upload-status-text admin-upload-status-text--${item.status}`}
-                    >
-                      {uploadQueueStatusLabel(item.status)}
-                    </span>
-                  </td>
-                  <td>
-                    <div className="admin-upload-validation-cell">
-                      <span>{item.message || 'Waiting for validation.'}</span>
-                    </div>
-                  </td>
-                  <td>
-                    <Button
-                      kind="ghost"
-                      size="sm"
-                      onClick={() => onRemove(item.id)}
-                      disabled={isSubmitting}
-                    >
-                      Cancel submission
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
       {validationIssues.length > 0 && (
         <div className="admin-upload-validation-table-wrap">
           <div className="admin-upload-validation-table-header">
@@ -622,20 +577,7 @@ function ApplicationSubmissionValidationPanel({
           </div>
         </div>
       )}
-
-      <div className="admin-upload-fspts-button-row admin-upload-preview-footer-actions">
-        <Button
-          kind="primary"
-          size="md"
-          className="admin-upload-fspts-action-button"
-          onClick={onReview}
-          disabled={isSubmitting || !canReview || items.length === 0 || validatingCount > 0}
-          renderIcon={ArrowRight}
-        >
-          {reviewLabel}
-        </Button>
-      </div>
-    </section>
+    </div>
   )
 }
 
@@ -649,7 +591,7 @@ function UploadStepReviewButton({
   onReview: () => void
 }) {
   return (
-    <div className="admin-upload-fspts-button-row">
+    <div className="admin-upload-fspts-button-row admin-upload-fspts-button-row--upload-step">
       <Button
         kind="primary"
         size="md"
@@ -709,13 +651,13 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
       : DOCUMENT_UPLOAD_ACCEPT
   const uploadFormatText =
     selectedWorkflowType === 'applicationSubmission'
-      ? 'Accepted formats: XML, ZIP, GeoJSON, or JSON. Maximum file size: 20 MiB'
+      ? 'Accepted formats: XML, ZIP, GeoJSON, or JSON. Maximum file size: 20 MiB.'
       : DOCUMENT_UPLOAD_GUIDANCE
   const currentUploadTargetSummary = uploadTargetSummary(selectedWorkflowType, formState)
   const resolvedPageTitle =
     pageTitle ??
     (selectedWorkflowType === 'applicationSubmission'
-      ? 'Upload Application Submission'
+      ? 'Upload application submission'
       : 'Data Upload')
   const hasQueuedLexisSubmissions =
     selectedWorkflowType === 'applicationSubmission' &&
@@ -1421,11 +1363,11 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
       : 'Upload queue workflow progress'
   const pageSubtitle =
     selectedWorkflowType === 'applicationSubmission'
-      ? 'Upload LEXIS XML or GeoJSON application submissions and review validated data before submitting.'
+      ? 'Upload an XML, ZIP, GeoJSON, or JSON file to create a LEXIS application.'
       : 'Upload documents and review selected files before submitting.'
   const uploadStepDescription =
     selectedWorkflowType === 'applicationSubmission'
-      ? 'The submission type will be detected automatically from each file.'
+      ? 'The submission type will be detected automatically from your file.'
       : 'Select documents to prepare before reviewing and submitting the upload.'
   const uploadSettingsPanel = (
     <section
@@ -1621,7 +1563,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
 
       <MultiFileDropZone
         title={
-          selectedWorkflowType === 'applicationSubmission' ? 'Submission files' : 'Upload documents'
+          selectedWorkflowType === 'applicationSubmission' ? 'Submission file' : 'Upload documents'
         }
         description={uploadFormatText}
         inputId="uploadFile"
@@ -1637,8 +1579,17 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
         }
         renderAsPanel={false}
         variant="fspts"
+        showMultipleFileGuidance={selectedWorkflowType !== 'applicationSubmission'}
         onFilesSelected={addFilesToQueue}
       />
+
+      {selectedWorkflowType === 'applicationSubmission' && uploadQueue.length > 0 && (
+        <ApplicationSubmissionValidationContent
+          items={uploadQueue}
+          isSubmitting={isSubmitting}
+          onRemove={removeQueuedFile}
+        />
+      )}
     </section>
   )
 
@@ -1690,21 +1641,15 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
               {uploadSettingsPanel}
 
               {selectedWorkflowType === 'applicationSubmission' ? (
-                uploadQueue.length > 0 ? (
-                  <ApplicationSubmissionValidationPanel
-                    items={uploadQueue}
-                    canReview={hasUploadAccess && canReviewLexisSubmissions}
-                    isSubmitting={isSubmitting}
-                    onReview={onReviewApplicationSubmissions}
-                    onRemove={removeQueuedFile}
-                  />
-                ) : (
-                  <UploadStepReviewButton
-                    label="Review submissions"
-                    disabled={!hasUploadAccess || isSubmitting}
-                    onReview={onReviewApplicationSubmissions}
-                  />
-                )
+                <UploadStepReviewButton
+                  label="Review"
+                  disabled={
+                    !hasUploadAccess ||
+                    isSubmitting ||
+                    (uploadQueue.length > 0 && !canReviewLexisSubmissions)
+                  }
+                  onReview={onReviewApplicationSubmissions}
+                />
               ) : uploadQueue.length > 0 ? (
                 <UploadQueuePreview
                   items={uploadQueue}

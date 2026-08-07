@@ -149,7 +149,7 @@ describe('Protected route guard access', () => {
 
     renderWithPath('/provincial/application/upload')
 
-    expect(await findLazyPageHeading('Upload Application Submission')).toBeInTheDocument()
+    expect(await findLazyPageHeading('Upload application submission')).toBeInTheDocument()
     expect(screen.getByLabelText('Application submission file')).toBeInTheDocument()
   })
 
@@ -169,7 +169,7 @@ describe('Protected route guard access', () => {
 
     renderWithPath('/provincial/application/upload')
 
-    expect(await findLazyPageHeading('Upload Application Submission')).toBeInTheDocument()
+    expect(await findLazyPageHeading('Upload application submission')).toBeInTheDocument()
     expect(screen.getByLabelText('Application submission file')).toBeInTheDocument()
   })
 
@@ -280,7 +280,7 @@ describe('Protected route guard access', () => {
 
     renderWithPath('/provincial/application/upload')
 
-    expect(await findLazyPageHeading('Upload Application Submission')).toBeInTheDocument()
+    expect(await findLazyPageHeading('Upload application submission')).toBeInTheDocument()
     expect(screen.getByLabelText('Application submission file')).toBeInTheDocument()
   })
 

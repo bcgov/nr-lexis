@@ -1551,19 +1551,35 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await page.setViewportSize({ width: 1440, height: 900 })
     await page.goto('/provincial/application/upload', { waitUntil: 'domcontentloaded' })
 
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'Upload application submission' }),
+    ).toBeVisible()
+    await expect(
+      page.getByText('Upload an XML, ZIP, GeoJSON, or JSON file to create a LEXIS application.'),
+    ).toBeVisible()
     const uploadPanel = page.locator('.admin-upload-panel').first()
-    await expect(uploadPanel.getByText('Submission files', { exact: true })).toBeVisible()
+    await expect(uploadPanel.getByText('Submission file', { exact: true })).toBeVisible()
+    await expect(
+      uploadPanel.getByText(
+        'Accepted formats: XML, ZIP, GeoJSON, or JSON. Maximum file size: 20 MiB.',
+        { exact: true },
+      ),
+    ).toBeVisible()
     await expect(uploadPanel.locator('.admin-upload-panel__header')).toHaveCount(0)
     await expect(uploadPanel.locator('.admin-upload-summary-strip')).toHaveCount(0)
     await expect(uploadPanel.locator('.admin-upload-drop-zone-field')).toHaveCSS(
       'margin-top',
       '0px',
     )
+    await expect(page.locator('.admin-upload-fspts-button-row--upload-step')).toHaveCSS(
+      'margin-top',
+      '16px',
+    )
 
-    const reviewButton = page.getByRole('button', { name: 'Review submissions' })
+    const reviewButton = page.getByRole('button', { name: 'Review' })
     await expect(reviewButton).toBeEnabled()
     await reviewButton.click()
-    await expect(page.getByText('Please upload a file before continuing.')).toBeVisible()
+    await expect(uploadPanel.getByText('Please upload a file before continuing.')).toBeVisible()
 
     await page.getByLabel('Application submission file').setInputFiles({
       name: 'valid-submission.xml',
@@ -1571,8 +1587,15 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       buffer: Buffer.from('<LexisSubmission />', 'utf8'),
     })
 
+    await expect(page.locator('.admin-upload-panel')).toHaveCount(1)
+    await expect(uploadPanel.locator('.admin-upload-application-validation-content')).toBeVisible()
+    await expect(uploadPanel.getByLabel('Selected submission files')).toBeVisible()
+    await expect(uploadPanel.locator('.admin-upload-file-chip')).toHaveCount(1)
+    await expect(uploadPanel.locator('.admin-upload-queue__table--submission')).toHaveCount(0)
+    await expect(uploadPanel.getByRole('heading', { name: 'Submission validated' })).toBeVisible()
+    await expect(uploadPanel.getByRole('button', { name: 'Review' })).toHaveCount(0)
     await expect(page.getByRole('heading', { name: 'Submission validated' })).toBeVisible()
-    await page.getByRole('button', { name: 'Review submission' }).click()
+    await page.getByRole('button', { name: 'Review' }).click()
 
     await expect(page.getByRole('heading', { level: 2, name: 'Review' })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Submission validated' })).toHaveCount(0)
@@ -1637,7 +1660,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       'download',
       'lexis-validation-issues.csv',
     )
-    await expect(page.getByRole('button', { name: 'Review submission' })).toBeDisabled()
+    await expect(page.getByRole('button', { name: 'Review' })).toBeDisabled()
     await expect(page.getByText('Upload error')).toHaveCount(0)
   })
 

@@ -1772,7 +1772,7 @@ test.describe('TEST IDIR admin regression', () => {
       /upload application submission/i,
     )
     await expectFsptsUploadLayout(page)
-    await expect(page.getByText('Submission files', { exact: true })).toBeVisible()
+    await expect(page.getByText('Submission file', { exact: true })).toBeVisible()
     await expect(page.getByLabel('Upload batch summary')).toHaveCount(0)
     const applicationSubmissionProgress = page.getByRole('list', {
       name: 'Application submission upload workflow progress',
@@ -1781,7 +1781,7 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(applicationSubmissionProgress.getByText('2. Review')).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Validation status' })).toHaveCount(0)
     await expect(page.getByRole('heading', { name: 'Submission summary' })).toHaveCount(0)
-    await expect(page.getByRole('button', { name: 'Review submissions' })).toBeDisabled()
+    await expect(page.getByRole('button', { name: 'Review' })).toBeDisabled()
 
     await expectAccessiblePage(page, '/provincial/review', /provincial application review/i)
     await expect(federalSection.getByRole('link', { name: /upload/i })).toHaveCount(0)

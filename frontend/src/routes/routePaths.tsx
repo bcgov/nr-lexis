@@ -492,7 +492,7 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
       <Layout>
         <AdminUploadsPage
           lockedWorkflowType="applicationSubmission"
-          pageTitle="Upload Application Submission"
+          pageTitle="Upload application submission"
         />
       </Layout>
     ),

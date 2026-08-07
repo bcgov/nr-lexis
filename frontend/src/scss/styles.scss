@@ -2629,6 +2629,10 @@ $notification-types: 'error', 'info', 'success', 'warning';
   justify-content: space-between;
 }
 
+.admin-upload-fspts-button-row--upload-step {
+  margin-block-start: 1rem;
+}
+
 .admin-upload-fspts-button-row .cds--btn {
   display: inline-flex;
   align-items: center;
@@ -2723,6 +2727,31 @@ $notification-types: 'error', 'info', 'success', 'warning';
   margin-block-start: 0.5rem;
   background: var(--fds-background);
   border-radius: 2px;
+}
+
+.admin-upload-application-file-list {
+  display: grid;
+  gap: 0.5rem;
+  max-inline-size: 50%;
+  margin-block-start: 0.5rem;
+}
+
+.admin-upload-application-file-list .admin-upload-file-chip {
+  max-inline-size: 100%;
+  margin: 0;
+}
+
+.admin-upload-application-file-list__item {
+  display: grid;
+  gap: 0.25rem;
+  min-inline-size: 0;
+}
+
+.admin-upload-application-file-list__message {
+  margin: 0;
+  color: var(--fds-text-secondary, var(--cds-text-secondary));
+  font-size: 0.75rem;
+  line-height: 1rem;
 }
 
 .admin-upload-drop-zone-field {
@@ -4149,6 +4178,7 @@ $notification-types: 'error', 'info', 'success', 'warning';
 
   .admin-upload-fspts-page .admin-upload-drop-zone,
   .admin-upload-drop-zone--fspts,
+  .admin-upload-application-file-list,
   .admin-upload-fspts-page .admin-upload-file-chip,
   .admin-upload-fspts-page .admin-upload-validation,
   .admin-upload-fspts-page .admin-upload-validation-table-wrap {
