@@ -96,7 +96,12 @@ describe('Notifications page', () => {
     render(<NotificationsPage />)
 
     expect(await screen.findByText('Winter service update')).toBeVisible()
-    expect(screen.getByRole('heading', { level: 1, name: 'Notifications' })).toBeVisible()
+    const pageHeading = screen.getByRole('heading', { level: 1, name: 'Notifications' })
+    expect(pageHeading).toBeVisible()
+    expect(pageHeading.closest('header')).toHaveClass(
+      'lexis-page-header',
+      'notifications-page__header',
+    )
     expect(
       screen.getByText(
         'Updates and bulletins from your administrators. Each notice shows until its posted end date.',

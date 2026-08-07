@@ -1,10 +1,8 @@
 .notifications-page {
   width: 100%;
-  max-width: 100rem;
   padding-top: 1.5rem;
 }
 
-.notifications-page__header,
 .notifications-page__notification-heading,
 .notifications-page__notification-actions,
 .notifications-page__notification-title-row {
@@ -13,28 +11,12 @@
   gap: 1rem;
 }
 
-.notifications-page__header,
 .notifications-page__notification-heading {
   justify-content: space-between;
 }
 
 .notifications-page__header {
-  align-items: flex-start;
   margin-bottom: 2rem;
-}
-
-.notifications-page__header h1 {
-  margin: 0;
-  font-size: 1.875rem;
-  font-weight: 300;
-  letter-spacing: 0.01em;
-  line-height: 1.2;
-}
-
-.notifications-page__header p {
-  margin: 0.375rem 0 0;
-  color: var(--cds-text-secondary);
-  font-size: 0.875rem;
 }
 
 .notifications-page__message {
@@ -485,7 +467,6 @@
 }
 
 @media (max-width: 42rem) {
-  .notifications-page__header,
   .notifications-page__notification-heading {
     align-items: flex-start;
     flex-direction: column;
@@ -495,7 +476,8 @@
     padding-top: 0.5rem;
   }
 
-  .notifications-page__header > .cds--btn {
+  .notifications-page__header .lexis-page-header__actions,
+  .notifications-page__header .lexis-page-header__actions > .cds--btn {
     width: 100%;
   }
 

@@ -382,6 +382,61 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     expect(pageWidth.scrollWidth).toBeLessThanOrEqual(pageWidth.clientWidth)
   })
 
+  test('uses the shared full-width page composition for notifications', async ({ page }) => {
+    await page.setViewportSize({ width: 2400, height: 1200 })
+    await page.goto('/notifications', { waitUntil: 'domcontentloaded' })
+
+    await expect(page.getByRole('heading', { level: 1, name: 'Notifications' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'New notification' })).toBeVisible()
+
+    const layout = await page.locator('.notifications-page').evaluate((notificationsPage) => {
+      const main = document.querySelector('main.app-main')
+      const pageHeader = notificationsPage.querySelector('.lexis-page-header')
+      const title = notificationsPage.querySelector('.lexis-page-header__title')
+      const subtitle = notificationsPage.querySelector('.lexis-page-header__subtitle')
+      const resultsBar = notificationsPage.querySelector('.notifications-page__results-bar')
+      if (!(main instanceof HTMLElement)) throw new Error('Application content not found')
+      if (!(pageHeader instanceof HTMLElement)) throw new Error('Shared page header not found')
+      if (!(title instanceof HTMLElement)) throw new Error('Notification title not found')
+      if (!(subtitle instanceof HTMLElement)) throw new Error('Notification subtitle not found')
+      if (!(resultsBar instanceof HTMLElement))
+        throw new Error('Notification results bar not found')
+
+      const mainStyle = getComputedStyle(main)
+      const titleStyle = getComputedStyle(title)
+      const subtitleStyle = getComputedStyle(subtitle)
+      const pageBounds = notificationsPage.getBoundingClientRect()
+      const resultsBounds = resultsBar.getBoundingClientRect()
+      const availableWidth =
+        main.clientWidth -
+        Number.parseFloat(mainStyle.paddingLeft) -
+        Number.parseFloat(mainStyle.paddingRight)
+
+      return {
+        availableWidth,
+        pageWidth: pageBounds.width,
+        pageLeft: pageBounds.left,
+        pageRight: pageBounds.right,
+        resultsLeft: resultsBounds.left,
+        resultsRight: resultsBounds.right,
+        titleFontSize: titleStyle.fontSize,
+        titleFontWeight: titleStyle.fontWeight,
+        titleLineHeight: titleStyle.lineHeight,
+        subtitleFontSize: subtitleStyle.fontSize,
+        subtitleLineHeight: subtitleStyle.lineHeight,
+      }
+    })
+
+    expect(Math.abs(layout.pageWidth - layout.availableWidth)).toBeLessThanOrEqual(1)
+    expect(Math.abs(layout.resultsLeft - layout.pageLeft)).toBeLessThanOrEqual(1)
+    expect(Math.abs(layout.resultsRight - layout.pageRight)).toBeLessThanOrEqual(1)
+    expect(layout.titleFontSize).toBe('32px')
+    expect(layout.titleFontWeight).toBe('400')
+    expect(layout.titleLineHeight).toBe('40px')
+    expect(layout.subtitleFontSize).toBe('16px')
+    expect(layout.subtitleLineHeight).toBe('24px')
+  })
+
   test('renders the authenticated search composition and persists UI preferences', async ({
     page,
   }) => {

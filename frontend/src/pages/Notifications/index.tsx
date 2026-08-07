@@ -22,6 +22,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ConfirmationModal from '@/components/ConfirmationModal'
 import Modal from '@/components/Modal'
 import NotificationEditor from '@/components/NotificationEditor'
+import PageHeader from '@/components/PageHeader'
 import { hasRole } from '@/context/auth/role-utils'
 import { useAuth } from '@/context/auth/useAuth'
 import type {
@@ -458,17 +459,19 @@ export default function NotificationsPage() {
 
   return (
     <div className="notifications-page">
-      <section className="notifications-page__header" aria-labelledby="notifications-page-title">
-        <div>
-          <h1 id="notifications-page-title">Notifications</h1>
-          <p>{pageDescription}</p>
-        </div>
-        {isAdmin && (
-          <Button size="md" renderIcon={Add} onClick={startCreate} disabled={saving}>
-            New notification
-          </Button>
-        )}
-      </section>
+      <PageHeader
+        className="notifications-page__header"
+        headingId="notifications-page-title"
+        title="Notifications"
+        subtitle={pageDescription}
+        actions={
+          isAdmin ? (
+            <Button size="md" renderIcon={Add} onClick={startCreate} disabled={saving}>
+              New notification
+            </Button>
+          ) : undefined
+        }
+      />
 
       {message && !showEditor && (
         <InlineNotification
