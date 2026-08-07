@@ -716,6 +716,7 @@ function Layout({ children }: LayoutProps) {
               className="csp-header-action"
               kind="ghost"
               label={isProfileOpen ? 'Close profile panel' : 'Open profile panel'}
+              aria-label={isProfileOpen ? 'Close profile panel' : 'Open profile panel'}
               aria-expanded={isProfileOpen}
               aria-controls="profile-panel"
               onClick={toggleProfile}
@@ -729,18 +730,19 @@ function Layout({ children }: LayoutProps) {
           id="profile-panel"
           className={`profile-panel${isProfileOpen ? ' is-open' : ''}`}
           role="dialog"
-          aria-label="Profile"
+          aria-label="My profile"
           aria-modal="false"
           aria-hidden={isProfileOpen ? undefined : true}
           inert={isProfileOpen ? undefined : true}
         >
           <div className="profile-panel__header">
-            <h2 className="profile-panel__title">Profile</h2>
+            <h2 className="profile-panel__title">My profile</h2>
             <IconButton
               align="bottom-right"
               className="profile-panel__close"
               kind="ghost"
               label="Close profile panel"
+              aria-label="Close profile panel"
               onClick={() => closeProfile(true)}
             >
               <Close size={20} />
@@ -787,7 +789,7 @@ function Layout({ children }: LayoutProps) {
 
           <button className="profile-panel__signout" type="button" onClick={handleLogout}>
             <Logout size={16} />
-            Sign out
+            Log out
           </button>
         </aside>
 

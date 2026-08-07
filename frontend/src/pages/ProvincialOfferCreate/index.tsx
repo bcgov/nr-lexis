@@ -5,6 +5,7 @@ import { AppNotification } from '../../components/AppNotification'
 import IsoDatePicker from '../../components/IsoDatePicker'
 import SearchableSelect from '../../components/SearchableSelect'
 import PageHeader from '@/components/PageHeader'
+import PendingIcon from '@/components/PendingIcon'
 import UnsavedChangesGuard, { formValuesEqual } from '@/components/UnsavedChangesGuard'
 import { hasProvincialSubmitterRole, hasRole } from '@/context/auth/role-utils'
 import {
@@ -1034,8 +1035,9 @@ const ProvincialOfferCreatePage = () => {
                   scopedClientLookupPending ||
                   !!applicationValidationError
                 }
+                renderIcon={isSubmitting ? PendingIcon : undefined}
               >
-                Save new offer
+                {isSubmitting ? 'Saving…' : 'Save new offer'}
               </Button>
             </div>
           </div>

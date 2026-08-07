@@ -28,6 +28,7 @@ import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'reac
 import EmptyState from '@/components/EmptyState'
 import DetailBreadcrumb from '@/components/DetailBreadcrumb'
 import PageHeader from '@/components/PageHeader'
+import PendingIcon from '@/components/PendingIcon'
 import AuthoritativeOptionsUnavailableNotification from '@/components/AuthoritativeOptionsUnavailableNotification'
 import StatusTag from '@/components/StatusTag'
 import TableFrame from '@/components/TableFrame'
@@ -3618,9 +3619,10 @@ const ProvincialApplicationDetailsPage = () => {
                                   summaryOptionsAvailability !== 'available' ||
                                   requiredSummaryOptionsMissing
                                 }
+                                renderIcon={isSavingSummary ? PendingIcon : undefined}
                                 onClick={() => onRequestSaveSummary('owner')}
                               >
-                                {isSavingSummary ? 'Saving...' : 'Save changes'}
+                                {isSavingSummary ? 'Saving…' : 'Save changes'}
                               </Button>
                             </div>
                           </>
@@ -3777,9 +3779,10 @@ const ProvincialApplicationDetailsPage = () => {
                                     summaryOptionsAvailability !== 'available' ||
                                     requiredSummaryOptionsMissing
                                   }
+                                  renderIcon={isSavingSummary ? PendingIcon : undefined}
                                   onClick={() => onRequestSaveSummary('agent')}
                                 >
-                                  {isSavingSummary ? 'Saving...' : 'Save changes'}
+                                  {isSavingSummary ? 'Saving…' : 'Save changes'}
                                 </Button>
                               </div>
                             </>
@@ -4329,9 +4332,10 @@ const ProvincialApplicationDetailsPage = () => {
                                   summaryOptionsAvailability !== 'available' ||
                                   requiredSummaryOptionsMissing
                                 }
+                                renderIcon={isSavingSummary ? PendingIcon : undefined}
                                 onClick={() => onRequestSaveSummary('summary')}
                               >
-                                {isSavingSummary ? 'Saving...' : 'Save Summary'}
+                                {isSavingSummary ? 'Saving…' : 'Save Summary'}
                               </Button>
                               <Button
                                 kind="tertiary"
@@ -4699,10 +4703,11 @@ const ProvincialApplicationDetailsPage = () => {
                                 kind="primary"
                                 size="sm"
                                 disabled={isSavingRemark}
+                                renderIcon={isSavingRemark ? PendingIcon : undefined}
                                 onClick={() => void onSaveRemark()}
                               >
                                 {isSavingRemark
-                                  ? 'Saving...'
+                                  ? 'Saving…'
                                   : editingRemarkId
                                     ? 'Update Remark'
                                     : 'Save Remark'}

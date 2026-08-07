@@ -568,8 +568,9 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(page.locator('.csp-theme-switch__thumb')).toHaveCSS('height', '18px')
 
     await page.getByRole('button', { name: 'Open profile panel' }).click()
-    const profilePanel = page.getByRole('dialog', { name: 'Profile' })
+    const profilePanel = page.getByRole('dialog', { name: 'My profile' })
     await expect(profilePanel).toHaveClass(/is-open/)
+    await expect(profilePanel.getByRole('button', { name: 'Log out' })).toBeVisible()
     await expect(profilePanel.getByRole('combobox', { name: 'Default zone' })).toHaveValue('RSI')
     await expect(profilePanel).toContainText(
       'Preselects the Cariboo, Kootenay-Boundary, and Thompson-Okanagan Natural Resource Regions in search tables.',

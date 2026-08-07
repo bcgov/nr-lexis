@@ -66,6 +66,7 @@ import { triggerBrowserDownload } from '@/utils/download'
 import IsoDatePicker from '../../components/IsoDatePicker'
 import SearchableSelect from '../../components/SearchableSelect'
 import RegionMultiSelect from '@/components/RegionMultiSelect'
+import PendingIcon from '@/components/PendingIcon'
 import { clientLocationLabel, isAgentApplicant } from '@/pages/shared/application-form-utils'
 import {
   mapSelectedOptionsById,
@@ -1427,9 +1428,10 @@ const ProvincialExemptionDetailsPage = () => {
                         requiredExemptionOptionsMissing ||
                         optionsAvailability !== 'available'
                       }
+                      renderIcon={saving ? PendingIcon : undefined}
                       onClick={() => void onSaveExemption()}
                     >
-                      {saving ? 'Saving...' : 'Save exemption'}
+                      {saving ? 'Saving…' : 'Save exemption'}
                     </Button>
                     <Button
                       kind="tertiary"
@@ -2421,9 +2423,10 @@ const ProvincialExemptionDetailsPage = () => {
             <Button
               kind="primary"
               disabled={creatingPermit}
+              renderIcon={creatingPermit ? PendingIcon : undefined}
               onClick={() => void onCreatePermitFromExemption()}
             >
-              {creatingPermit ? 'Creating...' : 'Create permit'}
+              {creatingPermit ? 'Creating…' : 'Create permit'}
             </Button>
           </div>
         </Modal>

@@ -3,6 +3,7 @@ import { Button, Checkbox, InlineNotification } from '@carbon/react'
 import { UNSAFE_DataRouterContext, useBeforeUnload, useBlocker } from 'react-router-dom'
 import type { BlockerFunction } from 'react-router-dom'
 import Modal from '@/components/Modal'
+import PendingIcon from '@/components/PendingIcon'
 import { isPageUnloadAuthorized } from '@/utils/page-unload'
 
 import './UnsavedChangesGuard.css'
@@ -219,9 +220,10 @@ const RouterNavigationGuard = ({
                 disabled={
                   navigationActionsDisabled || Boolean(saveAcknowledgement && !saveAcknowledged)
                 }
+                renderIcon={isSaving ? PendingIcon : undefined}
                 onClick={() => void saveAndLeave()}
               >
-                {isSaving ? 'Saving...' : 'Save and leave'}
+                {isSaving ? 'Saving…' : 'Save and leave'}
               </Button>
             )}
           </>

@@ -6,6 +6,7 @@ import ContentLoadingOverlay from '@/components/ContentLoadingOverlay'
 import DetailBreadcrumb from '@/components/DetailBreadcrumb'
 import IsoDatePicker from '../../components/IsoDatePicker'
 import PageHeader from '@/components/PageHeader'
+import PendingIcon from '@/components/PendingIcon'
 import SearchableSelect from '../../components/SearchableSelect'
 import UnsavedChangesGuard, { formValuesEqual } from '@/components/UnsavedChangesGuard'
 import type { ProvincialOfferDetail } from '@/interfaces/LexisDetails'
@@ -725,8 +726,9 @@ const ProvincialOfferDetailsPage = () => {
                       size="sm"
                       onClick={() => void onSave()}
                       disabled={isSubmitting}
+                      renderIcon={isSubmitting ? PendingIcon : undefined}
                     >
-                      {isSubmitting ? 'Saving...' : 'Save'}
+                      {isSubmitting ? 'Saving…' : 'Save'}
                     </Button>
                     <Button
                       kind="tertiary"

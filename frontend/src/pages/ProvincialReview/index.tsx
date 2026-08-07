@@ -22,6 +22,7 @@ import Modal from '@/components/Modal'
 import EmptyState from '@/components/EmptyState'
 import DisabledButtonTooltip from '@/components/DisabledButtonTooltip'
 import PageHeader from '@/components/PageHeader'
+import PendingIcon from '@/components/PendingIcon'
 import SearchSubmitButton from '@/components/SearchSubmitButton'
 import AuthoritativeOptionsUnavailableNotification from '@/components/AuthoritativeOptionsUnavailableNotification'
 import SearchableSelect from '../../components/SearchableSelect'
@@ -1161,9 +1162,10 @@ const ProvincialReviewPage = () => {
             disabled={
               optionsUnavailable || !rejectStatusAvailable || loadingRejectEmail || submittingReject
             }
+            renderIcon={submittingReject ? PendingIcon : undefined}
             onClick={() => void onRejectApplicationClick()}
           >
-            {submittingReject ? 'Saving...' : 'Save'}
+            {submittingReject ? 'Saving…' : 'Save'}
           </Button>
         </div>
       </Modal>

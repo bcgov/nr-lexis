@@ -617,14 +617,20 @@ describe('Layout shell', () => {
 
     expect(profilePanel).toHaveAttribute('aria-hidden', 'true')
     expect(profilePanel).toHaveAttribute('inert')
-    expect(screen.queryByRole('dialog', { name: 'Profile' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'My profile' })).not.toBeInTheDocument()
 
     await userEvent.click(profileToggle)
 
     expect(profileToggle).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByRole('dialog', { name: 'Profile' })).toHaveClass('is-open')
+    expect(screen.getByRole('dialog', { name: 'My profile' })).toHaveClass('is-open')
     expect(profilePanel).not.toHaveAttribute('aria-hidden')
     expect(profilePanel).not.toHaveAttribute('inert')
+    expect(
+      within(screen.getByRole('dialog', { name: 'My profile' })).getByRole('button', {
+        name: 'Close profile panel',
+      }),
+    ).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Log out' })).toBeVisible()
     expect(profileToggle).toHaveFocus()
     expect(profilePanel?.querySelector('.profile-panel__close')).not.toHaveFocus()
 
@@ -634,7 +640,7 @@ describe('Layout shell', () => {
     expect(profilePanel).not.toHaveClass('is-open')
     expect(profilePanel).toHaveAttribute('aria-hidden', 'true')
     expect(profilePanel).toHaveAttribute('inert')
-    expect(screen.queryByRole('dialog', { name: 'Profile' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'My profile' })).not.toBeInTheDocument()
   })
 
   it('shows the user role and available organization context in the profile panel', async () => {
@@ -653,7 +659,7 @@ describe('Layout shell', () => {
     renderLayout('/admin/rtm/emslogamv')
     await userEvent.click(screen.getByRole('button', { name: 'Open profile panel' }))
 
-    const profilePanel = screen.getByRole('dialog', { name: 'Profile' })
+    const profilePanel = screen.getByRole('dialog', { name: 'My profile' })
     expect(within(profilePanel).getByText('idir\\analyst (Read Only)')).toBeVisible()
     expect(within(profilePanel).getByText('Organization unit: 1903')).toBeVisible()
     expect(within(profilePanel).getByText('Forest client: 00012345')).toBeVisible()

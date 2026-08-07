@@ -28,6 +28,7 @@ import EmptyState from '@/components/EmptyState'
 import DetailBreadcrumb from '@/components/DetailBreadcrumb'
 import IsoDatePicker from '@/components/IsoDatePicker'
 import PageHeader from '@/components/PageHeader'
+import PendingIcon from '@/components/PendingIcon'
 import StatusTag from '@/components/StatusTag'
 import TableFrame from '@/components/TableFrame'
 import UnsavedChangesGuard, { formValuesEqual } from '@/components/UnsavedChangesGuard'
@@ -1201,9 +1202,10 @@ const FederalApplicationDetailsPage = () => {
                                   ((statusCode === 'REJ' || statusCode === 'WDN') &&
                                     !statusRemark.trim())
                                 }
+                                renderIcon={isSavingMutation ? PendingIcon : undefined}
                                 onClick={() => void onSaveStatus()}
                               >
-                                {isSavingMutation ? 'Saving...' : 'Update status'}
+                                {isSavingMutation ? 'Saving…' : 'Update status'}
                               </Button>
                               <Button
                                 kind="ghost"
@@ -1429,10 +1431,11 @@ const FederalApplicationDetailsPage = () => {
                                 kind="primary"
                                 size="sm"
                                 disabled={isSavingRemark}
+                                renderIcon={isSavingRemark ? PendingIcon : undefined}
                                 onClick={() => void onSaveRemark()}
                               >
                                 {isSavingRemark
-                                  ? 'Saving...'
+                                  ? 'Saving…'
                                   : editingRemarkId
                                     ? 'Update Remark'
                                     : 'Save Remark'}
@@ -1780,9 +1783,10 @@ const FederalApplicationDetailsPage = () => {
                                 kind="primary"
                                 size="sm"
                                 disabled={isSavingMutation || hasPermitValidationError}
+                                renderIcon={isSavingMutation ? PendingIcon : undefined}
                                 onClick={() => void onSavePermit()}
                               >
-                                {isSavingMutation ? 'Saving...' : 'Save federal permit'}
+                                {isSavingMutation ? 'Saving…' : 'Save federal permit'}
                               </Button>
                             </div>
                           </>

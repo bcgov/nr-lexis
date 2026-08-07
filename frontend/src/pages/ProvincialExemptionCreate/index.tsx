@@ -16,6 +16,7 @@ import { AppNotification } from '../../components/AppNotification'
 import SearchableSelect from '../../components/SearchableSelect'
 import RegionMultiSelect from '@/components/RegionMultiSelect'
 import PageHeader from '@/components/PageHeader'
+import PendingIcon from '@/components/PendingIcon'
 import AuthoritativeOptionsUnavailableNotification from '@/components/AuthoritativeOptionsUnavailableNotification'
 import UnsavedChangesGuard, { formValuesEqual } from '@/components/UnsavedChangesGuard'
 import { hasProvincialSubmitterRole, hasRole } from '@/context/auth/role-utils'
@@ -959,8 +960,9 @@ const ProvincialExemptionCreatePage = () => {
                 !canUseApplicationPrefill ||
                 (selectedApplicationNumbers.length > 0 && !hasCurrentPreview)
               }
+              renderIcon={isSubmitting ? PendingIcon : undefined}
             >
-              Save
+              {isSubmitting ? 'Saving…' : 'Save'}
             </Button>
           </div>
         </Tile>

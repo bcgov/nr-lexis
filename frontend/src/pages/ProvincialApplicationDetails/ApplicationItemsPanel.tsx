@@ -14,6 +14,7 @@ import {
 import { Box, Edit, List } from '@carbon/icons-react'
 import { AppNotification } from '../../components/AppNotification'
 import ConfirmationModal from '../../components/ConfirmationModal'
+import PendingIcon from '../../components/PendingIcon'
 import SearchableSelect from '../../components/SearchableSelect'
 import type { ProvincialApplicationDetail } from '@/interfaces/LexisDetails'
 import {
@@ -1646,9 +1647,10 @@ function ProvincialApplicationItemsPanel({
                     kind="primary"
                     size="sm"
                     disabled={!canSaveSelectedPackage}
+                    renderIcon={isSavingPackage ? PendingIcon : undefined}
                     onClick={() => void onSaveSelectedPackage()}
                   >
-                    Save Package
+                    {isSavingPackage ? 'Saving…' : 'Save Package'}
                   </Button>
                   <Button
                     kind="tertiary"
@@ -1934,9 +1936,10 @@ function ProvincialApplicationItemsPanel({
                 kind="tertiary"
                 size="sm"
                 disabled={!canCreatePackages || isSavingPackage}
+                renderIcon={isSavingPackage ? PendingIcon : undefined}
                 onClick={() => void onCreatePackage()}
               >
-                Create Package
+                {isSavingPackage ? 'Creating…' : 'Create Package'}
               </Button>
               <Button
                 kind="ghost"
@@ -2045,9 +2048,10 @@ function ProvincialApplicationItemsPanel({
                     !selectedPackageNumber ||
                     isSavingScale
                   }
+                  renderIcon={isSavingScale ? PendingIcon : undefined}
                   onClick={() => void onAddScale()}
                 >
-                  Add Scale
+                  {isSavingScale ? 'Adding…' : 'Add Scale'}
                 </Button>
                 <Button
                   kind="ghost"
@@ -2114,9 +2118,10 @@ function ProvincialApplicationItemsPanel({
                             deletingScaleId === row.id ||
                             row.permitted
                           }
+                          renderIcon={deletingScaleId === row.id ? PendingIcon : undefined}
                           onClick={() => void onDeleteScale(row.id)}
                         >
-                          {deletingScaleId === row.id ? 'Deleting...' : 'Delete'}
+                          {deletingScaleId === row.id ? 'Deleting…' : 'Delete'}
                         </Button>
                       </TableCell>
                     )}

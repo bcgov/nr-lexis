@@ -33,6 +33,7 @@ import DetailBreadcrumb from '@/components/DetailBreadcrumb'
 import EmptyState from '@/components/EmptyState'
 import IsoDatePicker from '@/components/IsoDatePicker'
 import PageHeader from '@/components/PageHeader'
+import PendingIcon from '@/components/PendingIcon'
 import StatusTag from '@/components/StatusTag'
 import TableFrame from '@/components/TableFrame'
 import UnsavedChangesGuard, { formValuesEqual } from '@/components/UnsavedChangesGuard'
@@ -3420,9 +3421,10 @@ const ProvincialPermitDetailsPage = () => {
                                     isLoadingAvailableApplications ||
                                     !selectedPermitApplicationToAdd
                                   }
+                                  renderIcon={isSavingPermitApplication ? PendingIcon : undefined}
                                   onClick={() => void onAddPermitApplication()}
                                 >
-                                  {isSavingPermitApplication ? 'Adding...' : 'Add application'}
+                                  {isSavingPermitApplication ? 'Adding…' : 'Add application'}
                                 </Button>
                               </div>
                             </>
@@ -3444,9 +3446,10 @@ const ProvincialPermitDetailsPage = () => {
                                   permitOptionsUnavailable ||
                                   requiredPermitOptionsMissing
                                 }
+                                renderIcon={isSavingPermit ? PendingIcon : undefined}
                                 onClick={() => void onSavePermit()}
                               >
-                                {isSavingPermit ? 'Saving...' : 'Save permit'}
+                                {isSavingPermit ? 'Saving…' : 'Save permit'}
                               </Button>
                               <Button
                                 kind="tertiary"
@@ -3687,9 +3690,10 @@ const ProvincialPermitDetailsPage = () => {
                                   !shippingReferences ||
                                   hasShippingValidationError
                                 }
+                                renderIcon={isSavingShipping ? PendingIcon : undefined}
                                 onClick={() => void onSaveShipping()}
                               >
-                                {isSavingShipping ? 'Saving...' : 'Save shipping'}
+                                {isSavingShipping ? 'Saving…' : 'Save shipping'}
                               </Button>
                               <Button
                                 kind="tertiary"
@@ -3981,10 +3985,11 @@ const ProvincialPermitDetailsPage = () => {
                                   type="button"
                                   size="sm"
                                   disabled={isLoadingBoicPackage || isSavingBoicPackage}
+                                  renderIcon={isSavingBoicPackage ? PendingIcon : undefined}
                                   onClick={() => void onSaveBlanketOicPackage()}
                                 >
                                   {isSavingBoicPackage
-                                    ? 'Saving...'
+                                    ? 'Saving…'
                                     : editingBoicPackageNumber
                                       ? 'Save package'
                                       : 'Create package'}
@@ -4077,9 +4082,10 @@ const ProvincialPermitDetailsPage = () => {
                                     !detail.oicApplicationNumber ||
                                     blanketOicPackageOptions.length === 0
                                   }
+                                  renderIcon={isSavingBoicScale ? PendingIcon : undefined}
                                   onClick={() => void onAddBlanketOicScale()}
                                 >
-                                  {isSavingBoicScale ? 'Adding scale...' : 'Add scale'}
+                                  {isSavingBoicScale ? 'Adding scale…' : 'Add scale'}
                                 </Button>
                               </div>
                             </>
@@ -4283,9 +4289,10 @@ const ProvincialPermitDetailsPage = () => {
                                   kind="primary"
                                   size="sm"
                                   disabled={isSavingFeeOverride}
+                                  renderIcon={isSavingFeeOverride ? PendingIcon : undefined}
                                   onClick={() => void onSaveFeeOverride()}
                                 >
-                                  {isSavingFeeOverride ? 'Saving...' : 'Save fee override'}
+                                  {isSavingFeeOverride ? 'Saving…' : 'Save fee override'}
                                 </Button>
                                 <Button
                                   kind="tertiary"
