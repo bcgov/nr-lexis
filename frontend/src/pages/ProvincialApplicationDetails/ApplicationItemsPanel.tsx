@@ -1405,14 +1405,9 @@ function ProvincialApplicationItemsPanel({
     growthTypeOptions,
     createPackageForm.ageClass,
   )
-  const applicationTotalPieces = detail.packages.reduce(
-    (total, packageItem) => total + packageItem.pieceCount,
-    0,
-  )
-
   return (
     <div id="application-items" className="application-detail-section application-items-panel">
-      <section className="application-items-card application-items-overview">
+      <section className="application-items-overview">
         <header className="application-items-panel__header">
           <h2 className="detail-tile-title application-items-panel__title">
             <List size={20} aria-hidden="true" />
@@ -1468,20 +1463,6 @@ function ProvincialApplicationItemsPanel({
             onCloseButtonClick={() => setItemsInfoMessage('')}
           />
         )}
-
-        <dl className="application-items-metric-strip" aria-label="Application item summary">
-          {[
-            ['Application Total Pieces', applicationTotalPieces.toLocaleString()],
-            ['Packages', packageNumbers.length.toLocaleString()],
-            ['Selected Package Number', selectedPackageNumber || 'None selected'],
-            ['Selected Scale Volume', packageForm.scaledVolume || 'Not provided'],
-          ].map(([label, value]) => (
-            <div key={label} className="application-items-metric">
-              <dt>{label}</dt>
-              <dd>{value}</dd>
-            </div>
-          ))}
-        </dl>
       </section>
 
       <div className="application-items-grid">

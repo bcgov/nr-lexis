@@ -352,7 +352,7 @@ describe('Admin upload workflow smoke', () => {
 
     renderPage('/admin/uploads?type=permit&permitNumber=5001')
 
-    expect(screen.getByLabelText('Upload batch summary')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Upload batch summary')).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Validation status' })).not.toBeInTheDocument()
     expect(screen.queryByText('No data uploaded yet')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Review upload' })).toBeDisabled()

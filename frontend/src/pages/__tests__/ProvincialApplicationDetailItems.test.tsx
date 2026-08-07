@@ -469,11 +469,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     await waitFor(() => {
       expect(mockedFetchApplicationPackageDetails).toHaveBeenCalledWith('PKG-1')
     })
-    const applicationItemSummary = screen.getByLabelText('Application item summary')
-    expect(
-      within(applicationItemSummary as HTMLElement).getByText('Application Total Pieces'),
-    ).toBeInTheDocument()
-    expect(within(applicationItemSummary as HTMLElement).getByText('5')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Application item summary')).not.toBeInTheDocument()
     const packageDetailsSection = screen.getByText('Package Details').closest('section')
     expect(packageDetailsSection).toBeTruthy()
     expect(packageDetailsSection).toHaveClass('application-items-card')

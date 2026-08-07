@@ -1391,23 +1391,6 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
         </div>
       )}
 
-      {selectedWorkflowType !== 'applicationSubmission' && (
-        <div className="admin-upload-summary-strip" aria-label="Upload batch summary">
-          <div>
-            <span>Target</span>
-            <strong>{currentUploadTargetSummary}</strong>
-          </div>
-          <div>
-            <span>Queued files</span>
-            <strong>{uploadQueue.length}</strong>
-          </div>
-          <div>
-            <span>Format</span>
-            <strong>Document</strong>
-          </div>
-        </div>
-      )}
-
       <div
         className="legacy-search-grid admin-upload-settings-grid"
         hidden={selectedWorkflowType === 'applicationSubmission'}
