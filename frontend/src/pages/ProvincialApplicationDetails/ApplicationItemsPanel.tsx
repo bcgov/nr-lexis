@@ -11,7 +11,7 @@ import {
   TextArea,
   TextInput,
 } from '@carbon/react'
-import { Box, Edit, List } from '@carbon/icons-react'
+import { Box, Edit, List, TrashCan } from '@carbon/icons-react'
 import { AppNotification } from '../../components/AppNotification'
 import ConfirmationModal from '../../components/ConfirmationModal'
 import PendingIcon from '../../components/PendingIcon'
@@ -408,6 +408,9 @@ function ProvincialApplicationItemsPanel({
   const [createPackageDraftTouched, setCreatePackageDraftTouched] = useState(false)
   const [scaleDraftTouched, setScaleDraftTouched] = useState(false)
   const [pendingPackageSelection, setPendingPackageSelection] = useState('')
+  const [packagePendingDeletion, setPackagePendingDeletion] = useState('')
+  const [scalePendingDeletion, setScalePendingDeletion] =
+    useState<ApplicationPackageScaleRow | null>(null)
   const scalesSectionRef = useRef<HTMLElement>(null)
   const lastScrolledToScalesRequestIdRef = useRef(0)
   const lastHandledFocusedPackageRequestRef = useRef('')
@@ -1196,38 +1199,50 @@ function ProvincialApplicationItemsPanel({
     }
   }
 
-  const onDeleteSelectedPackage = async () => {
-    if (!canAddPackages || !packageDataLoaded || !selectedPackageNumber) {
-      return
+  const onDeleteSelectedPackage = async (packageNumber: string) => {
+    if (
+      !canAddPackages ||
+      !packageDataLoaded ||
+      !packageNumber ||
+      packageNumber !== selectedPackageNumber
+    ) {
+      throw new Error('This package is no longer available for deletion.')
     }
 
     if (selectedPackageHasPermittedScale) {
-      setItemsErrorMessage('Package delete is not allowed after a scale has been permitted.')
-      return
+      throw new Error('Package delete is not allowed after a scale has been permitted.')
     }
 
     if (selectedPackageTotalPieces > 0) {
-      setItemsErrorMessage('Package delete is not allowed after scale pieces have been added.')
-      return
+      throw new Error('Package delete is not allowed after scale pieces have been added.')
     }
 
     setIsSavingPackage(true)
     setItemsErrorMessage('')
     setItemsInfoMessage('')
     try {
-      const result = await deleteApplicationPackage(selectedPackageNumber, applicationNumber)
+      const result = await deleteApplicationPackage(packageNumber, applicationNumber)
       if (!result.success) {
-        setItemsErrorMessage('Package delete failed.')
-        return
+        throw new Error('Package delete failed. Refresh and try again.')
       }
 
-      const deletedPackageNumber = selectedPackageNumber
-      dispatchPackageSelection({ type: 'delete', packageNumber: deletedPackageNumber })
-      setItemsInfoMessage(`Package ${deletedPackageNumber} deleted.`)
-      await onDetailChanged()
-      await loadApplicationScaleSummary()
-    } catch {
-      setItemsErrorMessage('Unable to delete package.')
+      dispatchPackageSelection({ type: 'delete', packageNumber })
+      setItemsInfoMessage(`Package ${packageNumber} deleted.`)
+      try {
+        await onDetailChanged()
+        await loadApplicationScaleSummary()
+      } catch (refreshError) {
+        console.error(refreshError)
+        setItemsErrorMessage(
+          `Package ${packageNumber} was deleted, but application items could not be refreshed. Reload the page.`,
+        )
+        setItemsInfoMessage(
+          `Package ${packageNumber} was deleted. Reload before changing packages again.`,
+        )
+      }
+    } catch (error) {
+      console.error(error)
+      throw error instanceof Error ? error : new Error('Unable to delete package.')
     } finally {
       setIsSavingPackage(false)
     }
@@ -1288,27 +1303,27 @@ function ProvincialApplicationItemsPanel({
     }
   }
 
-  const onDeleteScale = async (scaleId: string) => {
-    if (!canAddScales || !packageDataLoaded) {
-      return
+  const onDeleteScale = async (row: ApplicationPackageScaleRow) => {
+    if (!canAddScales || !packageDataLoaded || row.permitted) {
+      throw new Error('This scale is no longer available for deletion.')
     }
 
-    setDeletingScaleId(scaleId)
+    setDeletingScaleId(row.id)
     setItemsErrorMessage('')
     setItemsInfoMessage('')
     try {
-      const result = await deleteApplicationScale(scaleId, applicationNumber)
+      const result = await deleteApplicationScale(row.id, applicationNumber)
       if (!result.success) {
-        setItemsErrorMessage('Scale delete failed.')
-        return
+        throw new Error('Scale delete failed. Refresh and try again.')
       }
-      setScales((current) => current.filter((item) => item.id !== scaleId))
-      setItemsInfoMessage(`Scale ${scaleId} deleted.`)
+      setScales((current) => current.filter((item) => item.id !== row.id))
+      setItemsInfoMessage(`Scale ${row.id} deleted.`)
       setScaleLookupResult('')
       await loadApplicationScaleSummary()
       await loadPackageItems(selectedPackageNumber)
-    } catch {
-      setItemsErrorMessage('Unable to delete scale.')
+    } catch (error) {
+      console.error(error)
+      throw error instanceof Error ? error : new Error('Unable to delete scale.')
     } finally {
       setDeletingScaleId('')
     }
@@ -1664,7 +1679,8 @@ function ProvincialApplicationItemsPanel({
                     kind="danger--ghost"
                     size="sm"
                     disabled={!canDeleteSelectedPackage}
-                    onClick={() => void onDeleteSelectedPackage()}
+                    renderIcon={TrashCan}
+                    onClick={() => setPackagePendingDeletion(selectedPackageNumber)}
                   >
                     Delete Package
                   </Button>
@@ -2118,8 +2134,8 @@ function ProvincialApplicationItemsPanel({
                             deletingScaleId === row.id ||
                             row.permitted
                           }
-                          renderIcon={deletingScaleId === row.id ? PendingIcon : undefined}
-                          onClick={() => void onDeleteScale(row.id)}
+                          renderIcon={deletingScaleId === row.id ? PendingIcon : TrashCan}
+                          onClick={() => setScalePendingDeletion(row)}
                         >
                           {deletingScaleId === row.id ? 'Deleting…' : 'Delete'}
                         </Button>
@@ -2139,6 +2155,43 @@ function ProvincialApplicationItemsPanel({
           </div>
         </section>
       </div>
+      {packagePendingDeletion && (
+        <ConfirmationModal
+          open
+          danger
+          title="Delete package"
+          description={
+            <>
+              Permanently delete package <strong>{packagePendingDeletion}</strong> from application{' '}
+              {applicationNumber}? This cannot be undone.
+            </>
+          }
+          confirmLabel="Delete"
+          pendingLabel="Deleting…"
+          errorTitle="Failed to delete package"
+          onConfirm={() => onDeleteSelectedPackage(packagePendingDeletion)}
+          onClose={() => setPackagePendingDeletion('')}
+        />
+      )}
+      {scalePendingDeletion && (
+        <ConfirmationModal
+          open
+          danger
+          title="Delete scale"
+          description={
+            <>
+              Permanently delete scale <strong>{scalePendingDeletion.id}</strong> (
+              {scalePendingDeletion.timberMark}) from package {selectedPackageNumber}? This cannot
+              be undone.
+            </>
+          }
+          confirmLabel="Delete"
+          pendingLabel="Deleting…"
+          errorTitle="Failed to delete scale"
+          onConfirm={() => onDeleteScale(scalePendingDeletion)}
+          onClose={() => setScalePendingDeletion(null)}
+        />
+      )}
       <ConfirmationModal
         open={!!pendingPackageSelection}
         title="Discard package drafts?"

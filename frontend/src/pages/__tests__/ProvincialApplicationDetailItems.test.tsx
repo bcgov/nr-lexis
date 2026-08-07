@@ -932,11 +932,55 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
         name: 'Delete Package',
       }),
     )
+    const confirmation = await screen.findByRole('dialog', { name: 'Delete package' })
+    expect(confirmation).toHaveTextContent(
+      'Permanently delete package PKG-1 from application 321? This cannot be undone.',
+    )
+    expect(mockedDeleteApplicationPackage).not.toHaveBeenCalled()
+    await userEvent.click(within(confirmation).getByRole('button', { name: 'Delete' }))
 
     await waitFor(() => {
       expect(mockedDeleteApplicationPackage).toHaveBeenCalledWith('PKG-1', '321')
     })
     expect(await screen.findByText('Package PKG-1 deleted.')).toBeInTheDocument()
+  })
+
+  it('keeps a failed package deletion open for retry', async () => {
+    mockedFetchApplicationPackageScales.mockResolvedValue([
+      {
+        permitted: false,
+        timberMark: 'TM001',
+        species: 'Douglas-fir',
+        grade: 'Sawlog',
+        pieces: 0,
+        volume: '0.0',
+        id: '55',
+        cascadeSplitCode: 'S',
+      },
+    ])
+    mockedDeleteApplicationPackage.mockResolvedValue({ success: false })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationItemsForEditing()
+    await userEvent.click(screen.getByRole('button', { name: 'Delete Package' }))
+    const confirmation = await screen.findByRole('dialog', { name: 'Delete package' })
+    await userEvent.click(within(confirmation).getByRole('button', { name: 'Delete' }))
+
+    expect(await screen.findByText('Failed to delete package')).toBeInTheDocument()
+    expect(screen.getByText('Package delete failed. Refresh and try again.')).toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: 'Delete package' })).toBeInTheDocument()
+    expect(within(confirmation).getByRole('button', { name: 'Cancel' })).toBeEnabled()
+    expect(screen.getAllByText('PKG-1').length).toBeGreaterThan(0)
   })
 
   it('prevents package save and delete when package scales are permitted', async () => {
@@ -1271,6 +1315,12 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     expect(scaleRow).toBeTruthy()
     expect(within(scaleRow as HTMLElement).getByText('-')).toBeInTheDocument()
     fireEvent.click(within(scaleRow as HTMLElement).getByRole('button', { name: 'Delete' }))
+    const confirmation = await screen.findByRole('dialog', { name: 'Delete scale' })
+    expect(confirmation).toHaveTextContent(
+      'Permanently delete scale 55 (TM001) from package PKG-1? This cannot be undone.',
+    )
+    expect(mockedDeleteApplicationScale).not.toHaveBeenCalled()
+    await userEvent.click(within(confirmation).getByRole('button', { name: 'Delete' }))
     await waitFor(() => {
       expect(mockedDeleteApplicationScale).toHaveBeenCalledWith('55', '321')
     })

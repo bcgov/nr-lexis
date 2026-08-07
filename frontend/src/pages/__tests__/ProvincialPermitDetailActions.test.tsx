@@ -2251,6 +2251,14 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
 
     await userEvent.click(screen.getByRole('button', { name: 'Remove' }))
+    const removalConfirmation = await screen.findByRole('dialog', {
+      name: 'Remove Blanket OIC scale?',
+    })
+    expect(removalConfirmation).toHaveTextContent(
+      'Scale SCALE-9 (TM-9) will be removed from permit 777.',
+    )
+    expect(mockedDeleteBlanketOicScale).not.toHaveBeenCalled()
+    await userEvent.click(within(removalConfirmation).getByRole('button', { name: 'Remove' }))
     await waitFor(() => {
       expect(mockedDeleteBlanketOicScale).toHaveBeenCalledWith({
         scaleId: 'SCALE-9',

@@ -107,6 +107,7 @@ import {
   type BlanketOicPackageMutationRequest,
   type ProvincialPermitDetailTabsData,
   type ProvincialPermitDetailTabsRequest,
+  type ProvincialPermitItemRow,
 } from '@/service/provincial-permit-detail-tabs-service'
 import { ReportRequestError, runReport } from '@/service/report-service'
 import {
@@ -585,6 +586,8 @@ const ProvincialPermitDetailsPage = () => {
   )
   const [isUpdatingScaleId, setIsUpdatingScaleId] = useState<string | null>(null)
   const [isDeletingBoicScaleId, setIsDeletingBoicScaleId] = useState<string | null>(null)
+  const [boicScalePendingRemoval, setBoicScalePendingRemoval] =
+    useState<ProvincialPermitItemRow | null>(null)
   const [isSavingBoicScale, setIsSavingBoicScale] = useState(false)
   const [boicPackageForm, setBoicPackageForm] = useState<BlanketOicPackageForm>(
     EMPTY_BLANKET_OIC_PACKAGE_FORM,
@@ -2404,32 +2407,43 @@ const ProvincialPermitDetailsPage = () => {
   ])
 
   const onDeleteBlanketOicScale = useCallback(
-    async (scaleId: string) => {
+    async (row: ProvincialPermitItemRow) => {
       const resolvedPermitNumber = String(detail?.permitNumber ?? permitNumber ?? '').trim()
-      if (!canEditBlanketOicScaleRows || !resolvedPermitNumber || !scaleId) {
-        return
+      if (!canEditBlanketOicScaleRows || !resolvedPermitNumber || !row.id) {
+        throw new Error('This Blanket OIC scale is no longer available for removal.')
       }
 
       setActionErrorMessage('')
       setActionInfoMessage('')
-      setIsDeletingBoicScaleId(scaleId)
+      setIsDeletingBoicScaleId(row.id)
       try {
         const result = await deleteBlanketOicScale({
-          scaleId,
+          scaleId: row.id,
           permitNumber: resolvedPermitNumber,
         })
         if (!result.success) {
-          setActionErrorMessage(
+          throw new Error(
             result.errors[0] || result.message || 'Unable to remove Blanket OIC scale detail.',
           )
-          return
         }
 
-        await reloadPermitTabs()
-        setActionInfoMessage(result.message || 'Blanket OIC scale detail was removed.')
+        try {
+          await reloadPermitTabs()
+          setActionInfoMessage(result.message || 'Blanket OIC scale detail was removed.')
+        } catch (refreshError) {
+          console.error(refreshError)
+          setPermitTablesErrorMessage(
+            'The Blanket OIC scale was removed, but permit tables could not be refreshed. Reload the page.',
+          )
+          setActionInfoMessage(
+            `${result.message || 'Blanket OIC scale detail was removed.'} Reload before changing scale rows again.`,
+          )
+        }
       } catch (error) {
         console.error(error)
-        setActionErrorMessage('Unable to remove Blanket OIC scale detail.')
+        throw error instanceof Error
+          ? error
+          : new Error('Unable to remove Blanket OIC scale detail.')
       } finally {
         setIsDeletingBoicScaleId(null)
       }
@@ -4178,10 +4192,11 @@ const ProvincialPermitDetailsPage = () => {
                                           <TableCell>
                                             {row.includedInPermit ? (
                                               <Button
-                                                kind="ghost"
+                                                kind="danger--ghost"
                                                 size="sm"
                                                 disabled={isDeletingBoicScaleId === row.id}
-                                                onClick={() => void onDeleteBlanketOicScale(row.id)}
+                                                renderIcon={TrashCan}
+                                                onClick={() => setBoicScalePendingRemoval(row)}
                                               >
                                                 {isDeletingBoicScaleId === row.id
                                                   ? 'Removing...'
@@ -4797,6 +4812,25 @@ const ProvincialPermitDetailsPage = () => {
           errorTitle="Failed to delete document"
           onClose={() => setDocumentPendingDeletion(null)}
           onConfirm={() => onRemoveDocument(documentPendingDeletion)}
+        />
+      )}
+      {boicScalePendingRemoval && (
+        <ConfirmationModal
+          open
+          danger
+          title="Remove Blanket OIC scale?"
+          description={
+            <>
+              Scale <strong>{boicScalePendingRemoval.id}</strong> (
+              {boicScalePendingRemoval.timberMark || 'no timber mark'}) will be removed from permit{' '}
+              {detail?.permitNumber ?? permitNumber ?? ''}.
+            </>
+          }
+          confirmLabel="Remove"
+          pendingLabel="Removing…"
+          errorTitle="Failed to remove Blanket OIC scale"
+          onClose={() => setBoicScalePendingRemoval(null)}
+          onConfirm={() => onDeleteBlanketOicScale(boicScalePendingRemoval)}
         />
       )}
       <ConfirmationModal
