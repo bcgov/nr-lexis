@@ -93,6 +93,7 @@ import { formatLocalIsoDate } from '@/utils/date'
 import { sanitizeNotificationText } from '@/utils/notification-messages'
 import { firstStringField, isRecord } from '@/utils/record'
 import { resolveDefaultZoneRegionIds } from '@/service/user-preference-service'
+import { displayTableValue } from '@/utils/text'
 
 type ApprovalStatus = {
   kind: 'error' | 'success' | 'warning'
@@ -1130,19 +1131,21 @@ const ProvincialExemptionPage = () => {
                             row.exemptionNumber
                           )}
                         </TableCell>
-                        <TableCell>{row.type}</TableCell>
+                        <TableCell>{displayTableValue(row.type)}</TableCell>
                         <TableCell>
                           <StatusTag status={row.status} />
                         </TableCell>
-                        <TableCell>{row.applicantClientNumber || '-'}</TableCell>
-                        <TableCell>{row.ownerClientNumber}</TableCell>
-                        <TableCell>{row.approvedVolume}</TableCell>
-                        <TableCell>{row.balanceRemaining}</TableCell>
+                        <TableCell>{displayTableValue(row.applicantClientNumber)}</TableCell>
+                        <TableCell>{displayTableValue(row.ownerClientNumber)}</TableCell>
+                        <TableCell>{displayTableValue(row.approvedVolume)}</TableCell>
+                        <TableCell>{displayTableValue(row.balanceRemaining)}</TableCell>
                         <TableCell className="legacy-search-table-date">
-                          {row.listingDate}
+                          {displayTableValue(row.listingDate)}
                         </TableCell>
-                        <TableCell className="legacy-search-table-date">{row.expiryDate}</TableCell>
-                        <TableCell>{row.region}</TableCell>
+                        <TableCell className="legacy-search-table-date">
+                          {displayTableValue(row.expiryDate)}
+                        </TableCell>
+                        <TableCell>{displayTableValue(row.region)}</TableCell>
                       </TableRow>
                     )
                   })}

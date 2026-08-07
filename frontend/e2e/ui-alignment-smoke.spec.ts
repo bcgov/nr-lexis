@@ -206,6 +206,26 @@ const exportSchedulePage = {
   size: 100,
 }
 
+const feePolicyPage = {
+  rows: [
+    {
+      id: 'fee-policy-1',
+      effectiveDate: '2099-01-01',
+      orgUnitNo: '1903',
+      orgUnitCode: 'RCO',
+      orgUnitName: 'Cariboo Natural Resource Region',
+      policyPercentage: '4',
+      entryUserId: 'IDIR\\UI.TESTER',
+      entryTimestamp: '2026-07-01T12:00:00.000Z',
+      updateUserId: 'IDIR\\UI.TESTER',
+      updateTimestamp: '2026-07-01T12:00:00.000Z',
+    },
+  ],
+  total: 1,
+  page: 0,
+  size: 100,
+}
+
 const installSyntheticLexisApi = async (page: Page) => {
   let defaultRegion = 'RSI'
 
@@ -256,6 +276,9 @@ const installSyntheticLexisApi = async (page: Page) => {
         break
       case '/api/lexis/admin/schedules':
         body = exportSchedulePage
+        break
+      case '/api/lexis/admin/policies/fee':
+        body = feePolicyPage
         break
       default:
         body = { results: [], total: 0, page: 0, size: 25 }
@@ -718,6 +741,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
 
     await expect(rows).toHaveCount(2)
     await expect(table).toHaveClass(/cds--data-table--md/)
+    await expect(rows.first().getByRole('cell', { name: '—', exact: true })).toBeVisible()
     const firstRowHeight = await rows.first().evaluate((row) => row.getBoundingClientRect().height)
     expect(firstRowHeight).toBeGreaterThanOrEqual(40)
     expect(firstRowHeight).toBeLessThanOrEqual(64)
@@ -1315,6 +1339,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     const resultsRegion = page.getByRole('region', { name: 'Search results table' })
     await expect(resultsRegion.getByText('1001')).toBeVisible()
     await expect(resultsRegion.getByRole('table')).toHaveClass(/cds--data-table--md/)
+    await expect(resultsRegion.getByLabel('Items per page:')).toBeVisible()
     const scheduleDeleteButton = resultsRegion.getByRole('button', { name: 'Delete' })
     await expect(scheduleDeleteButton).toHaveClass(/cds--btn--danger--ghost/)
     await scheduleDeleteButton.click()
@@ -1366,6 +1391,15 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
 
     await expect(
       page.getByRole('heading', { level: 1, name: 'Fee policy administration' }),
+    ).toBeVisible()
+    const feePolicyTable = page
+      .getByRole('region', { name: 'Search results table' })
+      .getByRole('table')
+    await expect(
+      feePolicyTable.getByRole('columnheader', { name: 'Fee increase %', exact: true }),
+    ).toBeVisible()
+    await expect(
+      feePolicyTable.getByRole('columnheader', { name: 'Entry user', exact: true }),
     ).toBeVisible()
     const feeAddButton = page.getByRole('button', { name: 'Add fee policy' })
     await expect(feeAddButton).toBeEnabled()

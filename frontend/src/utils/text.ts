@@ -14,6 +14,13 @@ export const displayValue = (value: string | number | null | undefined): string 
   return String(value)
 }
 
+export const displayTableValue = (value: string | number | null | undefined): string => {
+  if (value === null || value === undefined || (typeof value === 'string' && value.trim() === '')) {
+    return '—'
+  }
+  return String(value)
+}
+
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export const displayAuditIdentity = (value: string | null | undefined): string => {

@@ -82,6 +82,7 @@ import {
   type SearchOption,
 } from '@/service/search-options-service'
 import { resolveDefaultZoneRegionIds } from '@/service/user-preference-service'
+import { displayTableValue } from '@/utils/text'
 import IsoDatePicker from '../../components/IsoDatePicker'
 
 type ExemptionStatus = {
@@ -917,10 +918,12 @@ const ProvincialApplicationPage = () => {
                       <TableCell>
                         <StatusTag status={row.status} />
                       </TableCell>
-                      {canCreateExemption && <TableCell>{row.applicantClientNumber}</TableCell>}
-                      <TableCell>{row.ownerClientNumber}</TableCell>
-                      <TableCell>{row.region}</TableCell>
-                      <TableCell>{row.applicationVolume}</TableCell>
+                      {canCreateExemption && (
+                        <TableCell>{displayTableValue(row.applicantClientNumber)}</TableCell>
+                      )}
+                      <TableCell>{displayTableValue(row.ownerClientNumber)}</TableCell>
+                      <TableCell>{displayTableValue(row.region)}</TableCell>
+                      <TableCell>{displayTableValue(row.applicationVolume)}</TableCell>
                       <TableCell>
                         {row.exemptionNumber ? (
                           <Link
@@ -930,10 +933,12 @@ const ProvincialApplicationPage = () => {
                             {row.exemptionNumber}
                           </Link>
                         ) : (
-                          '-'
+                          displayTableValue(row.exemptionNumber)
                         )}
                       </TableCell>
-                      <TableCell className="legacy-search-table-date">{row.listingDate}</TableCell>
+                      <TableCell className="legacy-search-table-date">
+                        {displayTableValue(row.listingDate)}
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

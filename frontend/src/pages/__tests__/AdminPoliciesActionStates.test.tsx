@@ -911,7 +911,7 @@ describe('Admin policy action states', () => {
       )
       expect(screen.getByText('220 results found')).toBeInTheDocument()
 
-      const rowsPerPage = screen.getByLabelText('Rows per page')
+      const rowsPerPage = screen.getByLabelText('Items per page:')
       expect(rowsPerPage).toHaveValue('100')
       expect(
         within(rowsPerPage)
@@ -961,7 +961,7 @@ describe('Admin policy action states', () => {
     expect(await screen.findByRole('heading', { level: 3, name: title })).toBeVisible()
     expect(screen.getByText('0 results found')).toBeVisible()
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('Rows per page')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Items per page:')).not.toBeInTheDocument()
   })
 
   it('shows policy loading inside the retained results workspace', async () => {

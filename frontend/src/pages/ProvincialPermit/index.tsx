@@ -76,6 +76,7 @@ import {
 import { fetchProvincialPermitOptions, type SearchOption } from '@/service/search-options-service'
 import { resolveDefaultZoneRegionIds } from '@/service/user-preference-service'
 import { formatPermitNumber } from '@/utils/permit'
+import { displayTableValue } from '@/utils/text'
 
 const INITIAL_FILTERS: ProvincialPermitSearchFilters = {
   applicationNumber: '',
@@ -628,11 +629,13 @@ const ProvincialPermitPage = () => {
                       <TableCell>
                         <StatusTag status={row.status} />
                       </TableCell>
-                      <TableCell>{row.applicantClientNumber}</TableCell>
-                      <TableCell>{row.ownerClientNumber}</TableCell>
-                      <TableCell>{row.totalVolume}</TableCell>
-                      <TableCell className="legacy-search-table-date">{row.issueDate}</TableCell>
-                      <TableCell>{row.region}</TableCell>
+                      <TableCell>{displayTableValue(row.applicantClientNumber)}</TableCell>
+                      <TableCell>{displayTableValue(row.ownerClientNumber)}</TableCell>
+                      <TableCell>{displayTableValue(row.totalVolume)}</TableCell>
+                      <TableCell className="legacy-search-table-date">
+                        {displayTableValue(row.issueDate)}
+                      </TableCell>
+                      <TableCell>{displayTableValue(row.region)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

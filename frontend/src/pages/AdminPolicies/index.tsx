@@ -154,7 +154,7 @@ const SCHEDULE_SORT_COLUMNS: Array<{ id: ExportScheduleSortField; label: string 
 const FEE_POLICY_SORT_COLUMNS: Array<{ id: FeePolicySortField; label: string }> = [
   { id: 'effective_date', label: 'Policy effective date' },
   { id: 'org_unit_no', label: 'Region' },
-  { id: 'percent_increase', label: 'Fee Increase %' },
+  { id: 'percent_increase', label: 'Fee increase %' },
 ]
 
 const FIL_POLICY_SORT_COLUMNS: Array<{ id: FilPolicySortField; label: string }> = [
@@ -811,7 +811,6 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
     <Pagination
       backwardText="Previous page"
       forwardText="Next page"
-      itemsPerPageText="Rows per page"
       page={page + 1}
       pageSize={pageSize}
       pageSizes={ADMIN_PAGE_SIZES}
@@ -1118,10 +1117,10 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                           </button>
                         </TableHeader>
                       ))}
-                      <TableHeader>Entry User</TableHeader>
-                      <TableHeader>Entry Timestamp</TableHeader>
-                      <TableHeader>Update User</TableHeader>
-                      <TableHeader>Update Timestamp</TableHeader>
+                      <TableHeader>Entry user</TableHeader>
+                      <TableHeader>Entry timestamp</TableHeader>
+                      <TableHeader>Update user</TableHeader>
+                      <TableHeader>Update timestamp</TableHeader>
                       <TableHeader>Actions</TableHeader>
                     </TableRow>
                   </TableHead>

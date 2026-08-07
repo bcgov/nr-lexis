@@ -69,6 +69,7 @@ import {
   searchFederalApplications,
 } from '@/service/federal-application-search-service'
 import { fetchFederalApplicationOptions, type SearchOption } from '@/service/search-options-service'
+import { displayTableValue } from '@/utils/text'
 
 type ExemptionSelectionStatus = {
   kind: 'error'
@@ -696,11 +697,15 @@ const FederalPage = () => {
                       <TableCell>
                         <StatusTag status={row.status} />
                       </TableCell>
-                      <TableCell>{row.clientNumber}</TableCell>
-                      <TableCell>{row.reason}</TableCell>
-                      <TableCell className="legacy-search-table-date">{row.receivedDate}</TableCell>
-                      <TableCell className="legacy-search-table-date">{row.listingDate}</TableCell>
-                      <TableCell>{row.exemptionType || '-'}</TableCell>
+                      <TableCell>{displayTableValue(row.clientNumber)}</TableCell>
+                      <TableCell>{displayTableValue(row.reason)}</TableCell>
+                      <TableCell className="legacy-search-table-date">
+                        {displayTableValue(row.receivedDate)}
+                      </TableCell>
+                      <TableCell className="legacy-search-table-date">
+                        {displayTableValue(row.listingDate)}
+                      </TableCell>
+                      <TableCell>{displayTableValue(row.exemptionType)}</TableCell>
                       <TableCell>
                         {row.exemptionNumber ? (
                           <Link
@@ -710,7 +715,7 @@ const FederalPage = () => {
                             {row.exemptionNumber}
                           </Link>
                         ) : (
-                          '-'
+                          displayTableValue(row.exemptionNumber)
                         )}
                       </TableCell>
                     </TableRow>

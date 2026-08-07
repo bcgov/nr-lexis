@@ -92,6 +92,7 @@ import { fetchApplicationReviewOptions, type SearchOption } from '@/service/sear
 import { fetchCurrentApplicationRecordVersion } from '@/service/record-version-service'
 import { resolveDefaultZoneRegionIds } from '@/service/user-preference-service'
 import {
+  displayTableValue,
   isValidEmail,
   normalizeTrimmedText as normalizeEmail,
   normalizeUpperText as normalizeReviewStatus,
@@ -1310,10 +1311,14 @@ const ProvincialReviewPage = () => {
                       <TableCell>
                         <StatusTag status={row.status} />
                       </TableCell>
-                      <TableCell>{formatApplicationVolume(row.volume)}</TableCell>
-                      <TableCell>{row.speciesEndUse}</TableCell>
-                      <TableCell className="legacy-search-table-date">{row.listingDate}</TableCell>
-                      <TableCell>{row.region}</TableCell>
+                      <TableCell>
+                        {displayTableValue(formatApplicationVolume(row.volume))}
+                      </TableCell>
+                      <TableCell>{displayTableValue(row.speciesEndUse)}</TableCell>
+                      <TableCell className="legacy-search-table-date">
+                        {displayTableValue(row.listingDate)}
+                      </TableCell>
+                      <TableCell>{displayTableValue(row.region)}</TableCell>
                       <TableCell>
                         <div className="provincial-review-row-actions">
                           <Button

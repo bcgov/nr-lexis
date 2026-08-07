@@ -77,6 +77,7 @@ import {
 } from '@/service/search-options-service'
 import { resolveDefaultZoneRegionIds } from '@/service/user-preference-service'
 import { formatBusinessIsoDate } from '@/utils/date'
+import { displayTableValue } from '@/utils/text'
 
 const INITIAL_FILTERS: ProvincialOfferSearchFilters = {
   applicationNumber: '',
@@ -662,12 +663,14 @@ const ProvincialOffersPage = () => {
                           {row.offerNumber}
                         </Link>
                       </TableCell>
-                      <TableCell>{row.applicationNumber}</TableCell>
+                      <TableCell>{displayTableValue(row.applicationNumber)}</TableCell>
                       <TableCell>{row.packageNumber || 'No Packages'}</TableCell>
-                      <TableCell className="legacy-search-table-date">{row.listingDate}</TableCell>
-                      <TableCell>{row.region}</TableCell>
                       <TableCell className="legacy-search-table-date">
-                        {row.offerWithdrawalDate || '-'}
+                        {displayTableValue(row.listingDate)}
+                      </TableCell>
+                      <TableCell>{displayTableValue(row.region)}</TableCell>
+                      <TableCell className="legacy-search-table-date">
+                        {displayTableValue(row.offerWithdrawalDate)}
                       </TableCell>
                     </TableRow>
                   ))}
