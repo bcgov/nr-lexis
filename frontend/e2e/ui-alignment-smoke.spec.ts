@@ -586,14 +586,25 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
 
     const sharedTokens = await page.evaluate(() => {
       const style = getComputedStyle(document.documentElement)
+      const resolveColor = (value: string) => {
+        const probe = document.createElement('span')
+        probe.style.color = value
+        document.body.append(probe)
+        const resolvedColor = getComputedStyle(probe).color
+        probe.remove()
+        return resolvedColor
+      }
+
       return {
-        greenTagBackground: style.getPropertyValue('--cds-tag-background-green').trim(),
-        greenTagColor: style.getPropertyValue('--cds-tag-color-green').trim(),
+        greenTagBackground: resolveColor(
+          style.getPropertyValue('--cds-tag-background-green').trim(),
+        ),
+        greenTagColor: resolveColor(style.getPropertyValue('--cds-tag-color-green').trim()),
       }
     })
     expect(sharedTokens).toEqual({
-      greenTagBackground: '#cce5cc',
-      greenTagColor: '#005500',
+      greenTagBackground: 'rgb(204, 229, 204)',
+      greenTagColor: 'rgb(0, 85, 0)',
     })
   })
 
