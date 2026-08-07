@@ -86,6 +86,87 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     expect(screen.queryByRole('button', { name: 'Review' })).not.toBeInTheDocument()
   })
 
+  it('shows species tabs and highlights uploaded values with warnings', async () => {
+    mockedPreviewUpload.mockResolvedValue({
+      status: 'accepted',
+      fileName: 'Filename.xlsx',
+      fileSize: 3,
+      message: 'Spreadsheet is valid.',
+      rowCount: 3,
+      retrievalDate: '2026-08-01',
+      updateDate: '2026-09-01',
+      errors: [],
+      warnings: ['Hemlock grade A changed significantly.', 'Cedar grade B changed significantly.'],
+      rows: [
+        {
+          species: 'BA',
+          grade: 'D',
+          growthIndicator: 'O',
+          retrievalDate: '2026-08-01',
+          updateDate: '2026-09-01',
+          currentValue: 75.29,
+          newValue: 78.14,
+          returnCode: '0',
+        },
+        {
+          species: 'HE',
+          grade: 'A',
+          growthIndicator: 'O',
+          retrievalDate: '2026-08-01',
+          updateDate: '2026-09-01',
+          currentValue: 100,
+          newValue: 120,
+          returnCode: '0',
+        },
+        {
+          species: 'CE',
+          grade: 'B',
+          growthIndicator: 'O',
+          retrievalDate: '2026-08-01',
+          updateDate: '2026-09-01',
+          currentValue: 200,
+          newValue: 240,
+          returnCode: '0',
+        },
+      ],
+    })
+    render(<RtmEmsLogAmvUploadPage />)
+    const workbook = new File([new Uint8Array([1, 2, 3])], 'Filename.xlsx', {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    })
+
+    await userEvent.upload(
+      screen.getByLabelText('Average monthly values upload spreadsheet'),
+      workbook,
+    )
+
+    expect(await screen.findByText('2 cells need a look before you save')).toBeVisible()
+    expect(
+      screen.getByText('In Hemlock and Cedar, highlighted below. You can save either way.'),
+    ).toBeVisible()
+    expect(screen.getByLabelText('Uploaded average monthly values file')).toHaveTextContent(
+      'Filename.xlsx',
+    )
+    expect(screen.getAllByRole('tab')).toHaveLength(7)
+    expect(document.querySelectorAll('.rtm-amv-species-tab__status--warning')).toHaveLength(2)
+
+    const balsamTable = screen.getByRole('table', {
+      name: 'Balsam average market value review',
+    })
+    expect(within(balsamTable).getByRole('columnheader', { name: 'August 2026' })).toBeVisible()
+    expect(within(balsamTable).getByRole('columnheader', { name: 'September 2026' })).toBeVisible()
+    expect(within(balsamTable).getByRole('row', { name: /D.*75\.29.*78\.14/ })).toBeVisible()
+
+    await userEvent.click(screen.getByRole('tab', { name: /Hemlock/ }))
+    const hemlockTable = screen.getByRole('table', {
+      name: 'Hemlock average market value review',
+    })
+    expect(within(hemlockTable).getByText('120.00').closest('td')).toHaveClass('has-warning')
+    expect(screen.getByText('Fixed values are not shown here')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Save values' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeEnabled()
+  })
+
   it('groups pine and hides fixed legacy grades while preserving the workbook submission', async () => {
     mockedPreviewUpload.mockResolvedValue({
       status: 'accepted',
@@ -104,7 +185,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
           growthIndicator: 'O',
           retrievalDate: '2026-06-01',
           updateDate: '2026-07-01',
-          currentValue: null,
+          currentValue: 9,
           newValue: 10,
           returnCode: '0',
         },
@@ -114,7 +195,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
           growthIndicator: 'O',
           retrievalDate: '2026-06-01',
           updateDate: '2026-07-01',
-          currentValue: null,
+          currentValue: 9,
           newValue: 10,
           returnCode: '0',
         },
@@ -124,7 +205,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
           growthIndicator: 'O',
           retrievalDate: '2026-06-01',
           updateDate: '2026-07-01',
-          currentValue: null,
+          currentValue: 9,
           newValue: 10,
           returnCode: '0',
         },
@@ -170,25 +251,16 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     )
     const effectiveMonth = (screen.getByLabelText('Month') as HTMLSelectElement).value
     expect(mockedPreviewUpload).toHaveBeenCalledWith(workbook, effectiveMonth)
-    await screen.findByText('Spreadsheet validated')
-    await userEvent.click(screen.getByRole('button', { name: 'Review' }))
+    await userEvent.click(await screen.findByRole('tab', { name: /Pine/ }))
 
-    const table = screen.getByRole('table', { name: 'Average monthly value upload review' })
-    expect(within(table).getByRole('columnheader', { name: 'Pine' })).toBeVisible()
-    expect(
-      within(table).queryByRole('columnheader', { name: 'Western white pine' }),
-    ).not.toBeInTheDocument()
-    expect(
-      within(table).queryByRole('columnheader', { name: 'Lodgepole pine' }),
-    ).not.toBeInTheDocument()
-    expect(
-      within(table).queryByRole('columnheader', { name: 'Yellow pine' }),
-    ).not.toBeInTheDocument()
-    expect(within(table).getByRole('row', { name: /A.*10\.00/ })).toBeVisible()
+    const table = screen.getByRole('table', { name: 'Pine average market value review' })
+    expect(within(table).getByRole('columnheader', { name: 'June 2026' })).toBeVisible()
+    expect(within(table).getByRole('columnheader', { name: 'July 2026' })).toBeVisible()
+    expect(within(table).getByRole('row', { name: /A.*9\.00.*10\.00/ })).toBeVisible()
     expect(within(table).queryByRole('row', { name: /W.*4\.00/ })).not.toBeInTheDocument()
     expect(within(table).queryByRole('row', { name: /BLANK.*5\.00/ })).not.toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Submit' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save values' }))
     await waitFor(() => {
       expect(mockedUpload).toHaveBeenCalledWith({ file: workbook, effectiveMonth })
     })

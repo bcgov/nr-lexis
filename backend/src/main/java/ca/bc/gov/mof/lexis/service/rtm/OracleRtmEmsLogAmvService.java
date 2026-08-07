@@ -379,7 +379,11 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
         }
       }
       List<RtmEmsLogAmvRowDto> previewRows =
-          buildPreviewRows(rowsToPreview, parseResult.retrievalDate(), parseResult.updateDate());
+          buildPreviewRows(
+              rowsToPreview,
+              parseResult.retrievalDate(),
+              parseResult.updateDate(),
+              errors.isEmpty());
       if (parseResult.dataRowCount() > 0 && parseResult.dataRowCount() < 2) {
         warnings.add("The uploaded file has very few rows; confirm it contains full AMV data.");
       }
@@ -822,9 +826,24 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
   }
 
   private List<RtmEmsLogAmvRowDto> buildPreviewRows(
-      List<UploadTarget> targets, LocalDate retrievalDate, LocalDate updateDate) {
+      List<UploadTarget> targets,
+      LocalDate retrievalDate,
+      LocalDate updateDate,
+      boolean loadCurrentValues) {
     if (retrievalDate == null || updateDate == null) {
       return List.of();
+    }
+
+    Map<String, BigDecimal> currentValues = new LinkedHashMap<>();
+    if (loadCurrentValues && !targets.isEmpty()) {
+      for (RtmEmsLogAmvRowDto row :
+          repository.findEffectiveDateRows(null, null, retrievalDate)) {
+        BigDecimal currentValue = row.newValue() == null ? row.currentValue() : row.newValue();
+        if (currentValue != null) {
+          currentValues.putIfAbsent(
+              previewRowKey(row.species(), row.grade(), row.growthIndicator()), currentValue);
+        }
+      }
     }
 
     List<RtmEmsLogAmvRowDto> previewRows = new ArrayList<>();
@@ -836,11 +855,21 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
               target.growthIndicator(),
               formatDate(retrievalDate),
               formatDate(updateDate),
-              null,
+              currentValues.get(
+                  previewRowKey(
+                      target.species(), target.grade(), target.growthIndicator())),
               target.newValue(),
               "0"));
     }
     return previewRows;
+  }
+
+  private String previewRowKey(String species, String grade, String growthIndicator) {
+    return String.join(
+        "|",
+        RtmEmsLogAmvDimensionValidator.normalize(species),
+        RtmEmsLogAmvDimensionValidator.normalize(grade),
+        RtmEmsLogAmvDimensionValidator.normalize(growthIndicator));
   }
 
   private List<UploadTarget> filterUploadTargetsForExistingRows(

@@ -446,6 +446,49 @@ class OracleRtmEmsLogAmvServiceTest {
   }
 
   @Test
+  void shouldIncludeCurrentMonthValuesInTheScreenUploadPreview() throws IOException {
+    OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
+    Clock clock =
+        Clock.fixed(Instant.parse("2026-06-15T19:00:00Z"), LexisBusinessTime.ZONE);
+    LocalDate retrievalMonth = LocalDate.of(2026, 6, 1);
+    when(repository.existsExact(eq("BA"), eq("A"), eq("O"), eq(retrievalMonth)))
+        .thenReturn(true);
+    when(repository.existsExact(eq("BA"), eq("A"), eq("S"), eq(retrievalMonth)))
+        .thenReturn(true);
+    when(repository.findEffectiveDateRows(isNull(), isNull(), eq(retrievalMonth)))
+        .thenReturn(
+            List.of(
+                new RtmEmsLogAmvRowDto(
+                    "BA",
+                    "A",
+                    "O",
+                    "2026-06-01",
+                    "2026-06-01",
+                    new BigDecimal("75.29"),
+                    new BigDecimal("75.29"),
+                    "0"),
+                new RtmEmsLogAmvRowDto(
+                    "BA",
+                    "A",
+                    "S",
+                    "2026-06-01",
+                    "2026-06-01",
+                    new BigDecimal("75.29"),
+                    new BigDecimal("75.29"),
+                    "0")));
+    OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository, clock);
+
+    var preview = service.previewUpload(singleBalsamWorkbook(), "2026-07-01");
+
+    assertThat(preview.status()).isEqualTo("accepted");
+    assertThat(preview.rows())
+        .extracting(row -> List.of(row.growthIndicator(), row.currentValue()))
+        .containsExactly(
+            List.of("O", new BigDecimal("75.29")),
+            List.of("S", new BigDecimal("75.29")));
+  }
+
+  @Test
   void shouldRejectEveryScreenMonthExceptTheImmediatelyUpcomingMonth() throws IOException {
     OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
     Clock clock =

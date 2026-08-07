@@ -930,11 +930,15 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
   }
 
   private String rowKey(RtmEmsLogAmvRowDto row) {
+    return rowKey(row.species(), row.grade(), row.growthIndicator());
+  }
+
+  private String rowKey(String species, String grade, String growthIndicator) {
     return String.join(
         "|",
-        normalize(row.species()),
-        normalize(row.grade()),
-        normalize(row.growthIndicator()));
+        normalize(species),
+        normalize(grade),
+        normalize(growthIndicator));
   }
 
   private int findMatchingRowIndex(
@@ -1089,6 +1093,15 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
       return List.of();
     }
 
+    Map<String, BigDecimal> currentValues = new LinkedHashMap<>();
+    for (RtmEmsLogAmvRowDto row :
+        findRowsForEffectiveDate(null, null, formatDate(parseResult.retrievalDate()))) {
+      BigDecimal currentValue = row.newValue() == null ? row.currentValue() : row.newValue();
+      if (currentValue != null) {
+        currentValues.putIfAbsent(rowKey(row), currentValue);
+      }
+    }
+
     List<RtmEmsLogAmvRowDto> previewRows = new ArrayList<>();
     for (UploadTarget row : previewTargets) {
       previewRows.add(
@@ -1098,7 +1111,7 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
               row.growthIndicator(),
               formatDate(parseResult.retrievalDate()),
               formatDate(parseResult.updateDate()),
-              null,
+              currentValues.get(rowKey(row.species(), row.grade(), row.growthIndicator())),
               row.newValue(),
               "0"));
     }

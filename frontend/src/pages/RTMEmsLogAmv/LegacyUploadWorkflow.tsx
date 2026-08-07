@@ -10,27 +10,28 @@ import {
   type ReactNode,
 } from 'react'
 import {
-  ArrowRight,
   CheckmarkFilled,
   Close,
   Document,
   Download,
   ErrorFilled,
   InformationFilled,
+  Save,
+  WarningAltFilled,
 } from '@carbon/icons-react'
 import {
   Button,
   Column,
   Grid,
   InlineLoading,
+  InlineNotification,
   Select,
   SelectItem,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  Tab,
+  TabList,
+  TabPanel,
+  TabPanels,
+  Tabs,
 } from '@carbon/react'
 import { AppNotification } from '../../components/AppNotification'
 import PageHeader from '@/components/PageHeader'
@@ -58,10 +59,12 @@ type RtmReviewSpeciesColumn = {
   speciesCodes: string[]
 }
 
-type RtmReviewMatrixRow = {
+type RtmSpeciesReviewRow = {
+  currentValues: RtmReviewCellValues
   key: string
   grade: string
-  values: Record<string, RtmReviewCellValues>
+  hasWarning: boolean
+  newValues: RtmReviewCellValues
 }
 
 type RtmReviewCellValues = Record<string, number | null>
@@ -286,7 +289,7 @@ const formatGrowthIndicator = (growthIndicator: string) => {
   return growthIndicator
 }
 
-const compareMatrixRows = (left: RtmReviewMatrixRow, right: RtmReviewMatrixRow) => {
+const compareReviewRows = (left: RtmSpeciesReviewRow, right: RtmSpeciesReviewRow) => {
   const leftGradeIndex = RTM_REVIEW_GRADE_ORDER.indexOf(left.grade)
   const rightGradeIndex = RTM_REVIEW_GRADE_ORDER.indexOf(right.grade)
   const normalizedLeftGradeIndex =
@@ -301,44 +304,77 @@ const compareMatrixRows = (left: RtmReviewMatrixRow, right: RtmReviewMatrixRow) 
   return left.grade.localeCompare(right.grade)
 }
 
-const buildReviewMatrixRows = (rows: RtmEmsLogAmvRow[]): RtmReviewMatrixRow[] => {
-  const matrixRows = new Map<string, RtmReviewMatrixRow>()
+const includesWholeToken = (value: string, token: string) => {
+  const escapedToken = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return new RegExp(`(^|[^A-Z0-9])${escapedToken}([^A-Z0-9]|$)`).test(value)
+}
 
-  RTM_REVIEW_GRADE_ORDER.forEach((grade) => {
-    matrixRows.set(grade, {
-      key: grade,
-      grade,
-      values: {},
-    })
-  })
+const warningReferencesSpecies = (warning: string, column: RtmReviewSpeciesColumn) => {
+  const normalizedWarning = normalizeKey(warning)
+  return [column.key, column.label, ...column.speciesCodes].some((token) =>
+    includesWholeToken(normalizedWarning, normalizeKey(token)),
+  )
+}
+
+const warningReferencesGrade = (warning: string, grade: string) => {
+  const normalizedWarning = normalizeKey(warning)
+  return (
+    normalizedWarning.includes(`GRADE ${grade}`) ||
+    normalizedWarning.includes(`GRADE '${grade}'`) ||
+    normalizedWarning.includes(`GRADE "${grade}"`)
+  )
+}
+
+const buildSpeciesReviewRows = (
+  rows: RtmEmsLogAmvRow[],
+  column: RtmReviewSpeciesColumn,
+  warnings: string[],
+): RtmSpeciesReviewRow[] => {
+  const reviewRows = new Map<string, RtmSpeciesReviewRow>()
 
   rows.forEach((row) => {
     const grade = normalizeGrade(row.grade)
     const growthIndicator = normalizeKey(row.growthIndicator)
     const speciesColumnKey = resolveSpeciesColumnKey(row.species)
 
-    if (!grade || !speciesColumnKey || HIDDEN_REVIEW_GRADES.has(grade)) {
+    if (
+      !grade ||
+      !growthIndicator ||
+      speciesColumnKey !== column.key ||
+      HIDDEN_REVIEW_GRADES.has(grade)
+    ) {
       return
     }
 
-    const matrixRowKey = grade
-    const matrixRow =
-      matrixRows.get(matrixRowKey) ??
+    const reviewRow =
+      reviewRows.get(grade) ??
       ({
-        key: matrixRowKey,
+        currentValues: {},
+        key: `${column.key}-${grade}`,
         grade,
-        values: {},
-      } satisfies RtmReviewMatrixRow)
+        hasWarning: false,
+        newValues: {},
+      } satisfies RtmSpeciesReviewRow)
 
-    const columnValues = matrixRow.values[speciesColumnKey] ?? {}
-    if (!(growthIndicator in columnValues)) {
-      columnValues[growthIndicator] = row.newValue
+    if (!(growthIndicator in reviewRow.currentValues)) {
+      reviewRow.currentValues[growthIndicator] = row.currentValue
     }
-    matrixRow.values[speciesColumnKey] = columnValues
-    matrixRows.set(matrixRowKey, matrixRow)
+    if (!(growthIndicator in reviewRow.newValues)) {
+      reviewRow.newValues[growthIndicator] = row.newValue
+    }
+
+    reviewRow.hasWarning =
+      reviewRow.hasWarning ||
+      row.currentValue === null ||
+      row.newValue === null ||
+      warnings.some(
+        (warning) =>
+          warningReferencesSpecies(warning, column) && warningReferencesGrade(warning, grade),
+      )
+    reviewRows.set(grade, reviewRow)
   })
 
-  return Array.from(matrixRows.values()).sort(compareMatrixRows)
+  return Array.from(reviewRows.values()).sort(compareReviewRows)
 }
 
 const growthSortIndex = (growthIndicator: string) => {
@@ -502,6 +538,66 @@ const UploadValidationStatus = ({
   )
 }
 
+const formatSpeciesList = (labels: string[]) => {
+  if (labels.length === 0) {
+    return ''
+  }
+
+  return new Intl.ListFormat('en-CA', { style: 'long', type: 'conjunction' }).format(labels)
+}
+
+const SpeciesReviewTable = ({
+  column,
+  currentMonthLabel,
+  nextMonthLabel,
+  rows,
+}: {
+  column: RtmReviewSpeciesColumn
+  currentMonthLabel: string
+  nextMonthLabel: string
+  rows: RtmSpeciesReviewRow[]
+}) => {
+  if (rows.length === 0) {
+    return (
+      <p className="rtm-amv-species-review__empty">
+        No uploaded values are available for {column.label}.
+      </p>
+    )
+  }
+
+  return (
+    <div className="rtm-amv-species-table-wrap">
+      <table
+        className="rtm-amv-species-table"
+        aria-label={`${column.label} average market value review`}
+      >
+        <thead>
+          <tr>
+            <th scope="col">Grade</th>
+            <th scope="col">{currentMonthLabel}</th>
+            <th scope="col">{nextMonthLabel}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.key}>
+              <th scope="row">{row.grade}</th>
+              <td className="rtm-amv-species-table__current-value">
+                {formatReviewCell(row.currentValues) || '—'}
+              </td>
+              <td className={row.hasWarning ? 'has-warning' : undefined}>
+                <span className="rtm-amv-species-table__new-value">
+                  {formatReviewCell(row.newValues) || '—'}
+                </span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 const ReviewUploadContent = ({
   previewResult,
   uploadResult,
@@ -509,39 +605,95 @@ const ReviewUploadContent = ({
   previewResult: RtmEmsLogAmvUploadPreview
   uploadResult: RtmEmsLogAmvUploadResult | null
 }) => {
+  const [selectedSpeciesIndex, setSelectedSpeciesIndex] = useState(0)
   const speciesColumns = buildReviewSpeciesColumns(previewResult.rows)
-  const matrixRows = buildReviewMatrixRows(previewResult.rows)
+  const speciesRows = speciesColumns.map((column) =>
+    buildSpeciesReviewRows(previewResult.rows, column, previewResult.warnings),
+  )
+  const warnedSpecies = speciesColumns.filter((_, index) =>
+    speciesRows[index].some((row) => row.hasWarning),
+  )
+  const warningCellCount = speciesRows.reduce(
+    (total, rows) => total + rows.filter((row) => row.hasWarning).length,
+    0,
+  )
+  const warningCount = warningCellCount || previewResult.warnings.length
+  const warningLabel = warningCellCount > 0 ? 'cell' : 'upload warning'
+  const warningVerb = warningCount === 1 ? 'needs' : 'need'
+  const currentMonthLabel = formatUploadMonth(previewResult.retrievalDate) ?? 'Current values'
+  const nextMonthLabel = formatUploadMonth(previewResult.updateDate) ?? 'New values'
+  const warningSpeciesText = formatSpeciesList(warnedSpecies.map((column) => column.label))
 
   return (
-    <div className="admin-upload-review admin-upload-review--rtm">
-      {matrixRows.length > 0 ? (
-        <div className="admin-upload-review-table">
-          <Table useZebraStyles aria-label="Average monthly value upload review">
-            <TableHead>
-              <TableRow>
-                <TableHeader>Grade</TableHeader>
-                {speciesColumns.map((column) => (
-                  <TableHeader key={column.key}>{column.label}</TableHeader>
-                ))}
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {matrixRows.map((row) => (
-                <TableRow key={row.key}>
-                  <TableCell>{row.grade}</TableCell>
-                  {speciesColumns.map((column) => (
-                    <TableCell key={column.key}>
-                      {formatReviewCell(row.values[column.key])}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      ) : (
-        <p className="admin-upload-review__empty-result">No parsed AMV rows are available.</p>
+    <section className="rtm-amv-review-card" aria-label="Uploaded average market values review">
+      {warningCount > 0 && (
+        <InlineNotification
+          className="rtm-amv-review-notification rtm-amv-review-notification--warning"
+          kind="warning"
+          lowContrast
+          hideCloseButton
+          title={`${warningCount} ${warningLabel}${warningCount === 1 ? '' : 's'} ${warningVerb} a look before you save`}
+          subtitle={
+            warningSpeciesText
+              ? `In ${warningSpeciesText}, highlighted below. You can save either way.`
+              : 'Review the upload warnings before saving. You can save either way.'
+          }
+        />
       )}
+
+      <div className="rtm-amv-species-tabs">
+        <Tabs
+          selectedIndex={selectedSpeciesIndex}
+          onChange={({ selectedIndex }) => setSelectedSpeciesIndex(selectedIndex)}
+        >
+          <TabList aria-label="Species" size="sm">
+            {speciesColumns.map((column, index) => {
+              const hasWarning = speciesRows[index].some((row) => row.hasWarning)
+              return (
+                <Tab key={column.key}>
+                  <span className="rtm-amv-species-tab__label">
+                    {column.label}
+                    {hasWarning ? (
+                      <WarningAltFilled
+                        className="rtm-amv-species-tab__status rtm-amv-species-tab__status--warning"
+                        size={12}
+                        aria-hidden="true"
+                      />
+                    ) : (
+                      <CheckmarkFilled
+                        className="rtm-amv-species-tab__status rtm-amv-species-tab__status--complete"
+                        size={12}
+                        aria-hidden="true"
+                      />
+                    )}
+                  </span>
+                </Tab>
+              )
+            })}
+          </TabList>
+          <TabPanels>
+            {speciesColumns.map((column, index) => (
+              <TabPanel key={column.key} className="rtm-amv-species-tab-panel">
+                <SpeciesReviewTable
+                  column={column}
+                  currentMonthLabel={currentMonthLabel}
+                  nextMonthLabel={nextMonthLabel}
+                  rows={speciesRows[index]}
+                />
+              </TabPanel>
+            ))}
+          </TabPanels>
+        </Tabs>
+      </div>
+
+      <InlineNotification
+        className="rtm-amv-review-notification rtm-amv-review-notification--fixed"
+        kind="info"
+        lowContrast
+        hideCloseButton
+        title="Fixed values are not shown here"
+        subtitle="Grades Z, BLANK and 1 to 6 are always $1.00 per cubic metre. They are saved automatically and appear on the permit invoice."
+      />
 
       {uploadResult && (
         <div className="admin-upload-result" role="status">
@@ -559,7 +711,7 @@ const ReviewUploadContent = ({
           </p>
         </div>
       )}
-    </div>
+    </section>
   )
 }
 
@@ -638,6 +790,7 @@ const RtmEmsLogAmvUploadPage = () => {
           fileName: nextFile.name,
           fileSize: nextFile.size,
         })
+        setUploadStep('review')
       } else {
         setPendingUploadValidation(null)
       }
@@ -767,17 +920,6 @@ const RtmEmsLogAmvUploadPage = () => {
     }
   }
 
-  const hasCurrentUploadValidation =
-    !!selectedUploadFile &&
-    selectedUploadFile.size > 0 &&
-    !!pendingUploadValidation &&
-    pendingUploadValidation.fileName === selectedUploadFile.name &&
-    pendingUploadValidation.fileSize === selectedUploadFile.size
-
-  const isReviewReady = hasCurrentUploadValidation && previewResult?.status === 'accepted'
-
-  const isReviewDisabled = isPreviewing || !canManage || !isReviewReady
-
   const isUploadDisabled =
     isUploading ||
     !canManage ||
@@ -787,26 +929,6 @@ const RtmEmsLogAmvUploadPage = () => {
     pendingUploadValidation.fileName !== selectedUploadFile.name ||
     pendingUploadValidation.fileSize !== selectedUploadFile.size ||
     previewResult?.status !== 'accepted'
-
-  const openReviewStep = () => {
-    if (!canManage) {
-      setUploadError('You do not have permission to upload average monthly value rows.')
-      return
-    }
-
-    if (!selectedUploadFile || selectedUploadFile.size <= 0) {
-      setUploadError('Please upload a file before continuing.')
-      return
-    }
-
-    if (!isReviewReady) {
-      setUploadError('Upload a spreadsheet that passes validation before reviewing it.')
-      return
-    }
-
-    setUploadError('')
-    setUploadStep('review')
-  }
 
   const uploadDropZoneClassName = [
     'admin-upload-drop-zone',
@@ -949,56 +1071,57 @@ const RtmEmsLogAmvUploadPage = () => {
                 />
               )}
             </section>
-
-            {isReviewReady && (
-              <div className="admin-upload-fspts-button-row">
-                <Button
-                  kind="primary"
-                  size="md"
-                  className="admin-upload-fspts-action-button"
-                  renderIcon={ArrowRight}
-                  onClick={openReviewStep}
-                  disabled={isReviewDisabled}
-                >
-                  Review
-                </Button>
-              </div>
-            )}
           </>
         ) : (
           <>
-            <section className="admin-upload-panel" aria-labelledby="rtm-review-title">
-              <div className="admin-upload-section-heading">
-                <h3 id="rtm-review-title">Review</h3>
-                <p>Review the details extracted from your file and submit when ready.</p>
+            <section className="rtm-amv-upload-card" aria-labelledby="rtm-uploaded-title">
+              <div className="admin-upload-field-header">
+                <div>
+                  <span id="rtm-uploaded-title" className="admin-upload-field-label">
+                    Upload spreadsheet
+                  </span>
+                  <p className="admin-upload-field-helper">{RTM_UPLOAD_FIELD_HELPER}</p>
+                </div>
               </div>
 
-              {uploadError && (
-                <p className="landing-page-help-text landing-page-help-text--error">
-                  {uploadError}
-                </p>
-              )}
-
-              {previewResult && (
-                <ReviewUploadContent previewResult={previewResult} uploadResult={uploadResult} />
+              {selectedUploadFile && (
+                <div
+                  className="rtm-amv-uploaded-file"
+                  aria-label="Uploaded average monthly values file"
+                >
+                  <span className="rtm-amv-uploaded-file__name">{selectedUploadFile.name}</span>
+                  <button
+                    type="button"
+                    className="rtm-amv-uploaded-file__remove"
+                    aria-label="Clear selected file"
+                    disabled={isUploading}
+                    onClick={clearUploadState}
+                  >
+                    <Close size={12} />
+                  </button>
+                </div>
               )}
             </section>
 
-            <div className="admin-upload-fspts-button-row">
-              <Button kind="ghost" size="md" onClick={() => setUploadStep('upload')}>
-                Back
-              </Button>
+            {previewResult && (
+              <ReviewUploadContent previewResult={previewResult} uploadResult={uploadResult} />
+            )}
+
+            <div className="admin-upload-fspts-button-row rtm-amv-upload-review-actions">
               <Button
                 kind="primary"
                 size="md"
                 className="admin-upload-fspts-action-button"
-                renderIcon={ArrowRight}
+                renderIcon={Save}
                 onClick={() => {
                   void submitUpload()
                 }}
                 disabled={isUploadDisabled}
               >
-                Submit
+                {isUploading ? 'Saving values' : 'Save values'}
+              </Button>
+              <Button kind="tertiary" size="md" disabled={isUploading} onClick={clearUploadState}>
+                Cancel
               </Button>
             </div>
           </>
