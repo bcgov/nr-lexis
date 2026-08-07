@@ -3123,6 +3123,25 @@ $notification-types: 'error', 'info', 'success', 'warning';
   line-height: 1.125rem;
 }
 
+.admin-upload-validation-table-download {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  color: var(--fds-interactive, var(--cds-link-primary));
+  font-size: 0.875rem;
+  line-height: 1.125rem;
+  text-decoration: none;
+}
+
+.admin-upload-validation-table-download:hover {
+  color: var(--fds-interactive-hover, var(--cds-link-primary-hover));
+  text-decoration: underline;
+}
+
+.admin-upload-validation-table-scroll {
+  overflow-x: auto;
+}
+
 .admin-upload-validation-table {
   inline-size: 100%;
   border-collapse: collapse;
@@ -3554,6 +3573,155 @@ $notification-types: 'error', 'info', 'success', 'warning';
   min-inline-size: 64rem;
 }
 
+.admin-upload-panel--submission-review {
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+
+.admin-upload-panel--submission-review .admin-upload-preview-footer-actions {
+  margin-block-start: 0.5rem;
+}
+
+.admin-upload-submission-review,
+.admin-upload-submission-review__item {
+  display: grid;
+  gap: 1.5rem;
+  min-inline-size: 0;
+}
+
+.admin-upload-submission-review {
+  gap: 2rem;
+}
+
+.admin-upload-submission-review__item-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  padding-block-end: 0.5rem;
+  border-block-end: 1px solid var(--fds-border-subtle, var(--cds-border-subtle));
+}
+
+.admin-upload-submission-review__item-heading h3 {
+  margin: 0;
+  color: var(--fds-text-primary, var(--cds-text-primary));
+  font-size: 1.25rem;
+  font-weight: 400;
+  line-height: 1.75rem;
+  overflow-wrap: anywhere;
+}
+
+.admin-upload-submission-review__section {
+  min-inline-size: 0;
+  overflow: hidden;
+  background: var(--fds-layer-01, var(--cds-layer));
+  border: 1px solid var(--fds-border-subtle, var(--cds-border-subtle));
+  border-radius: 8px;
+}
+
+.admin-upload-submission-review__section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 2rem 2rem 1rem;
+  color: var(--fds-text-primary, var(--cds-text-primary));
+  font-family: 'BC Sans', 'IBM Plex Sans', sans-serif;
+  font-size: 1.25rem;
+  font-weight: 400;
+  line-height: 1.75rem;
+}
+
+.admin-upload-submission-review__section-title svg {
+  flex-shrink: 0;
+  color: var(--fds-text-secondary, var(--cds-icon-secondary));
+}
+
+.admin-upload-submission-review__list {
+  inline-size: calc(100% - 4rem);
+  margin: 0 2rem 2rem;
+  border-collapse: collapse;
+  color: var(--fds-text-primary, var(--cds-text-primary));
+  font-size: 0.875rem;
+}
+
+.admin-upload-submission-review__list tr {
+  border-block-end: 1px solid var(--fds-border-subtle, var(--cds-border-subtle));
+}
+
+.admin-upload-submission-review__list tr:last-child {
+  border-block-end: 0;
+}
+
+.admin-upload-submission-review__list th,
+.admin-upload-submission-review__list td {
+  block-size: 2.25rem;
+  padding: 0.625rem 0;
+  text-align: start;
+  vertical-align: middle;
+}
+
+.admin-upload-submission-review__list th {
+  inline-size: 17.5rem;
+  min-inline-size: 17.5rem;
+  color: var(--fds-text-secondary, var(--cds-text-secondary));
+  font-weight: 400;
+  letter-spacing: 0.01rem;
+  white-space: nowrap;
+}
+
+.admin-upload-submission-review__list td {
+  overflow-wrap: anywhere;
+}
+
+.admin-upload-submission-review__table-wrap {
+  margin: 0 2rem 2rem;
+  overflow-x: auto;
+  border: 1px solid var(--fds-border-subtle, var(--cds-border-subtle));
+  border-radius: 4px;
+}
+
+.admin-upload-submission-review__table {
+  inline-size: 100%;
+  min-inline-size: 64rem;
+  border-collapse: collapse;
+  color: var(--fds-text-primary, var(--cds-text-primary));
+  font-size: 0.875rem;
+}
+
+.admin-upload-submission-review__table--issues {
+  min-inline-size: 40rem;
+}
+
+.admin-upload-submission-review__table th {
+  padding: 0.75rem 1rem;
+  background: var(--fds-table-header, var(--cds-layer-accent));
+  border-block-end: 1px solid var(--fds-border-subtle, var(--cds-border-subtle));
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.02rem;
+  text-align: start;
+  white-space: nowrap;
+}
+
+.admin-upload-submission-review__table td {
+  padding: 0.75rem 1rem;
+  vertical-align: middle;
+}
+
+.admin-upload-submission-review__table tbody tr:nth-child(even) td {
+  background: var(--fds-table-zebra, var(--cds-layer-accent));
+}
+
+.admin-upload-submission-review__table--issues th:first-child,
+.admin-upload-submission-review__table--issues td:first-child {
+  inline-size: 10rem;
+  white-space: nowrap;
+}
+
 .rtm-review-cell-values {
   display: grid;
   gap: 0.25rem;
@@ -3981,6 +4149,44 @@ $notification-types: 'error', 'info', 'success', 'warning';
   .admin-upload-fspts-page .admin-upload-validation,
   .admin-upload-fspts-page .admin-upload-validation-table-wrap {
     max-inline-size: 100%;
+  }
+
+  .admin-upload-validation-table-header {
+    block-size: auto;
+    min-block-size: 3rem;
+    padding-block: 0.75rem;
+    gap: 0.75rem;
+  }
+
+  .admin-upload-submission-review__section-title {
+    padding: 1.5rem 1rem 0.75rem;
+  }
+
+  .admin-upload-submission-review__list {
+    inline-size: calc(100% - 2rem);
+    margin: 0 1rem 1.5rem;
+  }
+
+  .admin-upload-submission-review__list tr {
+    display: grid;
+    padding: 0.625rem 0;
+  }
+
+  .admin-upload-submission-review__list th,
+  .admin-upload-submission-review__list td {
+    inline-size: auto;
+    min-inline-size: 0;
+    block-size: auto;
+    padding: 0;
+    white-space: normal;
+  }
+
+  .admin-upload-submission-review__list td {
+    margin-block-start: 0.25rem;
+  }
+
+  .admin-upload-submission-review__table-wrap {
+    margin: 0 1rem 1.5rem;
   }
 
   .rtm-amv-toolbar,

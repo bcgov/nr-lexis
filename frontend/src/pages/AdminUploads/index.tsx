@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Button, Column, ComboBox, Grid, TextArea, TextInput } from '@carbon/react'
-import { ArrowRight } from '@carbon/icons-react'
+import {
+  ArrowRight,
+  CheckmarkFilled,
+  Download,
+  ErrorFilled,
+  InformationFilled,
+} from '@carbon/icons-react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { AppNotification } from '../../components/AppNotification'
 import PageHeader from '@/components/PageHeader'
@@ -390,6 +396,52 @@ type ApplicationSubmissionValidationPanelProps = {
   onRemove: (id: string) => void
 }
 
+type ApplicationSubmissionValidationIssue = {
+  key: string
+  issue: 'Error' | 'Warning'
+  fileName: string
+  detail: string
+}
+
+const applicationSubmissionValidationIssues = (
+  items: UploadQueueItem[],
+): ApplicationSubmissionValidationIssue[] =>
+  items.flatMap((item) => {
+    const errors = item.details?.errors?.filter(Boolean) ?? []
+    const warnings = item.details?.warnings?.filter(Boolean) ?? []
+    const resolvedErrors =
+      errors.length === 0 && (item.status === 'failed' || item.status === 'invalid') && item.message
+        ? [item.message]
+        : errors
+
+    return [
+      ...resolvedErrors.map((detail, index) => ({
+        key: `${item.id}-error-${index}`,
+        issue: 'Error' as const,
+        fileName: item.file.name,
+        detail,
+      })),
+      ...warnings.map((detail, index) => ({
+        key: `${item.id}-warning-${index}`,
+        issue: 'Warning' as const,
+        fileName: item.file.name,
+        detail,
+      })),
+    ]
+  })
+
+const buildApplicationSubmissionIssuesCsv = (
+  issues: ApplicationSubmissionValidationIssue[],
+): string => {
+  const escape = (value: string): string => `"${value.replace(/"/g, '""')}"`
+  const rows = [
+    ['Issue', 'Submission file', 'Detail'],
+    ...issues.map((issue) => [issue.issue, issue.fileName, issue.detail]),
+  ]
+  const csv = rows.map((row) => row.map(escape).join(',')).join('\r\n')
+  return `data:text/csv;charset=utf-8,${encodeURIComponent(csv)}`
+}
+
 function ApplicationSubmissionValidationPanel({
   items,
   canReview,
@@ -398,6 +450,12 @@ function ApplicationSubmissionValidationPanel({
   onRemove,
 }: ApplicationSubmissionValidationPanelProps) {
   const validatingCount = items.filter((item) => item.status === 'validating').length
+  const queuedCount = items.filter((item) => item.status === 'queued').length
+  const validatedCount = items.filter((item) => item.status === 'validated').length
+  const validationIssues = applicationSubmissionValidationIssues(items)
+  const errorCount = validationIssues.filter((issue) => issue.issue === 'Error').length
+  const warningCount = validationIssues.length - errorCount
+  const isValidating = validatingCount > 0 || queuedCount > 0
   const reviewLabel = items.length === 1 ? 'Review submission' : 'Review submissions'
 
   return (
@@ -408,6 +466,67 @@ function ApplicationSubmissionValidationPanel({
           <p>Application submissions validate automatically after selection.</p>
         </div>
       </div>
+
+      {items.length > 0 &&
+        (isValidating ? (
+          <div className="admin-upload-validation admin-upload-validation--info" role="status">
+            <InformationFilled
+              className="admin-upload-validation__icon"
+              size={20}
+              aria-hidden="true"
+            />
+            <div className="admin-upload-validation__content">
+              <h3>{items.length === 1 ? 'Validating file' : 'Validating files'}</h3>
+              <p>Running application submission checks.</p>
+            </div>
+          </div>
+        ) : errorCount > 0 ? (
+          <div
+            className="admin-upload-validation admin-upload-validation--error"
+            role="alert"
+            aria-live="assertive"
+          >
+            <ErrorFilled className="admin-upload-validation__icon" size={20} aria-hidden="true" />
+            <div className="admin-upload-validation__content">
+              <h3>
+                {validationIssues.length} issue{validationIssues.length === 1 ? '' : 's'} found in
+                application {items.length === 1 ? 'submission' : 'submissions'}
+              </h3>
+              <p>Correct or replace the failed source files. Validated submissions can continue.</p>
+            </div>
+          </div>
+        ) : warningCount > 0 ? (
+          <div className="admin-upload-validation admin-upload-validation--info" role="status">
+            <InformationFilled
+              className="admin-upload-validation__icon"
+              size={20}
+              aria-hidden="true"
+            />
+            <div className="admin-upload-validation__content">
+              <h3>
+                {items.length === 1 ? 'Submission validated' : 'Submissions validated'} with
+                warnings
+              </h3>
+              <p>Review the validation warnings before continuing.</p>
+            </div>
+          </div>
+        ) : validatedCount > 0 ? (
+          <div className="admin-upload-validation admin-upload-validation--success" role="status">
+            <CheckmarkFilled
+              className="admin-upload-validation__icon"
+              size={20}
+              aria-hidden="true"
+            />
+            <div className="admin-upload-validation__content">
+              <h3>{items.length === 1 ? 'Submission validated' : 'Submissions validated'}</h3>
+              <p>
+                {items.length === 1
+                  ? `"${items[0].file.name}" was uploaded with no issues found.`
+                  : `${validatedCount} application submissions were uploaded with no issues found.`}
+              </p>
+            </div>
+          </div>
+        ) : null)}
 
       {items.length === 0 ? (
         <div className="admin-upload-empty-state">
@@ -448,12 +567,6 @@ function ApplicationSubmissionValidationPanel({
                   <td>
                     <div className="admin-upload-validation-cell">
                       <span>{item.message || 'Waiting for validation.'}</span>
-                      {item.details?.errors?.map((error) => (
-                        <span key={error}>{error}</span>
-                      ))}
-                      {item.details?.warnings?.map((warning) => (
-                        <span key={warning}>{warning}</span>
-                      ))}
                     </div>
                   </td>
                   <td>
@@ -472,20 +585,55 @@ function ApplicationSubmissionValidationPanel({
           </table>
         </div>
       )}
-      <div className="admin-upload-fspts-button-row admin-upload-fspts-button-row--split admin-upload-preview-footer-actions">
-        <div />
-        <div className="admin-upload-preview-footer-actions__right">
-          <Button
-            kind="primary"
-            size="md"
-            className="admin-upload-fspts-action-button"
-            onClick={onReview}
-            disabled={isSubmitting || !canReview || items.length === 0 || validatingCount > 0}
-            renderIcon={ArrowRight}
-          >
-            {reviewLabel}
-          </Button>
+
+      {validationIssues.length > 0 && (
+        <div className="admin-upload-validation-table-wrap">
+          <div className="admin-upload-validation-table-header">
+            <span>Validation issues ({validationIssues.length})</span>
+            <a
+              className="admin-upload-validation-table-download"
+              href={buildApplicationSubmissionIssuesCsv(validationIssues)}
+              download="lexis-validation-issues.csv"
+              aria-label="Download issues as CSV"
+            >
+              Download issues (.csv)
+              <Download size={16} aria-hidden="true" />
+            </a>
+          </div>
+          <div className="admin-upload-validation-table-scroll">
+            <table className="admin-upload-validation-table" aria-label="Validation issues">
+              <thead>
+                <tr>
+                  <th className="admin-upload-validation-table__issue">Issue</th>
+                  <th className="admin-upload-validation-table__location">Submission file</th>
+                  <th>Detail</th>
+                </tr>
+              </thead>
+              <tbody>
+                {validationIssues.map((issue) => (
+                  <tr key={issue.key}>
+                    <td className="admin-upload-validation-table__issue">{issue.issue}</td>
+                    <td className="admin-upload-validation-table__location">{issue.fileName}</td>
+                    <td>{issue.detail}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
+      )}
+
+      <div className="admin-upload-fspts-button-row admin-upload-preview-footer-actions">
+        <Button
+          kind="primary"
+          size="md"
+          className="admin-upload-fspts-action-button"
+          onClick={onReview}
+          disabled={isSubmitting || !canReview || items.length === 0 || validatingCount > 0}
+          renderIcon={ArrowRight}
+        >
+          {reviewLabel}
+        </Button>
       </div>
     </section>
   )
@@ -615,7 +763,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
           : uploadQueue.length > 0
             ? undefined
             : selectedWorkflowType === 'applicationSubmission'
-              ? 'Choose at least one application submission file.'
+              ? 'Please upload a file before continuing.'
               : 'Choose at least one file to upload.',
       applicationNumber:
         selectedWorkflowType === 'application'
@@ -1111,7 +1259,9 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
 
     if (validationErrors.length > 0) {
       setShowValidationErrors(true)
-      setErrorMessage(validationErrors.join(' '))
+      if (selectedWorkflowType !== 'applicationSubmission') {
+        setErrorMessage(validationErrors.join(' '))
+      }
       return
     }
 
@@ -1125,6 +1275,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
       return
     }
 
+    setSuccessMessage('')
     setApplicationSubmissionStep('review')
   }
 
@@ -1249,6 +1400,10 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
       ? APPLICATION_SUBMISSION_UPLOAD_STEPS
       : DOCUMENT_UPLOAD_STEPS
   const activeCompletedSteps = activeUploadStep === 'review' ? ['upload'] : []
+  const showGlobalUploadFeedback =
+    selectedWorkflowType !== 'applicationSubmission' ||
+    activeUploadStep !== 'upload' ||
+    uploadQueue.length === 0
   const applicationSubmissionReviewItems = useMemo(
     () =>
       uploadQueue.filter(
@@ -1493,7 +1648,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
 
       <Column sm={4} md={8} lg={16} className="admin-upload-fspts-content">
         <div className="admin-upload-workflow">
-          {successMessage && (
+          {successMessage && showGlobalUploadFeedback && (
             <AppNotification
               kind="success"
               title={successTitle}
@@ -1503,7 +1658,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
               onCloseButtonClick={() => setSuccessMessage('')}
             />
           )}
-          {errorMessage && (
+          {errorMessage && showGlobalUploadFeedback && (
             <AppNotification
               kind="error"
               title="Upload error"
@@ -1534,7 +1689,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
                 ) : (
                   <UploadStepReviewButton
                     label="Review submissions"
-                    disabled
+                    disabled={!hasUploadAccess || isSubmitting}
                     onReview={onReviewApplicationSubmissions}
                   />
                 )

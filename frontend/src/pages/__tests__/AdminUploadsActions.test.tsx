@@ -551,7 +551,12 @@ describe('Admin upload workflow smoke', () => {
     ).toHaveAttribute('aria-current', 'step')
     expect(screen.queryByRole('heading', { name: 'Validation status' })).not.toBeInTheDocument()
     expect(screen.queryByText('No application submissions selected')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Review submissions' })).toBeDisabled()
+    const emptyReviewButton = screen.getByRole('button', { name: 'Review submissions' })
+    expect(emptyReviewButton).toBeEnabled()
+    await userEvent.click(emptyReviewButton)
+    expect(screen.getByText('Please upload a file before continuing.')).toBeInTheDocument()
+    expect(mockedValidateApplicationSubmissionUpload).not.toHaveBeenCalled()
+    expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
     expect(screen.queryByRole('heading', { name: 'Submission summary' })).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Application number')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Document description')).not.toBeInTheDocument()
@@ -586,13 +591,17 @@ describe('Admin upload workflow smoke', () => {
     ).not.toBeInTheDocument()
     expect(screen.queryByRole('columnheader', { name: 'Submission type' })).not.toBeInTheDocument()
     expect(screen.queryByRole('columnheader', { name: 'Submission file' })).not.toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Submission review' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Review' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Submission metadata' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Application details' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Package details' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Product details' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Submission review' })).not.toBeInTheDocument()
     expect(screen.getByText('File name')).toBeInTheDocument()
     expect(screen.getByText('File size')).toBeInTheDocument()
     expect(screen.getByText('Submission timestamp')).toBeInTheDocument()
     expect(screen.getAllByText('submission.xml').length).toBeGreaterThan(0)
     expect(screen.getByText('7 B')).toBeInTheDocument()
-    expect(screen.getByText('Application summary')).toBeInTheDocument()
     const applicationDetailsTable = screen.getByRole('table', {
       name: 'Application details review',
     })
@@ -625,7 +634,7 @@ describe('Admin upload workflow smoke', () => {
     expect(screen.getAllByText('525.0').length).toBeGreaterThan(0)
     expect(screen.getByText('HE, FI')).toBeInTheDocument()
     expect(screen.queryByLabelText('Application submission file')).not.toBeInTheDocument()
-    expect(screen.getAllByText(/Package TEST23-652-7D-2/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText('TEST23-652-7D-2').length).toBeGreaterThan(0)
     expect(screen.getAllByText(/3 scale rows/).length).toBeGreaterThan(0)
 
     await userEvent.click(screen.getByRole('button', { name: 'Submit submission' }))
@@ -644,7 +653,7 @@ describe('Admin upload workflow smoke', () => {
     expect(screen.getAllByText(/Package TEST23-652-7D-2/).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/3 scale rows/).length).toBeGreaterThan(0)
     expect(screen.queryByText('No application submissions selected')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Review submissions' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Review submissions' })).toBeEnabled()
     expect(screen.queryByRole('button', { name: 'Cancel submission' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Open Application 9001' })).not.toBeInTheDocument()
   })
@@ -721,12 +730,25 @@ describe('Admin upload workflow smoke', () => {
       expect(mockedValidateApplicationSubmissionUpload).toHaveBeenCalledTimes(2)
     })
     expect(
-      screen.getByText('1 submission failed validation. Review the queue for details.'),
+      screen.getByRole('heading', { name: '1 issue found in application submissions' }),
     ).toBeInTheDocument()
+    const validationIssuesTable = screen.getByRole('table', { name: 'Validation issues' })
+    expect(
+      within(validationIssuesTable).getByRole('columnheader', { name: 'Issue' }),
+    ).toBeInTheDocument()
+    expect(
+      within(validationIssuesTable).getByRole('columnheader', { name: 'Submission file' }),
+    ).toBeInTheDocument()
+    expect(within(validationIssuesTable).getByText('invalid.xml')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Download issues as CSV' })).toHaveAttribute(
+      'download',
+      'lexis-validation-issues.csv',
+    )
 
     await userEvent.click(screen.getByRole('button', { name: 'Review submissions' }))
 
-    expect(screen.getByRole('heading', { name: 'Submission review' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Review' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Submission metadata' })).toBeInTheDocument()
     expect(screen.getAllByText('valid.xml').length).toBeGreaterThan(0)
     expect(screen.queryByText('invalid.xml')).not.toBeInTheDocument()
     expect(screen.queryByText('Invalid application submission XML.')).not.toBeInTheDocument()
@@ -755,7 +777,7 @@ describe('Admin upload workflow smoke', () => {
 
     expect(screen.queryByText('Submission validated')).not.toBeInTheDocument()
     expect(screen.queryByText('No application submissions selected')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Review submissions' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Review submissions' })).toBeEnabled()
     expect(screen.getByLabelText('Application submission file')).not.toBeDisabled()
     expect(
       screen.queryByText(
@@ -810,7 +832,11 @@ describe('Admin upload workflow smoke', () => {
     const file = new File(['zip-data'], 'submission.zip', { type: 'application/zip' })
     await userEvent.upload(screen.getByLabelText('Application submission file'), file)
 
-    expect(await screen.findByText('Submission validated')).toBeInTheDocument()
+    expect(
+      await screen.findByRole('heading', { name: 'Submission validated with warnings' }),
+    ).toBeInTheDocument()
+    const warningTable = screen.getByRole('table', { name: 'Validation issues' })
+    expect(within(warningTable).getByText('Warning')).toBeInTheDocument()
     expect(
       screen.getAllByText(/Loaded payload\/6-652-7.xml from ZIP archive submission.zip/).length,
     ).toBeGreaterThan(0)
@@ -932,13 +958,13 @@ describe('Admin upload workflow smoke', () => {
       expect(mockedValidateApplicationSubmissionUpload).toHaveBeenCalledTimes(2)
     })
     expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
+    expect(screen.getByRole('heading', { name: 'Submissions validated' })).toBeInTheDocument()
     expect(
-      screen.getByText(
-        '2 application submissions validated. Review the submission summary and submit submissions.',
-      ),
+      screen.getByText('2 application submissions were uploaded with no issues found.'),
     ).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Review submissions' }))
-    expect(screen.getByRole('heading', { name: 'Submission review' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Review' })).toBeInTheDocument()
+    expect(screen.getAllByRole('heading', { name: 'Submission metadata' })).toHaveLength(2)
     expect(screen.queryByRole('heading', { name: 'Submission summary' })).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Submit submissions' }))
@@ -962,15 +988,13 @@ describe('Admin upload workflow smoke', () => {
         '2 application submissions created. Verify the created application and package details.',
       ),
     ).toBeInTheDocument()
-    expect(
-      screen.queryByText('Choose at least one application submission file.'),
-    ).not.toBeInTheDocument()
+    expect(screen.queryByText('Please upload a file before continuing.')).not.toBeInTheDocument()
     expect(screen.getByLabelText('Application submission file')).not.toHaveAttribute(
       'aria-invalid',
       'true',
     )
     expect(screen.queryByText('No application submissions selected')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Review submissions' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Review submissions' })).toBeEnabled()
   })
 
   it('shows per-file review details for mixed XML upload results', async () => {
@@ -1021,9 +1045,10 @@ describe('Admin upload workflow smoke', () => {
       expect(mockedSubmitAdminUpload).toHaveBeenCalledTimes(2)
     })
 
-    expect(await screen.findByText('Submission review')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Review' })).toBeInTheDocument()
+    expect(screen.getAllByRole('heading', { name: 'Submission metadata' })).toHaveLength(2)
     expect(
-      screen.getByText('1 submission failed. Review the queue for details.'),
+      await screen.findByText('1 submission failed. Review the queue for details.'),
     ).toBeInTheDocument()
     expect(screen.getAllByText('first.xml').length).toBeGreaterThan(0)
     expect(screen.getAllByText('second.xml').length).toBeGreaterThan(0)
@@ -1083,7 +1108,7 @@ describe('Admin upload workflow smoke', () => {
     })
 
     expect(
-      screen.getByText('1 submission failed. Review the queue for details.'),
+      await screen.findByText('1 submission failed. Review the queue for details.'),
     ).toBeInTheDocument()
     expect(screen.getAllByText('Package TEST23-652-7D-2 already exists.').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Failed').length).toBeGreaterThan(0)
@@ -1216,7 +1241,16 @@ describe('Admin upload workflow smoke', () => {
     const file = new File(['<xml />'], 'submission.xml', { type: 'application/xml' })
     await userEvent.upload(screen.getByLabelText('Application submission file'), file)
 
-    expect(await screen.findByText('Upload error')).toBeInTheDocument()
+    expect(
+      await screen.findByRole('heading', { name: '1 issue found in application submission' }),
+    ).toBeInTheDocument()
+    const validationIssuesTable = screen.getByRole('table', { name: 'Validation issues' })
+    expect(within(validationIssuesTable).getByText('Error')).toBeInTheDocument()
+    expect(within(validationIssuesTable).getByText('submission.xml')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Download issues as CSV' })).toHaveAttribute(
+      'download',
+      'lexis-validation-issues.csv',
+    )
     expect(screen.getAllByText('Package TEST23-652-7D-2 already exists.').length).toBeGreaterThan(0)
     expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
   })
@@ -1238,7 +1272,7 @@ describe('Admin upload workflow smoke', () => {
     expect(screen.getByText('Upload application submissions')).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Validation status' })).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Submission summary' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Review submissions' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Review submissions' })).toBeEnabled()
     expect(screen.getByLabelText('Application submission file')).toBeInTheDocument()
     expect(screen.queryByLabelText('User reference')).not.toBeInTheDocument()
   })
