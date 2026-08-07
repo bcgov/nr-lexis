@@ -352,6 +352,7 @@ describe('Admin upload workflow smoke', () => {
 
     renderPage('/admin/uploads?type=permit&permitNumber=5001')
 
+    expect(screen.getByLabelText('Upload batch summary')).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Validation status' })).not.toBeInTheDocument()
     expect(screen.queryByText('No data uploaded yet')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Review upload' })).toBeDisabled()
@@ -538,9 +539,12 @@ describe('Admin upload workflow smoke', () => {
 
     renderPage('/provincial/application/upload')
 
-    expect(screen.getByText('Application submission upload')).toBeInTheDocument()
-    expect(screen.getByText('Upload application submissions')).toBeInTheDocument()
-    expect(screen.getByText('Queued submissions')).toBeInTheDocument()
+    expect(screen.queryByText('Application submission upload')).not.toBeInTheDocument()
+    expect(screen.getByText('Submission files')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Upload batch summary')).not.toBeInTheDocument()
+    expect(
+      screen.getByText(/Accepted formats: XML, ZIP, GeoJSON, or JSON\. Maximum file size: 20 MiB/),
+    ).toBeInTheDocument()
     const workflowProgress = screen.getByRole('list', {
       name: 'Application submission upload workflow progress',
     })
@@ -564,7 +568,6 @@ describe('Admin upload workflow smoke', () => {
 
     const file = new File(['<xml />'], 'submission.xml', { type: 'application/xml' })
     await userEvent.upload(screen.getByLabelText('Application submission file'), file)
-    expect(screen.getAllByText('Creates a new application').length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: 'Cancel submission' })).toBeInTheDocument()
     expect(
       screen.queryByText('Review 1 selected submission before submitting.'),
@@ -1269,7 +1272,8 @@ describe('Admin upload workflow smoke', () => {
       ),
     ).toBeVisible()
     expect(screen.queryByLabelText('Upload type')).not.toBeInTheDocument()
-    expect(screen.getByText('Upload application submissions')).toBeInTheDocument()
+    expect(screen.getByText('Submission files')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Upload batch summary')).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Validation status' })).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Submission summary' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Review submissions' })).toBeEnabled()

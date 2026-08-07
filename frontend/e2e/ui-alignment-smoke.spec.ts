@@ -1551,6 +1551,15 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await page.setViewportSize({ width: 1440, height: 900 })
     await page.goto('/provincial/application/upload', { waitUntil: 'domcontentloaded' })
 
+    const uploadPanel = page.locator('.admin-upload-panel').first()
+    await expect(uploadPanel.getByText('Submission files', { exact: true })).toBeVisible()
+    await expect(uploadPanel.locator('.admin-upload-panel__header')).toHaveCount(0)
+    await expect(uploadPanel.locator('.admin-upload-summary-strip')).toHaveCount(0)
+    await expect(uploadPanel.locator('.admin-upload-drop-zone-field')).toHaveCSS(
+      'margin-top',
+      '0px',
+    )
+
     const reviewButton = page.getByRole('button', { name: 'Review submissions' })
     await expect(reviewButton).toBeEnabled()
     await reviewButton.click()

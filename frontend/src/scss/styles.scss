@@ -2729,6 +2729,10 @@ $notification-types: 'error', 'info', 'success', 'warning';
   margin-block-start: 1.5rem;
 }
 
+.admin-upload-panel--application-submission .admin-upload-drop-zone-field {
+  margin-block-start: 0;
+}
+
 .admin-upload-progress {
   display: flex;
   min-inline-size: 0;

@@ -1772,6 +1772,8 @@ test.describe('TEST IDIR admin regression', () => {
       /upload application submission/i,
     )
     await expectFsptsUploadLayout(page)
+    await expect(page.getByText('Submission files', { exact: true })).toBeVisible()
+    await expect(page.getByLabel('Upload batch summary')).toHaveCount(0)
     const applicationSubmissionProgress = page.getByRole('list', {
       name: 'Application submission upload workflow progress',
     })

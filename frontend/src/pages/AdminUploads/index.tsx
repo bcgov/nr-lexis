@@ -709,7 +709,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
       : DOCUMENT_UPLOAD_ACCEPT
   const uploadFormatText =
     selectedWorkflowType === 'applicationSubmission'
-      ? 'Supported application submission formats: .xml, .zip, .geojson, and .json'
+      ? 'Accepted formats: XML, ZIP, GeoJSON, or JSON. Maximum file size: 20 MiB'
       : DOCUMENT_UPLOAD_GUIDANCE
   const currentUploadTargetSummary = uploadTargetSummary(selectedWorkflowType, formState)
   const resolvedPageTitle =
@@ -1425,37 +1425,51 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
       : 'Upload documents and review selected files before submitting.'
   const uploadStepDescription =
     selectedWorkflowType === 'applicationSubmission'
-      ? 'Select one or more application submission files to validate before review.'
+      ? 'The submission type will be detected automatically from each file.'
       : 'Select documents to prepare before reviewing and submitting the upload.'
   const uploadSettingsPanel = (
-    <section className="admin-upload-panel" aria-labelledby="admin-upload-settings-title">
-      <div className="admin-upload-panel__header">
-        <div>
-          <h2 id="admin-upload-settings-title">{selectedWorkflow.label}</h2>
-          <p>{workflowDescription(selectedWorkflowType)}</p>
+    <section
+      className={`admin-upload-panel${
+        selectedWorkflowType === 'applicationSubmission'
+          ? ' admin-upload-panel--application-submission'
+          : ''
+      }`}
+      aria-labelledby={
+        selectedWorkflowType === 'applicationSubmission'
+          ? 'uploadFile-panel-title'
+          : 'admin-upload-settings-title'
+      }
+    >
+      {selectedWorkflowType !== 'applicationSubmission' && (
+        <div className="admin-upload-panel__header">
+          <div>
+            <h2 id="admin-upload-settings-title">{selectedWorkflow.label}</h2>
+            <p>{workflowDescription(selectedWorkflowType)}</p>
+          </div>
         </div>
-      </div>
+      )}
 
-      <div className="admin-upload-summary-strip" aria-label="Upload batch summary">
-        <div>
-          <span>Target</span>
-          <strong>{currentUploadTargetSummary}</strong>
+      {selectedWorkflowType !== 'applicationSubmission' && (
+        <div className="admin-upload-summary-strip" aria-label="Upload batch summary">
+          <div>
+            <span>Target</span>
+            <strong>{currentUploadTargetSummary}</strong>
+          </div>
+          <div>
+            <span>Queued files</span>
+            <strong>{uploadQueue.length}</strong>
+          </div>
+          <div>
+            <span>Format</span>
+            <strong>Document</strong>
+          </div>
         </div>
-        <div>
-          <span>
-            {selectedWorkflowType === 'applicationSubmission'
-              ? 'Queued submissions'
-              : 'Queued files'}
-          </span>
-          <strong>{uploadQueue.length}</strong>
-        </div>
-        <div>
-          <span>Format</span>
-          <strong>{selectedWorkflowType === 'applicationSubmission' ? 'LEXIS' : 'Document'}</strong>
-        </div>
-      </div>
+      )}
 
-      <div className="legacy-search-grid admin-upload-settings-grid">
+      <div
+        className="legacy-search-grid admin-upload-settings-grid"
+        hidden={selectedWorkflowType === 'applicationSubmission'}
+      >
         {!lockedWorkflowType && (
           <SearchableSelect
             id="uploadWorkflowType"
@@ -1607,9 +1621,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
 
       <MultiFileDropZone
         title={
-          selectedWorkflowType === 'applicationSubmission'
-            ? 'Upload application submissions'
-            : 'Upload documents'
+          selectedWorkflowType === 'applicationSubmission' ? 'Submission files' : 'Upload documents'
         }
         description={uploadFormatText}
         inputId="uploadFile"
