@@ -3,6 +3,7 @@ import { MemoryRouter, useLocation } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
 import {
   clearPersistedSearchState,
+  resetPersistedRegionSearchState,
   usePersistedSearchParams,
 } from '@/pages/shared/usePersistedSearchParams'
 
@@ -16,6 +17,9 @@ const SearchStateProbe = () => {
       <output data-testid="location-search">{location.search}</output>
       <button type="button" onClick={() => setSearchParams(new URLSearchParams())}>
         Clear query
+      </button>
+      <button type="button" onClick={resetPersistedRegionSearchState}>
+        Apply default zone
       </button>
     </>
   )
@@ -81,5 +85,30 @@ describe('usePersistedSearchParams', () => {
     expect(screen.getAllByTestId('hook-search').at(-1)).toBeEmptyDOMElement()
     expect(window.sessionStorage.getItem('unrelated')).toBe('keep')
     rerendered.unmount()
+  })
+
+  it('resets only provincial region filters when the default zone changes', async () => {
+    window.sessionStorage.setItem(
+      'lexis.search-state.v1.provincial-review',
+      'status=SUBMITTED&region=1903%2C1904&page=3',
+    )
+    window.sessionStorage.setItem(
+      'lexis.search-state.v1.federal-applications',
+      'region=1903&page=4',
+    )
+    renderProbe('/provincial/application?status=NEW&region=1903%2C1904&page=2')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Apply default zone' }))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('hook-search')).toHaveTextContent('status=NEW&page=2')
+      expect(screen.getByTestId('hook-search')).not.toHaveTextContent('region=')
+    })
+    expect(window.sessionStorage.getItem('lexis.search-state.v1.provincial-review')).toBe(
+      'status=SUBMITTED&page=3',
+    )
+    expect(window.sessionStorage.getItem('lexis.search-state.v1.federal-applications')).toBe(
+      'region=1903&page=4',
+    )
   })
 })

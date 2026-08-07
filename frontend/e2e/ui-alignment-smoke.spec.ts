@@ -42,6 +42,8 @@ const applicationSearchOptions = {
     { code: '1904', name: 'Kootenay-Boundary' },
     { code: '1905', name: 'Northeast' },
     { code: '1907', name: 'Thompson-Okanagan' },
+    { code: '1909', name: 'South Coast' },
+    { code: '1910', name: 'West Coast' },
   ],
   currentSchedules: [{ code: '', name: 'Current schedule' }],
 }
@@ -205,6 +207,8 @@ const exportSchedulePage = {
 }
 
 const installSyntheticLexisApi = async (page: Page) => {
+  let defaultRegion = 'RSI'
+
   await page.route('**/api/lexis/**', async (route) => {
     const pathname = new URL(route.request().url()).pathname
     let body: unknown
@@ -214,7 +218,11 @@ const installSyntheticLexisApi = async (page: Page) => {
         body = authenticatedAdminSession
         break
       case '/api/lexis/session/preferences':
-        body = { defaultRegion: 'RSI' }
+        if (route.request().method() === 'PUT') {
+          const requestBody = route.request().postDataJSON() as { defaultRegion?: string | null }
+          defaultRegion = requestBody.defaultRegion ?? ''
+        }
+        body = { defaultRegion: defaultRegion || null }
         break
       case '/api/lexis/applications/search/options':
         body = applicationSearchOptions
@@ -407,7 +415,16 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     expect(fullWidthResults.filterResultsGap).toBe(32)
     const resultCountToolbar = page.locator('.legacy-search-table-toolbar .cds--toolbar-content')
     await expect(resultCountToolbar).toHaveCSS('align-items', 'center')
+    await expect(resultCountToolbar).toHaveCSS('height', '40px')
     await expect(resultCountToolbar).toHaveCSS('padding-left', '16px')
+    await expect(page.locator('.legacy-search-table-toolbar')).toHaveCSS(
+      'background-color',
+      'rgb(244, 244, 244)',
+    )
+    await expect(page.locator('.legacy-search-table-frame .cds--pagination')).toHaveCSS(
+      'background-color',
+      'rgb(244, 244, 244)',
+    )
     const activeNavLink = page.locator('a.csp-side-nav__link[data-label="Applications"]')
     const inactiveNavLink = page.locator('a.csp-side-nav__link[data-label="Exemptions"]')
     await expect(activeNavLink).toHaveCSS('height', '48px')
@@ -499,8 +516,23 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       avatarHeight: 64,
       backgroundColor: 'rgb(255, 255, 255)',
     })
+    const coastSearchRequest = page.waitForRequest((request) => {
+      const url = new URL(request.url())
+      return (
+        url.pathname === '/api/lexis/applications/search' &&
+        url.searchParams.getAll('region').join(',') === '1909,1910'
+      )
+    })
+    await profilePanel.getByRole('combobox', { name: 'Default zone' }).selectOption('RCO')
+    await profilePanel.getByRole('button', { name: 'Save preference' }).click()
+    await expect(profilePanel.getByRole('status')).toHaveText('Preference saved.')
+    await coastSearchRequest
     await profilePanel.getByRole('button', { name: 'Close profile panel' }).click()
     await expect(page.locator('#profile-panel')).toHaveAttribute('aria-hidden', 'true')
+    await expect(
+      page.getByRole('combobox', { name: /^Region\s*Total items selected:\s*2/ }),
+    ).toBeVisible()
+    await expect.poll(() => new URL(page.url()).searchParams.get('region')).toBe('1909,1910')
 
     await themeSwitch.click()
     await expect(themeSwitch).toHaveAttribute('aria-checked', 'true')
@@ -746,6 +778,11 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(page.locator('.csp-app-header')).toHaveCSS('background-color', 'rgb(15, 98, 254)')
     await expect(page.locator('main.app-main')).toHaveCSS('background-color', 'rgb(22, 22, 22)')
     await expect(page.locator('.csp-side-nav')).toHaveCSS('background-color', 'rgb(22, 22, 22)')
+    await expect(page.locator('.legacy-search-table-toolbar')).toHaveCSS(
+      'background-color',
+      'rgb(38, 38, 38)',
+    )
+    await expect(pagination).toHaveCSS('background-color', 'rgb(38, 38, 38)')
     await expect(table.locator('thead th').first()).toHaveCSS('background-color', 'rgb(57, 57, 57)')
     await expect(firstRowCell).toHaveCSS('background-color', 'rgb(38, 38, 38)')
     await expect(secondRowCell).toHaveCSS('background-color', 'rgb(44, 44, 44)')

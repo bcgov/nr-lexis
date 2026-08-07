@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Button, Select, SelectItem } from '@carbon/react'
+import { resetPersistedRegionSearchState } from '@/pages/shared/usePersistedSearchParams'
 import {
   DEFAULT_ZONE_HELPER_TEXT,
   DEFAULT_ZONE_OPTIONS,
@@ -70,6 +71,7 @@ export default function UserRegionPreference({ active }: UserRegionPreferencePro
     setHasError(false)
     try {
       const preferences = await updateUserPreferences(selectedZone)
+      resetPersistedRegionSearchState()
       setSavedZone(preferences.defaultRegion)
       setSelectedZone(preferences.defaultRegion)
       setMessage('Preference saved.')

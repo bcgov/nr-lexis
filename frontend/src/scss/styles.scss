@@ -104,6 +104,7 @@
   --csp-category-label: var(--csp-text-secondary);
   --csp-tile-border: #999999;
   --csp-table-border: var(--csp-border-subtle-01);
+  --csp-table-chrome-bg: #f4f4f4;
   --csp-table-header-bg: #e0e0e0;
   --csp-table-header-text: #161616;
   --csp-table-row-alt-bg: #f4f4f4;
@@ -232,6 +233,7 @@ body {
   --csp-category-label: var(--csp-text-secondary);
   --csp-tile-border: #6f6f6f;
   --csp-table-border: var(--csp-border-subtle-01);
+  --csp-table-chrome-bg: #262626;
   --csp-table-header-bg: #393939;
   --csp-table-header-text: #f4f4f4;
   --csp-table-row-alt-bg: #2c2c2c;
@@ -2158,12 +2160,13 @@ $notification-types: 'error', 'info', 'success', 'warning';
 
 .legacy-search-table-toolbar {
   margin: 0;
-  background-color: var(--csp-background);
+  background-color: var(--csp-table-chrome-bg);
 }
 
 .legacy-search-table-toolbar .cds--table-toolbar,
 .legacy-search-table-toolbar .cds--toolbar-content {
-  min-block-size: 3rem;
+  block-size: 2.5rem;
+  min-block-size: 2.5rem;
   background-color: transparent;
 }
 
@@ -2181,7 +2184,7 @@ $notification-types: 'error', 'info', 'success', 'warning';
   gap: 0.75rem;
   margin: 0;
   padding: 0.75rem 1rem;
-  background-color: var(--csp-background);
+  background-color: var(--csp-table-chrome-bg);
   border-block-start: 1px solid var(--csp-border-subtle-01);
 }
 
@@ -2197,13 +2200,13 @@ $notification-types: 'error', 'info', 'success', 'warning';
   color: var(--csp-text-primary);
   font-size: 1rem;
   font-weight: 400;
-  line-height: 1.5;
+  line-height: 1;
 }
 
 .legacy-search-table-frame {
   position: relative;
   min-height: 12rem;
-  background-color: var(--csp-background);
+  background-color: var(--csp-table-chrome-bg);
   border-block-start: 1px solid var(--csp-border-subtle-01);
 }
 
@@ -2268,7 +2271,7 @@ $notification-types: 'error', 'info', 'success', 'warning';
 }
 
 .legacy-search-table-frame .cds--pagination {
-  background-color: var(--csp-table-header-bg);
+  background-color: var(--csp-table-chrome-bg);
   border: 0;
   border-block-start: 1px solid var(--csp-border-subtle-01);
   border-block-end: 1px solid var(--csp-border-subtle-01);

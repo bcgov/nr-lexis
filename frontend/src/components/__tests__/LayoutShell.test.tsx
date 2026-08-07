@@ -665,6 +665,10 @@ describe('Layout shell', () => {
 
   it('loads and saves the default region from the profile panel', async () => {
     mockedFetchUserPreferences.mockResolvedValue({ defaultRegion: 'RCO' })
+    window.sessionStorage.setItem(
+      'lexis.search-state.v1.provincial-review',
+      'status=SUBMITTED&region=1903%2C1904&page=3',
+    )
     renderLayout('/admin/rtm/emslogamv')
 
     await userEvent.click(screen.getByRole('button', { name: 'Open profile panel' }))
@@ -687,6 +691,9 @@ describe('Layout shell', () => {
 
     expect(mockedUpdateUserPreferences).toHaveBeenCalledWith('RNI')
     expect(await screen.findByRole('status')).toHaveTextContent('Preference saved.')
+    expect(window.sessionStorage.getItem('lexis.search-state.v1.provincial-review')).toBe(
+      'status=SUBMITTED&page=3',
+    )
   })
 
   it('returns focus to the profile toggle when the panel is dismissed by keyboard', async () => {
