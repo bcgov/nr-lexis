@@ -456,6 +456,12 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     const submittedRegionParams = new URL((await applicationSearchRequest).url()).searchParams
     expect(submittedRegionParams.getAll('region')).toEqual(['1903', '1904', '1907'])
     await expect(page.locator('.lexis-status-tag')).toHaveCount(2)
+    const applicationSortHeader = page.getByRole('columnheader', {
+      name: 'Application',
+      exact: true,
+    })
+    await expect(applicationSortHeader).toHaveAttribute('aria-sort', 'descending')
+    await expect(applicationSortHeader.locator('button.cds--table-sort')).toBeVisible()
     const fullWidthResults = await page
       .getByRole('region', { name: 'Search results table' })
       .evaluate((results) => {

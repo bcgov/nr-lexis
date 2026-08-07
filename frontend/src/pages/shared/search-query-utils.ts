@@ -130,6 +130,9 @@ export const getNextSortDirection = <TField extends string>(
   nextField: TField,
 ): 'asc' | 'desc' => (currentField === nextField && currentDirection === 'asc' ? 'desc' : 'asc')
 
+export const toCarbonSortDirection = (direction: 'asc' | 'desc'): 'ASC' | 'DESC' =>
+  direction === 'asc' ? 'ASC' : 'DESC'
+
 export const parseEnumParam = <TValue extends string>(
   value: string | null,
   validValues: readonly TValue[],

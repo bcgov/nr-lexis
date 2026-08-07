@@ -62,6 +62,7 @@ import {
 } from '@/service/admin-policy-service'
 import { fetchReportOptions, type SearchOption } from '@/service/search-options-service'
 import IsoDatePicker from '../../components/IsoDatePicker'
+import { toCarbonSortDirection } from '@/pages/shared/search-query-utils'
 import { formatBusinessIsoDate } from '@/utils/date'
 import { getResponseStatus } from '@/utils/http-error'
 
@@ -1110,14 +1111,18 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                   <TableHead>
                     <TableRow>
                       {FEE_POLICY_SORT_COLUMNS.map((column) => (
-                        <TableHeader key={column.id}>
-                          <button
-                            type="button"
-                            className="legacy-sort-button"
-                            onClick={() => onFeeSort(column.id)}
-                          >
-                            {column.label}
-                          </button>
+                        <TableHeader
+                          key={column.id}
+                          isSortable
+                          isSortHeader={feeSortField === column.id}
+                          sortDirection={
+                            feeSortField === column.id
+                              ? toCarbonSortDirection(feeSortDirection)
+                              : 'NONE'
+                          }
+                          onClick={() => onFeeSort(column.id)}
+                        >
+                          {column.label}
                         </TableHeader>
                       ))}
                       <TableHeader>Entry user</TableHeader>
@@ -1226,14 +1231,18 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                   <TableHead>
                     <TableRow>
                       {FIL_POLICY_SORT_COLUMNS.map((column) => (
-                        <TableHeader key={column.id}>
-                          <button
-                            type="button"
-                            className="legacy-sort-button"
-                            onClick={() => onFilSort(column.id)}
-                          >
-                            {column.label}
-                          </button>
+                        <TableHeader
+                          key={column.id}
+                          isSortable
+                          isSortHeader={filSortField === column.id}
+                          sortDirection={
+                            filSortField === column.id
+                              ? toCarbonSortDirection(filSortDirection)
+                              : 'NONE'
+                          }
+                          onClick={() => onFilSort(column.id)}
+                        >
+                          {column.label}
                         </TableHeader>
                       ))}
                       <TableHeader>Entry user</TableHeader>
@@ -1406,14 +1415,18 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                     <TableHead>
                       <TableRow>
                         {SCHEDULE_SORT_COLUMNS.map((column) => (
-                          <TableHeader key={column.id}>
-                            <button
-                              type="button"
-                              className="legacy-sort-button"
-                              onClick={() => onScheduleSort(column.id)}
-                            >
-                              {column.label}
-                            </button>
+                          <TableHeader
+                            key={column.id}
+                            isSortable
+                            isSortHeader={scheduleSortField === column.id}
+                            sortDirection={
+                              scheduleSortField === column.id
+                                ? toCarbonSortDirection(scheduleSortDirection)
+                                : 'NONE'
+                            }
+                            onClick={() => onScheduleSort(column.id)}
+                          >
+                            {column.label}
                           </TableHeader>
                         ))}
                         <TableHeader>Actions</TableHeader>

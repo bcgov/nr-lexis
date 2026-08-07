@@ -16,6 +16,7 @@ import {
   parseSortDirectionParam,
   searchParamsWithValue,
   setSearchParam,
+  toCarbonSortDirection,
 } from '@/pages/shared/search-query-utils'
 
 describe('search-query-utils', () => {
@@ -87,6 +88,8 @@ describe('search-query-utils', () => {
     expect(getNextSortDirection('name', 'asc', 'name')).toBe('desc')
     expect(getNextSortDirection('name', 'desc', 'name')).toBe('asc')
     expect(getNextSortDirection('name', 'desc', 'date')).toBe('asc')
+    expect(toCarbonSortDirection('asc')).toBe('ASC')
+    expect(toCarbonSortDirection('desc')).toBe('DESC')
   })
 
   it('sets non-blank scalar and array search parameters', () => {

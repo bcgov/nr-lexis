@@ -325,7 +325,11 @@ describe('Provincial Review Action State Smoke', () => {
     const headers = screen
       .getAllByRole('columnheader')
       .slice(1)
-      .map((header) => header.textContent?.replace(/\s+/g, ' ').trim())
+      .map((header) =>
+        (header.querySelector('.cds--table-header-label') ?? header).textContent
+          ?.replace(/\s+/g, ' ')
+          .trim(),
+      )
 
     expect(headers).toEqual([
       'Application',
@@ -395,7 +399,10 @@ describe('Provincial Review Action State Smoke', () => {
     await screen.findByText('1000123')
     mockedSearchApplicationReviews.mockClear()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Application' }))
+    const applicationSortButton = screen.getByRole('button', { name: 'Application' })
+    expect(applicationSortButton.closest('th')).toHaveAttribute('aria-sort', 'descending')
+
+    await userEvent.click(applicationSortButton)
 
     await waitFor(() => {
       expect(
@@ -404,6 +411,10 @@ describe('Provincial Review Action State Smoke', () => {
             request.sortField === 'applicationNumber' && request.sortDirection === 'asc',
         ),
       ).toBe(true)
+      expect(screen.getByRole('button', { name: 'Application' }).closest('th')).toHaveAttribute(
+        'aria-sort',
+        'ascending',
+      )
     })
   })
 

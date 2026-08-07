@@ -46,6 +46,7 @@ import {
   parsePageSizeParam,
   parsePositiveIntParam,
   parseSortDirectionParam,
+  toCarbonSortDirection,
   type IdTextOption,
 } from '@/pages/shared/search-query-utils'
 import {
@@ -603,14 +604,16 @@ const ProvincialPermitPage = () => {
                 <TableHead>
                   <TableRow>
                     {SORT_COLUMNS.map((column) => (
-                      <TableHeader key={column.id}>
-                        <button
-                          type="button"
-                          className="legacy-sort-button"
-                          onClick={() => onHeaderClick(column.id)}
-                        >
-                          {column.label}
-                        </button>
+                      <TableHeader
+                        key={column.id}
+                        isSortable
+                        isSortHeader={sortField === column.id}
+                        sortDirection={
+                          sortField === column.id ? toCarbonSortDirection(sortDirection) : 'NONE'
+                        }
+                        onClick={() => onHeaderClick(column.id)}
+                      >
+                        {column.label}
                       </TableHeader>
                     ))}
                   </TableRow>

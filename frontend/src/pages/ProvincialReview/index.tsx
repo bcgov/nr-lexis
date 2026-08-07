@@ -63,6 +63,7 @@ import {
   parsePageSizeParam,
   parsePositiveIntParam,
   parseSortDirectionParam,
+  toCarbonSortDirection,
   type IdTextOption,
 } from '@/pages/shared/search-query-utils'
 import { useSearchFilterDraft } from '@/pages/shared/useSearchFilterDraft'
@@ -1255,18 +1256,20 @@ const ProvincialReviewPage = () => {
                       </DisabledButtonTooltip>
                     </TableHeader>
                     {RESULT_COLUMNS.map((column) => (
-                      <TableHeader key={column.id}>
-                        {column.sortField ? (
-                          <button
-                            type="button"
-                            className="legacy-sort-button"
-                            onClick={() => onHeaderClick(column.sortField!)}
-                          >
-                            {column.label}
-                          </button>
-                        ) : (
-                          column.label
-                        )}
+                      <TableHeader
+                        key={column.id}
+                        isSortable={Boolean(column.sortField)}
+                        isSortHeader={column.sortField === sortField}
+                        sortDirection={
+                          column.sortField === sortField
+                            ? toCarbonSortDirection(sortDirection)
+                            : 'NONE'
+                        }
+                        onClick={
+                          column.sortField ? () => onHeaderClick(column.sortField!) : undefined
+                        }
+                      >
+                        {column.label}
                       </TableHeader>
                     ))}
                     <TableHeader>Actions</TableHeader>

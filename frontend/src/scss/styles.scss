@@ -4224,21 +4224,6 @@ $notification-types: 'error', 'info', 'success', 'warning';
   margin: 0 0 0.75rem;
 }
 
-.legacy-sort-button {
-  appearance: none;
-  background: transparent;
-  border: 0;
-  color: inherit;
-  cursor: pointer;
-  font: inherit;
-  padding: 0;
-  text-align: left;
-}
-
-.legacy-sort-button:hover {
-  text-decoration: underline;
-}
-
 .summary-metric-value {
   font-size: 2rem;
   font-weight: 700;
