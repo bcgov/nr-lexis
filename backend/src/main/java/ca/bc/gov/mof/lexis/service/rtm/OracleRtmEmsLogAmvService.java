@@ -269,6 +269,11 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
 
   @Override
   public RtmEmsLogAmvUploadPreviewDto previewUpload(MultipartFile file) {
+    return previewUpload(file, null);
+  }
+
+  @Override
+  public RtmEmsLogAmvUploadPreviewDto previewUpload(MultipartFile file, String effectiveMonth) {
     if (file == null || file.isEmpty()) {
       return buildPreview("rejected", "No file provided.", 0, List.of("Choose a .xlsx file."), List.of());
     }
@@ -293,12 +298,26 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
           file.getSize());
     }
 
+    LocalDate parsedEffectiveMonth = parseRetrievalDate(effectiveMonth);
+    if (trimToNull(effectiveMonth) != null && parsedEffectiveMonth == null) {
+      return buildPreview(
+          RETURN_VALIDATION,
+          "Upload template validation failed.",
+          0,
+          List.of("Select a valid effective month."),
+          List.of());
+    }
+
     try {
       RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult parseResult =
-          RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(file.getInputStream());
+          parsedEffectiveMonth == null
+              ? RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(file.getInputStream())
+              : RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
+                  file.getInputStream(), parsedEffectiveMonth);
       List<String> warnings = new ArrayList<>(parseResult.warnings());
       List<String> errors = new ArrayList<>(parseResult.errors());
-      List<UploadTarget> rowsToPreview = buildUploadTargets(parseResult.rows(), warnings);
+      List<UploadTarget> rowsToPreview =
+          buildUploadTargets(parseResult.rows(), warnings, parsedEffectiveMonth != null);
 
       if (parseResult.dataRowCount() == 0) {
         errors.add("The uploaded file contains no data rows.");
@@ -363,6 +382,12 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
   @Override
   @Transactional
   public RtmEmsLogAmvUploadResultDto upload(MultipartFile file) {
+    return upload(file, null);
+  }
+
+  @Override
+  @Transactional
+  public RtmEmsLogAmvUploadResultDto upload(MultipartFile file, String effectiveMonth) {
     List<String> validationErrors = validateUploadRequest(file);
     if (!validationErrors.isEmpty()) {
       return buildUploadResult(
@@ -379,16 +404,33 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
 
     String fileName = trimToNull(file.getOriginalFilename());
     long fileSize = file.getSize();
+    LocalDate parsedEffectiveMonth = parseRetrievalDate(effectiveMonth);
+    if (trimToNull(effectiveMonth) != null && parsedEffectiveMonth == null) {
+      return buildUploadResult(
+          RETURN_VALIDATION,
+          "Upload template validation failed.",
+          fileName,
+          fileSize,
+          0,
+          0,
+          List.of("Select a valid effective month."),
+          List.of(),
+          List.of());
+    }
 
     try {
       RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult parseResult =
-          RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(file.getInputStream());
+          parsedEffectiveMonth == null
+              ? RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(file.getInputStream())
+              : RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
+                  file.getInputStream(), parsedEffectiveMonth);
 
       List<String> warnings = new ArrayList<>(parseResult.warnings());
       List<String> errors = new ArrayList<>(parseResult.errors());
       LocalDate parsedRetrievalDate = parseResult.retrievalDate();
       LocalDate parsedUpdateDate = parseResult.updateDate();
-      List<UploadTarget> rowsToUpload = buildUploadTargets(parseResult.rows(), warnings);
+      List<UploadTarget> rowsToUpload =
+          buildUploadTargets(parseResult.rows(), warnings, parsedEffectiveMonth != null);
 
       if (parseResult.dataRowCount() == 0) {
         errors.add("The uploaded file contains no data rows.");
@@ -824,7 +866,9 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
   }
 
   private List<UploadTarget> buildUploadTargets(
-      List<RtmEmsLogAmvUploadPreviewAnalyzer.UploadRow> parsedRows, List<String> warnings) {
+      List<RtmEmsLogAmvUploadPreviewAnalyzer.UploadRow> parsedRows,
+      List<String> warnings,
+      boolean expandGrowthTypes) {
     List<RtmEmsLogAmvUploadPreviewAnalyzer.UploadRow> uploadRows =
         parsedRows.stream()
             .filter(row -> isUploadableRow(row.species(), row.grade()))
@@ -835,16 +879,7 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
     }
 
     Map<String, UploadTarget> rowsBySpeciesGradeAndGrowth =
-        uploadRows.stream()
-            .map(
-                row ->
-                    new UploadTarget(
-                        row.species(),
-                        row.grade(),
-                        row.growthIndicator(),
-                        row.newValue(),
-                        row.sourceRow(),
-                        row.sourceColumn()))
+        expandUploadTargets(uploadRows, expandGrowthTypes).stream()
             .collect(
                 LinkedHashMap::new,
                 (map, target) -> {
@@ -873,6 +908,40 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
                 Map::putAll);
 
     return new ArrayList<>(rowsBySpeciesGradeAndGrowth.values());
+  }
+
+  private List<UploadTarget> expandUploadTargets(
+      List<RtmEmsLogAmvUploadPreviewAnalyzer.UploadRow> uploadRows, boolean expandGrowthTypes) {
+    List<UploadTarget> targets = new ArrayList<>();
+    for (RtmEmsLogAmvUploadPreviewAnalyzer.UploadRow row : uploadRows) {
+      String normalizedSpecies = RtmEmsLogAmvDimensionValidator.normalize(row.species());
+      List<String> speciesTargets =
+          BATCH_SPECIES_TARGETS.getOrDefault(normalizedSpecies, List.of(row.species()));
+      for (String species : speciesTargets) {
+        if (expandGrowthTypes) {
+          for (String growthIndicator : GROWTH_TARGETS) {
+            targets.add(
+                new UploadTarget(
+                    species,
+                    row.grade(),
+                    growthIndicator,
+                    row.newValue(),
+                    row.sourceRow(),
+                    row.sourceColumn()));
+          }
+        } else {
+          targets.add(
+              new UploadTarget(
+                  species,
+                  row.grade(),
+                  row.growthIndicator(),
+                  row.newValue(),
+                  row.sourceRow(),
+                  row.sourceColumn()));
+        }
+      }
+    }
+    return targets;
   }
 
   private record UploadTarget(

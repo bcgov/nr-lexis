@@ -19,7 +19,7 @@ vi.mock('@/pages/RTMEmsLogAmv', () => ({
 }))
 
 vi.mock('@/pages/RTMEmsLogAmv/LegacyUploadWorkflow', () => ({
-  default: () => <h1>AMV Spreadsheet Upload</h1>,
+  default: () => <h1>Average market values</h1>,
 }))
 
 vi.mock('@/pages/Federal', () => ({
@@ -323,7 +323,7 @@ describe('Protected route guard access', () => {
     renderWithPath('/admin/rtm/emslogamv/upload')
 
     expect(
-      await screen.findByRole('heading', { name: 'AMV Spreadsheet Upload' }),
+      await screen.findByRole('heading', { name: 'Average market values' }),
     ).toBeInTheDocument()
   })
 })

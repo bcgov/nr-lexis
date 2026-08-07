@@ -4,6 +4,7 @@
  */
 
 import {
+  useEffect,
   useRef,
   useState,
   type ChangeEvent,
@@ -24,6 +25,8 @@ import {
   Button,
   Column,
   Grid,
+  Select,
+  SelectItem,
   Table,
   TableBody,
   TableCell,
@@ -32,6 +35,7 @@ import {
   TableRow,
 } from '@carbon/react'
 import { AppNotification } from '../../components/AppNotification'
+import PageHeader from '@/components/PageHeader'
 import { useAuth } from '@/context/auth/useAuth'
 import {
   previewRtmEmsLogAmvUpload,
@@ -40,8 +44,8 @@ import {
   type RtmEmsLogAmvUploadPreview,
   type RtmEmsLogAmvUploadResult,
 } from '@/service/rtm-emslogamv-service'
-import UploadWorkflowProgress from '@/components/uploads/UploadWorkflowProgress'
 import { validateUploadFileSize } from '@/components/uploads/uploadQueueHelpers'
+import { formatBusinessIsoDate } from '@/utils/date'
 
 type PendingUploadValidation = {
   fileName: string
@@ -114,6 +118,45 @@ const formatUploadMonth = (dateValue: string | null | undefined): string | null 
   }).format(new Date(Date.UTC(year, monthIndex, 1)))
 }
 
+const currentEffectiveMonth = () => `${formatBusinessIsoDate().slice(0, 7)}-01`
+
+const shiftEffectiveMonth = (dateValue: string, offset: number): string => {
+  const match = /^(\d{4})-(\d{2})-01$/.exec(dateValue)
+  if (!match) {
+    return dateValue
+  }
+
+  const shifted = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1 + offset, 1))
+  return shifted.toISOString().slice(0, 10)
+}
+
+const buildEffectiveMonthOptions = (currentMonth: string) => {
+  return [1, ...Array.from({ length: 13 }, (_, index) => -index)].map((offset) => {
+    const value = shiftEffectiveMonth(currentMonth, offset)
+    const label = formatUploadMonth(value) ?? value
+    return {
+      value,
+      label: offset === 0 ? `${label}, current month` : label,
+    }
+  })
+}
+
+const formatEffectiveDateRange = (dateValue: string): string => {
+  const match = /^(\d{4})-(\d{2})-01$/.exec(dateValue)
+  if (!match) {
+    return dateValue
+  }
+
+  const year = Number(match[1])
+  const monthIndex = Number(match[2]) - 1
+  const month = new Intl.DateTimeFormat('en-CA', {
+    month: 'long',
+    timeZone: 'UTC',
+  }).format(new Date(Date.UTC(year, monthIndex, 1)))
+  const lastDay = new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate()
+  return `${month} 1 to ${lastDay}, ${year}`
+}
+
 const createAcceptedUploadMessage = (previewResult: RtmEmsLogAmvUploadPreview | null): string => {
   const monthLabel = formatUploadMonth(previewResult?.updateDate ?? previewResult?.retrievalDate)
   return monthLabel ? `New values applied for ${monthLabel}.` : 'New values applied.'
@@ -149,15 +192,11 @@ const RTM_UPLOAD_ACCEPT = ['application/vnd.openxmlformats-officedocument.spread
 const RTM_TEMPLATE_DOWNLOAD_PATH = '/templates/rtm-ems-log-amv-template.xlsx'
 const RTM_TEMPLATE_DOWNLOAD_NAME = 'rtm-ems-log-amv-template.xlsx'
 
-const RTM_UPLOAD_ONLY_DESCRIPTION = 'Update average monthly values by uploading an XLSX file.'
-const RTM_UPLOAD_STEP_DESCRIPTION =
-  'Add your completed template to check for errors before the new values take effect.'
-const RTM_UPLOAD_FIELD_HELPER = 'Accepted formats: .xlsx. Maximum file size: 20 MiB.'
-
-const RTM_UPLOAD_REVIEW_STEPS = [
-  { id: 'upload', label: 'Upload' },
-  { id: 'review', label: 'Review' },
-]
+const RTM_UPLOAD_ONLY_DESCRIPTION =
+  'Set the domestic log values that become the fee in lieu of export on coastal permits.'
+const RTM_VALUES_DESCRIPTION =
+  'Your spreadsheet fills in a value for each species and grade, ready to check before you save.'
+const RTM_UPLOAD_FIELD_HELPER = 'Accepted format: .xlsx, up to 20 MB.'
 
 const RTM_REVIEW_SPECIES_COLUMNS: RtmReviewSpeciesColumn[] = [
   { key: 'BA', label: 'Balsam', speciesCodes: ['BA'] },
@@ -166,9 +205,7 @@ const RTM_REVIEW_SPECIES_COLUMNS: RtmReviewSpeciesColumn[] = [
   { key: 'CY', label: 'Cypress', speciesCodes: ['CY'] },
   { key: 'FI', label: 'Fir', speciesCodes: ['FI'] },
   { key: 'SP', label: 'Spruce', speciesCodes: ['SP'] },
-  { key: 'WH', label: 'Western white pine', speciesCodes: ['WH'] },
-  { key: 'LO', label: 'Lodgepole pine', speciesCodes: ['LO'] },
-  { key: 'YE', label: 'Yellow pine', speciesCodes: ['YE'] },
+  { key: 'PINE', label: 'Pine', speciesCodes: ['WH', 'LO', 'YE', 'PINE'] },
 ]
 
 const RTM_REVIEW_GRADE_ORDER = [
@@ -188,16 +225,9 @@ const RTM_REVIEW_GRADE_ORDER = [
   'U',
   'X',
   'Y',
-  'Z',
-  '1',
-  '2',
-  '3',
-  '4',
-  '5',
-  '6',
 ]
 
-const HIDDEN_REVIEW_GRADES = new Set(['W', 'BLANK'])
+const HIDDEN_REVIEW_GRADES = new Set(['W', 'Z', '1', '2', '3', '4', '5', '6', 'BLANK'])
 
 const RTM_REVIEW_GROWTH_ORDER = ['O', 'S']
 
@@ -559,8 +589,10 @@ const ReviewUploadContent = ({
 const RtmEmsLogAmvUploadPage = () => {
   const { canPerform } = useAuth()
   const canManage = canPerform('/lexisAgentAdmin')
+  const currentMonth = currentEffectiveMonth()
   const validationRequestRef = useRef(0)
   const uploadInputRef = useRef<HTMLInputElement>(null)
+  const [effectiveMonth, setEffectiveMonth] = useState(currentEffectiveMonth)
   const [uploadStep, setUploadStep] = useState<RtmUploadStep>('upload')
   const [isPreviewing, setIsPreviewing] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
@@ -577,6 +609,17 @@ const RtmEmsLogAmvUploadPage = () => {
   const [uploadResult, setUploadResult] = useState<RtmEmsLogAmvUploadResult | null>(null)
   const [uploadInputKey, setUploadInputKey] = useState(0)
   const [isDraggingUpload, setIsDraggingUpload] = useState(false)
+  const effectiveMonthOptions = buildEffectiveMonthOptions(currentMonth)
+  const previousEffectiveMonth = shiftEffectiveMonth(effectiveMonth, -1)
+
+  useEffect(() => {
+    const previousTitle = document.title
+    document.title = 'Average market values | NR LEXIS'
+
+    return () => {
+      document.title = previousTitle
+    }
+  }, [])
 
   const validateUploadFile = async (nextFile: File | null) => {
     const requestId = validationRequestRef.current + 1
@@ -607,7 +650,7 @@ const RtmEmsLogAmvUploadPage = () => {
     setIsPreviewing(true)
 
     try {
-      const response = await previewRtmEmsLogAmvUpload(nextFile)
+      const response = await previewRtmEmsLogAmvUpload(nextFile, effectiveMonth)
 
       if (validationRequestRef.current !== requestId) {
         return
@@ -708,6 +751,7 @@ const RtmEmsLogAmvUploadPage = () => {
 
     try {
       const response = await uploadRtmEmsLogAmv({
+        effectiveMonth,
         file: selectedUploadFile,
       })
 
@@ -757,7 +801,7 @@ const RtmEmsLogAmvUploadPage = () => {
 
   const isReviewReady = hasCurrentUploadValidation && previewResult?.status === 'accepted'
 
-  const isReviewDisabled = isPreviewing || !canManage
+  const isReviewDisabled = isPreviewing || !canManage || !isReviewReady
 
   const isUploadDisabled =
     isUploading ||
@@ -796,45 +840,61 @@ const RtmEmsLogAmvUploadPage = () => {
   ]
     .filter(Boolean)
     .join(' ')
-  const completedWorkflowSteps = uploadStep === 'review' ? ['upload'] : []
-
   return (
-    <Grid fullWidth className="default-grid admin-upload-fspts-page">
-      <Column sm={4} md={8} lg={16} className="admin-upload-fspts-header">
-        <h1>AMV Spreadsheet Upload</h1>
-        <p>{RTM_UPLOAD_ONLY_DESCRIPTION}</p>
-        <UploadWorkflowProgress
-          steps={RTM_UPLOAD_REVIEW_STEPS}
-          currentStepId={uploadStep}
-          completedStepIds={completedWorkflowSteps}
-          ariaLabel="Average monthly values upload workflow progress"
-        />
+    <Grid fullWidth className="default-grid admin-upload-fspts-page rtm-amv-upload-page">
+      <Column sm={4} md={8} lg={16} className="admin-upload-fspts-header rtm-amv-upload-header">
+        <PageHeader title="Average market values" subtitle={RTM_UPLOAD_ONLY_DESCRIPTION} />
+
+        <div className="rtm-amv-month-summary" aria-label="Average market value month details">
+          <Select
+            id="rtm-amv-effective-month"
+            className="rtm-amv-month-select"
+            labelText="Month"
+            value={effectiveMonth}
+            disabled={isPreviewing || isUploading}
+            onChange={(event) => {
+              setEffectiveMonth(event.currentTarget.value)
+              clearUploadState()
+            }}
+          >
+            {effectiveMonthOptions.map((option) => (
+              <SelectItem key={option.value} value={option.value} text={option.label} />
+            ))}
+          </Select>
+          <div className="rtm-amv-month-summary__item">
+            <span>Values take effect</span>
+            <strong>{formatEffectiveDateRange(effectiveMonth)}</strong>
+          </div>
+          <div className="rtm-amv-month-summary__item">
+            <span>Compared against</span>
+            <strong>{formatUploadMonth(previousEffectiveMonth)}</strong>
+          </div>
+        </div>
       </Column>
 
-      <Column sm={4} md={8} lg={16} className="admin-upload-fspts-content">
+      <Column sm={4} md={8} lg={16} className="admin-upload-fspts-content rtm-amv-values-content">
+        <div className="admin-upload-section-heading rtm-amv-values-heading">
+          <h2 id="rtm-values-title">Values</h2>
+          <p>{RTM_VALUES_DESCRIPTION}</p>
+        </div>
+
         {uploadStep === 'upload' ? (
           <>
-            <div className="admin-upload-section-heading">
-              <h2 id="rtm-upload-title">Upload</h2>
-              <p>{RTM_UPLOAD_STEP_DESCRIPTION}</p>
-            </div>
-
-            <section className="admin-upload-panel" aria-labelledby="rtm-upload-title">
+            <section className="rtm-amv-upload-card" aria-labelledby="rtm-upload-title">
               <div className="admin-upload-field-header">
                 <div>
-                  <span className="admin-upload-field-label">Upload Excel Spreadsheet</span>
+                  <span id="rtm-upload-title" className="admin-upload-field-label">
+                    Upload spreadsheet
+                  </span>
                   <p className="admin-upload-field-helper">{RTM_UPLOAD_FIELD_HELPER}</p>
                 </div>
                 <a
-                  className="admin-upload-template-card"
+                  className="rtm-amv-template-link"
                   href={RTM_TEMPLATE_DOWNLOAD_PATH}
                   download={RTM_TEMPLATE_DOWNLOAD_NAME}
                   aria-label="Download template"
                 >
-                  <span>
-                    <span className="admin-upload-template-card__title">Download template</span>
-                    <span className="admin-upload-template-card__meta">XLSX</span>
-                  </span>
+                  <span>Download template</span>
                   <Download size={16} aria-hidden="true" />
                 </a>
               </div>
@@ -875,7 +935,7 @@ const RtmEmsLogAmvUploadPage = () => {
                 onDrop={onDropUploadFile}
               >
                 <div className="admin-upload-drop-zone__copy">
-                  <p>Drag and drop files here or click to upload</p>
+                  <p>Drag and drop your file here or click to upload</p>
                 </div>
               </div>
 
@@ -908,27 +968,29 @@ const RtmEmsLogAmvUploadPage = () => {
               />
             </section>
 
-            <div className="admin-upload-fspts-button-row">
-              <Button
-                kind="primary"
-                size="md"
-                className="admin-upload-fspts-action-button"
-                renderIcon={ArrowRight}
-                onClick={openReviewStep}
-                disabled={isReviewDisabled}
-              >
-                Review
-              </Button>
-            </div>
+            {selectedUploadFile && (
+              <div className="admin-upload-fspts-button-row">
+                <Button
+                  kind="primary"
+                  size="md"
+                  className="admin-upload-fspts-action-button"
+                  renderIcon={ArrowRight}
+                  onClick={openReviewStep}
+                  disabled={isReviewDisabled}
+                >
+                  Review
+                </Button>
+              </div>
+            )}
           </>
         ) : (
           <>
-            <div className="admin-upload-section-heading">
-              <h2 id="rtm-review-title">Review</h2>
-              <p>Review the details extracted from your file and submit when ready</p>
-            </div>
-
             <section className="admin-upload-panel" aria-labelledby="rtm-review-title">
+              <div className="admin-upload-section-heading">
+                <h3 id="rtm-review-title">Review</h3>
+                <p>Review the details extracted from your file and submit when ready.</p>
+              </div>
+
               {uploadError && (
                 <p className="landing-page-help-text landing-page-help-text--error">
                   {uploadError}

@@ -38,18 +38,20 @@ public class RtmEmsLogAmvUploadController {
   @PostMapping(value = "/emslogamv/preview", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
   public ResponseEntity<RtmEmsLogAmvUploadPreviewDto> previewUpload(
       @RequestParam(name = "file", required = false) MultipartFile file,
-      @RequestParam(name = "formFile", required = false) MultipartFile formFile) {
+      @RequestParam(name = "formFile", required = false) MultipartFile formFile,
+      @RequestParam(name = "effectiveMonth", required = false) String effectiveMonth) {
     RtmEmsLogAmvService service = requiredService("preview");
 
     MultipartFile uploadFile = firstNonNull(file, formFile);
-    RtmEmsLogAmvUploadPreviewDto result = service.previewUpload(uploadFile);
+    RtmEmsLogAmvUploadPreviewDto result = service.previewUpload(uploadFile, effectiveMonth);
     return ResponseEntity.status(responseStatus(result.status())).body(result);
   }
 
   @PostMapping(value = "/emslogamv/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
   public ResponseEntity<RtmEmsLogAmvUploadResultDto> upload(
       @RequestParam(name = "file", required = false) MultipartFile file,
-      @RequestParam(name = "formFile", required = false) MultipartFile formFile) {
+      @RequestParam(name = "formFile", required = false) MultipartFile formFile,
+      @RequestParam(name = "effectiveMonth", required = false) String effectiveMonth) {
     RtmEmsLogAmvService service = requiredService("upload");
 
     MultipartFile uploadFile = firstNonNull(file, formFile);
@@ -64,7 +66,7 @@ public class RtmEmsLogAmvUploadController {
                   List.of()));
     }
 
-    RtmEmsLogAmvUploadResultDto result = service.upload(uploadFile);
+    RtmEmsLogAmvUploadResultDto result = service.upload(uploadFile, effectiveMonth);
     return ResponseEntity.status(responseStatus(result.status())).body(result);
   }
 

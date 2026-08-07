@@ -65,6 +65,40 @@ class InMemoryRtmEmsLogAmvServiceTest {
   }
 
   @Test
+  void shouldApplyScreenMonthToGroupedPineAndBothGrowthTypes() throws IOException {
+    InMemoryRtmEmsLogAmvService service = new InMemoryRtmEmsLogAmvService();
+    service.saveBatch(
+        List.of(
+            new RtmEmsLogAmvSaveRequestDto(
+                "PINE",
+                "A",
+                "O",
+                "2026-07-01",
+                "2026-07-01",
+                BigDecimal.ZERO,
+                "update")));
+
+    MultipartFile workbook =
+        workbook("grouped-pine.xlsx", RtmEmsLogAmvWorkbookTestFixtures.ambiguousPineWorkbook());
+    RtmEmsLogAmvUploadPreviewDto preview = service.previewUpload(workbook, "2026-07-01");
+    RtmEmsLogAmvUploadResultDto upload = service.upload(workbook, "2026-07-01");
+
+    assertThat(preview.status()).isEqualTo("accepted");
+    assertThat(preview.rows())
+        .extracting(row -> List.of(row.species(), row.growthIndicator()))
+        .containsExactly(
+            List.of("WH", "O"),
+            List.of("WH", "S"),
+            List.of("LO", "O"),
+            List.of("LO", "S"),
+            List.of("YE", "O"),
+            List.of("YE", "S"));
+    assertThat(upload.status()).isEqualTo("accepted");
+    assertThat(upload.attemptedRowCount()).isEqualTo(6);
+    assertThat(upload.uploadedRowCount()).isEqualTo(6);
+  }
+
+  @Test
   void shouldRejectInvalidWorkbook() throws IOException {
     InMemoryRtmEmsLogAmvService service = new InMemoryRtmEmsLogAmvService();
 

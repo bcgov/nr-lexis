@@ -91,14 +91,18 @@ class RtmEmsLogAmvUploadPreviewAnalyzerTest {
   }
 
   @Test
-  void publishedTemplateShouldRequireUpdateDateAndUserEnteredValues() throws IOException {
+  void publishedTemplateShouldUseTheScreenMonthAndUserEnteredValues() throws IOException {
     byte[] templateBytes = Files.readAllBytes(resolvePublishedTemplate());
     String sheetXml = workbookEntryText(templateBytes, "xl/worksheets/sheet1.xml");
 
     assertThat(sheetXml)
-        .contains("Update Date (YYYY-MM-01)")
-        .contains("Growth Indicator (O or S)")
         .contains("GRADE")
+        .contains("PINE")
+        .doesNotContain("Update Date")
+        .doesNotContain("Growth Indicator")
+        .doesNotContain(">WH<")
+        .doesNotContain(">LO<")
+        .doesNotContain(">YE<")
         .doesNotContain("<t>Retrieval Date</t>")
         .doesNotContain("<f>TODAY()</f>")
         .doesNotContain("<v>10.25</v>")
@@ -108,15 +112,15 @@ class RtmEmsLogAmvUploadPreviewAnalyzerTest {
 
     RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult result =
         RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
-            new ByteArrayInputStream(templateBytes));
+            new ByteArrayInputStream(templateBytes), LocalDate.of(2026, 7, 1));
 
     assertThat(result.headerDetected()).isTrue();
-    assertThat(result.updateDate()).isNull();
-    assertThat(result.retrievalDate()).isNull();
-    assertThat(result.growthIndicator()).isNull();
-    assertThat(result.dataRowCount()).isEqualTo(25);
+    assertThat(result.updateDate()).isEqualTo(LocalDate.of(2026, 7, 1));
+    assertThat(result.retrievalDate()).isEqualTo(LocalDate.of(2026, 7, 1));
+    assertThat(result.growthIndicator()).isEqualTo("O");
+    assertThat(result.dataRowCount()).isEqualTo(16);
     assertThat(result.numericCellCount()).isZero();
-    assertThat(result.errors()).contains("Growth indicator is required in the uploaded template.");
+    assertThat(result.errors()).isEmpty();
     assertThat(result.rows()).isEmpty();
   }
 
@@ -153,7 +157,7 @@ class RtmEmsLogAmvUploadPreviewAnalyzerTest {
   }
 
   @Test
-  void shouldRejectAmbiguousPineHeader() throws IOException {
+  void shouldRejectTheGroupedPineHeaderWithoutScreenContext() throws IOException {
     RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult result =
         RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
             new ByteArrayInputStream(RtmEmsLogAmvWorkbookTestFixtures.ambiguousPineWorkbook()));
@@ -161,6 +165,18 @@ class RtmEmsLogAmvUploadPreviewAnalyzerTest {
     assertThat(result.errors())
         .anyMatch(error -> error.contains("ambiguous") && error.contains("WH, LO and YE"));
     assertThat(result.rows()).isEmpty();
+  }
+
+  @Test
+  void shouldParseTheGroupedPineHeaderWithScreenContext() throws IOException {
+    RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult result =
+        RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
+            new ByteArrayInputStream(RtmEmsLogAmvWorkbookTestFixtures.ambiguousPineWorkbook()),
+            LocalDate.of(2026, 7, 1));
+
+    assertThat(result.errors()).isEmpty();
+    assertThat(result.rows()).extracting(RtmEmsLogAmvUploadPreviewAnalyzer.UploadRow::species)
+        .containsExactly("PINE");
   }
 
   @Test

@@ -301,32 +301,28 @@ describe('Layout shell', () => {
   })
 
   it('marks only the exact side-nav route as active', () => {
-    renderLayout('/admin/rtm/emslogamv')
+    renderLayout('/admin/rtm/emslogamv/upload')
 
-    const averageMonthlyValuesLink = screen.getByRole('link', {
-      name: /Average Monthly Values/i,
+    const averageMarketValuesLink = screen.getByRole('link', {
+      name: /Average market values/i,
     })
     const activeLinks = document.querySelectorAll('.csp-side-nav__link.cds--side-nav__link--active')
 
     expect(document.querySelector('.page-header__eyebrow')).not.toBeInTheDocument()
     expect(activeLinks).toHaveLength(1)
-    expect(averageMonthlyValuesLink).toHaveClass('cds--side-nav__link--active')
-    expect(averageMonthlyValuesLink).toHaveAttribute('aria-current', 'page')
+    expect(averageMarketValuesLink).toHaveClass('cds--side-nav__link--active')
+    expect(averageMarketValuesLink).toHaveAttribute('aria-current', 'page')
   })
 
-  it('marks the spreadsheet upload route separately from the AMV grid', () => {
-    renderLayout('/admin/rtm/emslogamv/upload')
+  it('does not mark the upload navigation item active on the legacy AMV grid route', () => {
+    renderLayout('/admin/rtm/emslogamv')
 
-    const averageMonthlyValuesLink = screen.getByRole('link', {
-      name: /Average Monthly Values/i,
-    })
-    const spreadsheetUploadLink = screen.getByRole('link', {
-      name: /AMV Spreadsheet Upload/i,
+    const averageMarketValuesLink = screen.getByRole('link', {
+      name: /Average market values/i,
     })
 
-    expect(spreadsheetUploadLink).toHaveClass('cds--side-nav__link--active')
-    expect(spreadsheetUploadLink).toHaveAttribute('aria-current', 'page')
-    expect(averageMonthlyValuesLink).not.toHaveClass('cds--side-nav__link--active')
+    expect(averageMarketValuesLink).not.toHaveClass('cds--side-nav__link--active')
+    expect(averageMarketValuesLink).not.toHaveAttribute('aria-current')
   })
 
   it('renders split admin side-nav areas with distinct active routes', () => {
@@ -349,45 +345,37 @@ describe('Layout shell', () => {
     const scheduleLink = screen.getByRole('link', {
       name: /Export Schedule/i,
     })
-    const averageMonthlyValuesLink = screen.getByRole('link', {
-      name: /Average Monthly Values/i,
-    })
-    const spreadsheetUploadLink = screen.getByRole('link', {
-      name: /AMV Spreadsheet Upload/i,
+    const averageMarketValuesLink = screen.getByRole('link', {
+      name: /Average market values/i,
     })
 
     expect(feePolicyLink).toHaveAttribute('href', '/admin/policies/fee')
     expect(filPolicyLink).toHaveAttribute('href', '/admin/policies/fil')
     expect(scheduleLink).toHaveAttribute('href', '/admin/schedules')
-    expect(averageMonthlyValuesLink).toHaveAttribute('href', '/admin/rtm/emslogamv')
-    expect(spreadsheetUploadLink).toHaveAttribute('href', '/admin/rtm/emslogamv/upload')
+    expect(averageMarketValuesLink).toHaveAttribute('href', '/admin/rtm/emslogamv/upload')
     expect(scheduleLink).toHaveClass('cds--side-nav__link--active')
     expect(scheduleLink).toHaveAttribute('aria-current', 'page')
     expect(feePolicyLink).not.toHaveClass('cds--side-nav__link--active')
     expect(filPolicyLink).not.toHaveClass('cds--side-nav__link--active')
-    expect(averageMonthlyValuesLink).not.toHaveClass('cds--side-nav__link--active')
-    expect(spreadsheetUploadLink).not.toHaveClass('cds--side-nav__link--active')
+    expect(averageMarketValuesLink).not.toHaveClass('cds--side-nav__link--active')
   })
 
   it('shows only the RTM navigation links when PROD RTM-only mode is enabled', () => {
     window.config = { VITE_LEXIS_PROD_RTM_ONLY: 'true' }
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
-        defaultRoute: '/admin/rtm/emslogamv',
+        defaultRoute: '/admin/rtm/emslogamv/upload',
         canPerform: (action: string) => action === '/lexisAgentAdmin',
       }),
     )
 
-    renderLayout('/admin/rtm/emslogamv')
+    renderLayout('/admin/rtm/emslogamv/upload')
 
-    expect(screen.getByRole('link', { name: /Average Monthly Values/i })).toHaveAttribute(
-      'href',
-      '/admin/rtm/emslogamv',
-    )
-    expect(screen.getByRole('link', { name: /AMV Spreadsheet Upload/i })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: /Average market values/i })).toHaveAttribute(
       'href',
       '/admin/rtm/emslogamv/upload',
     )
+    expect(screen.queryByRole('link', { name: /Average Monthly Values/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /Users & Access/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /^Uploads$/i })).not.toBeInTheDocument()
     expect(screen.queryByText('Provincial')).not.toBeInTheDocument()
@@ -396,7 +384,7 @@ describe('Layout shell', () => {
   })
 
   it('renders side-nav links with standard icons and collapsed labels', () => {
-    renderLayout('/admin/rtm/emslogamv')
+    renderLayout('/admin/rtm/emslogamv/upload')
 
     const sideNav = screen.getByRole('navigation', { name: 'Side navigation' })
 
@@ -411,18 +399,13 @@ describe('Layout shell', () => {
     ])
     expect(screen.queryByRole('link', { name: /Users & Access/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /^Uploads$/i })).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /Average Monthly Values/i })).toBeVisible()
-    expect(screen.getByRole('link', { name: /AMV Spreadsheet Upload/i })).toBeVisible()
+    expect(screen.getByRole('link', { name: /Average market values/i })).toBeVisible()
     const navLinks = sideNav.querySelectorAll('.csp-side-nav__link')
     const navIcons = sideNav.querySelectorAll('.csp-side-nav__link .csp-side-nav__icon svg')
     expect(navIcons).toHaveLength(navLinks.length)
-    expect(screen.getByRole('link', { name: /Average Monthly Values/i })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: /Average market values/i })).toHaveAttribute(
       'data-label',
-      'Average Monthly Values',
-    )
-    expect(screen.getByRole('link', { name: /AMV Spreadsheet Upload/i })).toHaveAttribute(
-      'data-label',
-      'AMV Spreadsheet Upload',
+      'Average market values',
     )
   })
 
@@ -563,7 +546,7 @@ describe('Layout shell', () => {
       'false',
     )
     expect(screen.queryByRole('link', { name: /Advertising List/i })).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /Average Monthly Values/i })).toBeVisible()
+    expect(screen.getByRole('link', { name: /Average market values/i })).toBeVisible()
 
     await userEvent.click(screen.getByRole('button', { name: 'Reports' }))
 

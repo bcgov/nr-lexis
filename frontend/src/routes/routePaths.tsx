@@ -463,7 +463,7 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
     // INTENTIONAL_LEGACY_DIVERGENCE(RTM_AMV_TRANSITIONAL_UPLOAD):
     // The workbook workflow is temporarily available beside the modern grid for client evaluation.
     path: '/admin/rtm/emslogamv/upload',
-    id: 'Admin - AMV Spreadsheet Upload',
+    id: 'Admin - Average market values',
     requiredActions: ['/lexisAgentAdmin'],
     element: (
       <Layout>

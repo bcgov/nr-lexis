@@ -384,6 +384,58 @@ class OracleRtmEmsLogAmvServiceTest {
   }
 
   @Test
+  void shouldApplyTheScreenMonthAndExpandTheGroupedPineColumn() throws IOException {
+    OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
+    LocalDate effectiveMonth = LocalDate.of(2026, 7, 1);
+    when(repository.existsExact(anyString(), eq("A"), eq("O"), eq(effectiveMonth)))
+        .thenReturn(true);
+    stubAppliedFixtureValues(repository);
+    OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository);
+
+    var preview = service.previewUpload(groupedPineWorkbook(), "2026-07-01");
+    RtmEmsLogAmvUploadResultDto upload =
+        service.upload(groupedPineWorkbook(), "2026-07-01");
+
+    assertThat(preview.status()).isEqualTo("accepted");
+    assertThat(preview.retrievalDate()).isEqualTo("2026-07-01");
+    assertThat(preview.updateDate()).isEqualTo("2026-07-01");
+    assertThat(preview.rows())
+        .extracting(row -> List.of(row.species(), row.growthIndicator()))
+        .containsExactly(
+            List.of("WH", "O"),
+            List.of("WH", "S"),
+            List.of("LO", "O"),
+            List.of("LO", "S"),
+            List.of("YE", "O"),
+            List.of("YE", "S"));
+    assertThat(upload.status()).isEqualTo("accepted");
+    assertThat(upload.attemptedRowCount()).isEqualTo(6);
+    assertThat(upload.uploadedRowCount()).isEqualTo(6);
+    verify(repository)
+        .upsertAtomically(
+            argThat(
+                targets ->
+                    targets.size() == 6
+                        && targets.stream()
+                            .map(
+                                target ->
+                                    List.of(target.species(), target.growthIndicator()))
+                            .toList()
+                            .equals(
+                                List.of(
+                                    List.of("WH", "O"),
+                                    List.of("WH", "S"),
+                                    List.of("LO", "O"),
+                                    List.of("LO", "S"),
+                                    List.of("YE", "O"),
+                                    List.of("YE", "S")))
+                        && targets.stream()
+                            .allMatch(
+                                target ->
+                                    target.effectiveDate().equals(effectiveMonth))));
+  }
+
+  @Test
   void shouldAcceptPreviewWhenTargetGrowthRowsExist() throws IOException {
     OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
     LocalDate updateDate = LocalDate.of(2026, 6, 1);
@@ -1009,6 +1061,14 @@ class OracleRtmEmsLogAmvServiceTest {
         "matrix.xlsx",
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         RtmEmsLogAmvWorkbookTestFixtures.matrixWorkbook());
+  }
+
+  private MultipartFile groupedPineWorkbook() throws IOException {
+    return new MockMultipartFile(
+        "file",
+        "grouped-pine.xlsx",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        RtmEmsLogAmvWorkbookTestFixtures.ambiguousPineWorkbook());
   }
 
   private MultipartFile singleBalsamWorkbook() throws IOException {

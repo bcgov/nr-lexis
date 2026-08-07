@@ -53,6 +53,7 @@ export type RtmEmsLogAmvUploadPreview = {
 }
 
 export type RtmEmsLogAmvUploadRequest = {
+  effectiveMonth: string
   file: File
 }
 
@@ -138,9 +139,13 @@ export const saveRtmEmsLogAmvBatch = async (
   return response.data ?? { status: 'failed', message: '', errors: [], rows: [] }
 }
 
-export const previewRtmEmsLogAmvUpload = async (file: File): Promise<RtmEmsLogAmvUploadPreview> => {
+export const previewRtmEmsLogAmvUpload = async (
+  file: File,
+  effectiveMonth: string,
+): Promise<RtmEmsLogAmvUploadPreview> => {
   const payload = new FormData()
   payload.append('file', file)
+  payload.append('effectiveMonth', effectiveMonth)
 
   const response = await apiService
     .getAxiosInstance()
@@ -170,6 +175,7 @@ export const uploadRtmEmsLogAmv = async (
 ): Promise<RtmEmsLogAmvUploadResult> => {
   const payload = new FormData()
   payload.append('file', request.file)
+  payload.append('effectiveMonth', request.effectiveMonth)
 
   const response = await apiService
     .getAxiosInstance()
