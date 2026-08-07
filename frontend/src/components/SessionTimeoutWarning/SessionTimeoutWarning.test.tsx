@@ -73,6 +73,7 @@ describe('SessionTimeoutWarning', () => {
   })
 
   afterEach(() => {
+    document.documentElement.removeAttribute('data-carbon-theme')
     vi.useRealTimers()
   })
 
@@ -87,15 +88,18 @@ describe('SessionTimeoutWarning', () => {
 
     const dialog = screen.getByRole('alertdialog', { name: 'You’re about to be logged out' })
     expect(dialog).toHaveAttribute('aria-modal', 'true')
-    expect(screen.getByText('5:00')).toHaveAttribute('aria-live', 'polite')
+    expect(screen.getByText('5:00').parentElement).toHaveAttribute('aria-live', 'polite')
     expect(document.querySelector('.lexis-session-timeout-warning__urgency-icon')).toHaveAttribute(
       'hidden',
     )
     expect(screen.queryByRole('button', { name: 'Close' })).not.toBeInTheDocument()
-    expect(document.querySelector('.lexis-session-timeout-warning')).toHaveClass('is-visible')
+    expect(document.querySelector('.lexis-session-timeout-warning__overlay')).toBeInTheDocument()
+    expect(dialog).toHaveFocus()
 
-    fireEvent.keyDown(document, { key: 'Escape' })
-    fireEvent.click(document.querySelector('.cds--modal') as HTMLElement)
+    fireEvent.keyDown(dialog, { key: 'Escape' })
+    fireEvent.click(
+      document.querySelector('.lexis-session-timeout-warning__overlay') as HTMLElement,
+    )
     expect(dialog).toBeInTheDocument()
 
     act(() => {
@@ -114,19 +118,35 @@ describe('SessionTimeoutWarning', () => {
     expect(onLogOut).toHaveBeenCalledTimes(1)
   })
 
-  it('returns focus to the launcher after the user stays logged in', () => {
+  it('applies the active Carbon theme to the portal', () => {
+    document.documentElement.setAttribute('data-carbon-theme', 'g100')
+
+    renderWarning()
+
+    expect(document.querySelector('.lexis-session-timeout-warning__overlay')).toHaveClass(
+      'cds--g100',
+    )
+  })
+
+  it('traps focus and returns it to the launcher after the user stays logged in', async () => {
     render(<FocusHarness />)
 
     const launcher = screen.getByRole('button', { name: 'Open session warning' })
     launcher.focus()
     fireEvent.click(launcher)
 
+    const dialog = screen.getByRole('alertdialog', { name: 'You’re about to be logged out' })
     const stayLoggedInButton = screen.getByRole('button', { name: 'Stay logged in' })
-    expect(document.activeElement).toBe(stayLoggedInButton)
+    const logOutButton = screen.getByRole('button', { name: 'Log out' })
+    expect(dialog).toHaveFocus()
 
-    fireEvent.click(stayLoggedInButton)
-    act(() => {
-      vi.runOnlyPendingTimers()
+    fireEvent.keyDown(dialog, { key: 'Tab', shiftKey: true })
+    expect(stayLoggedInButton).toHaveFocus()
+    fireEvent.keyDown(dialog, { key: 'Tab' })
+    expect(logOutButton).toHaveFocus()
+
+    await act(async () => {
+      fireEvent.click(stayLoggedInButton)
     })
 
     expect(document.activeElement).toBe(launcher)

@@ -165,47 +165,63 @@ test.describe('session timeout regression', () => {
     await expect(dialog.getByText('5:00', { exact: true })).toBeVisible()
     await expect(dialog.getByRole('button', { name: 'Close' })).toHaveCount(0)
     await expect(urgencyIcon).toBeHidden()
+    await expect(dialog).toBeFocused()
 
     await page.keyboard.press('Escape')
     await expect(dialog).toBeVisible()
 
     const layout = await dialog.evaluate((container) => {
-      const footer = container.querySelector('.cds--modal-footer')
-      const buttons = Array.from(container.querySelectorAll('.cds--modal-footer .cds--btn'))
-      const secondaryButton = container.querySelector('.cds--modal-footer .cds--btn--secondary')
+      const actions = container.querySelector('.lexis-session-timeout-warning__actions')
+      const body = container.querySelector('.lexis-session-timeout-warning__body')
+      const buttons = Array.from(
+        container.querySelectorAll('.lexis-session-timeout-warning__actions .cds--btn'),
+      )
+      const logOutButton = container.querySelector('.cds--btn--tertiary')
+      const stayLoggedInButton = container.querySelector('.cds--btn--primary')
       if (
-        !(footer instanceof HTMLElement) ||
-        !(secondaryButton instanceof HTMLElement) ||
+        !(actions instanceof HTMLElement) ||
+        !(body instanceof HTMLElement) ||
+        !(logOutButton instanceof HTMLElement) ||
+        !(stayLoggedInButton instanceof HTMLElement) ||
         buttons.length !== 2
       ) {
         throw new Error('Session timeout modal actions were not rendered.')
       }
 
       const containerBounds = container.getBoundingClientRect()
-      const footerBounds = footer.getBoundingClientRect()
+      const actionsBounds = actions.getBoundingClientRect()
       const buttonBounds = buttons.map((button) => button.getBoundingClientRect())
+      const containerStyle = getComputedStyle(container)
       return {
-        footerWithinContainer:
-          footerBounds.left >= containerBounds.left - 1 &&
-          footerBounds.right <= containerBounds.right + 1,
+        actionsWithinContainer:
+          actionsBounds.left >= containerBounds.left - 1 &&
+          actionsBounds.right <= containerBounds.right + 1,
         buttonsWithinContainer: buttonBounds.every(
           (button) =>
             button.left >= containerBounds.left - 1 && button.right <= containerBounds.right + 1,
         ),
         buttonWidths: buttonBounds.map((button) => button.width),
-        buttonBorderRadii: buttons.map((button) => getComputedStyle(button).borderRadius),
-        footerBackground: getComputedStyle(footer).backgroundColor,
-        secondaryButtonBackground: getComputedStyle(secondaryButton).backgroundColor,
+        actionsGap: getComputedStyle(actions).gap,
+        actionsMarginTop: getComputedStyle(actions).marginTop,
+        bodyColor: getComputedStyle(body.querySelector('p') as HTMLElement).color,
+        containerColor: containerStyle.color,
+        containerBackground: containerStyle.backgroundColor,
+        containerBorderRadius: containerStyle.borderRadius,
+        containerPadding: containerStyle.padding,
         containerWidth: containerBounds.width,
       }
     })
 
-    expect(layout.footerWithinContainer).toBe(true)
+    expect(layout.actionsWithinContainer).toBe(true)
     expect(layout.buttonsWithinContainer).toBe(true)
     expect(layout.buttonWidths.every((width) => width < layout.containerWidth / 2)).toBe(true)
-    expect(layout.buttonBorderRadii).toEqual(['4px', '4px'])
-    expect(layout.secondaryButtonBackground).toBe(layout.footerBackground)
-    expect(layout.secondaryButtonBackground).not.toBe('rgb(255, 255, 255)')
+    expect(layout.actionsGap).toBe('8px')
+    expect(layout.actionsMarginTop).toBe('24px')
+    expect(layout.bodyColor).toBe(layout.containerColor)
+    expect(layout.containerBackground).not.toBe('rgb(255, 255, 255)')
+    expect(layout.containerBorderRadius).toBe('0px')
+    expect(layout.containerPadding).toBe('24px')
+    expect(layout.containerWidth).toBe(416)
 
     await page.clock.fastForward(SESSION_IDLE_WARNING_DURATION_MS - URGENT_COUNTDOWN_DURATION_MS)
 
