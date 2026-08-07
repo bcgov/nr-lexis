@@ -59,9 +59,9 @@ describe('user-preference-service', () => {
     expect(resolveDefaultZoneRegionIds(zone, availableRegionIds)).toEqual(expectedRegionIds)
   })
 
-  it('falls back to every available region when no usable preference exists', () => {
-    expect(resolveDefaultZoneRegionIds(null, ['1903', '1904'])).toEqual(['1903', '1904'])
-    expect(resolveDefaultZoneRegionIds('RCO', ['1903', '1904'])).toEqual(['1903', '1904'])
+  it('leaves regions unfiltered when no usable preference exists', () => {
+    expect(resolveDefaultZoneRegionIds(null, ['1903', '1904'])).toEqual([])
+    expect(resolveDefaultZoneRegionIds('RCO', ['1903', '1904'])).toEqual([])
   })
 
   it('notifies active consumers after a preference is saved', async () => {

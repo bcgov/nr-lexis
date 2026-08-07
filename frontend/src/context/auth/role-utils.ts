@@ -22,3 +22,8 @@ export const hasRole = (roles: string[] | null | undefined, role: string): boole
     return normalizedRole === expectedRole || normalizedRole === `LEXIS_${expectedRole}`
   })
 }
+
+export const hasProvincialStaffRole = (roles: string[] | null | undefined): boolean =>
+  ['ADMIN', 'READ_ONLY', 'APPLICATION_APPROVER', 'EXEMPTION_APPROVER'].some((role) =>
+    hasRole(roles, role),
+  )

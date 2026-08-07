@@ -68,6 +68,7 @@ public class LexisApiAuthorizationCustomizer
         case PERMIT_ALL -> authorize.requestMatchers(rule.method(), rule.patternsArray()).permitAll();
         case ADMIN_AUTHORITY ->
             authorize.requestMatchers(rule.patternsArray()).hasAuthority("LEXIS_ADMIN");
+        case PROVINCIAL_STAFF_ROLE -> authorizeProvincialStaffRoles(authorize, rule.patternsArray());
         case KNOWN_ROLE -> authorizeKnownRoles(authorize, rule);
         case ACTION -> authorizeAction(authorize, rule);
         case ANY_ACTION -> authorizeAnyAction(authorize, rule);
@@ -82,6 +83,7 @@ public class LexisApiAuthorizationCustomizer
           authorize) {
     authorize.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll();
     authorize.requestMatchers(HttpMethod.GET, HEALTH_PROBE_PATTERNS).permitAll();
+    authorizeProvincialStaffRoles(authorize, "/api/lexis/session/preferences");
     authorizeKnownRoles(authorize, PROD_RTM_ONLY_SESSION_PATTERNS);
     authorizeFixedAction(
         authorize, HttpMethod.GET, ACTION_LEXIS_AGENT_ADMIN, PROD_RTM_ONLY_GET_PATTERNS);
@@ -107,6 +109,19 @@ public class LexisApiAuthorizationCustomizer
             (authentication, context) ->
                 new AuthorizationDecision(
                     authorizationService.hasKnownRole(getAuthorities(authentication.get()))));
+  }
+
+  private void authorizeProvincialStaffRoles(
+      AuthorizeHttpRequestsConfigurer<HttpSecurity>.AuthorizationManagerRequestMatcherRegistry
+          authorize,
+      String... patterns) {
+    authorize
+        .requestMatchers(patterns)
+        .access(
+            (authentication, context) ->
+                new AuthorizationDecision(
+                    authorizationService.hasProvincialStaffRole(
+                        getAuthorities(authentication.get()))));
   }
 
   private void authorizeAction(

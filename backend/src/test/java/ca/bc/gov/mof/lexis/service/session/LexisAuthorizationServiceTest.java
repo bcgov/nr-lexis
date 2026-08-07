@@ -158,6 +158,27 @@ class LexisAuthorizationServiceTest {
   }
 
   @Test
+  void userPreferencesShouldBeLimitedToProvincialStaffRoles() {
+    LexisAuthorizationService service =
+        createService(
+            "LEXIS_PROVINCIAL_SUBMITTER",
+            Map.of(
+                "LEXIS_ADMIN", List.of("*"),
+                "LEXIS_READ_ONLY", List.of("/applicationSearch"),
+                "LEXIS_APPLICATION_APPROVER", List.of("/applicationsReview"),
+                "LEXIS_EXEMPTION_APPROVER", List.of("/exemptionSearch"),
+                "LEXIS_PROVINCIAL_SUBMITTER", List.of("/summary")));
+
+    assertThat(service.hasProvincialStaffRole(List.of("LEXIS_ADMIN"))).isTrue();
+    assertThat(service.hasProvincialStaffRole(List.of("LEXIS_READ_ONLY"))).isTrue();
+    assertThat(service.hasProvincialStaffRole(List.of("LEXIS_APPLICATION_APPROVER"))).isTrue();
+    assertThat(service.hasProvincialStaffRole(List.of("LEXIS_EXEMPTION_APPROVER"))).isTrue();
+    assertThat(service.hasProvincialStaffRole(List.of("LEXIS_PROVINCIAL_SUBMITTER"))).isFalse();
+    assertThat(service.hasProvincialStaffRole(List.of("LEXIS_PROVINCIAL_SUBMITTER_00012345")))
+        .isFalse();
+  }
+
+  @Test
   void famDelegatedAdministrationShouldNotBeAnApplicationRole() {
     LexisAuthorizationService service =
         createService(

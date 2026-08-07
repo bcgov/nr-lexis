@@ -210,7 +210,7 @@ describe('Provincial Offer Search Actions', () => {
     })
   })
 
-  it('defaults listing to date and all regions like legacy', async () => {
+  it('defaults the listing date without applying a region filter', async () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => false }))
     mockedFetchProvincialOfferOptions.mockResolvedValueOnce({
       regions: [
@@ -238,9 +238,8 @@ describe('Provincial Offer Search Actions', () => {
       expect(screen.getByLabelText('Listing to date')).toHaveValue('2026-07-11')
     })
     expect(
-      screen.getByRole('combobox', { name: /^Region\s*Total items selected:\s*2/ }),
+      screen.getByRole('combobox', { name: /^Region\s*Total items selected:\s*0/ }),
     ).toBeVisible()
-    expect(screen.queryByRole('list', { name: 'Selected regions' })).not.toBeInTheDocument()
     expect(mockedSearchProvincialOffers).not.toHaveBeenCalled()
 
     await userEvent.click(screen.getByRole('button', { name: 'Search' }))
@@ -250,7 +249,7 @@ describe('Provincial Offer Search Actions', () => {
         expect.objectContaining({
           filters: expect.objectContaining({
             listingToDate: '2026-07-11',
-            region: ['11', '22'],
+            region: [],
           }),
         }),
         expect.objectContaining({ knownTotal: expect.any(Number) }),
@@ -319,7 +318,7 @@ describe('Provincial Offer Search Actions', () => {
           filters: expect.objectContaining({
             applicationNumber: '',
             listingToDate: '2026-07-11',
-            region: ['11'],
+            region: [],
           }),
         }),
         expect.objectContaining({ knownTotal: expect.any(Number) }),

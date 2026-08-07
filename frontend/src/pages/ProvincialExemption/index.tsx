@@ -38,7 +38,7 @@ import type {
   ProvincialExemptionSearchSortField,
 } from '@/interfaces/ProvincialExemptionSearch'
 import { useAuth } from '@/context/auth/useAuth'
-import { hasProvincialSubmitterRole } from '@/context/auth/role-utils'
+import { hasProvincialStaffRole, hasProvincialSubmitterRole } from '@/context/auth/role-utils'
 import { hasInvalidIsoDateValue, isValidIsoDate } from '@/pages/shared/create-form-utils'
 import {
   buildPageDataCacheKey,
@@ -73,10 +73,7 @@ import { useSearchFilterDraft } from '@/pages/shared/useSearchFilterDraft'
 import { usePersistedSearchParams } from '@/pages/shared/usePersistedSearchParams'
 import { useDefaultRegionPreference } from '@/pages/shared/useDefaultRegionPreference'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
-import {
-  loadSearchWithDeferredTotal,
-  prefetchAdjacentSearchPages,
-} from '@/pages/shared/deferred-search-total'
+import { loadSearchWithDeferredTotal } from '@/pages/shared/deferred-search-total'
 import {
   countProvincialExemptions,
   searchProvincialExemptions,
@@ -228,7 +225,9 @@ const ProvincialExemptionPage = () => {
   const { capabilities, canPerform } = useAuth()
   const [searchParams, setSearchParams] = usePersistedSearchParams('provincial-exemptions')
   const [regionOptions, setRegionOptions] = useState<IdTextOption[]>([])
-  const { defaultRegion: defaultZone, preferenceLoading } = useDefaultRegionPreference()
+  const { defaultRegion: defaultZone, preferenceLoading } = useDefaultRegionPreference(
+    hasProvincialStaffRole(capabilities.roles),
+  )
   const [exemptionTypeOptions, setExemptionTypeOptions] = useState<SearchOption[]>([])
   const [exemptionStatusOptions, setExemptionStatusOptions] = useState<SearchOption[]>([])
   const [optionsLoading, setOptionsLoading] = useState(true)
@@ -372,14 +371,6 @@ const ProvincialExemptionPage = () => {
             buildSearchTotalCacheKey(request.filters),
             cachedResults.page.totalElements,
           )
-          prefetchAdjacentSearchPages({
-            pageId: 'provincial-exemption-search',
-            principal: capabilities?.principal,
-            request,
-            response: cachedResults,
-            search: searchProvincialExemptions,
-            onError: console.error,
-          })
           setResults(cachedResults)
           setLoading(false)
           setErrorMessage('')
@@ -412,14 +403,6 @@ const ProvincialExemptionPage = () => {
         ) => {
           if (totalIsExact && setPageDataCache(pageCacheKey, response, pageCacheGeneration)) {
             setCachedSearchTotal(totalCacheRef.current, totalCacheKey, response.page.totalElements)
-            prefetchAdjacentSearchPages({
-              pageId: 'provincial-exemption-search',
-              principal: capabilities?.principal,
-              request,
-              response,
-              search: searchProvincialExemptions,
-              onError: console.error,
-            })
           }
           queueMicrotask(() => {
             if (isLatestRequest()) {
@@ -427,14 +410,24 @@ const ProvincialExemptionPage = () => {
             }
           })
         }
-        const { response, totalIsExact } = await loadSearchWithDeferredTotal({
+        const { response, totalIsExact, deferredResponse } = await loadSearchWithDeferredTotal({
           request,
           cachedTotal,
           search: searchProvincialExemptions,
           count: countProvincialExemptions,
+          deferCount: true,
         })
         if (isLatestRequest()) {
           commitSearchResponse(response, totalIsExact)
+        }
+        if (deferredResponse) {
+          void deferredResponse
+            .then((exactResponse) => {
+              if (isLatestRequest()) {
+                commitSearchResponse(exactResponse, true)
+              }
+            })
+            .catch(console.error)
         }
       } catch (error) {
         if (isLatestRequest()) {

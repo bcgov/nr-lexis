@@ -56,14 +56,11 @@ export const resolveDefaultZoneRegionIds = (
   availableRegionIds: readonly string[],
 ): string[] => {
   if (!defaultZone) {
-    return [...availableRegionIds]
+    return []
   }
 
   const preferredRegionIds = new Set(DEFAULT_ZONE_REGION_IDS[defaultZone])
-  const matchingRegionIds = availableRegionIds.filter((regionId) =>
-    preferredRegionIds.has(regionId),
-  )
-  return matchingRegionIds.length > 0 ? matchingRegionIds : [...availableRegionIds]
+  return availableRegionIds.filter((regionId) => preferredRegionIds.has(regionId))
 }
 
 export const subscribeToUserPreferences = (listener: UserPreferencesListener): (() => void) => {

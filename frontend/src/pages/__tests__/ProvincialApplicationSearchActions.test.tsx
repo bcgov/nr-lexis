@@ -313,7 +313,7 @@ describe('Provincial Application Search Actions', () => {
           filters: expect.objectContaining({
             receivedFromDate: '',
             receivedToDate: '',
-            region: ['11'],
+            region: [],
           }),
         }),
         expect.any(Object),
@@ -478,16 +478,15 @@ describe('Provincial Application Search Actions', () => {
     })
   })
 
-  it('defaults all regions without searching when no search has been applied', async () => {
+  it('leaves regions unfiltered without searching when no search has been applied', async () => {
     renderPage('/provincial/application')
     await waitFor(() => {
       expect(mockedFetchProvincialApplicationOptions).toHaveBeenCalledOnce()
     })
 
     expect(
-      await screen.findByRole('combobox', { name: /^Region\s*Total items selected:\s*1/ }),
+      await screen.findByRole('combobox', { name: /^Region\s*Total items selected:\s*0/ }),
     ).toBeVisible()
-    expect(screen.queryByRole('list', { name: 'Selected regions' })).not.toBeInTheDocument()
     expect(mockedSearchProvincialApplications).not.toHaveBeenCalled()
     const resultsTable = screen.getByRole('region', { name: 'Search results table', hidden: true })
     expect(resultsTable.closest('[hidden]')).toHaveStyle({ display: 'none' })

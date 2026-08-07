@@ -812,13 +812,12 @@ describe('Provincial Review Action State Smoke', () => {
     expect(await screen.findByText('Updated application 1000123.')).toBeInTheDocument()
   }, 15000)
 
-  it('defaults to all active regions but waits for an explicit search', async () => {
+  it('leaves regions unfiltered and waits for an explicit search', async () => {
     renderPage('/provincial/review')
 
     expect(
-      await screen.findByRole('combobox', { name: /^Region\s*Total items selected:\s*2/ }),
+      await screen.findByRole('combobox', { name: /^Region\s*Total items selected:\s*0/ }),
     ).toBeVisible()
-    expect(screen.queryByRole('list', { name: 'Selected regions' })).not.toBeInTheDocument()
     expect(mockedSearchApplicationReviews).not.toHaveBeenCalled()
     const reviewQueue = screen.getByRole('region', { name: 'Review queue', hidden: true })
     expect(reviewQueue.closest('[hidden]')).toHaveStyle({ display: 'none' })
@@ -829,7 +828,7 @@ describe('Provincial Review Action State Smoke', () => {
     expect(mockedSearchApplicationReviews).toHaveBeenCalledWith(
       expect.objectContaining({
         filters: expect.objectContaining({
-          region: ['11', '12'],
+          region: [],
         }),
         pageSize: 100,
       }),

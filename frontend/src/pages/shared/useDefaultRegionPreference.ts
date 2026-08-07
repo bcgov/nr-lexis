@@ -5,7 +5,9 @@ import {
   type DefaultZone,
 } from '@/service/user-preference-service'
 
-export const useDefaultRegionPreference = (): {
+export const useDefaultRegionPreference = (
+  enabled = true,
+): {
   defaultRegion: DefaultZone | null
   preferenceLoading: boolean
 } => {
@@ -13,6 +15,10 @@ export const useDefaultRegionPreference = (): {
   const [preferenceLoading, setPreferenceLoading] = useState(true)
 
   useEffect(() => {
+    if (!enabled) {
+      return undefined
+    }
+
     let ignoreResult = false
     let receivedSavedPreference = false
     const unsubscribe = subscribeToUserPreferences((preferences) => {
@@ -28,7 +34,7 @@ export const useDefaultRegionPreference = (): {
         }
       })
       .catch(() => {
-        // Preference loading is optional; tables fall back to all available areas.
+        // Preference loading is optional; searches remain unfiltered when it is unavailable.
       })
       .finally(() => {
         if (!ignoreResult) {
@@ -40,7 +46,9 @@ export const useDefaultRegionPreference = (): {
       ignoreResult = true
       unsubscribe()
     }
-  }, [])
+  }, [enabled])
 
-  return { defaultRegion, preferenceLoading }
+  return enabled
+    ? { defaultRegion, preferenceLoading }
+    : { defaultRegion: null, preferenceLoading: false }
 }

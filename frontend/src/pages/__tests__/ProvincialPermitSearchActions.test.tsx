@@ -140,7 +140,7 @@ describe('Provincial Permit Search Actions', () => {
     )
   })
 
-  it('defaults all regions without searching when no search has been applied', async () => {
+  it('leaves regions unfiltered without searching when no search has been applied', async () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => false }))
 
     renderPage('/provincial/permit')
@@ -149,9 +149,8 @@ describe('Provincial Permit Search Actions', () => {
     })
 
     expect(
-      await screen.findByRole('combobox', { name: /^Region\s*Total items selected:\s*1/ }),
+      await screen.findByRole('combobox', { name: /^Region\s*Total items selected:\s*0/ }),
     ).toBeVisible()
-    expect(screen.queryByRole('list', { name: 'Selected regions' })).not.toBeInTheDocument()
     expect(mockedSearchProvincialPermits).not.toHaveBeenCalled()
     const resultsTable = screen.getByRole('region', { name: 'Search results table', hidden: true })
     expect(resultsTable.closest('[hidden]')).toHaveStyle({ display: 'none' })
@@ -309,7 +308,7 @@ describe('Provincial Permit Search Actions', () => {
         screen.getByTestId('permit-search-location').textContent ?? '',
       )
       expect(currentParams.has('invoiceNumber')).toBe(false)
-      expect(currentParams.get('region')).toBe('11')
+      expect(currentParams.has('region')).toBe(false)
       expect(currentParams.get('sortField')).toBe('permitNumber')
       expect(currentParams.get('sortDirection')).toBe('desc')
       expect(currentParams.get('page')).toBe('1')

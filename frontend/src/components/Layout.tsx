@@ -23,7 +23,11 @@ import {
 } from '@carbon/icons-react'
 import { HeaderMenuButton, IconButton, SkipToContent } from '@carbon/react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
-import { hasProvincialSubmitterRole, hasRole } from '@/context/auth/role-utils'
+import {
+  hasProvincialStaffRole,
+  hasProvincialSubmitterRole,
+  hasRole,
+} from '@/context/auth/role-utils'
 import OptimisticConflictModal from '@/components/OptimisticConflictModal'
 import UserRegionPreference from '@/components/UserRegionPreference'
 import { isProdRtmOnlyPathAllowed } from '@/config/features'
@@ -763,7 +767,9 @@ function Layout({ children }: LayoutProps) {
                 )}
               </div>
             </div>
-            <UserRegionPreference active={isProfileOpen} />
+            {hasProvincialStaffRole(capabilities.roles) && (
+              <UserRegionPreference active={isProfileOpen} />
+            )}
           </div>
 
           <hr className="profile-panel__divider" role="separator" />

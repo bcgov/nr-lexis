@@ -6,7 +6,10 @@ import { useAuth } from '@/context/auth/useAuth'
 import { useDefaultRegionPreference } from '@/pages/shared/useDefaultRegionPreference'
 import type { ProvincialExemptionSearchResponse } from '@/interfaces/ProvincialExemptionSearch'
 import ProvincialExemptionPage from '@/pages/ProvincialExemption'
-import { searchProvincialExemptions } from '@/service/provincial-exemption-search-service'
+import {
+  countProvincialExemptions,
+  searchProvincialExemptions,
+} from '@/service/provincial-exemption-search-service'
 import { fetchProvincialExemptionOptions } from '@/service/search-options-service'
 import {
   approveExemptions,
@@ -44,6 +47,7 @@ vi.mock('@/service/record-version-service', () => ({
 const mockedUseAuth = vi.mocked(useAuth)
 const mockedUseDefaultRegionPreference = vi.mocked(useDefaultRegionPreference)
 const mockedSearchProvincialExemptions = vi.mocked(searchProvincialExemptions)
+const mockedCountProvincialExemptions = vi.mocked(countProvincialExemptions)
 const mockedFetchProvincialExemptionOptions = vi.mocked(fetchProvincialExemptionOptions)
 const mockedApproveExemptions = vi.mocked(approveExemptions)
 const mockedSendExemptionApprovalEmails = vi.mocked(sendExemptionApprovalEmails)
@@ -759,7 +763,7 @@ describe('Provincial Exemption Search Actions', () => {
     expect(screen.getByRole('link', { name: 'EX-2002' })).toBeInTheDocument()
   })
 
-  it('defaults approver filters and all visible regions without using the session region', async () => {
+  it('defaults approver filters without applying a region when no preference exists', async () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
         capabilities: createTestCapabilities({
@@ -780,9 +784,8 @@ describe('Provincial Exemption Search Actions', () => {
     expect(resultsTable.closest('[hidden]')).toHaveStyle({ display: 'none' })
     expect(resultsTable).not.toBeVisible()
     expect(
-      await screen.findByRole('combobox', { name: /^Region\s*Total items selected:\s*1/ }),
+      await screen.findByRole('combobox', { name: /^Region\s*Total items selected:\s*0/ }),
     ).toBeVisible()
-    expect(screen.queryByRole('list', { name: 'Selected regions' })).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Search' }))
     await waitFor(() => {
@@ -791,7 +794,7 @@ describe('Provincial Exemption Search Actions', () => {
           filters: expect.objectContaining({
             exemptionStatusCode: 'NEW',
             exemptionTypeCode: 'M',
-            region: ['11'],
+            region: [],
           }),
         }),
         expect.objectContaining({ knownTotal: expect.any(Number) }),
@@ -807,6 +810,51 @@ describe('Provincial Exemption Search Actions', () => {
         expect.any(Object),
       )
     })
+  })
+
+  it('renders a full result page without waiting for the exact count', async () => {
+    const content = Array.from({ length: 10 }, (_, index) => ({
+      exemptionNumber: `EX-${index + 1}`,
+      type: 'Section 1',
+      typeCode: 'SECTION_1',
+      status: 'New',
+      statusCode: 'NEW',
+      applicantClientNumber: '11111111',
+      ownerClientNumber: '22222222',
+      approvedVolume: 100,
+      balanceRemaining: 100,
+      listingDate: '2026-01-10',
+      expiryDate: '2026-12-31',
+      region: '11',
+      canApprove: true,
+      isLocked: false,
+      canViewExemption: true,
+    }))
+    mockedSearchProvincialExemptions.mockResolvedValue({
+      content,
+      page: {
+        number: 0,
+        size: 10,
+        totalElements: 11,
+        totalPages: 2,
+      },
+    })
+    let resolveCount!: (total: number) => void
+    mockedCountProvincialExemptions.mockImplementation(
+      () =>
+        new Promise<number>((resolve) => {
+          resolveCount = resolve
+        }),
+    )
+
+    renderPage()
+
+    expect(await screen.findByText('EX-1')).toBeVisible()
+    expect(mockedCountProvincialExemptions).toHaveBeenCalledOnce()
+    expect(mockedSearchProvincialExemptions).toHaveBeenCalledOnce()
+
+    resolveCount(809)
+    await waitFor(() => expect(mockedSearchProvincialExemptions).toHaveBeenCalledOnce())
   })
 
   it('uses the saved region to preselect exemption search areas', async () => {
@@ -948,7 +996,7 @@ describe('Provincial Exemption Search Actions', () => {
           filters: expect.objectContaining({
             approvalFromDate: '',
             approvalToDate: '',
-            region: ['11'],
+            region: [],
           }),
         }),
         expect.any(Object),

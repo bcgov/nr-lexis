@@ -697,6 +697,24 @@ describe('Layout shell', () => {
     )
   })
 
+  it('does not offer region preferences to provincial submitters', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({
+          principal: 'bceidbusiness\\submitter_00012345',
+          roles: ['LEXIS_PROVINCIAL_SUBMITTER'],
+          forestClientNumber: '00012345',
+        }),
+      }),
+    )
+
+    renderLayout('/provincial/application')
+    await userEvent.click(screen.getByRole('button', { name: 'Open profile panel' }))
+
+    expect(screen.queryByRole('combobox', { name: 'Default region' })).not.toBeInTheDocument()
+    expect(mockedFetchUserPreferences).not.toHaveBeenCalled()
+  })
+
   it('returns focus to the profile toggle when the panel is dismissed by keyboard', async () => {
     renderLayout('/admin/rtm/emslogamv')
 

@@ -27,6 +27,7 @@ type KnownTotalSearchOptions = {
 type DeferredSearchResult<TResponse extends PagedSearchResponse> = {
   response: TResponse
   totalIsExact: boolean
+  deferredResponse?: Promise<TResponse>
 }
 
 type SearchPrefetchConfig<
@@ -82,11 +83,13 @@ export const loadSearchWithDeferredTotal = async <
   cachedTotal,
   search,
   count,
+  deferCount = false,
 }: {
   request: TRequest
   cachedTotal?: number
   search: (request: TRequest, options?: KnownTotalSearchOptions) => Promise<TResponse>
   count: (request: TRequest) => Promise<number>
+  deferCount?: boolean
 }): Promise<DeferredSearchResult<TResponse>> => {
   if (cachedTotal !== undefined) {
     const response = await search(request, { knownTotal: cachedTotal })
@@ -110,6 +113,14 @@ export const loadSearchWithDeferredTotal = async <
     return {
       response: withTotal(response, inferredTotal),
       totalIsExact: true,
+    }
+  }
+
+  if (deferCount) {
+    return {
+      response,
+      totalIsExact: false,
+      deferredResponse: count(request).then((total) => withTotal(response, total)),
     }
   }
 
