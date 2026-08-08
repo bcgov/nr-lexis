@@ -492,6 +492,38 @@ const UploadValidationMessage = ({
   )
 }
 
+const RejectedUploadFile = ({
+  fileName,
+  issue,
+  onClear,
+}: {
+  fileName: string
+  issue: string
+  onClear: () => void
+}) => (
+  <div
+    className="rtm-amv-rejected-file"
+    role="alert"
+    aria-label="Rejected average monthly values upload file"
+  >
+    <div className="rtm-amv-rejected-file__row">
+      <span className="rtm-amv-rejected-file__name">{fileName}</span>
+      <span className="rtm-amv-rejected-file__actions">
+        <ErrorFilled className="rtm-amv-rejected-file__error-icon" size={12} aria-hidden="true" />
+        <button
+          type="button"
+          className="rtm-amv-rejected-file__remove"
+          aria-label="Clear selected file"
+          onClick={onClear}
+        >
+          <Close size={12} aria-hidden="true" />
+        </button>
+      </span>
+    </div>
+    <p className="rtm-amv-rejected-file__issue">{issue}</p>
+  </div>
+)
+
 const buildValidationIssueRows = (
   details: string[],
 ): Array<{ detail: string; key: string; severity: 'Error' }> => {
@@ -1083,6 +1115,11 @@ const RtmEmsLogAmvUploadPage = () => {
   ]
     .filter(Boolean)
     .join(' ')
+  const rejectedFileIssue =
+    uploadError ||
+    (previewResult && previewResult.status !== 'accepted' && previewResult.errors.length <= 1
+      ? (previewResult.errors[0] ?? previewResult.message)
+      : '')
   return (
     <Grid fullWidth className="default-grid admin-upload-fspts-page rtm-amv-upload-page">
       <Column sm={4} md={8} lg={16} className="admin-upload-fspts-header rtm-amv-upload-header">
@@ -1188,6 +1225,12 @@ const RtmEmsLogAmvUploadPage = () => {
                       description={`Validating ${selectedUploadFile.name}`}
                     />
                   </div>
+                ) : rejectedFileIssue ? (
+                  <RejectedUploadFile
+                    fileName={selectedUploadFile.name}
+                    issue={rejectedFileIssue}
+                    onClear={clearUploadState}
+                  />
                 ) : (
                   <div
                     className="admin-upload-file-chip"
@@ -1209,7 +1252,7 @@ const RtmEmsLogAmvUploadPage = () => {
                   </div>
                 ))}
 
-              {!isPreviewing && (
+              {!isPreviewing && !rejectedFileIssue && (
                 <UploadValidationStatus
                   uploadError={uploadError}
                   previewResult={previewResult}

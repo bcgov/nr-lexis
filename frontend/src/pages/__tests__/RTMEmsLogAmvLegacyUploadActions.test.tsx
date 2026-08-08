@@ -72,6 +72,52 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     expect(mockedPreviewUpload).not.toHaveBeenCalled()
   })
 
+  it('shows one server validation issue in a compact rejected-file row', async () => {
+    mockedPreviewUpload.mockResolvedValue({
+      status: 'validation_failed',
+      fileName: 'Filename.xlsx',
+      fileSize: 1,
+      message: 'Upload template validation failed.',
+      rowCount: 0,
+      errors: ['The file has no numeric values. Please check your file and try again.'],
+      warnings: [],
+      rows: [],
+    })
+    render(<RtmEmsLogAmvUploadPage />)
+    const workbook = new File([new Uint8Array([1])], 'Filename.xlsx', {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    })
+
+    await userEvent.upload(
+      screen.getByLabelText('Average monthly values upload spreadsheet'),
+      workbook,
+    )
+
+    const rejectedFile = await screen.findByRole('alert', {
+      name: 'Rejected average monthly values upload file',
+    })
+    expect(within(rejectedFile).getByText('Filename.xlsx')).toBeVisible()
+    expect(
+      within(rejectedFile).getByText(
+        'The file has no numeric values. Please check your file and try again.',
+      ),
+    ).toBeVisible()
+    expect(screen.queryByText('1 validation issue found')).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('table', { name: 'Upload validation issues' }),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('tablist', { name: 'Species' })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Download template' })).toBeVisible()
+
+    await userEvent.click(within(rejectedFile).getByRole('button', { name: 'Clear selected file' }))
+
+    expect(
+      screen.queryByRole('alert', { name: 'Rejected average monthly values upload file' }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByText('Drag and drop your file here or click to upload')).toBeVisible()
+    expect(mockedSaveBatch).not.toHaveBeenCalled()
+  })
+
   it('shows the compact filename loading row while the spreadsheet is validated', async () => {
     mockedPreviewUpload.mockImplementation(() => new Promise(() => undefined))
     render(<RtmEmsLogAmvUploadPage />)

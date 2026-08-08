@@ -2463,6 +2463,7 @@ legend.cds--label {
 .rtm-amv-upload-page .rtm-amv-upload-card .admin-upload-file-chip,
 .rtm-amv-upload-page .rtm-amv-upload-card .rtm-amv-upload-loading,
 .rtm-amv-upload-page .rtm-amv-upload-card .rtm-amv-uploaded-file,
+.rtm-amv-upload-page .rtm-amv-upload-card .rtm-amv-rejected-file,
 .rtm-amv-upload-page .rtm-amv-upload-card .admin-upload-validation {
   max-inline-size: 29rem;
 }
@@ -2516,6 +2517,72 @@ legend.cds--label {
   white-space: nowrap;
   border: 0;
   clip-path: inset(50%);
+}
+
+.rtm-amv-rejected-file {
+  margin-block-start: 0.75rem;
+  color: var(--fds-text-primary, var(--cds-text-primary));
+  background: var(--fds-background, var(--cds-layer));
+  border: 1px solid var(--cds-support-error);
+}
+
+.rtm-amv-rejected-file__row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-block-size: 2rem;
+  padding: 0.5rem 0.75rem 0.25rem;
+}
+
+.rtm-amv-rejected-file__name {
+  min-inline-size: 0;
+  overflow: hidden;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rtm-amv-rejected-file__actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.25rem;
+  margin-inline-start: auto;
+}
+
+.rtm-amv-rejected-file__error-icon {
+  color: var(--cds-support-error);
+}
+
+.rtm-amv-rejected-file__remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 1.25rem;
+  block-size: 1.25rem;
+  padding: 0;
+  color: var(--cds-icon-primary);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.rtm-amv-rejected-file__remove:hover {
+  background: var(--cds-layer-hover);
+}
+
+.rtm-amv-rejected-file__remove:focus-visible {
+  outline: 2px solid var(--fds-focus, var(--cds-focus));
+  outline-offset: -2px;
+}
+
+.rtm-amv-rejected-file__issue {
+  margin: 0;
+  padding: 0 0.75rem 0.5rem;
+  color: var(--cds-text-error);
+  font-size: 0.75rem;
+  line-height: 1rem;
 }
 
 .rtm-amv-uploaded-file {
