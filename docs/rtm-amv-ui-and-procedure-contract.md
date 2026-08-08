@@ -7,8 +7,8 @@ not exposed while this workflow is under review. The active workflow preserves t
 
 ## Logical AMV review
 
-- The page shows one species tab at a time with current-month and upcoming-month columns. It has
-  no old-growth/second-growth control.
+- The page shows one species tab at a time with last-entered and upcoming-month columns. It has no
+  old-growth/second-growth control.
 - The displayed value is the old-growth (`O`) baseline. When saved, the same value is written to
   both old growth (`O`) and second growth (`S`).
 - User-facing copy intentionally describes one monthly value only; it does not expose the
@@ -50,7 +50,8 @@ only and does not misrepresent it as audit metadata.
   re-uploaded and saved as many times as needed until it becomes the current month.
 - Current and previous months are never editable. At month rollover, the page advances to the new
   immediately upcoming month and returns to the empty upload state.
-- The review compares the upcoming values with the current month's values.
+- The review compares the upcoming values with the latest earlier values in the table. That
+  comparison month is not necessarily the immediately previous month.
 - Values cannot be cleared: `AVG_MARKET_PRICE` is `NOT NULL` and the approved RTM contract has no
   delete operation.
 - A blank upcoming value is omitted from the batch. When the current month had a value, the blank
@@ -90,11 +91,17 @@ runs in PROD RTM-only mode. The older direct `/upload` endpoint remains for comp
 not called by this page because it would re-read the original workbook and discard review edits.
 
 The backend scans the workbook for malware, validates its shape, dates, dimensions, and values,
-uses the screen-selected effective month, and returns the union of current-month and uploaded
-logical cells. This union allows the client to show both missing-upcoming and new-combination
-warnings. Final submission expands the reviewed values to direct `MERGE` targets and writes them
-in one Spring transaction. It does not call the legacy row procedures. If any target is not
-applied or the database write fails, the complete batch transaction rolls back.
+uses the page's fixed upcoming effective month, and returns the union of the latest earlier and
+uploaded logical cells. This union allows the client to show both missing-upcoming and
+new-combination warnings. Final submission expands the reviewed values to direct `MERGE` targets
+and writes them in one Spring transaction. It does not call the legacy row procedures. If any
+target is not applied or the database write fails, the complete batch transaction rolls back.
+
+After an accepted save, the page removes the upload card, shows the saved confirmation, and keeps
+the reviewed values editable. Save and Cancel remain keyboard-focusable but are announced as
+unavailable until a value changes; the helper text is linked through `aria-describedby`. The page
+can display the current session's save time and authenticated principal, but that metadata cannot
+be reconstructed after navigation because the legacy table has no audit columns.
 
 ## Batch audit event
 

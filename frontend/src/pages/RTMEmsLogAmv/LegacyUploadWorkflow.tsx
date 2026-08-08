@@ -42,11 +42,17 @@ import {
   type RtmEmsLogAmvUploadResult,
 } from '@/service/rtm-emslogamv-service'
 import { validateUploadFileSize } from '@/components/uploads/uploadQueueHelpers'
-import { formatBusinessIsoDate } from '@/utils/date'
+import { formatBusinessIsoDate, LEXIS_BUSINESS_TIME_ZONE } from '@/utils/date'
 
 type PendingUploadValidation = {
   fileName: string
   fileSize: number
+}
+
+type SavedUploadState = {
+  savedAt: string
+  savedBy: string
+  valueCount: number
 }
 
 type RtmUploadStep = 'upload' | 'review'
@@ -143,9 +149,28 @@ const formatEffectiveStartDate = (dateValue: string): string => {
   return `${month} 1, ${year}`
 }
 
-const createAcceptedUploadMessage = (previewResult: RtmEmsLogAmvUploadPreview | null): string => {
-  const monthLabel = formatUploadMonth(previewResult?.updateDate ?? previewResult?.retrievalDate)
-  return monthLabel ? `New values applied for ${monthLabel}.` : 'New values applied.'
+const formatSavedDateTime = (date: Date): string => {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    day: 'numeric',
+    hour: 'numeric',
+    hour12: true,
+    minute: '2-digit',
+    month: 'long',
+    timeZone: LEXIS_BUSINESS_TIME_ZONE,
+    year: 'numeric',
+  }).formatToParts(date)
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((item) => item.type === type)?.value ?? ''
+
+  return `${part('month')} ${part('day')}, ${part('year')}, ${part('hour')}:${part('minute')} ${part('dayPeriod')}`
+}
+
+const reviewValuesMatch = (
+  left: Record<string, string>,
+  right: Record<string, string>,
+): boolean => {
+  const keys = new Set([...Object.keys(left), ...Object.keys(right)])
+  return Array.from(keys).every((key) => left[key] === right[key])
 }
 
 const normalizeIsoDate = (dateValue: string | null | undefined): string | null => {
@@ -562,7 +587,7 @@ const SpeciesReviewTable = ({
         <thead>
           <tr>
             <th scope="col">Grade</th>
-            <th scope="col">{currentMonthLabel}</th>
+            <th scope="col">{`Last entered (${currentMonthLabel})`}</th>
             <th scope="col">{nextMonthLabel}</th>
           </tr>
         </thead>
@@ -765,7 +790,7 @@ const ReviewUploadContent = ({
 }
 
 const RtmEmsLogAmvUploadPage = () => {
-  const { canPerform } = useAuth()
+  const { canPerform, capabilities } = useAuth()
   const canManage = canPerform('/lexisAgentAdmin')
   const validationRequestRef = useRef(0)
   const uploadInputRef = useRef<HTMLInputElement>(null)
@@ -782,6 +807,9 @@ const RtmEmsLogAmvUploadPage = () => {
   >('info')
   const [previewResult, setPreviewResult] = useState<RtmEmsLogAmvUploadPreview | null>(null)
   const [reviewValues, setReviewValues] = useState<Record<string, string>>({})
+  const [savedReviewValues, setSavedReviewValues] = useState<Record<string, string> | null>(null)
+  const [savedUploadState, setSavedUploadState] = useState<SavedUploadState | null>(null)
+  const [showSavedNotification, setShowSavedNotification] = useState(false)
   const [selectedUploadFile, setSelectedUploadFile] = useState<File | null>(null)
   const [pendingUploadValidation, setPendingUploadValidation] =
     useState<PendingUploadValidation | null>(null)
@@ -809,8 +837,12 @@ const RtmEmsLogAmvUploadPage = () => {
     setUploadSystemError(false)
     setPreviewResult(null)
     setReviewValues({})
+    setSavedReviewValues(null)
+    setSavedUploadState(null)
+    setShowSavedNotification(false)
     setUploadResult(null)
     setPendingUploadValidation(null)
+    setNotification('')
 
     if (!nextFile) {
       return
@@ -910,8 +942,12 @@ const RtmEmsLogAmvUploadPage = () => {
     setUploadSystemError(false)
     setPreviewResult(null)
     setReviewValues({})
+    setSavedReviewValues(null)
+    setSavedUploadState(null)
+    setShowSavedNotification(false)
     setUploadResult(null)
     setPendingUploadValidation(null)
+    setNotification('')
     setUploadInputKey((current) => current + 1)
     setIsDraggingUpload(false)
     setIsPreviewing(false)
@@ -969,8 +1005,14 @@ const RtmEmsLogAmvUploadPage = () => {
             : 'error',
       )
       if (response.status === 'accepted') {
-        setNotificationTitle('Average monthly values updated')
-        setNotification(createAcceptedUploadMessage(previewResult))
+        setSavedReviewValues({ ...reviewValues })
+        setSavedUploadState({
+          savedAt: formatSavedDateTime(new Date()),
+          savedBy: capabilities.principal ?? 'LEXIS user',
+          valueCount: saveRequests.length,
+        })
+        setShowSavedNotification(true)
+        setNotification('')
         setUploadResult(null)
       } else {
         setUploadResult(response)
@@ -1000,6 +1042,9 @@ const RtmEmsLogAmvUploadPage = () => {
   const hasReviewErrors = Object.values(reviewValues).some(
     (value) => reviewValueError(value) !== null,
   )
+  const hasUnsavedChanges =
+    savedReviewValues !== null && !reviewValuesMatch(reviewValues, savedReviewValues)
+  const savedActionsUnavailable = savedReviewValues !== null && !hasUnsavedChanges
 
   const isUploadDisabled =
     isUploading ||
@@ -1034,20 +1079,28 @@ const RtmEmsLogAmvUploadPage = () => {
         <div className="rtm-amv-month-summary" aria-label="Average market value month details">
           <div className="rtm-amv-month-summary__item rtm-amv-month-summary__month">
             <span>Month</span>
-            <strong>{`${formatUploadMonth(effectiveMonth) ?? effectiveMonth}, next month`}</strong>
+            <strong>{formatUploadMonth(effectiveMonth) ?? effectiveMonth}</strong>
           </div>
           <div className="rtm-amv-month-summary__item">
             <span>Values take effect</span>
             <strong>{formatEffectiveStartDate(effectiveMonth)}</strong>
           </div>
+          {savedUploadState && (
+            <div className="rtm-amv-month-summary__item">
+              <span>Last saved</span>
+              <strong>{`${savedUploadState.savedAt} by ${savedUploadState.savedBy}`}</strong>
+            </div>
+          )}
         </div>
       </Column>
 
       <Column sm={4} md={8} lg={16} className="admin-upload-fspts-content rtm-amv-values-content">
-        <div className="admin-upload-section-heading rtm-amv-values-heading">
-          <h2 id="rtm-values-title">Values</h2>
-          <p>{RTM_VALUES_DESCRIPTION}</p>
-        </div>
+        {!savedUploadState && (
+          <div className="admin-upload-section-heading rtm-amv-values-heading">
+            <h2 id="rtm-values-title">Values</h2>
+            <p>{RTM_VALUES_DESCRIPTION}</p>
+          </div>
+        )}
 
         {uploadStep === 'upload' ? (
           <>
@@ -1160,34 +1213,47 @@ const RtmEmsLogAmvUploadPage = () => {
           </>
         ) : (
           <>
-            <section className="rtm-amv-upload-card" aria-labelledby="rtm-uploaded-title">
-              <div className="admin-upload-field-header">
-                <div>
-                  <span id="rtm-uploaded-title" className="admin-upload-field-label">
-                    Upload spreadsheet
-                  </span>
-                  <p className="admin-upload-field-helper">{RTM_UPLOAD_FIELD_HELPER}</p>
+            {!savedUploadState && (
+              <section className="rtm-amv-upload-card" aria-labelledby="rtm-uploaded-title">
+                <div className="admin-upload-field-header">
+                  <div>
+                    <span id="rtm-uploaded-title" className="admin-upload-field-label">
+                      Upload spreadsheet
+                    </span>
+                    <p className="admin-upload-field-helper">{RTM_UPLOAD_FIELD_HELPER}</p>
+                  </div>
                 </div>
-              </div>
 
-              {selectedUploadFile && (
-                <div
-                  className="rtm-amv-uploaded-file"
-                  aria-label="Uploaded average monthly values file"
-                >
-                  <span className="rtm-amv-uploaded-file__name">{selectedUploadFile.name}</span>
-                  <button
-                    type="button"
-                    className="rtm-amv-uploaded-file__remove"
-                    aria-label="Clear selected file"
-                    disabled={isUploading}
-                    onClick={() => setDiscardConfirmation('file')}
+                {selectedUploadFile && (
+                  <div
+                    className="rtm-amv-uploaded-file"
+                    aria-label="Uploaded average monthly values file"
                   >
-                    <Close size={12} />
-                  </button>
-                </div>
-              )}
-            </section>
+                    <span className="rtm-amv-uploaded-file__name">{selectedUploadFile.name}</span>
+                    <button
+                      type="button"
+                      className="rtm-amv-uploaded-file__remove"
+                      aria-label="Clear selected file"
+                      disabled={isUploading}
+                      onClick={() => setDiscardConfirmation('file')}
+                    >
+                      <Close size={12} />
+                    </button>
+                  </div>
+                )}
+              </section>
+            )}
+
+            {savedUploadState && showSavedNotification && (
+              <InlineNotification
+                className="rtm-amv-saved-notification"
+                kind="success"
+                lowContrast
+                title="Values saved"
+                subtitle={`${savedUploadState.valueCount} ${savedUploadState.valueCount === 1 ? 'value' : 'values'} will take effect on ${formatEffectiveStartDate(effectiveMonth)}.`}
+                onCloseButtonClick={() => setShowSavedNotification(false)}
+              />
+            )}
 
             {previewResult && (
               <ReviewUploadContent
@@ -1202,6 +1268,12 @@ const RtmEmsLogAmvUploadPage = () => {
               />
             )}
 
+            {savedActionsUnavailable && (
+              <p id="rtm-amv-saved-actions-helper" className="rtm-amv-upload-review-helper">
+                Edit a value to save again.
+              </p>
+            )}
+
             <div className="admin-upload-fspts-button-row rtm-amv-upload-review-actions">
               <Button
                 kind="primary"
@@ -1209,9 +1281,16 @@ const RtmEmsLogAmvUploadPage = () => {
                 className="admin-upload-fspts-action-button"
                 renderIcon={Save}
                 onClick={() => {
+                  if (savedActionsUnavailable) {
+                    return
+                  }
                   void submitUpload()
                 }}
                 disabled={isUploadDisabled}
+                aria-disabled={savedActionsUnavailable || undefined}
+                aria-describedby={
+                  savedActionsUnavailable ? 'rtm-amv-saved-actions-helper' : undefined
+                }
               >
                 {isUploading ? 'Saving values' : 'Save values'}
               </Button>
@@ -1219,7 +1298,21 @@ const RtmEmsLogAmvUploadPage = () => {
                 kind="tertiary"
                 size="md"
                 disabled={isUploading}
-                onClick={() => setDiscardConfirmation('cancel')}
+                aria-disabled={savedActionsUnavailable || undefined}
+                aria-describedby={
+                  savedActionsUnavailable ? 'rtm-amv-saved-actions-helper' : undefined
+                }
+                onClick={() => {
+                  if (savedActionsUnavailable) {
+                    return
+                  }
+                  if (savedReviewValues) {
+                    setReviewValues({ ...savedReviewValues })
+                    setUploadResult(null)
+                    return
+                  }
+                  setDiscardConfirmation('cancel')
+                }}
               >
                 Cancel
               </Button>

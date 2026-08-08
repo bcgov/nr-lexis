@@ -38,7 +38,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     expect(screen.getByText(/domestic log values that become the fee in lieu/i)).toBeVisible()
     const monthSummary = screen.getByLabelText('Average market value month details')
     expect(within(monthSummary).queryByRole('combobox')).not.toBeInTheDocument()
-    expect(within(monthSummary).getByText(/^[A-Z][a-z]+ \d{4}, next month$/)).toBeVisible()
+    expect(within(monthSummary).getByText(/^[A-Z][a-z]+ \d{4}$/)).toBeVisible()
     expect(within(monthSummary).getByText('Values take effect')).toBeVisible()
     expect(within(monthSummary).getByText(/^[A-Z][a-z]+ 1, \d{4}$/)).toBeVisible()
     expect(within(monthSummary).queryByText('Compared against')).not.toBeInTheDocument()
@@ -315,7 +315,9 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     const balsamTable = screen.getByRole('table', {
       name: 'Balsam average market value review',
     })
-    expect(within(balsamTable).getByRole('columnheader', { name: 'July 2026' })).toBeVisible()
+    expect(
+      within(balsamTable).getByRole('columnheader', { name: 'Last entered (July 2026)' }),
+    ).toBeVisible()
     expect(within(balsamTable).getByRole('columnheader', { name: 'September 2026' })).toBeVisible()
     expect(within(balsamTable).getByRole('row', { name: /D.*75\.29.*78\.14/ })).toBeVisible()
 
@@ -379,7 +381,37 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     )
 
     expect(hemlockTable).toBeVisible()
-    expect(screen.getByRole('button', { name: 'Save values' })).toBeEnabled()
+    expect(screen.getByText('Values saved')).toBeVisible()
+    expect(screen.getByText(/\d+ values will take effect on [A-Z][a-z]+ 1, \d{4}\./)).toBeVisible()
+    expect(screen.getByText('Last saved')).toBeVisible()
+    expect(screen.getByText(/by idir\\admin$/)).toBeVisible()
+    expect(screen.queryByRole('heading', { name: 'Values', level: 2 })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Uploaded average monthly values file')).not.toBeInTheDocument()
+    expect(screen.getByText('Edit a value to save again.')).toBeVisible()
+    const savedSaveButton = screen.getByRole('button', { name: 'Save values' })
+    const savedCancelButton = screen.getByRole('button', { name: 'Cancel' })
+    expect(savedSaveButton).not.toBeDisabled()
+    expect(savedSaveButton).toHaveAttribute('aria-disabled', 'true')
+    expect(savedSaveButton).toHaveAccessibleDescription('Edit a value to save again.')
+    expect(savedSaveButton.tabIndex).toBe(0)
+    expect(savedCancelButton).not.toBeDisabled()
+    expect(savedCancelButton).toHaveAttribute('aria-disabled', 'true')
+    expect(savedCancelButton).toHaveAccessibleDescription('Edit a value to save again.')
+    expect(savedCancelButton.tabIndex).toBe(0)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save values' }))
+    expect(mockedSaveBatch).toHaveBeenCalledTimes(1)
+
+    await userEvent.clear(missingHemlockValue)
+    await userEvent.type(missingHemlockValue, '82.15')
+    expect(screen.queryByText('Edit a value to save again.')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save values' })).not.toHaveAttribute('aria-disabled')
+    expect(screen.getByRole('button', { name: 'Cancel' })).not.toHaveAttribute('aria-disabled')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(missingHemlockValue).toHaveValue('81.43')
+    expect(screen.getByText('Edit a value to save again.')).toBeVisible()
+
     await userEvent.clear(missingHemlockValue)
     await userEvent.type(missingHemlockValue, '82.15')
     await userEvent.click(screen.getByRole('button', { name: 'Save values' }))
@@ -391,6 +423,10 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       expect.arrayContaining([
         expect.objectContaining({ species: 'HE', grade: 'H', newValue: 82.15 }),
       ]),
+    )
+    expect(screen.getByRole('button', { name: 'Save values' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
     )
   })
 
@@ -605,7 +641,9 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     await userEvent.click(await screen.findByRole('tab', { name: /Pine/ }))
 
     const table = screen.getByRole('table', { name: 'Pine average market value review' })
-    expect(within(table).getByRole('columnheader', { name: 'June 2026' })).toBeVisible()
+    expect(
+      within(table).getByRole('columnheader', { name: 'Last entered (June 2026)' }),
+    ).toBeVisible()
     expect(within(table).getByRole('columnheader', { name: 'July 2026' })).toBeVisible()
     expect(within(table).getByRole('row', { name: /A.*9\.00.*10\.00/ })).toBeVisible()
     expect(within(table).queryByRole('row', { name: /W.*4\.00/ })).not.toBeInTheDocument()
