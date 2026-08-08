@@ -34,6 +34,7 @@ import {
   Tabs,
 } from '@carbon/react'
 import { AppNotification } from '../../components/AppNotification'
+import ConfirmationModal from '@/components/ConfirmationModal'
 import PageHeader from '@/components/PageHeader'
 import { useAuth } from '@/context/auth/useAuth'
 import {
@@ -860,6 +861,7 @@ const RtmEmsLogAmvUploadPage = () => {
   const [uploadResult, setUploadResult] = useState<RtmEmsLogAmvUploadResult | null>(null)
   const [uploadInputKey, setUploadInputKey] = useState(0)
   const [isDraggingUpload, setIsDraggingUpload] = useState(false)
+  const [showDiscardConfirmation, setShowDiscardConfirmation] = useState(false)
   const previousEffectiveMonth = shiftEffectiveMonth(effectiveMonth, -1)
 
   useEffect(() => {
@@ -1273,7 +1275,12 @@ const RtmEmsLogAmvUploadPage = () => {
               >
                 {isUploading ? 'Saving values' : 'Save values'}
               </Button>
-              <Button kind="tertiary" size="md" disabled={isUploading} onClick={clearUploadState}>
+              <Button
+                kind="tertiary"
+                size="md"
+                disabled={isUploading}
+                onClick={() => setShowDiscardConfirmation(true)}
+              >
                 Cancel
               </Button>
             </div>
@@ -1293,6 +1300,21 @@ const RtmEmsLogAmvUploadPage = () => {
             }}
           />
         </Column>
+      )}
+
+      {showDiscardConfirmation && (
+        <ConfirmationModal
+          open
+          title="Discard these values?"
+          description="The file and all values on screen will be cleared. Nothing has been saved."
+          cancelLabel="Keep editing"
+          cancelKind="tertiary"
+          confirmLabel="Discard values"
+          danger
+          size="xs"
+          onConfirm={clearUploadState}
+          onClose={() => setShowDiscardConfirmation(false)}
+        />
       )}
     </Grid>
   )

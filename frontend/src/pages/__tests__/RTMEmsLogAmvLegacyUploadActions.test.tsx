@@ -233,7 +233,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     )
   })
 
-  it('shows a clean editable review when every uploaded value is valid', async () => {
+  it('shows a clean editable review and confirms before discarding it', async () => {
     mockedPreviewUpload.mockResolvedValue({
       status: 'accepted',
       fileName: 'Filename.xlsx',
@@ -276,10 +276,45 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     })
     const cedarRow = within(cedarTable).getByRole('row', { name: /D.*102\.00.*103\.00/ })
     expect(cedarRow).not.toHaveClass('has-warning')
-    expect(within(cedarTable).getByLabelText('Cedar grade D September 2026 value')).toBeEnabled()
+    const cedarValue = within(cedarTable).getByLabelText('Cedar grade D September 2026 value')
+    expect(cedarValue).toBeEnabled()
     expect(screen.getByText('Fixed values are not shown here')).toBeVisible()
     expect(screen.getByRole('button', { name: 'Save values' })).toBeEnabled()
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeEnabled()
+
+    await userEvent.clear(cedarValue)
+    await userEvent.type(cedarValue, '109.25')
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    const dialog = screen.getByRole('dialog', { name: 'Discard these values?' })
+    expect(dialog).toHaveAccessibleDescription(
+      'The file and all values on screen will be cleared. Nothing has been saved.',
+    )
+    expect(within(dialog).getByRole('button', { name: 'Keep editing' })).toHaveClass(
+      'cds--btn--tertiary',
+    )
+    expect(within(dialog).getByRole('button', { name: 'Discard values' })).toHaveClass(
+      'cds--btn--danger',
+    )
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Keep editing' }))
+    await waitFor(() => {
+      expect(
+        screen.queryByRole('dialog', { name: 'Discard these values?' }),
+      ).not.toBeInTheDocument()
+    })
+    expect(cedarValue).toHaveValue('109.25')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Discard values' }))
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole('table', { name: 'Cedar average market value review' }),
+      ).not.toBeInTheDocument()
+    })
+    expect(screen.getByText('Drag and drop your file here or click to upload')).toBeVisible()
+    expect(mockedSaveBatch).not.toHaveBeenCalled()
   })
 
   it('groups pine and hides fixed legacy grades while preserving the workbook submission', async () => {
