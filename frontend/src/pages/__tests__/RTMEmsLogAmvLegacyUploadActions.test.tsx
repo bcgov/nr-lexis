@@ -233,7 +233,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     )
   })
 
-  it('shows a clean editable review and confirms before discarding it', async () => {
+  it('shows a clean editable review and confirms before discarding or removing it', async () => {
     mockedPreviewUpload.mockResolvedValue({
       status: 'accepted',
       fileName: 'Filename.xlsx',
@@ -307,6 +307,53 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     await userEvent.click(screen.getByRole('button', { name: 'Discard values' }))
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole('table', { name: 'Cedar average market value review' }),
+      ).not.toBeInTheDocument()
+    })
+    expect(screen.getByText('Drag and drop your file here or click to upload')).toBeVisible()
+    expect(mockedSaveBatch).not.toHaveBeenCalled()
+
+    await userEvent.upload(
+      screen.getByLabelText('Average monthly values upload spreadsheet'),
+      workbook,
+    )
+    await userEvent.click(await screen.findByRole('tab', { name: /Cedar/ }))
+    const reuploadedCedarTable = screen.getByRole('table', {
+      name: 'Cedar average market value review',
+    })
+    const reuploadedCedarValue = within(reuploadedCedarTable).getByLabelText(
+      'Cedar grade D September 2026 value',
+    )
+    await userEvent.clear(reuploadedCedarValue)
+    await userEvent.type(reuploadedCedarValue, '110.50')
+    await userEvent.click(screen.getByRole('button', { name: 'Clear selected file' }))
+
+    const removeDialog = screen.getByRole('dialog', {
+      name: 'Are you sure you want to remove this file?',
+    })
+    expect(removeDialog).toHaveAccessibleDescription(
+      'The values on screen will be cleared. Nothing has been saved.',
+    )
+    expect(within(removeDialog).getByRole('button', { name: 'Keep file' })).toHaveClass(
+      'cds--btn--tertiary',
+    )
+    expect(within(removeDialog).getByRole('button', { name: 'Remove file' })).toHaveClass(
+      'cds--btn--danger',
+    )
+
+    await userEvent.click(within(removeDialog).getByRole('button', { name: 'Keep file' }))
+    await waitFor(() => {
+      expect(
+        screen.queryByRole('dialog', { name: 'Are you sure you want to remove this file?' }),
+      ).not.toBeInTheDocument()
+    })
+    expect(reuploadedCedarValue).toHaveValue('110.50')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Clear selected file' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Remove file' }))
 
     await waitFor(() => {
       expect(

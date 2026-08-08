@@ -861,7 +861,7 @@ const RtmEmsLogAmvUploadPage = () => {
   const [uploadResult, setUploadResult] = useState<RtmEmsLogAmvUploadResult | null>(null)
   const [uploadInputKey, setUploadInputKey] = useState(0)
   const [isDraggingUpload, setIsDraggingUpload] = useState(false)
-  const [showDiscardConfirmation, setShowDiscardConfirmation] = useState(false)
+  const [discardConfirmation, setDiscardConfirmation] = useState<'cancel' | 'file' | null>(null)
   const previousEffectiveMonth = shiftEffectiveMonth(effectiveMonth, -1)
 
   useEffect(() => {
@@ -1241,7 +1241,7 @@ const RtmEmsLogAmvUploadPage = () => {
                     className="rtm-amv-uploaded-file__remove"
                     aria-label="Clear selected file"
                     disabled={isUploading}
-                    onClick={clearUploadState}
+                    onClick={() => setDiscardConfirmation('file')}
                   >
                     <Close size={12} />
                   </button>
@@ -1279,7 +1279,7 @@ const RtmEmsLogAmvUploadPage = () => {
                 kind="tertiary"
                 size="md"
                 disabled={isUploading}
-                onClick={() => setShowDiscardConfirmation(true)}
+                onClick={() => setDiscardConfirmation('cancel')}
               >
                 Cancel
               </Button>
@@ -1302,18 +1302,26 @@ const RtmEmsLogAmvUploadPage = () => {
         </Column>
       )}
 
-      {showDiscardConfirmation && (
+      {discardConfirmation && (
         <ConfirmationModal
           open
-          title="Discard these values?"
-          description="The file and all values on screen will be cleared. Nothing has been saved."
-          cancelLabel="Keep editing"
+          title={
+            discardConfirmation === 'file'
+              ? 'Are you sure you want to remove this file?'
+              : 'Discard these values?'
+          }
+          description={
+            discardConfirmation === 'file'
+              ? 'The values on screen will be cleared. Nothing has been saved.'
+              : 'The file and all values on screen will be cleared. Nothing has been saved.'
+          }
+          cancelLabel={discardConfirmation === 'file' ? 'Keep file' : 'Keep editing'}
           cancelKind="tertiary"
-          confirmLabel="Discard values"
+          confirmLabel={discardConfirmation === 'file' ? 'Remove file' : 'Discard values'}
           danger
           size="xs"
           onConfirm={clearUploadState}
-          onClose={() => setShowDiscardConfirmation(false)}
+          onClose={() => setDiscardConfirmation(null)}
         />
       )}
     </Grid>
