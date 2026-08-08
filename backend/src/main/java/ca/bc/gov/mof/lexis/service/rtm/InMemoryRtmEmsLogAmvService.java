@@ -397,6 +397,8 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
       List<String> errors = new ArrayList<>(parseResult.errors());
       List<UploadTarget> previewTargets =
           expandUploadTargets(parseResult.rows(), parsedEffectiveMonth != null);
+      LocalDate comparisonDate = parseResult.retrievalDate();
+      List<RtmEmsLogAmvRowDto> comparisonRows = List.of();
 
       if (parseResult.dataRowCount() == 0) {
         errors.add("The uploaded file contains no data rows.");
@@ -407,16 +409,20 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
       if (!parseResult.headerDetected()) {
         errors.add("The template header is not recognized as an RTM EMS AMV sheet.");
       }
-      if (parseResult.updateDate() == null || parseResult.retrievalDate() == null) {
+      if (enforceNextMonth && errors.isEmpty()) {
+        comparisonRows = findLatestBefore(formatDate(parsedEffectiveMonth));
+        comparisonDate = latestComparisonDate(comparisonRows, comparisonDate);
+      }
+      if (parseResult.updateDate() == null || comparisonDate == null) {
         errors.add("The update date is required in the uploaded template.");
       }
-      validateMonthStart(parseResult.retrievalDate(), "Retrieval date", errors);
+      validateMonthStart(comparisonDate, "Retrieval date", errors);
       validateMonthStart(parseResult.updateDate(), "Update date", errors);
-      validateUploadTargets(
-          previewTargets, parseResult.retrievalDate(), parseResult.updateDate(), errors);
+      validateUploadTargets(previewTargets, comparisonDate, parseResult.updateDate(), errors);
       List<RtmEmsLogAmvRowDto> previewRows =
           enforceNextMonth
-              ? buildScreenPreviewRows(parseResult, errors.isEmpty())
+              ? buildScreenPreviewRows(
+                  parseResult, comparisonRows, comparisonDate, errors.isEmpty())
               : buildPreviewRows(parseResult, previewTargets);
       if (errors.isEmpty() && !enforceNextMonth) {
         int initialRowCount = previewRows.size();
@@ -454,7 +460,7 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
           previewRows.size(),
           errors,
           warnings,
-          formatDate(parseResult.retrievalDate()),
+          formatDate(comparisonDate),
           formatDate(parseResult.updateDate()),
           previewRows,
           fileName,
@@ -1133,8 +1139,10 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
 
   private List<RtmEmsLogAmvRowDto> buildScreenPreviewRows(
       RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult parseResult,
+      List<RtmEmsLogAmvRowDto> comparisonRows,
+      LocalDate retrievalDate,
       boolean loadCurrentValues) {
-    if (parseResult.retrievalDate() == null || parseResult.updateDate() == null) {
+    if (retrievalDate == null || parseResult.updateDate() == null) {
       return List.of();
     }
 
@@ -1149,9 +1157,7 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
 
     Map<String, BigDecimal> currentValues = new LinkedHashMap<>();
     if (loadCurrentValues) {
-      for (RtmEmsLogAmvRowDto row :
-          findRowsForEffectiveDate(
-              null, null, formatDate(parseResult.retrievalDate()))) {
+      for (RtmEmsLogAmvRowDto row : comparisonRows) {
         String species = logicalScreenSpecies(row.species());
         String grade = RtmEmsLogAmvDimensionValidator.normalize(row.grade());
         BigDecimal currentValue = row.newValue() == null ? row.currentValue() : row.newValue();
@@ -1176,7 +1182,7 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
                 species,
                 grade,
                 "O",
-                formatDate(parseResult.retrievalDate()),
+                formatDate(retrievalDate),
                 formatDate(parseResult.updateDate()),
                 currentValues.get(key),
                 newValues.get(key),
@@ -1184,6 +1190,18 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
       }
     }
     return previewRows;
+  }
+
+  private LocalDate latestComparisonDate(
+      List<RtmEmsLogAmvRowDto> comparisonRows, LocalDate fallbackDate) {
+    LocalDate latestDate = null;
+    for (RtmEmsLogAmvRowDto row : comparisonRows) {
+      LocalDate rowDate = rowEffectiveDate(row);
+      if (rowDate != null && (latestDate == null || rowDate.isAfter(latestDate))) {
+        latestDate = rowDate;
+      }
+    }
+    return latestDate == null ? fallbackDate : latestDate;
   }
 
   private String logicalScreenSpecies(String species) {

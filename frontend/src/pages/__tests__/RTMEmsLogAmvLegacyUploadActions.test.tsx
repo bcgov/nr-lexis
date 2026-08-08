@@ -36,13 +36,12 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
 
     expect(screen.getByRole('heading', { name: 'Average market values', level: 1 })).toBeVisible()
     expect(screen.getByText(/domestic log values that become the fee in lieu/i)).toBeVisible()
-    const monthSelect = screen.getByLabelText('Month') as HTMLSelectElement
-    expect(monthSelect.value).toMatch(/^\d{4}-\d{2}-01$/)
-    expect(monthSelect).toBeDisabled()
-    expect(monthSelect.options).toHaveLength(1)
-    expect(monthSelect.selectedOptions[0]).toHaveTextContent(/, next month$/)
-    expect(screen.getByText('Values take effect')).toBeVisible()
-    expect(screen.getByText('Compared against')).toBeVisible()
+    const monthSummary = screen.getByLabelText('Average market value month details')
+    expect(within(monthSummary).queryByRole('combobox')).not.toBeInTheDocument()
+    expect(within(monthSummary).getByText(/^[A-Z][a-z]+ \d{4}, next month$/)).toBeVisible()
+    expect(within(monthSummary).getByText('Values take effect')).toBeVisible()
+    expect(within(monthSummary).getByText(/^[A-Z][a-z]+ 1, \d{4}$/)).toBeVisible()
+    expect(within(monthSummary).queryByText('Compared against')).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Values', level: 2 })).toBeVisible()
     expect(screen.getByText('Accepted format: .xlsx, up to 20 MB.')).toBeVisible()
     expect(screen.getByRole('link', { name: 'Download template' })).toHaveAttribute(
@@ -246,7 +245,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       fileSize: 3,
       message: 'Spreadsheet is valid.',
       rowCount: 4,
-      retrievalDate: '2026-08-01',
+      retrievalDate: '2026-07-01',
       updateDate: '2026-09-01',
       errors: [],
       warnings: [],
@@ -255,7 +254,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
           species: 'BA',
           grade: 'D',
           growthIndicator: 'O',
-          retrievalDate: '2026-08-01',
+          retrievalDate: '2026-07-01',
           updateDate: '2026-09-01',
           currentValue: 75.29,
           newValue: 78.14,
@@ -265,7 +264,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
           species: 'HE',
           grade: 'A',
           growthIndicator: 'O',
-          retrievalDate: '2026-08-01',
+          retrievalDate: '2026-07-01',
           updateDate: '2026-09-01',
           currentValue: null,
           newValue: 120,
@@ -275,7 +274,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
           species: 'HE',
           grade: 'H',
           growthIndicator: 'O',
-          retrievalDate: '2026-08-01',
+          retrievalDate: '2026-07-01',
           updateDate: '2026-09-01',
           currentValue: 81.4,
           newValue: null,
@@ -285,7 +284,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
           species: 'CE',
           grade: 'B',
           growthIndicator: 'O',
-          retrievalDate: '2026-08-01',
+          retrievalDate: '2026-07-01',
           updateDate: '2026-09-01',
           currentValue: 200,
           newValue: null,
@@ -316,7 +315,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     const balsamTable = screen.getByRole('table', {
       name: 'Balsam average market value review',
     })
-    expect(within(balsamTable).getByRole('columnheader', { name: 'August 2026' })).toBeVisible()
+    expect(within(balsamTable).getByRole('columnheader', { name: 'July 2026' })).toBeVisible()
     expect(within(balsamTable).getByRole('columnheader', { name: 'September 2026' })).toBeVisible()
     expect(within(balsamTable).getByRole('row', { name: /D.*75\.29.*78\.14/ })).toBeVisible()
 
@@ -330,11 +329,11 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     expect(newHemlockCombination).toHaveValue('120.00')
     expect(
       within(hemlockTable).getByText(
-        'August had none. Confirm this species and grade combination is valid.',
+        'July had none. Confirm this species and grade combination is valid.',
       ),
     ).toBeVisible()
     expect(
-      within(hemlockTable).getByText('August had 81.40. Enter a value, or 0 for none.'),
+      within(hemlockTable).getByText('July had 81.40. Enter a value, or 0 for none.'),
     ).toBeVisible()
     expect(screen.getByText('Fixed values are not shown here')).toBeVisible()
     expect(screen.getByRole('button', { name: 'Save values' })).toBeEnabled()
@@ -361,11 +360,11 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     expect(missingHemlockValue).toHaveValue('81.43')
     expect(
       within(hemlockTable).queryByText(
-        'August had none. Confirm this species and grade combination is valid.',
+        'July had none. Confirm this species and grade combination is valid.',
       ),
     ).not.toBeInTheDocument()
     expect(
-      within(hemlockTable).queryByText('August had 81.40. Enter a value, or 0 for none.'),
+      within(hemlockTable).queryByText('July had 81.40. Enter a value, or 0 for none.'),
     ).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Save values' }))
@@ -376,6 +375,21 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       expect.arrayContaining([
         expect.objectContaining({ species: 'HE', grade: 'A', newValue: 0 }),
         expect.objectContaining({ species: 'HE', grade: 'H', newValue: 81.43 }),
+      ]),
+    )
+
+    expect(hemlockTable).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Save values' })).toBeEnabled()
+    await userEvent.clear(missingHemlockValue)
+    await userEvent.type(missingHemlockValue, '82.15')
+    await userEvent.click(screen.getByRole('button', { name: 'Save values' }))
+
+    await waitFor(() => {
+      expect(mockedSaveBatch).toHaveBeenCalledTimes(2)
+    })
+    expect(mockedSaveBatch.mock.calls[1][0].values).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ species: 'HE', grade: 'H', newValue: 82.15 }),
       ]),
     )
   })
@@ -584,8 +598,10 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       screen.getByLabelText('Average monthly values upload spreadsheet'),
       workbook,
     )
-    const effectiveMonth = (screen.getByLabelText('Month') as HTMLSelectElement).value
-    expect(mockedPreviewUpload).toHaveBeenCalledWith(workbook, effectiveMonth)
+    expect(mockedPreviewUpload).toHaveBeenCalledWith(
+      workbook,
+      expect.stringMatching(/^\d{4}-\d{2}-01$/),
+    )
     await userEvent.click(await screen.findByRole('tab', { name: /Pine/ }))
 
     const table = screen.getByRole('table', { name: 'Pine average market value review' })

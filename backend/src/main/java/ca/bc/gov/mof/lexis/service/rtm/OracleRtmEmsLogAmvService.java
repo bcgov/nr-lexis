@@ -353,6 +353,8 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
       List<String> errors = new ArrayList<>(parseResult.errors());
       List<UploadTarget> rowsToPreview =
           buildUploadTargets(parseResult.rows(), warnings, parsedEffectiveMonth != null);
+      LocalDate comparisonDate = parseResult.retrievalDate();
+      List<RtmEmsLogAmvRowDto> comparisonRows = List.of();
 
       if (parseResult.dataRowCount() == 0) {
         errors.add("The uploaded file contains no data rows.");
@@ -363,14 +365,17 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
       if (!parseResult.headerDetected()) {
         errors.add("The template header is not recognized as an RTM EMS AMV sheet.");
       }
-      if (parseResult.updateDate() == null || parseResult.retrievalDate() == null) {
+      if (enforceNextMonth && errors.isEmpty()) {
+        comparisonRows = repository.findLatestEffectiveDateRowsBefore(parsedEffectiveMonth);
+        comparisonDate = latestComparisonDate(comparisonRows, comparisonDate);
+      }
+      if (parseResult.updateDate() == null || comparisonDate == null) {
         errors.add("The update date is required in the uploaded template.");
       }
-      validateMonthStart(parseResult.retrievalDate(), "Retrieval date", errors);
+      validateMonthStart(comparisonDate, "Retrieval date", errors);
       validateMonthStart(parseResult.updateDate(), "Update date", errors);
-      validateUploadDateOrder(parseResult.retrievalDate(), parseResult.updateDate(), errors);
-      validateUploadTargets(
-          rowsToPreview, parseResult.retrievalDate(), parseResult.updateDate(), errors);
+      validateUploadDateOrder(comparisonDate, parseResult.updateDate(), errors);
+      validateUploadTargets(rowsToPreview, comparisonDate, parseResult.updateDate(), errors);
       if (errors.isEmpty() && !enforceNextMonth) {
         rowsToPreview =
             filterUploadTargetsForExistingRows(
@@ -386,7 +391,8 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
           enforceNextMonth
               ? buildScreenPreviewRows(
                   parseResult.rows(),
-                  parseResult.retrievalDate(),
+                  comparisonRows,
+                  comparisonDate,
                   parseResult.updateDate(),
                   errors.isEmpty())
               : buildPreviewRows(
@@ -404,7 +410,7 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
           previewRows.size(),
           errors,
           warnings,
-          formatDate(parseResult.retrievalDate()),
+          formatDate(comparisonDate),
           formatDate(parseResult.updateDate()),
           previewRows,
           fileName,
@@ -884,6 +890,7 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
 
   private List<RtmEmsLogAmvRowDto> buildScreenPreviewRows(
       List<RtmEmsLogAmvUploadPreviewAnalyzer.UploadRow> uploadedRows,
+      List<RtmEmsLogAmvRowDto> comparisonRows,
       LocalDate retrievalDate,
       LocalDate updateDate,
       boolean loadCurrentValues) {
@@ -902,8 +909,7 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
 
     Map<String, BigDecimal> currentValues = new LinkedHashMap<>();
     if (loadCurrentValues) {
-      for (RtmEmsLogAmvRowDto row :
-          repository.findEffectiveDateRows(null, null, retrievalDate)) {
+      for (RtmEmsLogAmvRowDto row : comparisonRows) {
         String species = logicalScreenSpecies(row.species());
         String grade = RtmEmsLogAmvDimensionValidator.normalize(row.grade());
         BigDecimal currentValue = row.newValue() == null ? row.currentValue() : row.newValue();
@@ -936,6 +942,19 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
       }
     }
     return previewRows;
+  }
+
+  private LocalDate latestComparisonDate(
+      List<RtmEmsLogAmvRowDto> comparisonRows, LocalDate fallbackDate) {
+    LocalDate latestDate = null;
+    for (RtmEmsLogAmvRowDto row : comparisonRows) {
+      String dateValue = trimToNull(row.updateDate());
+      LocalDate rowDate = parseRetrievalDate(dateValue == null ? row.retrievalDate() : dateValue);
+      if (rowDate != null && (latestDate == null || rowDate.isAfter(latestDate))) {
+        latestDate = rowDate;
+      }
+    }
+    return latestDate == null ? fallbackDate : latestDate;
   }
 
   private String logicalScreenSpecies(String species) {

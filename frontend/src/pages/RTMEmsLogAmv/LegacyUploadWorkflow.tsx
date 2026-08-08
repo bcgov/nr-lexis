@@ -23,8 +23,6 @@ import {
   Grid,
   InlineLoading,
   InlineNotification,
-  Select,
-  SelectItem,
   Tab,
   TabList,
   TabPanel,
@@ -130,7 +128,7 @@ const shiftEffectiveMonth = (dateValue: string, offset: number): string => {
   return shifted.toISOString().slice(0, 10)
 }
 
-const formatEffectiveDateRange = (dateValue: string): string => {
+const formatEffectiveStartDate = (dateValue: string): string => {
   const match = /^(\d{4})-(\d{2})-01$/.exec(dateValue)
   if (!match) {
     return dateValue
@@ -142,8 +140,7 @@ const formatEffectiveDateRange = (dateValue: string): string => {
     month: 'long',
     timeZone: 'UTC',
   }).format(new Date(Date.UTC(year, monthIndex, 1)))
-  const lastDay = new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate()
-  return `${month} 1 to ${lastDay}, ${year}`
+  return `${month} 1, ${year}`
 }
 
 const createAcceptedUploadMessage = (previewResult: RtmEmsLogAmvUploadPreview | null): string => {
@@ -792,7 +789,6 @@ const RtmEmsLogAmvUploadPage = () => {
   const [uploadInputKey, setUploadInputKey] = useState(0)
   const [isDraggingUpload, setIsDraggingUpload] = useState(false)
   const [discardConfirmation, setDiscardConfirmation] = useState<'cancel' | 'file' | null>(null)
-  const previousEffectiveMonth = shiftEffectiveMonth(effectiveMonth, -1)
 
   useEffect(() => {
     const previousTitle = document.title
@@ -965,7 +961,6 @@ const RtmEmsLogAmvUploadPage = () => {
         rows: result.rows,
       }
 
-      setUploadResult(response)
       setNotificationKind(
         response.status === 'accepted'
           ? 'success'
@@ -976,8 +971,9 @@ const RtmEmsLogAmvUploadPage = () => {
       if (response.status === 'accepted') {
         setNotificationTitle('Average monthly values updated')
         setNotification(createAcceptedUploadMessage(previewResult))
-        clearUploadState()
+        setUploadResult(null)
       } else {
+        setUploadResult(response)
         setNotificationTitle('Average monthly values')
         setNotification(createResultMessage(response.status, response.message, response.errors))
       }
@@ -1036,25 +1032,13 @@ const RtmEmsLogAmvUploadPage = () => {
         <PageHeader title="Average market values" subtitle={RTM_UPLOAD_ONLY_DESCRIPTION} />
 
         <div className="rtm-amv-month-summary" aria-label="Average market value month details">
-          <Select
-            id="rtm-amv-effective-month"
-            className="rtm-amv-month-select"
-            labelText="Month"
-            value={effectiveMonth}
-            disabled
-          >
-            <SelectItem
-              value={effectiveMonth}
-              text={`${formatUploadMonth(effectiveMonth) ?? effectiveMonth}, next month`}
-            />
-          </Select>
-          <div className="rtm-amv-month-summary__item">
-            <span>Values take effect</span>
-            <strong>{formatEffectiveDateRange(effectiveMonth)}</strong>
+          <div className="rtm-amv-month-summary__item rtm-amv-month-summary__month">
+            <span>Month</span>
+            <strong>{`${formatUploadMonth(effectiveMonth) ?? effectiveMonth}, next month`}</strong>
           </div>
           <div className="rtm-amv-month-summary__item">
-            <span>Compared against</span>
-            <strong>{formatUploadMonth(previousEffectiveMonth)}</strong>
+            <span>Values take effect</span>
+            <strong>{formatEffectiveStartDate(effectiveMonth)}</strong>
           </div>
         </div>
       </Column>

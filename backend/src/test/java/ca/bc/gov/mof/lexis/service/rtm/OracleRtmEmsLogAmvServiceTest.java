@@ -439,20 +439,20 @@ class OracleRtmEmsLogAmvServiceTest {
   }
 
   @Test
-  void shouldIncludeCurrentMonthValuesInTheScreenUploadPreview() throws IOException {
+  void shouldCompareTheScreenUploadAgainstTheLatestAvailableValues() throws IOException {
     OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
     Clock clock =
         Clock.fixed(Instant.parse("2026-06-15T19:00:00Z"), LexisBusinessTime.ZONE);
-    LocalDate retrievalMonth = LocalDate.of(2026, 6, 1);
-    when(repository.findEffectiveDateRows(isNull(), isNull(), eq(retrievalMonth)))
+    LocalDate effectiveMonth = LocalDate.of(2026, 7, 1);
+    when(repository.findLatestEffectiveDateRowsBefore(effectiveMonth))
         .thenReturn(
             List.of(
                 new RtmEmsLogAmvRowDto(
                     "HE",
                     "H",
                     "O",
-                    "2026-06-01",
-                    "2026-06-01",
+                    "2026-05-01",
+                    "2026-05-01",
                     new BigDecimal("81.40"),
                     new BigDecimal("81.40"),
                     "0")));
@@ -461,6 +461,8 @@ class OracleRtmEmsLogAmvServiceTest {
     var preview = service.previewUpload(singleBalsamWorkbook(), "2026-07-01");
 
     assertThat(preview.status()).isEqualTo("accepted");
+    assertThat(preview.retrievalDate()).isEqualTo("2026-05-01");
+    assertThat(preview.updateDate()).isEqualTo("2026-07-01");
     assertThat(preview.rows()).hasSize(2);
     assertThat(preview.rows().get(0).species()).isEqualTo("BA");
     assertThat(preview.rows().get(0).grade()).isEqualTo("A");
@@ -472,6 +474,8 @@ class OracleRtmEmsLogAmvServiceTest {
     assertThat(preview.rows().get(1).growthIndicator()).isEqualTo("O");
     assertThat(preview.rows().get(1).currentValue()).isEqualByComparingTo("81.40");
     assertThat(preview.rows().get(1).newValue()).isNull();
+    verify(repository).findLatestEffectiveDateRowsBefore(effectiveMonth);
+    verify(repository, never()).findEffectiveDateRows(any(), any(), any());
   }
 
   @Test

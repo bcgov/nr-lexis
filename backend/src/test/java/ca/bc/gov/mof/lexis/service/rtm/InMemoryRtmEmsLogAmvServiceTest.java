@@ -99,7 +99,7 @@ class InMemoryRtmEmsLogAmvServiceTest {
     assertThat(preview.updateDate()).isEqualTo("2026-07-01");
     assertThat(preview.rows())
         .extracting(row -> List.of(row.species(), row.growthIndicator()))
-        .containsExactly(List.of("PINE", "O"));
+        .contains(List.of("PINE", "O"));
     assertThat(upload.status()).isEqualTo("accepted");
     assertThat(upload.attemptedRowCount()).isEqualTo(6);
     assertThat(upload.uploadedRowCount()).isEqualTo(6);
@@ -126,6 +126,34 @@ class InMemoryRtmEmsLogAmvServiceTest {
         .containsExactly("Average market values can only be uploaded for the next month.");
     assertThat(previousMonth.errors()).containsExactlyElementsOf(currentMonth.errors());
     assertThat(laterFutureMonth.errors()).containsExactlyElementsOf(currentMonth.errors());
+  }
+
+  @Test
+  void shouldCompareTheScreenUploadAgainstTheLatestAvailableValues() throws IOException {
+    Clock clock =
+        Clock.fixed(Instant.parse("2026-06-15T19:00:00Z"), LexisBusinessTime.ZONE);
+    InMemoryRtmEmsLogAmvService service = new InMemoryRtmEmsLogAmvService(clock);
+    service.save(
+        new RtmEmsLogAmvSaveRequestDto(
+            "BA", "A", "O", "2026-05-01", null, new BigDecimal("75.29"), "create"));
+    MultipartFile workbook =
+        workbook(
+            "single-balsam.xlsx",
+            RtmEmsLogAmvWorkbookTestFixtures.singleBalsamWorkbook());
+
+    var preview = service.previewUpload(workbook, "2026-07-01");
+
+    assertThat(preview.status()).isEqualTo("accepted");
+    assertThat(preview.retrievalDate()).isEqualTo("2026-05-01");
+    assertThat(preview.updateDate()).isEqualTo("2026-07-01");
+    assertThat(preview.rows())
+        .filteredOn(row -> "BA".equals(row.species()) && "A".equals(row.grade()))
+        .singleElement()
+        .satisfies(
+            row -> {
+              assertThat(row.currentValue()).isEqualByComparingTo("75.29");
+              assertThat(row.newValue()).isEqualByComparingTo("10.25");
+            });
   }
 
   @Test
