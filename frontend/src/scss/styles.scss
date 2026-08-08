@@ -2464,6 +2464,7 @@ legend.cds--label {
 .rtm-amv-upload-page .rtm-amv-upload-card .rtm-amv-upload-loading,
 .rtm-amv-upload-page .rtm-amv-upload-card .rtm-amv-uploaded-file,
 .rtm-amv-upload-page .rtm-amv-upload-card .rtm-amv-rejected-file,
+.rtm-amv-upload-page .rtm-amv-upload-card .rtm-amv-upload-system-error,
 .rtm-amv-upload-page .rtm-amv-upload-card .admin-upload-validation {
   max-inline-size: 29rem;
 }
@@ -2472,6 +2473,31 @@ legend.cds--label {
   min-block-size: 3.5rem;
   margin-block-end: 0;
   padding: 0.75rem;
+}
+
+.rtm-amv-upload-page .rtm-amv-upload-card .rtm-amv-upload-system-error {
+  margin-block-start: 0.75rem;
+}
+
+.rtm-amv-upload-system-error .cds--inline-notification__details {
+  min-inline-size: 0;
+  overflow: hidden;
+}
+
+.rtm-amv-upload-system-error .cds--inline-notification__text-wrapper {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  overflow: hidden;
+  padding-block: 0.375rem;
+}
+
+.rtm-amv-upload-system-error .cds--inline-notification__subtitle {
+  inline-size: 100%;
+  max-inline-size: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .rtm-amv-upload-page .admin-upload-fspts-button-row {

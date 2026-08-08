@@ -167,6 +167,58 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     expect(screen.queryByRole('tablist', { name: 'Species' })).not.toBeInTheDocument()
   })
 
+  it('shows a retryable system notice when upload validation is unavailable', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    mockedPreviewUpload
+      .mockRejectedValueOnce(new Error('Service unavailable'))
+      .mockResolvedValueOnce({
+        status: 'validation_failed',
+        fileName: 'Filename.xlsx',
+        fileSize: 1,
+        message: 'Upload template validation failed.',
+        rowCount: 0,
+        errors: ['The file has no numeric values.'],
+        warnings: [],
+        rows: [],
+      })
+    render(<RtmEmsLogAmvUploadPage />)
+    const workbook = new File([new Uint8Array([1])], 'Filename.xlsx', {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    })
+
+    await userEvent.upload(
+      screen.getByLabelText('Average monthly values upload spreadsheet'),
+      workbook,
+    )
+
+    expect(await screen.findByText('Upload could not be completed')).toBeVisible()
+    expect(
+      screen.getByText(
+        'Something went wrong on our end. Please try again. If the problem persists, contact...',
+      ),
+    ).toBeVisible()
+    expect(screen.queryByText('Filename.xlsx')).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('alert', { name: 'Rejected average monthly values upload file' }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByText('Drag and drop your file here or click to upload')).toBeVisible()
+    expect(screen.getByRole('link', { name: 'Download template' })).toBeVisible()
+    expect(
+      (screen.getByLabelText('Average monthly values upload spreadsheet') as HTMLInputElement)
+        .value,
+    ).toBe('')
+
+    await userEvent.upload(
+      screen.getByLabelText('Average monthly values upload spreadsheet'),
+      workbook,
+    )
+
+    expect(mockedPreviewUpload).toHaveBeenCalledTimes(2)
+    expect(await screen.findByText('The file has no numeric values.')).toBeVisible()
+    expect(screen.queryByText('Upload could not be completed')).not.toBeInTheDocument()
+    consoleError.mockRestore()
+  })
+
   it('shows the compact filename loading row while the spreadsheet is validated', async () => {
     mockedPreviewUpload.mockImplementation(() => new Promise(() => undefined))
     render(<RtmEmsLogAmvUploadPage />)

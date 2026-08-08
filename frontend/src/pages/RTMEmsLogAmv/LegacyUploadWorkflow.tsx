@@ -186,6 +186,9 @@ const RTM_UPLOAD_ONLY_DESCRIPTION =
 const RTM_VALUES_DESCRIPTION =
   'Your spreadsheet fills in a value for each species and grade, ready to check before you save.'
 const RTM_UPLOAD_FIELD_HELPER = 'Accepted format: .xlsx, up to 20 MB.'
+const RTM_UPLOAD_SYSTEM_ERROR_TITLE = 'Upload could not be completed'
+const RTM_UPLOAD_SYSTEM_ERROR_MESSAGE =
+  'Something went wrong on our end. Please try again. If the problem persists, contact...'
 
 const RTM_REVIEW_SPECIES_COLUMNS: RtmReviewSpeciesColumn[] = [
   { key: 'BA', label: 'Balsam', speciesCodes: ['BA'] },
@@ -774,6 +777,7 @@ const RtmEmsLogAmvUploadPage = () => {
   const [isPreviewing, setIsPreviewing] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [uploadError, setUploadError] = useState('')
+  const [uploadSystemError, setUploadSystemError] = useState(false)
   const [notification, setNotification] = useState('')
   const [notificationTitle, setNotificationTitle] = useState('Average monthly values')
   const [notificationKind, setNotificationKind] = useState<
@@ -806,6 +810,7 @@ const RtmEmsLogAmvUploadPage = () => {
     setUploadStep('upload')
     setSelectedUploadFile(nextFile)
     setUploadError('')
+    setUploadSystemError(false)
     setPreviewResult(null)
     setReviewValues({})
     setUploadResult(null)
@@ -844,8 +849,13 @@ const RtmEmsLogAmvUploadPage = () => {
           fileSize: nextFile.size,
         })
         setUploadStep('review')
-      } else {
+      } else if (validatedResponse.status === 'validation_failed') {
         setPendingUploadValidation(null)
+      } else {
+        setSelectedUploadFile(null)
+        setPreviewResult(null)
+        setUploadSystemError(true)
+        setUploadInputKey((current) => current + 1)
       }
     } catch (error) {
       if (validationRequestRef.current !== requestId) {
@@ -853,9 +863,12 @@ const RtmEmsLogAmvUploadPage = () => {
       }
 
       console.error(error)
-      setUploadError('Unable to validate this upload.')
+      setSelectedUploadFile(null)
+      setUploadError('')
+      setUploadSystemError(true)
       setPreviewResult(null)
       setPendingUploadValidation(null)
+      setUploadInputKey((current) => current + 1)
     } finally {
       if (validationRequestRef.current === requestId) {
         setIsPreviewing(false)
@@ -898,6 +911,7 @@ const RtmEmsLogAmvUploadPage = () => {
     setUploadStep('upload')
     setSelectedUploadFile(null)
     setUploadError('')
+    setUploadSystemError(false)
     setPreviewResult(null)
     setReviewValues({})
     setUploadResult(null)
@@ -1147,6 +1161,17 @@ const RtmEmsLogAmvUploadPage = () => {
                     </button>
                   </div>
                 ))}
+
+              {uploadSystemError && (
+                <InlineNotification
+                  className="rtm-amv-upload-system-error"
+                  kind="error"
+                  lowContrast
+                  hideCloseButton
+                  title={RTM_UPLOAD_SYSTEM_ERROR_TITLE}
+                  subtitle={RTM_UPLOAD_SYSTEM_ERROR_MESSAGE}
+                />
+              )}
             </section>
           </>
         ) : (
