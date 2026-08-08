@@ -118,6 +118,55 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     expect(mockedSaveBatch).not.toHaveBeenCalled()
   })
 
+  it('lists multiple server validation issues inside the rejected-file row', async () => {
+    const errors = [
+      'The file has no numeric values.',
+      'Error 2 can be listed here.',
+      'Error 3 can be listed here.',
+      'Error 4 can be listed here.',
+    ]
+    mockedPreviewUpload.mockResolvedValue({
+      status: 'validation_failed',
+      fileName: 'Filename.xlsx',
+      fileSize: 1,
+      message: 'Upload template validation failed.',
+      rowCount: 0,
+      errors,
+      warnings: [],
+      rows: [],
+    })
+    render(<RtmEmsLogAmvUploadPage />)
+    const workbook = new File([new Uint8Array([1])], 'Filename.xlsx', {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    })
+
+    await userEvent.upload(
+      screen.getByLabelText('Average monthly values upload spreadsheet'),
+      workbook,
+    )
+
+    const rejectedFile = await screen.findByRole('alert', {
+      name: 'Rejected average monthly values upload file',
+    })
+    expect(
+      within(rejectedFile).getByText(
+        "This file can't be used. Fix these issues in your spreadsheet, then upload it again:",
+      ),
+    ).toBeVisible()
+    const issueList = within(rejectedFile).getByRole('list', {
+      name: 'Upload validation issues',
+    })
+    expect(within(issueList).getAllByRole('listitem')).toHaveLength(4)
+    for (const error of errors) {
+      expect(within(issueList).getByText(error)).toBeVisible()
+    }
+    expect(screen.queryByText('4 validation issues found')).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('table', { name: 'Upload validation issues' }),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('tablist', { name: 'Species' })).not.toBeInTheDocument()
+  })
+
   it('shows the compact filename loading row while the spreadsheet is validated', async () => {
     mockedPreviewUpload.mockImplementation(() => new Promise(() => undefined))
     render(<RtmEmsLogAmvUploadPage />)

@@ -7,7 +7,6 @@ import {
   type ChangeEvent,
   type DragEvent,
   type KeyboardEvent,
-  type ReactNode,
 } from 'react'
 import {
   CheckmarkFilled,
@@ -15,7 +14,6 @@ import {
   Document,
   Download,
   ErrorFilled,
-  InformationFilled,
   Save,
   WarningAltFilled,
 } from '@carbon/icons-react'
@@ -465,162 +463,58 @@ const buildReviewedSaveRequests = (
   return [...visibleValues, ...fixedValues]
 }
 
-const UploadValidationMessage = ({
-  kind,
-  title,
-  children,
-}: {
-  kind: 'info' | 'success' | 'error'
-  title: string
-  children: ReactNode
-}) => {
-  const Icon =
-    kind === 'success' ? CheckmarkFilled : kind === 'error' ? ErrorFilled : InformationFilled
-
-  return (
-    <div
-      className={`admin-upload-validation admin-upload-validation--${kind}`}
-      role={kind === 'error' ? 'alert' : 'status'}
-      aria-live={kind === 'error' ? 'assertive' : 'polite'}
-    >
-      <Icon size={20} className="admin-upload-validation__icon" aria-hidden="true" />
-      <div className="admin-upload-validation__content">
-        <h3>{title}</h3>
-        {children}
-      </div>
-    </div>
-  )
-}
-
 const RejectedUploadFile = ({
   fileName,
-  issue,
+  issues,
   onClear,
 }: {
   fileName: string
-  issue: string
+  issues: string[]
   onClear: () => void
-}) => (
-  <div
-    className="rtm-amv-rejected-file"
-    role="alert"
-    aria-label="Rejected average monthly values upload file"
-  >
-    <div className="rtm-amv-rejected-file__row">
-      <span className="rtm-amv-rejected-file__name">{fileName}</span>
-      <span className="rtm-amv-rejected-file__actions">
-        <ErrorFilled className="rtm-amv-rejected-file__error-icon" size={12} aria-hidden="true" />
-        <button
-          type="button"
-          className="rtm-amv-rejected-file__remove"
-          aria-label="Clear selected file"
-          onClick={onClear}
-        >
-          <Close size={12} aria-hidden="true" />
-        </button>
-      </span>
-    </div>
-    <p className="rtm-amv-rejected-file__issue">{issue}</p>
-  </div>
-)
-
-const buildValidationIssueRows = (
-  details: string[],
-): Array<{ detail: string; key: string; severity: 'Error' }> => {
-  const occurrences = new Map<string, number>()
-
-  return details.map((detail) => {
-    const occurrence = (occurrences.get(detail) ?? 0) + 1
-    occurrences.set(detail, occurrence)
-
-    return {
-      detail,
-      key: `Error-${detail}-${occurrence}`,
-      severity: 'Error',
-    }
-  })
-}
-
-const ValidationIssuesTable = ({ errors }: { errors: string[] }) => {
-  const issues = buildValidationIssueRows(errors)
-
-  if (issues.length === 0) {
-    return null
-  }
-
-  return (
-    <div className="admin-upload-validation-table-wrap">
-      <div className="admin-upload-validation-table-header">
-        <span>Validation issues ({issues.length})</span>
-      </div>
-      <table className="admin-upload-validation-table" aria-label="Upload validation issues">
-        <thead>
-          <tr>
-            <th className="admin-upload-validation-table__issue" scope="col">
-              Issue
-            </th>
-            <th scope="col">Detail</th>
-          </tr>
-        </thead>
-        <tbody>
-          {issues.map((issue) => (
-            <tr key={issue.key}>
-              <td className="admin-upload-validation-table__issue">{issue.severity}</td>
-              <td>{issue.detail}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
-}
-
-const UploadValidationStatus = ({
-  uploadError,
-  previewResult,
-  selectedUploadFile,
-}: {
-  uploadError: string
-  previewResult: RtmEmsLogAmvUploadPreview | null
-  selectedUploadFile: File | null
 }) => {
-  if (uploadError) {
-    return (
-      <UploadValidationMessage kind="error" title="File not ready">
-        <p>{uploadError}</p>
-      </UploadValidationMessage>
-    )
-  }
-
-  if (!previewResult) {
-    return null
-  }
-
-  const isAccepted = previewResult.status === 'accepted'
-  const issueCount = previewResult.errors.length
-
+  const hasMultipleIssues = issues.length > 1
+  const issueOccurrences = new Map<string, number>()
+  const issueItems = issues.map((issue) => {
+    const occurrence = (issueOccurrences.get(issue) ?? 0) + 1
+    issueOccurrences.set(issue, occurrence)
+    return { issue, key: `${issue}-${occurrence}` }
+  })
   return (
-    <>
-      <UploadValidationMessage
-        kind={isAccepted ? 'success' : 'error'}
-        title={
-          isAccepted
-            ? 'Spreadsheet validated'
-            : `${issueCount} validation issue${issueCount === 1 ? '' : 's'} found`
-        }
-      >
-        <p>
-          {selectedUploadFile
-            ? `"${selectedUploadFile.name}" ${isAccepted ? 'is ready for review.' : 'needs correction before review.'}`
-            : previewResult.message}
-        </p>
-        {!isAccepted && (
-          <p>Correct the issues in your spreadsheet, then replace the file to continue.</p>
-        )}
-        {isAccepted && <p>{previewResult.message}</p>}
-      </UploadValidationMessage>
-      <ValidationIssuesTable errors={previewResult.errors} />
-    </>
+    <div
+      className="rtm-amv-rejected-file"
+      role="alert"
+      aria-label="Rejected average monthly values upload file"
+    >
+      <div className="rtm-amv-rejected-file__row">
+        <span className="rtm-amv-rejected-file__name">{fileName}</span>
+        <span className="rtm-amv-rejected-file__actions">
+          <ErrorFilled className="rtm-amv-rejected-file__error-icon" size={12} aria-hidden="true" />
+          <button
+            type="button"
+            className="rtm-amv-rejected-file__remove"
+            aria-label="Clear selected file"
+            onClick={onClear}
+          >
+            <Close size={12} aria-hidden="true" />
+          </button>
+        </span>
+      </div>
+      {hasMultipleIssues ? (
+        <div className="rtm-amv-rejected-file__details">
+          <p className="rtm-amv-rejected-file__intro">
+            This file can&apos;t be used. Fix these issues in your spreadsheet, then upload it
+            again:
+          </p>
+          <ul className="rtm-amv-rejected-file__issues" aria-label="Upload validation issues">
+            {issueItems.map(({ issue, key }) => (
+              <li key={key}>{issue}</li>
+            ))}
+          </ul>
+        </div>
+      ) : (
+        <p className="rtm-amv-rejected-file__issue">{issues[0]}</p>
+      )}
+    </div>
   )
 }
 
@@ -1115,11 +1009,13 @@ const RtmEmsLogAmvUploadPage = () => {
   ]
     .filter(Boolean)
     .join(' ')
-  const rejectedFileIssue =
-    uploadError ||
-    (previewResult && previewResult.status !== 'accepted' && previewResult.errors.length <= 1
-      ? (previewResult.errors[0] ?? previewResult.message)
-      : '')
+  const rejectedFileIssues = uploadError
+    ? [uploadError]
+    : previewResult && previewResult.status !== 'accepted'
+      ? previewResult.errors.length > 0
+        ? previewResult.errors
+        : [previewResult.message]
+      : []
   return (
     <Grid fullWidth className="default-grid admin-upload-fspts-page rtm-amv-upload-page">
       <Column sm={4} md={8} lg={16} className="admin-upload-fspts-header rtm-amv-upload-header">
@@ -1225,10 +1121,10 @@ const RtmEmsLogAmvUploadPage = () => {
                       description={`Validating ${selectedUploadFile.name}`}
                     />
                   </div>
-                ) : rejectedFileIssue ? (
+                ) : rejectedFileIssues.length > 0 ? (
                   <RejectedUploadFile
                     fileName={selectedUploadFile.name}
-                    issue={rejectedFileIssue}
+                    issues={rejectedFileIssues}
                     onClear={clearUploadState}
                   />
                 ) : (
@@ -1251,14 +1147,6 @@ const RtmEmsLogAmvUploadPage = () => {
                     </button>
                   </div>
                 ))}
-
-              {!isPreviewing && !rejectedFileIssue && (
-                <UploadValidationStatus
-                  uploadError={uploadError}
-                  previewResult={previewResult}
-                  selectedUploadFile={selectedUploadFile}
-                />
-              )}
             </section>
           </>
         ) : (

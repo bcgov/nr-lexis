@@ -2585,6 +2585,24 @@ legend.cds--label {
   line-height: 1rem;
 }
 
+.rtm-amv-rejected-file__details {
+  padding: 0 0.75rem 0.5rem;
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+.rtm-amv-rejected-file__intro {
+  margin: 0;
+}
+
+.rtm-amv-rejected-file__issues {
+  display: grid;
+  margin: 0.25rem 0 0;
+  padding: 0;
+  color: var(--cds-text-error);
+  list-style: none;
+}
+
 .rtm-amv-uploaded-file {
   display: flex;
   align-items: center;
