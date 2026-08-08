@@ -55,8 +55,9 @@ only and does not misrepresent it as audit metadata.
   delete operation.
 - A blank upcoming value is omitted from the batch. When the current month had a value, the blank
   cell receives an advisory warning and the user can enter `0` to persist an explicit zero.
-- A value for a species/grade combination that had no current-month value also receives an
-  advisory warning. Both advisory cases may be saved without correction.
+- A positive value for a species/grade combination that had no current-month value also receives
+  an advisory warning. Entering `0` records none and resolves that warning. Both advisory cases
+  may be saved without correction.
 
 ## Atomic reviewed saves
 

@@ -177,9 +177,10 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     const hemlockTable = screen.getByRole('table', {
       name: 'Hemlock average market value review',
     })
-    expect(within(hemlockTable).getByLabelText('Hemlock grade A September 2026 value')).toHaveValue(
-      '120.00',
+    const newHemlockCombination = within(hemlockTable).getByLabelText(
+      'Hemlock grade A September 2026 value',
     )
+    expect(newHemlockCombination).toHaveValue('120.00')
     expect(
       within(hemlockTable).getByText(
         'August had none. Confirm this species and grade combination is valid.',
@@ -195,7 +196,27 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     const missingHemlockValue = within(hemlockTable).getByLabelText(
       'Hemlock grade H September 2026 value',
     )
-    await userEvent.type(missingHemlockValue, '0')
+    await userEvent.clear(newHemlockCombination)
+    await userEvent.type(newHemlockCombination, '0')
+    await userEvent.type(missingHemlockValue, '81.43')
+
+    expect(await screen.findByText('1 cell needs a look before you save')).toBeVisible()
+    expect(
+      screen.getByText('In Hemlock and Cedar, highlighted below. You can save either way.'),
+    ).toBeVisible()
+    expect(document.querySelectorAll('.rtm-amv-species-tab__status--warning')).toHaveLength(1)
+    expect(
+      screen
+        .getByRole('tab', { name: /Hemlock/ })
+        .querySelector('.rtm-amv-species-tab__status--complete'),
+    ).toBeInTheDocument()
+    expect(newHemlockCombination).toHaveValue('0')
+    expect(missingHemlockValue).toHaveValue('81.43')
+    expect(
+      within(hemlockTable).queryByText(
+        'August had none. Confirm this species and grade combination is valid.',
+      ),
+    ).not.toBeInTheDocument()
     expect(
       within(hemlockTable).queryByText('August had 81.40. Enter a value, or 0 for none.'),
     ).not.toBeInTheDocument()
@@ -206,8 +227,8 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     })
     expect(mockedSaveBatch.mock.calls[0][0].values).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ species: 'HE', grade: 'A', newValue: 120 }),
-        expect.objectContaining({ species: 'HE', grade: 'H', newValue: 0 }),
+        expect.objectContaining({ species: 'HE', grade: 'A', newValue: 0 }),
+        expect.objectContaining({ species: 'HE', grade: 'H', newValue: 81.43 }),
       ]),
     )
   })

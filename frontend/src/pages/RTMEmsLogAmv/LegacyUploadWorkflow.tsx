@@ -423,12 +423,13 @@ const reviewValueWarning = (
   comparisonMonthName: string,
 ) => {
   const currentValue = firstReviewValue(row.currentValues)
-  const hasNewValue = value.trim().length > 0
+  const parsedValue = parseReviewValue(value)
+  const hasPositiveNewValue = typeof parsedValue === 'number' && parsedValue > 0
 
-  if (currentValue === null && hasNewValue) {
+  if (currentValue === null && hasPositiveNewValue) {
     return `${comparisonMonthName} had none. Confirm this species and grade combination is valid.`
   }
-  if (currentValue !== null && !hasNewValue) {
+  if (currentValue !== null && parsedValue === null) {
     return `${comparisonMonthName} had ${formatMoney(currentValue)}. Enter a value, or 0 for none.`
   }
   return null
@@ -719,11 +720,17 @@ const ReviewUploadContent = ({
   )
   const comparisonMonthName =
     formatUploadMonth(previewResult.retrievalDate)?.split(' ')[0] ?? 'The comparison month'
-  const hasRowWarning = (row: RtmSpeciesReviewRow) => {
-    const value = reviewValues[row.key] ?? ''
+  const initialReviewValues = buildInitialReviewValues(previewResult.rows)
+  const hasRowWarningForValues = (row: RtmSpeciesReviewRow, values: Record<string, string>) => {
+    const value = values[row.key] ?? ''
     return !reviewValueError(value) && !!reviewValueWarning(row, value, comparisonMonthName)
   }
-  const warnedSpecies = speciesColumns.filter((_, index) => speciesRows[index].some(hasRowWarning))
+  const hasRowWarning = (row: RtmSpeciesReviewRow) => hasRowWarningForValues(row, reviewValues)
+  const warnedSpecies = speciesColumns.filter(
+    (_, index) =>
+      speciesRows[index].some(hasRowWarning) ||
+      speciesRows[index].some((row) => hasRowWarningForValues(row, initialReviewValues)),
+  )
   const warningCellCount = speciesRows.reduce(
     (total, rows) => total + rows.filter(hasRowWarning).length,
     0,
