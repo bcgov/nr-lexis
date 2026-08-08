@@ -233,6 +233,55 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     )
   })
 
+  it('shows a clean editable review when every uploaded value is valid', async () => {
+    mockedPreviewUpload.mockResolvedValue({
+      status: 'accepted',
+      fileName: 'Filename.xlsx',
+      fileSize: 7,
+      message: 'Spreadsheet is valid.',
+      rowCount: 7,
+      retrievalDate: '2026-08-01',
+      updateDate: '2026-09-01',
+      errors: [],
+      warnings: [],
+      rows: ['BA', 'HE', 'CE', 'CY', 'FI', 'SP', 'PINE'].map((species, index) => ({
+        species,
+        grade: 'D',
+        growthIndicator: 'O',
+        retrievalDate: '2026-08-01',
+        updateDate: '2026-09-01',
+        currentValue: 100 + index,
+        newValue: 101 + index,
+        returnCode: '0',
+      })),
+    })
+    render(<RtmEmsLogAmvUploadPage />)
+    const workbook = new File([new Uint8Array([1])], 'Filename.xlsx', {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    })
+
+    await userEvent.upload(
+      screen.getByLabelText('Average monthly values upload spreadsheet'),
+      workbook,
+    )
+
+    expect(await screen.findByRole('tab', { name: /Cedar/ })).toBeVisible()
+    expect(screen.queryByText(/cells? need a look before you save/)).not.toBeInTheDocument()
+    expect(document.querySelectorAll('.rtm-amv-species-tab__status--warning')).toHaveLength(0)
+    expect(document.querySelectorAll('.rtm-amv-species-tab__status--complete')).toHaveLength(7)
+
+    await userEvent.click(screen.getByRole('tab', { name: /Cedar/ }))
+    const cedarTable = screen.getByRole('table', {
+      name: 'Cedar average market value review',
+    })
+    const cedarRow = within(cedarTable).getByRole('row', { name: /D.*102\.00.*103\.00/ })
+    expect(cedarRow).not.toHaveClass('has-warning')
+    expect(within(cedarTable).getByLabelText('Cedar grade D September 2026 value')).toBeEnabled()
+    expect(screen.getByText('Fixed values are not shown here')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Save values' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeEnabled()
+  })
+
   it('groups pine and hides fixed legacy grades while preserving the workbook submission', async () => {
     mockedPreviewUpload.mockResolvedValue({
       status: 'accepted',
