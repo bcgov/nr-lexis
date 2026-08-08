@@ -14,6 +14,7 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
+import { Add } from '@carbon/icons-react'
 import SearchResultsTableFrame from '../../components/SearchResultsTableFrame'
 import EmptyState from '@/components/EmptyState'
 import AuthoritativeOptionsUnavailableNotification from '@/components/AuthoritativeOptionsUnavailableNotification'
@@ -599,11 +600,6 @@ const ProvincialOffersPage = () => {
                   Clear all
                 </Button>
                 <SearchSubmitButton loading={loading} disabled={hasDateValidationError} />
-                {canCreateOffer && (
-                  <Link className="cds--link" to="/provincial/offers/create">
-                    Add Offer
-                  </Link>
-                )}
               </div>
             </form>
           </Tile>
@@ -628,6 +624,19 @@ const ProvincialOffersPage = () => {
               errorMessage || (loading && results.content.length === 0)
                 ? undefined
                 : results.page.totalElements
+            }
+            actions={
+              canCreateOffer ? (
+                <Button
+                  as={Link}
+                  to="/provincial/offers/create"
+                  kind="primary"
+                  size="md"
+                  renderIcon={Add}
+                >
+                  Add offer
+                </Button>
+              ) : undefined
             }
           >
             {errorMessage ? (

@@ -16,6 +16,7 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
+import { Add } from '@carbon/icons-react'
 import SearchResultsTableFrame from '../../components/SearchResultsTableFrame'
 import { AppNotification } from '../../components/AppNotification'
 import EmptyState from '@/components/EmptyState'
@@ -782,30 +783,7 @@ const ProvincialApplicationPage = () => {
                   Clear all
                 </Button>
                 <SearchSubmitButton loading={loading} disabled={hasDateValidationError} />
-                {canCreateExemption && (
-                  <DisabledButtonTooltip
-                    disabled={selectedRowsCount === 0}
-                    description="Select at least one eligible application."
-                  >
-                    <Button
-                      type="button"
-                      kind="tertiary"
-                      size="md"
-                      onClick={onCreateExemptionClick}
-                      disabled={selectedRowsCount === 0}
-                    >
-                      Create exemption for Selected Applications
-                    </Button>
-                  </DisabledButtonTooltip>
-                )}
               </div>
-              {canCreateApplication && (
-                <div className="provincial-application-create-link">
-                  <Link className="cds--link" to="/provincial/application/create">
-                    Add Application
-                  </Link>
-                </div>
-              )}
               {exemptionStatus && (
                 <AppNotification
                   className="legacy-inline-notification"
@@ -838,6 +816,39 @@ const ProvincialApplicationPage = () => {
               errorMessage || (loading && results.content.length === 0)
                 ? undefined
                 : results.page.totalElements
+            }
+            actions={
+              canCreateExemption || canCreateApplication ? (
+                <>
+                  {canCreateExemption && (
+                    <DisabledButtonTooltip
+                      disabled={selectedRowsCount === 0}
+                      description="Select at least one eligible application."
+                    >
+                      <Button
+                        type="button"
+                        kind="tertiary"
+                        size="md"
+                        onClick={onCreateExemptionClick}
+                        disabled={selectedRowsCount === 0}
+                      >
+                        Create exemption for selected applications
+                      </Button>
+                    </DisabledButtonTooltip>
+                  )}
+                  {canCreateApplication && (
+                    <Button
+                      as={Link}
+                      to="/provincial/application/create"
+                      kind="primary"
+                      size="md"
+                      renderIcon={Add}
+                    >
+                      Add application
+                    </Button>
+                  )}
+                </>
+              ) : undefined
             }
           >
             {errorMessage ? (

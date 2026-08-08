@@ -565,22 +565,6 @@ const FederalPage = () => {
                   Clear all
                 </Button>
                 <SearchSubmitButton loading={loading} disabled={hasDateValidationError} />
-                {canCreateFederalExemption && (
-                  <DisabledButtonTooltip
-                    disabled={selectedRowsCount === 0}
-                    description="Select at least one eligible application."
-                  >
-                    <Button
-                      type="button"
-                      kind="tertiary"
-                      size="md"
-                      onClick={onCreateExemptionClick}
-                      disabled={selectedRowsCount === 0}
-                    >
-                      Create exemption for Selected Applications
-                    </Button>
-                  </DisabledButtonTooltip>
-                )}
               </div>
               {exemptionSelectionStatus && (
                 <AppNotification
@@ -614,6 +598,24 @@ const FederalPage = () => {
               errorMessage || (loading && results.content.length === 0)
                 ? undefined
                 : results.page.totalElements
+            }
+            actions={
+              canCreateFederalExemption ? (
+                <DisabledButtonTooltip
+                  disabled={selectedRowsCount === 0}
+                  description="Select at least one eligible application."
+                >
+                  <Button
+                    type="button"
+                    kind="tertiary"
+                    size="md"
+                    onClick={onCreateExemptionClick}
+                    disabled={selectedRowsCount === 0}
+                  >
+                    Create exemption for selected applications
+                  </Button>
+                </DisabledButtonTooltip>
+              ) : undefined
             }
           >
             {errorMessage ? (

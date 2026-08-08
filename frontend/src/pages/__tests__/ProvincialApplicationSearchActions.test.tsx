@@ -124,22 +124,20 @@ describe('Provincial Application Search Actions', () => {
     await screen.findByText('321')
 
     const createExemptionButton = screen.getByRole('button', {
-      name: 'Create exemption for Selected Applications',
+      name: 'Create exemption for selected applications',
     })
     expect(createExemptionButton).toBeDisabled()
+    expect(createExemptionButton.closest('.legacy-search-table-toolbar__actions')).not.toBeNull()
 
     expect(screen.getByRole('checkbox', { name: 'Select 321' })).toBeEnabled()
     expect(screen.getByRole('checkbox', { name: 'Select 654' })).toBeDisabled()
     expect(
       screen.queryByRole('link', { name: 'Upload Application Submission' }),
     ).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Add Application' })).toHaveAttribute(
-      'href',
-      '/provincial/application/create',
-    )
-    expect(
-      screen.getByRole('link', { name: 'Add Application' }).closest('.legacy-search-actions'),
-    ).toBeNull()
+    const addApplicationAction = screen.getByRole('link', { name: 'Add application' })
+    expect(addApplicationAction).toHaveAttribute('href', '/provincial/application/create')
+    expect(addApplicationAction).toHaveClass('cds--btn--primary')
+    expect(addApplicationAction.closest('.legacy-search-table-toolbar__actions')).not.toBeNull()
 
     const ineligibleCheckbox = screen.getByRole('checkbox', { name: 'Select 654' })
     const ineligibleCheckboxTooltipTrigger = ineligibleCheckbox.closest(
@@ -155,11 +153,11 @@ describe('Provincial Application Search Actions', () => {
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select 321' }))
     expect(
-      screen.getByRole('button', { name: 'Create exemption for Selected Applications' }),
+      screen.getByRole('button', { name: 'Create exemption for selected applications' }),
     ).toBeEnabled()
 
     await userEvent.click(
-      screen.getByRole('button', { name: 'Create exemption for Selected Applications' }),
+      screen.getByRole('button', { name: 'Create exemption for selected applications' }),
     )
 
     expect(mockNavigate).toHaveBeenCalledWith('/provincial/exemption/create', {
@@ -191,7 +189,7 @@ describe('Provincial Application Search Actions', () => {
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select 321' }))
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select 654' }))
     await userEvent.click(
-      screen.getByRole('button', { name: 'Create exemption for Selected Applications' }),
+      screen.getByRole('button', { name: 'Create exemption for selected applications' }),
     )
 
     expect(mockNavigate).toHaveBeenCalledWith('/provincial/exemption/create', {
@@ -344,7 +342,7 @@ describe('Provincial Application Search Actions', () => {
     expect(screen.queryByLabelText('Applicant client number')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Owner client number')).not.toBeInTheDocument()
     expect(
-      screen.queryByRole('button', { name: 'Create exemption for Selected Applications' }),
+      screen.queryByRole('button', { name: 'Create exemption for selected applications' }),
     ).not.toBeInTheDocument()
     expect(
       screen.queryByRole('checkbox', { name: 'Select all rows on this page' }),
@@ -431,7 +429,7 @@ describe('Provincial Application Search Actions', () => {
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select all rows on this page' }))
     await userEvent.click(
-      screen.getByRole('button', { name: 'Create exemption for Selected Applications' }),
+      screen.getByRole('button', { name: 'Create exemption for selected applications' }),
     )
 
     await waitFor(() => {
@@ -451,7 +449,7 @@ describe('Provincial Application Search Actions', () => {
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select 321' }))
     expect(
-      screen.getByRole('button', { name: 'Create exemption for Selected Applications' }),
+      screen.getByRole('button', { name: 'Create exemption for selected applications' }),
     ).toBeEnabled()
 
     mockedSearchProvincialApplications.mockClear()
@@ -459,7 +457,7 @@ describe('Provincial Application Search Actions', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByRole('button', { name: 'Create exemption for Selected Applications' }),
+        screen.getByRole('button', { name: 'Create exemption for selected applications' }),
       ).toBeDisabled()
     })
     expect(mockedSearchProvincialApplications).not.toHaveBeenCalled()

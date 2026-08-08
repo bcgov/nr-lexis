@@ -2028,12 +2028,6 @@ $notification-types: 'error', 'info', 'success', 'warning';
   display: flex;
 }
 
-.provincial-application-create-link {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 0.5rem;
-}
-
 .legacy-form-fieldset {
   min-inline-size: 0;
   margin: 0 0 1rem;
@@ -2127,6 +2121,37 @@ $notification-types: 'error', 'info', 'success', 'warning';
   display: flex;
   flex: 0 0 auto;
   align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+@media (max-width: 671px) {
+  .legacy-search-table-toolbar--with-actions .cds--toolbar-content {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  .legacy-search-table-toolbar__actions {
+    flex: 1 1 100%;
+    inline-size: 100%;
+  }
+
+  .legacy-search-table-toolbar__actions > *,
+  .legacy-search-table-toolbar__actions .disabled-button-tooltip,
+  .legacy-search-table-toolbar__actions .disabled-button-tooltip > .cds--btn {
+    flex: 1 1 100%;
+    inline-size: 100%;
+    max-inline-size: none;
+    min-inline-size: 0;
+  }
+
+  .legacy-search-table-toolbar__actions .cds--btn {
+    block-size: auto;
+    min-block-size: 2.5rem;
+    padding-block: 0.625rem;
+    white-space: normal;
+  }
 }
 
 .provincial-review-table-toolbar {

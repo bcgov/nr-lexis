@@ -548,10 +548,12 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     ).toBeLessThanOrEqual(1)
     expect(fullWidthResults.headingLeft).toBe(initialShellLayout.headingLeft)
     expect(fullWidthResults.filterResultsGap).toBe(32)
-    const resultCountToolbar = page.locator('.legacy-search-table-toolbar .cds--toolbar-content')
-    await expect(resultCountToolbar).toHaveCSS('align-items', 'center')
-    await expect(resultCountToolbar).toHaveCSS('height', '40px')
-    await expect(resultCountToolbar).toHaveCSS('padding-left', '16px')
+    const resultActionToolbar = page.locator(
+      '.legacy-search-table-toolbar--with-actions .cds--toolbar-content',
+    )
+    await expect(resultActionToolbar).toHaveCSS('align-items', 'center')
+    await expect(resultActionToolbar).toHaveCSS('height', '56px')
+    await expect(resultActionToolbar).toHaveCSS('padding-left', '16px')
     await expect(page.locator('.legacy-search-table-toolbar')).toHaveCSS(
       'background-color',
       'rgb(244, 244, 244)',
@@ -726,7 +728,9 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       waitUntil: 'domcontentloaded',
     })
 
-    const fieldLabel = page.locator('label.cds--label').first()
+    const fieldLabel = page
+      .locator('.provincial-application-search-filters label.cds--label')
+      .first()
     const fieldInput = page.getByRole('textbox', { name: 'Application number' })
     await expect(fieldLabel).toHaveCSS('font-size', '14px')
     await expect(fieldInput).toHaveCSS('font-size', '16px')
@@ -738,10 +742,14 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(clearButton).toHaveCSS('border-color', 'rgb(15, 98, 254)')
     await expect(clearButton).toHaveCSS('color', 'rgb(15, 98, 254)')
 
-    await expect(page.getByRole('link', { name: 'Add Application' })).toHaveCSS(
-      'text-decoration-line',
-      'underline',
-    )
+    const addApplicationAction = page.getByRole('link', { name: 'Add application' })
+    await expect(addApplicationAction).toHaveClass(/cds--btn--primary/)
+    expect(
+      await addApplicationAction.evaluate((action) =>
+        Boolean(action.closest('.legacy-search-table-toolbar__actions')),
+      ),
+    ).toBe(true)
+    await expect(addApplicationAction).toHaveCSS('background-color', 'rgb(15, 98, 254)')
 
     const infoNotification = page.locator('.cds--inline-notification--info')
     await expect(infoNotification).toContainText('Export schedule filter applied')
@@ -899,12 +907,10 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await rows.nth(0).hover()
     await expect(firstRowCell).toHaveCSS('background-color', 'rgb(255, 255, 255)')
 
+    const addApplicationAction = page.getByRole('link', { name: 'Add application' })
     await page.getByRole('switch', { name: 'Toggle dark mode' }).click()
     await expect(page.locator('html')).toHaveAttribute('data-carbon-theme', 'g100')
-    await expect(page.getByRole('link', { name: 'Add Application' })).toHaveCSS(
-      'color',
-      'rgb(120, 169, 255)',
-    )
+    await expect(addApplicationAction).toHaveCSS('color', 'rgb(255, 255, 255)')
     await expect(page.getByRole('button', { name: 'Clear all', exact: true })).toHaveCSS(
       'color',
       'rgb(255, 255, 255)',
@@ -1104,15 +1110,23 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     expect(afterScroll.columnRight).toBeLessThanOrEqual(afterScroll.viewportRight + 1)
   })
 
-  test('keeps long exemption actions within a narrow mobile viewport', async ({ page }) => {
+  test('keeps result toolbar actions within a narrow mobile viewport', async ({ page }) => {
     await page.setViewportSize({ width: 320, height: 720 })
 
     for (const route of ['/provincial/application', '/federal']) {
       await page.goto(route, { waitUntil: 'domcontentloaded' })
+      const searchButton = page.getByRole('button', { name: 'Search', exact: true })
+      await expect(searchButton).toBeEnabled()
+      await searchButton.click()
       const exemptionAction = page.getByRole('button', {
-        name: 'Create exemption for Selected Applications',
+        name: 'Create exemption for selected applications',
       })
       await expect(exemptionAction).toBeVisible()
+      expect(
+        await exemptionAction.evaluate((action) =>
+          Boolean(action.closest('.legacy-search-table-toolbar__actions')),
+        ),
+      ).toBe(true)
 
       const bounds = await exemptionAction.evaluate((button) => {
         const rect = button.getBoundingClientRect()
@@ -1122,6 +1136,11 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       expect(bounds.left).toBeGreaterThanOrEqual(0)
       expect(bounds.right).toBeLessThanOrEqual(320)
       expect(bounds.scrollWidth).toBeLessThanOrEqual(Math.ceil(bounds.right - bounds.left))
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+        ),
+      ).toBe(false)
     }
   })
 

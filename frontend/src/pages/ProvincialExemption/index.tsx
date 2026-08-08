@@ -16,6 +16,7 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
+import { Add } from '@carbon/icons-react'
 import SearchResultsTableFrame from '../../components/SearchResultsTableFrame'
 import { AppNotification } from '../../components/AppNotification'
 import ConfirmationModal from '@/components/ConfirmationModal'
@@ -978,31 +979,6 @@ const ProvincialExemptionPage = () => {
                   Clear all
                 </Button>
                 <SearchSubmitButton loading={loading} disabled={hasDateValidationError} />
-                {canApproveExemption && (
-                  <DisabledButtonTooltip
-                    disabled={selectedRowsCount === 0 || approving}
-                    description={
-                      approving
-                        ? 'Wait for the approval request to finish.'
-                        : 'Select at least one exemption to approve.'
-                    }
-                  >
-                    <Button
-                      type="button"
-                      kind="tertiary"
-                      size="md"
-                      onClick={onApproveSelectedClick}
-                      disabled={selectedRowsCount === 0 || approving}
-                    >
-                      {approving ? 'Approving…' : 'Approve Selected Exemption'}
-                    </Button>
-                  </DisabledButtonTooltip>
-                )}
-                {canCreateExemption && (
-                  <Link className="cds--link" to="/provincial/exemption/create">
-                    Add Exemption
-                  </Link>
-                )}
               </div>
               {approvalStatus && (
                 <AppNotification
@@ -1043,6 +1019,43 @@ const ProvincialExemptionPage = () => {
               errorMessage || (loading && results.content.length === 0)
                 ? undefined
                 : results.page.totalElements
+            }
+            actions={
+              canApproveExemption || canCreateExemption ? (
+                <>
+                  {canApproveExemption && (
+                    <DisabledButtonTooltip
+                      disabled={selectedRowsCount === 0 || approving}
+                      description={
+                        approving
+                          ? 'Wait for the approval request to finish.'
+                          : 'Select at least one exemption to approve.'
+                      }
+                    >
+                      <Button
+                        type="button"
+                        kind="tertiary"
+                        size="md"
+                        onClick={onApproveSelectedClick}
+                        disabled={selectedRowsCount === 0 || approving}
+                      >
+                        {approving ? 'Approving…' : 'Approve selected exemptions'}
+                      </Button>
+                    </DisabledButtonTooltip>
+                  )}
+                  {canCreateExemption && (
+                    <Button
+                      as={Link}
+                      to="/provincial/exemption/create"
+                      kind="primary"
+                      size="md"
+                      renderIcon={Add}
+                    >
+                      Add exemption
+                    </Button>
+                  )}
+                </>
+              ) : undefined
             }
           >
             {errorMessage ? (

@@ -155,8 +155,9 @@ describe('Provincial Exemption Search Actions', () => {
     renderPage()
     await screen.findByText('EX-1001')
 
-    const approveButton = screen.getByRole('button', { name: 'Approve Selected Exemption' })
+    const approveButton = screen.getByRole('button', { name: 'Approve selected exemptions' })
     expect(approveButton).toBeDisabled()
+    expect(approveButton.closest('.legacy-search-table-toolbar__actions')).not.toBeNull()
 
     expect(screen.getByRole('checkbox', { name: 'Select EX-1001' })).toBeEnabled()
     const lockedCheckbox = screen.getByRole('checkbox', { name: 'Select EX-2002' })
@@ -175,9 +176,9 @@ describe('Provincial Exemption Search Actions', () => {
     )
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select EX-1001' }))
-    expect(screen.getByRole('button', { name: 'Approve Selected Exemption' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Approve selected exemptions' })).toBeEnabled()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Approve Selected Exemption' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Approve selected exemptions' }))
     const firstDialog = screen.getByRole('dialog', { name: 'Approve selected exemptions' })
     expect(within(firstDialog).getByText('EX-1001')).toBeInTheDocument()
     const firstCertification = within(firstDialog).getByRole('checkbox', {
@@ -201,7 +202,7 @@ describe('Provincial Exemption Search Actions', () => {
       ).not.toBeInTheDocument(),
     )
 
-    await userEvent.click(screen.getByRole('button', { name: 'Approve Selected Exemption' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Approve selected exemptions' }))
     const reopenedDialog = screen.getByRole('dialog', { name: 'Approve selected exemptions' })
     const reopenedCertification = within(reopenedDialog).getByRole('checkbox', {
       name: 'I certify that this exemption has been approved.',
@@ -243,7 +244,7 @@ describe('Provincial Exemption Search Actions', () => {
     ).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select EX-1001' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Approve Selected Exemption' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Approve selected exemptions' }))
     const postApprovalDialog = screen.getByRole('dialog', { name: 'Approve selected exemptions' })
     expect(
       within(postApprovalDialog).getByRole('checkbox', {
@@ -252,10 +253,10 @@ describe('Provincial Exemption Search Actions', () => {
     ).not.toBeChecked()
     await userEvent.click(within(postApprovalDialog).getByRole('button', { name: 'Cancel' }))
 
-    expect(screen.getByRole('link', { name: 'Add Exemption' })).toHaveAttribute(
-      'href',
-      '/provincial/exemption/create',
-    )
+    const addExemptionAction = screen.getByRole('link', { name: 'Add exemption' })
+    expect(addExemptionAction).toHaveAttribute('href', '/provincial/exemption/create')
+    expect(addExemptionAction).toHaveClass('cds--btn--primary')
+    expect(addExemptionAction.closest('.legacy-search-table-toolbar__actions')).not.toBeNull()
   }, 20_000)
 
   it('preserves selected exemptions while paging through approval results', async () => {
@@ -314,7 +315,7 @@ describe('Provincial Exemption Search Actions', () => {
 
     await userEvent.click(screen.getByLabelText('Next page'))
     await screen.findByText('EX-PAGE-2')
-    expect(screen.getByRole('button', { name: 'Approve Selected Exemption' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Approve selected exemptions' })).toBeEnabled()
 
     await userEvent.click(screen.getByLabelText('Previous page'))
     await screen.findByText('EX-PAGE-1')
@@ -329,7 +330,7 @@ describe('Provincial Exemption Search Actions', () => {
     renderPage()
     await screen.findByText('EX-1001')
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select EX-1001' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Approve Selected Exemption' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Approve selected exemptions' }))
 
     const approvalDialog = screen.getByRole('dialog', { name: 'Approve selected exemptions' })
     await userEvent.click(
@@ -385,7 +386,7 @@ describe('Provincial Exemption Search Actions', () => {
     renderPage()
     await screen.findByText('EX-1001')
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select EX-1001' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Approve Selected Exemption' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Approve selected exemptions' }))
 
     const approvalDialog = screen.getByRole('dialog', { name: 'Approve selected exemptions' })
     await userEvent.click(
@@ -477,7 +478,7 @@ describe('Provincial Exemption Search Actions', () => {
     renderPage()
     await screen.findByText('TEST-EX-001')
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select all rows on this page' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Approve Selected Exemption' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Approve selected exemptions' }))
     const approvalDialog = screen.getByRole('dialog', { name: 'Approve selected exemptions' })
     await userEvent.click(
       within(approvalDialog).getByRole('checkbox', {
@@ -595,7 +596,7 @@ describe('Provincial Exemption Search Actions', () => {
     renderPage()
     await screen.findByText('TEST-EX-001')
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select all rows on this page' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Approve Selected Exemption' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Approve selected exemptions' }))
 
     const approvalDialog = screen.getByRole('dialog', { name: 'Approve selected exemptions' })
     await userEvent.click(
@@ -659,7 +660,7 @@ describe('Provincial Exemption Search Actions', () => {
     await screen.findByText('EX-LOCKED')
     expect(screen.getByText('Locked')).toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: 'Select EX-LOCKED' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Approve Selected Exemption' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Approve selected exemptions' })).toBeDisabled()
   })
 
   it('explains why select-all is disabled when this page has no approvable exemptions', async () => {
@@ -736,13 +737,13 @@ describe('Provincial Exemption Search Actions', () => {
     renderPage()
     await screen.findByText('EX-1001')
 
-    expect(screen.queryByRole('link', { name: 'Add Exemption' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Add exemption' })).not.toBeInTheDocument()
     expect(screen.queryByRole('checkbox', { name: 'Select EX-1001' })).not.toBeInTheDocument()
     expect(
       screen.queryByRole('checkbox', { name: 'Select all rows on this page' }),
     ).not.toBeInTheDocument()
     expect(
-      screen.queryByRole('button', { name: 'Approve Selected Exemption' }),
+      screen.queryByRole('button', { name: 'Approve selected exemptions' }),
     ).not.toBeInTheDocument()
   })
 

@@ -95,7 +95,7 @@ describe('Provincial Offer Search Actions', () => {
     )
   })
 
-  it('shows add offer link only when createOffer action is granted', async () => {
+  it('shows the add offer result action only when createOffer is granted', async () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
         canPerform: (action: string) => action === 'createOffer',
@@ -105,10 +105,10 @@ describe('Provincial Offer Search Actions', () => {
     renderPage()
     await screen.findByText('OFF-1001')
 
-    expect(screen.getByRole('link', { name: 'Add Offer' })).toHaveAttribute(
-      'href',
-      '/provincial/offers/create',
-    )
+    const addOfferAction = screen.getByRole('link', { name: 'Add offer' })
+    expect(addOfferAction).toHaveAttribute('href', '/provincial/offers/create')
+    expect(addOfferAction).toHaveClass('cds--btn--primary')
+    expect(addOfferAction.closest('.legacy-search-table-toolbar__actions')).not.toBeNull()
   })
 
   it('hides add offer link when createOffer action is not granted', async () => {
@@ -117,7 +117,7 @@ describe('Provincial Offer Search Actions', () => {
     renderPage()
     await screen.findByText('OFF-1001')
 
-    expect(screen.queryByRole('link', { name: 'Add Offer' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Add offer' })).not.toBeInTheDocument()
   })
 
   it('opens without results or a search request when no search has been applied', async () => {
