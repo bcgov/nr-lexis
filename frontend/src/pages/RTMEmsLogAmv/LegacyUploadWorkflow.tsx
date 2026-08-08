@@ -38,8 +38,9 @@ import PageHeader from '@/components/PageHeader'
 import { useAuth } from '@/context/auth/useAuth'
 import {
   previewRtmEmsLogAmvUpload,
-  uploadRtmEmsLogAmv,
+  saveRtmEmsLogAmvBatch,
   type RtmEmsLogAmvRow,
+  type RtmEmsLogAmvSaveRequest,
   type RtmEmsLogAmvUploadPreview,
   type RtmEmsLogAmvUploadResult,
 } from '@/service/rtm-emslogamv-service'
@@ -63,7 +64,6 @@ type RtmSpeciesReviewRow = {
   currentValues: RtmReviewCellValues
   key: string
   grade: string
-  hasWarning: boolean
   newValues: RtmReviewCellValues
 }
 
@@ -220,6 +220,8 @@ const RTM_REVIEW_GRADE_ORDER = [
 const HIDDEN_REVIEW_GRADES = new Set(['W', 'Z', '1', '2', '3', '4', '5', '6', 'BLANK'])
 
 const RTM_REVIEW_GROWTH_ORDER = ['O', 'S']
+const RTM_FIXED_GRADES = ['Z', 'BLANK', '1', '2', '3', '4', '5', '6']
+const MAX_AMV_VALUE = 9999.99
 
 const normalizeKey = (value: string | null | undefined) => (value ?? '').trim().toUpperCase()
 
@@ -304,31 +306,9 @@ const compareReviewRows = (left: RtmSpeciesReviewRow, right: RtmSpeciesReviewRow
   return left.grade.localeCompare(right.grade)
 }
 
-const includesWholeToken = (value: string, token: string) => {
-  const escapedToken = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  return new RegExp(`(^|[^A-Z0-9])${escapedToken}([^A-Z0-9]|$)`).test(value)
-}
-
-const warningReferencesSpecies = (warning: string, column: RtmReviewSpeciesColumn) => {
-  const normalizedWarning = normalizeKey(warning)
-  return [column.key, column.label, ...column.speciesCodes].some((token) =>
-    includesWholeToken(normalizedWarning, normalizeKey(token)),
-  )
-}
-
-const warningReferencesGrade = (warning: string, grade: string) => {
-  const normalizedWarning = normalizeKey(warning)
-  return (
-    normalizedWarning.includes(`GRADE ${grade}`) ||
-    normalizedWarning.includes(`GRADE '${grade}'`) ||
-    normalizedWarning.includes(`GRADE "${grade}"`)
-  )
-}
-
 const buildSpeciesReviewRows = (
   rows: RtmEmsLogAmvRow[],
   column: RtmReviewSpeciesColumn,
-  warnings: string[],
 ): RtmSpeciesReviewRow[] => {
   const reviewRows = new Map<string, RtmSpeciesReviewRow>()
 
@@ -352,7 +332,6 @@ const buildSpeciesReviewRows = (
         currentValues: {},
         key: `${column.key}-${grade}`,
         grade,
-        hasWarning: false,
         newValues: {},
       } satisfies RtmSpeciesReviewRow)
 
@@ -363,14 +342,6 @@ const buildSpeciesReviewRows = (
       reviewRow.newValues[growthIndicator] = row.newValue
     }
 
-    reviewRow.hasWarning =
-      reviewRow.hasWarning ||
-      row.currentValue === null ||
-      row.newValue === null ||
-      warnings.some(
-        (warning) =>
-          warningReferencesSpecies(warning, column) && warningReferencesGrade(warning, grade),
-      )
     reviewRows.set(grade, reviewRow)
   })
 
@@ -409,6 +380,87 @@ const formatReviewCell = (values: RtmReviewCellValues | undefined) => {
       ))}
     </span>
   )
+}
+
+const firstReviewValue = (values: RtmReviewCellValues): number | null => {
+  const sortedEntries = Object.entries(values).sort(
+    ([leftGrowth], [rightGrowth]) => growthSortIndex(leftGrowth) - growthSortIndex(rightGrowth),
+  )
+  return sortedEntries.find(([, value]) => value !== null)?.[1] ?? null
+}
+
+const buildInitialReviewValues = (rows: RtmEmsLogAmvRow[]) => {
+  const values: Record<string, string> = {}
+  buildReviewSpeciesColumns(rows).forEach((column) => {
+    buildSpeciesReviewRows(rows, column).forEach((row) => {
+      const newValue = firstReviewValue(row.newValues)
+      values[row.key] = newValue === null ? '' : formatMoney(newValue)
+    })
+  })
+  return values
+}
+
+const parseReviewValue = (value: string): number | null | undefined => {
+  const normalized = value.trim().replace(/,/g, '')
+  if (!normalized) {
+    return null
+  }
+  if (!/^(?:\d+(?:\.\d{1,2})?|\.\d{1,2})$/.test(normalized)) {
+    return undefined
+  }
+  const parsed = Number(normalized)
+  return Number.isFinite(parsed) && parsed >= 0 && parsed <= MAX_AMV_VALUE ? parsed : undefined
+}
+
+const reviewValueError = (value: string) =>
+  parseReviewValue(value) === undefined
+    ? 'Enter a number from 0 to 9999.99 with no more than two decimal places.'
+    : null
+
+const reviewValueWarning = (
+  row: RtmSpeciesReviewRow,
+  value: string,
+  comparisonMonthName: string,
+) => {
+  const currentValue = firstReviewValue(row.currentValues)
+  const hasNewValue = value.trim().length > 0
+
+  if (currentValue === null && hasNewValue) {
+    return `${comparisonMonthName} had none. Confirm this species and grade combination is valid.`
+  }
+  if (currentValue !== null && !hasNewValue) {
+    return `${comparisonMonthName} had ${formatMoney(currentValue)}. Enter a value, or 0 for none.`
+  }
+  return null
+}
+
+const buildReviewedSaveRequests = (
+  previewResult: RtmEmsLogAmvUploadPreview,
+  reviewValues: Record<string, string>,
+): RtmEmsLogAmvSaveRequest[] => {
+  const retrievalDate = normalizeIsoDate(previewResult.retrievalDate) ?? ''
+  const updateDate = normalizeIsoDate(previewResult.updateDate) ?? ''
+  const request = (species: string, grade: string, newValue: number): RtmEmsLogAmvSaveRequest => ({
+    species,
+    grade,
+    growthIndicator: 'O',
+    retrievalDate,
+    updateDate,
+    newValue,
+    saveMode: 'update',
+  })
+
+  const visibleValues = RTM_REVIEW_SPECIES_COLUMNS.flatMap((column) =>
+    buildSpeciesReviewRows(previewResult.rows, column).flatMap((row) => {
+      const value = parseReviewValue(reviewValues[row.key] ?? '')
+      return typeof value === 'number' ? [request(column.key, row.grade, value)] : []
+    }),
+  )
+  const fixedValues = RTM_REVIEW_SPECIES_COLUMNS.flatMap((column) =>
+    RTM_FIXED_GRADES.map((grade) => request(column.key, grade, 1)),
+  )
+
+  return [...visibleValues, ...fixedValues]
 }
 
 const UploadValidationMessage = ({
@@ -548,14 +600,22 @@ const formatSpeciesList = (labels: string[]) => {
 
 const SpeciesReviewTable = ({
   column,
+  comparisonMonthName,
   currentMonthLabel,
+  disabled,
   nextMonthLabel,
+  onValueChange,
   rows,
+  values,
 }: {
   column: RtmReviewSpeciesColumn
+  comparisonMonthName: string
   currentMonthLabel: string
+  disabled: boolean
   nextMonthLabel: string
+  onValueChange: (key: string, value: string) => void
   rows: RtmSpeciesReviewRow[]
+  values: Record<string, string>
 }) => {
   if (rows.length === 0) {
     return (
@@ -579,19 +639,60 @@ const SpeciesReviewTable = ({
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => (
-            <tr key={row.key}>
-              <th scope="row">{row.grade}</th>
-              <td className="rtm-amv-species-table__current-value">
-                {formatReviewCell(row.currentValues) || '—'}
-              </td>
-              <td className={row.hasWarning ? 'has-warning' : undefined}>
-                <span className="rtm-amv-species-table__new-value">
-                  {formatReviewCell(row.newValues) || '—'}
-                </span>
-              </td>
-            </tr>
-          ))}
+          {rows.map((row) => {
+            const value = values[row.key] ?? ''
+            const error = reviewValueError(value)
+            const warning = error ? null : reviewValueWarning(row, value, comparisonMonthName)
+            const message = error ?? warning
+            const messageId = message ? `rtm-amv-${row.key}-message` : undefined
+            return (
+              <tr
+                key={row.key}
+                className={error ? 'has-error' : warning ? 'has-warning' : undefined}
+              >
+                <th scope="row">{row.grade}</th>
+                <td className="rtm-amv-species-table__current-value">
+                  {formatReviewCell(row.currentValues) || '—'}
+                </td>
+                <td>
+                  <div className="rtm-amv-species-table__review-value">
+                    <div className="rtm-amv-species-table__input-wrap">
+                      <input
+                        className="rtm-amv-species-table__input"
+                        type="text"
+                        inputMode="decimal"
+                        aria-label={`${column.label} grade ${row.grade} ${nextMonthLabel} value`}
+                        aria-describedby={messageId}
+                        aria-invalid={error ? true : undefined}
+                        disabled={disabled}
+                        value={value}
+                        onChange={(event) => onValueChange(row.key, event.currentTarget.value)}
+                      />
+                      {warning && (
+                        <WarningAltFilled
+                          className="rtm-amv-species-table__input-warning"
+                          size={14}
+                          aria-hidden="true"
+                        />
+                      )}
+                    </div>
+                    {message && (
+                      <p
+                        id={messageId}
+                        className={
+                          error
+                            ? 'rtm-amv-species-table__message has-error'
+                            : 'rtm-amv-species-table__message'
+                        }
+                      >
+                        {message}
+                      </p>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            )
+          })}
         </tbody>
       </table>
     </div>
@@ -599,22 +700,32 @@ const SpeciesReviewTable = ({
 }
 
 const ReviewUploadContent = ({
+  disabled,
+  onValueChange,
   previewResult,
+  reviewValues,
   uploadResult,
 }: {
+  disabled: boolean
+  onValueChange: (key: string, value: string) => void
   previewResult: RtmEmsLogAmvUploadPreview
+  reviewValues: Record<string, string>
   uploadResult: RtmEmsLogAmvUploadResult | null
 }) => {
   const [selectedSpeciesIndex, setSelectedSpeciesIndex] = useState(0)
   const speciesColumns = buildReviewSpeciesColumns(previewResult.rows)
   const speciesRows = speciesColumns.map((column) =>
-    buildSpeciesReviewRows(previewResult.rows, column, previewResult.warnings),
+    buildSpeciesReviewRows(previewResult.rows, column),
   )
-  const warnedSpecies = speciesColumns.filter((_, index) =>
-    speciesRows[index].some((row) => row.hasWarning),
-  )
+  const comparisonMonthName =
+    formatUploadMonth(previewResult.retrievalDate)?.split(' ')[0] ?? 'The comparison month'
+  const hasRowWarning = (row: RtmSpeciesReviewRow) => {
+    const value = reviewValues[row.key] ?? ''
+    return !reviewValueError(value) && !!reviewValueWarning(row, value, comparisonMonthName)
+  }
+  const warnedSpecies = speciesColumns.filter((_, index) => speciesRows[index].some(hasRowWarning))
   const warningCellCount = speciesRows.reduce(
-    (total, rows) => total + rows.filter((row) => row.hasWarning).length,
+    (total, rows) => total + rows.filter(hasRowWarning).length,
     0,
   )
   const warningCount = warningCellCount || previewResult.warnings.length
@@ -648,7 +759,7 @@ const ReviewUploadContent = ({
         >
           <TabList aria-label="Species" size="sm">
             {speciesColumns.map((column, index) => {
-              const hasWarning = speciesRows[index].some((row) => row.hasWarning)
+              const hasWarning = speciesRows[index].some(hasRowWarning)
               return (
                 <Tab key={column.key}>
                   <span className="rtm-amv-species-tab__label">
@@ -676,9 +787,13 @@ const ReviewUploadContent = ({
               <TabPanel key={column.key} className="rtm-amv-species-tab-panel">
                 <SpeciesReviewTable
                   column={column}
+                  comparisonMonthName={comparisonMonthName}
                   currentMonthLabel={currentMonthLabel}
+                  disabled={disabled}
                   nextMonthLabel={nextMonthLabel}
+                  onValueChange={onValueChange}
                   rows={speciesRows[index]}
+                  values={reviewValues}
                 />
               </TabPanel>
             ))}
@@ -731,6 +846,7 @@ const RtmEmsLogAmvUploadPage = () => {
     'success' | 'error' | 'warning' | 'info'
   >('info')
   const [previewResult, setPreviewResult] = useState<RtmEmsLogAmvUploadPreview | null>(null)
+  const [reviewValues, setReviewValues] = useState<Record<string, string>>({})
   const [selectedUploadFile, setSelectedUploadFile] = useState<File | null>(null)
   const [pendingUploadValidation, setPendingUploadValidation] =
     useState<PendingUploadValidation | null>(null)
@@ -756,6 +872,7 @@ const RtmEmsLogAmvUploadPage = () => {
     setSelectedUploadFile(nextFile)
     setUploadError('')
     setPreviewResult(null)
+    setReviewValues({})
     setUploadResult(null)
     setPendingUploadValidation(null)
 
@@ -786,6 +903,7 @@ const RtmEmsLogAmvUploadPage = () => {
       const validatedResponse = validateAcceptedPreview(response)
       setPreviewResult(validatedResponse)
       if (validatedResponse.status === 'accepted') {
+        setReviewValues(buildInitialReviewValues(validatedResponse.rows))
         setPendingUploadValidation({
           fileName: nextFile.name,
           fileSize: nextFile.size,
@@ -846,6 +964,7 @@ const RtmEmsLogAmvUploadPage = () => {
     setSelectedUploadFile(null)
     setUploadError('')
     setPreviewResult(null)
+    setReviewValues({})
     setUploadResult(null)
     setPendingUploadValidation(null)
     setUploadInputKey((current) => current + 1)
@@ -878,10 +997,24 @@ const RtmEmsLogAmvUploadPage = () => {
     setIsUploading(true)
 
     try {
-      const response = await uploadRtmEmsLogAmv({
-        effectiveMonth,
-        file: selectedUploadFile,
-      })
+      if (!previewResult) {
+        setUploadError('Validate this file before submitting changes.')
+        return
+      }
+
+      const saveRequests = buildReviewedSaveRequests(previewResult, reviewValues)
+      const result = await saveRtmEmsLogAmvBatch({ values: saveRequests })
+      const response: RtmEmsLogAmvUploadResult = {
+        status: result.status,
+        fileName: selectedUploadFile.name,
+        fileSize: selectedUploadFile.size,
+        message: result.message,
+        attemptedRowCount: saveRequests.length,
+        uploadedRowCount: result.rows.length,
+        errors: result.errors,
+        warnings: [],
+        rows: result.rows,
+      }
 
       setUploadResult(response)
       setNotificationKind(
@@ -915,13 +1048,17 @@ const RtmEmsLogAmvUploadPage = () => {
         rows: [],
       })
     } finally {
-      setPendingUploadValidation(null)
       setIsUploading(false)
     }
   }
 
+  const hasReviewErrors = Object.values(reviewValues).some(
+    (value) => reviewValueError(value) !== null,
+  )
+
   const isUploadDisabled =
     isUploading ||
+    hasReviewErrors ||
     !canManage ||
     !selectedUploadFile ||
     selectedUploadFile.size <= 0 ||
@@ -1104,7 +1241,16 @@ const RtmEmsLogAmvUploadPage = () => {
             </section>
 
             {previewResult && (
-              <ReviewUploadContent previewResult={previewResult} uploadResult={uploadResult} />
+              <ReviewUploadContent
+                disabled={isUploading}
+                previewResult={previewResult}
+                reviewValues={reviewValues}
+                uploadResult={uploadResult}
+                onValueChange={(key, value) => {
+                  setReviewValues((current) => ({ ...current, [key]: value }))
+                  setUploadResult(null)
+                }}
+              />
             )}
 
             <div className="admin-upload-fspts-button-row rtm-amv-upload-review-actions">

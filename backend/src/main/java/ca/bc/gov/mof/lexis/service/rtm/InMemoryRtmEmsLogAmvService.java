@@ -37,6 +37,10 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
   private static final String RETURN_FAILURE = "rejected";
   private static final String RETURN_VALIDATION = "validation_failed";
   private static final List<String> GROWTH_TARGETS = List.of("O", "S");
+  private static final List<String> SCREEN_SPECIES =
+      List.of("BA", "HE", "CE", "CY", "FI", "SP", "PINE");
+  private static final List<String> SCREEN_GRADES =
+      List.of("A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "U", "X", "Y");
   private static final Map<String, List<String>> BATCH_SPECIES_TARGETS =
       Map.of(
           "BA", List.of("BA"),
@@ -393,7 +397,6 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
       List<String> errors = new ArrayList<>(parseResult.errors());
       List<UploadTarget> previewTargets =
           expandUploadTargets(parseResult.rows(), parsedEffectiveMonth != null);
-      List<RtmEmsLogAmvRowDto> previewRows = buildPreviewRows(parseResult, previewTargets);
 
       if (parseResult.dataRowCount() == 0) {
         errors.add("The uploaded file contains no data rows.");
@@ -411,7 +414,11 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
       validateMonthStart(parseResult.updateDate(), "Update date", errors);
       validateUploadTargets(
           previewTargets, parseResult.retrievalDate(), parseResult.updateDate(), errors);
-      if (errors.isEmpty()) {
+      List<RtmEmsLogAmvRowDto> previewRows =
+          enforceNextMonth
+              ? buildScreenPreviewRows(parseResult, errors.isEmpty())
+              : buildPreviewRows(parseResult, previewTargets);
+      if (errors.isEmpty() && !enforceNextMonth) {
         int initialRowCount = previewRows.size();
         previewRows =
             previewRows.stream()
@@ -796,6 +803,12 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
       errors.addAll(
           RtmEmsLogAmvDimensionValidator.validateModernGrid(species, request.grade(), "O"));
     }
+    LocalDate effectiveDate =
+        effectiveDateForSave(
+            request.effectiveSaveMode(), parsedRetrievalDate, parsedUpdateDate);
+    if (effectiveDate != null && !isNextMonth(effectiveDate, clock)) {
+      errors.add("Average market values can only be saved for the next month.");
+    }
     return errors;
   }
 
@@ -1116,6 +1129,76 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
               "0"));
     }
     return previewRows;
+  }
+
+  private List<RtmEmsLogAmvRowDto> buildScreenPreviewRows(
+      RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult parseResult,
+      boolean loadCurrentValues) {
+    if (parseResult.retrievalDate() == null || parseResult.updateDate() == null) {
+      return List.of();
+    }
+
+    Map<String, BigDecimal> newValues = new LinkedHashMap<>();
+    for (RtmEmsLogAmvUploadPreviewAnalyzer.UploadRow row : parseResult.rows()) {
+      String species = logicalScreenSpecies(row.species());
+      String grade = RtmEmsLogAmvDimensionValidator.normalize(row.grade());
+      if (species != null && grade != null && SCREEN_GRADES.contains(grade)) {
+        newValues.put(screenPreviewRowKey(species, grade), row.newValue());
+      }
+    }
+
+    Map<String, BigDecimal> currentValues = new LinkedHashMap<>();
+    if (loadCurrentValues) {
+      for (RtmEmsLogAmvRowDto row :
+          findRowsForEffectiveDate(
+              null, null, formatDate(parseResult.retrievalDate()))) {
+        String species = logicalScreenSpecies(row.species());
+        String grade = RtmEmsLogAmvDimensionValidator.normalize(row.grade());
+        BigDecimal currentValue = row.newValue() == null ? row.currentValue() : row.newValue();
+        if (species != null
+            && grade != null
+            && SCREEN_GRADES.contains(grade)
+            && currentValue != null) {
+          currentValues.putIfAbsent(screenPreviewRowKey(species, grade), currentValue);
+        }
+      }
+    }
+
+    List<RtmEmsLogAmvRowDto> previewRows = new ArrayList<>();
+    for (String species : SCREEN_SPECIES) {
+      for (String grade : SCREEN_GRADES) {
+        String key = screenPreviewRowKey(species, grade);
+        if (!currentValues.containsKey(key) && !newValues.containsKey(key)) {
+          continue;
+        }
+        previewRows.add(
+            new RtmEmsLogAmvRowDto(
+                species,
+                grade,
+                "O",
+                formatDate(parseResult.retrievalDate()),
+                formatDate(parseResult.updateDate()),
+                currentValues.get(key),
+                newValues.get(key),
+                "0"));
+      }
+    }
+    return previewRows;
+  }
+
+  private String logicalScreenSpecies(String species) {
+    String normalizedSpecies = RtmEmsLogAmvDimensionValidator.normalize(species);
+    if (normalizedSpecies == null) {
+      return null;
+    }
+    if (List.of("WH", "LO", "YE", "PINE").contains(normalizedSpecies)) {
+      return "PINE";
+    }
+    return BATCH_SPECIES_TARGETS.containsKey(normalizedSpecies) ? normalizedSpecies : null;
+  }
+
+  private String screenPreviewRowKey(String species, String grade) {
+    return species + "|" + grade;
   }
 
   private List<UploadTarget> expandUploadTargets(

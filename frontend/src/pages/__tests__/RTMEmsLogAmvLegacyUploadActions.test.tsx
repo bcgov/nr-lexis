@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
 import RtmEmsLogAmvUploadPage from '@/pages/RTMEmsLogAmv/LegacyUploadWorkflow'
-import { previewRtmEmsLogAmvUpload, uploadRtmEmsLogAmv } from '@/service/rtm-emslogamv-service'
+import { previewRtmEmsLogAmvUpload, saveRtmEmsLogAmvBatch } from '@/service/rtm-emslogamv-service'
 import { createTestAuthContext } from '@/test-utils/auth'
 
 vi.mock('@/context/auth/useAuth', () => ({
@@ -12,17 +12,23 @@ vi.mock('@/context/auth/useAuth', () => ({
 
 vi.mock('@/service/rtm-emslogamv-service', () => ({
   previewRtmEmsLogAmvUpload: vi.fn(),
-  uploadRtmEmsLogAmv: vi.fn(),
+  saveRtmEmsLogAmvBatch: vi.fn(),
 }))
 
 const mockedUseAuth = vi.mocked(useAuth)
 const mockedPreviewUpload = vi.mocked(previewRtmEmsLogAmvUpload)
-const mockedUpload = vi.mocked(uploadRtmEmsLogAmv)
+const mockedSaveBatch = vi.mocked(saveRtmEmsLogAmvBatch)
 
 describe('RTM EMS Log AMV spreadsheet upload actions', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
+    mockedSaveBatch.mockResolvedValue({
+      status: 'accepted',
+      message: 'Values saved.',
+      errors: [],
+      rows: [],
+    })
   })
 
   it('renders the empty Average market values design and month context', () => {
@@ -92,11 +98,11 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       fileName: 'Filename.xlsx',
       fileSize: 3,
       message: 'Spreadsheet is valid.',
-      rowCount: 3,
+      rowCount: 4,
       retrievalDate: '2026-08-01',
       updateDate: '2026-09-01',
       errors: [],
-      warnings: ['Hemlock grade A changed significantly.', 'Cedar grade B changed significantly.'],
+      warnings: [],
       rows: [
         {
           species: 'BA',
@@ -114,8 +120,18 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
           growthIndicator: 'O',
           retrievalDate: '2026-08-01',
           updateDate: '2026-09-01',
-          currentValue: 100,
+          currentValue: null,
           newValue: 120,
+          returnCode: '0',
+        },
+        {
+          species: 'HE',
+          grade: 'H',
+          growthIndicator: 'O',
+          retrievalDate: '2026-08-01',
+          updateDate: '2026-09-01',
+          currentValue: 81.4,
+          newValue: null,
           returnCode: '0',
         },
         {
@@ -125,7 +141,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
           retrievalDate: '2026-08-01',
           updateDate: '2026-09-01',
           currentValue: 200,
-          newValue: 240,
+          newValue: null,
           returnCode: '0',
         },
       ],
@@ -140,7 +156,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       workbook,
     )
 
-    expect(await screen.findByText('2 cells need a look before you save')).toBeVisible()
+    expect(await screen.findByText('3 cells need a look before you save')).toBeVisible()
     expect(
       screen.getByText('In Hemlock and Cedar, highlighted below. You can save either way.'),
     ).toBeVisible()
@@ -161,10 +177,39 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     const hemlockTable = screen.getByRole('table', {
       name: 'Hemlock average market value review',
     })
-    expect(within(hemlockTable).getByText('120.00').closest('td')).toHaveClass('has-warning')
+    expect(within(hemlockTable).getByLabelText('Hemlock grade A September 2026 value')).toHaveValue(
+      '120.00',
+    )
+    expect(
+      within(hemlockTable).getByText(
+        'August had none. Confirm this species and grade combination is valid.',
+      ),
+    ).toBeVisible()
+    expect(
+      within(hemlockTable).getByText('August had 81.40. Enter a value, or 0 for none.'),
+    ).toBeVisible()
     expect(screen.getByText('Fixed values are not shown here')).toBeVisible()
     expect(screen.getByRole('button', { name: 'Save values' })).toBeEnabled()
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeEnabled()
+
+    const missingHemlockValue = within(hemlockTable).getByLabelText(
+      'Hemlock grade H September 2026 value',
+    )
+    await userEvent.type(missingHemlockValue, '0')
+    expect(
+      within(hemlockTable).queryByText('August had 81.40. Enter a value, or 0 for none.'),
+    ).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save values' }))
+    await waitFor(() => {
+      expect(mockedSaveBatch).toHaveBeenCalledTimes(1)
+    })
+    expect(mockedSaveBatch.mock.calls[0][0].values).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ species: 'HE', grade: 'A', newValue: 120 }),
+        expect.objectContaining({ species: 'HE', grade: 'H', newValue: 0 }),
+      ]),
+    )
   })
 
   it('groups pine and hides fixed legacy grades while preserving the workbook submission', async () => {
@@ -231,15 +276,6 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
         },
       ],
     })
-    mockedUpload.mockResolvedValue({
-      status: 'accepted',
-      message: 'Spreadsheet uploaded.',
-      attemptedRowCount: 5,
-      uploadedRowCount: 5,
-      errors: [],
-      warnings: [],
-      rows: [],
-    })
     render(<RtmEmsLogAmvUploadPage />)
     const workbook = new File([new Uint8Array([1])], 'rtm-values.xlsx', {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -262,7 +298,17 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Save values' }))
     await waitFor(() => {
-      expect(mockedUpload).toHaveBeenCalledWith({ file: workbook, effectiveMonth })
+      expect(mockedSaveBatch).toHaveBeenCalledTimes(1)
     })
+    const request = mockedSaveBatch.mock.calls[0][0]
+    expect(request.values).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ species: 'PINE', grade: 'A', newValue: 10 }),
+        expect.objectContaining({ species: 'PINE', grade: 'BLANK', newValue: 1 }),
+      ]),
+    )
+    expect(request.values).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ grade: 'W' })]),
+    )
   })
 })

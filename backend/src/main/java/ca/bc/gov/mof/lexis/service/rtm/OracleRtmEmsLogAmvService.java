@@ -49,6 +49,10 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
   private static final String RETURN_FAILURE = "rejected";
   private static final String RETURN_VALIDATION = "validation_failed";
   private static final List<String> GROWTH_TARGETS = List.of("O", "S");
+  private static final List<String> SCREEN_SPECIES =
+      List.of("BA", "HE", "CE", "CY", "FI", "SP", "PINE");
+  private static final List<String> SCREEN_GRADES =
+      List.of("A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "U", "X", "Y");
   private static final Map<String, List<String>> BATCH_SPECIES_TARGETS =
       Map.of(
           "BA", List.of("BA"),
@@ -367,7 +371,7 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
       validateUploadDateOrder(parseResult.retrievalDate(), parseResult.updateDate(), errors);
       validateUploadTargets(
           rowsToPreview, parseResult.retrievalDate(), parseResult.updateDate(), errors);
-      if (errors.isEmpty()) {
+      if (errors.isEmpty() && !enforceNextMonth) {
         rowsToPreview =
             filterUploadTargetsForExistingRows(
                 rowsToPreview,
@@ -379,11 +383,17 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
         }
       }
       List<RtmEmsLogAmvRowDto> previewRows =
-          buildPreviewRows(
-              rowsToPreview,
-              parseResult.retrievalDate(),
-              parseResult.updateDate(),
-              errors.isEmpty());
+          enforceNextMonth
+              ? buildScreenPreviewRows(
+                  parseResult.rows(),
+                  parseResult.retrievalDate(),
+                  parseResult.updateDate(),
+                  errors.isEmpty())
+              : buildPreviewRows(
+                  rowsToPreview,
+                  parseResult.retrievalDate(),
+                  parseResult.updateDate(),
+                  errors.isEmpty());
       if (parseResult.dataRowCount() > 0 && parseResult.dataRowCount() < 2) {
         warnings.add("The uploaded file has very few rows; confirm it contains full AMV data.");
       }
@@ -633,6 +643,14 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
       errors.addAll(
           RtmEmsLogAmvDimensionValidator.validateModernGrid(species, request.grade(), "O"));
     }
+    LocalDate effectiveDate =
+        effectiveDateForSave(
+            request.effectiveSaveMode(),
+            parseRetrievalDate(request.retrievalDate()),
+            parseRetrievalDate(request.updateDate()));
+    if (effectiveDate != null && !isNextMonth(effectiveDate, clock)) {
+      errors.add("Average market values can only be saved for the next month.");
+    }
     return errors;
   }
 
@@ -862,6 +880,77 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
               "0"));
     }
     return previewRows;
+  }
+
+  private List<RtmEmsLogAmvRowDto> buildScreenPreviewRows(
+      List<RtmEmsLogAmvUploadPreviewAnalyzer.UploadRow> uploadedRows,
+      LocalDate retrievalDate,
+      LocalDate updateDate,
+      boolean loadCurrentValues) {
+    if (retrievalDate == null || updateDate == null) {
+      return List.of();
+    }
+
+    Map<String, BigDecimal> newValues = new LinkedHashMap<>();
+    for (RtmEmsLogAmvUploadPreviewAnalyzer.UploadRow row : uploadedRows) {
+      String species = logicalScreenSpecies(row.species());
+      String grade = RtmEmsLogAmvDimensionValidator.normalize(row.grade());
+      if (species != null && grade != null && SCREEN_GRADES.contains(grade)) {
+        newValues.put(screenPreviewRowKey(species, grade), row.newValue());
+      }
+    }
+
+    Map<String, BigDecimal> currentValues = new LinkedHashMap<>();
+    if (loadCurrentValues) {
+      for (RtmEmsLogAmvRowDto row :
+          repository.findEffectiveDateRows(null, null, retrievalDate)) {
+        String species = logicalScreenSpecies(row.species());
+        String grade = RtmEmsLogAmvDimensionValidator.normalize(row.grade());
+        BigDecimal currentValue = row.newValue() == null ? row.currentValue() : row.newValue();
+        if (species != null
+            && grade != null
+            && SCREEN_GRADES.contains(grade)
+            && currentValue != null) {
+          currentValues.putIfAbsent(screenPreviewRowKey(species, grade), currentValue);
+        }
+      }
+    }
+
+    List<RtmEmsLogAmvRowDto> previewRows = new ArrayList<>();
+    for (String species : SCREEN_SPECIES) {
+      for (String grade : SCREEN_GRADES) {
+        String key = screenPreviewRowKey(species, grade);
+        if (!currentValues.containsKey(key) && !newValues.containsKey(key)) {
+          continue;
+        }
+        previewRows.add(
+            new RtmEmsLogAmvRowDto(
+                species,
+                grade,
+                "O",
+                formatDate(retrievalDate),
+                formatDate(updateDate),
+                currentValues.get(key),
+                newValues.get(key),
+                "0"));
+      }
+    }
+    return previewRows;
+  }
+
+  private String logicalScreenSpecies(String species) {
+    String normalizedSpecies = RtmEmsLogAmvDimensionValidator.normalize(species);
+    if (normalizedSpecies == null) {
+      return null;
+    }
+    if (List.of("WH", "LO", "YE", "PINE").contains(normalizedSpecies)) {
+      return "PINE";
+    }
+    return BATCH_SPECIES_TARGETS.containsKey(normalizedSpecies) ? normalizedSpecies : null;
+  }
+
+  private String screenPreviewRowKey(String species, String grade) {
+    return species + "|" + grade;
   }
 
   private String previewRowKey(String species, String grade, String growthIndicator) {

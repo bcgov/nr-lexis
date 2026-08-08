@@ -2666,17 +2666,74 @@ legend.cds--label {
   color: var(--fds-text-secondary, var(--cds-text-secondary));
 }
 
-.rtm-amv-species-table__new-value {
-  display: block;
-  min-inline-size: 5rem;
-  padding: 0.25rem 0.5rem;
+.rtm-amv-species-table tbody tr.has-warning > th,
+.rtm-amv-species-table tbody tr.has-warning > td {
+  background: var(--fds-support-warning-bg, #fff8e1);
+}
+
+.rtm-amv-species-table tbody tr.has-error > th,
+.rtm-amv-species-table tbody tr.has-error > td {
+  background: var(--cds-notification-background-error);
+}
+
+.rtm-amv-species-table__review-value {
+  min-inline-size: 8rem;
+}
+
+.rtm-amv-species-table__input-wrap {
+  position: relative;
+}
+
+.rtm-amv-species-table__input {
+  inline-size: 100%;
+  block-size: 1.75rem;
+  padding: 0.25rem 1.75rem 0.25rem 0.5rem;
+  color: var(--fds-text-primary, var(--cds-text-primary));
+  font: inherit;
   background: var(--fds-background, var(--cds-layer-accent));
+  border: 0;
   border-block-end: 1px solid var(--fds-border-strong, var(--cds-border-strong));
 }
 
-.rtm-amv-species-table td.has-warning .rtm-amv-species-table__new-value {
-  background: var(--fds-support-warning-bg, #fff8e1);
-  border-color: var(--cds-support-warning);
+.rtm-amv-species-table__input:focus {
+  outline: 2px solid var(--fds-interactive, var(--cds-focus));
+  outline-offset: -2px;
+}
+
+.rtm-amv-species-table__input:disabled {
+  color: var(--cds-text-disabled);
+  cursor: not-allowed;
+}
+
+.rtm-amv-species-table tr.has-warning .rtm-amv-species-table__input {
+  background: var(--fds-layer-01, var(--cds-layer));
+  box-shadow: inset 0 0 0 1px var(--cds-support-warning);
+  border-block-end-color: var(--cds-support-warning);
+}
+
+.rtm-amv-species-table tr.has-error .rtm-amv-species-table__input {
+  box-shadow: inset 0 0 0 1px var(--cds-support-error);
+  border-block-end-color: var(--cds-support-error);
+}
+
+.rtm-amv-species-table__input-warning {
+  position: absolute;
+  inset-block-start: 0.4375rem;
+  inset-inline-end: 0.5rem;
+  color: var(--cds-support-warning);
+  pointer-events: none;
+}
+
+.rtm-amv-species-table__message {
+  max-inline-size: 10rem;
+  margin: 0.25rem 0 0;
+  color: var(--fds-text-primary, var(--cds-text-primary));
+  font-size: 0.625rem;
+  line-height: 0.75rem;
+}
+
+.rtm-amv-species-table__message.has-error {
+  color: var(--cds-text-error);
 }
 
 .rtm-amv-species-review__empty {

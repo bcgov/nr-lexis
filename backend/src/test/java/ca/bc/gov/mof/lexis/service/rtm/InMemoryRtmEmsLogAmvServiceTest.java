@@ -72,16 +72,21 @@ class InMemoryRtmEmsLogAmvServiceTest {
     Clock clock =
         Clock.fixed(Instant.parse("2026-06-15T19:00:00Z"), LexisBusinessTime.ZONE);
     InMemoryRtmEmsLogAmvService service = new InMemoryRtmEmsLogAmvService(clock);
-    service.saveBatch(
-        List.of(
-            new RtmEmsLogAmvSaveRequestDto(
-                "PINE",
-                "A",
-                "O",
-                "2026-06-01",
-                "2026-06-01",
-                BigDecimal.ZERO,
-                "update")));
+    List.of("WH", "LO", "YE")
+        .forEach(
+            species ->
+                List.of("O", "S")
+                    .forEach(
+                        growth ->
+                            service.save(
+                                new RtmEmsLogAmvSaveRequestDto(
+                                    species,
+                                    "A",
+                                    growth,
+                                    "2026-06-01",
+                                    null,
+                                    BigDecimal.ZERO,
+                                    "create"))));
 
     MultipartFile workbook =
         workbook("grouped-pine.xlsx", RtmEmsLogAmvWorkbookTestFixtures.ambiguousPineWorkbook());
@@ -94,13 +99,7 @@ class InMemoryRtmEmsLogAmvServiceTest {
     assertThat(preview.updateDate()).isEqualTo("2026-07-01");
     assertThat(preview.rows())
         .extracting(row -> List.of(row.species(), row.growthIndicator()))
-        .containsExactly(
-            List.of("WH", "O"),
-            List.of("WH", "S"),
-            List.of("LO", "O"),
-            List.of("LO", "S"),
-            List.of("YE", "O"),
-            List.of("YE", "S"));
+        .containsExactly(List.of("PINE", "O"));
     assertThat(upload.status()).isEqualTo("accepted");
     assertThat(upload.attemptedRowCount()).isEqualTo(6);
     assertThat(upload.uploadedRowCount()).isEqualTo(6);
@@ -176,7 +175,9 @@ class InMemoryRtmEmsLogAmvServiceTest {
 
   @Test
   void shouldApplyPineToAllPhysicalSpeciesAndBothGrowthTypesInOneBatch() {
-    InMemoryRtmEmsLogAmvService service = new InMemoryRtmEmsLogAmvService();
+    Clock clock =
+        Clock.fixed(Instant.parse("2026-06-15T19:00:00Z"), LexisBusinessTime.ZONE);
+    InMemoryRtmEmsLogAmvService service = new InMemoryRtmEmsLogAmvService(clock);
 
     var result =
         service.saveBatch(
@@ -204,10 +205,12 @@ class InMemoryRtmEmsLogAmvServiceTest {
   }
 
   @Test
-  void shouldAcceptModernGridGradesForHistoricMonths() {
-    InMemoryRtmEmsLogAmvService service = new InMemoryRtmEmsLogAmvService();
+  void shouldRejectAnyBatchOutsideTheImmediatelyUpcomingMonth() {
+    Clock clock =
+        Clock.fixed(Instant.parse("2026-06-15T19:00:00Z"), LexisBusinessTime.ZONE);
+    InMemoryRtmEmsLogAmvService service = new InMemoryRtmEmsLogAmvService(clock);
 
-    var result =
+    var historic =
         service.saveBatch(
             List.of(
                 new RtmEmsLogAmvSaveRequestDto(
@@ -218,10 +221,66 @@ class InMemoryRtmEmsLogAmvServiceTest {
                     "2000-02-01",
                     new BigDecimal("10.25"),
                     "update")));
+    var current =
+        service.saveBatch(
+            List.of(
+                new RtmEmsLogAmvSaveRequestDto(
+                    "BA",
+                    "Z",
+                    "O",
+                    "2026-06-01",
+                    "2026-06-01",
+                    new BigDecimal("10.25"),
+                    "update")));
+    var laterFuture =
+        service.saveBatch(
+            List.of(
+                new RtmEmsLogAmvSaveRequestDto(
+                    "BA",
+                    "Z",
+                    "O",
+                    "2026-08-01",
+                    "2026-08-01",
+                    new BigDecimal("10.25"),
+                    "update")));
+
+    assertThat(historic.status()).isEqualTo("validation_failed");
+    assertThat(current.status()).isEqualTo("validation_failed");
+    assertThat(laterFuture.status()).isEqualTo("validation_failed");
+    assertThat(historic.errors())
+        .containsExactly(
+            "Table value 1: Average market values can only be saved for the next month.");
+    assertThat(current.errors()).containsExactlyElementsOf(historic.errors());
+    assertThat(laterFuture.errors()).containsExactlyElementsOf(historic.errors());
+    assertThat(historic.rows()).isEmpty();
+    assertThat(current.rows()).isEmpty();
+    assertThat(laterFuture.rows()).isEmpty();
+  }
+
+  @Test
+  void shouldSaveTheFixedBlankGradeForTheUpcomingMonth() {
+    Clock clock =
+        Clock.fixed(Instant.parse("2026-06-15T19:00:00Z"), LexisBusinessTime.ZONE);
+    InMemoryRtmEmsLogAmvService service = new InMemoryRtmEmsLogAmvService(clock);
+
+    var result =
+        service.saveBatch(
+            List.of(
+                new RtmEmsLogAmvSaveRequestDto(
+                    "BA",
+                    "BLANK",
+                    "O",
+                    "2026-06-01",
+                    "2026-07-01",
+                    BigDecimal.ONE,
+                    "update")));
 
     assertThat(result.status()).isEqualTo("accepted");
-    assertThat(result.rows()).extracting(row -> List.of(row.grade(), row.growthIndicator()))
-        .containsExactlyInAnyOrder(List.of("Z", "O"), List.of("Z", "S"));
+    assertThat(result.rows())
+        .extracting(row -> List.of(row.grade(), row.growthIndicator(), row.newValue()))
+        .containsExactlyInAnyOrder(
+            List.of("BLANK", "O", BigDecimal.ONE),
+            List.of("BLANK", "S", BigDecimal.ONE));
   }
 
   @Test

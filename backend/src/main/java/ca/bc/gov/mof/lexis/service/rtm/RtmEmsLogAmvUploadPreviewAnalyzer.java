@@ -869,7 +869,7 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
         }
       }
 
-      if (!foundNumericValue) {
+      if (!foundNumericValue && effectiveMonth == null) {
         warnings.add(
             "Row %d grade '%s' had no parseable AMV values and was skipped."
                 .formatted(rowNumber, grade));
