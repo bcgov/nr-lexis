@@ -732,6 +732,10 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       .locator('.provincial-application-search-filters label.cds--label')
       .first()
     const fieldInput = page.getByRole('textbox', { name: 'Application number' })
+    await expect(page.locator('.lexis-page-header__title')).toHaveCSS(
+      'font-family',
+      'BCSans, "IBM Plex Sans", -apple-system, sans-serif',
+    )
     await expect(fieldLabel).toHaveCSS('font-size', '14px')
     await expect(fieldInput).toHaveCSS('font-size', '16px')
 
@@ -782,6 +786,67 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     expect(sharedTokens).toEqual({
       greenTagBackground: 'rgb(204, 229, 204)',
       greenTagColor: 'rgb(0, 85, 0)',
+    })
+
+    const attachedTableCorners = await page.evaluate(() => {
+      const probe = document.createElement('div')
+      probe.style.position = 'absolute'
+      probe.innerHTML = `
+        <div class="cds--data-table-header"></div>
+        <div class="cds--pagination">
+          <button class="cds--pagination__button" type="button"></button>
+        </div>
+      `
+      document.querySelector('.app-shell')?.append(probe)
+
+      const corners = (selector: string) => {
+        const style = getComputedStyle(probe.querySelector(selector) as HTMLElement)
+        return [
+          style.borderTopLeftRadius,
+          style.borderTopRightRadius,
+          style.borderBottomRightRadius,
+          style.borderBottomLeftRadius,
+        ].join(' ')
+      }
+
+      const result = {
+        tableHeader: corners('.cds--data-table-header'),
+        pagination: corners('.cds--pagination'),
+        paginationButton: corners('.cds--pagination__button'),
+      }
+      probe.remove()
+      return result
+    })
+
+    expect(attachedTableCorners).toEqual({
+      tableHeader: '4px 4px 0px 0px',
+      pagination: '0px 0px 4px 4px',
+      paginationButton: '0px 0px 0px 0px',
+    })
+
+    const emptyStateChrome = await page.evaluate(() => {
+      const probe = document.createElement('div')
+      probe.className = 'lexis-table-frame legacy-search-table-content'
+      probe.style.position = 'absolute'
+      probe.innerHTML = `
+        <section class="lexis-empty-state"></section>
+        <div class="cds--pagination"></div>
+      `
+      document.querySelector('.app-shell')?.append(probe)
+
+      const emptyState = probe.querySelector('.lexis-empty-state') as HTMLElement
+      const pagination = probe.querySelector('.cds--pagination') as HTMLElement
+      const result = {
+        emptyStateBackground: getComputedStyle(emptyState).backgroundColor,
+        paginationDisplay: getComputedStyle(pagination).display,
+      }
+      probe.remove()
+      return result
+    })
+
+    expect(emptyStateChrome).toEqual({
+      emptyStateBackground: 'rgba(0, 0, 0, 0)',
+      paginationDisplay: 'none',
     })
   })
 
@@ -1631,6 +1696,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(
       page.getByText('Upload an XML, ZIP, GeoJSON, or JSON file to create a LEXIS application.'),
     ).toBeVisible()
+    await expect(page.locator('.admin-upload-fspts-page')).toHaveCSS('row-gap', '0px')
     const uploadPanel = page.locator('.admin-upload-panel').first()
     await expect(uploadPanel.getByText('Submission file', { exact: true })).toBeVisible()
     await expect(
@@ -1640,6 +1706,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       ),
     ).toBeVisible()
     await expect(uploadPanel.locator('.admin-upload-panel__header')).toHaveCount(0)
+    await expect(uploadPanel.locator('.admin-upload-settings-grid')).toBeHidden()
     await expect(uploadPanel.locator('.admin-upload-summary-strip')).toHaveCount(0)
     await expect(uploadPanel.locator('.admin-upload-drop-zone-field')).toHaveCSS(
       'margin-top',
@@ -1653,7 +1720,14 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     const reviewButton = page.getByRole('button', { name: 'Review' })
     await expect(reviewButton).toBeEnabled()
     await reviewButton.click()
-    await expect(uploadPanel.getByText('Please upload a file before continuing.')).toBeVisible()
+    const uploadError = uploadPanel.locator('.admin-upload-file-error')
+    await expect(uploadError).toContainText('Please upload a file before continuing.')
+    await expect(uploadError.locator('svg')).toHaveCount(1)
+    await expect(uploadError).toHaveCSS('display', 'flex')
+    await expect(uploadError).toHaveCSS('font-size', '12px')
+    await expect(uploadError).toHaveCSS('line-height', '18px')
+    await expect(uploadError).toHaveCSS('gap', '4px')
+    await expect(uploadError).toHaveCSS('margin-top', '6px')
 
     await page.getByLabel('Application submission file').setInputFiles({
       name: 'valid-submission.xml',

@@ -270,7 +270,7 @@ test.describe('session timeout regression', () => {
 
     await page.clock.fastForward(SESSION_IDLE_WARNING_DELAY_MS + SESSION_IDLE_WARNING_DURATION_MS)
 
-    await expect(page.getByRole('heading', { name: 'Welcome to LEXIS' })).toBeVisible()
+    await expect(page.getByRole('heading', { level: 1, name: 'LEXIS' })).toBeVisible()
     await expect(page.getByText('You’ve been logged out', { exact: true })).toBeVisible()
   })
 
@@ -291,7 +291,7 @@ test.describe('session timeout regression', () => {
       .getByRole('button', { name: /sign out/i })
     await signOutButton.click()
 
-    await expect(page.getByRole('heading', { name: 'Welcome to LEXIS' })).toBeVisible()
+    await expect(page.getByRole('heading', { level: 1, name: 'LEXIS' })).toBeVisible()
     await expect(page.getByText('You’ve been logged out', { exact: true })).toHaveCount(0)
   })
 })

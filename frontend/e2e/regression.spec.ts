@@ -444,7 +444,7 @@ const regressionClientEmail = 'lexis-regression@example.test'
 const naturalResourceRegionCodes = ['1903', '1904', '1905', '1906', '1907', '1908', '1909', '1910']
 const sessionExpiredEventName = 'lexis:session-expired'
 const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/
-const landingSubtitle = 'Create and manage applications, view offers and permits'
+const landingSubtitle = 'Log Exemption Information System'
 const advertisingListReportEndpoint = '/api/lexis/reports/biweeklyListing'
 const recordVersionHeader = 'X-Lexis-Record-Version'
 const regressionEndUseCode = 'PL'
@@ -561,7 +561,7 @@ const expectLoginShell = async (page: Page, source: string): Promise<void> => {
 
   expect(new URL(page.url()).origin).toBe(baseOrigin)
   await expect(page.getByRole('button', { name: /log in with business bceid/i })).toBeVisible()
-  await expect(page.getByRole('heading', { name: 'Welcome to LEXIS' })).toBeVisible()
+  await expect(page.getByRole('heading', { level: 1, name: 'LEXIS' })).toBeVisible()
   await expect(page.getByText(landingSubtitle, { exact: true })).toBeVisible()
   await expect(page.getByAltText('Government of British Columbia')).toBeVisible()
   await expect(page.locator('.landing-img')).toBeVisible()

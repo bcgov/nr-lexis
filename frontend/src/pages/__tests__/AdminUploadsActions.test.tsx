@@ -1273,6 +1273,7 @@ describe('Admin upload workflow smoke', () => {
       screen.getByText('Upload an XML, ZIP, GeoJSON, or JSON file to create a LEXIS application.'),
     ).toBeVisible()
     expect(screen.queryByLabelText('Upload type')).not.toBeInTheDocument()
+    expect(document.querySelector('.admin-upload-settings-grid')).not.toBeVisible()
     expect(screen.getByText('Submission file')).toBeInTheDocument()
     expect(screen.queryByLabelText('Upload batch summary')).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Validation status' })).not.toBeInTheDocument()

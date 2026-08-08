@@ -1,5 +1,5 @@
 import { useRef, useState, type DragEvent, type KeyboardEvent } from 'react'
-import { Upload } from '@carbon/icons-react'
+import { ErrorFilled, Upload } from '@carbon/icons-react'
 
 export type MultiFileDropZoneProps = {
   title: string
@@ -177,6 +177,7 @@ function MultiFileDropZone({
           id={`${inputId}-error`}
           role="alert"
         >
+          <ErrorFilled size={14} aria-hidden="true" />
           {invalidText}
         </p>
       )}

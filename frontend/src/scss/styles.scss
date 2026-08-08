@@ -864,6 +864,11 @@ a.csp-side-nav__link.cds--side-nav__link--active[aria-current='page'] {
 .default-grid > .cds--css-grid-column > h1 {
   color: var(--csp-text-primary);
   margin: 0;
+  font-family:
+    'BCSans',
+    'IBM Plex Sans',
+    -apple-system,
+    sans-serif;
   font-size: 2rem;
   font-weight: 400;
   line-height: 2.5rem;
@@ -997,11 +1002,20 @@ legend.cds--label {
 .app-shell .flatpickr-prev-month,
 .app-shell .flatpickr-next-month,
 .app-shell .cds--tile,
-.app-shell .cds--data-table-header,
-.app-shell .cds--table-expand__button,
-.app-shell .cds--pagination,
-.app-shell .cds--pagination__button {
+.app-shell .cds--table-expand__button {
   border-radius: 4px;
+}
+
+.app-shell .cds--data-table-header {
+  border-radius: 4px 4px 0 0;
+}
+
+.app-shell .cds--pagination {
+  border-radius: 0 0 4px 4px;
+}
+
+.app-shell .cds--pagination__button {
+  border-radius: 0;
 }
 
 .cds--inline-notification,
@@ -1247,6 +1261,42 @@ $notification-types: 'error', 'info', 'success', 'warning';
   object-position: center;
 }
 
+// Match the FSPTS public entry composition: equal desktop columns, a compact
+// content inset, and one consistent vertical rhythm between the logo, product
+// name, full system name, notices, and login actions.
+.login-landing .landing-content-col {
+  margin: 0;
+  padding: 2rem;
+  padding-inline: 2rem;
+}
+
+.login-landing .landing-content-wrapper {
+  width: 100%;
+  gap: 6rem;
+}
+
+.login-landing .landing-logo {
+  margin-block-start: 1.2rem;
+}
+
+.login-landing .landing-title-group {
+  display: contents;
+}
+
+.login-landing .landing-subtitle {
+  color: var(--csp-text-primary);
+}
+
+.login-landing .landing-session-expired-notification {
+  margin-block-start: 0;
+}
+
+.login-landing .landing-actions,
+.login-landing .landing-session-expired-notification + .landing-actions {
+  gap: 1rem;
+  margin-block-start: -2rem;
+}
+
 @media (max-width: 1055px) {
   .landing-content-col {
     min-height: auto;
@@ -1256,6 +1306,15 @@ $notification-types: 'error', 'info', 'success', 'warning';
 
   .landing-content-wrapper {
     width: 100%;
+  }
+
+  .login-landing .landing-content-col {
+    padding: 1rem;
+    padding-inline: 1rem;
+  }
+
+  .login-landing .landing-content-wrapper {
+    gap: 3rem;
   }
 
   .landing-title {
@@ -2211,7 +2270,11 @@ $notification-types: 'error', 'info', 'success', 'warning';
 }
 
 .legacy-search-table-content > .lexis-empty-state {
-  background-color: var(--csp-layer-01);
+  background-color: transparent;
+}
+
+.legacy-search-table-content:has(> .lexis-empty-state) > .cds--pagination {
+  display: none;
 }
 
 .legacy-search-table-frame .cds--data-table {
@@ -2434,6 +2497,10 @@ $notification-types: 'error', 'info', 'success', 'warning';
   gap: 0;
 }
 
+.admin-upload-settings-grid[hidden] {
+  display: none;
+}
+
 .admin-upload-fspts-page {
   --fds-interactive: #0073e6;
   --fds-interactive-hover: #005db5;
@@ -2468,6 +2535,7 @@ $notification-types: 'error', 'info', 'success', 'warning';
     sans-serif;
   min-block-size: calc(100vh - 3rem);
   align-content: start;
+  row-gap: 0;
 }
 
 :root[data-carbon-theme='g100'] .admin-upload-fspts-page {
@@ -3002,7 +3070,17 @@ $notification-types: 'error', 'info', 'success', 'warning';
 }
 
 .admin-upload-file-error {
-  margin: 0.75rem 0 0;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin: 0.375rem 0 0;
+  font-size: 0.75rem;
+  line-height: 1.125rem;
+}
+
+.admin-upload-file-error svg {
+  flex-shrink: 0;
+  fill: currentcolor;
 }
 
 .admin-upload-step-panel {
@@ -5251,6 +5329,15 @@ $notification-types: 'error', 'info', 'success', 'warning';
   .landing-content-col {
     padding: 1.5rem;
     padding-inline: 1.5rem;
+  }
+
+  .login-landing .landing-content-col {
+    padding: 1rem;
+    padding-inline: 1rem;
+  }
+
+  .login-landing .landing-content-wrapper {
+    gap: 2.5rem;
   }
 
   .landing-logo {

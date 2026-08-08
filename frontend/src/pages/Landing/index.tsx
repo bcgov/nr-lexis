@@ -21,7 +21,9 @@ const LandingPage = () => {
   const logoSource = theme === 'g100' ? reverseLogo : logo
 
   const [errorMessage, setErrorMessage] = useState('')
-  const [showSessionExpiredMessage] = useState(hasSessionExpiredLoginNotice)
+  const [showSessionExpiredMessage, setShowSessionExpiredMessage] = useState(
+    hasSessionExpiredLoginNotice,
+  )
 
   useEffect(() => {
     if (showSessionExpiredMessage) {
@@ -46,19 +48,17 @@ const LandingPage = () => {
   }
 
   return (
-    <main className="landing-grid-container" id="main-content" aria-busy={isLoading}>
+    <main className="landing-grid-container login-landing" id="main-content" aria-busy={isLoading}>
       <Grid fullWidth className="landing-grid">
-        <Column className="landing-content-col" sm={4} md={8} lg={9}>
+        <Column className="landing-content-col" sm={4} md={8} lg={8}>
           <div className="landing-content-wrapper">
             <div className="landing-logo-mark">
               <img src={logoSource} alt="Government of British Columbia" className="landing-logo" />
             </div>
 
             <div className="landing-title-group">
-              <h1 className="landing-title">Welcome to LEXIS</h1>
-              <p className="landing-subtitle">
-                Create and manage applications, view offers and permits
-              </p>
+              <h1 className="landing-title">LEXIS</h1>
+              <h2 className="landing-subtitle">Log Exemption Information System</h2>
             </div>
 
             {showSessionExpiredMessage && (
@@ -66,9 +66,9 @@ const LandingPage = () => {
                 className="landing-session-expired-notification"
                 kind="warning"
                 lowContrast
-                hideCloseButton
                 title="You’ve been logged out"
                 subtitle="Your session expired for security reasons and any unsaved changes were lost. Log in again to continue."
+                onCloseButtonClick={() => setShowSessionExpiredMessage(false)}
               />
             )}
 
@@ -118,8 +118,12 @@ const LandingPage = () => {
           </div>
         </Column>
 
-        <Column className="landing-img-col" sm={4} md={8} lg={7}>
-          <img src={landingImage} alt="" className="landing-img" aria-hidden="true" />
+        <Column className="landing-img-col" sm={4} md={8} lg={8}>
+          <img
+            src={landingImage}
+            alt="Log sorting operation at a British Columbia harbour"
+            className="landing-img"
+          />
         </Column>
       </Grid>
     </main>
