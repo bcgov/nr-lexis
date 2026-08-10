@@ -647,7 +647,7 @@ const SpeciesReviewTable = ({
         <thead>
           <tr>
             <th scope="col">Grade</th>
-            <th scope="col">{`Last entered (${currentMonthLabel})`}</th>
+            <th scope="col">{`Value in effect (${currentMonthLabel})`}</th>
             <th scope="col">{nextMonthLabel}</th>
           </tr>
         </thead>

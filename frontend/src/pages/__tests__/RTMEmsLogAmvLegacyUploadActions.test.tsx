@@ -187,7 +187,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     expect(mockedSearchLatest).toHaveBeenCalledWith(nextMonth)
     expect(
       within(table).getByRole('columnheader', {
-        name: `Last entered (${monthLabel(comparisonMonth)})`,
+        name: `Value in effect (${monthLabel(comparisonMonth)})`,
       }),
     ).toBeVisible()
     const value = within(table).getByLabelText(`Balsam grade D ${monthLabel(nextMonth)} value`)
@@ -783,7 +783,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       name: 'Balsam average market value review',
     })
     expect(
-      within(balsamTable).getByRole('columnheader', { name: 'Last entered (July 2026)' }),
+      within(balsamTable).getByRole('columnheader', { name: 'Value in effect (July 2026)' }),
     ).toBeVisible()
     expect(within(balsamTable).getByRole('columnheader', { name: 'September 2026' })).toBeVisible()
     expect(within(balsamTable).getByRole('row', { name: /D.*75\.29.*78\.14/ })).toBeVisible()
@@ -1139,7 +1139,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
 
     const table = screen.getByRole('table', { name: 'Pine average market value review' })
     expect(
-      within(table).getByRole('columnheader', { name: 'Last entered (June 2026)' }),
+      within(table).getByRole('columnheader', { name: 'Value in effect (June 2026)' }),
     ).toBeVisible()
     expect(within(table).getByRole('columnheader', { name: 'July 2026' })).toBeVisible()
     expect(within(table).getByRole('row', { name: /A.*9\.00.*10\.00/ })).toBeVisible()
