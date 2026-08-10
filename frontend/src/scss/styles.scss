@@ -2622,6 +2622,13 @@ $notification-types: 'error', 'info', 'success', 'warning';
   background: var(--fds-background);
 }
 
+.rtm-amv-page-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--fds-layer-01);
+}
+
 .rtm-amv-initial-state {
   min-block-size: calc(100vh - 3rem);
 }

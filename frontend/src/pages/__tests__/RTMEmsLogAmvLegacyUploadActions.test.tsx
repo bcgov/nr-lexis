@@ -73,7 +73,9 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
 
     render(<RtmEmsLogAmvUploadPage />)
 
-    expect(screen.getByText('Loading average market values')).toBeVisible()
+    const loadingState = screen.getByRole('status')
+    expect(loadingState).toHaveClass('rtm-amv-page-loading')
+    expect(within(loadingState).getByRole('img', { name: 'Loading…' })).toBeVisible()
     expect(screen.queryByRole('heading', { name: 'Average market values' })).not.toBeInTheDocument()
     expect(screen.queryByText('Upload spreadsheet')).not.toBeInTheDocument()
     expect(screen.queryByRole('tablist', { name: 'Species' })).not.toBeInTheDocument()
@@ -82,7 +84,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
 
     expect(screen.getByRole('heading', { name: 'Average market values' })).toBeVisible()
     expect(screen.getByText('Upload spreadsheet')).toBeVisible()
-    expect(screen.queryByText('Loading average market values')).not.toBeInTheDocument()
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })
 
   it('does not fall back to upload when the saved-value lookup fails', async () => {

@@ -24,6 +24,7 @@ import {
   Grid,
   InlineLoading,
   InlineNotification,
+  Loading,
   Tab,
   TabList,
   TabPanel,
@@ -1248,15 +1249,13 @@ const RtmEmsLogAmvUploadPage = () => {
 
   if (isCheckingSavedValues) {
     return (
-      <Grid
-        fullWidth
-        className="default-grid admin-upload-fspts-page rtm-amv-upload-page rtm-amv-initial-state"
-        aria-busy="true"
+      <div
+        className="admin-upload-fspts-page rtm-amv-page-loading"
+        role="status"
+        aria-live="polite"
       >
-        <Column sm={4} md={8} lg={16} className="rtm-amv-initial-state__content">
-          <InlineLoading description="Loading average market values" />
-        </Column>
-      </Grid>
+        <Loading description="Loading…" withOverlay={false} />
+      </div>
     )
   }
 

@@ -111,8 +111,9 @@ review and latest-earlier comparison; if none exist, it restores the upload stat
 filename are not persisted, so neither is shown in a restored review. Replacing a workbook after
 the first accepted save is not part of the current flow; that option remains deferred until its
 design and persistence contract are complete. The saved-row lookup gates the initial workflow
-render: neither upload nor review is shown while it is pending, and a failed lookup shows an error
-instead of assuming there are no saved values.
+render: neither upload nor review is shown while it is pending. The application shell remains
+visible around a centered, non-overlay Carbon loading indicator, matching the initial-data gate in
+NR-FSPTS. A failed lookup shows an error instead of assuming there are no saved values.
 
 ## Batch audit event
 
