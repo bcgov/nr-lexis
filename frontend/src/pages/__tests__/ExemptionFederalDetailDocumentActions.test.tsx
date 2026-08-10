@@ -2063,7 +2063,9 @@ describe('Exemption and Federal Detail Document Actions', () => {
     )
 
     expect(
-      await screen.findByText('Unable to retrieve provincial exemption detail.'),
+      await screen.findByText('Unable to retrieve provincial exemption detail.', {
+        selector: '.detail-page-inline-error',
+      }),
     ).toBeInTheDocument()
     expect(mockedFetchExemptionDocuments).not.toHaveBeenCalled()
   })
@@ -2080,7 +2082,9 @@ describe('Exemption and Federal Detail Document Actions', () => {
     )
 
     expect(
-      await screen.findByText('Unable to retrieve federal application detail.'),
+      await screen.findByText('Unable to retrieve federal application detail.', {
+        selector: '.detail-page-inline-error',
+      }),
     ).toBeInTheDocument()
     expect(mockedFetchFederalApplicationDocuments).not.toHaveBeenCalled()
   })

@@ -27,6 +27,7 @@ import { Edit, TrashCan } from '@carbon/icons-react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import EmptyState from '@/components/EmptyState'
 import DetailBreadcrumb from '@/components/DetailBreadcrumb'
+import DetailLoadError from '@/components/DetailLoadError'
 import PageHeader from '@/components/PageHeader'
 import PendingIcon from '@/components/PendingIcon'
 import AuthoritativeOptionsUnavailableNotification from '@/components/AuthoritativeOptionsUnavailableNotification'
@@ -3346,15 +3347,7 @@ const ProvincialApplicationDetailsPage = () => {
         </Column>
       )}
 
-      {!loading && !!errorMessage && (
-        <AppNotification
-          kind="error"
-          title="Detail unavailable"
-          subtitle={errorMessage}
-          lowContrast
-          onCloseButtonClick={() => setErrorMessage('')}
-        />
-      )}
+      {!loading && !!errorMessage && <DetailLoadError message={errorMessage} />}
 
       {!!creationSuccessMessage && (
         <AppNotification

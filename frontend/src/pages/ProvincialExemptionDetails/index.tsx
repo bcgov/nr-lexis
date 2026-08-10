@@ -28,6 +28,7 @@ import ConfirmationModal from '@/components/ConfirmationModal'
 import Modal from '@/components/Modal'
 import EmptyState from '@/components/EmptyState'
 import DetailBreadcrumb from '@/components/DetailBreadcrumb'
+import DetailLoadError from '@/components/DetailLoadError'
 import DisabledButtonTooltip from '@/components/DisabledButtonTooltip'
 import ExemptionApprovalEmailModal, {
   type ExemptionApprovalRecipient,
@@ -1509,15 +1510,7 @@ const ProvincialExemptionDetailsPage = () => {
         </Column>
       )}
 
-      {!loading && !!errorMessage && (
-        <AppNotification
-          kind="error"
-          title="Detail unavailable"
-          subtitle={errorMessage}
-          lowContrast
-          onCloseButtonClick={() => setErrorMessage('')}
-        />
-      )}
+      {!loading && !!errorMessage && <DetailLoadError message={errorMessage} />}
 
       {detail && currentDetail && (
         <>

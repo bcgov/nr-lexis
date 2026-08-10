@@ -2452,8 +2452,14 @@ $notification-types: 'error', 'info', 'success', 'warning';
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-  inline-size: min(28rem, calc(100vw - 2rem));
+  inline-size: min(18rem, calc(100vw - 2rem));
   pointer-events: none;
+}
+
+@media (min-width: 99rem) {
+  .app-notification-region {
+    inline-size: min(22rem, calc(100vw - 2rem));
+  }
 }
 
 .app-notification {
@@ -2483,13 +2489,6 @@ $notification-types: 'error', 'info', 'success', 'warning';
 
 .app-notification__toast.legacy-inline-notification {
   margin-top: 0;
-}
-
-@media (max-width: 42rem) {
-  .app-notification-region {
-    inset-inline: 1rem;
-    inline-size: auto;
-  }
 }
 
 .admin-upload-workflow {
@@ -4385,6 +4384,14 @@ $notification-types: 'error', 'info', 'success', 'warning';
 
 .detail-page-error {
   margin-bottom: 1rem;
+}
+
+.detail-page-grid > .detail-page-error > .detail-page-inline-error {
+  margin: 0;
+  padding: 1rem 1.5rem;
+  color: var(--cds-text-error, #da1e28);
+  font-size: 16px;
+  line-height: 1.5rem;
 }
 
 .detail-page-loading {

@@ -1284,13 +1284,22 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(initialLoader).toHaveCSS('padding-top', '64px')
 
     await expect(page.getByText('Detail unavailable')).toBeVisible()
+    const inlineError = page.locator('.detail-page-inline-error')
     const notificationRegion = page.locator('.app-notification-region')
     const toast = notificationRegion.locator('.app-notification__toast')
+    await expect(inlineError).toHaveText('Unable to retrieve provincial offer detail.')
+    await expect(inlineError).toHaveCSS('padding', '16px 24px')
+    await expect(inlineError).toHaveCSS('font-size', '16px')
+    await expect(notificationRegion).toHaveCSS('width', '288px')
     await expect(notificationRegion).toHaveCSS('top', '16px')
     await expect(notificationRegion).toHaveCSS('right', '16px')
     await expect(notificationRegion).toHaveCSS('z-index', '12000')
     await expect(toast).toHaveCSS('animation-name', 'app-notification-slide-in-right')
     await expect(toast).toHaveCSS('animation-duration', '0.3s')
+
+    await toast.getByRole('button', { name: 'close notification' }).click()
+    await expect(toast).toBeHidden()
+    await expect(inlineError).toBeVisible()
   })
 
   test('bounds detail field cards to one, two, and three columns', async ({ page }) => {

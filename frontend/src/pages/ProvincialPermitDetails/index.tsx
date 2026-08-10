@@ -30,6 +30,7 @@ import { hasProvincialSubmitterRole, hasRole } from '@/context/auth/role-utils'
 import ConfirmationModal from '@/components/ConfirmationModal'
 import ContentLoadingOverlay from '@/components/ContentLoadingOverlay'
 import DetailBreadcrumb from '@/components/DetailBreadcrumb'
+import DetailLoadError from '@/components/DetailLoadError'
 import EmptyState from '@/components/EmptyState'
 import IsoDatePicker from '@/components/IsoDatePicker'
 import PageHeader from '@/components/PageHeader'
@@ -2912,17 +2913,7 @@ const ProvincialPermitDetailsPage = () => {
         </Column>
       )}
 
-      {!loading && !!errorMessage && (
-        <Column sm={4} md={8} lg={16} className="detail-page-error">
-          <AppNotification
-            kind="error"
-            title="Detail unavailable"
-            subtitle={errorMessage}
-            lowContrast
-            onCloseButtonClick={() => setErrorMessage('')}
-          />
-        </Column>
-      )}
+      {!loading && !!errorMessage && <DetailLoadError message={errorMessage} />}
 
       {!loading && !!documentsInvoicesErrorMessage && !documentsInvoicesErrorDismissed && (
         <Column sm={4} md={8} lg={16} className="detail-page-error">

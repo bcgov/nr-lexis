@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { AppNotification } from '../../components/AppNotification'
 import ContentLoadingOverlay from '@/components/ContentLoadingOverlay'
 import DetailBreadcrumb from '@/components/DetailBreadcrumb'
+import DetailLoadError from '@/components/DetailLoadError'
 import IsoDatePicker from '../../components/IsoDatePicker'
 import PageHeader from '@/components/PageHeader'
 import PendingIcon from '@/components/PendingIcon'
@@ -415,17 +416,7 @@ const ProvincialOfferDetailsPage = () => {
         </Column>
       )}
 
-      {!loading && !!errorMessage && (
-        <Column sm={4} md={8} lg={16} className="detail-page-error">
-          <AppNotification
-            kind="error"
-            title="Detail unavailable"
-            subtitle={errorMessage}
-            lowContrast
-            onCloseButtonClick={() => setErrorMessage('')}
-          />
-        </Column>
-      )}
+      {!loading && !!errorMessage && <DetailLoadError message={errorMessage} />}
 
       {!loading && !!status && (
         <Column sm={4} md={8} lg={16} className="detail-page-error">

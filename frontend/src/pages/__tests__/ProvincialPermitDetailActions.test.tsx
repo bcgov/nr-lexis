@@ -3855,7 +3855,9 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
 
     expect(
-      await screen.findByText('Unable to retrieve provincial permit detail.'),
+      await screen.findByText('Unable to retrieve provincial permit detail.', {
+        selector: '.detail-page-inline-error',
+      }),
     ).toBeInTheDocument()
     expect(mockedFetchProvincialPermitDetailTabs).not.toHaveBeenCalled()
     expect(mockedFetchPermitDocuments).not.toHaveBeenCalled()
