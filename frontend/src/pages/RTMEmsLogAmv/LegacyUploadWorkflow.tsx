@@ -61,6 +61,8 @@ type SavedUploadState = {
 
 type RtmUploadStep = 'upload' | 'review'
 
+type UploadIntent = 'initial' | 'replace'
+
 type DiscardConfirmation = 'cancel' | 'file' | 'saved-changes'
 
 type SavedNotification = 'discarded' | 'saved'
@@ -215,7 +217,7 @@ const EFFECTIVE_MONTH_REFRESH_INTERVAL_MS = 1_000
 const RTM_UPLOAD_ONLY_DESCRIPTION =
   'Set the domestic log values that become the fee in lieu of export on coastal permits.'
 const RTM_VALUES_DESCRIPTION =
-  'Your spreadsheet fills in a value for each species and grade, ready to check before you save.'
+  'Your spreadsheet provides a value for each species and grade. You will be able to check them before you save.'
 const RTM_UPLOAD_FIELD_HELPER = 'Accepted format: .xlsx, up to 20 MB.'
 const RTM_UPLOAD_SYSTEM_ERROR_TITLE = 'Upload could not be completed'
 const RTM_UPLOAD_SYSTEM_ERROR_MESSAGE =
@@ -872,6 +874,9 @@ const RtmEmsLogAmvUploadPage = () => {
     'success' | 'error' | 'warning' | 'info'
   >('info')
   const [previewResult, setPreviewResult] = useState<RtmEmsLogAmvUploadPreview | null>(null)
+  const [savedPreviewResult, setSavedPreviewResult] = useState<RtmEmsLogAmvUploadPreview | null>(
+    null,
+  )
   const [reviewValues, setReviewValues] = useState<Record<string, string>>({})
   const [savedReviewValues, setSavedReviewValues] = useState<Record<string, string> | null>(null)
   const [savedUploadState, setSavedUploadState] = useState<SavedUploadState | null>(null)
@@ -893,23 +898,35 @@ const RtmEmsLogAmvUploadPage = () => {
     }
   }, [])
 
-  const validateUploadFile = async (nextFile: File | null) => {
+  const validateUploadFile = async (
+    nextFile: File | null,
+    uploadIntent: UploadIntent = 'initial',
+  ) => {
+    const isReplacingSavedValues =
+      uploadIntent === 'replace' &&
+      savedReviewValues !== null &&
+      savedUploadState !== null &&
+      previewResult !== null
     savedValuesRequestRef.current += 1
     const requestId = validationRequestRef.current + 1
     validationRequestRef.current = requestId
 
-    setUploadStep('upload')
     setSelectedUploadFile(nextFile)
     setUploadError('')
     setUploadSystemError(false)
-    setPreviewResult(null)
-    setReviewValues({})
-    setSavedReviewValues(null)
-    setSavedUploadState(null)
-    setSavedNotification(null)
     setUploadResult(null)
     setPendingUploadValidation(null)
     setNotification('')
+
+    if (!isReplacingSavedValues) {
+      setUploadStep('upload')
+      setPreviewResult(null)
+      setSavedPreviewResult(null)
+      setReviewValues({})
+      setSavedReviewValues(null)
+      setSavedUploadState(null)
+      setSavedNotification(null)
+    }
 
     if (!nextFile) {
       return
@@ -918,11 +935,19 @@ const RtmEmsLogAmvUploadPage = () => {
     const sizeError = validateUploadFileSize(nextFile)
     if (sizeError) {
       setUploadError(sizeError)
+      if (isReplacingSavedValues) {
+        setSelectedUploadFile(null)
+        setUploadInputKey((current) => current + 1)
+      }
       return
     }
 
     if (!isAcceptedUploadFile(nextFile)) {
       setUploadError('Upload an XLSX file before continuing.')
+      if (isReplacingSavedValues) {
+        setSelectedUploadFile(null)
+        setUploadInputKey((current) => current + 1)
+      }
       return
     }
 
@@ -936,19 +961,35 @@ const RtmEmsLogAmvUploadPage = () => {
       }
 
       const validatedResponse = validateAcceptedPreview(response)
-      setPreviewResult(validatedResponse)
       if (validatedResponse.status === 'accepted') {
+        setPreviewResult(validatedResponse)
         setReviewValues(buildInitialReviewValues(validatedResponse.rows))
         setPendingUploadValidation({
           fileName: nextFile.name,
           fileSize: nextFile.size,
         })
+        setSavedNotification(null)
         setUploadStep('review')
       } else if (validatedResponse.status === 'validation_failed') {
         setPendingUploadValidation(null)
+        if (isReplacingSavedValues) {
+          setSelectedUploadFile(null)
+          setUploadError(
+            createResultMessage(
+              validatedResponse.status,
+              validatedResponse.message,
+              validatedResponse.errors,
+            ),
+          )
+          setUploadInputKey((current) => current + 1)
+        } else {
+          setPreviewResult(validatedResponse)
+        }
       } else {
         setSelectedUploadFile(null)
-        setPreviewResult(null)
+        if (!isReplacingSavedValues) {
+          setPreviewResult(null)
+        }
         setUploadSystemError(true)
         setUploadInputKey((current) => current + 1)
       }
@@ -961,7 +1002,9 @@ const RtmEmsLogAmvUploadPage = () => {
       setSelectedUploadFile(null)
       setUploadError('')
       setUploadSystemError(true)
-      setPreviewResult(null)
+      if (!isReplacingSavedValues) {
+        setPreviewResult(null)
+      }
       setPendingUploadValidation(null)
       setUploadInputKey((current) => current + 1)
     } finally {
@@ -973,6 +1016,10 @@ const RtmEmsLogAmvUploadPage = () => {
 
   const updateUploadFile = (event: ChangeEvent<HTMLInputElement>) => {
     void validateUploadFile(event.currentTarget.files?.[0] ?? null)
+  }
+
+  const updateReplacementFile = (event: ChangeEvent<HTMLInputElement>) => {
+    void validateUploadFile(event.currentTarget.files?.[0] ?? null, 'replace')
   }
 
   const onDropUploadFile = (event: DragEvent<HTMLDivElement>) => {
@@ -990,6 +1037,17 @@ const RtmEmsLogAmvUploadPage = () => {
     }
 
     uploadInputRef.current?.click()
+  }
+
+  const openReplacementFileDialog = () => {
+    if (!canManage || isPreviewing || isUploading || !savedUploadState) {
+      return
+    }
+
+    if (uploadInputRef.current) {
+      uploadInputRef.current.value = ''
+      uploadInputRef.current.click()
+    }
   }
 
   const onUploadDropZoneKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -1010,6 +1068,7 @@ const RtmEmsLogAmvUploadPage = () => {
     setUploadError('')
     setUploadSystemError(false)
     setPreviewResult(null)
+    setSavedPreviewResult(null)
     setReviewValues({})
     setSavedReviewValues(null)
     setSavedUploadState(null)
@@ -1052,6 +1111,7 @@ const RtmEmsLogAmvUploadPage = () => {
         const savedPreview = buildSavedReviewPreview(effectiveMonth, savedRows, comparisonRows)
         const savedValues = buildInitialReviewValues(savedPreview.rows)
         setPreviewResult(savedPreview)
+        setSavedPreviewResult(savedPreview)
         setReviewValues(savedValues)
         setSavedReviewValues(savedValues)
         setSavedUploadState({ valueCount: savedRows.length })
@@ -1172,12 +1232,16 @@ const RtmEmsLogAmvUploadPage = () => {
       )
       if (response.status === 'accepted') {
         setSavedReviewValues({ ...reviewValues })
+        setSavedPreviewResult(previewResult)
         setSavedUploadState({
           savedAt: formatSavedDateTime(new Date()),
           savedBy: capabilities.principal ?? 'LEXIS user',
           valueCount: saveRequests.length,
         })
         setSavedNotification('saved')
+        setSelectedUploadFile(null)
+        setPendingUploadValidation(null)
+        setUploadInputKey((current) => current + 1)
         setNotification('')
         setUploadResult(null)
       } else {
@@ -1227,6 +1291,7 @@ const RtmEmsLogAmvUploadPage = () => {
 
   const isUploadDisabled =
     isUploading ||
+    isPreviewing ||
     hasReviewErrors ||
     !canManage ||
     !hasSaveSource ||
@@ -1302,11 +1367,61 @@ const RtmEmsLogAmvUploadPage = () => {
       </Column>
 
       <Column sm={4} md={8} lg={16} className="admin-upload-fspts-content rtm-amv-values-content">
-        {!savedUploadState && (
-          <div className="admin-upload-section-heading rtm-amv-values-heading">
+        {savedUploadState && savedNotification && (
+          <InlineNotification
+            className="rtm-amv-saved-notification"
+            kind="success"
+            lowContrast
+            title={savedNotification === 'discarded' ? 'Changes discarded' : 'Values saved'}
+            subtitle={
+              savedNotification === 'discarded'
+                ? 'Values are back to your last save.'
+                : `${savedUploadState.valueCount} ${savedUploadState.valueCount === 1 ? 'value' : 'values'} will take effect on ${formatEffectiveStartDate(effectiveMonth)}.`
+            }
+            onCloseButtonClick={() => setSavedNotification(null)}
+          />
+        )}
+
+        <div className="admin-upload-section-heading rtm-amv-values-heading">
+          <div className="rtm-amv-values-heading__copy">
             <h2 id="rtm-values-title">Values</h2>
             <p>{RTM_VALUES_DESCRIPTION}</p>
           </div>
+          {savedUploadState && (
+            <>
+              <input
+                ref={uploadInputRef}
+                key={uploadInputKey}
+                id="rtm-replacement-file"
+                className="admin-upload-native-input"
+                type="file"
+                aria-label="Replacement average monthly values spreadsheet"
+                accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                disabled={!canManage || isUploading || isPreviewing}
+                onChange={updateReplacementFile}
+              />
+              <Button
+                className="rtm-amv-replace-file-button"
+                kind="tertiary"
+                size="sm"
+                disabled={!canManage || isUploading || isPreviewing}
+                onClick={openReplacementFileDialog}
+              >
+                {isPreviewing ? 'Replacing file' : 'Replace file'}
+              </Button>
+            </>
+          )}
+        </div>
+
+        {savedUploadState && (uploadError || uploadSystemError) && (
+          <InlineNotification
+            className="rtm-amv-replacement-error"
+            kind="error"
+            lowContrast
+            hideCloseButton
+            title={uploadSystemError ? RTM_UPLOAD_SYSTEM_ERROR_TITLE : 'File could not be used'}
+            subtitle={uploadSystemError ? RTM_UPLOAD_SYSTEM_ERROR_MESSAGE : uploadError}
+          />
         )}
 
         {uploadStep === 'upload' ? (
@@ -1452,24 +1567,9 @@ const RtmEmsLogAmvUploadPage = () => {
               </section>
             )}
 
-            {savedUploadState && savedNotification && (
-              <InlineNotification
-                className="rtm-amv-saved-notification"
-                kind="success"
-                lowContrast
-                title={savedNotification === 'discarded' ? 'Changes discarded' : 'Values saved'}
-                subtitle={
-                  savedNotification === 'discarded'
-                    ? 'Values are back to your last save.'
-                    : `${savedUploadState.valueCount} ${savedUploadState.valueCount === 1 ? 'value' : 'values'} will take effect on ${formatEffectiveStartDate(effectiveMonth)}.`
-                }
-                onCloseButtonClick={() => setSavedNotification(null)}
-              />
-            )}
-
             {previewResult && (
               <ReviewUploadContent
-                disabled={isUploading}
+                disabled={isUploading || isPreviewing}
                 previewResult={previewResult}
                 reviewValues={reviewValues}
                 uploadResult={uploadResult}
@@ -1511,7 +1611,7 @@ const RtmEmsLogAmvUploadPage = () => {
                 ref={cancelButtonRef}
                 kind="tertiary"
                 size="md"
-                disabled={isUploading}
+                disabled={isUploading || isPreviewing}
                 aria-disabled={savedActionsUnavailable || undefined}
                 aria-describedby={
                   savedActionsUnavailable ? 'rtm-amv-saved-actions-helper' : undefined
@@ -1587,6 +1687,14 @@ const RtmEmsLogAmvUploadPage = () => {
               ? () => {
                   if (!savedReviewValues) return
                   setReviewValues({ ...savedReviewValues })
+                  if (savedPreviewResult) {
+                    setPreviewResult(savedPreviewResult)
+                  }
+                  setSelectedUploadFile(null)
+                  setPendingUploadValidation(null)
+                  setUploadError('')
+                  setUploadSystemError(false)
+                  setUploadInputKey((current) => current + 1)
                   setSavedNotification('discarded')
                   setUploadResult(null)
                 }

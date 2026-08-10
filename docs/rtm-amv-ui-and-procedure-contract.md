@@ -99,7 +99,10 @@ and writes them in one Spring transaction. It does not call the legacy row proce
 target is not applied or the database write fails, the complete batch transaction rolls back.
 
 After an accepted save, the page removes the upload card, shows the saved confirmation, and keeps
-the reviewed values editable. Save and Cancel remain keyboard-focusable but are announced as
+the reviewed values editable. A Replace file action previews another workbook over the values on
+screen without changing the database. A rejected replacement leaves the saved review intact;
+Cancel restores the last-saved preview, while Save values applies the replacement through the same
+batch update used for manual edits. Save and Cancel remain keyboard-focusable but are announced as
 unavailable until a value changes; the helper text is linked through `aria-describedby`. Editing a
 value clears the saved confirmation. Cancel then offers to save the changes or restore the last
 saved values; restoring them shows a dismissible confirmation that also clears on the next edit.
@@ -108,12 +111,11 @@ session's save time and authenticated principal, but that metadata cannot be rec
 navigation because the legacy table has no audit columns. On navigation or refresh, the page reads
 the immediately upcoming month's rows from `EMS_LOG_AMV`. If rows exist, it restores the editable
 review and latest-earlier comparison; if none exist, it restores the upload state. The workbook and
-filename are not persisted, so neither is shown in a restored review. Replacing a workbook after
-the first accepted save is not part of the current flow; that option remains deferred until its
-design and persistence contract are complete. The saved-row lookup gates the initial workflow
-render: neither upload nor review is shown while it is pending. The application shell remains
-visible around a centered, non-overlay Carbon loading indicator, matching the initial-data gate in
-NR-FSPTS. A failed lookup shows an error instead of assuming there are no saved values.
+filename are not persisted, so neither is shown after a save or in a restored review. The saved-row
+lookup gates the initial workflow render: neither upload nor review is shown while it is pending.
+The application shell remains visible around a centered, non-overlay Carbon loading indicator,
+matching the initial-data gate in NR-FSPTS. A failed lookup shows an error instead of assuming there
+are no saved values.
 
 ## Batch audit event
 

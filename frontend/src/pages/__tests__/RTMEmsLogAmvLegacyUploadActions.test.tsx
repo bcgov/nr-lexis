@@ -188,7 +188,8 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     ).toBeVisible()
     const value = within(table).getByLabelText(`Balsam grade D ${monthLabel(nextMonth)} value`)
     expect(value).toHaveValue('78.14')
-    expect(screen.queryByRole('heading', { name: 'Values', level: 2 })).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Values', level: 2 })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Replace file' })).toBeVisible()
     expect(screen.queryByText('Upload spreadsheet')).not.toBeInTheDocument()
     expect(screen.queryByText('Last saved')).not.toBeInTheDocument()
     expect(screen.queryByText('Values saved')).not.toBeInTheDocument()
@@ -217,6 +218,167 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       ]),
     )
     expect(screen.getByText('Values saved')).toBeVisible()
+  })
+
+  it('replaces a saved review from a workbook and updates it only after save', async () => {
+    const currentMonth = `${formatBusinessIsoDate().slice(0, 7)}-01`
+    const nextMonth = monthOffset(currentMonth, 1)
+    const comparisonMonth = monthOffset(nextMonth, -1)
+    mockedSearch.mockResolvedValue([
+      {
+        species: 'BA',
+        grade: 'D',
+        growthIndicator: 'O',
+        retrievalDate: nextMonth,
+        updateDate: nextMonth,
+        currentValue: 78.14,
+        newValue: 78.14,
+        returnCode: '0',
+      },
+    ])
+    mockedSearchLatest.mockResolvedValue([
+      {
+        species: 'BA',
+        grade: 'D',
+        growthIndicator: 'O',
+        retrievalDate: comparisonMonth,
+        updateDate: comparisonMonth,
+        currentValue: 75.29,
+        newValue: 75.29,
+        returnCode: '0',
+      },
+    ])
+    mockedPreviewUpload.mockResolvedValue({
+      status: 'accepted',
+      fileName: 'replacement.xlsx',
+      fileSize: 1,
+      message: 'Spreadsheet is valid.',
+      rowCount: 1,
+      retrievalDate: comparisonMonth,
+      updateDate: nextMonth,
+      errors: [],
+      warnings: [],
+      rows: [
+        {
+          species: 'BA',
+          grade: 'D',
+          growthIndicator: 'O',
+          retrievalDate: comparisonMonth,
+          updateDate: nextMonth,
+          currentValue: 75.29,
+          newValue: 91.25,
+          returnCode: '0',
+        },
+      ],
+    })
+
+    await renderUploadPage()
+    const replacement = new File([new Uint8Array([1])], 'replacement.xlsx', {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    })
+
+    await userEvent.upload(
+      screen.getByLabelText('Replacement average monthly values spreadsheet'),
+      replacement,
+    )
+
+    expect(mockedPreviewUpload).toHaveBeenCalledWith(replacement, nextMonth)
+    const replacementValue = await screen.findByLabelText(
+      `Balsam grade D ${monthLabel(nextMonth)} value`,
+    )
+    expect(replacementValue).toHaveValue('91.25')
+    expect(mockedSaveBatch).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    const discardDialog = screen.getByRole('dialog', { name: 'Discard these values?' })
+    await userEvent.click(within(discardDialog).getByRole('button', { name: 'Discard changes' }))
+
+    expect(screen.getByLabelText(`Balsam grade D ${monthLabel(nextMonth)} value`)).toHaveValue(
+      '78.14',
+    )
+    expect(screen.getByText('Changes discarded')).toBeVisible()
+
+    await userEvent.upload(
+      screen.getByLabelText('Replacement average monthly values spreadsheet'),
+      replacement,
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Save values' }))
+
+    await waitFor(() => expect(mockedSaveBatch).toHaveBeenCalledTimes(1))
+    expect(mockedSaveBatch.mock.calls[0][0].values).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          species: 'BA',
+          grade: 'D',
+          retrievalDate: comparisonMonth,
+          updateDate: nextMonth,
+          newValue: 91.25,
+          saveMode: 'update',
+        }),
+      ]),
+    )
+    expect(screen.getByText('Values saved')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Replace file' })).toBeVisible()
+  })
+
+  it('keeps saved values on screen when a replacement workbook is rejected', async () => {
+    const currentMonth = `${formatBusinessIsoDate().slice(0, 7)}-01`
+    const nextMonth = monthOffset(currentMonth, 1)
+    const comparisonMonth = monthOffset(nextMonth, -1)
+    mockedSearch.mockResolvedValue([
+      {
+        species: 'BA',
+        grade: 'D',
+        growthIndicator: 'O',
+        retrievalDate: nextMonth,
+        updateDate: nextMonth,
+        currentValue: 78.14,
+        newValue: 78.14,
+        returnCode: '0',
+      },
+    ])
+    mockedSearchLatest.mockResolvedValue([
+      {
+        species: 'BA',
+        grade: 'D',
+        growthIndicator: 'O',
+        retrievalDate: comparisonMonth,
+        updateDate: comparisonMonth,
+        currentValue: 75.29,
+        newValue: 75.29,
+        returnCode: '0',
+      },
+    ])
+    mockedPreviewUpload.mockResolvedValue({
+      status: 'validation_failed',
+      fileName: 'wrong-month.xlsx',
+      fileSize: 1,
+      message: 'Upload template validation failed.',
+      rowCount: 0,
+      retrievalDate: comparisonMonth,
+      updateDate: nextMonth,
+      errors: ['The file has no numeric values.'],
+      warnings: [],
+      rows: [],
+    })
+
+    await renderUploadPage()
+    const replacement = new File([new Uint8Array([1])], 'wrong-month.xlsx', {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    })
+
+    await userEvent.upload(
+      screen.getByLabelText('Replacement average monthly values spreadsheet'),
+      replacement,
+    )
+
+    expect(await screen.findByText(/The file has no numeric values/)).toBeVisible()
+    expect(screen.getByLabelText(`Balsam grade D ${monthLabel(nextMonth)} value`)).toHaveValue(
+      '78.14',
+    )
+    expect(screen.getByText('Edit a value to save again.')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Replace file' })).toBeEnabled()
+    expect(mockedSaveBatch).not.toHaveBeenCalled()
   })
 
   it('advances to the next editable month and clears the prior workflow at rollover', async () => {
@@ -623,7 +785,8 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     expect(screen.getByText(/\d+ values will take effect on [A-Z][a-z]+ 1, \d{4}\./)).toBeVisible()
     expect(screen.getByText('Last saved')).toBeVisible()
     expect(screen.getByText(/by idir\\admin$/)).toBeVisible()
-    expect(screen.queryByRole('heading', { name: 'Values', level: 2 })).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Values', level: 2 })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Replace file' })).toBeVisible()
     expect(screen.queryByLabelText('Uploaded average monthly values file')).not.toBeInTheDocument()
     expect(screen.getByText('Edit a value to save again.')).toBeVisible()
     const savedSaveButton = screen.getByRole('button', { name: 'Save values' })

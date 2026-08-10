@@ -2693,9 +2693,31 @@ $notification-types: 'error', 'info', 'success', 'warning';
   padding: 1.5rem 1.75rem 3rem;
 }
 
+.rtm-amv-values-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.rtm-amv-values-heading__copy {
+  min-inline-size: 0;
+}
+
 .rtm-amv-values-heading h2 {
   font-size: 1.5rem;
   line-height: 2rem;
+}
+
+.rtm-amv-replace-file-button {
+  flex: 0 0 auto;
+  margin-block-start: 0.25rem;
+}
+
+.rtm-amv-replacement-error {
+  inline-size: 100%;
+  max-inline-size: none;
+  margin-block: 0 1rem;
 }
 
 .rtm-amv-upload-card {
