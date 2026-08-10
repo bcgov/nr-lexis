@@ -1,6 +1,6 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
 import RtmEmsLogAmvUploadPage from '@/pages/RTMEmsLogAmv/LegacyUploadWorkflow'
 import { previewRtmEmsLogAmvUpload, saveRtmEmsLogAmvBatch } from '@/service/rtm-emslogamv-service'
@@ -31,6 +31,10 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     })
   })
 
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it('renders the empty Average market values design and month context', () => {
     render(<RtmEmsLogAmvUploadPage />)
 
@@ -50,6 +54,64 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     )
     expect(screen.queryByRole('button', { name: 'Review' })).not.toBeInTheDocument()
     expect(document.title).toBe('Average market values | NR LEXIS')
+  })
+
+  it('advances to the next editable month and clears the prior workflow at rollover', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-09-01T06:59:30Z'))
+    mockedPreviewUpload.mockResolvedValue({
+      status: 'accepted',
+      fileName: 'Filename.xlsx',
+      fileSize: 1,
+      message: 'Spreadsheet is valid.',
+      rowCount: 1,
+      retrievalDate: '2026-08-01',
+      updateDate: '2026-09-01',
+      errors: [],
+      warnings: [],
+      rows: [
+        {
+          species: 'BA',
+          grade: 'D',
+          growthIndicator: 'O',
+          retrievalDate: '2026-08-01',
+          updateDate: '2026-09-01',
+          currentValue: 75.29,
+          newValue: 78.14,
+          returnCode: '0',
+        },
+      ],
+    })
+
+    render(<RtmEmsLogAmvUploadPage />)
+    expect(
+      within(screen.getByLabelText('Average market value month details')).getByText(
+        'September 2026',
+      ),
+    ).toBeVisible()
+
+    const workbook = new File([new Uint8Array([1])], 'Filename.xlsx', {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    })
+    fireEvent.change(screen.getByLabelText('Average monthly values upload spreadsheet'), {
+      target: { files: [workbook] },
+    })
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(screen.getByRole('table', { name: 'Balsam average market value review' })).toBeVisible()
+
+    vi.setSystemTime(new Date('2026-09-01T07:00:30Z'))
+    act(() => window.dispatchEvent(new Event('focus')))
+
+    const monthSummary = screen.getByLabelText('Average market value month details')
+    expect(within(monthSummary).getByText('October 2026')).toBeVisible()
+    expect(within(monthSummary).getByText('October 1, 2026')).toBeVisible()
+    expect(
+      screen.queryByRole('table', { name: 'Balsam average market value review' }),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText('Filename.xlsx')).not.toBeInTheDocument()
+    expect(screen.getByText('Drag and drop your file here or click to upload')).toBeVisible()
   })
 
   it('rejects files above 20 MiB before requesting a server preview', async () => {

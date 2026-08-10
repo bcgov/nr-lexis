@@ -1,6 +1,7 @@
 /** Spreadsheet-only AMV upload and review workflow. */
 
 import {
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -202,6 +203,7 @@ const validateAcceptedPreview = (
 const RTM_UPLOAD_ACCEPT = ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']
 const RTM_TEMPLATE_DOWNLOAD_PATH = '/templates/rtm-ems-log-amv-template.xlsx'
 const RTM_TEMPLATE_DOWNLOAD_NAME = 'rtm-ems-log-amv-template.xlsx'
+const EFFECTIVE_MONTH_REFRESH_INTERVAL_MS = 60_000
 
 const RTM_UPLOAD_ONLY_DESCRIPTION =
   'Set the domestic log values that become the fee in lieu of export on coastal permits.'
@@ -793,8 +795,12 @@ const RtmEmsLogAmvUploadPage = () => {
   const { canPerform, capabilities } = useAuth()
   const canManage = canPerform('/lexisAgentAdmin')
   const validationRequestRef = useRef(0)
+  const saveRequestRef = useRef(0)
   const uploadInputRef = useRef<HTMLInputElement>(null)
-  const [effectiveMonth] = useState(() => shiftEffectiveMonth(currentEffectiveMonth(), 1))
+  const [effectiveMonth, setEffectiveMonth] = useState(() =>
+    shiftEffectiveMonth(currentEffectiveMonth(), 1),
+  )
+  const effectiveMonthRef = useRef(effectiveMonth)
   const [uploadStep, setUploadStep] = useState<RtmUploadStep>('upload')
   const [isPreviewing, setIsPreviewing] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
@@ -934,8 +940,9 @@ const RtmEmsLogAmvUploadPage = () => {
     openUploadFileDialog()
   }
 
-  const clearUploadState = () => {
+  const clearUploadState = useCallback(() => {
     validationRequestRef.current += 1
+    saveRequestRef.current += 1
     setUploadStep('upload')
     setSelectedUploadFile(null)
     setUploadError('')
@@ -951,7 +958,41 @@ const RtmEmsLogAmvUploadPage = () => {
     setUploadInputKey((current) => current + 1)
     setIsDraggingUpload(false)
     setIsPreviewing(false)
-  }
+    setIsUploading(false)
+    setDiscardConfirmation(null)
+  }, [])
+
+  useEffect(() => {
+    const refreshEffectiveMonth = () => {
+      const nextEffectiveMonth = shiftEffectiveMonth(currentEffectiveMonth(), 1)
+      if (nextEffectiveMonth === effectiveMonthRef.current) {
+        return
+      }
+
+      effectiveMonthRef.current = nextEffectiveMonth
+      setEffectiveMonth(nextEffectiveMonth)
+      clearUploadState()
+    }
+
+    const refreshInterval = window.setInterval(
+      refreshEffectiveMonth,
+      EFFECTIVE_MONTH_REFRESH_INTERVAL_MS,
+    )
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') {
+        refreshEffectiveMonth()
+      }
+    }
+
+    window.addEventListener('focus', refreshEffectiveMonth)
+    document.addEventListener('visibilitychange', refreshWhenVisible)
+
+    return () => {
+      window.clearInterval(refreshInterval)
+      window.removeEventListener('focus', refreshEffectiveMonth)
+      document.removeEventListener('visibilitychange', refreshWhenVisible)
+    }
+  }, [clearUploadState])
 
   const submitUpload = async () => {
     if (!canManage) {
@@ -976,6 +1017,8 @@ const RtmEmsLogAmvUploadPage = () => {
     setUploadError('')
     setUploadResult(null)
     setIsUploading(true)
+    const requestId = saveRequestRef.current + 1
+    saveRequestRef.current = requestId
 
     try {
       if (!previewResult) {
@@ -985,6 +1028,10 @@ const RtmEmsLogAmvUploadPage = () => {
 
       const saveRequests = buildReviewedSaveRequests(previewResult, reviewValues)
       const result = await saveRtmEmsLogAmvBatch({ values: saveRequests })
+      if (saveRequestRef.current !== requestId) {
+        return
+      }
+
       const response: RtmEmsLogAmvUploadResult = {
         status: result.status,
         fileName: selectedUploadFile.name,
@@ -1020,6 +1067,10 @@ const RtmEmsLogAmvUploadPage = () => {
         setNotification(createResultMessage(response.status, response.message, response.errors))
       }
     } catch (error) {
+      if (saveRequestRef.current !== requestId) {
+        return
+      }
+
       console.error(error)
       const message = 'Unable to apply average monthly value upload.'
       setNotificationKind('error')
@@ -1035,7 +1086,9 @@ const RtmEmsLogAmvUploadPage = () => {
         rows: [],
       })
     } finally {
-      setIsUploading(false)
+      if (saveRequestRef.current === requestId) {
+        setIsUploading(false)
+      }
     }
   }
 
