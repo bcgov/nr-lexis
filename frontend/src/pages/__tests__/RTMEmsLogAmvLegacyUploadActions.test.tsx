@@ -103,7 +103,11 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     await renderUploadPage()
 
     expect(screen.getByRole('heading', { name: 'Average market values', level: 1 })).toBeVisible()
-    expect(screen.getByText(/domestic log values that become the fee in lieu/i)).toBeVisible()
+    expect(
+      screen.getByText(
+        'Set the domestic log values used to calculate export fees for coastal permits.',
+      ),
+    ).toBeVisible()
     const monthSummary = screen.getByLabelText('Average market value month details')
     expect(within(monthSummary).queryByRole('combobox')).not.toBeInTheDocument()
     expect(within(monthSummary).getByText(/^[A-Z][a-z]+ \d{4}$/)).toBeVisible()
@@ -292,10 +296,13 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       ),
     ).toBeVisible()
     expect(savedValue).toHaveValue('78.14')
+    expect(screen.getByRole('button', { name: 'Keep current values' })).toBeVisible()
+    expect(screen.getByText('Edit a value to save again.')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Cancel' })).toHaveAttribute('aria-disabled', 'true')
     expect(mockedPreviewUpload).not.toHaveBeenCalled()
     expect(mockedSaveBatch).not.toHaveBeenCalled()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Keep current values' }))
     expect(
       screen.queryByLabelText('Replacement average monthly values spreadsheet'),
     ).not.toBeInTheDocument()
@@ -313,6 +320,21 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       `Balsam grade D ${monthLabel(nextMonth)} value`,
     )
     expect(replacementValue).toHaveValue('91.25')
+    expect(
+      screen.queryByText('Selecting a file will replace the values on screen'),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByLabelText('Uploaded replacement average monthly values file'),
+    ).toHaveTextContent('replacement.xlsx')
+    expect(
+      screen.queryByRole('button', {
+        name: 'Choose a replacement average monthly values spreadsheet',
+      }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save values' })).not.toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
     expect(mockedSaveBatch).not.toHaveBeenCalled()
 
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
@@ -346,6 +368,10 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     )
     expect(screen.getByText('Values saved')).toBeVisible()
     expect(screen.getByRole('button', { name: 'Replace file' })).toBeVisible()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Replace file' }))
+    expect(screen.queryByText('Values saved')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Keep current values' })).toBeVisible()
   })
 
   it('keeps saved values on screen when a replacement workbook is rejected', async () => {
@@ -405,10 +431,19 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       '78.14',
     )
     expect(screen.getByText('wrong-month.xlsx')).toBeVisible()
-    expect(screen.queryByText('Edit a value to save again.')).not.toBeInTheDocument()
+    expect(screen.getByText('Edit a value to save again.')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Keep current values' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Cancel' })).toHaveAttribute('aria-disabled', 'true')
     expect(screen.queryByRole('button', { name: 'Replace file' })).not.toBeInTheDocument()
     expect(screen.getByLabelText('Replacement average monthly values spreadsheet')).toBeVisible()
     expect(mockedSaveBatch).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Keep current values' }))
+    expect(screen.getByRole('button', { name: 'Replace file' })).toBeVisible()
+    expect(screen.queryByText('wrong-month.xlsx')).not.toBeInTheDocument()
+    expect(screen.getByLabelText(`Balsam grade D ${monthLabel(nextMonth)} value`)).toHaveValue(
+      '78.14',
+    )
   })
 
   it('advances to the next editable month and clears the prior workflow at rollover', async () => {

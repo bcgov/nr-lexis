@@ -2716,18 +2716,45 @@ $notification-types: 'error', 'info', 'success', 'warning';
 
 .rtm-amv-replacement-upload {
   display: grid;
-  gap: 1rem;
+  gap: 1.5rem;
   margin-block-end: 1rem;
+  padding: 1.5rem 1.25rem;
+  background: var(--fds-layer-01);
+  border: 1px solid var(--fds-border-subtle);
+  border-radius: 4px;
 }
 
 .rtm-amv-replacement-warning {
   inline-size: 100%;
+  min-inline-size: 0;
   max-inline-size: none;
   margin: 0;
 }
 
 .rtm-amv-replacement-upload-card {
   margin: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+
+.rtm-amv-replacement-warning .cds--actionable-notification__action-button {
+  flex: 0 0 auto;
+  color: var(--fds-interactive, var(--cds-link-primary));
+  white-space: nowrap;
+}
+
+.rtm-amv-replacement-warning .cds--actionable-notification__details {
+  min-inline-size: 0;
+}
+
+.rtm-amv-replacement-warning .cds--actionable-notification__content {
+  display: grid;
+}
+
+.rtm-amv-replacement-warning .cds--actionable-notification__title {
+  margin-inline-end: 0;
 }
 
 .rtm-amv-upload-card {
