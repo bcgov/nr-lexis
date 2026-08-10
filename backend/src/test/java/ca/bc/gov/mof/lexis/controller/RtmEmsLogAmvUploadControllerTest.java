@@ -43,14 +43,14 @@ class RtmEmsLogAmvUploadControllerTest {
             List.of(),
             List.of());
     when(serviceProvider.getIfAvailable()).thenReturn(service);
-    when(service.previewUpload(file)).thenReturn(result);
+    when(service.previewUpload(file, "2026-07-01")).thenReturn(result);
 
     ResponseEntity<RtmEmsLogAmvUploadPreviewDto> response =
-        controller().previewUpload(file, null);
+        controller().previewUpload(file, null, "2026-07-01");
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(result);
-    verify(service).previewUpload(file);
+    verify(service).previewUpload(file, "2026-07-01");
   }
 
   @Test
@@ -60,20 +60,21 @@ class RtmEmsLogAmvUploadControllerTest {
         new RtmEmsLogAmvUploadResultDto(
             "accepted", "template.xlsx", file.getSize(), "Upload completed.", 1, 1, List.of(), List.of(), List.of());
     when(serviceProvider.getIfAvailable()).thenReturn(service);
-    when(service.upload(file)).thenReturn(result);
+    when(service.upload(file, "2026-07-01")).thenReturn(result);
 
-    ResponseEntity<RtmEmsLogAmvUploadResultDto> response = controller().upload(file, null);
+    ResponseEntity<RtmEmsLogAmvUploadResultDto> response =
+        controller().upload(file, null, "2026-07-01");
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(result);
-    verify(service).upload(file);
+    verify(service).upload(file, "2026-07-01");
   }
 
   @Test
   void previewShouldFailWhenAuthoritativeServiceIsMissing() {
     when(serviceProvider.getIfAvailable()).thenReturn(null);
 
-    assertThatThrownBy(() -> controller().previewUpload(sampleWorkbook(), null))
+    assertThatThrownBy(() -> controller().previewUpload(sampleWorkbook(), null, "2026-07-01"))
         .isInstanceOf(DataAccessResourceFailureException.class)
         .hasMessage("The authoritative RTM AMV service is temporarily unavailable.");
   }

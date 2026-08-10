@@ -7,6 +7,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -55,6 +56,8 @@ class LexisProdRtmOnlyAuthorizationIntegrationTest {
   void prodRtmOnlyModeShouldExposeRtmAmvTableAndRequiredSupportApisToAdmins()
       throws Exception {
     SimpleGrantedAuthority admin = new SimpleGrantedAuthority("LEXIS_ADMIN");
+    String nextMonth =
+        LexisBusinessTime.today().withDayOfMonth(1).plusMonths(1).toString();
 
     mockMvc
         .perform(get("/api/lexis/session/capabilities").with(jwt().authorities(admin)))
@@ -87,14 +90,14 @@ class LexisProdRtmOnlyAuthorizationIntegrationTest {
                           "species":"BA",
                           "grade":"A",
                           "growthIndicator":"O",
-                          "retrievalDate":"2099-01-01",
-                          "updateDate":"2099-01-01",
+                          "retrievalDate":"%s",
+                          "updateDate":"%s",
                           "newValue":10.01,
                           "saveMode":"create"
                         }
                       ]
                     }
-                    """)
+                    """.formatted(nextMonth, nextMonth))
                 .with(jwt().authorities(admin)))
         .andExpect(status().isOk());
 

@@ -1,13 +1,14 @@
 # RTM AMV UI And Persistence Contract
 
-This note records the active RTM Average Monthly Values contract. Administrators can maintain
-values through the editable grid at `/admin/rtm/emslogamv` or the transitional workbook workflow
-at `/admin/rtm/emslogamv/upload`. Both preserve the legacy `THE.EMS_LOG_AMV` schema and its
-downstream synchronization trigger.
+This note records the active RTM Average Monthly Values contract. Administrators maintain values
+through the workbook workflow at `/admin/rtm/emslogamv/upload`. The former editable-grid route is
+not exposed while this workflow is under review. The active workflow preserves the legacy
+`THE.EMS_LOG_AMV` schema and its downstream synchronization trigger.
 
-## Editable AMV grid
+## Logical AMV review
 
-- The page shows one editable table. It has no old-growth/second-growth control.
+- The page shows one species tab at a time with last-entered and upcoming-month columns. It has no
+  old-growth/second-growth control.
 - The displayed value is the old-growth (`O`) baseline. When saved, the same value is written to
   both old growth (`O`) and second growth (`S`).
 - User-facing copy intentionally describes one monthly value only; it does not expose the
@@ -16,11 +17,10 @@ downstream synchronization trigger.
   Spruce (`SP`), and one friendly Pine column.
 - Spruce maps one-to-one to physical `SP`; it does not expand like Pine.
 - Pine expands to all three legacy species codes: `WH`, `LO`, and `YE`.
-- The UI exposes grades `A` through `M`, `U`, `X`, `Y`, `Z`, and `1` through `6`. It does not
-  show `W` or the legacy blank-grade row.
-- A stored blank grade is still normalized to `BLANK` by the read/API compatibility layer, but it
-  is intentionally not editable through the GUI.
-- Every listed grid grade is available for every effective month.
+- The review exposes grades `A` through `M`, `U`, `X`, and `Y`. It does not show `W`, `Z`, grades
+  `1` through `6`, or the legacy blank-grade row.
+- Fixed grades `Z`, `BLANK`, and `1` through `6` are saved automatically as `$1.00` for every
+  species and are described in the review notice.
 
 `THE.EMS_LOG_AMV` has no `blank` flag; its legacy columns are `SPECIES`, `GRADE`,
 `GROWTH_TYPE_ST`, `EFFECTIVE_DATE`, `AVG_MARKET_PRICE`, and `REVISION_COUNT`. The UI therefore
@@ -31,8 +31,8 @@ does not invent or submit a `blank = 1` field.
 The legacy `BLANK` label is a display alias for a space-valued `GRADE` (`' '`) row. It is not a
 column or a flag. The legacy UI submitted that row as `GRADE = ' '`, the select procedure returned
 it as `BLANK`, and the table trigger normalizes an omitted or trimmed grade to a space. The active
-UI intentionally omits that row, as requested; it does not replace it with a new `blank = 1`
-attribute.
+UI intentionally hides that row and maintains it automatically at `$1.00`; it does not replace it
+with a new `blank = 1` attribute.
 
 Likewise, legacy `UPDATE_DATE` is a user-entered effective month. It is not the timestamp of the
 last submission: the legacy update procedure uses a later value to create a new effective-dated
@@ -41,27 +41,33 @@ only and does not misrepresent it as audit metadata.
 
 ## Dates and values
 
-- The UI accepts a month and always submits the first calendar day of that month.
+- The UI derives the immediately upcoming month and always submits its first calendar day.
 - The API also normalizes a supported `YYYY-MM-DD` input to that month's first day before it
   queries or saves a value. It does not retain a time-of-day component.
 - Retrieval dates are implementation data and are not shown or editable in the UI.
 - A value must be numeric, non-negative, at most `9999.99`, and have at most two decimal places.
-- Past months never prefill. They remain editable, and multiple changes are saved together as one
-  atomic batch after confirmation.
-- An empty current month can use values from the immediately preceding calendar month as an
-  unsaved starting point.
-- A future month can use the latest available earlier values as an unsaved starting point.
+- The only editable effective month is the immediately upcoming calendar month. Its values can be
+  edited and saved as many times as needed until it becomes the current month.
+- Current and previous months are never editable. At month rollover, the page advances to the new
+  immediately upcoming month and loads that month's saved rows when they exist; otherwise it
+  returns to the empty upload state.
+- The review compares the upcoming values with the latest earlier values in the table. That
+  comparison month is not necessarily the immediately previous month.
 - Values cannot be cleared: `AVG_MARKET_PRICE` is `NOT NULL` and the approved RTM contract has no
   delete operation.
-- In the grid, a single dash (`-`) is treated as an empty value. It warns when a copied starting
-  value is omitted from the batch; it is never persisted as a value, and negative numbers remain
-  invalid.
+- A blank upcoming value is omitted from the batch. When the current month had a value, the blank
+  cell receives an advisory warning and the user can enter `0` to persist an explicit zero.
+- A positive value for a species/grade combination that had no current-month value also receives
+  an advisory warning. Entering `0` records none and resolves that warning. Both advisory cases
+  may be saved without correction.
 
-## Atomic grid saves
+## Atomic reviewed saves
 
 The active page calls `POST /api/lexis/rtm/emslogamv/batch` once per Save action. The body is a
-`values` array containing the dirty logical cells. The prior single-row `POST /emslogamv` route is
-not exposed, so a caller cannot bypass the atomic batch contract.
+`values` array containing all nonblank reviewed logical cells plus the fixed `$1.00` grades. The
+backend independently rejects a batch whose effective date is not the immediately upcoming
+month. The prior single-row `POST /emslogamv` route is not exposed, so the page cannot bypass the
+atomic batch contract.
 
 The backend validates the complete request before any write, then expands each logical cell to its
 physical targets:
@@ -74,22 +80,47 @@ transaction. It requires the deployed LEXIS database user to have direct `INSERT
 access to `THE.EMS_LOG_AMV`; it does not call the legacy row procedures because they commit
 internally. If any write fails or is not applied, the transaction is rolled back. An incomplete
 batch is reported as rejected; a database failure uses the API's normal service-unavailable
-response. A successful response is therefore the confirmation that the complete grid submission
-was accepted.
+response. A successful response is therefore the confirmation that the complete reviewed
+submission was accepted.
 
-## Atomic workbook uploads
+## Workbook preview and save
 
-The separate workbook page retains the XLSX template, validation, preview, and review flow so the
-client can compare it with the editable grid during the transition period. Preview calls
-`POST /api/lexis/rtm/emslogamv/preview`; final submission calls
-`POST /api/lexis/rtm/emslogamv/upload`. Both routes require `/lexisAgentAdmin`, including when the
-application runs in PROD RTM-only mode.
+The active page retains the XLSX template, validation, preview, and species review flow. Preview
+calls `POST /api/lexis/rtm/emslogamv/preview`; the reviewed values are then submitted through the
+atomic batch endpoint. These routes require `/lexisAgentAdmin`, including when the application
+runs in PROD RTM-only mode. The older direct `/upload` endpoint remains for compatibility but is
+not called by this page because it would re-read the original workbook and discard review edits.
 
 The backend scans the workbook for malware, validates its shape, dates, dimensions, and values,
-and retains only workbook keys that exist for the retrieval month. Final submission converts all
-eligible workbook rows to direct `MERGE` targets and writes them in one Spring transaction. It does
-not call the legacy row procedures. If any target is not applied or the database write fails, the
-complete workbook transaction rolls back and the upload reports zero saved rows.
+uses the page's fixed upcoming effective month, and returns the union of the latest earlier and
+uploaded logical cells. This union allows the client to show both missing-upcoming and
+new-combination warnings. Final submission expands the reviewed values to direct `MERGE` targets
+and writes them in one Spring transaction. It does not call the legacy row procedures. If any
+target is not applied or the database write fails, the complete batch transaction rolls back.
+
+After an accepted save, the page removes the upload card, shows the saved confirmation, and keeps
+the reviewed values editable. Replace file first reveals a warning and the upload area together in
+one card above the unchanged saved review; opening it does not select a file or change any values.
+Keep current values closes that temporary state. An accepted replacement removes the warning,
+shows the selected filename, and previews the workbook over the values on screen without changing
+the database. A rejected replacement remains visible in the upload area and leaves the review
+intact; Cancel restores the last-saved preview, while Save values applies the replacement through
+the same batch update used for manual edits. The expanded replacement area is browser-only state,
+so refresh returns to the compact saved review. Save and Cancel remain keyboard-focusable but are
+announced as unavailable until a value changes or a replacement workbook has been accepted; the
+helper text is linked through `aria-describedby`. Editing a value clears the saved confirmation.
+Cancel then offers to save the changes or restore the last saved values; restoring them shows a
+dismissible confirmation that also clears on the next edit.
+Confirmation dialogs return focus to the action that opened them. The page can display the current
+session's save time and authenticated principal, but that metadata cannot be reconstructed after
+navigation because the legacy table has no audit columns. On navigation or refresh, the page reads
+the immediately upcoming month's rows from `EMS_LOG_AMV`. If rows exist, it restores the editable
+review and latest-earlier comparison; if none exist, it restores the upload state. The workbook and
+filename are not persisted, so neither is shown after a save or in a restored review. The saved-row
+lookup gates the initial workflow render: neither upload nor review is shown while it is pending.
+The application shell remains visible around a centered, non-overlay Carbon loading indicator,
+matching the initial-data gate in NR-FSPTS. A failed lookup shows an error instead of assuming there
+are no saved values.
 
 ## Batch audit event
 
@@ -113,9 +144,10 @@ change can claim that every report, integration, and query is unaffected.
 
 `RTM_EMS_LOG_AMV_INSERT` and `RTM_EMS_LOG_AMV_UPDATE` are retained in the database for legacy
 compatibility. Both issue `COMMIT`, which makes them unsuitable for either active multi-row save.
-The grid and workbook upload therefore use the same direct transactional `MERGE` implementation;
-no single-row mutation route is exposed. The read path can still use the direct effective-date
-query because the legacy select procedure requires an exact species and growth type.
+The reviewed batch and compatibility workbook upload therefore use the same direct transactional
+`MERGE` implementation; no single-row mutation route is exposed. The read path can still use the
+direct effective-date query because the legacy select procedure requires an exact species and
+growth type.
 
 The table has no user/timestamp audit columns. This change preserves the schema and trigger; it
 does not claim to add audit metadata that the legacy data model cannot store.
@@ -131,9 +163,9 @@ does not claim to add audit metadata that the legacy data model cannot store.
 | FR-11           | Confluence correction needed | `EMS_LOG_AMV` has no submission/update timestamp column; the legacy update-date value is an effective month, not an audit timestamp.              |
 | FR-12 and FR-14 | Confluence correction needed | `BLANK` is the legacy display alias for `GRADE = ' '`; the physical table has no blank flag/column to set to `1`.                                  |
 | FR-13           | Implemented                | No blank flag is rendered or accepted from the UI.                                                                                                  |
-| FR-15           | Implemented                | The editable grade set is `A` through `M`, `U`, `X`, `Y`, `Z`, and `1` through `6`; `W` and blank are hidden.                                       |
-| FR-16           | Implemented                | A legacy empty `NEWVAL` is a no-op: clearing an existing cell restores its loaded value on blur and omits it from the batch; a single dash is treated as the same blank marker; blank cells with no stored value remain omitted. |
-| FR-17           | Implemented                | Grid batches and workbook submissions validate before direct `MERGE` writes inside one transaction.                                                 |
+| FR-15           | Implemented                | The editable grade set is `A` through `M`, `U`, `X`, and `Y`; `W` and fixed grades are hidden. Fixed grades are submitted automatically at `$1.00`. |
+| FR-16           | Implemented                | A blank upcoming value is omitted and remains an advisory warning when the current month had a value; entering `0` persists an explicit zero.       |
+| FR-17           | Implemented                | Reviewed batches validate before direct `MERGE` writes inside one transaction.                                                                      |
 | FR-18           | Partially implemented      | Structured application audit events record the authenticated actor, server timestamp, batch outcome/status, and logical/physical row counts; durable persisted audit still requires an approved table or schema change. |
 | FR-19 to FR-20  | Implemented                | Numeric non-negative validation occurs before save; accepted and rejected batch outcomes are returned to the user.                                  |
 | FR-21           | Live verification required | The trigger mirrors to `EXPORT_LOG_AMV`, but reports, integrations, and queries still require TEST/downstream validation.                           |
@@ -142,16 +174,16 @@ does not claim to add audit metadata that the legacy data model cannot store.
 
 The implemented UI behavior is constrained by the existing data model:
 
-- Legacy RTM allowed a user to enter one physical growth partition at a time. The active unified
-  table intentionally applies the Confluence O/S fan-out rule instead; no physical-table change is
-  required because `EMS_LOG_AMV` stores the partitions through `GROWTH_TYPE_ST`.
+- Legacy RTM allowed a user to enter one physical growth partition at a time. The active logical
+  review intentionally applies the Confluence O/S fan-out rule instead; no physical-table change
+  is required because `EMS_LOG_AMV` stores the partitions through `GROWTH_TYPE_ST`.
 - `BLANK` is a legacy grade sentinel (`GRADE = ' '`), not a column. The Confluence `blank = 1`
   wording needs correction before a new flag or column is considered.
 - It has no submitting-user, submission-timestamp, or update-timestamp column. A new audit table
   or an approved schema change is required to retain that information.
 - `AVG_MARKET_PRICE` is `NOT NULL`; legacy code treats an empty value as a no-op. The active UI
-  preserves that behavior by restoring a cleared stored value on blur and omitting it from the
-  batch. Product confirmation is still needed if a delete behavior is desired instead.
+  preserves that behavior by omitting blank reviewed values from the batch. Product confirmation
+  is still needed if a delete behavior is desired instead.
 
 No schema, trigger, or downstream consumer behavior is inferred or altered by this branch.
 

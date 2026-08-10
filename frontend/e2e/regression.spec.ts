@@ -772,7 +772,7 @@ const adminNavigationSections: Array<{
   },
   {
     section: 'Admin',
-    links: ['Fee Policy', 'Fee in Lieu', 'Export Schedule', 'Average Monthly Values'],
+    links: ['Fee Policy', 'Fee in Lieu', 'Export Schedule', 'Average market values'],
   },
 ]
 
@@ -786,7 +786,7 @@ const adminAccessiblePages: Array<[path: string, heading: RegExp]> = [
   ['/provincial/application', /provincial application search/i],
   ['/federal', /federal application search/i],
   ['/reports', /application report/i],
-  ['/admin/rtm/emslogamv', /average monthly values/i],
+  ['/admin/rtm/emslogamv/upload', /average market values/i],
 ]
 
 const reportAccessiblePages: Array<[path: string, heading: RegExp]> = [
@@ -1899,7 +1899,20 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(page.getByRole('button', { name: 'Reject Application' })).toHaveCount(0)
   })
 
-  test('shows AMV table controls and row highlighting', async () => {
+  test('exposes only the spreadsheet AMV workflow and redirects the GUI route', async () => {
+    const page = await authenticatedIdirPage()
+
+    await expectAccessiblePage(page, '/admin/rtm/emslogamv', /average market values/i)
+
+    await expect(page).toHaveURL(/\/admin\/rtm\/emslogamv\/upload$/)
+    await expect(page).toHaveTitle('Average market values | NR LEXIS')
+    await expect(page.getByRole('region', { name: 'Upload spreadsheet' })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Download template' })).toBeVisible()
+    await expect(page.getByRole('table', { name: 'Average monthly value table' })).toHaveCount(0)
+  })
+
+  // The GUI table remains in source for possible later reactivation, but it is not routed.
+  test.skip('shows AMV table controls and row highlighting', async () => {
     const page = await authenticatedIdirPage()
     const savedRows = ['A', 'B'].flatMap((grade, gradeIndex) =>
       ['O', 'S'].map((growthIndicator) => ({
@@ -1984,7 +1997,7 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(balsamGradeA.locator('xpath=ancestor::td')).not.toHaveClass(/has-warning/)
   })
 
-  test('uses copied AMV values as the warning baseline', async () => {
+  test.skip('uses copied AMV values as the warning baseline', async () => {
     const page = await authenticatedIdirPage()
     const currentMonth = `${formatBusinessIsoDate().slice(0, 7)}-01`
     const [currentYear, currentMonthNumber] = currentMonth.split('-').map(Number)
@@ -2074,7 +2087,7 @@ test.describe('TEST IDIR admin regression', () => {
       .not.toBe(warningBackground)
   })
 
-  test('shows AMV table save validation failures without persisting values', async () => {
+  test.skip('shows AMV table save validation failures without persisting values', async () => {
     const page = await authenticatedIdirPage()
     const saveRequests: Array<Record<string, unknown>> = []
 

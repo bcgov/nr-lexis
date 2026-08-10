@@ -1,55 +1,72 @@
-/**
- * AMV workbook upload and review workflow, exposed beside the editable grid during
- * the client evaluation period.
- */
+/** Spreadsheet-only AMV upload and review workflow. */
 
 import {
+  useCallback,
+  useEffect,
   useRef,
   useState,
   type ChangeEvent,
   type DragEvent,
   type KeyboardEvent,
-  type ReactNode,
 } from 'react'
 import {
-  ArrowRight,
   CheckmarkFilled,
   Close,
   Document,
   Download,
   ErrorFilled,
-  InformationFilled,
+  Save,
+  WarningAltFilled,
 } from '@carbon/icons-react'
 import {
+  ActionableNotification,
   Button,
   Column,
   Grid,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  InlineLoading,
+  InlineNotification,
+  Loading,
+  Tab,
+  TabList,
+  TabPanel,
+  TabPanels,
+  Tabs,
 } from '@carbon/react'
 import { AppNotification } from '../../components/AppNotification'
+import ConfirmationModal from '@/components/ConfirmationModal'
+import PageHeader from '@/components/PageHeader'
 import { useAuth } from '@/context/auth/useAuth'
 import {
   previewRtmEmsLogAmvUpload,
-  uploadRtmEmsLogAmv,
+  saveRtmEmsLogAmvBatch,
+  searchLatestRtmEmsLogAmv,
+  searchRtmEmsLogAmv,
   type RtmEmsLogAmvRow,
+  type RtmEmsLogAmvSaveRequest,
   type RtmEmsLogAmvUploadPreview,
   type RtmEmsLogAmvUploadResult,
 } from '@/service/rtm-emslogamv-service'
-import UploadWorkflowProgress from '@/components/uploads/UploadWorkflowProgress'
-import PendingIcon from '@/components/PendingIcon'
 import { validateUploadFileSize } from '@/components/uploads/uploadQueueHelpers'
+import { formatBusinessIsoDate, LEXIS_BUSINESS_TIME_ZONE } from '@/utils/date'
 
 type PendingUploadValidation = {
   fileName: string
   fileSize: number
 }
 
+type SavedUploadState = {
+  savedAt?: string
+  savedBy?: string
+  valueCount: number
+}
+
 type RtmUploadStep = 'upload' | 'review'
+
+type UploadIntent = 'initial' | 'replace'
+
+type DiscardConfirmation = 'cancel' | 'file' | 'saved-changes'
+
+type SavedNotification = 'discarded' | 'saved'
 
 type RtmReviewSpeciesColumn = {
   key: string
@@ -57,10 +74,11 @@ type RtmReviewSpeciesColumn = {
   speciesCodes: string[]
 }
 
-type RtmReviewMatrixRow = {
+type RtmSpeciesReviewRow = {
+  currentValues: RtmReviewCellValues
   key: string
   grade: string
-  values: Record<string, RtmReviewCellValues>
+  newValues: RtmReviewCellValues
 }
 
 type RtmReviewCellValues = Record<string, number | null>
@@ -115,9 +133,55 @@ const formatUploadMonth = (dateValue: string | null | undefined): string | null 
   }).format(new Date(Date.UTC(year, monthIndex, 1)))
 }
 
-const createAcceptedUploadMessage = (previewResult: RtmEmsLogAmvUploadPreview | null): string => {
-  const monthLabel = formatUploadMonth(previewResult?.updateDate ?? previewResult?.retrievalDate)
-  return monthLabel ? `New values applied for ${monthLabel}.` : 'New values applied.'
+const currentEffectiveMonth = () => `${formatBusinessIsoDate().slice(0, 7)}-01`
+
+const shiftEffectiveMonth = (dateValue: string, offset: number): string => {
+  const match = /^(\d{4})-(\d{2})-01$/.exec(dateValue)
+  if (!match) {
+    return dateValue
+  }
+
+  const shifted = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1 + offset, 1))
+  return shifted.toISOString().slice(0, 10)
+}
+
+const formatEffectiveStartDate = (dateValue: string): string => {
+  const match = /^(\d{4})-(\d{2})-01$/.exec(dateValue)
+  if (!match) {
+    return dateValue
+  }
+
+  const year = Number(match[1])
+  const monthIndex = Number(match[2]) - 1
+  const month = new Intl.DateTimeFormat('en-CA', {
+    month: 'long',
+    timeZone: 'UTC',
+  }).format(new Date(Date.UTC(year, monthIndex, 1)))
+  return `${month} 1, ${year}`
+}
+
+const formatSavedDateTime = (date: Date): string => {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    day: 'numeric',
+    hour: 'numeric',
+    hour12: true,
+    minute: '2-digit',
+    month: 'long',
+    timeZone: LEXIS_BUSINESS_TIME_ZONE,
+    year: 'numeric',
+  }).formatToParts(date)
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((item) => item.type === type)?.value ?? ''
+
+  return `${part('month')} ${part('day')}, ${part('year')}, ${part('hour')}:${part('minute')} ${part('dayPeriod')}`
+}
+
+const reviewValuesMatch = (
+  left: Record<string, string>,
+  right: Record<string, string>,
+): boolean => {
+  const keys = new Set([...Object.keys(left), ...Object.keys(right)])
+  return Array.from(keys).every((key) => left[key] === right[key])
 }
 
 const normalizeIsoDate = (dateValue: string | null | undefined): string | null => {
@@ -149,16 +213,19 @@ const validateAcceptedPreview = (
 const RTM_UPLOAD_ACCEPT = ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']
 const RTM_TEMPLATE_DOWNLOAD_PATH = '/templates/rtm-ems-log-amv-template.xlsx'
 const RTM_TEMPLATE_DOWNLOAD_NAME = 'rtm-ems-log-amv-template.xlsx'
+const EFFECTIVE_MONTH_REFRESH_INTERVAL_MS = 1_000
 
-const RTM_UPLOAD_ONLY_DESCRIPTION = 'Update average monthly values by uploading an XLSX file.'
-const RTM_UPLOAD_STEP_DESCRIPTION =
-  'Add your completed template to check for errors before the new values take effect.'
-const RTM_UPLOAD_FIELD_HELPER = 'Accepted formats: .xlsx. Maximum file size: 20 MiB.'
-
-const RTM_UPLOAD_REVIEW_STEPS = [
-  { id: 'upload', label: 'Upload' },
-  { id: 'review', label: 'Review' },
-]
+const RTM_UPLOAD_ONLY_DESCRIPTION =
+  'Set the domestic log values used to calculate export fees for coastal permits.'
+const RTM_VALUES_DESCRIPTION =
+  'Your spreadsheet provides a value for each species and grade. You will be able to check them before you save.'
+const RTM_UPLOAD_FIELD_HELPER = 'Accepted format: .xlsx, up to 20 MB.'
+const RTM_UPLOAD_SYSTEM_ERROR_TITLE = 'Upload could not be completed'
+const RTM_UPLOAD_SYSTEM_ERROR_MESSAGE =
+  'Something went wrong on our end. Please try again. If the problem persists, contact...'
+const RTM_VALUES_LOAD_ERROR_TITLE = 'Average market values could not be loaded'
+const RTM_VALUES_LOAD_ERROR_MESSAGE =
+  'Something went wrong on our end. Refresh the page to try again. If the problem persists, contact...'
 
 const RTM_REVIEW_SPECIES_COLUMNS: RtmReviewSpeciesColumn[] = [
   { key: 'BA', label: 'Balsam', speciesCodes: ['BA'] },
@@ -167,9 +234,7 @@ const RTM_REVIEW_SPECIES_COLUMNS: RtmReviewSpeciesColumn[] = [
   { key: 'CY', label: 'Cypress', speciesCodes: ['CY'] },
   { key: 'FI', label: 'Fir', speciesCodes: ['FI'] },
   { key: 'SP', label: 'Spruce', speciesCodes: ['SP'] },
-  { key: 'WH', label: 'Western white pine', speciesCodes: ['WH'] },
-  { key: 'LO', label: 'Lodgepole pine', speciesCodes: ['LO'] },
-  { key: 'YE', label: 'Yellow pine', speciesCodes: ['YE'] },
+  { key: 'PINE', label: 'Pine', speciesCodes: ['WH', 'LO', 'YE', 'PINE'] },
 ]
 
 const RTM_REVIEW_GRADE_ORDER = [
@@ -189,18 +254,13 @@ const RTM_REVIEW_GRADE_ORDER = [
   'U',
   'X',
   'Y',
-  'Z',
-  '1',
-  '2',
-  '3',
-  '4',
-  '5',
-  '6',
 ]
 
-const HIDDEN_REVIEW_GRADES = new Set(['W', 'BLANK'])
+const HIDDEN_REVIEW_GRADES = new Set(['W', 'Z', '1', '2', '3', '4', '5', '6', 'BLANK'])
 
 const RTM_REVIEW_GROWTH_ORDER = ['O', 'S']
+const RTM_FIXED_GRADES = ['Z', 'BLANK', '1', '2', '3', '4', '5', '6']
+const MAX_AMV_VALUE = 9999.99
 
 const normalizeKey = (value: string | null | undefined) => (value ?? '').trim().toUpperCase()
 
@@ -235,29 +295,6 @@ const resolveSpeciesColumnKey = (species: string | null | undefined) => {
   return matchedColumn?.key ?? normalizedSpecies
 }
 
-const buildReviewSpeciesColumns = (rows: RtmEmsLogAmvRow[]): RtmReviewSpeciesColumn[] => {
-  const knownColumnKeys = new Set(RTM_REVIEW_SPECIES_COLUMNS.map((column) => column.key))
-  const extraColumns = new Set<string>()
-
-  rows.forEach((row) => {
-    const columnKey = resolveSpeciesColumnKey(row.species)
-    if (columnKey && !knownColumnKeys.has(columnKey)) {
-      extraColumns.add(columnKey)
-    }
-  })
-
-  return [
-    ...RTM_REVIEW_SPECIES_COLUMNS,
-    ...Array.from(extraColumns)
-      .sort()
-      .map((columnKey) => ({
-        key: columnKey,
-        label: columnKey,
-        speciesCodes: [columnKey],
-      })),
-  ]
-}
-
 const formatGrowthIndicator = (growthIndicator: string) => {
   if (growthIndicator === 'O') {
     return 'Old growth'
@@ -270,7 +307,7 @@ const formatGrowthIndicator = (growthIndicator: string) => {
   return growthIndicator
 }
 
-const compareMatrixRows = (left: RtmReviewMatrixRow, right: RtmReviewMatrixRow) => {
+const compareReviewRows = (left: RtmSpeciesReviewRow, right: RtmSpeciesReviewRow) => {
   const leftGradeIndex = RTM_REVIEW_GRADE_ORDER.indexOf(left.grade)
   const rightGradeIndex = RTM_REVIEW_GRADE_ORDER.indexOf(right.grade)
   const normalizedLeftGradeIndex =
@@ -285,44 +322,46 @@ const compareMatrixRows = (left: RtmReviewMatrixRow, right: RtmReviewMatrixRow) 
   return left.grade.localeCompare(right.grade)
 }
 
-const buildReviewMatrixRows = (rows: RtmEmsLogAmvRow[]): RtmReviewMatrixRow[] => {
-  const matrixRows = new Map<string, RtmReviewMatrixRow>()
-
-  RTM_REVIEW_GRADE_ORDER.forEach((grade) => {
-    matrixRows.set(grade, {
-      key: grade,
-      grade,
-      values: {},
-    })
-  })
+const buildSpeciesReviewRows = (
+  rows: RtmEmsLogAmvRow[],
+  column: RtmReviewSpeciesColumn,
+): RtmSpeciesReviewRow[] => {
+  const reviewRows = new Map<string, RtmSpeciesReviewRow>()
 
   rows.forEach((row) => {
     const grade = normalizeGrade(row.grade)
     const growthIndicator = normalizeKey(row.growthIndicator)
     const speciesColumnKey = resolveSpeciesColumnKey(row.species)
 
-    if (!grade || !speciesColumnKey || HIDDEN_REVIEW_GRADES.has(grade)) {
+    if (
+      !grade ||
+      !growthIndicator ||
+      speciesColumnKey !== column.key ||
+      HIDDEN_REVIEW_GRADES.has(grade)
+    ) {
       return
     }
 
-    const matrixRowKey = grade
-    const matrixRow =
-      matrixRows.get(matrixRowKey) ??
+    const reviewRow =
+      reviewRows.get(grade) ??
       ({
-        key: matrixRowKey,
+        currentValues: {},
+        key: `${column.key}-${grade}`,
         grade,
-        values: {},
-      } satisfies RtmReviewMatrixRow)
+        newValues: {},
+      } satisfies RtmSpeciesReviewRow)
 
-    const columnValues = matrixRow.values[speciesColumnKey] ?? {}
-    if (!(growthIndicator in columnValues)) {
-      columnValues[growthIndicator] = row.newValue
+    if (!(growthIndicator in reviewRow.currentValues)) {
+      reviewRow.currentValues[growthIndicator] = row.currentValue
     }
-    matrixRow.values[speciesColumnKey] = columnValues
-    matrixRows.set(matrixRowKey, matrixRow)
+    if (!(growthIndicator in reviewRow.newValues)) {
+      reviewRow.newValues[growthIndicator] = row.newValue
+    }
+
+    reviewRows.set(grade, reviewRow)
   })
 
-  return Array.from(matrixRows.values()).sort(compareMatrixRows)
+  return Array.from(reviewRows.values()).sort(compareReviewRows)
 }
 
 const growthSortIndex = (growthIndicator: string) => {
@@ -359,183 +398,436 @@ const formatReviewCell = (values: RtmReviewCellValues | undefined) => {
   )
 }
 
-const UploadValidationMessage = ({
-  kind,
-  title,
-  children,
-}: {
-  kind: 'info' | 'success' | 'error'
-  title: string
-  children: ReactNode
-}) => {
-  const Icon =
-    kind === 'success' ? CheckmarkFilled : kind === 'error' ? ErrorFilled : InformationFilled
+const firstReviewValue = (values: RtmReviewCellValues): number | null => {
+  const sortedEntries = Object.entries(values).sort(
+    ([leftGrowth], [rightGrowth]) => growthSortIndex(leftGrowth) - growthSortIndex(rightGrowth),
+  )
+  return sortedEntries.find(([, value]) => value !== null)?.[1] ?? null
+}
 
+const buildInitialReviewValues = (rows: RtmEmsLogAmvRow[]) => {
+  const values: Record<string, string> = {}
+  RTM_REVIEW_SPECIES_COLUMNS.forEach((column) => {
+    buildSpeciesReviewRows(rows, column).forEach((row) => {
+      const newValue = firstReviewValue(row.newValues)
+      values[row.key] = newValue === null ? '' : formatMoney(newValue)
+    })
+  })
+  return values
+}
+
+const rowEffectiveDate = (row: RtmEmsLogAmvRow): string | null =>
+  normalizeIsoDate(row.updateDate) ?? normalizeIsoDate(row.retrievalDate)
+
+const rowValue = (row: RtmEmsLogAmvRow): number | null => row.newValue ?? row.currentValue
+
+const buildSavedReviewPreview = (
+  effectiveMonth: string,
+  savedRows: RtmEmsLogAmvRow[],
+  comparisonRows: RtmEmsLogAmvRow[],
+): RtmEmsLogAmvUploadPreview => {
+  const supportedSpecies = new Set(RTM_REVIEW_SPECIES_COLUMNS.map((column) => column.key))
+  const supportedGrades = new Set(RTM_REVIEW_GRADE_ORDER)
+  const comparisonDate =
+    comparisonRows
+      .map(rowEffectiveDate)
+      .filter((date): date is string => date !== null)
+      .sort()
+      .at(-1) ?? shiftEffectiveMonth(effectiveMonth, -1)
+  const valuesByKey = (rows: RtmEmsLogAmvRow[]) => {
+    const values = new Map<string, { grade: string; species: string; value: number | null }>()
+
+    rows.forEach((row) => {
+      const species = resolveSpeciesColumnKey(row.species)
+      const grade = normalizeGrade(row.grade)
+      if (!supportedSpecies.has(species) || !supportedGrades.has(grade)) {
+        return
+      }
+
+      const key = `${species}-${grade}`
+      if (!values.has(key)) {
+        values.set(key, { grade, species, value: rowValue(row) })
+      }
+    })
+
+    return values
+  }
+  const savedValues = valuesByKey(savedRows)
+  const comparisonValues = valuesByKey(comparisonRows)
+  const keys = new Set([...comparisonValues.keys(), ...savedValues.keys()])
+  const rows = Array.from(keys).map((key) => {
+    const savedValue = savedValues.get(key)
+    const comparisonValue = comparisonValues.get(key)
+    const dimensions = savedValue ?? comparisonValue
+
+    return {
+      species: dimensions?.species ?? null,
+      grade: dimensions?.grade ?? null,
+      growthIndicator: 'O',
+      retrievalDate: comparisonDate,
+      updateDate: effectiveMonth,
+      currentValue: comparisonValue?.value ?? null,
+      newValue: savedValue?.value ?? null,
+      returnCode: '0',
+    }
+  })
+
+  return {
+    status: 'accepted',
+    message: 'Saved average market values loaded.',
+    rowCount: savedRows.length,
+    retrievalDate: comparisonDate,
+    updateDate: effectiveMonth,
+    errors: [],
+    warnings: [],
+    rows,
+  }
+}
+
+const parseReviewValue = (value: string): number | null | undefined => {
+  const normalized = value.trim().replace(/,/g, '')
+  if (!normalized) {
+    return null
+  }
+  if (!/^(?:\d+(?:\.\d{1,2})?|\.\d{1,2})$/.test(normalized)) {
+    return undefined
+  }
+  const parsed = Number(normalized)
+  return Number.isFinite(parsed) && parsed >= 0 && parsed <= MAX_AMV_VALUE ? parsed : undefined
+}
+
+const reviewValueError = (value: string) =>
+  parseReviewValue(value) === undefined
+    ? 'Enter a number from 0 to 9999.99 with no more than two decimal places.'
+    : null
+
+const reviewValueWarning = (
+  row: RtmSpeciesReviewRow,
+  value: string,
+  comparisonMonthName: string,
+) => {
+  const currentValue = firstReviewValue(row.currentValues)
+  const parsedValue = parseReviewValue(value)
+  const hasPositiveNewValue = typeof parsedValue === 'number' && parsedValue > 0
+
+  if (currentValue === null && hasPositiveNewValue) {
+    return `${comparisonMonthName} had none. Confirm this species and grade combination is valid.`
+  }
+  if (currentValue !== null && parsedValue === null) {
+    return `${comparisonMonthName} had ${formatMoney(currentValue)}. Enter a value, or 0 for none.`
+  }
+  return null
+}
+
+const buildReviewedSaveRequests = (
+  previewResult: RtmEmsLogAmvUploadPreview,
+  reviewValues: Record<string, string>,
+): RtmEmsLogAmvSaveRequest[] => {
+  const retrievalDate = normalizeIsoDate(previewResult.retrievalDate) ?? ''
+  const updateDate = normalizeIsoDate(previewResult.updateDate) ?? ''
+  const request = (species: string, grade: string, newValue: number): RtmEmsLogAmvSaveRequest => ({
+    species,
+    grade,
+    growthIndicator: 'O',
+    retrievalDate,
+    updateDate,
+    newValue,
+    saveMode: 'update',
+  })
+
+  const visibleValues = RTM_REVIEW_SPECIES_COLUMNS.flatMap((column) =>
+    buildSpeciesReviewRows(previewResult.rows, column).flatMap((row) => {
+      const value = parseReviewValue(reviewValues[row.key] ?? '')
+      return typeof value === 'number' ? [request(column.key, row.grade, value)] : []
+    }),
+  )
+  const fixedValues = RTM_REVIEW_SPECIES_COLUMNS.flatMap((column) =>
+    RTM_FIXED_GRADES.map((grade) => request(column.key, grade, 1)),
+  )
+
+  return [...visibleValues, ...fixedValues]
+}
+
+const RejectedUploadFile = ({
+  fileName,
+  issues,
+  onClear,
+}: {
+  fileName: string
+  issues: string[]
+  onClear: () => void
+}) => {
+  const hasMultipleIssues = issues.length > 1
+  const issueOccurrences = new Map<string, number>()
+  const issueItems = issues.map((issue) => {
+    const occurrence = (issueOccurrences.get(issue) ?? 0) + 1
+    issueOccurrences.set(issue, occurrence)
+    return { issue, key: `${issue}-${occurrence}` }
+  })
   return (
     <div
-      className={`admin-upload-validation admin-upload-validation--${kind}`}
-      role={kind === 'error' ? 'alert' : 'status'}
-      aria-live={kind === 'error' ? 'assertive' : 'polite'}
+      className="rtm-amv-rejected-file"
+      role="alert"
+      aria-label="Rejected average monthly values upload file"
     >
-      <Icon size={20} className="admin-upload-validation__icon" aria-hidden="true" />
-      <div className="admin-upload-validation__content">
-        <h3>{title}</h3>
-        {children}
+      <div className="rtm-amv-rejected-file__row">
+        <span className="rtm-amv-rejected-file__name">{fileName}</span>
+        <span className="rtm-amv-rejected-file__actions">
+          <ErrorFilled className="rtm-amv-rejected-file__error-icon" size={12} aria-hidden="true" />
+          <button
+            type="button"
+            className="rtm-amv-rejected-file__remove"
+            aria-label="Clear selected file"
+            onClick={onClear}
+          >
+            <Close size={12} aria-hidden="true" />
+          </button>
+        </span>
       </div>
+      {hasMultipleIssues ? (
+        <div className="rtm-amv-rejected-file__details">
+          <p className="rtm-amv-rejected-file__intro">
+            This file can&apos;t be used. Fix these issues in your spreadsheet, then upload it
+            again:
+          </p>
+          <ul className="rtm-amv-rejected-file__issues" aria-label="Upload validation issues">
+            {issueItems.map(({ issue, key }) => (
+              <li key={key}>{issue}</li>
+            ))}
+          </ul>
+        </div>
+      ) : (
+        <p className="rtm-amv-rejected-file__issue">{issues[0]}</p>
+      )}
     </div>
   )
 }
 
-const buildValidationIssueRows = (
-  details: string[],
-): Array<{ detail: string; key: string; severity: 'Error' }> => {
-  const occurrences = new Map<string, number>()
+const formatSpeciesList = (labels: string[]) => {
+  if (labels.length === 0) {
+    return ''
+  }
 
-  return details.map((detail) => {
-    const occurrence = (occurrences.get(detail) ?? 0) + 1
-    occurrences.set(detail, occurrence)
-
-    return {
-      detail,
-      key: `Error-${detail}-${occurrence}`,
-      severity: 'Error',
-    }
-  })
+  return new Intl.ListFormat('en-CA', { style: 'long', type: 'conjunction' }).format(labels)
 }
 
-const ValidationIssuesTable = ({ errors }: { errors: string[] }) => {
-  const issues = buildValidationIssueRows(errors)
-
-  if (issues.length === 0) {
-    return null
+const SpeciesReviewTable = ({
+  column,
+  comparisonMonthName,
+  currentMonthLabel,
+  disabled,
+  nextMonthLabel,
+  onValueChange,
+  rows,
+  values,
+}: {
+  column: RtmReviewSpeciesColumn
+  comparisonMonthName: string
+  currentMonthLabel: string
+  disabled: boolean
+  nextMonthLabel: string
+  onValueChange: (key: string, value: string) => void
+  rows: RtmSpeciesReviewRow[]
+  values: Record<string, string>
+}) => {
+  if (rows.length === 0) {
+    return (
+      <p className="rtm-amv-species-review__empty">
+        No uploaded values are available for {column.label}.
+      </p>
+    )
   }
 
   return (
-    <div className="admin-upload-validation-table-wrap">
-      <div className="admin-upload-validation-table-header">
-        <span>Validation issues ({issues.length})</span>
-      </div>
-      <table className="admin-upload-validation-table" aria-label="Upload validation issues">
+    <div className="rtm-amv-species-table-wrap">
+      <table
+        className="rtm-amv-species-table"
+        aria-label={`${column.label} average market value review`}
+      >
         <thead>
           <tr>
-            <th className="admin-upload-validation-table__issue" scope="col">
-              Issue
-            </th>
-            <th scope="col">Detail</th>
+            <th scope="col">Grade</th>
+            <th scope="col">{`Value in effect (${currentMonthLabel})`}</th>
+            <th scope="col">{nextMonthLabel}</th>
           </tr>
         </thead>
         <tbody>
-          {issues.map((issue) => (
-            <tr key={issue.key}>
-              <td className="admin-upload-validation-table__issue">{issue.severity}</td>
-              <td>{issue.detail}</td>
-            </tr>
-          ))}
+          {rows.map((row) => {
+            const value = values[row.key] ?? ''
+            const error = reviewValueError(value)
+            const warning = error ? null : reviewValueWarning(row, value, comparisonMonthName)
+            const message = error ?? warning
+            const messageId = message ? `rtm-amv-${row.key}-message` : undefined
+            return (
+              <tr
+                key={row.key}
+                className={error ? 'has-error' : warning ? 'has-warning' : undefined}
+              >
+                <th scope="row">{row.grade}</th>
+                <td className="rtm-amv-species-table__current-value">
+                  {formatReviewCell(row.currentValues) || '—'}
+                </td>
+                <td>
+                  <div className="rtm-amv-species-table__review-value">
+                    <div className="rtm-amv-species-table__input-wrap">
+                      <input
+                        className="rtm-amv-species-table__input"
+                        type="text"
+                        inputMode="decimal"
+                        aria-label={`${column.label} grade ${row.grade} ${nextMonthLabel} value`}
+                        aria-describedby={messageId}
+                        aria-invalid={error ? true : undefined}
+                        disabled={disabled}
+                        value={value}
+                        onChange={(event) => onValueChange(row.key, event.currentTarget.value)}
+                      />
+                      {warning && (
+                        <WarningAltFilled
+                          className="rtm-amv-species-table__input-warning"
+                          size={14}
+                          aria-hidden="true"
+                        />
+                      )}
+                    </div>
+                    {message && (
+                      <p
+                        id={messageId}
+                        className={
+                          error
+                            ? 'rtm-amv-species-table__message has-error'
+                            : 'rtm-amv-species-table__message'
+                        }
+                      >
+                        {message}
+                      </p>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            )
+          })}
         </tbody>
       </table>
     </div>
   )
 }
 
-const UploadValidationStatus = ({
-  isPreviewing,
-  uploadError,
-  previewResult,
-  selectedUploadFile,
-}: {
-  isPreviewing: boolean
-  uploadError: string
-  previewResult: RtmEmsLogAmvUploadPreview | null
-  selectedUploadFile: File | null
-}) => {
-  if (uploadError) {
-    return (
-      <UploadValidationMessage kind="error" title="File not ready">
-        <p>{uploadError}</p>
-      </UploadValidationMessage>
-    )
-  }
-
-  if (isPreviewing) {
-    return (
-      <UploadValidationMessage kind="info" title="Validating spreadsheet">
-        <p>Checking the uploaded workbook before review.</p>
-      </UploadValidationMessage>
-    )
-  }
-
-  if (!previewResult) {
-    return null
-  }
-
-  const isAccepted = previewResult.status === 'accepted'
-  const issueCount = previewResult.errors.length
-
-  return (
-    <>
-      <UploadValidationMessage
-        kind={isAccepted ? 'success' : 'error'}
-        title={
-          isAccepted
-            ? 'Spreadsheet validated'
-            : `${issueCount} validation issue${issueCount === 1 ? '' : 's'} found`
-        }
-      >
-        <p>
-          {selectedUploadFile
-            ? `"${selectedUploadFile.name}" ${isAccepted ? 'is ready for review.' : 'needs correction before review.'}`
-            : previewResult.message}
-        </p>
-        {!isAccepted && (
-          <p>Correct the issues in your spreadsheet, then replace the file to continue.</p>
-        )}
-        {isAccepted && <p>{previewResult.message}</p>}
-      </UploadValidationMessage>
-      <ValidationIssuesTable errors={previewResult.errors} />
-    </>
-  )
-}
-
 const ReviewUploadContent = ({
+  disabled,
+  onValueChange,
   previewResult,
+  reviewValues,
   uploadResult,
 }: {
+  disabled: boolean
+  onValueChange: (key: string, value: string) => void
   previewResult: RtmEmsLogAmvUploadPreview
+  reviewValues: Record<string, string>
   uploadResult: RtmEmsLogAmvUploadResult | null
 }) => {
-  const speciesColumns = buildReviewSpeciesColumns(previewResult.rows)
-  const matrixRows = buildReviewMatrixRows(previewResult.rows)
+  const [selectedSpeciesIndex, setSelectedSpeciesIndex] = useState(0)
+  const speciesColumns = RTM_REVIEW_SPECIES_COLUMNS
+  const speciesRows = speciesColumns.map((column) =>
+    buildSpeciesReviewRows(previewResult.rows, column),
+  )
+  const comparisonMonthName =
+    formatUploadMonth(previewResult.retrievalDate)?.split(' ')[0] ?? 'The comparison month'
+  const initialReviewValues = buildInitialReviewValues(previewResult.rows)
+  const hasRowWarningForValues = (row: RtmSpeciesReviewRow, values: Record<string, string>) => {
+    const value = values[row.key] ?? ''
+    return !reviewValueError(value) && !!reviewValueWarning(row, value, comparisonMonthName)
+  }
+  const hasRowWarning = (row: RtmSpeciesReviewRow) => hasRowWarningForValues(row, reviewValues)
+  const warnedSpecies = speciesColumns.filter(
+    (_, index) =>
+      speciesRows[index].some(hasRowWarning) ||
+      speciesRows[index].some((row) => hasRowWarningForValues(row, initialReviewValues)),
+  )
+  const warningCellCount = speciesRows.reduce(
+    (total, rows) => total + rows.filter(hasRowWarning).length,
+    0,
+  )
+  const warningCount = warningCellCount || previewResult.warnings.length
+  const warningLabel = warningCellCount > 0 ? 'cell' : 'upload warning'
+  const warningVerb = warningCount === 1 ? 'needs' : 'need'
+  const currentMonthLabel = formatUploadMonth(previewResult.retrievalDate) ?? 'Current values'
+  const nextMonthLabel = formatUploadMonth(previewResult.updateDate) ?? 'New values'
+  const warningSpeciesText = formatSpeciesList(warnedSpecies.map((column) => column.label))
 
   return (
-    <div className="admin-upload-review admin-upload-review--rtm">
-      {matrixRows.length > 0 ? (
-        <div className="admin-upload-review-table">
-          <Table size="md" useZebraStyles aria-label="Average monthly value upload review">
-            <TableHead>
-              <TableRow>
-                <TableHeader>Grade</TableHeader>
-                {speciesColumns.map((column) => (
-                  <TableHeader key={column.key}>{column.label}</TableHeader>
-                ))}
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {matrixRows.map((row) => (
-                <TableRow key={row.key}>
-                  <TableCell>{row.grade}</TableCell>
-                  {speciesColumns.map((column) => (
-                    <TableCell key={column.key}>
-                      {formatReviewCell(row.values[column.key])}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      ) : (
-        <p className="admin-upload-review__empty-result">No parsed AMV rows are available.</p>
+    <section className="rtm-amv-review-card" aria-label="Uploaded average market values review">
+      {warningCount > 0 && (
+        <InlineNotification
+          className="rtm-amv-review-notification rtm-amv-review-notification--warning"
+          kind="warning"
+          lowContrast
+          hideCloseButton
+          title={`${warningCount} ${warningLabel}${warningCount === 1 ? '' : 's'} ${warningVerb} a look before you save`}
+          subtitle={
+            warningSpeciesText
+              ? `In ${warningSpeciesText}, highlighted below. You can save either way.`
+              : 'Review the upload warnings before saving. You can save either way.'
+          }
+        />
       )}
+
+      <div className="rtm-amv-species-tabs">
+        <Tabs
+          selectedIndex={selectedSpeciesIndex}
+          onChange={({ selectedIndex }) => setSelectedSpeciesIndex(selectedIndex)}
+        >
+          <TabList aria-label="Species" size="sm">
+            {speciesColumns.map((column, index) => {
+              const hasWarning = speciesRows[index].some(hasRowWarning)
+              return (
+                <Tab key={column.key}>
+                  <span className="rtm-amv-species-tab__label">
+                    {column.label}
+                    {hasWarning ? (
+                      <WarningAltFilled
+                        className="rtm-amv-species-tab__status rtm-amv-species-tab__status--warning"
+                        size={12}
+                        aria-hidden="true"
+                      />
+                    ) : (
+                      <CheckmarkFilled
+                        className="rtm-amv-species-tab__status rtm-amv-species-tab__status--complete"
+                        size={12}
+                        aria-hidden="true"
+                      />
+                    )}
+                  </span>
+                </Tab>
+              )
+            })}
+          </TabList>
+          <TabPanels>
+            {speciesColumns.map((column, index) => (
+              <TabPanel key={column.key} className="rtm-amv-species-tab-panel">
+                <SpeciesReviewTable
+                  column={column}
+                  comparisonMonthName={comparisonMonthName}
+                  currentMonthLabel={currentMonthLabel}
+                  disabled={disabled}
+                  nextMonthLabel={nextMonthLabel}
+                  onValueChange={onValueChange}
+                  rows={speciesRows[index]}
+                  values={reviewValues}
+                />
+              </TabPanel>
+            ))}
+          </TabPanels>
+        </Tabs>
+      </div>
+
+      <InlineNotification
+        className="rtm-amv-review-notification rtm-amv-review-notification--fixed"
+        kind="info"
+        lowContrast
+        hideCloseButton
+        title="Fixed values are not shown here"
+        subtitle="Grades Z, BLANK and 1 to 6 are always $1.00 per cubic metre. They are saved automatically and appear on the permit invoice."
+      />
 
       {uploadResult && (
         <div className="admin-upload-result" role="status">
@@ -553,42 +845,93 @@ const ReviewUploadContent = ({
           </p>
         </div>
       )}
-    </div>
+    </section>
   )
 }
 
 const RtmEmsLogAmvUploadPage = () => {
-  const { canPerform } = useAuth()
+  const { canPerform, capabilities } = useAuth()
   const canManage = canPerform('/lexisAgentAdmin')
   const validationRequestRef = useRef(0)
+  const saveRequestRef = useRef(0)
+  const savedValuesRequestRef = useRef(0)
   const uploadInputRef = useRef<HTMLInputElement>(null)
+  const cancelButtonRef = useRef<HTMLButtonElement>(null)
+  const removeFileButtonRef = useRef<HTMLButtonElement>(null)
+  const replacementPreviewRef = useRef<RtmEmsLogAmvUploadPreview | null>(null)
+  const replacementReviewValuesRef = useRef<Record<string, string> | null>(null)
+  const [effectiveMonth, setEffectiveMonth] = useState(() =>
+    shiftEffectiveMonth(currentEffectiveMonth(), 1),
+  )
+  const effectiveMonthRef = useRef(effectiveMonth)
   const [uploadStep, setUploadStep] = useState<RtmUploadStep>('upload')
   const [isPreviewing, setIsPreviewing] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
+  const [isCheckingSavedValues, setIsCheckingSavedValues] = useState(true)
+  const [savedValuesLoadError, setSavedValuesLoadError] = useState(false)
   const [uploadError, setUploadError] = useState('')
+  const [uploadSystemError, setUploadSystemError] = useState(false)
   const [notification, setNotification] = useState('')
   const [notificationTitle, setNotificationTitle] = useState('Average monthly values')
   const [notificationKind, setNotificationKind] = useState<
     'success' | 'error' | 'warning' | 'info'
   >('info')
   const [previewResult, setPreviewResult] = useState<RtmEmsLogAmvUploadPreview | null>(null)
+  const [savedPreviewResult, setSavedPreviewResult] = useState<RtmEmsLogAmvUploadPreview | null>(
+    null,
+  )
+  const [reviewValues, setReviewValues] = useState<Record<string, string>>({})
+  const [savedReviewValues, setSavedReviewValues] = useState<Record<string, string> | null>(null)
+  const [savedUploadState, setSavedUploadState] = useState<SavedUploadState | null>(null)
+  const [savedNotification, setSavedNotification] = useState<SavedNotification | null>(null)
   const [selectedUploadFile, setSelectedUploadFile] = useState<File | null>(null)
   const [pendingUploadValidation, setPendingUploadValidation] =
     useState<PendingUploadValidation | null>(null)
   const [uploadResult, setUploadResult] = useState<RtmEmsLogAmvUploadResult | null>(null)
   const [uploadInputKey, setUploadInputKey] = useState(0)
   const [isDraggingUpload, setIsDraggingUpload] = useState(false)
+  const [replacementUploadOpen, setReplacementUploadOpen] = useState(false)
+  const [discardConfirmation, setDiscardConfirmation] = useState<DiscardConfirmation | null>(null)
 
-  const validateUploadFile = async (nextFile: File | null) => {
+  useEffect(() => {
+    const previousTitle = document.title
+    document.title = 'Average market values | NR LEXIS'
+
+    return () => {
+      document.title = previousTitle
+    }
+  }, [])
+
+  const validateUploadFile = async (
+    nextFile: File | null,
+    uploadIntent: UploadIntent = 'initial',
+  ) => {
+    const isReplacingSavedValues =
+      uploadIntent === 'replace' &&
+      replacementUploadOpen &&
+      savedReviewValues !== null &&
+      savedUploadState !== null &&
+      previewResult !== null
+    savedValuesRequestRef.current += 1
     const requestId = validationRequestRef.current + 1
     validationRequestRef.current = requestId
 
-    setUploadStep('upload')
     setSelectedUploadFile(nextFile)
     setUploadError('')
-    setPreviewResult(null)
+    setUploadSystemError(false)
     setUploadResult(null)
     setPendingUploadValidation(null)
+    setNotification('')
+
+    if (!isReplacingSavedValues) {
+      setUploadStep('upload')
+      setPreviewResult(null)
+      setSavedPreviewResult(null)
+      setReviewValues({})
+      setSavedReviewValues(null)
+      setSavedUploadState(null)
+      setSavedNotification(null)
+    }
 
     if (!nextFile) {
       return
@@ -608,21 +951,42 @@ const RtmEmsLogAmvUploadPage = () => {
     setIsPreviewing(true)
 
     try {
-      const response = await previewRtmEmsLogAmvUpload(nextFile)
+      const response = await previewRtmEmsLogAmvUpload(nextFile, effectiveMonth)
 
       if (validationRequestRef.current !== requestId) {
         return
       }
 
       const validatedResponse = validateAcceptedPreview(response)
-      setPreviewResult(validatedResponse)
       if (validatedResponse.status === 'accepted') {
+        setPreviewResult(validatedResponse)
+        setReviewValues(buildInitialReviewValues(validatedResponse.rows))
         setPendingUploadValidation({
           fileName: nextFile.name,
           fileSize: nextFile.size,
         })
-      } else {
+        setSavedNotification(null)
+        setUploadStep('review')
+      } else if (validatedResponse.status === 'validation_failed') {
         setPendingUploadValidation(null)
+        if (isReplacingSavedValues) {
+          setUploadError(
+            createResultMessage(
+              validatedResponse.status,
+              validatedResponse.message,
+              validatedResponse.errors,
+            ),
+          )
+        } else {
+          setPreviewResult(validatedResponse)
+        }
+      } else {
+        setSelectedUploadFile(null)
+        if (!isReplacingSavedValues) {
+          setPreviewResult(null)
+        }
+        setUploadSystemError(true)
+        setUploadInputKey((current) => current + 1)
       }
     } catch (error) {
       if (validationRequestRef.current !== requestId) {
@@ -630,9 +994,14 @@ const RtmEmsLogAmvUploadPage = () => {
       }
 
       console.error(error)
-      setUploadError('Unable to validate this upload.')
-      setPreviewResult(null)
+      setSelectedUploadFile(null)
+      setUploadError('')
+      setUploadSystemError(true)
+      if (!isReplacingSavedValues) {
+        setPreviewResult(null)
+      }
       setPendingUploadValidation(null)
+      setUploadInputKey((current) => current + 1)
     } finally {
       if (validationRequestRef.current === requestId) {
         setIsPreviewing(false)
@@ -644,6 +1013,10 @@ const RtmEmsLogAmvUploadPage = () => {
     void validateUploadFile(event.currentTarget.files?.[0] ?? null)
   }
 
+  const updateReplacementFile = (event: ChangeEvent<HTMLInputElement>) => {
+    void validateUploadFile(event.currentTarget.files?.[0] ?? null, 'replace')
+  }
+
   const onDropUploadFile = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault()
     setIsDraggingUpload(false)
@@ -653,12 +1026,39 @@ const RtmEmsLogAmvUploadPage = () => {
     void validateUploadFile(event.dataTransfer.files?.[0] ?? null)
   }
 
+  const onDropReplacementFile = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    setIsDraggingUpload(false)
+    if (!canManage || !replacementUploadOpen) {
+      return
+    }
+    void validateUploadFile(event.dataTransfer.files?.[0] ?? null, 'replace')
+  }
+
   const openUploadFileDialog = () => {
-    if (!canManage) {
+    if (!canManage || isPreviewing || isUploading) {
       return
     }
 
     uploadInputRef.current?.click()
+  }
+
+  const startReplacementUpload = () => {
+    if (!canManage || isPreviewing || isUploading || !savedUploadState) {
+      return
+    }
+
+    validationRequestRef.current += 1
+    replacementPreviewRef.current = previewResult
+    replacementReviewValuesRef.current = { ...reviewValues }
+    setReplacementUploadOpen(true)
+    setSelectedUploadFile(null)
+    setPendingUploadValidation(null)
+    setUploadError('')
+    setUploadSystemError(false)
+    setUploadResult(null)
+    setIsDraggingUpload(false)
+    setUploadInputKey((current) => current + 1)
   }
 
   const onUploadDropZoneKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -670,18 +1070,145 @@ const RtmEmsLogAmvUploadPage = () => {
     openUploadFileDialog()
   }
 
-  const clearUploadState = () => {
+  const clearUploadState = useCallback(() => {
     validationRequestRef.current += 1
+    saveRequestRef.current += 1
+    savedValuesRequestRef.current += 1
     setUploadStep('upload')
     setSelectedUploadFile(null)
     setUploadError('')
+    setUploadSystemError(false)
     setPreviewResult(null)
+    setSavedPreviewResult(null)
+    setReviewValues({})
+    setSavedReviewValues(null)
+    setSavedUploadState(null)
+    setSavedNotification(null)
     setUploadResult(null)
     setPendingUploadValidation(null)
+    setNotification('')
     setUploadInputKey((current) => current + 1)
     setIsDraggingUpload(false)
+    setReplacementUploadOpen(false)
     setIsPreviewing(false)
+    setIsUploading(false)
+    setDiscardConfirmation(null)
+    replacementPreviewRef.current = null
+    replacementReviewValuesRef.current = null
+  }, [])
+
+  const clearReplacementFile = () => {
+    validationRequestRef.current += 1
+    setSelectedUploadFile(null)
+    setPendingUploadValidation(null)
+    setUploadError('')
+    setUploadSystemError(false)
+    setUploadResult(null)
+    setIsDraggingUpload(false)
+    setIsPreviewing(false)
+    setUploadInputKey((current) => current + 1)
+    if (replacementReviewValuesRef.current) {
+      setReviewValues({ ...replacementReviewValuesRef.current })
+    }
+    if (replacementPreviewRef.current) {
+      setPreviewResult(replacementPreviewRef.current)
+    }
   }
+
+  const closeReplacementUpload = () => {
+    clearReplacementFile()
+    setReplacementUploadOpen(false)
+    replacementPreviewRef.current = null
+    replacementReviewValuesRef.current = null
+  }
+
+  useEffect(() => {
+    const requestId = savedValuesRequestRef.current + 1
+    savedValuesRequestRef.current = requestId
+
+    const loadSavedValues = async () => {
+      try {
+        const savedRows = await searchRtmEmsLogAmv({
+          species: '',
+          growthIndicator: '',
+          retrievalDate: effectiveMonth,
+          updateDate: effectiveMonth,
+        })
+        if (savedValuesRequestRef.current !== requestId) {
+          return
+        }
+        if (savedRows.length === 0) {
+          setIsCheckingSavedValues(false)
+          return
+        }
+
+        const comparisonRows = await searchLatestRtmEmsLogAmv(effectiveMonth)
+        if (savedValuesRequestRef.current !== requestId) {
+          return
+        }
+
+        const savedPreview = buildSavedReviewPreview(effectiveMonth, savedRows, comparisonRows)
+        const savedValues = buildInitialReviewValues(savedPreview.rows)
+        setPreviewResult(savedPreview)
+        setSavedPreviewResult(savedPreview)
+        setReviewValues(savedValues)
+        setSavedReviewValues(savedValues)
+        setSavedUploadState({ valueCount: savedRows.length })
+        setUploadStep('review')
+        setIsCheckingSavedValues(false)
+      } catch (error) {
+        if (savedValuesRequestRef.current !== requestId) {
+          return
+        }
+
+        console.error(error)
+        setSavedValuesLoadError(true)
+        setIsCheckingSavedValues(false)
+      }
+    }
+
+    void loadSavedValues()
+
+    return () => {
+      if (savedValuesRequestRef.current === requestId) {
+        savedValuesRequestRef.current += 1
+      }
+    }
+  }, [effectiveMonth])
+
+  useEffect(() => {
+    const refreshEffectiveMonth = () => {
+      const nextEffectiveMonth = shiftEffectiveMonth(currentEffectiveMonth(), 1)
+      if (nextEffectiveMonth === effectiveMonthRef.current) {
+        return
+      }
+
+      effectiveMonthRef.current = nextEffectiveMonth
+      setIsCheckingSavedValues(true)
+      setSavedValuesLoadError(false)
+      setEffectiveMonth(nextEffectiveMonth)
+      clearUploadState()
+    }
+
+    const refreshInterval = window.setInterval(
+      refreshEffectiveMonth,
+      EFFECTIVE_MONTH_REFRESH_INTERVAL_MS,
+    )
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') {
+        refreshEffectiveMonth()
+      }
+    }
+
+    window.addEventListener('focus', refreshEffectiveMonth)
+    document.addEventListener('visibilitychange', refreshWhenVisible)
+
+    return () => {
+      window.clearInterval(refreshInterval)
+      window.removeEventListener('focus', refreshEffectiveMonth)
+      document.removeEventListener('visibilitychange', refreshWhenVisible)
+    }
+  }, [clearUploadState])
 
   const submitUpload = async () => {
     if (!canManage) {
@@ -689,15 +1216,17 @@ const RtmEmsLogAmvUploadPage = () => {
       return
     }
 
-    if (!selectedUploadFile) {
+    const isSavedReview = savedReviewValues !== null
+    if (!selectedUploadFile && !isSavedReview) {
       setUploadError('Upload an XLSX file before submitting changes.')
       return
     }
 
     if (
-      !pendingUploadValidation ||
-      pendingUploadValidation.fileName !== selectedUploadFile.name ||
-      pendingUploadValidation.fileSize !== selectedUploadFile.size
+      !isSavedReview &&
+      (!pendingUploadValidation ||
+        pendingUploadValidation.fileName !== selectedUploadFile?.name ||
+        pendingUploadValidation.fileSize !== selectedUploadFile?.size)
     ) {
       setUploadError('Validate this file before submitting changes.')
       return
@@ -706,13 +1235,33 @@ const RtmEmsLogAmvUploadPage = () => {
     setUploadError('')
     setUploadResult(null)
     setIsUploading(true)
+    const requestId = saveRequestRef.current + 1
+    saveRequestRef.current = requestId
 
     try {
-      const response = await uploadRtmEmsLogAmv({
-        file: selectedUploadFile,
-      })
+      if (!previewResult) {
+        setUploadError('Validate this file before submitting changes.')
+        return
+      }
 
-      setUploadResult(response)
+      const saveRequests = buildReviewedSaveRequests(previewResult, reviewValues)
+      const result = await saveRtmEmsLogAmvBatch({ values: saveRequests })
+      if (saveRequestRef.current !== requestId) {
+        return
+      }
+
+      const response: RtmEmsLogAmvUploadResult = {
+        status: result.status,
+        fileName: selectedUploadFile?.name,
+        fileSize: selectedUploadFile?.size,
+        message: result.message,
+        attemptedRowCount: saveRequests.length,
+        uploadedRowCount: result.rows.length,
+        errors: result.errors,
+        warnings: [],
+        rows: result.rows,
+      }
+
       setNotificationKind(
         response.status === 'accepted'
           ? 'success'
@@ -721,15 +1270,32 @@ const RtmEmsLogAmvUploadPage = () => {
             : 'error',
       )
       if (response.status === 'accepted') {
-        setNotificationTitle('Average monthly values updated')
-        setNotification(createAcceptedUploadMessage(previewResult))
-        clearUploadState()
-      } else {
+        setSavedReviewValues({ ...reviewValues })
+        setSavedPreviewResult(previewResult)
+        setSavedUploadState({
+          savedAt: formatSavedDateTime(new Date()),
+          savedBy: capabilities.principal ?? 'LEXIS user',
+          valueCount: saveRequests.length,
+        })
+        setSavedNotification('saved')
+        setReplacementUploadOpen(false)
+        replacementPreviewRef.current = null
+        replacementReviewValuesRef.current = null
+        setSelectedUploadFile(null)
         setPendingUploadValidation(null)
+        setUploadInputKey((current) => current + 1)
+        setNotification('')
+        setUploadResult(null)
+      } else {
+        setUploadResult(response)
         setNotificationTitle('Average monthly values')
         setNotification(createResultMessage(response.status, response.message, response.errors))
       }
     } catch (error) {
+      if (saveRequestRef.current !== requestId) {
+        return
+      }
+
       console.error(error)
       const message = 'Unable to apply average monthly value upload.'
       setNotificationKind('error')
@@ -745,226 +1311,405 @@ const RtmEmsLogAmvUploadPage = () => {
         rows: [],
       })
     } finally {
-      setIsUploading(false)
+      if (saveRequestRef.current === requestId) {
+        setIsUploading(false)
+      }
     }
   }
 
-  const hasCurrentUploadValidation =
+  const hasReviewErrors = Object.values(reviewValues).some(
+    (value) => reviewValueError(value) !== null,
+  )
+  const hasUnsavedChanges =
+    savedReviewValues !== null && !reviewValuesMatch(reviewValues, savedReviewValues)
+  const hasValidatedUpload =
     !!selectedUploadFile &&
     selectedUploadFile.size > 0 &&
     !!pendingUploadValidation &&
     pendingUploadValidation.fileName === selectedUploadFile.name &&
     pendingUploadValidation.fileSize === selectedUploadFile.size
-
-  const isReviewReady = hasCurrentUploadValidation && previewResult?.status === 'accepted'
-
-  const isReviewDisabled = isPreviewing || !canManage
+  const savedActionsUnavailable =
+    savedReviewValues !== null && !hasUnsavedChanges && !hasValidatedUpload
+  const hasSaveSource = savedReviewValues !== null || hasValidatedUpload
 
   const isUploadDisabled =
     isUploading ||
+    isPreviewing ||
+    hasReviewErrors ||
     !canManage ||
-    !selectedUploadFile ||
-    selectedUploadFile.size <= 0 ||
-    !pendingUploadValidation ||
-    pendingUploadValidation.fileName !== selectedUploadFile.name ||
-    pendingUploadValidation.fileSize !== selectedUploadFile.size ||
+    !hasSaveSource ||
     previewResult?.status !== 'accepted'
 
-  const openReviewStep = () => {
-    if (!canManage) {
-      setUploadError('You do not have permission to upload average monthly value rows.')
-      return
-    }
-
-    if (!selectedUploadFile || selectedUploadFile.size <= 0) {
-      setUploadError('Please upload a file before continuing.')
-      return
-    }
-
-    if (!isReviewReady) {
-      setUploadError('Upload a spreadsheet that passes validation before reviewing it.')
-      return
-    }
-
-    setUploadError('')
-    setUploadStep('review')
-  }
+  const isFileSelectionDisabled = !canManage || isUploading || isPreviewing
 
   const uploadDropZoneClassName = [
     'admin-upload-drop-zone',
     isDraggingUpload ? 'is-dragging' : '',
-    !canManage ? 'is-disabled' : '',
+    isFileSelectionDisabled ? 'is-disabled' : '',
   ]
     .filter(Boolean)
     .join(' ')
-  const completedWorkflowSteps = uploadStep === 'review' ? ['upload'] : []
+  const rejectedFileIssues = uploadError
+    ? [uploadError]
+    : previewResult && previewResult.status !== 'accepted'
+      ? previewResult.errors.length > 0
+        ? previewResult.errors
+        : [previewResult.message]
+      : []
+
+  const renderUploadCard = (isReplacement: boolean) => {
+    const titleId = isReplacement ? 'rtm-replacement-upload-title' : 'rtm-upload-title'
+    const inputId = isReplacement ? 'rtm-replacement-file' : 'rtm-upload-file'
+    const inputLabel = isReplacement
+      ? 'Replacement average monthly values spreadsheet'
+      : 'Average monthly values upload spreadsheet'
+    const dropZoneLabel = isReplacement
+      ? 'Choose a replacement average monthly values spreadsheet'
+      : 'Choose an average monthly values upload spreadsheet'
+    const showUploadedReplacement = isReplacement && hasValidatedUpload
+
+    return (
+      <section
+        className={`rtm-amv-upload-card${isReplacement ? ' rtm-amv-replacement-upload-card' : ''}`}
+        aria-labelledby={titleId}
+      >
+        <div className="admin-upload-field-header">
+          <div>
+            <span id={titleId} className="admin-upload-field-label">
+              Upload spreadsheet
+            </span>
+            <p className="admin-upload-field-helper">{RTM_UPLOAD_FIELD_HELPER}</p>
+          </div>
+          {!showUploadedReplacement && (
+            <a
+              className="rtm-amv-template-link"
+              href={RTM_TEMPLATE_DOWNLOAD_PATH}
+              download={RTM_TEMPLATE_DOWNLOAD_NAME}
+              aria-label="Download template"
+            >
+              <span>Download template</span>
+              <Download size={16} aria-hidden="true" />
+            </a>
+          )}
+        </div>
+
+        <input
+          ref={uploadInputRef}
+          key={uploadInputKey}
+          id={inputId}
+          className="admin-upload-native-input"
+          type="file"
+          aria-label={inputLabel}
+          accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          disabled={isFileSelectionDisabled}
+          onChange={isReplacement ? updateReplacementFile : updateUploadFile}
+        />
+
+        {!showUploadedReplacement && (
+          <div
+            className={uploadDropZoneClassName}
+            role="button"
+            tabIndex={isFileSelectionDisabled ? -1 : 0}
+            aria-disabled={isFileSelectionDisabled}
+            aria-label={dropZoneLabel}
+            onClick={openUploadFileDialog}
+            onKeyDown={onUploadDropZoneKeyDown}
+            onDragEnter={(event) => {
+              event.preventDefault()
+              if (!isFileSelectionDisabled) {
+                setIsDraggingUpload(true)
+              }
+            }}
+            onDragOver={(event) => {
+              event.preventDefault()
+              if (!isFileSelectionDisabled) {
+                setIsDraggingUpload(true)
+              }
+            }}
+            onDragLeave={() => setIsDraggingUpload(false)}
+            onDrop={isReplacement ? onDropReplacementFile : onDropUploadFile}
+          >
+            <div className="admin-upload-drop-zone__copy">
+              <p>Drag and drop your file here or click to upload</p>
+            </div>
+          </div>
+        )}
+
+        {selectedUploadFile &&
+          (showUploadedReplacement ? (
+            <div
+              className="rtm-amv-uploaded-file"
+              aria-label="Uploaded replacement average monthly values file"
+            >
+              <span className="rtm-amv-uploaded-file__name">{selectedUploadFile.name}</span>
+              <button
+                type="button"
+                className="rtm-amv-uploaded-file__remove"
+                aria-label="Clear selected file"
+                disabled={isUploading}
+                onClick={clearReplacementFile}
+              >
+                <Close size={12} />
+              </button>
+            </div>
+          ) : isPreviewing ? (
+            <div className="rtm-amv-upload-loading" aria-busy="true">
+              <span className="rtm-amv-upload-loading__name">{selectedUploadFile.name}</span>
+              <InlineLoading
+                className="rtm-amv-upload-loading__spinner"
+                description={`Validating ${selectedUploadFile.name}`}
+              />
+            </div>
+          ) : rejectedFileIssues.length > 0 ? (
+            <RejectedUploadFile
+              fileName={selectedUploadFile.name}
+              issues={rejectedFileIssues}
+              onClear={isReplacement ? clearReplacementFile : clearUploadState}
+            />
+          ) : (
+            <div
+              className="admin-upload-file-chip"
+              aria-label={
+                isReplacement
+                  ? 'Selected replacement average monthly values file'
+                  : 'Selected average monthly values upload file'
+              }
+            >
+              <Document size={16} aria-hidden="true" />
+              <span className="admin-upload-file-chip__name">{selectedUploadFile.name}</span>
+              <span className="admin-upload-file-chip__size">
+                {selectedUploadFile.size.toLocaleString()} bytes
+              </span>
+              <button
+                type="button"
+                className="admin-upload-file-chip__remove"
+                aria-label="Clear selected file"
+                onClick={isReplacement ? clearReplacementFile : clearUploadState}
+              >
+                <Close size={16} />
+              </button>
+            </div>
+          ))}
+
+        {uploadSystemError && (
+          <InlineNotification
+            className="rtm-amv-upload-system-error"
+            kind="error"
+            lowContrast
+            hideCloseButton
+            title={RTM_UPLOAD_SYSTEM_ERROR_TITLE}
+            subtitle={RTM_UPLOAD_SYSTEM_ERROR_MESSAGE}
+          />
+        )}
+      </section>
+    )
+  }
+
+  if (isCheckingSavedValues) {
+    return (
+      <div
+        className="admin-upload-fspts-page rtm-amv-page-loading"
+        role="status"
+        aria-live="polite"
+      >
+        <Loading description="Loading…" withOverlay={false} />
+      </div>
+    )
+  }
+
+  if (savedValuesLoadError) {
+    return (
+      <Grid
+        fullWidth
+        className="default-grid admin-upload-fspts-page rtm-amv-upload-page rtm-amv-initial-state"
+      >
+        <Column sm={4} md={8} lg={16} className="rtm-amv-initial-state__content">
+          <InlineNotification
+            kind="error"
+            lowContrast
+            hideCloseButton
+            title={RTM_VALUES_LOAD_ERROR_TITLE}
+            subtitle={RTM_VALUES_LOAD_ERROR_MESSAGE}
+          />
+        </Column>
+      </Grid>
+    )
+  }
 
   return (
-    <Grid fullWidth className="default-grid admin-upload-fspts-page">
-      <Column sm={4} md={8} lg={16} className="admin-upload-fspts-header">
-        <h1>AMV Spreadsheet Upload</h1>
-        <p>{RTM_UPLOAD_ONLY_DESCRIPTION}</p>
-        <UploadWorkflowProgress
-          steps={RTM_UPLOAD_REVIEW_STEPS}
-          currentStepId={uploadStep}
-          completedStepIds={completedWorkflowSteps}
-          ariaLabel="Average monthly values upload workflow progress"
-        />
+    <Grid fullWidth className="default-grid admin-upload-fspts-page rtm-amv-upload-page">
+      <Column sm={4} md={8} lg={16} className="admin-upload-fspts-header rtm-amv-upload-header">
+        <PageHeader title="Average market values" subtitle={RTM_UPLOAD_ONLY_DESCRIPTION} />
+
+        <div className="rtm-amv-month-summary" aria-label="Average market value month details">
+          <div className="rtm-amv-month-summary__item rtm-amv-month-summary__month">
+            <span>Month</span>
+            <strong>{formatUploadMonth(effectiveMonth) ?? effectiveMonth}</strong>
+          </div>
+          <div className="rtm-amv-month-summary__item">
+            <span>Values take effect</span>
+            <strong>{formatEffectiveStartDate(effectiveMonth)}</strong>
+          </div>
+          {savedUploadState?.savedAt && savedUploadState.savedBy && (
+            <div className="rtm-amv-month-summary__item">
+              <span>Last saved</span>
+              <strong>{`${savedUploadState.savedAt} by ${savedUploadState.savedBy}`}</strong>
+            </div>
+          )}
+        </div>
       </Column>
 
-      <Column sm={4} md={8} lg={16} className="admin-upload-fspts-content">
+      <Column sm={4} md={8} lg={16} className="admin-upload-fspts-content rtm-amv-values-content">
+        {savedUploadState && savedNotification && !replacementUploadOpen && (
+          <InlineNotification
+            className="rtm-amv-saved-notification"
+            kind="success"
+            lowContrast
+            title={savedNotification === 'discarded' ? 'Changes discarded' : 'Values saved'}
+            subtitle={
+              savedNotification === 'discarded'
+                ? 'Values are back to your last save.'
+                : `${savedUploadState.valueCount} ${savedUploadState.valueCount === 1 ? 'value' : 'values'} will take effect on ${formatEffectiveStartDate(effectiveMonth)}.`
+            }
+            onCloseButtonClick={() => setSavedNotification(null)}
+          />
+        )}
+
+        <div className="admin-upload-section-heading rtm-amv-values-heading">
+          <div className="rtm-amv-values-heading__copy">
+            <h2 id="rtm-values-title">Values</h2>
+            <p>{RTM_VALUES_DESCRIPTION}</p>
+          </div>
+          {savedUploadState && !replacementUploadOpen && (
+            <Button
+              className="rtm-amv-replace-file-button"
+              kind="tertiary"
+              size="md"
+              disabled={!canManage || isUploading || isPreviewing}
+              onClick={startReplacementUpload}
+            >
+              Replace file
+            </Button>
+          )}
+        </div>
+
         {uploadStep === 'upload' ? (
-          <>
-            <div className="admin-upload-section-heading">
-              <h2 id="rtm-upload-title">Upload</h2>
-              <p>{RTM_UPLOAD_STEP_DESCRIPTION}</p>
-            </div>
-
-            <section className="admin-upload-panel" aria-labelledby="rtm-upload-title">
-              <div className="admin-upload-field-header">
-                <div>
-                  <span className="admin-upload-field-label">Upload Excel Spreadsheet</span>
-                  <p className="admin-upload-field-helper">{RTM_UPLOAD_FIELD_HELPER}</p>
-                </div>
-                <a
-                  className="admin-upload-template-card"
-                  href={RTM_TEMPLATE_DOWNLOAD_PATH}
-                  download={RTM_TEMPLATE_DOWNLOAD_NAME}
-                  aria-label="Download template"
-                >
-                  <span>
-                    <span className="admin-upload-template-card__title">Download template</span>
-                    <span className="admin-upload-template-card__meta">XLSX</span>
-                  </span>
-                  <Download size={16} aria-hidden="true" />
-                </a>
-              </div>
-
-              <input
-                ref={uploadInputRef}
-                key={uploadInputKey}
-                id="rtm-upload-file"
-                className="admin-upload-native-input"
-                type="file"
-                aria-label="Average monthly values upload spreadsheet"
-                accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                disabled={!canManage}
-                onChange={updateUploadFile}
-              />
-
-              <div
-                className={uploadDropZoneClassName}
-                role="button"
-                tabIndex={canManage ? 0 : -1}
-                aria-disabled={!canManage}
-                aria-label="Choose an average monthly values upload spreadsheet"
-                onClick={openUploadFileDialog}
-                onKeyDown={onUploadDropZoneKeyDown}
-                onDragEnter={(event) => {
-                  event.preventDefault()
-                  if (canManage) {
-                    setIsDraggingUpload(true)
-                  }
-                }}
-                onDragOver={(event) => {
-                  event.preventDefault()
-                  if (canManage) {
-                    setIsDraggingUpload(true)
-                  }
-                }}
-                onDragLeave={() => setIsDraggingUpload(false)}
-                onDrop={onDropUploadFile}
-              >
-                <div className="admin-upload-drop-zone__copy">
-                  <p>Drag and drop files here or click to upload</p>
-                </div>
-              </div>
-
-              {selectedUploadFile && (
-                <div
-                  className="admin-upload-file-chip"
-                  aria-label="Selected average monthly values upload file"
-                >
-                  <Document size={16} aria-hidden="true" />
-                  <span className="admin-upload-file-chip__name">{selectedUploadFile.name}</span>
-                  <span className="admin-upload-file-chip__size">
-                    {selectedUploadFile.size.toLocaleString()} bytes
-                  </span>
-                  <button
-                    type="button"
-                    className="admin-upload-file-chip__remove"
-                    aria-label="Clear selected file"
-                    onClick={clearUploadState}
-                  >
-                    <Close size={16} />
-                  </button>
-                </div>
-              )}
-
-              <UploadValidationStatus
-                isPreviewing={isPreviewing}
-                uploadError={uploadError}
-                previewResult={previewResult}
-                selectedUploadFile={selectedUploadFile}
-              />
-            </section>
-
-            <div className="admin-upload-fspts-button-row">
-              <Button
-                kind="primary"
-                size="md"
-                className="admin-upload-fspts-action-button"
-                renderIcon={ArrowRight}
-                onClick={openReviewStep}
-                disabled={isReviewDisabled}
-              >
-                Review
-              </Button>
-            </div>
-          </>
+          renderUploadCard(false)
         ) : (
           <>
-            <div className="admin-upload-section-heading">
-              <h2 id="rtm-review-title">Review</h2>
-              <p>Review the details extracted from your file and submit when ready</p>
-            </div>
+            {savedUploadState && replacementUploadOpen && (
+              <div className="rtm-amv-replacement-upload">
+                {!hasValidatedUpload && (
+                  <ActionableNotification
+                    className="rtm-amv-replacement-warning"
+                    actionButtonLabel="Keep current values"
+                    inline
+                    kind="warning"
+                    lowContrast
+                    hideCloseButton
+                    role="status"
+                    title="Selecting a file will replace the values on screen"
+                    subtitle="Any edits you haven't saved will be lost. Your saved values won't change until you save again."
+                    onActionButtonClick={closeReplacementUpload}
+                  />
+                )}
+                {renderUploadCard(true)}
+              </div>
+            )}
 
-            <section
-              className="admin-upload-panel"
-              aria-labelledby="rtm-review-title"
-              aria-busy={isUploading}
-            >
-              {uploadError && (
-                <p className="landing-page-help-text landing-page-help-text--error">
-                  {uploadError}
-                </p>
-              )}
+            {!savedUploadState && (
+              <section className="rtm-amv-upload-card" aria-labelledby="rtm-uploaded-title">
+                <div className="admin-upload-field-header">
+                  <div>
+                    <span id="rtm-uploaded-title" className="admin-upload-field-label">
+                      Upload spreadsheet
+                    </span>
+                    <p className="admin-upload-field-helper">{RTM_UPLOAD_FIELD_HELPER}</p>
+                  </div>
+                </div>
 
-              {previewResult && (
-                <ReviewUploadContent previewResult={previewResult} uploadResult={uploadResult} />
-              )}
-            </section>
+                {selectedUploadFile && (
+                  <div
+                    className="rtm-amv-uploaded-file"
+                    aria-label="Uploaded average monthly values file"
+                  >
+                    <span className="rtm-amv-uploaded-file__name">{selectedUploadFile.name}</span>
+                    <button
+                      ref={removeFileButtonRef}
+                      type="button"
+                      className="rtm-amv-uploaded-file__remove"
+                      aria-label="Clear selected file"
+                      disabled={isUploading}
+                      onClick={() => setDiscardConfirmation('file')}
+                    >
+                      <Close size={12} />
+                    </button>
+                  </div>
+                )}
+              </section>
+            )}
 
-            <div className="admin-upload-fspts-button-row">
-              <Button
-                kind="ghost"
-                size="md"
-                disabled={isUploading}
-                onClick={() => setUploadStep('upload')}
-              >
-                Back
-              </Button>
+            {previewResult && (
+              <ReviewUploadContent
+                disabled={isUploading || isPreviewing}
+                previewResult={previewResult}
+                reviewValues={reviewValues}
+                uploadResult={uploadResult}
+                onValueChange={(key, value) => {
+                  setReviewValues((current) => ({ ...current, [key]: value }))
+                  setSavedNotification(null)
+                  setUploadResult(null)
+                }}
+              />
+            )}
+
+            {savedActionsUnavailable && (
+              <p id="rtm-amv-saved-actions-helper" className="rtm-amv-upload-review-helper">
+                Edit a value to save again.
+              </p>
+            )}
+
+            <div className="admin-upload-fspts-button-row rtm-amv-upload-review-actions">
               <Button
                 kind="primary"
                 size="md"
                 className="admin-upload-fspts-action-button"
-                renderIcon={isUploading ? PendingIcon : ArrowRight}
+                renderIcon={Save}
                 onClick={() => {
+                  if (savedActionsUnavailable) {
+                    return
+                  }
                   void submitUpload()
                 }}
                 disabled={isUploadDisabled}
+                aria-disabled={savedActionsUnavailable || undefined}
+                aria-describedby={
+                  savedActionsUnavailable ? 'rtm-amv-saved-actions-helper' : undefined
+                }
               >
-                {isUploading ? 'Submitting…' : 'Submit'}
+                {isUploading ? 'Saving values' : 'Save values'}
+              </Button>
+              <Button
+                ref={cancelButtonRef}
+                kind="tertiary"
+                size="md"
+                disabled={isUploading || isPreviewing}
+                aria-disabled={savedActionsUnavailable || undefined}
+                aria-describedby={
+                  savedActionsUnavailable ? 'rtm-amv-saved-actions-helper' : undefined
+                }
+                onClick={() => {
+                  if (savedActionsUnavailable) {
+                    return
+                  }
+                  if (savedReviewValues) {
+                    setDiscardConfirmation('saved-changes')
+                    return
+                  }
+                  setDiscardConfirmation('cancel')
+                }}
+              >
+                Cancel
               </Button>
             </div>
           </>
@@ -983,6 +1728,66 @@ const RtmEmsLogAmvUploadPage = () => {
             }}
           />
         </Column>
+      )}
+
+      {discardConfirmation && (
+        <ConfirmationModal
+          open
+          launcherButtonRef={discardConfirmation === 'file' ? removeFileButtonRef : cancelButtonRef}
+          title={
+            discardConfirmation === 'file'
+              ? 'Are you sure you want to remove this file?'
+              : 'Discard these values?'
+          }
+          description={
+            discardConfirmation === 'file'
+              ? 'The values on screen will be cleared. Nothing has been saved.'
+              : discardConfirmation === 'saved-changes'
+                ? "The values you changed since your last save will be cleared. Your saved values won't change."
+                : 'The file and all values on screen will be cleared. Nothing has been saved.'
+          }
+          cancelLabel={
+            discardConfirmation === 'file'
+              ? 'Keep file'
+              : discardConfirmation === 'saved-changes'
+                ? 'Discard changes'
+                : 'Keep editing'
+          }
+          confirmLabel={
+            discardConfirmation === 'file'
+              ? 'Remove file'
+              : discardConfirmation === 'saved-changes'
+                ? 'Save changes'
+                : 'Discard values'
+          }
+          pendingLabel={discardConfirmation === 'saved-changes' ? 'Saving changes' : undefined}
+          confirmDisabled={discardConfirmation === 'saved-changes' && isUploadDisabled}
+          danger={discardConfirmation !== 'saved-changes'}
+          size="xs"
+          onCancel={
+            discardConfirmation === 'saved-changes'
+              ? () => {
+                  if (!savedReviewValues) return
+                  setReviewValues({ ...savedReviewValues })
+                  if (savedPreviewResult) {
+                    setPreviewResult(savedPreviewResult)
+                  }
+                  setSelectedUploadFile(null)
+                  setPendingUploadValidation(null)
+                  setUploadError('')
+                  setUploadSystemError(false)
+                  setUploadInputKey((current) => current + 1)
+                  setReplacementUploadOpen(false)
+                  replacementPreviewRef.current = null
+                  replacementReviewValuesRef.current = null
+                  setSavedNotification('discarded')
+                  setUploadResult(null)
+                }
+              : undefined
+          }
+          onConfirm={discardConfirmation === 'saved-changes' ? submitUpload : clearUploadState}
+          onClose={() => setDiscardConfirmation(null)}
+        />
       )}
     </Grid>
   )

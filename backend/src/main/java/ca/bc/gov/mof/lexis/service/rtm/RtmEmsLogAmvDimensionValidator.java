@@ -19,7 +19,7 @@ final class RtmEmsLogAmvDimensionValidator {
   static final Set<String> MODERN_GRID_GRADES =
       Set.of(
           "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M",
-          "U", "X", "Y", "Z", "1", "2", "3", "4", "5", "6");
+          "U", "X", "Y", "Z", "1", "2", "3", "4", "5", "6", "BLANK");
   private static final Set<String> EXPANDED_GRADES = Set.of("W", "Z", "1", "2");
 
   private RtmEmsLogAmvDimensionValidator() {}

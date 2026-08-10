@@ -239,7 +239,7 @@ describe('Auth Provider Role Matrix', () => {
     await waitForAuthLoad()
 
     expect(screen.getByTestId('roles')).toHaveTextContent('ADMIN')
-    expect(screen.getByTestId('default-route')).toHaveTextContent('/admin/rtm/emslogamv')
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/admin/rtm/emslogamv/upload')
     expect(screen.getByTestId('action-/lexisAgentAdmin')).toHaveTextContent('true')
     expect(screen.getByTestId('action-/applicationSearch')).toHaveTextContent('false')
     expect(screen.getByTestId('action-createApplication')).toHaveTextContent('false')

@@ -89,7 +89,7 @@ describe('Landing auth flow smoke', () => {
   it('does not show a signed-out notice on the default login page', () => {
     renderPage()
 
-    expect(screen.queryByText('You’ve been logged out')).not.toBeInTheDocument()
+    expect(screen.queryByText("You've been logged out")).not.toBeInTheDocument()
   })
 
   it('applies the saved dark theme and uses the reverse logo before login', () => {
@@ -108,7 +108,7 @@ describe('Landing auth flow smoke', () => {
 
     renderPage()
 
-    expect(screen.getByText('You’ve been logged out')).toBeInTheDocument()
+    expect(screen.getByText("You've been logged out")).toBeInTheDocument()
     expect(
       screen.getByText(
         'Your session expired for security reasons and any unsaved changes were lost. Log in again to continue.',
@@ -116,7 +116,7 @@ describe('Landing auth flow smoke', () => {
     ).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: /close notification/i }))
-    expect(screen.queryByText('You’ve been logged out')).not.toBeInTheDocument()
+    expect(screen.queryByText("You've been logged out")).not.toBeInTheDocument()
   })
 
   it('runs Business BCeID login action from the landing entry button', async () => {

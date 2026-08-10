@@ -1100,25 +1100,18 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(applicationItemsCard).toHaveCSS('border-color', 'rgb(82, 82, 82)')
   })
 
-  test('shows one striped RTM AMV table without growth controls or a blank grade row', async ({
-    page,
-  }) => {
+  test('exposes only the spreadsheet RTM AMV workflow', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
     await page.goto('/admin/rtm/emslogamv', { waitUntil: 'domcontentloaded' })
 
+    await expect(page).toHaveURL(/\/admin\/rtm\/emslogamv\/upload$/)
     await expect(
-      page.getByRole('heading', { level: 1, name: 'Average monthly values' }),
+      page.getByRole('heading', { level: 1, name: 'Average market values' }),
     ).toBeVisible()
-    const table = page.getByRole('table', { name: 'Average monthly value table' })
-    await expect(table).toBeVisible()
-    await expect(table.locator('tbody tr')).toHaveCount(23)
-    await expect(page.getByRole('radio')).toHaveCount(0)
-    await expect(table.getByRole('cell', { name: 'BLANK', exact: true })).toHaveCount(0)
-
-    const firstRowCell = table.locator('tbody tr').first().locator('td').first()
-    await expect(firstRowCell).toHaveCSS('background-color', 'rgb(255, 255, 255)')
-    await table.locator('tbody tr').first().hover()
-    await expect(firstRowCell).toHaveCSS('background-color', 'rgb(255, 255, 255)')
+    await expect(page).toHaveTitle('Average market values | NR LEXIS')
+    await expect(page.getByRole('region', { name: 'Upload spreadsheet' })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Download template' })).toBeVisible()
+    await expect(page.getByRole('table', { name: 'Average monthly value table' })).toHaveCount(0)
   })
 
   test('keeps the search shell within a mobile viewport', async ({ page }) => {

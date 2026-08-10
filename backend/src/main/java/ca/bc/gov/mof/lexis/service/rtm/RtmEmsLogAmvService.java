@@ -24,5 +24,9 @@ public interface RtmEmsLogAmvService {
 
   RtmEmsLogAmvUploadPreviewDto previewUpload(MultipartFile file);
 
+  RtmEmsLogAmvUploadPreviewDto previewUpload(MultipartFile file, String effectiveMonth);
+
   RtmEmsLogAmvUploadResultDto upload(MultipartFile file);
+
+  RtmEmsLogAmvUploadResultDto upload(MultipartFile file, String effectiveMonth);
 }

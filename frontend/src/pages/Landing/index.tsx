@@ -66,7 +66,7 @@ const LandingPage = () => {
                 className="landing-session-expired-notification"
                 kind="warning"
                 lowContrast
-                title="You’ve been logged out"
+                title="You've been logged out"
                 subtitle="Your session expired for security reasons and any unsaved changes were lost. Log in again to continue."
                 onCloseButtonClick={() => setShowSessionExpiredMessage(false)}
               />

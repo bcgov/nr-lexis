@@ -1,5 +1,5 @@
 import { Button, Loading } from '@carbon/react'
-import { useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { useId, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { AppNotification } from '@/components/AppNotification'
 import Modal from '@/components/Modal'
 import { genericActionFailureMessage } from '@/utils/notification-messages'
@@ -20,8 +20,10 @@ export type ConfirmationModalProps = {
   danger?: boolean
   size?: 'xs' | 'sm' | 'md' | 'lg'
   className?: string
+  launcherButtonRef?: RefObject<HTMLElement | null>
   errorTitle?: string
   onConfirm: () => Promise<void> | void
+  onCancel?: () => void
   onClose: () => void
   onError?: (error: unknown) => void
 }
@@ -43,8 +45,10 @@ const ConfirmationModal = ({
   danger = false,
   size = 'sm',
   className,
+  launcherButtonRef,
   errorTitle = 'Action failed',
   onConfirm,
+  onCancel,
   onClose,
   onError,
 }: ConfirmationModalProps) => {
@@ -65,11 +69,25 @@ const ConfirmationModal = ({
     return () => dialog?.removeAttribute('aria-describedby')
   }, [description, descriptionId, open])
 
-  const requestClose = () => {
-    if (!pending) {
-      setFailureMessage('')
-      onClose()
+  const closeAndRestoreFocus = () => {
+    const launcherButton = launcherButtonRef?.current
+    onClose()
+    if (launcherButton) {
+      window.setTimeout(() => launcherButton.focus())
     }
+  }
+
+  const requestClose = () => {
+    if (pending) return
+    setFailureMessage('')
+    closeAndRestoreFocus()
+  }
+
+  const requestCancel = () => {
+    if (pending) return
+    setFailureMessage('')
+    onCancel?.()
+    closeAndRestoreFocus()
   }
 
   const confirm = async () => {
@@ -79,7 +97,7 @@ const ConfirmationModal = ({
     setPending(true)
     try {
       await onConfirm()
-      onClose()
+      closeAndRestoreFocus()
     } catch (error) {
       if (onError) {
         onError(error)
@@ -104,6 +122,7 @@ const ConfirmationModal = ({
         aria-label={title}
         aria-describedby={description ? descriptionId : undefined}
         className={['lexis-confirmation-modal', className].filter(Boolean).join(' ')}
+        launcherButtonRef={launcherButtonRef}
         selectorPrimaryFocus={`#${cancelButtonId}`}
         preventCloseOnClickOutside
         onRequestClose={requestClose}
@@ -117,7 +136,7 @@ const ConfirmationModal = ({
           {children}
         </div>
         <div className="lexis-confirmation-modal__actions">
-          <Button id={cancelButtonId} kind="tertiary" disabled={pending} onClick={requestClose}>
+          <Button id={cancelButtonId} kind="tertiary" disabled={pending} onClick={requestCancel}>
             {cancelLabel}
           </Button>
           <Button

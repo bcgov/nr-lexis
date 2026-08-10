@@ -20,8 +20,11 @@ import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvRowDto;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvUploadResultDto;
 import ca.bc.gov.mof.lexis.repository.rtm.OracleRtmEmsLogAmvRepository;
 import ca.bc.gov.mof.lexis.service.scan.VirusScanService;
+import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import org.mockito.ArgumentCaptor;
@@ -42,6 +45,9 @@ import org.springframework.web.multipart.MultipartFile;
 
 @ExtendWith(OutputCaptureExtension.class)
 class OracleRtmEmsLogAmvServiceTest {
+
+  private static final Clock JUNE_2026_CLOCK =
+      Clock.fixed(Instant.parse("2026-06-15T19:00:00Z"), LexisBusinessTime.ZONE);
 
   @Test
   void shouldInstantiateWithRepositoryConstructorInOracleProfile() {
@@ -121,7 +127,8 @@ class OracleRtmEmsLogAmvServiceTest {
     OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
     when(repository.upsertAtomically(any()))
         .thenReturn(new int[] {1, 1, 1, 1, 1, 1});
-    OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository);
+    OracleRtmEmsLogAmvService service =
+        new OracleRtmEmsLogAmvService(repository, JUNE_2026_CLOCK);
 
     RtmEmsLogAmvMutationResultDto result =
         service.saveBatch(
@@ -174,7 +181,8 @@ class OracleRtmEmsLogAmvServiceTest {
   void shouldAtomicallyFanOutSpruceToBothGrowthTypesWithoutPineExpansion() {
     OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
     when(repository.upsertAtomically(any())).thenReturn(new int[] {1, 1});
-    OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository);
+    OracleRtmEmsLogAmvService service =
+        new OracleRtmEmsLogAmvService(repository, JUNE_2026_CLOCK);
 
     RtmEmsLogAmvMutationResultDto result =
         service.saveBatch(
@@ -213,10 +221,10 @@ class OracleRtmEmsLogAmvServiceTest {
   }
 
   @Test
-  void shouldAcceptModernGridGradesForHistoricMonths() {
+  void shouldRejectHistoricMonthsInBatch() {
     OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
-    when(repository.upsertAtomically(any())).thenReturn(new int[] {1, 1});
-    OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository);
+    OracleRtmEmsLogAmvService service =
+        new OracleRtmEmsLogAmvService(repository, JUNE_2026_CLOCK);
 
     RtmEmsLogAmvMutationResultDto result =
         service.saveBatch(
@@ -230,17 +238,11 @@ class OracleRtmEmsLogAmvServiceTest {
                     new BigDecimal("12.50"),
                     "update")));
 
-    assertThat(result.status()).isEqualTo("accepted");
-    verify(repository)
-        .upsertAtomically(
-            argThat(
-                targets ->
-                    targets.size() == 2
-                        && targets.stream()
-                            .allMatch(
-                                target ->
-                                    target.grade().equals("Z")
-                                        && target.effectiveDate().equals(LocalDate.of(2000, 2, 1)))));
+    assertThat(result.status()).isEqualTo("validation_failed");
+    assertThat(result.errors())
+        .containsExactly(
+            "Table value 1: Average market values can only be saved for the next month.");
+    verifyNoInteractions(repository);
   }
 
   @Test
@@ -381,6 +383,124 @@ class OracleRtmEmsLogAmvServiceTest {
                                     List.of("PL", "PW", "PY").contains(target.species()))
                         && targets.stream()
                             .allMatch(target -> target.growthIndicator().equals("O"))));
+  }
+
+  @Test
+  void shouldApplyTheScreenMonthAndExpandTheGroupedPineColumn() throws IOException {
+    OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
+    Clock clock =
+        Clock.fixed(Instant.parse("2026-06-15T19:00:00Z"), LexisBusinessTime.ZONE);
+    LocalDate retrievalMonth = LocalDate.of(2026, 6, 1);
+    LocalDate effectiveMonth = LocalDate.of(2026, 7, 1);
+    stubAppliedFixtureValues(repository);
+    OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository, clock);
+
+    var preview = service.previewUpload(groupedPineWorkbook(), "2026-07-01");
+    RtmEmsLogAmvUploadResultDto upload =
+        service.upload(groupedPineWorkbook(), "2026-07-01");
+    RtmEmsLogAmvUploadResultDto reupload =
+        service.upload(groupedPineWorkbook(), "2026-07-01");
+
+    assertThat(preview.status()).isEqualTo("accepted");
+    assertThat(preview.retrievalDate()).isEqualTo("2026-06-01");
+    assertThat(preview.updateDate()).isEqualTo("2026-07-01");
+    assertThat(preview.rows())
+        .extracting(row -> List.of(row.species(), row.growthIndicator()))
+        .containsExactly(List.of("PINE", "O"));
+    assertThat(upload.status()).isEqualTo("accepted");
+    assertThat(upload.attemptedRowCount()).isEqualTo(6);
+    assertThat(upload.uploadedRowCount()).isEqualTo(6);
+    assertThat(reupload.status()).isEqualTo("accepted");
+    assertThat(reupload.uploadedRowCount()).isEqualTo(6);
+    verify(repository, times(2))
+        .upsertAtomically(
+            argThat(
+                targets ->
+                    targets.size() == 6
+                        && targets.stream()
+                            .map(
+                                target ->
+                                    List.of(target.species(), target.growthIndicator()))
+                            .toList()
+                            .equals(
+                                List.of(
+                                    List.of("WH", "O"),
+                                    List.of("WH", "S"),
+                                    List.of("LO", "O"),
+                                    List.of("LO", "S"),
+                                    List.of("YE", "O"),
+                                    List.of("YE", "S")))
+                        && targets.stream()
+                            .allMatch(
+                                target ->
+                                    target.effectiveDate().equals(effectiveMonth))));
+    verify(repository, times(12))
+        .existsExact(anyString(), eq("A"), anyString(), eq(retrievalMonth));
+  }
+
+  @Test
+  void shouldCompareTheScreenUploadAgainstTheLatestAvailableValues() throws IOException {
+    OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
+    Clock clock =
+        Clock.fixed(Instant.parse("2026-06-15T19:00:00Z"), LexisBusinessTime.ZONE);
+    LocalDate effectiveMonth = LocalDate.of(2026, 7, 1);
+    when(repository.findLatestEffectiveDateRowsBefore(effectiveMonth))
+        .thenReturn(
+            List.of(
+                new RtmEmsLogAmvRowDto(
+                    "HE",
+                    "H",
+                    "O",
+                    "2026-05-01",
+                    "2026-05-01",
+                    new BigDecimal("81.40"),
+                    new BigDecimal("81.40"),
+                    "0")));
+    OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository, clock);
+
+    var preview = service.previewUpload(singleBalsamWorkbook(), "2026-07-01");
+
+    assertThat(preview.status()).isEqualTo("accepted");
+    assertThat(preview.retrievalDate()).isEqualTo("2026-05-01");
+    assertThat(preview.updateDate()).isEqualTo("2026-07-01");
+    assertThat(preview.rows()).hasSize(2);
+    assertThat(preview.rows().get(0).species()).isEqualTo("BA");
+    assertThat(preview.rows().get(0).grade()).isEqualTo("A");
+    assertThat(preview.rows().get(0).growthIndicator()).isEqualTo("O");
+    assertThat(preview.rows().get(0).currentValue()).isNull();
+    assertThat(preview.rows().get(0).newValue()).isEqualByComparingTo("10.25");
+    assertThat(preview.rows().get(1).species()).isEqualTo("HE");
+    assertThat(preview.rows().get(1).grade()).isEqualTo("H");
+    assertThat(preview.rows().get(1).growthIndicator()).isEqualTo("O");
+    assertThat(preview.rows().get(1).currentValue()).isEqualByComparingTo("81.40");
+    assertThat(preview.rows().get(1).newValue()).isNull();
+    verify(repository).findLatestEffectiveDateRowsBefore(effectiveMonth);
+    verify(repository, never()).findEffectiveDateRows(any(), any(), any());
+  }
+
+  @Test
+  void shouldRejectEveryScreenMonthExceptTheImmediatelyUpcomingMonth() throws IOException {
+    OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
+    Clock clock =
+        Clock.fixed(Instant.parse("2026-06-15T19:00:00Z"), LexisBusinessTime.ZONE);
+    OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository, clock);
+
+    var currentMonth = service.previewUpload(groupedPineWorkbook(), "2026-06-01");
+    var previousMonth = service.upload(groupedPineWorkbook(), "2026-05-01");
+    var laterFutureMonth = service.previewUpload(groupedPineWorkbook(), "2026-08-01");
+    var midMonth = service.upload(groupedPineWorkbook(), "2026-07-15");
+    var missingMonth = service.previewUpload(groupedPineWorkbook(), null);
+
+    assertThat(currentMonth.status()).isEqualTo("validation_failed");
+    assertThat(previousMonth.status()).isEqualTo("validation_failed");
+    assertThat(laterFutureMonth.status()).isEqualTo("validation_failed");
+    assertThat(currentMonth.errors())
+        .containsExactly("Average market values can only be uploaded for the next month.");
+    assertThat(previousMonth.errors()).containsExactlyElementsOf(currentMonth.errors());
+    assertThat(laterFutureMonth.errors()).containsExactlyElementsOf(currentMonth.errors());
+    assertThat(midMonth.errors()).containsExactly("Select a valid effective month.");
+    assertThat(missingMonth.errors()).containsExactly("Select a valid effective month.");
+    verifyNoInteractions(repository);
   }
 
   @Test
@@ -1011,6 +1131,14 @@ class OracleRtmEmsLogAmvServiceTest {
         RtmEmsLogAmvWorkbookTestFixtures.matrixWorkbook());
   }
 
+  private MultipartFile groupedPineWorkbook() throws IOException {
+    return new MockMultipartFile(
+        "file",
+        "grouped-pine.xlsx",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        RtmEmsLogAmvWorkbookTestFixtures.ambiguousPineWorkbook());
+  }
+
   private MultipartFile singleBalsamWorkbook() throws IOException {
     return new MockMultipartFile(
         "file",
@@ -1141,7 +1269,7 @@ class OracleRtmEmsLogAmvServiceTest {
       OracleRtmEmsLogAmvRepository repository,
       RecordingTransactionManager transactionManager) {
     OracleRtmEmsLogAmvService target =
-        new OracleRtmEmsLogAmvService(repository);
+        new OracleRtmEmsLogAmvService(repository, JUNE_2026_CLOCK);
     TransactionInterceptor interceptor =
         new TransactionInterceptor(
             transactionManager, new AnnotationTransactionAttributeSource());

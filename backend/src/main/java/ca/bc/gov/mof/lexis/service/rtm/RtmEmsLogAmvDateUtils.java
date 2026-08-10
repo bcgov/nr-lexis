@@ -2,6 +2,7 @@ package ca.bc.gov.mof.lexis.service.rtm;
 
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
@@ -39,6 +40,24 @@ public final class RtmEmsLogAmvDateUtils {
     } catch (DateTimeParseException ignored) {
       return null;
     }
+  }
+
+  public static LocalDate parseMonthStartDate(String value) {
+    String normalized = trimToNull(value);
+    if (normalized == null) {
+      return null;
+    }
+
+    try {
+      LocalDate parsed = LocalDate.parse(normalized, DateTimeFormatter.ISO_LOCAL_DATE);
+      return isFirstOfMonth(parsed) ? parsed : null;
+    } catch (DateTimeParseException ignored) {
+      return null;
+    }
+  }
+
+  public static boolean isNextMonth(LocalDate value, Clock clock) {
+    return value != null && YearMonth.from(value).equals(YearMonth.now(clock).plusMonths(1));
   }
 
   public static boolean isFirstOfMonth(LocalDate value) {

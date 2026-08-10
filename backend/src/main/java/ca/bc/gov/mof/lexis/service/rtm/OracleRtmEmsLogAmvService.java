@@ -1,6 +1,8 @@
 package ca.bc.gov.mof.lexis.service.rtm;
 
 import static ca.bc.gov.mof.lexis.service.rtm.RtmEmsLogAmvDateUtils.isFirstOfMonth;
+import static ca.bc.gov.mof.lexis.service.rtm.RtmEmsLogAmvDateUtils.isNextMonth;
+import static ca.bc.gov.mof.lexis.service.rtm.RtmEmsLogAmvDateUtils.parseMonthStartDate;
 import static ca.bc.gov.mof.lexis.service.rtm.RtmEmsLogAmvDateUtils.parseRetrievalDate;
 import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.exceptionType;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
@@ -13,9 +15,11 @@ import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvUploadPreviewDto;
 import ca.bc.gov.mof.lexis.repository.rtm.OracleRtmEmsLogAmvRepository;
 import ca.bc.gov.mof.lexis.service.scan.VirusScanException;
 import ca.bc.gov.mof.lexis.service.scan.VirusScanService;
+import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.sql.Statement;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -45,6 +49,10 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
   private static final String RETURN_FAILURE = "rejected";
   private static final String RETURN_VALIDATION = "validation_failed";
   private static final List<String> GROWTH_TARGETS = List.of("O", "S");
+  private static final List<String> SCREEN_SPECIES =
+      List.of("BA", "HE", "CE", "CY", "FI", "SP", "PINE");
+  private static final List<String> SCREEN_GRADES =
+      List.of("A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "U", "X", "Y");
   private static final Map<String, List<String>> BATCH_SPECIES_TARGETS =
       Map.of(
           "BA", List.of("BA"),
@@ -56,16 +64,27 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
           "PINE", List.of("WH", "LO", "YE"));
   private final OracleRtmEmsLogAmvRepository repository;
   private final VirusScanService virusScanService;
+  private final Clock clock;
 
   @Autowired
   public OracleRtmEmsLogAmvService(
       OracleRtmEmsLogAmvRepository repository, VirusScanService virusScanService) {
+    this(repository, virusScanService, LexisBusinessTime.systemClock());
+  }
+
+  OracleRtmEmsLogAmvService(
+      OracleRtmEmsLogAmvRepository repository, VirusScanService virusScanService, Clock clock) {
     this.repository = repository;
     this.virusScanService = virusScanService;
+    this.clock = clock == null ? LexisBusinessTime.systemClock() : clock;
   }
 
   OracleRtmEmsLogAmvService(OracleRtmEmsLogAmvRepository repository) {
     this(repository, VirusScanService.NO_OP);
+  }
+
+  OracleRtmEmsLogAmvService(OracleRtmEmsLogAmvRepository repository, Clock clock) {
+    this(repository, VirusScanService.NO_OP, clock);
   }
 
   @Override
@@ -269,6 +288,16 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
 
   @Override
   public RtmEmsLogAmvUploadPreviewDto previewUpload(MultipartFile file) {
+    return previewUpload(file, null, false);
+  }
+
+  @Override
+  public RtmEmsLogAmvUploadPreviewDto previewUpload(MultipartFile file, String effectiveMonth) {
+    return previewUpload(file, effectiveMonth, true);
+  }
+
+  private RtmEmsLogAmvUploadPreviewDto previewUpload(
+      MultipartFile file, String effectiveMonth, boolean enforceNextMonth) {
     if (file == null || file.isEmpty()) {
       return buildPreview("rejected", "No file provided.", 0, List.of("Choose a .xlsx file."), List.of());
     }
@@ -293,12 +322,39 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
           file.getSize());
     }
 
+    LocalDate parsedEffectiveMonth =
+        enforceNextMonth
+            ? parseMonthStartDate(effectiveMonth)
+            : parseRetrievalDate(effectiveMonth);
+    if (enforceNextMonth && parsedEffectiveMonth == null) {
+      return buildPreview(
+          RETURN_VALIDATION,
+          "Upload template validation failed.",
+          0,
+          List.of("Select a valid effective month."),
+          List.of());
+    }
+    if (enforceNextMonth && !isNextMonth(parsedEffectiveMonth, clock)) {
+      return buildPreview(
+          RETURN_VALIDATION,
+          "Upload template validation failed.",
+          0,
+          List.of("Average market values can only be uploaded for the next month."),
+          List.of());
+    }
+
     try {
       RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult parseResult =
-          RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(file.getInputStream());
+          parsedEffectiveMonth == null
+              ? RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(file.getInputStream())
+              : RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
+                  file.getInputStream(), parsedEffectiveMonth);
       List<String> warnings = new ArrayList<>(parseResult.warnings());
       List<String> errors = new ArrayList<>(parseResult.errors());
-      List<UploadTarget> rowsToPreview = buildUploadTargets(parseResult.rows(), warnings);
+      List<UploadTarget> rowsToPreview =
+          buildUploadTargets(parseResult.rows(), warnings, parsedEffectiveMonth != null);
+      LocalDate comparisonDate = parseResult.retrievalDate();
+      List<RtmEmsLogAmvRowDto> comparisonRows = List.of();
 
       if (parseResult.dataRowCount() == 0) {
         errors.add("The uploaded file contains no data rows.");
@@ -309,15 +365,18 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
       if (!parseResult.headerDetected()) {
         errors.add("The template header is not recognized as an RTM EMS AMV sheet.");
       }
-      if (parseResult.updateDate() == null || parseResult.retrievalDate() == null) {
+      if (enforceNextMonth && errors.isEmpty()) {
+        comparisonRows = repository.findLatestEffectiveDateRowsBefore(parsedEffectiveMonth);
+        comparisonDate = latestComparisonDate(comparisonRows, comparisonDate);
+      }
+      if (parseResult.updateDate() == null || comparisonDate == null) {
         errors.add("The update date is required in the uploaded template.");
       }
-      validateMonthStart(parseResult.retrievalDate(), "Retrieval date", errors);
+      validateMonthStart(comparisonDate, "Retrieval date", errors);
       validateMonthStart(parseResult.updateDate(), "Update date", errors);
-      validateUploadDateOrder(parseResult.retrievalDate(), parseResult.updateDate(), errors);
-      validateUploadTargets(
-          rowsToPreview, parseResult.retrievalDate(), parseResult.updateDate(), errors);
-      if (errors.isEmpty()) {
+      validateUploadDateOrder(comparisonDate, parseResult.updateDate(), errors);
+      validateUploadTargets(rowsToPreview, comparisonDate, parseResult.updateDate(), errors);
+      if (errors.isEmpty() && !enforceNextMonth) {
         rowsToPreview =
             filterUploadTargetsForExistingRows(
                 rowsToPreview,
@@ -329,7 +388,18 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
         }
       }
       List<RtmEmsLogAmvRowDto> previewRows =
-          buildPreviewRows(rowsToPreview, parseResult.retrievalDate(), parseResult.updateDate());
+          enforceNextMonth
+              ? buildScreenPreviewRows(
+                  parseResult.rows(),
+                  comparisonRows,
+                  comparisonDate,
+                  parseResult.updateDate(),
+                  errors.isEmpty())
+              : buildPreviewRows(
+                  rowsToPreview,
+                  parseResult.retrievalDate(),
+                  parseResult.updateDate(),
+                  errors.isEmpty());
       if (parseResult.dataRowCount() > 0 && parseResult.dataRowCount() < 2) {
         warnings.add("The uploaded file has very few rows; confirm it contains full AMV data.");
       }
@@ -340,7 +410,7 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
           previewRows.size(),
           errors,
           warnings,
-          formatDate(parseResult.retrievalDate()),
+          formatDate(comparisonDate),
           formatDate(parseResult.updateDate()),
           previewRows,
           fileName,
@@ -363,6 +433,17 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
   @Override
   @Transactional
   public RtmEmsLogAmvUploadResultDto upload(MultipartFile file) {
+    return upload(file, null, false);
+  }
+
+  @Override
+  @Transactional
+  public RtmEmsLogAmvUploadResultDto upload(MultipartFile file, String effectiveMonth) {
+    return upload(file, effectiveMonth, true);
+  }
+
+  private RtmEmsLogAmvUploadResultDto upload(
+      MultipartFile file, String effectiveMonth, boolean enforceNextMonth) {
     List<String> validationErrors = validateUploadRequest(file);
     if (!validationErrors.isEmpty()) {
       return buildUploadResult(
@@ -379,16 +460,48 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
 
     String fileName = trimToNull(file.getOriginalFilename());
     long fileSize = file.getSize();
+    LocalDate parsedEffectiveMonth =
+        enforceNextMonth
+            ? parseMonthStartDate(effectiveMonth)
+            : parseRetrievalDate(effectiveMonth);
+    if (enforceNextMonth && parsedEffectiveMonth == null) {
+      return buildUploadResult(
+          RETURN_VALIDATION,
+          "Upload template validation failed.",
+          fileName,
+          fileSize,
+          0,
+          0,
+          List.of("Select a valid effective month."),
+          List.of(),
+          List.of());
+    }
+    if (enforceNextMonth && !isNextMonth(parsedEffectiveMonth, clock)) {
+      return buildUploadResult(
+          RETURN_VALIDATION,
+          "Upload template validation failed.",
+          fileName,
+          fileSize,
+          0,
+          0,
+          List.of("Average market values can only be uploaded for the next month."),
+          List.of(),
+          List.of());
+    }
 
     try {
       RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult parseResult =
-          RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(file.getInputStream());
+          parsedEffectiveMonth == null
+              ? RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(file.getInputStream())
+              : RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
+                  file.getInputStream(), parsedEffectiveMonth);
 
       List<String> warnings = new ArrayList<>(parseResult.warnings());
       List<String> errors = new ArrayList<>(parseResult.errors());
       LocalDate parsedRetrievalDate = parseResult.retrievalDate();
       LocalDate parsedUpdateDate = parseResult.updateDate();
-      List<UploadTarget> rowsToUpload = buildUploadTargets(parseResult.rows(), warnings);
+      List<UploadTarget> rowsToUpload =
+          buildUploadTargets(parseResult.rows(), warnings, parsedEffectiveMonth != null);
 
       if (parseResult.dataRowCount() == 0) {
         errors.add("The uploaded file contains no data rows.");
@@ -535,6 +648,14 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
     for (String species : physicalSpecies) {
       errors.addAll(
           RtmEmsLogAmvDimensionValidator.validateModernGrid(species, request.grade(), "O"));
+    }
+    LocalDate effectiveDate =
+        effectiveDateForSave(
+            request.effectiveSaveMode(),
+            parseRetrievalDate(request.retrievalDate()),
+            parseRetrievalDate(request.updateDate()));
+    if (effectiveDate != null && !isNextMonth(effectiveDate, clock)) {
+      errors.add("Average market values can only be saved for the next month.");
     }
     return errors;
   }
@@ -729,9 +850,24 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
   }
 
   private List<RtmEmsLogAmvRowDto> buildPreviewRows(
-      List<UploadTarget> targets, LocalDate retrievalDate, LocalDate updateDate) {
+      List<UploadTarget> targets,
+      LocalDate retrievalDate,
+      LocalDate updateDate,
+      boolean loadCurrentValues) {
     if (retrievalDate == null || updateDate == null) {
       return List.of();
+    }
+
+    Map<String, BigDecimal> currentValues = new LinkedHashMap<>();
+    if (loadCurrentValues && !targets.isEmpty()) {
+      for (RtmEmsLogAmvRowDto row :
+          repository.findEffectiveDateRows(null, null, retrievalDate)) {
+        BigDecimal currentValue = row.newValue() == null ? row.currentValue() : row.newValue();
+        if (currentValue != null) {
+          currentValues.putIfAbsent(
+              previewRowKey(row.species(), row.grade(), row.growthIndicator()), currentValue);
+        }
+      }
     }
 
     List<RtmEmsLogAmvRowDto> previewRows = new ArrayList<>();
@@ -743,11 +879,105 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
               target.growthIndicator(),
               formatDate(retrievalDate),
               formatDate(updateDate),
-              null,
+              currentValues.get(
+                  previewRowKey(
+                      target.species(), target.grade(), target.growthIndicator())),
               target.newValue(),
               "0"));
     }
     return previewRows;
+  }
+
+  private List<RtmEmsLogAmvRowDto> buildScreenPreviewRows(
+      List<RtmEmsLogAmvUploadPreviewAnalyzer.UploadRow> uploadedRows,
+      List<RtmEmsLogAmvRowDto> comparisonRows,
+      LocalDate retrievalDate,
+      LocalDate updateDate,
+      boolean loadCurrentValues) {
+    if (retrievalDate == null || updateDate == null) {
+      return List.of();
+    }
+
+    Map<String, BigDecimal> newValues = new LinkedHashMap<>();
+    for (RtmEmsLogAmvUploadPreviewAnalyzer.UploadRow row : uploadedRows) {
+      String species = logicalScreenSpecies(row.species());
+      String grade = RtmEmsLogAmvDimensionValidator.normalize(row.grade());
+      if (species != null && grade != null && SCREEN_GRADES.contains(grade)) {
+        newValues.put(screenPreviewRowKey(species, grade), row.newValue());
+      }
+    }
+
+    Map<String, BigDecimal> currentValues = new LinkedHashMap<>();
+    if (loadCurrentValues) {
+      for (RtmEmsLogAmvRowDto row : comparisonRows) {
+        String species = logicalScreenSpecies(row.species());
+        String grade = RtmEmsLogAmvDimensionValidator.normalize(row.grade());
+        BigDecimal currentValue = row.newValue() == null ? row.currentValue() : row.newValue();
+        if (species != null
+            && grade != null
+            && SCREEN_GRADES.contains(grade)
+            && currentValue != null) {
+          currentValues.putIfAbsent(screenPreviewRowKey(species, grade), currentValue);
+        }
+      }
+    }
+
+    List<RtmEmsLogAmvRowDto> previewRows = new ArrayList<>();
+    for (String species : SCREEN_SPECIES) {
+      for (String grade : SCREEN_GRADES) {
+        String key = screenPreviewRowKey(species, grade);
+        if (!currentValues.containsKey(key) && !newValues.containsKey(key)) {
+          continue;
+        }
+        previewRows.add(
+            new RtmEmsLogAmvRowDto(
+                species,
+                grade,
+                "O",
+                formatDate(retrievalDate),
+                formatDate(updateDate),
+                currentValues.get(key),
+                newValues.get(key),
+                "0"));
+      }
+    }
+    return previewRows;
+  }
+
+  private LocalDate latestComparisonDate(
+      List<RtmEmsLogAmvRowDto> comparisonRows, LocalDate fallbackDate) {
+    LocalDate latestDate = null;
+    for (RtmEmsLogAmvRowDto row : comparisonRows) {
+      String dateValue = trimToNull(row.updateDate());
+      LocalDate rowDate = parseRetrievalDate(dateValue == null ? row.retrievalDate() : dateValue);
+      if (rowDate != null && (latestDate == null || rowDate.isAfter(latestDate))) {
+        latestDate = rowDate;
+      }
+    }
+    return latestDate == null ? fallbackDate : latestDate;
+  }
+
+  private String logicalScreenSpecies(String species) {
+    String normalizedSpecies = RtmEmsLogAmvDimensionValidator.normalize(species);
+    if (normalizedSpecies == null) {
+      return null;
+    }
+    if (List.of("WH", "LO", "YE", "PINE").contains(normalizedSpecies)) {
+      return "PINE";
+    }
+    return BATCH_SPECIES_TARGETS.containsKey(normalizedSpecies) ? normalizedSpecies : null;
+  }
+
+  private String screenPreviewRowKey(String species, String grade) {
+    return species + "|" + grade;
+  }
+
+  private String previewRowKey(String species, String grade, String growthIndicator) {
+    return String.join(
+        "|",
+        RtmEmsLogAmvDimensionValidator.normalize(species),
+        RtmEmsLogAmvDimensionValidator.normalize(grade),
+        RtmEmsLogAmvDimensionValidator.normalize(growthIndicator));
   }
 
   private List<UploadTarget> filterUploadTargetsForExistingRows(
@@ -824,7 +1054,9 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
   }
 
   private List<UploadTarget> buildUploadTargets(
-      List<RtmEmsLogAmvUploadPreviewAnalyzer.UploadRow> parsedRows, List<String> warnings) {
+      List<RtmEmsLogAmvUploadPreviewAnalyzer.UploadRow> parsedRows,
+      List<String> warnings,
+      boolean expandGrowthTypes) {
     List<RtmEmsLogAmvUploadPreviewAnalyzer.UploadRow> uploadRows =
         parsedRows.stream()
             .filter(row -> isUploadableRow(row.species(), row.grade()))
@@ -835,16 +1067,7 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
     }
 
     Map<String, UploadTarget> rowsBySpeciesGradeAndGrowth =
-        uploadRows.stream()
-            .map(
-                row ->
-                    new UploadTarget(
-                        row.species(),
-                        row.grade(),
-                        row.growthIndicator(),
-                        row.newValue(),
-                        row.sourceRow(),
-                        row.sourceColumn()))
+        expandUploadTargets(uploadRows, expandGrowthTypes).stream()
             .collect(
                 LinkedHashMap::new,
                 (map, target) -> {
@@ -873,6 +1096,40 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
                 Map::putAll);
 
     return new ArrayList<>(rowsBySpeciesGradeAndGrowth.values());
+  }
+
+  private List<UploadTarget> expandUploadTargets(
+      List<RtmEmsLogAmvUploadPreviewAnalyzer.UploadRow> uploadRows, boolean expandGrowthTypes) {
+    List<UploadTarget> targets = new ArrayList<>();
+    for (RtmEmsLogAmvUploadPreviewAnalyzer.UploadRow row : uploadRows) {
+      String normalizedSpecies = RtmEmsLogAmvDimensionValidator.normalize(row.species());
+      List<String> speciesTargets =
+          BATCH_SPECIES_TARGETS.getOrDefault(normalizedSpecies, List.of(row.species()));
+      for (String species : speciesTargets) {
+        if (expandGrowthTypes) {
+          for (String growthIndicator : GROWTH_TARGETS) {
+            targets.add(
+                new UploadTarget(
+                    species,
+                    row.grade(),
+                    growthIndicator,
+                    row.newValue(),
+                    row.sourceRow(),
+                    row.sourceColumn()));
+          }
+        } else {
+          targets.add(
+              new UploadTarget(
+                  species,
+                  row.grade(),
+                  row.growthIndicator(),
+                  row.newValue(),
+                  row.sourceRow(),
+                  row.sourceColumn()));
+        }
+      }
+    }
+    return targets;
   }
 
   private record UploadTarget(

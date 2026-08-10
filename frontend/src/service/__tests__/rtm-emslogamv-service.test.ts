@@ -108,7 +108,7 @@ describe('rtm-emslogamv-service', () => {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     })
 
-    const result = await previewRtmEmsLogAmvUpload(file)
+    const result = await previewRtmEmsLogAmvUpload(file, '2026-06-01')
 
     expect(postMock).toHaveBeenCalledWith(
       '/lexis/rtm/emslogamv/preview',
@@ -120,6 +120,7 @@ describe('rtm-emslogamv-service', () => {
     )
     const [, payload, config] = postMock.mock.calls[0]
     expect(payload.get('file')).toBe(file)
+    expect(payload.get('effectiveMonth')).toBe('2026-06-01')
     expect(config.validateStatus(422)).toBe(true)
     expect(config.validateStatus(500)).toBe(false)
     expect(result).toEqual(expect.objectContaining({ status: 'accepted', rowCount: 2 }))
@@ -143,7 +144,7 @@ describe('rtm-emslogamv-service', () => {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     })
 
-    const result = await uploadRtmEmsLogAmv({ file })
+    const result = await uploadRtmEmsLogAmv({ file, effectiveMonth: '2026-06-01' })
 
     expect(postMock).toHaveBeenCalledWith(
       '/lexis/rtm/emslogamv/upload',
@@ -155,6 +156,7 @@ describe('rtm-emslogamv-service', () => {
     )
     const [, payload, config] = postMock.mock.calls[0]
     expect(payload.get('file')).toBe(file)
+    expect(payload.get('effectiveMonth')).toBe('2026-06-01')
     expect(config.validateStatus(422)).toBe(true)
     expect(config.validateStatus(500)).toBe(false)
     expect(result).toEqual(

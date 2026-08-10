@@ -14,12 +14,8 @@ vi.mock('@/pages/Reports', () => ({
   default: () => <h1>Reports</h1>,
 }))
 
-vi.mock('@/pages/RTMEmsLogAmv', () => ({
-  default: () => <h1>Average Monthly Values</h1>,
-}))
-
 vi.mock('@/pages/RTMEmsLogAmv/LegacyUploadWorkflow', () => ({
-  default: () => <h1>AMV Spreadsheet Upload</h1>,
+  default: () => <h1>Average market values</h1>,
 }))
 
 vi.mock('@/pages/Federal', () => ({
@@ -41,6 +37,7 @@ const renderWithPath = (path: string) => {
       <RouterProvider router={router} />
     </ThemeProvider>,
   )
+  return router
 }
 
 const findLazyPageHeading = (name: string) =>
@@ -299,7 +296,7 @@ describe('Protected route guard access', () => {
     ).toBeInTheDocument()
   })
 
-  it('allows the RTM protected route when PROD RTM-only mode is enabled', async () => {
+  it('redirects the disabled AMV GUI route to the spreadsheet upload', async () => {
     window.config = { VITE_LEXIS_PROD_RTM_ONLY: 'true' }
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
@@ -307,11 +304,12 @@ describe('Protected route guard access', () => {
       }),
     )
 
-    renderWithPath('/admin/rtm/emslogamv')
+    const router = renderWithPath('/admin/rtm/emslogamv')
 
     expect(
-      await screen.findByRole('heading', { name: 'Average Monthly Values' }),
+      await screen.findByRole('heading', { name: 'Average market values' }),
     ).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/admin/rtm/emslogamv/upload')
   })
 
   it('allows the AMV spreadsheet upload route when PROD RTM-only mode is enabled', async () => {
@@ -325,7 +323,7 @@ describe('Protected route guard access', () => {
     renderWithPath('/admin/rtm/emslogamv/upload')
 
     expect(
-      await screen.findByRole('heading', { name: 'AMV Spreadsheet Upload' }),
+      await screen.findByRole('heading', { name: 'Average market values' }),
     ).toBeInTheDocument()
   })
 })

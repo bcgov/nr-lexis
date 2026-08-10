@@ -140,7 +140,13 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
 
   static UploadParseResult parseForUpload(InputStream inputStream) throws IOException {
     ParsedWorkbook parsedWorkbook = readWorkbook(inputStream);
-    return parseUploadSheet(parsedWorkbook.rows());
+    return parseUploadSheet(parsedWorkbook.rows(), null, null);
+  }
+
+  static UploadParseResult parseForUpload(InputStream inputStream, LocalDate effectiveMonth)
+      throws IOException {
+    ParsedWorkbook parsedWorkbook = readWorkbook(inputStream);
+    return parseUploadSheet(parsedWorkbook.rows(), effectiveMonth, "O");
   }
 
   private static ParsedWorkbook readWorkbook(InputStream inputStream) throws IOException {
@@ -763,16 +769,18 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
     return null;
   }
 
-  private static UploadParseResult parseUploadSheet(List<ParsedRow> rows) {
+  private static UploadParseResult parseUploadSheet(
+      List<ParsedRow> rows, LocalDate effectiveMonth, String defaultGrowthIndicator) {
     int dataRows = 0;
     int numericCells = 0;
     boolean headerDetected = false;
     int headerRow = -1;
     UploadMetadata metadata = parseUploadMetadata(rows);
-    LocalDate updateDate = metadata.updateDate();
-    LocalDate retrievalDate = updateDate;
-    String growthIndicator = metadata.growthIndicator();
-    Map<String, String> speciesHeaderAliases = speciesHeaderAliases();
+    LocalDate updateDate = effectiveMonth == null ? metadata.updateDate() : effectiveMonth;
+    LocalDate retrievalDate = effectiveMonth == null ? updateDate : effectiveMonth.minusMonths(1);
+    String growthIndicator =
+        defaultGrowthIndicator == null ? metadata.growthIndicator() : defaultGrowthIndicator;
+    Map<String, String> speciesHeaderAliases = speciesHeaderAliases(effectiveMonth != null);
     Map<Integer, String> speciesByColumn = new HashMap<>();
     List<String> errors = new ArrayList<>();
     List<String> warnings = new ArrayList<>();
@@ -861,7 +869,7 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
         }
       }
 
-      if (!foundNumericValue) {
+      if (!foundNumericValue && effectiveMonth == null) {
         warnings.add(
             "Row %d grade '%s' had no parseable AMV values and was skipped."
                 .formatted(rowNumber, grade));
@@ -905,7 +913,8 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
       }
 
       String normalizedValue = normalizeHeader(value);
-      if (AMBIGUOUS_SPECIES_HEADERS.contains(normalizedValue)) {
+      if (AMBIGUOUS_SPECIES_HEADERS.contains(normalizedValue)
+          && !speciesHeaderAliases.containsKey(normalizedValue)) {
         errors.add(
             "Header row %d species '%s' is ambiguous; use separate WH, LO and YE columns."
                 .formatted(rowNumber, normalizedValue));
@@ -1122,7 +1131,7 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
         .strip();
   }
 
-  private static Map<String, String> speciesHeaderAliases() {
+  private static Map<String, String> speciesHeaderAliases(boolean allowGroupedPine) {
     Map<String, String> aliases = new LinkedHashMap<>();
     aliases.put("BA", "BA");
     aliases.put("BALSAM", "BA");
@@ -1139,6 +1148,9 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
     aliases.put("WH", "WH");
     aliases.put("LO", "LO");
     aliases.put("YE", "YE");
+    if (allowGroupedPine) {
+      aliases.put("PINE", "PINE");
+    }
     return aliases;
   }
 
