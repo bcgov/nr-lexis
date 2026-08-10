@@ -529,6 +529,25 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
+  void applicationOptionsShouldAllowSearchAndDetailRoles() throws Exception {
+    for (String role :
+        List.of("LEXIS_READ_ONLY", "LEXIS_APPLICATION_APPROVER", "LEXIS_EXEMPTION_APPROVER")) {
+      mockMvc.perform(
+              get("/api/lexis/applications/search/options")
+                  .with(jwt().authorities(new SimpleGrantedAuthority(role))))
+          .andExpect(status().isOk());
+    }
+  }
+
+  @Test
+  void applicationsSearchShouldRejectExemptionApproverAccess() throws Exception {
+    mockMvc.perform(
+            get("/api/lexis/applications/search")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_EXEMPTION_APPROVER"))))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
   void applicationDetailsShouldAllowReadOnlyExemptionApproverAccess() throws Exception {
     mockMvc.perform(
             get("/api/lexis/applications/1000123")

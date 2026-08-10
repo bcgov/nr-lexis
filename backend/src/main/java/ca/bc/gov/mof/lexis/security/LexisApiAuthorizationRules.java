@@ -204,12 +204,15 @@ final class LexisApiAuthorizationRules {
               "/api/lexis/errorPage",
               "/api/lexis/errorPage.do"),
           anyAction(HttpMethod.GET, REPORT_WORKSPACE_ACTIONS, "/api/lexis/reports/options"),
+          anyAction(
+              HttpMethod.GET,
+              List.of("/applicationSearch", ACTION_APPLICATION_DETAILS),
+              "/api/lexis/applications/search/options"),
           action(
               HttpMethod.GET,
               "/applicationSearch",
               "/api/lexis/applicationSearch",
               "/api/lexis/applicationSearch.do",
-              "/api/lexis/applications/search/options",
               "/api/lexis/applications/search",
               "/api/lexis/applications/search/count",
               "/api/lexis/applications/search/verify-clients",
