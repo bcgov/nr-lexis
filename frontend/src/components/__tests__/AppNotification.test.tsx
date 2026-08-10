@@ -77,7 +77,7 @@ describe('AppNotification', () => {
     expect(darkRegion).not.toHaveClass('cds--white')
   })
 
-  it('auto-dismisses success notifications after at least 8 seconds by default', () => {
+  it('auto-dismisses success notifications after the FSPTS timing and exit animation', () => {
     vi.useFakeTimers()
     const onClose = vi.fn()
 
@@ -91,7 +91,18 @@ describe('AppNotification', () => {
     )
 
     act(() => {
-      vi.advanceTimersByTime(7999)
+      vi.advanceTimersByTime(5699)
+    })
+    expect(onClose).not.toHaveBeenCalled()
+
+    act(() => {
+      vi.advanceTimersByTime(1)
+    })
+    expect(document.querySelector('.app-notification')).toHaveClass('app-notification--exiting')
+    expect(onClose).not.toHaveBeenCalled()
+
+    act(() => {
+      vi.advanceTimersByTime(299)
     })
     expect(onClose).not.toHaveBeenCalled()
 
@@ -99,6 +110,48 @@ describe('AppNotification', () => {
       vi.advanceTimersByTime(1)
     })
     expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('honours a caller-provided success timeout without applying a minimum', () => {
+    vi.useFakeTimers()
+    const onClose = vi.fn()
+
+    render(
+      <AppNotification
+        kind="success"
+        title="Saved"
+        subtitle="Changes saved."
+        autoDismissMs={1000}
+        onCloseButtonClick={onClose}
+      />,
+    )
+
+    act(() => {
+      vi.advanceTimersByTime(700)
+    })
+    expect(document.querySelector('.app-notification')).toHaveClass('app-notification--exiting')
+
+    act(() => {
+      vi.advanceTimersByTime(300)
+    })
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows only the newest active notification without resurfacing the previous one', () => {
+    const { rerender } = render(
+      <>
+        <AppNotification kind="warning" title="Earlier warning" subtitle="First message." />
+        <AppNotification kind="error" title="Latest error" subtitle="Second message." />
+      </>,
+    )
+
+    expect(screen.queryByText('Earlier warning')).not.toBeInTheDocument()
+    expect(screen.getByText('Latest error')).toBeVisible()
+
+    rerender(<AppNotification kind="warning" title="Earlier warning" subtitle="First message." />)
+
+    expect(screen.queryByText('Earlier warning')).not.toBeInTheDocument()
+    expect(screen.queryByText('Latest error')).not.toBeInTheDocument()
   })
 
   it('does not auto-dismiss error notifications', () => {

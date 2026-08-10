@@ -6,6 +6,7 @@ import {
   Column,
   DismissibleTag,
   Grid,
+  InlineNotification,
   TextArea,
   TextInput,
   Tile,
@@ -16,6 +17,7 @@ import { AppNotification } from '../../components/AppNotification'
 import SearchableSelect from '../../components/SearchableSelect'
 import RegionMultiSelect from '@/components/RegionMultiSelect'
 import PageHeader from '@/components/PageHeader'
+import PendingIcon from '@/components/PendingIcon'
 import AuthoritativeOptionsUnavailableNotification from '@/components/AuthoritativeOptionsUnavailableNotification'
 import UnsavedChangesGuard, { formValuesEqual } from '@/components/UnsavedChangesGuard'
 import { hasProvincialSubmitterRole, hasRole } from '@/context/auth/role-utils'
@@ -200,6 +202,7 @@ type PageStatus = {
   kind: 'success' | 'error'
   title: string
   message: string
+  placement?: 'inline'
 }
 
 const ProvincialExemptionCreatePage = () => {
@@ -557,6 +560,7 @@ const ProvincialExemptionCreatePage = () => {
         kind: 'error',
         title: 'Application Not Added',
         message: 'Add or clear the pending application number before saving.',
+        placement: 'inline',
       })
       return false
     }
@@ -566,6 +570,7 @@ const ProvincialExemptionCreatePage = () => {
         title: 'Exemption Preview Required',
         message:
           previewError ?? 'Wait for LEXIS to validate the selected applications before saving.',
+        placement: 'inline',
       })
       return false
     }
@@ -575,6 +580,7 @@ const ProvincialExemptionCreatePage = () => {
         kind: 'error',
         title: 'Validation Error',
         message: firstSubmitValidationError ?? 'Please fix validation errors before saving.',
+        placement: 'inline',
       })
       return false
     }
@@ -694,12 +700,12 @@ const ProvincialExemptionCreatePage = () => {
             subtitle={`Loaded ${prefillState.selectedApplicationNumbers.length} ${prefillApplicationLabel} into this form.`}
             lowContrast
             onCloseButtonClick={() => setShowPrefillNotice(false)}
-            autoDismissMs={8000}
+            autoDismissMs={6000}
           />
         </Column>
       )}
 
-      {!!status && (
+      {!!status && status.placement !== 'inline' && (
         <Column sm={4} md={8} lg={16}>
           <AppNotification
             kind={status.kind}
@@ -707,13 +713,23 @@ const ProvincialExemptionCreatePage = () => {
             subtitle={status.message}
             lowContrast
             onCloseButtonClick={() => setStatus(null)}
-            autoDismissMs={status.kind === 'success' ? 8000 : undefined}
+            autoDismissMs={status.kind === 'success' ? 6000 : undefined}
           />
         </Column>
       )}
 
       <Column sm={4} md={8} lg={16}>
         <Tile className="create-form-tile">
+          {status?.placement === 'inline' && (
+            <InlineNotification
+              className="create-form-validation-notification"
+              kind="error"
+              title={status.title}
+              subtitle={status.message}
+              lowContrast
+              onCloseButtonClick={() => setStatus(null)}
+            />
+          )}
           <fieldset className="legacy-form-fieldset create-form-section">
             <legend>Exemption details</legend>
             <div className="legacy-search-grid create-form-grid">
@@ -744,7 +760,7 @@ const ProvincialExemptionCreatePage = () => {
                       />
                       <Button
                         type="button"
-                        kind="secondary"
+                        kind="tertiary"
                         size="sm"
                         disabled={!form.applicationNumber.trim()}
                         onClick={onAddApplication}
@@ -938,7 +954,8 @@ const ProvincialExemptionCreatePage = () => {
           >
             <Button
               type="button"
-              kind="secondary"
+              kind="tertiary"
+              size="md"
               onClick={() =>
                 navigate(isFederalApplicationPrefill ? '/federal' : '/provincial/exemption')
               }
@@ -948,6 +965,7 @@ const ProvincialExemptionCreatePage = () => {
             <Button
               type="button"
               kind="primary"
+              size="md"
               onClick={() => void onSave(true)}
               disabled={
                 !optionsLoaded ||
@@ -957,8 +975,9 @@ const ProvincialExemptionCreatePage = () => {
                 !canUseApplicationPrefill ||
                 (selectedApplicationNumbers.length > 0 && !hasCurrentPreview)
               }
+              renderIcon={isSubmitting ? PendingIcon : undefined}
             >
-              Save
+              {isSubmitting ? 'Saving…' : 'Save'}
             </Button>
           </div>
         </Tile>

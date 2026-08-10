@@ -14,14 +14,16 @@ import {
   Checkbox,
   InlineLoading,
   InlineNotification,
-  Modal,
   RadioButton,
   RadioButtonGroup,
   TextInput,
 } from '@carbon/react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ConfirmationModal from '@/components/ConfirmationModal'
+import Modal from '@/components/Modal'
 import NotificationEditor from '@/components/NotificationEditor'
+import PageHeader from '@/components/PageHeader'
+import { formValuesEqual } from '@/components/UnsavedChangesGuard'
 import { hasRole } from '@/context/auth/role-utils'
 import { useAuth } from '@/context/auth/useAuth'
 import type {
@@ -264,7 +266,9 @@ export default function NotificationsPage() {
   const [message, setMessage] = useState<NotificationMessage | null>(null)
   const [notificationPendingDeletion, setNotificationPendingDeletion] =
     useState<LexisNotification | null>(null)
+  const [showDiscardConfirmation, setShowDiscardConfirmation] = useState(false)
   const editorLauncherRef = useRef<HTMLElement>(null)
+  const editorBaselineRef = useRef<NotificationForm>(emptyForm())
 
   const loadNotifications = useCallback(
     async (clearMessage = true) => {
@@ -310,7 +314,9 @@ export default function NotificationsPage() {
   const startCreate = (): void => {
     editorLauncherRef.current =
       document.activeElement instanceof HTMLElement ? document.activeElement : null
-    setForm(emptyForm())
+    const nextForm = emptyForm()
+    editorBaselineRef.current = nextForm
+    setForm(nextForm)
     setMessage(null)
     setShowEditor(true)
   }
@@ -318,7 +324,9 @@ export default function NotificationsPage() {
   const startEdit = (notification: LexisNotification): void => {
     editorLauncherRef.current =
       document.activeElement instanceof HTMLElement ? document.activeElement : null
-    setForm(toForm(notification))
+    const nextForm = toForm(notification)
+    editorBaselineRef.current = nextForm
+    setForm(nextForm)
     setMessage(null)
     setShowEditor(true)
   }
@@ -329,10 +337,27 @@ export default function NotificationsPage() {
   }
 
   const resetForm = (): void => {
-    setForm(emptyForm())
+    const nextForm = emptyForm()
+    editorBaselineRef.current = nextForm
+    setForm(nextForm)
     setShowEditor(false)
+    setShowDiscardConfirmation(false)
     setMessage(null)
     restoreEditorLauncherFocus()
+  }
+
+  const requestCloseEditor = (): void => {
+    if (saving) return
+    if (!formValuesEqual(form, editorBaselineRef.current)) {
+      setShowDiscardConfirmation(true)
+      return
+    }
+    resetForm()
+  }
+
+  const closeDiscardConfirmation = (): void => {
+    setShowDiscardConfirmation(false)
+    window.setTimeout(() => document.getElementById('notification-title')?.focus())
   }
 
   const toggleAudienceRole = (role: string, selected: boolean): void => {
@@ -411,7 +436,9 @@ export default function NotificationsPage() {
           subtitle: 'The notification changes have been saved.',
         })
       }
-      setForm(emptyForm())
+      const nextForm = emptyForm()
+      editorBaselineRef.current = nextForm
+      setForm(nextForm)
       setShowEditor(false)
       restoreLauncherFocus = true
       await loadNotifications(false)
@@ -445,12 +472,7 @@ export default function NotificationsPage() {
       })
       await loadNotifications(false)
     } catch {
-      setMessage({
-        kind: 'error',
-        title: 'Notification could not be deleted',
-        subtitle: 'Please try again.',
-      })
-      throw new Error('Notification deletion failed.')
+      throw new Error('Please try again.')
     } finally {
       setSaving(false)
     }
@@ -458,17 +480,19 @@ export default function NotificationsPage() {
 
   return (
     <div className="notifications-page">
-      <section className="notifications-page__header" aria-labelledby="notifications-page-title">
-        <div>
-          <h1 id="notifications-page-title">Notifications</h1>
-          <p>{pageDescription}</p>
-        </div>
-        {isAdmin && (
-          <Button size="md" renderIcon={Add} onClick={startCreate} disabled={saving}>
-            New notification
-          </Button>
-        )}
-      </section>
+      <PageHeader
+        className="notifications-page__header"
+        headingId="notifications-page-title"
+        title="Notifications"
+        subtitle={pageDescription}
+        actions={
+          isAdmin ? (
+            <Button size="md" renderIcon={Add} onClick={startCreate} disabled={saving}>
+              New notification
+            </Button>
+          ) : undefined
+        }
+      />
 
       {message && !showEditor && (
         <InlineNotification
@@ -498,12 +522,8 @@ export default function NotificationsPage() {
           loadingDescription="Saving notification…"
           loadingIconDescription="Saving notification"
           preventCloseOnClickOutside
-          onRequestClose={() => {
-            if (!saving) {
-              resetForm()
-            }
-          }}
-          onSecondarySubmit={resetForm}
+          onRequestClose={requestCloseEditor}
+          onSecondarySubmit={requestCloseEditor}
           onRequestSubmit={() => void save()}
         >
           <p className="notifications-page__editor-help">
@@ -788,9 +808,21 @@ export default function NotificationsPage() {
           }
           confirmLabel="Delete"
           pendingLabel="Deleting…"
+          errorTitle="Notification could not be deleted"
           danger
           onConfirm={() => remove(notificationPendingDeletion)}
           onClose={() => setNotificationPendingDeletion(null)}
+        />
+      )}
+
+      {showDiscardConfirmation && (
+        <ConfirmationModal
+          open
+          title="Discard notification changes?"
+          description="Your unsaved notification changes will be lost."
+          confirmLabel="Discard changes"
+          onConfirm={resetForm}
+          onClose={closeDiscardConfirmation}
         />
       )}
     </div>

@@ -71,6 +71,28 @@ class OracleRepositorySupportTest {
 
   @Test
   @SuppressWarnings("unchecked")
+  void queryDirectPageWithTailShouldPageBeforeTheFinalProjection() {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    when(jdbcTemplate.query(anyString(), any(RowMapper.class), any(Object[].class)))
+        .thenReturn(List.of("row-11", "row-12"));
+    DirectRepository repository = new DirectRepository(jdbcTemplate);
+
+    Page<String> results = repository.loadPageWithTail(1, 10, 12);
+
+    assertThat(results.getContent()).containsExactly("row-11", "row-12");
+    ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+    ArgumentCaptor<Object[]> binds = ArgumentCaptor.forClass(Object[].class);
+    verify(jdbcTemplate).query(sql.capture(), any(RowMapper.class), binds.capture());
+    assertThat(sql.getValue())
+        .startsWith("WITH PAGE_VALUES AS (SELECT VALUE FROM TEST_VALUES")
+        .contains("WHERE 1=1 AND CODE = ? ORDER BY VALUE ASC")
+        .contains("OFFSET ? ROWS FETCH NEXT ? ROWS ONLY)")
+        .endsWith("SELECT VALUE FROM PAGE_VALUES ORDER BY VALUE ASC");
+    assertThat(binds.getValue()).containsExactly("ACTIVE", 10L, 10);
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
   void queryDirectSliceShouldFetchOneLookAheadRowWithOneQuery() {
     JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
     when(jdbcTemplate.query(anyString(), any(RowMapper.class), any(Object[].class)))
@@ -272,6 +294,17 @@ class OracleRepositorySupportTest {
       return queryDirectPage(
           "SELECT VALUE FROM TEST_VALUES",
           pageCriteria(),
+          page,
+          size,
+          totalElements,
+          rs -> rs.getString("VALUE"));
+    }
+
+    Page<String> loadPageWithTail(int page, int size, int totalElements) {
+      return queryDirectPageWithTail(
+          "WITH PAGE_VALUES AS (SELECT VALUE FROM TEST_VALUES",
+          pageCriteria(),
+          ") SELECT VALUE FROM PAGE_VALUES ORDER BY VALUE ASC",
           page,
           size,
           totalElements,

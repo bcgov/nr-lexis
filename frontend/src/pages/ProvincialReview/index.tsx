@@ -6,7 +6,6 @@ import {
   Column,
   Grid,
   InlineNotification,
-  Modal,
   Pagination,
   Table,
   TableBody,
@@ -19,9 +18,12 @@ import {
 } from '@carbon/react'
 import SearchResultsTableFrame from '../../components/SearchResultsTableFrame'
 import { AppNotification } from '../../components/AppNotification'
+import ConfirmationModal from '@/components/ConfirmationModal'
+import Modal from '@/components/Modal'
 import EmptyState from '@/components/EmptyState'
 import DisabledButtonTooltip from '@/components/DisabledButtonTooltip'
 import PageHeader from '@/components/PageHeader'
+import PendingIcon from '@/components/PendingIcon'
 import SearchSubmitButton from '@/components/SearchSubmitButton'
 import AuthoritativeOptionsUnavailableNotification from '@/components/AuthoritativeOptionsUnavailableNotification'
 import SearchableSelect from '../../components/SearchableSelect'
@@ -35,6 +37,7 @@ import type {
   ApplicationReviewSearchSortField,
 } from '@/interfaces/ApplicationReviewSearch'
 import { useAuth } from '@/context/auth/useAuth'
+import { hasProvincialStaffRole } from '@/context/auth/role-utils'
 import { hasInvalidIsoDateValue, isValidIsoDate } from '@/pages/shared/create-form-utils'
 import {
   buildPageDataCacheKey,
@@ -61,6 +64,7 @@ import {
   parsePageSizeParam,
   parsePositiveIntParam,
   parseSortDirectionParam,
+  toCarbonSortDirection,
   type IdTextOption,
 } from '@/pages/shared/search-query-utils'
 import { useSearchFilterDraft } from '@/pages/shared/useSearchFilterDraft'
@@ -89,8 +93,9 @@ import {
 } from '@/service/provincial-application-items-service'
 import { fetchApplicationReviewOptions, type SearchOption } from '@/service/search-options-service'
 import { fetchCurrentApplicationRecordVersion } from '@/service/record-version-service'
-import { resolveDefaultRegionAreaIds } from '@/service/user-preference-service'
+import { resolveDefaultZoneRegionIds } from '@/service/user-preference-service'
 import {
+  displayTableValue,
   isValidEmail,
   normalizeTrimmedText as normalizeEmail,
   normalizeUpperText as normalizeReviewStatus,
@@ -242,7 +247,9 @@ const ProvincialReviewPage = () => {
   const [searchParams, setSearchParams] = usePersistedSearchParams('provincial-review')
   const [productTypeOptions, setProductTypeOptions] = useState<SearchOption[]>([])
   const [regionOptions, setRegionOptions] = useState<IdTextOption[]>([])
-  const { defaultRegion, preferenceLoading } = useDefaultRegionPreference()
+  const { defaultRegion: defaultZone, preferenceLoading } = useDefaultRegionPreference(
+    hasProvincialStaffRole(capabilities.roles),
+  )
   const [reviewStatusOptions, setReviewStatusOptions] = useState<SearchOption[]>([])
   const [optionsLoading, setOptionsLoading] = useState(true)
   const [optionsUnavailable, setOptionsUnavailable] = useState(false)
@@ -326,19 +333,19 @@ const ProvincialReviewPage = () => {
     () => mapSelectedOptionsById(filters.region, regionOptions, (id) => `Region ${id}`),
     [filters.region, regionOptions],
   )
-  const defaultRegionAreaIds = useMemo(
+  const defaultZoneRegionIds = useMemo(
     () =>
-      resolveDefaultRegionAreaIds(
-        defaultRegion,
+      resolveDefaultZoneRegionIds(
+        defaultZone,
         regionOptions.map((region) => region.id),
       ),
-    [defaultRegion, regionOptions],
+    [defaultZone, regionOptions],
   )
   const regionDefaultPending =
     !searchParams.has('region') &&
     (optionsLoading ||
       preferenceLoading ||
-      (!optionsUnavailable && defaultRegionAreaIds.length > 0))
+      (!optionsUnavailable && defaultZoneRegionIds.length > 0))
   const rejectStatusSelectOptions = reviewStatusOptions
   const rejectStatusAvailable = reviewStatusOptions.some(
     (option) => option.value === REJECT_STATUS_CODE,
@@ -532,7 +539,7 @@ const ProvincialReviewPage = () => {
       preferenceLoading ||
       optionsUnavailable ||
       searchParams.has('region') ||
-      defaultRegionAreaIds.length === 0
+      defaultZoneRegionIds.length === 0
     ) {
       return
     }
@@ -542,7 +549,7 @@ const ProvincialReviewPage = () => {
         buildSearchParams(
           {
             ...urlState.filters,
-            region: defaultRegionAreaIds,
+            region: defaultZoneRegionIds,
           },
           urlState.sortField,
           urlState.sortDirection,
@@ -556,10 +563,10 @@ const ProvincialReviewPage = () => {
 
     setFilters((currentFilters) => ({
       ...currentFilters,
-      region: defaultRegionAreaIds,
+      region: defaultZoneRegionIds,
     }))
   }, [
-    defaultRegionAreaIds,
+    defaultZoneRegionIds,
     hasSearchQuery,
     optionsLoading,
     optionsUnavailable,
@@ -602,7 +609,7 @@ const ProvincialReviewPage = () => {
     clearSelection()
     const defaultFilters = {
       ...INITIAL_FILTERS,
-      region: defaultRegionAreaIds,
+      region: defaultZoneRegionIds,
     }
     setFilters(defaultFilters)
     setSearchParams(
@@ -812,7 +819,7 @@ const ProvincialReviewPage = () => {
     }
   }
 
-  const approveApplications = async (applicationNumbers: string[]) => {
+  const approveApplications = async (applicationNumbers: string[]): Promise<boolean> => {
     setSubmittingApproval(true)
     setReviewActionStatus(null)
 
@@ -873,6 +880,7 @@ const ProvincialReviewPage = () => {
         },
         { force: true },
       )
+      return successCount > 0
     } finally {
       setSubmittingApproval(false)
     }
@@ -901,9 +909,11 @@ const ProvincialReviewPage = () => {
 
   const onConfirmApproveSelected = async () => {
     const selectedNumbers = approvalConfirmationNumbers
-    setApprovalConfirmationNumbers([])
     if (selectedNumbers.length > 0) {
-      await approveApplications(selectedNumbers)
+      const approved = await approveApplications(selectedNumbers)
+      if (!approved) {
+        throw new Error('No selected applications were approved.')
+      }
     }
   }
 
@@ -928,7 +938,7 @@ const ProvincialReviewPage = () => {
   }
 
   return (
-    <Grid fullWidth className="default-grid">
+    <Grid fullWidth className="default-grid fullbleed-table-page provincial-review-search-page">
       <Column sm={4} md={8} lg={16}>
         <PageHeader
           title="Provincial application review"
@@ -949,7 +959,7 @@ const ProvincialReviewPage = () => {
                 : 'Action failed'
           }
           subtitle={reviewActionStatus.message}
-          autoDismissMs={reviewActionStatus.kind === 'success' ? 8000 : undefined}
+          autoDismissMs={reviewActionStatus.kind === 'success' ? 6000 : undefined}
           onCloseButtonClick={() => setReviewActionStatus(null)}
         />
       )}
@@ -1027,8 +1037,14 @@ const ProvincialReviewPage = () => {
               />
             </div>
             <div className="legacy-search-actions" role="group" aria-label="Review search actions">
-              <Button type="button" kind="tertiary" onClick={onClearFilters} disabled={loading}>
-                Clear Filters
+              <Button
+                type="button"
+                kind="tertiary"
+                size="md"
+                onClick={onClearFilters}
+                disabled={loading}
+              >
+                Clear all
               </Button>
               <SearchSubmitButton loading={loading} disabled={hasDateValidationError} />
             </div>
@@ -1036,29 +1052,23 @@ const ProvincialReviewPage = () => {
         </section>
       </Column>
 
-      <Modal
+      <ConfirmationModal
         open={approvalConfirmationNumbers.length > 0}
-        size="sm"
-        modalHeading="Approve applications"
-        aria-label="Approve applications"
-        primaryButtonText="Approve"
-        secondaryButtonText="Cancel"
-        primaryButtonDisabled={submittingApproval}
-        preventCloseOnClickOutside
-        onRequestClose={() => {
-          if (!submittingApproval) {
-            setApprovalConfirmationNumbers([])
-          }
-        }}
-        onRequestSubmit={() => void onConfirmApproveSelected()}
+        title="Approve applications"
+        description="You are about to approve the following applications:"
+        confirmLabel="Approve"
+        pendingLabel="Approving…"
+        confirmDisabled={submittingApproval}
+        onClose={() => setApprovalConfirmationNumbers([])}
+        onConfirm={onConfirmApproveSelected}
+        onError={() => undefined}
       >
-        <p>You are about to approve the following applications:</p>
         <ul aria-label="Applications to approve">
           {approvalConfirmationNumbers.map((applicationNumber) => (
             <li key={applicationNumber}>{applicationNumber}</li>
           ))}
         </ul>
-      </Modal>
+      </ConfirmationModal>
 
       <Modal
         open={Boolean(rejectApplicationNumber)}
@@ -1143,7 +1153,7 @@ const ProvincialReviewPage = () => {
             )}
         </div>
         <div className="review-reject-modal__actions">
-          <Button kind="secondary" disabled={submittingReject} onClick={closeRejectPanel}>
+          <Button kind="tertiary" disabled={submittingReject} onClick={closeRejectPanel}>
             Cancel
           </Button>
           <Button
@@ -1151,9 +1161,10 @@ const ProvincialReviewPage = () => {
             disabled={
               optionsUnavailable || !rejectStatusAvailable || loadingRejectEmail || submittingReject
             }
+            renderIcon={submittingReject ? PendingIcon : undefined}
             onClick={() => void onRejectApplicationClick()}
           >
-            {submittingReject ? 'Saving...' : 'Save'}
+            {submittingReject ? 'Saving…' : 'Save'}
           </Button>
         </div>
       </Modal>
@@ -1175,7 +1186,7 @@ const ProvincialReviewPage = () => {
                 ? 'Results unavailable'
                 : loading && results.content.length === 0
                   ? 'Loading results…'
-                  : `${results.page.totalElements} results found`}
+                  : `${new Intl.NumberFormat('en-CA').format(results.page.totalElements)} results found`}
             </p>
             <DisabledButtonTooltip
               disabled={
@@ -1196,7 +1207,7 @@ const ProvincialReviewPage = () => {
               }
             >
               <Button
-                kind="secondary"
+                kind="tertiary"
                 onClick={() => void onApproveSelectedClick()}
                 disabled={
                   loading ||
@@ -1210,7 +1221,7 @@ const ProvincialReviewPage = () => {
               </Button>
             </DisabledButtonTooltip>
           </div>
-          <SearchResultsTableFrame loading={loading} loadingDescription="Loading review queue...">
+          <SearchResultsTableFrame loading={loading} loadingDescription="Loading review queue…">
             {errorMessage ? (
               <EmptyState
                 role="alert"
@@ -1218,7 +1229,7 @@ const ProvincialReviewPage = () => {
                 description={errorMessage}
               />
             ) : results.content.length > 0 ? (
-              <Table useZebraStyles>
+              <Table size="md" useZebraStyles>
                 <TableHead>
                   <TableRow>
                     <TableHeader>
@@ -1243,18 +1254,20 @@ const ProvincialReviewPage = () => {
                       </DisabledButtonTooltip>
                     </TableHeader>
                     {RESULT_COLUMNS.map((column) => (
-                      <TableHeader key={column.id}>
-                        {column.sortField ? (
-                          <button
-                            type="button"
-                            className="legacy-sort-button"
-                            onClick={() => onHeaderClick(column.sortField!)}
-                          >
-                            {column.label}
-                          </button>
-                        ) : (
-                          column.label
-                        )}
+                      <TableHeader
+                        key={column.id}
+                        isSortable={Boolean(column.sortField)}
+                        isSortHeader={column.sortField === sortField}
+                        sortDirection={
+                          column.sortField === sortField
+                            ? toCarbonSortDirection(sortDirection)
+                            : 'NONE'
+                        }
+                        onClick={
+                          column.sortField ? () => onHeaderClick(column.sortField!) : undefined
+                        }
+                      >
+                        {column.label}
                       </TableHeader>
                     ))}
                     <TableHeader>Actions</TableHeader>
@@ -1301,10 +1314,14 @@ const ProvincialReviewPage = () => {
                       <TableCell>
                         <StatusTag status={row.status} />
                       </TableCell>
-                      <TableCell>{formatApplicationVolume(row.volume)}</TableCell>
-                      <TableCell>{row.speciesEndUse}</TableCell>
-                      <TableCell className="legacy-search-table-date">{row.listingDate}</TableCell>
-                      <TableCell>{row.region}</TableCell>
+                      <TableCell>
+                        {displayTableValue(formatApplicationVolume(row.volume))}
+                      </TableCell>
+                      <TableCell>{displayTableValue(row.speciesEndUse)}</TableCell>
+                      <TableCell className="legacy-search-table-date">
+                        {displayTableValue(row.listingDate)}
+                      </TableCell>
+                      <TableCell>{displayTableValue(row.region)}</TableCell>
                       <TableCell>
                         <div className="provincial-review-row-actions">
                           <Button

@@ -278,6 +278,9 @@ describe('UnsavedChangesGuard', () => {
     await makeDirtyAndLeave()
     await userEvent.click(screen.getByRole('button', { name: 'Save and leave' }))
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1))
+    const savingButton = screen.getByRole('button', { name: 'Saving…' })
+    expect(savingButton).toBeDisabled()
+    expect(savingButton.querySelector('.cds--loading')).toBeInTheDocument()
 
     await act(async () => {
       void router.navigate('/other')

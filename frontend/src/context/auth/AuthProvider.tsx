@@ -706,7 +706,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         open={sessionWarningExpiresAt !== null}
         expiresAt={sessionWarningExpiresAt}
         launcherButtonRef={sessionWarningLauncherRef}
-        onStayLoggedIn={() => void extendSession()}
+        onStayLoggedIn={extendSession}
         onLogOut={() => void logout()}
       />
     </AuthContext>

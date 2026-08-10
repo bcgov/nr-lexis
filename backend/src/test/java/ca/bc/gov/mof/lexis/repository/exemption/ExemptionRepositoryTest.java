@@ -386,7 +386,7 @@ class ExemptionRepositoryTest {
   }
 
   @Test
-  void countShouldUseFilterCriteriaWithoutAggregateGroupingOrOrdering() {
+  void countShouldUseTheFilterOnlyQueryWhenLinkedApplicationDataIsNotNeeded() {
     TestExemptionRepository repository = new TestExemptionRepository();
 
     repository.count(
@@ -399,8 +399,8 @@ class ExemptionRepositoryTest {
         .doesNotContain("ORDER BY EE.");
     assertThat(repository.countSelectSql())
         .contains("SELECT COUNT(*)")
-        .contains("CANONICAL_EXEMPTION_APPLICATION AS")
-        .contains("EEA.CANONICAL_RANK = 1")
+        .contains("FROM EXPORT_EXEMPTION EE")
+        .doesNotContain("CANONICAL_EXEMPTION_APPLICATION AS")
         .doesNotContain("SELECT DISTINCT")
         .doesNotContain("EXPORT_PERMIT_DETAIL")
         .doesNotContain("EXEMPTION_ORG_UNIT");
@@ -527,10 +527,15 @@ class ExemptionRepositoryTest {
     repository.search(criteriaWithSort(null));
 
     assertThat(repository.pageSelectSql())
+        .contains("WITH PAGE_EXEMPTIONS AS")
+        .contains("OFFSET ? ROWS FETCH NEXT ? ROWS ONLY")
         .contains("PERMIT_VOLUME_BY_EXEMPTION AS")
-        .contains("SUM(PERMIT_VOLUME) AS USED_VOLUME")
+        .contains("SUM(EPD.PERMIT_VOLUME) AS USED_VOLUME")
+        .contains("INNER JOIN PAGE_EXEMPTIONS PE_VOLUME")
         .contains("LEFT JOIN PERMIT_VOLUME_BY_EXEMPTION PV")
         .doesNotContain("LEFT JOIN EXPORT_PERMIT_DETAIL EPD");
+    assertThat(repository.pageSelectSql().indexOf("OFFSET ? ROWS FETCH NEXT ? ROWS ONLY"))
+        .isLessThan(repository.pageSelectSql().indexOf("PERMIT_VOLUME_BY_EXEMPTION AS"));
   }
 
   @Test
@@ -732,6 +737,30 @@ class ExemptionRepositoryTest {
       List<T> content = (List<T>) rows.subList(fromIndex, toIndex);
       return new PageImpl<>(content, PageRequest.of(page, size), totalElements);
     }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    protected <T> Page<T> queryDirectPageWithTail(
+        String selectPrefix,
+        DirectSql whereAndOrder,
+        String selectTail,
+        int page,
+        int size,
+        int totalElements,
+        SqlRowMapper<T> rowMapper) {
+      pageSelectSql =
+          selectPrefix
+              + whereAndOrder.sql()
+              + " OFFSET ? ROWS FETCH NEXT ? ROWS ONLY"
+              + selectTail;
+      whereSql = whereAndOrder.sql();
+      bindValues = whereAndOrder.bindValues();
+      pageCalls++;
+      int fromIndex = Math.min(rows.size(), Math.max(0, page) * Math.max(1, size));
+      int toIndex = Math.min(rows.size(), fromIndex + Math.max(1, size));
+      List<T> content = (List<T>) rows.subList(fromIndex, toIndex);
+      return new PageImpl<>(content, PageRequest.of(page, size), totalElements);
+    }
   }
 
   private static final class DetailReadExemptionRepository extends ExemptionRepository {
@@ -768,6 +797,23 @@ class ExemptionRepositoryTest {
     protected <T> Page<T> queryDirectPage(
         String selectSql,
         DirectSql whereAndOrder,
+        int page,
+        int size,
+        int totalElements,
+        SqlRowMapper<T> rowMapper) {
+      try {
+        return new PageImpl<>(
+            List.of(rowMapper.map(resultSet)), PageRequest.of(page, size), totalElements);
+      } catch (SQLException ex) {
+        throw new DataRetrievalFailureException("Unable to map exemption cursor", ex);
+      }
+    }
+
+    @Override
+    protected <T> Page<T> queryDirectPageWithTail(
+        String selectPrefix,
+        DirectSql whereAndOrder,
+        String selectTail,
         int page,
         int size,
         int totalElements,

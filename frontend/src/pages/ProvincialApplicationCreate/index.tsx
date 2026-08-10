@@ -5,7 +5,7 @@ import {
   Column,
   DismissibleTag,
   Grid,
-  Modal,
+  InlineNotification,
   Tab,
   TabList,
   TabPanel,
@@ -17,6 +17,7 @@ import {
 } from '@carbon/react'
 import SearchableSelect from '../../components/SearchableSelect'
 import { AppNotification } from '../../components/AppNotification'
+import Modal from '@/components/Modal'
 import DetailDocumentUploadPanel from '../../components/uploads/DetailDocumentUploadPanel'
 import PageHeader from '@/components/PageHeader'
 import AuthoritativeOptionsUnavailableNotification from '@/components/AuthoritativeOptionsUnavailableNotification'
@@ -267,6 +268,7 @@ type PageStatus = {
   kind: 'success' | 'error'
   title: string
   message: string
+  placement?: 'inline'
 }
 
 const ProvincialApplicationCreatePage = () => {
@@ -1165,6 +1167,7 @@ const ProvincialApplicationCreatePage = () => {
         kind: 'error',
         title: 'Validation Error',
         message: firstSubmitValidationError ?? 'Please fix validation errors before saving.',
+        placement: 'inline',
       })
       return false
     }
@@ -1233,7 +1236,10 @@ const ProvincialApplicationCreatePage = () => {
 
   const onConfirmAccuracy = async () => {
     if (!accuracyConfirmed || isSubmitting) return
-    await onSave(true, true)
+    const saved = await onSave(true, true)
+    if (!saved) {
+      throw new Error('Application save failed.')
+    }
   }
 
   const onDiscardCreateDraft = (): void => {
@@ -1282,7 +1288,7 @@ const ProvincialApplicationCreatePage = () => {
         </Column>
       )}
 
-      {!!status && (
+      {!!status && status.placement !== 'inline' && (
         <Column sm={4} md={8} lg={16}>
           <AppNotification
             kind={status.kind}
@@ -1290,12 +1296,22 @@ const ProvincialApplicationCreatePage = () => {
             subtitle={status.message}
             lowContrast
             onCloseButtonClick={() => setStatus(null)}
-            autoDismissMs={status.kind === 'success' ? 8000 : undefined}
+            autoDismissMs={status.kind === 'success' ? 6000 : undefined}
           />
         </Column>
       )}
 
       <Column sm={4} md={8} lg={16} className="application-detail-tabs-column">
+        {status?.placement === 'inline' && (
+          <InlineNotification
+            className="create-form-validation-notification"
+            kind="error"
+            title={status.title}
+            subtitle={status.message}
+            lowContrast
+            onCloseButtonClick={() => setStatus(null)}
+          />
+        )}
         <Tabs
           selectedIndex={selectedApplicationTabIndex}
           onChange={({ selectedIndex }) => setSelectedApplicationTabIndex(selectedIndex)}
@@ -1303,7 +1319,6 @@ const ProvincialApplicationCreatePage = () => {
           <TabList
             aria-label="Application create sections"
             contained
-            size="md"
             className="application-tabs__list application-detail-tab-list"
           >
             <Tab>Summary</Tab>
@@ -1801,7 +1816,7 @@ const ProvincialApplicationCreatePage = () => {
                       <div className="application-species-actions">
                         <Button
                           type="button"
-                          kind="secondary"
+                          kind="tertiary"
                           size="sm"
                           disabled={
                             !applicationSpeciesCandidate ||
@@ -1884,7 +1899,7 @@ const ProvincialApplicationCreatePage = () => {
                       <Button
                         ref={createPackageButtonRef}
                         type="button"
-                        kind="secondary"
+                        kind="tertiary"
                         size="sm"
                         onClick={() => setPackageSavePromptOpen(true)}
                       >
@@ -1972,7 +1987,8 @@ const ProvincialApplicationCreatePage = () => {
         >
           <Button
             type="button"
-            kind="secondary"
+            kind="tertiary"
+            size="md"
             onClick={() => {
               closeAccuracyConfirmation()
               navigate('/provincial/application')
@@ -1983,6 +1999,7 @@ const ProvincialApplicationCreatePage = () => {
           <Button
             type="button"
             kind="primary"
+            size="md"
             onClick={onRequestSave}
             disabled={
               !optionsLoaded ||
@@ -2008,6 +2025,7 @@ const ProvincialApplicationCreatePage = () => {
           onConfirmedChange={setAccuracyConfirmed}
           onConfirm={onConfirmAccuracy}
           onClose={closeAccuracyConfirmation}
+          onError={() => undefined}
         />
       )}
       <Modal

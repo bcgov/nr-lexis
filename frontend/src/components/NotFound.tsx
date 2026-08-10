@@ -14,7 +14,7 @@ const NotFound = () => {
         title="404"
         description="The page you're looking for does not exist."
         action={
-          <Button kind="secondary" name="homeBtn" id="homeBtn" onClick={() => buttonClicked()}>
+          <Button kind="tertiary" name="homeBtn" id="homeBtn" onClick={() => buttonClicked()}>
             Back Home
           </Button>
         }

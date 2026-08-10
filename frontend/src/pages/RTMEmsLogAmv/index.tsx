@@ -1,18 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import {
-  CheckmarkFilled,
-  ErrorFilled,
-  InformationFilled,
-  Renew,
-  Save,
-  WarningAltFilled,
-} from '@carbon/icons-react'
+import { ErrorFilled, InformationFilled, Renew, Save, WarningAltFilled } from '@carbon/icons-react'
 import {
   Button,
   Column,
   Grid,
   InlineLoading,
-  Modal,
   Table,
   TableBody,
   TableCell,
@@ -22,7 +14,9 @@ import {
   TextInput,
 } from '@carbon/react'
 import { AppNotification } from '../../components/AppNotification'
+import ConfirmationModal from '@/components/ConfirmationModal'
 import PageHeader from '@/components/PageHeader'
+import PendingIcon from '@/components/PendingIcon'
 import TableFrame from '@/components/TableFrame'
 import { useAuth } from '@/context/auth/useAuth'
 import {
@@ -566,14 +560,14 @@ const RTMEmsLogAmvPage = () => {
     }
   }
 
-  const saveChanges = async () => {
+  const saveChanges = async (): Promise<boolean> => {
     if (!canManage) {
       setNotification({
         kind: 'error',
         title: 'Average monthly values',
         subtitle: 'You do not have permission to update average monthly values.',
       })
-      return
+      return false
     }
 
     if (validationErrors.length > 0) {
@@ -582,7 +576,7 @@ const RTMEmsLogAmvPage = () => {
         title: 'Average monthly values',
         subtitle: validationErrors[0],
       })
-      return
+      return false
     }
 
     const saveRequests = dirtyCells.flatMap((cell) => {
@@ -590,7 +584,7 @@ const RTMEmsLogAmvPage = () => {
       return request ? [request] : []
     })
     if (saveRequests.length === 0) {
-      return
+      return false
     }
 
     setIsSaving(true)
@@ -605,7 +599,7 @@ const RTMEmsLogAmvPage = () => {
             notificationMessage(result.message, result.errors) ||
             'Unable to save average monthly values.',
         })
-        return
+        return false
       }
 
       setNotification({
@@ -617,6 +611,7 @@ const RTMEmsLogAmvPage = () => {
             : `Saved ${dirtyCells.length} table cell${dirtyCells.length === 1 ? '' : 's'}.`,
       })
       await loadRows()
+      return true
     } catch (error) {
       console.error(error)
       setNotification({
@@ -624,6 +619,7 @@ const RTMEmsLogAmvPage = () => {
         title: 'Average monthly values',
         subtitle: 'Unable to save average monthly values.',
       })
+      return false
     } finally {
       setIsSaving(false)
     }
@@ -684,7 +680,7 @@ const RTMEmsLogAmvPage = () => {
               Previous month
             </Button>
             <Button
-              kind="secondary"
+              kind="tertiary"
               size="md"
               renderIcon={Renew}
               onClick={() => {
@@ -873,11 +869,11 @@ const RTMEmsLogAmvPage = () => {
             kind="primary"
             size="md"
             className="admin-upload-fspts-action-button"
-            renderIcon={isSaving ? CheckmarkFilled : Save}
+            renderIcon={isSaving ? PendingIcon : Save}
             onClick={requestSave}
             disabled={saveDisabled}
           >
-            {isSaving ? 'Saving' : 'Save changes'}
+            {isSaving ? 'Saving…' : 'Save changes'}
           </Button>
           <div className="rtm-amv-actions__summary" role="status">
             {hasPendingChanges ? (
@@ -892,61 +888,41 @@ const RTMEmsLogAmvPage = () => {
       </Column>
 
       {showWarningConfirmation && (
-        <Modal
+        <ConfirmationModal
           open
-          passiveModal
+          title="Confirm AMV changes"
+          description={`Review the following before saving ${dirtyCells.length} changed cell${dirtyCells.length === 1 ? '' : 's'}.`}
+          confirmLabel="Confirm and save"
+          pendingLabel="Saving…"
+          confirmDisabled={isSaving}
           size="sm"
-          modalHeading="Confirm AMV changes"
-          aria-label="Confirm AMV changes"
           className="rtm-amv-confirm-modal"
-          preventCloseOnClickOutside
-          selectorPrimaryFocus="#rtm-amv-confirm-cancel"
-          onRequestClose={() => setShowWarningConfirmation(false)}
+          onClose={() => setShowWarningConfirmation(false)}
+          onError={() => undefined}
+          onConfirm={async () => {
+            const saved = await saveChanges()
+            if (!saved) {
+              throw new Error('Average monthly values could not be saved.')
+            }
+          }}
         >
-          <div className="rtm-amv-confirm-modal__body">
-            <p className="rtm-amv-confirm-modal__intro">
-              Review the following before saving {dirtyCells.length} changed cell
-              {dirtyCells.length === 1 ? '' : 's'}.
-            </p>
-            <div className="rtm-amv-confirm-modal__warning">
-              <WarningAltFilled size={20} aria-hidden="true" />
-              <div>
-                <ul>
-                  {confirmationMessages.slice(0, 8).map((warning) => (
-                    <li key={warning}>{warning}</li>
-                  ))}
-                </ul>
-                {confirmationMessages.length > 8 && (
-                  <p>
-                    {confirmationMessages.length - 8} more warning
-                    {confirmationMessages.length - 8 === 1 ? '' : 's'} apply to this save.
-                  </p>
-                )}
-              </div>
+          <div className="rtm-amv-confirm-modal__warning">
+            <WarningAltFilled size={20} aria-hidden="true" />
+            <div>
+              <ul>
+                {confirmationMessages.slice(0, 8).map((warning) => (
+                  <li key={warning}>{warning}</li>
+                ))}
+              </ul>
+              {confirmationMessages.length > 8 && (
+                <p>
+                  {confirmationMessages.length - 8} more warning
+                  {confirmationMessages.length - 8 === 1 ? '' : 's'} apply to this save.
+                </p>
+              )}
             </div>
           </div>
-          <div className="rtm-amv-confirm-modal__actions">
-            <Button
-              id="rtm-amv-confirm-cancel"
-              kind="secondary"
-              size="md"
-              onClick={() => setShowWarningConfirmation(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              kind="primary"
-              size="md"
-              renderIcon={Save}
-              onClick={() => {
-                setShowWarningConfirmation(false)
-                void saveChanges()
-              }}
-            >
-              Confirm and save
-            </Button>
-          </div>
-        </Modal>
+        </ConfirmationModal>
       )}
 
       {notification && (

@@ -143,9 +143,10 @@ describe('Federal Search Actions', () => {
     await screen.findByText('FED-1001')
 
     const createButton = screen.getByRole('button', {
-      name: 'Create exemption for Selected Applications',
+      name: 'Create exemption for selected applications',
     })
     expect(createButton).toBeDisabled()
+    expect(createButton.closest('.legacy-search-table-toolbar__actions')).not.toBeNull()
     expect(
       screen.getByRole('checkbox', { name: 'Select federal application FED-1001' }),
     ).toBeEnabled()
@@ -157,10 +158,10 @@ describe('Federal Search Actions', () => {
       screen.getByRole('checkbox', { name: 'Select federal application FED-1001' }),
     )
     expect(
-      screen.getByRole('button', { name: 'Create exemption for Selected Applications' }),
+      screen.getByRole('button', { name: 'Create exemption for selected applications' }),
     ).toBeEnabled()
     await userEvent.click(
-      screen.getByRole('button', { name: 'Create exemption for Selected Applications' }),
+      screen.getByRole('button', { name: 'Create exemption for selected applications' }),
     )
 
     expect(mockNavigate).toHaveBeenCalledWith(
@@ -285,7 +286,7 @@ describe('Federal Search Actions', () => {
     ).not.toBeChecked()
 
     await userEvent.click(
-      screen.getByRole('button', { name: 'Create exemption for Selected Applications' }),
+      screen.getByRole('button', { name: 'Create exemption for selected applications' }),
     )
     expect(mockNavigate).toHaveBeenCalledWith(
       '/provincial/exemption/create?applications=1001%2C1002&source=federal',
@@ -350,7 +351,7 @@ describe('Federal Search Actions', () => {
     await screen.findByText('FED-1001')
 
     expect(
-      screen.queryByRole('button', { name: 'Create exemption for Selected Applications' }),
+      screen.queryByRole('button', { name: 'Create exemption for selected applications' }),
     ).not.toBeInTheDocument()
     expect(
       screen.queryByRole('checkbox', { name: /Select federal application/ }),
@@ -372,7 +373,7 @@ describe('Federal Search Actions', () => {
     await screen.findByText('FED-1001')
 
     expect(
-      screen.queryByRole('button', { name: 'Create exemption for Selected Applications' }),
+      screen.queryByRole('button', { name: 'Create exemption for selected applications' }),
     ).not.toBeInTheDocument()
     expect(
       screen.queryByRole('checkbox', { name: /Select federal application/ }),

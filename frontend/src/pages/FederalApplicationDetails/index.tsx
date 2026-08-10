@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Edit } from '@carbon/icons-react'
+import { Edit, TrashCan } from '@carbon/icons-react'
 import {
   Button,
   Column,
   Grid,
-  InlineLoading,
+  InlineNotification,
+  Loading,
   Select,
   SelectItem,
   Tab,
@@ -24,10 +25,13 @@ import {
 } from '@carbon/react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import ContentLoadingOverlay from '@/components/ContentLoadingOverlay'
+import ConfirmationModal from '@/components/ConfirmationModal'
 import EmptyState from '@/components/EmptyState'
 import DetailBreadcrumb from '@/components/DetailBreadcrumb'
+import DetailLoadError from '@/components/DetailLoadError'
 import IsoDatePicker from '@/components/IsoDatePicker'
 import PageHeader from '@/components/PageHeader'
+import PendingIcon from '@/components/PendingIcon'
 import StatusTag from '@/components/StatusTag'
 import TableFrame from '@/components/TableFrame'
 import UnsavedChangesGuard, { formValuesEqual } from '@/components/UnsavedChangesGuard'
@@ -180,6 +184,8 @@ const FederalApplicationDetailsPage = () => {
   const [isSavingMutation, setIsSavingMutation] = useState(false)
   const [isSavingRemark, setIsSavingRemark] = useState(false)
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
+  const [documentPendingDeletion, setDocumentPendingDeletion] =
+    useState<FederalApplicationDocumentRow | null>(null)
   const [documentUploadDirty, setDocumentUploadDirty] = useState(false)
   const [documentUploadBusy, setDocumentUploadBusy] = useState(false)
   const [documentUploadResetKey, setDocumentUploadResetKey] = useState(0)
@@ -690,7 +696,7 @@ const FederalApplicationDetailsPage = () => {
   const onRemoveDocument = useCallback(
     async (row: FederalApplicationDocumentRow) => {
       if (!applicationNumber || federalApplicationLocked || !canDeleteApplicationDocuments) {
-        return
+        throw new Error('This document cannot be deleted from the current application.')
       }
 
       const isLatestRequest = beginDetailRequest()
@@ -703,19 +709,32 @@ const FederalApplicationDetailsPage = () => {
           return
         }
         if (!removeResult.success) {
-          setActionErrorMessage('Document removal failed. Refresh and try again.')
-          return
+          throw new Error('Document removal failed. Refresh and try again.')
         }
 
-        const documentsResult = await fetchFederalApplicationDocuments(applicationNumber)
-        if (isLatestRequest()) {
-          setDocumentRows(documentsResult.rows)
+        try {
+          const documentsResult = await fetchFederalApplicationDocuments(applicationNumber)
+          if (isLatestRequest()) {
+            setDocumentRows(documentsResult.rows)
+            setDocumentsErrorMessage('')
+            setActionInfoMessage(`${row.name || 'Document'} was deleted.`)
+          }
+        } catch (refreshError) {
+          if (isLatestRequest()) {
+            console.error(refreshError)
+            setDocumentsErrorMessage(
+              'The document was deleted, but federal application documents could not be refreshed. Reload the page.',
+            )
+            setActionInfoMessage(
+              `${row.name || 'Document'} was deleted. Reload before changing documents again.`,
+            )
+          }
         }
       } catch (error) {
         if (isLatestRequest()) {
           console.error(error)
-          setActionErrorMessage('Unable to remove the selected document.')
         }
+        throw error instanceof Error ? error : new Error('Unable to remove the selected document.')
       } finally {
         if (isLatestRequest()) {
           setIsRemovingDocumentId(null)
@@ -823,55 +842,22 @@ const FederalApplicationDetailsPage = () => {
       </Column>
 
       {loading && !currentDetail && (
-        <Column sm={4} md={8} lg={16}>
-          <InlineLoading description="Loading federal application detail..." />
+        <Column
+          sm={4}
+          md={8}
+          lg={16}
+          className="detail-page-loading"
+          role="status"
+          aria-live="polite"
+        >
+          <Loading description="Loading federal application detail…" withOverlay={false} />
         </Column>
       )}
 
-      {!loading && !!errorMessage && (
-        <Column sm={4} md={8} lg={16} className="detail-page-error">
-          <AppNotification
-            kind="error"
-            title="Detail unavailable"
-            subtitle={errorMessage}
-            lowContrast
-            onCloseButtonClick={() => setErrorMessage('')}
-          />
-        </Column>
-      )}
+      {!loading && !!errorMessage && <DetailLoadError message={errorMessage} />}
 
       {detail && currentDetail && (
         <>
-          {!!documentsErrorMessage && (
-            <Column sm={4} md={8} lg={16} className="detail-page-error">
-              <AppNotification
-                kind="warning"
-                title="Documents unavailable"
-                subtitle={documentsErrorMessage}
-                lowContrast
-              />
-            </Column>
-          )}
-          {!!remarksErrorMessage && (
-            <Column sm={4} md={8} lg={16} className="detail-page-error">
-              <AppNotification
-                kind="warning"
-                title="Remarks unavailable"
-                subtitle={remarksErrorMessage}
-                lowContrast
-              />
-            </Column>
-          )}
-          {!!shippingReferencesErrorMessage && (
-            <Column sm={4} md={8} lg={16} className="detail-page-error">
-              <AppNotification
-                kind="warning"
-                title="Shipping options unavailable"
-                subtitle={shippingReferencesErrorMessage}
-                lowContrast
-              />
-            </Column>
-          )}
           {!!actionErrorMessage && (
             <Column sm={4} md={8} lg={16} className="detail-page-error">
               <AppNotification
@@ -896,7 +882,8 @@ const FederalApplicationDetailsPage = () => {
           )}
           {federalApplicationLocked && (
             <Column sm={4} md={8} lg={16} className="detail-page-error">
-              <AppNotification
+              <InlineNotification
+                className="detail-context-notification"
                 kind="warning"
                 title="Application locked"
                 subtitle={
@@ -904,6 +891,7 @@ const FederalApplicationDetailsPage = () => {
                   'This application is currently locked for editing by another user.'
                 }
                 lowContrast
+                hideCloseButton
               />
             </Column>
           )}
@@ -920,7 +908,7 @@ const FederalApplicationDetailsPage = () => {
           >
             <ContentLoadingOverlay
               loading={isRefreshingDetail}
-              loadingDescription="Refreshing federal application detail..."
+              loadingDescription="Refreshing federal application detail…"
             />
             <Tabs
               selectedIndex={selectedFederalApplicationTabIndex}
@@ -933,7 +921,6 @@ const FederalApplicationDetailsPage = () => {
               <TabList
                 aria-label="Federal application detail sections"
                 contained
-                size="md"
                 className="application-tabs__list application-detail-tab-list"
               >
                 <Tab>Owner</Tab>
@@ -1195,9 +1182,10 @@ const FederalApplicationDetailsPage = () => {
                                   ((statusCode === 'REJ' || statusCode === 'WDN') &&
                                     !statusRemark.trim())
                                 }
+                                renderIcon={isSavingMutation ? PendingIcon : undefined}
                                 onClick={() => void onSaveStatus()}
                               >
-                                {isSavingMutation ? 'Saving...' : 'Update status'}
+                                {isSavingMutation ? 'Saving…' : 'Update status'}
                               </Button>
                               <Button
                                 kind="ghost"
@@ -1248,7 +1236,7 @@ const FederalApplicationDetailsPage = () => {
                         <h2 className="detail-tile-title">Packages</h2>
                         {detail.packages.length > 0 ? (
                           <TableFrame ariaLabel="Federal application packages">
-                            <Table useZebraStyles>
+                            <Table size="md" useZebraStyles>
                               <TableHead>
                                 <TableRow>
                                   <TableHeader>Package number</TableHeader>
@@ -1276,15 +1264,15 @@ const FederalApplicationDetailsPage = () => {
                       <Tile>
                         <h2 className="detail-tile-title">Summary of scale</h2>
                         {scaleErrorMessage ? (
-                          <AppNotification
-                            kind="warning"
+                          <EmptyState
                             title="Scale details unavailable"
-                            subtitle={scaleErrorMessage}
-                            lowContrast
+                            description={scaleErrorMessage}
+                            headingLevel={3}
+                            role="alert"
                           />
                         ) : scaleRows.length > 0 ? (
                           <TableFrame ariaLabel="Federal application scale details">
-                            <Table useZebraStyles>
+                            <Table size="md" useZebraStyles>
                               <TableHead>
                                 <TableRow>
                                   <TableHeader>Package</TableHeader>
@@ -1328,7 +1316,7 @@ const FederalApplicationDetailsPage = () => {
                         <h2 className="detail-tile-title">Offers</h2>
                         {detail.offers.length > 0 ? (
                           <TableFrame ariaLabel="Federal application offers">
-                            <Table useZebraStyles>
+                            <Table size="md" useZebraStyles>
                               <TableHead>
                                 <TableRow>
                                   <TableHeader>Offer number</TableHeader>
@@ -1423,10 +1411,11 @@ const FederalApplicationDetailsPage = () => {
                                 kind="primary"
                                 size="sm"
                                 disabled={isSavingRemark}
+                                renderIcon={isSavingRemark ? PendingIcon : undefined}
                                 onClick={() => void onSaveRemark()}
                               >
                                 {isSavingRemark
-                                  ? 'Saving...'
+                                  ? 'Saving…'
                                   : editingRemarkId
                                     ? 'Update Remark'
                                     : 'Save Remark'}
@@ -1450,7 +1439,7 @@ const FederalApplicationDetailsPage = () => {
                             />
                           ) : remarkRows.length > 0 ? (
                             <TableFrame ariaLabel="Federal application remarks">
-                              <Table useZebraStyles>
+                              <Table size="md" useZebraStyles>
                                 <TableHead>
                                   <TableRow>
                                     <TableHeader>Date</TableHeader>
@@ -1510,7 +1499,7 @@ const FederalApplicationDetailsPage = () => {
                           {canEditApplicationDocuments &&
                             (isEditingFederalDocuments ? (
                               <Button
-                                kind="secondary"
+                                kind="tertiary"
                                 size="sm"
                                 disabled={documentUploadBusy || isRemovingDocumentId !== null}
                                 onClick={onCancelFederalDocumentEdit}
@@ -1551,7 +1540,7 @@ const FederalApplicationDetailsPage = () => {
                           />
                         ) : documentRows.length > 0 ? (
                           <TableFrame ariaLabel="Federal application documents">
-                            <Table useZebraStyles>
+                            <Table size="md" useZebraStyles>
                               <TableHead>
                                 <TableRow>
                                   <TableHeader>File Name</TableHeader>
@@ -1585,10 +1574,11 @@ const FederalApplicationDetailsPage = () => {
                                                 !canDeleteApplicationDocuments ||
                                                 isRemovingDocumentId === row.id
                                               }
-                                              onClick={() => void onRemoveDocument(row)}
+                                              renderIcon={TrashCan}
+                                              onClick={() => setDocumentPendingDeletion(row)}
                                             >
                                               {isRemovingDocumentId === row.id
-                                                ? 'Deleting...'
+                                                ? 'Deleting…'
                                                 : 'Delete'}
                                             </Button>
                                           )}
@@ -1615,6 +1605,16 @@ const FederalApplicationDetailsPage = () => {
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
                       <Tile className="detail-section-card federal-shipping-details">
+                        {shippingReferencesErrorMessage && (
+                          <InlineNotification
+                            className="detail-context-notification"
+                            kind="warning"
+                            lowContrast
+                            hideCloseButton
+                            title="Shipping options unavailable"
+                            subtitle={shippingReferencesErrorMessage}
+                          />
+                        )}
                         {isEditingFederalPermit && canMutateFederalApplication ? (
                           <>
                             <div className="detail-section-card__header">
@@ -1763,7 +1763,7 @@ const FederalApplicationDetailsPage = () => {
                             </div>
                             <div className="federal-shipping-details__actions">
                               <Button
-                                kind="secondary"
+                                kind="tertiary"
                                 size="sm"
                                 disabled={isSavingMutation}
                                 onClick={onCancelFederalPermitEdit}
@@ -1774,9 +1774,10 @@ const FederalApplicationDetailsPage = () => {
                                 kind="primary"
                                 size="sm"
                                 disabled={isSavingMutation || hasPermitValidationError}
+                                renderIcon={isSavingMutation ? PendingIcon : undefined}
                                 onClick={() => void onSavePermit()}
                               >
-                                {isSavingMutation ? 'Saving...' : 'Save federal permit'}
+                                {isSavingMutation ? 'Saving…' : 'Save federal permit'}
                               </Button>
                             </div>
                           </>
@@ -1875,6 +1876,24 @@ const FederalApplicationDetailsPage = () => {
             </Tabs>
           </Column>
         </>
+      )}
+      {documentPendingDeletion && (
+        <ConfirmationModal
+          open
+          danger
+          title="Delete document"
+          description={
+            <>
+              Permanently delete <strong>{documentPendingDeletion.name || 'this document'}</strong>?
+              This cannot be undone.
+            </>
+          }
+          confirmLabel="Delete"
+          pendingLabel="Deleting…"
+          errorTitle="Failed to delete document"
+          onClose={() => setDocumentPendingDeletion(null)}
+          onConfirm={() => onRemoveDocument(documentPendingDeletion)}
+        />
       )}
       <UnsavedChangesGuard
         isDirty={isFederalApplicationDirty}

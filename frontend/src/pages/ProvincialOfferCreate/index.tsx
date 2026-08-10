@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Button, Column, Grid, TextArea, TextInput } from '@carbon/react'
+import { Button, Column, Grid, InlineNotification, TextArea, TextInput } from '@carbon/react'
 import { AppNotification } from '../../components/AppNotification'
 import IsoDatePicker from '../../components/IsoDatePicker'
 import SearchableSelect from '../../components/SearchableSelect'
 import PageHeader from '@/components/PageHeader'
+import PendingIcon from '@/components/PendingIcon'
 import UnsavedChangesGuard, { formValuesEqual } from '@/components/UnsavedChangesGuard'
 import { hasProvincialSubmitterRole, hasRole } from '@/context/auth/role-utils'
 import {
@@ -126,6 +127,7 @@ type PageStatus = {
   kind: 'success' | 'error'
   title: string
   message: string
+  placement?: 'inline'
 }
 
 type ScopedOfferClientContext = {
@@ -550,6 +552,7 @@ const ProvincialOfferCreatePage = () => {
         kind: 'error',
         title: 'Validation error',
         message: validationMessage,
+        placement: 'inline',
       })
       return false
     }
@@ -642,14 +645,14 @@ const ProvincialOfferCreatePage = () => {
         />
       </Column>
 
-      {!!status && (
+      {!!status && status.placement !== 'inline' && (
         <Column sm={4} md={8} lg={16}>
           <AppNotification
             kind={status.kind}
             title={status.title}
             subtitle={status.message}
             lowContrast
-            autoDismissMs={status.kind === 'success' ? 8000 : undefined}
+            autoDismissMs={status.kind === 'success' ? 6000 : undefined}
             onCloseButtonClick={() => setStatus(null)}
           />
         </Column>
@@ -668,6 +671,16 @@ const ProvincialOfferCreatePage = () => {
 
       <Column sm={4} md={8} lg={16}>
         <div className="provincial-offer-create create-form-tile provincial-offer-sections provincial-offer-section-stack">
+          {status?.placement === 'inline' && (
+            <InlineNotification
+              className="create-form-validation-notification"
+              kind="error"
+              title={status.title}
+              subtitle={status.message}
+              lowContrast
+              onCloseButtonClick={() => setStatus(null)}
+            />
+          )}
           <fieldset className="legacy-form-fieldset create-form-section offer-form-section">
             <legend>Application details</legend>
             <div className="legacy-search-grid create-form-grid">
@@ -760,7 +773,7 @@ const ProvincialOfferCreatePage = () => {
                 helperText={
                   isScopedProvincialSubmitter
                     ? scopedClientLookupPending
-                      ? 'Loading from your authenticated forest client...'
+                      ? 'Loading from your authenticated forest client…'
                       : 'Loaded from your authenticated forest client.'
                     : undefined
                 }
@@ -1015,12 +1028,18 @@ const ProvincialOfferCreatePage = () => {
               role="group"
               aria-label="Offer form actions"
             >
-              <Button type="button" kind="secondary" onClick={() => navigate('/provincial/offers')}>
+              <Button
+                type="button"
+                kind="tertiary"
+                size="md"
+                onClick={() => navigate('/provincial/offers')}
+              >
                 Cancel
               </Button>
               <Button
                 type="button"
                 kind="primary"
+                size="md"
                 onClick={() => void onSave(true)}
                 disabled={
                   isSubmitting ||
@@ -1028,8 +1047,9 @@ const ProvincialOfferCreatePage = () => {
                   scopedClientLookupPending ||
                   !!applicationValidationError
                 }
+                renderIcon={isSubmitting ? PendingIcon : undefined}
               >
-                Save new offer
+                {isSubmitting ? 'Saving…' : 'Save new offer'}
               </Button>
             </div>
           </div>

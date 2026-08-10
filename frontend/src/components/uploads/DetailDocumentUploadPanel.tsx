@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Button, Modal, TextArea, TextInput } from '@carbon/react'
+import { Button, TextArea, TextInput } from '@carbon/react'
 import { Add, ArrowRight } from '@carbon/icons-react'
 import { AppNotification } from '../AppNotification'
+import Modal from '@/components/Modal'
 import {
   buildUploadResultMessage,
   buildUploadReviewDetails,
@@ -337,7 +338,7 @@ const DetailDocumentUploadPanel = ({
         workflowLabel: copy.workflowLabel,
         queuedAt,
         status: validationMessage ? ('invalid' as const) : ('validating' as const),
-        message: validationMessage || 'Validating file...',
+        message: validationMessage || 'Validating file…',
         targetSummary: lockedTargetSummary,
         details: validationMessage
           ? { summary: validationMessage, errors: [validationMessage] }
@@ -568,7 +569,7 @@ const DetailDocumentUploadPanel = ({
           title="Upload submitted"
           subtitle={successMessage}
           lowContrast
-          autoDismissMs={8000}
+          autoDismissMs={6000}
           onCloseButtonClick={() => setSuccessMessage('')}
         />
       )}
@@ -611,7 +612,7 @@ const DetailDocumentUploadPanel = ({
               title="Upload submitted"
               subtitle={successMessage}
               lowContrast
-              autoDismissMs={8000}
+              autoDismissMs={6000}
               onCloseButtonClick={() => setSuccessMessage('')}
             />
           )}
@@ -742,7 +743,7 @@ const DetailDocumentUploadPanel = ({
           )}
 
           <div className="detail-document-upload-modal__actions">
-            <Button kind="secondary" disabled={isSubmitting} onClick={closeUploadModal}>
+            <Button kind="tertiary" disabled={isSubmitting} onClick={closeUploadModal}>
               Cancel
             </Button>
             {uploadStep === 'review' && (
@@ -764,7 +765,7 @@ const DetailDocumentUploadPanel = ({
               }}
             >
               {isSubmitting
-                ? 'Submitting upload...'
+                ? 'Submitting upload…'
                 : uploadStep === 'review'
                   ? 'Submit upload'
                   : 'Review upload'}

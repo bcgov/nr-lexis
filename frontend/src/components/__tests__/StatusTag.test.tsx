@@ -21,8 +21,10 @@ describe('StatusTag', () => {
     ['APP - Not approved', 'negative'],
     ['EXP - Expired', 'expired'],
     ['CAN - Cancelled', 'cancelled'],
-    ['WDN - Withdrawn', 'inactive'],
-    ['Inactive', 'inactive'],
+    ['WDN - Withdrawn', 'neutral'],
+    ['Inactive', 'neutral'],
+    ['Retired', 'retired'],
+    ['Deleted', 'deleted'],
     ['Updated', 'updated'],
     ['Unmapped status', 'neutral'],
   ])('maps %s to the %s semantic variant', (status, expectedVariant) => {

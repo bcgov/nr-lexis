@@ -10,6 +10,15 @@ export type PersistedSearchPageId =
   | 'provincial-review'
 
 const SEARCH_STATE_STORAGE_PREFIX = 'lexis.search-state.v1.'
+const DEFAULT_REGION_CHANGE_EVENT = 'lexis:default-region-change'
+
+const REGION_SCOPED_SEARCH_PAGES = new Set<PersistedSearchPageId>([
+  'provincial-applications',
+  'provincial-exemptions',
+  'provincial-offers',
+  'provincial-permits',
+  'provincial-review',
+])
 
 const storageKey = (pageId: PersistedSearchPageId): string =>
   `${SEARCH_STATE_STORAGE_PREFIX}${pageId}`
@@ -51,6 +60,26 @@ export const clearPersistedSearchState = (): void => {
   } catch {
     // Authentication cleanup still proceeds when browser storage is unavailable.
   }
+}
+
+export const resetPersistedRegionSearchState = (): void => {
+  REGION_SCOPED_SEARCH_PAGES.forEach((pageId) => {
+    const persistedSearch = readPersistedSearch(pageId)
+    if (!persistedSearch) {
+      return
+    }
+
+    const params = new URLSearchParams(persistedSearch)
+    params.delete('region')
+    const nextSearch = params.toString()
+    if (nextSearch) {
+      persistSearch(pageId, nextSearch)
+    } else {
+      removePersistedSearch(pageId)
+    }
+  })
+
+  window.dispatchEvent(new Event(DEFAULT_REGION_CHANGE_EVENT))
 }
 
 /**
@@ -99,6 +128,29 @@ export const usePersistedSearchParams = (pageId: PersistedSearchPageId) => {
       removePersistedSearch(pageId)
     }
   }, [pageId, searchParams])
+
+  useEffect(() => {
+    if (!REGION_SCOPED_SEARCH_PAGES.has(pageId)) {
+      return undefined
+    }
+
+    const resetCurrentRegion = () => {
+      setSearchParams(
+        (currentParams) => {
+          if (!currentParams.has('region')) {
+            return currentParams
+          }
+          const nextParams = new URLSearchParams(currentParams)
+          nextParams.delete('region')
+          return nextParams
+        },
+        { replace: true },
+      )
+    }
+
+    window.addEventListener(DEFAULT_REGION_CHANGE_EVENT, resetCurrentRegion)
+    return () => window.removeEventListener(DEFAULT_REGION_CHANGE_EVENT, resetCurrentRegion)
+  }, [pageId, setSearchParams])
 
   return [searchParams, setSearchParams] as const
 }

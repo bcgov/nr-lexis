@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   displayAuditIdentity,
+  displayTableValue,
   displayValue,
   isValidEmail,
   joinNonBlankText,
@@ -38,6 +39,15 @@ describe('text utilities', () => {
     expect(displayValue('')).toBe('Not provided')
     expect(displayValue(0)).toBe('0')
     expect(displayValue('DAR')).toBe('DAR')
+  })
+
+  it('formats compact table fallback values', () => {
+    expect(displayTableValue(null)).toBe('—')
+    expect(displayTableValue(undefined)).toBe('—')
+    expect(displayTableValue('')).toBe('—')
+    expect(displayTableValue('   ')).toBe('—')
+    expect(displayTableValue(0)).toBe('0')
+    expect(displayTableValue('DAR')).toBe('DAR')
   })
 
   it('does not expose opaque audit identifiers as authors', () => {

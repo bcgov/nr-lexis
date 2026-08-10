@@ -189,10 +189,9 @@ describe('Provincial exemption edit context', () => {
     expect(
       within(pageHeader as HTMLElement).getByText('Check and manage this provincial exemption'),
     ).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Provincial exemption search' })).toHaveAttribute(
-      'href',
-      '/provincial/exemption',
-    )
+    expect(
+      screen.getByRole('link', { name: 'Back to Provincial exemption search' }),
+    ).toHaveAttribute('href', '/provincial/exemption')
     expect(within(pageHeader as HTMLElement).getByText('Active')).toHaveAttribute(
       'data-status-variant',
       'positive',

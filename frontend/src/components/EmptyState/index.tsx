@@ -5,28 +5,24 @@ import './EmptyState.css'
 const DefaultEmptyStatePictogram = () => (
   <svg
     className="lexis-empty-state__default-pictogram"
-    width="80"
-    height="80"
-    viewBox="0 0 32 32"
+    width="48"
+    height="48"
+    viewBox="0 0 48 48"
     fill="none"
+    stroke="currentColor"
+    strokeWidth="0.6"
+    strokeLinecap="round"
+    strokeLinejoin="round"
     xmlns="http://www.w3.org/2000/svg"
     aria-hidden="true"
     focusable="false"
   >
-    <path
-      d="M11 29H2V1h16l6 6v5M18 1v6h6M6 13h10M6 19h5"
-      stroke="currentColor"
-      strokeWidth="1.25"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <circle cx="21" cy="22" r="7" stroke="currentColor" strokeWidth="1.25" />
-    <path
-      d="m26.25 27.25 4.25 4.25"
-      stroke="currentColor"
-      strokeWidth="1.25"
-      strokeLinecap="round"
-    />
+    <path d="M3 1.5H27L36 10.5V43.5H3Z" vectorEffect="non-scaling-stroke" />
+    <path d="M27 1.5V10.5H36" vectorEffect="non-scaling-stroke" />
+    <path d="M9 19.5H24" vectorEffect="non-scaling-stroke" />
+    <path d="M9 28.5H16.5" vectorEffect="non-scaling-stroke" />
+    <circle cx="31.5" cy="34.5" r="11.5" vectorEffect="non-scaling-stroke" />
+    <path d="M40 43L46 48" vectorEffect="non-scaling-stroke" />
   </svg>
 )
 

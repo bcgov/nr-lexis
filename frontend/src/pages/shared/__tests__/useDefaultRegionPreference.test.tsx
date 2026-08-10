@@ -48,4 +48,12 @@ describe('useDefaultRegionPreference', () => {
       expect(result.current).toEqual({ defaultRegion: null, preferenceLoading: false })
     })
   })
+
+  it('does not load preferences for users outside the staff roles', () => {
+    const { result } = renderHook(() => useDefaultRegionPreference(false))
+
+    expect(result.current).toEqual({ defaultRegion: null, preferenceLoading: false })
+    expect(fetchUserPreferencesMock).not.toHaveBeenCalled()
+    expect(subscribeToUserPreferencesMock).not.toHaveBeenCalled()
+  })
 })

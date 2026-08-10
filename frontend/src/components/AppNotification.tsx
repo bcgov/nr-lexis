@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useState, type PropsWithChildren } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type PropsWithChildren,
+} from 'react'
 import { createPortal } from 'react-dom'
 import { ToastNotification, type ToastNotificationProps } from '@carbon/react'
 import {
@@ -6,12 +14,30 @@ import {
   sanitizeNotificationText,
 } from '@/utils/notification-messages'
 
-const MINIMUM_SUCCESS_AUTO_DISMISS_MS = 8000
+const DEFAULT_SUCCESS_AUTO_DISMISS_MS = 6000
+const NOTIFICATION_EXIT_ANIMATION_MS = 300
 const PERSISTENT_NOTIFICATION_KINDS = new Set(['error', 'warning', 'warning-alt'])
 export const APP_NOTIFICATION_REGION_ID = 'lexis-toast-notification-region'
 
+let nextNotificationId = 0
+let activeNotificationId: number | null = null
+const activeNotificationListeners = new Set<() => void>()
+
+const subscribeToActiveNotification = (listener: () => void) => {
+  activeNotificationListeners.add(listener)
+  return () => activeNotificationListeners.delete(listener)
+}
+
+const getActiveNotificationId = () => activeNotificationId
+
+const setActiveNotificationId = (notificationId: number | null) => {
+  if (activeNotificationId === notificationId) return
+  activeNotificationId = notificationId
+  activeNotificationListeners.forEach((listener) => listener())
+}
+
 export type AppNotificationProps = PropsWithChildren<
-  Omit<ToastNotificationProps, 'onCloseButtonClick' | 'hideCloseButton' | 'timeout'> & {
+  Omit<ToastNotificationProps, 'onClose' | 'onCloseButtonClick' | 'hideCloseButton' | 'timeout'> & {
     onCloseButtonClick?: () => void
     autoDismissMs?: number
     pauseAutoDismissOnInteraction?: boolean
@@ -55,8 +81,16 @@ export function AppNotification({
   lowContrast = true,
   ...notificationProps
 }: AppNotificationProps) {
+  const [notificationId] = useState(() => ++nextNotificationId)
   const [notificationRegion] = useState<HTMLElement | null>(() => getNotificationRegion())
   const [isPaused, setIsPaused] = useState(false)
+  const [isExiting, setIsExiting] = useState(false)
+  const closeTimeoutRef = useRef<number | null>(null)
+  const currentActiveNotificationId = useSyncExternalStore(
+    subscribeToActiveNotification,
+    getActiveNotificationId,
+    getActiveNotificationId,
+  )
   const normalizedKind = typeof kind === 'string' ? kind : ''
   const isPersistentNotification = PERSISTENT_NOTIFICATION_KINDS.has(normalizedKind)
   const hasNotificationAction = Boolean(
@@ -66,10 +100,10 @@ export function AppNotification({
       .onActionButtonClick,
   )
   const requestedAutoDismissMs =
-    autoDismissMs ?? (normalizedKind === 'success' ? MINIMUM_SUCCESS_AUTO_DISMISS_MS : undefined)
+    autoDismissMs ?? (normalizedKind === 'success' ? DEFAULT_SUCCESS_AUTO_DISMISS_MS : undefined)
   const effectiveAutoDismissMs =
     !isPersistentNotification && !hasNotificationAction && requestedAutoDismissMs
-      ? Math.max(requestedAutoDismissMs, MINIMUM_SUCCESS_AUTO_DISMISS_MS)
+      ? requestedAutoDismissMs
       : undefined
   const resolvedTitle =
     typeof title === 'string' ? sanitizeNotificationText(title, 'Notification') : title
@@ -78,19 +112,72 @@ export function AppNotification({
       ? sanitizeNotificationText(subtitle, genericActionFailureMessage)
       : subtitle
 
+  useLayoutEffect(() => {
+    if (closeTimeoutRef.current !== null) {
+      window.clearTimeout(closeTimeoutRef.current)
+      closeTimeoutRef.current = null
+    }
+    // A new payload supersedes any exit animation still attached to this instance.
+    // eslint-disable-next-line @eslint-react/set-state-in-effect
+    setIsExiting(false)
+    setActiveNotificationId(notificationId)
+
+    return () => {
+      if (activeNotificationId === notificationId) {
+        setActiveNotificationId(null)
+      }
+    }
+  }, [kind, notificationId, subtitle, title])
+
+  useEffect(
+    () => () => {
+      if (closeTimeoutRef.current !== null) {
+        window.clearTimeout(closeTimeoutRef.current)
+      }
+    },
+    [],
+  )
+
+  const closeNotification = useCallback(() => {
+    if (!onCloseButtonClick || isExiting) return
+
+    setIsExiting(true)
+    closeTimeoutRef.current = window.setTimeout(() => {
+      closeTimeoutRef.current = null
+      onCloseButtonClick()
+    }, NOTIFICATION_EXIT_ANIMATION_MS)
+  }, [isExiting, onCloseButtonClick])
+
   useEffect(() => {
-    if (!onCloseButtonClick || !effectiveAutoDismissMs || isPaused) {
+    if (
+      currentActiveNotificationId !== notificationId ||
+      !onCloseButtonClick ||
+      !effectiveAutoDismissMs ||
+      isPaused ||
+      isExiting
+    ) {
       return undefined
     }
 
-    const timeoutId = window.setTimeout(() => {
-      onCloseButtonClick()
-    }, effectiveAutoDismissMs)
+    const timeoutId = window.setTimeout(
+      () => {
+        closeNotification()
+      },
+      Math.max(0, effectiveAutoDismissMs - NOTIFICATION_EXIT_ANIMATION_MS),
+    )
 
     return () => {
       window.clearTimeout(timeoutId)
     }
-  }, [effectiveAutoDismissMs, isPaused, onCloseButtonClick])
+  }, [
+    closeNotification,
+    currentActiveNotificationId,
+    effectiveAutoDismissMs,
+    isExiting,
+    isPaused,
+    notificationId,
+    onCloseButtonClick,
+  ])
 
   const handleMouseEnter = useCallback(() => {
     if (pauseAutoDismissOnInteraction) {
@@ -118,7 +205,9 @@ export function AppNotification({
 
   const notification = (
     <div
-      className="app-notification"
+      className={['app-notification', isExiting ? 'app-notification--exiting' : '']
+        .filter(Boolean)
+        .join(' ')}
       onBlur={handleBlur}
       onFocus={handleFocus}
       onMouseEnter={handleMouseEnter}
@@ -129,7 +218,9 @@ export function AppNotification({
         hideCloseButton={!onCloseButtonClick}
         kind={kind}
         lowContrast={lowContrast}
-        onCloseButtonClick={onCloseButtonClick}
+        onClose={() => false}
+        onCloseButtonClick={closeNotification}
+        role="status"
         subtitle={resolvedSubtitle}
         timeout={0}
         title={resolvedTitle}
@@ -140,5 +231,7 @@ export function AppNotification({
     </div>
   )
 
-  return notificationRegion ? createPortal(notification, notificationRegion) : null
+  return notificationRegion && currentActiveNotificationId === notificationId
+    ? createPortal(notification, notificationRegion)
+    : null
 }

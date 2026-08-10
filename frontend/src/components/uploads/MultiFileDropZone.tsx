@@ -1,5 +1,5 @@
 import { useRef, useState, type DragEvent, type KeyboardEvent } from 'react'
-import { Upload } from '@carbon/icons-react'
+import { ErrorFilled, Upload } from '@carbon/icons-react'
 
 export type MultiFileDropZoneProps = {
   title: string
@@ -13,6 +13,7 @@ export type MultiFileDropZoneProps = {
   disabledDescription?: string
   renderAsPanel?: boolean
   variant?: 'default' | 'fspts'
+  showMultipleFileGuidance?: boolean
   onFilesSelected: (files: FileList | null) => void
 }
 
@@ -33,6 +34,7 @@ function MultiFileDropZone({
   disabledDescription = 'File upload is not available.',
   renderAsPanel = true,
   variant = 'default',
+  showMultipleFileGuidance = true,
   onFilesSelected,
 }: MultiFileDropZoneProps) {
   const inputRef = useRef<HTMLInputElement>(null)
@@ -72,6 +74,9 @@ function MultiFileDropZone({
   ]
     .filter(Boolean)
     .join(' ')
+  const helperDescription = showMultipleFileGuidance
+    ? `${description}. Multiple files can be queued and saved together.`
+    : description
 
   const fieldContent = (
     <>
@@ -79,7 +84,7 @@ function MultiFileDropZone({
         <div className="admin-upload-panel__header">
           <div>
             <h2 id={`${inputId}-panel-title`}>{title}</h2>
-            <p>{description}. Multiple files can be queued and saved together.</p>
+            <p>{helperDescription}</p>
           </div>
         </div>
       ) : (
@@ -89,9 +94,7 @@ function MultiFileDropZone({
               {title}
             </span>
             <p className="admin-upload-field-helper">
-              {disabled && variant === 'fspts'
-                ? disabledDescription
-                : `${description}. Multiple files can be queued and saved together.`}
+              {disabled && variant === 'fspts' ? disabledDescription : helperDescription}
             </p>
           </div>
         </div>
@@ -174,6 +177,7 @@ function MultiFileDropZone({
           id={`${inputId}-error`}
           role="alert"
         >
+          <ErrorFilled size={14} aria-hidden="true" />
           {invalidText}
         </p>
       )}

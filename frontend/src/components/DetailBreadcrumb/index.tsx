@@ -1,4 +1,4 @@
-import { Breadcrumb, BreadcrumbItem } from '@carbon/react'
+import { ArrowLeft } from '@carbon/icons-react'
 import { Link, type To } from 'react-router-dom'
 
 export type DetailBreadcrumbProps = {
@@ -14,11 +14,10 @@ export type DetailBreadcrumbProps = {
  * deterministic.
  */
 const DetailBreadcrumb = ({ label, to }: DetailBreadcrumbProps) => (
-  <Breadcrumb noTrailingSlash size="sm">
-    <BreadcrumbItem>
-      <Link to={to}>{label}</Link>
-    </BreadcrumbItem>
-  </Breadcrumb>
+  <Link className="back-link" to={to}>
+    <ArrowLeft size={16} aria-hidden />
+    Back to {label}
+  </Link>
 )
 
 export default DetailBreadcrumb

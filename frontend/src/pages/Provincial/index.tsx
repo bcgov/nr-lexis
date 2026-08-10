@@ -348,7 +348,7 @@ const ProvincialPage = () => {
             />
           </div>
           <div className="legacy-search-actions">
-            <Button kind="secondary" onClick={() => void loadTotals()} disabled={loadingTotals}>
+            <Button kind="tertiary" onClick={() => void loadTotals()} disabled={loadingTotals}>
               Refresh Totals
             </Button>
           </div>
@@ -377,7 +377,7 @@ const ProvincialPage = () => {
 
       {loadingTotals && (
         <Column sm={4} md={8} lg={16}>
-          <InlineLoading description="Refreshing provincial totals..." />
+          <InlineLoading description="Refreshing provincial totals…" />
         </Column>
       )}
 
@@ -397,7 +397,7 @@ const ProvincialPage = () => {
         <Tile>
           {visibleWorkflows.length > 0 ? (
             <TableFrame ariaLabel="Provincial workflows table">
-              <Table useZebraStyles className="dashboard-data-table">
+              <Table size="md" useZebraStyles className="dashboard-data-table">
                 <TableHead>
                   <TableRow>
                     <TableHeader>Area</TableHeader>

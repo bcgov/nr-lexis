@@ -1,11 +1,13 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Edit } from '@carbon/icons-react'
+import { Edit, TrashCan } from '@carbon/icons-react'
 import {
   Button,
   Checkbox,
   Column,
   Grid,
   InlineLoading,
+  InlineNotification,
+  Loading,
   Select,
   SelectItem,
   Tab,
@@ -29,9 +31,11 @@ import { hasProvincialSubmitterRole, hasRole } from '@/context/auth/role-utils'
 import ConfirmationModal from '@/components/ConfirmationModal'
 import ContentLoadingOverlay from '@/components/ContentLoadingOverlay'
 import DetailBreadcrumb from '@/components/DetailBreadcrumb'
+import DetailLoadError from '@/components/DetailLoadError'
 import EmptyState from '@/components/EmptyState'
 import IsoDatePicker from '@/components/IsoDatePicker'
 import PageHeader from '@/components/PageHeader'
+import PendingIcon from '@/components/PendingIcon'
 import StatusTag from '@/components/StatusTag'
 import TableFrame from '@/components/TableFrame'
 import UnsavedChangesGuard, { formValuesEqual } from '@/components/UnsavedChangesGuard'
@@ -105,6 +109,7 @@ import {
   type BlanketOicPackageMutationRequest,
   type ProvincialPermitDetailTabsData,
   type ProvincialPermitDetailTabsRequest,
+  type ProvincialPermitItemRow,
 } from '@/service/provincial-permit-detail-tabs-service'
 import { ReportRequestError, runReport } from '@/service/report-service'
 import {
@@ -273,19 +278,19 @@ const PermitClientTile = ({
       { label: 'Location', value: displayValue(locationCode) },
       {
         label: 'Company name',
-        value: isLoading ? 'Loading...' : displayValue(clientData?.companyName),
+        value: isLoading ? 'Loading…' : displayValue(clientData?.companyName),
       },
-      { label: 'Address', value: isLoading ? 'Loading...' : displayValue(clientData?.address) },
-      { label: 'City', value: isLoading ? 'Loading...' : displayValue(clientData?.city) },
-      { label: 'Province', value: isLoading ? 'Loading...' : displayValue(clientData?.province) },
+      { label: 'Address', value: isLoading ? 'Loading…' : displayValue(clientData?.address) },
+      { label: 'City', value: isLoading ? 'Loading…' : displayValue(clientData?.city) },
+      { label: 'Province', value: isLoading ? 'Loading…' : displayValue(clientData?.province) },
       {
         label: 'Postal code',
-        value: isLoading ? 'Loading...' : displayValue(clientData?.postalCode),
+        value: isLoading ? 'Loading…' : displayValue(clientData?.postalCode),
       },
-      { label: 'Country', value: isLoading ? 'Loading...' : displayValue(clientData?.country) },
-      { label: 'Phone', value: isLoading ? 'Loading...' : displayValue(clientData?.phone) },
-      { label: 'Fax', value: isLoading ? 'Loading...' : displayValue(clientData?.fax) },
-      { label: 'Email', value: isLoading ? 'Loading...' : displayValue(clientData?.email) },
+      { label: 'Country', value: isLoading ? 'Loading…' : displayValue(clientData?.country) },
+      { label: 'Phone', value: isLoading ? 'Loading…' : displayValue(clientData?.phone) },
+      { label: 'Fax', value: isLoading ? 'Loading…' : displayValue(clientData?.fax) },
+      { label: 'Email', value: isLoading ? 'Loading…' : displayValue(clientData?.email) },
     ]}
   />
 )
@@ -565,21 +570,22 @@ const ProvincialPermitDetailsPage = () => {
   const [permitFeesErrorMessage, setPermitFeesErrorMessage] = useState('')
   const [documentsErrorMessage, setDocumentsErrorMessage] = useState('')
   const [invoicesErrorMessage, setInvoicesErrorMessage] = useState('')
-  const [documentsInvoicesErrorDismissed, setDocumentsInvoicesErrorDismissed] = useState(false)
   const [deferredPermitTabLoaded, setDeferredPermitTabLoaded] = useState(
     EMPTY_DEFERRED_PERMIT_TAB_STATE,
   )
   const [deferredPermitTabLoading, setDeferredPermitTabLoading] = useState(
     EMPTY_DEFERRED_PERMIT_TAB_STATE,
   )
-  const documentsInvoicesErrorMessage = [documentsErrorMessage, invoicesErrorMessage]
-    .filter(Boolean)
-    .join(' ')
   const [actionErrorMessage, setActionErrorMessage] = useState('')
   const [actionInfoMessage, setActionInfoMessage] = useState('')
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
+  const [documentPendingDeletion, setDocumentPendingDeletion] = useState<PermitDocumentRow | null>(
+    null,
+  )
   const [isUpdatingScaleId, setIsUpdatingScaleId] = useState<string | null>(null)
   const [isDeletingBoicScaleId, setIsDeletingBoicScaleId] = useState<string | null>(null)
+  const [boicScalePendingRemoval, setBoicScalePendingRemoval] =
+    useState<ProvincialPermitItemRow | null>(null)
   const [isSavingBoicScale, setIsSavingBoicScale] = useState(false)
   const [boicPackageForm, setBoicPackageForm] = useState<BlanketOicPackageForm>(
     EMPTY_BLANKET_OIC_PACKAGE_FORM,
@@ -605,6 +611,9 @@ const ProvincialPermitDetailsPage = () => {
   const [isRemovingPermitApplication, setIsRemovingPermitApplication] = useState<string | null>(
     null,
   )
+  const [permitApplicationPendingRemoval, setPermitApplicationPendingRemoval] = useState<
+    string | null
+  >(null)
   const [boicScaleForm, setBoicScaleForm] = useState<BlanketOicScaleForm>(
     EMPTY_BLANKET_OIC_SCALE_FORM,
   )
@@ -818,7 +827,6 @@ const ProvincialPermitDetailsPage = () => {
         setInvoiceRows([])
         setDocumentsErrorMessage('')
         setInvoicesErrorMessage('')
-        setDocumentsInvoicesErrorDismissed(false)
         setLoading(false)
         return
       }
@@ -831,7 +839,6 @@ const ProvincialPermitDetailsPage = () => {
       setPermitExemptionContextReady(false)
       setDocumentsErrorMessage('')
       setInvoicesErrorMessage('')
-      setDocumentsInvoicesErrorDismissed(false)
       setTabsData(null)
       setFeeOverrideContext(null)
       setFeeOverrideForm(null)
@@ -968,7 +975,6 @@ const ProvincialPermitDetailsPage = () => {
           setInvoiceRows([])
           setDocumentsErrorMessage('')
           setInvoicesErrorMessage('')
-          setDocumentsInvoicesErrorDismissed(false)
         }
       } finally {
         if (isLatestRequest()) {
@@ -989,7 +995,7 @@ const ProvincialPermitDetailsPage = () => {
   }, [permitNumber])
 
   const hasPermitAgent = Boolean(detail?.applicantClientNumber?.trim())
-  const hasGbmsHistory = (tabsData?.gbmsEvents.length ?? 0) > 0
+  const hasGbmsHistory = (tabsData?.gbmsEvents.length ?? 0) > 0 || Boolean(gbmsErrorMessage)
   const permitDetailTabs = PERMIT_DETAIL_TABS.filter(
     ({ id }) => (id !== 'agent' || hasPermitAgent) && (id !== 'gbms' || hasGbmsHistory),
   )
@@ -1118,7 +1124,6 @@ const ProvincialPermitDetailsPage = () => {
           } else {
             setInvoicesErrorMessage('Unable to retrieve permit invoice details.')
           }
-          setDocumentsInvoicesErrorDismissed(false)
         }
       } finally {
         if (isLatestRequest()) {
@@ -2059,7 +2064,7 @@ const ProvincialPermitDetailsPage = () => {
     async (applicationNumber: string) => {
       const resolvedPermitNumber = String(detail?.permitNumber ?? permitNumber ?? '').trim()
       if (!canEditPermitApplications || !resolvedPermitNumber || !applicationNumber) {
-        return
+        throw new Error('This application cannot be removed from the current permit.')
       }
 
       setActionErrorMessage('')
@@ -2071,10 +2076,9 @@ const ProvincialPermitDetailsPage = () => {
           applicationNumber,
         })
         if (!result.success) {
-          setActionErrorMessage(
+          throw new Error(
             result.errors[0] || result.message || 'Unable to remove application from the permit.',
           )
-          return
         }
 
         setTabsData((current) =>
@@ -2102,7 +2106,9 @@ const ProvincialPermitDetailsPage = () => {
         }
       } catch (error) {
         console.error(error)
-        setActionErrorMessage('Unable to remove application from the permit.')
+        throw error instanceof Error
+          ? error
+          : new Error('Unable to remove application from the permit.')
       } finally {
         setIsRemovingPermitApplication(null)
       }
@@ -2275,13 +2281,13 @@ const ProvincialPermitDetailsPage = () => {
       setActionErrorMessage('')
       setActionInfoMessage('')
       setIsDeletingBoicPackageNumber(packageNumberToDelete)
+      let failureMessage = ''
       try {
         const result = await deleteBlanketOicPackage(resolvedPermitNumber, packageNumberToDelete)
         if (!result.success) {
-          setActionErrorMessage(
-            result.errors[0] || result.message || 'Unable to delete the Blanket OIC package.',
-          )
-          return
+          failureMessage =
+            result.errors[0] || result.message || 'Unable to delete the Blanket OIC package.'
+          throw new Error(failureMessage)
         }
         if (editingBoicPackageNumber === packageNumberToDelete) {
           resetBlanketOicPackageForm()
@@ -2289,8 +2295,11 @@ const ProvincialPermitDetailsPage = () => {
         await reloadPermitTabs()
         setActionInfoMessage(result.message || 'Blanket OIC package was deleted.')
       } catch (error) {
-        console.error(error)
-        setActionErrorMessage('Unable to delete the Blanket OIC package.')
+        if (!failureMessage) {
+          console.error(error)
+          failureMessage = 'Unable to delete the Blanket OIC package.'
+        }
+        throw new Error(failureMessage)
       } finally {
         setIsDeletingBoicPackageNumber(null)
       }
@@ -2392,32 +2401,43 @@ const ProvincialPermitDetailsPage = () => {
   ])
 
   const onDeleteBlanketOicScale = useCallback(
-    async (scaleId: string) => {
+    async (row: ProvincialPermitItemRow) => {
       const resolvedPermitNumber = String(detail?.permitNumber ?? permitNumber ?? '').trim()
-      if (!canEditBlanketOicScaleRows || !resolvedPermitNumber || !scaleId) {
-        return
+      if (!canEditBlanketOicScaleRows || !resolvedPermitNumber || !row.id) {
+        throw new Error('This Blanket OIC scale is no longer available for removal.')
       }
 
       setActionErrorMessage('')
       setActionInfoMessage('')
-      setIsDeletingBoicScaleId(scaleId)
+      setIsDeletingBoicScaleId(row.id)
       try {
         const result = await deleteBlanketOicScale({
-          scaleId,
+          scaleId: row.id,
           permitNumber: resolvedPermitNumber,
         })
         if (!result.success) {
-          setActionErrorMessage(
+          throw new Error(
             result.errors[0] || result.message || 'Unable to remove Blanket OIC scale detail.',
           )
-          return
         }
 
-        await reloadPermitTabs()
-        setActionInfoMessage(result.message || 'Blanket OIC scale detail was removed.')
+        try {
+          await reloadPermitTabs()
+          setActionInfoMessage(result.message || 'Blanket OIC scale detail was removed.')
+        } catch (refreshError) {
+          console.error(refreshError)
+          setPermitTablesErrorMessage(
+            'The Blanket OIC scale was removed, but permit tables could not be refreshed. Reload the page.',
+          )
+          setActionInfoMessage(
+            `${result.message || 'Blanket OIC scale detail was removed.'} Reload before changing scale rows again.`,
+          )
+        }
       } catch (error) {
         console.error(error)
-        setActionErrorMessage('Unable to remove Blanket OIC scale detail.')
+        throw error instanceof Error
+          ? error
+          : new Error('Unable to remove Blanket OIC scale detail.')
       } finally {
         setIsDeletingBoicScaleId(null)
       }
@@ -2589,7 +2609,7 @@ const ProvincialPermitDetailsPage = () => {
     async (row: PermitDocumentRow) => {
       const resolvedPermitNumber = String(detail?.permitNumber ?? permitNumber ?? '').trim()
       if (!resolvedPermitNumber) {
-        return
+        throw new Error('Permit number is unavailable.')
       }
 
       const invoiceDocument = isInvoiceDocumentRow(row)
@@ -2598,7 +2618,7 @@ const ProvincialPermitDetailsPage = () => {
         !canDeletePermitDocuments ||
         (invoiceDocument && !canDeleteInvoiceDocuments)
       ) {
-        return
+        throw new Error('This document cannot be deleted from the current permit.')
       }
 
       const isLatestRequest = beginDocumentRefreshRequest()
@@ -2616,41 +2636,53 @@ const ProvincialPermitDetailsPage = () => {
           return
         }
         if (!removeResult.success) {
-          setActionErrorMessage('Unable to remove selected document.')
-          return
+          throw new Error('Document removal failed. Refresh and try again.')
         }
 
-        beginPermitDocumentsRequest()
-        beginPermitInvoicesRequest()
-        deferredPermitTabLoadsRef.current.delete('documents')
-        deferredPermitTabLoadsRef.current.delete('invoices')
-        setDeferredPermitTabLoading((current) => ({
-          ...current,
-          documents: false,
-          invoices: false,
-        }))
-        const [documentsResult, invoicesResult] = await Promise.all([
-          fetchPermitDocuments(resolvedPermitNumber),
-          fetchPermitInvoices(resolvedPermitNumber),
-        ])
-        if (isLatestRequest()) {
-          setDocumentRows(documentsResult.rows)
-          setInvoiceRows(invoicesResult.rows)
-          loadedDeferredPermitTabsRef.current.add('documents')
-          loadedDeferredPermitTabsRef.current.add('invoices')
-          setDeferredPermitTabLoaded((current) => ({
+        try {
+          beginPermitDocumentsRequest()
+          beginPermitInvoicesRequest()
+          deferredPermitTabLoadsRef.current.delete('documents')
+          deferredPermitTabLoadsRef.current.delete('invoices')
+          setDeferredPermitTabLoading((current) => ({
             ...current,
-            documents: true,
-            invoices: true,
+            documents: false,
+            invoices: false,
           }))
-          setDocumentsErrorMessage('')
-          setInvoicesErrorMessage('')
+          const [documentsResult, invoicesResult] = await Promise.all([
+            fetchPermitDocuments(resolvedPermitNumber),
+            fetchPermitInvoices(resolvedPermitNumber),
+          ])
+          if (isLatestRequest()) {
+            setDocumentRows(documentsResult.rows)
+            setInvoiceRows(invoicesResult.rows)
+            loadedDeferredPermitTabsRef.current.add('documents')
+            loadedDeferredPermitTabsRef.current.add('invoices')
+            setDeferredPermitTabLoaded((current) => ({
+              ...current,
+              documents: true,
+              invoices: true,
+            }))
+            setDocumentsErrorMessage('')
+            setInvoicesErrorMessage('')
+            setActionInfoMessage(`${row.name || 'Document'} was deleted.`)
+          }
+        } catch (refreshError) {
+          if (isLatestRequest()) {
+            console.error(refreshError)
+            setDocumentsErrorMessage(
+              'The document was deleted, but permit documents could not be refreshed. Reload the page.',
+            )
+            setActionInfoMessage(
+              `${row.name || 'Document'} was deleted. Reload before changing documents again.`,
+            )
+          }
         }
       } catch (error) {
         if (isLatestRequest()) {
           console.error(error)
-          setActionErrorMessage('Unable to remove selected document.')
         }
+        throw error instanceof Error ? error : new Error('Unable to remove selected document.')
       } finally {
         if (isLatestRequest()) {
           setIsRemovingDocumentId(null)
@@ -2795,7 +2827,7 @@ const ProvincialPermitDetailsPage = () => {
     >
       <ContentLoadingOverlay
         loading={isRefreshingDetail}
-        loadingDescription="Refreshing provincial permit detail..."
+        loadingDescription="Refreshing provincial permit detail…"
       />
       <Column sm={4} md={8} lg={16}>
         <DetailBreadcrumb label="Provincial permit search" to="/provincial/permit" />
@@ -2818,14 +2850,14 @@ const ProvincialPermitDetailsPage = () => {
               <>
                 {canRequestPermitReview && (
                   <Button
-                    kind="secondary"
+                    kind="tertiary"
                     size="sm"
                     disabled={isSendingPermitEmail || !permitReviewReady}
                     title={
                       permitReviewReady
                         ? undefined
                         : isPermitTablesLoading
-                          ? 'Checking permit review readiness...'
+                          ? 'Checking permit review readiness…'
                           : 'An active permit requires an application, package, and scale detail before review can be requested.'
                     }
                     onClick={() => void onSendPermitEmail('request')}
@@ -2837,7 +2869,7 @@ const ProvincialPermitDetailsPage = () => {
                     Modern permit detail supports previewing and resending the approval email. */}
                 {canSendPermitApproval && (
                   <Button
-                    kind="secondary"
+                    kind="tertiary"
                     size="sm"
                     disabled={isSendingPermitEmail}
                     onClick={() => void onOpenPermitApprovalEmail()}
@@ -2850,9 +2882,10 @@ const ProvincialPermitDetailsPage = () => {
                     kind="primary"
                     size="sm"
                     disabled={isOpeningPermitReport}
+                    renderIcon={isOpeningPermitReport ? PendingIcon : undefined}
                     onClick={() => void onOpenPermitReport()}
                   >
-                    {isOpeningPermitReport ? 'Opening...' : 'Print permit'}
+                    {isOpeningPermitReport ? 'Opening…' : 'Print permit'}
                   </Button>
                 )}
               </>
@@ -2862,105 +2895,67 @@ const ProvincialPermitDetailsPage = () => {
       </Column>
 
       {loading && !detailMatchesRoute && (
-        <Column sm={4} md={8} lg={16}>
-          <InlineLoading description="Loading provincial permit detail..." />
+        <Column
+          sm={4}
+          md={8}
+          lg={16}
+          className="detail-page-loading"
+          role="status"
+          aria-live="polite"
+        >
+          <Loading description="Loading provincial permit detail…" withOverlay={false} />
         </Column>
       )}
 
-      {!loading && !!errorMessage && (
-        <Column sm={4} md={8} lg={16} className="detail-page-error">
-          <AppNotification
-            kind="error"
-            title="Detail unavailable"
-            subtitle={errorMessage}
-            lowContrast
-            onCloseButtonClick={() => setErrorMessage('')}
-          />
-        </Column>
-      )}
-
-      {!loading && !!documentsInvoicesErrorMessage && !documentsInvoicesErrorDismissed && (
-        <Column sm={4} md={8} lg={16} className="detail-page-error">
-          <AppNotification
-            kind="warning"
-            title="Documents/invoices unavailable"
-            subtitle={documentsInvoicesErrorMessage}
-            lowContrast
-            onCloseButtonClick={() => setDocumentsInvoicesErrorDismissed(true)}
-          />
-        </Column>
-      )}
+      {!loading && !!errorMessage && <DetailLoadError message={errorMessage} />}
 
       {detail && detailMatchesRoute && (
         <>
-          {!!permitTablesErrorMessage && (
-            <Column sm={4} md={8} lg={16} className="detail-page-error">
-              <AppNotification
-                kind="warning"
-                title="Permit tables unavailable"
-                subtitle={permitTablesErrorMessage}
-                lowContrast
-              />
-            </Column>
-          )}
-          {!!gbmsErrorMessage && (
-            <Column sm={4} md={8} lg={16} className="detail-page-error">
-              <AppNotification
-                kind="warning"
-                title="GBMS history unavailable"
-                subtitle={gbmsErrorMessage}
-                lowContrast
-                onCloseButtonClick={() => setGbmsErrorMessage('')}
-              />
-            </Column>
-          )}
           {!!permitEditLockMessage && (
             <Column sm={4} md={8} lg={16} className="detail-page-error">
-              <AppNotification
+              <InlineNotification
+                className="detail-context-notification"
                 kind="warning"
                 title="Editing unavailable"
                 subtitle={permitEditLockMessage}
                 lowContrast
+                hideCloseButton
               />
             </Column>
           )}
           {!!permitEditContextUnavailableMessage && (
             <Column sm={4} md={8} lg={16} className="detail-page-error">
-              <AppNotification
+              <InlineNotification
+                className="detail-context-notification"
                 kind="warning"
                 title="Editing unavailable"
                 subtitle={permitEditContextUnavailableMessage}
                 lowContrast
-              />
-            </Column>
-          )}
-          {!!shippingReferencesErrorMessage && (
-            <Column sm={4} md={8} lg={16} className="detail-page-error">
-              <AppNotification
-                kind="warning"
-                title="Shipping options unavailable"
-                subtitle={shippingReferencesErrorMessage}
-                lowContrast
+                hideCloseButton
               />
             </Column>
           )}
           {!!permitOptionsErrorMessage && (
             <Column sm={4} md={8} lg={16} className="detail-page-error">
-              <AppNotification
+              <InlineNotification
+                className="detail-context-notification"
                 kind="warning"
                 title="Permit options unavailable"
                 subtitle={permitOptionsErrorMessage}
                 lowContrast
+                hideCloseButton
               />
             </Column>
           )}
           {requiredPermitOptionsMissing && (
             <Column sm={4} md={8} lg={16} className="detail-page-error">
-              <AppNotification
+              <InlineNotification
+                className="detail-context-notification"
                 kind="warning"
                 title="Required permit options not configured"
                 subtitle="A required permit status or Blanket OIC region list is empty. Permit saves are disabled."
                 lowContrast
+                hideCloseButton
               />
             </Column>
           )}
@@ -2971,6 +2966,7 @@ const ProvincialPermitDetailsPage = () => {
                 title="Action info"
                 subtitle={actionInfoMessage}
                 lowContrast
+                autoDismissMs={6000}
                 onCloseButtonClick={() => setActionInfoMessage('')}
               />
             </Column>
@@ -3011,7 +3007,6 @@ const ProvincialPermitDetailsPage = () => {
               <TabList
                 aria-label="Permit detail sections"
                 contained
-                size="md"
                 className="application-tabs__list application-detail-tab-list"
               >
                 {permitDetailTabs.map(({ id, label }) => (
@@ -3322,60 +3317,65 @@ const ProvincialPermitDetailsPage = () => {
                         <Tile>
                           <h2 className="detail-tile-title">Associated applications</h2>
                           {isPermitTablesLoading ? (
-                            <InlineLoading description="Loading associated permit applications..." />
-                          ) : (
-                            !permitTablesErrorMessage &&
-                            (associatedPermitApplications.length > 0 ? (
-                              <TableFrame ariaLabel="Associated permit applications">
-                                <Table useZebraStyles>
-                                  <TableHead>
-                                    <TableRow>
-                                      <TableHeader>Application number</TableHeader>
+                            <InlineLoading description="Loading associated permit applications…" />
+                          ) : permitTablesErrorMessage ? (
+                            <EmptyState
+                              title="Associated applications unavailable"
+                              description={permitTablesErrorMessage}
+                              headingLevel={3}
+                              role="alert"
+                            />
+                          ) : associatedPermitApplications.length > 0 ? (
+                            <TableFrame ariaLabel="Associated permit applications">
+                              <Table size="md" useZebraStyles>
+                                <TableHead>
+                                  <TableRow>
+                                    <TableHeader>Application number</TableHeader>
+                                    {canEditPermitApplications && (
+                                      <TableHeader>Actions</TableHeader>
+                                    )}
+                                  </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                  {associatedPermitApplications.map((applicationNumber) => (
+                                    <TableRow key={applicationNumber}>
+                                      <TableCell>
+                                        <Link
+                                          to={`/provincial/application/${encodeURIComponent(applicationNumber)}`}
+                                        >
+                                          {applicationNumber}
+                                        </Link>
+                                      </TableCell>
                                       {canEditPermitApplications && (
-                                        <TableHeader>Actions</TableHeader>
+                                        <TableCell>
+                                          <Button
+                                            kind="ghost"
+                                            size="sm"
+                                            disabled={
+                                              isRemovingPermitApplication === applicationNumber
+                                            }
+                                            renderIcon={TrashCan}
+                                            onClick={() =>
+                                              setPermitApplicationPendingRemoval(applicationNumber)
+                                            }
+                                          >
+                                            {isRemovingPermitApplication === applicationNumber
+                                              ? 'Removing…'
+                                              : 'Remove'}
+                                          </Button>
+                                        </TableCell>
                                       )}
                                     </TableRow>
-                                  </TableHead>
-                                  <TableBody>
-                                    {associatedPermitApplications.map((applicationNumber) => (
-                                      <TableRow key={applicationNumber}>
-                                        <TableCell>
-                                          <Link
-                                            to={`/provincial/application/${encodeURIComponent(applicationNumber)}`}
-                                          >
-                                            {applicationNumber}
-                                          </Link>
-                                        </TableCell>
-                                        {canEditPermitApplications && (
-                                          <TableCell>
-                                            <Button
-                                              kind="ghost"
-                                              size="sm"
-                                              disabled={
-                                                isRemovingPermitApplication === applicationNumber
-                                              }
-                                              onClick={() =>
-                                                void onRemovePermitApplication(applicationNumber)
-                                              }
-                                            >
-                                              {isRemovingPermitApplication === applicationNumber
-                                                ? 'Removing...'
-                                                : 'Remove'}
-                                            </Button>
-                                          </TableCell>
-                                        )}
-                                      </TableRow>
-                                    ))}
-                                  </TableBody>
-                                </Table>
-                              </TableFrame>
-                            ) : (
-                              <EmptyState
-                                title="No associated applications"
-                                description="No applications are associated with this permit."
-                                headingLevel={3}
-                              />
-                            ))
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </TableFrame>
+                          ) : (
+                            <EmptyState
+                              title="No associated applications"
+                              description="No applications are associated with this permit."
+                              headingLevel={3}
+                            />
                           )}
                           {canEditPermitApplications && (
                             <>
@@ -3410,9 +3410,10 @@ const ProvincialPermitDetailsPage = () => {
                                     isLoadingAvailableApplications ||
                                     !selectedPermitApplicationToAdd
                                   }
+                                  renderIcon={isSavingPermitApplication ? PendingIcon : undefined}
                                   onClick={() => void onAddPermitApplication()}
                                 >
-                                  {isSavingPermitApplication ? 'Adding...' : 'Add application'}
+                                  {isSavingPermitApplication ? 'Adding…' : 'Add application'}
                                 </Button>
                               </div>
                             </>
@@ -3434,12 +3435,13 @@ const ProvincialPermitDetailsPage = () => {
                                   permitOptionsUnavailable ||
                                   requiredPermitOptionsMissing
                                 }
+                                renderIcon={isSavingPermit ? PendingIcon : undefined}
                                 onClick={() => void onSavePermit()}
                               >
-                                {isSavingPermit ? 'Saving...' : 'Save permit'}
+                                {isSavingPermit ? 'Saving…' : 'Save permit'}
                               </Button>
                               <Button
-                                kind="secondary"
+                                kind="tertiary"
                                 size="sm"
                                 disabled={isSavingPermit}
                                 onClick={() => {
@@ -3452,7 +3454,7 @@ const ProvincialPermitDetailsPage = () => {
                             </>
                           ) : (
                             <Button
-                              kind="secondary"
+                              kind="tertiary"
                               size="sm"
                               onClick={() => {
                                 resetPermitFormSection(false)
@@ -3501,6 +3503,16 @@ const ProvincialPermitDetailsPage = () => {
                       {isEditingShipping && permitForm ? (
                         <Tile>
                           <h2 className="detail-tile-title">Shipping</h2>
+                          {shippingReferencesErrorMessage && (
+                            <InlineNotification
+                              className="detail-context-notification"
+                              kind="warning"
+                              lowContrast
+                              hideCloseButton
+                              title="Shipping options unavailable"
+                              subtitle={shippingReferencesErrorMessage}
+                            />
+                          )}
                           <div className="legacy-search-grid">
                             {renderPermitTextInput(
                               'destinationCompanyName',
@@ -3609,58 +3621,70 @@ const ProvincialPermitDetailsPage = () => {
                           </div>
                         </Tile>
                       ) : (
-                        <DetailFieldTile
-                          title="Shipping"
-                          fields={[
-                            {
-                              label: 'Destination company',
-                              value: displayValue(detail.destinationCompanyName),
-                            },
-                            {
-                              label: 'Destination country',
-                              value: displayValue(
-                                shippingReferenceLabel(
-                                  shippingReferences?.countries,
-                                  detail.destinationCountryCode,
+                        <>
+                          {shippingReferencesErrorMessage && (
+                            <InlineNotification
+                              className="detail-context-notification"
+                              kind="warning"
+                              lowContrast
+                              hideCloseButton
+                              title="Shipping options unavailable"
+                              subtitle={shippingReferencesErrorMessage}
+                            />
+                          )}
+                          <DetailFieldTile
+                            title="Shipping"
+                            fields={[
+                              {
+                                label: 'Destination company',
+                                value: displayValue(detail.destinationCompanyName),
+                              },
+                              {
+                                label: 'Destination country',
+                                value: displayValue(
+                                  shippingReferenceLabel(
+                                    shippingReferences?.countries,
+                                    detail.destinationCountryCode,
+                                  ),
                                 ),
-                              ),
-                            },
-                            {
-                              label: 'Transport type',
-                              value: displayValue(
-                                shippingReferenceLabel(
-                                  shippingReferences?.transportTypes,
-                                  detail.transportTypeCode,
+                              },
+                              {
+                                label: 'Transport type',
+                                value: displayValue(
+                                  shippingReferenceLabel(
+                                    shippingReferences?.transportTypes,
+                                    detail.transportTypeCode,
+                                  ),
                                 ),
-                              ),
-                            },
-                            {
-                              label: 'Transport name',
-                              value: displayValue(detail.transportName),
-                            },
-                            {
-                              label: 'Port of export',
-                              value: displayValue(
-                                shippingReferenceLabel(
-                                  shippingReferences?.ports,
-                                  detail.portOfExportCode,
+                              },
+                              {
+                                label: 'Transport name',
+                                value: displayValue(detail.transportName),
+                              },
+                              {
+                                label: 'Port of export',
+                                value: displayValue(
+                                  shippingReferenceLabel(
+                                    shippingReferences?.ports,
+                                    detail.portOfExportCode,
+                                  ),
                                 ),
-                              ),
-                            },
-                            ...(detail.portOfExportCode?.trim().toUpperCase() === 'OT'
-                              ? [
-                                  {
-                                    label: 'Other port of export',
-                                    value: displayValue(detail.otherPortOfExport),
-                                  },
-                                ]
-                              : []),
-                            {
-                              label: 'Estimated shipping date',
-                              value: displayValue(detail.estimatedShippingDate),
-                            },
-                          ]}
-                        />
+                              },
+                              ...(detail.portOfExportCode?.trim().toUpperCase() === 'OT'
+                                ? [
+                                    {
+                                      label: 'Other port of export',
+                                      value: displayValue(detail.otherPortOfExport),
+                                    },
+                                  ]
+                                : []),
+                              {
+                                label: 'Estimated shipping date',
+                                value: displayValue(detail.estimatedShippingDate),
+                              },
+                            ]}
+                          />
+                        </>
                       )}
                     </Column>
                     {canEditShipping && (
@@ -3677,12 +3701,13 @@ const ProvincialPermitDetailsPage = () => {
                                   !shippingReferences ||
                                   hasShippingValidationError
                                 }
+                                renderIcon={isSavingShipping ? PendingIcon : undefined}
                                 onClick={() => void onSaveShipping()}
                               >
-                                {isSavingShipping ? 'Saving...' : 'Save shipping'}
+                                {isSavingShipping ? 'Saving…' : 'Save shipping'}
                               </Button>
                               <Button
-                                kind="secondary"
+                                kind="tertiary"
                                 size="sm"
                                 disabled={isSavingShipping}
                                 onClick={() => {
@@ -3695,7 +3720,7 @@ const ProvincialPermitDetailsPage = () => {
                             </>
                           ) : (
                             <Button
-                              kind="secondary"
+                              kind="tertiary"
                               size="sm"
                               disabled={isShippingReferencesLoading || !shippingReferences}
                               onClick={() => {
@@ -3721,111 +3746,112 @@ const ProvincialPermitDetailsPage = () => {
                             {detail.blanketOic ? 'Blanket OIC package details' : 'Package details'}
                           </legend>
                           {isPermitTablesLoading ? (
-                            <InlineLoading description="Loading permit items..." />
-                          ) : (
-                            !permitTablesErrorMessage &&
-                            ((tabsData?.packages ?? []).length > 0 ? (
-                              <TableFrame ariaLabel="Permit packages">
-                                <Table useZebraStyles>
-                                  <TableHead>
-                                    <TableRow>
-                                      <TableHeader>Package number</TableHeader>
-                                      <TableHeader>Region</TableHeader>
-                                      <TableHeader>Species and end use sort</TableHeader>
-                                      <TableHeader>Age class</TableHeader>
-                                      <TableHeader>Package volume (m³)</TableHeader>
-                                      <TableHeader>Average length</TableHeader>
-                                      <TableHeader>Average top diameter</TableHeader>
-                                      <TableHeader>Product type</TableHeader>
+                            <InlineLoading description="Loading permit items…" />
+                          ) : permitTablesErrorMessage ? (
+                            <EmptyState
+                              title="Permit items unavailable"
+                              description={permitTablesErrorMessage}
+                              headingLevel={3}
+                              role="alert"
+                            />
+                          ) : (tabsData?.packages ?? []).length > 0 ? (
+                            <TableFrame ariaLabel="Permit packages">
+                              <Table size="md" useZebraStyles>
+                                <TableHead>
+                                  <TableRow>
+                                    <TableHeader>Package number</TableHeader>
+                                    <TableHeader>Region</TableHeader>
+                                    <TableHeader>Species and end use sort</TableHeader>
+                                    <TableHeader>Age class</TableHeader>
+                                    <TableHeader>Package volume (m³)</TableHeader>
+                                    <TableHeader>Average length</TableHeader>
+                                    <TableHeader>Average top diameter</TableHeader>
+                                    <TableHeader>Product type</TableHeader>
+                                    {detail.blanketOic && (
+                                      <>
+                                        <TableHeader>Current package volume (m³)</TableHeader>
+                                        <TableHeader>Status</TableHeader>
+                                        <TableHeader>Reprocessed</TableHeader>
+                                        <TableHeader>Comments</TableHeader>
+                                      </>
+                                    )}
+                                    {canEditBlanketOicPackages && (
+                                      <TableHeader>Actions</TableHeader>
+                                    )}
+                                  </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                  {(tabsData?.packages ?? []).map((row) => (
+                                    <TableRow key={row.packageNumber}>
+                                      <TableCell>{row.packageNumber || '-'}</TableCell>
+                                      <TableCell>{row.region || '-'}</TableCell>
+                                      <TableCell style={{ whiteSpace: 'pre-line' }}>
+                                        {row.speciesEndUseSort || '-'}
+                                      </TableCell>
+                                      <TableCell>{row.ageClass || '-'}</TableCell>
+                                      <TableCell>{row.packageVolume || '-'}</TableCell>
+                                      <TableCell>{row.averageLength || '-'}</TableCell>
+                                      <TableCell>{row.averageTopDiameter || '-'}</TableCell>
+                                      <TableCell>{row.productType || '-'}</TableCell>
                                       {detail.blanketOic && (
                                         <>
-                                          <TableHeader>Current package volume (m³)</TableHeader>
-                                          <TableHeader>Status</TableHeader>
-                                          <TableHeader>Reprocessed</TableHeader>
-                                          <TableHeader>Comments</TableHeader>
+                                          <TableCell>{row.currentPackageVolume || '-'}</TableCell>
+                                          <TableCell>
+                                            {row.status ? <StatusTag status={row.status} /> : '-'}
+                                          </TableCell>
+                                          <TableCell>{row.reprocessed || '-'}</TableCell>
+                                          <TableCell>{row.comments || '-'}</TableCell>
                                         </>
                                       )}
                                       {canEditBlanketOicPackages && (
-                                        <TableHeader>Actions</TableHeader>
+                                        <TableCell>
+                                          <Button
+                                            type="button"
+                                            kind="ghost"
+                                            size="sm"
+                                            disabled={
+                                              isLoadingBoicPackage ||
+                                              isSavingBoicPackage ||
+                                              isDeletingBoicPackageNumber !== null
+                                            }
+                                            onClick={() =>
+                                              void onEditBlanketOicPackage(row.packageNumber)
+                                            }
+                                          >
+                                            Edit
+                                          </Button>
+                                          <Button
+                                            type="button"
+                                            kind="danger--ghost"
+                                            size="sm"
+                                            disabled={
+                                              isSavingBoicPackage ||
+                                              isDeletingBoicPackageNumber !== null ||
+                                              (tabsData?.items ?? []).some(
+                                                (item) => item.packageNumber === row.packageNumber,
+                                              )
+                                            }
+                                            onClick={() =>
+                                              setBoicPackageNumberPendingDeletion(row.packageNumber)
+                                            }
+                                          >
+                                            {isDeletingBoicPackageNumber === row.packageNumber
+                                              ? 'Deleting…'
+                                              : 'Delete'}
+                                          </Button>
+                                        </TableCell>
                                       )}
                                     </TableRow>
-                                  </TableHead>
-                                  <TableBody>
-                                    {(tabsData?.packages ?? []).map((row) => (
-                                      <TableRow key={row.packageNumber}>
-                                        <TableCell>{row.packageNumber || '-'}</TableCell>
-                                        <TableCell>{row.region || '-'}</TableCell>
-                                        <TableCell style={{ whiteSpace: 'pre-line' }}>
-                                          {row.speciesEndUseSort || '-'}
-                                        </TableCell>
-                                        <TableCell>{row.ageClass || '-'}</TableCell>
-                                        <TableCell>{row.packageVolume || '-'}</TableCell>
-                                        <TableCell>{row.averageLength || '-'}</TableCell>
-                                        <TableCell>{row.averageTopDiameter || '-'}</TableCell>
-                                        <TableCell>{row.productType || '-'}</TableCell>
-                                        {detail.blanketOic && (
-                                          <>
-                                            <TableCell>{row.currentPackageVolume || '-'}</TableCell>
-                                            <TableCell>
-                                              {row.status ? <StatusTag status={row.status} /> : '-'}
-                                            </TableCell>
-                                            <TableCell>{row.reprocessed || '-'}</TableCell>
-                                            <TableCell>{row.comments || '-'}</TableCell>
-                                          </>
-                                        )}
-                                        {canEditBlanketOicPackages && (
-                                          <TableCell>
-                                            <Button
-                                              type="button"
-                                              kind="ghost"
-                                              size="sm"
-                                              disabled={
-                                                isLoadingBoicPackage ||
-                                                isSavingBoicPackage ||
-                                                isDeletingBoicPackageNumber !== null
-                                              }
-                                              onClick={() =>
-                                                void onEditBlanketOicPackage(row.packageNumber)
-                                              }
-                                            >
-                                              Edit
-                                            </Button>
-                                            <Button
-                                              type="button"
-                                              kind="danger--ghost"
-                                              size="sm"
-                                              disabled={
-                                                isSavingBoicPackage ||
-                                                isDeletingBoicPackageNumber !== null ||
-                                                (tabsData?.items ?? []).some(
-                                                  (item) =>
-                                                    item.packageNumber === row.packageNumber,
-                                                )
-                                              }
-                                              onClick={() =>
-                                                setBoicPackageNumberPendingDeletion(
-                                                  row.packageNumber,
-                                                )
-                                              }
-                                            >
-                                              {isDeletingBoicPackageNumber === row.packageNumber
-                                                ? 'Deleting...'
-                                                : 'Delete'}
-                                            </Button>
-                                          </TableCell>
-                                        )}
-                                      </TableRow>
-                                    ))}
-                                  </TableBody>
-                                </Table>
-                              </TableFrame>
-                            ) : (
-                              <EmptyState
-                                title="No package details"
-                                description="No package detail rows are available for this permit."
-                                headingLevel={3}
-                              />
-                            ))
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </TableFrame>
+                          ) : (
+                            <EmptyState
+                              title="No package details"
+                              description="No package detail rows are available for this permit."
+                              headingLevel={3}
+                            />
                           )}
                           {canEditBlanketOicPackages && (
                             <div className="application-detail-edit-section">
@@ -3835,7 +3861,7 @@ const ProvincialPermitDetailsPage = () => {
                                   : 'Create Blanket OIC package'}
                               </h3>
                               {isLoadingBoicPackage && (
-                                <InlineLoading description="Loading package..." />
+                                <InlineLoading description="Loading package…" />
                               )}
                               <div className="legacy-search-grid">
                                 <TextInput
@@ -3971,10 +3997,11 @@ const ProvincialPermitDetailsPage = () => {
                                   type="button"
                                   size="sm"
                                   disabled={isLoadingBoicPackage || isSavingBoicPackage}
+                                  renderIcon={isSavingBoicPackage ? PendingIcon : undefined}
                                   onClick={() => void onSaveBlanketOicPackage()}
                                 >
                                   {isSavingBoicPackage
-                                    ? 'Saving...'
+                                    ? 'Saving…'
                                     : editingBoicPackageNumber
                                       ? 'Save package'
                                       : 'Create package'}
@@ -4067,9 +4094,10 @@ const ProvincialPermitDetailsPage = () => {
                                     !detail.oicApplicationNumber ||
                                     blanketOicPackageOptions.length === 0
                                   }
+                                  renderIcon={isSavingBoicScale ? PendingIcon : undefined}
                                   onClick={() => void onAddBlanketOicScale()}
                                 >
-                                  {isSavingBoicScale ? 'Adding scale...' : 'Add scale'}
+                                  {isSavingBoicScale ? 'Adding scale…' : 'Add scale'}
                                 </Button>
                               </div>
                             </>
@@ -4086,7 +4114,7 @@ const ProvincialPermitDetailsPage = () => {
                           {!permitTablesErrorMessage &&
                             (filteredItems.length > 0 ? (
                               <TableFrame ariaLabel="Permit item rows">
-                                <Table useZebraStyles>
+                                <Table size="md" useZebraStyles>
                                   <TableHead>
                                     <TableRow>
                                       {canDisplayNormalPermitScaleMembership && (
@@ -4140,13 +4168,14 @@ const ProvincialPermitDetailsPage = () => {
                                           <TableCell>
                                             {row.includedInPermit ? (
                                               <Button
-                                                kind="ghost"
+                                                kind="danger--ghost"
                                                 size="sm"
                                                 disabled={isDeletingBoicScaleId === row.id}
-                                                onClick={() => void onDeleteBlanketOicScale(row.id)}
+                                                renderIcon={TrashCan}
+                                                onClick={() => setBoicScalePendingRemoval(row)}
                                               >
                                                 {isDeletingBoicScaleId === row.id
-                                                  ? 'Removing...'
+                                                  ? 'Removing…'
                                                   : 'Remove'}
                                               </Button>
                                             ) : (
@@ -4221,7 +4250,7 @@ const ProvincialPermitDetailsPage = () => {
                             <p>
                               {editContextLoadFailed
                                 ? 'Fee override details are unavailable. No override changes can be saved.'
-                                : 'Loading fee override details...'}
+                                : 'Loading fee override details…'}
                             </p>
                           ) : isEditingFeeOverride ? (
                             <>
@@ -4273,12 +4302,13 @@ const ProvincialPermitDetailsPage = () => {
                                   kind="primary"
                                   size="sm"
                                   disabled={isSavingFeeOverride}
+                                  renderIcon={isSavingFeeOverride ? PendingIcon : undefined}
                                   onClick={() => void onSaveFeeOverride()}
                                 >
-                                  {isSavingFeeOverride ? 'Saving...' : 'Save fee override'}
+                                  {isSavingFeeOverride ? 'Saving…' : 'Save fee override'}
                                 </Button>
                                 <Button
-                                  kind="secondary"
+                                  kind="tertiary"
                                   size="sm"
                                   disabled={isSavingFeeOverride}
                                   onClick={() => {
@@ -4315,7 +4345,7 @@ const ProvincialPermitDetailsPage = () => {
                               {canEditFeeOverride && (
                                 <div className="legacy-search-actions">
                                   <Button
-                                    kind="secondary"
+                                    kind="tertiary"
                                     size="sm"
                                     onClick={() => setIsEditingFeeOverride(true)}
                                   >
@@ -4341,65 +4371,69 @@ const ProvincialPermitDetailsPage = () => {
                             role="alert"
                           />
                         ) : deferredPermitTabLoading.fees ? (
-                          <InlineLoading description="Loading permit fee details..." />
-                        ) : (
-                          !permitTablesErrorMessage &&
-                          (filteredFees.length > 0 ? (
-                            <TableFrame ariaLabel="Permit fee rows">
-                              <Table useZebraStyles>
-                                <TableHead>
-                                  <TableRow>
-                                    <TableHeader>Package</TableHeader>
-                                    <TableHeader>Timber Mark</TableHeader>
-                                    <TableHeader>Species</TableHeader>
-                                    <TableHeader>Grade</TableHeader>
-                                    <TableHeader>AMV ($/m³ CAD)</TableHeader>
-                                    <TableHeader>Volume (m³)</TableHeader>
-                                    {showMinistryFeeColumn && <TableHeader>EWB$</TableHeader>}
-                                    <TableHeader>FIL%</TableHeader>
-                                    <TableHeader>MF%</TableHeader>
-                                    <TableHeader>Fee (CAD)</TableHeader>
+                          <InlineLoading description="Loading permit fee details…" />
+                        ) : permitTablesErrorMessage ? (
+                          <EmptyState
+                            title="Fee calculation unavailable"
+                            description={permitTablesErrorMessage}
+                            headingLevel={3}
+                            role="alert"
+                          />
+                        ) : filteredFees.length > 0 ? (
+                          <TableFrame ariaLabel="Permit fee rows">
+                            <Table size="md" useZebraStyles>
+                              <TableHead>
+                                <TableRow>
+                                  <TableHeader>Package</TableHeader>
+                                  <TableHeader>Timber Mark</TableHeader>
+                                  <TableHeader>Species</TableHeader>
+                                  <TableHeader>Grade</TableHeader>
+                                  <TableHeader>AMV ($/m³ CAD)</TableHeader>
+                                  <TableHeader>Volume (m³)</TableHeader>
+                                  {showMinistryFeeColumn && <TableHeader>EWB$</TableHeader>}
+                                  <TableHeader>FIL%</TableHeader>
+                                  <TableHeader>MF%</TableHeader>
+                                  <TableHeader>Fee (CAD)</TableHeader>
+                                </TableRow>
+                              </TableHead>
+                              <TableBody>
+                                {filteredFees.map((row) => (
+                                  <TableRow key={row.id}>
+                                    <TableCell>{row.packageNumber || '-'}</TableCell>
+                                    <TableCell>{row.timberMark || '-'}</TableCell>
+                                    <TableCell>{row.species || '-'}</TableCell>
+                                    <TableCell>{row.grade || '-'}</TableCell>
+                                    <TableCell>{row.amv || '-'}</TableCell>
+                                    <TableCell>{row.volume.toLocaleString()}</TableCell>
+                                    {showMinistryFeeColumn && (
+                                      <TableCell>{row.ewb || '-'}</TableCell>
+                                    )}
+                                    <TableCell>{row.filPercent || '-'}</TableCell>
+                                    <TableCell>{row.mfPercent || '-'}</TableCell>
+                                    <TableCell>
+                                      {row.amountDisplay.trim() === '$'
+                                        ? '$'
+                                        : `$${formatAmount(row.amount)}`}
+                                    </TableCell>
                                   </TableRow>
-                                </TableHead>
-                                <TableBody>
-                                  {filteredFees.map((row) => (
-                                    <TableRow key={row.id}>
-                                      <TableCell>{row.packageNumber || '-'}</TableCell>
-                                      <TableCell>{row.timberMark || '-'}</TableCell>
-                                      <TableCell>{row.species || '-'}</TableCell>
-                                      <TableCell>{row.grade || '-'}</TableCell>
-                                      <TableCell>{row.amv || '-'}</TableCell>
-                                      <TableCell>{row.volume.toLocaleString()}</TableCell>
-                                      {showMinistryFeeColumn && (
-                                        <TableCell>{row.ewb || '-'}</TableCell>
-                                      )}
-                                      <TableCell>{row.filPercent || '-'}</TableCell>
-                                      <TableCell>{row.mfPercent || '-'}</TableCell>
-                                      <TableCell>
-                                        {row.amountDisplay.trim() === '$'
-                                          ? '$'
-                                          : `$${formatAmount(row.amount)}`}
-                                      </TableCell>
-                                    </TableRow>
-                                  ))}
-                                </TableBody>
-                              </Table>
-                            </TableFrame>
-                          ) : (
-                            <EmptyState
-                              title={
-                                (tabsData?.fees ?? []).length === 0
-                                  ? 'No fee details available'
-                                  : 'No matching fee details'
-                              }
-                              description={
-                                (tabsData?.fees ?? []).length === 0
-                                  ? 'No fee rows are available for this permit.'
-                                  : 'No fee rows matched the current filter.'
-                              }
-                              headingLevel={3}
-                            />
-                          ))
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </TableFrame>
+                        ) : (
+                          <EmptyState
+                            title={
+                              (tabsData?.fees ?? []).length === 0
+                                ? 'No fee details available'
+                                : 'No matching fee details'
+                            }
+                            description={
+                              (tabsData?.fees ?? []).length === 0
+                                ? 'No fee rows are available for this permit.'
+                                : 'No fee rows matched the current filter.'
+                            }
+                            headingLevel={3}
+                          />
                         )}
                       </Tile>
                     </Column>
@@ -4411,9 +4445,16 @@ const ProvincialPermitDetailsPage = () => {
                       <Column sm={4} md={8} lg={16}>
                         <Tile>
                           <h2 className="detail-tile-title">GBMS invoice history</h2>
-                          {!permitTablesErrorMessage && (
+                          {gbmsErrorMessage ? (
+                            <EmptyState
+                              title="GBMS history unavailable"
+                              description={gbmsErrorMessage}
+                              headingLevel={3}
+                              role="alert"
+                            />
+                          ) : (
                             <TableFrame ariaLabel="GBMS invoice history">
-                              <Table useZebraStyles>
+                              <Table size="md" useZebraStyles>
                                 <TableHead>
                                   <TableRow>
                                     <TableHeader>GBMS Invoice Number</TableHeader>
@@ -4455,7 +4496,7 @@ const ProvincialPermitDetailsPage = () => {
                           {canEditPermitDocuments &&
                             (isEditingPermitDocuments ? (
                               <Button
-                                kind="secondary"
+                                kind="tertiary"
                                 size="sm"
                                 disabled={permitDocumentUploadBusy || isRemovingDocumentId !== null}
                                 onClick={onCancelPermitDocumentEditing}
@@ -4495,7 +4536,7 @@ const ProvincialPermitDetailsPage = () => {
                           placeholder="Filter by file name, description, type, source, or id"
                         />
                         {deferredPermitTabLoading.documents ? (
-                          <InlineLoading description="Loading permit documents..." />
+                          <InlineLoading description="Loading permit documents…" />
                         ) : documentsErrorMessage ? (
                           <EmptyState
                             title="Permit documents unavailable"
@@ -4505,7 +4546,7 @@ const ProvincialPermitDetailsPage = () => {
                           />
                         ) : filteredDocumentRows.length > 0 ? (
                           <TableFrame ariaLabel="Permit document rows">
-                            <Table useZebraStyles>
+                            <Table size="md" useZebraStyles>
                               <TableHead>
                                 <TableRow>
                                   <TableHeader>File Name</TableHeader>
@@ -4551,10 +4592,11 @@ const ProvincialPermitDetailsPage = () => {
                                                   ? 'The document source is not safe to delete from this page.'
                                                   : undefined
                                               }
-                                              onClick={() => void onRemoveDocument(row)}
+                                              renderIcon={TrashCan}
+                                              onClick={() => setDocumentPendingDeletion(row)}
                                             >
                                               {isRemovingDocumentId === row.id
-                                                ? 'Deleting...'
+                                                ? 'Deleting…'
                                                 : 'Delete'}
                                             </Button>
                                           )}
@@ -4594,7 +4636,7 @@ const ProvincialPermitDetailsPage = () => {
                           {canEditInvoiceDocuments &&
                             (isEditingInvoiceDocuments ? (
                               <Button
-                                kind="secondary"
+                                kind="tertiary"
                                 size="sm"
                                 disabled={invoiceDocumentUploadBusy}
                                 onClick={onCancelInvoiceDocumentEditing}
@@ -4634,7 +4676,7 @@ const ProvincialPermitDetailsPage = () => {
                           placeholder="Filter by invoice number, value, rate, or fee-in-lieu"
                         />
                         {deferredPermitTabLoading.invoices ? (
-                          <InlineLoading description="Loading permit invoices..." />
+                          <InlineLoading description="Loading permit invoices…" />
                         ) : invoicesErrorMessage ? (
                           <EmptyState
                             title="Invoices unavailable"
@@ -4644,7 +4686,7 @@ const ProvincialPermitDetailsPage = () => {
                           />
                         ) : filteredInvoiceRows.length > 0 ? (
                           <TableFrame ariaLabel="Permit invoice rows">
-                            <Table useZebraStyles>
+                            <Table size="md" useZebraStyles>
                               <TableHead>
                                 <TableRow>
                                   <TableHeader>Invoice number</TableHeader>
@@ -4705,6 +4747,7 @@ const ProvincialPermitDetailsPage = () => {
           pendingLabel="Sending…"
           confirmDisabled={!isValidEmail(permitApprovalEmailAddress)}
           onClose={() => setPermitApprovalEmailOpen(false)}
+          onError={() => undefined}
           onConfirm={async () => {
             const sent = await onSendPermitEmail('approval', permitApprovalEmailAddress)
             if (!sent) {
@@ -4722,6 +4765,61 @@ const ProvincialPermitDetailsPage = () => {
             onChange={(event) => setPermitApprovalEmailAddress(event.target.value)}
           />
         </ConfirmationModal>
+      )}
+      {permitApplicationPendingRemoval && (
+        <ConfirmationModal
+          open
+          danger
+          title="Remove associated application?"
+          description={
+            <>
+              <strong>{permitApplicationPendingRemoval}</strong> will be removed from permit{' '}
+              {detail?.permitNumber ?? permitNumber ?? ''}.
+            </>
+          }
+          confirmLabel="Remove"
+          pendingLabel="Removing…"
+          errorTitle="Failed to remove application"
+          onClose={() => setPermitApplicationPendingRemoval(null)}
+          onConfirm={() => onRemovePermitApplication(permitApplicationPendingRemoval)}
+        />
+      )}
+      {documentPendingDeletion && (
+        <ConfirmationModal
+          open
+          danger
+          title="Delete document"
+          description={
+            <>
+              Permanently delete <strong>{documentPendingDeletion.name || 'this document'}</strong>?
+              This cannot be undone.
+            </>
+          }
+          confirmLabel="Delete"
+          pendingLabel="Deleting…"
+          errorTitle="Failed to delete document"
+          onClose={() => setDocumentPendingDeletion(null)}
+          onConfirm={() => onRemoveDocument(documentPendingDeletion)}
+        />
+      )}
+      {boicScalePendingRemoval && (
+        <ConfirmationModal
+          open
+          danger
+          title="Remove Blanket OIC scale?"
+          description={
+            <>
+              Scale <strong>{boicScalePendingRemoval.id}</strong> (
+              {boicScalePendingRemoval.timberMark || 'no timber mark'}) will be removed from permit{' '}
+              {detail?.permitNumber ?? permitNumber ?? ''}.
+            </>
+          }
+          confirmLabel="Remove"
+          pendingLabel="Removing…"
+          errorTitle="Failed to remove Blanket OIC scale"
+          onClose={() => setBoicScalePendingRemoval(null)}
+          onConfirm={() => onDeleteBlanketOicScale(boicScalePendingRemoval)}
+        />
       )}
       <ConfirmationModal
         open={boicPackageNumberPendingDeletion !== null}

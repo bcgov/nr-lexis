@@ -16,6 +16,7 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
+import { Add } from '@carbon/icons-react'
 import SearchResultsTableFrame from '../../components/SearchResultsTableFrame'
 import { AppNotification } from '../../components/AppNotification'
 import EmptyState from '@/components/EmptyState'
@@ -34,6 +35,7 @@ import type {
   ProvincialApplicationSearchSortField,
 } from '@/interfaces/ProvincialApplicationSearch'
 import { useAuth } from '@/context/auth/useAuth'
+import { hasProvincialStaffRole } from '@/context/auth/role-utils'
 import { hasInvalidIsoDateValue, isValidIsoDate } from '@/pages/shared/create-form-utils'
 import {
   buildPageDataCacheKey,
@@ -62,6 +64,7 @@ import {
   parsePageSizeParam,
   parsePositiveIntParam,
   parseSortDirectionParam,
+  toCarbonSortDirection,
   type IdTextOption,
 } from '@/pages/shared/search-query-utils'
 import { useSearchFilterDraft } from '@/pages/shared/useSearchFilterDraft'
@@ -80,7 +83,8 @@ import {
   fetchProvincialApplicationOptions,
   type SearchOption,
 } from '@/service/search-options-service'
-import { resolveDefaultRegionAreaIds } from '@/service/user-preference-service'
+import { resolveDefaultZoneRegionIds } from '@/service/user-preference-service'
+import { displayTableValue } from '@/utils/text'
 import IsoDatePicker from '../../components/IsoDatePicker'
 
 type ExemptionStatus = {
@@ -180,7 +184,9 @@ const ProvincialApplicationPage = () => {
   const { capabilities, canPerform } = useAuth()
   const [searchParams, setSearchParams] = usePersistedSearchParams('provincial-applications')
   const [regionOptions, setRegionOptions] = useState<IdTextOption[]>([])
-  const { defaultRegion, preferenceLoading } = useDefaultRegionPreference()
+  const { defaultRegion: defaultZone, preferenceLoading } = useDefaultRegionPreference(
+    hasProvincialStaffRole(capabilities.roles),
+  )
   const [exemptionTypeOptions, setExemptionTypeOptions] = useState<SearchOption[]>([])
   const [applicationStatusOptions, setApplicationStatusOptions] = useState<SearchOption[]>([])
   const [productTypeOptions, setProductTypeOptions] = useState<SearchOption[]>([])
@@ -268,19 +274,19 @@ const ProvincialApplicationPage = () => {
     () => mapSelectedOptionsById(filters.region, regionOptions, (id) => `Region ${id}`),
     [filters.region, regionOptions],
   )
-  const defaultRegionAreaIds = useMemo(
+  const defaultZoneRegionIds = useMemo(
     () =>
-      resolveDefaultRegionAreaIds(
-        defaultRegion,
+      resolveDefaultZoneRegionIds(
+        defaultZone,
         regionOptions.map((region) => region.id),
       ),
-    [defaultRegion, regionOptions],
+    [defaultZone, regionOptions],
   )
   const regionDefaultPending =
     !searchParams.has('region') &&
     (optionsLoading ||
       preferenceLoading ||
-      (!optionsUnavailable && defaultRegionAreaIds.length > 0))
+      (!optionsUnavailable && defaultZoneRegionIds.length > 0))
 
   const hasDateValidationError = useMemo(() => {
     return hasInvalidIsoDateValue(
@@ -445,7 +451,7 @@ const ProvincialApplicationPage = () => {
       preferenceLoading ||
       optionsUnavailable ||
       searchParams.has('region') ||
-      defaultRegionAreaIds.length === 0
+      defaultZoneRegionIds.length === 0
     ) {
       return
     }
@@ -455,7 +461,7 @@ const ProvincialApplicationPage = () => {
         buildSearchParams(
           {
             ...urlState.filters,
-            region: defaultRegionAreaIds,
+            region: defaultZoneRegionIds,
           },
           urlState.sortField,
           urlState.sortDirection,
@@ -469,10 +475,10 @@ const ProvincialApplicationPage = () => {
 
     setFilters((currentFilters) => ({
       ...currentFilters,
-      region: defaultRegionAreaIds,
+      region: defaultZoneRegionIds,
     }))
   }, [
-    defaultRegionAreaIds,
+    defaultZoneRegionIds,
     hasSearchQuery,
     optionsLoading,
     optionsUnavailable,
@@ -515,7 +521,7 @@ const ProvincialApplicationPage = () => {
     clearSelection()
     const defaultFilters = {
       ...INITIAL_FILTERS,
-      region: defaultRegionAreaIds,
+      region: defaultZoneRegionIds,
     }
     setFilters(defaultFilters)
     setSearchParams(
@@ -621,7 +627,10 @@ const ProvincialApplicationPage = () => {
   }
 
   return (
-    <Grid fullWidth className="default-grid provincial-application-search-page">
+    <Grid
+      fullWidth
+      className="default-grid fullbleed-table-page provincial-application-search-page"
+    >
       <Column sm={4} md={8} lg={16}>
         <PageHeader
           title="Provincial application search"
@@ -771,33 +780,10 @@ const ProvincialApplicationPage = () => {
                   disabled={loading}
                   size="md"
                 >
-                  Clear Filters
+                  Clear all
                 </Button>
                 <SearchSubmitButton loading={loading} disabled={hasDateValidationError} />
-                {canCreateExemption && (
-                  <DisabledButtonTooltip
-                    disabled={selectedRowsCount === 0}
-                    description="Select at least one eligible application."
-                  >
-                    <Button
-                      type="button"
-                      kind="secondary"
-                      size="md"
-                      onClick={onCreateExemptionClick}
-                      disabled={selectedRowsCount === 0}
-                    >
-                      Create exemption for Selected Applications
-                    </Button>
-                  </DisabledButtonTooltip>
-                )}
               </div>
-              {canCreateApplication && (
-                <div className="provincial-application-create-link">
-                  <Link className="cds--link" to="/provincial/application/create">
-                    Add Application
-                  </Link>
-                </div>
-              )}
               {exemptionStatus && (
                 <AppNotification
                   className="legacy-inline-notification"
@@ -825,11 +811,44 @@ const ProvincialApplicationPage = () => {
         >
           <SearchResultsTableFrame
             loading={loading}
-            loadingDescription="Loading application search results..."
+            loadingDescription="Loading application search results…"
             totalItems={
               errorMessage || (loading && results.content.length === 0)
                 ? undefined
                 : results.page.totalElements
+            }
+            actions={
+              canCreateExemption || canCreateApplication ? (
+                <>
+                  {canCreateExemption && (
+                    <DisabledButtonTooltip
+                      disabled={selectedRowsCount === 0}
+                      description="Select at least one eligible application."
+                    >
+                      <Button
+                        type="button"
+                        kind="tertiary"
+                        size="md"
+                        onClick={onCreateExemptionClick}
+                        disabled={selectedRowsCount === 0}
+                      >
+                        Create exemption for selected applications
+                      </Button>
+                    </DisabledButtonTooltip>
+                  )}
+                  {canCreateApplication && (
+                    <Button
+                      as={Link}
+                      to="/provincial/application/create"
+                      kind="primary"
+                      size="md"
+                      renderIcon={Add}
+                    >
+                      Add application
+                    </Button>
+                  )}
+                </>
+              ) : undefined
             }
           >
             {errorMessage ? (
@@ -839,7 +858,7 @@ const ProvincialApplicationPage = () => {
                 description={errorMessage}
               />
             ) : results.content.length > 0 ? (
-              <Table useZebraStyles>
+              <Table size="md" useZebraStyles>
                 <TableHead>
                   <TableRow>
                     {canCreateExemption && (
@@ -862,18 +881,20 @@ const ProvincialApplicationPage = () => {
                       </TableHeader>
                     )}
                     {visibleResultColumns.map((column) => (
-                      <TableHeader key={column.id}>
-                        {column.sortField ? (
-                          <button
-                            type="button"
-                            className="legacy-sort-button"
-                            onClick={() => onHeaderClick(column.sortField!)}
-                          >
-                            {column.label}
-                          </button>
-                        ) : (
-                          column.label
-                        )}
+                      <TableHeader
+                        key={column.id}
+                        isSortable={Boolean(column.sortField)}
+                        isSortHeader={column.sortField === sortField}
+                        sortDirection={
+                          column.sortField === sortField
+                            ? toCarbonSortDirection(sortDirection)
+                            : 'NONE'
+                        }
+                        onClick={
+                          column.sortField ? () => onHeaderClick(column.sortField!) : undefined
+                        }
+                      >
+                        {column.label}
                       </TableHeader>
                     ))}
                   </TableRow>
@@ -911,10 +932,12 @@ const ProvincialApplicationPage = () => {
                       <TableCell>
                         <StatusTag status={row.status} />
                       </TableCell>
-                      {canCreateExemption && <TableCell>{row.applicantClientNumber}</TableCell>}
-                      <TableCell>{row.ownerClientNumber}</TableCell>
-                      <TableCell>{row.region}</TableCell>
-                      <TableCell>{row.applicationVolume}</TableCell>
+                      {canCreateExemption && (
+                        <TableCell>{displayTableValue(row.applicantClientNumber)}</TableCell>
+                      )}
+                      <TableCell>{displayTableValue(row.ownerClientNumber)}</TableCell>
+                      <TableCell>{displayTableValue(row.region)}</TableCell>
+                      <TableCell>{displayTableValue(row.applicationVolume)}</TableCell>
                       <TableCell>
                         {row.exemptionNumber ? (
                           <Link
@@ -924,10 +947,12 @@ const ProvincialApplicationPage = () => {
                             {row.exemptionNumber}
                           </Link>
                         ) : (
-                          '-'
+                          displayTableValue(row.exemptionNumber)
                         )}
                       </TableCell>
-                      <TableCell className="legacy-search-table-date">{row.listingDate}</TableCell>
+                      <TableCell className="legacy-search-table-date">
+                        {displayTableValue(row.listingDate)}
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

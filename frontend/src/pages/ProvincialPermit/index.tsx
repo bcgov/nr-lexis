@@ -29,6 +29,7 @@ import type {
   ProvincialPermitSearchSortField,
 } from '@/interfaces/ProvincialPermitSearch'
 import { useAuth } from '@/context/auth/useAuth'
+import { hasProvincialStaffRole } from '@/context/auth/role-utils'
 import { hasInvalidIsoDateValue, isValidIsoDate } from '@/pages/shared/create-form-utils'
 import {
   DEFAULT_SEARCH_PAGE,
@@ -45,6 +46,7 @@ import {
   parsePageSizeParam,
   parsePositiveIntParam,
   parseSortDirectionParam,
+  toCarbonSortDirection,
   type IdTextOption,
 } from '@/pages/shared/search-query-utils'
 import {
@@ -73,8 +75,9 @@ import {
   searchProvincialPermits,
 } from '@/service/provincial-permit-search-service'
 import { fetchProvincialPermitOptions, type SearchOption } from '@/service/search-options-service'
-import { resolveDefaultRegionAreaIds } from '@/service/user-preference-service'
+import { resolveDefaultZoneRegionIds } from '@/service/user-preference-service'
 import { formatPermitNumber } from '@/utils/permit'
+import { displayTableValue } from '@/utils/text'
 
 const INITIAL_FILTERS: ProvincialPermitSearchFilters = {
   applicationNumber: '',
@@ -138,7 +141,9 @@ const ProvincialPermitPage = () => {
   const { capabilities } = useAuth()
   const [searchParams, setSearchParams] = usePersistedSearchParams('provincial-permits')
   const [regionOptions, setRegionOptions] = useState<IdTextOption[]>([])
-  const { defaultRegion, preferenceLoading } = useDefaultRegionPreference()
+  const { defaultRegion: defaultZone, preferenceLoading } = useDefaultRegionPreference(
+    hasProvincialStaffRole(capabilities.roles),
+  )
   const [permitStatusOptions, setPermitStatusOptions] = useState<SearchOption[]>([])
   const [optionsLoading, setOptionsLoading] = useState(true)
   const [optionsUnavailable, setOptionsUnavailable] = useState(false)
@@ -205,19 +210,19 @@ const ProvincialPermitPage = () => {
     () => mapSelectedOptionsById(filters.region, regionOptions, (id) => `Region ${id}`),
     [filters.region, regionOptions],
   )
-  const defaultRegionAreaIds = useMemo(
+  const defaultZoneRegionIds = useMemo(
     () =>
-      resolveDefaultRegionAreaIds(
-        defaultRegion,
+      resolveDefaultZoneRegionIds(
+        defaultZone,
         regionOptions.map((region) => region.id),
       ),
-    [defaultRegion, regionOptions],
+    [defaultZone, regionOptions],
   )
   const regionDefaultPending =
     !searchParams.has('region') &&
     (optionsLoading ||
       preferenceLoading ||
-      (!optionsUnavailable && defaultRegionAreaIds.length > 0))
+      (!optionsUnavailable && defaultZoneRegionIds.length > 0))
 
   const hasDateValidationError = useMemo(() => {
     return hasInvalidIsoDateValue(filters.issuedFromDate, filters.issuedToDate)
@@ -362,7 +367,7 @@ const ProvincialPermitPage = () => {
       preferenceLoading ||
       optionsUnavailable ||
       searchParams.has('region') ||
-      defaultRegionAreaIds.length === 0
+      defaultZoneRegionIds.length === 0
     ) {
       return
     }
@@ -372,7 +377,7 @@ const ProvincialPermitPage = () => {
         buildSearchParams(
           {
             ...urlState.filters,
-            region: defaultRegionAreaIds,
+            region: defaultZoneRegionIds,
           },
           urlState.sortField,
           urlState.sortDirection,
@@ -386,10 +391,10 @@ const ProvincialPermitPage = () => {
 
     setFilters((currentFilters) => ({
       ...currentFilters,
-      region: defaultRegionAreaIds,
+      region: defaultZoneRegionIds,
     }))
   }, [
-    defaultRegionAreaIds,
+    defaultZoneRegionIds,
     hasSearchQuery,
     optionsLoading,
     optionsUnavailable,
@@ -430,7 +435,7 @@ const ProvincialPermitPage = () => {
   const onClearFilters = () => {
     const defaultFilters = {
       ...INITIAL_FILTERS,
-      region: defaultRegionAreaIds,
+      region: defaultZoneRegionIds,
     }
     setFilters(defaultFilters)
     setSearchParams(
@@ -452,7 +457,7 @@ const ProvincialPermitPage = () => {
   }
 
   return (
-    <Grid fullWidth className="default-grid provincial-permit-search-page">
+    <Grid fullWidth className="default-grid fullbleed-table-page provincial-permit-search-page">
       <Column sm={4} md={8} lg={16}>
         <PageHeader
           title="Provincial permit search"
@@ -559,7 +564,7 @@ const ProvincialPermitPage = () => {
                   disabled={loading}
                   size="md"
                 >
-                  Clear Filters
+                  Clear all
                 </Button>
                 <SearchSubmitButton loading={loading} disabled={hasDateValidationError} />
               </div>
@@ -581,7 +586,7 @@ const ProvincialPermitPage = () => {
         >
           <SearchResultsTableFrame
             loading={loading}
-            loadingDescription="Loading permit search results..."
+            loadingDescription="Loading permit search results…"
             totalItems={
               errorMessage || (loading && results.content.length === 0)
                 ? undefined
@@ -595,18 +600,20 @@ const ProvincialPermitPage = () => {
                 description={errorMessage}
               />
             ) : results.content.length > 0 ? (
-              <Table useZebraStyles>
+              <Table size="md" useZebraStyles>
                 <TableHead>
                   <TableRow>
                     {SORT_COLUMNS.map((column) => (
-                      <TableHeader key={column.id}>
-                        <button
-                          type="button"
-                          className="legacy-sort-button"
-                          onClick={() => onHeaderClick(column.id)}
-                        >
-                          {column.label}
-                        </button>
+                      <TableHeader
+                        key={column.id}
+                        isSortable
+                        isSortHeader={sortField === column.id}
+                        sortDirection={
+                          sortField === column.id ? toCarbonSortDirection(sortDirection) : 'NONE'
+                        }
+                        onClick={() => onHeaderClick(column.id)}
+                      >
+                        {column.label}
                       </TableHeader>
                     ))}
                   </TableRow>
@@ -625,11 +632,13 @@ const ProvincialPermitPage = () => {
                       <TableCell>
                         <StatusTag status={row.status} />
                       </TableCell>
-                      <TableCell>{row.applicantClientNumber}</TableCell>
-                      <TableCell>{row.ownerClientNumber}</TableCell>
-                      <TableCell>{row.totalVolume}</TableCell>
-                      <TableCell className="legacy-search-table-date">{row.issueDate}</TableCell>
-                      <TableCell>{row.region}</TableCell>
+                      <TableCell>{displayTableValue(row.applicantClientNumber)}</TableCell>
+                      <TableCell>{displayTableValue(row.ownerClientNumber)}</TableCell>
+                      <TableCell>{displayTableValue(row.totalVolume)}</TableCell>
+                      <TableCell className="legacy-search-table-date">
+                        {displayTableValue(row.issueDate)}
+                      </TableCell>
+                      <TableCell>{displayTableValue(row.region)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

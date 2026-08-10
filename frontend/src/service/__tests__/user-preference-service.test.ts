@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   fetchUserPreferences,
-  resolveDefaultRegionAreaIds,
+  resolveDefaultZoneRegionIds,
   subscribeToUserPreferences,
   updateUserPreferences,
 } from '@/service/user-preference-service'
@@ -25,14 +25,14 @@ describe('user-preference-service', () => {
     vi.clearAllMocks()
   })
 
-  it('loads the current users default region', async () => {
+  it("loads the current user's default zone from the legacy API field", async () => {
     getMock.mockResolvedValue({ data: { defaultRegion: 'RCO' } })
 
     await expect(fetchUserPreferences()).resolves.toEqual({ defaultRegion: 'RCO' })
     expect(getMock).toHaveBeenCalledWith('/lexis/session/preferences')
   })
 
-  it('updates or clears the default region without sending a user identifier', async () => {
+  it('updates or clears the default zone without sending a user identifier', async () => {
     putMock.mockResolvedValue({ data: { defaultRegion: null } })
 
     await expect(updateUserPreferences(null)).resolves.toEqual({ defaultRegion: null })
@@ -41,7 +41,7 @@ describe('user-preference-service', () => {
     })
   })
 
-  it('rejects unsupported region values from the backend contract', async () => {
+  it('rejects unsupported zone values from the backend contract', async () => {
     getMock.mockResolvedValue({ data: { defaultRegion: 'UNKNOWN' } })
 
     await expect(fetchUserPreferences()).rejects.toThrow(
@@ -53,15 +53,15 @@ describe('user-preference-service', () => {
     ['RCO', ['1909', '1910']],
     ['RNI', ['1905', '1906', '1908']],
     ['RSI', ['1903', '1904', '1907']],
-  ] as const)('maps %s to its available natural resource areas', (region, expectedAreaIds) => {
-    const availableAreaIds = ['1903', '1904', '1905', '1906', '1907', '1908', '1909', '1910']
+  ] as const)('maps %s to its Natural Resource Regions', (zone, expectedRegionIds) => {
+    const availableRegionIds = ['1903', '1904', '1905', '1906', '1907', '1908', '1909', '1910']
 
-    expect(resolveDefaultRegionAreaIds(region, availableAreaIds)).toEqual(expectedAreaIds)
+    expect(resolveDefaultZoneRegionIds(zone, availableRegionIds)).toEqual(expectedRegionIds)
   })
 
-  it('falls back to every available area when no usable preference exists', () => {
-    expect(resolveDefaultRegionAreaIds(null, ['1903', '1904'])).toEqual(['1903', '1904'])
-    expect(resolveDefaultRegionAreaIds('RCO', ['1903', '1904'])).toEqual(['1903', '1904'])
+  it('leaves regions unfiltered when no usable preference exists', () => {
+    expect(resolveDefaultZoneRegionIds(null, ['1903', '1904'])).toEqual([])
+    expect(resolveDefaultZoneRegionIds('RCO', ['1903', '1904'])).toEqual([])
   })
 
   it('notifies active consumers after a preference is saved', async () => {

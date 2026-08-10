@@ -169,10 +169,9 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(
       within(pageHeader as HTMLElement).getByText('Check and manage this provincial application'),
     ).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Provincial application search' })).toHaveAttribute(
-      'href',
-      '/provincial/application',
-    )
+    expect(
+      screen.getByRole('link', { name: 'Back to Provincial application search' }),
+    ).toHaveAttribute('href', '/provincial/application')
     const status = within(pageHeader as HTMLElement).getByText('Approved')
     expect(status).toHaveClass('lexis-status-tag')
     expect(status).toHaveAttribute('data-status-variant', 'positive')
@@ -1623,25 +1622,10 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       ),
     ).toBeInTheDocument()
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
-    await waitFor(() =>
-      expect(
-        screen.queryByRole('dialog', {
-          name: 'Confirm application accuracy',
-        }),
-      ).not.toBeInTheDocument(),
-    )
-
-    await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
-    const warningAcceptedDialog = screen.getByRole('dialog', {
-      name: 'Confirm application accuracy',
-    })
-    const warningAcceptedAcknowledgement = within(warningAcceptedDialog).getByRole('checkbox', {
-      name: 'I Agree',
-    })
-    expect(warningAcceptedAcknowledgement).not.toBeChecked()
-    await userEvent.click(warningAcceptedAcknowledgement)
+    expect(reopenedDialog).toBeVisible()
+    expect(reopenedAcknowledgement).toBeChecked()
     await userEvent.click(
-      within(warningAcceptedDialog).getByRole('button', {
+      within(reopenedDialog).getByRole('button', {
         name: 'Save summary',
       }),
     )
@@ -1908,7 +1892,9 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     )
 
     expect(
-      await screen.findByText('Unable to retrieve provincial application detail.'),
+      await screen.findByText('Unable to retrieve provincial application detail.', {
+        selector: '.detail-page-inline-error',
+      }),
     ).toBeInTheDocument()
     expect(mockedFetchApplicationDocuments).not.toHaveBeenCalled()
   })

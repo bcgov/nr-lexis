@@ -1,11 +1,11 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import SearchResultsTableFrame from '../SearchResultsTableFrame'
 
 describe('SearchResultsTableFrame', () => {
   it('replaces stale rows with a labelled table skeleton while loading', () => {
     const { container } = render(
-      <SearchResultsTableFrame loading loadingDescription="Loading search results...">
+      <SearchResultsTableFrame loading loadingDescription="Loading search results…">
         <table>
           <tbody>
             <tr>
@@ -21,14 +21,14 @@ describe('SearchResultsTableFrame', () => {
       'aria-busy',
       'true',
     )
-    expect(screen.getByText('Loading search results...')).toBeInTheDocument()
-    expect(screen.getByRole('table', { name: 'Loading search results...' })).toBeInTheDocument()
+    expect(screen.getByText('Loading search results…')).toBeInTheDocument()
+    expect(screen.getByRole('table', { name: 'Loading search results…' })).toBeInTheDocument()
     expect(screen.queryByText('Existing rows')).not.toBeInTheDocument()
   })
 
   it('omits the loading indicator when the table frame is not loading', () => {
     const { container } = render(
-      <SearchResultsTableFrame loading={false} loadingDescription="Loading search results...">
+      <SearchResultsTableFrame loading={false} loadingDescription="Loading search results…">
         <table>
           <tbody>
             <tr>
@@ -50,13 +50,13 @@ describe('SearchResultsTableFrame', () => {
     expect(screen.getByRole('region', { name: 'Search results table' })).not.toHaveAttribute(
       'tabindex',
     )
-    expect(screen.queryByText('Loading search results...')).not.toBeInTheDocument()
+    expect(screen.queryByText('Loading search results…')).not.toBeInTheDocument()
     expect(screen.getByText('Loaded rows')).toBeInTheDocument()
   })
 
   it('becomes keyboard-focusable only when the table overflows', async () => {
     render(
-      <SearchResultsTableFrame loading={false} loadingDescription="Loading search results...">
+      <SearchResultsTableFrame loading={false} loadingDescription="Loading search results…">
         <table>
           <tbody>
             <tr>
@@ -79,7 +79,7 @@ describe('SearchResultsTableFrame', () => {
     render(
       <SearchResultsTableFrame
         loading={false}
-        loadingDescription="Loading search results..."
+        loadingDescription="Loading search results…"
         totalItems={12}
       >
         <table>
@@ -102,7 +102,7 @@ describe('SearchResultsTableFrame', () => {
     render(
       <SearchResultsTableFrame
         loading={false}
-        loadingDescription="Loading search results..."
+        loadingDescription="Loading search results…"
         totalItems={totalItems}
       >
         <table>
@@ -116,5 +116,28 @@ describe('SearchResultsTableFrame', () => {
     )
 
     expect(screen.getByText(expectedLabel)).toBeInTheDocument()
+  })
+
+  it('places page actions in the result-count toolbar', () => {
+    render(
+      <SearchResultsTableFrame
+        loading={false}
+        loadingDescription="Loading search results…"
+        totalItems={3}
+        actions={<button type="button">Add record</button>}
+      >
+        <table>
+          <tbody>
+            <tr>
+              <td>Rows</td>
+            </tr>
+          </tbody>
+        </table>
+      </SearchResultsTableFrame>,
+    )
+
+    const toolbar = screen.getByRole('group', { name: 'data table toolbar' })
+    expect(within(toolbar).getByText('3 results found')).toBeInTheDocument()
+    expect(within(toolbar).getByRole('button', { name: 'Add record' })).toBeInTheDocument()
   })
 })

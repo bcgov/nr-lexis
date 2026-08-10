@@ -103,9 +103,7 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
         name: 'Documents unavailable',
       }),
     ).toBeInTheDocument()
-    expect(
-      screen.getByText('Document information could not be retrieved for this application.'),
-    ).toBeInTheDocument()
+    expect(screen.getByText('Unable to retrieve application documents.')).toBeInTheDocument()
     expect(
       screen.queryByRole('heading', { level: 3, name: 'No documents found' }),
     ).not.toBeInTheDocument()
@@ -533,12 +531,63 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
     })
     expect(deleteButton).toBeEnabled()
     await userEvent.click(deleteButton)
+    const confirmation = await screen.findByRole('dialog', { name: 'Delete document' })
+    expect(confirmation).toHaveTextContent('Permanently delete app-doc.pdf? This cannot be undone.')
+    expect(mockedRemoveApplicationDocument).not.toHaveBeenCalled()
+    await userEvent.click(within(confirmation).getByRole('button', { name: 'Delete' }))
 
     await waitFor(() => {
       expect(mockedRemoveApplicationDocument).toHaveBeenCalledWith('100', '321')
       expect(mockedFetchApplicationDocuments).toHaveBeenCalledTimes(2)
       expect(screen.queryByText('app-doc.pdf')).not.toBeInTheDocument()
     })
+  })
+
+  it('keeps a failed document deletion open for retry', async () => {
+    mockedFetchApplicationDocuments.mockResolvedValue({
+      rows: [
+        {
+          id: '100',
+          name: 'app-doc.pdf',
+          description: 'remove me',
+          type: 'Attachment',
+        },
+      ],
+      source: 'api',
+    })
+    mockedRemoveApplicationDocument.mockResolvedValue({
+      success: false,
+      source: 'api',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationDocumentsForEditing()
+    const documentRow = (await screen.findByText('app-doc.pdf')).closest('tr')
+    expect(documentRow).toBeTruthy()
+    await userEvent.click(
+      within(documentRow as HTMLElement).getByRole('button', {
+        name: 'Delete',
+      }),
+    )
+
+    const confirmation = await screen.findByRole('dialog', { name: 'Delete document' })
+    await userEvent.click(within(confirmation).getByRole('button', { name: 'Delete' }))
+
+    expect(await screen.findByText('Failed to delete document')).toBeInTheDocument()
+    expect(screen.getByText('Document removal failed. Refresh and try again.')).toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: 'Delete document' })).toBeInTheDocument()
+    expect(within(confirmation).getByRole('button', { name: 'Cancel' })).toBeEnabled()
+    expect(within(documentRow as HTMLElement).getByText('app-doc.pdf')).toBeInTheDocument()
   })
 
   it('keeps linked permit documents read-only on the application aggregate', async () => {
@@ -734,6 +783,8 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
         name: 'Delete',
       }),
     )
+    const deleteDialog = await screen.findByRole('dialog', { name: 'Delete document' })
+    await userEvent.click(within(deleteDialog).getByRole('button', { name: 'Delete' }))
 
     await waitFor(() => {
       expect(mockedFetchApplicationDocuments).toHaveBeenCalledTimes(2)

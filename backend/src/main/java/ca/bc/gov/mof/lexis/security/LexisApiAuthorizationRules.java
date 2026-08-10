@@ -13,6 +13,7 @@ final class LexisApiAuthorizationRules {
   enum RuleType {
     PERMIT_ALL,
     ADMIN_AUTHORITY,
+    PROVINCIAL_STAFF_ROLE,
     KNOWN_ROLE,
     ACTION,
     ANY_ACTION
@@ -188,6 +189,7 @@ final class LexisApiAuthorizationRules {
               "/actuator/health/readiness"),
           adminAuthority("/actuator/**"),
           knownRole("/error"),
+          provincialStaffRole("/api/lexis/session/preferences"),
           knownRole("/api/lexis/session/**"),
           knownRole("/api/lexis/notifications"),
           adminAuthority(
@@ -751,6 +753,11 @@ final class LexisApiAuthorizationRules {
 
   private static Rule knownRole(String... paths) {
     return new Rule(RuleType.KNOWN_ROLE, null, List.of(paths), null, Map.of(), List.of());
+  }
+
+  private static Rule provincialStaffRole(String... paths) {
+    return new Rule(
+        RuleType.PROVINCIAL_STAFF_ROLE, null, List.of(paths), null, Map.of(), List.of());
   }
 
   private static Rule action(HttpMethod method, String legacyAction, String... paths) {

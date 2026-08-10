@@ -442,13 +442,9 @@ const missingApplicationNumber = '999999999'
 const virusScanRejectionMessage = 'The uploaded file failed virus scanning.'
 const regressionClientEmail = 'lexis-regression@example.test'
 const naturalResourceRegionCodes = ['1903', '1904', '1905', '1906', '1907', '1908', '1909', '1910']
-const selectedNaturalResourceRegionNames = [
-  'Cariboo Natural Resource Region',
-  'Skeena Natural Resource Region',
-]
 const sessionExpiredEventName = 'lexis:session-expired'
 const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/
-const landingSubtitle = 'Create and manage applications, view offers and permits'
+const landingSubtitle = 'Log Exemption Information System'
 const advertisingListReportEndpoint = '/api/lexis/reports/biweeklyListing'
 const recordVersionHeader = 'X-Lexis-Record-Version'
 const regressionEndUseCode = 'PL'
@@ -565,7 +561,7 @@ const expectLoginShell = async (page: Page, source: string): Promise<void> => {
 
   expect(new URL(page.url()).origin).toBe(baseOrigin)
   await expect(page.getByRole('button', { name: /log in with business bceid/i })).toBeVisible()
-  await expect(page.getByRole('heading', { name: 'Welcome to LEXIS' })).toBeVisible()
+  await expect(page.getByRole('heading', { level: 1, name: 'LEXIS' })).toBeVisible()
   await expect(page.getByText(landingSubtitle, { exact: true })).toBeVisible()
   await expect(page.getByAltText('Government of British Columbia')).toBeVisible()
   await expect(page.locator('.landing-img')).toBeVisible()
@@ -1744,8 +1740,8 @@ test.describe('TEST IDIR admin regression', () => {
     await reportsSection.getByRole('button', { name: 'Reports' }).click()
     await expect(reportsSection.getByRole('link', { name: 'Advertising List' })).toBeVisible()
 
-    await page.getByRole('button', { name: 'Collapse side navigation' }).click()
-    await expect(page.getByRole('button', { name: 'Expand side navigation' })).toBeVisible()
+    await page.getByRole('button', { name: 'Close menu' }).click()
+    await expect(page.getByRole('button', { name: 'Open menu' })).toBeVisible()
     await expect(page.getByRole('link', { name: 'Application review' })).toHaveAttribute(
       'title',
       'Application review',
@@ -1754,7 +1750,7 @@ test.describe('TEST IDIR admin regression', () => {
       'title',
       'Advertising List',
     )
-    await page.getByRole('button', { name: 'Expand side navigation' }).click()
+    await page.getByRole('button', { name: 'Open menu' }).click()
   })
 
   test('keeps upload navigation scoped to provincial application submissions', async () => {
@@ -1776,6 +1772,8 @@ test.describe('TEST IDIR admin regression', () => {
       /upload application submission/i,
     )
     await expectFsptsUploadLayout(page)
+    await expect(page.getByText('Submission file', { exact: true })).toBeVisible()
+    await expect(page.getByLabel('Upload batch summary')).toHaveCount(0)
     const applicationSubmissionProgress = page.getByRole('list', {
       name: 'Application submission upload workflow progress',
     })
@@ -1783,7 +1781,7 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(applicationSubmissionProgress.getByText('2. Review')).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Validation status' })).toHaveCount(0)
     await expect(page.getByRole('heading', { name: 'Submission summary' })).toHaveCount(0)
-    await expect(page.getByRole('button', { name: 'Review submissions' })).toBeDisabled()
+    await expect(page.getByRole('button', { name: 'Review' })).toBeDisabled()
 
     await expectAccessiblePage(page, '/provincial/review', /provincial application review/i)
     await expect(federalSection.getByRole('link', { name: /upload/i })).toHaveCount(0)
@@ -2140,21 +2138,16 @@ test.describe('TEST IDIR admin regression', () => {
     ])
   })
 
-  test('shows selected natural resource region names across search filters', async () => {
+  test('uses the default Carbon region multi-select across search filters', async () => {
     const page = await authenticatedIdirPage()
 
     for (const [path, heading] of regionFilterPages) {
       await expectAccessiblePage(page, path, heading)
-      const selectedRegions = page.getByRole('list', { name: 'Selected regions' })
-      await expect(selectedRegions, `${path} should show its selected regions`).toBeVisible({
-        timeout: 30_000,
-      })
-      for (const regionName of selectedNaturalResourceRegionNames) {
-        await expect(
-          selectedRegions.getByText(regionName, { exact: true }),
-          `${path} should show ${regionName}`,
-        ).toBeVisible()
-      }
+      await expect(
+        page.getByRole('combobox', { name: /^Region\s*Total items selected:\s*2/ }),
+        `${path} should expose Carbon's selected-item summary`,
+      ).toBeVisible({ timeout: 30_000 })
+      await expect(page.getByRole('list', { name: 'Selected regions' })).toHaveCount(0)
     }
   })
 
@@ -2751,8 +2744,8 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(page.getByLabel('Listing from date')).toBeVisible()
     await expect(page.getByLabel('Listing to date')).toBeVisible()
     await expect(page.getByRole('combobox', { name: 'Output format' })).toHaveValue('PDF')
-    await expect(page.getByRole('button', { name: 'Generate Report' })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Reset Fields' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Generate report' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Clear all' })).toBeVisible()
   })
 
   test('generates advertising list PDF report', async () => {

@@ -6,6 +6,8 @@ import {
   DismissibleTag,
   Grid,
   InlineLoading,
+  InlineNotification,
+  Loading,
   Tab,
   TabList,
   TabPanel,
@@ -22,11 +24,13 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
-import { Edit } from '@carbon/icons-react'
+import { Edit, TrashCan } from '@carbon/icons-react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import EmptyState from '@/components/EmptyState'
 import DetailBreadcrumb from '@/components/DetailBreadcrumb'
+import DetailLoadError from '@/components/DetailLoadError'
 import PageHeader from '@/components/PageHeader'
+import PendingIcon from '@/components/PendingIcon'
 import AuthoritativeOptionsUnavailableNotification from '@/components/AuthoritativeOptionsUnavailableNotification'
 import StatusTag from '@/components/StatusTag'
 import TableFrame from '@/components/TableFrame'
@@ -35,6 +39,7 @@ import ApplicationAccuracyConfirmation, {
   APPLICATION_ACCURACY_ACKNOWLEDGEMENT,
 } from '@/components/ApplicationAccuracyConfirmation'
 import ContentLoadingOverlay from '@/components/ContentLoadingOverlay'
+import ConfirmationModal from '@/components/ConfirmationModal'
 import { useAuth } from '@/context/auth/useAuth'
 import { hasProvincialSubmitterRole } from '@/context/auth/role-utils'
 import type { ProvincialApplicationDetail } from '@/interfaces/LexisDetails'
@@ -269,7 +274,8 @@ function ClientDataSummary({
         ))}
       </dl>
       {clientLookupMessage && dismissedClientLookupMessageKey !== clientLookupMessageKey && (
-        <AppNotification
+        <InlineNotification
+          className="detail-context-notification"
           kind="warning"
           title="Client lookup"
           subtitle={clientLookupMessage}
@@ -580,6 +586,8 @@ const ProvincialApplicationDetailsPage = () => {
   )
   const [actionWarningMessage, setActionWarningMessage] = useState('')
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
+  const [documentPendingDeletion, setDocumentPendingDeletion] =
+    useState<ProvincialApplicationDocumentRow | null>(null)
   const [documentUploadDirty, setDocumentUploadDirty] = useState(false)
   const [documentUploadBusy, setDocumentUploadBusy] = useState(false)
   const [documentUploadResetKey, setDocumentUploadResetKey] = useState(0)
@@ -2096,7 +2104,7 @@ const ProvincialApplicationDetailsPage = () => {
   const onRemoveDocument = useCallback(
     async (row: ProvincialApplicationDocumentRow) => {
       if (!applicationNumber) {
-        return
+        throw new Error('Application number is unavailable.')
       }
 
       const isLatestRequest = beginDetailRequest()
@@ -2110,21 +2118,34 @@ const ProvincialApplicationDetailsPage = () => {
           return
         }
         if (!removeResult.success) {
-          setActionErrorMessage('Document removal failed. Refresh and try again.')
-          return
+          throw new Error('Document removal failed. Refresh and try again.')
         }
 
-        const documentsResult = await fetchApplicationDocuments(applicationNumber)
-        if (isLatestRequest()) {
-          setDocumentRows(documentsResult.rows)
-          setDocumentLookupAvailability('available')
+        try {
+          const documentsResult = await fetchApplicationDocuments(applicationNumber)
+          if (isLatestRequest()) {
+            setDocumentRows(documentsResult.rows)
+            setDocumentLookupAvailability('available')
+            setDocumentsErrorMessage('')
+            setActionInfoMessage(`${row.name || 'Document'} was deleted.`)
+          }
+        } catch (refreshError) {
+          if (isLatestRequest()) {
+            console.error(refreshError)
+            setDocumentLookupAvailability('unavailable')
+            setDocumentsErrorMessage(
+              'The document was deleted, but application documents could not be refreshed. Reload the page.',
+            )
+            setActionInfoMessage(
+              `${row.name || 'Document'} was deleted. Reload before changing documents again.`,
+            )
+          }
         }
-      } catch {
+      } catch (error) {
         if (isLatestRequest()) {
-          setDocumentLookupAvailability('unavailable')
-          setDocumentsErrorMessage('Unable to retrieve application documents.')
-          setActionErrorMessage('Unable to remove the selected document.')
+          console.error(error)
         }
+        throw error instanceof Error ? error : new Error('Unable to remove the selected document.')
       } finally {
         if (isLatestRequest()) {
           setIsRemovingDocumentId(null)
@@ -2561,7 +2582,10 @@ const ProvincialApplicationDetailsPage = () => {
 
   const onConfirmSummaryAccuracy = useCallback(async () => {
     if (!summaryAccuracyConfirmed || isSavingSummary) return
-    await completeSummarySave(pendingSummarySaveSource, true)
+    const saved = await completeSummarySave(pendingSummarySaveSource, true)
+    if (!saved) {
+      throw new Error('Application changes were not saved.')
+    }
   }, [completeSummarySave, isSavingSummary, pendingSummarySaveSource, summaryAccuracyConfirmed])
 
   const buildReviewStatusPayload = useCallback(
@@ -2999,10 +3023,10 @@ const ProvincialApplicationDetailsPage = () => {
           role="alert"
         />
       ) : permitLookupAvailability === 'loading' ? (
-        <InlineLoading description="Loading application permits..." />
+        <InlineLoading description="Loading application permits…" />
       ) : permitRows.length > 0 ? (
         <TableFrame ariaLabel="Application permits">
-          <Table useZebraStyles>
+          <Table size="md" useZebraStyles>
             <TableHead>
               <TableRow>
                 <TableHeader>Permit</TableHeader>
@@ -3064,7 +3088,7 @@ const ProvincialApplicationDetailsPage = () => {
             placeholder="Filter by company, offer number, received date, validity, or withdrawal date"
           />
           <TableFrame ariaLabel="Application offers">
-            <Table useZebraStyles>
+            <Table size="md" useZebraStyles>
               <TableHead>
                 <TableRow>
                   <TableHeader>Offer</TableHeader>
@@ -3192,7 +3216,8 @@ const ProvincialApplicationDetailsPage = () => {
               />
             </div>
             {showReviewValidationNotification && (
-              <AppNotification
+              <InlineNotification
+                className="detail-context-notification"
                 kind="error"
                 title="Review validation"
                 subtitle={reviewValidationMessage}
@@ -3210,7 +3235,7 @@ const ProvincialApplicationDetailsPage = () => {
                 Approve Application
               </Button>
               <Button
-                kind="secondary"
+                kind="tertiary"
                 size="sm"
                 disabled={
                   isSubmittingReviewAction ||
@@ -3296,7 +3321,7 @@ const ProvincialApplicationDetailsPage = () => {
     >
       <ContentLoadingOverlay
         loading={isRefreshingDetail}
-        loadingDescription="Refreshing provincial application detail..."
+        loadingDescription="Refreshing provincial application detail…"
       />
       <Column sm={4} md={8} lg={16}>
         <DetailBreadcrumb label="Provincial application search" to="/provincial/application" />
@@ -3316,20 +3341,19 @@ const ProvincialApplicationDetailsPage = () => {
       </Column>
 
       {loading && !detailMatchesRoute && (
-        <Column sm={4} md={8} lg={16}>
-          <InlineLoading description="Loading provincial application detail..." />
+        <Column
+          sm={4}
+          md={8}
+          lg={16}
+          className="detail-page-loading"
+          role="status"
+          aria-live="polite"
+        >
+          <Loading description="Loading provincial application detail…" withOverlay={false} />
         </Column>
       )}
 
-      {!loading && !!errorMessage && (
-        <AppNotification
-          kind="error"
-          title="Detail unavailable"
-          subtitle={errorMessage}
-          lowContrast
-          onCloseButtonClick={() => setErrorMessage('')}
-        />
-      )}
+      {!loading && !!errorMessage && <DetailLoadError message={errorMessage} />}
 
       {!!creationSuccessMessage && (
         <AppNotification
@@ -3337,22 +3361,13 @@ const ProvincialApplicationDetailsPage = () => {
           title="Action complete"
           subtitle={creationSuccessMessage}
           lowContrast
-          autoDismissMs={8000}
+          autoDismissMs={6000}
           onCloseButtonClick={() => setCreationSuccessMessage('')}
         />
       )}
 
       {detail && detailMatchesRoute && (
         <>
-          {!!documentsErrorMessage && (
-            <AppNotification
-              kind="warning"
-              title="Documents unavailable"
-              subtitle={documentsErrorMessage}
-              lowContrast
-              onCloseButtonClick={() => setDocumentsErrorMessage('')}
-            />
-          )}
           {summaryOptionsAvailability === 'unavailable' && (
             <AuthoritativeOptionsUnavailableNotification title="Application options unavailable" />
           )}
@@ -3360,11 +3375,13 @@ const ProvincialApplicationDetailsPage = () => {
             (selectedApplicationTab === 'owner' && isEditingOwnerDetails) ||
             (selectedApplicationTab === 'agent' && isEditingAgentDetails)) &&
             requiredSummaryOptionsMissing && (
-              <AppNotification
+              <InlineNotification
+                className="detail-context-notification"
                 kind="warning"
                 title="Application summary options unavailable"
                 subtitle={`Missing required options: ${missingSummaryOptionLabels.join(', ')}. Summary changes cannot be saved.`}
                 lowContrast
+                hideCloseButton
               />
             )}
           {canReviewApplication &&
@@ -3373,11 +3390,13 @@ const ProvincialApplicationDetailsPage = () => {
               <AuthoritativeOptionsUnavailableNotification title="Review options unavailable" />
             )}
           {canReviewApplication && isEditingReview && requiredReviewOptionsMissing && (
-            <AppNotification
+            <InlineNotification
+              className="detail-context-notification"
               kind="warning"
               title="Review statuses not configured"
               subtitle="No authoritative review statuses are configured. Review status updates are disabled."
               lowContrast
+              hideCloseButton
             />
           )}
           {!!actionErrorMessage && (
@@ -3404,16 +3423,18 @@ const ProvincialApplicationDetailsPage = () => {
               title="Action completed"
               subtitle={actionInfoMessage}
               lowContrast
-              autoDismissMs={8000}
+              autoDismissMs={6000}
               onCloseButtonClick={() => setActionInfoMessage('')}
             />
           )}
           {!!detail.locked && !!detail.lockMessage && (
-            <AppNotification
+            <InlineNotification
+              className="detail-context-notification"
               kind="warning"
               title="Application locked"
               subtitle={detail.lockMessage}
               lowContrast
+              hideCloseButton
             />
           )}
 
@@ -3432,7 +3453,6 @@ const ProvincialApplicationDetailsPage = () => {
               <TabList
                 aria-label="Application detail sections"
                 contained
-                size="md"
                 className="application-tabs__list application-detail-tab-list"
               >
                 <Tab>Owner</Tab>
@@ -3596,7 +3616,7 @@ const ProvincialApplicationDetailsPage = () => {
                             />
                             <div className="legacy-search-actions">
                               <Button
-                                kind="secondary"
+                                kind="tertiary"
                                 size="sm"
                                 disabled={isSavingSummary}
                                 onClick={onCancelOwnerDetails}
@@ -3611,9 +3631,10 @@ const ProvincialApplicationDetailsPage = () => {
                                   summaryOptionsAvailability !== 'available' ||
                                   requiredSummaryOptionsMissing
                                 }
+                                renderIcon={isSavingSummary ? PendingIcon : undefined}
                                 onClick={() => onRequestSaveSummary('owner')}
                               >
-                                {isSavingSummary ? 'Saving...' : 'Save changes'}
+                                {isSavingSummary ? 'Saving…' : 'Save changes'}
                               </Button>
                             </div>
                           </>
@@ -3755,7 +3776,7 @@ const ProvincialApplicationDetailsPage = () => {
                               />
                               <div className="legacy-search-actions">
                                 <Button
-                                  kind="secondary"
+                                  kind="tertiary"
                                   size="sm"
                                   disabled={isSavingSummary}
                                   onClick={onCancelAgentDetails}
@@ -3770,9 +3791,10 @@ const ProvincialApplicationDetailsPage = () => {
                                     summaryOptionsAvailability !== 'available' ||
                                     requiredSummaryOptionsMissing
                                   }
+                                  renderIcon={isSavingSummary ? PendingIcon : undefined}
                                   onClick={() => onRequestSaveSummary('agent')}
                                 >
-                                  {isSavingSummary ? 'Saving...' : 'Save changes'}
+                                  {isSavingSummary ? 'Saving…' : 'Save changes'}
                                 </Button>
                               </div>
                             </>
@@ -4270,7 +4292,7 @@ const ProvincialApplicationDetailsPage = () => {
                                 <div className="application-species-actions">
                                   <Button
                                     type="button"
-                                    kind="secondary"
+                                    kind="tertiary"
                                     size="sm"
                                     disabled={
                                       !applicationSpeciesCandidate ||
@@ -4322,12 +4344,13 @@ const ProvincialApplicationDetailsPage = () => {
                                   summaryOptionsAvailability !== 'available' ||
                                   requiredSummaryOptionsMissing
                                 }
+                                renderIcon={isSavingSummary ? PendingIcon : undefined}
                                 onClick={() => onRequestSaveSummary('summary')}
                               >
-                                {isSavingSummary ? 'Saving...' : 'Save Summary'}
+                                {isSavingSummary ? 'Saving…' : 'Save Summary'}
                               </Button>
                               <Button
-                                kind="secondary"
+                                kind="tertiary"
                                 size="sm"
                                 disabled={isSavingSummary}
                                 onClick={onCancelSummaryDetails}
@@ -4425,7 +4448,7 @@ const ProvincialApplicationDetailsPage = () => {
                               placeholder="Filter by package, pieces, or volume"
                             />
                             <TableFrame ariaLabel="Application packages">
-                              <Table useZebraStyles>
+                              <Table size="md" useZebraStyles>
                                 <TableHead>
                                   <TableRow>
                                     <TableHeader aria-label="Package selection" />
@@ -4501,7 +4524,7 @@ const ProvincialApplicationDetailsPage = () => {
                           {canEditApplicationDocuments &&
                             (isEditingDocuments ? (
                               <Button
-                                kind="secondary"
+                                kind="tertiary"
                                 size="sm"
                                 disabled={documentUploadBusy || isRemovingDocumentId !== null}
                                 onClick={onCancelDocumentEditing}
@@ -4534,7 +4557,8 @@ const ProvincialApplicationDetailsPage = () => {
                         {selectedApplicationTab === 'documents' &&
                           !!showDocumentUploadUnavailableMessage &&
                           canUploadApplicationDocuments && (
-                            <AppNotification
+                            <InlineNotification
+                              className="detail-context-notification"
                               kind="info"
                               title="Upload unavailable"
                               subtitle={documentUploadUnavailableMessage}
@@ -4549,13 +4573,16 @@ const ProvincialApplicationDetailsPage = () => {
                         {documentLookupAvailability === 'unavailable' && (
                           <EmptyState
                             title="Documents unavailable"
-                            description="Document information could not be retrieved for this application."
+                            description={
+                              documentsErrorMessage ||
+                              'Document information could not be retrieved for this application.'
+                            }
                             headingLevel={3}
                             role="alert"
                           />
                         )}
                         {documentLookupAvailability === 'loading' && (
-                          <InlineLoading description="Loading application documents..." />
+                          <InlineLoading description="Loading application documents…" />
                         )}
                         {documentLookupAvailability === 'available' && !hasApplicationDocuments && (
                           <EmptyState
@@ -4579,7 +4606,7 @@ const ProvincialApplicationDetailsPage = () => {
                               placeholder="Filter by file name, description, type, source, or id"
                             />
                             <TableFrame ariaLabel="Application document rows">
-                              <Table useZebraStyles>
+                              <Table size="md" useZebraStyles>
                                 <TableHead>
                                   <TableRow>
                                     <TableHeader>File Name</TableHeader>
@@ -4619,10 +4646,11 @@ const ProvincialApplicationDetailsPage = () => {
                                                   ? `Delete this document from its ${row.source || 'source'} details page.`
                                                   : undefined
                                               }
-                                              onClick={() => void onRemoveDocument(row)}
+                                              renderIcon={TrashCan}
+                                              onClick={() => setDocumentPendingDeletion(row)}
                                             >
                                               {isRemovingDocumentId === row.id
-                                                ? 'Deleting...'
+                                                ? 'Deleting…'
                                                 : 'Delete'}
                                             </Button>
                                           )}
@@ -4692,10 +4720,11 @@ const ProvincialApplicationDetailsPage = () => {
                                 kind="primary"
                                 size="sm"
                                 disabled={isSavingRemark}
+                                renderIcon={isSavingRemark ? PendingIcon : undefined}
                                 onClick={() => void onSaveRemark()}
                               >
                                 {isSavingRemark
-                                  ? 'Saving...'
+                                  ? 'Saving…'
                                   : editingRemarkId
                                     ? 'Update Remark'
                                     : 'Save Remark'}
@@ -4728,7 +4757,7 @@ const ProvincialApplicationDetailsPage = () => {
                                 placeholder="Filter by title or remark text"
                               />
                               <TableFrame ariaLabel="Application remarks">
-                                <Table useZebraStyles>
+                                <Table size="md" useZebraStyles>
                                   <TableHead>
                                     <TableRow>
                                       <TableHeader>Date</TableHeader>
@@ -4819,8 +4848,27 @@ const ProvincialApplicationDetailsPage = () => {
             onConfirmedChange={setSummaryAccuracyConfirmed}
             onConfirm={onConfirmSummaryAccuracy}
             onClose={closeSummaryAccuracyConfirmation}
+            onError={() => undefined}
           />
         )}
+      {documentPendingDeletion && (
+        <ConfirmationModal
+          open
+          danger
+          title="Delete document"
+          description={
+            <>
+              Permanently delete <strong>{documentPendingDeletion.name || 'this document'}</strong>?
+              This cannot be undone.
+            </>
+          }
+          confirmLabel="Delete"
+          pendingLabel="Deleting…"
+          errorTitle="Failed to delete document"
+          onClose={() => setDocumentPendingDeletion(null)}
+          onConfirm={() => onRemoveDocument(documentPendingDeletion)}
+        />
+      )}
       <UnsavedChangesGuard
         isDirty={isApplicationDirty}
         isBusy={

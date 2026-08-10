@@ -26,7 +26,7 @@
   color: var(--cds-text-primary, #161616);
   font-size: 1.125rem;
   font-weight: 700;
-  line-height: 1.5rem;
+  line-height: 1.3;
 }
 
 .lexis-empty-state__description {
@@ -46,11 +46,4 @@
 
 .lexis-empty-state__action {
   margin-block-start: 1.5rem;
-}
-
-@media (max-width: 671px) {
-  .lexis-empty-state {
-    min-block-size: 16rem;
-    padding: 3rem 1rem;
-  }
 }

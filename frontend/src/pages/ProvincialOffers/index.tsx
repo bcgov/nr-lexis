@@ -14,6 +14,7 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
+import { Add } from '@carbon/icons-react'
 import SearchResultsTableFrame from '../../components/SearchResultsTableFrame'
 import EmptyState from '@/components/EmptyState'
 import AuthoritativeOptionsUnavailableNotification from '@/components/AuthoritativeOptionsUnavailableNotification'
@@ -28,6 +29,7 @@ import type {
   ProvincialOfferSearchSortField,
 } from '@/interfaces/ProvincialOfferSearch'
 import { useAuth } from '@/context/auth/useAuth'
+import { hasProvincialStaffRole } from '@/context/auth/role-utils'
 import { hasInvalidIsoDateValue, isValidIsoDate } from '@/pages/shared/create-form-utils'
 import {
   buildPageDataCacheKey,
@@ -56,6 +58,7 @@ import {
   parsePageSizeParam,
   parsePositiveIntParam,
   parseSortDirectionParam,
+  toCarbonSortDirection,
   type IdTextOption,
 } from '@/pages/shared/search-query-utils'
 import { useSearchFilterDraft } from '@/pages/shared/useSearchFilterDraft'
@@ -74,8 +77,9 @@ import {
   fetchProvincialApplicationOptions,
   fetchProvincialOfferOptions,
 } from '@/service/search-options-service'
-import { resolveDefaultRegionAreaIds } from '@/service/user-preference-service'
+import { resolveDefaultZoneRegionIds } from '@/service/user-preference-service'
 import { formatBusinessIsoDate } from '@/utils/date'
+import { displayTableValue } from '@/utils/text'
 
 const INITIAL_FILTERS: ProvincialOfferSearchFilters = {
   applicationNumber: '',
@@ -134,7 +138,9 @@ const ProvincialOffersPage = () => {
   const { capabilities, canPerform } = useAuth()
   const [searchParams, setSearchParams] = usePersistedSearchParams('provincial-offers')
   const [regionOptions, setRegionOptions] = useState<IdTextOption[]>([])
-  const { defaultRegion, preferenceLoading } = useDefaultRegionPreference()
+  const { defaultRegion: defaultZone, preferenceLoading } = useDefaultRegionPreference(
+    hasProvincialStaffRole(capabilities.roles),
+  )
   const [results, setResults] = useState<ProvincialOfferSearchResponse>(EMPTY_RESULTS)
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
@@ -201,19 +207,19 @@ const ProvincialOffersPage = () => {
     () => mapSelectedOptionsById(filters.region, regionOptions, (id) => `Region ${id}`),
     [filters.region, regionOptions],
   )
-  const defaultRegionAreaIds = useMemo(
+  const defaultZoneRegionIds = useMemo(
     () =>
-      resolveDefaultRegionAreaIds(
-        defaultRegion,
+      resolveDefaultZoneRegionIds(
+        defaultZone,
         regionOptions.map((region) => region.id),
       ),
-    [defaultRegion, regionOptions],
+    [defaultZone, regionOptions],
   )
   const regionDefaultPending =
     !searchParams.has('region') &&
     (!isOptionsLoaded ||
       preferenceLoading ||
-      (!offerOptionsUnavailable && defaultRegionAreaIds.length > 0))
+      (!offerOptionsUnavailable && defaultZoneRegionIds.length > 0))
 
   const hasDateValidationError = useMemo(() => {
     return hasInvalidIsoDateValue(
@@ -404,7 +410,7 @@ const ProvincialOffersPage = () => {
       preferenceLoading ||
       offerOptionsUnavailable ||
       searchParams.has('region') ||
-      defaultRegionAreaIds.length === 0
+      defaultZoneRegionIds.length === 0
     ) {
       return
     }
@@ -414,7 +420,7 @@ const ProvincialOffersPage = () => {
         buildSearchParams(
           {
             ...urlState.filters,
-            region: defaultRegionAreaIds,
+            region: defaultZoneRegionIds,
           },
           urlState.sortField,
           urlState.sortDirection,
@@ -428,10 +434,10 @@ const ProvincialOffersPage = () => {
 
     setFilters((currentFilters) => ({
       ...currentFilters,
-      region: defaultRegionAreaIds,
+      region: defaultZoneRegionIds,
     }))
   }, [
-    defaultRegionAreaIds,
+    defaultZoneRegionIds,
     hasSearchQuery,
     isOptionsLoaded,
     offerOptionsUnavailable,
@@ -473,7 +479,7 @@ const ProvincialOffersPage = () => {
     const defaultFilters = {
       ...INITIAL_FILTERS,
       listingToDate: defaultListingToDate,
-      region: defaultRegionAreaIds,
+      region: defaultZoneRegionIds,
     }
     setFilters(defaultFilters)
     setSearchParams(
@@ -495,7 +501,7 @@ const ProvincialOffersPage = () => {
   }
 
   return (
-    <Grid fullWidth className="default-grid provincial-offer-search-page">
+    <Grid fullWidth className="default-grid fullbleed-table-page provincial-offer-search-page">
       <Column sm={4} md={8} lg={16}>
         <PageHeader
           title="Provincial offers search"
@@ -591,14 +597,9 @@ const ProvincialOffersPage = () => {
                   disabled={loading}
                   size="md"
                 >
-                  Clear Filters
+                  Clear all
                 </Button>
                 <SearchSubmitButton loading={loading} disabled={hasDateValidationError} />
-                {canCreateOffer && (
-                  <Link className="cds--link" to="/provincial/offers/create">
-                    Add Offer
-                  </Link>
-                )}
               </div>
             </form>
           </Tile>
@@ -618,11 +619,24 @@ const ProvincialOffersPage = () => {
         >
           <SearchResultsTableFrame
             loading={loading}
-            loadingDescription="Loading offer search results..."
+            loadingDescription="Loading offer search results…"
             totalItems={
               errorMessage || (loading && results.content.length === 0)
                 ? undefined
                 : results.page.totalElements
+            }
+            actions={
+              canCreateOffer ? (
+                <Button
+                  as={Link}
+                  to="/provincial/offers/create"
+                  kind="primary"
+                  size="md"
+                  renderIcon={Add}
+                >
+                  Add offer
+                </Button>
+              ) : undefined
             }
           >
             {errorMessage ? (
@@ -632,18 +646,20 @@ const ProvincialOffersPage = () => {
                 description={errorMessage}
               />
             ) : results.content.length > 0 ? (
-              <Table useZebraStyles>
+              <Table size="md" useZebraStyles>
                 <TableHead>
                   <TableRow>
                     {SORT_COLUMNS.map((column) => (
-                      <TableHeader key={column.id}>
-                        <button
-                          type="button"
-                          className="legacy-sort-button"
-                          onClick={() => onHeaderClick(column.id)}
-                        >
-                          {column.label}
-                        </button>
+                      <TableHeader
+                        key={column.id}
+                        isSortable
+                        isSortHeader={sortField === column.id}
+                        sortDirection={
+                          sortField === column.id ? toCarbonSortDirection(sortDirection) : 'NONE'
+                        }
+                        onClick={() => onHeaderClick(column.id)}
+                      >
+                        {column.label}
                       </TableHeader>
                     ))}
                   </TableRow>
@@ -659,12 +675,14 @@ const ProvincialOffersPage = () => {
                           {row.offerNumber}
                         </Link>
                       </TableCell>
-                      <TableCell>{row.applicationNumber}</TableCell>
+                      <TableCell>{displayTableValue(row.applicationNumber)}</TableCell>
                       <TableCell>{row.packageNumber || 'No Packages'}</TableCell>
-                      <TableCell className="legacy-search-table-date">{row.listingDate}</TableCell>
-                      <TableCell>{row.region}</TableCell>
                       <TableCell className="legacy-search-table-date">
-                        {row.offerWithdrawalDate || '-'}
+                        {displayTableValue(row.listingDate)}
+                      </TableCell>
+                      <TableCell>{displayTableValue(row.region)}</TableCell>
+                      <TableCell className="legacy-search-table-date">
+                        {displayTableValue(row.offerWithdrawalDate)}
                       </TableCell>
                     </TableRow>
                   ))}
