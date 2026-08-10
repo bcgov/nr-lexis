@@ -519,7 +519,24 @@ describe('Create Page Core Flows', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
     const postSaveDialog = screen.getByRole('dialog', { name: 'Confirm application accuracy' })
-    expect(within(postSaveDialog).getByRole('checkbox', { name: 'I Agree' })).not.toBeChecked()
+    const postSaveAcknowledgement = within(postSaveDialog).getByRole('checkbox', {
+      name: 'I Agree',
+    })
+    expect(postSaveAcknowledgement).not.toBeChecked()
+
+    mockedSubmitProvincialApplicationCreate.mockResolvedValueOnce({
+      success: false,
+      message: 'Save rejected.',
+      createdId: undefined,
+      errors: ['Save rejected.'],
+      warnings: [],
+    })
+    await userEvent.click(postSaveAcknowledgement)
+    await userEvent.click(within(postSaveDialog).getByRole('button', { name: 'Save application' }))
+
+    expect(await screen.findByText('Save Failed')).toBeVisible()
+    expect(postSaveDialog).toBeVisible()
+    expect(within(postSaveDialog).getByRole('button', { name: 'Save application' })).toBeEnabled()
   }, 20_000)
 
   it('converts provincial application term months and years to total days on submit', async () => {

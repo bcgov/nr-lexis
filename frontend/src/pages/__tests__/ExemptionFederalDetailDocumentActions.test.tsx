@@ -710,11 +710,6 @@ describe('Exemption and Federal Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByText('Associated applications unavailable')).toBeInTheDocument()
-    expect(
-      screen.getAllByText('Unable to retrieve applications associated with this exemption.'),
-    ).not.toHaveLength(0)
-
     await selectDetailTab('Applications')
     expect(
       await screen.findByRole('heading', { name: 'Applications unavailable', level: 3 }),
@@ -722,6 +717,9 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(
       screen.queryByRole('heading', { name: 'No applications found', level: 3 }),
     ).not.toBeInTheDocument()
+    expect(
+      screen.getByText('Unable to retrieve applications associated with this exemption.'),
+    ).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Add application' })).not.toBeInTheDocument()
 
     await selectDetailTab('Fees')
@@ -740,7 +738,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     )
   })
 
-  it('keeps exemption document lookup failure distinct after its warning is dismissed', async () => {
+  it('keeps exemption document lookup failure in the affected tab', async () => {
     mockedFetchExemptionDocuments.mockRejectedValue(new Error('Oracle unavailable'))
 
     render(
@@ -765,10 +763,10 @@ describe('Exemption and Federal Detail Document Actions', () => {
       screen.queryByRole('heading', { name: 'No documents found', level: 3 }),
     ).not.toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('button', { name: 'close notification' }))
     expect(
       screen.getByRole('heading', { name: 'Documents unavailable', level: 3 }),
     ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'close notification' })).not.toBeInTheDocument()
   })
 
   it('opens exemption document from API response', async () => {
@@ -850,6 +848,12 @@ describe('Exemption and Federal Detail Document Actions', () => {
       name: 'Delete',
     })
     await userEvent.click(deleteButton)
+    const confirmation = await screen.findByRole('dialog', { name: 'Delete document' })
+    expect(confirmation).toHaveTextContent(
+      'Permanently delete exemption-doc.pdf? This cannot be undone.',
+    )
+    expect(mockedRemoveExemptionDocument).not.toHaveBeenCalled()
+    await userEvent.click(within(confirmation).getByRole('button', { name: 'Delete' }))
 
     await waitFor(() => {
       expect(mockedRemoveExemptionDocument).toHaveBeenCalledWith('700', 'EX-777')
@@ -1056,10 +1060,9 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(
       within(federalHeader as HTMLElement).getByText('Check and manage this federal application'),
     ).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Federal application search' })).toHaveAttribute(
-      'href',
-      '/federal',
-    )
+    expect(
+      screen.getByRole('link', { name: 'Back to Federal application search' }),
+    ).toHaveAttribute('href', '/federal')
     expect(within(federalHeader as HTMLElement).getByText('Submitted')).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Actions' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Back to Federal Search results' })).toBeNull()
@@ -1148,14 +1151,14 @@ describe('Exemption and Federal Detail Document Actions', () => {
       expect(mockedFetchFederalApplicationDocuments).toHaveBeenCalledWith('888')
       expect(mockedFetchFederalApplicationRemarks).toHaveBeenCalledWith('888')
     })
-    expect(screen.getByText('Refreshing federal application detail...')).toBeInTheDocument()
+    expect(screen.getByText('Refreshing federal application detail…')).toBeInTheDocument()
 
     resolveScales?.()
     resolveDocuments?.()
     resolveRemarks?.()
 
     await waitFor(() => {
-      expect(screen.queryByText('Refreshing federal application detail...')).not.toBeInTheDocument()
+      expect(screen.queryByText('Refreshing federal application detail…')).not.toBeInTheDocument()
     })
   })
 
@@ -1851,7 +1854,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
 
     expect(await screen.findByRole('tab', { name: 'Owner' })).toBeInTheDocument()
     expect(
-      screen.queryByRole('link', { name: 'Federal application search' }),
+      screen.queryByRole('link', { name: 'Back to Federal application search' }),
     ).not.toBeInTheDocument()
     await selectDetailTab('Remarks')
     expect(await screen.findByText('Review note')).toBeInTheDocument()
@@ -1897,6 +1900,12 @@ describe('Exemption and Federal Detail Document Actions', () => {
       name: 'Delete',
     })
     await userEvent.click(deleteButton)
+    const confirmation = await screen.findByRole('dialog', { name: 'Delete document' })
+    expect(confirmation).toHaveTextContent(
+      'Permanently delete federal-doc.pdf? This cannot be undone.',
+    )
+    expect(mockedRemoveFederalApplicationDocument).not.toHaveBeenCalled()
+    await userEvent.click(within(confirmation).getByRole('button', { name: 'Delete' }))
 
     await waitFor(() => {
       expect(mockedRemoveFederalApplicationDocument).toHaveBeenCalledWith('800', '888')
@@ -2052,7 +2061,9 @@ describe('Exemption and Federal Detail Document Actions', () => {
     )
 
     expect(
-      await screen.findByText('Unable to retrieve provincial exemption detail.'),
+      await screen.findByText('Unable to retrieve provincial exemption detail.', {
+        selector: '.detail-page-inline-error',
+      }),
     ).toBeInTheDocument()
     expect(mockedFetchExemptionDocuments).not.toHaveBeenCalled()
   })
@@ -2069,7 +2080,9 @@ describe('Exemption and Federal Detail Document Actions', () => {
     )
 
     expect(
-      await screen.findByText('Unable to retrieve federal application detail.'),
+      await screen.findByText('Unable to retrieve federal application detail.', {
+        selector: '.detail-page-inline-error',
+      }),
     ).toBeInTheDocument()
     expect(mockedFetchFederalApplicationDocuments).not.toHaveBeenCalled()
   })

@@ -1,5 +1,6 @@
-import { Button, Loading, Modal, TextInput } from '@carbon/react'
+import { Button, Loading, TextInput } from '@carbon/react'
 import { useId } from 'react'
+import Modal from '@/components/Modal'
 import { isValidEmail, normalizeTrimmedText } from '@/utils/text'
 
 import './ConfirmationModal/ConfirmationModal.css'
@@ -87,7 +88,7 @@ const ExemptionApprovalEmailModal = ({
         })}
       </div>
       <div className="lexis-confirmation-modal__actions">
-        <Button id={skipButtonId} kind="secondary" disabled={sending} onClick={onSkip}>
+        <Button id={skipButtonId} kind="tertiary" disabled={sending} onClick={onSkip}>
           {recipients.length === 1 ? 'Skip notification' : 'Skip notifications'}
         </Button>
         <Button
@@ -100,7 +101,7 @@ const ExemptionApprovalEmailModal = ({
             }
           }}
         >
-          {sending ? 'Sending...' : recipients.length === 1 ? 'Send' : 'Send all'}
+          {sending ? 'Sending…' : recipients.length === 1 ? 'Send' : 'Send all'}
         </Button>
       </div>
     </Modal>

@@ -325,6 +325,41 @@ public abstract class OracleRepositorySupport {
         normalizedTotal);
   }
 
+  /** Executes a directly paged Oracle query whose final projection follows the paged CTE. */
+  protected <T> Page<T> queryDirectPageWithTail(
+      String selectPrefix,
+      DirectSql whereAndOrder,
+      String selectTail,
+      int page,
+      int size,
+      int totalElements,
+      SqlRowMapper<T> rowMapper) {
+    int normalizedPage = Math.max(0, page);
+    int normalizedSize = Math.max(1, size);
+    int normalizedTotal = Math.max(0, totalElements);
+    long offset = (long) normalizedPage * normalizedSize;
+    if (offset >= normalizedTotal) {
+      return new PageImpl<>(
+          List.of(), PageRequest.of(normalizedPage, normalizedSize), normalizedTotal);
+    }
+
+    List<Object> bindValues = new ArrayList<>(whereAndOrder.bindValues());
+    bindValues.add(offset);
+    bindValues.add(normalizedSize);
+    List<T> rows =
+        jdbcTemplate.query(
+            selectPrefix
+                + whereAndOrder.sql()
+                + " OFFSET ? ROWS FETCH NEXT ? ROWS ONLY"
+                + selectTail,
+            (rs, rowNumber) -> rowMapper.map(rs),
+            bindValues.toArray());
+    return new PageImpl<>(
+        List.copyOf(rows),
+        PageRequest.of(normalizedPage, normalizedSize),
+        normalizedTotal);
+  }
+
   /** Executes one directly paged Oracle query with one look-ahead row for slice navigation. */
   protected <T> Slice<T> queryDirectSlice(
       String selectSql,

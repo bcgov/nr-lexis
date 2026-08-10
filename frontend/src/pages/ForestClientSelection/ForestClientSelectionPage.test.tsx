@@ -30,11 +30,12 @@ describe('ForestClientSelectionPage', () => {
       </AuthContext>,
     )
 
-    expect(screen.getByRole('heading', { name: 'Select an organization' })).toBeVisible()
-    expect(screen.getByRole('button', { name: 'Open LEXIS' })).toBeDisabled()
+    expect(screen.getByRole('heading', { name: 'Select organization' })).toBeVisible()
+    expect(screen.getByRole('img', { name: 'BC forest landscape' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled()
 
-    await userEvent.selectOptions(screen.getByLabelText('Organization'), '00067890')
-    await userEvent.click(screen.getByRole('button', { name: 'Open LEXIS' }))
+    await userEvent.click(screen.getByRole('radio', { name: 'Forest client 00067890' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
 
     await waitFor(() => {
       expect(selectForestClient).toHaveBeenCalledWith('00067890')
@@ -65,5 +66,33 @@ describe('ForestClientSelectionPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Sign out' }))
 
     expect(logout).toHaveBeenCalledOnce()
+  })
+
+  it('keeps the organization choices available when activation fails', async () => {
+    const selectForestClient = vi.fn().mockRejectedValue(new Error('unavailable'))
+
+    render(
+      <AuthContext
+        value={createTestAuthContext({
+          capabilities: createTestCapabilities({
+            forestClientNumber: null,
+            availableForestClientNumbers: ['00012345', '00067890'],
+            forestClientSelectionRequired: true,
+          }),
+          selectForestClient,
+        })}
+      >
+        <ThemeProvider>
+          <ForestClientSelectionPage />
+        </ThemeProvider>
+      </AuthContext>,
+    )
+
+    await userEvent.click(screen.getByRole('radio', { name: 'Forest client 00012345' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
+
+    expect(await screen.findByText('Organization not selected')).toBeVisible()
+    expect(screen.getByRole('radio', { name: 'Forest client 00012345' })).toBeChecked()
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled()
   })
 })

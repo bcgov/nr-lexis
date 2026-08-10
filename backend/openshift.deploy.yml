@@ -33,6 +33,10 @@ parameters:
     value: "1000m"
   - name: MAX_MEM
     value: "800Mi"
+  # Container timezone used by the JVM default zone. The exemption-expiry
+  # scheduler remains independently pinned by LEXIS_EXPIRY_ZONE below.
+  - name: TZ
+    value: America/Vancouver
   - name: APP_LOG_LEVEL
     value: INFO
   - name: LEXIS_REPORT_STATISTICS_LOG_LEVEL
@@ -204,6 +208,8 @@ objects:
                 - containerPort: 8080
                   protocol: TCP
               env:
+                - name: TZ
+                  value: ${TZ}
                 - name: SPRING_PROFILES_ACTIVE
                   value: ${SPRING_PROFILES_ACTIVE}
                 - name: LEXIS_REQUIRE_ORACLE_PROFILE

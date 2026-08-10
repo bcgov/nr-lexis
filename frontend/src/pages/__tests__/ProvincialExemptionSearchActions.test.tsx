@@ -6,7 +6,10 @@ import { useAuth } from '@/context/auth/useAuth'
 import { useDefaultRegionPreference } from '@/pages/shared/useDefaultRegionPreference'
 import type { ProvincialExemptionSearchResponse } from '@/interfaces/ProvincialExemptionSearch'
 import ProvincialExemptionPage from '@/pages/ProvincialExemption'
-import { searchProvincialExemptions } from '@/service/provincial-exemption-search-service'
+import {
+  countProvincialExemptions,
+  searchProvincialExemptions,
+} from '@/service/provincial-exemption-search-service'
 import { fetchProvincialExemptionOptions } from '@/service/search-options-service'
 import {
   approveExemptions,
@@ -44,6 +47,7 @@ vi.mock('@/service/record-version-service', () => ({
 const mockedUseAuth = vi.mocked(useAuth)
 const mockedUseDefaultRegionPreference = vi.mocked(useDefaultRegionPreference)
 const mockedSearchProvincialExemptions = vi.mocked(searchProvincialExemptions)
+const mockedCountProvincialExemptions = vi.mocked(countProvincialExemptions)
 const mockedFetchProvincialExemptionOptions = vi.mocked(fetchProvincialExemptionOptions)
 const mockedApproveExemptions = vi.mocked(approveExemptions)
 const mockedSendExemptionApprovalEmails = vi.mocked(sendExemptionApprovalEmails)
@@ -151,8 +155,9 @@ describe('Provincial Exemption Search Actions', () => {
     renderPage()
     await screen.findByText('EX-1001')
 
-    const approveButton = screen.getByRole('button', { name: 'Approve Selected Exemption' })
+    const approveButton = screen.getByRole('button', { name: 'Approve selected exemptions' })
     expect(approveButton).toBeDisabled()
+    expect(approveButton.closest('.legacy-search-table-toolbar__actions')).not.toBeNull()
 
     expect(screen.getByRole('checkbox', { name: 'Select EX-1001' })).toBeEnabled()
     const lockedCheckbox = screen.getByRole('checkbox', { name: 'Select EX-2002' })
@@ -171,9 +176,9 @@ describe('Provincial Exemption Search Actions', () => {
     )
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select EX-1001' }))
-    expect(screen.getByRole('button', { name: 'Approve Selected Exemption' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Approve selected exemptions' })).toBeEnabled()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Approve Selected Exemption' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Approve selected exemptions' }))
     const firstDialog = screen.getByRole('dialog', { name: 'Approve selected exemptions' })
     expect(within(firstDialog).getByText('EX-1001')).toBeInTheDocument()
     const firstCertification = within(firstDialog).getByRole('checkbox', {
@@ -197,7 +202,7 @@ describe('Provincial Exemption Search Actions', () => {
       ).not.toBeInTheDocument(),
     )
 
-    await userEvent.click(screen.getByRole('button', { name: 'Approve Selected Exemption' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Approve selected exemptions' }))
     const reopenedDialog = screen.getByRole('dialog', { name: 'Approve selected exemptions' })
     const reopenedCertification = within(reopenedDialog).getByRole('checkbox', {
       name: 'I certify that this exemption has been approved.',
@@ -239,7 +244,7 @@ describe('Provincial Exemption Search Actions', () => {
     ).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select EX-1001' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Approve Selected Exemption' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Approve selected exemptions' }))
     const postApprovalDialog = screen.getByRole('dialog', { name: 'Approve selected exemptions' })
     expect(
       within(postApprovalDialog).getByRole('checkbox', {
@@ -248,10 +253,10 @@ describe('Provincial Exemption Search Actions', () => {
     ).not.toBeChecked()
     await userEvent.click(within(postApprovalDialog).getByRole('button', { name: 'Cancel' }))
 
-    expect(screen.getByRole('link', { name: 'Add Exemption' })).toHaveAttribute(
-      'href',
-      '/provincial/exemption/create',
-    )
+    const addExemptionAction = screen.getByRole('link', { name: 'Add exemption' })
+    expect(addExemptionAction).toHaveAttribute('href', '/provincial/exemption/create')
+    expect(addExemptionAction).toHaveClass('cds--btn--primary')
+    expect(addExemptionAction.closest('.legacy-search-table-toolbar__actions')).not.toBeNull()
   }, 20_000)
 
   it('preserves selected exemptions while paging through approval results', async () => {
@@ -310,7 +315,7 @@ describe('Provincial Exemption Search Actions', () => {
 
     await userEvent.click(screen.getByLabelText('Next page'))
     await screen.findByText('EX-PAGE-2')
-    expect(screen.getByRole('button', { name: 'Approve Selected Exemption' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Approve selected exemptions' })).toBeEnabled()
 
     await userEvent.click(screen.getByLabelText('Previous page'))
     await screen.findByText('EX-PAGE-1')
@@ -325,7 +330,7 @@ describe('Provincial Exemption Search Actions', () => {
     renderPage()
     await screen.findByText('EX-1001')
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select EX-1001' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Approve Selected Exemption' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Approve selected exemptions' }))
 
     const approvalDialog = screen.getByRole('dialog', { name: 'Approve selected exemptions' })
     await userEvent.click(
@@ -381,7 +386,7 @@ describe('Provincial Exemption Search Actions', () => {
     renderPage()
     await screen.findByText('EX-1001')
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select EX-1001' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Approve Selected Exemption' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Approve selected exemptions' }))
 
     const approvalDialog = screen.getByRole('dialog', { name: 'Approve selected exemptions' })
     await userEvent.click(
@@ -473,7 +478,7 @@ describe('Provincial Exemption Search Actions', () => {
     renderPage()
     await screen.findByText('TEST-EX-001')
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select all rows on this page' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Approve Selected Exemption' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Approve selected exemptions' }))
     const approvalDialog = screen.getByRole('dialog', { name: 'Approve selected exemptions' })
     await userEvent.click(
       within(approvalDialog).getByRole('checkbox', {
@@ -511,7 +516,7 @@ describe('Provincial Exemption Search Actions', () => {
       name: 'Skip notifications',
     })
     const sendAll = within(notificationDialog).getByRole('button', { name: 'Send all' })
-    expect(skipNotifications).toHaveClass('cds--btn--secondary')
+    expect(skipNotifications).toHaveClass('cds--btn--tertiary')
     expect(sendAll).toHaveClass('cds--btn--primary')
     expect(skipNotifications.parentElement).toHaveClass('lexis-confirmation-modal__actions')
     expect(notificationDialog.querySelector('.cds--modal-footer')).not.toBeInTheDocument()
@@ -591,7 +596,7 @@ describe('Provincial Exemption Search Actions', () => {
     renderPage()
     await screen.findByText('TEST-EX-001')
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select all rows on this page' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Approve Selected Exemption' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Approve selected exemptions' }))
 
     const approvalDialog = screen.getByRole('dialog', { name: 'Approve selected exemptions' })
     await userEvent.click(
@@ -655,7 +660,7 @@ describe('Provincial Exemption Search Actions', () => {
     await screen.findByText('EX-LOCKED')
     expect(screen.getByText('Locked')).toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: 'Select EX-LOCKED' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Approve Selected Exemption' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Approve selected exemptions' })).toBeDisabled()
   })
 
   it('explains why select-all is disabled when this page has no approvable exemptions', async () => {
@@ -732,13 +737,13 @@ describe('Provincial Exemption Search Actions', () => {
     renderPage()
     await screen.findByText('EX-1001')
 
-    expect(screen.queryByRole('link', { name: 'Add Exemption' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Add exemption' })).not.toBeInTheDocument()
     expect(screen.queryByRole('checkbox', { name: 'Select EX-1001' })).not.toBeInTheDocument()
     expect(
       screen.queryByRole('checkbox', { name: 'Select all rows on this page' }),
     ).not.toBeInTheDocument()
     expect(
-      screen.queryByRole('button', { name: 'Approve Selected Exemption' }),
+      screen.queryByRole('button', { name: 'Approve selected exemptions' }),
     ).not.toBeInTheDocument()
   })
 
@@ -759,7 +764,7 @@ describe('Provincial Exemption Search Actions', () => {
     expect(screen.getByRole('link', { name: 'EX-2002' })).toBeInTheDocument()
   })
 
-  it('defaults approver filters and all visible regions without using the session region', async () => {
+  it('defaults approver filters without applying a region when no preference exists', async () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
         capabilities: createTestCapabilities({
@@ -779,8 +784,9 @@ describe('Provincial Exemption Search Actions', () => {
     const resultsTable = screen.getByRole('region', { name: 'Search results table', hidden: true })
     expect(resultsTable.closest('[hidden]')).toHaveStyle({ display: 'none' })
     expect(resultsTable).not.toBeVisible()
-    const selectedRegions = await screen.findByRole('list', { name: 'Selected regions' })
-    expect(within(selectedRegions).getByText('Cariboo')).toBeVisible()
+    expect(
+      await screen.findByRole('combobox', { name: /^Region\s*Total items selected:\s*0/ }),
+    ).toBeVisible()
 
     await userEvent.click(screen.getByRole('button', { name: 'Search' }))
     await waitFor(() => {
@@ -789,14 +795,14 @@ describe('Provincial Exemption Search Actions', () => {
           filters: expect.objectContaining({
             exemptionStatusCode: 'NEW',
             exemptionTypeCode: 'M',
-            region: ['11'],
+            region: [],
           }),
         }),
         expect.objectContaining({ knownTotal: expect.any(Number) }),
       )
     })
 
-    await userEvent.click(screen.getByRole('button', { name: 'Clear Filters' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Clear all' }))
     await waitFor(() => {
       expect(mockedSearchProvincialExemptions).toHaveBeenLastCalledWith(
         expect.objectContaining({
@@ -805,6 +811,51 @@ describe('Provincial Exemption Search Actions', () => {
         expect.any(Object),
       )
     })
+  })
+
+  it('renders a full result page without waiting for the exact count', async () => {
+    const content = Array.from({ length: 10 }, (_, index) => ({
+      exemptionNumber: `EX-${index + 1}`,
+      type: 'Section 1',
+      typeCode: 'SECTION_1',
+      status: 'New',
+      statusCode: 'NEW',
+      applicantClientNumber: '11111111',
+      ownerClientNumber: '22222222',
+      approvedVolume: 100,
+      balanceRemaining: 100,
+      listingDate: '2026-01-10',
+      expiryDate: '2026-12-31',
+      region: '11',
+      canApprove: true,
+      isLocked: false,
+      canViewExemption: true,
+    }))
+    mockedSearchProvincialExemptions.mockResolvedValue({
+      content,
+      page: {
+        number: 0,
+        size: 10,
+        totalElements: 11,
+        totalPages: 2,
+      },
+    })
+    let resolveCount!: (total: number) => void
+    mockedCountProvincialExemptions.mockImplementation(
+      () =>
+        new Promise<number>((resolve) => {
+          resolveCount = resolve
+        }),
+    )
+
+    renderPage()
+
+    expect(await screen.findByText('EX-1')).toBeVisible()
+    expect(mockedCountProvincialExemptions).toHaveBeenCalledOnce()
+    expect(mockedSearchProvincialExemptions).toHaveBeenCalledOnce()
+
+    resolveCount(809)
+    await waitFor(() => expect(mockedSearchProvincialExemptions).toHaveBeenCalledOnce())
   })
 
   it('uses the saved region to preselect exemption search areas', async () => {
@@ -825,11 +876,10 @@ describe('Provincial Exemption Search Actions', () => {
 
     renderPage('/provincial/exemption')
 
-    const selectedRegions = await screen.findByRole('list', { name: 'Selected regions' })
-    expect(within(selectedRegions).getByText('Northeast')).toBeVisible()
-    expect(within(selectedRegions).getByText('Omineca')).toBeVisible()
-    expect(within(selectedRegions).getByText('Skeena')).toBeVisible()
-    expect(within(selectedRegions).queryByText('Cariboo')).not.toBeInTheDocument()
+    expect(
+      await screen.findByRole('combobox', { name: /^Region\s*Total items selected:\s*3/ }),
+    ).toBeVisible()
+    expect(screen.queryByRole('list', { name: 'Selected regions' })).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Search' }))
     await waitFor(() => {
@@ -842,7 +892,7 @@ describe('Provincial Exemption Search Actions', () => {
     })
   })
 
-  it('shows selected exemption search regions as removable pills', async () => {
+  it('shows selected exemption search regions in the default Carbon multi-select', async () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
     mockedFetchProvincialExemptionOptions.mockResolvedValueOnce({
       exemptionTypes: [{ value: 'SECTION_1', label: 'Section 1' }],
@@ -856,9 +906,10 @@ describe('Provincial Exemption Search Actions', () => {
     renderPage('/provincial/exemption?region=1903,1908')
     await screen.findByText('EX-1001')
 
-    const selectedRegions = await screen.findByRole('list', { name: 'Selected regions' })
-    expect(within(selectedRegions).getByText('Cariboo Natural Resource Region')).toBeVisible()
-    expect(within(selectedRegions).getByText('Skeena Natural Resource Region')).toBeVisible()
+    expect(
+      await screen.findByRole('combobox', { name: /^Region\s*Total items selected:\s*2/ }),
+    ).toBeVisible()
+    expect(screen.queryByRole('list', { name: 'Selected regions' })).not.toBeInTheDocument()
   })
 
   it('uses the application search filter order and labels', async () => {
@@ -936,7 +987,7 @@ describe('Provincial Exemption Search Actions', () => {
       expect.any(Object),
     )
 
-    await userEvent.click(screen.getByRole('button', { name: 'Clear Filters' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Clear all' }))
 
     expect(screen.getByLabelText('Approval from date')).toHaveValue('')
     expect(screen.getByLabelText('Approval to date')).toHaveValue('')
@@ -946,7 +997,7 @@ describe('Provincial Exemption Search Actions', () => {
           filters: expect.objectContaining({
             approvalFromDate: '',
             approvalToDate: '',
-            region: ['11'],
+            region: [],
           }),
         }),
         expect.any(Object),

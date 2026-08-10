@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -16,11 +16,16 @@ vi.mock('@/context/auth/useAuth', () => ({
 }))
 
 vi.mock('@/service/user-preference-service', () => ({
-  DEFAULT_REGION_OPTIONS: [
+  DEFAULT_ZONE_OPTIONS: [
     { value: 'RCO', label: 'Coast (RCO)' },
     { value: 'RNI', label: 'Northern Interior (RNI)' },
     { value: 'RSI', label: 'Southern Interior (RSI)' },
   ],
+  DEFAULT_ZONE_HELPER_TEXT: {
+    RCO: 'Preselects the South Coast and West Coast Natural Resource Regions in search tables.',
+    RNI: 'Preselects the Northeast, Omineca, and Skeena Natural Resource Regions in search tables.',
+    RSI: 'Preselects the Cariboo, Kootenay-Boundary, and Thompson-Okanagan Natural Resource Regions in search tables.',
+  },
   fetchUserPreferences: vi.fn(),
   updateUserPreferences: vi.fn(),
 }))
@@ -209,7 +214,7 @@ describe('Layout shell', () => {
     expect(document.querySelector('.app-shell')).toHaveClass('is-side-nav-collapsed')
     expect(document.getElementById(NOTIFICATION_REGION_ID)).toHaveClass('cds--g100')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Expand side navigation' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Open menu' }))
 
     expect(screen.getByRole('button', { name: 'Reports' })).toHaveAttribute(
       'aria-expanded',
@@ -223,7 +228,7 @@ describe('Layout shell', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Reports' }))
     await userEvent.click(screen.getByRole('switch', { name: 'Toggle dark mode' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Collapse side navigation' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Close menu' }))
 
     expect(window.localStorage.getItem(THEME_PREFERENCE_KEY)).toBe('g100')
     expect(window.localStorage.getItem(SIDE_NAV_PREFERENCE_KEY)).toBe('true')
@@ -266,7 +271,7 @@ describe('Layout shell', () => {
 
     await userEvent.click(screen.getByRole('switch', { name: 'Toggle dark mode' }))
     await userEvent.click(screen.getByRole('button', { name: 'Reports' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Collapse side navigation' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Close menu' }))
 
     expect(screen.getByRole('switch', { name: 'Toggle dark mode' })).toHaveAttribute(
       'aria-checked',
@@ -560,7 +565,7 @@ describe('Layout shell', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Reports' }))
     expect(screen.queryByRole('link', { name: /Advertising List/i })).not.toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Collapse side navigation' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Close menu' }))
 
     expect(screen.getByRole('link', { name: /Advertising List/i })).toBeVisible()
   })
@@ -570,19 +575,20 @@ describe('Layout shell', () => {
 
     const shell = document.querySelector('.app-shell')
     const sideNav = screen.getByRole('navigation', { name: 'Side navigation' })
-    const collapseButton = screen.getByRole('button', { name: 'Collapse side navigation' })
+    const collapseButton = screen.getByRole('button', { name: 'Close menu' })
 
     expect(shell).not.toHaveClass('is-side-nav-collapsed')
     expect(sideNav).not.toHaveClass('is-collapsed')
-    expect(collapseButton).toHaveAttribute('aria-controls', 'side-navigation-list')
-    expect(collapseButton).not.toHaveAttribute('aria-expanded')
+    expect(collapseButton).toHaveAttribute('aria-controls', 'side-navigation')
+    expect(collapseButton).toHaveAttribute('aria-expanded', 'true')
 
     await userEvent.click(collapseButton)
 
     expect(shell).toHaveClass('is-side-nav-collapsed')
     expect(sideNav).toHaveClass('is-collapsed')
-    expect(screen.getByRole('button', { name: 'Expand side navigation' })).not.toHaveAttribute(
+    expect(screen.getByRole('button', { name: 'Open menu' })).toHaveAttribute(
       'aria-expanded',
+      'false',
     )
   })
 
@@ -594,14 +600,20 @@ describe('Layout shell', () => {
 
     expect(profilePanel).toHaveAttribute('aria-hidden', 'true')
     expect(profilePanel).toHaveAttribute('inert')
-    expect(screen.queryByRole('dialog', { name: 'Profile' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'My profile' })).not.toBeInTheDocument()
 
     await userEvent.click(profileToggle)
 
     expect(profileToggle).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByRole('dialog', { name: 'Profile' })).toHaveClass('is-open')
+    expect(screen.getByRole('dialog', { name: 'My profile' })).toHaveClass('is-open')
     expect(profilePanel).not.toHaveAttribute('aria-hidden')
     expect(profilePanel).not.toHaveAttribute('inert')
+    expect(
+      within(screen.getByRole('dialog', { name: 'My profile' })).getByRole('button', {
+        name: 'Close profile panel',
+      }),
+    ).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Log out' })).toBeVisible()
     expect(profileToggle).toHaveFocus()
     expect(profilePanel?.querySelector('.profile-panel__close')).not.toHaveFocus()
 
@@ -611,7 +623,7 @@ describe('Layout shell', () => {
     expect(profilePanel).not.toHaveClass('is-open')
     expect(profilePanel).toHaveAttribute('aria-hidden', 'true')
     expect(profilePanel).toHaveAttribute('inert')
-    expect(screen.queryByRole('dialog', { name: 'Profile' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'My profile' })).not.toBeInTheDocument()
   })
 
   it('shows the user role and available organization context in the profile panel', async () => {
@@ -630,7 +642,7 @@ describe('Layout shell', () => {
     renderLayout('/admin/rtm/emslogamv')
     await userEvent.click(screen.getByRole('button', { name: 'Open profile panel' }))
 
-    const profilePanel = screen.getByRole('dialog', { name: 'Profile' })
+    const profilePanel = screen.getByRole('dialog', { name: 'My profile' })
     expect(within(profilePanel).getByText('idir\\analyst (Read Only)')).toBeVisible()
     expect(within(profilePanel).getByText('Organization unit: 1903')).toBeVisible()
     expect(within(profilePanel).getByText('Forest client: 00012345')).toBeVisible()
@@ -643,18 +655,81 @@ describe('Layout shell', () => {
 
   it('loads and saves the default region from the profile panel', async () => {
     mockedFetchUserPreferences.mockResolvedValue({ defaultRegion: 'RCO' })
+    window.sessionStorage.setItem(
+      'lexis.search-state.v1.provincial-review',
+      'status=SUBMITTED&region=1903%2C1904&page=3',
+    )
     renderLayout('/admin/rtm/emslogamv')
 
     await userEvent.click(screen.getByRole('button', { name: 'Open profile panel' }))
 
-    const regionSelect = await screen.findByRole('combobox', { name: 'Default region' })
-    await waitFor(() => expect(regionSelect).toHaveValue('RCO'))
+    const zoneSelect = await screen.findByRole('combobox', { name: 'Default zone' })
+    await waitFor(() => expect(zoneSelect).toHaveValue('RCO'))
+    expect(
+      screen.getByText(
+        'Preselects the South Coast and West Coast Natural Resource Regions in search tables.',
+      ),
+    ).toBeVisible()
 
-    await userEvent.selectOptions(regionSelect, 'RNI')
+    await userEvent.selectOptions(zoneSelect, 'RNI')
+    expect(
+      screen.getByText(
+        'Preselects the Northeast, Omineca, and Skeena Natural Resource Regions in search tables.',
+      ),
+    ).toBeVisible()
     await userEvent.click(screen.getByRole('button', { name: 'Save preference' }))
 
     expect(mockedUpdateUserPreferences).toHaveBeenCalledWith('RNI')
     expect(await screen.findByRole('status')).toHaveTextContent('Preference saved.')
+    expect(window.sessionStorage.getItem('lexis.search-state.v1.provincial-review')).toBe(
+      'status=SUBMITTED&page=3',
+    )
+  })
+
+  it('locks the default zone controls while the preference is saving', async () => {
+    mockedFetchUserPreferences.mockResolvedValue({ defaultRegion: 'RCO' })
+    let resolveSave!: (preference: { defaultRegion: 'RNI' }) => void
+    mockedUpdateUserPreferences.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveSave = resolve
+        }),
+    )
+    renderLayout('/admin/rtm/emslogamv')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Open profile panel' }))
+    const zoneSelect = await screen.findByRole('combobox', { name: 'Default zone' })
+    await waitFor(() => expect(zoneSelect).toHaveValue('RCO'))
+    await userEvent.selectOptions(zoneSelect, 'RNI')
+    await userEvent.click(screen.getByRole('button', { name: 'Save preference' }))
+
+    const savingButton = screen.getByRole('button', { name: 'Saving…' })
+    expect(savingButton).toBeDisabled()
+    expect(savingButton.querySelector('.cds--loading')).toBeInTheDocument()
+    expect(zoneSelect).toBeDisabled()
+
+    await act(async () => resolveSave({ defaultRegion: 'RNI' }))
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Preference saved.')
+    expect(screen.getByRole('button', { name: 'Save preference' })).toBeDisabled()
+  })
+
+  it('does not offer region preferences to provincial submitters', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({
+          principal: 'bceidbusiness\\submitter_00012345',
+          roles: ['LEXIS_PROVINCIAL_SUBMITTER'],
+          forestClientNumber: '00012345',
+        }),
+      }),
+    )
+
+    renderLayout('/provincial/application')
+    await userEvent.click(screen.getByRole('button', { name: 'Open profile panel' }))
+
+    expect(screen.queryByRole('combobox', { name: 'Default region' })).not.toBeInTheDocument()
+    expect(mockedFetchUserPreferences).not.toHaveBeenCalled()
   })
 
   it('returns focus to the profile toggle when the panel is dismissed by keyboard', async () => {
@@ -680,7 +755,7 @@ describe('Layout shell', () => {
 
     const sideNav = document.getElementById('side-navigation')
     const mainContent = document.getElementById('main-content')
-    const openMenuButton = screen.getByRole('button', { name: 'Open navigation menu' })
+    const openMenuButton = screen.getByRole('button', { name: 'Open menu' })
 
     expect(document.querySelector('.app-shell')).not.toHaveClass('is-side-nav-collapsed')
     expect(openMenuButton).toHaveAttribute('aria-expanded', 'false')
@@ -691,7 +766,7 @@ describe('Layout shell', () => {
 
     await userEvent.click(openMenuButton)
 
-    expect(screen.getByRole('button', { name: 'Close navigation menu' })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: 'Close menu' })).toHaveAttribute(
       'aria-expanded',
       'true',
     )
@@ -703,9 +778,9 @@ describe('Layout shell', () => {
     expect(screen.getByRole('button', { name: 'Dismiss navigation menu' })).toBeInTheDocument()
     expect(window.localStorage.getItem(SIDE_NAV_PREFERENCE_KEY)).toBe('true')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Close navigation menu' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Close menu' }))
 
-    expect(screen.getByRole('button', { name: 'Open navigation menu' })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: 'Open menu' })).toHaveAttribute(
       'aria-expanded',
       'false',
     )
@@ -721,7 +796,7 @@ describe('Layout shell', () => {
     mockMobileViewport()
     renderLayout('/admin/rtm/emslogamv')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Open navigation menu' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Open menu' }))
     await waitFor(() => {
       expect(screen.getByRole('link', { name: /^Notifications$/i })).toHaveFocus()
     })
@@ -729,15 +804,15 @@ describe('Layout shell', () => {
     await userEvent.keyboard('{Escape}')
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Open navigation menu' })).toHaveFocus()
+      expect(screen.getByRole('button', { name: 'Open menu' })).toHaveFocus()
     })
     expect(document.getElementById('side-navigation')).not.toHaveClass('is-mobile-open')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Open navigation menu' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Open menu' }))
     await userEvent.click(screen.getByRole('link', { name: /^Applications$/i }))
 
     expect(screen.getByTestId('current-path')).toHaveTextContent('/provincial/application')
-    expect(screen.getByRole('button', { name: 'Open navigation menu' })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: 'Open menu' })).toHaveAttribute(
       'aria-expanded',
       'false',
     )

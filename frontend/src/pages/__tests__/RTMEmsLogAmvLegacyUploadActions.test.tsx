@@ -755,4 +755,60 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       expect.arrayContaining([expect.objectContaining({ grade: 'W' })]),
     )
   })
+
+  it('keeps review visible and re-enables its actions when submission fails', async () => {
+    let rejectSave: (reason: Error) => void = () => undefined
+    mockedPreviewUpload.mockResolvedValue({
+      status: 'accepted',
+      fileName: 'rtm-values.xlsx',
+      fileSize: 1,
+      message: 'Spreadsheet is valid.',
+      rowCount: 1,
+      retrievalDate: '2026-06-01',
+      updateDate: '2026-07-01',
+      errors: [],
+      warnings: [],
+      rows: [
+        {
+          species: 'BA',
+          grade: 'D',
+          growthIndicator: 'O',
+          retrievalDate: '2026-06-01',
+          updateDate: '2026-07-01',
+          currentValue: 75.29,
+          newValue: 78.14,
+          returnCode: '0',
+        },
+      ],
+    })
+    mockedSaveBatch.mockImplementation(
+      () =>
+        new Promise((_, reject) => {
+          rejectSave = reject
+        }),
+    )
+    render(<RtmEmsLogAmvUploadPage />)
+    const workbook = new File([new Uint8Array([1])], 'rtm-values.xlsx', {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    })
+
+    await userEvent.upload(
+      screen.getByLabelText('Average monthly values upload spreadsheet'),
+      workbook,
+    )
+    const reviewTable = await screen.findByRole('table', {
+      name: 'Balsam average market value review',
+    })
+    await userEvent.click(screen.getByRole('button', { name: 'Save values' }))
+
+    expect(screen.getByRole('button', { name: 'Saving values' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled()
+
+    await act(async () => rejectSave(new Error('unavailable')))
+
+    expect(await screen.findByText('Unable to apply average monthly value upload.')).toBeVisible()
+    expect(reviewTable).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Save values' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeEnabled()
+  })
 })

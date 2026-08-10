@@ -3,7 +3,6 @@ import {
   Calendar,
   ChevronDown,
   Certificate,
-  ChevronLeft,
   Close,
   DataTable,
   Dashboard,
@@ -24,7 +23,11 @@ import {
 } from '@carbon/icons-react'
 import { HeaderMenuButton, IconButton, SkipToContent } from '@carbon/react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
-import { hasProvincialSubmitterRole, hasRole } from '@/context/auth/role-utils'
+import {
+  hasProvincialStaffRole,
+  hasProvincialSubmitterRole,
+  hasRole,
+} from '@/context/auth/role-utils'
 import OptimisticConflictModal from '@/components/OptimisticConflictModal'
 import UserRegionPreference from '@/components/UserRegionPreference'
 import { isProdRtmOnlyPathAllowed } from '@/config/features'
@@ -398,6 +401,7 @@ function Layout({ children }: LayoutProps) {
   )
   const isDarkTheme = theme === 'g100'
   const isDesktopSideNavCollapsed = isSideNavCollapsed && !isMobileViewport
+  const isNavigationOpen = isMobileViewport ? isMobileNavOpen : !isDesktopSideNavCollapsed
   const notificationAudienceKey = `${capabilities.principal ?? ''}:${capabilities.roles?.join('|') ?? ''}`
   const profileInitials = useMemo(
     () => getProfileInitials(capabilities.principal),
@@ -453,7 +457,7 @@ function Layout({ children }: LayoutProps) {
 
   const focusMobileNavigationToggle = (): void => {
     window.requestAnimationFrame(() => {
-      document.getElementById('mobile-navigation-toggle')?.focus()
+      document.getElementById('navigation-toggle')?.focus()
     })
   }
 
@@ -485,9 +489,14 @@ function Layout({ children }: LayoutProps) {
     navigate('/select-organization')
   }
 
-  const toggleMobileNavigation = (): void => {
+  const toggleNavigation = (): void => {
     setIsProfileOpen(false)
-    setIsMobileNavOpen((current) => !current)
+    if (isMobileViewport) {
+      setIsMobileNavOpen((current) => !current)
+      return
+    }
+
+    setIsSideNavCollapsed((current) => !current)
   }
 
   const toggleProfile = (): void => {
@@ -533,7 +542,7 @@ function Layout({ children }: LayoutProps) {
       if (event.key === 'Escape') {
         setIsMobileNavOpen(false)
         window.requestAnimationFrame(() => {
-          document.getElementById('mobile-navigation-toggle')?.focus()
+          document.getElementById('navigation-toggle')?.focus()
         })
       }
     }
@@ -660,14 +669,13 @@ function Layout({ children }: LayoutProps) {
         <SkipToContent />
         <header className="cds--header csp-app-header" aria-label="NR LEXIS">
           <HeaderMenuButton
-            id="mobile-navigation-toggle"
-            className="csp-mobile-nav-toggle"
-            aria-label={isMobileNavOpen ? 'Close navigation menu' : 'Open navigation menu'}
+            id="navigation-toggle"
+            className="csp-navigation-toggle"
+            aria-label={isNavigationOpen ? 'Close menu' : 'Open menu'}
             aria-controls="side-navigation"
-            aria-expanded={isMobileNavOpen}
-            isActive={isMobileNavOpen}
-            isCollapsible
-            onClick={toggleMobileNavigation}
+            aria-expanded={isNavigationOpen}
+            isActive={isNavigationOpen}
+            onClick={toggleNavigation}
           />
 
           <button
@@ -702,6 +710,7 @@ function Layout({ children }: LayoutProps) {
               className="csp-header-action"
               kind="ghost"
               label={isProfileOpen ? 'Close profile panel' : 'Open profile panel'}
+              aria-label={isProfileOpen ? 'Close profile panel' : 'Open profile panel'}
               aria-expanded={isProfileOpen}
               aria-controls="profile-panel"
               onClick={toggleProfile}
@@ -715,18 +724,19 @@ function Layout({ children }: LayoutProps) {
           id="profile-panel"
           className={`profile-panel${isProfileOpen ? ' is-open' : ''}`}
           role="dialog"
-          aria-label="Profile"
+          aria-label="My profile"
           aria-modal="false"
           aria-hidden={isProfileOpen ? undefined : true}
           inert={isProfileOpen ? undefined : true}
         >
           <div className="profile-panel__header">
-            <h2 className="profile-panel__title">Profile</h2>
+            <h2 className="profile-panel__title">My profile</h2>
             <IconButton
               align="bottom-right"
               className="profile-panel__close"
               kind="ghost"
               label="Close profile panel"
+              aria-label="Close profile panel"
               onClick={() => closeProfile(true)}
             >
               <Close size={20} />
@@ -753,7 +763,9 @@ function Layout({ children }: LayoutProps) {
                 )}
               </div>
             </div>
-            <UserRegionPreference active={isProfileOpen} />
+            {hasProvincialStaffRole(capabilities.roles) && (
+              <UserRegionPreference active={isProfileOpen} />
+            )}
           </div>
 
           <hr className="profile-panel__divider" role="separator" />
@@ -771,7 +783,7 @@ function Layout({ children }: LayoutProps) {
 
           <button className="profile-panel__signout" type="button" onClick={handleLogout}>
             <Logout size={16} />
-            Sign out
+            Log out
           </button>
         </aside>
 
@@ -782,23 +794,6 @@ function Layout({ children }: LayoutProps) {
           aria-hidden={isMobileViewport && !isMobileNavOpen ? true : undefined}
           inert={isMobileViewport && !isMobileNavOpen ? true : undefined}
         >
-          <button
-            type="button"
-            className="csp-side-nav__toggle"
-            aria-controls="side-navigation-list"
-            aria-label={
-              isDesktopSideNavCollapsed ? 'Expand side navigation' : 'Collapse side navigation'
-            }
-            onClick={() => setIsSideNavCollapsed((current) => !current)}
-          >
-            <span className="csp-side-nav__toggle-icon" aria-hidden="true">
-              <ChevronLeft size={16} />
-            </span>
-            <span className="cds--side-nav__toggle-label csp-side-nav__toggle-text">
-              {isDesktopSideNavCollapsed ? 'Expand' : 'Collapse'}
-            </span>
-          </button>
-
           <ul id="side-navigation-list" className="cds--side-nav__items csp-side-nav__items">
             {visibleNavigationSections.map((section) => {
               if (section.standalone) {

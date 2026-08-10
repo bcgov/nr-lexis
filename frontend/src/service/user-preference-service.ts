@@ -1,30 +1,37 @@
 import apiService from '@/service/api-service'
 import { isRecord } from '@/utils/record'
 
-export const DEFAULT_REGION_OPTIONS = [
+export const DEFAULT_ZONE_OPTIONS = [
   { value: 'RCO', label: 'Coast (RCO)' },
   { value: 'RNI', label: 'Northern Interior (RNI)' },
   { value: 'RSI', label: 'Southern Interior (RSI)' },
 ] as const
 
-export type DefaultRegion = (typeof DEFAULT_REGION_OPTIONS)[number]['value']
+export type DefaultZone = (typeof DEFAULT_ZONE_OPTIONS)[number]['value']
 
 export type UserPreferences = {
-  defaultRegion: DefaultRegion | null
+  // The API field keeps its persisted name, but RCO/RNI/RSI are legacy LEXIS zones.
+  defaultRegion: DefaultZone | null
 }
 
-const DEFAULT_REGION_AREA_IDS: Record<DefaultRegion, readonly string[]> = {
+const DEFAULT_ZONE_REGION_IDS: Record<DefaultZone, readonly string[]> = {
   RCO: ['1909', '1910'],
   RNI: ['1905', '1906', '1908'],
   RSI: ['1903', '1904', '1907'],
+}
+
+export const DEFAULT_ZONE_HELPER_TEXT: Record<DefaultZone, string> = {
+  RCO: 'Preselects the South Coast and West Coast Natural Resource Regions in search tables.',
+  RNI: 'Preselects the Northeast, Omineca, and Skeena Natural Resource Regions in search tables.',
+  RSI: 'Preselects the Cariboo, Kootenay-Boundary, and Thompson-Okanagan Natural Resource Regions in search tables.',
 }
 
 type UserPreferencesListener = (preferences: UserPreferences) => void
 
 const userPreferencesListeners = new Set<UserPreferencesListener>()
 
-const isDefaultRegion = (value: unknown): value is DefaultRegion =>
-  DEFAULT_REGION_OPTIONS.some((option) => option.value === value)
+const isDefaultZone = (value: unknown): value is DefaultZone =>
+  DEFAULT_ZONE_OPTIONS.some((option) => option.value === value)
 
 const parsePreferences = (input: unknown): UserPreferences => {
   if (!isRecord(input)) {
@@ -32,7 +39,7 @@ const parsePreferences = (input: unknown): UserPreferences => {
   }
 
   const { defaultRegion } = input
-  if (defaultRegion !== null && !isDefaultRegion(defaultRegion)) {
+  if (defaultRegion !== null && !isDefaultZone(defaultRegion)) {
     throw new Error('User preferences response is unavailable.')
   }
 
@@ -44,17 +51,16 @@ export const fetchUserPreferences = async (): Promise<UserPreferences> => {
   return parsePreferences(response.data)
 }
 
-export const resolveDefaultRegionAreaIds = (
-  defaultRegion: DefaultRegion | null,
-  availableAreaIds: readonly string[],
+export const resolveDefaultZoneRegionIds = (
+  defaultZone: DefaultZone | null,
+  availableRegionIds: readonly string[],
 ): string[] => {
-  if (!defaultRegion) {
-    return [...availableAreaIds]
+  if (!defaultZone) {
+    return []
   }
 
-  const preferredAreaIds = new Set(DEFAULT_REGION_AREA_IDS[defaultRegion])
-  const matchingAreaIds = availableAreaIds.filter((areaId) => preferredAreaIds.has(areaId))
-  return matchingAreaIds.length > 0 ? matchingAreaIds : [...availableAreaIds]
+  const preferredRegionIds = new Set(DEFAULT_ZONE_REGION_IDS[defaultZone])
+  return availableRegionIds.filter((regionId) => preferredRegionIds.has(regionId))
 }
 
 export const subscribeToUserPreferences = (listener: UserPreferencesListener): (() => void) => {
@@ -63,7 +69,7 @@ export const subscribeToUserPreferences = (listener: UserPreferencesListener): (
 }
 
 export const updateUserPreferences = async (
-  defaultRegion: DefaultRegion | null,
+  defaultRegion: DefaultZone | null,
 ): Promise<UserPreferences> => {
   const response = await apiService
     .getAxiosInstance()

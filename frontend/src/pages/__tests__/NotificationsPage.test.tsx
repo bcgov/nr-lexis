@@ -96,7 +96,12 @@ describe('Notifications page', () => {
     render(<NotificationsPage />)
 
     expect(await screen.findByText('Winter service update')).toBeVisible()
-    expect(screen.getByRole('heading', { level: 1, name: 'Notifications' })).toBeVisible()
+    const pageHeading = screen.getByRole('heading', { level: 1, name: 'Notifications' })
+    expect(pageHeading).toBeVisible()
+    expect(pageHeading.closest('header')).toHaveClass(
+      'lexis-page-header',
+      'notifications-page__header',
+    )
     expect(
       screen.getByText(
         'Updates and bulletins from your administrators. Each notice shows until its posted end date.',
@@ -429,6 +434,64 @@ describe('Notifications page', () => {
     expect(screen.queryByText('Recently updated notifications')).not.toBeInTheDocument()
   })
 
+  it('confirms before discarding notification editor changes', async () => {
+    const user = userEvent.setup()
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({ roles: ['LEXIS_ADMIN'] }),
+      }),
+    )
+
+    render(<NotificationsPage />)
+
+    const launcher = await screen.findByRole('button', { name: 'New notification' })
+    await user.click(launcher)
+    const editor = await screen.findByRole('dialog', { name: 'New notification' })
+    await user.type(within(editor).getByLabelText(/^Title/), 'Unsaved notice')
+    await user.click(within(editor).getByRole('button', { name: 'Cancel' }))
+
+    const discardDialog = await screen.findByRole('dialog', {
+      name: 'Discard notification changes?',
+    })
+    expect(editor).toBeVisible()
+    await user.click(within(discardDialog).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(within(editor).getByLabelText(/^Title/)).toHaveFocus())
+
+    await user.click(within(editor).getByRole('button', { name: 'Cancel' }))
+    const reopenedDiscardDialog = await screen.findByRole('dialog', {
+      name: 'Discard notification changes?',
+    })
+    await user.click(within(reopenedDiscardDialog).getByRole('button', { name: 'Discard changes' }))
+
+    await waitFor(() => expect(launcher).toHaveFocus())
+    expect(screen.queryByRole('dialog', { name: 'New notification' })).not.toBeInTheDocument()
+  })
+
+  it('keeps the editor open and re-enables save after a publish failure', async () => {
+    const user = userEvent.setup()
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({ roles: ['LEXIS_ADMIN'] }),
+      }),
+    )
+    mockedCreateNotification.mockRejectedValueOnce(new Error('unavailable'))
+
+    render(<NotificationsPage />)
+
+    await screen.findByText('Winter service update')
+    await user.click(screen.getByRole('button', { name: 'New notification' }))
+    const editor = await screen.findByRole('dialog', { name: 'New notification' })
+    await user.type(within(editor).getByLabelText(/^Title/), 'Office closure')
+    await user.type(
+      within(editor).getByLabelText('Notification content editor'),
+      'Office closed Friday.',
+    )
+    await user.click(within(editor).getByRole('button', { name: 'Publish' }))
+
+    expect(await within(editor).findByText('Notification could not be saved')).toBeVisible()
+    expect(within(editor).getByRole('button', { name: 'Publish' })).toBeEnabled()
+  })
+
   it('asks an administrator to confirm before deleting a notification', async () => {
     const user = userEvent.setup()
     mockedUseAuth.mockReturnValue(
@@ -448,5 +511,26 @@ describe('Notifications page', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Delete' }))
 
     await waitFor(() => expect(mockedDeleteNotification).toHaveBeenCalledWith(notification.id))
+  })
+
+  it('keeps delete confirmation open and re-enables retry after failure', async () => {
+    const user = userEvent.setup()
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({ roles: ['LEXIS_ADMIN'] }),
+      }),
+    )
+    mockedDeleteNotification.mockRejectedValueOnce(new Error('unavailable'))
+
+    render(<NotificationsPage />)
+
+    await screen.findByText('Winter service update')
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Delete this notification?' })
+    await user.click(within(dialog).getByRole('button', { name: 'Delete' }))
+
+    expect(await screen.findByText('Notification could not be deleted')).toBeVisible()
+    expect(dialog).toBeVisible()
+    expect(within(dialog).getByRole('button', { name: 'Delete' })).toBeEnabled()
   })
 })

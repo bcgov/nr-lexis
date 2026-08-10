@@ -17,6 +17,8 @@ describe('EmptyState', () => {
     expect(region).toHaveAttribute('aria-describedby', description.id)
     expect(pictogram).toHaveAttribute('aria-hidden', 'true')
     expect(pictogram).toHaveAttribute('focusable', 'false')
+    expect(pictogram).toHaveAttribute('width', '48')
+    expect(pictogram).toHaveAttribute('height', '48')
   })
 
   it('supports a meaningful custom icon, action, heading level, and custom class', () => {

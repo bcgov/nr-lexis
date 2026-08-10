@@ -10,7 +10,8 @@ export type StatusTagVariant =
   | 'negative'
   | 'expired'
   | 'cancelled'
-  | 'inactive'
+  | 'retired'
+  | 'deleted'
   | 'updated'
   | 'neutral'
 
@@ -33,8 +34,8 @@ const CODE_VARIANTS: Readonly<Record<string, StatusTagVariant>> = {
   DAL: 'negative',
   EXP: 'expired',
   CAN: 'cancelled',
-  WDN: 'inactive',
-  WDR: 'inactive',
+  WDN: 'neutral',
+  WDR: 'neutral',
   UPD: 'updated',
 }
 
@@ -58,9 +59,9 @@ export const getStatusTagVariant = (status: string): StatusTagVariant => {
   }
   if (hasAnyTerm(normalized, ['CANCEL'])) return 'cancelled'
   if (hasAnyTerm(normalized, ['EXPIR'])) return 'expired'
-  if (hasAnyTerm(normalized, ['WITHDRAW', 'RETIRED', 'DELETED', 'REPLACED', 'CLOSED'])) {
-    return 'inactive'
-  }
+  if (hasAnyTerm(normalized, ['RETIR'])) return 'retired'
+  if (hasAnyTerm(normalized, ['DELET'])) return 'deleted'
+  if (hasAnyTerm(normalized, ['WITHDRAW', 'REPLACED', 'CLOSED', 'INACTIVE'])) return 'neutral'
   if (
     hasAnyTerm(normalized, ['PENDING', 'REVIEW', 'IN PROGRESS', 'PROCESS', 'QUEUED', 'WAITING'])
   ) {
@@ -85,8 +86,6 @@ export const getStatusTagVariant = (status: string): StatusTagVariant => {
   ) {
     return 'positive'
   }
-  if (normalized.includes('INACTIVE')) return 'inactive'
-
   return 'neutral'
 }
 

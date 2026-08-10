@@ -253,7 +253,7 @@ describe('AuthProvider logout', () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1)
     })
-    expect(document.querySelector('.lexis-session-timeout-warning')).not.toHaveClass('is-visible')
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(SESSION_IDLE_TIMEOUT_MS - 2)
@@ -313,7 +313,7 @@ describe('AuthProvider logout', () => {
     })
 
     expect(screen.getByRole('alertdialog')).toBeInTheDocument()
-    fireEvent.keyDown(document, { key: 'Escape' })
+    fireEvent.keyDown(screen.getByRole('alertdialog'), { key: 'Escape' })
     expect(screen.getByRole('alertdialog')).toBeInTheDocument()
 
     await act(async () => {
@@ -321,7 +321,7 @@ describe('AuthProvider logout', () => {
       await Promise.resolve()
     })
     expect(authMocks.fetchAuthSession).toHaveBeenCalledWith({ forceRefresh: true })
-    expect(document.querySelector('.lexis-session-timeout-warning')).not.toHaveClass('is-visible')
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
     expect(screen.getByText('You’re still logged in')).toBeInTheDocument()
     expect(screen.getByText('Your session has been extended.')).toBeInTheDocument()
 

@@ -1,7 +1,9 @@
 import { use, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
-import { Button, Checkbox, InlineNotification, Modal } from '@carbon/react'
+import { Button, Checkbox, InlineNotification } from '@carbon/react'
 import { UNSAFE_DataRouterContext, useBeforeUnload, useBlocker } from 'react-router-dom'
 import type { BlockerFunction } from 'react-router-dom'
+import Modal from '@/components/Modal'
+import PendingIcon from '@/components/PendingIcon'
 import { isPageUnloadAuthorized } from '@/utils/page-unload'
 
 import './UnsavedChangesGuard.css'
@@ -200,7 +202,7 @@ const RouterNavigationGuard = ({
         )}
       </div>
       <div className="lexis-unsaved-changes-modal__actions">
-        <Button id={stayButtonId} kind="secondary" disabled={isSaving} onClick={stay}>
+        <Button id={stayButtonId} kind="tertiary" disabled={isSaving} onClick={stay}>
           Stay
         </Button>
         {!busyWithoutDirtyChanges && (
@@ -218,9 +220,10 @@ const RouterNavigationGuard = ({
                 disabled={
                   navigationActionsDisabled || Boolean(saveAcknowledgement && !saveAcknowledged)
                 }
+                renderIcon={isSaving ? PendingIcon : undefined}
                 onClick={() => void saveAndLeave()}
               >
-                {isSaving ? 'Saving...' : 'Save and leave'}
+                {isSaving ? 'Saving…' : 'Save and leave'}
               </Button>
             )}
           </>

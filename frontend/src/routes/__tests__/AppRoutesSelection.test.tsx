@@ -99,7 +99,7 @@ describe('AppRoutes selection', () => {
 
     render(<AppRoutes />)
 
-    expect(screen.getByRole('img', { name: 'Loading session...' })).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: 'Loading session…' })).toBeInTheDocument()
     expect(screen.queryByText('protected-routes')).not.toBeInTheDocument()
   })
 

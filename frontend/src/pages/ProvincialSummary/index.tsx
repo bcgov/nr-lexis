@@ -288,7 +288,7 @@ const ProvincialSummaryPage = () => {
             { label: 'Client number', value: displayValue(clientNumber) },
             {
               label: 'Company name',
-              value: clientLoading ? 'Loading company name...' : displayValue(companyName),
+              value: clientLoading ? 'Loading company name…' : displayValue(companyName),
             },
           ]}
         />
@@ -305,7 +305,7 @@ const ProvincialSummaryPage = () => {
               {...applications}
               onLoad={applications.load}
               title="My Applications"
-              loadingDescription="Loading your applications..."
+              loadingDescription="Loading your applications…"
               emptyTitle="No applications found"
               emptyDescription="No provincial applications are linked to this forest client."
               searchPath="/provincial/application"
@@ -372,7 +372,7 @@ const ProvincialSummaryPage = () => {
               {...offers}
               onLoad={offers.load}
               title="My Offers"
-              loadingDescription="Loading your offers..."
+              loadingDescription="Loading your offers…"
               emptyTitle="No offers found"
               emptyDescription="No purchase offers are linked to this forest client."
               searchPath="/provincial/offers"
@@ -421,7 +421,7 @@ const ProvincialSummaryPage = () => {
               {...exemptions}
               onLoad={exemptions.load}
               title="My Exemptions"
-              loadingDescription="Loading your exemptions..."
+              loadingDescription="Loading your exemptions…"
               emptyTitle="No exemptions found"
               emptyDescription="No exemptions are linked to this forest client."
               searchPath="/provincial/exemption"
@@ -475,7 +475,7 @@ const ProvincialSummaryPage = () => {
               {...permits}
               onLoad={permits.load}
               title="My Permits"
-              loadingDescription="Loading your permits..."
+              loadingDescription="Loading your permits…"
               emptyTitle="No permits found"
               emptyDescription="No permits are linked to this forest client."
               searchPath="/provincial/permit"
@@ -535,7 +535,7 @@ const ProvincialSummaryPage = () => {
               {...fees}
               onLoad={fees.load}
               title="My Fees"
-              loadingDescription="Calculating your fees..."
+              loadingDescription="Calculating your fees…"
               emptyTitle="No fees found"
               emptyDescription="No permit fees are linked to this forest client."
               searchPath="/provincial/permit"
@@ -580,7 +580,7 @@ const ProvincialSummaryPage = () => {
               {...offersPlaced}
               onLoad={offersPlaced.load}
               title="Offers Placed"
-              loadingDescription="Loading offers placed by your client..."
+              loadingDescription="Loading offers placed by your client…"
               emptyTitle="No offers placed"
               emptyDescription="This forest client has not placed any active offers."
               renderTable={(rows: SummaryOffer[]) => (

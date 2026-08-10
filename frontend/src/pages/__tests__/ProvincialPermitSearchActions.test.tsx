@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -140,7 +140,7 @@ describe('Provincial Permit Search Actions', () => {
     )
   })
 
-  it('defaults all regions without searching when no search has been applied', async () => {
+  it('leaves regions unfiltered without searching when no search has been applied', async () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => false }))
 
     renderPage('/provincial/permit')
@@ -148,8 +148,9 @@ describe('Provincial Permit Search Actions', () => {
       expect(mockedFetchProvincialPermitOptions).toHaveBeenCalledOnce()
     })
 
-    const selectedRegions = await screen.findByRole('list', { name: 'Selected regions' })
-    expect(within(selectedRegions).getByText('Cariboo')).toBeVisible()
+    expect(
+      await screen.findByRole('combobox', { name: /^Region\s*Total items selected:\s*0/ }),
+    ).toBeVisible()
     expect(mockedSearchProvincialPermits).not.toHaveBeenCalled()
     const resultsTable = screen.getByRole('region', { name: 'Search results table', hidden: true })
     expect(resultsTable.closest('[hidden]')).toHaveStyle({ display: 'none' })
@@ -174,11 +175,10 @@ describe('Provincial Permit Search Actions', () => {
 
     renderPage('/provincial/permit')
 
-    const selectedRegions = await screen.findByRole('list', { name: 'Selected regions' })
-    expect(within(selectedRegions).getByText('Cariboo')).toBeVisible()
-    expect(within(selectedRegions).getByText('Kootenay-Boundary')).toBeVisible()
-    expect(within(selectedRegions).getByText('Thompson-Okanagan')).toBeVisible()
-    expect(within(selectedRegions).queryByText('Northeast')).not.toBeInTheDocument()
+    expect(
+      await screen.findByRole('combobox', { name: /^Region\s*Total items selected:\s*3/ }),
+    ).toBeVisible()
+    expect(screen.queryByRole('list', { name: 'Selected regions' })).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Search' }))
     await waitFor(() => {
@@ -220,7 +220,7 @@ describe('Provincial Permit Search Actions', () => {
     renderPage()
 
     await waitFor(() => expect(mockedCountProvincialPermits).toHaveBeenCalledOnce())
-    expect(screen.getByText('Loading permit search results...')).toBeInTheDocument()
+    expect(screen.getByText('Loading permit search results…')).toBeInTheDocument()
     expect(screen.queryByText('11 results found')).not.toBeInTheDocument()
     expect(screen.queryByText('7001')).not.toBeInTheDocument()
 
@@ -300,7 +300,7 @@ describe('Provincial Permit Search Actions', () => {
       ).toBe(true)
     })
 
-    await userEvent.click(screen.getByRole('button', { name: 'Clear Filters' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Clear all' }))
 
     expect(invoiceNumber).toHaveValue('')
     await waitFor(() => {
@@ -308,7 +308,7 @@ describe('Provincial Permit Search Actions', () => {
         screen.getByTestId('permit-search-location').textContent ?? '',
       )
       expect(currentParams.has('invoiceNumber')).toBe(false)
-      expect(currentParams.get('region')).toBe('11')
+      expect(currentParams.has('region')).toBe(false)
       expect(currentParams.get('sortField')).toBe('permitNumber')
       expect(currentParams.get('sortDirection')).toBe('desc')
       expect(currentParams.get('page')).toBe('1')
@@ -432,7 +432,7 @@ describe('Provincial Permit Search Actions', () => {
     )
   })
 
-  it('shows selected permit search regions as removable pills', async () => {
+  it('shows selected permit search regions in the default Carbon multi-select', async () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
     mockedFetchProvincialPermitOptions.mockResolvedValueOnce({
       permitStatuses: [{ value: 'Issued', label: 'Issued' }],
@@ -445,9 +445,10 @@ describe('Provincial Permit Search Actions', () => {
     renderPage('/provincial/permit?region=1903,1908')
     await screen.findByText('7001')
 
-    const selectedRegions = await screen.findByRole('list', { name: 'Selected regions' })
-    expect(within(selectedRegions).getByText('Cariboo Natural Resource Region')).toBeVisible()
-    expect(within(selectedRegions).getByText('Skeena Natural Resource Region')).toBeVisible()
+    expect(
+      await screen.findByRole('combobox', { name: /^Region\s*Total items selected:\s*2/ }),
+    ).toBeVisible()
+    expect(screen.queryByRole('list', { name: 'Selected regions' })).not.toBeInTheDocument()
   })
 
   it('disables search for invalid dates and requests descending sort when permit header is clicked', async () => {

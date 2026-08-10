@@ -1,6 +1,7 @@
 import { WarningFilled } from '@carbon/icons-react'
-import { Modal } from '@carbon/react'
-import { useEffect, useLayoutEffect, useRef, type RefObject } from 'react'
+import { Button } from '@carbon/react'
+import { useEffect, useLayoutEffect, useRef, type KeyboardEvent, type RefObject } from 'react'
+import { createPortal } from 'react-dom'
 
 import './SessionTimeoutWarning.css'
 
@@ -10,7 +11,7 @@ export type SessionTimeoutWarningProps = {
   open: boolean
   expiresAt: number | null
   launcherButtonRef: RefObject<HTMLElement | null>
-  onStayLoggedIn: () => void
+  onStayLoggedIn: () => void | Promise<void>
   onLogOut: () => void
 }
 
@@ -25,10 +26,6 @@ const getRemainingSeconds = (expiresAt: number): number => {
   return Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000))
 }
 
-const ignoreCloseRequest = (event: React.SyntheticEvent<HTMLElement>) => {
-  event.preventDefault()
-}
-
 const SessionTimeoutWarning = ({
   open,
   expiresAt,
@@ -36,14 +33,27 @@ const SessionTimeoutWarning = ({
   onStayLoggedIn,
   onLogOut,
 }: SessionTimeoutWarningProps) => {
-  const modalRef = useRef<HTMLDivElement>(null)
+  const dialogRef = useRef<HTMLDivElement>(null)
   const countdownRef = useRef<HTMLSpanElement>(null)
   const urgencyIconRef = useRef<HTMLSpanElement>(null)
+  const logOutButtonRef = useRef<HTMLButtonElement>(null)
+  const stayLoggedInButtonRef = useRef<HTMLButtonElement>(null)
+  const stayLoggedInPendingRef = useRef(false)
 
   useLayoutEffect(() => {
-    const closeButton = modalRef.current?.querySelector<HTMLElement>('.cds--modal-close-button')
-    closeButton?.setAttribute('hidden', '')
-  }, [open])
+    if (!open) {
+      return undefined
+    }
+
+    const launcher = launcherButtonRef.current
+    dialogRef.current?.focus()
+
+    return () => {
+      if (launcher?.isConnected) {
+        launcher.focus()
+      }
+    }
+  }, [launcherButtonRef, open])
 
   useEffect(() => {
     if (!open || expiresAt === null) {
@@ -71,51 +81,115 @@ const SessionTimeoutWarning = ({
     return () => window.clearInterval(intervalId)
   }, [expiresAt, open])
 
+  const handleStayLoggedIn = async () => {
+    if (stayLoggedInPendingRef.current) {
+      return
+    }
+
+    stayLoggedInPendingRef.current = true
+    try {
+      await onStayLoggedIn()
+    } finally {
+      stayLoggedInPendingRef.current = false
+    }
+  }
+
+  const handleDialogKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      event.stopPropagation()
+      return
+    }
+    if (event.key !== 'Tab') {
+      return
+    }
+
+    const firstButton = logOutButtonRef.current
+    const lastButton = stayLoggedInButtonRef.current
+    if (!firstButton || !lastButton) {
+      return
+    }
+
+    const activeElement = document.activeElement
+    if (event.shiftKey && (activeElement === firstButton || activeElement === dialogRef.current)) {
+      event.preventDefault()
+      lastButton.focus()
+    } else if (!event.shiftKey && activeElement === lastButton) {
+      event.preventDefault()
+      firstButton.focus()
+    }
+  }
+
+  if (!open) {
+    return null
+  }
+
   const initialCountdown =
     expiresAt === null ? '5:00' : formatSessionCountdown(getRemainingSeconds(expiresAt))
+  const portalTheme =
+    document.documentElement.getAttribute('data-carbon-theme') === 'g100' ? 'g100' : 'white'
 
-  return (
-    <Modal
-      ref={modalRef}
-      open={open}
-      alert
-      size="sm"
-      modalHeading="You’re about to be logged out"
-      aria-label="You’re about to be logged out"
-      className="lexis-session-timeout-warning"
-      launcherButtonRef={launcherButtonRef}
-      primaryButtonText="Stay logged in"
-      secondaryButtonText="Log out"
-      selectorPrimaryFocus=".cds--modal-footer .cds--btn--primary"
-      preventCloseOnClickOutside
-      onRequestClose={ignoreCloseRequest}
-      onRequestSubmit={onStayLoggedIn}
-      onSecondarySubmit={onLogOut}
-    >
-      <p className="lexis-session-timeout-warning__description">
-        For your security, you’ll be logged out in{' '}
-        <span className="lexis-session-timeout-warning__countdown-wrapper">
-          <span
-            ref={countdownRef}
-            className="lexis-session-timeout-warning__countdown"
-            aria-live="polite"
-            aria-atomic="true"
+  return createPortal(
+    <div className={`lexis-session-timeout-warning__overlay cds--${portalTheme}`}>
+      <div
+        ref={dialogRef}
+        className="lexis-session-timeout-warning"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="lexis-session-timeout-warning-title"
+        aria-describedby="lexis-session-timeout-warning-description"
+        tabIndex={-1}
+        onKeyDown={handleDialogKeyDown}
+      >
+        <h2
+          id="lexis-session-timeout-warning-title"
+          className="lexis-session-timeout-warning__title"
+        >
+          You’re about to be logged out
+        </h2>
+        <div
+          id="lexis-session-timeout-warning-description"
+          className="lexis-session-timeout-warning__body"
+        >
+          <p>
+            For your security, you’ll be logged out in{' '}
+            <span
+              className="lexis-session-timeout-warning__countdown-wrapper"
+              aria-live="polite"
+              aria-atomic="true"
+            >
+              <span ref={countdownRef} className="lexis-session-timeout-warning__countdown">
+                {initialCountdown}
+              </span>
+              <span
+                ref={urgencyIconRef}
+                className="lexis-session-timeout-warning__urgency-icon"
+                aria-hidden="true"
+                hidden
+              >
+                <WarningFilled />
+              </span>
+            </span>{' '}
+            unless you choose to stay logged in.
+          </p>
+          <p>Any unsaved changes may be lost.</p>
+        </div>
+        <div className="lexis-session-timeout-warning__actions">
+          <Button ref={logOutButtonRef} kind="tertiary" size="md" onClick={onLogOut}>
+            Log out
+          </Button>
+          <Button
+            ref={stayLoggedInButtonRef}
+            kind="primary"
+            size="md"
+            onClick={() => void handleStayLoggedIn()}
           >
-            {initialCountdown}
-          </span>
-          <span
-            ref={urgencyIconRef}
-            className="lexis-session-timeout-warning__urgency-icon"
-            aria-hidden="true"
-            hidden
-          >
-            <WarningFilled size={20} />
-          </span>
-        </span>{' '}
-        unless you choose to stay logged in.
-      </p>
-      <p className="lexis-session-timeout-warning__description">Any unsaved changes may be lost.</p>
-    </Modal>
+            Stay logged in
+          </Button>
+        </div>
+      </div>
+    </div>,
+    document.body,
   )
 }
 

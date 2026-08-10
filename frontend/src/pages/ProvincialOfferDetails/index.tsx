@@ -1,11 +1,22 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Button, Column, Grid, InlineLoading, TextArea, TextInput, Tile } from '@carbon/react'
+import {
+  Button,
+  Column,
+  Grid,
+  InlineNotification,
+  Loading,
+  TextArea,
+  TextInput,
+  Tile,
+} from '@carbon/react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { AppNotification } from '../../components/AppNotification'
 import ContentLoadingOverlay from '@/components/ContentLoadingOverlay'
 import DetailBreadcrumb from '@/components/DetailBreadcrumb'
+import DetailLoadError from '@/components/DetailLoadError'
 import IsoDatePicker from '../../components/IsoDatePicker'
 import PageHeader from '@/components/PageHeader'
+import PendingIcon from '@/components/PendingIcon'
 import SearchableSelect from '../../components/SearchableSelect'
 import UnsavedChangesGuard, { formValuesEqual } from '@/components/UnsavedChangesGuard'
 import type { ProvincialOfferDetail } from '@/interfaces/LexisDetails'
@@ -44,6 +55,7 @@ type PageStatus = {
   kind: 'success' | 'error'
   title: string
   message: string
+  placement?: 'inline'
 }
 
 const YES_NO_OPTIONS = [
@@ -324,6 +336,7 @@ const ProvincialOfferDetailsPage = () => {
         title: 'Offer locked',
         message:
           detail.lockMessage || 'This offer is currently locked for editing by another user.',
+        placement: 'inline',
       })
       return false
     }
@@ -337,6 +350,7 @@ const ProvincialOfferDetailsPage = () => {
         kind: 'error',
         title: 'Validation error',
         message: validationMessage,
+        placement: 'inline',
       })
       return false
     }
@@ -393,7 +407,7 @@ const ProvincialOfferDetailsPage = () => {
           subtitle="Check and manage this provincial offer"
           actions={
             !loading && !isEditing && currentDetail && form && canEditAnyOfferField ? (
-              <Button kind="primary" onClick={() => setIsEditing(true)}>
+              <Button kind="tertiary" size="sm" onClick={() => setIsEditing(true)}>
                 Edit
               </Button>
             ) : undefined
@@ -402,31 +416,28 @@ const ProvincialOfferDetailsPage = () => {
       </Column>
 
       {loading && !currentDetail && (
-        <Column sm={4} md={8} lg={16}>
-          <InlineLoading description="Loading provincial offer detail..." />
+        <Column
+          sm={4}
+          md={8}
+          lg={16}
+          className="detail-page-loading"
+          role="status"
+          aria-live="polite"
+        >
+          <Loading description="Loading provincial offer detail…" withOverlay={false} />
         </Column>
       )}
 
-      {!loading && !!errorMessage && (
-        <Column sm={4} md={8} lg={16} className="detail-page-error">
-          <AppNotification
-            kind="error"
-            title="Detail unavailable"
-            subtitle={errorMessage}
-            lowContrast
-            onCloseButtonClick={() => setErrorMessage('')}
-          />
-        </Column>
-      )}
+      {!loading && !!errorMessage && <DetailLoadError message={errorMessage} />}
 
-      {!loading && !!status && (
+      {!loading && !!status && status.placement !== 'inline' && (
         <Column sm={4} md={8} lg={16} className="detail-page-error">
           <AppNotification
             kind={status.kind}
             title={status.title}
             subtitle={status.message}
             lowContrast
-            autoDismissMs={status.kind === 'success' ? 8000 : undefined}
+            autoDismissMs={status.kind === 'success' ? 6000 : undefined}
             onCloseButtonClick={() => setStatus(null)}
           />
         </Column>
@@ -434,7 +445,8 @@ const ProvincialOfferDetailsPage = () => {
 
       {!loading && currentDetail?.locked && (
         <Column sm={4} md={8} lg={16} className="detail-page-error">
-          <AppNotification
+          <InlineNotification
+            className="detail-context-notification"
             kind="warning"
             title="Offer locked"
             subtitle={
@@ -442,6 +454,7 @@ const ProvincialOfferDetailsPage = () => {
               'This offer is currently locked for editing by another user.'
             }
             lowContrast
+            hideCloseButton
           />
         </Column>
       )}
@@ -457,8 +470,18 @@ const ProvincialOfferDetailsPage = () => {
         >
           <ContentLoadingOverlay
             loading={isRefreshingDetail}
-            loadingDescription="Refreshing provincial offer detail..."
+            loadingDescription="Refreshing provincial offer detail…"
           />
+          {status?.placement === 'inline' && (
+            <InlineNotification
+              className="detail-context-notification"
+              kind="error"
+              title={status.title}
+              subtitle={status.message}
+              lowContrast
+              onCloseButtonClick={() => setStatus(null)}
+            />
+          )}
           <Tile className="provincial-offer-create provincial-offer-sections">
             <fieldset className="legacy-form-fieldset offer-form-section">
               <legend>Application details</legend>
@@ -713,10 +736,21 @@ const ProvincialOfferDetailsPage = () => {
               <div className="legacy-search-actions">
                 {isEditing ? (
                   <>
-                    <Button kind="primary" onClick={() => void onSave()} disabled={isSubmitting}>
-                      {isSubmitting ? 'Saving...' : 'Save'}
+                    <Button
+                      kind="primary"
+                      size="sm"
+                      onClick={() => void onSave()}
+                      disabled={isSubmitting}
+                      renderIcon={isSubmitting ? PendingIcon : undefined}
+                    >
+                      {isSubmitting ? 'Saving…' : 'Save'}
                     </Button>
-                    <Button kind="secondary" onClick={onCancelEdit} disabled={isSubmitting}>
+                    <Button
+                      kind="tertiary"
+                      size="sm"
+                      onClick={onCancelEdit}
+                      disabled={isSubmitting}
+                    >
                       Cancel
                     </Button>
                   </>

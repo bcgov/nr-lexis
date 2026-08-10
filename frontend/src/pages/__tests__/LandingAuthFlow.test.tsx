@@ -68,12 +68,16 @@ describe('Landing auth flow smoke', () => {
     renderPage()
 
     expect(screen.getByRole('main')).toHaveAttribute('aria-busy', 'false')
-    expect(screen.getByRole('heading', { name: 'Welcome to LEXIS' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: 'LEXIS' })).toBeInTheDocument()
     expect(
-      screen.getByText('Create and manage applications, view offers and permits'),
+      screen.getByRole('heading', { level: 2, name: 'Log Exemption Information System' }),
     ).toBeInTheDocument()
 
     const loginButton = screen.getByRole('button', { name: 'Log in with IDIR' })
+    expect(loginButton).toHaveClass('cds--btn--md')
+    expect(screen.getByRole('button', { name: 'Log in with Business BCeID' })).toHaveClass(
+      'cds--btn--md',
+    )
     await userEvent.click(loginButton)
 
     expect(login).toHaveBeenCalledWith('idir')
@@ -99,7 +103,7 @@ describe('Landing auth flow smoke', () => {
     ).toContain('gov-bc-logo-horiz')
   })
 
-  it('shows the signed-out notice after an automatic session expiry', () => {
+  it('shows a dismissible signed-out notice after an automatic session expiry', async () => {
     markSessionExpiredLoginNotice()
 
     renderPage()
@@ -110,6 +114,9 @@ describe('Landing auth flow smoke', () => {
         'Your session expired for security reasons and any unsaved changes were lost. Log in again to continue.',
       ),
     ).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /close notification/i }))
+    expect(screen.queryByText('You’ve been logged out')).not.toBeInTheDocument()
   })
 
   it('runs Business BCeID login action from the landing entry button', async () => {

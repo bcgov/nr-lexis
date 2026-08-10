@@ -78,7 +78,7 @@ function UploadQueuePreview({
   emptyStateDescription = 'Upload files to see them here.',
   itemNoun = 'file',
   submitLabel = 'Submit upload',
-  submittingLabel = 'Submitting upload...',
+  submittingLabel = 'Submitting upload…',
   removeLabel = 'Remove',
   pendingMessage = 'Not submitted yet.',
   canRemoveItem = () => true,
@@ -166,6 +166,7 @@ function UploadQueuePreview({
   const queueFilterId = `${idPrefix}QueueFilter`
   const itemNounPlural = `${itemNoun}s`
   const isSubmissionQueue = itemNoun === 'submission'
+  const useSubmissionReviewLayout = isSubmissionQueue && isReviewStep
   const workflowColumnLabel = isSubmissionQueue ? 'Submission type' : 'Upload type'
   const fileColumnLabel = isSubmissionQueue ? 'Submission file' : 'File'
   const currentWorkflowStep = items.length > 0 && isReviewStep ? 'review' : 'upload'
@@ -238,7 +239,12 @@ function UploadQueuePreview({
   )
 
   return (
-    <section className="admin-upload-panel" aria-labelledby={previewTitleId}>
+    <section
+      className={`admin-upload-panel${useSubmissionReviewLayout ? ' admin-upload-panel--submission-review' : ''}`}
+      {...(useSubmissionReviewLayout
+        ? { 'aria-label': `${itemNoun.charAt(0).toUpperCase()}${itemNoun.slice(1)} review` }
+        : { 'aria-labelledby': previewTitleId })}
+    >
       {showWorkflowProgress && (
         <UploadWorkflowProgress
           steps={UPLOAD_REVIEW_STEPS}
@@ -248,21 +254,23 @@ function UploadQueuePreview({
         />
       )}
 
-      <div className="admin-upload-panel__header">
-        <div>
-          <h2 id={previewTitleId}>{displayedPreviewTitle}</h2>
-          <p>
-            {items.length === 0
-              ? emptyDescription
-              : isReviewStep
-                ? `Review ${reviewSelectedItemLabel} before submitting.`
-                : uploadStepDescription}
-          </p>
+      {!useSubmissionReviewLayout && (
+        <div className="admin-upload-panel__header">
+          <div>
+            <h2 id={previewTitleId}>{displayedPreviewTitle}</h2>
+            <p>
+              {items.length === 0
+                ? emptyDescription
+                : isReviewStep
+                  ? `Review ${reviewSelectedItemLabel} before submitting.`
+                  : uploadStepDescription}
+            </p>
+          </div>
+          <div className="admin-upload-preview-actions">
+            {!hideActions && actionsPlacement === 'header' && actionControls}
+          </div>
         </div>
-        <div className="admin-upload-preview-actions">
-          {!hideActions && actionsPlacement === 'header' && actionControls}
-        </div>
-      </div>
+      )}
 
       {items.length === 0 ? (
         <div className="admin-upload-empty-state">
@@ -372,15 +380,32 @@ function UploadQueuePreview({
         </>
       )}
       {!hideActions && actionsPlacement === 'footer' && (
-        <div className="admin-upload-fspts-button-row admin-upload-fspts-button-row--split admin-upload-preview-footer-actions">
-          <div>
-            {isReviewStep && onBack && (
-              <Button kind="ghost" size="md" onClick={onBack} disabled={isSubmitting}>
-                {backLabel}
-              </Button>
-            )}
-          </div>
-          <div className="admin-upload-preview-footer-actions__right">{actionControls}</div>
+        <div
+          className={`admin-upload-fspts-button-row admin-upload-preview-footer-actions${
+            useSubmissionReviewLayout ? '' : ' admin-upload-fspts-button-row--split'
+          }`}
+        >
+          {useSubmissionReviewLayout ? (
+            <>
+              {isReviewStep && onBack && (
+                <Button kind="ghost" size="md" onClick={onBack} disabled={isSubmitting}>
+                  {backLabel}
+                </Button>
+              )}
+              {actionControls}
+            </>
+          ) : (
+            <>
+              <div>
+                {isReviewStep && onBack && (
+                  <Button kind="ghost" size="md" onClick={onBack} disabled={isSubmitting}>
+                    {backLabel}
+                  </Button>
+                )}
+              </div>
+              <div className="admin-upload-preview-footer-actions__right">{actionControls}</div>
+            </>
+          )}
         </div>
       )}
     </section>

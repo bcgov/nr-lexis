@@ -270,7 +270,7 @@ describe('Provincial Review Action State Smoke', () => {
       within(searchActions)
         .getAllByRole('button')
         .map((button) => button.textContent?.trim()),
-    ).toEqual(['Clear Filters', 'Search'])
+    ).toEqual(['Clear all', 'Search'])
     expect(
       within(searchActions).getByRole('button', { name: 'Search' }).querySelector('svg'),
     ).not.toBeNull()
@@ -325,7 +325,11 @@ describe('Provincial Review Action State Smoke', () => {
     const headers = screen
       .getAllByRole('columnheader')
       .slice(1)
-      .map((header) => header.textContent?.replace(/\s+/g, ' ').trim())
+      .map((header) =>
+        (header.querySelector('.cds--table-header-label') ?? header).textContent
+          ?.replace(/\s+/g, ' ')
+          .trim(),
+      )
 
     expect(headers).toEqual([
       'Application',
@@ -395,7 +399,10 @@ describe('Provincial Review Action State Smoke', () => {
     await screen.findByText('1000123')
     mockedSearchApplicationReviews.mockClear()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Application' }))
+    const applicationSortButton = screen.getByRole('button', { name: 'Application' })
+    expect(applicationSortButton.closest('th')).toHaveAttribute('aria-sort', 'descending')
+
+    await userEvent.click(applicationSortButton)
 
     await waitFor(() => {
       expect(
@@ -404,6 +411,10 @@ describe('Provincial Review Action State Smoke', () => {
             request.sortField === 'applicationNumber' && request.sortDirection === 'asc',
         ),
       ).toBe(true)
+      expect(screen.getByRole('button', { name: 'Application' }).closest('th')).toHaveAttribute(
+        'aria-sort',
+        'ascending',
+      )
     })
   })
 
@@ -812,12 +823,12 @@ describe('Provincial Review Action State Smoke', () => {
     expect(await screen.findByText('Updated application 1000123.')).toBeInTheDocument()
   }, 15000)
 
-  it('defaults to all active regions but waits for an explicit search', async () => {
+  it('leaves regions unfiltered and waits for an explicit search', async () => {
     renderPage('/provincial/review')
 
-    const selectedRegions = await screen.findByRole('list', { name: 'Selected regions' })
-    expect(within(selectedRegions).getByText('Cariboo')).toBeVisible()
-    expect(within(selectedRegions).getByText('Coast')).toBeVisible()
+    expect(
+      await screen.findByRole('combobox', { name: /^Region\s*Total items selected:\s*0/ }),
+    ).toBeVisible()
     expect(mockedSearchApplicationReviews).not.toHaveBeenCalled()
     const reviewQueue = screen.getByRole('region', { name: 'Review queue', hidden: true })
     expect(reviewQueue.closest('[hidden]')).toHaveStyle({ display: 'none' })
@@ -828,7 +839,7 @@ describe('Provincial Review Action State Smoke', () => {
     expect(mockedSearchApplicationReviews).toHaveBeenCalledWith(
       expect.objectContaining({
         filters: expect.objectContaining({
-          region: ['11', '12'],
+          region: [],
         }),
         pageSize: 100,
       }),
@@ -855,11 +866,10 @@ describe('Provincial Review Action State Smoke', () => {
 
     renderPage('/provincial/review')
 
-    const selectedRegions = await screen.findByRole('list', { name: 'Selected regions' })
-    expect(within(selectedRegions).getByText('Northeast')).toBeVisible()
-    expect(within(selectedRegions).getByText('Omineca')).toBeVisible()
-    expect(within(selectedRegions).getByText('Skeena')).toBeVisible()
-    expect(within(selectedRegions).queryByText('Cariboo')).not.toBeInTheDocument()
+    expect(
+      await screen.findByRole('combobox', { name: /^Region\s*Total items selected:\s*3/ }),
+    ).toBeVisible()
+    expect(screen.queryByRole('list', { name: 'Selected regions' })).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Search' }))
     await waitFor(() => {
@@ -1014,6 +1024,33 @@ describe('Provincial Review Action State Smoke', () => {
     expect(mockedSendApplicationReviewStatusEmail).not.toHaveBeenCalled()
   })
 
+  it('keeps approval confirmation open and re-enables retry when every approval fails', async () => {
+    mockedApproveApplicationReview.mockResolvedValueOnce({
+      updated: false,
+      valid: false,
+      statusCode: 'APP',
+      clientEmail: '',
+      remark: '',
+      message: 'Application owner location does not exist.',
+    })
+
+    renderPage()
+    await screen.findByText('1000456')
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select 1000456' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Approve Selected Applications' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Approve applications' })
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Approve' }))
+
+    expect(
+      await screen.findByText(
+        'No selected applications were approved; 1 failed. Failed applications: 1000456 — Application owner location does not exist.',
+      ),
+    ).toBeVisible()
+    expect(dialog).toBeVisible()
+    expect(within(dialog).getByRole('button', { name: 'Approve' })).toBeEnabled()
+    expect(screen.getByRole('checkbox', { name: 'Select 1000456' })).toBeChecked()
+  })
+
   it('sends selected region org unit numbers to the review search request', async () => {
     mockedFetchApplicationReviewOptions.mockResolvedValueOnce({
       productTypes: [{ value: 'LOG', label: 'Logs' }],
@@ -1052,7 +1089,7 @@ describe('Provincial Review Action State Smoke', () => {
     })
   })
 
-  it('shows selected review search regions as removable pills', async () => {
+  it('shows selected review search regions in the default Carbon multi-select', async () => {
     mockedFetchApplicationReviewOptions.mockResolvedValueOnce({
       productTypes: [{ value: 'LOG', label: 'Logs' }],
       regions: [
@@ -1065,9 +1102,10 @@ describe('Provincial Review Action State Smoke', () => {
     renderPage('/provincial/review?region=1903,1908')
     await screen.findByText('1000123')
 
-    const selectedRegions = await screen.findByRole('list', { name: 'Selected regions' })
-    expect(within(selectedRegions).getByText('Cariboo Natural Resource Region')).toBeVisible()
-    expect(within(selectedRegions).getByText('Skeena Natural Resource Region')).toBeVisible()
+    expect(
+      await screen.findByRole('combobox', { name: /^Region\s*Total items selected:\s*2/ }),
+    ).toBeVisible()
+    expect(screen.queryByRole('list', { name: 'Selected regions' })).not.toBeInTheDocument()
   })
 
   it('disables selection and action buttons when user lacks review permission', async () => {

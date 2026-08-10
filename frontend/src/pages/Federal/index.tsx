@@ -69,6 +69,7 @@ import {
   searchFederalApplications,
 } from '@/service/federal-application-search-service'
 import { fetchFederalApplicationOptions, type SearchOption } from '@/service/search-options-service'
+import { displayTableValue } from '@/utils/text'
 
 type ExemptionSelectionStatus = {
   kind: 'error'
@@ -470,7 +471,7 @@ const FederalPage = () => {
   }
 
   return (
-    <Grid fullWidth className="default-grid federal-application-search-page">
+    <Grid fullWidth className="default-grid fullbleed-table-page federal-application-search-page">
       <Column sm={4} md={8} lg={16}>
         <PageHeader
           title="Federal application search"
@@ -561,25 +562,9 @@ const FederalPage = () => {
                   disabled={loading}
                   size="md"
                 >
-                  Clear Filters
+                  Clear all
                 </Button>
                 <SearchSubmitButton loading={loading} disabled={hasDateValidationError} />
-                {canCreateFederalExemption && (
-                  <DisabledButtonTooltip
-                    disabled={selectedRowsCount === 0}
-                    description="Select at least one eligible application."
-                  >
-                    <Button
-                      type="button"
-                      kind="secondary"
-                      size="md"
-                      onClick={onCreateExemptionClick}
-                      disabled={selectedRowsCount === 0}
-                    >
-                      Create exemption for Selected Applications
-                    </Button>
-                  </DisabledButtonTooltip>
-                )}
               </div>
               {exemptionSelectionStatus && (
                 <AppNotification
@@ -608,11 +593,29 @@ const FederalPage = () => {
         >
           <SearchResultsTableFrame
             loading={loading}
-            loadingDescription="Loading federal application search results..."
+            loadingDescription="Loading federal application search results…"
             totalItems={
               errorMessage || (loading && results.content.length === 0)
                 ? undefined
                 : results.page.totalElements
+            }
+            actions={
+              canCreateFederalExemption ? (
+                <DisabledButtonTooltip
+                  disabled={selectedRowsCount === 0}
+                  description="Select at least one eligible application."
+                >
+                  <Button
+                    type="button"
+                    kind="tertiary"
+                    size="md"
+                    onClick={onCreateExemptionClick}
+                    disabled={selectedRowsCount === 0}
+                  >
+                    Create exemption for selected applications
+                  </Button>
+                </DisabledButtonTooltip>
+              ) : undefined
             }
           >
             {errorMessage ? (
@@ -622,7 +625,7 @@ const FederalPage = () => {
                 description={errorMessage}
               />
             ) : results.content.length > 0 ? (
-              <Table useZebraStyles>
+              <Table size="md" useZebraStyles>
                 <TableHead>
                   <TableRow>
                     {canCreateFederalExemption && (
@@ -696,11 +699,15 @@ const FederalPage = () => {
                       <TableCell>
                         <StatusTag status={row.status} />
                       </TableCell>
-                      <TableCell>{row.clientNumber}</TableCell>
-                      <TableCell>{row.reason}</TableCell>
-                      <TableCell className="legacy-search-table-date">{row.receivedDate}</TableCell>
-                      <TableCell className="legacy-search-table-date">{row.listingDate}</TableCell>
-                      <TableCell>{row.exemptionType || '-'}</TableCell>
+                      <TableCell>{displayTableValue(row.clientNumber)}</TableCell>
+                      <TableCell>{displayTableValue(row.reason)}</TableCell>
+                      <TableCell className="legacy-search-table-date">
+                        {displayTableValue(row.receivedDate)}
+                      </TableCell>
+                      <TableCell className="legacy-search-table-date">
+                        {displayTableValue(row.listingDate)}
+                      </TableCell>
+                      <TableCell>{displayTableValue(row.exemptionType)}</TableCell>
                       <TableCell>
                         {row.exemptionNumber ? (
                           <Link
@@ -710,7 +717,7 @@ const FederalPage = () => {
                             {row.exemptionNumber}
                           </Link>
                         ) : (
-                          '-'
+                          displayTableValue(row.exemptionNumber)
                         )}
                       </TableCell>
                     </TableRow>

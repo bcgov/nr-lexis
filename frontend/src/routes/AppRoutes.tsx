@@ -31,7 +31,7 @@ const AppRoutes = () => {
   )
 
   if (isLoading) {
-    return <Loading withOverlay={true} description="Loading session..." />
+    return <Loading withOverlay={true} description="Loading session…" />
   }
 
   if (
@@ -43,7 +43,7 @@ const AppRoutes = () => {
   }
 
   return (
-    <Suspense fallback={<Loading withOverlay={true} description="Loading routes..." />}>
+    <Suspense fallback={<Loading withOverlay={true} description="Loading routes…" />}>
       <RouterProvider router={browserRouter} />
     </Suspense>
   )

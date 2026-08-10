@@ -35,6 +35,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.scheduling.annotation.Scheduled;
 
 @ExtendWith(MockitoExtension.class)
 class ExemptionExpirySchedulerTest {
@@ -111,6 +112,32 @@ class ExemptionExpirySchedulerTest {
     assertThat(lockCaptor.getValue().getName()).isEqualTo("lexis-exemption-expiry");
     assertThat(lockCaptor.getValue().getLockAtMostFor()).isEqualTo(LOCK_AT_MOST_FOR);
     assertThat(lockCaptor.getValue().getLockAtLeastFor()).isEqualTo(LOCK_AT_LEAST_FOR);
+  }
+
+  @Test
+  void scheduledTriggerShouldStayPinnedToTheConfiguredExpiryZone() throws NoSuchMethodException {
+    Scheduled schedule =
+        ExemptionExpiryScheduler.class
+            .getDeclaredMethod("expireDueExemptions")
+            .getAnnotation(Scheduled.class);
+
+    assertThat(schedule.cron()).isEqualTo("${lexis.expiry.cron:30 0 0 * * *}");
+    assertThat(schedule.zone()).isEqualTo("${lexis.expiry.zone:America/Vancouver}");
+  }
+
+  @Test
+  void runDateShouldAdvanceAtVancouverMidnightWhenClockUsesUtc() {
+    SimpleMeterRegistry registry = new SimpleMeterRegistry();
+    MutableClock clock = new MutableClock(Instant.parse("2026-07-11T06:59:00Z"));
+    ExemptionExpiryScheduler scheduler = scheduler(registry, clock);
+    doReturn(emptyResult()).when(expiryService).expireDueExemptions();
+
+    scheduler.expireDueExemptions();
+    clock.setInstant(Instant.parse("2026-07-11T07:01:00Z"));
+    scheduler.expireDueExemptions();
+
+    verify(expiryService, times(2)).expireDueExemptions();
+    assertThat(counter(registry, "completed")).isEqualTo(2d);
   }
 
   @Test

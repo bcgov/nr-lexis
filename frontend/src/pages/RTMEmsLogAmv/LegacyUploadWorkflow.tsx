@@ -1423,7 +1423,6 @@ const RtmEmsLogAmvUploadPage = () => {
                 ? 'Discard changes'
                 : 'Keep editing'
           }
-          cancelKind="tertiary"
           confirmLabel={
             discardConfirmation === 'file'
               ? 'Remove file'

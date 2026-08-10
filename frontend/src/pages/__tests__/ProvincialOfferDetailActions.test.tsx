@@ -108,7 +108,7 @@ describe('Provincial Offer Detail Actions', () => {
     expect(
       within(pageHeader as HTMLElement).getByText('Check and manage this provincial offer'),
     ).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Provincial offer search' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'Back to Provincial offer search' })).toHaveAttribute(
       'href',
       '/provincial/offers',
     )

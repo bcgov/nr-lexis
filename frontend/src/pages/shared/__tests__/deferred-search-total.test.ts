@@ -69,6 +69,33 @@ describe('loadSearchWithDeferredTotal', () => {
     expect(result.response.page.totalPages).toBe(5)
   })
 
+  it('can return a full page before the exact count resolves', async () => {
+    const search = vi.fn().mockResolvedValue(responseWith(100, 101))
+    let resolveCount!: (total: number) => void
+    const count = vi.fn(
+      () =>
+        new Promise<number>((resolve) => {
+          resolveCount = resolve
+        }),
+    )
+
+    const result = await loadSearchWithDeferredTotal({
+      request: { page: 0, pageSize: 100 },
+      search,
+      count,
+      deferCount: true,
+    })
+
+    expect(result.totalIsExact).toBe(false)
+    expect(result.response.page.totalElements).toBe(101)
+    expect(count).toHaveBeenCalledOnce()
+
+    resolveCount(490)
+    await expect(result.deferredResponse).resolves.toMatchObject({
+      page: { totalElements: 490, totalPages: 5 },
+    })
+  })
+
   it('infers exact total without counting when the returned page is short', async () => {
     const search = vi.fn().mockResolvedValue(responseWith(12, 101))
     const count = vi.fn()

@@ -26,10 +26,17 @@ class BackendRuntimeConfigTest {
   }
 
   @Test
-  void containerShouldUseLegacyPacificWallClockForOracleTimestamps() throws IOException {
+  void containerShouldUseDeploymentControlledPacificWallClock() throws IOException {
     String dockerfile = Files.readString(resolve(Path.of("backend", "Dockerfile")));
+    String deployment =
+        Files.readString(resolve(Path.of("backend", "openshift.deploy.yml")));
 
-    assertThat(dockerfile).contains("-Duser.timezone=America/Vancouver");
+    assertThat(dockerfile)
+        .contains("variable set by openshift.deploy.yml")
+        .doesNotContain("\"-Duser.timezone=");
+    assertThat(deployment)
+        .contains("- name: TZ\n    value: America/Vancouver")
+        .contains("- name: TZ\n                  value: ${TZ}");
   }
 
   @Test
