@@ -857,6 +857,8 @@ const RtmEmsLogAmvUploadPage = () => {
   const uploadInputRef = useRef<HTMLInputElement>(null)
   const cancelButtonRef = useRef<HTMLButtonElement>(null)
   const removeFileButtonRef = useRef<HTMLButtonElement>(null)
+  const replacementPreviewRef = useRef<RtmEmsLogAmvUploadPreview | null>(null)
+  const replacementReviewValuesRef = useRef<Record<string, string> | null>(null)
   const [effectiveMonth, setEffectiveMonth] = useState(() =>
     shiftEffectiveMonth(currentEffectiveMonth(), 1),
   )
@@ -887,6 +889,7 @@ const RtmEmsLogAmvUploadPage = () => {
   const [uploadResult, setUploadResult] = useState<RtmEmsLogAmvUploadResult | null>(null)
   const [uploadInputKey, setUploadInputKey] = useState(0)
   const [isDraggingUpload, setIsDraggingUpload] = useState(false)
+  const [replacementUploadOpen, setReplacementUploadOpen] = useState(false)
   const [discardConfirmation, setDiscardConfirmation] = useState<DiscardConfirmation | null>(null)
 
   useEffect(() => {
@@ -904,6 +907,7 @@ const RtmEmsLogAmvUploadPage = () => {
   ) => {
     const isReplacingSavedValues =
       uploadIntent === 'replace' &&
+      replacementUploadOpen &&
       savedReviewValues !== null &&
       savedUploadState !== null &&
       previewResult !== null
@@ -935,19 +939,11 @@ const RtmEmsLogAmvUploadPage = () => {
     const sizeError = validateUploadFileSize(nextFile)
     if (sizeError) {
       setUploadError(sizeError)
-      if (isReplacingSavedValues) {
-        setSelectedUploadFile(null)
-        setUploadInputKey((current) => current + 1)
-      }
       return
     }
 
     if (!isAcceptedUploadFile(nextFile)) {
       setUploadError('Upload an XLSX file before continuing.')
-      if (isReplacingSavedValues) {
-        setSelectedUploadFile(null)
-        setUploadInputKey((current) => current + 1)
-      }
       return
     }
 
@@ -973,7 +969,6 @@ const RtmEmsLogAmvUploadPage = () => {
       } else if (validatedResponse.status === 'validation_failed') {
         setPendingUploadValidation(null)
         if (isReplacingSavedValues) {
-          setSelectedUploadFile(null)
           setUploadError(
             createResultMessage(
               validatedResponse.status,
@@ -981,7 +976,6 @@ const RtmEmsLogAmvUploadPage = () => {
               validatedResponse.errors,
             ),
           )
-          setUploadInputKey((current) => current + 1)
         } else {
           setPreviewResult(validatedResponse)
         }
@@ -1031,23 +1025,39 @@ const RtmEmsLogAmvUploadPage = () => {
     void validateUploadFile(event.dataTransfer.files?.[0] ?? null)
   }
 
+  const onDropReplacementFile = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    setIsDraggingUpload(false)
+    if (!canManage || !replacementUploadOpen) {
+      return
+    }
+    void validateUploadFile(event.dataTransfer.files?.[0] ?? null, 'replace')
+  }
+
   const openUploadFileDialog = () => {
-    if (!canManage) {
+    if (!canManage || isPreviewing || isUploading) {
       return
     }
 
     uploadInputRef.current?.click()
   }
 
-  const openReplacementFileDialog = () => {
+  const startReplacementUpload = () => {
     if (!canManage || isPreviewing || isUploading || !savedUploadState) {
       return
     }
 
-    if (uploadInputRef.current) {
-      uploadInputRef.current.value = ''
-      uploadInputRef.current.click()
-    }
+    validationRequestRef.current += 1
+    replacementPreviewRef.current = previewResult
+    replacementReviewValuesRef.current = { ...reviewValues }
+    setReplacementUploadOpen(true)
+    setSelectedUploadFile(null)
+    setPendingUploadValidation(null)
+    setUploadError('')
+    setUploadSystemError(false)
+    setUploadResult(null)
+    setIsDraggingUpload(false)
+    setUploadInputKey((current) => current + 1)
   }
 
   const onUploadDropZoneKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -1078,10 +1088,38 @@ const RtmEmsLogAmvUploadPage = () => {
     setNotification('')
     setUploadInputKey((current) => current + 1)
     setIsDraggingUpload(false)
+    setReplacementUploadOpen(false)
     setIsPreviewing(false)
     setIsUploading(false)
     setDiscardConfirmation(null)
+    replacementPreviewRef.current = null
+    replacementReviewValuesRef.current = null
   }, [])
+
+  const clearReplacementFile = () => {
+    validationRequestRef.current += 1
+    setSelectedUploadFile(null)
+    setPendingUploadValidation(null)
+    setUploadError('')
+    setUploadSystemError(false)
+    setUploadResult(null)
+    setIsDraggingUpload(false)
+    setIsPreviewing(false)
+    setUploadInputKey((current) => current + 1)
+    if (replacementReviewValuesRef.current) {
+      setReviewValues({ ...replacementReviewValuesRef.current })
+    }
+    if (replacementPreviewRef.current) {
+      setPreviewResult(replacementPreviewRef.current)
+    }
+  }
+
+  const closeReplacementUpload = () => {
+    clearReplacementFile()
+    setReplacementUploadOpen(false)
+    replacementPreviewRef.current = null
+    replacementReviewValuesRef.current = null
+  }
 
   useEffect(() => {
     const requestId = savedValuesRequestRef.current + 1
@@ -1239,6 +1277,9 @@ const RtmEmsLogAmvUploadPage = () => {
           valueCount: saveRequests.length,
         })
         setSavedNotification('saved')
+        setReplacementUploadOpen(false)
+        replacementPreviewRef.current = null
+        replacementReviewValuesRef.current = null
         setSelectedUploadFile(null)
         setPendingUploadValidation(null)
         setUploadInputKey((current) => current + 1)
@@ -1280,7 +1321,8 @@ const RtmEmsLogAmvUploadPage = () => {
   )
   const hasUnsavedChanges =
     savedReviewValues !== null && !reviewValuesMatch(reviewValues, savedReviewValues)
-  const savedActionsUnavailable = savedReviewValues !== null && !hasUnsavedChanges
+  const savedSaveUnavailable = savedReviewValues !== null && !hasUnsavedChanges
+  const savedCancelUnavailable = savedSaveUnavailable && !replacementUploadOpen
   const hasValidatedUpload =
     !!selectedUploadFile &&
     selectedUploadFile.size > 0 &&
@@ -1297,10 +1339,12 @@ const RtmEmsLogAmvUploadPage = () => {
     !hasSaveSource ||
     previewResult?.status !== 'accepted'
 
+  const isFileSelectionDisabled = !canManage || isUploading || isPreviewing
+
   const uploadDropZoneClassName = [
     'admin-upload-drop-zone',
     isDraggingUpload ? 'is-dragging' : '',
-    !canManage ? 'is-disabled' : '',
+    isFileSelectionDisabled ? 'is-disabled' : '',
   ]
     .filter(Boolean)
     .join(' ')
@@ -1311,6 +1355,133 @@ const RtmEmsLogAmvUploadPage = () => {
         ? previewResult.errors
         : [previewResult.message]
       : []
+
+  const renderUploadCard = (isReplacement: boolean) => {
+    const titleId = isReplacement ? 'rtm-replacement-upload-title' : 'rtm-upload-title'
+    const inputId = isReplacement ? 'rtm-replacement-file' : 'rtm-upload-file'
+    const inputLabel = isReplacement
+      ? 'Replacement average monthly values spreadsheet'
+      : 'Average monthly values upload spreadsheet'
+    const dropZoneLabel = isReplacement
+      ? 'Choose a replacement average monthly values spreadsheet'
+      : 'Choose an average monthly values upload spreadsheet'
+
+    return (
+      <section
+        className={`rtm-amv-upload-card${isReplacement ? ' rtm-amv-replacement-upload-card' : ''}`}
+        aria-labelledby={titleId}
+      >
+        <div className="admin-upload-field-header">
+          <div>
+            <span id={titleId} className="admin-upload-field-label">
+              Upload spreadsheet
+            </span>
+            <p className="admin-upload-field-helper">{RTM_UPLOAD_FIELD_HELPER}</p>
+          </div>
+          <a
+            className="rtm-amv-template-link"
+            href={RTM_TEMPLATE_DOWNLOAD_PATH}
+            download={RTM_TEMPLATE_DOWNLOAD_NAME}
+            aria-label="Download template"
+          >
+            <span>Download template</span>
+            <Download size={16} aria-hidden="true" />
+          </a>
+        </div>
+
+        <input
+          ref={uploadInputRef}
+          key={uploadInputKey}
+          id={inputId}
+          className="admin-upload-native-input"
+          type="file"
+          aria-label={inputLabel}
+          accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          disabled={isFileSelectionDisabled}
+          onChange={isReplacement ? updateReplacementFile : updateUploadFile}
+        />
+
+        <div
+          className={uploadDropZoneClassName}
+          role="button"
+          tabIndex={isFileSelectionDisabled ? -1 : 0}
+          aria-disabled={isFileSelectionDisabled}
+          aria-label={dropZoneLabel}
+          onClick={openUploadFileDialog}
+          onKeyDown={onUploadDropZoneKeyDown}
+          onDragEnter={(event) => {
+            event.preventDefault()
+            if (!isFileSelectionDisabled) {
+              setIsDraggingUpload(true)
+            }
+          }}
+          onDragOver={(event) => {
+            event.preventDefault()
+            if (!isFileSelectionDisabled) {
+              setIsDraggingUpload(true)
+            }
+          }}
+          onDragLeave={() => setIsDraggingUpload(false)}
+          onDrop={isReplacement ? onDropReplacementFile : onDropUploadFile}
+        >
+          <div className="admin-upload-drop-zone__copy">
+            <p>Drag and drop your file here or click to upload</p>
+          </div>
+        </div>
+
+        {selectedUploadFile &&
+          (isPreviewing ? (
+            <div className="rtm-amv-upload-loading" aria-busy="true">
+              <span className="rtm-amv-upload-loading__name">{selectedUploadFile.name}</span>
+              <InlineLoading
+                className="rtm-amv-upload-loading__spinner"
+                description={`Validating ${selectedUploadFile.name}`}
+              />
+            </div>
+          ) : rejectedFileIssues.length > 0 ? (
+            <RejectedUploadFile
+              fileName={selectedUploadFile.name}
+              issues={rejectedFileIssues}
+              onClear={isReplacement ? clearReplacementFile : clearUploadState}
+            />
+          ) : (
+            <div
+              className="admin-upload-file-chip"
+              aria-label={
+                isReplacement
+                  ? 'Selected replacement average monthly values file'
+                  : 'Selected average monthly values upload file'
+              }
+            >
+              <Document size={16} aria-hidden="true" />
+              <span className="admin-upload-file-chip__name">{selectedUploadFile.name}</span>
+              <span className="admin-upload-file-chip__size">
+                {selectedUploadFile.size.toLocaleString()} bytes
+              </span>
+              <button
+                type="button"
+                className="admin-upload-file-chip__remove"
+                aria-label="Clear selected file"
+                onClick={isReplacement ? clearReplacementFile : clearUploadState}
+              >
+                <Close size={16} />
+              </button>
+            </div>
+          ))}
+
+        {uploadSystemError && (
+          <InlineNotification
+            className="rtm-amv-upload-system-error"
+            kind="error"
+            lowContrast
+            hideCloseButton
+            title={RTM_UPLOAD_SYSTEM_ERROR_TITLE}
+            subtitle={RTM_UPLOAD_SYSTEM_ERROR_MESSAGE}
+          />
+        )}
+      </section>
+    )
+  }
 
   if (isCheckingSavedValues) {
     return (
@@ -1387,154 +1558,37 @@ const RtmEmsLogAmvUploadPage = () => {
             <h2 id="rtm-values-title">Values</h2>
             <p>{RTM_VALUES_DESCRIPTION}</p>
           </div>
-          {savedUploadState && (
-            <>
-              <input
-                ref={uploadInputRef}
-                key={uploadInputKey}
-                id="rtm-replacement-file"
-                className="admin-upload-native-input"
-                type="file"
-                aria-label="Replacement average monthly values spreadsheet"
-                accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                disabled={!canManage || isUploading || isPreviewing}
-                onChange={updateReplacementFile}
-              />
-              <Button
-                className="rtm-amv-replace-file-button"
-                kind="tertiary"
-                size="sm"
-                disabled={!canManage || isUploading || isPreviewing}
-                onClick={openReplacementFileDialog}
-              >
-                {isPreviewing ? 'Replacing file' : 'Replace file'}
-              </Button>
-            </>
+          {savedUploadState && !replacementUploadOpen && (
+            <Button
+              className="rtm-amv-replace-file-button"
+              kind="tertiary"
+              size="sm"
+              disabled={!canManage || isUploading || isPreviewing}
+              onClick={startReplacementUpload}
+            >
+              Replace file
+            </Button>
           )}
         </div>
 
-        {savedUploadState && (uploadError || uploadSystemError) && (
-          <InlineNotification
-            className="rtm-amv-replacement-error"
-            kind="error"
-            lowContrast
-            hideCloseButton
-            title={uploadSystemError ? RTM_UPLOAD_SYSTEM_ERROR_TITLE : 'File could not be used'}
-            subtitle={uploadSystemError ? RTM_UPLOAD_SYSTEM_ERROR_MESSAGE : uploadError}
-          />
-        )}
-
         {uploadStep === 'upload' ? (
-          <>
-            <section className="rtm-amv-upload-card" aria-labelledby="rtm-upload-title">
-              <div className="admin-upload-field-header">
-                <div>
-                  <span id="rtm-upload-title" className="admin-upload-field-label">
-                    Upload spreadsheet
-                  </span>
-                  <p className="admin-upload-field-helper">{RTM_UPLOAD_FIELD_HELPER}</p>
-                </div>
-                <a
-                  className="rtm-amv-template-link"
-                  href={RTM_TEMPLATE_DOWNLOAD_PATH}
-                  download={RTM_TEMPLATE_DOWNLOAD_NAME}
-                  aria-label="Download template"
-                >
-                  <span>Download template</span>
-                  <Download size={16} aria-hidden="true" />
-                </a>
-              </div>
-
-              <input
-                ref={uploadInputRef}
-                key={uploadInputKey}
-                id="rtm-upload-file"
-                className="admin-upload-native-input"
-                type="file"
-                aria-label="Average monthly values upload spreadsheet"
-                accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                disabled={!canManage}
-                onChange={updateUploadFile}
-              />
-
-              <div
-                className={uploadDropZoneClassName}
-                role="button"
-                tabIndex={canManage ? 0 : -1}
-                aria-disabled={!canManage}
-                aria-label="Choose an average monthly values upload spreadsheet"
-                onClick={openUploadFileDialog}
-                onKeyDown={onUploadDropZoneKeyDown}
-                onDragEnter={(event) => {
-                  event.preventDefault()
-                  if (canManage) {
-                    setIsDraggingUpload(true)
-                  }
-                }}
-                onDragOver={(event) => {
-                  event.preventDefault()
-                  if (canManage) {
-                    setIsDraggingUpload(true)
-                  }
-                }}
-                onDragLeave={() => setIsDraggingUpload(false)}
-                onDrop={onDropUploadFile}
-              >
-                <div className="admin-upload-drop-zone__copy">
-                  <p>Drag and drop your file here or click to upload</p>
-                </div>
-              </div>
-
-              {selectedUploadFile &&
-                (isPreviewing ? (
-                  <div className="rtm-amv-upload-loading" aria-busy="true">
-                    <span className="rtm-amv-upload-loading__name">{selectedUploadFile.name}</span>
-                    <InlineLoading
-                      className="rtm-amv-upload-loading__spinner"
-                      description={`Validating ${selectedUploadFile.name}`}
-                    />
-                  </div>
-                ) : rejectedFileIssues.length > 0 ? (
-                  <RejectedUploadFile
-                    fileName={selectedUploadFile.name}
-                    issues={rejectedFileIssues}
-                    onClear={clearUploadState}
-                  />
-                ) : (
-                  <div
-                    className="admin-upload-file-chip"
-                    aria-label="Selected average monthly values upload file"
-                  >
-                    <Document size={16} aria-hidden="true" />
-                    <span className="admin-upload-file-chip__name">{selectedUploadFile.name}</span>
-                    <span className="admin-upload-file-chip__size">
-                      {selectedUploadFile.size.toLocaleString()} bytes
-                    </span>
-                    <button
-                      type="button"
-                      className="admin-upload-file-chip__remove"
-                      aria-label="Clear selected file"
-                      onClick={clearUploadState}
-                    >
-                      <Close size={16} />
-                    </button>
-                  </div>
-                ))}
-
-              {uploadSystemError && (
-                <InlineNotification
-                  className="rtm-amv-upload-system-error"
-                  kind="error"
-                  lowContrast
-                  hideCloseButton
-                  title={RTM_UPLOAD_SYSTEM_ERROR_TITLE}
-                  subtitle={RTM_UPLOAD_SYSTEM_ERROR_MESSAGE}
-                />
-              )}
-            </section>
-          </>
+          renderUploadCard(false)
         ) : (
           <>
+            {savedUploadState && replacementUploadOpen && (
+              <div className="rtm-amv-replacement-upload">
+                <InlineNotification
+                  className="rtm-amv-replacement-warning"
+                  kind="warning"
+                  lowContrast
+                  hideCloseButton
+                  title="Selecting a file will replace the values on screen"
+                  subtitle="Any edits you haven't saved will be lost. Your saved values won't change until you save again."
+                />
+                {renderUploadCard(true)}
+              </div>
+            )}
+
             {!savedUploadState && (
               <section className="rtm-amv-upload-card" aria-labelledby="rtm-uploaded-title">
                 <div className="admin-upload-field-header">
@@ -1581,7 +1635,7 @@ const RtmEmsLogAmvUploadPage = () => {
               />
             )}
 
-            {savedActionsUnavailable && (
+            {savedCancelUnavailable && (
               <p id="rtm-amv-saved-actions-helper" className="rtm-amv-upload-review-helper">
                 Edit a value to save again.
               </p>
@@ -1594,15 +1648,15 @@ const RtmEmsLogAmvUploadPage = () => {
                 className="admin-upload-fspts-action-button"
                 renderIcon={Save}
                 onClick={() => {
-                  if (savedActionsUnavailable) {
+                  if (savedSaveUnavailable) {
                     return
                   }
                   void submitUpload()
                 }}
                 disabled={isUploadDisabled}
-                aria-disabled={savedActionsUnavailable || undefined}
+                aria-disabled={savedSaveUnavailable || undefined}
                 aria-describedby={
-                  savedActionsUnavailable ? 'rtm-amv-saved-actions-helper' : undefined
+                  savedCancelUnavailable ? 'rtm-amv-saved-actions-helper' : undefined
                 }
               >
                 {isUploading ? 'Saving values' : 'Save values'}
@@ -1612,12 +1666,16 @@ const RtmEmsLogAmvUploadPage = () => {
                 kind="tertiary"
                 size="md"
                 disabled={isUploading || isPreviewing}
-                aria-disabled={savedActionsUnavailable || undefined}
+                aria-disabled={savedCancelUnavailable || undefined}
                 aria-describedby={
-                  savedActionsUnavailable ? 'rtm-amv-saved-actions-helper' : undefined
+                  savedCancelUnavailable ? 'rtm-amv-saved-actions-helper' : undefined
                 }
                 onClick={() => {
-                  if (savedActionsUnavailable) {
+                  if (savedCancelUnavailable) {
+                    return
+                  }
+                  if (replacementUploadOpen && !hasUnsavedChanges) {
+                    closeReplacementUpload()
                     return
                   }
                   if (savedReviewValues) {
@@ -1695,6 +1753,9 @@ const RtmEmsLogAmvUploadPage = () => {
                   setUploadError('')
                   setUploadSystemError(false)
                   setUploadInputKey((current) => current + 1)
+                  setReplacementUploadOpen(false)
+                  replacementPreviewRef.current = null
+                  replacementReviewValuesRef.current = null
                   setSavedNotification('discarded')
                   setUploadResult(null)
                 }

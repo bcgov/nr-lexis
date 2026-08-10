@@ -2714,10 +2714,20 @@ $notification-types: 'error', 'info', 'success', 'warning';
   margin-block-start: 0.25rem;
 }
 
-.rtm-amv-replacement-error {
+.rtm-amv-replacement-upload {
+  display: grid;
+  gap: 1rem;
+  margin-block-end: 1rem;
+}
+
+.rtm-amv-replacement-warning {
   inline-size: 100%;
   max-inline-size: none;
-  margin-block: 0 1rem;
+  margin: 0;
+}
+
+.rtm-amv-replacement-upload-card {
+  margin: 0;
 }
 
 .rtm-amv-upload-card {

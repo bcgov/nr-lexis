@@ -277,6 +277,32 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     })
 
+    const savedValue = screen.getByLabelText(`Balsam grade D ${monthLabel(nextMonth)} value`)
+    expect(savedValue).toHaveValue('78.14')
+    expect(
+      screen.queryByLabelText('Replacement average monthly values spreadsheet'),
+    ).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Replace file' }))
+
+    expect(screen.getByText('Selecting a file will replace the values on screen')).toBeVisible()
+    expect(
+      screen.getByText(
+        "Any edits you haven't saved will be lost. Your saved values won't change until you save again.",
+      ),
+    ).toBeVisible()
+    expect(savedValue).toHaveValue('78.14')
+    expect(mockedPreviewUpload).not.toHaveBeenCalled()
+    expect(mockedSaveBatch).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(
+      screen.queryByLabelText('Replacement average monthly values spreadsheet'),
+    ).not.toBeInTheDocument()
+    expect(savedValue).toHaveValue('78.14')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Replace file' }))
+
     await userEvent.upload(
       screen.getByLabelText('Replacement average monthly values spreadsheet'),
       replacement,
@@ -298,6 +324,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     )
     expect(screen.getByText('Changes discarded')).toBeVisible()
 
+    await userEvent.click(screen.getByRole('button', { name: 'Replace file' }))
     await userEvent.upload(
       screen.getByLabelText('Replacement average monthly values spreadsheet'),
       replacement,
@@ -367,6 +394,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     })
 
+    await userEvent.click(screen.getByRole('button', { name: 'Replace file' }))
     await userEvent.upload(
       screen.getByLabelText('Replacement average monthly values spreadsheet'),
       replacement,
@@ -376,8 +404,10 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     expect(screen.getByLabelText(`Balsam grade D ${monthLabel(nextMonth)} value`)).toHaveValue(
       '78.14',
     )
-    expect(screen.getByText('Edit a value to save again.')).toBeVisible()
-    expect(screen.getByRole('button', { name: 'Replace file' })).toBeEnabled()
+    expect(screen.getByText('wrong-month.xlsx')).toBeVisible()
+    expect(screen.queryByText('Edit a value to save again.')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Replace file' })).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Replacement average monthly values spreadsheet')).toBeVisible()
     expect(mockedSaveBatch).not.toHaveBeenCalled()
   })
 
