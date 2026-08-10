@@ -46,10 +46,11 @@ only and does not misrepresent it as audit metadata.
   queries or saves a value. It does not retain a time-of-day component.
 - Retrieval dates are implementation data and are not shown or editable in the UI.
 - A value must be numeric, non-negative, at most `9999.99`, and have at most two decimal places.
-- The only editable effective month is the immediately upcoming calendar month. It can be
-  re-uploaded and saved as many times as needed until it becomes the current month.
+- The only editable effective month is the immediately upcoming calendar month. Its values can be
+  edited and saved as many times as needed until it becomes the current month.
 - Current and previous months are never editable. At month rollover, the page advances to the new
-  immediately upcoming month and returns to the empty upload state.
+  immediately upcoming month and loads that month's saved rows when they exist; otherwise it
+  returns to the empty upload state.
 - The review compares the upcoming values with the latest earlier values in the table. That
   comparison month is not necessarily the immediately previous month.
 - Values cannot be cleared: `AVG_MARKET_PRICE` is `NOT NULL` and the approved RTM contract has no
@@ -104,7 +105,12 @@ value clears the saved confirmation. Cancel then offers to save the changes or r
 saved values; restoring them shows a dismissible confirmation that also clears on the next edit.
 Confirmation dialogs return focus to the action that opened them. The page can display the current
 session's save time and authenticated principal, but that metadata cannot be reconstructed after
-navigation because the legacy table has no audit columns.
+navigation because the legacy table has no audit columns. On navigation or refresh, the page reads
+the immediately upcoming month's rows from `EMS_LOG_AMV`. If rows exist, it restores the editable
+review and latest-earlier comparison; if none exist, it restores the upload state. The workbook and
+filename are not persisted, so neither is shown in a restored review. Replacing a workbook after
+the first accepted save is not part of the current flow; that option remains deferred until its
+design and persistence contract are complete.
 
 ## Batch audit event
 

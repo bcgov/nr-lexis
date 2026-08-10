@@ -3,8 +3,14 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
 import RtmEmsLogAmvUploadPage from '@/pages/RTMEmsLogAmv/LegacyUploadWorkflow'
-import { previewRtmEmsLogAmvUpload, saveRtmEmsLogAmvBatch } from '@/service/rtm-emslogamv-service'
+import {
+  previewRtmEmsLogAmvUpload,
+  saveRtmEmsLogAmvBatch,
+  searchLatestRtmEmsLogAmv,
+  searchRtmEmsLogAmv,
+} from '@/service/rtm-emslogamv-service'
 import { createTestAuthContext } from '@/test-utils/auth'
+import { formatBusinessIsoDate } from '@/utils/date'
 
 vi.mock('@/context/auth/useAuth', () => ({
   useAuth: vi.fn(),
@@ -13,11 +19,25 @@ vi.mock('@/context/auth/useAuth', () => ({
 vi.mock('@/service/rtm-emslogamv-service', () => ({
   previewRtmEmsLogAmvUpload: vi.fn(),
   saveRtmEmsLogAmvBatch: vi.fn(),
+  searchLatestRtmEmsLogAmv: vi.fn(),
+  searchRtmEmsLogAmv: vi.fn(),
 }))
 
 const mockedUseAuth = vi.mocked(useAuth)
 const mockedPreviewUpload = vi.mocked(previewRtmEmsLogAmvUpload)
 const mockedSaveBatch = vi.mocked(saveRtmEmsLogAmvBatch)
+const mockedSearchLatest = vi.mocked(searchLatestRtmEmsLogAmv)
+const mockedSearch = vi.mocked(searchRtmEmsLogAmv)
+
+const monthOffset = (dateValue: string, offset: number) => {
+  const [year, month] = dateValue.split('-').map(Number)
+  return new Date(Date.UTC(year, month - 1 + offset, 1)).toISOString().slice(0, 10)
+}
+
+const monthLabel = (dateValue: string) =>
+  new Intl.DateTimeFormat('en-CA', { month: 'long', timeZone: 'UTC', year: 'numeric' }).format(
+    new Date(`${dateValue}T00:00:00Z`),
+  )
 
 describe('RTM EMS Log AMV spreadsheet upload actions', () => {
   beforeEach(() => {
@@ -29,6 +49,8 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       errors: [],
       rows: [],
     })
+    mockedSearch.mockResolvedValue([])
+    mockedSearchLatest.mockResolvedValue([])
   })
 
   afterEach(() => {
@@ -54,6 +76,83 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     )
     expect(screen.queryByRole('button', { name: 'Review' })).not.toBeInTheDocument()
     expect(document.title).toBe('Average market values | NR LEXIS')
+  })
+
+  it('restores next-month saved values as an editable review without file metadata', async () => {
+    const currentMonth = `${formatBusinessIsoDate().slice(0, 7)}-01`
+    const nextMonth = monthOffset(currentMonth, 1)
+    const comparisonMonth = monthOffset(nextMonth, -2)
+    mockedSearch.mockResolvedValue([
+      {
+        species: 'BA',
+        grade: 'D',
+        growthIndicator: 'O',
+        retrievalDate: nextMonth,
+        updateDate: nextMonth,
+        currentValue: 78.14,
+        newValue: 78.14,
+        returnCode: '0',
+      },
+    ])
+    mockedSearchLatest.mockResolvedValue([
+      {
+        species: 'BA',
+        grade: 'D',
+        growthIndicator: 'O',
+        retrievalDate: comparisonMonth,
+        updateDate: comparisonMonth,
+        currentValue: 75.29,
+        newValue: 75.29,
+        returnCode: '0',
+      },
+    ])
+
+    render(<RtmEmsLogAmvUploadPage />)
+
+    const table = await screen.findByRole('table', {
+      name: 'Balsam average market value review',
+    })
+    expect(mockedSearch).toHaveBeenCalledWith({
+      species: '',
+      growthIndicator: '',
+      retrievalDate: nextMonth,
+      updateDate: nextMonth,
+    })
+    expect(mockedSearchLatest).toHaveBeenCalledWith(nextMonth)
+    expect(
+      within(table).getByRole('columnheader', {
+        name: `Last entered (${monthLabel(comparisonMonth)})`,
+      }),
+    ).toBeVisible()
+    const value = within(table).getByLabelText(`Balsam grade D ${monthLabel(nextMonth)} value`)
+    expect(value).toHaveValue('78.14')
+    expect(screen.queryByRole('heading', { name: 'Values', level: 2 })).not.toBeInTheDocument()
+    expect(screen.queryByText('Upload spreadsheet')).not.toBeInTheDocument()
+    expect(screen.queryByText('Last saved')).not.toBeInTheDocument()
+    expect(screen.queryByText('Values saved')).not.toBeInTheDocument()
+    expect(screen.getByText('Edit a value to save again.')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Save values' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
+
+    await userEvent.clear(value)
+    await userEvent.type(value, '79.25')
+    await userEvent.click(screen.getByRole('button', { name: 'Save values' }))
+
+    await waitFor(() => expect(mockedSaveBatch).toHaveBeenCalledTimes(1))
+    expect(mockedSaveBatch.mock.calls[0][0].values).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          species: 'BA',
+          grade: 'D',
+          retrievalDate: comparisonMonth,
+          updateDate: nextMonth,
+          newValue: 79.25,
+        }),
+      ]),
+    )
+    expect(screen.getByText('Values saved')).toBeVisible()
   })
 
   it('advances to the next editable month and clears the prior workflow at rollover', async () => {

@@ -37,6 +37,8 @@ import { useAuth } from '@/context/auth/useAuth'
 import {
   previewRtmEmsLogAmvUpload,
   saveRtmEmsLogAmvBatch,
+  searchLatestRtmEmsLogAmv,
+  searchRtmEmsLogAmv,
   type RtmEmsLogAmvRow,
   type RtmEmsLogAmvSaveRequest,
   type RtmEmsLogAmvUploadPreview,
@@ -51,8 +53,8 @@ type PendingUploadValidation = {
 }
 
 type SavedUploadState = {
-  savedAt: string
-  savedBy: string
+  savedAt?: string
+  savedBy?: string
   valueCount: number
 }
 
@@ -430,6 +432,72 @@ const buildInitialReviewValues = (rows: RtmEmsLogAmvRow[]) => {
   return values
 }
 
+const rowEffectiveDate = (row: RtmEmsLogAmvRow): string | null =>
+  normalizeIsoDate(row.updateDate) ?? normalizeIsoDate(row.retrievalDate)
+
+const rowValue = (row: RtmEmsLogAmvRow): number | null => row.newValue ?? row.currentValue
+
+const buildSavedReviewPreview = (
+  effectiveMonth: string,
+  savedRows: RtmEmsLogAmvRow[],
+  comparisonRows: RtmEmsLogAmvRow[],
+): RtmEmsLogAmvUploadPreview => {
+  const comparisonDate =
+    comparisonRows
+      .map(rowEffectiveDate)
+      .filter((date): date is string => date !== null)
+      .sort()
+      .at(-1) ?? shiftEffectiveMonth(effectiveMonth, -1)
+  const valuesByKey = (rows: RtmEmsLogAmvRow[]) => {
+    const values = new Map<string, { grade: string; species: string; value: number | null }>()
+
+    rows.forEach((row) => {
+      const species = resolveSpeciesColumnKey(row.species)
+      const grade = normalizeGrade(row.grade)
+      if (!species || !grade) {
+        return
+      }
+
+      const key = `${species}-${grade}`
+      if (!values.has(key)) {
+        values.set(key, { grade, species, value: rowValue(row) })
+      }
+    })
+
+    return values
+  }
+  const savedValues = valuesByKey(savedRows)
+  const comparisonValues = valuesByKey(comparisonRows)
+  const keys = new Set([...comparisonValues.keys(), ...savedValues.keys()])
+  const rows = Array.from(keys).map((key) => {
+    const savedValue = savedValues.get(key)
+    const comparisonValue = comparisonValues.get(key)
+    const dimensions = savedValue ?? comparisonValue
+
+    return {
+      species: dimensions?.species ?? null,
+      grade: dimensions?.grade ?? null,
+      growthIndicator: 'O',
+      retrievalDate: comparisonDate,
+      updateDate: effectiveMonth,
+      currentValue: comparisonValue?.value ?? null,
+      newValue: savedValue?.value ?? null,
+      returnCode: '0',
+    }
+  })
+
+  return {
+    status: 'accepted',
+    message: 'Saved average market values loaded.',
+    rowCount: savedRows.length,
+    retrievalDate: comparisonDate,
+    updateDate: effectiveMonth,
+    errors: [],
+    warnings: [],
+    rows,
+  }
+}
+
 const parseReviewValue = (value: string): number | null | undefined => {
   const normalized = value.trim().replace(/,/g, '')
   if (!normalized) {
@@ -800,6 +868,7 @@ const RtmEmsLogAmvUploadPage = () => {
   const canManage = canPerform('/lexisAgentAdmin')
   const validationRequestRef = useRef(0)
   const saveRequestRef = useRef(0)
+  const savedValuesRequestRef = useRef(0)
   const uploadInputRef = useRef<HTMLInputElement>(null)
   const cancelButtonRef = useRef<HTMLButtonElement>(null)
   const removeFileButtonRef = useRef<HTMLButtonElement>(null)
@@ -840,6 +909,7 @@ const RtmEmsLogAmvUploadPage = () => {
   }, [])
 
   const validateUploadFile = async (nextFile: File | null) => {
+    savedValuesRequestRef.current += 1
     const requestId = validationRequestRef.current + 1
     validationRequestRef.current = requestId
 
@@ -949,6 +1019,7 @@ const RtmEmsLogAmvUploadPage = () => {
   const clearUploadState = useCallback(() => {
     validationRequestRef.current += 1
     saveRequestRef.current += 1
+    savedValuesRequestRef.current += 1
     setUploadStep('upload')
     setSelectedUploadFile(null)
     setUploadError('')
@@ -967,6 +1038,53 @@ const RtmEmsLogAmvUploadPage = () => {
     setIsUploading(false)
     setDiscardConfirmation(null)
   }, [])
+
+  useEffect(() => {
+    const requestId = savedValuesRequestRef.current + 1
+    savedValuesRequestRef.current = requestId
+
+    const loadSavedValues = async () => {
+      try {
+        const savedRows = await searchRtmEmsLogAmv({
+          species: '',
+          growthIndicator: '',
+          retrievalDate: effectiveMonth,
+          updateDate: effectiveMonth,
+        })
+        if (savedValuesRequestRef.current !== requestId || savedRows.length === 0) {
+          return
+        }
+
+        const comparisonRows = await searchLatestRtmEmsLogAmv(effectiveMonth)
+        if (savedValuesRequestRef.current !== requestId) {
+          return
+        }
+
+        const savedPreview = buildSavedReviewPreview(effectiveMonth, savedRows, comparisonRows)
+        const savedValues = buildInitialReviewValues(savedPreview.rows)
+        setPreviewResult(savedPreview)
+        setReviewValues(savedValues)
+        setSavedReviewValues(savedValues)
+        setSavedUploadState({ valueCount: savedRows.length })
+        setUploadStep('review')
+      } catch (error) {
+        if (savedValuesRequestRef.current !== requestId) {
+          return
+        }
+
+        console.error(error)
+        setUploadSystemError(true)
+      }
+    }
+
+    void loadSavedValues()
+
+    return () => {
+      if (savedValuesRequestRef.current === requestId) {
+        savedValuesRequestRef.current += 1
+      }
+    }
+  }, [effectiveMonth])
 
   useEffect(() => {
     const refreshEffectiveMonth = () => {
@@ -1006,15 +1124,17 @@ const RtmEmsLogAmvUploadPage = () => {
       return
     }
 
-    if (!selectedUploadFile) {
+    const isSavedReview = savedReviewValues !== null
+    if (!selectedUploadFile && !isSavedReview) {
       setUploadError('Upload an XLSX file before submitting changes.')
       return
     }
 
     if (
-      !pendingUploadValidation ||
-      pendingUploadValidation.fileName !== selectedUploadFile.name ||
-      pendingUploadValidation.fileSize !== selectedUploadFile.size
+      !isSavedReview &&
+      (!pendingUploadValidation ||
+        pendingUploadValidation.fileName !== selectedUploadFile?.name ||
+        pendingUploadValidation.fileSize !== selectedUploadFile?.size)
     ) {
       setUploadError('Validate this file before submitting changes.')
       return
@@ -1040,8 +1160,8 @@ const RtmEmsLogAmvUploadPage = () => {
 
       const response: RtmEmsLogAmvUploadResult = {
         status: result.status,
-        fileName: selectedUploadFile.name,
-        fileSize: selectedUploadFile.size,
+        fileName: selectedUploadFile?.name,
+        fileSize: selectedUploadFile?.size,
         message: result.message,
         attemptedRowCount: saveRequests.length,
         uploadedRowCount: result.rows.length,
@@ -1104,16 +1224,19 @@ const RtmEmsLogAmvUploadPage = () => {
   const hasUnsavedChanges =
     savedReviewValues !== null && !reviewValuesMatch(reviewValues, savedReviewValues)
   const savedActionsUnavailable = savedReviewValues !== null && !hasUnsavedChanges
+  const hasValidatedUpload =
+    !!selectedUploadFile &&
+    selectedUploadFile.size > 0 &&
+    !!pendingUploadValidation &&
+    pendingUploadValidation.fileName === selectedUploadFile.name &&
+    pendingUploadValidation.fileSize === selectedUploadFile.size
+  const hasSaveSource = savedReviewValues !== null || hasValidatedUpload
 
   const isUploadDisabled =
     isUploading ||
     hasReviewErrors ||
     !canManage ||
-    !selectedUploadFile ||
-    selectedUploadFile.size <= 0 ||
-    !pendingUploadValidation ||
-    pendingUploadValidation.fileName !== selectedUploadFile.name ||
-    pendingUploadValidation.fileSize !== selectedUploadFile.size ||
+    !hasSaveSource ||
     previewResult?.status !== 'accepted'
 
   const uploadDropZoneClassName = [
@@ -1144,7 +1267,7 @@ const RtmEmsLogAmvUploadPage = () => {
             <span>Values take effect</span>
             <strong>{formatEffectiveStartDate(effectiveMonth)}</strong>
           </div>
-          {savedUploadState && (
+          {savedUploadState?.savedAt && savedUploadState.savedBy && (
             <div className="rtm-amv-month-summary__item">
               <span>Last saved</span>
               <strong>{`${savedUploadState.savedAt} by ${savedUploadState.savedBy}`}</strong>
