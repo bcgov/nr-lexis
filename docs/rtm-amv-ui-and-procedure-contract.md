@@ -110,7 +110,9 @@ the immediately upcoming month's rows from `EMS_LOG_AMV`. If rows exist, it rest
 review and latest-earlier comparison; if none exist, it restores the upload state. The workbook and
 filename are not persisted, so neither is shown in a restored review. Replacing a workbook after
 the first accepted save is not part of the current flow; that option remains deferred until its
-design and persistence contract are complete.
+design and persistence contract are complete. The saved-row lookup gates the initial workflow
+render: neither upload nor review is shown while it is pending, and a failed lookup shows an error
+instead of assuming there are no saved values.
 
 ## Batch audit event
 

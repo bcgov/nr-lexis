@@ -39,6 +39,12 @@ const monthLabel = (dateValue: string) =>
     new Date(`${dateValue}T00:00:00Z`),
   )
 
+const renderUploadPage = async () => {
+  await act(async () => {
+    render(<RtmEmsLogAmvUploadPage />)
+  })
+}
+
 describe('RTM EMS Log AMV spreadsheet upload actions', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -57,8 +63,42 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     vi.useRealTimers()
   })
 
-  it('renders the empty Average market values design and month context', () => {
+  it('waits for the saved-value lookup before choosing a workflow state', async () => {
+    let finishSearch!: (rows: []) => void
+    mockedSearch.mockReturnValue(
+      new Promise((resolve) => {
+        finishSearch = resolve
+      }),
+    )
+
     render(<RtmEmsLogAmvUploadPage />)
+
+    expect(screen.getByText('Loading average market values')).toBeVisible()
+    expect(screen.queryByRole('heading', { name: 'Average market values' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Upload spreadsheet')).not.toBeInTheDocument()
+    expect(screen.queryByRole('tablist', { name: 'Species' })).not.toBeInTheDocument()
+
+    await act(async () => finishSearch([]))
+
+    expect(screen.getByRole('heading', { name: 'Average market values' })).toBeVisible()
+    expect(screen.getByText('Upload spreadsheet')).toBeVisible()
+    expect(screen.queryByText('Loading average market values')).not.toBeInTheDocument()
+  })
+
+  it('does not fall back to upload when the saved-value lookup fails', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    mockedSearch.mockRejectedValue(new Error('Service unavailable'))
+
+    render(<RtmEmsLogAmvUploadPage />)
+
+    expect(await screen.findByText('Average market values could not be loaded')).toBeVisible()
+    expect(screen.queryByText('Upload spreadsheet')).not.toBeInTheDocument()
+    expect(screen.queryByRole('tablist', { name: 'Species' })).not.toBeInTheDocument()
+    consoleError.mockRestore()
+  })
+
+  it('renders the empty Average market values design and month context', async () => {
+    await renderUploadPage()
 
     expect(screen.getByRole('heading', { name: 'Average market values', level: 1 })).toBeVisible()
     expect(screen.getByText(/domestic log values that become the fee in lieu/i)).toBeVisible()
@@ -93,6 +133,26 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
         newValue: 78.14,
         returnCode: '0',
       },
+      {
+        species: 'AL',
+        grade: 'D',
+        growthIndicator: 'O',
+        retrievalDate: nextMonth,
+        updateDate: nextMonth,
+        currentValue: 65,
+        newValue: 65,
+        returnCode: '0',
+      },
+      {
+        species: 'BA',
+        grade: 'Q',
+        growthIndicator: 'O',
+        retrievalDate: nextMonth,
+        updateDate: nextMonth,
+        currentValue: 64,
+        newValue: 64,
+        returnCode: '0',
+      },
     ])
     mockedSearchLatest.mockResolvedValue([
       {
@@ -107,7 +167,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       },
     ])
 
-    render(<RtmEmsLogAmvUploadPage />)
+    await renderUploadPage()
 
     const table = await screen.findByRole('table', {
       name: 'Balsam average market value review',
@@ -130,6 +190,8 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     expect(screen.queryByText('Upload spreadsheet')).not.toBeInTheDocument()
     expect(screen.queryByText('Last saved')).not.toBeInTheDocument()
     expect(screen.queryByText('Values saved')).not.toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'AL' })).not.toBeInTheDocument()
+    expect(within(table).queryByRole('rowheader', { name: 'Q' })).not.toBeInTheDocument()
     expect(screen.getByText('Edit a value to save again.')).toBeVisible()
     expect(screen.getByRole('button', { name: 'Save values' })).toHaveAttribute(
       'aria-disabled',
@@ -182,7 +244,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       ],
     })
 
-    render(<RtmEmsLogAmvUploadPage />)
+    await renderUploadPage()
     expect(
       within(screen.getByLabelText('Average market value month details')).getByText(
         'September 2026',
@@ -201,7 +263,9 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     expect(screen.getByRole('table', { name: 'Balsam average market value review' })).toBeVisible()
 
     vi.setSystemTime(new Date('2026-09-01T07:00:30Z'))
-    act(() => vi.advanceTimersByTime(1_000))
+    await act(async () => {
+      vi.advanceTimersByTime(1_000)
+    })
 
     const monthSummary = screen.getByLabelText('Average market value month details')
     expect(within(monthSummary).getByText('October 2026')).toBeVisible()
@@ -214,7 +278,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
   })
 
   it('rejects files above 20 MiB before requesting a server preview', async () => {
-    render(<RtmEmsLogAmvUploadPage />)
+    await renderUploadPage()
     const oversized = new File(
       [new Uint8Array(20 * 1024 * 1024 + 1)],
       'oversized-rtm-template.xlsx',
@@ -243,7 +307,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       warnings: [],
       rows: [],
     })
-    render(<RtmEmsLogAmvUploadPage />)
+    await renderUploadPage()
     const workbook = new File([new Uint8Array([1])], 'Filename.xlsx', {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     })
@@ -295,7 +359,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       warnings: [],
       rows: [],
     })
-    render(<RtmEmsLogAmvUploadPage />)
+    await renderUploadPage()
     const workbook = new File([new Uint8Array([1])], 'Filename.xlsx', {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     })
@@ -341,7 +405,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
         warnings: [],
         rows: [],
       })
-    render(<RtmEmsLogAmvUploadPage />)
+    await renderUploadPage()
     const workbook = new File([new Uint8Array([1])], 'Filename.xlsx', {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     })
@@ -381,7 +445,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
 
   it('shows the compact filename loading row while the spreadsheet is validated', async () => {
     mockedPreviewUpload.mockImplementation(() => new Promise(() => undefined))
-    render(<RtmEmsLogAmvUploadPage />)
+    await renderUploadPage()
     const workbook = new File([new Uint8Array([1])], 'Filename.xlsx', {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     })
@@ -453,7 +517,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
         },
       ],
     })
-    render(<RtmEmsLogAmvUploadPage />)
+    await renderUploadPage()
     const workbook = new File([new Uint8Array([1, 2, 3])], 'Filename.xlsx', {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     })
@@ -638,7 +702,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
         returnCode: '0',
       })),
     })
-    render(<RtmEmsLogAmvUploadPage />)
+    await renderUploadPage()
     const workbook = new File([new Uint8Array([1])], 'Filename.xlsx', {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     })
@@ -815,7 +879,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
         },
       ],
     })
-    render(<RtmEmsLogAmvUploadPage />)
+    await renderUploadPage()
     const workbook = new File([new Uint8Array([1])], 'rtm-values.xlsx', {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     })
@@ -886,7 +950,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
           rejectSave = reject
         }),
     )
-    render(<RtmEmsLogAmvUploadPage />)
+    await renderUploadPage()
     const workbook = new File([new Uint8Array([1])], 'rtm-values.xlsx', {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     })

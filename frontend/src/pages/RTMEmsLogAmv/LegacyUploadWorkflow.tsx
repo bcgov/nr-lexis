@@ -219,6 +219,9 @@ const RTM_UPLOAD_FIELD_HELPER = 'Accepted format: .xlsx, up to 20 MB.'
 const RTM_UPLOAD_SYSTEM_ERROR_TITLE = 'Upload could not be completed'
 const RTM_UPLOAD_SYSTEM_ERROR_MESSAGE =
   'Something went wrong on our end. Please try again. If the problem persists, contact...'
+const RTM_VALUES_LOAD_ERROR_TITLE = 'Average market values could not be loaded'
+const RTM_VALUES_LOAD_ERROR_MESSAGE =
+  'Something went wrong on our end. Refresh the page to try again. If the problem persists, contact...'
 
 const RTM_REVIEW_SPECIES_COLUMNS: RtmReviewSpeciesColumn[] = [
   { key: 'BA', label: 'Balsam', speciesCodes: ['BA'] },
@@ -442,6 +445,8 @@ const buildSavedReviewPreview = (
   savedRows: RtmEmsLogAmvRow[],
   comparisonRows: RtmEmsLogAmvRow[],
 ): RtmEmsLogAmvUploadPreview => {
+  const supportedSpecies = new Set(RTM_REVIEW_SPECIES_COLUMNS.map((column) => column.key))
+  const supportedGrades = new Set(RTM_REVIEW_GRADE_ORDER)
   const comparisonDate =
     comparisonRows
       .map(rowEffectiveDate)
@@ -454,7 +459,7 @@ const buildSavedReviewPreview = (
     rows.forEach((row) => {
       const species = resolveSpeciesColumnKey(row.species)
       const grade = normalizeGrade(row.grade)
-      if (!species || !grade) {
+      if (!supportedSpecies.has(species) || !supportedGrades.has(grade)) {
         return
       }
 
@@ -879,6 +884,8 @@ const RtmEmsLogAmvUploadPage = () => {
   const [uploadStep, setUploadStep] = useState<RtmUploadStep>('upload')
   const [isPreviewing, setIsPreviewing] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
+  const [isCheckingSavedValues, setIsCheckingSavedValues] = useState(true)
+  const [savedValuesLoadError, setSavedValuesLoadError] = useState(false)
   const [uploadError, setUploadError] = useState('')
   const [uploadSystemError, setUploadSystemError] = useState(false)
   const [notification, setNotification] = useState('')
@@ -1051,7 +1058,11 @@ const RtmEmsLogAmvUploadPage = () => {
           retrievalDate: effectiveMonth,
           updateDate: effectiveMonth,
         })
-        if (savedValuesRequestRef.current !== requestId || savedRows.length === 0) {
+        if (savedValuesRequestRef.current !== requestId) {
+          return
+        }
+        if (savedRows.length === 0) {
+          setIsCheckingSavedValues(false)
           return
         }
 
@@ -1067,13 +1078,15 @@ const RtmEmsLogAmvUploadPage = () => {
         setSavedReviewValues(savedValues)
         setSavedUploadState({ valueCount: savedRows.length })
         setUploadStep('review')
+        setIsCheckingSavedValues(false)
       } catch (error) {
         if (savedValuesRequestRef.current !== requestId) {
           return
         }
 
         console.error(error)
-        setUploadSystemError(true)
+        setSavedValuesLoadError(true)
+        setIsCheckingSavedValues(false)
       }
     }
 
@@ -1094,6 +1107,8 @@ const RtmEmsLogAmvUploadPage = () => {
       }
 
       effectiveMonthRef.current = nextEffectiveMonth
+      setIsCheckingSavedValues(true)
+      setSavedValuesLoadError(false)
       setEffectiveMonth(nextEffectiveMonth)
       clearUploadState()
     }
@@ -1253,6 +1268,40 @@ const RtmEmsLogAmvUploadPage = () => {
         ? previewResult.errors
         : [previewResult.message]
       : []
+
+  if (isCheckingSavedValues) {
+    return (
+      <Grid
+        fullWidth
+        className="default-grid admin-upload-fspts-page rtm-amv-upload-page rtm-amv-initial-state"
+        aria-busy="true"
+      >
+        <Column sm={4} md={8} lg={16} className="rtm-amv-initial-state__content">
+          <InlineLoading description="Loading average market values" />
+        </Column>
+      </Grid>
+    )
+  }
+
+  if (savedValuesLoadError) {
+    return (
+      <Grid
+        fullWidth
+        className="default-grid admin-upload-fspts-page rtm-amv-upload-page rtm-amv-initial-state"
+      >
+        <Column sm={4} md={8} lg={16} className="rtm-amv-initial-state__content">
+          <InlineNotification
+            kind="error"
+            lowContrast
+            hideCloseButton
+            title={RTM_VALUES_LOAD_ERROR_TITLE}
+            subtitle={RTM_VALUES_LOAD_ERROR_MESSAGE}
+          />
+        </Column>
+      </Grid>
+    )
+  }
+
   return (
     <Grid fullWidth className="default-grid admin-upload-fspts-page rtm-amv-upload-page">
       <Column sm={4} md={8} lg={16} className="admin-upload-fspts-header rtm-amv-upload-header">

@@ -2622,6 +2622,19 @@ $notification-types: 'error', 'info', 'success', 'warning';
   background: var(--fds-background);
 }
 
+.rtm-amv-initial-state {
+  min-block-size: calc(100vh - 3rem);
+}
+
+.rtm-amv-initial-state__content {
+  padding: 2rem 1.75rem;
+}
+
+.rtm-amv-initial-state__content .cds--inline-notification {
+  max-inline-size: 40rem;
+  margin: 0;
+}
+
 .rtm-amv-upload-header {
   padding: 2rem 1.75rem 1.5rem;
 }
