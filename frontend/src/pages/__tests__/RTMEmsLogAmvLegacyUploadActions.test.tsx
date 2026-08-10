@@ -515,6 +515,16 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
           newValue: null,
           returnCode: '0',
         },
+        {
+          species: 'AL',
+          grade: 'D',
+          growthIndicator: 'O',
+          retrievalDate: '2026-07-01',
+          updateDate: '2026-09-01',
+          currentValue: 65,
+          newValue: 66,
+          returnCode: '0',
+        },
       ],
     })
     await renderUploadPage()
@@ -535,6 +545,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       'Filename.xlsx',
     )
     expect(screen.getAllByRole('tab')).toHaveLength(7)
+    expect(screen.queryByRole('tab', { name: 'AL' })).not.toBeInTheDocument()
     expect(document.querySelectorAll('.rtm-amv-species-tab__status--warning')).toHaveLength(2)
 
     const balsamTable = screen.getByRole('table', {

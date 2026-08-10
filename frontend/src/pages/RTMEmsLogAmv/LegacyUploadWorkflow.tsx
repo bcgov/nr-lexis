@@ -291,29 +291,6 @@ const resolveSpeciesColumnKey = (species: string | null | undefined) => {
   return matchedColumn?.key ?? normalizedSpecies
 }
 
-const buildReviewSpeciesColumns = (rows: RtmEmsLogAmvRow[]): RtmReviewSpeciesColumn[] => {
-  const knownColumnKeys = new Set(RTM_REVIEW_SPECIES_COLUMNS.map((column) => column.key))
-  const extraColumns = new Set<string>()
-
-  rows.forEach((row) => {
-    const columnKey = resolveSpeciesColumnKey(row.species)
-    if (columnKey && !knownColumnKeys.has(columnKey)) {
-      extraColumns.add(columnKey)
-    }
-  })
-
-  return [
-    ...RTM_REVIEW_SPECIES_COLUMNS,
-    ...Array.from(extraColumns)
-      .sort()
-      .map((columnKey) => ({
-        key: columnKey,
-        label: columnKey,
-        speciesCodes: [columnKey],
-      })),
-  ]
-}
-
 const formatGrowthIndicator = (growthIndicator: string) => {
   if (growthIndicator === 'O') {
     return 'Old growth'
@@ -426,7 +403,7 @@ const firstReviewValue = (values: RtmReviewCellValues): number | null => {
 
 const buildInitialReviewValues = (rows: RtmEmsLogAmvRow[]) => {
   const values: Record<string, string> = {}
-  buildReviewSpeciesColumns(rows).forEach((column) => {
+  RTM_REVIEW_SPECIES_COLUMNS.forEach((column) => {
     buildSpeciesReviewRows(rows, column).forEach((row) => {
       const newValue = firstReviewValue(row.newValues)
       values[row.key] = newValue === null ? '' : formatMoney(newValue)
@@ -745,7 +722,7 @@ const ReviewUploadContent = ({
   uploadResult: RtmEmsLogAmvUploadResult | null
 }) => {
   const [selectedSpeciesIndex, setSelectedSpeciesIndex] = useState(0)
-  const speciesColumns = buildReviewSpeciesColumns(previewResult.rows)
+  const speciesColumns = RTM_REVIEW_SPECIES_COLUMNS
   const speciesRows = speciesColumns.map((column) =>
     buildSpeciesReviewRows(previewResult.rows, column),
   )
