@@ -80,6 +80,27 @@ describe('ConfirmationModal', () => {
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1))
   })
 
+  it('uses the confirmation action as the default pending label', async () => {
+    const user = userEvent.setup()
+    const pendingConfirmation = deferred()
+
+    render(
+      <ConfirmationModal
+        open
+        title="Approve application?"
+        confirmLabel="Approve"
+        onConfirm={() => pendingConfirmation.promise}
+        onClose={vi.fn()}
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Approve' }))
+
+    expect(screen.getByRole('button', { name: 'Approve…' })).toBeDisabled()
+
+    await act(async () => pendingConfirmation.resolve())
+  })
+
   it('shows rejected work, keeps the dialog open, and allows retry', async () => {
     const user = userEvent.setup()
     const error = new Error('database unavailable')

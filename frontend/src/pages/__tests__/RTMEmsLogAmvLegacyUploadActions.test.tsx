@@ -143,4 +143,49 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       expect(mockedUpload).toHaveBeenCalledWith({ file: workbook })
     })
   })
+
+  it('keeps review visible and re-enables its actions when submission fails', async () => {
+    let rejectUpload: (reason: Error) => void = () => undefined
+    mockedPreviewUpload.mockResolvedValue({
+      status: 'accepted',
+      fileName: 'rtm-values.xlsx',
+      fileSize: 1,
+      message: 'Spreadsheet is valid.',
+      rowCount: 0,
+      retrievalDate: '2026-06-01',
+      updateDate: '2026-07-01',
+      errors: [],
+      warnings: [],
+      rows: [],
+    })
+    mockedUpload.mockImplementation(
+      () =>
+        new Promise((_, reject) => {
+          rejectUpload = reject
+        }),
+    )
+    render(<RtmEmsLogAmvUploadPage />)
+    const workbook = new File([new Uint8Array([1])], 'rtm-values.xlsx', {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    })
+
+    await userEvent.upload(
+      screen.getByLabelText('Average monthly values upload spreadsheet'),
+      workbook,
+    )
+    await screen.findByText('Spreadsheet validated')
+    await userEvent.click(screen.getByRole('button', { name: 'Review' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Submit' }))
+
+    expect(screen.getByRole('button', { name: 'Submitting…' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Back' })).toBeDisabled()
+    expect(screen.getByRole('region', { name: 'Review' })).toHaveAttribute('aria-busy', 'true')
+
+    rejectUpload(new Error('unavailable'))
+
+    expect(await screen.findByText('Unable to apply average monthly value upload.')).toBeVisible()
+    expect(screen.getByRole('heading', { name: 'Review' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Submit' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Back' })).toBeEnabled()
+  })
 })

@@ -1,5 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Button, Column, Grid, Loading, TextArea, TextInput, Tile } from '@carbon/react'
+import {
+  Button,
+  Column,
+  Grid,
+  InlineNotification,
+  Loading,
+  TextArea,
+  TextInput,
+  Tile,
+} from '@carbon/react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { AppNotification } from '../../components/AppNotification'
 import ContentLoadingOverlay from '@/components/ContentLoadingOverlay'
@@ -46,6 +55,7 @@ type PageStatus = {
   kind: 'success' | 'error'
   title: string
   message: string
+  placement?: 'inline'
 }
 
 const YES_NO_OPTIONS = [
@@ -326,6 +336,7 @@ const ProvincialOfferDetailsPage = () => {
         title: 'Offer locked',
         message:
           detail.lockMessage || 'This offer is currently locked for editing by another user.',
+        placement: 'inline',
       })
       return false
     }
@@ -339,6 +350,7 @@ const ProvincialOfferDetailsPage = () => {
         kind: 'error',
         title: 'Validation error',
         message: validationMessage,
+        placement: 'inline',
       })
       return false
     }
@@ -418,14 +430,14 @@ const ProvincialOfferDetailsPage = () => {
 
       {!loading && !!errorMessage && <DetailLoadError message={errorMessage} />}
 
-      {!loading && !!status && (
+      {!loading && !!status && status.placement !== 'inline' && (
         <Column sm={4} md={8} lg={16} className="detail-page-error">
           <AppNotification
             kind={status.kind}
             title={status.title}
             subtitle={status.message}
             lowContrast
-            autoDismissMs={status.kind === 'success' ? 8000 : undefined}
+            autoDismissMs={status.kind === 'success' ? 6000 : undefined}
             onCloseButtonClick={() => setStatus(null)}
           />
         </Column>
@@ -433,7 +445,8 @@ const ProvincialOfferDetailsPage = () => {
 
       {!loading && currentDetail?.locked && (
         <Column sm={4} md={8} lg={16} className="detail-page-error">
-          <AppNotification
+          <InlineNotification
+            className="detail-context-notification"
             kind="warning"
             title="Offer locked"
             subtitle={
@@ -441,6 +454,7 @@ const ProvincialOfferDetailsPage = () => {
               'This offer is currently locked for editing by another user.'
             }
             lowContrast
+            hideCloseButton
           />
         </Column>
       )}
@@ -458,6 +472,16 @@ const ProvincialOfferDetailsPage = () => {
             loading={isRefreshingDetail}
             loadingDescription="Refreshing provincial offer detail…"
           />
+          {status?.placement === 'inline' && (
+            <InlineNotification
+              className="detail-context-notification"
+              kind="error"
+              title={status.title}
+              subtitle={status.message}
+              lowContrast
+              onCloseButtonClick={() => setStatus(null)}
+            />
+          )}
           <Tile className="provincial-offer-create provincial-offer-sections">
             <fieldset className="legacy-form-fieldset offer-form-section">
               <legend>Application details</legend>

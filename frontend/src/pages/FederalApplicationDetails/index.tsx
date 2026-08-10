@@ -4,6 +4,7 @@ import {
   Button,
   Column,
   Grid,
+  InlineNotification,
   Loading,
   Select,
   SelectItem,
@@ -857,36 +858,6 @@ const FederalApplicationDetailsPage = () => {
 
       {detail && currentDetail && (
         <>
-          {!!documentsErrorMessage && (
-            <Column sm={4} md={8} lg={16} className="detail-page-error">
-              <AppNotification
-                kind="warning"
-                title="Documents unavailable"
-                subtitle={documentsErrorMessage}
-                lowContrast
-              />
-            </Column>
-          )}
-          {!!remarksErrorMessage && (
-            <Column sm={4} md={8} lg={16} className="detail-page-error">
-              <AppNotification
-                kind="warning"
-                title="Remarks unavailable"
-                subtitle={remarksErrorMessage}
-                lowContrast
-              />
-            </Column>
-          )}
-          {!!shippingReferencesErrorMessage && (
-            <Column sm={4} md={8} lg={16} className="detail-page-error">
-              <AppNotification
-                kind="warning"
-                title="Shipping options unavailable"
-                subtitle={shippingReferencesErrorMessage}
-                lowContrast
-              />
-            </Column>
-          )}
           {!!actionErrorMessage && (
             <Column sm={4} md={8} lg={16} className="detail-page-error">
               <AppNotification
@@ -911,7 +882,8 @@ const FederalApplicationDetailsPage = () => {
           )}
           {federalApplicationLocked && (
             <Column sm={4} md={8} lg={16} className="detail-page-error">
-              <AppNotification
+              <InlineNotification
+                className="detail-context-notification"
                 kind="warning"
                 title="Application locked"
                 subtitle={
@@ -919,6 +891,7 @@ const FederalApplicationDetailsPage = () => {
                   'This application is currently locked for editing by another user.'
                 }
                 lowContrast
+                hideCloseButton
               />
             </Column>
           )}
@@ -1291,11 +1264,11 @@ const FederalApplicationDetailsPage = () => {
                       <Tile>
                         <h2 className="detail-tile-title">Summary of scale</h2>
                         {scaleErrorMessage ? (
-                          <AppNotification
-                            kind="warning"
+                          <EmptyState
                             title="Scale details unavailable"
-                            subtitle={scaleErrorMessage}
-                            lowContrast
+                            description={scaleErrorMessage}
+                            headingLevel={3}
+                            role="alert"
                           />
                         ) : scaleRows.length > 0 ? (
                           <TableFrame ariaLabel="Federal application scale details">
@@ -1632,6 +1605,16 @@ const FederalApplicationDetailsPage = () => {
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
                       <Tile className="detail-section-card federal-shipping-details">
+                        {shippingReferencesErrorMessage && (
+                          <InlineNotification
+                            className="detail-context-notification"
+                            kind="warning"
+                            lowContrast
+                            hideCloseButton
+                            title="Shipping options unavailable"
+                            subtitle={shippingReferencesErrorMessage}
+                          />
+                        )}
                         {isEditingFederalPermit && canMutateFederalApplication ? (
                           <>
                             <div className="detail-section-card__header">

@@ -1059,8 +1059,8 @@ describe('Admin upload workflow smoke', () => {
     expect(screen.getAllByText('first.xml').length).toBeGreaterThan(0)
     expect(screen.getAllByText('second.xml').length).toBeGreaterThan(0)
     expect(screen.getAllByText(/Application 9001/).length).toBeGreaterThan(0)
-    expect(screen.getAllByText(/Package TEST23-652-7D-2/).length).toBeGreaterThan(0)
-    expect(screen.getAllByText(/3 scale rows/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText('TEST23-652-7D-2').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('3 scale rows').length).toBeGreaterThan(0)
     expect(
       screen.getAllByText(/Loaded payload\/first.xml from ZIP archive first.zip/).length,
     ).toBeGreaterThan(0)

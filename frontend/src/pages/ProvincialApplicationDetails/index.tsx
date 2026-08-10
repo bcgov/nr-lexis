@@ -6,6 +6,7 @@ import {
   DismissibleTag,
   Grid,
   InlineLoading,
+  InlineNotification,
   Loading,
   Tab,
   TabList,
@@ -273,7 +274,8 @@ function ClientDataSummary({
         ))}
       </dl>
       {clientLookupMessage && dismissedClientLookupMessageKey !== clientLookupMessageKey && (
-        <AppNotification
+        <InlineNotification
+          className="detail-context-notification"
           kind="warning"
           title="Client lookup"
           subtitle={clientLookupMessage}
@@ -2580,7 +2582,10 @@ const ProvincialApplicationDetailsPage = () => {
 
   const onConfirmSummaryAccuracy = useCallback(async () => {
     if (!summaryAccuracyConfirmed || isSavingSummary) return
-    await completeSummarySave(pendingSummarySaveSource, true)
+    const saved = await completeSummarySave(pendingSummarySaveSource, true)
+    if (!saved) {
+      throw new Error('Application changes were not saved.')
+    }
   }, [completeSummarySave, isSavingSummary, pendingSummarySaveSource, summaryAccuracyConfirmed])
 
   const buildReviewStatusPayload = useCallback(
@@ -3211,7 +3216,8 @@ const ProvincialApplicationDetailsPage = () => {
               />
             </div>
             {showReviewValidationNotification && (
-              <AppNotification
+              <InlineNotification
+                className="detail-context-notification"
                 kind="error"
                 title="Review validation"
                 subtitle={reviewValidationMessage}
@@ -3355,22 +3361,13 @@ const ProvincialApplicationDetailsPage = () => {
           title="Action complete"
           subtitle={creationSuccessMessage}
           lowContrast
-          autoDismissMs={8000}
+          autoDismissMs={6000}
           onCloseButtonClick={() => setCreationSuccessMessage('')}
         />
       )}
 
       {detail && detailMatchesRoute && (
         <>
-          {!!documentsErrorMessage && (
-            <AppNotification
-              kind="warning"
-              title="Documents unavailable"
-              subtitle={documentsErrorMessage}
-              lowContrast
-              onCloseButtonClick={() => setDocumentsErrorMessage('')}
-            />
-          )}
           {summaryOptionsAvailability === 'unavailable' && (
             <AuthoritativeOptionsUnavailableNotification title="Application options unavailable" />
           )}
@@ -3378,11 +3375,13 @@ const ProvincialApplicationDetailsPage = () => {
             (selectedApplicationTab === 'owner' && isEditingOwnerDetails) ||
             (selectedApplicationTab === 'agent' && isEditingAgentDetails)) &&
             requiredSummaryOptionsMissing && (
-              <AppNotification
+              <InlineNotification
+                className="detail-context-notification"
                 kind="warning"
                 title="Application summary options unavailable"
                 subtitle={`Missing required options: ${missingSummaryOptionLabels.join(', ')}. Summary changes cannot be saved.`}
                 lowContrast
+                hideCloseButton
               />
             )}
           {canReviewApplication &&
@@ -3391,11 +3390,13 @@ const ProvincialApplicationDetailsPage = () => {
               <AuthoritativeOptionsUnavailableNotification title="Review options unavailable" />
             )}
           {canReviewApplication && isEditingReview && requiredReviewOptionsMissing && (
-            <AppNotification
+            <InlineNotification
+              className="detail-context-notification"
               kind="warning"
               title="Review statuses not configured"
               subtitle="No authoritative review statuses are configured. Review status updates are disabled."
               lowContrast
+              hideCloseButton
             />
           )}
           {!!actionErrorMessage && (
@@ -3422,16 +3423,18 @@ const ProvincialApplicationDetailsPage = () => {
               title="Action completed"
               subtitle={actionInfoMessage}
               lowContrast
-              autoDismissMs={8000}
+              autoDismissMs={6000}
               onCloseButtonClick={() => setActionInfoMessage('')}
             />
           )}
           {!!detail.locked && !!detail.lockMessage && (
-            <AppNotification
+            <InlineNotification
+              className="detail-context-notification"
               kind="warning"
               title="Application locked"
               subtitle={detail.lockMessage}
               lowContrast
+              hideCloseButton
             />
           )}
 
@@ -4554,7 +4557,8 @@ const ProvincialApplicationDetailsPage = () => {
                         {selectedApplicationTab === 'documents' &&
                           !!showDocumentUploadUnavailableMessage &&
                           canUploadApplicationDocuments && (
-                            <AppNotification
+                            <InlineNotification
+                              className="detail-context-notification"
                               kind="info"
                               title="Upload unavailable"
                               subtitle={documentUploadUnavailableMessage}
@@ -4569,7 +4573,10 @@ const ProvincialApplicationDetailsPage = () => {
                         {documentLookupAvailability === 'unavailable' && (
                           <EmptyState
                             title="Documents unavailable"
-                            description="Document information could not be retrieved for this application."
+                            description={
+                              documentsErrorMessage ||
+                              'Document information could not be retrieved for this application.'
+                            }
                             headingLevel={3}
                             role="alert"
                           />
@@ -4841,6 +4848,7 @@ const ProvincialApplicationDetailsPage = () => {
             onConfirmedChange={setSummaryAccuracyConfirmed}
             onConfirm={onConfirmSummaryAccuracy}
             onClose={closeSummaryAccuracyConfirmation}
+            onError={() => undefined}
           />
         )}
       {documentPendingDeletion && (

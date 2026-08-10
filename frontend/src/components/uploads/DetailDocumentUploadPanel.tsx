@@ -569,7 +569,7 @@ const DetailDocumentUploadPanel = ({
           title="Upload submitted"
           subtitle={successMessage}
           lowContrast
-          autoDismissMs={8000}
+          autoDismissMs={6000}
           onCloseButtonClick={() => setSuccessMessage('')}
         />
       )}
@@ -612,7 +612,7 @@ const DetailDocumentUploadPanel = ({
               title="Upload submitted"
               subtitle={successMessage}
               lowContrast
-              autoDismissMs={8000}
+              autoDismissMs={6000}
               onCloseButtonClick={() => setSuccessMessage('')}
             />
           )}

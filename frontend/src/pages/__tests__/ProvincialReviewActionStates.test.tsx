@@ -1024,6 +1024,33 @@ describe('Provincial Review Action State Smoke', () => {
     expect(mockedSendApplicationReviewStatusEmail).not.toHaveBeenCalled()
   })
 
+  it('keeps approval confirmation open and re-enables retry when every approval fails', async () => {
+    mockedApproveApplicationReview.mockResolvedValueOnce({
+      updated: false,
+      valid: false,
+      statusCode: 'APP',
+      clientEmail: '',
+      remark: '',
+      message: 'Application owner location does not exist.',
+    })
+
+    renderPage()
+    await screen.findByText('1000456')
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select 1000456' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Approve Selected Applications' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Approve applications' })
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Approve' }))
+
+    expect(
+      await screen.findByText(
+        'No selected applications were approved; 1 failed. Failed applications: 1000456 — Application owner location does not exist.',
+      ),
+    ).toBeVisible()
+    expect(dialog).toBeVisible()
+    expect(within(dialog).getByRole('button', { name: 'Approve' })).toBeEnabled()
+    expect(screen.getByRole('checkbox', { name: 'Select 1000456' })).toBeChecked()
+  })
+
   it('sends selected region org unit numbers to the review search request', async () => {
     mockedFetchApplicationReviewOptions.mockResolvedValueOnce({
       productTypes: [{ value: 'LOG', label: 'Logs' }],

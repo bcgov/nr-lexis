@@ -41,6 +41,7 @@ import {
   type RtmEmsLogAmvUploadResult,
 } from '@/service/rtm-emslogamv-service'
 import UploadWorkflowProgress from '@/components/uploads/UploadWorkflowProgress'
+import PendingIcon from '@/components/PendingIcon'
 import { validateUploadFileSize } from '@/components/uploads/uploadQueueHelpers'
 
 type PendingUploadValidation = {
@@ -724,6 +725,7 @@ const RtmEmsLogAmvUploadPage = () => {
         setNotification(createAcceptedUploadMessage(previewResult))
         clearUploadState()
       } else {
+        setPendingUploadValidation(null)
         setNotificationTitle('Average monthly values')
         setNotification(createResultMessage(response.status, response.message, response.errors))
       }
@@ -743,7 +745,6 @@ const RtmEmsLogAmvUploadPage = () => {
         rows: [],
       })
     } finally {
-      setPendingUploadValidation(null)
       setIsUploading(false)
     }
   }
@@ -928,7 +929,11 @@ const RtmEmsLogAmvUploadPage = () => {
               <p>Review the details extracted from your file and submit when ready</p>
             </div>
 
-            <section className="admin-upload-panel" aria-labelledby="rtm-review-title">
+            <section
+              className="admin-upload-panel"
+              aria-labelledby="rtm-review-title"
+              aria-busy={isUploading}
+            >
               {uploadError && (
                 <p className="landing-page-help-text landing-page-help-text--error">
                   {uploadError}
@@ -941,20 +946,25 @@ const RtmEmsLogAmvUploadPage = () => {
             </section>
 
             <div className="admin-upload-fspts-button-row">
-              <Button kind="ghost" size="md" onClick={() => setUploadStep('upload')}>
+              <Button
+                kind="ghost"
+                size="md"
+                disabled={isUploading}
+                onClick={() => setUploadStep('upload')}
+              >
                 Back
               </Button>
               <Button
                 kind="primary"
                 size="md"
                 className="admin-upload-fspts-action-button"
-                renderIcon={ArrowRight}
+                renderIcon={isUploading ? PendingIcon : ArrowRight}
                 onClick={() => {
                   void submitUpload()
                 }}
                 disabled={isUploadDisabled}
               >
-                Submit
+                {isUploading ? 'Submitting…' : 'Submit'}
               </Button>
             </div>
           </>

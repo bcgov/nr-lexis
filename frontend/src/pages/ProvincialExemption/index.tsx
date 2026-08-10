@@ -728,17 +728,15 @@ const ProvincialExemptionPage = () => {
     }
   }
 
-  const onConfirmApproval = async () => {
+  const onConfirmApproval = async (): Promise<boolean> => {
     const selectedRows = { ...selectedRowsById }
     const selectedNumbers = Object.keys(selectedRows)
     if (approving || !approvalCertified) {
-      return
+      return false
     }
     if (selectedNumbers.length === 0) {
-      setApprovalConfirmationOpen(false)
-      setApprovalCertified(false)
-      setApprovalDate('')
-      return
+      setApprovalStatus({ kind: 'error', message: 'Select at least one exemption to approve.' })
+      return false
     }
 
     setApproving(true)
@@ -784,7 +782,7 @@ const ProvincialExemptionPage = () => {
           kind: 'error',
           message: `No selected exemptions were approved; ${failureCount} failed. Failed exemptions: ${failureDetails}`,
         })
-        return
+        return false
       }
 
       const partialMessages = approvals
@@ -814,7 +812,6 @@ const ProvincialExemptionPage = () => {
         kind: recipients.length > 0 && !partialFailure ? 'success' : 'warning',
         message: messages.join(' '),
       })
-      setApprovalConfirmationOpen(false)
       setApprovalEmailContext(recipients.length > 0 ? { approvedCount, partialFailure } : null)
       setApprovalEmailRecipients(recipients)
       try {
@@ -835,17 +832,16 @@ const ProvincialExemptionPage = () => {
           message: `${current?.message || approvedExemptionMessage(approvedCount)} Refresh the page to see the latest status.`,
         }))
       }
+      return true
     } catch (error) {
       console.error(error)
       setApprovalStatus({
         kind: 'error',
         message: 'Unable to approve the selected exemptions.',
       })
+      return false
     } finally {
       setApproving(false)
-      setApprovalConfirmationOpen(false)
-      setApprovalCertified(false)
-      setApprovalDate('')
     }
   }
 
@@ -992,7 +988,7 @@ const ProvincialExemptionPage = () => {
                         : 'Approval completed'
                   }
                   subtitle={approvalStatus.message}
-                  autoDismissMs={approvalStatus.kind === 'success' ? 8000 : undefined}
+                  autoDismissMs={approvalStatus.kind === 'success' ? 6000 : undefined}
                   onCloseButtonClick={() => setApprovalStatus(null)}
                 />
               )}
@@ -1201,7 +1197,13 @@ const ProvincialExemptionPage = () => {
           pendingLabel="Approving…"
           confirmDisabled={approving || !approvalCertified}
           onClose={closeApprovalConfirmation}
-          onConfirm={onConfirmApproval}
+          onError={() => undefined}
+          onConfirm={async () => {
+            const approved = await onConfirmApproval()
+            if (!approved) {
+              throw new Error('Exemption approval failed.')
+            }
+          }}
         >
           <ul>
             {selectedExemptionNumbers.map((number) => (

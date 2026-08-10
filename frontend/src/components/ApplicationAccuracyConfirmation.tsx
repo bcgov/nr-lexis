@@ -20,6 +20,7 @@ type ApplicationAccuracyConfirmationProps = {
   onConfirmedChange: (confirmed: boolean) => void
   onConfirm: () => Promise<void> | void
   onClose: () => void
+  onError?: (error: unknown) => void
 }
 
 const ApplicationAccuracyConfirmation = ({
@@ -31,6 +32,7 @@ const ApplicationAccuracyConfirmation = ({
   onConfirmedChange,
   onConfirm,
   onClose,
+  onError,
 }: ApplicationAccuracyConfirmationProps) => {
   const checkboxId = `application-accuracy-${useId().replaceAll(':', '')}`
 
@@ -49,6 +51,7 @@ const ApplicationAccuracyConfirmation = ({
       confirmDisabled={!confirmed || busy}
       onConfirm={confirm}
       onClose={onClose}
+      onError={onError}
     >
       <Checkbox
         id={checkboxId}

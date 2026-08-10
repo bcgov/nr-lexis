@@ -345,6 +345,37 @@ describe('RTM EMS Log AMV actions', () => {
         expect.objectContaining({ species: 'HE', grade: 'A', newValue: 20 }),
       ]),
     })
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: 'Confirm AMV changes' })).not.toBeInTheDocument()
+    })
+  })
+
+  it('keeps the past-month confirmation open and re-enables retry after rejection', async () => {
+    const user = userEvent.setup()
+    const pastMonth = monthOffset(CURRENT_MONTH, -1)
+    mockRows([], [], pastMonth)
+    mockedSaveBatch.mockResolvedValue({
+      status: 'validation_failed',
+      message: 'Average monthly value validation failed.',
+      errors: ['Balsam grade A is outside the allowed range.'],
+      rows: [],
+    })
+
+    render(<RTMEmsLogAmvPage />)
+    await waitForMonthLoad()
+    fireEvent.change(screen.getByLabelText('Effective month'), {
+      target: { value: pastMonth.slice(0, 7) },
+    })
+    await waitForMonthLoad(pastMonth)
+    await user.type(amvCell('Balsam (BA)', 'A'), '10')
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    const dialog = await screen.findByRole('dialog', { name: 'Confirm AMV changes' })
+    await user.click(within(dialog).getByRole('button', { name: 'Confirm and save' }))
+
+    expect(await screen.findByText(/Balsam grade A is outside the allowed range/)).toBeVisible()
+    expect(dialog).toBeVisible()
+    expect(within(dialog).getByRole('button', { name: 'Confirm and save' })).toBeEnabled()
   })
 
   it('blocks invalid values before a batch is sent', async () => {

@@ -1600,7 +1600,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
               title={successTitle}
               subtitle={successMessage}
               lowContrast
-              autoDismissMs={8000}
+              autoDismissMs={6000}
               onCloseButtonClick={() => setSuccessMessage('')}
             />
           )}

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'r
 import {
   Button,
   InlineLoading,
+  InlineNotification,
   Table,
   TableBody,
   TableCell,
@@ -1438,11 +1439,13 @@ function ProvincialApplicationItemsPanel({
         {isEditingItems &&
           referenceOptionsUnavailable &&
           (canEditPackages || canAddPackages || canAddScales) && (
-            <AppNotification
+            <InlineNotification
+              className="detail-context-notification"
               kind="warning"
               title="Item options unavailable"
               subtitle="Package saves, package creation, and scale additions are disabled because authoritative Oracle options could not be verified."
               lowContrast
+              hideCloseButton
             />
           )}
         {!!itemsErrorMessage && (

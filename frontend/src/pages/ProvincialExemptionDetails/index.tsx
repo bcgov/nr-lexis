@@ -5,6 +5,7 @@ import {
   Checkbox,
   Column,
   Grid,
+  InlineNotification,
   Loading,
   Tab,
   TabList,
@@ -309,7 +310,6 @@ const ProvincialExemptionDetailsPage = () => {
   const [loading, setLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
   const [documentsErrorMessage, setDocumentsErrorMessage] = useState('')
-  const [documentsErrorDismissed, setDocumentsErrorDismissed] = useState(false)
   const [applicationsErrorMessage, setApplicationsErrorMessage] = useState('')
   const [permitsErrorMessage, setPermitsErrorMessage] = useState('')
   const [blanketOicTotalsErrorMessage, setBlanketOicTotalsErrorMessage] = useState('')
@@ -478,7 +478,6 @@ const ProvincialExemptionDetailsPage = () => {
         setEditForm(null)
         setIsEditingDocuments(false)
         setDocumentsErrorMessage('')
-        setDocumentsErrorDismissed(false)
         setApplicationsErrorMessage('')
         setPermitsErrorMessage('')
         setBlanketOicTotalsErrorMessage('')
@@ -491,7 +490,6 @@ const ProvincialExemptionDetailsPage = () => {
       setLoading(true)
       setErrorMessage('')
       setDocumentsErrorMessage('')
-      setDocumentsErrorDismissed(false)
       setApplicationsErrorMessage('')
       setPermitsErrorMessage('')
       setBlanketOicTotalsErrorMessage('')
@@ -557,7 +555,6 @@ const ProvincialExemptionDetailsPage = () => {
           console.error(documentsResult.reason)
           setDocumentRows([])
           setDocumentsErrorMessage('Unable to retrieve exemption documents.')
-          setDocumentsErrorDismissed(false)
         }
 
         if (applicationsResult.status === 'fulfilled') {
@@ -615,7 +612,6 @@ const ProvincialExemptionDetailsPage = () => {
             setEditContextLoaded(false)
             setEditForm(null)
             setDocumentsErrorMessage('')
-            setDocumentsErrorDismissed(false)
             setApplicationsErrorMessage('')
             setPermitsErrorMessage('')
             setBlanketOicTotalsErrorMessage('')
@@ -1125,8 +1121,8 @@ const ProvincialExemptionDetailsPage = () => {
     [sendingApprovalEmail],
   )
 
-  const onApproveExemption = useCallback(async () => {
-    if (!detail || approving || !approvalCertified) return
+  const onApproveExemption = useCallback(async (): Promise<boolean> => {
+    if (!detail || approving || !approvalCertified) return false
     setApproving(true)
     setActionErrorMessage('')
     setActionInfoMessage('')
@@ -1138,13 +1134,12 @@ const ProvincialExemptionDetailsPage = () => {
             approval.errors.join(' ') ||
             'The exemption could not be approved.',
         )
-        return
+        return false
       }
 
       const recipients = approval.sendGrid.map(
         ([number, email]): ExemptionApprovalRecipient => [number, email],
       )
-      setApprovalConfirmationOpen(false)
       setApprovalEmailRecipients(recipients)
       setActionInfoMessage(
         recipients.length > 0
@@ -1157,15 +1152,13 @@ const ProvincialExemptionDetailsPage = () => {
         console.error(refreshError)
         setActionInfoMessage((current) => `${current} Refresh the page to see the latest status.`)
       }
+      return true
     } catch (error) {
       console.error(error)
       setActionErrorMessage('Unable to approve the exemption.')
+      return false
     } finally {
       setApproving(false)
-      setApprovalConfirmationOpen(false)
-      setApprovalConfirmationTarget(null)
-      setApprovalCertified(false)
-      setApprovalDate('')
     }
   }, [approvalCertified, approving, detail, refreshEditableData])
 
@@ -1208,10 +1201,12 @@ const ProvincialExemptionDetailsPage = () => {
       )
     } finally {
       setCreatingPermit(false)
-      setPermitCreationConfirmationOpen(false)
     }
 
-    if (newPermitPath) setPermitCreationDestination(newPermitPath)
+    if (newPermitPath) {
+      setPermitCreationConfirmationOpen(false)
+      setPermitCreationDestination(newPermitPath)
+    }
   }, [canCreateMinisterialPermit, creatingPermit, detail])
 
   const onGenerateApprovedReport = useCallback(async () => {
@@ -1486,6 +1481,7 @@ const ProvincialExemptionDetailsPage = () => {
                     kind="tertiary"
                     size="sm"
                     disabled={generatingReport}
+                    renderIcon={generatingReport ? PendingIcon : undefined}
                     onClick={() => void onGenerateApprovedReport()}
                   >
                     {generatingReport ? 'Generating…' : 'Print approved exemption'}
@@ -1515,53 +1511,34 @@ const ProvincialExemptionDetailsPage = () => {
       {detail && currentDetail && (
         <>
           {!!exemptionEditLockMessage && (
-            <AppNotification
+            <InlineNotification
+              className="detail-context-notification"
               kind="warning"
               title="Editing unavailable"
               subtitle={exemptionEditLockMessage}
               lowContrast
+              hideCloseButton
             />
           )}
           {!!editContextUnavailableMessage && (
-            <AppNotification
+            <InlineNotification
+              className="detail-context-notification"
               kind="warning"
               title="Editing unavailable"
               subtitle={editContextUnavailableMessage}
               lowContrast
+              hideCloseButton
             />
           )}
           {optionsAvailability === 'unavailable' && <AuthoritativeOptionsUnavailableNotification />}
           {requiredExemptionOptionsMissing && (
-            <AppNotification
+            <InlineNotification
+              className="detail-context-notification"
               kind="warning"
               title="Required exemption options not configured"
               subtitle="A required exemption type, status, or Blanket OIC region list is empty. Exemption saves are disabled."
               lowContrast
-            />
-          )}
-          {!!documentsErrorMessage && !documentsErrorDismissed && (
-            <AppNotification
-              kind="warning"
-              title="Documents unavailable"
-              subtitle={documentsErrorMessage}
-              lowContrast
-              onCloseButtonClick={() => setDocumentsErrorDismissed(true)}
-            />
-          )}
-          {!!applicationsErrorMessage && (
-            <AppNotification
-              kind="warning"
-              title="Associated applications unavailable"
-              subtitle={applicationsErrorMessage}
-              lowContrast
-            />
-          )}
-          {!!clientContextErrorMessage && (
-            <AppNotification
-              kind="warning"
-              title="Client details unavailable"
-              subtitle={clientContextErrorMessage}
-              lowContrast
+              hideCloseButton
             />
           )}
           {!!actionErrorMessage && (
@@ -1579,16 +1556,18 @@ const ProvincialExemptionDetailsPage = () => {
               title="Action completed"
               subtitle={actionInfoMessage}
               lowContrast
-              autoDismissMs={8000}
+              autoDismissMs={6000}
               onCloseButtonClick={() => setActionInfoMessage('')}
             />
           )}
           {editing && !!formValidationMessage && (
-            <AppNotification
+            <InlineNotification
+              className="detail-context-notification"
               kind="warning"
               title="Review exemption values"
               subtitle={formValidationMessage}
               lowContrast
+              hideCloseButton
             />
           )}
 
@@ -1626,18 +1605,27 @@ const ProvincialExemptionDetailsPage = () => {
                   <TabPanel className="application-detail-tab-panel">
                     <Grid fullWidth className="application-detail-tab-grid">
                       <Column sm={4} md={8} lg={16}>
-                        <ExemptionClientTile
-                          title="Owner client details"
-                          clientNumber={exemptionOwnerClientNumber}
-                          applicantType={clientContextApplication?.applicantTypeCode ?? ''}
-                          locationCode={ownerClientLocationCode}
-                          contactName={clientContextApplication?.ownerContactName ?? ''}
-                          companyName={clientContextApplication?.ownerCompanyName ?? ''}
-                          locations={ownerClientLocations}
-                          clientData={ownerClientData}
-                          isLoading={clientContextLoading}
-                          showAgentIndicator
-                        />
+                        {clientContextErrorMessage ? (
+                          <EmptyState
+                            title="Client details unavailable"
+                            description={clientContextErrorMessage}
+                            headingLevel={3}
+                            role="alert"
+                          />
+                        ) : (
+                          <ExemptionClientTile
+                            title="Owner client details"
+                            clientNumber={exemptionOwnerClientNumber}
+                            applicantType={clientContextApplication?.applicantTypeCode ?? ''}
+                            locationCode={ownerClientLocationCode}
+                            contactName={clientContextApplication?.ownerContactName ?? ''}
+                            companyName={clientContextApplication?.ownerCompanyName ?? ''}
+                            locations={ownerClientLocations}
+                            clientData={ownerClientData}
+                            isLoading={clientContextLoading}
+                            showAgentIndicator
+                          />
+                        )}
                       </Column>
                     </Grid>
                   </TabPanel>
@@ -1646,17 +1634,26 @@ const ProvincialExemptionDetailsPage = () => {
                   <TabPanel className="application-detail-tab-panel">
                     <Grid fullWidth className="application-detail-tab-grid">
                       <Column sm={4} md={8} lg={16}>
-                        <ExemptionClientTile
-                          title="Agent client details"
-                          clientNumber={exemptionAgentClientNumber}
-                          applicantType={clientContextApplication?.applicantTypeCode ?? ''}
-                          locationCode={agentClientLocationCode}
-                          contactName={clientContextApplication?.agentContactName ?? ''}
-                          companyName={clientContextApplication?.agentCompanyName ?? ''}
-                          locations={agentClientLocations}
-                          clientData={agentClientData}
-                          isLoading={clientContextLoading}
-                        />
+                        {clientContextErrorMessage ? (
+                          <EmptyState
+                            title="Client details unavailable"
+                            description={clientContextErrorMessage}
+                            headingLevel={3}
+                            role="alert"
+                          />
+                        ) : (
+                          <ExemptionClientTile
+                            title="Agent client details"
+                            clientNumber={exemptionAgentClientNumber}
+                            applicantType={clientContextApplication?.applicantTypeCode ?? ''}
+                            locationCode={agentClientLocationCode}
+                            contactName={clientContextApplication?.agentContactName ?? ''}
+                            companyName={clientContextApplication?.agentCompanyName ?? ''}
+                            locations={agentClientLocations}
+                            clientData={agentClientData}
+                            isLoading={clientContextLoading}
+                          />
+                        )}
                       </Column>
                     </Grid>
                   </TabPanel>
@@ -1880,6 +1877,11 @@ const ProvincialExemptionDetailsPage = () => {
                                   kind="tertiary"
                                   size="sm"
                                   disabled={addApplicationDisabled}
+                                  renderIcon={
+                                    applicationMutationNumber === applicationNumberToAdd.trim()
+                                      ? PendingIcon
+                                      : undefined
+                                  }
                                   onClick={() => void onAddApplication()}
                                 >
                                   {applicationMutationNumber === applicationNumberToAdd.trim()
@@ -2016,11 +2018,13 @@ const ProvincialExemptionDetailsPage = () => {
                           </div>
                         )}
                         {detail.blanketOic && blanketOicTotalsErrorMessage && (
-                          <AppNotification
+                          <InlineNotification
+                            className="detail-context-notification"
                             kind="warning"
                             title="Blanket OIC totals unavailable"
                             subtitle={blanketOicTotalsErrorMessage}
                             lowContrast
+                            hideCloseButton
                           />
                         )}
                         {detail.blanketOic && blanketOicTotals && (
@@ -2419,9 +2423,13 @@ const ProvincialExemptionDetailsPage = () => {
             pendingLabel="Approving…"
             confirmDisabled={approving || !approvalCertified}
             onClose={closeApprovalConfirmation}
-            onConfirm={() => {
+            onError={() => undefined}
+            onConfirm={async () => {
               if (approvalConfirmationTarget === currentDetail?.exemptionNumber) {
-                return onApproveExemption()
+                const approved = await onApproveExemption()
+                if (!approved) {
+                  throw new Error('Exemption approval failed.')
+                }
               }
             }}
           >

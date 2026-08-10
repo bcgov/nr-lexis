@@ -382,6 +382,60 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     expect(pageWidth.scrollWidth).toBeLessThanOrEqual(pageWidth.clientWidth)
   })
 
+  test('uses the FSPTS split-screen organization picker without mobile overflow', async ({
+    page,
+  }) => {
+    await page.route('**/api/lexis/session/capabilities', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ...authenticatedAdminSession,
+          principal: 'UI.MULTI.CLIENT',
+          roles: ['PROVINCIAL_SUBMITTER'],
+          forestClientNumber: null,
+          availableForestClientNumbers: ['00012345', '00067890'],
+          forestClientSelectionRequired: true,
+        }),
+      })
+    })
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.goto('/select-organization', { waitUntil: 'domcontentloaded' })
+
+    await expect(page.getByRole('heading', { level: 1, name: 'Select organization' })).toBeVisible()
+    await expect(page.getByRole('img', { name: 'BC forest landscape' })).toBeVisible()
+    const firstOrganization = page.getByRole('radio', { name: 'Forest client 00012345' })
+    const continueButton = page.getByRole('button', { name: 'Continue' })
+    await expect(firstOrganization).not.toBeChecked()
+    await expect(continueButton).toBeDisabled()
+
+    const desktopColumns = await page.evaluate(() => {
+      const content = document.querySelector('.forest-client-selection__content')
+      const image = document.querySelector('.forest-client-selection .landing-img-col')
+      if (!(content instanceof HTMLElement) || !(image instanceof HTMLElement)) {
+        throw new Error('Organization selection columns not found')
+      }
+      return {
+        contentWidth: content.getBoundingClientRect().width,
+        imageWidth: image.getBoundingClientRect().width,
+      }
+    })
+    expect(Math.abs(desktopColumns.contentWidth - desktopColumns.imageWidth)).toBeLessThanOrEqual(1)
+
+    await firstOrganization.focus()
+    await page.keyboard.press('Space')
+    await expect(firstOrganization).toBeChecked()
+    await expect(continueButton).toBeEnabled()
+
+    await page.setViewportSize({ width: 390, height: 844 })
+    await expect(page.locator('.forest-client-selection__panel')).toBeVisible()
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+      ),
+    ).toBe(false)
+  })
+
   test('uses the shared full-width page composition for notifications', async ({ page }) => {
     await page.setViewportSize({ width: 2400, height: 1200 })
     await page.goto('/notifications', { waitUntil: 'domcontentloaded' })

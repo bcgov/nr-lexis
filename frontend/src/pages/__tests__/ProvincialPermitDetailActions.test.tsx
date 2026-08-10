@@ -883,7 +883,10 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(
       await screen.findByText('GBMS invoice history could not be loaded. Please try again later.'),
     ).toBeInTheDocument()
-    expect(screen.queryByRole('tab', { name: 'GBMS' })).not.toBeInTheDocument()
+    await selectPermitDetailTab('GBMS')
+    expect(
+      screen.getByRole('heading', { name: 'GBMS history unavailable', level: 3 }),
+    ).toBeInTheDocument()
   })
 
   it('loads GBMS history when the permit has no receipt number', async () => {
@@ -1646,22 +1649,15 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     await selectPermitDetailTab('Documents')
 
-    expect(await screen.findByText('Documents/invoices unavailable')).toBeInTheDocument()
-    expect(screen.getAllByText('Unable to retrieve permit documents.')).not.toHaveLength(0)
-    expect(screen.queryByLabelText('Permit highlights')).not.toBeInTheDocument()
-
     expect(
       await screen.findByRole('heading', { name: 'Permit documents unavailable', level: 3 }),
     ).toBeInTheDocument()
+    expect(screen.getByText('Unable to retrieve permit documents.')).toBeInTheDocument()
     expect(
       screen.queryByRole('heading', { name: 'No permit documents available', level: 3 }),
     ).not.toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('button', { name: 'close notification' }))
-    expect(screen.queryByText('Documents/invoices unavailable')).not.toBeInTheDocument()
-    expect(
-      screen.getByRole('heading', { name: 'Permit documents unavailable', level: 3 }),
-    ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'close notification' })).not.toBeInTheDocument()
   })
 
   it('shows Blanket OIC package columns on the items tab', async () => {
@@ -3879,14 +3875,14 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
 
     await selectPermitDetailTab('Items')
-    expect(await screen.findByRole('heading', { name: /Permit items/ })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 2, name: 'Permit items' })).toBeInTheDocument()
     expect(mockedFetchProvincialPermitDetailTabs).toHaveBeenCalledWith({
       permitNumber: '777',
       receiptNumber: 'R-1',
       blanketOic: false,
     })
-    expect(screen.getByText('Permit tables unavailable')).toBeInTheDocument()
-    expect(screen.getByText('Unable to retrieve permit table details.')).toBeInTheDocument()
+    expect(screen.getByText('Permit items unavailable')).toBeInTheDocument()
+    expect(screen.getAllByText('Unable to retrieve permit table details.')).toHaveLength(3)
     expect(
       screen.queryByText('No permit item rows matched the current filter.'),
     ).not.toBeInTheDocument()
@@ -3912,7 +3908,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     renderPermitDetails()
     await selectPermitDetailTab('Items')
 
-    expect(await screen.findByText('Permit tables unavailable')).toBeInTheDocument()
+    expect(await screen.findByText('Permit items unavailable')).toBeInTheDocument()
     expect(
       screen.queryByRole('heading', { name: 'Create Blanket OIC package' }),
     ).not.toBeInTheDocument()

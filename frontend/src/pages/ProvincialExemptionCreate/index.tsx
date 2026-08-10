@@ -6,6 +6,7 @@ import {
   Column,
   DismissibleTag,
   Grid,
+  InlineNotification,
   TextArea,
   TextInput,
   Tile,
@@ -201,6 +202,7 @@ type PageStatus = {
   kind: 'success' | 'error'
   title: string
   message: string
+  placement?: 'inline'
 }
 
 const ProvincialExemptionCreatePage = () => {
@@ -558,6 +560,7 @@ const ProvincialExemptionCreatePage = () => {
         kind: 'error',
         title: 'Application Not Added',
         message: 'Add or clear the pending application number before saving.',
+        placement: 'inline',
       })
       return false
     }
@@ -567,6 +570,7 @@ const ProvincialExemptionCreatePage = () => {
         title: 'Exemption Preview Required',
         message:
           previewError ?? 'Wait for LEXIS to validate the selected applications before saving.',
+        placement: 'inline',
       })
       return false
     }
@@ -576,6 +580,7 @@ const ProvincialExemptionCreatePage = () => {
         kind: 'error',
         title: 'Validation Error',
         message: firstSubmitValidationError ?? 'Please fix validation errors before saving.',
+        placement: 'inline',
       })
       return false
     }
@@ -695,12 +700,12 @@ const ProvincialExemptionCreatePage = () => {
             subtitle={`Loaded ${prefillState.selectedApplicationNumbers.length} ${prefillApplicationLabel} into this form.`}
             lowContrast
             onCloseButtonClick={() => setShowPrefillNotice(false)}
-            autoDismissMs={8000}
+            autoDismissMs={6000}
           />
         </Column>
       )}
 
-      {!!status && (
+      {!!status && status.placement !== 'inline' && (
         <Column sm={4} md={8} lg={16}>
           <AppNotification
             kind={status.kind}
@@ -708,13 +713,23 @@ const ProvincialExemptionCreatePage = () => {
             subtitle={status.message}
             lowContrast
             onCloseButtonClick={() => setStatus(null)}
-            autoDismissMs={status.kind === 'success' ? 8000 : undefined}
+            autoDismissMs={status.kind === 'success' ? 6000 : undefined}
           />
         </Column>
       )}
 
       <Column sm={4} md={8} lg={16}>
         <Tile className="create-form-tile">
+          {status?.placement === 'inline' && (
+            <InlineNotification
+              className="create-form-validation-notification"
+              kind="error"
+              title={status.title}
+              subtitle={status.message}
+              lowContrast
+              onCloseButtonClick={() => setStatus(null)}
+            />
+          )}
           <fieldset className="legacy-form-fieldset create-form-section">
             <legend>Exemption details</legend>
             <div className="legacy-search-grid create-form-grid">

@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
-import { Button, Column, Grid, TextArea, TextInput, Tile } from '@carbon/react'
+import { Button, Column, Grid, InlineNotification, TextArea, TextInput, Tile } from '@carbon/react'
 import { AppNotification } from '../../components/AppNotification'
 import EmptyState from '@/components/EmptyState'
 import IsoDatePicker from '@/components/IsoDatePicker'
 import PageHeader from '@/components/PageHeader'
+import PendingIcon from '@/components/PendingIcon'
 import SearchableSelect from '../../components/SearchableSelect'
 import RegionMultiSelect from '@/components/RegionMultiSelect'
 import { isValidIsoDate } from '@/pages/shared/create-form-utils'
@@ -1355,14 +1356,17 @@ const ReportsPage = () => {
             className="report-config-panel"
             role="region"
             aria-labelledby="selected-report-title"
+            aria-busy={isGenerating}
           >
             <>
               {requiredReportOptionsFailed && (
-                <AppNotification
+                <InlineNotification
+                  className="report-config-notification"
                   kind="error"
                   title="Report options unavailable"
                   subtitle={REPORT_OPTIONS_UNAVAILABLE_MESSAGE}
                   lowContrast
+                  hideCloseButton
                 />
               )}
               <div className="legacy-search-grid report-parameter-grid report-config-fields">
@@ -1580,6 +1584,7 @@ const ReportsPage = () => {
                 <Button
                   kind="primary"
                   size="md"
+                  renderIcon={isGenerating ? PendingIcon : undefined}
                   onClick={() => void onOpenReportRequest()}
                   disabled={isGenerating || reportGenerationDisabled || hasInvalidReportDate}
                 >

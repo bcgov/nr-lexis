@@ -1,9 +1,17 @@
 import { useState, type FormEvent } from 'react'
-import { ArrowRight, Logout } from '@carbon/icons-react'
-import { Button, InlineNotification, Select, SelectItem } from '@carbon/react'
+import { Logout } from '@carbon/icons-react'
+import {
+  Button,
+  Column,
+  Grid,
+  InlineNotification,
+  RadioButton,
+  RadioButtonGroup,
+} from '@carbon/react'
 import { useAuth } from '@/context/auth/useAuth'
 import { useTheme } from '@/context/theme/useTheme'
 import logo from '@/assets/BCID_H_rgb_pos.png'
+import landingImage from '@/assets/landing.jpg'
 import reverseLogo from '@/assets/gov-bc-logo-horiz.png'
 
 export type ForestClientSelectionPageProps = {
@@ -43,79 +51,92 @@ const ForestClientSelectionPage = ({ onSelected }: ForestClientSelectionPageProp
   }
 
   return (
-    <main id="main-content" className="forest-client-selection" aria-busy={isSubmitting}>
-      <section className="forest-client-selection__card" aria-labelledby="organization-heading">
-        <img
-          src={logoSource}
-          alt="Government of British Columbia"
-          className="forest-client-selection__logo"
-        />
-
-        <div className="forest-client-selection__heading">
-          <p className="forest-client-selection__eyebrow">LEXIS</p>
-          <h1 id="organization-heading">Select an organization</h1>
-          <p>
-            Your Business BCeID account has access to more than one forest client. Choose the
-            organization you want to work with for this session.
-          </p>
-        </div>
-
-        <form
-          className="forest-client-selection__form"
-          onSubmit={(event) => void handleSubmit(event)}
+    <main
+      id="main-content"
+      className="landing-grid-container forest-client-selection"
+      aria-busy={isSubmitting}
+    >
+      <Grid fullWidth className="landing-grid">
+        <Column
+          className="landing-content-col forest-client-selection__content"
+          sm={4}
+          md={8}
+          lg={8}
         >
-          <Select
-            id="forest-client-selection"
-            labelText="Organization"
-            value={selectedClientNumber}
-            disabled={isSubmitting || availableClientNumbers.length === 0}
-            onChange={(event) => setSelectedClientNumber(event.target.value)}
+          <section
+            className="forest-client-selection__panel"
+            aria-labelledby="organization-heading"
           >
-            <SelectItem value="" text="Choose an organization" disabled />
-            {availableClientNumbers.map((clientNumber) => (
-              <SelectItem
-                key={clientNumber}
-                value={clientNumber}
-                text={`Forest client ${clientNumber}`}
-              />
-            ))}
-          </Select>
-
-          <p className="forest-client-selection__help">
-            LEXIS will validate this choice against your FAM permissions and use it to scope all
-            client data.
-          </p>
-
-          {errorMessage && (
-            <InlineNotification
-              kind="error"
-              lowContrast
-              hideCloseButton
-              title="Organization not selected"
-              subtitle={errorMessage}
+            <img
+              src={logoSource}
+              alt="Government of British Columbia"
+              className="forest-client-selection__logo"
             />
-          )}
 
-          <div className="forest-client-selection__actions">
-            <Button
-              type="submit"
-              renderIcon={ArrowRight}
-              disabled={!selectedClientNumber || isSubmitting}
+            <div className="forest-client-selection__heading">
+              <h1 id="organization-heading">Select organization</h1>
+              <p>
+                Your Business BCeID account is registered with more than one forest-client
+                organization. Pick which one you want to work under for this session. You can sign
+                out and back in to switch later.
+              </p>
+            </div>
+
+            <form
+              className="forest-client-selection__form"
+              onSubmit={(event) => void handleSubmit(event)}
             >
-              {currentClientNumber ? 'Continue' : 'Open LEXIS'}
-            </Button>
-            <Button
-              type="button"
-              kind="ghost"
-              renderIcon={Logout}
-              disabled={isSubmitting}
-              onClick={() => void logout()}
-            >
-              Sign out
-            </Button>
-          </div>
-        </form>
-      </section>
+              <RadioButtonGroup
+                legendText="Organization"
+                name="forest-client-selection"
+                valueSelected={selectedClientNumber}
+                orientation="vertical"
+                disabled={isSubmitting || availableClientNumbers.length === 0}
+                onChange={(value) => setSelectedClientNumber(String(value))}
+              >
+                {availableClientNumbers.map((clientNumber) => (
+                  <RadioButton
+                    key={clientNumber}
+                    id={`forest-client-selection-${clientNumber}`}
+                    value={clientNumber}
+                    labelText={`Forest client ${clientNumber}`}
+                  />
+                ))}
+              </RadioButtonGroup>
+
+              {errorMessage && (
+                <InlineNotification
+                  kind="error"
+                  lowContrast
+                  hideCloseButton
+                  title="Organization not selected"
+                  subtitle={errorMessage}
+                />
+              )}
+
+              <div className="forest-client-selection__actions">
+                <Button type="submit" size="md" disabled={!selectedClientNumber || isSubmitting}>
+                  Continue
+                </Button>
+                <Button
+                  type="button"
+                  kind="ghost"
+                  size="md"
+                  renderIcon={Logout}
+                  disabled={isSubmitting}
+                  onClick={() => void logout()}
+                >
+                  Sign out
+                </Button>
+              </div>
+            </form>
+          </section>
+        </Column>
+
+        <Column className="landing-img-col" sm={4} md={8} lg={8}>
+          <img src={landingImage} alt="BC forest landscape" className="landing-img" />
+        </Column>
+      </Grid>
     </main>
   )
 }

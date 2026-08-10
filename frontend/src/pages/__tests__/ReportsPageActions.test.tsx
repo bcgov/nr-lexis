@@ -1238,6 +1238,47 @@ describe('Reports Page Actions', () => {
     })
   })
 
+  it('marks the report panel busy and disables competing actions while generating', async () => {
+    mockReportPermissions()
+    let resolveReport: ((value: Awaited<ReturnType<typeof runReport>>) => void) | undefined
+    mockedRunReport.mockReset()
+    mockedRunReport.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveReport = resolve
+        }),
+    )
+
+    render(
+      <MemoryRouter initialEntries={['/reports']}>
+        <Routes>
+          <Route path="/reports" element={<ReportsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const reportPanel = await screen.findByRole('region', { name: 'Application Report' })
+    await userEvent.type(screen.getByLabelText('Received from date'), '2026-01-01')
+    const generateButton = screen.getByRole('button', { name: 'Generate report' })
+    await waitFor(() => expect(generateButton).toBeEnabled())
+    await userEvent.click(generateButton)
+
+    await waitFor(() => expect(mockedRunReport).toHaveBeenCalledTimes(1))
+    expect(reportPanel).toHaveAttribute('aria-busy', 'true')
+    expect(screen.getByRole('button', { name: 'Generating report…' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Clear all' })).toBeDisabled()
+
+    resolveReport?.({
+      source: 'api',
+      blob: new Blob(['report']),
+      filename: 'report.pdf',
+      contentType: 'application/pdf',
+    })
+
+    await waitFor(() => expect(reportPanel).toHaveAttribute('aria-busy', 'false'))
+    expect(screen.getByRole('button', { name: 'Generate report' })).toBeEnabled()
+  })
+
   it('validates advertising list date range before generating the filtered report', async () => {
     mockReportPermissions()
 

@@ -710,11 +710,6 @@ describe('Exemption and Federal Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByText('Associated applications unavailable')).toBeInTheDocument()
-    expect(
-      screen.getAllByText('Unable to retrieve applications associated with this exemption.'),
-    ).not.toHaveLength(0)
-
     await selectDetailTab('Applications')
     expect(
       await screen.findByRole('heading', { name: 'Applications unavailable', level: 3 }),
@@ -722,6 +717,9 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(
       screen.queryByRole('heading', { name: 'No applications found', level: 3 }),
     ).not.toBeInTheDocument()
+    expect(
+      screen.getByText('Unable to retrieve applications associated with this exemption.'),
+    ).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Add application' })).not.toBeInTheDocument()
 
     await selectDetailTab('Fees')
@@ -740,7 +738,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     )
   })
 
-  it('keeps exemption document lookup failure distinct after its warning is dismissed', async () => {
+  it('keeps exemption document lookup failure in the affected tab', async () => {
     mockedFetchExemptionDocuments.mockRejectedValue(new Error('Oracle unavailable'))
 
     render(
@@ -765,10 +763,10 @@ describe('Exemption and Federal Detail Document Actions', () => {
       screen.queryByRole('heading', { name: 'No documents found', level: 3 }),
     ).not.toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('button', { name: 'close notification' }))
     expect(
       screen.getByRole('heading', { name: 'Documents unavailable', level: 3 }),
     ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'close notification' })).not.toBeInTheDocument()
   })
 
   it('opens exemption document from API response', async () => {

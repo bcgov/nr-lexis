@@ -5,6 +5,7 @@ import {
   Column,
   DismissibleTag,
   Grid,
+  InlineNotification,
   Tab,
   TabList,
   TabPanel,
@@ -267,6 +268,7 @@ type PageStatus = {
   kind: 'success' | 'error'
   title: string
   message: string
+  placement?: 'inline'
 }
 
 const ProvincialApplicationCreatePage = () => {
@@ -1165,6 +1167,7 @@ const ProvincialApplicationCreatePage = () => {
         kind: 'error',
         title: 'Validation Error',
         message: firstSubmitValidationError ?? 'Please fix validation errors before saving.',
+        placement: 'inline',
       })
       return false
     }
@@ -1233,7 +1236,10 @@ const ProvincialApplicationCreatePage = () => {
 
   const onConfirmAccuracy = async () => {
     if (!accuracyConfirmed || isSubmitting) return
-    await onSave(true, true)
+    const saved = await onSave(true, true)
+    if (!saved) {
+      throw new Error('Application save failed.')
+    }
   }
 
   const onDiscardCreateDraft = (): void => {
@@ -1282,7 +1288,7 @@ const ProvincialApplicationCreatePage = () => {
         </Column>
       )}
 
-      {!!status && (
+      {!!status && status.placement !== 'inline' && (
         <Column sm={4} md={8} lg={16}>
           <AppNotification
             kind={status.kind}
@@ -1290,12 +1296,22 @@ const ProvincialApplicationCreatePage = () => {
             subtitle={status.message}
             lowContrast
             onCloseButtonClick={() => setStatus(null)}
-            autoDismissMs={status.kind === 'success' ? 8000 : undefined}
+            autoDismissMs={status.kind === 'success' ? 6000 : undefined}
           />
         </Column>
       )}
 
       <Column sm={4} md={8} lg={16} className="application-detail-tabs-column">
+        {status?.placement === 'inline' && (
+          <InlineNotification
+            className="create-form-validation-notification"
+            kind="error"
+            title={status.title}
+            subtitle={status.message}
+            lowContrast
+            onCloseButtonClick={() => setStatus(null)}
+          />
+        )}
         <Tabs
           selectedIndex={selectedApplicationTabIndex}
           onChange={({ selectedIndex }) => setSelectedApplicationTabIndex(selectedIndex)}
@@ -2009,6 +2025,7 @@ const ProvincialApplicationCreatePage = () => {
           onConfirmedChange={setAccuracyConfirmed}
           onConfirm={onConfirmAccuracy}
           onClose={closeAccuracyConfirmation}
+          onError={() => undefined}
         />
       )}
       <Modal

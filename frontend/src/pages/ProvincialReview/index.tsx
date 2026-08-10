@@ -18,6 +18,7 @@ import {
 } from '@carbon/react'
 import SearchResultsTableFrame from '../../components/SearchResultsTableFrame'
 import { AppNotification } from '../../components/AppNotification'
+import ConfirmationModal from '@/components/ConfirmationModal'
 import Modal from '@/components/Modal'
 import EmptyState from '@/components/EmptyState'
 import DisabledButtonTooltip from '@/components/DisabledButtonTooltip'
@@ -818,7 +819,7 @@ const ProvincialReviewPage = () => {
     }
   }
 
-  const approveApplications = async (applicationNumbers: string[]) => {
+  const approveApplications = async (applicationNumbers: string[]): Promise<boolean> => {
     setSubmittingApproval(true)
     setReviewActionStatus(null)
 
@@ -879,6 +880,7 @@ const ProvincialReviewPage = () => {
         },
         { force: true },
       )
+      return successCount > 0
     } finally {
       setSubmittingApproval(false)
     }
@@ -907,9 +909,11 @@ const ProvincialReviewPage = () => {
 
   const onConfirmApproveSelected = async () => {
     const selectedNumbers = approvalConfirmationNumbers
-    setApprovalConfirmationNumbers([])
     if (selectedNumbers.length > 0) {
-      await approveApplications(selectedNumbers)
+      const approved = await approveApplications(selectedNumbers)
+      if (!approved) {
+        throw new Error('No selected applications were approved.')
+      }
     }
   }
 
@@ -955,7 +959,7 @@ const ProvincialReviewPage = () => {
                 : 'Action failed'
           }
           subtitle={reviewActionStatus.message}
-          autoDismissMs={reviewActionStatus.kind === 'success' ? 8000 : undefined}
+          autoDismissMs={reviewActionStatus.kind === 'success' ? 6000 : undefined}
           onCloseButtonClick={() => setReviewActionStatus(null)}
         />
       )}
@@ -1048,29 +1052,23 @@ const ProvincialReviewPage = () => {
         </section>
       </Column>
 
-      <Modal
+      <ConfirmationModal
         open={approvalConfirmationNumbers.length > 0}
-        size="sm"
-        modalHeading="Approve applications"
-        aria-label="Approve applications"
-        primaryButtonText="Approve"
-        secondaryButtonText="Cancel"
-        primaryButtonDisabled={submittingApproval}
-        preventCloseOnClickOutside
-        onRequestClose={() => {
-          if (!submittingApproval) {
-            setApprovalConfirmationNumbers([])
-          }
-        }}
-        onRequestSubmit={() => void onConfirmApproveSelected()}
+        title="Approve applications"
+        description="You are about to approve the following applications:"
+        confirmLabel="Approve"
+        pendingLabel="Approving…"
+        confirmDisabled={submittingApproval}
+        onClose={() => setApprovalConfirmationNumbers([])}
+        onConfirm={onConfirmApproveSelected}
+        onError={() => undefined}
       >
-        <p>You are about to approve the following applications:</p>
         <ul aria-label="Applications to approve">
           {approvalConfirmationNumbers.map((applicationNumber) => (
             <li key={applicationNumber}>{applicationNumber}</li>
           ))}
         </ul>
-      </Modal>
+      </ConfirmationModal>
 
       <Modal
         open={Boolean(rejectApplicationNumber)}

@@ -38,7 +38,7 @@ const ConfirmationModal = ({
   children,
   confirmLabel = 'Confirm',
   cancelLabel = 'Cancel',
-  pendingLabel = 'Working…',
+  pendingLabel,
   confirmDisabled = false,
   danger = false,
   size = 'sm',
@@ -126,7 +126,7 @@ const ConfirmationModal = ({
             renderIcon={pending ? PendingIcon : undefined}
             onClick={() => void confirm()}
           >
-            {pending ? pendingLabel : confirmLabel}
+            {pending ? (pendingLabel ?? `${confirmLabel}…`) : confirmLabel}
           </Button>
         </div>
       </Modal>

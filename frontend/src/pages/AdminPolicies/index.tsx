@@ -838,7 +838,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
           title={notificationTitle}
           subtitle={successMessage}
           lowContrast
-          autoDismissMs={8000}
+          autoDismissMs={6000}
           onCloseButtonClick={() => setSuccessMessage('')}
         />
       )}

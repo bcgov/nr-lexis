@@ -1622,25 +1622,10 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       ),
     ).toBeInTheDocument()
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
-    await waitFor(() =>
-      expect(
-        screen.queryByRole('dialog', {
-          name: 'Confirm application accuracy',
-        }),
-      ).not.toBeInTheDocument(),
-    )
-
-    await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
-    const warningAcceptedDialog = screen.getByRole('dialog', {
-      name: 'Confirm application accuracy',
-    })
-    const warningAcceptedAcknowledgement = within(warningAcceptedDialog).getByRole('checkbox', {
-      name: 'I Agree',
-    })
-    expect(warningAcceptedAcknowledgement).not.toBeChecked()
-    await userEvent.click(warningAcceptedAcknowledgement)
+    expect(reopenedDialog).toBeVisible()
+    expect(reopenedAcknowledgement).toBeChecked()
     await userEvent.click(
-      within(warningAcceptedDialog).getByRole('button', {
+      within(reopenedDialog).getByRole('button', {
         name: 'Save summary',
       }),
     )

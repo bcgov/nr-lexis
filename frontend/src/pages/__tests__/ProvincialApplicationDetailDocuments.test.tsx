@@ -103,9 +103,7 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
         name: 'Documents unavailable',
       }),
     ).toBeInTheDocument()
-    expect(
-      screen.getByText('Document information could not be retrieved for this application.'),
-    ).toBeInTheDocument()
+    expect(screen.getByText('Unable to retrieve application documents.')).toBeInTheDocument()
     expect(
       screen.queryByRole('heading', { level: 3, name: 'No documents found' }),
     ).not.toBeInTheDocument()
