@@ -36,30 +36,36 @@ export default function UserRegionPreference({ active }: UserRegionPreferencePro
     }
 
     let ignoreResult = false
-    setIsLoading(true)
-    setMessage('')
-    setHasError(false)
 
-    void fetchUserPreferences()
-      .then((preferences) => {
-        if (ignoreResult) {
-          return
-        }
+    const loadPreferences = async (): Promise<void> => {
+      // Let effect setup finish so Strict Mode cleanup can cancel a stale activation.
+      await Promise.resolve()
+      if (ignoreResult) return
+
+      setIsLoading(true)
+      setMessage('')
+      setHasError(false)
+
+      try {
+        const preferences = await fetchUserPreferences()
+        if (ignoreResult) return
+
         setSavedZone(preferences.defaultRegion)
         setSelectedZone(preferences.defaultRegion)
         setHasLoaded(true)
-      })
-      .catch(() => {
+      } catch {
         if (!ignoreResult) {
           setMessage(LOAD_ERROR)
           setHasError(true)
         }
-      })
-      .finally(() => {
+      } finally {
         if (!ignoreResult) {
           setIsLoading(false)
         }
-      })
+      }
+    }
+
+    void loadPreferences()
 
     return () => {
       ignoreResult = true

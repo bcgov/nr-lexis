@@ -25,6 +25,5 @@ const Modal = ({ ref, ...props }: ModalProps & { ref?: Ref<HTMLDivElement> }) =>
   )
 }
 
-export { Modal }
 export type { ModalProps }
 export default Modal
