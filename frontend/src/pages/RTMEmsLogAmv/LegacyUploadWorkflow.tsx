@@ -1584,7 +1584,7 @@ const RtmEmsLogAmvUploadPage = () => {
             <Button
               className="rtm-amv-replace-file-button"
               kind="tertiary"
-              size="sm"
+              size="md"
               disabled={!canManage || isUploading || isPreviewing}
               onClick={startReplacementUpload}
             >
