@@ -1288,7 +1288,14 @@ $notification-types: 'error', 'info', 'success', 'warning';
 }
 
 .login-landing .landing-session-expired-notification {
+  --cds-notification-border-warning: rgba(255, 195, 0, 0.4);
+
+  max-inline-size: 100%;
   margin-block-start: 0;
+}
+
+.login-landing .landing-session-expired-notification .cds--inline-notification__title {
+  font-weight: 700;
 }
 
 .login-landing .landing-actions,
