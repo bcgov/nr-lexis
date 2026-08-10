@@ -2369,6 +2369,7 @@ legend.cds--label {
 }
 
 .rtm-amv-upload-page {
+  row-gap: 0;
   background: var(--fds-background);
 }
 
@@ -2860,7 +2861,17 @@ legend.cds--label {
 .rtm-amv-saved-notification {
   inline-size: 100%;
   max-inline-size: none;
-  margin-block-end: 1rem;
+  margin-block: 0 1rem;
+}
+
+.rtm-amv-saved-notification .cds--inline-notification__text-wrapper {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.rtm-amv-saved-notification .cds--inline-notification__title {
+  margin-inline-end: 0;
 }
 
 .rtm-amv-upload-review-helper {

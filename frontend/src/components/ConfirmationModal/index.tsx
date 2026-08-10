@@ -1,5 +1,5 @@
 import { Button, Loading, Modal } from '@carbon/react'
-import { useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { useId, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 
 import './ConfirmationModal.css'
 
@@ -18,7 +18,9 @@ export type ConfirmationModalProps = {
   danger?: boolean
   size?: 'xs' | 'sm' | 'md' | 'lg'
   className?: string
+  launcherButtonRef?: RefObject<HTMLElement | null>
   onConfirm: () => Promise<void> | void
+  onCancel?: () => void
   onClose: () => void
   onError?: (error: unknown) => void
 }
@@ -41,7 +43,9 @@ const ConfirmationModal = ({
   danger = false,
   size = 'sm',
   className,
+  launcherButtonRef,
   onConfirm,
+  onCancel,
   onClose,
   onError,
 }: ConfirmationModalProps) => {
@@ -61,8 +65,22 @@ const ConfirmationModal = ({
     return () => dialog?.removeAttribute('aria-describedby')
   }, [description, descriptionId, open])
 
+  const closeAndRestoreFocus = () => {
+    const launcherButton = launcherButtonRef?.current
+    onClose()
+    if (launcherButton) {
+      window.setTimeout(() => launcherButton.focus())
+    }
+  }
+
   const requestClose = () => {
-    if (!pending) onClose()
+    if (!pending) closeAndRestoreFocus()
+  }
+
+  const requestCancel = () => {
+    if (pending) return
+    onCancel?.()
+    closeAndRestoreFocus()
   }
 
   const confirm = async () => {
@@ -71,7 +89,7 @@ const ConfirmationModal = ({
     setPending(true)
     try {
       await onConfirm()
-      onClose()
+      closeAndRestoreFocus()
     } catch (error) {
       onError?.(error)
     } finally {
@@ -89,6 +107,7 @@ const ConfirmationModal = ({
       aria-label={title}
       aria-describedby={description ? descriptionId : undefined}
       className={['lexis-confirmation-modal', className].filter(Boolean).join(' ')}
+      launcherButtonRef={launcherButtonRef}
       selectorPrimaryFocus={`#${cancelButtonId}`}
       preventCloseOnClickOutside={pending}
       onRequestClose={requestClose}
@@ -102,7 +121,7 @@ const ConfirmationModal = ({
         {children}
       </div>
       <div className="lexis-confirmation-modal__actions">
-        <Button id={cancelButtonId} kind={cancelKind} disabled={pending} onClick={requestClose}>
+        <Button id={cancelButtonId} kind={cancelKind} disabled={pending} onClick={requestCancel}>
           {cancelLabel}
         </Button>
         <Button

@@ -99,9 +99,12 @@ target is not applied or the database write fails, the complete batch transactio
 
 After an accepted save, the page removes the upload card, shows the saved confirmation, and keeps
 the reviewed values editable. Save and Cancel remain keyboard-focusable but are announced as
-unavailable until a value changes; the helper text is linked through `aria-describedby`. The page
-can display the current session's save time and authenticated principal, but that metadata cannot
-be reconstructed after navigation because the legacy table has no audit columns.
+unavailable until a value changes; the helper text is linked through `aria-describedby`. Editing a
+value clears the saved confirmation. Cancel then offers to save the changes or restore the last
+saved values; restoring them shows a dismissible confirmation that also clears on the next edit.
+Confirmation dialogs return focus to the action that opened them. The page can display the current
+session's save time and authenticated principal, but that metadata cannot be reconstructed after
+navigation because the legacy table has no audit columns.
 
 ## Batch audit event
 

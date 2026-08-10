@@ -102,7 +102,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     expect(screen.getByRole('table', { name: 'Balsam average market value review' })).toBeVisible()
 
     vi.setSystemTime(new Date('2026-09-01T07:00:30Z'))
-    act(() => window.dispatchEvent(new Event('focus')))
+    act(() => vi.advanceTimersByTime(1_000))
 
     const monthSummary = screen.getByLabelText('Average market value month details')
     expect(within(monthSummary).getByText('October 2026')).toBeVisible()
@@ -466,17 +466,41 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
 
     await userEvent.clear(missingHemlockValue)
     await userEvent.type(missingHemlockValue, '82.15')
+    expect(screen.queryByText('Values saved')).not.toBeInTheDocument()
     expect(screen.queryByText('Edit a value to save again.')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Save values' })).not.toHaveAttribute('aria-disabled')
     expect(screen.getByRole('button', { name: 'Cancel' })).not.toHaveAttribute('aria-disabled')
 
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    const savedChangesDialog = screen.getByRole('dialog', { name: 'Discard these values?' })
+    expect(savedChangesDialog).toHaveAccessibleDescription(
+      "The values you changed since your last save will be cleared. Your saved values won't change.",
+    )
+    expect(within(savedChangesDialog).getByRole('button', { name: 'Discard changes' })).toHaveClass(
+      'cds--btn--tertiary',
+    )
+    expect(within(savedChangesDialog).getByRole('button', { name: 'Save changes' })).toHaveClass(
+      'cds--btn--primary',
+    )
+
+    await userEvent.click(
+      within(savedChangesDialog).getByRole('button', { name: 'Discard changes' }),
+    )
     expect(missingHemlockValue).toHaveValue('81.43')
+    expect(screen.getByText('Changes discarded')).toBeVisible()
+    expect(screen.getByText('Values are back to your last save.')).toBeVisible()
     expect(screen.getByText('Edit a value to save again.')).toBeVisible()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus())
 
     await userEvent.clear(missingHemlockValue)
     await userEvent.type(missingHemlockValue, '82.15')
-    await userEvent.click(screen.getByRole('button', { name: 'Save values' }))
+    expect(screen.queryByText('Changes discarded')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    await userEvent.click(
+      within(screen.getByRole('dialog', { name: 'Discard these values?' })).getByRole('button', {
+        name: 'Save changes',
+      }),
+    )
 
     await waitFor(() => {
       expect(mockedSaveBatch).toHaveBeenCalledTimes(2)
@@ -490,6 +514,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       'aria-disabled',
       'true',
     )
+    expect(screen.getByText('Values saved')).toBeVisible()
   })
 
   it('shows a clean editable review and confirms before discarding or removing it', async () => {
@@ -563,6 +588,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       ).not.toBeInTheDocument()
     })
     expect(cedarValue).toHaveValue('109.25')
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus())
 
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     await userEvent.click(screen.getByRole('button', { name: 'Discard values' }))
@@ -610,6 +636,9 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       ).not.toBeInTheDocument()
     })
     expect(reuploadedCedarValue).toHaveValue('110.50')
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Clear selected file' })).toHaveFocus(),
+    )
 
     await userEvent.click(screen.getByRole('button', { name: 'Clear selected file' }))
     await userEvent.click(screen.getByRole('button', { name: 'Remove file' }))

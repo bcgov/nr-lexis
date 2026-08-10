@@ -118,6 +118,31 @@ describe('ConfirmationModal', () => {
     expect(onConfirm).not.toHaveBeenCalled()
   })
 
+  it('runs a separate secondary action before closing', async () => {
+    const user = userEvent.setup()
+    const onCancel = vi.fn()
+    const onClose = vi.fn()
+    const onConfirm = vi.fn()
+
+    render(
+      <ConfirmationModal
+        open
+        title="Save your changes?"
+        cancelLabel="Discard changes"
+        confirmLabel="Save changes"
+        onCancel={onCancel}
+        onConfirm={onConfirm}
+        onClose={onClose}
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Discard changes' }))
+
+    expect(onCancel).toHaveBeenCalledTimes(1)
+    expect(onClose).toHaveBeenCalledTimes(1)
+    expect(onConfirm).not.toHaveBeenCalled()
+  })
+
   it('guards confirmation while the caller marks it disabled', async () => {
     const user = userEvent.setup()
     const onConfirm = vi.fn()

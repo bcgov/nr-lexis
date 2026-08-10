@@ -58,6 +58,10 @@ type SavedUploadState = {
 
 type RtmUploadStep = 'upload' | 'review'
 
+type DiscardConfirmation = 'cancel' | 'file' | 'saved-changes'
+
+type SavedNotification = 'discarded' | 'saved'
+
 type RtmReviewSpeciesColumn = {
   key: string
   label: string
@@ -203,7 +207,7 @@ const validateAcceptedPreview = (
 const RTM_UPLOAD_ACCEPT = ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']
 const RTM_TEMPLATE_DOWNLOAD_PATH = '/templates/rtm-ems-log-amv-template.xlsx'
 const RTM_TEMPLATE_DOWNLOAD_NAME = 'rtm-ems-log-amv-template.xlsx'
-const EFFECTIVE_MONTH_REFRESH_INTERVAL_MS = 60_000
+const EFFECTIVE_MONTH_REFRESH_INTERVAL_MS = 1_000
 
 const RTM_UPLOAD_ONLY_DESCRIPTION =
   'Set the domestic log values that become the fee in lieu of export on coastal permits.'
@@ -797,6 +801,8 @@ const RtmEmsLogAmvUploadPage = () => {
   const validationRequestRef = useRef(0)
   const saveRequestRef = useRef(0)
   const uploadInputRef = useRef<HTMLInputElement>(null)
+  const cancelButtonRef = useRef<HTMLButtonElement>(null)
+  const removeFileButtonRef = useRef<HTMLButtonElement>(null)
   const [effectiveMonth, setEffectiveMonth] = useState(() =>
     shiftEffectiveMonth(currentEffectiveMonth(), 1),
   )
@@ -815,14 +821,14 @@ const RtmEmsLogAmvUploadPage = () => {
   const [reviewValues, setReviewValues] = useState<Record<string, string>>({})
   const [savedReviewValues, setSavedReviewValues] = useState<Record<string, string> | null>(null)
   const [savedUploadState, setSavedUploadState] = useState<SavedUploadState | null>(null)
-  const [showSavedNotification, setShowSavedNotification] = useState(false)
+  const [savedNotification, setSavedNotification] = useState<SavedNotification | null>(null)
   const [selectedUploadFile, setSelectedUploadFile] = useState<File | null>(null)
   const [pendingUploadValidation, setPendingUploadValidation] =
     useState<PendingUploadValidation | null>(null)
   const [uploadResult, setUploadResult] = useState<RtmEmsLogAmvUploadResult | null>(null)
   const [uploadInputKey, setUploadInputKey] = useState(0)
   const [isDraggingUpload, setIsDraggingUpload] = useState(false)
-  const [discardConfirmation, setDiscardConfirmation] = useState<'cancel' | 'file' | null>(null)
+  const [discardConfirmation, setDiscardConfirmation] = useState<DiscardConfirmation | null>(null)
 
   useEffect(() => {
     const previousTitle = document.title
@@ -845,7 +851,7 @@ const RtmEmsLogAmvUploadPage = () => {
     setReviewValues({})
     setSavedReviewValues(null)
     setSavedUploadState(null)
-    setShowSavedNotification(false)
+    setSavedNotification(null)
     setUploadResult(null)
     setPendingUploadValidation(null)
     setNotification('')
@@ -951,7 +957,7 @@ const RtmEmsLogAmvUploadPage = () => {
     setReviewValues({})
     setSavedReviewValues(null)
     setSavedUploadState(null)
-    setShowSavedNotification(false)
+    setSavedNotification(null)
     setUploadResult(null)
     setPendingUploadValidation(null)
     setNotification('')
@@ -1058,7 +1064,7 @@ const RtmEmsLogAmvUploadPage = () => {
           savedBy: capabilities.principal ?? 'LEXIS user',
           valueCount: saveRequests.length,
         })
-        setShowSavedNotification(true)
+        setSavedNotification('saved')
         setNotification('')
         setUploadResult(null)
       } else {
@@ -1284,6 +1290,7 @@ const RtmEmsLogAmvUploadPage = () => {
                   >
                     <span className="rtm-amv-uploaded-file__name">{selectedUploadFile.name}</span>
                     <button
+                      ref={removeFileButtonRef}
                       type="button"
                       className="rtm-amv-uploaded-file__remove"
                       aria-label="Clear selected file"
@@ -1297,14 +1304,18 @@ const RtmEmsLogAmvUploadPage = () => {
               </section>
             )}
 
-            {savedUploadState && showSavedNotification && (
+            {savedUploadState && savedNotification && (
               <InlineNotification
                 className="rtm-amv-saved-notification"
                 kind="success"
                 lowContrast
-                title="Values saved"
-                subtitle={`${savedUploadState.valueCount} ${savedUploadState.valueCount === 1 ? 'value' : 'values'} will take effect on ${formatEffectiveStartDate(effectiveMonth)}.`}
-                onCloseButtonClick={() => setShowSavedNotification(false)}
+                title={savedNotification === 'discarded' ? 'Changes discarded' : 'Values saved'}
+                subtitle={
+                  savedNotification === 'discarded'
+                    ? 'Values are back to your last save.'
+                    : `${savedUploadState.valueCount} ${savedUploadState.valueCount === 1 ? 'value' : 'values'} will take effect on ${formatEffectiveStartDate(effectiveMonth)}.`
+                }
+                onCloseButtonClick={() => setSavedNotification(null)}
               />
             )}
 
@@ -1316,6 +1327,7 @@ const RtmEmsLogAmvUploadPage = () => {
                 uploadResult={uploadResult}
                 onValueChange={(key, value) => {
                   setReviewValues((current) => ({ ...current, [key]: value }))
+                  setSavedNotification(null)
                   setUploadResult(null)
                 }}
               />
@@ -1348,6 +1360,7 @@ const RtmEmsLogAmvUploadPage = () => {
                 {isUploading ? 'Saving values' : 'Save values'}
               </Button>
               <Button
+                ref={cancelButtonRef}
                 kind="tertiary"
                 size="md"
                 disabled={isUploading}
@@ -1360,8 +1373,7 @@ const RtmEmsLogAmvUploadPage = () => {
                     return
                   }
                   if (savedReviewValues) {
-                    setReviewValues({ ...savedReviewValues })
-                    setUploadResult(null)
+                    setDiscardConfirmation('saved-changes')
                     return
                   }
                   setDiscardConfirmation('cancel')
@@ -1391,6 +1403,7 @@ const RtmEmsLogAmvUploadPage = () => {
       {discardConfirmation && (
         <ConfirmationModal
           open
+          launcherButtonRef={discardConfirmation === 'file' ? removeFileButtonRef : cancelButtonRef}
           title={
             discardConfirmation === 'file'
               ? 'Are you sure you want to remove this file?'
@@ -1399,14 +1412,40 @@ const RtmEmsLogAmvUploadPage = () => {
           description={
             discardConfirmation === 'file'
               ? 'The values on screen will be cleared. Nothing has been saved.'
-              : 'The file and all values on screen will be cleared. Nothing has been saved.'
+              : discardConfirmation === 'saved-changes'
+                ? "The values you changed since your last save will be cleared. Your saved values won't change."
+                : 'The file and all values on screen will be cleared. Nothing has been saved.'
           }
-          cancelLabel={discardConfirmation === 'file' ? 'Keep file' : 'Keep editing'}
+          cancelLabel={
+            discardConfirmation === 'file'
+              ? 'Keep file'
+              : discardConfirmation === 'saved-changes'
+                ? 'Discard changes'
+                : 'Keep editing'
+          }
           cancelKind="tertiary"
-          confirmLabel={discardConfirmation === 'file' ? 'Remove file' : 'Discard values'}
-          danger
+          confirmLabel={
+            discardConfirmation === 'file'
+              ? 'Remove file'
+              : discardConfirmation === 'saved-changes'
+                ? 'Save changes'
+                : 'Discard values'
+          }
+          pendingLabel={discardConfirmation === 'saved-changes' ? 'Saving changes' : undefined}
+          confirmDisabled={discardConfirmation === 'saved-changes' && isUploadDisabled}
+          danger={discardConfirmation !== 'saved-changes'}
           size="xs"
-          onConfirm={clearUploadState}
+          onCancel={
+            discardConfirmation === 'saved-changes'
+              ? () => {
+                  if (!savedReviewValues) return
+                  setReviewValues({ ...savedReviewValues })
+                  setSavedNotification('discarded')
+                  setUploadResult(null)
+                }
+              : undefined
+          }
+          onConfirm={discardConfirmation === 'saved-changes' ? submitUpload : clearUploadState}
           onClose={() => setDiscardConfirmation(null)}
         />
       )}
