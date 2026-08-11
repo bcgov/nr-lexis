@@ -112,7 +112,7 @@ class BackendRuntimeConfigTest {
   }
 
   @Test
-  void reportQueryTimeoutShouldBeBoundedAndDeploymentConfigurable()
+  void reportQueryControlsShouldBeBoundedAndDeploymentConfigurable()
       throws IOException {
     String applicationConfig =
         Files.readString(resolve(Path.of("backend", "src", "main", "resources", "application.yml")));
@@ -123,17 +123,25 @@ class BackendRuntimeConfigTest {
 
     assertThat(applicationConfig)
         .contains("query-timeout-seconds: ${LEXIS_REPORT_QUERY_TIMEOUT_SECONDS:120}")
+        .contains("jdbc-fetch-size: ${LEXIS_REPORT_JDBC_FETCH_SIZE:100}")
+        .doesNotContain("max-output-bytes", "LEXIS_REPORT_MAX_OUTPUT_BYTES")
         .doesNotContain("LEXIS_REPORT_MAX_CONCURRENT");
     assertThat(deployment)
         .contains("- name: LEXIS_REPORT_QUERY_TIMEOUT_SECONDS")
         .contains("value: ${LEXIS_REPORT_QUERY_TIMEOUT_SECONDS}")
+        .contains("- name: LEXIS_REPORT_JDBC_FETCH_SIZE")
+        .contains("value: ${LEXIS_REPORT_JDBC_FETCH_SIZE}")
         .doesNotContain("LEXIS_REPORT_MAX_CONCURRENT");
     assertThat(workflow)
         .contains(
             "LEXIS_REPORT_QUERY_TIMEOUT_SECONDS:"
                 + " ${{ vars.LEXIS_REPORT_QUERY_TIMEOUT_SECONDS || '120' }}")
         .contains(
+            "LEXIS_REPORT_JDBC_FETCH_SIZE:"
+                + " ${{ vars.LEXIS_REPORT_JDBC_FETCH_SIZE || '100' }}")
+        .contains(
             "-p LEXIS_REPORT_QUERY_TIMEOUT_SECONDS=\"$LEXIS_REPORT_QUERY_TIMEOUT_SECONDS\"")
+        .contains("-p LEXIS_REPORT_JDBC_FETCH_SIZE=\"$LEXIS_REPORT_JDBC_FETCH_SIZE\"")
         .doesNotContain("LEXIS_REPORT_MAX_CONCURRENT");
   }
 
@@ -273,6 +281,7 @@ class BackendRuntimeConfigTest {
 
     assertThat(dockerfile).contains("VOLUME /tmp");
     assertThat(applicationConfig)
+        .contains("artifact-directory: /tmp/lexis-reports")
         .contains("virtualizer-directory: ${LEXIS_REPORT_VIRTUALIZER_DIRECTORY:/tmp/lexis-jasper}");
     assertThat(deployment)
         .contains("- name: init-tmp-storage\n                  mountPath: /tmp")

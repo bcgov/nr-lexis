@@ -18,10 +18,11 @@ class LexisReportResourcePropertiesTest {
         context -> {
           LexisReportResourceProperties properties =
               context.getBean(LexisReportResourceProperties.class);
-          assertThat(properties.getMaxOutputBytes()).isEqualTo(25L * 1024L * 1024L);
+          assertThat(properties.getArtifactDirectory()).isEqualTo("/tmp/lexis-reports");
           assertThat(properties.getVirtualizerDirectory()).isEqualTo("/tmp/lexis-jasper");
           assertThat(properties.getVirtualizerMaxPages()).isEqualTo(50);
           assertThat(properties.getQueryTimeoutSeconds()).isEqualTo(120);
+          assertThat(properties.getJdbcFetchSize()).isEqualTo(100);
         });
   }
 
@@ -29,16 +30,18 @@ class LexisReportResourcePropertiesTest {
   void shouldBindDeploymentOverrides() {
     contextRunner
         .withPropertyValues(
-            "lexis.reports.max-output-bytes=4096",
+            "lexis.reports.artifact-directory=/tmp/custom-reports",
             "lexis.reports.query-timeout-seconds=37",
+            "lexis.reports.jdbc-fetch-size=250",
             "lexis.reports.virtualizer-directory=/tmp/custom-jasper",
             "lexis.reports.virtualizer-max-pages=7")
         .run(
             context -> {
               LexisReportResourceProperties properties =
                   context.getBean(LexisReportResourceProperties.class);
-              assertThat(properties.getMaxOutputBytes()).isEqualTo(4096);
+              assertThat(properties.getArtifactDirectory()).isEqualTo("/tmp/custom-reports");
               assertThat(properties.getQueryTimeoutSeconds()).isEqualTo(37);
+              assertThat(properties.getJdbcFetchSize()).isEqualTo(250);
               assertThat(properties.getVirtualizerDirectory()).isEqualTo("/tmp/custom-jasper");
               assertThat(properties.getVirtualizerMaxPages()).isEqualTo(7);
             });

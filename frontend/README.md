@@ -42,6 +42,11 @@ rollout but not an image rebuild.
 
 Additional route and endpoint overrides are listed in `frontend/.env.example`.
 
+### Report Downloads
+
+Browsers that support the File System Access API stream generated reports directly to the selected
+file. Other browsers retain the existing Blob download fallback for compatibility.
+
 ### Development Server Options
 
 These are read by `vite.config.ts` and only matter when running `npm run dev` or the Compose frontend service.

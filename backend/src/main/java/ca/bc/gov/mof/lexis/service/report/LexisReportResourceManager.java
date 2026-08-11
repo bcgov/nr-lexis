@@ -1,9 +1,9 @@
 package ca.bc.gov.mof.lexis.service.report;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Map;
@@ -15,44 +15,54 @@ import net.sf.jasperreports.engine.SimpleJasperReportsContext;
 import net.sf.jasperreports.engine.fill.JRSwapFileVirtualizer;
 import net.sf.jasperreports.engine.query.JRJdbcQueryExecuterFactory;
 import net.sf.jasperreports.engine.util.JRSwapFile;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
-/** Report query-timeout, output-size, and Jasper temporary-storage controls. */
+/** File-backed report, JDBC fetch, query-timeout, and Jasper temporary-storage controls. */
 @Service
-@Profile("oracle")
 public class LexisReportResourceManager {
 
   private static final int SWAP_BLOCK_SIZE_BYTES = 4096;
   private static final int SWAP_MIN_GROW_BLOCKS = 100;
 
-  private final long maxOutputBytes;
+  private static final String ARTIFACT_FILE_PREFIX = "lexis-report-";
+  private static final String ARTIFACT_FILE_SUFFIX = ".tmp";
+
+  private final Path artifactDirectory;
   private final Path virtualizerDirectory;
   private final int virtualizerMaxPages;
   private final int queryTimeoutSeconds;
+  private final int jdbcFetchSize;
   private final JasperReportsContext jasperReportsContext;
 
   public LexisReportResourceManager(LexisReportResourceProperties properties) {
     Objects.requireNonNull(properties, "properties");
-    if (properties.getMaxOutputBytes() < 1
-        || properties.getMaxOutputBytes() > Integer.MAX_VALUE
-        || properties.getVirtualizerMaxPages() < 1
+    if (properties.getVirtualizerMaxPages() < 1
         || properties.getQueryTimeoutSeconds() < 1
-        || properties.getQueryTimeoutSeconds() > 3600) {
+        || properties.getQueryTimeoutSeconds() > 3600
+        || properties.getJdbcFetchSize() < 1
+        || properties.getJdbcFetchSize() > 10_000) {
       throw new IllegalArgumentException("Report resource limits are invalid.");
+    }
+    String artifactDirectoryValue = properties.getArtifactDirectory();
+    if (artifactDirectoryValue == null || artifactDirectoryValue.isBlank()) {
+      throw new IllegalArgumentException("Report artifact directory is required.");
     }
     String directory = properties.getVirtualizerDirectory();
     if (directory == null || directory.isBlank()) {
       throw new IllegalArgumentException("Report virtualizer directory is required.");
     }
-    this.maxOutputBytes = properties.getMaxOutputBytes();
+    this.artifactDirectory = Path.of(artifactDirectoryValue).toAbsolutePath().normalize();
     this.virtualizerDirectory = Path.of(directory).toAbsolutePath().normalize();
     this.virtualizerMaxPages = properties.getVirtualizerMaxPages();
     this.queryTimeoutSeconds = properties.getQueryTimeoutSeconds();
+    this.jdbcFetchSize = properties.getJdbcFetchSize();
     SimpleJasperReportsContext timeoutContext = new SimpleJasperReportsContext();
     timeoutContext.setProperty(
         JRJdbcQueryExecuterFactory.PROPERTY_JDBC_QUERY_TIMEOUT,
         Integer.toString(queryTimeoutSeconds));
+    timeoutContext.setProperty(
+        JRJdbcQueryExecuterFactory.PROPERTY_JDBC_FETCH_SIZE,
+        Integer.toString(jdbcFetchSize));
     this.jasperReportsContext = timeoutContext;
   }
 
@@ -60,42 +70,29 @@ public class LexisReportResourceManager {
     return new LexisReportResourceManager(new LexisReportResourceProperties());
   }
 
-  public LimitedByteArrayOutputStream newOutputStream() {
-    return new LimitedByteArrayOutputStream(maxOutputBytes);
+  public LexisReportArtifact createArtifact() {
+    try {
+      Files.createDirectories(artifactDirectory);
+      return new LexisReportArtifact(
+          Files.createTempFile(artifactDirectory, ARTIFACT_FILE_PREFIX, ARTIFACT_FILE_SUFFIX));
+    } catch (IOException exception) {
+      throw new LexisReportGenerationException(
+          "Report temporary storage could not be prepared.", exception);
+    }
   }
 
-  void applyQueryTimeout(Statement statement) throws SQLException {
-    Objects.requireNonNull(statement, "statement").setQueryTimeout(queryTimeoutSeconds);
+  void applyQueryControls(Statement statement) throws SQLException {
+    Statement safeStatement = Objects.requireNonNull(statement, "statement");
+    safeStatement.setQueryTimeout(queryTimeoutSeconds);
+    safeStatement.setFetchSize(jdbcFetchSize);
+  }
+
+  void applyFetchSize(ResultSet resultSet) throws SQLException {
+    Objects.requireNonNull(resultSet, "resultSet").setFetchSize(jdbcFetchSize);
   }
 
   JasperReportsContext jasperReportsContext() {
     return jasperReportsContext;
-  }
-
-  public byte[] requireWithinOutputLimit(byte[] content) {
-    byte[] safeContent = content == null ? new byte[0] : content;
-    if (safeContent.length > maxOutputBytes) {
-      throw new LexisReportOutputLimitException(maxOutputBytes);
-    }
-    return safeContent;
-  }
-
-  /**
-   * Bounds legacy report rows that must be retained for Jasper rendering. The estimate supplied by
-   * the caller includes conservative collection and cell overhead in addition to UTF-8 content.
-   */
-  public void requireWithinMaterializationBudget(long estimatedBytes) {
-    if (estimatedBytes > maxOutputBytes) {
-      throw new LexisReportOutputLimitException(maxOutputBytes);
-    }
-  }
-
-  public LexisGeneratedReport requireWithinOutputLimit(LexisGeneratedReport report) {
-    if (report == null) {
-      return null;
-    }
-    requireWithinOutputLimit(report.content());
-    return report;
   }
 
   public JasperVirtualizerSession openVirtualizer(Map<String, Object> reportParameters) {
@@ -116,16 +113,6 @@ public class LexisReportResourceManager {
     return new JasperVirtualizerSession(virtualizer);
   }
 
-  public void rethrowOutputLimit(Throwable throwable) {
-    Throwable current = throwable;
-    while (current != null) {
-      if (current instanceof LexisReportOutputLimitException outputLimit) {
-        throw outputLimit;
-      }
-      current = current.getCause();
-    }
-  }
-
   public static final class JasperVirtualizerSession implements AutoCloseable {
 
     private final JRSwapFileVirtualizer virtualizer;
@@ -143,37 +130,4 @@ public class LexisReportResourceManager {
     }
   }
 
-  public static final class LimitedByteArrayOutputStream extends ByteArrayOutputStream {
-
-    private final long maxOutputBytes;
-
-    private LimitedByteArrayOutputStream(long maxOutputBytes) {
-      super((int) Math.min(16L * 1024L, maxOutputBytes));
-      this.maxOutputBytes = maxOutputBytes;
-    }
-
-    @Override
-    public synchronized void write(int value) {
-      requireCapacity(1);
-      super.write(value);
-    }
-
-    @Override
-    public synchronized void write(byte[] bytes, int offset, int length) {
-      Objects.checkFromIndexSize(offset, length, bytes.length);
-      requireCapacity(length);
-      super.write(bytes, offset, length);
-    }
-
-    @Override
-    public synchronized void writeBytes(byte[] bytes) {
-      write(bytes, 0, bytes.length);
-    }
-
-    private void requireCapacity(int additionalBytes) {
-      if (additionalBytes > maxOutputBytes - count) {
-        throw new LexisReportOutputLimitException(maxOutputBytes);
-      }
-    }
-  }
 }

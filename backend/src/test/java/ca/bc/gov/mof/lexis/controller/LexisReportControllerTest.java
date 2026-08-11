@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.controller;
 
+import static ca.bc.gov.mof.lexis.test.ReportTestArtifacts.report;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -13,7 +14,6 @@ import ca.bc.gov.mof.lexis.dto.report.LexisReportRequestDto;
 import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
 import ca.bc.gov.mof.lexis.service.report.LexisGeneratedReport;
 import ca.bc.gov.mof.lexis.service.report.LexisReportGenerationException;
-import ca.bc.gov.mof.lexis.service.report.LexisReportOutputLimitException;
 import ca.bc.gov.mof.lexis.service.report.LexisReportService;
 import ca.bc.gov.mof.lexis.service.report.LexisReportValidationException;
 import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService;
@@ -109,24 +109,6 @@ class LexisReportControllerTest {
         .contains("Unable to generate")
         .doesNotContain("Oracle failed")
         .doesNotContain("down");
-  }
-
-  @Test
-  void oversizedReportShouldReturnPayloadTooLargeWithActionableMessage() {
-    when(reportServiceProvider.getIfAvailable()).thenReturn(reportService);
-    when(reportService.generateReport(eq("offerReport"), any(LexisReportRequestDto.class)))
-        .thenThrow(new LexisReportOutputLimitException(1024));
-    LexisReportController controller =
-        new LexisReportController(
-            reportServiceProvider, provincialAuthorizationService, principalService);
-
-    ResponseEntity<StreamingResponseBody> response = controller.offerReport(sampleRequest());
-
-    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.PAYLOAD_TOO_LARGE);
-    assertThat(response.getHeaders().getContentType()).isEqualTo(MediaType.TEXT_PLAIN);
-    assertThat(new String(responseBody(response), StandardCharsets.UTF_8))
-        .contains("configured maximum of 1024 bytes")
-        .contains("Narrow the report filters");
   }
 
   @Test
@@ -483,7 +465,7 @@ class LexisReportControllerTest {
   }
 
   private LexisGeneratedReport sampleGeneratedReport() {
-    return new LexisGeneratedReport("lexis-report.pdf", "application/pdf", new byte[] {1, 2, 3});
+    return report("lexis-report.pdf", "application/pdf", (byte) 1, (byte) 2, (byte) 3);
   }
 
   private LexisReportRequestDto sampleRequest() {

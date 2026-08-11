@@ -7,18 +7,23 @@ import ca.bc.gov.mof.lexis.dto.report.LexisReportRequestDto;
 import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
+import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import net.sf.jasperreports.engine.JRDataSource;
 import net.sf.jasperreports.engine.JRException;
+import net.sf.jasperreports.engine.JRField;
 import net.sf.jasperreports.engine.JasperCompileManager;
 import net.sf.jasperreports.engine.JasperExportManager;
 import net.sf.jasperreports.engine.JasperFillManager;
 import net.sf.jasperreports.engine.JasperPrint;
 import net.sf.jasperreports.engine.JasperReport;
-import net.sf.jasperreports.engine.data.JRMapCollectionDataSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -60,46 +65,54 @@ public class OracleLegacyJasperTableReportService {
       return Optional.empty();
     }
 
-    Optional<LegacyTabularReportData> dataOptional =
-        legacyCsvReportService.loadLegacyTabularReportData(definition, request);
-    if (dataOptional.isEmpty()) {
-      return Optional.empty();
-    }
-
-    LegacyTabularReportData data = dataOptional.orElseThrow();
-    Map<String, Object> parameters = buildTemplateParameters(definition, request, data);
-    JRMapCollectionDataSource dataSource = new JRMapCollectionDataSource(buildRowMaps(data));
-
+    Map<String, Object> parameters = new HashMap<>();
     try {
-      byte[] pdfBytes = renderPdf(parameters, dataSource);
-      return Optional.of(
-          new LexisGeneratedReport(
-              definition.resolveFilename(LexisReportFormat.PDF),
-              LexisReportFormat.PDF.mediaType(),
-              pdfBytes));
+      try (LexisReportResourceManager.JasperVirtualizerSession ignored =
+          reportResources.openVirtualizer(parameters)) {
+        Optional<JasperPrint> print =
+            legacyCsvReportService.withLegacyTabularReportCursor(
+                definition,
+                request,
+                resultSet -> {
+                  LegacyResultSetDataSource dataSource =
+                      new LegacyResultSetDataSource(resultSet);
+                  parameters.putAll(
+                      buildTemplateParameters(
+                          definition, request, dataSource.columnHeaders()));
+                  return JasperFillManager.getInstance(reportResources.jasperReportsContext())
+                      .fill(getOrCompileTemplate(), parameters, dataSource);
+                });
+        if (print.isEmpty()) {
+          return Optional.empty();
+        }
+
+        try (LexisReportArtifact artifact = reportResources.createArtifact()) {
+          exportPdf(print.orElseThrow(), artifact.outputStream());
+          return Optional.of(
+              artifact.complete(
+                  definition.resolveFilename(LexisReportFormat.PDF),
+                  LexisReportFormat.PDF.mediaType()));
+        }
+      }
     } catch (JRException ex) {
-      reportResources.rethrowOutputLimit(ex);
       LOGGER.error(
           "event=lexis_report operation=migrated_table_render outcome=failed action={} failureType={}",
           definition.action(),
           exceptionType(ex));
       throw new LexisReportGenerationException(
           "The migrated report could not be rendered for " + definition.action(), ex);
+    } catch (IOException ex) {
+      LOGGER.error(
+          "event=lexis_report operation=migrated_table_artifact outcome=failed action={} failureType={}",
+          definition.action(),
+          exceptionType(ex));
+      throw new LexisReportGenerationException(
+          "The migrated report could not be stored for " + definition.action(), ex);
     }
   }
 
-  byte[] renderPdf(Map<String, Object> parameters, JRMapCollectionDataSource dataSource)
-      throws JRException {
-    try (LexisReportResourceManager.JasperVirtualizerSession ignored =
-        reportResources.openVirtualizer(parameters)) {
-      JasperPrint print =
-          JasperFillManager.getInstance(reportResources.jasperReportsContext())
-              .fill(getOrCompileTemplate(), parameters, dataSource);
-      LexisReportResourceManager.LimitedByteArrayOutputStream output =
-          reportResources.newOutputStream();
-      JasperExportManager.exportReportToPdfStream(print, output);
-      return reportResources.requireWithinOutputLimit(output.toByteArray());
-    }
+  void exportPdf(JasperPrint print, OutputStream output) throws JRException {
+    JasperExportManager.exportReportToPdfStream(print, output);
   }
 
   private boolean supportsPdfMigration(LexisJasperReportDefinition definition) {
@@ -137,18 +150,18 @@ public class OracleLegacyJasperTableReportService {
   Map<String, Object> buildTemplateParameters(
       LexisJasperReportDefinition definition,
       LexisReportRequestDto request,
-      LegacyTabularReportData data) {
+      List<String> columnHeaders) {
     Map<String, Object> parameters = new HashMap<>();
     parameters.put("REPORT_TITLE", titleFor(definition));
     parameters.put("REPORT_SUBTITLE", subtitleFor(definition, request));
     parameters.put("REPORT_GENERATED_DATE", LexisBusinessTime.today().toString());
-    parameters.put("P_COLUMN_COUNT", Math.min(data.columnHeaders().size(), MAX_COLUMNS));
+    parameters.put("P_COLUMN_COUNT", Math.min(columnHeaders.size(), MAX_COLUMNS));
 
-    boolean overflowColumns = data.columnHeaders().size() > MAX_COLUMNS;
+    boolean overflowColumns = columnHeaders.size() > MAX_COLUMNS;
     if (overflowColumns) {
       LOGGER.warn(
           "Collapsing legacy Jasper table columns from [{}] to [{}] plus overflow for action [{}]",
-          data.columnHeaders().size(),
+          columnHeaders.size(),
           DIRECT_COLUMNS_WHEN_OVERFLOWING,
           definition.action());
     }
@@ -158,7 +171,7 @@ public class OracleLegacyJasperTableReportService {
       if (overflowColumns && index == MAX_COLUMNS) {
         header = OVERFLOW_COLUMN_HEADER;
       } else {
-        header = index <= data.columnHeaders().size() ? data.columnHeaders().get(index - 1) : "";
+        header = index <= columnHeaders.size() ? columnHeaders.get(index - 1) : "";
       }
       parameters.put("P_COL_HEADER_" + index, header);
     }
@@ -166,26 +179,7 @@ public class OracleLegacyJasperTableReportService {
     return parameters;
   }
 
-  List<Map<String, ?>> buildRowMaps(LegacyTabularReportData data) {
-    List<Map<String, ?>> result = new ArrayList<>(data.rows().size());
-    boolean overflowColumns = data.columnHeaders().size() > MAX_COLUMNS;
-    for (List<String> row : data.rows()) {
-      Map<String, Object> mappedRow = new HashMap<>();
-      for (int index = 1; index <= MAX_COLUMNS; index++) {
-        String value;
-        if (overflowColumns && index == MAX_COLUMNS) {
-          value = overflowColumns(data.columnHeaders(), row);
-        } else {
-          value = index <= row.size() ? row.get(index - 1) : "";
-        }
-        mappedRow.put("COL_" + index, sanitizeCellValue(value));
-      }
-      result.add(mappedRow);
-    }
-    return result;
-  }
-
-  private String overflowColumns(List<String> headers, List<String> row) {
+  String overflowColumns(List<String> headers, List<String> row) {
     List<String> values = new ArrayList<>();
     for (int index = DIRECT_COLUMNS_WHEN_OVERFLOWING; index < headers.size(); index++) {
       String header = sanitizeCellValue(headers.get(index));
@@ -287,5 +281,66 @@ public class OracleLegacyJasperTableReportService {
       return trimmed.substring(1, trimmed.length() - 1).replace(" ", "");
     }
     return trimmed;
+  }
+
+  private final class LegacyResultSetDataSource implements JRDataSource {
+
+    private final ResultSet resultSet;
+    private final List<String> columnHeaders;
+    private final String[] currentRow;
+
+    private LegacyResultSetDataSource(ResultSet resultSet) throws SQLException {
+      this.resultSet = resultSet;
+      ResultSetMetaData metadata = resultSet.getMetaData();
+      int columnCount = metadata.getColumnCount();
+      this.columnHeaders = new ArrayList<>(columnCount);
+      this.currentRow = new String[columnCount];
+      for (int index = 1; index <= columnCount; index++) {
+        columnHeaders.add(metadata.getColumnName(index));
+      }
+    }
+
+    private List<String> columnHeaders() {
+      return columnHeaders;
+    }
+
+    @Override
+    public boolean next() throws JRException {
+      try {
+        if (!resultSet.next()) {
+          return false;
+        }
+        for (int index = 1; index <= currentRow.length; index++) {
+          currentRow[index - 1] = sanitizeCellValue(resultSet.getString(index));
+        }
+        return true;
+      } catch (SQLException exception) {
+        throw new JRException("Unable to read the legacy report cursor", exception);
+      }
+    }
+
+    @Override
+    public Object getFieldValue(JRField field) {
+      String fieldName = field == null ? null : field.getName();
+      if (fieldName == null || !fieldName.startsWith("COL_")) {
+        return "";
+      }
+
+      int outputColumn;
+      try {
+        outputColumn = Integer.parseInt(fieldName.substring("COL_".length()));
+      } catch (NumberFormatException exception) {
+        return "";
+      }
+      if (outputColumn < 1 || outputColumn > MAX_COLUMNS) {
+        return "";
+      }
+
+      boolean overflowColumns = columnHeaders.size() > MAX_COLUMNS;
+      if (overflowColumns && outputColumn == MAX_COLUMNS) {
+        return overflowColumns(columnHeaders, List.of(currentRow));
+      }
+      return outputColumn <= currentRow.length ? currentRow[outputColumn - 1] : "";
+    }
   }
 }

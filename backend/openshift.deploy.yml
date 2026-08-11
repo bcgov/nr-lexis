@@ -73,6 +73,9 @@ parameters:
   - name: LEXIS_REPORT_QUERY_TIMEOUT_SECONDS
     description: Maximum Oracle/Jasper report query duration before cancellation
     value: "120"
+  - name: LEXIS_REPORT_JDBC_FETCH_SIZE
+    description: Oracle rows fetched per report database round trip
+    value: "100"
   - name: LEXIS_PERMIT_INVOICE_MODE
     description: Permit invoice coordinator; legacy-best-effort preserves the legacy workflow
     value: legacy-best-effort
@@ -268,6 +271,8 @@ objects:
                   value: ${LEXIS_EXPIRY_LOCK_AT_LEAST_FOR}
                 - name: LEXIS_REPORT_QUERY_TIMEOUT_SECONDS
                   value: ${LEXIS_REPORT_QUERY_TIMEOUT_SECONDS}
+                - name: LEXIS_REPORT_JDBC_FETCH_SIZE
+                  value: ${LEXIS_REPORT_JDBC_FETCH_SIZE}
                 - name: LEXIS_PERMIT_INVOICE_MODE
                   value: ${LEXIS_PERMIT_INVOICE_MODE}
                 - name: LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS

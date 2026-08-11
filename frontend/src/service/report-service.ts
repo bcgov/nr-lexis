@@ -12,14 +12,24 @@ export type RunReportRequest = {
 
 export type RunReportResult = {
   source: 'api'
-  blob: Blob
+  blob?: Blob
   filename: string
   contentType: string
+  downloaded?: boolean
+  cancelled?: boolean
 }
 
 type ReportApiPayload = {
   parameters: Record<string, string>
   format: string
+}
+
+type ReportFileHandle = {
+  createWritable: () => Promise<WritableStream<Uint8Array>>
+}
+
+type ReportSavePickerWindow = Window & {
+  showSaveFilePicker?: (options?: { suggestedName?: string }) => Promise<ReportFileHandle>
 }
 
 const DEFAULT_REPORT_ERROR_MESSAGE = 'Unable to generate report. Check values and try again.'
@@ -71,6 +81,17 @@ const REPORT_FILENAME_BASES: Readonly<Record<string, string>> = {
   teacReport: 'teac-package-report',
   tenureReport: 'tenure-analysis-report',
   transportReport: 'transport-report',
+}
+const LEGACY_CSV_FILENAME_BASES: Readonly<Record<string, string>> = {
+  applicationReport: 'applicationLedger',
+  biweeklyListing: 'biweeklyListing',
+  exemptionReport: 'exemptionLedger',
+  feeReport: 'feeReport',
+  offerReport: 'offerReport',
+  permitLedgerReport: 'permitLedger',
+  speciesGradeReport: 'speciesGradeReport',
+  teacReport: 'TeacReport',
+  transportReport: 'transportReport',
 }
 
 const compactLegacyIndexedValues = (
@@ -214,6 +235,30 @@ const getDefaultFilename = (
   return `${filenameBase}.${resolveReportExtension(reportId, values, actionMapping)}`
 }
 
+const getVancouverDate = (): string => {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Vancouver',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date())
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]))
+  return `${values.year}-${values.month}-${values.day}`
+}
+
+const getSuggestedFilename = (
+  reportId: string,
+  values: Record<string, string>,
+  actionMapping?: string,
+): string => {
+  const format = resolveReportFormat(reportId, values, actionMapping)
+  const legacyCsvBase = LEGACY_CSV_FILENAME_BASES[reportId]
+  if (format === 'CSV' && legacyCsvBase) {
+    return `${legacyCsvBase}${getVancouverDate()}.csv`
+  }
+  return getDefaultFilename(reportId, values, actionMapping)
+}
+
 const extractErrorMessage = (payload: unknown): string => {
   if (!payload || typeof payload !== 'object') {
     return ''
@@ -234,11 +279,33 @@ const isJsonContentType = (contentType: string | undefined): boolean => {
   return normalized === 'application/json' || normalized.endsWith('+json')
 }
 
+const isReadableStream = (payload: unknown): payload is ReadableStream<Uint8Array> =>
+  Boolean(
+    payload &&
+    typeof payload === 'object' &&
+    typeof (payload as ReadableStream<Uint8Array>).getReader === 'function',
+  )
+
+const getReportSavePicker = ():
+  | ((options?: { suggestedName?: string }) => Promise<ReportFileHandle>)
+  | undefined => {
+  const picker = (window as ReportSavePickerWindow).showSaveFilePicker
+  return typeof picker === 'function' ? picker.bind(window) : undefined
+}
+
+const isPickerCancellation = (error: unknown): boolean =>
+  Boolean(error && typeof error === 'object' && (error as { name?: unknown }).name === 'AbortError')
+
 const readErrorPayload = async (
   payload: unknown,
   responseContentType?: string,
 ): Promise<string> => {
-  if (payload && typeof payload === 'object' && !(payload instanceof Blob)) {
+  if (
+    payload &&
+    typeof payload === 'object' &&
+    !(payload instanceof Blob) &&
+    !isReadableStream(payload)
+  ) {
     return extractErrorMessage(payload)
   }
 
@@ -248,6 +315,8 @@ const readErrorPayload = async (
     if (payload instanceof Blob) {
       text = (await payload.text()).trim()
       blobContentType = payload.type
+    } else if (isReadableStream(payload)) {
+      text = (await new Response(payload).text()).trim()
     } else if (typeof payload === 'string') {
       text = payload.trim()
     } else {
@@ -278,8 +347,38 @@ const readErrorPayload = async (
 }
 
 export const runReport = async (request: RunReportRequest): Promise<RunReportResult> => {
+  const defaultFilename = getDefaultFilename(
+    request.reportId,
+    request.values,
+    request.actionMapping,
+  )
+  const savePicker = getReportSavePicker()
+  let fileHandle: ReportFileHandle | undefined
+  if (savePicker) {
+    try {
+      fileHandle = await savePicker({
+        suggestedName: getSuggestedFilename(
+          request.reportId,
+          request.values,
+          request.actionMapping,
+        ),
+      })
+    } catch (error) {
+      if (isPickerCancellation(error)) {
+        return {
+          source: 'api',
+          filename: defaultFilename,
+          contentType: 'application/octet-stream',
+          downloaded: false,
+          cancelled: true,
+        }
+      }
+      throw error
+    }
+  }
+
   const requestConfig: AxiosRequestConfig<ReportApiPayload> = {
-    responseType: 'blob',
+    ...(fileHandle ? { adapter: 'fetch', responseType: 'stream' } : { responseType: 'blob' }),
     headers: {
       Accept: 'application/octet-stream',
       'Content-Type': 'application/json',
@@ -290,11 +389,9 @@ export const runReport = async (request: RunReportRequest): Promise<RunReportRes
   try {
     response = await apiService
       .getAxiosInstance()
-      .post<Blob>(
-        buildModernReportEndpoint(request.reportId),
-        buildReportPayload(request.reportId, request.values, request.actionMapping),
-        requestConfig,
-      )
+      .post<
+        Blob | ReadableStream<Uint8Array>
+      >(buildModernReportEndpoint(request.reportId), buildReportPayload(request.reportId, request.values, request.actionMapping), requestConfig)
   } catch (error) {
     if (axios.isAxiosError(error)) {
       const responseContentType = error.response?.headers
@@ -306,21 +403,37 @@ export const runReport = async (request: RunReportRequest): Promise<RunReportRes
     throw error
   }
 
-  if (response.status === 204 || response.data.size === 0) {
+  if (response.status === 204 || (response.data instanceof Blob && response.data.size === 0)) {
     throw new ReportRequestError('No report data matched the selected criteria.')
   }
 
   const contentType =
     getResponseHeaderValue(response.headers, 'content-type') ?? 'application/octet-stream'
-  const filename = extractResponseFilename(
-    response.headers,
-    getDefaultFilename(request.reportId, request.values, request.actionMapping),
-  )
+  const filename = extractResponseFilename(response.headers, defaultFilename)
+
+  if (fileHandle) {
+    const writable = await fileHandle.createWritable()
+    if (isReadableStream(response.data)) {
+      await response.data.pipeTo(writable)
+    } else if (response.data instanceof Blob) {
+      await response.data.stream().pipeTo(writable)
+    } else {
+      await writable.abort('Report response was not streamable.')
+      throw new ReportRequestError(DEFAULT_REPORT_ERROR_MESSAGE)
+    }
+    return {
+      source: 'api',
+      filename,
+      contentType,
+      downloaded: true,
+    }
+  }
 
   return {
     source: 'api',
-    blob: response.data,
+    blob: response.data as Blob,
     filename,
     contentType,
+    downloaded: false,
   }
 }

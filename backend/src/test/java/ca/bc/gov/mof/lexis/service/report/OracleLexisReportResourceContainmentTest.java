@@ -1,7 +1,7 @@
 package ca.bc.gov.mof.lexis.service.report;
 
+import static ca.bc.gov.mof.lexis.test.ReportTestArtifacts.report;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -40,9 +40,9 @@ class OracleLexisReportResourceContainmentTest {
               started.countDown();
               release.await();
               return Optional.of(
-                  new LexisGeneratedReport("offers.csv", "text/csv", new byte[] {1}));
+                  report("offers.csv", "text/csv", (byte) 1));
             });
-    OracleLexisReportService service = service(csvService, tableService, resources(1024));
+    OracleLexisReportService service = service(csvService, tableService, resources());
 
     try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
       Future<Optional<LexisGeneratedReport>> first =
@@ -62,46 +62,20 @@ class OracleLexisReportResourceContainmentTest {
   }
 
   @Test
-  void outputLimitShouldApplyToLegacyCsvResults() {
+  void generatedArtifactShouldPassThroughWithoutAnApplicationSizeCap() {
     OracleLegacyCsvReportService csvService = mock(OracleLegacyCsvReportService.class);
     OracleLegacyJasperTableReportService tableService =
         mock(OracleLegacyJasperTableReportService.class);
     LexisReportRequestDto request = new LexisReportRequestDto(Map.of(), "CSV");
+    LexisGeneratedReport artifact =
+        report("offers.csv", "text/csv", (byte) 1, (byte) 2, (byte) 3, (byte) 4);
     when(csvService.generateLegacyCsvReport(
             LexisJasperReportDefinition.OFFER_REPORT, request, LexisReportFormat.CSV))
-        .thenReturn(
-            Optional.of(
-                new LexisGeneratedReport("offers.csv", "text/csv", new byte[] {1, 2, 3, 4})));
+        .thenReturn(Optional.of(artifact));
 
-    OracleLexisReportService service = service(csvService, tableService, resources(3));
+    OracleLexisReportService service = service(csvService, tableService, resources());
 
-    assertThatThrownBy(() -> service.generateReport("offerReport", request))
-        .isInstanceOf(LexisReportOutputLimitException.class)
-        .hasMessageContaining("3 bytes");
-  }
-
-  @Test
-  void outputLimitShouldApplyToLegacyJasperTableResults() {
-    OracleLegacyCsvReportService csvService = mock(OracleLegacyCsvReportService.class);
-    OracleLegacyJasperTableReportService tableService =
-        mock(OracleLegacyJasperTableReportService.class);
-    LexisReportRequestDto request =
-        new LexisReportRequestDto(Map.of("exportJurisdictionCode", "P"), "PDF");
-    when(csvService.generateLegacyCsvReport(
-            LexisJasperReportDefinition.TEAC_REPORT, request, LexisReportFormat.PDF))
-        .thenReturn(Optional.empty());
-    when(tableService.generateLegacyPdfReport(
-            LexisJasperReportDefinition.TEAC_REPORT, request, LexisReportFormat.PDF))
-        .thenReturn(
-            Optional.of(
-                new LexisGeneratedReport(
-                    "teac.pdf", "application/pdf", new byte[] {1, 2, 3, 4})));
-
-    OracleLexisReportService service = service(csvService, tableService, resources(3));
-
-    assertThatThrownBy(() -> service.generateReport("teacReport", request))
-        .isInstanceOf(LexisReportOutputLimitException.class)
-        .hasMessageContaining("3 bytes");
+    assertThat(service.generateReport("offerReport", request)).containsSame(artifact);
   }
 
   private OracleLexisReportService service(
@@ -119,9 +93,9 @@ class OracleLexisReportResourceContainmentTest {
         resources);
   }
 
-  private LexisReportResourceManager resources(long maxOutputBytes) {
+  private LexisReportResourceManager resources() {
     LexisReportResourceProperties properties = new LexisReportResourceProperties();
-    properties.setMaxOutputBytes(maxOutputBytes);
+    properties.setArtifactDirectory(tempDirectory.resolve("reports").toString());
     properties.setVirtualizerDirectory(tempDirectory.resolve("jasper").toString());
     properties.setVirtualizerMaxPages(2);
     return new LexisReportResourceManager(properties);
