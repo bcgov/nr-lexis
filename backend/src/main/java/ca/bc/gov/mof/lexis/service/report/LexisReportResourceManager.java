@@ -1,11 +1,18 @@
 package ca.bc.gov.mof.lexis.service.report;
 
+import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.exceptionType;
+
 import java.io.IOException;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -15,12 +22,15 @@ import net.sf.jasperreports.engine.SimpleJasperReportsContext;
 import net.sf.jasperreports.engine.fill.JRSwapFileVirtualizer;
 import net.sf.jasperreports.engine.query.JRJdbcQueryExecuterFactory;
 import net.sf.jasperreports.engine.util.JRSwapFile;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 /** File-backed report, JDBC fetch, query-timeout, and Jasper temporary-storage controls. */
 @Service
 public class LexisReportResourceManager {
 
+  private static final Logger LOGGER = LoggerFactory.getLogger(LexisReportResourceManager.class);
   private static final int SWAP_BLOCK_SIZE_BYTES = 4096;
   private static final int SWAP_MIN_GROW_BLOCKS = 100;
 
@@ -81,6 +91,52 @@ public class LexisReportResourceManager {
     }
   }
 
+  StaleArtifactCleanupResult deleteStaleArtifacts(Instant staleBefore) {
+    Objects.requireNonNull(staleBefore, "staleBefore");
+    if (Files.notExists(artifactDirectory)) {
+      return StaleArtifactCleanupResult.empty();
+    }
+
+    long deletedFileCount = 0;
+    long deletedByteCount = 0;
+    long failedFileCount = 0;
+    String artifactPattern = ARTIFACT_FILE_PREFIX + "*" + ARTIFACT_FILE_SUFFIX;
+    try (DirectoryStream<Path> artifacts =
+        Files.newDirectoryStream(artifactDirectory, artifactPattern)) {
+      for (Path artifact : artifacts) {
+        try {
+          BasicFileAttributes attributes =
+              Files.readAttributes(
+                  artifact, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+          if (!attributes.isRegularFile()
+              || !attributes.lastModifiedTime().toInstant().isBefore(staleBefore)) {
+            continue;
+          }
+          if (Files.deleteIfExists(artifact)) {
+            deletedFileCount++;
+            deletedByteCount += attributes.size();
+          }
+        } catch (NoSuchFileException exception) {
+          // The normal response cleanup won the race.
+        } catch (IOException exception) {
+          failedFileCount++;
+          LOGGER.warn(
+              "event=lexis_report_artifact_cleanup outcome=file_delete_failed failureType={}",
+              exceptionType(exception));
+        }
+      }
+    } catch (NoSuchFileException exception) {
+      return new StaleArtifactCleanupResult(
+          deletedFileCount, deletedByteCount, failedFileCount);
+    } catch (IOException exception) {
+      throw new LexisReportGenerationException(
+          "Report temporary storage could not be inspected.", exception);
+    }
+
+    return new StaleArtifactCleanupResult(
+        deletedFileCount, deletedByteCount, failedFileCount);
+  }
+
   void applyQueryControls(Statement statement) throws SQLException {
     Statement safeStatement = Objects.requireNonNull(statement, "statement");
     safeStatement.setQueryTimeout(queryTimeoutSeconds);
@@ -127,6 +183,14 @@ public class LexisReportResourceManager {
       if (cleaned.compareAndSet(false, true)) {
         virtualizer.cleanup();
       }
+    }
+  }
+
+  record StaleArtifactCleanupResult(
+      long deletedFileCount, long deletedByteCount, long failedFileCount) {
+
+    private static StaleArtifactCleanupResult empty() {
+      return new StaleArtifactCleanupResult(0, 0, 0);
     }
   }
 

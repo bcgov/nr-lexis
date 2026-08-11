@@ -19,6 +19,7 @@ class LexisReportResourcePropertiesTest {
           LexisReportResourceProperties properties =
               context.getBean(LexisReportResourceProperties.class);
           assertThat(properties.getArtifactDirectory()).isEqualTo("/tmp/lexis-reports");
+          assertThat(properties.getArtifactStaleAfterMinutes()).isEqualTo(60);
           assertThat(properties.getVirtualizerDirectory()).isEqualTo("/tmp/lexis-jasper");
           assertThat(properties.getVirtualizerMaxPages()).isEqualTo(50);
           assertThat(properties.getQueryTimeoutSeconds()).isEqualTo(120);
@@ -31,6 +32,7 @@ class LexisReportResourcePropertiesTest {
     contextRunner
         .withPropertyValues(
             "lexis.reports.artifact-directory=/tmp/custom-reports",
+            "lexis.reports.artifact-stale-after-minutes=90",
             "lexis.reports.query-timeout-seconds=37",
             "lexis.reports.jdbc-fetch-size=250",
             "lexis.reports.virtualizer-directory=/tmp/custom-jasper",
@@ -40,6 +42,7 @@ class LexisReportResourcePropertiesTest {
               LexisReportResourceProperties properties =
                   context.getBean(LexisReportResourceProperties.class);
               assertThat(properties.getArtifactDirectory()).isEqualTo("/tmp/custom-reports");
+              assertThat(properties.getArtifactStaleAfterMinutes()).isEqualTo(90);
               assertThat(properties.getQueryTimeoutSeconds()).isEqualTo(37);
               assertThat(properties.getJdbcFetchSize()).isEqualTo(250);
               assertThat(properties.getVirtualizerDirectory()).isEqualTo("/tmp/custom-jasper");

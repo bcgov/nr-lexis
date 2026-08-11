@@ -6,8 +6,11 @@ import static org.mockito.Mockito.verify;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
 import java.sql.ResultSet;
 import java.sql.Statement;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
 import net.sf.jasperreports.engine.JRParameter;
@@ -46,6 +49,42 @@ class LexisReportResourceManagerTest {
     }
 
     assertThat(path).doesNotExist();
+  }
+
+  @Test
+  void shouldDeleteOnlyStaleManagedArtifacts() throws Exception {
+    LexisReportResourceManager manager = manager();
+    LexisGeneratedReport staleReport = completedReport(manager, new byte[] {1, 2, 3});
+    LexisGeneratedReport freshReport = completedReport(manager, new byte[] {4, 5});
+    Path unrelatedFile = staleReport.artifactPath().getParent().resolve("keep-me.tmp");
+    Files.write(unrelatedFile, new byte[] {6});
+    Instant now = Instant.parse("2026-08-11T18:00:00Z");
+    Files.setLastModifiedTime(
+        staleReport.artifactPath(), FileTime.from(now.minus(Duration.ofHours(2))));
+    Files.setLastModifiedTime(freshReport.artifactPath(), FileTime.from(now));
+    Files.setLastModifiedTime(unrelatedFile, FileTime.from(now.minus(Duration.ofHours(2))));
+
+    LexisReportResourceManager.StaleArtifactCleanupResult result =
+        manager.deleteStaleArtifacts(now.minus(Duration.ofHours(1)));
+
+    assertThat(result.deletedFileCount()).isEqualTo(1);
+    assertThat(result.deletedByteCount()).isEqualTo(3);
+    assertThat(result.failedFileCount()).isZero();
+    assertThat(staleReport.artifactPath()).doesNotExist();
+    assertThat(freshReport.artifactPath()).exists();
+    assertThat(unrelatedFile).exists();
+  }
+
+  @Test
+  void shouldTreatAMissingArtifactDirectoryAsAlreadyClean() {
+    LexisReportResourceManager manager = manager();
+
+    LexisReportResourceManager.StaleArtifactCleanupResult result =
+        manager.deleteStaleArtifacts(Instant.now());
+
+    assertThat(result.deletedFileCount()).isZero();
+    assertThat(result.deletedByteCount()).isZero();
+    assertThat(result.failedFileCount()).isZero();
   }
 
   @Test
@@ -108,6 +147,14 @@ class LexisReportResourceManagerTest {
 
   private LexisReportResourceManager manager() {
     return manager(120, 100);
+  }
+
+  private LexisGeneratedReport completedReport(
+      LexisReportResourceManager manager, byte[] content) throws Exception {
+    try (LexisReportArtifact artifact = manager.createArtifact()) {
+      artifact.outputStream().write(content);
+      return artifact.complete("report.csv", "text/csv");
+    }
   }
 
   private LexisReportResourceManager manager(

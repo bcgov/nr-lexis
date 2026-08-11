@@ -111,7 +111,9 @@ Report rows are consumed with a bounded JDBC fetch size and written to file-back
 `/tmp/lexis-reports`. Oracle cursors and connections are closed before the completed artifact is
 streamed to the browser, so a slow or disconnected browser does not retain database resources.
 Artifacts are deleted after each transfer attempt. There is no application-level report size cap;
-the pod's normal ephemeral-storage limit remains the physical boundary.
+the pod's normal ephemeral-storage limit remains the physical boundary. As orphan protection, every
+backend replica removes only managed report artifacts older than one hour from its own temporary
+storage at 03:30 America/Vancouver. This local cleanup intentionally does not use a distributed lock.
 
 ### Virus Scanning
 

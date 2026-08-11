@@ -18,6 +18,9 @@ public class LexisReportResourceProperties {
   @NotBlank
   private String artifactDirectory = "/tmp/lexis-reports";
 
+  @Min(1)
+  private int artifactStaleAfterMinutes = 60;
+
   @NotBlank
   private String virtualizerDirectory = "/tmp/lexis-jasper";
 
@@ -38,6 +41,14 @@ public class LexisReportResourceProperties {
 
   public void setArtifactDirectory(String artifactDirectory) {
     this.artifactDirectory = artifactDirectory;
+  }
+
+  public int getArtifactStaleAfterMinutes() {
+    return artifactStaleAfterMinutes;
+  }
+
+  public void setArtifactStaleAfterMinutes(int artifactStaleAfterMinutes) {
+    this.artifactStaleAfterMinutes = artifactStaleAfterMinutes;
   }
 
   public String getVirtualizerDirectory() {

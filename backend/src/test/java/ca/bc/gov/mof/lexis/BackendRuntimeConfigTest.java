@@ -282,6 +282,9 @@ class BackendRuntimeConfigTest {
     assertThat(dockerfile).contains("VOLUME /tmp");
     assertThat(applicationConfig)
         .contains("artifact-directory: /tmp/lexis-reports")
+        .contains("artifact-cleanup-cron: \"0 30 3 * * *\"")
+        .contains("artifact-cleanup-zone: America/Vancouver")
+        .contains("artifact-stale-after-minutes: 60")
         .contains("virtualizer-directory: ${LEXIS_REPORT_VIRTUALIZER_DIRECTORY:/tmp/lexis-jasper}");
     assertThat(deployment)
         .contains("- name: init-tmp-storage\n                  mountPath: /tmp")
