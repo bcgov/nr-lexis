@@ -3077,8 +3077,11 @@ $notification-types: 'error', 'info', 'success', 'warning';
 }
 
 .rtm-amv-species-table-wrap {
+  inline-size: fit-content;
   max-inline-size: 100%;
   overflow-x: auto;
+  border: 1px solid var(--fds-border-subtle, var(--cds-border-subtle));
+  border-radius: 4px;
 }
 
 .rtm-amv-species-table {
@@ -3097,6 +3100,11 @@ $notification-types: 'error', 'info', 'success', 'warning';
   border-block-end: 1px solid var(--fds-border-subtle, var(--cds-border-subtle));
   text-align: start;
   vertical-align: middle;
+}
+
+.rtm-amv-species-table tbody tr:last-child > th,
+.rtm-amv-species-table tbody tr:last-child > td {
+  border-block-end: 0;
 }
 
 .rtm-amv-species-table thead th {
