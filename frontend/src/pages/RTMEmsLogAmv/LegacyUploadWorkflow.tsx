@@ -8,6 +8,7 @@ import {
   type ChangeEvent,
   type DragEvent,
   type KeyboardEvent,
+  type RefObject,
 } from 'react'
 import {
   CheckmarkFilled,
@@ -534,10 +535,12 @@ const RejectedUploadFile = ({
   fileName,
   issues,
   onClear,
+  removeButtonRef,
 }: {
   fileName: string
   issues: string[]
   onClear: () => void
+  removeButtonRef?: RefObject<HTMLButtonElement | null>
 }) => {
   const hasMultipleIssues = issues.length > 1
   const issueOccurrences = new Map<string, number>()
@@ -557,6 +560,7 @@ const RejectedUploadFile = ({
         <span className="rtm-amv-rejected-file__actions">
           <ErrorFilled className="rtm-amv-rejected-file__error-icon" size={12} aria-hidden="true" />
           <button
+            ref={removeButtonRef}
             type="button"
             className="rtm-amv-rejected-file__remove"
             aria-label="Clear selected file"
@@ -1311,6 +1315,19 @@ const RtmEmsLogAmvUploadPage = () => {
     !!pendingUploadValidation &&
     pendingUploadValidation.fileName === selectedUploadFile.name &&
     pendingUploadValidation.fileSize === selectedUploadFile.size
+  const requestReplacementFileRemoval = () => {
+    const replacementFileValues =
+      hasValidatedUpload && previewResult?.status === 'accepted'
+        ? buildInitialReviewValues(previewResult.rows)
+        : replacementReviewValuesRef.current
+
+    if (replacementFileValues && !reviewValuesMatch(reviewValues, replacementFileValues)) {
+      setDiscardConfirmation('file')
+      return
+    }
+
+    clearReplacementFile()
+  }
   const savedActionsUnavailable =
     savedReviewValues !== null && !hasUnsavedChanges && !hasValidatedUpload
   const hasSaveSource = savedReviewValues !== null || hasValidatedUpload
@@ -1426,11 +1443,12 @@ const RtmEmsLogAmvUploadPage = () => {
             >
               <span className="rtm-amv-uploaded-file__name">{selectedUploadFile.name}</span>
               <button
+                ref={removeFileButtonRef}
                 type="button"
                 className="rtm-amv-uploaded-file__remove"
                 aria-label="Clear selected file"
                 disabled={isUploading}
-                onClick={clearReplacementFile}
+                onClick={requestReplacementFileRemoval}
               >
                 <Close size={12} />
               </button>
@@ -1447,7 +1465,8 @@ const RtmEmsLogAmvUploadPage = () => {
             <RejectedUploadFile
               fileName={selectedUploadFile.name}
               issues={rejectedFileIssues}
-              onClear={isReplacement ? clearReplacementFile : clearUploadState}
+              onClear={isReplacement ? requestReplacementFileRemoval : clearUploadState}
+              removeButtonRef={isReplacement ? removeFileButtonRef : undefined}
             />
           ) : (
             <div
@@ -1464,10 +1483,11 @@ const RtmEmsLogAmvUploadPage = () => {
                 {selectedUploadFile.size.toLocaleString()} bytes
               </span>
               <button
+                ref={isReplacement ? removeFileButtonRef : undefined}
                 type="button"
                 className="admin-upload-file-chip__remove"
                 aria-label="Clear selected file"
-                onClick={isReplacement ? clearReplacementFile : clearUploadState}
+                onClick={isReplacement ? requestReplacementFileRemoval : clearUploadState}
               >
                 <Close size={16} />
               </button>
@@ -1762,7 +1782,13 @@ const RtmEmsLogAmvUploadPage = () => {
                 }
               : undefined
           }
-          onConfirm={discardConfirmation === 'saved-changes' ? submitUpload : clearUploadState}
+          onConfirm={
+            discardConfirmation === 'saved-changes'
+              ? submitUpload
+              : discardConfirmation === 'file' && replacementUploadOpen
+                ? clearReplacementFile
+                : clearUploadState
+          }
           onClose={() => setDiscardConfirmation(null)}
         />
       )}

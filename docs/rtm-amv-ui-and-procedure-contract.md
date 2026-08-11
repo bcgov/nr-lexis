@@ -105,10 +105,13 @@ Keep current values closes that temporary state. An accepted replacement removes
 shows the selected filename, and previews the workbook over the values on screen without changing
 the database. A rejected replacement remains visible in the upload area and leaves the review
 intact; Cancel restores the last-saved preview, while Save values applies the replacement through
-the same batch update used for manual edits. The expanded replacement area is browser-only state,
-so refresh returns to the compact saved review. Save and Cancel remain keyboard-focusable but are
-announced as unavailable until a value changes or a replacement workbook has been accepted; the
-helper text is linked through `aria-describedby`. Editing a value clears the saved confirmation.
+the same batch update used for manual edits. Removing a replacement file restores the review from
+before that file was selected; if a file-derived value was then edited by hand, removal first shows
+the confirmation because re-uploading cannot recover that edit. The expanded replacement area is
+browser-only state, so refresh returns to the compact saved review. Save and Cancel remain
+keyboard-focusable but are announced as unavailable until a value changes or a replacement
+workbook has been accepted; the helper text is linked through `aria-describedby`. Editing a value
+clears the saved confirmation.
 Cancel then offers to save the changes or restore the last saved values; restoring them shows a
 dismissible confirmation that also clears on the next edit.
 Confirmation dialogs return focus to the action that opened them. The page header does not show

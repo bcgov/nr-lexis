@@ -226,7 +226,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     expect(screen.getByText('Values saved')).toBeVisible()
   })
 
-  it('replaces a saved review from a workbook and updates it only after save', async () => {
+  it('confirms removal of manually edited replacement values and updates only after save', async () => {
     const currentMonth = `${formatBusinessIsoDate().slice(0, 7)}-01`
     const nextMonth = monthOffset(currentMonth, 1)
     const comparisonMonth = monthOffset(nextMonth, -1)
@@ -338,6 +338,51 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       'true',
     )
     expect(mockedSaveBatch).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Clear selected file' }))
+    expect(
+      screen.queryByRole('dialog', { name: 'Are you sure you want to remove this file?' }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByLabelText(`Balsam grade D ${monthLabel(nextMonth)} value`)).toHaveValue(
+      '78.14',
+    )
+
+    await userEvent.upload(
+      screen.getByLabelText('Replacement average monthly values spreadsheet'),
+      replacement,
+    )
+    const editedReplacementValue = await screen.findByLabelText(
+      `Balsam grade D ${monthLabel(nextMonth)} value`,
+    )
+    await userEvent.clear(editedReplacementValue)
+    await userEvent.type(editedReplacementValue, '92.50')
+    await userEvent.click(screen.getByRole('button', { name: 'Clear selected file' }))
+
+    const removeReplacementDialog = screen.getByRole('dialog', {
+      name: 'Are you sure you want to remove this file?',
+    })
+    expect(removeReplacementDialog).toHaveAccessibleDescription(
+      'The values on screen will be cleared. Nothing has been saved.',
+    )
+    await userEvent.click(
+      within(removeReplacementDialog).getByRole('button', { name: 'Keep file' }),
+    )
+    expect(editedReplacementValue).toHaveValue('92.50')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Clear selected file' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Remove file' }))
+    expect(screen.getByLabelText(`Balsam grade D ${monthLabel(nextMonth)} value`)).toHaveValue(
+      '78.14',
+    )
+    expect(mockedSaveBatch).not.toHaveBeenCalled()
+
+    await userEvent.upload(
+      screen.getByLabelText('Replacement average monthly values spreadsheet'),
+      replacement,
+    )
+    expect(
+      await screen.findByLabelText(`Balsam grade D ${monthLabel(nextMonth)} value`),
+    ).toHaveValue('91.25')
 
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     const discardDialog = screen.getByRole('dialog', { name: 'Discard these values?' })
