@@ -111,16 +111,15 @@ announced as unavailable until a value changes or a replacement workbook has bee
 helper text is linked through `aria-describedby`. Editing a value clears the saved confirmation.
 Cancel then offers to save the changes or restore the last saved values; restoring them shows a
 dismissible confirmation that also clears on the next edit.
-Confirmation dialogs return focus to the action that opened them. The page can display the current
-session's save time and authenticated principal, but that metadata cannot be reconstructed after
-navigation because the legacy table has no audit columns. On navigation or refresh, the page reads
-the immediately upcoming month's rows from `EMS_LOG_AMV`. If rows exist, it restores the editable
-review and latest-earlier comparison; if none exist, it restores the upload state. The workbook and
-filename are not persisted, so neither is shown after a save or in a restored review. The saved-row
-lookup gates the initial workflow render: neither upload nor review is shown while it is pending.
-The application shell remains visible around a centered, non-overlay Carbon loading indicator,
-matching the initial-data gate in NR-FSPTS. A failed lookup shows an error instead of assuming there
-are no saved values.
+Confirmation dialogs return focus to the action that opened them. The page header does not show
+save time or user because `EMS_LOG_AMV` has no durable audit data for either. On navigation or
+refresh, the page reads the immediately upcoming month's rows from
+`EMS_LOG_AMV`. If rows exist, it restores the editable review and latest-earlier comparison; if
+none exist, it restores the upload state. The workbook and filename are not persisted, so neither
+is shown after a save or in a restored review. The saved-row lookup gates the initial workflow
+render: neither upload nor review is shown while it is pending. The application shell remains
+visible around a centered, non-overlay Carbon loading indicator, matching the initial-data gate in
+NR-FSPTS. A failed lookup shows an error instead of assuming there are no saved values.
 
 ## Batch audit event
 

@@ -47,7 +47,7 @@ import {
   type RtmEmsLogAmvUploadResult,
 } from '@/service/rtm-emslogamv-service'
 import { validateUploadFileSize } from '@/components/uploads/uploadQueueHelpers'
-import { formatBusinessIsoDate, LEXIS_BUSINESS_TIME_ZONE } from '@/utils/date'
+import { formatBusinessIsoDate } from '@/utils/date'
 
 type PendingUploadValidation = {
   fileName: string
@@ -55,8 +55,6 @@ type PendingUploadValidation = {
 }
 
 type SavedUploadState = {
-  savedAt?: string
-  savedBy?: string
   valueCount: number
 }
 
@@ -158,22 +156,6 @@ const formatEffectiveStartDate = (dateValue: string): string => {
     timeZone: 'UTC',
   }).format(new Date(Date.UTC(year, monthIndex, 1)))
   return `${month} 1, ${year}`
-}
-
-const formatSavedDateTime = (date: Date): string => {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    day: 'numeric',
-    hour: 'numeric',
-    hour12: true,
-    minute: '2-digit',
-    month: 'long',
-    timeZone: LEXIS_BUSINESS_TIME_ZONE,
-    year: 'numeric',
-  }).formatToParts(date)
-  const part = (type: Intl.DateTimeFormatPartTypes) =>
-    parts.find((item) => item.type === type)?.value ?? ''
-
-  return `${part('month')} ${part('day')}, ${part('year')}, ${part('hour')}:${part('minute')} ${part('dayPeriod')}`
 }
 
 const reviewValuesMatch = (
@@ -850,7 +832,7 @@ const ReviewUploadContent = ({
 }
 
 const RtmEmsLogAmvUploadPage = () => {
-  const { canPerform, capabilities } = useAuth()
+  const { canPerform } = useAuth()
   const canManage = canPerform('/lexisAgentAdmin')
   const validationRequestRef = useRef(0)
   const saveRequestRef = useRef(0)
@@ -1273,8 +1255,6 @@ const RtmEmsLogAmvUploadPage = () => {
         setSavedReviewValues({ ...reviewValues })
         setSavedPreviewResult(previewResult)
         setSavedUploadState({
-          savedAt: formatSavedDateTime(new Date()),
-          savedBy: capabilities.principal ?? 'LEXIS user',
           valueCount: saveRequests.length,
         })
         setSavedNotification('saved')
@@ -1550,12 +1530,6 @@ const RtmEmsLogAmvUploadPage = () => {
             <span>Values take effect</span>
             <strong>{formatEffectiveStartDate(effectiveMonth)}</strong>
           </div>
-          {savedUploadState?.savedAt && savedUploadState.savedBy && (
-            <div className="rtm-amv-month-summary__item">
-              <span>Last saved</span>
-              <strong>{`${savedUploadState.savedAt} by ${savedUploadState.savedBy}`}</strong>
-            </div>
-          )}
         </div>
       </Column>
 
