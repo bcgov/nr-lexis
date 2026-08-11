@@ -511,7 +511,7 @@ const reviewValueWarning = (
   const hasPositiveNewValue = typeof parsedValue === 'number' && parsedValue > 0
 
   if (currentValue === null && hasPositiveNewValue) {
-    return `${comparisonMonthName} had none. Confirm this species and grade combination is valid.`
+    return 'No value has ever been set for this grade. Confirm this species and grade combination is valid.'
   }
   if (currentValue !== null && parsedValue === null) {
     return `${comparisonMonthName} had ${formatMoney(currentValue)}. Enter a value, or 0 for none.`

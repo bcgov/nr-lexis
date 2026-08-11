@@ -798,7 +798,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     expect(newHemlockCombination).toHaveValue('120.00')
     expect(
       within(hemlockTable).getByText(
-        'July had none. Confirm this species and grade combination is valid.',
+        'No value has ever been set for this grade. Confirm this species and grade combination is valid.',
       ),
     ).toBeVisible()
     expect(
@@ -829,7 +829,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     expect(missingHemlockValue).toHaveValue('81.43')
     expect(
       within(hemlockTable).queryByText(
-        'July had none. Confirm this species and grade combination is valid.',
+        'No value has ever been set for this grade. Confirm this species and grade combination is valid.',
       ),
     ).not.toBeInTheDocument()
     expect(
