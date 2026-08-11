@@ -777,6 +777,9 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     )
     expect(screen.getAllByRole('tab')).toHaveLength(7)
     expect(screen.queryByRole('tab', { name: 'AL' })).not.toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Balsam, no warnings' })).toBeVisible()
+    expect(screen.getByRole('tab', { name: 'Hemlock, warning' })).toBeVisible()
+    expect(screen.getByRole('tab', { name: 'Cedar, warning' })).toBeVisible()
     expect(document.querySelectorAll('.rtm-amv-species-tab__status--warning')).toHaveLength(2)
 
     const balsamTable = screen.getByRole('table', {
@@ -822,9 +825,10 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     expect(document.querySelectorAll('.rtm-amv-species-tab__status--warning')).toHaveLength(1)
     expect(
       screen
-        .getByRole('tab', { name: /Hemlock/ })
+        .getByRole('tab', { name: 'Hemlock, no warnings' })
         .querySelector('.rtm-amv-species-tab__status--complete'),
     ).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Cedar, warning' })).toBeVisible()
     expect(newHemlockCombination).toHaveValue('0')
     expect(missingHemlockValue).toHaveValue('81.43')
     expect(

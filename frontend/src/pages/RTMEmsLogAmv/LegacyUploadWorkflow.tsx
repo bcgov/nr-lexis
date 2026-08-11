@@ -762,7 +762,10 @@ const ReviewUploadContent = ({
             {speciesColumns.map((column, index) => {
               const hasWarning = speciesRows[index].some(hasRowWarning)
               return (
-                <Tab key={column.key}>
+                <Tab
+                  key={column.key}
+                  aria-label={`${column.label}, ${hasWarning ? 'warning' : 'no warnings'}`}
+                >
                   <span className="rtm-amv-species-tab__label">
                     {column.label}
                     {hasWarning ? (
