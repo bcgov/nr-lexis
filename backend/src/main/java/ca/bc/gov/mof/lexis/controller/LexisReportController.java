@@ -9,13 +9,13 @@ import ca.bc.gov.mof.lexis.dto.report.LexisReportRequestDto;
 import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
 import ca.bc.gov.mof.lexis.service.report.LexisGeneratedReport;
 import ca.bc.gov.mof.lexis.service.report.LexisReportGenerationException;
-import ca.bc.gov.mof.lexis.service.report.LexisReportOutputLimitException;
 import ca.bc.gov.mof.lexis.service.report.LexisReportService;
 import ca.bc.gov.mof.lexis.service.report.LexisReportValidationException;
 import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
@@ -280,22 +280,18 @@ public class LexisReportController {
       }
 
       LexisGeneratedReport report = generatedReport.orElseThrow();
-      byte[] content = report.content() == null ? new byte[0] : report.content();
-      String effectiveFormat = effectiveFormat(report, normalizedRequest.format());
-      return completeAudit(
-          audit,
-          toResponse(report, audit, effectiveFormat),
-          effectiveFormat,
-          "generation_succeeded",
-          content.length);
-    } catch (LexisReportOutputLimitException ex) {
-      LOGGER.warn("Report output exceeded the configured size limit for {}", reportLabel);
-      return completeAudit(
-          audit,
-          reportError(org.springframework.http.HttpStatus.PAYLOAD_TOO_LARGE, ex.getMessage()),
-          null,
-          "output_limit_exceeded",
-          0);
+      try {
+        String effectiveFormat = effectiveFormat(report, normalizedRequest.format());
+        return completeAudit(
+            audit,
+            toResponse(report, audit, effectiveFormat),
+            effectiveFormat,
+            "generation_succeeded",
+            report.contentLength());
+      } catch (RuntimeException exception) {
+        deleteArtifact(report.artifactPath());
+        throw exception;
+      }
     } catch (LexisReportGenerationException ex) {
       LOGGER.error(
           "event=lexis_report operation=generate outcome=failed report={} failureType={}",
@@ -384,7 +380,7 @@ public class LexisReportController {
       ResponseEntity<StreamingResponseBody> response,
       String effectiveFormat,
       String outcome,
-      int bytes) {
+      long bytes) {
     var auditLog =
         response.getStatusCode().isError() ? AUDIT_LOGGER.atWarn() : AUDIT_LOGGER.atDebug();
     auditLog.log(
@@ -396,14 +392,14 @@ public class LexisReportController {
         response.getStatusCode().value(),
         outcome,
         Math.max(0L, (System.nanoTime() - audit.startedNanos()) / 1_000_000L),
-        Math.max(0, bytes));
+        Math.max(0L, bytes));
     return response;
   }
 
   private void completeTransferAudit(
       ReportAuditContext audit,
       String effectiveFormat,
-      int expectedBytes,
+      long expectedBytes,
       boolean successful,
       long durationNanos) {
     String outcome = successful ? "stream_write_succeeded" : "stream_write_failed";
@@ -416,7 +412,7 @@ public class LexisReportController {
         effectiveFormat,
         outcome,
         Math.max(0L, durationNanos / 1_000_000L),
-        Math.max(0, expectedBytes));
+        Math.max(0L, expectedBytes));
     if (meterRegistry != null) {
       meterRegistry
           .counter(
@@ -503,18 +499,18 @@ public class LexisReportController {
             ? "lexis-report.bin"
             : report.filename();
     MediaType mediaType = resolveMediaType(report.mediaType());
-    byte[] content = report.content() == null ? new byte[0] : report.content();
-    int contentLength = content.length;
+    long contentLength = report.contentLength();
     TemporaryReportStreamingBody responseBody;
     try {
       responseBody =
-          TemporaryReportStreamingBody.stage(
-              content,
+          TemporaryReportStreamingBody.fromArtifact(
+              report.artifactPath(),
               (successful, durationNanos) ->
                   completeTransferAudit(
                       audit, effectiveFormat, contentLength, successful, durationNanos));
     } catch (IOException exception) {
-      throw new LexisReportGenerationException("Unable to stage the generated report", exception);
+      throw new LexisReportGenerationException(
+          "Unable to claim the generated report artifact", exception);
     }
 
     ContentDisposition disposition =
@@ -545,6 +541,17 @@ public class LexisReportController {
       return MediaType.parseMediaType(mediaType);
     } catch (InvalidMediaTypeException ex) {
       return MediaType.APPLICATION_OCTET_STREAM;
+    }
+  }
+
+  private void deleteArtifact(java.nio.file.Path artifactPath) {
+    if (artifactPath == null) {
+      return;
+    }
+    try {
+      Files.deleteIfExists(artifactPath);
+    } catch (IOException exception) {
+      LOGGER.warn("Unable to remove an unclaimed LEXIS report artifact", exception);
     }
   }
 

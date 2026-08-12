@@ -8,6 +8,7 @@ import {
   type ChangeEvent,
   type DragEvent,
   type KeyboardEvent,
+  type RefObject,
 } from 'react'
 import {
   CheckmarkFilled,
@@ -35,6 +36,7 @@ import {
 import { AppNotification } from '../../components/AppNotification'
 import ConfirmationModal from '@/components/ConfirmationModal'
 import PageHeader from '@/components/PageHeader'
+import PendingIcon from '@/components/PendingIcon'
 import { useAuth } from '@/context/auth/useAuth'
 import {
   previewRtmEmsLogAmvUpload,
@@ -47,7 +49,7 @@ import {
   type RtmEmsLogAmvUploadResult,
 } from '@/service/rtm-emslogamv-service'
 import { validateUploadFileSize } from '@/components/uploads/uploadQueueHelpers'
-import { formatBusinessIsoDate, LEXIS_BUSINESS_TIME_ZONE } from '@/utils/date'
+import { formatBusinessIsoDate } from '@/utils/date'
 
 type PendingUploadValidation = {
   fileName: string
@@ -55,8 +57,6 @@ type PendingUploadValidation = {
 }
 
 type SavedUploadState = {
-  savedAt?: string
-  savedBy?: string
   valueCount: number
 }
 
@@ -158,22 +158,6 @@ const formatEffectiveStartDate = (dateValue: string): string => {
     timeZone: 'UTC',
   }).format(new Date(Date.UTC(year, monthIndex, 1)))
   return `${month} 1, ${year}`
-}
-
-const formatSavedDateTime = (date: Date): string => {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    day: 'numeric',
-    hour: 'numeric',
-    hour12: true,
-    minute: '2-digit',
-    month: 'long',
-    timeZone: LEXIS_BUSINESS_TIME_ZONE,
-    year: 'numeric',
-  }).formatToParts(date)
-  const part = (type: Intl.DateTimeFormatPartTypes) =>
-    parts.find((item) => item.type === type)?.value ?? ''
-
-  return `${part('month')} ${part('day')}, ${part('year')}, ${part('hour')}:${part('minute')} ${part('dayPeriod')}`
 }
 
 const reviewValuesMatch = (
@@ -552,10 +536,12 @@ const RejectedUploadFile = ({
   fileName,
   issues,
   onClear,
+  removeButtonRef,
 }: {
   fileName: string
   issues: string[]
   onClear: () => void
+  removeButtonRef?: RefObject<HTMLButtonElement | null>
 }) => {
   const hasMultipleIssues = issues.length > 1
   const issueOccurrences = new Map<string, number>()
@@ -575,6 +561,7 @@ const RejectedUploadFile = ({
         <span className="rtm-amv-rejected-file__actions">
           <ErrorFilled className="rtm-amv-rejected-file__error-icon" size={12} aria-hidden="true" />
           <button
+            ref={removeButtonRef}
             type="button"
             className="rtm-amv-rejected-file__remove"
             aria-label="Clear selected file"
@@ -780,7 +767,10 @@ const ReviewUploadContent = ({
             {speciesColumns.map((column, index) => {
               const hasWarning = speciesRows[index].some(hasRowWarning)
               return (
-                <Tab key={column.key}>
+                <Tab
+                  key={column.key}
+                  aria-label={`${column.label}, ${hasWarning ? 'warning' : 'no warnings'}`}
+                >
                   <span className="rtm-amv-species-tab__label">
                     {column.label}
                     {hasWarning ? (
@@ -850,7 +840,7 @@ const ReviewUploadContent = ({
 }
 
 const RtmEmsLogAmvUploadPage = () => {
-  const { canPerform, capabilities } = useAuth()
+  const { canPerform } = useAuth()
   const canManage = canPerform('/lexisAgentAdmin')
   const validationRequestRef = useRef(0)
   const saveRequestRef = useRef(0)
@@ -1273,8 +1263,6 @@ const RtmEmsLogAmvUploadPage = () => {
         setSavedReviewValues({ ...reviewValues })
         setSavedPreviewResult(previewResult)
         setSavedUploadState({
-          savedAt: formatSavedDateTime(new Date()),
-          savedBy: capabilities.principal ?? 'LEXIS user',
           valueCount: saveRequests.length,
         })
         setSavedNotification('saved')
@@ -1328,6 +1316,19 @@ const RtmEmsLogAmvUploadPage = () => {
     !!pendingUploadValidation &&
     pendingUploadValidation.fileName === selectedUploadFile.name &&
     pendingUploadValidation.fileSize === selectedUploadFile.size
+  const requestReplacementFileRemoval = () => {
+    const replacementFileValues =
+      hasValidatedUpload && previewResult?.status === 'accepted'
+        ? buildInitialReviewValues(previewResult.rows)
+        : replacementReviewValuesRef.current
+
+    if (replacementFileValues && !reviewValuesMatch(reviewValues, replacementFileValues)) {
+      setDiscardConfirmation('file')
+      return
+    }
+
+    clearReplacementFile()
+  }
   const savedActionsUnavailable =
     savedReviewValues !== null && !hasUnsavedChanges && !hasValidatedUpload
   const hasSaveSource = savedReviewValues !== null || hasValidatedUpload
@@ -1443,11 +1444,12 @@ const RtmEmsLogAmvUploadPage = () => {
             >
               <span className="rtm-amv-uploaded-file__name">{selectedUploadFile.name}</span>
               <button
+                ref={removeFileButtonRef}
                 type="button"
                 className="rtm-amv-uploaded-file__remove"
                 aria-label="Clear selected file"
                 disabled={isUploading}
-                onClick={clearReplacementFile}
+                onClick={requestReplacementFileRemoval}
               >
                 <Close size={12} />
               </button>
@@ -1464,7 +1466,8 @@ const RtmEmsLogAmvUploadPage = () => {
             <RejectedUploadFile
               fileName={selectedUploadFile.name}
               issues={rejectedFileIssues}
-              onClear={isReplacement ? clearReplacementFile : clearUploadState}
+              onClear={isReplacement ? requestReplacementFileRemoval : clearUploadState}
+              removeButtonRef={isReplacement ? removeFileButtonRef : undefined}
             />
           ) : (
             <div
@@ -1481,10 +1484,11 @@ const RtmEmsLogAmvUploadPage = () => {
                 {selectedUploadFile.size.toLocaleString()} bytes
               </span>
               <button
+                ref={isReplacement ? removeFileButtonRef : undefined}
                 type="button"
                 className="admin-upload-file-chip__remove"
                 aria-label="Clear selected file"
-                onClick={isReplacement ? clearReplacementFile : clearUploadState}
+                onClick={isReplacement ? requestReplacementFileRemoval : clearUploadState}
               >
                 <Close size={16} />
               </button>
@@ -1550,26 +1554,18 @@ const RtmEmsLogAmvUploadPage = () => {
             <span>Values take effect</span>
             <strong>{formatEffectiveStartDate(effectiveMonth)}</strong>
           </div>
-          {savedUploadState?.savedAt && savedUploadState.savedBy && (
-            <div className="rtm-amv-month-summary__item">
-              <span>Last saved</span>
-              <strong>{`${savedUploadState.savedAt} by ${savedUploadState.savedBy}`}</strong>
-            </div>
-          )}
         </div>
       </Column>
 
       <Column sm={4} md={8} lg={16} className="admin-upload-fspts-content rtm-amv-values-content">
         {savedUploadState && savedNotification && !replacementUploadOpen && (
-          <InlineNotification
-            className="rtm-amv-saved-notification"
+          <AppNotification
             kind="success"
-            lowContrast
             title={savedNotification === 'discarded' ? 'Changes discarded' : 'Values saved'}
             subtitle={
               savedNotification === 'discarded'
                 ? 'Values are back to your last save.'
-                : `${savedUploadState.valueCount} ${savedUploadState.valueCount === 1 ? 'value' : 'values'} will take effect on ${formatEffectiveStartDate(effectiveMonth)}.`
+                : `They take effect on ${formatEffectiveStartDate(effectiveMonth)}.`
             }
             onCloseButtonClick={() => setSavedNotification(null)}
           />
@@ -1674,7 +1670,7 @@ const RtmEmsLogAmvUploadPage = () => {
                 kind="primary"
                 size="md"
                 className="admin-upload-fspts-action-button"
-                renderIcon={Save}
+                renderIcon={isUploading ? PendingIcon : Save}
                 onClick={() => {
                   if (savedActionsUnavailable) {
                     return
@@ -1743,7 +1739,7 @@ const RtmEmsLogAmvUploadPage = () => {
             discardConfirmation === 'file'
               ? 'The values on screen will be cleared. Nothing has been saved.'
               : discardConfirmation === 'saved-changes'
-                ? "The values you changed since your last save will be cleared. Your saved values won't change."
+                ? 'The table will return to your last saved values. Changes made since then will be discarded.'
                 : 'The file and all values on screen will be cleared. Nothing has been saved.'
           }
           cancelLabel={
@@ -1762,6 +1758,7 @@ const RtmEmsLogAmvUploadPage = () => {
           }
           pendingLabel={discardConfirmation === 'saved-changes' ? 'Saving changes' : undefined}
           confirmDisabled={discardConfirmation === 'saved-changes' && isUploadDisabled}
+          cancelDanger={discardConfirmation === 'saved-changes'}
           danger={discardConfirmation !== 'saved-changes'}
           size="xs"
           onCancel={
@@ -1785,7 +1782,13 @@ const RtmEmsLogAmvUploadPage = () => {
                 }
               : undefined
           }
-          onConfirm={discardConfirmation === 'saved-changes' ? submitUpload : clearUploadState}
+          onConfirm={
+            discardConfirmation === 'saved-changes'
+              ? submitUpload
+              : discardConfirmation === 'file' && replacementUploadOpen
+                ? clearReplacementFile
+                : clearUploadState
+          }
           onClose={() => setDiscardConfirmation(null)}
         />
       )}

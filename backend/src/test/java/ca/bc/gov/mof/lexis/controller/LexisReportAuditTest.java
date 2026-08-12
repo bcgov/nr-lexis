@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.controller;
 
+import static ca.bc.gov.mof.lexis.test.ReportTestArtifacts.report;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -86,8 +87,13 @@ class LexisReportAuditTest {
     when(reportService.generateReport(eq("offerReport"), any(LexisReportRequestDto.class)))
         .thenReturn(
             Optional.of(
-                new LexisGeneratedReport(
-                    "forced-report.pdf", "application/pdf", new byte[] {1, 2, 3, 4})));
+                report(
+                    "forced-report.pdf",
+                    "application/pdf",
+                    (byte) 1,
+                    (byte) 2,
+                    (byte) 3,
+                    (byte) 4)));
 
     SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
     LexisReportController controller = reportController(meterRegistry);
@@ -135,8 +141,7 @@ class LexisReportAuditTest {
     when(reportService.generateReport(eq("offerReport"), any(LexisReportRequestDto.class)))
         .thenReturn(
             Optional.of(
-                new LexisGeneratedReport(
-                    "report.pdf", "application/pdf", new byte[] {1, 2, 3})));
+                report("report.pdf", "application/pdf", (byte) 1, (byte) 2, (byte) 3)));
 
     var controller = reportController();
     consume(controller.offerReport(new LexisReportRequestDto(Map.of(), "PDF")));
@@ -166,8 +171,7 @@ class LexisReportAuditTest {
     when(reportService.generateReport(eq("offerReport"), any(LexisReportRequestDto.class)))
         .thenReturn(
             Optional.of(
-                new LexisGeneratedReport(
-                    "report.pdf", "application/pdf", new byte[] {1, 2, 3})));
+                report("report.pdf", "application/pdf", (byte) 1, (byte) 2, (byte) 3)));
     SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
     var response =
         reportController(meterRegistry)
@@ -283,8 +287,8 @@ class LexisReportAuditTest {
     when(reportService.generateReport(eq("offerReport"), any(LexisReportRequestDto.class)))
         .thenReturn(
             Optional.of(
-                new LexisGeneratedReport(
-                    "legacy-offer.csv", "application/vnd.ms-excel", new byte[] {8, 9})));
+                report(
+                    "legacy-offer.csv", "application/vnd.ms-excel", (byte) 8, (byte) 9)));
 
     LegacyReportRouteController controller =
         new LegacyReportRouteController(reportController());

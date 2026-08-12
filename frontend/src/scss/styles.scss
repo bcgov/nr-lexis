@@ -2441,6 +2441,7 @@ $notification-types: 'error', 'info', 'success', 'warning';
   flex-direction: column;
   gap: 0.75rem;
   inline-size: min(18rem, calc(100vw - 2rem));
+  background-color: transparent;
   pointer-events: none;
 }
 
@@ -2470,24 +2471,20 @@ $notification-types: 'error', 'info', 'success', 'warning';
 
 @keyframes app-notification-slide-in-right {
   from {
-    opacity: 0;
     transform: translateX(100%);
   }
 
   to {
-    opacity: 1;
     transform: translateX(0);
   }
 }
 
 @keyframes app-notification-slide-out-right {
   from {
-    opacity: 1;
     transform: translateX(0);
   }
 
   to {
-    opacity: 0;
     transform: translateX(calc(100% + 1rem));
   }
 }
@@ -2583,6 +2580,10 @@ $notification-types: 'error', 'info', 'success', 'warning';
 .cds--content.app-main:has(.admin-upload-fspts-page) {
   padding-block-start: 0;
   padding-inline: 0;
+}
+
+.cds--content.app-main:has(.rtm-amv-upload-page) {
+  padding-block-end: 0;
 }
 
 .admin-upload-fspts-header,
@@ -3077,8 +3078,11 @@ $notification-types: 'error', 'info', 'success', 'warning';
 }
 
 .rtm-amv-species-table-wrap {
+  inline-size: fit-content;
   max-inline-size: 100%;
   overflow-x: auto;
+  border: 1px solid var(--fds-border-subtle, var(--cds-border-subtle));
+  border-radius: 4px;
 }
 
 .rtm-amv-species-table {
@@ -3097,6 +3101,11 @@ $notification-types: 'error', 'info', 'success', 'warning';
   border-block-end: 1px solid var(--fds-border-subtle, var(--cds-border-subtle));
   text-align: start;
   vertical-align: middle;
+}
+
+.rtm-amv-species-table tbody tr:last-child > th,
+.rtm-amv-species-table tbody tr:last-child > td {
+  border-block-end: 0;
 }
 
 .rtm-amv-species-table thead th {
@@ -3191,22 +3200,6 @@ $notification-types: 'error', 'info', 'success', 'warning';
 .rtm-amv-review-card .rtm-amv-review-notification--fixed {
   margin-block-start: 0;
   margin-block-end: 1rem;
-}
-
-.rtm-amv-saved-notification {
-  inline-size: 100%;
-  max-inline-size: none;
-  margin-block: 0 1rem;
-}
-
-.rtm-amv-saved-notification .cds--inline-notification__text-wrapper {
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: center;
-}
-
-.rtm-amv-saved-notification .cds--inline-notification__title {
-  margin-inline-end: 0;
 }
 
 .rtm-amv-upload-review-helper {

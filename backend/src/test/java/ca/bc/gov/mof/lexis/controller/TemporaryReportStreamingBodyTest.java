@@ -17,9 +17,11 @@ class TemporaryReportStreamingBodyTest {
   void successfulTransferShouldDeleteTheTemporaryFileAndNotifyTheObserver() throws Exception {
     byte[] content = new byte[] {1, 2, 3};
     AtomicBoolean successful = new AtomicBoolean();
+    Path artifact = Files.createTempFile("lexis-report-test-", ".tmp");
+    Files.write(artifact, content);
     TemporaryReportStreamingBody body =
-        TemporaryReportStreamingBody.stage(
-            content,
+        TemporaryReportStreamingBody.fromArtifact(
+            artifact,
             (completed, durationNanos) -> {
               successful.set(completed);
               assertThat(durationNanos).isNotNegative();
@@ -37,9 +39,11 @@ class TemporaryReportStreamingBodyTest {
   @Test
   void failedTransferShouldDeleteTheTemporaryFileAndNotifyTheObserver() throws Exception {
     AtomicBoolean successful = new AtomicBoolean(true);
+    Path artifact = Files.createTempFile("lexis-report-test-", ".tmp");
+    Files.write(artifact, new byte[] {1, 2, 3});
     TemporaryReportStreamingBody body =
-        TemporaryReportStreamingBody.stage(
-            new byte[] {1, 2, 3},
+        TemporaryReportStreamingBody.fromArtifact(
+            artifact,
             (completed, durationNanos) -> successful.set(completed));
     Path temporaryFile = body.temporaryFile();
     OutputStream failingOutput =
@@ -64,9 +68,11 @@ class TemporaryReportStreamingBodyTest {
 
   @Test
   void observerFailureShouldNotInterruptTransferOrCleanup() throws Exception {
+    Path artifact = Files.createTempFile("lexis-report-test-", ".tmp");
+    Files.write(artifact, new byte[] {4, 5});
     TemporaryReportStreamingBody body =
-        TemporaryReportStreamingBody.stage(
-            new byte[] {4, 5},
+        TemporaryReportStreamingBody.fromArtifact(
+            artifact,
             (completed, durationNanos) -> {
               throw new IllegalStateException("metrics unavailable");
             });

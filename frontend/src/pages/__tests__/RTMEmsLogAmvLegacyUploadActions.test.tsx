@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { APP_NOTIFICATION_REGION_ID } from '@/components/AppNotification'
 import { useAuth } from '@/context/auth/useAuth'
 import RtmEmsLogAmvUploadPage from '@/pages/RTMEmsLogAmv/LegacyUploadWorkflow'
 import {
@@ -226,7 +227,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     expect(screen.getByText('Values saved')).toBeVisible()
   })
 
-  it('replaces a saved review from a workbook and updates it only after save', async () => {
+  it('confirms removal of manually edited replacement values and updates only after save', async () => {
     const currentMonth = `${formatBusinessIsoDate().slice(0, 7)}-01`
     const nextMonth = monthOffset(currentMonth, 1)
     const comparisonMonth = monthOffset(nextMonth, -1)
@@ -338,6 +339,51 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       'true',
     )
     expect(mockedSaveBatch).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Clear selected file' }))
+    expect(
+      screen.queryByRole('dialog', { name: 'Are you sure you want to remove this file?' }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByLabelText(`Balsam grade D ${monthLabel(nextMonth)} value`)).toHaveValue(
+      '78.14',
+    )
+
+    await userEvent.upload(
+      screen.getByLabelText('Replacement average monthly values spreadsheet'),
+      replacement,
+    )
+    const editedReplacementValue = await screen.findByLabelText(
+      `Balsam grade D ${monthLabel(nextMonth)} value`,
+    )
+    await userEvent.clear(editedReplacementValue)
+    await userEvent.type(editedReplacementValue, '92.50')
+    await userEvent.click(screen.getByRole('button', { name: 'Clear selected file' }))
+
+    const removeReplacementDialog = screen.getByRole('dialog', {
+      name: 'Are you sure you want to remove this file?',
+    })
+    expect(removeReplacementDialog).toHaveAccessibleDescription(
+      'The values on screen will be cleared. Nothing has been saved.',
+    )
+    await userEvent.click(
+      within(removeReplacementDialog).getByRole('button', { name: 'Keep file' }),
+    )
+    expect(editedReplacementValue).toHaveValue('92.50')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Clear selected file' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Remove file' }))
+    expect(screen.getByLabelText(`Balsam grade D ${monthLabel(nextMonth)} value`)).toHaveValue(
+      '78.14',
+    )
+    expect(mockedSaveBatch).not.toHaveBeenCalled()
+
+    await userEvent.upload(
+      screen.getByLabelText('Replacement average monthly values spreadsheet'),
+      replacement,
+    )
+    expect(
+      await screen.findByLabelText(`Balsam grade D ${monthLabel(nextMonth)} value`),
+    ).toHaveValue('91.25')
 
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     const discardDialog = screen.getByRole('dialog', { name: 'Discard these values?' })
@@ -777,6 +823,9 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     )
     expect(screen.getAllByRole('tab')).toHaveLength(7)
     expect(screen.queryByRole('tab', { name: 'AL' })).not.toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Balsam, no warnings' })).toBeVisible()
+    expect(screen.getByRole('tab', { name: 'Hemlock, warning' })).toBeVisible()
+    expect(screen.getByRole('tab', { name: 'Cedar, warning' })).toBeVisible()
     expect(document.querySelectorAll('.rtm-amv-species-tab__status--warning')).toHaveLength(2)
 
     const balsamTable = screen.getByRole('table', {
@@ -822,9 +871,10 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     expect(document.querySelectorAll('.rtm-amv-species-tab__status--warning')).toHaveLength(1)
     expect(
       screen
-        .getByRole('tab', { name: /Hemlock/ })
+        .getByRole('tab', { name: 'Hemlock, no warnings' })
         .querySelector('.rtm-amv-species-tab__status--complete'),
     ).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Cedar, warning' })).toBeVisible()
     expect(newHemlockCombination).toHaveValue('0')
     expect(missingHemlockValue).toHaveValue('81.43')
     expect(
@@ -848,10 +898,13 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     )
 
     expect(hemlockTable).toBeVisible()
-    expect(screen.getByText('Values saved')).toBeVisible()
-    expect(screen.getByText(/\d+ values will take effect on [A-Z][a-z]+ 1, \d{4}\./)).toBeVisible()
-    expect(screen.getByText('Last saved')).toBeVisible()
-    expect(screen.getByText(/by idir\\admin$/)).toBeVisible()
+    const savedToastTitle = screen.getByText('Values saved')
+    expect(savedToastTitle).toBeVisible()
+    const savedToast = savedToastTitle.closest('.cds--toast-notification') as HTMLElement
+    expect(savedToast).toHaveClass('cds--toast-notification--success')
+    expect(document.getElementById(APP_NOTIFICATION_REGION_ID)).toContainElement(savedToast)
+    expect(screen.getByText(/They take effect on [A-Z][a-z]+ 1, \d{4}\./)).toBeVisible()
+    expect(screen.queryByText('Last saved')).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Values', level: 2 })).toBeVisible()
     expect(screen.getByRole('button', { name: 'Replace file' })).toBeVisible()
     expect(screen.queryByLabelText('Uploaded average monthly values file')).not.toBeInTheDocument()
@@ -880,10 +933,10 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     const savedChangesDialog = screen.getByRole('dialog', { name: 'Discard these values?' })
     expect(savedChangesDialog).toHaveAccessibleDescription(
-      "The values you changed since your last save will be cleared. Your saved values won't change.",
+      'The table will return to your last saved values. Changes made since then will be discarded.',
     )
     expect(within(savedChangesDialog).getByRole('button', { name: 'Discard changes' })).toHaveClass(
-      'cds--btn--tertiary',
+      'cds--btn--danger--tertiary',
     )
     expect(within(savedChangesDialog).getByRole('button', { name: 'Save changes' })).toHaveClass(
       'cds--btn--primary',
@@ -1207,7 +1260,9 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     })
     await userEvent.click(screen.getByRole('button', { name: 'Save values' }))
 
-    expect(screen.getByRole('button', { name: 'Saving values' })).toBeDisabled()
+    const savingButton = screen.getByRole('button', { name: 'Saving values' })
+    expect(savingButton).toBeDisabled()
+    expect(savingButton.querySelector('.cds--loading')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled()
 
     await act(async () => rejectSave(new Error('unavailable')))
