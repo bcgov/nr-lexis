@@ -54,6 +54,7 @@ OpenShift receives sensitive values from Secrets and ordinary settings from temp
 | `LEXIS_EXPIRY_LOCK_AT_MOST_FOR` | Maximum Oracle ShedLock duration; releases a crashed run | PT6H |
 | `LEXIS_EXPIRY_LOCK_AT_LEAST_FOR` | Minimum Oracle ShedLock duration; absorbs multi-pod trigger skew | PT5M |
 | `LEXIS_REPORT_QUERY_TIMEOUT_SECONDS` | Maximum JDBC/Jasper report query duration in seconds (1-3600) | 120 |
+| `LEXIS_REPORT_JDBC_FETCH_SIZE` | Oracle rows fetched per report database round trip (1-10000) | 100 |
 | `LEXIS_REPORT_STATISTICS_LOG_LEVEL` | Successful report generation/download statistics; DEBUG in DEV/TEST and hidden at the INFO threshold in PROD | INFO |
 | `LEXIS_PERMIT_INVOICE_MODE` | Selects `legacy-best-effort`, `canadian-internal`, or `disabled` permit invoice coordination | legacy-best-effort |
 | `LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS` | Requested timeout in seconds for each isolated GBMS transaction (1-3600); cancellation can leave the outcome unknown | 60 |
@@ -88,6 +89,7 @@ The reusable deployment workflow maps these GitHub settings:
 | `LEXIS_EXPIRY_LOCK_AT_MOST_FOR` | Variable `LEXIS_EXPIRY_LOCK_AT_MOST_FOR` |
 | `LEXIS_EXPIRY_LOCK_AT_LEAST_FOR` | Variable `LEXIS_EXPIRY_LOCK_AT_LEAST_FOR` |
 | `LEXIS_REPORT_QUERY_TIMEOUT_SECONDS` | Variable `LEXIS_REPORT_QUERY_TIMEOUT_SECONDS` |
+| `LEXIS_REPORT_JDBC_FETCH_SIZE` | Variable `LEXIS_REPORT_JDBC_FETCH_SIZE` |
 | `LEXIS_REPORT_STATISTICS_LOG_LEVEL` | Derived from the deployment environment |
 | `LEXIS_PERMIT_INVOICE_MODE` | Variable `LEXIS_PERMIT_INVOICE_MODE` |
 | `LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS` | Variable `LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS` |
@@ -102,6 +104,16 @@ The reusable deployment workflow maps these GitHub settings:
 | `LEXIS_MAIL_REGION_RCO_ADDRESS` | Secret `LEXIS_MAIL_REGION_RCO_ADDRESS` |
 | `LEXIS_MAIL_REGION_RNI_ADDRESS` | Secret `LEXIS_MAIL_REGION_RNI_ADDRESS` |
 | `LEXIS_MAIL_REGION_RSI_ADDRESS` | Secret `LEXIS_MAIL_REGION_RSI_ADDRESS` |
+
+### Report Resource Lifecycle
+
+Report rows are consumed with a bounded JDBC fetch size and written to file-backed artifacts under
+`/tmp/lexis-reports`. Oracle cursors and connections are closed before the completed artifact is
+streamed to the browser, so a slow or disconnected browser does not retain database resources.
+Artifacts are deleted after each transfer attempt. There is no application-level report size cap;
+the pod's normal ephemeral-storage limit remains the physical boundary. As orphan protection, every
+backend replica removes only managed report artifacts older than one hour from its own temporary
+storage at 03:30 America/Vancouver. This local cleanup intentionally does not use a distributed lock.
 
 ### Virus Scanning
 

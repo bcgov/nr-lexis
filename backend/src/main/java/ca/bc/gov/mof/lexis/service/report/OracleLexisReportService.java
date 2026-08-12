@@ -11,6 +11,9 @@ import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -19,7 +22,6 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.LocalDate;
 import java.util.HashMap;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -153,8 +155,7 @@ public class OracleLexisReportService implements LexisReportService {
     }
 
     LexisJasperReportDefinition definition = definitionOptional.get();
-    return generateResolvedReport(definition, request)
-        .map(reportResources::requireWithinOutputLimit);
+    return generateResolvedReport(definition, request);
   }
 
   private Optional<LexisGeneratedReport> generateResolvedReport(
@@ -224,25 +225,29 @@ public class OracleLexisReportService implements LexisReportService {
         definition.action(),
         effectiveFormat.name());
     try (LexisReportResourceManager.JasperVirtualizerSession ignored =
-            reportResources.openVirtualizer(parameters);
-        Connection connection = dataSource.getConnection()) {
-      JasperPrint print =
-          JasperFillManager.getInstance(reportResources.jasperReportsContext())
-              .fill(jasperReport, parameters, connection);
-      byte[] reportBytes = exportTemplateReport(print, effectiveFormat, definition);
+        reportResources.openVirtualizer(parameters)) {
+      JasperPrint print;
+      try (Connection connection = dataSource.getConnection()) {
+        print =
+            JasperFillManager.getInstance(reportResources.jasperReportsContext())
+                .fill(jasperReport, parameters, connection);
+      }
+
+      LexisGeneratedReport generatedReport;
+      try (LexisReportArtifact artifact = reportResources.createArtifact()) {
+        exportTemplateReport(print, effectiveFormat, definition, artifact.outputStream());
+        generatedReport =
+            artifact.complete(
+                definition.resolveFilename(effectiveFormat), effectiveFormat.mediaType());
+      }
       LOGGER.debug(
           "Generated Jasper report action [{}] format [{}] bytes [{}] durationMs [{}]",
           definition.action(),
           effectiveFormat.name(),
-          reportBytes.length,
+          generatedReport.contentLength(),
           elapsedMillis(startedNanos));
-      return Optional.of(
-          new LexisGeneratedReport(
-              definition.resolveFilename(effectiveFormat),
-              effectiveFormat.mediaType(),
-              reportBytes));
+      return Optional.of(generatedReport);
     } catch (JRException | JRRuntimeException ex) {
-      reportResources.rethrowOutputLimit(ex);
       LOGGER.error(
           "event=lexis_report operation=jasper_render outcome=failed action={} durationMs={} failureType={}",
           definition.action(),
@@ -258,6 +263,14 @@ public class OracleLexisReportService implements LexisReportService {
           exceptionType(ex));
       throw new LexisReportGenerationException(
           "The report data could not be loaded for " + definition.action(), ex);
+    } catch (IOException ex) {
+      LOGGER.error(
+          "event=lexis_report operation=artifact_write outcome=failed action={} durationMs={} failureType={}",
+          definition.action(),
+          elapsedMillis(startedNanos),
+          exceptionType(ex));
+      throw new LexisReportGenerationException(
+          "The report could not be stored for " + definition.action(), ex);
     }
   }
 
@@ -466,124 +479,45 @@ public class OracleLexisReportService implements LexisReportService {
     return value == null || value.trim().isEmpty();
   }
 
-  byte[] exportTemplateReport(
+  void exportTemplateReport(
       JasperPrint print,
       LexisReportFormat format,
-      LexisJasperReportDefinition definition)
+      LexisJasperReportDefinition definition,
+      OutputStream output)
       throws JRException {
     if (format == LexisReportFormat.PDF) {
-      LexisReportResourceManager.LimitedByteArrayOutputStream output =
-          reportResources.newOutputStream();
       JasperExportManager.exportReportToPdfStream(print, output);
-      return reportResources.requireWithinOutputLimit(output.toByteArray());
+      return;
     }
     if (format == LexisReportFormat.CSV) {
-      return exportTemplateCsv(print);
+      exportTemplateCsv(print, output);
+      return;
     }
     if (format == LexisReportFormat.XLS) {
-      return exportTemplateXls(print);
+      exportTemplateXls(print, output);
+      return;
     }
     if (format == LexisReportFormat.XLSX) {
-      return exportTemplateXlsx(print);
+      exportTemplateXlsx(print, output);
+      return;
     }
     throw new IllegalStateException(
         "Unsupported template export format [" + format.name() + "] for action " + definition.action());
   }
 
-  byte[] exportTemplateCsv(JasperPrint print) throws JRException {
-    LexisReportResourceManager.LimitedByteArrayOutputStream output =
-        reportResources.newOutputStream();
+  void exportTemplateCsv(JasperPrint print, OutputStream output) throws JRException {
     JRCsvExporter exporter = new JRCsvExporter();
     exporter.setExporterInput(new SimpleExporterInput(print));
-    exporter.setExporterOutput(
-        new SimpleWriterExporterOutput(output, StandardCharsets.UTF_8.name()));
-    exporter.exportReport();
-    return reportResources.requireWithinOutputLimit(sanitizeTemplateCsv(output.toByteArray()));
+    try (Writer writer =
+        new CsvSanitizingWriter(new OutputStreamWriter(output, StandardCharsets.UTF_8))) {
+      exporter.setExporterOutput(new SimpleWriterExporterOutput(writer));
+      exporter.exportReport();
+    } catch (IOException ex) {
+      throw new JRException("Unable to write the Jasper CSV artifact", ex);
+    }
   }
 
-  byte[] sanitizeTemplateCsv(byte[] csvBytes) {
-    String csv = new String(csvBytes == null ? new byte[0] : csvBytes, StandardCharsets.UTF_8);
-    List<List<String>> rows = new ArrayList<>();
-    List<String> row = new ArrayList<>();
-    StringBuilder cell = new StringBuilder();
-    boolean quoted = false;
-    boolean rowStarted = false;
-
-    for (int index = 0; index < csv.length(); index++) {
-      char current = csv.charAt(index);
-      if (quoted) {
-        if (current == '"') {
-          if (index + 1 < csv.length() && csv.charAt(index + 1) == '"') {
-            cell.append('"');
-            index++;
-          } else {
-            quoted = false;
-          }
-        } else {
-          cell.append(current);
-        }
-        rowStarted = true;
-        continue;
-      }
-      if (current == '"' && cell.length() == 0) {
-        quoted = true;
-        rowStarted = true;
-      } else if (current == ',') {
-        row.add(cell.toString());
-        cell.setLength(0);
-        rowStarted = true;
-      } else if (current == '\r' || current == '\n') {
-        if (current == '\r' && index + 1 < csv.length() && csv.charAt(index + 1) == '\n') {
-          index++;
-        }
-        row.add(cell.toString());
-        rows.add(row);
-        row = new ArrayList<>();
-        cell.setLength(0);
-        rowStarted = false;
-      } else {
-        cell.append(current);
-        rowStarted = true;
-      }
-    }
-    if (rowStarted || cell.length() > 0 || !row.isEmpty()) {
-      row.add(cell.toString());
-      rows.add(row);
-    }
-
-    StringBuilder safeCsv = new StringBuilder(csv.length() + 64);
-    for (List<String> values : rows) {
-      for (int index = 0; index < values.size(); index++) {
-        if (index > 0) {
-          safeCsv.append(',');
-        }
-        safeCsv.append('"').append(sanitizeCsvCell(values.get(index))).append('"');
-      }
-      safeCsv.append('\n');
-    }
-    return reportResources.requireWithinOutputLimit(
-        safeCsv.toString().getBytes(StandardCharsets.UTF_8));
-  }
-
-  private String sanitizeCsvCell(String input) {
-    String sanitized =
-        input == null
-            ? ""
-            : input.replace("\"", "\"\"").replace("\n", "").replace("\r", "").replace("\f", "");
-    String candidate = sanitized.stripLeading();
-    boolean startsWithControl = !sanitized.isEmpty() && sanitized.charAt(0) == '\t';
-    boolean startsWithFormula =
-        !candidate.isEmpty()
-            && (candidate.charAt(0) == '='
-                || candidate.charAt(0) == '+'
-                || candidate.charAt(0) == '-'
-                || candidate.charAt(0) == '@');
-    return startsWithControl || startsWithFormula ? "'" + sanitized : sanitized;
-  }
-
-  byte[] exportTemplateXlsx(JasperPrint print) throws JRException {
-    LexisReportResourceManager.LimitedByteArrayOutputStream output =
-        reportResources.newOutputStream();
+  void exportTemplateXlsx(JasperPrint print, OutputStream output) throws JRException {
     JRXlsxExporter exporter = new JRXlsxExporter();
     SimpleXlsxReportConfiguration configuration = new SimpleXlsxReportConfiguration();
     configuration.setDetectCellType(true);
@@ -594,12 +528,9 @@ public class OracleLexisReportService implements LexisReportService {
     exporter.setExporterInput(new SimpleExporterInput(print));
     exporter.setExporterOutput(new SimpleOutputStreamExporterOutput(output));
     exporter.exportReport();
-    return reportResources.requireWithinOutputLimit(output.toByteArray());
   }
 
-  byte[] exportTemplateXls(JasperPrint print) throws JRException {
-    LexisReportResourceManager.LimitedByteArrayOutputStream output =
-        reportResources.newOutputStream();
+  void exportTemplateXls(JasperPrint print, OutputStream output) throws JRException {
     JRXlsExporter exporter = new JRXlsExporter();
     SimpleXlsReportConfiguration configuration = new SimpleXlsReportConfiguration();
     configuration.setDetectCellType(true);
@@ -610,7 +541,6 @@ public class OracleLexisReportService implements LexisReportService {
     exporter.setExporterInput(new SimpleExporterInput(print));
     exporter.setExporterOutput(new SimpleOutputStreamExporterOutput(output));
     exporter.exportReport();
-    return reportResources.requireWithinOutputLimit(output.toByteArray());
   }
 
   JasperReport compileTemplate(LexisJasperReportDefinition definition) {

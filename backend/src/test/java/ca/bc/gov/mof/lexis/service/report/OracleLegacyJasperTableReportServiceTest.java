@@ -1,15 +1,26 @@
 package ca.bc.gov.mof.lexis.service.report;
 
+import static ca.bc.gov.mof.lexis.test.ReportTestArtifacts.content;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.report.LexisReportRequestDto;
+import java.io.OutputStream;
+import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import net.sf.jasperreports.engine.JRException;
-import net.sf.jasperreports.engine.data.JRMapCollectionDataSource;
+import net.sf.jasperreports.engine.JasperPrint;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -21,23 +32,22 @@ class OracleLegacyJasperTableReportServiceTest {
   @Mock private OracleLegacyCsvReportService legacyCsvReportService;
 
   @Test
-  void shouldGeneratePdfForTeacReportUsingLegacyTabularData() {
-    LegacyTabularReportData tabularData =
-        new LegacyTabularReportData(
+  void shouldGeneratePdfForTeacReportUsingLegacyCursorData() throws Exception {
+    TabularData tabularData =
+        new TabularData(
             List.of("ORG_UNIT", "EXPORT_SCHEDULE"),
             List.of(
                 List.of("RKB", "12345"),
                 List.of("RNO", "12345")));
 
-    when(legacyCsvReportService.loadLegacyTabularReportData(
-            LexisJasperReportDefinition.TEAC_REPORT,
-            new LexisReportRequestDto(
-                Map.of(
-                    "exportJurisdictionCode", "P",
-                    "exportSchedule", "12345",
-                    "region", "[1904,1905]"),
-                "PDF")))
-        .thenReturn(Optional.of(tabularData));
+    LexisReportRequestDto request =
+        new LexisReportRequestDto(
+            Map.of(
+                "exportJurisdictionCode", "P",
+                "exportSchedule", "12345",
+                "region", "[1904,1905]"),
+            "PDF");
+    stubCursor(LexisJasperReportDefinition.TEAC_REPORT, request, tabularData);
 
     OracleLegacyJasperTableReportService service =
         new OracleLegacyJasperTableReportService(legacyCsvReportService);
@@ -45,32 +55,26 @@ class OracleLegacyJasperTableReportServiceTest {
     Optional<LexisGeneratedReport> report =
         service.generateLegacyPdfReport(
             LexisJasperReportDefinition.TEAC_REPORT,
-            new LexisReportRequestDto(
-                Map.of(
-                    "exportJurisdictionCode", "P",
-                    "exportSchedule", "12345",
-                    "region", "[1904,1905]"),
-                "PDF"),
+            request,
             LexisReportFormat.PDF);
 
     assertThat(report).isPresent();
     assertThat(report.orElseThrow().filename()).isEqualTo("teac-package-report.pdf");
     assertThat(report.orElseThrow().mediaType()).isEqualTo("application/pdf");
-    assertThat(report.orElseThrow().content()).isNotEmpty();
+    assertThat(content(report.orElseThrow())).isNotEmpty();
   }
 
   @Test
-  void shouldGeneratePdfForApprovedExemptionReportUsingLegacyTabularData() {
-    LegacyTabularReportData tabularData =
-        new LegacyTabularReportData(
+  void shouldGeneratePdfForApprovedExemptionReportUsingLegacyCursorData() throws Exception {
+    TabularData tabularData =
+        new TabularData(
             List.of("EXEMPTION_NUMBER", "APPROVED_VOLUME", "EXPORT_EXEMPTION_STATUS_CODE"),
             List.of(List.of("EX-123", "1200", "ACT")));
     LexisReportRequestDto request =
         new LexisReportRequestDto(Map.of("exemptionNumber", "EX-123"), "PDF");
 
-    when(legacyCsvReportService.loadLegacyTabularReportData(
-            LexisJasperReportDefinition.APPROVED_EXEMPTION_REPORT, request))
-        .thenReturn(Optional.of(tabularData));
+    stubCursor(
+        LexisJasperReportDefinition.APPROVED_EXEMPTION_REPORT, request, tabularData);
 
     OracleLegacyJasperTableReportService service =
         new OracleLegacyJasperTableReportService(legacyCsvReportService);
@@ -84,13 +88,48 @@ class OracleLegacyJasperTableReportServiceTest {
     assertThat(report).isPresent();
     assertThat(report.orElseThrow().filename()).isEqualTo("approved-exemption.pdf");
     assertThat(report.orElseThrow().mediaType()).isEqualTo("application/pdf");
-    assertThat(report.orElseThrow().content()).isNotEmpty();
+    assertThat(content(report.orElseThrow())).isNotEmpty();
+  }
+
+  @Test
+  void shouldReleaseLegacyCursorBeforeExportingPdfArtifact() throws Exception {
+    LexisReportRequestDto request = new LexisReportRequestDto(Map.of(), "PDF");
+    AtomicBoolean cursorReleased = new AtomicBoolean(false);
+    ResultSet resultSet = resultSet(new TabularData(List.of("ORG_UNIT"), List.of(List.of("RKB"))));
+    doAnswer(
+            invocation -> {
+              OracleLegacyCsvReportService.LegacyCursorProcessor<?, ?> processor =
+                  invocation.getArgument(2);
+              try {
+                return Optional.of(processor.process(resultSet));
+              } finally {
+                cursorReleased.set(true);
+              }
+            })
+        .when(legacyCsvReportService)
+        .withLegacyTabularReportCursor(
+            eq(LexisJasperReportDefinition.TEAC_REPORT), eq(request), any());
+    OracleLegacyJasperTableReportService service =
+        new OracleLegacyJasperTableReportService(legacyCsvReportService) {
+          @Override
+          void exportPdf(JasperPrint print, OutputStream output) {
+            assertThat(cursorReleased).isTrue();
+          }
+        };
+
+    LexisGeneratedReport report =
+        service
+            .generateLegacyPdfReport(
+                LexisJasperReportDefinition.TEAC_REPORT, request, LexisReportFormat.PDF)
+            .orElseThrow();
+
+    assertThat(content(report)).isEmpty();
   }
 
   @Test
   void shouldCollapseOverflowColumnsInsteadOfDroppingLegacyFallbackData() {
-    LegacyTabularReportData tabularData =
-        new LegacyTabularReportData(
+    TabularData tabularData =
+        new TabularData(
             List.of(
                 "COL_A",
                 "COL_B",
@@ -129,17 +168,15 @@ class OracleLegacyJasperTableReportServiceTest {
         service.buildTemplateParameters(
             LexisJasperReportDefinition.SPECIES_GRADE_REPORT,
             new LexisReportRequestDto(Map.of(), "PDF"),
-            tabularData);
-    List<Map<String, ?>> rows = service.buildRowMaps(tabularData);
+            tabularData.columnHeaders());
+    String overflow =
+        service.overflowColumns(tabularData.columnHeaders(), tabularData.rows().getFirst());
 
     assertThat(parameters)
         .containsEntry("P_COLUMN_COUNT", 12)
         .containsEntry("P_COL_HEADER_11", "COL_K")
         .containsEntry("P_COL_HEADER_12", "Additional Columns");
-    assertThat(rows).hasSize(1);
-    assertThat(rows.get(0).get("COL_11")).isEqualTo("value-k");
-    assertThat(rows.get(0).get("COL_12"))
-        .isEqualTo("COL_L=value-l; COL_M=value-m; COL_N=value-n");
+    assertThat(overflow).isEqualTo("COL_L=value-l; COL_M=value-m; COL_N=value-n");
   }
 
   @Test
@@ -160,7 +197,7 @@ class OracleLegacyJasperTableReportServiceTest {
                     "regionLabel",
                     "Kootenay-Boundary Natural Resource Region, Skeena Natural Resource Region"),
                 "PDF"),
-            new LegacyTabularReportData(List.of("ORG_UNIT"), List.of()));
+            List.of("ORG_UNIT"));
 
     assertThat(parameters)
         .containsEntry(
@@ -192,7 +229,7 @@ class OracleLegacyJasperTableReportServiceTest {
                     Map.entry("timberMark", "TM123"),
                     Map.entry("forestFileId", "A12345")),
                 "PDF"),
-            new LegacyTabularReportData(List.of("SPECIES"), List.of()));
+            List.of("SPECIES"));
 
     assertThat(parameters)
         .containsEntry(
@@ -217,7 +254,7 @@ class OracleLegacyJasperTableReportServiceTest {
                     "exportSchedule", "1001",
                     "region", "1904"),
                 "PDF"),
-            new LegacyTabularReportData(List.of("ORG_UNIT"), List.of()));
+            List.of("ORG_UNIT"));
 
     assertThat(parameters)
         .containsEntry(
@@ -240,18 +277,15 @@ class OracleLegacyJasperTableReportServiceTest {
   }
 
   @Test
-  void shouldPropagateWhenMigratedLegacyPdfRenderFails() {
-    LegacyTabularReportData tabularData =
-        new LegacyTabularReportData(List.of("ORG_UNIT"), List.of(List.of("RKB")));
+  void shouldPropagateWhenMigratedLegacyPdfRenderFails() throws Exception {
+    TabularData tabularData =
+        new TabularData(List.of("ORG_UNIT"), List.of(List.of("RKB")));
     LexisReportRequestDto request = new LexisReportRequestDto(Map.of(), "PDF");
-    when(legacyCsvReportService.loadLegacyTabularReportData(
-            LexisJasperReportDefinition.TEAC_REPORT, request))
-        .thenReturn(Optional.of(tabularData));
+    stubCursor(LexisJasperReportDefinition.TEAC_REPORT, request, tabularData);
     OracleLegacyJasperTableReportService service =
         new OracleLegacyJasperTableReportService(legacyCsvReportService) {
           @Override
-          byte[] renderPdf(Map<String, Object> parameters, JRMapCollectionDataSource dataSource)
-              throws JRException {
+          void exportPdf(JasperPrint print, OutputStream output) throws JRException {
             throw new JRException("render failed");
           }
         };
@@ -266,4 +300,43 @@ class OracleLegacyJasperTableReportServiceTest {
         .hasMessage("The migrated report could not be rendered for teacReport")
         .hasCauseInstanceOf(JRException.class);
   }
+
+  @SuppressWarnings({"rawtypes", "unchecked"})
+  private void stubCursor(
+      LexisJasperReportDefinition definition,
+      LexisReportRequestDto request,
+      TabularData data)
+      throws Exception {
+    ResultSet resultSet = resultSet(data);
+
+    doAnswer(
+            invocation -> {
+              OracleLegacyCsvReportService.LegacyCursorProcessor processor =
+                  invocation.getArgument(2);
+              return Optional.of(processor.process(resultSet));
+            })
+        .when(legacyCsvReportService)
+        .withLegacyTabularReportCursor(eq(definition), eq(request), any());
+  }
+
+  private ResultSet resultSet(TabularData data) throws Exception {
+    ResultSet resultSet = mock(ResultSet.class);
+    ResultSetMetaData metadata = mock(ResultSetMetaData.class);
+    when(resultSet.getMetaData()).thenReturn(metadata);
+    when(metadata.getColumnCount()).thenReturn(data.columnHeaders().size());
+    for (int index = 1; index <= data.columnHeaders().size(); index++) {
+      when(metadata.getColumnName(index)).thenReturn(data.columnHeaders().get(index - 1));
+    }
+
+    AtomicInteger rowIndex = new AtomicInteger(-1);
+    when(resultSet.next())
+        .thenAnswer(invocation -> rowIndex.incrementAndGet() < data.rows().size());
+    when(resultSet.getString(anyInt()))
+        .thenAnswer(
+            invocation ->
+                data.rows().get(rowIndex.get()).get(invocation.getArgument(0, Integer.class) - 1));
+    return resultSet;
+  }
+
+  private record TabularData(List<String> columnHeaders, List<List<String>> rows) {}
 }

@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.service.report;
 
+import static ca.bc.gov.mof.lexis.test.ReportTestArtifacts.report;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -12,12 +13,19 @@ import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository;
 import ca.bc.gov.mof.lexis.repository.report.LexisReportScheduleRepository;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.io.StringWriter;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
 import javax.sql.DataSource;
 import net.sf.jasperreports.engine.JRRuntimeException;
 import net.sf.jasperreports.engine.JasperCompileManager;
@@ -108,8 +116,12 @@ class OracleLexisReportServiceFormatSupportTest {
     OracleLegacyJasperTableReportService legacyJasperTableReportService =
         Mockito.mock(OracleLegacyJasperTableReportService.class);
     LexisGeneratedReport legacyReport =
-        new LexisGeneratedReport(
-            "offerReport2026-06-04.csv", "application/vnd.ms-excel", "csv".getBytes());
+        report(
+            "offerReport2026-06-04.csv",
+            "application/vnd.ms-excel",
+            (byte) 'c',
+            (byte) 's',
+            (byte) 'v');
     LexisReportRequestDto request =
         new LexisReportRequestDto(Map.of("region", "1904"), "CSV");
     Mockito.when(
@@ -136,7 +148,8 @@ class OracleLexisReportServiceFormatSupportTest {
     OracleLegacyJasperTableReportService legacyJasperTableReportService =
         Mockito.mock(OracleLegacyJasperTableReportService.class);
     LexisGeneratedReport legacyReport =
-        new LexisGeneratedReport("speciesGradeReport.pdf", "application/pdf", new byte[] {1, 2, 3});
+        report(
+            "speciesGradeReport.pdf", "application/pdf", (byte) 1, (byte) 2, (byte) 3);
     LexisReportRequestDto request =
         new LexisReportRequestDto(Map.of("region", "1904"), "PDF");
     LexisReportRequestDto effectiveRequest =
@@ -174,7 +187,7 @@ class OracleLexisReportServiceFormatSupportTest {
     OracleLegacyJasperTableReportService legacyJasperTableReportService =
         Mockito.mock(OracleLegacyJasperTableReportService.class);
     LexisGeneratedReport legacyReport =
-        new LexisGeneratedReport("approvedExemptionReport.pdf", "application/pdf", new byte[] {1});
+        report("approvedExemptionReport.pdf", "application/pdf", (byte) 1);
     LexisReportRequestDto request =
         new LexisReportRequestDto(Map.of("exemptionNumber", "EX-123"), "CSV");
     Mockito.when(
@@ -252,10 +265,11 @@ class OracleLexisReportServiceFormatSupportTest {
           }
 
           @Override
-          byte[] exportTemplateReport(
+          void exportTemplateReport(
               JasperPrint print,
               LexisReportFormat format,
-              LexisJasperReportDefinition definition) {
+              LexisJasperReportDefinition definition,
+              OutputStream output) {
             throw new JRRuntimeException("font unavailable");
           }
         };
@@ -267,6 +281,67 @@ class OracleLexisReportServiceFormatSupportTest {
         .isInstanceOf(LexisReportGenerationException.class)
         .hasMessage("The report could not be rendered for feeReport")
         .hasCauseInstanceOf(JRRuntimeException.class);
+  }
+
+  @Test
+  void shouldCloseOracleConnectionBeforeExportingTemplateArtifact() throws Exception {
+    DataSource dataSource = Mockito.mock(DataSource.class);
+    Connection connection = Mockito.mock(Connection.class);
+    AtomicBoolean connectionClosed = new AtomicBoolean(false);
+    OracleLegacyCsvReportService legacyCsvReportService =
+        Mockito.mock(OracleLegacyCsvReportService.class);
+    OracleLegacyJasperTableReportService legacyJasperTableReportService =
+        Mockito.mock(OracleLegacyJasperTableReportService.class);
+    Mockito.when(dataSource.getConnection()).thenReturn(connection);
+    Mockito.doAnswer(
+            invocation -> {
+              connectionClosed.set(true);
+              return null;
+            })
+        .when(connection)
+        .close();
+    OracleLexisReportService service =
+        new OracleLexisReportService(
+            dataSource,
+            new LexisJasperReportParameterProvider(),
+            legacyCsvReportService,
+            legacyJasperTableReportService,
+            Mockito.mock(PermitRpcRepository.class),
+            Mockito.mock(LexisReportScheduleRepository.class),
+            new LexisSessionService("LEXIS_PROVINCIAL_SUBMITTER")) {
+          @Override
+          JasperReport compileTemplate(LexisJasperReportDefinition definition) {
+            try (var input =
+                new ClassPathResource("reports/lexis/LEXIS_DYNAMIC_TABLE.jrxml").getInputStream()) {
+              return JasperCompileManager.compileReport(input);
+            } catch (Exception ex) {
+              throw new IllegalStateException("test template could not be compiled", ex);
+            }
+          }
+
+          @Override
+          void exportTemplateReport(
+              JasperPrint print,
+              LexisReportFormat format,
+              LexisJasperReportDefinition definition,
+              OutputStream output) {
+            assertThat(connectionClosed).isTrue();
+            try {
+              output.write("report".getBytes(StandardCharsets.UTF_8));
+            } catch (IOException ex) {
+              throw new AssertionError("test report could not be written", ex);
+            }
+          }
+        };
+
+    LexisGeneratedReport report =
+        service
+            .generateReport("feeReport", new LexisReportRequestDto(Map.of(), "PDF"))
+            .orElseThrow();
+
+    assertThat(report.contentLength()).isEqualTo(6);
+    Mockito.verify(connection).close();
+    Files.deleteIfExists(report.artifactPath());
   }
 
   @Test
@@ -311,22 +386,21 @@ class OracleLexisReportServiceFormatSupportTest {
     print.setPageHeight(50);
     print.addPage(new JRBasePrintPage());
 
-    byte[] csvBytes = service.exportTemplateCsv(print);
+    ByteArrayOutputStream output = new ByteArrayOutputStream();
+    service.exportTemplateCsv(print, output);
+    byte[] csvBytes = output.toByteArray();
 
     assertThat(csvBytes).isNotNull();
     assertThat(csvBytes.length).isGreaterThanOrEqualTo(0);
   }
 
   @Test
-  void shouldNeutralizeFormulaCellsInTemplateCsv() {
-    OracleLexisReportService service = createService();
-
-    String safe =
-        new String(
-            service.sanitizeTemplateCsv(
-                "\"safe\",\"=cmd\",\"  +SUM(A1)\",\"@user\",\"-2\"\n"
-                    .getBytes(java.nio.charset.StandardCharsets.UTF_8)),
-            java.nio.charset.StandardCharsets.UTF_8);
+  void shouldNeutralizeFormulaCellsInTemplateCsv() throws Exception {
+    StringWriter output = new StringWriter();
+    try (CsvSanitizingWriter writer = new CsvSanitizingWriter(output)) {
+      writer.write("\"safe\",\"=cmd\",\"  +SUM(A1)\",\"@user\",\"-2\"\n");
+    }
+    String safe = output.toString();
 
     assertThat(safe)
         .isEqualTo("\"safe\",\"'=cmd\",\"'  +SUM(A1)\",\"'@user\",\"'-2\"\n");
@@ -342,7 +416,9 @@ class OracleLexisReportServiceFormatSupportTest {
     print.setPageHeight(50);
     print.addPage(new JRBasePrintPage());
 
-    byte[] xlsxBytes = service.exportTemplateXlsx(print);
+    ByteArrayOutputStream output = new ByteArrayOutputStream();
+    service.exportTemplateXlsx(print, output);
+    byte[] xlsxBytes = output.toByteArray();
 
     assertThat(xlsxBytes).isNotNull();
     assertThat(xlsxBytes).startsWith(new byte[] {'P', 'K'});
@@ -358,7 +434,9 @@ class OracleLexisReportServiceFormatSupportTest {
     print.setPageHeight(50);
     print.addPage(new JRBasePrintPage());
 
-    byte[] xlsBytes = service.exportTemplateXls(print);
+    ByteArrayOutputStream output = new ByteArrayOutputStream();
+    service.exportTemplateXls(print, output);
+    byte[] xlsBytes = output.toByteArray();
 
     assertThat(xlsBytes)
         .startsWith(

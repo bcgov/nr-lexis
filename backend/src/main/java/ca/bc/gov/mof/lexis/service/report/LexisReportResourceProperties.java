@@ -12,12 +12,14 @@ import org.springframework.validation.annotation.Validated;
 @ConfigurationProperties(prefix = "lexis.reports")
 public class LexisReportResourceProperties {
 
-  static final long DEFAULT_MAX_OUTPUT_BYTES = 25L * 1024L * 1024L;
   static final int DEFAULT_QUERY_TIMEOUT_SECONDS = 120;
+  static final int DEFAULT_JDBC_FETCH_SIZE = 100;
+
+  @NotBlank
+  private String artifactDirectory = "/tmp/lexis-reports";
 
   @Min(1)
-  @Max(Integer.MAX_VALUE)
-  private long maxOutputBytes = DEFAULT_MAX_OUTPUT_BYTES;
+  private int artifactStaleAfterMinutes = 60;
 
   @NotBlank
   private String virtualizerDirectory = "/tmp/lexis-jasper";
@@ -29,12 +31,24 @@ public class LexisReportResourceProperties {
   @Max(3600)
   private int queryTimeoutSeconds = DEFAULT_QUERY_TIMEOUT_SECONDS;
 
-  public long getMaxOutputBytes() {
-    return maxOutputBytes;
+  @Min(1)
+  @Max(10_000)
+  private int jdbcFetchSize = DEFAULT_JDBC_FETCH_SIZE;
+
+  public String getArtifactDirectory() {
+    return artifactDirectory;
   }
 
-  public void setMaxOutputBytes(long maxOutputBytes) {
-    this.maxOutputBytes = maxOutputBytes;
+  public void setArtifactDirectory(String artifactDirectory) {
+    this.artifactDirectory = artifactDirectory;
+  }
+
+  public int getArtifactStaleAfterMinutes() {
+    return artifactStaleAfterMinutes;
+  }
+
+  public void setArtifactStaleAfterMinutes(int artifactStaleAfterMinutes) {
+    this.artifactStaleAfterMinutes = artifactStaleAfterMinutes;
   }
 
   public String getVirtualizerDirectory() {
@@ -59,5 +73,13 @@ public class LexisReportResourceProperties {
 
   public void setQueryTimeoutSeconds(int queryTimeoutSeconds) {
     this.queryTimeoutSeconds = queryTimeoutSeconds;
+  }
+
+  public int getJdbcFetchSize() {
+    return jdbcFetchSize;
+  }
+
+  public void setJdbcFetchSize(int jdbcFetchSize) {
+    this.jdbcFetchSize = jdbcFetchSize;
   }
 }

@@ -1,11 +1,13 @@
 package ca.bc.gov.mof.lexis.service.report;
 
 import ca.bc.gov.mof.lexis.dto.report.LexisReportRequestDto;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.TreeMap;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
@@ -15,6 +17,16 @@ import org.springframework.stereotype.Service;
 public class InMemoryLexisReportService implements LexisReportService {
 
   private static final String DEFAULT_FORMAT = "PDF";
+  private final LexisReportResourceManager reportResources;
+
+  public InMemoryLexisReportService() {
+    this(LexisReportResourceManager.defaults());
+  }
+
+  @Autowired
+  public InMemoryLexisReportService(LexisReportResourceManager reportResources) {
+    this.reportResources = reportResources;
+  }
 
   @Override
   public Optional<LexisGeneratedReport> generateReport(String reportAction, LexisReportRequestDto request) {
@@ -25,15 +37,20 @@ public class InMemoryLexisReportService implements LexisReportService {
     String extension = resolveExtension(normalizedFormat);
     String mediaType = resolveMediaType(extension);
 
-    byte[] content =
-        buildStubBody(normalizedAction, normalizedFormat, normalizedRequest.parameters())
-            .getBytes(StandardCharsets.UTF_8);
-
     String filename =
         LexisJasperReportDefinition.fromAction(normalizedAction)
             .map(definition -> definition.resolveFilename(reportFormat))
             .orElse(normalizedAction + "." + extension);
-    return Optional.of(new LexisGeneratedReport(filename, mediaType, content));
+    try (LexisReportArtifact artifact = reportResources.createArtifact()) {
+      artifact
+          .outputStream()
+          .write(
+              buildStubBody(normalizedAction, normalizedFormat, normalizedRequest.parameters())
+                  .getBytes(StandardCharsets.UTF_8));
+      return Optional.of(artifact.complete(filename, mediaType));
+    } catch (IOException exception) {
+      throw new LexisReportGenerationException("The stub report could not be stored.", exception);
+    }
   }
 
   private LexisReportRequestDto normalizeRequest(LexisReportRequestDto request) {

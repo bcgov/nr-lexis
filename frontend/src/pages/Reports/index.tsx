@@ -1323,7 +1323,9 @@ const ReportsPage = () => {
         values: effectiveReportValues,
       })
 
-      triggerBrowserDownload(runResult.blob, runResult.filename)
+      if (runResult.blob) {
+        triggerBrowserDownload(runResult.blob, runResult.filename)
+      }
     } catch (error) {
       console.error(error)
       setLaunchErrorMessage(

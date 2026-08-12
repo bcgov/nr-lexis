@@ -1109,6 +1109,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       page.getByRole('heading', { level: 1, name: 'Average market values' }),
     ).toBeVisible()
     await expect(page).toHaveTitle('Average market values | NR LEXIS')
+    await expect(page.locator('main.app-main')).toHaveCSS('padding-bottom', '0px')
     await expect(page.getByRole('region', { name: 'Upload spreadsheet' })).toBeVisible()
     await expect(page.getByRole('link', { name: 'Download template' })).toBeVisible()
     await expect(page.getByRole('table', { name: 'Average monthly value table' })).toHaveCount(0)
@@ -1341,10 +1342,15 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(notificationRegion).toHaveCSS('top', '16px')
     await expect(notificationRegion).toHaveCSS('right', '16px')
     await expect(notificationRegion).toHaveCSS('z-index', '12000')
+    await expect(notificationRegion).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
     await expect(toast).toHaveCSS('animation-name', 'app-notification-slide-in-right')
     await expect(toast).toHaveCSS('animation-duration', '0.3s')
+    await expect(toast).toHaveCSS('opacity', '1')
 
     await toast.getByRole('button', { name: 'close notification' }).click()
+    await expect(page.locator('.app-notification')).toHaveClass(/app-notification--exiting/)
+    await expect(toast).toHaveCSS('animation-name', 'app-notification-slide-out-right')
+    await expect(toast).toHaveCSS('opacity', '1')
     await expect(toast).toBeHidden()
     await expect(inlineError).toBeVisible()
   })

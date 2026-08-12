@@ -2527,7 +2527,9 @@ const ProvincialPermitDetailsPage = () => {
         actionMapping: 'generate',
         values: { permitNumber: resolvedPermitNumber },
       })
-      triggerBrowserDownload(result.blob, result.filename)
+      if (result.blob) {
+        triggerBrowserDownload(result.blob, result.filename)
+      }
     } catch (error) {
       console.error(error)
       setActionErrorMessage(

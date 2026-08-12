@@ -1219,7 +1219,9 @@ const ProvincialExemptionDetailsPage = () => {
         reportId: 'approvedExemptionReport',
         values: { exemptionNumber: detail.exemptionNumber },
       })
-      triggerBrowserDownload(result.blob, result.filename)
+      if (result.blob) {
+        triggerBrowserDownload(result.blob, result.filename)
+      }
     } catch (error) {
       console.error(error)
       setActionErrorMessage(

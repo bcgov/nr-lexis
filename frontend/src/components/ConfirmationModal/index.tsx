@@ -17,6 +17,7 @@ export type ConfirmationModalProps = {
   cancelLabel?: string
   pendingLabel?: string
   confirmDisabled?: boolean
+  cancelDanger?: boolean
   danger?: boolean
   size?: 'xs' | 'sm' | 'md' | 'lg'
   className?: string
@@ -42,6 +43,7 @@ const ConfirmationModal = ({
   cancelLabel = 'Cancel',
   pendingLabel,
   confirmDisabled = false,
+  cancelDanger = false,
   danger = false,
   size = 'sm',
   className,
@@ -136,7 +138,12 @@ const ConfirmationModal = ({
           {children}
         </div>
         <div className="lexis-confirmation-modal__actions">
-          <Button id={cancelButtonId} kind="tertiary" disabled={pending} onClick={requestCancel}>
+          <Button
+            id={cancelButtonId}
+            kind={cancelDanger ? 'danger--tertiary' : 'tertiary'}
+            disabled={pending}
+            onClick={requestCancel}
+          >
             {cancelLabel}
           </Button>
           <Button

@@ -1,11 +1,12 @@
 package ca.bc.gov.mof.lexis.service.report;
 
+import static ca.bc.gov.mof.lexis.test.ReportTestArtifacts.content;
+import static java.util.Map.entry;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
-import static java.util.Map.entry;
 
 import ca.bc.gov.mof.lexis.dto.report.LexisReportRequestDto;
 import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
@@ -134,7 +135,7 @@ class OracleLegacyCsvReportServiceTest {
   }
 
   @Test
-  void shouldStopStreamingAndCloseResourcesWhenCsvOutputLimitIsReached() throws Exception {
+  void shouldStreamCsvRowsToFileAndCloseResources() throws Exception {
     when(dataSource.getConnection()).thenReturn(connection);
     when(connection.prepareCall("{ call LEXIS_REPORTING.APP_REPORT_CSV(?,?,?,?) }"))
         .thenReturn(callableStatement);
@@ -153,22 +154,22 @@ class OracleLegacyCsvReportServiceTest {
         .thenAnswer(
             ignored -> {
               rowsRead.incrementAndGet();
-              return true;
+              return rowsRead.get() == 1;
             });
     when(resultSet.getString(1)).thenReturn("X".repeat(64));
 
-    OracleLegacyCsvReportService service = serviceWithMaxOutputBytes(48);
+    OracleLegacyCsvReportService service = new OracleLegacyCsvReportService(dataSource);
 
-    assertThatThrownBy(
-            () ->
-                service.generateLegacyCsvReport(
-                    LexisJasperReportDefinition.APPLICATION_REPORT,
-                    new LexisReportRequestDto(Map.of(), "CSV"),
-                    LexisReportFormat.CSV))
-        .isInstanceOf(LexisReportOutputLimitException.class)
-        .hasMessageContaining("48 bytes");
+    var report =
+        service.generateLegacyCsvReport(
+            LexisJasperReportDefinition.APPLICATION_REPORT,
+            new LexisReportRequestDto(Map.of(), "CSV"),
+            LexisReportFormat.CSV);
 
-    assertThat(rowsRead).hasValue(1);
+    assertThat(report).isPresent();
+    assertThat(report.orElseThrow().contentLength()).isGreaterThan(48);
+    assertThat(content(report.orElseThrow())).isNotEmpty();
+    assertThat(rowsRead).hasValue(2);
     verify(resultSet).close();
     verify(callableStatement).close();
     verify(connection).close();
@@ -193,7 +194,7 @@ class OracleLegacyCsvReportServiceTest {
     when(resultSet.next()).thenReturn(true).thenThrow(new SQLException("cursor read failed"));
     when(resultSet.getString(1)).thenReturn("123");
 
-    OracleLegacyCsvReportService service = serviceWithMaxOutputBytes(1024);
+    OracleLegacyCsvReportService service = new OracleLegacyCsvReportService(dataSource);
 
     assertThatThrownBy(
             () ->
@@ -215,28 +216,28 @@ class OracleLegacyCsvReportServiceTest {
   }
 
   @Test
-  void shouldBoundJasperListMaterializationAndCloseResources() throws Exception {
+  void shouldExposeTheLegacyCursorOnlyWithinTheManagedResourceScope() throws Exception {
     when(dataSource.getConnection()).thenReturn(connection);
     when(connection.prepareCall("{ call LEXIS_REPORTING.PROVINCIAL_TEAC_REPORT(?,?,?) }"))
         .thenReturn(callableStatement);
     when(callableStatement.getObject(3)).thenReturn(resultSet);
-    when(resultSet.getMetaData()).thenReturn(metaData);
-    when(metaData.getColumnCount()).thenReturn(1);
-    when(metaData.getColumnName(1)).thenReturn("VALUE");
-    when(resultSet.next()).thenReturn(true);
+    when(resultSet.next()).thenReturn(true, false);
     when(resultSet.getString(1)).thenReturn("X");
 
-    OracleLegacyCsvReportService service = serviceWithMaxOutputBytes(170);
+    OracleLegacyCsvReportService service = new OracleLegacyCsvReportService(dataSource);
 
-    assertThatThrownBy(
-            () ->
-                service.loadLegacyTabularReportData(
-                    LexisJasperReportDefinition.TEAC_REPORT,
-                    new LexisReportRequestDto(
-                        Map.of("exportJurisdictionCode", "P"), "PDF")))
-        .isInstanceOf(LexisReportOutputLimitException.class)
-        .hasMessageContaining("170 bytes");
+    var value =
+        service.withLegacyTabularReportCursor(
+            LexisJasperReportDefinition.TEAC_REPORT,
+            new LexisReportRequestDto(Map.of("exportJurisdictionCode", "P"), "PDF"),
+            cursor -> {
+              assertThat(cursor.next()).isTrue();
+              return cursor.getString(1);
+            });
 
+    assertThat(value).contains("X");
+
+    verify(resultSet).setFetchSize(100);
     verify(resultSet).close();
     verify(callableStatement).close();
     verify(connection).close();
@@ -323,7 +324,7 @@ class OracleLegacyCsvReportServiceTest {
     assertThat(report.orElseThrow().filename()).isEqualTo("TeacReport" + today() + ".csv");
     assertThat(report.orElseThrow().mediaType()).isEqualTo("application/vnd.ms-excel");
 
-    String csv = new String(report.orElseThrow().content());
+    String csv = new String(content(report.orElseThrow()));
     assertThat(csv).contains("\"ORG_UNIT\",\"VALUE\"");
     assertThat(csv).contains("\"12\",\"A\"\"B\"");
 
@@ -426,7 +427,6 @@ class OracleLegacyCsvReportServiceTest {
     when(callableStatement.getObject(2)).thenReturn(resultSet);
 
     when(resultSet.getMetaData()).thenReturn(metaData);
-    when(metaData.getColumnCount()).thenReturn(3);
     when(metaData.getColumnName(1)).thenReturn("EXEMPTION_NUMBER");
     when(metaData.getColumnName(2)).thenReturn("APPROVED_VOLUME");
     when(metaData.getColumnName(3)).thenReturn("EXPORT_EXEMPTION_STATUS_CODE");
@@ -438,14 +438,26 @@ class OracleLegacyCsvReportServiceTest {
     OracleLegacyCsvReportService service = new OracleLegacyCsvReportService(dataSource);
 
     var data =
-        service.loadLegacyTabularReportData(
+        service.withLegacyTabularReportCursor(
             LexisJasperReportDefinition.APPROVED_EXEMPTION_REPORT,
-            new LexisReportRequestDto(Map.of("exemptionNumber", "EX-123"), "PDF"));
+            new LexisReportRequestDto(Map.of("exemptionNumber", "EX-123"), "PDF"),
+            cursor -> {
+              ResultSetMetaData metadata = cursor.getMetaData();
+              List<String> headers =
+                  List.of(
+                      metadata.getColumnName(1),
+                      metadata.getColumnName(2),
+                      metadata.getColumnName(3));
+              assertThat(cursor.next()).isTrue();
+              return Map.entry(
+                  headers,
+                  List.of(cursor.getString(1), cursor.getString(2), cursor.getString(3)));
+            });
 
     assertThat(data).isPresent();
-    assertThat(data.orElseThrow().columnHeaders())
+    assertThat(data.orElseThrow().getKey())
         .containsExactly("EXEMPTION_NUMBER", "APPROVED_VOLUME", "EXPORT_EXEMPTION_STATUS_CODE");
-    assertThat(data.orElseThrow().rows()).containsExactly(List.of("EX-123", "1200", "ACT"));
+    assertThat(data.orElseThrow().getValue()).containsExactly("EX-123", "1200", "ACT");
 
     verify(callableStatement).setString(1, "EX-123");
     verify(callableStatement).registerOutParameter(2, Types.REF_CURSOR);
@@ -784,7 +796,7 @@ class OracleLegacyCsvReportServiceTest {
     assertThat(report).isPresent();
     assertThat(report.orElseThrow().filename()).isEqualTo("biweeklyListing" + today() + ".csv");
 
-    String csv = new String(report.orElseThrow().content());
+    String csv = new String(content(report.orElseThrow()));
     assertThat(csv)
         .contains(
             "\"CLIENT_CONTACT_PHONE\",\"CLIENT_CONTACT_EMAIL\",\"JURISDICTION_CODE\"");
@@ -964,13 +976,6 @@ class OracleLegacyCsvReportServiceTest {
         .createOracleArray(
             org.mockito.ArgumentMatchers.eq("CBR_VARCHAR2_ARRAY"), bindValuesCaptor.capture());
     assertThat((String[]) bindValuesCaptor.getValue()).containsExactly(expectedValues);
-  }
-
-  private OracleLegacyCsvReportService serviceWithMaxOutputBytes(long maxOutputBytes) {
-    LexisReportResourceProperties properties = new LexisReportResourceProperties();
-    properties.setMaxOutputBytes(maxOutputBytes);
-    return new OracleLegacyCsvReportService(
-        dataSource, new LexisReportResourceManager(properties));
   }
 
   private static String today() {
