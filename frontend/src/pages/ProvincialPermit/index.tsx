@@ -149,10 +149,13 @@ const ProvincialPermitPage = () => {
   const [permitStatusOptions, setPermitStatusOptions] = useState<SearchOption[]>([])
   const [optionsLoading, setOptionsLoading] = useState(true)
   const [optionsUnavailable, setOptionsUnavailable] = useState(false)
-  const [results, setResults] = useState<ProvincialPermitSearchResponse>(EMPTY_RESULTS)
+  const [searchResult, setSearchResult] = useState<{
+    results: ProvincialPermitSearchResponse
+    totalStatus: DeferredSearchTotalStatus
+  }>({ results: EMPTY_RESULTS, totalStatus: 'exact' })
+  const { results, totalStatus } = searchResult
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
-  const [totalStatus, setTotalStatus] = useState<DeferredSearchTotalStatus>('exact')
   const totalCacheRef = useRef<SearchTotalCache>(new Map())
   const withCurrentSearch = useCallback(
     (path: string): string => appendSearchParamsToPath(path, searchParams),
@@ -232,9 +235,12 @@ const ProvincialPermitPage = () => {
   }, [filters.issuedFromDate, filters.issuedToDate])
 
   const beginSearchRequest = useLatestRequestGuard()
-  const commitResults = useCallback((nextResults: ProvincialPermitSearchResponse) => {
-    setResults(nextResults)
-  }, [])
+  const commitResults = useCallback(
+    (nextResults: ProvincialPermitSearchResponse, nextTotalStatus: DeferredSearchTotalStatus) => {
+      setSearchResult({ results: nextResults, totalStatus: nextTotalStatus })
+    },
+    [],
+  )
 
   const runSearch = useCallback(
     async (request: ProvincialPermitSearchRequest, options: { force?: boolean } = {}) => {
@@ -261,8 +267,7 @@ const ProvincialPermitPage = () => {
             search: searchProvincialPermits,
             onError: console.error,
           })
-          setResults(cachedResults)
-          setTotalStatus('exact')
+          commitResults(cachedResults, 'exact')
           setLoading(false)
           setErrorMessage('')
           return
@@ -297,8 +302,7 @@ const ProvincialPermitPage = () => {
           }
           queueMicrotask(() => {
             if (isLatestRequest()) {
-              commitResults(response)
-              setTotalStatus(totalIsExact ? 'exact' : 'pending')
+              commitResults(response, totalIsExact ? 'exact' : 'pending')
             }
           })
         }
@@ -322,7 +326,7 @@ const ProvincialPermitPage = () => {
             .catch((error) => {
               console.error(error)
               if (isLatestRequest()) {
-                setTotalStatus('unavailable')
+                commitResults(response, 'unavailable')
               }
             })
         }
@@ -330,7 +334,7 @@ const ProvincialPermitPage = () => {
         if (isLatestRequest()) {
           console.error(error)
           setErrorMessage('Unable to retrieve permit search results.')
-          setResults(EMPTY_RESULTS)
+          commitResults(EMPTY_RESULTS, 'exact')
         }
       } finally {
         if (isLatestRequest()) {

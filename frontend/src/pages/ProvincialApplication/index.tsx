@@ -194,10 +194,13 @@ const ProvincialApplicationPage = () => {
   const [productTypeOptions, setProductTypeOptions] = useState<SearchOption[]>([])
   const [optionsLoading, setOptionsLoading] = useState(true)
   const [optionsUnavailable, setOptionsUnavailable] = useState(false)
-  const [results, setResults] = useState<ProvincialApplicationSearchResponse>(EMPTY_RESULTS)
+  const [searchResult, setSearchResult] = useState<{
+    results: ProvincialApplicationSearchResponse
+    totalStatus: DeferredSearchTotalStatus
+  }>({ results: EMPTY_RESULTS, totalStatus: 'exact' })
+  const { results, totalStatus } = searchResult
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
-  const [totalStatus, setTotalStatus] = useState<DeferredSearchTotalStatus>('exact')
   const [selectedRowsById, setSelectedRowsById] = useState<
     Record<string, ProvincialApplicationSearchItem>
   >({})
@@ -306,9 +309,15 @@ const ProvincialApplicationPage = () => {
   ])
 
   const beginSearchRequest = useLatestRequestGuard()
-  const commitResults = useCallback((nextResults: ProvincialApplicationSearchResponse) => {
-    setResults(nextResults)
-  }, [])
+  const commitResults = useCallback(
+    (
+      nextResults: ProvincialApplicationSearchResponse,
+      nextTotalStatus: DeferredSearchTotalStatus,
+    ) => {
+      setSearchResult({ results: nextResults, totalStatus: nextTotalStatus })
+    },
+    [],
+  )
 
   const runSearch = useCallback(
     async (request: ProvincialApplicationSearchRequest, options: { force?: boolean } = {}) => {
@@ -335,8 +344,7 @@ const ProvincialApplicationPage = () => {
             search: searchProvincialApplications,
             onError: console.error,
           })
-          setResults(cachedResults)
-          setTotalStatus('exact')
+          commitResults(cachedResults, 'exact')
           setLoading(false)
           setErrorMessage('')
           return
@@ -378,8 +386,7 @@ const ProvincialApplicationPage = () => {
           }
           queueMicrotask(() => {
             if (isLatestRequest()) {
-              commitResults(response)
-              setTotalStatus(totalIsExact ? 'exact' : 'pending')
+              commitResults(response, totalIsExact ? 'exact' : 'pending')
             }
           })
         }
@@ -403,7 +410,7 @@ const ProvincialApplicationPage = () => {
             .catch((error) => {
               console.error(error)
               if (isLatestRequest()) {
-                setTotalStatus('unavailable')
+                commitResults(response, 'unavailable')
               }
             })
         }
@@ -411,7 +418,7 @@ const ProvincialApplicationPage = () => {
         if (isLatestRequest()) {
           console.error(error)
           setErrorMessage('Unable to retrieve application search results.')
-          setResults(EMPTY_RESULTS)
+          commitResults(EMPTY_RESULTS, 'exact')
         }
       } finally {
         if (isLatestRequest()) {
