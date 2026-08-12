@@ -59,6 +59,8 @@ management:
 lexis:
   runtime:
     require-oracle-profile: ${LEXIS_REQUIRE_ORACLE_PROFILE:false}
+  streaming:
+    max-concurrency: ${LEXIS_STREAMING_MAX_CONCURRENCY:16}
   reports:
     artifact-directory: /tmp/lexis-reports
     artifact-cleanup-cron: "0 30 3 * * *"

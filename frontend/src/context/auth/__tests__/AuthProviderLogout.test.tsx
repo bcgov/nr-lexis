@@ -79,7 +79,7 @@ describe('AuthProvider logout', () => {
       },
     })
     authMocks.signOut.mockResolvedValue(undefined)
-    logoutChainMocks.startFederatedLogout.mockReturnValue(false)
+    logoutChainMocks.startFederatedLogout.mockResolvedValue(false)
     mockedFetchSessionCapabilities.mockResolvedValue({
       authenticated: true,
       principal: 'idir\\tester',
@@ -131,7 +131,17 @@ describe('AuthProvider logout', () => {
   })
 
   it('uses the FSPTS-style federated logout chain when it is configured', async () => {
-    logoutChainMocks.startFederatedLogout.mockReturnValue(true)
+    const callOrder: string[] = []
+    authMocks.signOut.mockImplementation(async () => {
+      callOrder.push('revoke')
+    })
+    logoutChainMocks.startFederatedLogout.mockImplementation(
+      async (revokeSession: () => Promise<void>) => {
+        await revokeSession()
+        callOrder.push('redirect')
+        return true
+      },
+    )
     markSessionExpiredLoginNotice()
     renderProbe()
 
@@ -141,9 +151,45 @@ describe('AuthProvider logout', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Logout' }))
 
-    expect(logoutChainMocks.startFederatedLogout).toHaveBeenCalledOnce()
-    expect(authMocks.signOut).not.toHaveBeenCalled()
+    await waitFor(() => {
+      expect(logoutChainMocks.startFederatedLogout).toHaveBeenCalledOnce()
+    })
+    expect(logoutChainMocks.startFederatedLogout).toHaveBeenCalledWith(expect.any(Function))
+    expect(authMocks.signOut).toHaveBeenCalledOnce()
+    expect(callOrder).toEqual(['revoke', 'redirect'])
     expect(hasSessionExpiredLoginNotice()).toBe(false)
+  })
+
+  it('continues federated logout after Cognito revocation fails', async () => {
+    const revocationError = new Error('cognito unavailable')
+    let upstreamLogoutStarted = false
+    authMocks.signOut.mockRejectedValue(revocationError)
+    logoutChainMocks.startFederatedLogout.mockImplementation(
+      async (revokeSession: () => Promise<void>) => {
+        try {
+          await revokeSession()
+        } finally {
+          upstreamLogoutStarted = true
+        }
+        return true
+      },
+    )
+    renderProbe()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('loading')).toHaveTextContent('false')
+    })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Logout' }))
+
+    await waitFor(() => {
+      expect(upstreamLogoutStarted).toBe(true)
+    })
+    expect(authMocks.signOut).toHaveBeenCalledOnce()
+    expect(consoleWarnSpy).toHaveBeenCalledWith(
+      'Unable to complete Cognito sign-out. Clearing local auth state.',
+      revocationError,
+    )
   })
 
   it('uses the FSPTS 30 minute idle timeout', () => {
