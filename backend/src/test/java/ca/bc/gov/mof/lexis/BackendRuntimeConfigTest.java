@@ -146,6 +146,28 @@ class BackendRuntimeConfigTest {
   }
 
   @Test
+  void asynchronousStreamingConcurrencyShouldBeBoundedPerPodAndDeploymentConfigurable()
+      throws IOException {
+    String applicationConfig =
+        Files.readString(resolve(Path.of("backend", "src", "main", "resources", "application.yml")));
+    String deployment =
+        Files.readString(resolve(Path.of("backend", "openshift.deploy.yml")));
+    String workflow =
+        Files.readString(resolve(Path.of(".github", "workflows", "reusable-deploy.yml")));
+
+    assertThat(applicationConfig)
+        .contains("max-concurrency: ${LEXIS_STREAMING_MAX_CONCURRENCY:16}");
+    assertThat(deployment)
+        .contains("- name: LEXIS_STREAMING_MAX_CONCURRENCY")
+        .contains("value: ${LEXIS_STREAMING_MAX_CONCURRENCY}");
+    assertThat(workflow)
+        .contains(
+            "LEXIS_STREAMING_MAX_CONCURRENCY:"
+                + " ${{ vars.LEXIS_STREAMING_MAX_CONCURRENCY || '16' }}")
+        .contains("-p LEXIS_STREAMING_MAX_CONCURRENCY=\"$LEXIS_STREAMING_MAX_CONCURRENCY\"");
+  }
+
+  @Test
   void openApiViewerOriginShouldReachTheBackendThroughDeploymentConfiguration()
       throws IOException {
     String deployment =
