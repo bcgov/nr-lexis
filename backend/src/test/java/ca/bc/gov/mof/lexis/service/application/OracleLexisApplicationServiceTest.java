@@ -8,6 +8,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
+import ca.bc.gov.mof.lexis.dto.application.ApplicationAccessContextDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchCriteria;
@@ -208,6 +209,25 @@ class OracleLexisApplicationServiceTest {
 
     assertThat(response).contains(detail);
     verify(repository).findByApplicationNumber(1000456L);
+  }
+
+  @Test
+  void accessShouldUseNarrowRepositoryLookup() {
+    ApplicationAccessContextDto access =
+        new ApplicationAccessContextDto(1000456L, "P", 12L, "00077881", "00055667");
+    when(repository.findAccessByApplicationNumber(1000456L)).thenReturn(Optional.of(access));
+
+    Optional<ApplicationAccessContextDto> response =
+        service.findAccessByApplicationNumber(1000456L);
+
+    assertThat(response).contains(access);
+    verify(repository).findAccessByApplicationNumber(1000456L);
+  }
+
+  @Test
+  void accessShouldReturnEmptyForInvalidApplicationNumber() {
+    assertThat(service.findAccessByApplicationNumber(0L)).isEmpty();
+    verifyNoInteractions(repository);
   }
 
   @Test

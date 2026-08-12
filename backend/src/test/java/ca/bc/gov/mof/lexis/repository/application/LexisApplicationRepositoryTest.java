@@ -2,10 +2,15 @@ package ca.bc.gov.mof.lexis.repository.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
+import ca.bc.gov.mof.lexis.dto.application.ApplicationAccessContextDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResultDto;
@@ -24,9 +29,48 @@ import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
 
 @DisplayName("Unit Test | LexisApplicationRepository")
 class LexisApplicationRepositoryTest {
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void accessLookupShouldUseOneNarrowApplicationQuery() {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    ApplicationAccessContextDto access =
+        new ApplicationAccessContextDto(900123L, "P", 1904L, "00077881", "00055667");
+    when(jdbcTemplate.query(any(String.class), any(RowMapper.class), eq(900123L)))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<ApplicationAccessContextDto> rowMapper = invocation.getArgument(1);
+              ResultSet resultSet = mock(ResultSet.class);
+              when(resultSet.getLong("APPLICATION_NUMBER")).thenReturn(900123L);
+              when(resultSet.getString("EXPORT_JURISDICTION_CODE")).thenReturn("P");
+              when(resultSet.getLong("ORG_UNIT_NO")).thenReturn(1904L);
+              when(resultSet.getString("OWNER_CLIENT_NUMBER")).thenReturn("00077881");
+              when(resultSet.getString("AGENT_CLIENT_NUMBER")).thenReturn("00055667");
+              return List.of(rowMapper.mapRow(resultSet, 0));
+            });
+    LexisApplicationRepository repository = new LexisApplicationRepository(jdbcTemplate);
+
+    assertThat(repository.findAccessByApplicationNumber(900123L)).contains(access);
+
+    verify(jdbcTemplate)
+        .query(
+            argThat(
+                sql ->
+                    sql.contains("FROM EXPORT_EXEMPTION_APPLICATION")
+                        && sql.contains("EXPORT_JURISDICTION_CODE")
+                        && sql.contains("ORG_UNIT_NO")
+                        && sql.contains("OWNER_CLIENT_NUMBER")
+                        && sql.contains("AGENT_CLIENT_NUMBER")
+                        && !sql.contains("EXPORT_PACKAGE")
+                        && !sql.contains("EXPORT_PURCHASE_OFFER")),
+            any(RowMapper.class),
+            eq(900123L));
+  }
 
   @Test
   void loadExemptionReasonOptionsShouldUseLegacyProcedureName() {

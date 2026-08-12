@@ -68,13 +68,57 @@ class ProvincialAuthorizationServiceTest {
   void scopedSubmitterCanOnlyAccessApplicationsOwnedOrRepresentedByItsClient() {
     Authentication authentication = submitter("00012345");
     when(applicationServiceProvider.getIfAvailable()).thenReturn(applicationService);
-    when(applicationService.findByApplicationNumber(1L))
-        .thenReturn(Optional.of(application(1L, "00012345", "00099999", 76L)));
-    when(applicationService.findByApplicationNumber(2L))
-        .thenReturn(Optional.of(application(2L, "00088888", "00099999", 76L)));
+    when(applicationService.findAccessByApplicationNumber(1L))
+        .thenReturn(Optional.of(applicationAccess(1L, "00012345", "00099999", 76L, "P")));
+    when(applicationService.findAccessByApplicationNumber(2L))
+        .thenReturn(Optional.of(applicationAccess(2L, "00088888", "00099999", 76L, "P")));
+    when(applicationService.findAccessByApplicationNumber(3L))
+        .thenReturn(Optional.of(applicationAccess(3L, "00088888", "00012345", 76L, "P")));
 
     assertThat(service.canAccessApplication(authentication, 1L)).isTrue();
     assertThat(service.canAccessApplication(authentication, 2L)).isFalse();
+    assertThat(service.canAccessApplication(authentication, 3L)).isTrue();
+    verify(applicationService, never()).findByApplicationNumber(1L);
+    verify(applicationService, never()).findByApplicationNumber(2L);
+    verify(applicationService, never()).findByApplicationNumber(3L);
+  }
+
+  @Test
+  void ordinaryApplicationAccessShouldUseOneLightweightLookup() {
+    Authentication authentication = submitter("00012345");
+    when(applicationServiceProvider.getIfAvailable()).thenReturn(applicationService);
+    when(applicationService.findAccessByApplicationNumber(1L))
+        .thenReturn(Optional.of(applicationAccess(1L, "00012345", null, 76L, "P")));
+
+    assertThat(service.canAccessApplication(authentication, 1L)).isTrue();
+
+    verify(applicationService).findAccessByApplicationNumber(1L);
+    verify(applicationService, never()).findByApplicationNumber(1L);
+  }
+
+  @Test
+  void administratorApplicationAccessShouldBypassEveryLookup() {
+    Authentication administrator =
+        new TestingAuthenticationToken("admin", "n/a", "LEXIS_ADMIN");
+
+    assertThat(service.canAccessApplication(administrator, 1L)).isTrue();
+
+    verifyNoInteractions(applicationServiceProvider, applicationService);
+  }
+
+  @Test
+  void applicationApproverShouldRetainProvincialOrganizationAccessSemantics() {
+    Authentication approver =
+        new TestingAuthenticationToken(
+            "approver", "n/a", "LEXIS_APPLICATION_APPROVER");
+    when(applicationServiceProvider.getIfAvailable()).thenReturn(applicationService);
+    when(applicationService.findAccessByApplicationNumber(1L))
+        .thenReturn(Optional.of(applicationAccess(1L, "00012345", null, 76L, "P")));
+
+    assertThat(service.canAccessApplication(approver, 1L)).isTrue();
+
+    verify(applicationService).findAccessByApplicationNumber(1L);
+    verifyNoInteractions(principalService);
   }
 
   @Test
@@ -114,7 +158,8 @@ class ProvincialAuthorizationServiceTest {
     LexisApplicationDetailDto federal =
         application(1L, "00012345", "00099999", 76L, "F");
     when(applicationServiceProvider.getIfAvailable()).thenReturn(applicationService);
-    when(applicationService.findByApplicationNumber(1L)).thenReturn(Optional.of(federal));
+    when(applicationService.findAccessByApplicationNumber(1L))
+        .thenReturn(Optional.of(applicationAccess(1L, "00012345", "00099999", 76L, "F")));
 
     assertThat(service.canAccessApplication(authentication, federal)).isFalse();
     assertThat(service.canAccessApplication(authentication, 1L)).isFalse();
@@ -899,6 +944,16 @@ class ProvincialAuthorizationServiceTest {
         List.of(),
         List.of(),
         jurisdiction);
+  }
+
+  private ApplicationAccessContextDto applicationAccess(
+      long applicationNumber,
+      String owner,
+      String agent,
+      Long orgUnit,
+      String jurisdiction) {
+    return new ApplicationAccessContextDto(
+        applicationNumber, jurisdiction, orgUnit, owner, agent);
   }
 
   private ApplicationDetailsRpcService.ApplicationEditContext applicationEditContext(

@@ -1,6 +1,7 @@
 package ca.bc.gov.mof.lexis.service.application;
 
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
+import ca.bc.gov.mof.lexis.dto.application.ApplicationAccessContextDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchCriteria;
@@ -235,6 +236,22 @@ public class InMemoryLexisApplicationService implements LexisApplicationService 
         .filter(app -> app.applicationNumber() == applicationNumber)
         .findFirst()
         .map(this::toDetail);
+  }
+
+  @Override
+  public Optional<ApplicationAccessContextDto> findAccessByApplicationNumber(
+      long applicationNumber) {
+    return APPLICATIONS.stream()
+        .filter(app -> app.applicationNumber() == applicationNumber)
+        .findFirst()
+        .map(
+            app ->
+                new ApplicationAccessContextDto(
+                    app.applicationNumber(),
+                    "P",
+                    app.orgUnitNumber(),
+                    app.ownerClientNumber(),
+                    app.agentClientNumber()));
   }
 
   @Override
