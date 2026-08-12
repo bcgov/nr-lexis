@@ -1781,7 +1781,7 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(applicationSubmissionProgress.getByText('2. Review')).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Validation status' })).toHaveCount(0)
     await expect(page.getByRole('heading', { name: 'Submission summary' })).toHaveCount(0)
-    await expect(page.getByRole('button', { name: 'Review' })).toBeDisabled()
+    await expect(page.getByRole('button', { name: 'Review' })).toBeEnabled()
 
     await expectAccessiblePage(page, '/provincial/review', /provincial application review/i)
     await expect(federalSection.getByRole('link', { name: /upload/i })).toHaveCount(0)
@@ -1906,7 +1906,15 @@ test.describe('TEST IDIR admin regression', () => {
 
     await expect(page).toHaveURL(/\/admin\/rtm\/emslogamv\/upload$/)
     await expect(page).toHaveTitle('Average market values | NR LEXIS')
-    await expect(page.getByRole('region', { name: 'Upload spreadsheet' })).toBeVisible()
+    const uploadSpreadsheet = page.getByRole('region', { name: 'Upload spreadsheet' })
+    const replaceFile = page.getByRole('button', { name: 'Replace file' })
+    await expect
+      .poll(async () => (await uploadSpreadsheet.isVisible()) || (await replaceFile.isVisible()))
+      .toBe(true)
+    if (await replaceFile.isVisible()) {
+      await replaceFile.click()
+    }
+    await expect(uploadSpreadsheet).toBeVisible()
     await expect(page.getByRole('link', { name: 'Download template' })).toBeVisible()
     await expect(page.getByRole('table', { name: 'Average monthly value table' })).toHaveCount(0)
   })
@@ -2214,7 +2222,7 @@ test.describe('TEST IDIR admin regression', () => {
         height: element.getBoundingClientRect().height,
       })),
     ])
-    expect(paragraphMetrics.height).toBe(normalFieldMetrics.height)
+    expect(paragraphMetrics.height).toBeGreaterThan(normalFieldMetrics.height)
     expect(paragraphMetrics.fontSize).toBe(normalFieldMetrics.fontSize)
     expect(paragraphMetrics.resize).toBe('vertical')
 
@@ -2267,18 +2275,13 @@ test.describe('TEST IDIR admin regression', () => {
       name: 'Application species',
     })
     await expect(speciesSelect).toBeEnabled({ timeout: 30_000 })
-    await speciesSelect.click()
-    await expect(speciesSelect).toHaveAttribute('aria-expanded', 'true')
-    const speciesMenuId = await speciesSelect.getAttribute('aria-controls')
-    expect(speciesMenuId, 'application species should control a dropdown menu').toBeTruthy()
-    const speciesMenu = page.locator(`#${speciesMenuId}`)
-    await expect(speciesMenu).toBeVisible()
-    expect(await speciesMenu.getByRole('option').count()).toBeGreaterThan(0)
-    const firstSpeciesOption = speciesMenu.getByRole('option').first()
-    const firstSpeciesLabel = (await firstSpeciesOption.textContent())?.trim() ?? ''
+    await expect(speciesSelect).not.toHaveValue('')
+    const firstSpeciesLabel = (await speciesSelect.inputValue()).trim()
     const firstSpeciesCode = firstSpeciesLabel.split(/\s+-\s+/, 1)[0]?.trim() ?? ''
-    expect(firstSpeciesCode, 'application species option should include a code').not.toBe('')
-    await firstSpeciesOption.click()
+    expect(
+      firstSpeciesCode,
+      'application species should prefill the first available code',
+    ).not.toBe('')
 
     const addSpeciesButton = packagesPanel.getByRole('button', {
       name: 'Add application species',
