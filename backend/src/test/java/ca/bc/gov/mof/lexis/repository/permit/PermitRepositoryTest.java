@@ -158,13 +158,13 @@ class PermitRepositoryTest {
             "ACT",
             "INV-1",
             "00055667",
-            "00077881",
+            "00055667",
             "00077881",
             1904L);
   }
 
   @Test
-  void searchShouldPreserveLegacyApplicantAndOwnerFilterWiring() {
+  void searchShouldFilterApplicantAsAgentWithOwnerFallbackAndOwnerAsClient() {
     TestPermitRepository repository = new TestPermitRepository();
 
     repository.search(
@@ -184,11 +184,11 @@ class PermitRepositoryTest {
             10));
 
     assertThat(repository.whereSql())
-        .contains("EPD.CLIENT_NUMBER LIKE '%' || ? || '%'")
         .contains("EPD.AGENT_NUMBER LIKE '%' || ? || '%'")
-        .contains("EPD.CLIENT_NUMBER LIKE '%' || ? || '%' AND EPD.AGENT_NUMBER IS NULL");
+        .contains("EPD.CLIENT_NUMBER LIKE '%' || ? || '%' AND EPD.AGENT_NUMBER IS NULL")
+        .contains("AND EPD.CLIENT_NUMBER LIKE '%' || ? || '%'");
     assertThat(repository.bindValues())
-        .containsExactly("00055667", "00077881", "00077881");
+        .containsExactly("00055667", "00055667", "00077881");
   }
 
   @Test
@@ -206,7 +206,7 @@ class PermitRepositoryTest {
   }
 
   @Test
-  void scopedAccessShouldUseLegacyDirectAndLinkedApplicationBranches() {
+  void scopedAccessShouldUseDirectPermitPartiesAndOnlyPackageLinkedApplicationParties() {
     TestPermitRepository repository = new TestPermitRepository();
     PermitSearchCriteria criteria =
         new PermitSearchCriteria(
@@ -240,22 +240,28 @@ class PermitRepositoryTest {
         .contains("WITH ACCESSIBLE_PERMITS AS")
         .contains("OWNER_PERMIT.CLIENT_NUMBER = ?")
         .contains("AGENT_PERMIT.AGENT_NUMBER = ?")
+        .contains("FROM EXPORT_SCALE_DETAIL LINKED_SCALE")
+        .contains("INNER JOIN EXPORT_PACKAGE LINKED_PACKAGE")
+        .contains("LINKED_PACKAGE.PACKAGE_NUMBER = LINKED_SCALE.PACKAGE_NUMBER")
+        .contains("EP_ACCESS.APPLICATION_NUMBER = LINKED_PACKAGE.APPLICATION_NUMBER")
+        .contains("EP_ACCESS.OWNER_CLIENT_NUMBER = ?")
         .contains("EP_ACCESS.AGENT_CLIENT_NUMBER = ?")
         .contains("UNION\n  SELECT AGENT_PERMIT.EXPORT_PERMIT_DETAIL_NUMBER")
-        .contains("UNION\n  SELECT LINKED_PERMIT.EXPORT_PERMIT_DETAIL_NUMBER")
+        .contains("UNION\n  SELECT LINKED_SCALE.EXPORT_PERMIT_DETAIL_NUMBER")
         .doesNotContain("UNION ALL")
-        .doesNotContain("EP_ACCESS.OWNER_CLIENT_NUMBER =")
         .contains("EP_ACCESS.EXPORT_JURISDICTION_CODE = 'P'")
-        .contains("EP_ACCESS.EXPORT_JURISDICTION_CODE IS NULL")
-        .contains("EXISTS (\n    SELECT 1 FROM EXPORT_SCALE_DETAIL ESD_REQUIRED")
+        .contains("LINKED_SCALE.EXPORT_PERMIT_DETAIL_NUMBER IS NOT NULL")
+        .doesNotContain("EP_ACCESS.EXEMPTION_NUMBER")
+        .doesNotContain("EP_ACCESS.EXPORT_JURISDICTION_CODE IS NULL")
         .contains("INNER JOIN ACCESSIBLE_PERMITS AP");
     assertThat(searchBinds)
         .containsExactly(
             "00012345",
             "00012345",
             "00012345",
+            "00012345",
             "00099999",
-            "00088888",
+            "00099999",
             "00088888");
     assertThat(repository.countWhereSql()).isEqualTo(searchSql.substring(0, searchSql.indexOf(" ORDER BY")));
     assertThat(repository.countBindValues()).isEqualTo(searchBinds);
@@ -268,7 +274,7 @@ class PermitRepositoryTest {
   }
 
   @Test
-  void scopedFeeAccessShouldNotRequireScaleOnTheLinkedApplicationBranch() {
+  void scopedFeeAccessShouldUseTheSamePackageLinkedApplicationRelationship() {
     TestPermitRepository repository = new TestPermitRepository();
 
     repository.search(
@@ -291,10 +297,14 @@ class PermitRepositoryTest {
 
     assertThat(repository.pageSelectSql())
         .contains("WITH ACCESSIBLE_PERMITS AS")
+        .contains("FROM EXPORT_SCALE_DETAIL LINKED_SCALE")
+        .contains("INNER JOIN EXPORT_PACKAGE LINKED_PACKAGE")
+        .contains("EP_ACCESS.OWNER_CLIENT_NUMBER = ?")
+        .contains("EP_ACCESS.AGENT_CLIENT_NUMBER = ?")
         .contains("EP_ACCESS.EXPORT_JURISDICTION_CODE = 'P'")
         .doesNotContain("EXPORT_SCALE_DETAIL ESD_REQUIRED");
     assertThat(repository.bindValues())
-        .containsExactly("00012345", "00012345", "00012345");
+        .containsExactly("00012345", "00012345", "00012345", "00012345");
   }
 
   @Test

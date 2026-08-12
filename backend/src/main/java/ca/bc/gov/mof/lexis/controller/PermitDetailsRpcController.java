@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.controller;
 
+import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parseDate;
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parsePositiveLong;
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.sanitizeFileName;
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.fromRequest;
@@ -676,6 +677,10 @@ public class PermitDetailsRpcController {
     }
     Long permitNumber = parsePositiveLong(mutationRequest.permitNumber());
     requirePermitAccess(permitNumber, authentication);
+    if (requestsMinistryPermitMutation(mutationRequest, permitNumber)
+        && !canReviewPermits(authentication)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
     if (mutationRequest.exemptionNumber() != null
         && !mutationRequest.exemptionNumber().isBlank()) {
       requireExemptionAccess(mutationRequest.exemptionNumber(), authentication);
@@ -706,6 +711,11 @@ public class PermitDetailsRpcController {
       Long permitNumber,
       Authentication authentication) {
     requirePermitAccess(permitNumber, authentication);
+    if (requestsMinistryPermitMutation(mutationRequest, permitNumber)
+        && !canReviewPermits(authentication)) {
+      throw new AccessDeniedException(
+          "Permit status and date changes require permit review authority.");
+    }
     List<String> exemptionNumbers =
         exemptionNumbersForPermitMutation(service, mutationRequest);
     exemptionNumbers.forEach(
@@ -1469,6 +1479,48 @@ public class PermitDetailsRpcController {
         && (request.overrideInd() != null
             || request.overrideFee() != null
             || request.overrideComment() != null);
+  }
+
+  private boolean requestsMinistryPermitMutation(
+      PermitMutationRequestDto request, Long permitNumber) {
+    if (request == null || permitNumber == null) {
+      return false;
+    }
+    if (permitService == null) {
+      return hasText(request.permitStatus())
+          || hasText(request.permitSubmitDate())
+          || hasText(request.permitIssueDate())
+          || hasText(request.permitExpiryDate());
+    }
+    return permitService
+        .findByPermitNumber(permitNumber)
+        .map(
+            detail ->
+                submittedCodeChanged(request.permitStatus(), detail.permitStatusCode())
+                    || submittedDateChanged(
+                        request.permitSubmitDate(), detail.applicationDate())
+                    || submittedDateChanged(request.permitIssueDate(), detail.issueDate())
+                    || submittedDateChanged(request.permitExpiryDate(), detail.expiryDate()))
+        .orElse(true);
+  }
+
+  private boolean submittedCodeChanged(String submitted, String current) {
+    if (submitted == null || submitted.isBlank()) {
+      return false;
+    }
+    return !submitted.trim().equalsIgnoreCase(current == null ? "" : current.trim());
+  }
+
+  private boolean submittedDateChanged(String submitted, java.time.LocalDate current) {
+    if (submitted == null || submitted.isBlank()) {
+      return false;
+    }
+    java.time.LocalDate submittedDate = parseDate(submitted);
+    return submittedDate == null || !java.util.Objects.equals(current, submittedDate);
+  }
+
+  private boolean hasText(String value) {
+    return value != null && !value.isBlank();
   }
 
   private void requirePermitAccess(Long permitNumber, Authentication authentication) {

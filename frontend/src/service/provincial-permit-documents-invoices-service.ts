@@ -59,6 +59,7 @@ export type AddPermitInvoiceRequest = {
 export type PermitDetailMutationRequest = {
   permitNumber: string
   permitStatus: string
+  permitSubmitDate: string
   permitIssueDate: string
   permitExpiryDate: string
   permitRequestDate: string
@@ -105,6 +106,8 @@ export type AddPermitInvoiceResult = {
 export type PermitDetailMutationResult = AddPermitInvoiceResult & {
   permitStatus?: string
   permitReceiptNo?: string
+  permitVolume?: number | null
+  permitNumberOfPieces?: number | null
 }
 
 export type CreatePermitFromExemptionResult = AddPermitInvoiceResult & {
@@ -395,6 +398,7 @@ const normalizePermitDetailMutationPayload = (
   const payload: Record<string, string> = {
     permitNumber: request.permitNumber.trim(),
     permitStatus: request.permitStatus.trim(),
+    permitSubmitDate: request.permitSubmitDate.trim(),
     permitIssueDate: request.permitIssueDate.trim(),
     permitExpiryDate: request.permitExpiryDate.trim(),
     permitRequestDate: request.permitRequestDate.trim(),

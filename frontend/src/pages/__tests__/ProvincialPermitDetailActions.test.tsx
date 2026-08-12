@@ -652,9 +652,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
       within(permitSummaryTile as HTMLElement).getByRole('link', { name: 'EX-9' }),
     ).toHaveAttribute('href', '/provincial/exemption/EX-9')
     expect(within(permitSummaryTile as HTMLElement).getByText('Submit date')).toBeInTheDocument()
-    expect(within(permitSummaryTile as HTMLElement).getByText('2026-04-10')).toBeInTheDocument()
     expect(within(permitSummaryTile as HTMLElement).getByText('Received date')).toBeInTheDocument()
-    expect(within(permitSummaryTile as HTMLElement).getByText('2026-04-15')).toBeInTheDocument()
+    expect(within(permitSummaryTile as HTMLElement).getAllByText('2026-04-10')).toHaveLength(2)
     expect(within(permitSummaryTile as HTMLElement).getByText('Author')).toBeInTheDocument()
     expect(
       within(permitSummaryTile as HTMLElement).getByText('idir\\permit-author'),
@@ -2308,7 +2307,10 @@ describe('Provincial Permit Detail Action Smoke', () => {
         }),
       )
     })
-    expect(mockedUpdatePermitDetail.mock.calls[0]?.[0]).not.toHaveProperty('permitSubmitDate')
+    expect(mockedUpdatePermitDetail.mock.calls[0]?.[0]).toHaveProperty(
+      'permitSubmitDate',
+      '2026-04-10',
+    )
     expect(await screen.findByText('The permit was updated successfully.')).toBeInTheDocument()
     expect(screen.getAllByText('Active').length).toBeGreaterThan(0)
   })
@@ -2329,6 +2331,55 @@ describe('Provincial Permit Detail Action Smoke', () => {
         }),
       )
     })
+  })
+
+  it('edits an active submit date while keeping ordinary linked and derived fields read-only', async () => {
+    configureActivePermit()
+    renderPermitDetails()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+
+    const submitDate = screen.getByLabelText('Submit date')
+    expect(submitDate).toBeEnabled()
+    expect(screen.getByLabelText('Exemption number')).toBeDisabled()
+    expect(screen.getByLabelText('Received date')).toBeDisabled()
+    expect(screen.getByLabelText('Permit volume (m³)')).toBeDisabled()
+    expect(screen.getByLabelText('Number of pieces')).toBeDisabled()
+
+    await userEvent.clear(submitDate)
+    await userEvent.type(submitDate, '2026-04-09')
+    expect(screen.getByLabelText('Received date')).toHaveValue('2026-04-09')
+    await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
+
+    await waitFor(() => {
+      expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          exemptionNumber: 'EX-9',
+          permitSubmitDate: '2026-04-09',
+          permitRequestDate: '2026-04-09',
+          permitTotalVolume: '120',
+          permitNumberOfPieces: '10',
+        }),
+      )
+    })
+  })
+
+  it('keeps ministry-controlled permit status and dates read-only without permit review authority', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        canPerform: (action: string) => action !== '/permitsReview',
+      }),
+    )
+    configureActivePermit()
+    renderPermitDetails()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+
+    expect(screen.getByLabelText('Permit status')).toBeDisabled()
+    expect(screen.getByLabelText('Submit date')).toBeDisabled()
+    expect(screen.getByLabelText('Issue date')).toBeDisabled()
+    expect(screen.getByLabelText('Expiry date')).toBeDisabled()
+    expect(screen.getByLabelText('Received date')).toBeDisabled()
   })
 
   it('does not submit hidden Blanket OIC request limits for a normal permit', async () => {
@@ -2598,6 +2649,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
     renderPermitDetails()
 
     await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    expect(screen.getByLabelText('Exemption number')).toBeDisabled()
+    expect(screen.getByLabelText('Submit date')).toBeEnabled()
+    expect(screen.getByLabelText('Received date')).toBeDisabled()
+    expect(screen.getByLabelText('Permit volume (m³)')).toBeDisabled()
+    expect(screen.getByLabelText('Number of pieces')).toBeDisabled()
     await userEvent.clear(screen.getByLabelText('Permit Request Pieces'))
     await userEvent.type(screen.getByLabelText('Permit Request Pieces'), '250')
     await userEvent.clear(screen.getByLabelText('Permit Request Volume (m³)'))
@@ -2749,6 +2805,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
       source: 'api',
       permitStatus: 'PPD',
       permitReceiptNo: '',
+      permitVolume: 95,
+      permitNumberOfPieces: 9,
     })
     renderPermitDetails()
 
@@ -2762,6 +2820,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
       await screen.findByText(/Fee Receipt Number should not be empty for a complete Permit/),
     ).toBeInTheDocument()
     expect(screen.getAllByText('PPD').length).toBeGreaterThan(0)
+    const financialTile = screen
+      .getByRole('heading', { name: 'Financial and volume' })
+      .closest('.cds--tile')
+    expect(within(financialTile as HTMLElement).getByText('95')).toBeInTheDocument()
+    expect(within(financialTile as HTMLElement).getByText('9')).toBeInTheDocument()
   })
 
   it('only exposes the supported payment completion fields for a payment-pending permit', async () => {
@@ -3175,6 +3238,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       expect(screen.queryByRole('dialog', { name: /Email permit .* approval/ })).toBeNull()
       expect(screen.getByText('Permit review request email sent.')).toBeInTheDocument()
     })
+    expect(screen.getAllByText('2026-07-10')).toHaveLength(2)
   })
 
   it('saves a permit fee override without changing unrelated permit fields', async () => {

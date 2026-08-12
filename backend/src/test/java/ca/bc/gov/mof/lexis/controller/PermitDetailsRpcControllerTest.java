@@ -67,12 +67,16 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.stream.Stream;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
@@ -1530,6 +1534,9 @@ class PermitDetailsRpcControllerTest {
                 "overrideFee", new String[] {"25.00"},
                 "overrideComment", new String[] {"Reviewed"}));
     TestingAuthenticationToken authentication = authorizedSavePermit();
+    when(authorizationService.canPerformAction(
+            List.of("LEXIS_APPLICATION_APPROVER"), "/permitsReview"))
+        .thenReturn(false);
 
     ResponseEntity<PermitMutationRpcResponseDto> response =
         controller.updatePermit(request, authentication);
@@ -1538,6 +1545,64 @@ class PermitDetailsRpcControllerTest {
     verify(authorizationService)
         .canPerformAction(List.of("LEXIS_APPLICATION_APPROVER"), "/permitsReview");
     verify(service, never()).updatePermit(any(), any());
+  }
+
+  @ParameterizedTest
+  @MethodSource("ministryPermitMutationFields")
+  void updatePermitShouldRequirePermitReviewAuthorityForStatusAndDateChanges(
+      String fieldName, String fieldValue) {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameterMap())
+        .thenReturn(
+            Map.of(
+                "permitNumber", new String[] {"7000123"},
+                fieldName, new String[] {fieldValue}));
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+    when(authorizationService.canPerformAction(
+            List.of("LEXIS_APPLICATION_APPROVER"), "/permitsReview"))
+        .thenReturn(false);
+
+    ResponseEntity<PermitMutationRpcResponseDto> response =
+        controller.updatePermit(request, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    verify(authorizationService)
+        .canPerformAction(List.of("LEXIS_APPLICATION_APPROVER"), "/permitsReview");
+    verify(service, never()).updatePermit(any(), any());
+  }
+
+  private static Stream<Arguments> ministryPermitMutationFields() {
+    return Stream.of(
+        Arguments.of("permitStatus", "CAN"),
+        Arguments.of("permitSubmitDate", "2026-04-09"),
+        Arguments.of("permitIssueDate", "2026-04-11"),
+        Arguments.of("permitExpiryDate", "2027-01-01"));
+  }
+
+  @Test
+  void updatePermitShouldForwardSubmitDateCorrectionWithPermitReviewAuthority() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameterMap())
+        .thenReturn(
+            Map.of(
+                "permitNumber", new String[] {"7000123"},
+                "permitSubmitDate", new String[] {"2026-04-09"}));
+    when(service.updatePermit(any(PermitMutationRequestDto.class), eq("idir\\jsmith")))
+        .thenReturn(
+            new PermitMutationRpcResponseDto(
+                true, "saved", List.of(), List.of(), 7000123L, "ACT", null,
+                false, false, null));
+    allowApplicationMutationLocks();
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+    when(authorizationService.canPerformAction(
+            List.of("LEXIS_APPLICATION_APPROVER"), "/permitsReview"))
+        .thenReturn(true);
+
+    ResponseEntity<PermitMutationRpcResponseDto> response =
+        controller.updatePermit(request, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    verify(service).updatePermit(any(PermitMutationRequestDto.class), eq("idir\\jsmith"));
   }
 
   @Test
@@ -2400,6 +2465,9 @@ class PermitDetailsRpcControllerTest {
     lenient()
         .when(authorizationService.canPerformAction(roles, "/applicationDetails"))
         .thenReturn(true);
+    lenient()
+        .when(authorizationService.canPerformAction(roles, "/permitsReview"))
+        .thenReturn(true);
     return authentication;
   }
 
@@ -2443,6 +2511,7 @@ class PermitDetailsRpcControllerTest {
         "Truck",
         "VAN",
         null,
+        java.time.LocalDate.of(2026, 4, 10),
         null,
         null,
         null,
@@ -2450,6 +2519,10 @@ class PermitDetailsRpcControllerTest {
         100d,
         10L,
         "R-1",
+        null,
+        null,
+        null,
+        null,
         null,
         null,
         null,

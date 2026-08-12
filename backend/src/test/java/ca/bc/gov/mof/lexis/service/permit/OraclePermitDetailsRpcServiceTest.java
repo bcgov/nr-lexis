@@ -190,6 +190,19 @@ class OraclePermitDetailsRpcServiceTest {
             Optional.of(
                 new ClientData(
                     "00077881", "Client", null, null, null, null, null, null, null, null)));
+    lenient()
+        .when(repository.findScaleDetailsByPermitNumber(7000123L))
+        .thenReturn(
+            List.of(
+                scale(
+                    "CURRENT-1",
+                    "TM-CURRENT",
+                    "HE",
+                    "A",
+                    100.0d,
+                    42L,
+                    "7000123",
+                    "PKG-CURRENT")));
   }
 
   @AfterEach
@@ -2539,7 +2552,7 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
-  void updatePermitShouldRejectNonFiniteSubmittedVolumes() {
+  void updatePermitShouldIgnoreTheSubmittedTotalButRejectANonFiniteBlanketOicRequestVolume() {
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(blanketOicPermitMutationRow()));
     when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("B"));
@@ -2554,10 +2567,38 @@ class OraclePermitDetailsRpcServiceTest {
 
     assertThat(response.success()).isFalse();
     assertThat(response.errors())
-        .containsExactlyInAnyOrder(
-            "A valid permit volume is required.",
-            "A valid Permit Request Volume is required.");
+        .containsExactly("A valid Permit Request Volume is required.");
     verify(repository, never()).updatePermitDetail(any(), any(), any());
+  }
+
+  @Test
+  void updatePermitShouldPersistAuthoritativeScaleTotalsInsteadOfSubmittedTotals() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow()));
+    stubTargetMinisterialExemption("EX-700");
+    when(repository.findScaleDetailsByPermitNumber(7000123L))
+        .thenReturn(
+            List.of(
+                scale("101", "TM-1", "HE", "A", 7.5d, 3L, "7000123", "PKG-1"),
+                scale("102", "TM-2", "FI", "B", 2.5d, 4L, "7000123", "PKG-2")));
+    when(repository.updatePermitDetail(
+            any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
+        .thenReturn(true);
+
+    PermitMutationRpcResponseDto response =
+        service.updatePermit(
+            ordinaryTotalsEditRequest("999.9", "999"), "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    assertThat(response.permitVolume()).isEqualTo(10.0d);
+    assertThat(response.permitNumberOfPieces()).isEqualTo(7L);
+    ArgumentCaptor<PermitMutationRow> permitCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository)
+        .updatePermitDetail(
+            permitCaptor.capture(), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE));
+    assertThat(permitCaptor.getValue().permitVolume()).isEqualTo(10.0d);
+    assertThat(permitCaptor.getValue().numberOfPieces()).isEqualTo(7L);
   }
 
   @Test
@@ -2629,6 +2670,44 @@ class OraclePermitDetailsRpcServiceTest {
             permitCaptor.capture(), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE));
     assertThat(permitCaptor.getValue().oicRequestPieces()).isEqualTo(9_999_999_999L);
     assertThat(permitCaptor.getValue().oicRequestVolume()).isEqualTo(999_999_999.0d);
+  }
+
+  @Test
+  void updatePermitShouldKeepBlanketOicRequestFieldsSeparateFromDerivedPermitTotals() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(blanketOicPermitMutationRow()));
+    when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("B"));
+    when(exemptionService.findByExemptionNumber("EX-700"))
+        .thenReturn(
+            Optional.of(
+                exemptionDetailWithClients(
+                    "EX-700", "B", "00077881", "00077880")));
+    stubOicApplicationBinding("EX-700");
+    when(repository.findScaleDetailsByPermitNumber(7000123L))
+        .thenReturn(
+            List.of(
+                scale("101", "TM-1", "HE", "A", 8.0d, 3L, "7000123", "PKG-1"),
+                scale("102", "TM-2", "FI", "B", 2.0d, 4L, "7000123", "PKG-2")));
+    when(repository.updatePermitDetail(
+            any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
+        .thenReturn(true);
+
+    PermitMutationRpcResponseDto response =
+        service.updatePermit(blanketOicEditRequest(), "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<PermitMutationRow> permitCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository)
+        .updatePermitDetail(
+            permitCaptor.capture(), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE));
+    PermitMutationRow updated = permitCaptor.getValue();
+    assertThat(updated.applicationDate()).isEqualTo(LocalDate.of(2026, 3, 14));
+    assertThat(updated.receivedDate()).isEqualTo(LocalDate.of(2026, 3, 15));
+    assertThat(updated.permitVolume()).isEqualTo(10.0d);
+    assertThat(updated.numberOfPieces()).isEqualTo(7L);
+    assertThat(updated.oicRequestVolume()).isEqualTo(101.0d);
+    assertThat(updated.oicRequestPieces()).isEqualTo(101L);
   }
 
   @Test
@@ -2881,20 +2960,26 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
-  void updatePermitShouldRejectPermitTotalChangesAfterInvoicing() {
+  void updatePermitShouldIgnoreSubmittedPermitTotalsAfterInvoicing() {
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(permitMutationRow("COM")));
     stubTargetMinisterialExemption("EX-700");
+    when(repository.updatePermitDetail(
+            any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
+        .thenReturn(true);
 
     PermitMutationRpcResponseDto response =
         service.updatePermit(
             formCheckRequest("COM", "43", "Legacy notes"), "idir\\jsmith");
 
-    assertThat(response.success()).isFalse();
-    assertThat(response.errors())
-        .containsExactly(
-            "Invoice-related permit details cannot be changed after permit invoicing. Reactivate or cancel the permit first.");
-    verify(repository, never()).updatePermitDetail(any(), any(), any());
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<PermitMutationRow> permitCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository)
+        .updatePermitDetail(
+            permitCaptor.capture(), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE));
+    assertThat(permitCaptor.getValue().numberOfPieces()).isEqualTo(42L);
+    verify(permitInvoiceOrchestrationServiceProvider, never()).getIfAvailable();
   }
 
   @Test
@@ -3313,7 +3398,7 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
-  void updatePermitShouldKeepTheSubmitDateImmutableAfterCreation() {
+  void updatePermitShouldAllowActiveSubmitDateCorrectionAndAlignOrdinaryReceivedDate() {
     PermitMutationRow current =
         withInvoiceContext(
             permitMutationRow("ACT"),
@@ -3324,14 +3409,47 @@ class OraclePermitDetailsRpcServiceTest {
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(current));
     stubTargetMinisterialExemption("EX-700");
+    when(repository.updatePermitDetail(
+            any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
+        .thenReturn(true);
 
     PermitMutationRpcResponseDto response =
         service.updatePermit(
             formCheckRequest("ACT", "42", "Legacy notes"), "idir\\jsmith");
 
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<PermitMutationRow> permitCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository)
+        .updatePermitDetail(
+            permitCaptor.capture(), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE));
+    assertThat(permitCaptor.getValue().applicationDate())
+        .isEqualTo(LocalDate.of(2026, 3, 15));
+    assertThat(permitCaptor.getValue().receivedDate())
+        .isEqualTo(LocalDate.of(2026, 3, 15));
+  }
+
+  @Test
+  void updatePermitShouldRejectSubmitDateCorrectionUnlessTheCurrentPermitIsActive() {
+    PermitMutationRow current =
+        withInvoiceContext(
+            permitMutationRow("CAN"),
+            LocalDate.of(2025, 3, 15),
+            "US",
+            "00077880",
+            "01");
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(current));
+    stubTargetMinisterialExemption("EX-700");
+
+    PermitMutationRpcResponseDto response =
+        service.updatePermit(
+            formCheckRequest("CAN", "42", "Legacy notes"), "idir\\jsmith");
+
     assertThat(response.success()).isFalse();
     assertThat(response.errors())
-        .containsExactly("The permit submit date cannot be changed after the permit is created.");
+        .containsExactly(
+            "The permit submit date can only be changed while the permit is active and uninvoiced.");
     verify(repository, never()).updatePermitDetail(any(), any(), any());
   }
 
@@ -3689,7 +3807,6 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(response.errors())
         .containsExactly("A valid submit date is required to complete a permit.");
     verify(repository, never()).updatePermitDetail(any(), any(), any());
-    verify(repository, never()).findScaleDetailsByPermitNumber(7000123L);
     verify(permitInvoiceOrchestrationService, never()).orchestrate(any(), any());
   }
 
@@ -4050,14 +4167,9 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
-  void updatePermitShouldRejectReparentingAcrossApplicationBindings() {
+  void updatePermitShouldRejectChangingItsExemptionBeforeResolvingAnotherBinding() {
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(permitMutationRow()));
-    stubTargetMinisterialExemption("EX-800");
-    when(repository.findApplicationNumbersByPermitNumberRequired(7000123L))
-        .thenReturn(List.of(1000456L));
-    when(repository.findApplicationNumbersByExemptionNumber("EX-800"))
-        .thenReturn(List.of(1000999L));
 
     PermitMutationRpcResponseDto response =
         service.updatePermit(
@@ -4066,31 +4178,8 @@ class OraclePermitDetailsRpcServiceTest {
 
     assertThat(response.success()).isFalse();
     assertThat(response.errors())
-        .contains("The permit has applications that do not belong to the selected exemption.");
-    verify(repository, never()).updatePermitDetail(any(), any(), any());
-  }
-
-  @Test
-  void updatePermitShouldRejectReparentingAcrossPackageBindings() {
-    when(repository.findPermitMutationByPermitNumber(7000123L))
-        .thenReturn(Optional.of(permitMutationRow()));
-    stubTargetMinisterialExemption("EX-800");
-    when(repository.findApplicationNumbersByPermitNumberRequired(7000123L))
-        .thenReturn(List.of());
-    when(repository.findPackageNumbersByPermitNumberRequired(7000123L))
-        .thenReturn(List.of("PKG-OLD"));
-    when(repository.findPackageNumbersByOicPermitNumber(7000123L)).thenReturn(List.of());
-    when(repository.findPackagesByExemptionNumberRequired("EX-800"))
-        .thenReturn(List.of(new PackageCandidateRow(1000999L, "PKG-NEW")));
-
-    PermitMutationRpcResponseDto response =
-        service.updatePermit(
-            updatePermitRequest("EX-800", "00077881", "00077880", null),
-            "idir\\jsmith");
-
-    assertThat(response.success()).isFalse();
-    assertThat(response.errors())
-        .contains("The permit has packages that do not belong to the selected exemption.");
+        .containsExactly("The permit exemption cannot be changed through ordinary permit edit.");
+    verify(repository, never()).findExemptionTypeCode("EX-800");
     verify(repository, never()).updatePermitDetail(any(), any(), any());
   }
 
@@ -4098,20 +4187,11 @@ class OraclePermitDetailsRpcServiceTest {
   void updatePermitShouldRejectAssigningAnOicApplicationThroughGenericPermitUpdate() {
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(permitMutationRow()));
-    when(repository.findExemptionTypeCode("BOIC-2")).thenReturn(Optional.of("B"));
-    when(exemptionService.findByExemptionNumber("BOIC-2"))
-        .thenReturn(
-            Optional.of(
-                exemptionDetailWithClients("BOIC-2", "B", null, null)));
-    when(repository.findApplicationNumbersByPermitNumberRequired(7000123L))
-        .thenReturn(List.of());
-    when(repository.findPackageNumbersByPermitNumberRequired(7000123L))
-        .thenReturn(List.of());
-    when(repository.findPackageNumbersByOicPermitNumber(7000123L)).thenReturn(List.of());
+    stubTargetMinisterialExemption("EX-700");
 
     PermitMutationRpcResponseDto response =
         service.updatePermit(
-            updatePermitRequest("BOIC-2", "00077881", "00077880", "1000999"),
+            updatePermitRequest("EX-700", "00077881", "00077880", "1000999"),
             "idir\\jsmith");
 
     assertThat(response.success()).isFalse();
@@ -4894,7 +4974,7 @@ class OraclePermitDetailsRpcServiceTest {
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(permitMutationRow()));
 
-    PermitMutationRequestDto request = formCheckRequest("ACT", "43", "Legacy notes");
+    PermitMutationRequestDto request = formCheckRequest("ACT", "42", "Changed notes");
 
     boolean changed = service.hasFormChanges(request);
 
@@ -6204,7 +6284,8 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   private void permitTotalsUpdateSucceeds() {
-    when(repository.updatePermitDetail(
+    lenient()
+        .when(repository.updatePermitDetail(
             org.mockito.ArgumentMatchers.any(PermitMutationRow.class),
             org.mockito.ArgumentMatchers.eq("idir\\jsmith"),
             org.mockito.ArgumentMatchers.isNull()))
@@ -7383,6 +7464,81 @@ class OraclePermitDetailsRpcServiceTest {
 
   private PermitMutationRequestDto invalidPermitVolumesRequest() {
     return numericPermitMutationRequest("NaN", "Infinity", null, null);
+  }
+
+  private PermitMutationRequestDto ordinaryTotalsEditRequest(
+      String permitVolume, String permitPieces) {
+    return new PermitMutationRequestDto(
+        "7000123",
+        "ACT",
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        permitVolume,
+        permitPieces,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null);
+  }
+
+  private PermitMutationRequestDto blanketOicEditRequest() {
+    return new PermitMutationRequestDto(
+        "7000123",
+        "ACT",
+        "03/14/2026",
+        null,
+        null,
+        "03/13/2026",
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        "999.9",
+        "999",
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        "101",
+        "101.0",
+        null,
+        null,
+        null,
+        null,
+        null);
   }
 
   private PermitMutationRequestDto invalidOverrideFeeRequest() {

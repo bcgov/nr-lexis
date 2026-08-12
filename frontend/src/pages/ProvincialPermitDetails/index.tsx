@@ -298,6 +298,7 @@ const PermitClientTile = ({
 type PermitDetailFormField =
   | 'permitNumber'
   | 'permitStatus'
+  | 'permitSubmitDate'
   | 'permitIssueDate'
   | 'permitExpiryDate'
   | 'permitRequestDate'
@@ -400,9 +401,12 @@ const optionalIntegerValue = (value: string): number | null => {
 const buildPermitDetailForm = (permitDetail: ProvincialPermitDetail): PermitDetailForm => ({
   permitNumber: detailValue(permitDetail.permitNumber),
   permitStatus: detailValue(permitDetail.permitStatusCode),
+  permitSubmitDate: detailValue(permitDetail.applicationDate),
   permitIssueDate: detailValue(permitDetail.issueDate),
   permitExpiryDate: detailValue(permitDetail.expiryDate),
-  permitRequestDate: detailValue(permitDetail.receivedDate),
+  permitRequestDate: detailValue(
+    permitDetail.blanketOic ? permitDetail.receivedDate : permitDetail.applicationDate,
+  ),
   exemptionNumber: detailValue(permitDetail.exemptionNumber),
   permitReceiptNo: detailValue(permitDetail.receiptNumber),
   permitRemarks: detailValue(permitDetail.remarks),
@@ -466,10 +470,13 @@ const withUpdatedPermitDetail = (
       permitStatusCode === detailValue(currentDetail.permitStatusCode)
         ? currentDetail.permitStatusDescription
         : selectedStatusLabel || permitStatusCode || null,
+    applicationDate: form.permitSubmitDate.trim() || null,
     exemptionNumber: form.exemptionNumber.trim() || null,
     issueDate: form.permitIssueDate.trim() || null,
     expiryDate: form.permitExpiryDate.trim() || null,
-    receivedDate: form.permitRequestDate.trim() || null,
+    receivedDate: currentDetail.blanketOic
+      ? currentDetail.receivedDate
+      : form.permitSubmitDate.trim() || null,
     permitVolume: optionalNumberValue(form.permitTotalVolume),
     numberOfPieces: optionalIntegerValue(form.permitNumberOfPieces),
     oicRequestPieces: optionalIntegerValue(form.oicPermitTotalPieces),
@@ -506,7 +513,9 @@ const withPermitMutationResult = (
 ): ProvincialPermitDetail => {
   const permitStatus = result.permitStatus?.trim()
   const hasReceiptNumber = result.permitReceiptNo !== undefined
-  if (!permitStatus && !hasReceiptNumber) {
+  const hasPermitVolume = result.permitVolume !== undefined
+  const hasPermitNumberOfPieces = result.permitNumberOfPieces !== undefined
+  if (!permitStatus && !hasReceiptNumber && !hasPermitVolume && !hasPermitNumberOfPieces) {
     return currentDetail
   }
 
@@ -520,6 +529,10 @@ const withPermitMutationResult = (
     receiptNumber: hasReceiptNumber
       ? result.permitReceiptNo?.trim() || null
       : currentDetail.receiptNumber,
+    permitVolume: hasPermitVolume ? (result.permitVolume ?? null) : currentDetail.permitVolume,
+    numberOfPieces: hasPermitNumberOfPieces
+      ? (result.permitNumberOfPieces ?? null)
+      : currentDetail.numberOfPieces,
   }
 }
 
@@ -1332,6 +1345,8 @@ const ProvincialPermitDetailsPage = () => {
     editContextLoaded &&
     !permitEditLocked &&
     !permitExpired
+  const canReviewPermits = canPerform('/permitsReview')
+  const canCorrectPermitSubmitDate = canSavePermit && canReviewPermits && permitStatusCode === 'ACT'
   const canEditShipping = canSavePermit && permitStatusCode !== 'CAN'
   const invoiceMaterialLocked = permitStatusCode === 'COM' || permitStatusCode === 'PPD'
   const canEnterPaymentReceipt = permitStatusCode === 'PPD' && !detail?.receiptNumber?.trim()
@@ -1424,6 +1439,7 @@ const ProvincialPermitDetailsPage = () => {
     !!permitBaselineForm &&
     (
       [
+        'permitSubmitDate',
         'exemptionNumber',
         'orgUnitNumber',
         'ownerClientNumber',
@@ -1563,7 +1579,8 @@ const ProvincialPermitDetailsPage = () => {
         : undefined,
       permitIssueDate: isoDateFieldError(permitForm.permitIssueDate) ?? undefined,
       permitExpiryDate: isoDateFieldError(permitForm.permitExpiryDate) ?? undefined,
-      permitRequestDate: isoDateFieldError(permitForm.permitRequestDate) ?? undefined,
+      permitSubmitDate: isoDateFieldError(permitForm.permitSubmitDate) ?? undefined,
+      permitRequestDate: undefined,
       estimatedShippingDate: firstValidationError(
         () => requiredFieldError(permitForm.estimatedShippingDate, 'Estimated shipping date'),
         () => isoDateFieldError(permitForm.estimatedShippingDate),
@@ -1638,7 +1655,13 @@ const ProvincialPermitDetailsPage = () => {
     getVisibleFieldError(field, permitFieldErrors, touchedPermitFields, showPermitValidationErrors)
 
   const setPermitFormField = (field: PermitDetailFormField, value: string): void => {
-    setPermitForm((current) => (current ? { ...current, [field]: value } : current))
+    setPermitForm((current) => {
+      if (!current) return current
+      if (field === 'permitSubmitDate' && !detail?.blanketOic) {
+        return { ...current, permitSubmitDate: value, permitRequestDate: value }
+      }
+      return { ...current, [field]: value }
+    })
   }
 
   const resetPermitFormSection = (shippingFields: boolean): void => {
@@ -2564,10 +2587,22 @@ const ProvincialPermitDetailsPage = () => {
           setActionInfoMessage(result.message || 'Permit email sent.')
           if (type === 'request' && result.permitRequestDate) {
             setDetail((current) =>
-              current ? { ...current, receivedDate: result.permitRequestDate } : current,
+              current
+                ? {
+                    ...current,
+                    applicationDate: result.permitRequestDate,
+                    receivedDate: result.permitRequestDate,
+                  }
+                : current,
             )
             setPermitForm((current) =>
-              current ? { ...current, permitRequestDate: result.permitRequestDate } : current,
+              current
+                ? {
+                    ...current,
+                    permitSubmitDate: result.permitRequestDate,
+                    permitRequestDate: result.permitRequestDate,
+                  }
+                : current,
             )
           }
           return true
@@ -3034,11 +3069,7 @@ const ProvincialPermitDetailsPage = () => {
                               value={displayValue(detail.packageNumber)}
                               disabled
                             />
-                            {renderPermitTextInput(
-                              'exemptionNumber',
-                              'Exemption number',
-                              invoiceMaterialLocked,
-                            )}
+                            {renderPermitTextInput('exemptionNumber', 'Exemption number', true)}
                             <Select
                               id="permit-permitStatus"
                               labelText="Permit status"
@@ -3049,7 +3080,11 @@ const ProvincialPermitDetailsPage = () => {
                               onChange={(event) =>
                                 setPermitFormField('permitStatus', event.target.value)
                               }
-                              disabled={isPermitOptionsLoading || permitStatusOptions.length === 0}
+                              disabled={
+                                !canReviewPermits ||
+                                isPermitOptionsLoading ||
+                                permitStatusOptions.length === 0
+                              }
                             >
                               <SelectItem value="" text="Select a permit status" />
                               {editablePermitStatusOptions.map((option) => (
@@ -3060,19 +3095,22 @@ const ProvincialPermitDetailsPage = () => {
                                 />
                               ))}
                             </Select>
-                            <TextInput
-                              id="permit-applicationDate"
-                              labelText="Submit date"
-                              value={displayValue(detail.applicationDate)}
-                              disabled
-                            />
+                            {renderPermitTextInput(
+                              'permitSubmitDate',
+                              'Submit date',
+                              !canCorrectPermitSubmitDate,
+                            )}
                             {renderPermitTextInput(
                               'permitIssueDate',
                               'Issue date',
-                              invoiceMaterialLocked,
+                              !canReviewPermits || invoiceMaterialLocked,
                             )}
-                            {renderPermitTextInput('permitExpiryDate', 'Expiry date', false)}
-                            {renderPermitTextInput('permitRequestDate', 'Received date', false)}
+                            {renderPermitTextInput(
+                              'permitExpiryDate',
+                              'Expiry date',
+                              !canReviewPermits,
+                            )}
+                            {renderPermitTextInput('permitRequestDate', 'Received date', true)}
                             {detail.blanketOic ? (
                               <Select
                                 id="permit-orgUnitNumber"
@@ -3159,7 +3197,12 @@ const ProvincialPermitDetailsPage = () => {
                             { label: 'Submit date', value: displayValue(detail.applicationDate) },
                             { label: 'Issue date', value: displayValue(detail.issueDate) },
                             { label: 'Expiry date', value: displayValue(detail.expiryDate) },
-                            { label: 'Received date', value: displayValue(detail.receivedDate) },
+                            {
+                              label: 'Received date',
+                              value: displayValue(
+                                detail.blanketOic ? detail.receivedDate : detail.applicationDate,
+                              ),
+                            },
                             { label: 'Region', value: displayValue(detail.region) },
                           ]}
                         />
@@ -3195,15 +3238,11 @@ const ProvincialPermitDetailsPage = () => {
                                 'Permit Request Volume (m³)',
                                 invoiceMaterialLocked,
                               )}
-                            {renderPermitTextInput(
-                              'permitTotalVolume',
-                              'Permit volume (m³)',
-                              invoiceMaterialLocked,
-                            )}
+                            {renderPermitTextInput('permitTotalVolume', 'Permit volume (m³)', true)}
                             {renderPermitTextInput(
                               'permitNumberOfPieces',
                               'Number of pieces',
-                              invoiceMaterialLocked,
+                              true,
                             )}
                             {renderPermitTextInput(
                               'permitReceiptNo',
