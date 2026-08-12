@@ -848,7 +848,6 @@ const RtmEmsLogAmvUploadPage = () => {
   const uploadInputRef = useRef<HTMLInputElement>(null)
   const cancelButtonRef = useRef<HTMLButtonElement>(null)
   const removeFileButtonRef = useRef<HTMLButtonElement>(null)
-  const savedNotificationRef = useRef<HTMLDivElement>(null)
   const replacementPreviewRef = useRef<RtmEmsLogAmvUploadPreview | null>(null)
   const replacementReviewValuesRef = useRef<Record<string, string> | null>(null)
   const [effectiveMonth, setEffectiveMonth] = useState(() =>
@@ -892,29 +891,6 @@ const RtmEmsLogAmvUploadPage = () => {
       document.title = previousTitle
     }
   }, [])
-
-  useEffect(() => {
-    if (!savedNotification || replacementUploadOpen) {
-      return
-    }
-
-    const savedNotificationElement = savedNotificationRef.current
-    if (!savedNotificationElement) {
-      return
-    }
-
-    const notificationBounds = savedNotificationElement.getBoundingClientRect()
-    const mainBounds = savedNotificationElement.closest('main')?.getBoundingClientRect()
-    const headerBounds = document.querySelector('.csp-app-header')?.getBoundingClientRect()
-    const visibleTop = Math.max(0, mainBounds?.top ?? 0, headerBounds?.bottom ?? 0)
-    const visibleBottom = Math.min(window.innerHeight, mainBounds?.bottom ?? window.innerHeight)
-    const isFullyVisible =
-      notificationBounds.top >= visibleTop && notificationBounds.bottom <= visibleBottom
-
-    if (!isFullyVisible) {
-      savedNotificationElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-    }
-  }, [replacementUploadOpen, savedNotification])
 
   const validateUploadFile = async (
     nextFile: File | null,
@@ -1583,20 +1559,16 @@ const RtmEmsLogAmvUploadPage = () => {
 
       <Column sm={4} md={8} lg={16} className="admin-upload-fspts-content rtm-amv-values-content">
         {savedUploadState && savedNotification && !replacementUploadOpen && (
-          <div ref={savedNotificationRef} className="rtm-amv-saved-notification-anchor">
-            <InlineNotification
-              className="rtm-amv-saved-notification"
-              kind="success"
-              lowContrast
-              title={savedNotification === 'discarded' ? 'Changes discarded' : 'Values saved'}
-              subtitle={
-                savedNotification === 'discarded'
-                  ? 'Values are back to your last save.'
-                  : `They take effect on ${formatEffectiveStartDate(effectiveMonth)}.`
-              }
-              onCloseButtonClick={() => setSavedNotification(null)}
-            />
-          </div>
+          <AppNotification
+            kind="success"
+            title={savedNotification === 'discarded' ? 'Changes discarded' : 'Values saved'}
+            subtitle={
+              savedNotification === 'discarded'
+                ? 'Values are back to your last save.'
+                : `They take effect on ${formatEffectiveStartDate(effectiveMonth)}.`
+            }
+            onCloseButtonClick={() => setSavedNotification(null)}
+          />
         )}
 
         <div className="admin-upload-section-heading rtm-amv-values-heading">

@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { APP_NOTIFICATION_REGION_ID } from '@/components/AppNotification'
 import { useAuth } from '@/context/auth/useAuth'
 import RtmEmsLogAmvUploadPage from '@/pages/RTMEmsLogAmv/LegacyUploadWorkflow'
 import {
@@ -60,7 +61,6 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
   })
 
   afterEach(() => {
-    vi.restoreAllMocks()
     vi.useRealTimers()
   })
 
@@ -126,31 +126,6 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
   })
 
   it('restores next-month saved values as an editable review without file metadata', async () => {
-    let savedNotificationTop = 100
-    const originalGetBoundingClientRect = Element.prototype.getBoundingClientRect
-    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (
-      this: Element,
-    ) {
-      if (
-        this instanceof HTMLElement &&
-        this.classList.contains('rtm-amv-saved-notification-anchor')
-      ) {
-        return {
-          bottom: savedNotificationTop + 64,
-          height: 64,
-          left: 0,
-          right: 320,
-          top: savedNotificationTop,
-          width: 320,
-          x: 0,
-          y: savedNotificationTop,
-          toJSON: () => ({}),
-        }
-      }
-
-      return originalGetBoundingClientRect.call(this)
-    })
-    const scrollIntoViewSpy = vi.spyOn(Element.prototype, 'scrollIntoView')
     const currentMonth = `${formatBusinessIsoDate().slice(0, 7)}-01`
     const nextMonth = monthOffset(currentMonth, 1)
     const comparisonMonth = monthOffset(nextMonth, -2)
@@ -235,7 +210,6 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
 
     await userEvent.clear(value)
     await userEvent.type(value, '79.25')
-    scrollIntoViewSpy.mockClear()
     await userEvent.click(screen.getByRole('button', { name: 'Save values' }))
 
     await waitFor(() => expect(mockedSaveBatch).toHaveBeenCalledTimes(1))
@@ -251,19 +225,6 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       ]),
     )
     expect(screen.getByText('Values saved')).toBeVisible()
-    expect(scrollIntoViewSpy).not.toHaveBeenCalled()
-
-    await userEvent.clear(value)
-    await userEvent.type(value, '79.50')
-    expect(screen.queryByText('Values saved')).not.toBeInTheDocument()
-    savedNotificationTop = window.innerHeight + 1
-
-    await userEvent.click(screen.getByRole('button', { name: 'Save values' }))
-
-    await waitFor(() => expect(mockedSaveBatch).toHaveBeenCalledTimes(2))
-    await waitFor(() => {
-      expect(scrollIntoViewSpy).toHaveBeenCalledWith({ behavior: 'smooth', block: 'nearest' })
-    })
   })
 
   it('confirms removal of manually edited replacement values and updates only after save', async () => {
@@ -937,13 +898,11 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     )
 
     expect(hemlockTable).toBeVisible()
-    const savedNotificationTitle = screen.getByText('Values saved')
-    expect(savedNotificationTitle).toBeVisible()
-    const savedInlineNotification = savedNotificationTitle.closest(
-      '.cds--inline-notification',
-    ) as HTMLElement
-    expect(savedInlineNotification).toHaveClass('cds--inline-notification--success')
-    expect(savedInlineNotification).toHaveClass('rtm-amv-saved-notification')
+    const savedToastTitle = screen.getByText('Values saved')
+    expect(savedToastTitle).toBeVisible()
+    const savedToast = savedToastTitle.closest('.cds--toast-notification') as HTMLElement
+    expect(savedToast).toHaveClass('cds--toast-notification--success')
+    expect(document.getElementById(APP_NOTIFICATION_REGION_ID)).toContainElement(savedToast)
     expect(screen.getByText(/They take effect on [A-Z][a-z]+ 1, \d{4}\./)).toBeVisible()
     expect(screen.queryByText('Last saved')).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Values', level: 2 })).toBeVisible()
