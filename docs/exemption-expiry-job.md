@@ -23,8 +23,12 @@ expired lock.
 
 If the table, grants, or Oracle lock provider are temporarily unavailable, the nightly trigger is
 skipped and logged; expiry never falls back to an uncoordinated run. API startup and traffic remain
-available while the database migration is deployed. Backend startup does not run expiry; a missed
-nightly trigger remains eligible on the following night.
+available while the database migration is deployed. Each enabled backend replica also attempts one
+reconciliation after the application is ready. The reconciliation uses the same Oracle lock and
+idempotent expiry service as the nightly trigger, so only a lock holder runs it and exemptions that
+were already processed are harmlessly ignored. Lock contention or a failed startup reconciliation
+does not fail pod startup or claim the local run date, so another replica or a later trigger can
+retry.
 
 ## Configuration
 

@@ -23,7 +23,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.annotation.Profile;
+import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -106,6 +108,17 @@ public class ExemptionExpiryScheduler {
       zone = "${lexis.expiry.zone:America/Vancouver}")
   public void expireDueExemptions() {
     runForCurrentLocalDate("scheduled_run");
+  }
+
+  @EventListener(ApplicationReadyEvent.class)
+  public void reconcileDueExemptionsOnStartup() {
+    try {
+      runForCurrentLocalDate("startup_reconciliation");
+    } catch (RuntimeException ex) {
+      LOGGER.warn(
+          "event=lexis_exemption_expiry operation=startup_reconciliation outcome=deferred reason=run_failed startupContinues=true failureType={}",
+          exceptionType(ex));
+    }
   }
 
   private void runForCurrentLocalDate(String operation) {

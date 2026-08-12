@@ -35,6 +35,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
 
 @ExtendWith(MockitoExtension.class)
@@ -123,6 +125,68 @@ class ExemptionExpirySchedulerTest {
 
     assertThat(schedule.cron()).isEqualTo("${lexis.expiry.cron:30 0 0 * * *}");
     assertThat(schedule.zone()).isEqualTo("${lexis.expiry.zone:America/Vancouver}");
+  }
+
+  @Test
+  void startupReconciliationShouldUseTheLockedRunAndSuppressTheSameDaySchedule()
+      throws NoSuchMethodException {
+    SimpleMeterRegistry registry = new SimpleMeterRegistry();
+    ExemptionExpiryScheduler scheduler = scheduler(registry);
+    doReturn(emptyResult()).when(expiryService).expireDueExemptions();
+
+    EventListener listener =
+        ExemptionExpiryScheduler.class
+            .getDeclaredMethod("reconcileDueExemptionsOnStartup")
+            .getAnnotation(EventListener.class);
+
+    scheduler.reconcileDueExemptionsOnStartup();
+    scheduler.expireDueExemptions();
+
+    assertThat(listener).isNotNull();
+    assertThat(listener.value()).containsExactly(ApplicationReadyEvent.class);
+    verify(expiryService).expireDueExemptions();
+    verify(lockProvider).lock(any());
+    verify(distributedLock).unlock();
+    assertThat(counter(registry, "completed")).isEqualTo(1d);
+    assertThat(counter(registry, "skipped")).isEqualTo(1d);
+  }
+
+  @Test
+  void heldStartupLockShouldLeaveTheSameDayRunEligibleForScheduledRetry() {
+    SimpleMeterRegistry registry = new SimpleMeterRegistry();
+    ExemptionExpiryScheduler scheduler = scheduler(registry);
+    doReturn(Optional.empty())
+        .doReturn(Optional.of(distributedLock))
+        .when(lockProvider)
+        .lock(any());
+    doReturn(emptyResult()).when(expiryService).expireDueExemptions();
+
+    scheduler.reconcileDueExemptionsOnStartup();
+    scheduler.expireDueExemptions();
+
+    verify(expiryService).expireDueExemptions();
+    verify(lockProvider, times(2)).lock(any());
+    verify(distributedLock).unlock();
+    assertThat(counter(registry, "completed")).isEqualTo(1d);
+    assertThat(counter(registry, "skipped")).isEqualTo(1d);
+  }
+
+  @Test
+  void startupFailureShouldNotEscapeAndShouldLeaveTheSameDayRunEligibleForRetry() {
+    SimpleMeterRegistry registry = new SimpleMeterRegistry();
+    ExemptionExpiryScheduler scheduler = scheduler(registry);
+    doThrow(new IllegalStateException("Oracle failed"))
+        .doReturn(emptyResult())
+        .when(expiryService)
+        .expireDueExemptions();
+
+    assertThatCode(scheduler::reconcileDueExemptionsOnStartup).doesNotThrowAnyException();
+    scheduler.expireDueExemptions();
+
+    verify(expiryService, times(2)).expireDueExemptions();
+    verify(distributedLock, times(2)).unlock();
+    assertThat(counter(registry, "completed")).isEqualTo(1d);
+    assertThat(counter(registry, "failed")).isEqualTo(1d);
   }
 
   @Test

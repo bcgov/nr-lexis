@@ -49,6 +49,16 @@ class ApplicationApprovalEligibilityServiceTest {
   }
 
   @Test
+  void shouldAllowAValidUnlinkedFederalApplication() {
+    stubValidApplication("F");
+
+    var result = service.evaluate(1000456L);
+
+    assertThat(result.eligible()).isTrue();
+    assertThat(result.errors()).isEmpty();
+  }
+
+  @Test
   void shouldRejectEveryLegacyReadyForApprovalAssociation() {
     stubValidApplication();
     when(applicationRepository.findApplicationUpdateRecord(1000456L))
@@ -148,14 +158,18 @@ class ApplicationApprovalEligibilityServiceTest {
   }
 
   private void stubValidApplication() {
+    stubValidApplication("P");
+  }
+
+  private void stubValidApplication(String jurisdictionCode) {
     when(applicationRepository.findApplicationUpdateRecord(1000456L))
-        .thenReturn(Optional.of(validApplication(null)));
+        .thenReturn(Optional.of(validApplication(null, jurisdictionCode)));
     when(applicationRepository.isProductTypeCodeValidRequired("H")).thenReturn(true);
     when(applicationRepository.isGrowthTypeCodeValidRequired("O")).thenReturn(true);
     when(applicationRepository.isExemptionReasonCodeValidRequired("S")).thenReturn(true);
     when(applicationRepository.isApplicationStatusCodeValidRequired("NEW")).thenReturn(true);
     when(applicationRepository.isApplicantTypeCodeValidRequired("O")).thenReturn(true);
-    when(applicationRepository.isJurisdictionCodeValidRequired("P")).thenReturn(true);
+    when(applicationRepository.isJurisdictionCodeValidRequired(jurisdictionCode)).thenReturn(true);
     when(applicationRepository.isOrgUnitValidRequired(1909L)).thenReturn(true);
     when(clientRepository.findLocationByClientNumberCodeRequired("00011111", "01"))
         .thenReturn(Optional.of(clientLocation()));
@@ -175,6 +189,11 @@ class ApplicationApprovalEligibilityServiceTest {
   }
 
   private ApplicationUpdateRecord validApplication(String exemptionNumber) {
+    return validApplication(exemptionNumber, "P");
+  }
+
+  private ApplicationUpdateRecord validApplication(
+      String exemptionNumber, String jurisdictionCode) {
     return new ApplicationUpdateRecord(
         1000456L,
         null,
@@ -199,7 +218,7 @@ class ApplicationApprovalEligibilityServiceTest {
         "O",
         1909L,
         "H",
-        "P",
+        jurisdictionCode,
         "O",
         null,
         "Owner Contact",

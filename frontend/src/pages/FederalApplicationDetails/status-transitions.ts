@@ -3,6 +3,8 @@ export type FederalStatusTransition = {
   label: string
 }
 
+// INTENTIONAL_LEGACY_DIVERGENCE(FEDERAL_DETAIL_APPROVAL_TRANSITION): The detail page exposes
+// approval, with the backend enforcing the shared Application Review readiness validation.
 const APPROVE_TRANSITION: FederalStatusTransition = { code: 'APP', label: 'Approved' }
 const REVIEW_OUTCOME_TRANSITIONS: FederalStatusTransition[] = [
   { code: 'REJ', label: 'Rejected' },

@@ -178,6 +178,29 @@ class ApplicationReviewOracleServiceTest {
   }
 
   @Test
+  void approveShouldSurfaceFederalReadinessFailure() {
+    when(repository.findAuthoritativeJurisdictionCode(1000456L)).thenReturn(Optional.of("F"));
+    when(federalApplicationService.updateStatus(
+            1000456L, new FederalStatusMutationRequest("APP", null), "reviewer"))
+        .thenReturn(
+            new FederalMutationResult(
+                false,
+                null,
+                null,
+                List.of("Applications linked to a permit cannot be approved.")));
+
+    ApplicationReviewStatusUpdateResultDto result = service.approve(1000456L, "reviewer");
+
+    assertThat(result.valid()).isFalse();
+    assertThat(result.updated()).isFalse();
+    assertThat(result.message()).contains("linked to a permit");
+    verify(federalApplicationService)
+        .updateStatus(1000456L, new FederalStatusMutationRequest("APP", null), "reviewer");
+    verify(repository, org.mockito.Mockito.never())
+        .updateStatusWithRemarkFromAllowedSources(any(), any(), any(), any(), any());
+  }
+
+  @Test
   void approveShouldFailClosedWhenJurisdictionCannotBeVerified() {
     when(repository.findAuthoritativeJurisdictionCode(1000456L)).thenReturn(Optional.empty());
 

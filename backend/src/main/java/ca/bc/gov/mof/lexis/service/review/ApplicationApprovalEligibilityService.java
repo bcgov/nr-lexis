@@ -19,7 +19,7 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** Applies the legacy domain gate before an application-review approval can set status APP. */
+/** Applies the legacy domain gate before an application approval can set status APP. */
 @Service
 @Profile("oracle")
 public class ApplicationApprovalEligibilityService {
@@ -27,7 +27,7 @@ public class ApplicationApprovalEligibilityService {
   private static final Set<String> REVIEWABLE_STATUS_CODES = Set.of("NEW", "PND");
   private static final Set<String> PRODUCT_TYPE_CODES = Set.of("H", "S", "T");
   private static final Set<String> APPLICANT_TYPE_CODES = Set.of("O", "A");
-  private static final String PROVINCIAL_JURISDICTION = "P";
+  private static final Set<String> APPROVABLE_JURISDICTIONS = Set.of("P", "F");
   private static final String PRODUCT_HARVESTED = "H";
   private static final String PRODUCT_STANDING = "S";
   private static final String PRODUCT_UNMANUFACTURED = "T";
@@ -73,8 +73,8 @@ public class ApplicationApprovalEligibilityService {
     if (!REVIEWABLE_STATUS_CODES.contains(normalizeCode(application.applicationStatusCode()))) {
       errors.add("Only new or pending applications can be approved.");
     }
-    if (!PROVINCIAL_JURISDICTION.equals(normalizeCode(application.jurisdictionCode()))) {
-      errors.add("Only provincial applications can be approved through application review.");
+    if (!APPROVABLE_JURISDICTIONS.contains(normalizeCode(application.jurisdictionCode()))) {
+      errors.add("Only provincial or federal applications can be approved.");
     }
     if (application.applicationDate() == null) {
       errors.add("Application date is required.");
