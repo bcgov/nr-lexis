@@ -1592,7 +1592,7 @@ const RtmEmsLogAmvUploadPage = () => {
               subtitle={
                 savedNotification === 'discarded'
                   ? 'Values are back to your last save.'
-                  : `${savedUploadState.valueCount} ${savedUploadState.valueCount === 1 ? 'value' : 'values'} will take effect on ${formatEffectiveStartDate(effectiveMonth)}.`
+                  : `They take effect on ${formatEffectiveStartDate(effectiveMonth)}.`
               }
               onCloseButtonClick={() => setSavedNotification(null)}
             />

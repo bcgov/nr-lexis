@@ -944,7 +944,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     ) as HTMLElement
     expect(savedInlineNotification).toHaveClass('cds--inline-notification--success')
     expect(savedInlineNotification).toHaveClass('rtm-amv-saved-notification')
-    expect(screen.getByText(/\d+ values will take effect on [A-Z][a-z]+ 1, \d{4}\./)).toBeVisible()
+    expect(screen.getByText(/They take effect on [A-Z][a-z]+ 1, \d{4}\./)).toBeVisible()
     expect(screen.queryByText('Last saved')).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Values', level: 2 })).toBeVisible()
     expect(screen.getByRole('button', { name: 'Replace file' })).toBeVisible()
