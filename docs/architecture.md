@@ -44,6 +44,10 @@ over TCP rather than deploying a scanner workload of its own.
 
 Interactive users authenticate through FAM's Cognito integration. The backend validates the JWT,
 normalizes FAM authorities, and derives the authenticated forest-client scopes where applicable.
+The signed `custom:idp_name` claim is also enforced when authorities are created: `idir` identities
+can receive only staff roles, while `bceidbusiness` identities can receive only concrete,
+client-scoped Provincial Submitter roles. Missing or unknown identity-provider claims and
+incompatible role assignments grant no corresponding LEXIS authority.
 When FAM assigns a Provincial Submitter to multiple forest clients, LEXIS requires a per-session
 active organization selection. The frontend sends that selection with each API request and the
 backend validates it against the client-scoped FAM authorities before enforcing it for every
@@ -51,7 +55,9 @@ protected object, child resource, download, and mutation. The frontend treats it
 guards as user experience controls rather than the security boundary.
 
 FAM delegated administration controls who may assign the five LEXIS application roles. It is a FAM
-permission type, not a LEXIS runtime role, and does not grant or appear as application access.
+permission type, not a LEXIS runtime role, and does not grant or appear as application access. FAM
+should prevent incompatible identity/role assignments at provisioning time; the backend token guard
+is the authoritative runtime control.
 
 NEXCOL does not use an interactive FAM role. It obtains a Keycloak service-client token with the
 `lexis:federal-submission:submit` scope and reaches only the federal validation and submission

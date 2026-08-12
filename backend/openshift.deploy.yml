@@ -56,8 +56,8 @@ parameters:
   - name: LEXIS_PROD_RTM_ONLY
     value: "false"
   - name: LEXIS_EXPIRY_ENABLED
-    description: Enable the legacy-equivalent daily exemption expiry scheduler
-    value: "false"
+    description: Enable exemption expiry; set false only as an explicit operational kill switch
+    value: "true"
   - name: LEXIS_EXPIRY_CRON
     description: Daily expiry scheduler cron expression
     value: "30 0 0 * * *"

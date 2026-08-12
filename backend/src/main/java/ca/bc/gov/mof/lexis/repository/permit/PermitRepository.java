@@ -80,16 +80,19 @@ public class PermitRepository extends OracleRepositorySupport {
         FROM EXPORT_PERMIT_DETAIL AGENT_PERMIT
         WHERE AGENT_PERMIT.AGENT_NUMBER = ?
         UNION
-        SELECT LINKED_PERMIT.EXPORT_PERMIT_DETAIL_NUMBER
-        FROM EXPORT_PERMIT_DETAIL LINKED_PERMIT
+        SELECT LINKED_SCALE.EXPORT_PERMIT_DETAIL_NUMBER
+        FROM EXPORT_SCALE_DETAIL LINKED_SCALE
+        INNER JOIN EXPORT_PACKAGE LINKED_PACKAGE
+          ON LINKED_PACKAGE.PACKAGE_NUMBER = LINKED_SCALE.PACKAGE_NUMBER
         INNER JOIN EXPORT_EXEMPTION_APPLICATION EP_ACCESS
-          ON EP_ACCESS.EXEMPTION_NUMBER = LINKED_PERMIT.EXEMPTION_NUMBER
-        WHERE EP_ACCESS.AGENT_CLIENT_NUMBER = ?
+          ON EP_ACCESS.APPLICATION_NUMBER = LINKED_PACKAGE.APPLICATION_NUMBER
+        WHERE EP_ACCESS.EXPORT_JURISDICTION_CODE = 'P'
           AND (
-            EP_ACCESS.EXPORT_JURISDICTION_CODE = 'P'
-            OR EP_ACCESS.EXPORT_JURISDICTION_CODE IS NULL
+            EP_ACCESS.OWNER_CLIENT_NUMBER = ?
+            OR EP_ACCESS.AGENT_CLIENT_NUMBER = ?
           )
-      %s)
+          AND LINKED_SCALE.EXPORT_PERMIT_DETAIL_NUMBER IS NOT NULL
+      )
       """;
   private static final Map<String, String> SEARCH_SORT_COLUMNS =
       Map.ofEntries(
@@ -205,24 +208,22 @@ public class PermitRepository extends OracleRepositorySupport {
               + "AND ESI.EXPORT_SALES_INVOICE_NUMBER LIKE '%' || ? || '%')",
           invoiceNumber);
     }
-    // Preserve the deployed legacy search wiring: the applicant filter targets the stored
-    // client number, while the owner filter targets the displayed applicant (agent or client).
-    where.addLike("EPD.CLIENT_NUMBER", criteria.applicantClientNumber());
-
-    String ownerClientNumber = trim(criteria.ownerClientNumber());
-    if (ownerClientNumber != null) {
+    String applicantClientNumber = trim(criteria.applicantClientNumber());
+    if (applicantClientNumber != null) {
       where.addRawWithBinds(
           " AND (EPD.AGENT_NUMBER LIKE '%' || ? || '%' "
               + "OR (EPD.CLIENT_NUMBER LIKE '%' || ? || '%' "
               + "AND EPD.AGENT_NUMBER IS NULL))",
-          ownerClientNumber,
-          ownerClientNumber);
+          applicantClientNumber,
+          applicantClientNumber);
     }
+    where.addLike("EPD.CLIENT_NUMBER", criteria.ownerClientNumber());
 
     String accessClientNumber = trim(criteria.accessClientNumber());
     if (accessClientNumber != null) {
       // The scoped CTE appears before the ordinary WHERE predicates in the final SQL.
       where.addLeadingBinds(
+          accessClientNumber,
           accessClientNumber,
           accessClientNumber,
           accessClientNumber);
@@ -245,7 +246,7 @@ public class PermitRepository extends OracleRepositorySupport {
     if (trim(criteria.accessClientNumber()) == null) {
       return SEARCH_PERMITS;
     }
-    return buildAccessiblePermitsCte(criteria.requireScalePermit())
+    return buildAccessiblePermitsCte()
         + SEARCH_PERMIT_COLUMNS
         + PERMIT_FROM
         + ACCESSIBLE_PERMIT_JOIN
@@ -256,7 +257,7 @@ public class PermitRepository extends OracleRepositorySupport {
     if (trim(criteria.accessClientNumber()) == null) {
       return COUNT_PERMITS;
     }
-    return buildAccessiblePermitsCte(criteria.requireScalePermit())
+    return buildAccessiblePermitsCte()
         + "SELECT COUNT(*)\n"
         + PERMIT_FROM
         + ACCESSIBLE_PERMIT_JOIN
@@ -264,16 +265,8 @@ public class PermitRepository extends OracleRepositorySupport {
         + "  ON EPSC.EXPORT_PERMIT_STATUS_CODE = EPD.EXPORT_PERMIT_STATUS_CODE\n";
   }
 
-  private String buildAccessiblePermitsCte(boolean requireScalePermit) {
-    String scaleRequirement =
-        requireScalePermit
-            ? "  AND EXISTS (\n"
-                + "    SELECT 1 FROM EXPORT_SCALE_DETAIL ESD_REQUIRED\n"
-                + "    WHERE ESD_REQUIRED.EXPORT_PERMIT_DETAIL_NUMBER = "
-                + "LINKED_PERMIT.EXPORT_PERMIT_DETAIL_NUMBER\n"
-                + "  )\n"
-            : "";
-    return ACCESSIBLE_PERMITS_CTE.formatted(scaleRequirement);
+  private String buildAccessiblePermitsCte() {
+    return ACCESSIBLE_PERMITS_CTE;
   }
 
   private String buildSearchOrder(String requestedSort) {

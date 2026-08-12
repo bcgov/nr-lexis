@@ -932,6 +932,7 @@ describe('provincial permit detail services', () => {
     const result = await updatePermitDetail({
       permitNumber: ' 777 ',
       permitStatus: ' COM ',
+      permitSubmitDate: ' 2026-05-19 ',
       permitIssueDate: '2026-05-20',
       permitExpiryDate: '2026-06-20',
       permitRequestDate: '2026-05-19',
@@ -961,6 +962,7 @@ describe('provincial permit detail services', () => {
     expect(body).toBeInstanceOf(URLSearchParams)
     expect(body.get('permitNumber')).toBe('777')
     expect(body.get('permitStatus')).toBe('COM')
+    expect(body.get('permitSubmitDate')).toBe('2026-05-19')
     expect(body.get('oicPermitTotalPieces')).toBe('250')
     expect(body.get('oicPermitTotalVolume')).toBe('125.75')
     expect(body.get('orgUnitNo')).toBe('1903')

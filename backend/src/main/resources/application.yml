@@ -71,7 +71,7 @@ lexis:
     virtualizer-directory: ${LEXIS_REPORT_VIRTUALIZER_DIRECTORY:/tmp/lexis-jasper}
     virtualizer-max-pages: ${LEXIS_REPORT_VIRTUALIZER_MAX_PAGES:50}
   expiry:
-    enabled: ${LEXIS_EXPIRY_ENABLED:false}
+    enabled: ${LEXIS_EXPIRY_ENABLED:true}
     cron: ${LEXIS_EXPIRY_CRON:30 0 0 * * *}
     zone: ${LEXIS_EXPIRY_ZONE:America/Vancouver}
     lock-at-most-for: ${LEXIS_EXPIRY_LOCK_AT_MOST_FOR:PT6H}

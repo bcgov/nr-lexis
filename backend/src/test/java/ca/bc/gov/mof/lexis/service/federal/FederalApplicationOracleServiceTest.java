@@ -25,6 +25,7 @@ import ca.bc.gov.mof.lexis.repository.review.ApplicationReviewRepository;
 import ca.bc.gov.mof.lexis.service.application.ApplicationEditLockService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
+import ca.bc.gov.mof.lexis.service.review.ApplicationApprovalEligibilityService;
 import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import java.time.Clock;
 import java.time.Instant;
@@ -62,6 +63,7 @@ class FederalApplicationOracleServiceTest {
   @Mock private ApplicationDetailsRpcRepository applicationDetailsRepository;
   @Mock private ApplicationDetailsRpcService applicationDetailsService;
   @Mock private ApplicationReviewRepository applicationReviewRepository;
+  @Mock private ApplicationApprovalEligibilityService approvalEligibilityService;
   @Mock private ClientLookupService clientLookupService;
   @Mock private ApplicationEditLockService editLockService;
   @InjectMocks private FederalApplicationOracleService service;
@@ -1395,6 +1397,8 @@ class FederalApplicationOracleServiceTest {
   void updateStatusShouldPreserveModernApprovalExtensionFromPending() {
     when(repository.findMutationContextRequired(1000456L))
         .thenReturn(Optional.of(federalContext("PND", LocalDate.of(2026, 7, 11))));
+    when(approvalEligibilityService.evaluate(1000456L))
+        .thenReturn(new ApplicationApprovalEligibilityService.Eligibility(true, List.of()));
     when(applicationReviewRepository.updateStatusWithRemarkFromAllowedSources(
             1000456L,
             "APP",
@@ -1413,6 +1417,35 @@ class FederalApplicationOracleServiceTest {
                 "idir\\approver");
 
     assertThat(result.success()).isTrue();
+    verify(approvalEligibilityService).evaluate(1000456L);
+  }
+
+  @Test
+  void updateStatusShouldRejectApprovalWhenLegacyReadinessGateFails() {
+    when(repository.findMutationContextRequired(1000456L))
+        .thenReturn(Optional.of(federalContext("NEW", LocalDate.of(2026, 7, 11))));
+    when(approvalEligibilityService.evaluate(1000456L))
+        .thenReturn(
+            new ApplicationApprovalEligibilityService.Eligibility(
+                false,
+                List.of(
+                    "Applications linked to an exemption cannot be approved.",
+                    "Applications linked to a permit cannot be approved.")));
+
+    FederalApplicationService.FederalMutationResult result =
+        serviceAt("2026-07-11T19:00:00Z")
+            .updateStatus(
+                1000456L,
+                new FederalApplicationService.FederalStatusMutationRequest("APP", null),
+                "idir\\approver");
+
+    assertThat(result.success()).isFalse();
+    assertThat(result.errors())
+        .containsExactly(
+            "Applications linked to an exemption cannot be approved.",
+            "Applications linked to a permit cannot be approved.");
+    verify(approvalEligibilityService).evaluate(1000456L);
+    verifyNoInteractions(applicationReviewRepository);
   }
 
   @Test
@@ -1744,6 +1777,7 @@ class FederalApplicationOracleServiceTest {
         applicationDetailsRepository,
         applicationDetailsService,
         applicationReviewRepository,
+        approvalEligibilityService,
         clientLookupService,
         editLockService,
         Clock.fixed(Instant.parse(instant), LexisBusinessTime.ZONE));

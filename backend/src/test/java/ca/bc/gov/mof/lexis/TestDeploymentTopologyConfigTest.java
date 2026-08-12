@@ -74,6 +74,7 @@ class TestDeploymentTopologyConfigTest {
         .contains("backend_memory_request: \"1Gi\"")
         .contains("backend_cpu_limit: \"1500m\"")
         .contains("backend_memory_limit: \"2Gi\"")
+        .contains("expiry_enabled: false")
         .contains("lexis_mail_from: ${{ secrets.LEXIS_MAIL_FROM }}");
     assertThat(backendDeploy)
         .contains("file: backend/openshift.deploy.yml")
@@ -132,6 +133,10 @@ class TestDeploymentTopologyConfigTest {
     assertThat(workflow)
         .contains("backend_min_replicas:")
         .contains("backend_max_replicas:")
+        .contains(
+            "expiry_enabled:\n"
+                + "        description: Enable exemption expiry; false is an explicit operational kill switch\n"
+                + "        default: true")
         .doesNotContain("Enforce single-backend lock topology", "inputs.backend_replicas")
         .contains("-p MIN_REPLICAS=\"${{ inputs.backend_min_replicas }}\"")
         .contains("-p MAX_REPLICAS=\"${{ inputs.backend_max_replicas }}\"")

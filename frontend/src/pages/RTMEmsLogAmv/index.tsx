@@ -360,10 +360,6 @@ const warningDeduplicate = (warnings: Array<string | null>) =>
 const notificationMessage = (message: string, errors: string[]) =>
   Array.from(new Set([message, ...errors].filter(Boolean))).join(' ')
 
-/**
- * INTENTIONAL_LEGACY_DIVERGENCE(RTM_AMV_CONSOLIDATION):
- * Modern LEXIS hosts the former RTM AMV workflow as a unified monthly grid with atomic batch saves.
- */
 const RTMEmsLogAmvPage = () => {
   const { canPerform } = useAuth()
   const canManage = canPerform('/lexisAgentAdmin')

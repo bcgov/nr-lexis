@@ -1224,8 +1224,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         || hasDateChanged(
             storedPermit.estimatedShippingDate(), parseDate(request.estimatedShippingDate()))
         || hasStringChanged(storedPermit.portOfExportCode(), request.portOfExport())
-        || hasStringChanged(storedPermit.receiptNumber(), request.permitReceiptNo())
-        || hasLongChanged(storedPermit.numberOfPieces(), parseLongOrZero(request.permitNumberOfPieces()));
+        || hasStringChanged(storedPermit.receiptNumber(), request.permitReceiptNo());
   }
 
   @Override
@@ -1699,22 +1698,24 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
           List.of("Expired permits are read-only."), permitNumber);
     }
     String currentExemptionNumber = trimToNull(current.exemptionNumber());
+    if (currentExemptionNumber == null) {
+      return failureMutationResponse(
+          List.of("A valid exemption number is required."), permitNumber);
+    }
     boolean exemptionWasSubmitted = request.exemptionNumber() != null;
     String requestedExemptionNumber = trimToNull(request.exemptionNumber());
     if (exemptionWasSubmitted && requestedExemptionNumber == null) {
       return failureMutationResponse(
           List.of("A valid exemption number is required."), permitNumber);
     }
-    String targetExemptionNumber =
-        exemptionWasSubmitted ? requestedExemptionNumber : currentExemptionNumber;
-    if (targetExemptionNumber == null) {
+    if (requestedExemptionNumber != null
+        && !requestedExemptionNumber.equalsIgnoreCase(currentExemptionNumber)) {
       return failureMutationResponse(
-          List.of("A valid exemption number is required."), permitNumber);
+          List.of("The permit exemption cannot be changed through ordinary permit edit."),
+          permitNumber);
     }
+    String targetExemptionNumber = currentExemptionNumber;
 
-    boolean reparenting =
-        requestedExemptionNumber != null
-            && !requestedExemptionNumber.equalsIgnoreCase(currentExemptionNumber);
     String submittedOicApplicationNumber = trimToNull(request.oicApplicationNumber());
     Long requestedOicApplicationNumber = parsePositiveLong(submittedOicApplicationNumber);
     List<String> exemptionErrors = new ArrayList<>();
@@ -1734,23 +1735,13 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
           mergeSubmittedText(request.ownerClientNumber(), current.clientNumber()),
           mergeSubmittedText(request.agentClientNumber(), current.agentNumber()),
           exemptionErrors);
-      if (reparenting) {
-        validatePermitReparenting(
-            permitNumber,
-            targetExemption,
-            exemptionErrors);
-      }
     }
     if (!exemptionErrors.isEmpty()) {
       return failureMutationResponse(exemptionErrors, permitNumber);
     }
 
-    Double submittedPermitVolume = parseDouble(request.permitTotalVolume());
     Double submittedOicRequestVolume = parseDouble(request.oicPermitTotalVolume());
     List<String> numericErrors = new ArrayList<>();
-    if (isInvalidSubmittedDouble(request.permitTotalVolume(), submittedPermitVolume)) {
-      numericErrors.add("A valid permit volume is required.");
-    }
     boolean targetBlanketOic = targetExemption != null && targetExemption.blanketOic();
     if (targetBlanketOic
         && isInvalidSubmittedDouble(
@@ -1786,6 +1777,17 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
           mergeSubmittedText(request.overrideComment(), current.overrideComment());
     }
 
+    LocalDate targetSubmitDate =
+        firstNonNull(parseDate(request.permitSubmitDate()), current.applicationDate());
+    LocalDate targetReceivedDate =
+        targetBlanketOic ? current.receivedDate() : targetSubmitDate;
+    List<PermitScaleDetailRow> linkedScales =
+        repository.findScaleDetailsByPermitNumber(permitNumber);
+    double authoritativePermitVolume =
+        linkedScales.stream().mapToDouble(PermitScaleDetailRow::speciesGradeVolume).sum();
+    long authoritativePermitPieces =
+        linkedScales.stream().mapToLong(PermitScaleDetailRow::piecesCount).sum();
+
     PermitMutationRow updated =
         new PermitMutationRow(
             permitNumber,
@@ -1795,13 +1797,13 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
             mergeSubmittedDate(
                 request.estimatedShippingDate(), current.estimatedShippingDate()),
             mergeSubmittedText(request.otherPortOfExport(), current.otherPortOfExport()),
-            firstNonNull(parseDate(request.permitSubmitDate()), current.applicationDate()),
-            firstNonNull(parseDate(firstNonNull(request.permitRequestDate(), request.permitSubmitDate())), current.receivedDate()),
+            targetSubmitDate,
+            targetReceivedDate,
             firstNonNull(parseDate(request.permitIssueDate()), current.permitIssueDate()),
             mergeSubmittedText(request.permitReceiptNo(), current.receiptNumber()),
             firstNonNull(parseDate(request.permitExpiryDate()), current.expiryDate()),
-            firstNonNull(submittedPermitVolume, current.permitVolume()),
-            firstNonNull(parsePositiveLong(request.permitNumberOfPieces()), current.numberOfPieces()),
+            authoritativePermitVolume,
+            authoritativePermitPieces,
             firstNonNull(current.feeInLieuVolume(), 0L),
             current.federalPermitNumber(),
             mergeSubmittedText(request.permitRemarks(), current.remarks()),
@@ -1836,6 +1838,13 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       return failureMutationResponse(oicBindingErrors, permitNumber);
     }
 
+    if (!java.util.Objects.equals(current.applicationDate(), updated.applicationDate())
+        && !EXPORT_PERMIT_STATUS_ACTIVE.equalsIgnoreCase(current.permitStatusCode())) {
+      return failureMutationResponse(
+          List.of("The permit submit date can only be changed while the permit is active and uninvoiced."),
+          permitNumber);
+    }
+
     PermitMutationRow submittedPermit = updated;
     String submittedPermitStatusCode = normalizeCode(submittedPermit.permitStatusCode());
     ValidationResult validation =
@@ -1854,13 +1863,6 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       }
     }
     updated = validation.permit();
-    if (current.applicationDate() != null
-        && !java.util.Objects.equals(
-            current.applicationDate(), updated.applicationDate())) {
-      return failureMutationResponse(
-          List.of("The permit submit date cannot be changed after the permit is created."),
-          permitNumber);
-    }
     if (!java.util.Objects.equals(current.orgUnitNo(), updated.orgUnitNo())
         && !targetOrganizationMatchesLinkedApplications(updated)) {
       return failureMutationResponse(
@@ -1959,7 +1961,9 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         updated.receiptNumber(),
         false,
         false,
-        null);
+        null,
+        updated.permitVolume(),
+        updated.numberOfPieces());
   }
 
   @Override
@@ -3883,42 +3887,6 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
                     trimToNull(application.exemptionNumber()))
                     && "Y".equals(trimToNull(application.oicIndicator())))
         .isPresent();
-  }
-
-  private void validatePermitReparenting(
-      Long permitNumber,
-      ValidatedExemptionBinding targetExemption,
-      List<String> errors) {
-    String exemptionNumber = targetExemption.detail().exemptionNumber();
-
-    List<Long> linkedApplications =
-        repository.findApplicationNumbersByPermitNumberRequired(permitNumber);
-    if (!linkedApplications.isEmpty()) {
-      Set<Long> targetApplications =
-          Set.copyOf(repository.findApplicationNumbersByExemptionNumber(exemptionNumber));
-      if (linkedApplications.stream().anyMatch(value -> !targetApplications.contains(value))) {
-        errors.add("The permit has applications that do not belong to the selected exemption.");
-      }
-    }
-
-    Set<String> linkedPackages =
-        java.util.stream.Stream.concat(
-                repository.findPackageNumbersByPermitNumberRequired(permitNumber).stream(),
-                repository.findPackageNumbersByOicPermitNumber(permitNumber).stream())
-            .map(this::normalizeIdentifier)
-            .filter(value -> value != null)
-            .collect(java.util.stream.Collectors.toSet());
-    if (!linkedPackages.isEmpty()) {
-      Set<String> targetPackages =
-          repository.findPackagesByExemptionNumberRequired(exemptionNumber).stream()
-              .map(PackageCandidateRow::packageNumber)
-              .map(this::normalizeIdentifier)
-              .filter(value -> value != null)
-              .collect(java.util.stream.Collectors.toSet());
-      if (!targetPackages.containsAll(linkedPackages)) {
-        errors.add("The permit has packages that do not belong to the selected exemption.");
-      }
-    }
   }
 
   private String normalizeIdentifier(String value) {

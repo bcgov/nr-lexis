@@ -21,6 +21,7 @@ import ca.bc.gov.mof.lexis.repository.review.ApplicationReviewRepository;
 import ca.bc.gov.mof.lexis.service.application.ApplicationEditLockService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
+import ca.bc.gov.mof.lexis.service.review.ApplicationApprovalEligibilityService;
 import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import ca.bc.gov.mof.lexis.util.TextUtils;
 import java.time.Clock;
@@ -51,6 +52,7 @@ public class FederalApplicationOracleService implements FederalApplicationServic
   private final ApplicationDetailsRpcRepository applicationDetailsRepository;
   private final ApplicationDetailsRpcService applicationDetailsService;
   private final ApplicationReviewRepository applicationReviewRepository;
+  private final ApplicationApprovalEligibilityService approvalEligibilityService;
   private final ClientLookupService clientLookupService;
   private final ApplicationEditLockService editLockService;
   private final Clock clock;
@@ -62,6 +64,7 @@ public class FederalApplicationOracleService implements FederalApplicationServic
       ApplicationDetailsRpcRepository applicationDetailsRepository,
       ApplicationDetailsRpcService applicationDetailsService,
       ApplicationReviewRepository applicationReviewRepository,
+      ApplicationApprovalEligibilityService approvalEligibilityService,
       ClientLookupService clientLookupService,
       ApplicationEditLockService editLockService) {
     this(
@@ -70,6 +73,7 @@ public class FederalApplicationOracleService implements FederalApplicationServic
         applicationDetailsRepository,
         applicationDetailsService,
         applicationReviewRepository,
+        approvalEligibilityService,
         clientLookupService,
         editLockService,
         LexisBusinessTime.systemClock());
@@ -81,6 +85,7 @@ public class FederalApplicationOracleService implements FederalApplicationServic
       ApplicationDetailsRpcRepository applicationDetailsRepository,
       ApplicationDetailsRpcService applicationDetailsService,
       ApplicationReviewRepository applicationReviewRepository,
+      ApplicationApprovalEligibilityService approvalEligibilityService,
       ClientLookupService clientLookupService,
       ApplicationEditLockService editLockService,
       Clock clock) {
@@ -89,6 +94,7 @@ public class FederalApplicationOracleService implements FederalApplicationServic
     this.applicationDetailsRepository = applicationDetailsRepository;
     this.applicationDetailsService = applicationDetailsService;
     this.applicationReviewRepository = applicationReviewRepository;
+    this.approvalEligibilityService = approvalEligibilityService;
     this.clientLookupService = clientLookupService;
     this.editLockService = editLockService;
     this.clock = clock == null ? LexisBusinessTime.systemClock() : clock;
@@ -385,6 +391,11 @@ public class FederalApplicationOracleService implements FederalApplicationServic
       allowedSourceStatuses = List.of("NEW", "PND");
       if (!allowedSourceStatuses.contains(currentStatus)) {
         return failure(List.of("Federal applications can only be approved from NEW or PND."));
+      }
+      ApplicationApprovalEligibilityService.Eligibility eligibility =
+          approvalEligibilityService.evaluate(applicationNumber);
+      if (!eligibility.eligible()) {
+        return failure(eligibility.errors());
       }
     } else {
       allowedSourceStatuses = List.of("APP");

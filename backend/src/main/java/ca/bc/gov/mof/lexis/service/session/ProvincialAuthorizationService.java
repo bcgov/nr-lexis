@@ -741,9 +741,9 @@ public class ProvincialAuthorizationService {
   }
 
   private boolean isOrgUnitRestricted(Set<String> roles, OrgUnitSurface surface) {
-    // INTENTIONAL_LEGACY_DIVERGENCE(EXEMPTION_APPROVER_GLOBAL_SEARCH): Cognito does not carry the
-    // legacy WebADE organization context. Region selection is a search filter, not an
-    // authorization boundary.
+    // INTENTIONAL_LEGACY_DIVERGENCE(FAM_STAFF_GLOBAL_DATA_SCOPE): IDIR staff have global record
+    // scope within their granted actions. Zone and region selections are defaults and filters,
+    // not authorization boundaries; Provincial Submitter client scope is enforced separately.
     return false;
   }
 

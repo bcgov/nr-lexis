@@ -13,7 +13,10 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
-/** Dispatches workflow email events asynchronously after the publishing transaction commits. */
+/**
+ * INTENTIONAL_LEGACY_DIVERGENCE(ASYNC_WORKFLOW_EMAIL_DELIVERY): Dispatches workflow email events
+ * asynchronously after the publishing transaction commits.
+ */
 @Component
 public class EmailEventDispatcher {
 

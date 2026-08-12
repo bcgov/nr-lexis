@@ -12,6 +12,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
+import ca.bc.gov.mof.lexis.configuration.LexisFeatureProperties;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Clock;
 import java.time.Duration;
@@ -35,6 +36,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
 
 @ExtendWith(MockitoExtension.class)
@@ -123,6 +127,94 @@ class ExemptionExpirySchedulerTest {
 
     assertThat(schedule.cron()).isEqualTo("${lexis.expiry.cron:30 0 0 * * *}");
     assertThat(schedule.zone()).isEqualTo("${lexis.expiry.zone:America/Vancouver}");
+  }
+
+  @Test
+  void expirySchedulerShouldBeEnabledWhenTheOperationalOverrideIsNotConfigured() {
+    ConditionalOnProperty condition =
+        ExemptionExpiryScheduler.class.getAnnotation(ConditionalOnProperty.class);
+
+    assertThat(condition.prefix()).isEqualTo("lexis.expiry");
+    assertThat(condition.name()).containsExactly("enabled");
+    assertThat(condition.havingValue()).isEqualTo("true");
+    assertThat(condition.matchIfMissing()).isTrue();
+  }
+
+  @Test
+  void startupReconciliationShouldUseTheLockedRunAndSuppressTheSameDaySchedule()
+      throws NoSuchMethodException {
+    SimpleMeterRegistry registry = new SimpleMeterRegistry();
+    ExemptionExpiryScheduler scheduler = scheduler(registry);
+    doReturn(emptyResult()).when(expiryService).expireDueExemptions();
+
+    EventListener listener =
+        ExemptionExpiryScheduler.class
+            .getDeclaredMethod("reconcileDueExemptionsOnStartup")
+            .getAnnotation(EventListener.class);
+
+    scheduler.reconcileDueExemptionsOnStartup();
+    scheduler.expireDueExemptions();
+
+    assertThat(listener).isNotNull();
+    assertThat(listener.value()).containsExactly(ApplicationReadyEvent.class);
+    verify(expiryService).expireDueExemptions();
+    verify(lockProvider).lock(any());
+    verify(distributedLock).unlock();
+    assertThat(counter(registry, "completed")).isEqualTo(1d);
+    assertThat(counter(registry, "skipped")).isEqualTo(1d);
+  }
+
+  @Test
+  void expiryTriggersShouldNotRunInProdRtmOnlyMode() {
+    SimpleMeterRegistry registry = new SimpleMeterRegistry();
+    ExemptionExpiryScheduler scheduler = scheduler(registry, fixedClock(), true);
+
+    scheduler.reconcileDueExemptionsOnStartup();
+    scheduler.expireDueExemptions();
+
+    verifyNoInteractions(expiryService);
+    verifyNoInteractions(lockProvider);
+    assertThat(counter(registry, "completed")).isZero();
+    assertThat(counter(registry, "failed")).isZero();
+    assertThat(counter(registry, "skipped")).isEqualTo(2d);
+  }
+
+  @Test
+  void heldStartupLockShouldLeaveTheSameDayRunEligibleForScheduledRetry() {
+    SimpleMeterRegistry registry = new SimpleMeterRegistry();
+    ExemptionExpiryScheduler scheduler = scheduler(registry);
+    doReturn(Optional.empty())
+        .doReturn(Optional.of(distributedLock))
+        .when(lockProvider)
+        .lock(any());
+    doReturn(emptyResult()).when(expiryService).expireDueExemptions();
+
+    scheduler.reconcileDueExemptionsOnStartup();
+    scheduler.expireDueExemptions();
+
+    verify(expiryService).expireDueExemptions();
+    verify(lockProvider, times(2)).lock(any());
+    verify(distributedLock).unlock();
+    assertThat(counter(registry, "completed")).isEqualTo(1d);
+    assertThat(counter(registry, "skipped")).isEqualTo(1d);
+  }
+
+  @Test
+  void startupFailureShouldNotEscapeAndShouldLeaveTheSameDayRunEligibleForRetry() {
+    SimpleMeterRegistry registry = new SimpleMeterRegistry();
+    ExemptionExpiryScheduler scheduler = scheduler(registry);
+    doThrow(new IllegalStateException("Oracle failed"))
+        .doReturn(emptyResult())
+        .when(expiryService)
+        .expireDueExemptions();
+
+    assertThatCode(scheduler::reconcileDueExemptionsOnStartup).doesNotThrowAnyException();
+    scheduler.expireDueExemptions();
+
+    verify(expiryService, times(2)).expireDueExemptions();
+    verify(distributedLock, times(2)).unlock();
+    assertThat(counter(registry, "completed")).isEqualTo(1d);
+    assertThat(counter(registry, "failed")).isEqualTo(1d);
   }
 
   @Test
@@ -308,7 +400,12 @@ class ExemptionExpirySchedulerTest {
   }
 
   private ExemptionExpiryScheduler scheduler(SimpleMeterRegistry registry, Clock clock) {
-    return scheduler(expiryService, lockProvider, registry, clock);
+    return scheduler(registry, clock, false);
+  }
+
+  private ExemptionExpiryScheduler scheduler(
+      SimpleMeterRegistry registry, Clock clock, boolean prodRtmOnly) {
+    return scheduler(expiryService, lockProvider, registry, clock, prodRtmOnly);
   }
 
   private ExemptionExpiryScheduler scheduler(
@@ -316,10 +413,22 @@ class ExemptionExpirySchedulerTest {
       LockProvider provider,
       SimpleMeterRegistry registry,
       Clock clock) {
+    return scheduler(service, provider, registry, clock, false);
+  }
+
+  private ExemptionExpiryScheduler scheduler(
+      ExemptionExpiryService service,
+      LockProvider provider,
+      SimpleMeterRegistry registry,
+      Clock clock,
+      boolean prodRtmOnly) {
+    LexisFeatureProperties featureProperties = new LexisFeatureProperties();
+    featureProperties.setProdRtmOnly(prodRtmOnly);
     return new ExemptionExpiryScheduler(
         service,
         provider,
         registry,
+        featureProperties,
         clock,
         VANCOUVER,
         LOCK_AT_MOST_FOR,
