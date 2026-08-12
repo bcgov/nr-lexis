@@ -9,6 +9,7 @@ import ProvincialReviewPage from '@/pages/ProvincialReview'
 import { clearAllPageDataCache } from '@/pages/shared/page-data-cache'
 import {
   approveApplicationReview,
+  countApplicationReviews,
   searchApplicationReviews,
   sendApplicationReviewStatusEmail,
   updateApplicationReviewStatus,
@@ -53,6 +54,7 @@ vi.mock('@/service/record-version-service', () => ({
 
 const mockedUseAuth = vi.mocked(useAuth)
 const mockedUseDefaultRegionPreference = vi.mocked(useDefaultRegionPreference)
+const mockedCountApplicationReviews = vi.mocked(countApplicationReviews)
 const mockedSearchApplicationReviews = vi.mocked(searchApplicationReviews)
 const mockedApproveApplicationReview = vi.mocked(approveApplicationReview)
 const mockedUpdateApplicationReviewStatus = vi.mocked(updateApplicationReviewStatus)
@@ -251,6 +253,44 @@ describe('Provincial Review Action State Smoke', () => {
 
     expect(await screen.findByText('1000123')).toBeInTheDocument()
     expect(screen.queryByText('No review records found')).not.toBeInTheDocument()
+  })
+
+  it('paints review rows before the exact result count is available', async () => {
+    const rows = Array.from({ length: 10 }, (_, index) => ({
+      ...reviewResponse.content[0],
+      applicationNumber: String(3000000 + index),
+    }))
+    mockedSearchApplicationReviews.mockResolvedValueOnce({
+      content: rows,
+      page: {
+        number: 0,
+        size: 10,
+        totalElements: 11,
+        totalPages: 2,
+      },
+    })
+    let resolveCount!: (total: number) => void
+    mockedCountApplicationReviews.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveCount = resolve
+      }),
+    )
+
+    renderPage(
+      '/provincial/review?region=11,12&page=1&pageSize=10&sortField=applicationNumber&sortDirection=desc',
+    )
+
+    await waitFor(() => expect(mockedCountApplicationReviews).toHaveBeenCalledOnce())
+    expect(await screen.findByText('3000000')).toBeInTheDocument()
+    expect(screen.getByText('At least 10 results found — counting…')).toBeInTheDocument()
+    expect(screen.queryByText('Loading results…')).not.toBeInTheDocument()
+
+    await act(async () => {
+      resolveCount(125)
+    })
+
+    expect(await screen.findByText('125 results found')).toBeInTheDocument()
+    expect(screen.getByText('3000000')).toBeInTheDocument()
   })
 
   it('uses the legacy provincial application review page title', async () => {

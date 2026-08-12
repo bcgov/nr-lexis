@@ -30,6 +30,8 @@ type DeferredSearchResult<TResponse extends PagedSearchResponse> = {
   deferredResponse?: Promise<TResponse>
 }
 
+export type DeferredSearchTotalStatus = 'exact' | 'pending' | 'unavailable'
+
 type SearchPrefetchConfig<
   TRequest extends SearchPageRequest,
   TResponse extends PagedSearchResponse,
@@ -43,6 +45,8 @@ type SearchPrefetchConfig<
 }
 
 const pendingPagePrefetches = new Set<string>()
+const MAX_PREFETCH_PAGE_SIZE = 50
+const PREFETCH_IDLE_TIMEOUT_MS = 1_000
 
 const totalPagesFor = (totalElements: number, pageSize: number): number =>
   Math.max(1, Math.ceil(Math.max(0, totalElements) / Math.max(1, pageSize)))
@@ -64,6 +68,19 @@ const withTotal = <TResponse extends PagedSearchResponse>(
 
 const optimisticTotalFor = (request: SearchPageRequest): number =>
   Math.max((request.page + 1) * request.pageSize + 1, request.pageSize + 1)
+
+export const formatDeferredSearchTotalLabel = (
+  totalElements: number,
+  status: DeferredSearchTotalStatus,
+  knownMinimum = totalElements,
+): string | undefined => {
+  if (status === 'exact') {
+    return undefined
+  }
+  const formattedTotal = new Intl.NumberFormat('en-CA').format(knownMinimum)
+  const suffix = status === 'pending' ? 'counting…' : 'exact count unavailable'
+  return `At least ${formattedTotal} results found — ${suffix}`
+}
 
 const inferExactTotalFromShortPage = <TResponse extends PagedSearchResponse>(
   request: SearchPageRequest,
@@ -132,30 +149,32 @@ export const loadSearchWithDeferredTotal = async <
   }
 }
 
-const prefetchSearchPage = <
+const scheduleIdlePrefetch = (prefetch: () => void): void => {
+  if (typeof globalThis.requestIdleCallback === 'function') {
+    globalThis.requestIdleCallback(prefetch, { timeout: PREFETCH_IDLE_TIMEOUT_MS })
+    return
+  }
+
+  globalThis.setTimeout(prefetch, 0)
+}
+
+const scheduleNextSearchPagePrefetch = <
   TRequest extends SearchPageRequest,
   TResponse extends PagedSearchResponse,
->({
-  pageId,
-  principal,
-  request,
-  response,
-  search,
-  onError,
-  targetPage,
-}: SearchPrefetchConfig<TRequest, TResponse> & { targetPage: number }): void => {
-  if (targetPage < 0 || targetPage >= response.page.totalPages) {
+>(
+  config: SearchPrefetchConfig<TRequest, TResponse>,
+): void => {
+  const { pageId, principal, request, response, search, onError } = config
+  const targetPage = request.page + 1
+  if (
+    request.pageSize > MAX_PREFETCH_PAGE_SIZE ||
+    targetPage >= response.page.totalPages ||
+    response.content.length < request.pageSize
+  ) {
     return
   }
 
-  if (targetPage > request.page && response.content.length < request.pageSize) {
-    return
-  }
-
-  const targetRequest = {
-    ...request,
-    page: targetPage,
-  }
+  const targetRequest = { ...request, page: targetPage }
   const targetPageCacheKey = buildPageDataCacheKey(pageId, principal, targetRequest)
   if (
     getPageDataCache<TResponse>(targetPageCacheKey) ||
@@ -166,26 +185,41 @@ const prefetchSearchPage = <
 
   const pageCacheGeneration = getPageDataCacheGeneration()
   pendingPagePrefetches.add(targetPageCacheKey)
-  void search(targetRequest, { knownTotal: response.page.totalElements })
-    .then((targetResponse) => {
-      setPageDataCache(
-        targetPageCacheKey,
-        withTotal(targetResponse, response.page.totalElements),
-        pageCacheGeneration,
-      )
-    })
-    .catch((error) => onError?.(error))
-    .finally(() => {
+  scheduleIdlePrefetch(() => {
+    if (
+      getPageDataCacheGeneration() !== pageCacheGeneration ||
+      getPageDataCache<TResponse>(targetPageCacheKey)
+    ) {
       pendingPagePrefetches.delete(targetPageCacheKey)
-    })
+      return
+    }
+
+    void search(targetRequest, { knownTotal: response.page.totalElements })
+      .then((targetResponse) => {
+        setPageDataCache(
+          targetPageCacheKey,
+          withTotal(targetResponse, response.page.totalElements),
+          pageCacheGeneration,
+        )
+      })
+      .catch((error) => onError?.(error))
+      .finally(() => {
+        pendingPagePrefetches.delete(targetPageCacheKey)
+      })
+  })
 }
 
+export const prefetchNextSearchPage = <
+  TRequest extends SearchPageRequest,
+  TResponse extends PagedSearchResponse,
+>(
+  config: SearchPrefetchConfig<TRequest, TResponse>,
+): void => scheduleNextSearchPagePrefetch(config)
+
+// Compatibility wrapper for existing consumers. Speculative work is intentionally next-page only.
 export const prefetchAdjacentSearchPages = <
   TRequest extends SearchPageRequest,
   TResponse extends PagedSearchResponse,
 >(
   config: SearchPrefetchConfig<TRequest, TResponse>,
-): void => {
-  prefetchSearchPage({ ...config, targetPage: config.request.page + 1 })
-  prefetchSearchPage({ ...config, targetPage: config.request.page - 1 })
-}
+): void => scheduleNextSearchPagePrefetch(config)

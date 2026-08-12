@@ -1,11 +1,14 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
 import { useDefaultRegionPreference } from '@/pages/shared/useDefaultRegionPreference'
 import ProvincialApplicationPage from '@/pages/ProvincialApplication'
-import { searchProvincialApplications } from '@/service/provincial-application-search-service'
+import {
+  countProvincialApplications,
+  searchProvincialApplications,
+} from '@/service/provincial-application-search-service'
 import { fetchProvincialApplicationOptions } from '@/service/search-options-service'
 import { createTestAuthContext } from '@/test-utils/auth'
 
@@ -38,6 +41,7 @@ vi.mock('@/service/search-options-service', () => ({
 
 const mockedUseAuth = vi.mocked(useAuth)
 const mockedUseDefaultRegionPreference = vi.mocked(useDefaultRegionPreference)
+const mockedCountProvincialApplications = vi.mocked(countProvincialApplications)
 const mockedSearchProvincialApplications = vi.mocked(searchProvincialApplications)
 const mockedFetchProvincialApplicationOptions = vi.mocked(fetchProvincialApplicationOptions)
 
@@ -167,6 +171,64 @@ describe('Provincial Application Search Actions', () => {
         ownerClientNumber: '22222222',
       },
     })
+  })
+
+  it('paints application rows before the exact result count is available', async () => {
+    const rows = Array.from({ length: 10 }, (_, index) => ({
+      ...searchRowsWithMixedEligibility[0],
+      applicationNumber: String(8000 + index),
+      packageNumber: `PKG-${index + 1}`,
+    }))
+    mockedSearchProvincialApplications.mockResolvedValueOnce({
+      content: rows,
+      page: {
+        number: 0,
+        size: 10,
+        totalElements: 11,
+        totalPages: 2,
+      },
+    })
+    let resolveCount!: (total: number) => void
+    mockedCountProvincialApplications.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveCount = resolve
+      }),
+    )
+
+    renderPage()
+
+    await waitFor(() => expect(mockedCountProvincialApplications).toHaveBeenCalledOnce())
+    expect(await screen.findByText('8000')).toBeInTheDocument()
+    expect(screen.getByText('At least 10 results found — counting…')).toBeInTheDocument()
+    expect(screen.queryByText('Loading application search results…')).not.toBeInTheDocument()
+
+    await act(async () => {
+      resolveCount(125)
+    })
+
+    expect(await screen.findByText('125 results found')).toBeInTheDocument()
+    expect(screen.getByText('8000')).toBeInTheDocument()
+  })
+
+  it('keeps application rows and marks the exact count unavailable when counting fails', async () => {
+    const rows = Array.from({ length: 10 }, (_, index) => ({
+      ...searchRowsWithMixedEligibility[0],
+      applicationNumber: String(8100 + index),
+      packageNumber: `PKG-${index + 1}`,
+    }))
+    mockedSearchProvincialApplications.mockResolvedValueOnce({
+      content: rows,
+      page: { number: 0, size: 10, totalElements: 11, totalPages: 2 },
+    })
+    mockedCountProvincialApplications.mockRejectedValueOnce(new Error('count unavailable'))
+
+    renderPage()
+
+    expect(await screen.findByText('8100')).toBeInTheDocument()
+    expect(
+      await screen.findByText('At least 10 results found — exact count unavailable'),
+    ).toBeInTheDocument()
+    expect(screen.getByText('8100')).toBeInTheDocument()
   })
 
   it('passes every selected eligible application to exemption create', async () => {

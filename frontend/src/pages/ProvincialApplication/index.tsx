@@ -72,8 +72,10 @@ import { usePersistedSearchParams } from '@/pages/shared/usePersistedSearchParam
 import { useDefaultRegionPreference } from '@/pages/shared/useDefaultRegionPreference'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import {
+  formatDeferredSearchTotalLabel,
   loadSearchWithDeferredTotal,
-  prefetchAdjacentSearchPages,
+  prefetchNextSearchPage,
+  type DeferredSearchTotalStatus,
 } from '@/pages/shared/deferred-search-total'
 import {
   countProvincialApplications,
@@ -195,6 +197,7 @@ const ProvincialApplicationPage = () => {
   const [results, setResults] = useState<ProvincialApplicationSearchResponse>(EMPTY_RESULTS)
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
+  const [totalStatus, setTotalStatus] = useState<DeferredSearchTotalStatus>('exact')
   const [selectedRowsById, setSelectedRowsById] = useState<
     Record<string, ProvincialApplicationSearchItem>
   >({})
@@ -324,7 +327,7 @@ const ProvincialApplicationPage = () => {
             buildSearchTotalCacheKey(request.filters),
             cachedResults.page.totalElements,
           )
-          prefetchAdjacentSearchPages({
+          prefetchNextSearchPage({
             pageId: 'provincial-application-search',
             principal: capabilities?.principal,
             request,
@@ -333,6 +336,7 @@ const ProvincialApplicationPage = () => {
             onError: console.error,
           })
           setResults(cachedResults)
+          setTotalStatus('exact')
           setLoading(false)
           setErrorMessage('')
           return
@@ -363,7 +367,7 @@ const ProvincialApplicationPage = () => {
         ) => {
           if (totalIsExact && setPageDataCache(pageCacheKey, response, pageCacheGeneration)) {
             setCachedSearchTotal(totalCacheRef.current, totalCacheKey, response.page.totalElements)
-            prefetchAdjacentSearchPages({
+            prefetchNextSearchPage({
               pageId: 'provincial-application-search',
               principal: capabilities?.principal,
               request,
@@ -375,17 +379,33 @@ const ProvincialApplicationPage = () => {
           queueMicrotask(() => {
             if (isLatestRequest()) {
               commitResults(response)
+              setTotalStatus(totalIsExact ? 'exact' : 'pending')
             }
           })
         }
-        const { response, totalIsExact } = await loadSearchWithDeferredTotal({
+        const { response, totalIsExact, deferredResponse } = await loadSearchWithDeferredTotal({
           request,
           cachedTotal,
           search: searchProvincialApplications,
           count: countProvincialApplications,
+          deferCount: true,
         })
         if (isLatestRequest()) {
           commitSearchResponse(response, totalIsExact)
+        }
+        if (deferredResponse) {
+          void deferredResponse
+            .then((exactResponse) => {
+              if (isLatestRequest()) {
+                commitSearchResponse(exactResponse, true)
+              }
+            })
+            .catch((error) => {
+              console.error(error)
+              if (isLatestRequest()) {
+                setTotalStatus('unavailable')
+              }
+            })
         }
       } catch (error) {
         if (isLatestRequest()) {
@@ -817,6 +837,11 @@ const ProvincialApplicationPage = () => {
                 ? undefined
                 : results.page.totalElements
             }
+            totalItemsLabel={formatDeferredSearchTotalLabel(
+              results.page.totalElements,
+              totalStatus,
+              results.page.number * results.page.size + results.content.length,
+            )}
             actions={
               canCreateExemption || canCreateApplication ? (
                 <>
@@ -969,6 +994,8 @@ const ProvincialApplicationPage = () => {
                 pageSize={results.page.size}
                 pageSizes={[...SEARCH_PAGE_SIZE_OPTIONS]}
                 totalItems={results.page.totalElements}
+                pagesUnknown={totalStatus !== 'exact'}
+                isLastPage={totalStatus !== 'exact' && results.content.length < results.page.size}
                 onChange={({ page, pageSize: nextPageSize }) => {
                   clearSelection()
                   setSearchParams(

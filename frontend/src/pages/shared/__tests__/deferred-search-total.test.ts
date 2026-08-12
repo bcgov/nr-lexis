@@ -1,7 +1,8 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  formatDeferredSearchTotalLabel,
   loadSearchWithDeferredTotal,
-  prefetchAdjacentSearchPages,
+  prefetchNextSearchPage,
 } from '@/pages/shared/deferred-search-total'
 import {
   buildPageDataCacheKey,
@@ -34,7 +35,32 @@ const responseWith = (
   },
 })
 
+let idleCallbacks: Array<() => void> = []
+
+const runNextIdleCallback = (): void => {
+  const callback = idleCallbacks.shift()
+  if (!callback) {
+    throw new Error('Expected an idle callback to be scheduled')
+  }
+  callback()
+}
+
 describe('loadSearchWithDeferredTotal', () => {
+  beforeEach(() => {
+    idleCallbacks = []
+    vi.stubGlobal(
+      'requestIdleCallback',
+      vi.fn((callback: IdleRequestCallback) => {
+        idleCallbacks.push(() => callback({ didTimeout: false, timeRemaining: () => 50 }))
+        return idleCallbacks.length
+      }),
+    )
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
   it('waits for the exact count before resolving a full page', async () => {
     const search = vi.fn().mockResolvedValue(responseWith(100, 101))
     let resolveCount!: (total: number) => void
@@ -96,6 +122,16 @@ describe('loadSearchWithDeferredTotal', () => {
     })
   })
 
+  it('labels a deferred total using only the known row minimum', () => {
+    expect(formatDeferredSearchTotalLabel(11, 'pending', 10)).toBe(
+      'At least 10 results found — counting…',
+    )
+    expect(formatDeferredSearchTotalLabel(11, 'unavailable', 10)).toBe(
+      'At least 10 results found — exact count unavailable',
+    )
+    expect(formatDeferredSearchTotalLabel(11, 'exact', 10)).toBeUndefined()
+  })
+
   it('infers exact total without counting when the returned page is short', async () => {
     const search = vi.fn().mockResolvedValue(responseWith(12, 101))
     const count = vi.fn()
@@ -148,7 +184,7 @@ describe('loadSearchWithDeferredTotal', () => {
     const nextResponse = responseWith(20, 45, 20, 1)
     const search = vi.fn().mockResolvedValue(nextResponse)
 
-    prefetchAdjacentSearchPages({
+    prefetchNextSearchPage({
       pageId: 'test-search',
       principal: 'IDIR\\TEST',
       request: { page: 0, pageSize: 20 },
@@ -156,6 +192,8 @@ describe('loadSearchWithDeferredTotal', () => {
       search,
     })
 
+    expect(search).not.toHaveBeenCalled()
+    runNextIdleCallback()
     await vi.waitFor(() => {
       expect(search).toHaveBeenCalledWith({ page: 1, pageSize: 20 }, { knownTotal: 45 })
     })
@@ -167,14 +205,14 @@ describe('loadSearchWithDeferredTotal', () => {
     expect(getPageDataCache<TestResponse>(cacheKey)).toEqual(nextResponse)
   })
 
-  it('prefetches both adjacent pages for middle-page navigation', async () => {
+  it('prefetches only the next page for middle-page navigation', async () => {
     clearAllPageDataCache()
     const currentResponse = responseWith(20, 45, 20, 1)
     const search = vi.fn((request: { page: number; pageSize: number }) =>
       Promise.resolve(responseWith(request.page === 2 ? 5 : 20, 45, 20, request.page)),
     )
 
-    prefetchAdjacentSearchPages({
+    prefetchNextSearchPage({
       pageId: 'test-search',
       principal: 'IDIR\\TEST',
       request: { page: 1, pageSize: 20 },
@@ -182,10 +220,10 @@ describe('loadSearchWithDeferredTotal', () => {
       search,
     })
 
+    runNextIdleCallback()
     await vi.waitFor(() => {
-      expect(search).toHaveBeenCalledTimes(2)
+      expect(search).toHaveBeenCalledOnce()
     })
-    expect(search).toHaveBeenCalledWith({ page: 0, pageSize: 20 }, { knownTotal: 45 })
     expect(search).toHaveBeenCalledWith({ page: 2, pageSize: 20 }, { knownTotal: 45 })
 
     const previousCacheKey = buildPageDataCacheKey('test-search', 'IDIR\\TEST', {
@@ -196,8 +234,25 @@ describe('loadSearchWithDeferredTotal', () => {
       page: 2,
       pageSize: 20,
     })
-    expect(getPageDataCache<TestResponse>(previousCacheKey)?.page.number).toBe(0)
+    expect(getPageDataCache<TestResponse>(previousCacheKey)).toBeNull()
     expect(getPageDataCache<TestResponse>(nextCacheKey)?.page.number).toBe(2)
+  })
+
+  it('skips speculative prefetch for page sizes above 50', () => {
+    clearAllPageDataCache()
+    const currentResponse = responseWith(100, 250, 100, 0)
+    const search = vi.fn()
+
+    prefetchNextSearchPage({
+      pageId: 'test-search',
+      principal: 'IDIR\\TEST',
+      request: { page: 0, pageSize: 100 },
+      response: currentResponse,
+      search,
+    })
+
+    expect(globalThis.requestIdleCallback).not.toHaveBeenCalled()
+    expect(search).not.toHaveBeenCalled()
   })
 
   it('does not duplicate in-flight page prefetches', async () => {
@@ -219,10 +274,13 @@ describe('loadSearchWithDeferredTotal', () => {
       response: currentResponse,
       search,
     }
-    prefetchAdjacentSearchPages(config)
-    prefetchAdjacentSearchPages(config)
+    prefetchNextSearchPage(config)
+    prefetchNextSearchPage(config)
 
-    expect(search).toHaveBeenCalledTimes(1)
+    expect(globalThis.requestIdleCallback).toHaveBeenCalledOnce()
+    expect(search).not.toHaveBeenCalled()
+    runNextIdleCallback()
+    expect(search).toHaveBeenCalledOnce()
     resolveSearch?.(nextResponse)
 
     const cacheKey = buildPageDataCacheKey('test-search', 'IDIR\\TEST', {
@@ -234,33 +292,28 @@ describe('loadSearchWithDeferredTotal', () => {
     })
   })
 
-  it('does not cache an in-flight prefetch after page data is invalidated', async () => {
+  it('does not start a scheduled prefetch after page data is invalidated', () => {
     clearAllPageDataCache()
-    let resolveSearch: ((response: TestResponse) => void) | undefined
     const currentResponse = responseWith(20, 45, 20, 0)
-    const nextResponse = responseWith(20, 45, 20, 1)
-    const searchPromise = new Promise<TestResponse>((resolve) => {
-      resolveSearch = resolve
-    })
-    const search = vi.fn(() => searchPromise)
+    const search = vi.fn()
 
-    prefetchAdjacentSearchPages({
+    prefetchNextSearchPage({
       pageId: 'test-search',
       principal: 'IDIR\\TEST',
       request: { page: 0, pageSize: 20 },
       response: currentResponse,
       search,
     })
-    expect(search).toHaveBeenCalledTimes(1)
+    expect(search).not.toHaveBeenCalled()
 
     clearAllPageDataCache()
-    resolveSearch?.(nextResponse)
-    await searchPromise
+    runNextIdleCallback()
 
     const cacheKey = buildPageDataCacheKey('test-search', 'IDIR\\TEST', {
       page: 1,
       pageSize: 20,
     })
+    expect(search).not.toHaveBeenCalled()
     expect(getPageDataCache<TestResponse>(cacheKey)).toBeNull()
   })
 })

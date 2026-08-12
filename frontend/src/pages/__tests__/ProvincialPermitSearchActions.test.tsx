@@ -191,7 +191,7 @@ describe('Provincial Permit Search Actions', () => {
     })
   })
 
-  it('keeps the table loading until the exact result count is available', async () => {
+  it('paints permit rows before the exact result count is available', async () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => false }))
     const rows = Array.from({ length: 10 }, (_, index) => ({
       permitNumber: String(7001 + index),
@@ -220,9 +220,9 @@ describe('Provincial Permit Search Actions', () => {
     renderPage()
 
     await waitFor(() => expect(mockedCountProvincialPermits).toHaveBeenCalledOnce())
-    expect(screen.getByText('Loading permit search results…')).toBeInTheDocument()
-    expect(screen.queryByText('11 results found')).not.toBeInTheDocument()
-    expect(screen.queryByText('7001')).not.toBeInTheDocument()
+    expect(await screen.findByText('7001')).toBeInTheDocument()
+    expect(screen.getByText('At least 10 results found — counting…')).toBeInTheDocument()
+    expect(screen.queryByText('Loading permit search results…')).not.toBeInTheDocument()
 
     await act(async () => {
       resolveCount(125)

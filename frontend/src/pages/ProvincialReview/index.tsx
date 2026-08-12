@@ -73,8 +73,10 @@ import { useDefaultRegionPreference } from '@/pages/shared/useDefaultRegionPrefe
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { isAgentApplicant } from '@/pages/shared/application-form-utils'
 import {
+  formatDeferredSearchTotalLabel,
   loadSearchWithDeferredTotal,
-  prefetchAdjacentSearchPages,
+  prefetchNextSearchPage,
+  type DeferredSearchTotalStatus,
 } from '@/pages/shared/deferred-search-total'
 import {
   approveApplicationReview,
@@ -256,6 +258,7 @@ const ProvincialReviewPage = () => {
   const [results, setResults] = useState<ApplicationReviewSearchResponse>(EMPTY_RESULTS)
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
+  const [totalStatus, setTotalStatus] = useState<DeferredSearchTotalStatus>('exact')
   const [selectedRowsById, setSelectedRowsById] = useState<Record<string, boolean>>({})
   const [submittingApproval, setSubmittingApproval] = useState(false)
   const [approvalConfirmationNumbers, setApprovalConfirmationNumbers] = useState<string[]>([])
@@ -408,7 +411,7 @@ const ProvincialReviewPage = () => {
             buildSearchTotalCacheKey(request.filters),
             cachedResults.page.totalElements,
           )
-          prefetchAdjacentSearchPages({
+          prefetchNextSearchPage({
             pageId: 'provincial-review-search',
             principal: capabilities?.principal,
             request,
@@ -417,6 +420,7 @@ const ProvincialReviewPage = () => {
             onError: console.error,
           })
           setResults(cachedResults)
+          setTotalStatus('exact')
           setLoading(false)
           setErrorMessage('')
           return
@@ -448,7 +452,7 @@ const ProvincialReviewPage = () => {
         ) => {
           if (totalIsExact && setPageDataCache(pageCacheKey, response, pageCacheGeneration)) {
             setCachedSearchTotal(totalCacheRef.current, totalCacheKey, response.page.totalElements)
-            prefetchAdjacentSearchPages({
+            prefetchNextSearchPage({
               pageId: 'provincial-review-search',
               principal: capabilities?.principal,
               request,
@@ -460,17 +464,33 @@ const ProvincialReviewPage = () => {
           queueMicrotask(() => {
             if (isLatestRequest()) {
               commitResults(response)
+              setTotalStatus(totalIsExact ? 'exact' : 'pending')
             }
           })
         }
-        const { response, totalIsExact } = await loadSearchWithDeferredTotal({
+        const { response, totalIsExact, deferredResponse } = await loadSearchWithDeferredTotal({
           request,
           cachedTotal,
           search: searchApplicationReviews,
           count: countApplicationReviews,
+          deferCount: true,
         })
         if (isLatestRequest()) {
           commitSearchResponse(response, totalIsExact)
+        }
+        if (deferredResponse) {
+          void deferredResponse
+            .then((exactResponse) => {
+              if (isLatestRequest()) {
+                commitSearchResponse(exactResponse, true)
+              }
+            })
+            .catch((error) => {
+              console.error(error)
+              if (isLatestRequest()) {
+                setTotalStatus('unavailable')
+              }
+            })
         }
       } catch (error) {
         if (isLatestRequest()) {
@@ -1186,7 +1206,12 @@ const ProvincialReviewPage = () => {
                 ? 'Results unavailable'
                 : loading && results.content.length === 0
                   ? 'Loading results…'
-                  : `${new Intl.NumberFormat('en-CA').format(results.page.totalElements)} results found`}
+                  : (formatDeferredSearchTotalLabel(
+                      results.page.totalElements,
+                      totalStatus,
+                      results.page.number * results.page.size + results.content.length,
+                    ) ??
+                    `${new Intl.NumberFormat('en-CA').format(results.page.totalElements)} results found`)}
             </p>
             <DisabledButtonTooltip
               disabled={
@@ -1372,6 +1397,8 @@ const ProvincialReviewPage = () => {
                 pageSize={results.page.size}
                 pageSizes={[...APPLICATION_REVIEW_PAGE_SIZE_OPTIONS]}
                 totalItems={results.page.totalElements}
+                pagesUnknown={totalStatus !== 'exact'}
+                isLastPage={totalStatus !== 'exact' && results.content.length < results.page.size}
                 onChange={({ page, pageSize: nextPageSize }) => {
                   clearSelection()
                   setSearchParams(
