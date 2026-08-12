@@ -271,7 +271,7 @@ test.describe('session timeout regression', () => {
     await page.clock.fastForward(SESSION_IDLE_WARNING_DELAY_MS + SESSION_IDLE_WARNING_DURATION_MS)
 
     await expect(page.getByRole('heading', { level: 1, name: 'LEXIS' })).toBeVisible()
-    await expect(page.getByText('You’ve been logged out', { exact: true })).toBeVisible()
+    await expect(page.getByText("You've been logged out", { exact: true })).toBeVisible()
   })
 
   test('does not show the warning after manual logout', async ({ page }) => {
@@ -286,12 +286,12 @@ test.describe('session timeout regression', () => {
 
     const profileButton = page.locator('button[aria-controls="profile-panel"]')
     await profileButton.click()
-    const signOutButton = page
+    const logOutButton = page
       .locator('#profile-panel.is-open')
-      .getByRole('button', { name: /sign out/i })
-    await signOutButton.click()
+      .getByRole('button', { name: 'Log out' })
+    await logOutButton.click()
 
     await expect(page.getByRole('heading', { level: 1, name: 'LEXIS' })).toBeVisible()
-    await expect(page.getByText('You’ve been logged out', { exact: true })).toHaveCount(0)
+    await expect(page.getByText("You've been logged out", { exact: true })).toHaveCount(0)
   })
 })
