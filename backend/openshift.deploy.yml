@@ -76,6 +76,9 @@ parameters:
   - name: LEXIS_REPORT_JDBC_FETCH_SIZE
     description: Oracle rows fetched per report database round trip
     value: "100"
+  - name: LEXIS_STREAMING_MAX_CONCURRENCY
+    description: Maximum active asynchronous report and document transfers per backend pod
+    value: "16"
   - name: LEXIS_PERMIT_INVOICE_MODE
     description: Permit invoice coordinator; legacy-best-effort preserves the legacy workflow
     value: legacy-best-effort
@@ -273,6 +276,8 @@ objects:
                   value: ${LEXIS_REPORT_QUERY_TIMEOUT_SECONDS}
                 - name: LEXIS_REPORT_JDBC_FETCH_SIZE
                   value: ${LEXIS_REPORT_JDBC_FETCH_SIZE}
+                - name: LEXIS_STREAMING_MAX_CONCURRENCY
+                  value: ${LEXIS_STREAMING_MAX_CONCURRENCY}
                 - name: LEXIS_PERMIT_INVOICE_MODE
                   value: ${LEXIS_PERMIT_INVOICE_MODE}
                 - name: LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS
