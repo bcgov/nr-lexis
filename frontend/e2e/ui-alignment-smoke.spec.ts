@@ -1342,8 +1342,10 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(notificationRegion).toHaveCSS('top', '16px')
     await expect(notificationRegion).toHaveCSS('right', '16px')
     await expect(notificationRegion).toHaveCSS('z-index', '12000')
+    await expect(notificationRegion).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
     await expect(toast).toHaveCSS('animation-name', 'app-notification-slide-in-right')
     await expect(toast).toHaveCSS('animation-duration', '0.3s')
+    await expect(toast).toHaveCSS('opacity', '1')
 
     await toast.getByRole('button', { name: 'close notification' }).click()
     await expect(page.locator('.app-notification')).toHaveClass(/app-notification--exiting/)
