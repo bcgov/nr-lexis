@@ -1109,6 +1109,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       page.getByRole('heading', { level: 1, name: 'Average market values' }),
     ).toBeVisible()
     await expect(page).toHaveTitle('Average market values | NR LEXIS')
+    await expect(page.locator('main.app-main')).toHaveCSS('padding-bottom', '0px')
     await expect(page.getByRole('region', { name: 'Upload spreadsheet' })).toBeVisible()
     await expect(page.getByRole('link', { name: 'Download template' })).toBeVisible()
     await expect(page.getByRole('table', { name: 'Average monthly value table' })).toHaveCount(0)

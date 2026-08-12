@@ -2585,6 +2585,10 @@ $notification-types: 'error', 'info', 'success', 'warning';
   padding-inline: 0;
 }
 
+.cds--content.app-main:has(.rtm-amv-upload-page) {
+  padding-block-end: 0;
+}
+
 .admin-upload-fspts-header,
 .admin-upload-fspts-content {
   margin-inline: 0;
