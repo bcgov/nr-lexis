@@ -8,7 +8,9 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.convert.converter.Converter;
 import org.springframework.security.core.GrantedAuthority;
@@ -33,6 +35,16 @@ import org.springframework.util.StringUtils;
 @Component
 public class Oauth2SecurityCustomizer
     implements Customizer<OAuth2ResourceServerConfigurer<HttpSecurity>> {
+
+  private static final String IDP_IDIR = "idir";
+  private static final String IDP_BCEID_BUSINESS = "bceidbusiness";
+  private static final String ROLE_PROVINCIAL_SUBMITTER = "LEXIS_PROVINCIAL_SUBMITTER";
+  private static final Set<String> STAFF_ROLES =
+      Set.of(
+          "LEXIS_ADMIN",
+          "LEXIS_READ_ONLY",
+          "LEXIS_APPLICATION_APPROVER",
+          "LEXIS_EXEMPTION_APPROVER");
 
   private final JwtDecoder jwtDecoder;
   private final LexisSessionService sessionService;
@@ -94,7 +106,10 @@ public class Oauth2SecurityCustomizer
     if (cognitoIssuerUri.equals(tokenIssuer)) {
       List<String> groups = jwt.getClaimAsStringList("cognito:groups");
       if (groups != null && !groups.isEmpty()) {
-        authorities.addAll(sessionService.parseGrantedAuthorities(groups));
+        authorities.addAll(
+            sessionService.parseGrantedAuthorities(
+                identityCompatibleFamGroups(
+                    groups, jwt.getClaimAsString("custom:idp_name"))));
       }
     } else if (keycloakIssuerUri != null && keycloakIssuerUri.equals(tokenIssuer)) {
       authorities.addAll(normalizedScopeAuthorities(jwt));
@@ -103,6 +118,35 @@ public class Oauth2SecurityCustomizer
     return authorities.stream()
         .map(authority -> (GrantedAuthority) new SimpleGrantedAuthority(authority))
         .toList();
+  }
+
+  private static List<String> identityCompatibleFamGroups(
+      List<String> groups, String identityProvider) {
+    // INTENTIONAL_LEGACY_DIVERGENCE(FAM_STAFF_GLOBAL_DATA_SCOPE): the approved FAM
+    // model keeps IDIR staff authorities separate from client-scoped BCeID submitters.
+    if (!IDP_IDIR.equals(identityProvider) && !IDP_BCEID_BUSINESS.equals(identityProvider)) {
+      return List.of();
+    }
+
+    return groups.stream()
+        .filter(group -> group != null)
+        .map(group -> group.trim().toUpperCase(Locale.ROOT))
+        .filter(group -> !group.isEmpty())
+        .filter(
+            group ->
+                IDP_IDIR.equals(identityProvider)
+                    ? STAFF_ROLES.contains(group)
+                    : isClientScopedProvincialSubmitter(group))
+        .toList();
+  }
+
+  private static boolean isClientScopedProvincialSubmitter(String group) {
+    String prefix = ROLE_PROVINCIAL_SUBMITTER + "_";
+    if (!group.startsWith(prefix)) {
+      return false;
+    }
+    String clientNumber = group.substring(prefix.length());
+    return !clientNumber.isEmpty() && clientNumber.chars().allMatch(Character::isDigit);
   }
 
   private List<String> normalizedScopeAuthorities(Jwt jwt) {

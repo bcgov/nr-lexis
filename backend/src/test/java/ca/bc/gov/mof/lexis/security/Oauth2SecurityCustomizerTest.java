@@ -34,6 +34,8 @@ class Oauth2SecurityCustomizerTest {
             Map.of(
                 "iss",
                 COGNITO_ISSUER,
+                "custom:idp_name",
+                "idir",
                 "cognito:groups",
                 List.of("LEXIS_READ_ONLY"),
                 "scope",
@@ -93,6 +95,8 @@ class Oauth2SecurityCustomizerTest {
             Map.of(
                 "iss",
                 COGNITO_ISSUER,
+                "custom:idp_name",
+                "bceidbusiness",
                 "cognito:groups",
                 List.of("LEXIS_PROVINCIAL_SUBMITTER_00012345")));
 
@@ -102,6 +106,152 @@ class Oauth2SecurityCustomizerTest {
                 .toList())
         .containsExactly(
             "LEXIS_PROVINCIAL_SUBMITTER_00012345", "LEXIS_PROVINCIAL_SUBMITTER");
+  }
+
+  @Test
+  void cognitoIdirAuthoritiesShouldExcludeProvincialSubmitterGroups() {
+    Oauth2SecurityCustomizer customizer =
+        new Oauth2SecurityCustomizer(
+            COGNITO_JWKS,
+            COGNITO_ISSUER,
+            "",
+            "",
+            new LexisSessionService("LEXIS_PROVINCIAL_SUBMITTER"));
+
+    Jwt jwt =
+        jwt(
+            Map.of(
+                "iss",
+                COGNITO_ISSUER,
+                "custom:idp_name",
+                "idir",
+                "cognito:groups",
+                List.of(
+                    "LEXIS_ADMIN",
+                    "LEXIS_READ_ONLY",
+                    "LEXIS_APPLICATION_APPROVER",
+                    "LEXIS_EXEMPTION_APPROVER",
+                    "LEXIS_PROVINCIAL_SUBMITTER_00012345")));
+
+    assertThat(
+            customizer.normalizedAuthorities(jwt).stream()
+                .map(GrantedAuthority::getAuthority)
+                .toList())
+        .containsExactly(
+            "LEXIS_ADMIN",
+            "LEXIS_READ_ONLY",
+            "LEXIS_APPLICATION_APPROVER",
+            "LEXIS_EXEMPTION_APPROVER");
+  }
+
+  @Test
+  void cognitoBceidBusinessAuthoritiesShouldExcludeStaffAndBaseOnlySubmitterGroups() {
+    Oauth2SecurityCustomizer customizer =
+        new Oauth2SecurityCustomizer(
+            COGNITO_JWKS,
+            COGNITO_ISSUER,
+            "",
+            "",
+            new LexisSessionService("LEXIS_PROVINCIAL_SUBMITTER"));
+
+    Jwt jwt =
+        jwt(
+            Map.of(
+                "iss",
+                COGNITO_ISSUER,
+                "custom:idp_name",
+                "bceidbusiness",
+                "cognito:groups",
+                List.of(
+                    "LEXIS_ADMIN",
+                    "LEXIS_PROVINCIAL_SUBMITTER",
+                    "LEXIS_PROVINCIAL_SUBMITTER_00012345")));
+
+    assertThat(
+            customizer.normalizedAuthorities(jwt).stream()
+                .map(GrantedAuthority::getAuthority)
+                .toList())
+        .containsExactly(
+            "LEXIS_PROVINCIAL_SUBMITTER_00012345", "LEXIS_PROVINCIAL_SUBMITTER");
+  }
+
+  @Test
+  void cognitoBceidBusinessAuthoritiesShouldRejectBaseOnlySubmitterGroup() {
+    Oauth2SecurityCustomizer customizer =
+        new Oauth2SecurityCustomizer(
+            COGNITO_JWKS,
+            COGNITO_ISSUER,
+            "",
+            "",
+            new LexisSessionService("LEXIS_PROVINCIAL_SUBMITTER"));
+
+    Jwt jwt =
+        jwt(
+            Map.of(
+                "iss",
+                COGNITO_ISSUER,
+                "custom:idp_name",
+                "bceidbusiness",
+                "cognito:groups",
+                List.of("LEXIS_PROVINCIAL_SUBMITTER")));
+
+    assertThat(customizer.normalizedAuthorities(jwt)).isEmpty();
+  }
+
+  @Test
+  void cognitoBceidBusinessAuthoritiesShouldRejectMalformedClientScope() {
+    Oauth2SecurityCustomizer customizer =
+        new Oauth2SecurityCustomizer(
+            COGNITO_JWKS,
+            COGNITO_ISSUER,
+            "",
+            "",
+            new LexisSessionService("LEXIS_PROVINCIAL_SUBMITTER"));
+
+    Jwt jwt =
+        jwt(
+            Map.of(
+                "iss",
+                COGNITO_ISSUER,
+                "custom:idp_name",
+                "bceidbusiness",
+                "cognito:groups",
+                List.of(
+                    "LEXIS_PROVINCIAL_SUBMITTER_",
+                    "LEXIS_PROVINCIAL_SUBMITTER_NOT_A_CLIENT")));
+
+    assertThat(customizer.normalizedAuthorities(jwt)).isEmpty();
+  }
+
+  @Test
+  void cognitoAuthoritiesShouldFailClosedForMissingOrUnknownIdentityProvider() {
+    Oauth2SecurityCustomizer customizer =
+        new Oauth2SecurityCustomizer(
+            COGNITO_JWKS,
+            COGNITO_ISSUER,
+            "",
+            "",
+            new LexisSessionService("LEXIS_PROVINCIAL_SUBMITTER"));
+
+    Jwt missingIdp =
+        jwt(
+            Map.of(
+                "iss",
+                COGNITO_ISSUER,
+                "cognito:groups",
+                List.of("LEXIS_ADMIN")));
+    Jwt unknownIdp =
+        jwt(
+            Map.of(
+                "iss",
+                COGNITO_ISSUER,
+                "custom:idp_name",
+                "dev-bceidbusiness",
+                "cognito:groups",
+                List.of("LEXIS_PROVINCIAL_SUBMITTER_00012345")));
+
+    assertThat(customizer.normalizedAuthorities(missingIdp)).isEmpty();
+    assertThat(customizer.normalizedAuthorities(unknownIdp)).isEmpty();
   }
 
   @Test
@@ -131,6 +281,33 @@ class Oauth2SecurityCustomizerTest {
                 .map(GrantedAuthority::getAuthority)
                 .toList())
         .isEmpty();
+  }
+
+  @Test
+  void keycloakAuthoritiesShouldIgnoreInteractiveIdentityProviderCompatibility() {
+    Oauth2SecurityCustomizer customizer =
+        new Oauth2SecurityCustomizer(
+            COGNITO_JWKS,
+            COGNITO_ISSUER,
+            KEYCLOAK_ISSUER,
+            "",
+            new LexisSessionService("LEXIS_PROVINCIAL_SUBMITTER"));
+
+    Jwt jwt =
+        jwt(
+            Map.of(
+                "iss",
+                KEYCLOAK_ISSUER,
+                "custom:idp_name",
+                "unknown",
+                "scope",
+                "lexis:federal-submission:submit"));
+
+    assertThat(
+            customizer.normalizedAuthorities(jwt).stream()
+                .map(GrantedAuthority::getAuthority)
+                .toList())
+        .containsExactly("SCOPE_lexis:federal-submission:submit");
   }
 
   @Test
