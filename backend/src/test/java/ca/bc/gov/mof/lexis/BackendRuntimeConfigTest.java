@@ -177,11 +177,16 @@ class BackendRuntimeConfigTest {
                     "OracleShedLockConfiguration.java")));
 
     assertThat(applicationConfig)
+        .contains("enabled: ${LEXIS_EXPIRY_ENABLED:true}")
         .contains("cron: ${LEXIS_EXPIRY_CRON:30 0 0 * * *}")
         .contains("zone: ${LEXIS_EXPIRY_ZONE:America/Vancouver}")
         .contains("lock-at-most-for: ${LEXIS_EXPIRY_LOCK_AT_MOST_FOR:PT6H}")
         .contains("lock-at-least-for: ${LEXIS_EXPIRY_LOCK_AT_LEAST_FOR:PT5M}");
     assertThat(deployment)
+        .contains(
+            "- name: LEXIS_EXPIRY_ENABLED\n"
+                + "    description: Enable exemption expiry; set false only as an explicit operational kill switch\n"
+                + "    value: \"true\"")
         .contains("- name: LEXIS_EXPIRY_CRON")
         .contains("- name: LEXIS_EXPIRY_ZONE")
         .contains("- name: LEXIS_EXPIRY_LOCK_AT_MOST_FOR")

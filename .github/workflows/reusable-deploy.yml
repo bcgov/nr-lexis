@@ -62,8 +62,8 @@ on:
         default: "128Mi"
         type: string
       expiry_enabled:
-        description: Enable the daily exemption expiry scheduler
-        default: false
+        description: Enable exemption expiry; false is an explicit operational kill switch
+        default: true
         type: boolean
       tag:
         description: Container tag

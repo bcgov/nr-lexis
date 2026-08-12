@@ -28,13 +28,16 @@ reconciliation after the application is ready. The reconciliation uses the same 
 idempotent expiry service as the nightly trigger, so only a lock holder runs it and exemptions that
 were already processed are harmlessly ignored. Lock contention or a failed startup reconciliation
 does not fail pod startup or claim the local run date, so another replica or a later trigger can
-retry.
+retry. Both startup reconciliation and the nightly trigger are skipped before locking or mutation
+while `LEXIS_PROD_RTM_ONLY=true`, because the legacy application remains responsible for expiry
+during the temporary RTM-only rollout.
 
 ## Configuration
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `LEXIS_EXPIRY_ENABLED` | `false` | Creates the scheduled job when true. |
+| `LEXIS_PROD_RTM_ONLY` | `false` | Prevents every modern expiry trigger while legacy remains active. |
+| `LEXIS_EXPIRY_ENABLED` | `true` | Creates the expiry scheduler; set false only as an operational kill switch. |
 | `LEXIS_EXPIRY_CRON` | `30 0 0 * * *` | Spring six-field cron expression. |
 | `LEXIS_EXPIRY_ZONE` | `America/Vancouver` | Scheduler time zone. |
 | `LEXIS_EXPIRY_LOCK_AT_MOST_FOR` | `PT6H` | Maximum duration of one Oracle scheduler lock. |
@@ -45,5 +48,5 @@ retry.
 Prometheus exposes completed, failed, and skipped run counters plus gauges for
 the last completed run's timestamp, candidate count, expired count, and deferred count. A separate
 gauge records the last top-level failure timestamp. These metrics are process-local and reset when
-the backend pod restarts. Lock contention and lock-provider failures increment the skipped counter;
-deferred exemptions remain eligible for the next run.
+the backend pod restarts. Lock contention, lock-provider failures, and RTM-only suppression increment
+the skipped counter; deferred exemptions remain eligible for the next run.
