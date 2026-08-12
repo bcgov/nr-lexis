@@ -2482,12 +2482,10 @@ $notification-types: 'error', 'info', 'success', 'warning';
 
 @keyframes app-notification-slide-out-right {
   from {
-    opacity: 1;
     transform: translateX(0);
   }
 
   to {
-    opacity: 0;
     transform: translateX(calc(100% + 1rem));
   }
 }

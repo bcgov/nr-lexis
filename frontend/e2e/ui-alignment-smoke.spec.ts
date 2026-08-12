@@ -1346,6 +1346,9 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(toast).toHaveCSS('animation-duration', '0.3s')
 
     await toast.getByRole('button', { name: 'close notification' }).click()
+    await expect(page.locator('.app-notification')).toHaveClass(/app-notification--exiting/)
+    await expect(toast).toHaveCSS('animation-name', 'app-notification-slide-out-right')
+    await expect(toast).toHaveCSS('opacity', '1')
     await expect(toast).toBeHidden()
     await expect(inlineError).toBeVisible()
   })
