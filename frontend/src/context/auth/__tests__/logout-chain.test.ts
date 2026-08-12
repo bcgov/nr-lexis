@@ -54,63 +54,31 @@ describe('federated logout chain', () => {
     expect(cognitoLogout.searchParams.get('logout_uri')).toBe(appReturnUrl)
   })
 
-  it('does not start a partial chain when required configuration is missing', async () => {
+  it('does not start a partial chain when required configuration is missing', () => {
     window.config = {
       ...configuredLogout,
       VITE_LOGOUT_KEYCLOAK_CLIENT_ID: '',
     }
-    const revokeSession = vi.fn()
     const navigate = vi.fn()
 
-    await expect(
-      startFederatedLogout(revokeSession, 'https://nr-lexis-test.example', navigate),
-    ).resolves.toBe(false)
-    expect(revokeSession).not.toHaveBeenCalled()
+    expect(startFederatedLogout('https://nr-lexis-test.example', navigate)).toBe(false)
     expect(navigate).not.toHaveBeenCalled()
   })
 
-  it('revokes the Cognito session and clears only this client tokens before navigation', async () => {
+  it('clears only this Cognito client tokens before navigation', () => {
     const matchingPrefix = `CognitoIdentityServiceProvider.${configuredLogout.VITE_USER_POOLS_WEB_CLIENT_ID}`
     window.localStorage.setItem(`${matchingPrefix}.LastAuthUser`, 'tester')
     window.localStorage.setItem(`${matchingPrefix}.tester.accessToken`, 'access')
     window.localStorage.setItem('CognitoIdentityServiceProvider.other-client.token', 'other')
-    const callOrder: string[] = []
-    const revokeSession = vi.fn(async () => {
-      expect(window.localStorage.getItem(`${matchingPrefix}.tester.accessToken`)).toBe('access')
-      callOrder.push('revoke')
-    })
-    const navigate = vi.fn(() => {
-      expect(window.localStorage.getItem(`${matchingPrefix}.tester.accessToken`)).toBeNull()
-      callOrder.push('navigate')
-    })
+    const navigate = vi.fn()
 
-    await expect(
-      startFederatedLogout(revokeSession, 'https://nr-lexis-test.example', navigate),
-    ).resolves.toBe(true)
-    expect(callOrder).toEqual(['revoke', 'navigate'])
-    expect(revokeSession).toHaveBeenCalledOnce()
+    expect(startFederatedLogout('https://nr-lexis-test.example', navigate)).toBe(true)
     expect(navigate).toHaveBeenCalledOnce()
     expect(window.localStorage.getItem(`${matchingPrefix}.LastAuthUser`)).toBeNull()
     expect(window.localStorage.getItem(`${matchingPrefix}.tester.accessToken`)).toBeNull()
     expect(window.localStorage.getItem('CognitoIdentityServiceProvider.other-client.token')).toBe(
       'other',
     )
-  })
-
-  it('continues the upstream logout chain when Cognito revocation fails', async () => {
-    const matchingPrefix = `CognitoIdentityServiceProvider.${configuredLogout.VITE_USER_POOLS_WEB_CLIENT_ID}`
-    window.localStorage.setItem(`${matchingPrefix}.tester.refreshToken`, 'refresh')
-    const revocationError = new Error('Cognito revocation failed')
-    const revokeSession = vi.fn().mockRejectedValue(revocationError)
-    const navigate = vi.fn()
-
-    await expect(
-      startFederatedLogout(revokeSession, 'https://nr-lexis-test.example', navigate),
-    ).rejects.toBe(revocationError)
-
-    expect(revokeSession).toHaveBeenCalledOnce()
-    expect(navigate).toHaveBeenCalledOnce()
-    expect(window.localStorage.getItem(`${matchingPrefix}.tester.refreshToken`)).toBeNull()
   })
 
   it('leaves storage unchanged when no Cognito client is configured', () => {

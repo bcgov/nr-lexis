@@ -48,22 +48,16 @@ export const buildFederatedLogoutUrl = (appReturnUrl: string): string | null => 
   return `${siteminderUrl}?retnow=1&returl=${encodeURIComponent(keycloakLogoutUrl)}`
 }
 
-export const startFederatedLogout = async (
-  revokeSession: () => Promise<void>,
+export const startFederatedLogout = (
   appReturnUrl = window.location.origin,
   navigate: (url: string) => void = (url) => window.location.assign(url),
-): Promise<boolean> => {
+): boolean => {
   const logoutUrl = buildFederatedLogoutUrl(appReturnUrl)
   if (!logoutUrl) {
     return false
   }
 
-  // Amplify needs the stored refresh token to revoke the Cognito session.
-  try {
-    await revokeSession()
-  } finally {
-    clearStoredCognitoTokens()
-    navigate(logoutUrl)
-  }
+  clearStoredCognitoTokens()
+  navigate(logoutUrl)
   return true
 }

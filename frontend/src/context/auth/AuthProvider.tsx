@@ -326,7 +326,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
           clearSessionExpiredLoginNotice()
         }
 
-        if (shouldSignOut && (await startFederatedLogout(cognitoSignOut))) {
+        if (shouldSignOut && startFederatedLogout()) {
           return
         }
 
@@ -579,7 +579,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       clearPersistedSearchState()
       authenticatedSessionRef.current = false
 
-      if (isCognitoConfigured && (await startFederatedLogout(cognitoSignOut))) {
+      if (isCognitoConfigured && startFederatedLogout()) {
         return
       }
 
