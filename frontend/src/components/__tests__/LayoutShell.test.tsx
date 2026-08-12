@@ -460,6 +460,44 @@ describe('Layout shell', () => {
     expect(screen.queryByRole('link', { name: /^Application Report$/i })).not.toBeInTheDocument()
   })
 
+  it('shows read-only reports without exposing create or admin navigation', () => {
+    const grantedActions = [
+      '/applicationSearch',
+      '/exemptionSearch',
+      '/offersSearch',
+      '/permitSearch',
+      '/applicationReport',
+      'mofrListing',
+      '/offerReport',
+    ]
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({
+          principal: 'idir\\readonly',
+          roles: ['READ_ONLY'],
+          welcomeTarget: '/reports',
+          grantedActions,
+        }),
+        defaultRoute: '/reports',
+        canPerform: (action: string) => grantedActions.includes(action),
+      }),
+    )
+
+    renderLayout('/reports')
+
+    expect(screen.getByRole('link', { name: /^Application Report$/i })).toBeVisible()
+    expect(screen.getByRole('link', { name: /Advertising List/i })).toBeVisible()
+    expect(screen.getByRole('link', { name: /^Offers Report$/i })).toBeVisible()
+    expect(
+      screen.queryByRole('link', { name: /Create\/Edit Application/i }),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Create\/Edit Exemption/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Create\/Edit Offer/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /^Fee Policy$/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /^Fee in Lieu$/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /^Export Schedule$/i })).not.toBeInTheDocument()
+  })
+
   it('renders legacy report navigation when an auth mock omits roles', () => {
     const capabilitiesWithoutRoles = {
       authenticated: true,
