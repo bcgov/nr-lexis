@@ -72,8 +72,10 @@ import { usePersistedSearchParams } from '@/pages/shared/usePersistedSearchParam
 import { useDefaultRegionPreference } from '@/pages/shared/useDefaultRegionPreference'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import {
+  formatDeferredSearchTotalLabel,
   loadSearchWithDeferredTotal,
-  prefetchAdjacentSearchPages,
+  prefetchNextSearchPage,
+  type DeferredSearchTotalStatus,
 } from '@/pages/shared/deferred-search-total'
 import {
   countProvincialApplications,
@@ -192,7 +194,11 @@ const ProvincialApplicationPage = () => {
   const [productTypeOptions, setProductTypeOptions] = useState<SearchOption[]>([])
   const [optionsLoading, setOptionsLoading] = useState(true)
   const [optionsUnavailable, setOptionsUnavailable] = useState(false)
-  const [results, setResults] = useState<ProvincialApplicationSearchResponse>(EMPTY_RESULTS)
+  const [searchResult, setSearchResult] = useState<{
+    results: ProvincialApplicationSearchResponse
+    totalStatus: DeferredSearchTotalStatus
+  }>({ results: EMPTY_RESULTS, totalStatus: 'exact' })
+  const { results, totalStatus } = searchResult
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
   const [selectedRowsById, setSelectedRowsById] = useState<
@@ -303,9 +309,15 @@ const ProvincialApplicationPage = () => {
   ])
 
   const beginSearchRequest = useLatestRequestGuard()
-  const commitResults = useCallback((nextResults: ProvincialApplicationSearchResponse) => {
-    setResults(nextResults)
-  }, [])
+  const commitResults = useCallback(
+    (
+      nextResults: ProvincialApplicationSearchResponse,
+      nextTotalStatus: DeferredSearchTotalStatus,
+    ) => {
+      setSearchResult({ results: nextResults, totalStatus: nextTotalStatus })
+    },
+    [],
+  )
 
   const runSearch = useCallback(
     async (request: ProvincialApplicationSearchRequest, options: { force?: boolean } = {}) => {
@@ -324,7 +336,7 @@ const ProvincialApplicationPage = () => {
             buildSearchTotalCacheKey(request.filters),
             cachedResults.page.totalElements,
           )
-          prefetchAdjacentSearchPages({
+          prefetchNextSearchPage({
             pageId: 'provincial-application-search',
             principal: capabilities?.principal,
             request,
@@ -332,7 +344,7 @@ const ProvincialApplicationPage = () => {
             search: searchProvincialApplications,
             onError: console.error,
           })
-          setResults(cachedResults)
+          commitResults(cachedResults, 'exact')
           setLoading(false)
           setErrorMessage('')
           return
@@ -363,7 +375,7 @@ const ProvincialApplicationPage = () => {
         ) => {
           if (totalIsExact && setPageDataCache(pageCacheKey, response, pageCacheGeneration)) {
             setCachedSearchTotal(totalCacheRef.current, totalCacheKey, response.page.totalElements)
-            prefetchAdjacentSearchPages({
+            prefetchNextSearchPage({
               pageId: 'provincial-application-search',
               principal: capabilities?.principal,
               request,
@@ -374,24 +386,39 @@ const ProvincialApplicationPage = () => {
           }
           queueMicrotask(() => {
             if (isLatestRequest()) {
-              commitResults(response)
+              commitResults(response, totalIsExact ? 'exact' : 'pending')
             }
           })
         }
-        const { response, totalIsExact } = await loadSearchWithDeferredTotal({
+        const { response, totalIsExact, deferredResponse } = await loadSearchWithDeferredTotal({
           request,
           cachedTotal,
           search: searchProvincialApplications,
           count: countProvincialApplications,
+          deferCount: true,
         })
         if (isLatestRequest()) {
           commitSearchResponse(response, totalIsExact)
+        }
+        if (deferredResponse) {
+          void deferredResponse
+            .then((exactResponse) => {
+              if (isLatestRequest()) {
+                commitSearchResponse(exactResponse, true)
+              }
+            })
+            .catch((error) => {
+              console.error(error)
+              if (isLatestRequest()) {
+                commitResults(response, 'unavailable')
+              }
+            })
         }
       } catch (error) {
         if (isLatestRequest()) {
           console.error(error)
           setErrorMessage('Unable to retrieve application search results.')
-          setResults(EMPTY_RESULTS)
+          commitResults(EMPTY_RESULTS, 'exact')
         }
       } finally {
         if (isLatestRequest()) {
@@ -817,6 +844,11 @@ const ProvincialApplicationPage = () => {
                 ? undefined
                 : results.page.totalElements
             }
+            totalItemsLabel={formatDeferredSearchTotalLabel(
+              results.page.totalElements,
+              totalStatus,
+              results.page.number * results.page.size + results.content.length,
+            )}
             actions={
               canCreateExemption || canCreateApplication ? (
                 <>
@@ -969,6 +1001,8 @@ const ProvincialApplicationPage = () => {
                 pageSize={results.page.size}
                 pageSizes={[...SEARCH_PAGE_SIZE_OPTIONS]}
                 totalItems={results.page.totalElements}
+                pagesUnknown={totalStatus !== 'exact'}
+                isLastPage={totalStatus !== 'exact' && results.content.length < results.page.size}
                 onChange={({ page, pageSize: nextPageSize }) => {
                   clearSelection()
                   setSearchParams(

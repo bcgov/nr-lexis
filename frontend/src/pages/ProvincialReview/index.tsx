@@ -73,8 +73,10 @@ import { useDefaultRegionPreference } from '@/pages/shared/useDefaultRegionPrefe
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { isAgentApplicant } from '@/pages/shared/application-form-utils'
 import {
+  formatDeferredSearchTotalLabel,
   loadSearchWithDeferredTotal,
-  prefetchAdjacentSearchPages,
+  prefetchNextSearchPage,
+  type DeferredSearchTotalStatus,
 } from '@/pages/shared/deferred-search-total'
 import {
   approveApplicationReview,
@@ -253,7 +255,11 @@ const ProvincialReviewPage = () => {
   const [reviewStatusOptions, setReviewStatusOptions] = useState<SearchOption[]>([])
   const [optionsLoading, setOptionsLoading] = useState(true)
   const [optionsUnavailable, setOptionsUnavailable] = useState(false)
-  const [results, setResults] = useState<ApplicationReviewSearchResponse>(EMPTY_RESULTS)
+  const [searchResult, setSearchResult] = useState<{
+    results: ApplicationReviewSearchResponse
+    totalStatus: DeferredSearchTotalStatus
+  }>({ results: EMPTY_RESULTS, totalStatus: 'exact' })
+  const { results, totalStatus } = searchResult
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
   const [selectedRowsById, setSelectedRowsById] = useState<Record<string, boolean>>({})
@@ -387,9 +393,12 @@ const ProvincialReviewPage = () => {
   }, [selectableRows, selectedRowsById])
 
   const beginSearchRequest = useLatestRequestGuard()
-  const commitResults = useCallback((nextResults: ApplicationReviewSearchResponse) => {
-    setResults(nextResults)
-  }, [])
+  const commitResults = useCallback(
+    (nextResults: ApplicationReviewSearchResponse, nextTotalStatus: DeferredSearchTotalStatus) => {
+      setSearchResult({ results: nextResults, totalStatus: nextTotalStatus })
+    },
+    [],
+  )
 
   const runSearch = useCallback(
     async (request: ApplicationReviewSearchRequest, options: { force?: boolean } = {}) => {
@@ -408,7 +417,7 @@ const ProvincialReviewPage = () => {
             buildSearchTotalCacheKey(request.filters),
             cachedResults.page.totalElements,
           )
-          prefetchAdjacentSearchPages({
+          prefetchNextSearchPage({
             pageId: 'provincial-review-search',
             principal: capabilities?.principal,
             request,
@@ -416,7 +425,7 @@ const ProvincialReviewPage = () => {
             search: searchApplicationReviews,
             onError: console.error,
           })
-          setResults(cachedResults)
+          commitResults(cachedResults, 'exact')
           setLoading(false)
           setErrorMessage('')
           return
@@ -448,7 +457,7 @@ const ProvincialReviewPage = () => {
         ) => {
           if (totalIsExact && setPageDataCache(pageCacheKey, response, pageCacheGeneration)) {
             setCachedSearchTotal(totalCacheRef.current, totalCacheKey, response.page.totalElements)
-            prefetchAdjacentSearchPages({
+            prefetchNextSearchPage({
               pageId: 'provincial-review-search',
               principal: capabilities?.principal,
               request,
@@ -459,24 +468,39 @@ const ProvincialReviewPage = () => {
           }
           queueMicrotask(() => {
             if (isLatestRequest()) {
-              commitResults(response)
+              commitResults(response, totalIsExact ? 'exact' : 'pending')
             }
           })
         }
-        const { response, totalIsExact } = await loadSearchWithDeferredTotal({
+        const { response, totalIsExact, deferredResponse } = await loadSearchWithDeferredTotal({
           request,
           cachedTotal,
           search: searchApplicationReviews,
           count: countApplicationReviews,
+          deferCount: true,
         })
         if (isLatestRequest()) {
           commitSearchResponse(response, totalIsExact)
+        }
+        if (deferredResponse) {
+          void deferredResponse
+            .then((exactResponse) => {
+              if (isLatestRequest()) {
+                commitSearchResponse(exactResponse, true)
+              }
+            })
+            .catch((error) => {
+              console.error(error)
+              if (isLatestRequest()) {
+                commitResults(response, 'unavailable')
+              }
+            })
         }
       } catch (error) {
         if (isLatestRequest()) {
           console.error(error)
           setErrorMessage('Unable to retrieve application review search results.')
-          setResults(EMPTY_RESULTS)
+          commitResults(EMPTY_RESULTS, 'exact')
         }
       } finally {
         if (isLatestRequest()) {
@@ -1186,7 +1210,12 @@ const ProvincialReviewPage = () => {
                 ? 'Results unavailable'
                 : loading && results.content.length === 0
                   ? 'Loading results…'
-                  : `${new Intl.NumberFormat('en-CA').format(results.page.totalElements)} results found`}
+                  : (formatDeferredSearchTotalLabel(
+                      results.page.totalElements,
+                      totalStatus,
+                      results.page.number * results.page.size + results.content.length,
+                    ) ??
+                    `${new Intl.NumberFormat('en-CA').format(results.page.totalElements)} results found`)}
             </p>
             <DisabledButtonTooltip
               disabled={
@@ -1372,6 +1401,8 @@ const ProvincialReviewPage = () => {
                 pageSize={results.page.size}
                 pageSizes={[...APPLICATION_REVIEW_PAGE_SIZE_OPTIONS]}
                 totalItems={results.page.totalElements}
+                pagesUnknown={totalStatus !== 'exact'}
+                isLastPage={totalStatus !== 'exact' && results.content.length < results.page.size}
                 onChange={({ page, pageSize: nextPageSize }) => {
                   clearSelection()
                   setSearchParams(

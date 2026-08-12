@@ -3590,7 +3590,7 @@ test.describe('TEST IDIR admin regression', () => {
         )
       }, sessionExpiredEventName),
     )
-    await expect(page.getByText('You’ve been logged out', { exact: true })).toBeVisible()
+    await expect(page.getByText("You've been logged out", { exact: true })).toBeVisible()
   })
 
   test('signs out to the login shell without an expired-session warning', async ({ page }) => {
@@ -3604,9 +3604,9 @@ test.describe('TEST IDIR admin regression', () => {
     }
     const openProfilePanel = page.locator('#profile-panel.is-open')
     await expect(openProfilePanel).toBeVisible()
-    const signOutButton = openProfilePanel.getByRole('button', { name: /sign out/i })
-    await expect(signOutButton).toBeVisible()
-    await expectLogoutRoundTrip(page, 'Logout', () => signOutButton.click())
-    await expect(page.getByText('You’ve been logged out', { exact: true })).toHaveCount(0)
+    const logOutButton = openProfilePanel.getByRole('button', { name: 'Log out' })
+    await expect(logOutButton).toBeVisible()
+    await expectLogoutRoundTrip(page, 'Logout', () => logOutButton.click())
+    await expect(page.getByText("You've been logged out", { exact: true })).toHaveCount(0)
   })
 })

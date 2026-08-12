@@ -4,6 +4,7 @@ import static ca.bc.gov.mof.lexis.util.ValueUtils.coalesce;
 import static ca.bc.gov.mof.lexis.util.ValueUtils.firstNonNull;
 
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
+import ca.bc.gov.mof.lexis.dto.application.ApplicationAccessContextDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResultDto;
@@ -142,6 +143,16 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
           Map.entry("region", "v.REGION_CODE"));
   private static final String FIND_APPLICATION_BY_NUMBER =
       LEXIS_GROUP_5_PACKAGE + "FIND_APPLICATION_BY_NUMBER(?,?)";
+  private static final String FIND_APPLICATION_ACCESS =
+      """
+      SELECT APPLICATION_NUMBER,
+             EXPORT_JURISDICTION_CODE,
+             ORG_UNIT_NO,
+             OWNER_CLIENT_NUMBER,
+             AGENT_CLIENT_NUMBER
+      FROM EXPORT_EXEMPTION_APPLICATION
+      WHERE APPLICATION_NUMBER = ?
+      """;
   private static final String FIND_PACKAGE_BY_NUMBER =
       LEXIS_GROUP_5_PACKAGE + "FIND_PACKAGE_BY_NUMBER(?,?)";
   private static final String FIND_PACKAGES_BY_APPLICATION =
@@ -330,6 +341,27 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
             offers,
             app.jurisdictionCode(),
             app.author()));
+  }
+
+  public Optional<ApplicationAccessContextDto> findAccessByApplicationNumber(
+      Long applicationNumber) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      return Optional.empty();
+    }
+
+    return jdbcTemplate
+        .query(
+            FIND_APPLICATION_ACCESS,
+            (rs, rowNumber) ->
+                new ApplicationAccessContextDto(
+                    getLong(rs, "APPLICATION_NUMBER"),
+                    getString(rs, "EXPORT_JURISDICTION_CODE"),
+                    getLong(rs, "ORG_UNIT_NO"),
+                    getString(rs, "OWNER_CLIENT_NUMBER"),
+                    getString(rs, "AGENT_CLIENT_NUMBER")),
+            applicationNumber)
+        .stream()
+        .findFirst();
   }
 
   public Optional<LexisPackageLookupDto> findPackageByPackageNumber(String packageNumber) {

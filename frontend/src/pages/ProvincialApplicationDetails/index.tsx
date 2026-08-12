@@ -591,6 +591,7 @@ const ProvincialApplicationDetailsPage = () => {
   const [documentUploadDirty, setDocumentUploadDirty] = useState(false)
   const [documentUploadBusy, setDocumentUploadBusy] = useState(false)
   const [documentUploadResetKey, setDocumentUploadResetKey] = useState(0)
+  const documentRequestSequenceRef = useRef(0)
   const [applicationItemsDirty, setApplicationItemsDirty] = useState(false)
   const [applicationItemsBusy, setApplicationItemsBusy] = useState(false)
   const [applicationItemsResetKey, setApplicationItemsResetKey] = useState(0)
@@ -757,6 +758,7 @@ const ProvincialApplicationDetailsPage = () => {
 
   const loadApplicationDetail = useCallback(async () => {
     const isLatestRequest = beginDetailRequest()
+    const detailDocumentRequestSequence = ++documentRequestSequenceRef.current
     setSummaryAccuracyConfirmationOpen(false)
     setSummaryAccuracyConfirmed(false)
     setSummaryAccuracyApplicationNumber(null)
@@ -799,6 +801,7 @@ const ProvincialApplicationDetailsPage = () => {
     setDocumentsErrorMessage('')
     setActionErrorMessage('')
     setActionInfoMessage('')
+    setPermitLookupAvailability('loading')
     if (!retainingCurrentDetail) {
       setIsEditingSummary(false)
       setIsEditingOwnerDetails(false)
@@ -811,7 +814,6 @@ const ProvincialApplicationDetailsPage = () => {
       setDocumentRows([])
       setPermitRows([])
       setDocumentLookupAvailability('loading')
-      setPermitLookupAvailability('loading')
     }
 
     try {
@@ -866,65 +868,82 @@ const ProvincialApplicationDetailsPage = () => {
         void verifyIndustryExemptionAccess()
       }
 
-      try {
-        const permitsResult = await fetchApplicationPermits(applicationNumber)
-        if (isLatestRequest()) {
+      const [summarySnapshotResult, applicationSpeciesResult] = await Promise.allSettled([
+        fetchApplicationSummarySnapshot(applicationNumber),
+        fetchApplicationSpecies(applicationNumber),
+      ])
+      if (!isLatestRequest()) {
+        return
+      }
+
+      if (
+        summarySnapshotResult.status === 'fulfilled' &&
+        summarySnapshotResult.value &&
+        String(summarySnapshotResult.value.applicationNumber) === applicationNumber
+      ) {
+        editableSummaryForm = normalizeSummaryAgentFields(
+          toSummarySnapshotFormState(summarySnapshotResult.value),
+        )
+      } else if (summarySnapshotResult.status === 'rejected') {
+        setActionErrorMessage('Unable to retrieve complete application summary fields.')
+      }
+
+      if (applicationSpeciesResult.status === 'fulfilled' && editableSummaryForm) {
+        editableSummaryForm = withApplicationSpecies(
+          editableSummaryForm,
+          applicationSpeciesResult.value,
+        )
+      } else if (applicationSpeciesResult.status === 'rejected') {
+        setActionErrorMessage('Unable to retrieve application species fields.')
+      }
+
+      if (editableSummaryForm) {
+        setSummaryForm(editableSummaryForm)
+        setSummaryBaselineForm(editableSummaryForm)
+      }
+
+      // The core application and its editable summary are now stable. Permit and document reads
+      // remain serial to avoid multiplying Oracle demand, but no longer keep the whole page inert.
+      setLoading(false)
+      const loadSecondarySections = async () => {
+        try {
+          const permitsResult = await fetchApplicationPermits(applicationNumber)
+          if (!isLatestRequest()) {
+            return
+          }
           setPermitRows(permitsResult)
           setPermitLookupAvailability('available')
-        }
-      } catch {
-        if (isLatestRequest()) {
+        } catch {
+          if (!isLatestRequest()) {
+            return
+          }
           if (!retainingCurrentDetail) {
             setPermitRows([])
-            setPermitLookupAvailability('unavailable')
           }
+          setPermitLookupAvailability('unavailable')
           setActionErrorMessage('Unable to retrieve application permits.')
         }
-      }
 
-      try {
-        const summarySnapshot = await fetchApplicationSummarySnapshot(applicationNumber)
-        if (
-          isLatestRequest() &&
-          summarySnapshot &&
-          String(summarySnapshot.applicationNumber) === applicationNumber
-        ) {
-          editableSummaryForm = normalizeSummaryAgentFields(
-            toSummarySnapshotFormState(summarySnapshot),
-          )
-          setSummaryForm(editableSummaryForm)
-          setSummaryBaselineForm(editableSummaryForm)
+        if (detailDocumentRequestSequence !== documentRequestSequenceRef.current) {
+          return
         }
-      } catch {
-        if (isLatestRequest()) {
-          setActionErrorMessage('Unable to retrieve complete application summary fields.')
-        }
-      }
-
-      try {
-        const applicationSpeciesRows = await fetchApplicationSpecies(applicationNumber)
-        if (isLatestRequest() && editableSummaryForm) {
-          const summaryFormWithSpecies = withApplicationSpecies(
-            editableSummaryForm,
-            applicationSpeciesRows,
-          )
-          setSummaryForm(summaryFormWithSpecies)
-          setSummaryBaselineForm(summaryFormWithSpecies)
-        }
-      } catch {
-        if (isLatestRequest()) {
-          setActionErrorMessage('Unable to retrieve application species fields.')
-        }
-      }
-
-      try {
-        const documentsResult = await fetchApplicationDocuments(applicationNumber)
-        if (isLatestRequest()) {
+        try {
+          const documentsResult = await fetchApplicationDocuments(applicationNumber)
+          if (
+            !isLatestRequest() ||
+            detailDocumentRequestSequence !== documentRequestSequenceRef.current
+          ) {
+            return
+          }
           setDocumentRows(documentsResult.rows)
           setDocumentLookupAvailability('available')
-        }
-      } catch {
-        if (isLatestRequest()) {
+        } catch {
+          if (
+            !isLatestRequest() ||
+            detailDocumentRequestSequence !== documentRequestSequenceRef.current
+          ) {
+            return
+          }
           if (!retainingCurrentDetail) {
             setDocumentRows([])
             setDocumentLookupAvailability('unavailable')
@@ -932,6 +951,7 @@ const ProvincialApplicationDetailsPage = () => {
           setDocumentsErrorMessage('Unable to retrieve application documents.')
         }
       }
+      void loadSecondarySections()
     } catch {
       if (isLatestRequest()) {
         setErrorMessage('Unable to retrieve provincial application detail.')
@@ -2068,13 +2088,20 @@ const ProvincialApplicationDetailsPage = () => {
       return
     }
 
+    const documentRequestSequence = ++documentRequestSequenceRef.current
     setDocumentLookupAvailability('loading')
     try {
       const documentsResult = await fetchApplicationDocuments(applicationNumber)
+      if (documentRequestSequence !== documentRequestSequenceRef.current) {
+        return
+      }
       setDocumentRows(documentsResult.rows)
       setDocumentLookupAvailability('available')
       setDocumentsErrorMessage('')
     } catch (error) {
+      if (documentRequestSequence !== documentRequestSequenceRef.current) {
+        return
+      }
       setDocumentRows([])
       setDocumentLookupAvailability('unavailable')
       setDocumentsErrorMessage('Unable to retrieve application documents.')
@@ -2107,14 +2134,17 @@ const ProvincialApplicationDetailsPage = () => {
         throw new Error('Application number is unavailable.')
       }
 
-      const isLatestRequest = beginDetailRequest()
+      const documentRequestSequence = ++documentRequestSequenceRef.current
+      const isCurrentApplication = () => currentApplicationNumberRef.current === applicationNumber
+      const isCurrentDocumentRequest = () =>
+        isCurrentApplication() && documentRequestSequence === documentRequestSequenceRef.current
       setIsRemovingDocumentId(row.id)
       setActionErrorMessage('')
       setActionInfoMessage('')
 
       try {
         const removeResult = await removeApplicationDocument(row.id, applicationNumber)
-        if (!isLatestRequest()) {
+        if (!isCurrentDocumentRequest()) {
           return
         }
         if (!removeResult.success) {
@@ -2123,14 +2153,14 @@ const ProvincialApplicationDetailsPage = () => {
 
         try {
           const documentsResult = await fetchApplicationDocuments(applicationNumber)
-          if (isLatestRequest()) {
+          if (isCurrentDocumentRequest()) {
             setDocumentRows(documentsResult.rows)
             setDocumentLookupAvailability('available')
             setDocumentsErrorMessage('')
             setActionInfoMessage(`${row.name || 'Document'} was deleted.`)
           }
         } catch (refreshError) {
-          if (isLatestRequest()) {
+          if (isCurrentDocumentRequest()) {
             console.error(refreshError)
             setDocumentLookupAvailability('unavailable')
             setDocumentsErrorMessage(
@@ -2142,17 +2172,17 @@ const ProvincialApplicationDetailsPage = () => {
           }
         }
       } catch (error) {
-        if (isLatestRequest()) {
+        if (isCurrentApplication()) {
           console.error(error)
         }
         throw error instanceof Error ? error : new Error('Unable to remove the selected document.')
       } finally {
-        if (isLatestRequest()) {
+        if (isCurrentApplication()) {
           setIsRemovingDocumentId(null)
         }
       }
     },
-    [applicationNumber, beginDetailRequest],
+    [applicationNumber],
   )
 
   const onCancelDocumentEditing = useCallback(() => {

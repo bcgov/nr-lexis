@@ -68,8 +68,8 @@ public class ProvincialAuthorizationService {
     LexisApplicationService service = applicationServiceProvider.getIfAvailable();
     return service != null
         && service
-            .findByApplicationNumber(applicationNumber)
-            .map(detail -> canAccessApplication(authentication, detail))
+            .findAccessByApplicationNumber(applicationNumber)
+            .map(application -> canAccessApplication(authentication, application))
             .orElse(false);
   }
 

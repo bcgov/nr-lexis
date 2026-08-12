@@ -5,6 +5,7 @@ import static ca.bc.gov.mof.lexis.util.CollectionUtils.safeList;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
+import ca.bc.gov.mof.lexis.dto.application.ApplicationAccessContextDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchCriteria;
@@ -85,6 +86,15 @@ public class OracleLexisApplicationService implements LexisApplicationService {
       return Optional.empty();
     }
     return repository.findByApplicationNumber(applicationNumber);
+  }
+
+  @Override
+  public Optional<ApplicationAccessContextDto> findAccessByApplicationNumber(
+      long applicationNumber) {
+    if (applicationNumber < 1) {
+      return Optional.empty();
+    }
+    return repository.findAccessByApplicationNumber(applicationNumber);
   }
 
   @Override
