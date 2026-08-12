@@ -358,6 +358,70 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
     expect(mockedFetchApplicationDocuments).toHaveBeenCalledTimes(2)
   })
 
+  it('does not let the initial document lookup overwrite a newer upload refresh', async () => {
+    let resolveInitialDocuments:
+      | ((value: Awaited<ReturnType<typeof fetchApplicationDocuments>>) => void)
+      | undefined
+    mockedFetchApplicationDocuments
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveInitialDocuments = resolve
+        }),
+      )
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: '900',
+            name: 'uploaded-doc.pdf',
+            description: 'Uploaded',
+            type: 'Attachment',
+          },
+        ],
+        source: 'api',
+      })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationDetailTab('Documents')
+    await waitFor(() => expect(mockedFetchApplicationDocuments).toHaveBeenCalledTimes(1))
+    const file = new File(['test'], 'uploaded-doc.pdf', { type: 'application/pdf' })
+    await openDocumentUploadModal()
+    await userEvent.type(screen.getByLabelText(/Document description/), 'Uploaded')
+    await userEvent.upload(screen.getByLabelText('Document File'), file)
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Review upload' })).toBeEnabled()
+    })
+    await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Submit upload' }))
+
+    expect(await screen.findByText('uploaded-doc.pdf')).toBeInTheDocument()
+    await act(async () => {
+      resolveInitialDocuments?.({
+        rows: [
+          {
+            id: '100',
+            name: 'stale-doc.pdf',
+            description: 'Stale',
+            type: 'Attachment',
+          },
+        ],
+        source: 'api',
+      })
+    })
+
+    expect(screen.getByText('uploaded-doc.pdf')).toBeInTheDocument()
+    expect(screen.queryByText('stale-doc.pdf')).not.toBeInTheDocument()
+  })
+
   it('keeps a partial upload queue mounted while the document list refreshes', async () => {
     let resolveDocumentRefresh:
       | ((value: Awaited<ReturnType<typeof fetchApplicationDocuments>>) => void)

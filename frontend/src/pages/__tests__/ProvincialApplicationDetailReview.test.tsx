@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import type { ProvincialApplicationDetail } from '@/interfaces/LexisDetails'
@@ -13,6 +13,7 @@ import {
   mockedApproveApplicationReview,
   mockedFetchApplicationClientData,
   mockedFetchApplicationClientLocations,
+  mockedFetchApplicationPermits,
   mockedFetchApplicationSummarySnapshot,
   mockedFetchProvincialApplicationDetail,
   mockedSaveApplicationRemark,
@@ -231,6 +232,60 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     })
     expect(await screen.findByText('Application remark saved.')).toBeInTheDocument()
     expect(screen.getAllByText('New application note').length).toBeGreaterThan(0)
+  })
+
+  it('gates industry document uploads while permits refresh after a save', async () => {
+    const industryDetail: ProvincialApplicationDetail = {
+      ...reviewableApplicationDetail,
+      industryUser: true,
+    }
+    let resolveRefreshedPermits:
+      | ((value: { permitNumber: string; permitStatusDescription: string }[]) => void)
+      | undefined
+    mockApplicationDetailAuth(() => true, ['LEXIS_PROVINCIAL_SUBMITTER_00011122'])
+    mockedFetchProvincialApplicationDetail.mockResolvedValue(industryDetail)
+    mockedFetchApplicationPermits.mockResolvedValueOnce([]).mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveRefreshedPermits = resolve
+      }),
+    )
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationRemarksForEditing()
+    fireEvent.change(screen.getByLabelText('New Remark'), {
+      target: { value: 'Refresh permit eligibility' },
+    })
+    await userEvent.click(screen.getByRole('button', { name: 'Save Remark' }))
+    await waitFor(() => expect(mockedFetchApplicationPermits).toHaveBeenCalledTimes(2))
+
+    await selectApplicationDetailTab('Documents')
+    expect(
+      await screen.findByText(
+        'Application document upload is unavailable while permit information cannot be retrieved.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Edit documents' })).not.toBeInTheDocument()
+
+    await act(async () => {
+      resolveRefreshedPermits?.([{ permitNumber: '900101', permitStatusDescription: 'Complete' }])
+    })
+
+    expect(
+      await screen.findByText(
+        'Application document upload is unavailable for industry users when the application has a complete permit.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Edit documents' })).not.toBeInTheDocument()
   })
 
   it('shows the explicit remark validation failure without clearing the draft', async () => {

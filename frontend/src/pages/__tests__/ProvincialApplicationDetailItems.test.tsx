@@ -9,7 +9,10 @@ import {
   Routes,
 } from 'react-router-dom'
 import type { ProvincialApplicationDetail } from '@/interfaces/LexisDetails'
-import type { fetchApplicationPackageDetails } from '@/service/provincial-application-items-service'
+import type {
+  fetchApplicationPackageDetails,
+  fetchApplicationPermits,
+} from '@/service/provincial-application-items-service'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   setupApplicationDetailTests,
@@ -23,6 +26,7 @@ import {
   mockedCheckApplicationVolumeUsage,
   mockedDeleteApplicationPackage,
   mockedDeleteApplicationScale,
+  mockedFetchApplicationDocuments,
   mockedFetchApplicationGradeCodes,
   mockedFetchApplicationPackageDetails,
   mockedFetchApplicationPackageScales,
@@ -47,6 +51,41 @@ Element.prototype.scrollIntoView = vi.fn()
 
 describe.sequential('Provincial Application Detail Actions - items', () => {
   beforeEach(setupApplicationDetailTests)
+
+  it('makes the core application usable while secondary sections continue loading', async () => {
+    let resolvePermits:
+      | ((value: Awaited<ReturnType<typeof fetchApplicationPermits>>) => void)
+      | undefined
+    mockedFetchApplicationPermits.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolvePermits = resolve
+      }),
+    )
+
+    const { container } = render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Application 321' }),
+    ).toBeInTheDocument()
+    await waitFor(() => expect(mockedFetchApplicationPermits).toHaveBeenCalledWith('321'))
+    expect(container.querySelector('.provincial-application-detail')).not.toHaveAttribute('inert')
+    expect(mockedFetchApplicationDocuments).not.toHaveBeenCalled()
+
+    await act(async () => {
+      resolvePermits?.([])
+    })
+
+    await waitFor(() => expect(mockedFetchApplicationDocuments).toHaveBeenCalledWith('321'))
+  })
 
   it('renders application permits and opens permit details', async () => {
     mockedFetchApplicationPermits.mockResolvedValue([
