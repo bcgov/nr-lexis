@@ -35,6 +35,9 @@ final class LexisApiAuthorizationRules {
   private static final String ACTION_FEDERAL_APPLICATION_DETAILS = "/federalApplicationDetails";
   private static final String ACTION_FEE_REPORT = "/feeReport";
   private static final String ACTION_FILE_APPLICATION_UPLOAD = "/fileApplicationUpload";
+  private static final String ACTION_FILE_EXEMPTION_UPLOAD = "/fileExemptionUpload";
+  private static final String ACTION_FILE_INVOICE_UPLOAD = "/fileInvoiceUpload";
+  private static final String ACTION_FILE_PERMIT_UPLOAD = "/filePermitUpload";
   private static final String ACTION_LEXIS_AGENT_ADMIN = "/lexisAgentAdmin";
   private static final String ACTION_LEXIS_FIL_ADMIN = "/lexisFILAdmin";
   private static final String ACTION_LEXIS_POLICY_ADMIN = "/lexisPolicyAdmin";
@@ -73,9 +76,9 @@ final class LexisApiAuthorizationRules {
       actionMap(
           Map.entry("getDocumentDetails", ACTION_APPLICATION_DETAILS),
           Map.entry("getDocument", ACTION_APPLICATION_DETAILS),
-          Map.entry("removeDocument", ACTION_APPLICATION_DETAILS),
+          Map.entry("removeDocument", ACTION_FILE_APPLICATION_UPLOAD),
           Map.entry("getRemark", ACTION_APPLICATION_REMARKS),
-          Map.entry("persistRemark", ACTION_APPLICATION_REMARKS),
+          Map.entry("persistRemark", ACTION_CREATE_APPLICATION),
           Map.entry("checkFormChanges", ACTION_APPLICATION_DETAILS),
           Map.entry("checkUnusedVolume", ACTION_APPLICATION_DETAILS),
           Map.entry("releaseLock", ACTION_APPLICATION_DETAILS),
@@ -115,7 +118,7 @@ final class LexisApiAuthorizationRules {
           Map.entry("getBlanketOICTotals", ACTION_EXEMPTION_DETAILS),
           Map.entry("getDocumentDetails", ACTION_EXEMPTION_DETAILS),
           Map.entry("getDocument", ACTION_EXEMPTION_DETAILS),
-          Map.entry("removeDocument", ACTION_EXEMPTION_DETAILS),
+          Map.entry("removeDocument", ACTION_FILE_EXEMPTION_UPLOAD),
           Map.entry("checkExemptionNumber", ACTION_SAVE_EXEMPTION),
           Map.entry("addApplicationToExemption", ACTION_SAVE_EXEMPTION),
           Map.entry("removeApplicationFromExemption", ACTION_SAVE_EXEMPTION),
@@ -138,7 +141,7 @@ final class LexisApiAuthorizationRules {
           Map.entry("getClientData", ACTION_OFFER_DETAILS),
           Map.entry("getClientLocations", ACTION_OFFER_DETAILS),
           Map.entry("addOffer", ACTION_CREATE_OFFER),
-          Map.entry("updateOffer", ACTION_OFFER_DETAILS));
+          Map.entry("updateOffer", ACTION_CREATE_OFFER));
 
   private static final Map<String, String> PERMIT_DETAILS_RPC_ACTIONS =
       actionMap(
@@ -176,9 +179,9 @@ final class LexisApiAuthorizationRules {
           Map.entry("getFileTypes", ACTION_PERMIT_DETAILS),
           Map.entry("getDocument", ACTION_PERMIT_DETAILS),
           Map.entry("getDocumentDetails", ACTION_PERMIT_DETAILS),
-          Map.entry("removePermitDocument", ACTION_PERMIT_DETAILS),
-          Map.entry("removeApplicationDocument", ACTION_PERMIT_DETAILS),
-          Map.entry("removeInvoiceDocument", ACTION_PERMIT_DETAILS));
+          Map.entry("removePermitDocument", ACTION_FILE_PERMIT_UPLOAD),
+          Map.entry("removeApplicationDocument", ACTION_FILE_APPLICATION_UPLOAD),
+          Map.entry("removeInvoiceDocument", ACTION_FILE_INVOICE_UPLOAD));
 
   private static final List<Rule> RULES =
       List.of(
@@ -400,7 +403,7 @@ final class LexisApiAuthorizationRules {
               "/api/lexis/admin/uploads/applications/validation"),
           action(
               HttpMethod.POST,
-              "/filePermitUpload",
+              ACTION_FILE_PERMIT_UPLOAD,
               "/api/lexis/filePermitUpload",
               "/api/lexis/uploads/permit",
               "/api/lexis/uploads/permit/validation",
@@ -408,7 +411,7 @@ final class LexisApiAuthorizationRules {
               "/api/lexis/admin/uploads/permits/validation"),
           action(
               HttpMethod.POST,
-              "/fileExemptionUpload",
+              ACTION_FILE_EXEMPTION_UPLOAD,
               "/api/lexis/fileExemptionUpload",
               "/api/lexis/uploads/exemption",
               "/api/lexis/uploads/exemption/validation",
@@ -416,7 +419,7 @@ final class LexisApiAuthorizationRules {
               "/api/lexis/admin/uploads/exemptions/validation"),
           action(
               HttpMethod.POST,
-              "/fileInvoiceUpload",
+              ACTION_FILE_INVOICE_UPLOAD,
               "/api/lexis/fileInvoiceUpload",
               "/api/lexis/uploads/invoice",
               "/api/lexis/uploads/invoice/validation",
@@ -463,7 +466,7 @@ final class LexisApiAuthorizationRules {
               "/api/lexis/rpc/application-details/**"),
           action(
               HttpMethod.POST,
-              ACTION_APPLICATION_REMARKS,
+              ACTION_CREATE_APPLICATION,
               "/api/lexis/rpc/application-details/remark"),
           action(
               HttpMethod.POST,
@@ -485,7 +488,7 @@ final class LexisApiAuthorizationRules {
               "/api/lexis/applicationDetailsRPC.do"),
           action(
               HttpMethod.DELETE,
-              ACTION_APPLICATION_DETAILS,
+              ACTION_FILE_APPLICATION_UPLOAD,
               "/api/lexis/rpc/application-details/document"),
           action(
               HttpMethod.DELETE,
@@ -518,8 +521,12 @@ final class LexisApiAuthorizationRules {
               "/api/lexis/exemptionDetailsRPC"),
           action(
               HttpMethod.DELETE,
-              ACTION_EXEMPTION_DETAILS,
-              "/api/lexis/rpc/exemption-details/**"),
+              ACTION_FILE_EXEMPTION_UPLOAD,
+              "/api/lexis/rpc/exemption-details/document"),
+          action(
+              HttpMethod.DELETE,
+              ACTION_SAVE_EXEMPTION,
+              "/api/lexis/rpc/exemption-details/application"),
           action(
               HttpMethod.GET,
               ACTION_OFFER_DETAILS,
@@ -532,8 +539,11 @@ final class LexisApiAuthorizationRules {
               "/api/lexis/rpc/offer-details/offer"),
           action(
               HttpMethod.POST,
+              ACTION_CREATE_OFFER,
+              "/api/lexis/rpc/offer-details/offer/update"),
+          action(
+              HttpMethod.POST,
               ACTION_OFFER_DETAILS,
-              "/api/lexis/rpc/offer-details/offer/update",
               "/api/lexis/rpc/offer-details/release-lock"),
           legacyAction(
               HttpMethod.POST,
@@ -573,8 +583,11 @@ final class LexisApiAuthorizationRules {
               "/api/lexis/rpc/permit-details/approval-email"),
           action(
               HttpMethod.POST,
+              ACTION_SAVE_PERMIT,
+              "/api/lexis/rpc/permit-details/request-email"),
+          action(
+              HttpMethod.POST,
               ACTION_PERMIT_DETAILS,
-              "/api/lexis/rpc/permit-details/request-email",
               "/api/lexis/rpc/permit-details/release-lock"),
           legacyAction(
               HttpMethod.POST,
@@ -584,9 +597,15 @@ final class LexisApiAuthorizationRules {
               "/api/lexis/permitDetailsRPC.do"),
           action(
               HttpMethod.DELETE,
-              ACTION_PERMIT_DETAILS,
-              "/api/lexis/rpc/permit-details/document/permit",
-              "/api/lexis/rpc/permit-details/document/application",
+              ACTION_FILE_PERMIT_UPLOAD,
+              "/api/lexis/rpc/permit-details/document/permit"),
+          action(
+              HttpMethod.DELETE,
+              ACTION_FILE_APPLICATION_UPLOAD,
+              "/api/lexis/rpc/permit-details/document/application"),
+          action(
+              HttpMethod.DELETE,
+              ACTION_FILE_INVOICE_UPLOAD,
               "/api/lexis/rpc/permit-details/document/invoice"),
           action(
               HttpMethod.POST,

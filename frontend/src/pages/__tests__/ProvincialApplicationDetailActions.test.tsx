@@ -559,7 +559,10 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
   })
 
   it('loads complete application context without enabling edits for read-only viewers', async () => {
-    mockApplicationDetailAuth((action) => action === '/applicationDetails', ['LEXIS_READ_ONLY'])
+    mockApplicationDetailAuth(
+      (action) => ['/applicationDetails', '/applicationRemarks'].includes(action),
+      ['LEXIS_READ_ONLY'],
+    )
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
       ...applicationDetail,
       readOnly: true,
@@ -622,6 +625,17 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       expectSummaryField('Application end use', 'Lumber')
     })
     expect(within(summaryTile).queryByRole('button', { name: 'Save Summary' })).toBeNull()
+
+    await selectApplicationDetailTab('Remarks')
+    const remarksTable = within(
+      screen.getByRole('region', { name: 'Application remarks' }),
+    ).getByRole('table')
+    expect(within(remarksTable).getByText('ok')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add remark' })).not.toBeInTheDocument()
+    expect(
+      within(remarksTable).queryByRole('columnheader', { name: 'Actions' }),
+    ).not.toBeInTheDocument()
+    expect(within(remarksTable).queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
   })
 
   it('shows offer company and received date from application detail', async () => {

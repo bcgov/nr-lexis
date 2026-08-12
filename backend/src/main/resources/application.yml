@@ -111,6 +111,7 @@ lexis:
       LEXIS_READ_ONLY:
         - "/applicationSearch"
         - "/applicationDetails"
+        - "/applicationRemarks"
         - "/exemptionSearch"
         - "/exemptionDetails"
         - "/offersSearch"
@@ -120,6 +121,20 @@ lexis:
         - "/federalApplicationSearch"
         - "/federalApplicationDetails"
         - "viewFederalApplication"
+        # READ_ONLY can generate every non-admin report. Legacy TEST exposes the staff report
+        # workspaces below but omits Application Report and the contextual exemption print action.
+        - "/applicationReport"
+        - "/approvedExemptionReport"
+        - "/offerReport"
+        - "/teacReport"
+        - "/exemptionReport"
+        - "/permitReport"
+        - "/permitLedgerReport"
+        - "/transportReport"
+        - "/speciesGradeReport"
+        - "/feeReport"
+        - "/tenureReport"
+        - "mofrListing"
       LEXIS_APPLICATION_APPROVER:
         - "/applicationsReview"
         - "/changeApplicantType"

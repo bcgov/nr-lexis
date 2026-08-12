@@ -47,7 +47,7 @@ class LexisAuthorizationMatrixParityTest {
   private static final List<String> NON_PERMIT_REPORT_ACTIONS =
       REPORT_ACTIONS.stream().filter(action -> !"/permitReport".equals(action)).toList();
 
-  private static final List<String> APPLICATION_APPROVER_REPORT_ACTIONS =
+  private static final List<String> LEGACY_STAFF_REPORT_ACTIONS =
       REPORT_ACTIONS.stream()
           .filter(
               action ->
@@ -171,13 +171,13 @@ class LexisAuthorizationMatrixParityTest {
   }
 
   @Test
-  void applicationRemarksShouldBeAvailableToAdminsAndApplicationApproversOnly() {
+  void applicationRemarksShouldBeVisibleToReadOnlyAndEditableRoles() {
     assertThat(authorizationService.resolveRolesForAction("/applicationRemarks"))
         .contains(
             "LEXIS_ADMIN",
+            "LEXIS_READ_ONLY",
             "LEXIS_APPLICATION_APPROVER")
         .doesNotContain(
-            "LEXIS_READ_ONLY",
             "LEXIS_EXEMPTION_APPROVER",
             "LEXIS_PROVINCIAL_SUBMITTER");
   }
@@ -241,7 +241,7 @@ class LexisAuthorizationMatrixParityTest {
     assertThat(authorizationService.resolveGrantedActions(List.of("LEXIS_APPLICATION_APPROVER")))
         .containsAll(PROVINCIAL_VIEW_ACTIONS)
         .containsAll(FEDERAL_READ_ACTIONS)
-        .containsAll(APPLICATION_APPROVER_REPORT_ACTIONS)
+        .containsAll(LEGACY_STAFF_REPORT_ACTIONS)
         .contains(
             "/applicationsReview",
             "/changeApplicantType",
@@ -298,13 +298,14 @@ class LexisAuthorizationMatrixParityTest {
   }
 
   @Test
-  void readOnlyRoleShouldViewSearchesAndDetailsWithoutMutatingActionsOrReports() {
+  void readOnlyRoleShouldViewSearchesDetailsRemarksAndReportsWithoutMutatingActions() {
     assertThat(authorizationService.resolveGrantedActions(List.of("LEXIS_READ_ONLY")))
         .containsAll(PROVINCIAL_VIEW_ACTIONS)
         .containsAll(FEDERAL_READ_ACTIONS)
+        .containsAll(REPORT_ACTIONS)
+        .contains("/applicationRemarks")
         .doesNotContain(
             "/summary",
-            "/applicationRemarks",
             "/applicationsReview",
             "/editCompletedApplications",
             "/createExemption",
@@ -321,8 +322,7 @@ class LexisAuthorizationMatrixParityTest {
             "createPermit",
             "saveExemption",
             "savePermit",
-            "uploadApplicationSubmission")
-        .doesNotContainAnyElementsOf(REPORT_ACTIONS);
+            "uploadApplicationSubmission");
   }
 
   @Test
