@@ -173,6 +173,7 @@ describe('ConfirmationModal', () => {
     render(
       <ConfirmationModal
         open
+        cancelDanger
         title="Save your changes?"
         cancelLabel="Discard changes"
         confirmLabel="Save changes"
@@ -182,7 +183,9 @@ describe('ConfirmationModal', () => {
       />,
     )
 
-    await user.click(screen.getByRole('button', { name: 'Discard changes' }))
+    const discardButton = screen.getByRole('button', { name: 'Discard changes' })
+    expect(discardButton).toHaveClass('cds--btn--danger--tertiary')
+    await user.click(discardButton)
 
     expect(onCancel).toHaveBeenCalledTimes(1)
     expect(onClose).toHaveBeenCalledTimes(1)

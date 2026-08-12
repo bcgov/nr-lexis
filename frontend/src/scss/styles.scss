@@ -3201,22 +3201,6 @@ $notification-types: 'error', 'info', 'success', 'warning';
   margin-block-end: 1rem;
 }
 
-.rtm-amv-saved-notification {
-  inline-size: 100%;
-  max-inline-size: none;
-  margin-block: 0 1rem;
-}
-
-.rtm-amv-saved-notification .cds--inline-notification__text-wrapper {
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: center;
-}
-
-.rtm-amv-saved-notification .cds--inline-notification__title {
-  margin-inline-end: 0;
-}
-
 .rtm-amv-upload-review-helper {
   margin: 1rem 0 0;
   color: var(--fds-text-secondary, var(--cds-text-secondary));

@@ -36,6 +36,7 @@ import {
 import { AppNotification } from '../../components/AppNotification'
 import ConfirmationModal from '@/components/ConfirmationModal'
 import PageHeader from '@/components/PageHeader'
+import PendingIcon from '@/components/PendingIcon'
 import { useAuth } from '@/context/auth/useAuth'
 import {
   previewRtmEmsLogAmvUpload,
@@ -1558,10 +1559,8 @@ const RtmEmsLogAmvUploadPage = () => {
 
       <Column sm={4} md={8} lg={16} className="admin-upload-fspts-content rtm-amv-values-content">
         {savedUploadState && savedNotification && !replacementUploadOpen && (
-          <InlineNotification
-            className="rtm-amv-saved-notification"
+          <AppNotification
             kind="success"
-            lowContrast
             title={savedNotification === 'discarded' ? 'Changes discarded' : 'Values saved'}
             subtitle={
               savedNotification === 'discarded'
@@ -1671,7 +1670,7 @@ const RtmEmsLogAmvUploadPage = () => {
                 kind="primary"
                 size="md"
                 className="admin-upload-fspts-action-button"
-                renderIcon={Save}
+                renderIcon={isUploading ? PendingIcon : Save}
                 onClick={() => {
                   if (savedActionsUnavailable) {
                     return
@@ -1740,7 +1739,7 @@ const RtmEmsLogAmvUploadPage = () => {
             discardConfirmation === 'file'
               ? 'The values on screen will be cleared. Nothing has been saved.'
               : discardConfirmation === 'saved-changes'
-                ? "The values you changed since your last save will be cleared. Your saved values won't change."
+                ? 'The table will return to your last saved values. Changes made since then will be discarded.'
                 : 'The file and all values on screen will be cleared. Nothing has been saved.'
           }
           cancelLabel={
@@ -1759,6 +1758,7 @@ const RtmEmsLogAmvUploadPage = () => {
           }
           pendingLabel={discardConfirmation === 'saved-changes' ? 'Saving changes' : undefined}
           confirmDisabled={discardConfirmation === 'saved-changes' && isUploadDisabled}
+          cancelDanger={discardConfirmation === 'saved-changes'}
           danger={discardConfirmation !== 'saved-changes'}
           size="xs"
           onCancel={

@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { APP_NOTIFICATION_REGION_ID } from '@/components/AppNotification'
 import { useAuth } from '@/context/auth/useAuth'
 import RtmEmsLogAmvUploadPage from '@/pages/RTMEmsLogAmv/LegacyUploadWorkflow'
 import {
@@ -897,7 +898,11 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     )
 
     expect(hemlockTable).toBeVisible()
-    expect(screen.getByText('Values saved')).toBeVisible()
+    const savedToastTitle = screen.getByText('Values saved')
+    expect(savedToastTitle).toBeVisible()
+    const savedToast = savedToastTitle.closest('.cds--toast-notification') as HTMLElement
+    expect(savedToast).toHaveClass('cds--toast-notification--success')
+    expect(document.getElementById(APP_NOTIFICATION_REGION_ID)).toContainElement(savedToast)
     expect(screen.getByText(/\d+ values will take effect on [A-Z][a-z]+ 1, \d{4}\./)).toBeVisible()
     expect(screen.queryByText('Last saved')).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Values', level: 2 })).toBeVisible()
@@ -928,10 +933,10 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     const savedChangesDialog = screen.getByRole('dialog', { name: 'Discard these values?' })
     expect(savedChangesDialog).toHaveAccessibleDescription(
-      "The values you changed since your last save will be cleared. Your saved values won't change.",
+      'The table will return to your last saved values. Changes made since then will be discarded.',
     )
     expect(within(savedChangesDialog).getByRole('button', { name: 'Discard changes' })).toHaveClass(
-      'cds--btn--tertiary',
+      'cds--btn--danger--tertiary',
     )
     expect(within(savedChangesDialog).getByRole('button', { name: 'Save changes' })).toHaveClass(
       'cds--btn--primary',
@@ -1255,7 +1260,9 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     })
     await userEvent.click(screen.getByRole('button', { name: 'Save values' }))
 
-    expect(screen.getByRole('button', { name: 'Saving values' })).toBeDisabled()
+    const savingButton = screen.getByRole('button', { name: 'Saving values' })
+    expect(savingButton).toBeDisabled()
+    expect(savingButton.querySelector('.cds--loading')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled()
 
     await act(async () => rejectSave(new Error('unavailable')))
