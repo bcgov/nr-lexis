@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { runReport } from '@/service/report-service'
 
 const postMock = vi.fn()
@@ -15,6 +15,144 @@ describe('report-service', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.unstubAllEnvs()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+    Reflect.deleteProperty(window, 'showSaveFilePicker')
+  })
+
+  it('streams report bytes directly to a selected file when the browser supports it', async () => {
+    const writtenBytes: number[] = []
+    const writable = new WritableStream<Uint8Array>({
+      write(chunk) {
+        writtenBytes.push(...chunk)
+      },
+    })
+    const createWritable = vi.fn().mockResolvedValue(writable)
+    const showSaveFilePicker = vi.fn().mockResolvedValue({ createWritable })
+    Object.defineProperty(window, 'showSaveFilePicker', {
+      configurable: true,
+      value: showSaveFilePicker,
+    })
+    const reportBytes = new TextEncoder().encode('streamed report')
+    postMock.mockResolvedValue({
+      status: 200,
+      data: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(reportBytes)
+          controller.close()
+        },
+      }),
+      headers: {
+        'content-type': 'application/pdf',
+        'content-disposition': 'attachment; filename="offer-report.pdf"',
+      },
+    })
+
+    const result = await runReport({
+      reportId: 'offerReport',
+      actionMapping: 'generate',
+      values: {},
+    })
+
+    expect(showSaveFilePicker).toHaveBeenCalledWith({ suggestedName: 'offer-report.pdf' })
+    expect(postMock.mock.calls[0][2]).toEqual(
+      expect.objectContaining({ adapter: 'fetch', responseType: 'stream' }),
+    )
+    expect(createWritable).toHaveBeenCalledOnce()
+    expect(new TextDecoder().decode(Uint8Array.from(writtenBytes))).toBe('streamed report')
+    expect(result).toEqual(
+      expect.objectContaining({
+        filename: 'offer-report.pdf',
+        contentType: 'application/pdf',
+        downloaded: true,
+      }),
+    )
+    expect(result.blob).toBeUndefined()
+  })
+
+  it('does not generate a report when the save picker is cancelled', async () => {
+    const cancellation = Object.assign(new Error('cancelled'), { name: 'AbortError' })
+    const showSaveFilePicker = vi.fn().mockRejectedValue(cancellation)
+    Object.defineProperty(window, 'showSaveFilePicker', {
+      configurable: true,
+      value: showSaveFilePicker,
+    })
+
+    const result = await runReport({
+      reportId: 'offerReport',
+      actionMapping: 'generate',
+      values: {},
+    })
+
+    expect(postMock).not.toHaveBeenCalled()
+    expect(result).toEqual(
+      expect.objectContaining({
+        filename: 'offer-report.pdf',
+        cancelled: true,
+        downloaded: false,
+      }),
+    )
+  })
+
+  it('suggests the legacy dated CSV filename before generation starts', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-08-12T06:30:00Z'))
+    const writable = new WritableStream<Uint8Array>()
+    const showSaveFilePicker = vi
+      .fn()
+      .mockResolvedValue({ createWritable: vi.fn().mockResolvedValue(writable) })
+    Object.defineProperty(window, 'showSaveFilePicker', {
+      configurable: true,
+      value: showSaveFilePicker,
+    })
+    postMock.mockResolvedValue({
+      status: 200,
+      data: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.close()
+        },
+      }),
+      headers: {},
+    })
+
+    await runReport({
+      reportId: 'offerReport',
+      actionMapping: 'generateCsv',
+      values: { outputFormat: 'CSV' },
+    })
+
+    expect(showSaveFilePicker).toHaveBeenCalledWith({
+      suggestedName: 'offerReport2026-08-11.csv',
+    })
+  })
+
+  it('reads a streamed API error without creating the selected file', async () => {
+    const createWritable = vi.fn()
+    Object.defineProperty(window, 'showSaveFilePicker', {
+      configurable: true,
+      value: vi.fn().mockResolvedValue({ createWritable }),
+    })
+    const errorBody = new TextEncoder().encode('Oracle report generation failed.')
+    const error = {
+      isAxiosError: true,
+      response: {
+        headers: { 'content-type': 'text/plain' },
+        data: new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(errorBody)
+            controller.close()
+          },
+        }),
+      },
+    }
+    postMock.mockRejectedValue(error)
+
+    await expect(
+      runReport({ reportId: 'offerReport', actionMapping: 'generate', values: {} }),
+    ).rejects.toThrow('Oracle report generation failed.')
+    expect(createWritable).not.toHaveBeenCalled()
   })
 
   it('posts report payload to default endpoint and parses filename from headers', async () => {

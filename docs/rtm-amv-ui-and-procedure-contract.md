@@ -98,29 +98,34 @@ new-combination warnings. Final submission expands the reviewed values to direct
 and writes them in one Spring transaction. It does not call the legacy row procedures. If any
 target is not applied or the database write fails, the complete batch transaction rolls back.
 
-After an accepted save, the page removes the upload card, shows the saved confirmation, and keeps
-the reviewed values editable. Replace file first reveals a warning and the upload area together in
-one card above the unchanged saved review; opening it does not select a file or change any values.
+After an accepted save, the page removes the upload card, shows the saved confirmation in the
+fixed top-right toast region, and keeps the reviewed values editable. The confirmation does not
+change the user's scroll position. While a save is pending, the Save values button shows a spinner
+and changes its label to Saving values. Replace file first
+reveals a warning and the upload area together in one card above the unchanged saved review;
+opening it does not select a file or change any values.
 Keep current values closes that temporary state. An accepted replacement removes the warning,
 shows the selected filename, and previews the workbook over the values on screen without changing
 the database. A rejected replacement remains visible in the upload area and leaves the review
 intact; Cancel restores the last-saved preview, while Save values applies the replacement through
-the same batch update used for manual edits. The expanded replacement area is browser-only state,
-so refresh returns to the compact saved review. Save and Cancel remain keyboard-focusable but are
-announced as unavailable until a value changes or a replacement workbook has been accepted; the
-helper text is linked through `aria-describedby`. Editing a value clears the saved confirmation.
-Cancel then offers to save the changes or restore the last saved values; restoring them shows a
-dismissible confirmation that also clears on the next edit.
-Confirmation dialogs return focus to the action that opened them. The page can display the current
-session's save time and authenticated principal, but that metadata cannot be reconstructed after
-navigation because the legacy table has no audit columns. On navigation or refresh, the page reads
-the immediately upcoming month's rows from `EMS_LOG_AMV`. If rows exist, it restores the editable
-review and latest-earlier comparison; if none exist, it restores the upload state. The workbook and
-filename are not persisted, so neither is shown after a save or in a restored review. The saved-row
-lookup gates the initial workflow render: neither upload nor review is shown while it is pending.
-The application shell remains visible around a centered, non-overlay Carbon loading indicator,
-matching the initial-data gate in NR-FSPTS. A failed lookup shows an error instead of assuming there
-are no saved values.
+the same batch update used for manual edits. Removing a replacement file restores the review from
+before that file was selected; if a file-derived value was then edited by hand, removal first shows
+the confirmation because re-uploading cannot recover that edit. The expanded replacement area is
+browser-only state, so refresh returns to the compact saved review. Save and Cancel remain
+keyboard-focusable but are announced as unavailable until a value changes or a replacement
+workbook has been accepted; the helper text is linked through `aria-describedby`. Editing a value
+clears the saved confirmation. Cancel then offers to save the changes or return the table to the
+last saved values; Discard changes uses the danger-tertiary style. Restoring the saved values shows
+a dismissible confirmation that also clears on the next edit.
+Confirmation dialogs return focus to the action that opened them. The page header does not show
+save time or user because `EMS_LOG_AMV` has no durable audit data for either. On navigation or
+refresh, the page reads the immediately upcoming month's rows from
+`EMS_LOG_AMV`. If rows exist, it restores the editable review and latest-earlier comparison; if
+none exist, it restores the upload state. The workbook and filename are not persisted, so neither
+is shown after a save or in a restored review. The saved-row lookup gates the initial workflow
+render: neither upload nor review is shown while it is pending. The application shell remains
+visible around a centered, non-overlay Carbon loading indicator, matching the initial-data gate in
+NR-FSPTS. A failed lookup shows an error instead of assuming there are no saved values.
 
 ## Batch audit event
 

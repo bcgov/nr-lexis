@@ -7,10 +7,10 @@ import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.exceptionType;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
 import ca.bc.gov.mof.lexis.dto.report.LexisReportRequestDto;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.sql.Array;
+import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.sql.Array;
 import java.sql.CallableStatement;
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -38,9 +38,6 @@ public class OracleLegacyCsvReportService {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(OracleLegacyCsvReportService.class);
   private static final String STRING_ARRAY_TYPE = "CBR_VARCHAR2_ARRAY";
-  private static final long MATERIALIZED_ROW_OVERHEAD_BYTES = 32L;
-  private static final long MATERIALIZED_CELL_OVERHEAD_BYTES = 64L;
-
   private static final String SPECIES_GRADE_CSV_PROCEDURE =
       "{ call LEXIS_REPORTING.SPECIES_GRADE_REPORT_CSV(?,?,?,?,?,?,?,?,?,?,?) }";
   private static final String PROVINCIAL_TEAC_CSV_PROCEDURE =
@@ -135,31 +132,16 @@ public class OracleLegacyCsvReportService {
     };
   }
 
-  public Optional<LegacyTabularReportData> loadLegacyTabularReportData(
-      LexisJasperReportDefinition definition,
-      LexisReportRequestDto request) {
-    return switch (definition) {
-      case SPECIES_GRADE_REPORT -> loadSpeciesGradeData(request);
-      case TEAC_REPORT -> loadTeacData(request);
-      case APPROVED_EXEMPTION_REPORT -> loadApprovedExemptionData(request);
-      default -> Optional.empty();
-    };
-  }
-
   private Optional<LexisGeneratedReport> generateSpeciesGradeCsv(LexisReportRequestDto request) {
     Map<String, String> parameters = requestParameters(request);
-    byte[] content =
+    return Optional.of(
         executeCursorCsv(
             SPECIES_GRADE_CSV_PROCEDURE,
             cs -> bindSpeciesGradeParameters(cs, parameters),
             11,
-            "species grade");
-
-    return Optional.of(
-        new LexisGeneratedReport(
-            LexisJasperReportDefinition.SPECIES_GRADE_REPORT.resolveFilename(LexisReportFormat.CSV),
-            LexisReportFormat.CSV.mediaType(),
-            content));
+            "species grade",
+            LexisJasperReportDefinition.SPECIES_GRADE_REPORT.resolveFilename(
+                LexisReportFormat.CSV)));
   }
 
   private Optional<LexisGeneratedReport> generateTeacCsv(LexisReportRequestDto request) {
@@ -168,36 +150,49 @@ public class OracleLegacyCsvReportService {
     if (procedureCall == null) {
       return Optional.empty();
     }
-    byte[] content =
-        executeCursorCsv(
-            procedureCall, cs -> bindTeacParameters(cs, parameters), 3, "TEAC");
-
     return Optional.of(
-        new LexisGeneratedReport(
-            LexisJasperReportDefinition.TEAC_REPORT.resolveFilename(LexisReportFormat.CSV),
-            LexisReportFormat.CSV.mediaType(),
-            content));
+        executeCursorCsv(
+            procedureCall,
+            cs -> bindTeacParameters(cs, parameters),
+            3,
+            "TEAC",
+            LexisJasperReportDefinition.TEAC_REPORT.resolveFilename(LexisReportFormat.CSV)));
   }
 
-  private Optional<LegacyTabularReportData> loadSpeciesGradeData(LexisReportRequestDto request) {
+  <T, E extends Exception> Optional<T> withLegacyTabularReportCursor(
+      LexisJasperReportDefinition definition,
+      LexisReportRequestDto request,
+      LegacyCursorProcessor<T, E> processor)
+      throws E {
     Map<String, String> parameters = requestParameters(request);
-    return executeCursorProcedure(
-        SPECIES_GRADE_CSV_PROCEDURE,
-        cs -> bindSpeciesGradeParameters(cs, parameters),
-        11);
-  }
-
-  private Optional<LegacyTabularReportData> loadTeacData(LexisReportRequestDto request) {
-    Map<String, String> parameters = requestParameters(request);
-    String procedureCall = resolveTeacProcedure(parameters);
-    if (procedureCall == null) {
-      return Optional.empty();
-    }
-
-    return executeCursorProcedure(
-        procedureCall,
-        cs -> bindTeacParameters(cs, parameters),
-        3);
+    return switch (definition) {
+      case SPECIES_GRADE_REPORT ->
+          executeCursorProcedure(
+              SPECIES_GRADE_CSV_PROCEDURE,
+              cs -> bindSpeciesGradeParameters(cs, parameters),
+              11,
+              processor);
+      case TEAC_REPORT -> {
+        String procedureCall = resolveTeacProcedure(parameters);
+        yield procedureCall == null
+            ? Optional.empty()
+            : executeCursorProcedure(
+                procedureCall, cs -> bindTeacParameters(cs, parameters), 3, processor);
+      }
+      case APPROVED_EXEMPTION_REPORT -> {
+        String exemptionNumber = trimToNull(first(parameters, "exemptionNumber"));
+        if (exemptionNumber == null) {
+          LOGGER.warn("Approved exemption report request missing exemptionNumber");
+          yield Optional.empty();
+        }
+        yield executeCursorProcedure(
+            APPROVED_EXEMPTION_PROCEDURE,
+            cs -> setNullableString(cs, 1, exemptionNumber),
+            2,
+            processor);
+      }
+      default -> Optional.empty();
+    };
   }
 
   private void bindSpeciesGradeParameters(
@@ -234,60 +229,43 @@ public class OracleLegacyCsvReportService {
     cs.setLong(2, parseLongOrZero(first(parameters, "exportSchedule")));
   }
 
-  private Optional<LegacyTabularReportData> loadApprovedExemptionData(LexisReportRequestDto request) {
-    Map<String, String> parameters = requestParameters(request);
-    String exemptionNumber = trimToNull(first(parameters, "exemptionNumber"));
-    if (exemptionNumber == null) {
-      LOGGER.warn("Approved exemption report request missing exemptionNumber");
-      return Optional.empty();
-    }
-
-    return executeCursorProcedure(
-        APPROVED_EXEMPTION_PROCEDURE,
-        cs -> setNullableString(cs, 1, exemptionNumber),
-        2);
-  }
-
   private Optional<LexisGeneratedReport> generateApplicationCsv(LexisReportRequestDto request) {
     Map<String, String> parameters = requestParameters(request);
     DynamicWhere where = buildApplicationWhere(parameters);
-    byte[] content =
-        executeDynamicCursorCsv(APPLICATION_CSV_PROCEDURE, where, "application");
-
     return Optional.of(
-        new LexisGeneratedReport(
-            LexisJasperReportDefinition.APPLICATION_REPORT.resolveFilename(LexisReportFormat.CSV),
-            LexisReportFormat.CSV.mediaType(),
-            content));
+        executeDynamicCursorCsv(
+            APPLICATION_CSV_PROCEDURE,
+            where,
+            "application",
+            LexisJasperReportDefinition.APPLICATION_REPORT.resolveFilename(
+                LexisReportFormat.CSV)));
   }
 
   private Optional<LexisGeneratedReport> generateOfferCsv(LexisReportRequestDto request) {
     Map<String, String> parameters = requestParameters(request);
     DynamicWhere where = buildOfferWhere(parameters);
-    byte[] content = executeDynamicCursorCsv(OFFERS_CSV_PROCEDURE, where, "offer");
-
     return Optional.of(
-        new LexisGeneratedReport(
-            LexisJasperReportDefinition.OFFER_REPORT.resolveFilename(LexisReportFormat.CSV),
-            LexisReportFormat.CSV.mediaType(),
-            content));
+        executeDynamicCursorCsv(
+            OFFERS_CSV_PROCEDURE,
+            where,
+            "offer",
+            LexisJasperReportDefinition.OFFER_REPORT.resolveFilename(LexisReportFormat.CSV)));
   }
 
   private Optional<LexisGeneratedReport> generateFeeCsv(LexisReportRequestDto request) {
     Map<String, String> parameters = requestParameters(request);
     DynamicWhere where = buildFeeWhere(parameters);
-    byte[] content = executeDynamicCursorCsv(FEE_SUMMARY_CSV_PROCEDURE, where, "fee");
-
     return Optional.of(
-        new LexisGeneratedReport(
-            LexisJasperReportDefinition.FEE_REPORT.resolveFilename(LexisReportFormat.CSV),
-            LexisReportFormat.CSV.mediaType(),
-            content));
+        executeDynamicCursorCsv(
+            FEE_SUMMARY_CSV_PROCEDURE,
+            where,
+            "fee",
+            LexisJasperReportDefinition.FEE_REPORT.resolveFilename(LexisReportFormat.CSV)));
   }
 
   private Optional<LexisGeneratedReport> generatePermitLedgerCsv(LexisReportRequestDto request) {
     Map<String, String> parameters = requestParameters(request);
-    byte[] content =
+    return Optional.of(
         executeCursorCsv(
             PERMIT_LEDGER_CSV_PROCEDURE,
             cs -> {
@@ -304,45 +282,42 @@ public class OracleLegacyCsvReportService {
               setNullableString(cs, 11, nullIfBlank(first(parameters, "destinationCountry")));
             },
             12,
-            "permit ledger");
-
-    return Optional.of(
-        new LexisGeneratedReport(
-            LexisJasperReportDefinition.PERMIT_LEDGER_REPORT.resolveFilename(LexisReportFormat.CSV),
-            LexisReportFormat.CSV.mediaType(),
-            content));
+            "permit ledger",
+            LexisJasperReportDefinition.PERMIT_LEDGER_REPORT.resolveFilename(
+                LexisReportFormat.CSV)));
   }
 
   private Optional<LexisGeneratedReport> generateBiweeklyCsv(LexisReportRequestDto request) {
     Map<String, String> parameters = requestParameters(request);
-    byte[] content = renderBiweeklyCsv(parameters);
-
     return Optional.of(
-        new LexisGeneratedReport(
-            LexisJasperReportDefinition.BIWEEKLY_LISTING.resolveFilename(LexisReportFormat.CSV),
-            LexisReportFormat.CSV.mediaType(),
-            content));
+        renderBiweeklyCsv(
+            parameters,
+            LexisJasperReportDefinition.BIWEEKLY_LISTING.resolveFilename(
+                LexisReportFormat.CSV)));
   }
 
-  private byte[] renderBiweeklyCsv(Map<String, String> parameters) {
-    try (Connection connection = dataSource.getConnection();
-        CallableStatement cs = prepareCall(connection, BIWEEKLY_REPORT_PROCEDURE)) {
-      cs.setString(1, defaultIfBlank(csvValue(parameters, "region", "orgUnitNumber"), ""));
-      setNullableString(cs, 2, first(parameters, "exportJurisdictionCode", "jurisdiction"));
-      cs.setString(3, defaultDate(first(parameters, "fromDate"), "0001-01-01"));
-      cs.setString(4, defaultDate(first(parameters, "toDate"), "9999-12-31"));
-      cs.registerOutParameter(5, Types.REF_CURSOR);
-      cs.execute();
+  private LexisGeneratedReport renderBiweeklyCsv(
+      Map<String, String> parameters, String filename) {
+    try (LexisReportArtifact artifact = reportResources.createArtifact()) {
+      try (Connection connection = dataSource.getConnection();
+          CallableStatement cs = prepareCall(connection, BIWEEKLY_REPORT_PROCEDURE)) {
+        cs.setString(1, defaultIfBlank(csvValue(parameters, "region", "orgUnitNumber"), ""));
+        setNullableString(cs, 2, first(parameters, "exportJurisdictionCode", "jurisdiction"));
+        cs.setString(3, defaultDate(first(parameters, "fromDate"), "0001-01-01"));
+        cs.setString(4, defaultDate(first(parameters, "toDate"), "9999-12-31"));
+        cs.registerOutParameter(5, Types.REF_CURSOR);
+        cs.execute();
 
-      try (ResultSet rs = requiredCursor(cs, 5)) {
-        ByteArrayOutputStream output = reportResources.newOutputStream();
-        writeCsvRow(
-            output,
-            BIWEEKLY_CSV_HEADERS.size(),
-            index -> BIWEEKLY_CSV_HEADERS.get(index - 1));
-        streamBiweeklyCsvRows(connection, rs, output);
-        return reportResources.requireWithinOutputLimit(output.toByteArray());
+        try (ResultSet rs = requiredCursor(cs, 5)) {
+          OutputStream output = artifact.outputStream();
+          writeCsvRow(
+              output,
+              BIWEEKLY_CSV_HEADERS.size(),
+              index -> BIWEEKLY_CSV_HEADERS.get(index - 1));
+          streamBiweeklyCsvRows(connection, rs, output);
+        }
       }
+      return artifact.complete(filename, LexisReportFormat.CSV.mediaType());
     } catch (IOException ex) {
       throw csvRenderFailure("biweekly", ex);
     } catch (SQLException ex) {
@@ -355,7 +330,7 @@ public class OracleLegacyCsvReportService {
   }
 
   private void streamBiweeklyCsvRows(
-      Connection connection, ResultSet reportRows, ByteArrayOutputStream output)
+      Connection connection, ResultSet reportRows, OutputStream output)
       throws SQLException, IOException {
     while (reportRows.next()) {
       Map<String, String> reportRow = readCurrentRow(reportRows);
@@ -377,7 +352,7 @@ public class OracleLegacyCsvReportService {
       String applicationNumber,
       String jurisdiction,
       Map<String, String> reportRow,
-      ByteArrayOutputStream output)
+      OutputStream output)
       throws SQLException, IOException {
     if (applicationNumber == null || applicationNumber.isBlank()) {
       return false;
@@ -400,7 +375,7 @@ public class OracleLegacyCsvReportService {
     }
   }
 
-  private void writeCsvDataRow(ByteArrayOutputStream output, List<String> row) throws IOException {
+  private void writeCsvDataRow(OutputStream output, List<String> row) throws IOException {
     writeCsvRow(output, row.size(), index -> row.get(index - 1));
   }
 
@@ -461,25 +436,25 @@ public class OracleLegacyCsvReportService {
   private Optional<LexisGeneratedReport> generateTransportCsv(LexisReportRequestDto request) {
     Map<String, String> parameters = requestParameters(request);
     DynamicWhere where = buildTransportWhere(parameters);
-    byte[] content = executeDynamicCursorCsv(TRANSPORT_CSV_PROCEDURE, where, "transport");
-
     return Optional.of(
-        new LexisGeneratedReport(
-            LexisJasperReportDefinition.TRANSPORT_REPORT.resolveFilename(LexisReportFormat.CSV),
-            LexisReportFormat.CSV.mediaType(),
-            content));
+        executeDynamicCursorCsv(
+            TRANSPORT_CSV_PROCEDURE,
+            where,
+            "transport",
+            LexisJasperReportDefinition.TRANSPORT_REPORT.resolveFilename(
+                LexisReportFormat.CSV)));
   }
 
   private Optional<LexisGeneratedReport> generateExemptionCsv(LexisReportRequestDto request) {
     Map<String, String> parameters = requestParameters(request);
     DynamicWhere where = buildExemptionWhere(parameters);
-    byte[] content = executeDynamicCursorCsv(EXEMPTIONS_CSV_PROCEDURE, where, "exemption");
-
     return Optional.of(
-        new LexisGeneratedReport(
-            LexisJasperReportDefinition.EXEMPTION_REPORT.resolveFilename(LexisReportFormat.CSV),
-            LexisReportFormat.CSV.mediaType(),
-            content));
+        executeDynamicCursorCsv(
+            EXEMPTIONS_CSV_PROCEDURE,
+            where,
+            "exemption",
+            LexisJasperReportDefinition.EXEMPTION_REPORT.resolveFilename(
+                LexisReportFormat.CSV)));
   }
 
   private DynamicWhere buildApplicationWhere(Map<String, String> parameters) {
@@ -562,37 +537,43 @@ public class OracleLegacyCsvReportService {
     return where.build();
   }
 
-  private byte[] executeDynamicCursorCsv(
+  private LexisGeneratedReport executeDynamicCursorCsv(
       String procedureCall,
       DynamicWhere where,
-      String reportName) {
-    try (Connection connection = dataSource.getConnection();
-        CallableStatement cs = prepareCall(connection, procedureCall)) {
-      cs.setString(1, " WHERE " + where.sql());
-      Array bindArray = null;
-      if (where.bindValues().isEmpty()) {
-        cs.setNull(2, Types.ARRAY);
-      } else {
-        OracleConnection oracleConnection = connection.unwrap(OracleConnection.class);
-        bindArray =
-            oracleConnection.createOracleArray(
-                STRING_ARRAY_TYPE,
-                where.bindValues().toArray(new String[0]));
-        cs.setArray(2, bindArray);
-      }
-      cs.setInt(3, where.bindValues().size());
-      cs.registerOutParameter(4, Types.REF_CURSOR);
-      try {
-        cs.execute();
+      String reportName,
+      String filename) {
+    try (LexisReportArtifact artifact = reportResources.createArtifact()) {
+      try (Connection connection = dataSource.getConnection();
+          CallableStatement cs = prepareCall(connection, procedureCall)) {
+        cs.setString(1, " WHERE " + where.sql());
+        Array bindArray = null;
+        if (where.bindValues().isEmpty()) {
+          cs.setNull(2, Types.ARRAY);
+        } else {
+          OracleConnection oracleConnection = connection.unwrap(OracleConnection.class);
+          bindArray =
+              oracleConnection.createOracleArray(
+                  STRING_ARRAY_TYPE,
+                  where.bindValues().toArray(new String[0]));
+          cs.setArray(2, bindArray);
+        }
+        cs.setInt(3, where.bindValues().size());
+        cs.registerOutParameter(4, Types.REF_CURSOR);
+        try {
+          cs.execute();
 
-        try (ResultSet rs = requiredCursor(cs, 4)) {
-          return renderCursorCsv(rs, reportName);
-        }
-      } finally {
-        if (bindArray != null) {
-          bindArray.free();
+          try (ResultSet rs = requiredCursor(cs, 4)) {
+            renderCursorCsv(rs, artifact.outputStream(), reportName);
+          }
+        } finally {
+          if (bindArray != null) {
+            bindArray.free();
+          }
         }
       }
+      return artifact.complete(filename, LexisReportFormat.CSV.mediaType());
+    } catch (IOException ex) {
+      throw csvRenderFailure(reportName, ex);
     } catch (SQLException ex) {
       LOGGER.error(
           "event=lexis_report operation=filtered_cursor_load outcome=failed failureType={}",
@@ -602,20 +583,26 @@ public class OracleLegacyCsvReportService {
     }
   }
 
-  private byte[] executeCursorCsv(
+  private LexisGeneratedReport executeCursorCsv(
       String procedureCall,
       SqlStatementBinder binder,
       int cursorOutIndex,
-      String reportName) {
-    try (Connection connection = dataSource.getConnection();
-        CallableStatement cs = prepareCall(connection, procedureCall)) {
-      binder.bind(cs);
-      cs.registerOutParameter(cursorOutIndex, Types.REF_CURSOR);
-      cs.execute();
+      String reportName,
+      String filename) {
+    try (LexisReportArtifact artifact = reportResources.createArtifact()) {
+      try (Connection connection = dataSource.getConnection();
+          CallableStatement cs = prepareCall(connection, procedureCall)) {
+        binder.bind(cs);
+        cs.registerOutParameter(cursorOutIndex, Types.REF_CURSOR);
+        cs.execute();
 
-      try (ResultSet rs = requiredCursor(cs, cursorOutIndex)) {
-        return renderCursorCsv(rs, reportName);
+        try (ResultSet rs = requiredCursor(cs, cursorOutIndex)) {
+          renderCursorCsv(rs, artifact.outputStream(), reportName);
+        }
       }
+      return artifact.complete(filename, LexisReportFormat.CSV.mediaType());
+    } catch (IOException ex) {
+      throw csvRenderFailure(reportName, ex);
     } catch (SQLException ex) {
       LOGGER.error(
           "event=lexis_report operation=cursor_load outcome=failed report={} failureType={}",
@@ -626,10 +613,12 @@ public class OracleLegacyCsvReportService {
     }
   }
 
-  private Optional<LegacyTabularReportData> executeCursorProcedure(
+  private <T, E extends Exception> Optional<T> executeCursorProcedure(
       String procedureCall,
       SqlStatementBinder binder,
-      int cursorOutIndex) {
+      int cursorOutIndex,
+      LegacyCursorProcessor<T, E> processor)
+      throws E {
     try (Connection connection = dataSource.getConnection();
         CallableStatement cs = prepareCall(connection, procedureCall)) {
       binder.bind(cs);
@@ -637,7 +626,7 @@ public class OracleLegacyCsvReportService {
       cs.execute();
 
       try (ResultSet rs = requiredCursor(cs, cursorOutIndex)) {
-        return Optional.of(readTabularData(rs));
+        return Optional.of(processor.process(rs));
       }
     } catch (SQLException ex) {
       LOGGER.error(
@@ -651,6 +640,7 @@ public class OracleLegacyCsvReportService {
       throws SQLException {
     Object cursor = statement.getObject(cursorOutIndex);
     if (cursor instanceof ResultSet resultSet) {
+      reportResources.applyFetchSize(resultSet);
       return resultSet;
     }
     throw new SQLException("Oracle report procedure returned no REF CURSOR");
@@ -660,7 +650,7 @@ public class OracleLegacyCsvReportService {
       throws SQLException {
     CallableStatement statement = connection.prepareCall(procedureCall);
     try {
-      reportResources.applyQueryTimeout(statement);
+      reportResources.applyQueryControls(statement);
       return statement;
     } catch (SQLException | RuntimeException exception) {
       try {
@@ -672,45 +662,8 @@ public class OracleLegacyCsvReportService {
     }
   }
 
-  private LegacyTabularReportData readTabularData(ResultSet rs) throws SQLException {
-    ResultSetMetaData meta = rs.getMetaData();
-    int columnCount = meta.getColumnCount();
-    List<String> headers = new ArrayList<>(columnCount);
-    long estimatedBytes = MATERIALIZED_ROW_OVERHEAD_BYTES;
-    reportResources.requireWithinMaterializationBudget(estimatedBytes);
-    for (int index = 1; index <= columnCount; index++) {
-      String header = meta.getColumnName(index);
-      estimatedBytes = reserveMaterializedCell(estimatedBytes, header);
-      headers.add(header);
-    }
-
-    List<List<String>> rows = new ArrayList<>();
-    while (rs.next()) {
-      estimatedBytes += MATERIALIZED_ROW_OVERHEAD_BYTES;
-      reportResources.requireWithinMaterializationBudget(estimatedBytes);
-      List<String> row = new ArrayList<>(columnCount);
-      for (int index = 1; index <= columnCount; index++) {
-        String value = rs.getString(index);
-        String safeValue = value == null ? "" : value;
-        estimatedBytes = reserveMaterializedCell(estimatedBytes, safeValue);
-        row.add(safeValue);
-      }
-      rows.add(row);
-    }
-
-    return new LegacyTabularReportData(headers, rows);
-  }
-
-  private long reserveMaterializedCell(long currentBytes, String value) {
-    long nextBytes =
-        currentBytes
-            + MATERIALIZED_CELL_OVERHEAD_BYTES
-            + (value == null ? 0L : value.getBytes(StandardCharsets.UTF_8).length);
-    reportResources.requireWithinMaterializationBudget(nextBytes);
-    return nextBytes;
-  }
-
-  private byte[] renderCursorCsv(ResultSet rs, String reportName) throws SQLException {
+  private void renderCursorCsv(ResultSet rs, OutputStream output, String reportName)
+      throws SQLException {
     ResultSetMetaData meta = rs.getMetaData();
     int columnCount = meta.getColumnCount();
     String[] row = new String[columnCount];
@@ -718,7 +671,6 @@ public class OracleLegacyCsvReportService {
       row[index - 1] = meta.getColumnName(index);
     }
 
-    ByteArrayOutputStream output = reportResources.newOutputStream();
     try {
       writeCsvRow(output, columnCount, index -> row[index - 1]);
       while (rs.next()) {
@@ -731,10 +683,9 @@ public class OracleLegacyCsvReportService {
     } catch (IOException ex) {
       throw csvRenderFailure(reportName, ex);
     }
-    return reportResources.requireWithinOutputLimit(output.toByteArray());
   }
 
-  private void writeCsvRow(ByteArrayOutputStream output, int columnCount, CsvValueResolver resolver)
+  private void writeCsvRow(OutputStream output, int columnCount, CsvValueResolver resolver)
       throws IOException {
     for (int index = 1; index <= columnCount; index++) {
       String value = sanitizeForCsv(resolver.resolve(index));
@@ -897,6 +848,11 @@ public class OracleLegacyCsvReportService {
   @FunctionalInterface
   private interface SqlStatementBinder {
     void bind(CallableStatement cs) throws SQLException;
+  }
+
+  @FunctionalInterface
+  interface LegacyCursorProcessor<T, E extends Exception> {
+    T process(ResultSet resultSet) throws SQLException, E;
   }
 
   @FunctionalInterface

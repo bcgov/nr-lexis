@@ -4,7 +4,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
+import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
@@ -14,8 +14,6 @@ final class TemporaryReportStreamingBody implements StreamingResponseBody {
 
   private static final Logger LOGGER =
       LoggerFactory.getLogger(TemporaryReportStreamingBody.class);
-  private static final String TEMP_FILE_PREFIX = "lexis-report-";
-  private static final String TEMP_FILE_SUFFIX = ".tmp";
   private final Path temporaryFile;
   private final TransferObserver transferObserver;
 
@@ -24,27 +22,14 @@ final class TemporaryReportStreamingBody implements StreamingResponseBody {
     this.transferObserver = transferObserver;
   }
 
-  static TemporaryReportStreamingBody stage(
-      byte[] content, TransferObserver transferObserver) throws IOException {
-    byte[] stagedContent = content == null ? new byte[0] : content;
-    Path temporaryFile = null;
-    try {
-      temporaryFile = Files.createTempFile(TEMP_FILE_PREFIX, TEMP_FILE_SUFFIX);
-      Files.write(
-          temporaryFile,
-          stagedContent,
-          StandardOpenOption.TRUNCATE_EXISTING);
-      return new TemporaryReportStreamingBody(temporaryFile, transferObserver);
-    } catch (IOException | RuntimeException exception) {
-      if (temporaryFile != null) {
-        try {
-          Files.deleteIfExists(temporaryFile);
-        } catch (IOException cleanupException) {
-          exception.addSuppressed(cleanupException);
-        }
-      }
-      throw exception;
+  static TemporaryReportStreamingBody fromArtifact(
+      Path artifactPath, TransferObserver transferObserver) throws IOException {
+    Path temporaryFile =
+        Objects.requireNonNull(artifactPath, "artifactPath").toAbsolutePath().normalize();
+    if (!Files.isRegularFile(temporaryFile)) {
+      throw new IOException("Generated report artifact is unavailable.");
     }
+    return new TemporaryReportStreamingBody(temporaryFile, transferObserver);
   }
 
   @Override

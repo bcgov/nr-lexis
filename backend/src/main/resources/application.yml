@@ -60,8 +60,12 @@ lexis:
   runtime:
     require-oracle-profile: ${LEXIS_REQUIRE_ORACLE_PROFILE:false}
   reports:
-    max-output-bytes: ${LEXIS_REPORT_MAX_OUTPUT_BYTES:26214400}
+    artifact-directory: /tmp/lexis-reports
+    artifact-cleanup-cron: "0 30 3 * * *"
+    artifact-cleanup-zone: America/Vancouver
+    artifact-stale-after-minutes: 60
     query-timeout-seconds: ${LEXIS_REPORT_QUERY_TIMEOUT_SECONDS:120}
+    jdbc-fetch-size: ${LEXIS_REPORT_JDBC_FETCH_SIZE:100}
     virtualizer-directory: ${LEXIS_REPORT_VIRTUALIZER_DIRECTORY:/tmp/lexis-jasper}
     virtualizer-max-pages: ${LEXIS_REPORT_VIRTUALIZER_MAX_PAGES:50}
   expiry:
