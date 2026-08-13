@@ -21,6 +21,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import org.springframework.context.annotation.Profile;
@@ -36,6 +37,7 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
   private static final String RETURN_SUCCESS = "accepted";
   private static final String RETURN_FAILURE = "rejected";
   private static final String RETURN_VALIDATION = "validation_failed";
+  private static final String UPLOAD_VALIDATION_FAILURE_MESSAGE = "This file couldn't be used.";
   private static final List<String> GROWTH_TARGETS = List.of("O", "S");
   private static final List<String> SCREEN_SPECIES =
       List.of("BA", "HE", "CE", "CY", "FI", "SP", "PINE");
@@ -50,6 +52,15 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
           "FI", List.of("FI"),
           "SP", List.of("SP"),
           "PINE", List.of("WH", "LO", "YE"));
+  private static final Map<String, String> SCREEN_SPECIES_LABELS =
+      Map.of(
+          "BA", "Balsam",
+          "HE", "Hemlock",
+          "CE", "Cedar",
+          "CY", "Cypress",
+          "FI", "Fir",
+          "SP", "Spruce",
+          "PINE", "Pine");
 
   private final VirusScanService virusScanService;
   private final Clock clock;
@@ -373,7 +384,7 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
     if (enforceNextMonth && parsedEffectiveMonth == null) {
       return buildPreview(
           RETURN_VALIDATION,
-          "Upload template validation failed.",
+          UPLOAD_VALIDATION_FAILURE_MESSAGE,
           0,
           List.of("Select a valid effective month."),
           List.of());
@@ -381,7 +392,7 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
     if (enforceNextMonth && !isNextMonth(parsedEffectiveMonth, clock)) {
       return buildPreview(
           RETURN_VALIDATION,
-          "Upload template validation failed.",
+          UPLOAD_VALIDATION_FAILURE_MESSAGE,
           0,
           List.of("Average market values can only be uploaded for the next month."),
           List.of());
@@ -456,7 +467,7 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
 
       return buildPreview(
           errors.isEmpty() ? "accepted" : RETURN_VALIDATION,
-          errors.isEmpty() ? "File parsed for preview." : "Upload template validation failed.",
+          errors.isEmpty() ? "File parsed for preview." : UPLOAD_VALIDATION_FAILURE_MESSAGE,
           previewRows.size(),
           errors,
           warnings,
@@ -491,7 +502,7 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
     if (!validationErrors.isEmpty()) {
       return buildUploadResult(
           RETURN_VALIDATION,
-          "Upload template validation failed.",
+          UPLOAD_VALIDATION_FAILURE_MESSAGE,
           trimToNull(file == null ? null : file.getOriginalFilename()),
           file == null ? 0L : file.getSize(),
           0,
@@ -510,7 +521,7 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
     if (enforceNextMonth && parsedEffectiveMonth == null) {
       return buildUploadResult(
           RETURN_VALIDATION,
-          "Upload template validation failed.",
+          UPLOAD_VALIDATION_FAILURE_MESSAGE,
           fileName,
           fileSize,
           0,
@@ -522,7 +533,7 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
     if (enforceNextMonth && !isNextMonth(parsedEffectiveMonth, clock)) {
       return buildUploadResult(
           RETURN_VALIDATION,
-          "Upload template validation failed.",
+          UPLOAD_VALIDATION_FAILURE_MESSAGE,
           fileName,
           fileSize,
           0,
@@ -630,7 +641,7 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
       if (!errors.isEmpty()) {
         return buildUploadResult(
             RETURN_VALIDATION,
-            "Upload template validation failed.",
+            UPLOAD_VALIDATION_FAILURE_MESSAGE,
             fileName,
             fileSize,
             rowsToUpload.size(),
@@ -1013,47 +1024,66 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
       LocalDate retrievalDate,
       LocalDate updateDate,
       List<String> errors) {
-    if (targets == null) {
+    if (targets == null || targets.isEmpty()) {
       return;
     }
+    LinkedHashSet<String> uploadErrors = new LinkedHashSet<>();
+    LinkedHashSet<String> cellErrors = new LinkedHashSet<>();
     for (UploadTarget target : targets) {
-      addUploadValidationErrors(
-          target.species(),
-          target.grade(),
-          target.growthIndicator(),
-          target.newValue(),
-          target.sourceRow(),
-          target.sourceColumn(),
-          retrievalDate,
-          updateDate,
-          errors);
+      List<String> targetErrors =
+          validateSaveRequest(
+              new RtmEmsLogAmvSaveRequestDto(
+                  target.species(),
+                  target.grade(),
+                  target.growthIndicator(),
+                  formatDate(retrievalDate),
+                  formatDate(updateDate),
+                  target.newValue(),
+                  SAVE_MODE_UPDATE));
+      targetErrors.forEach(
+          error -> {
+            if (isUploadCellError(error)) {
+              cellErrors.add(formatUploadCellError(target, error));
+            } else {
+              uploadErrors.add(error);
+            }
+          });
     }
+    uploadErrors.stream().filter(error -> !errors.contains(error)).forEach(errors::add);
+    errors.addAll(cellErrors);
   }
 
-  private void addUploadValidationErrors(
-      String species,
-      String grade,
-      String growthIndicator,
-      BigDecimal newValue,
-      int sourceRow,
-      int sourceColumn,
-      LocalDate retrievalDate,
-      LocalDate updateDate,
-      List<String> errors) {
-    validateSaveRequest(
-            new RtmEmsLogAmvSaveRequestDto(
-                species,
-                grade,
-                growthIndicator,
-                formatDate(retrievalDate),
-                formatDate(updateDate),
-                newValue,
-                SAVE_MODE_UPDATE))
-        .forEach(
-            error ->
-                errors.add(
-                    "Source row %d, column %s: %s"
-                        .formatted(sourceRow, columnToLetter(sourceColumn), error)));
+  private boolean isUploadCellError(String error) {
+    return error.startsWith("New value")
+        || error.startsWith("Species")
+        || error.startsWith("Grade")
+        || error.startsWith("Growth indicator");
+  }
+
+  private String formatUploadCellError(UploadTarget target, String error) {
+    String logicalSpecies = logicalScreenSpecies(target.species());
+    String speciesLabel =
+        logicalSpecies == null ? null : SCREEN_SPECIES_LABELS.get(logicalSpecies);
+    if (speciesLabel == null) {
+      speciesLabel = trimToNull(target.species());
+    }
+    String grade = RtmEmsLogAmvDimensionValidator.normalize(target.grade());
+    return "%s grade %s: %s"
+        .formatted(
+            speciesLabel == null ? "Unknown species" : speciesLabel,
+            grade == null ? "unknown" : grade,
+            formatUploadCellErrorReason(error));
+  }
+
+  private String formatUploadCellErrorReason(String error) {
+    return switch (error) {
+      case "New value is required." -> "a value is required";
+      case "New value must be greater than or equal to zero." -> "must be zero or greater";
+      case "New value must have no more than 2 decimal places." ->
+          "more than two decimal places";
+      case "New value must not exceed 9999.99." -> "must be 9999.99 or less";
+      default -> error;
+    };
   }
 
   private String formatDate(LocalDate date) {

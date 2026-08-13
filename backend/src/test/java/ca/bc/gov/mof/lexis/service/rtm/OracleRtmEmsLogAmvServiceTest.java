@@ -519,6 +519,22 @@ class OracleRtmEmsLogAmvServiceTest {
   }
 
   @Test
+  void shouldDescribeWorkbookValueErrorsBySpeciesAndGradeOnce() throws IOException {
+    OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
+    OracleRtmEmsLogAmvService service =
+        new OracleRtmEmsLogAmvService(repository, JUNE_2026_CLOCK);
+
+    var result = service.previewUpload(precisionErrorsWorkbook(), "2026-07-01");
+
+    assertThat(result.status()).isEqualTo("validation_failed");
+    assertThat(result.message()).isEqualTo("This file couldn't be used.");
+    assertThat(result.errors())
+        .containsExactly(
+            "Hemlock grade J: more than two decimal places",
+            "Cedar grade J: more than two decimal places");
+  }
+
+  @Test
   void shouldPropagatePreviewTargetVerificationFailure() throws IOException {
     OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
     when(repository.existsExact(anyString(), anyString(), anyString(), any(LocalDate.class)))
@@ -1169,6 +1185,14 @@ class OracleRtmEmsLogAmvServiceTest {
         "optional-cedar-grade.xlsx",
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         RtmEmsLogAmvWorkbookTestFixtures.optionalCedarGradeWorkbook());
+  }
+
+  private MultipartFile precisionErrorsWorkbook() throws IOException {
+    return new MockMultipartFile(
+        "file",
+        "precision-errors.xlsx",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        RtmEmsLogAmvWorkbookTestFixtures.precisionErrorsWorkbook());
   }
 
   private static void stubAppliedFixtureValues(OracleRtmEmsLogAmvRepository repository) {

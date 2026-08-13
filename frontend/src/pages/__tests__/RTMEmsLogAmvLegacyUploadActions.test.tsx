@@ -454,7 +454,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       status: 'validation_failed',
       fileName: 'wrong-month.xlsx',
       fileSize: 1,
-      message: 'Upload template validation failed.',
+      message: "This file couldn't be used.",
       rowCount: 0,
       retrievalDate: comparisonMonth,
       updateDate: nextMonth,
@@ -578,7 +578,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       status: 'validation_failed',
       fileName: 'Filename.xlsx',
       fileSize: 1,
-      message: 'Upload template validation failed.',
+      message: "This file couldn't be used.",
       rowCount: 0,
       errors: ['The file has no numeric values. Please check your file and try again.'],
       warnings: [],
@@ -619,18 +619,16 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     expect(mockedSaveBatch).not.toHaveBeenCalled()
   })
 
-  it('lists multiple server validation issues inside the rejected-file row', async () => {
+  it('deduplicates and caps server validation issues inside the rejected-file row', async () => {
     const errors = [
-      'The file has no numeric values.',
-      'Error 2 can be listed here.',
-      'Error 3 can be listed here.',
-      'Error 4 can be listed here.',
+      ...Array.from({ length: 12 }, (_, index) => `Problem ${index + 1}.`),
+      'Problem 1.',
     ]
     mockedPreviewUpload.mockResolvedValue({
       status: 'validation_failed',
       fileName: 'Filename.xlsx',
       fileSize: 1,
-      message: 'Upload template validation failed.',
+      message: "This file couldn't be used.",
       rowCount: 0,
       errors,
       warnings: [],
@@ -650,18 +648,18 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       name: 'Rejected average monthly values upload file',
     })
     expect(
-      within(rejectedFile).getByText(
-        "This file can't be used. Fix these issues in your spreadsheet, then upload it again:",
-      ),
+      within(rejectedFile).getByText("This file couldn't be used — 12 problems found"),
     ).toBeVisible()
     const issueList = within(rejectedFile).getByRole('list', {
       name: 'Upload validation issues',
     })
-    expect(within(issueList).getAllByRole('listitem')).toHaveLength(4)
-    for (const error of errors) {
+    expect(within(issueList).getAllByRole('listitem')).toHaveLength(11)
+    for (const error of errors.slice(0, 10)) {
       expect(within(issueList).getByText(error)).toBeVisible()
     }
-    expect(screen.queryByText('4 validation issues found')).not.toBeInTheDocument()
+    expect(within(issueList).getByText('and 2 more')).toBeVisible()
+    expect(within(issueList).queryByText('Problem 11.')).not.toBeInTheDocument()
+    expect(within(issueList).getAllByText('Problem 1.')).toHaveLength(1)
     expect(
       screen.queryByRole('table', { name: 'Upload validation issues' }),
     ).not.toBeInTheDocument()
@@ -676,7 +674,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
         status: 'validation_failed',
         fileName: 'Filename.xlsx',
         fileSize: 1,
-        message: 'Upload template validation failed.',
+        message: "This file couldn't be used.",
         rowCount: 0,
         errors: ['The file has no numeric values.'],
         warnings: [],
@@ -865,9 +863,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     await userEvent.type(missingHemlockValue, '81.43')
 
     expect(await screen.findByText('1 cell needs a look before you save')).toBeVisible()
-    expect(
-      screen.getByText('In Hemlock and Cedar, highlighted below. You can save either way.'),
-    ).toBeVisible()
+    expect(screen.getByText('In Cedar, highlighted below. You can save either way.')).toBeVisible()
     expect(document.querySelectorAll('.rtm-amv-species-tab__status--warning')).toHaveLength(1)
     expect(
       screen

@@ -157,6 +157,26 @@ class InMemoryRtmEmsLogAmvServiceTest {
   }
 
   @Test
+  void shouldDescribeWorkbookValueErrorsBySpeciesAndGradeOnce() throws IOException {
+    Clock clock =
+        Clock.fixed(Instant.parse("2026-06-15T19:00:00Z"), LexisBusinessTime.ZONE);
+    InMemoryRtmEmsLogAmvService service = new InMemoryRtmEmsLogAmvService(clock);
+    MultipartFile workbook =
+        workbook(
+            "precision-errors.xlsx",
+            RtmEmsLogAmvWorkbookTestFixtures.precisionErrorsWorkbook());
+
+    var result = service.previewUpload(workbook, "2026-07-01");
+
+    assertThat(result.status()).isEqualTo("validation_failed");
+    assertThat(result.message()).isEqualTo("This file couldn't be used.");
+    assertThat(result.errors())
+        .containsExactly(
+            "Hemlock grade J: more than two decimal places",
+            "Cedar grade J: more than two decimal places");
+  }
+
+  @Test
   void shouldRejectInvalidWorkbook() throws IOException {
     InMemoryRtmEmsLogAmvService service = new InMemoryRtmEmsLogAmvService();
 

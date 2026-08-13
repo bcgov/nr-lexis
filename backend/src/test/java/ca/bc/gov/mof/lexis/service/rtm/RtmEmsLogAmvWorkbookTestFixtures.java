@@ -96,6 +96,19 @@ final class RtmEmsLogAmvWorkbookTestFixtures {
             row(4, text("A4", "C"), number("B4", "11.11"))));
   }
 
+  static byte[] precisionErrorsWorkbook() throws IOException {
+    return workbook(
+        List.of(
+            row(1, text("A1", "Update Date (YYYY-MM-01)"), text("B1", "2026-06-01")),
+            row(2, text("A2", "Growth Indicator (O or S)"), text("B2", "O")),
+            row(3, text("A3", "GRADE"), text("B3", "HE"), text("C3", "CE")),
+            row(
+                4,
+                text("A4", "J"),
+                number("B4", "10.123"),
+                number("C4", "20.456"))));
+  }
+
   static byte[] singleWhitePineWorkbook() throws IOException {
     return workbook(
         List.of(
