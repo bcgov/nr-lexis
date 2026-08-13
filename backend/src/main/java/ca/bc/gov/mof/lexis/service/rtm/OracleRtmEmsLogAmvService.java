@@ -54,7 +54,7 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
   private static final List<String> SCREEN_SPECIES =
       List.of("BA", "HE", "CE", "CY", "FI", "SP", "PINE");
   private static final List<String> SCREEN_GRADES =
-      List.of("A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "U", "X", "Y");
+      List.of("B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "U", "X", "Y");
   private static final Map<String, List<String>> BATCH_SPECIES_TARGETS =
       Map.of(
           "BA", List.of("BA"),
@@ -1107,18 +1107,23 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
   private List<UploadTarget> buildUploadTargets(
       List<RtmEmsLogAmvUploadPreviewAnalyzer.UploadRow> parsedRows,
       List<String> warnings,
-      boolean expandGrowthTypes) {
-    List<RtmEmsLogAmvUploadPreviewAnalyzer.UploadRow> uploadRows =
+      boolean screenWorkflow) {
+    List<RtmEmsLogAmvUploadPreviewAnalyzer.UploadRow> structurallyValidRows =
         parsedRows.stream()
             .filter(row -> isUploadableRow(row.species(), row.grade()))
             .toList();
 
-    if (uploadRows.size() < parsedRows.size()) {
+    if (structurallyValidRows.size() < parsedRows.size()) {
       warnings.add("Some rows were skipped because they were missing grade/species values.");
     }
 
+    List<RtmEmsLogAmvUploadPreviewAnalyzer.UploadRow> uploadRows =
+        structurallyValidRows.stream()
+            .filter(row -> !screenWorkflow || !isRetiredScreenGrade(row.grade()))
+            .toList();
+
     Map<String, UploadTarget> rowsBySpeciesGradeAndGrowth =
-        expandUploadTargets(uploadRows, expandGrowthTypes).stream()
+        expandUploadTargets(uploadRows, screenWorkflow).stream()
             .collect(
                 LinkedHashMap::new,
                 (map, target) -> {
@@ -1147,6 +1152,10 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
                 Map::putAll);
 
     return new ArrayList<>(rowsBySpeciesGradeAndGrowth.values());
+  }
+
+  private boolean isRetiredScreenGrade(String grade) {
+    return "A".equals(RtmEmsLogAmvDimensionValidator.normalize(grade));
   }
 
   private List<UploadTarget> expandUploadTargets(

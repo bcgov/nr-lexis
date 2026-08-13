@@ -762,7 +762,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
         },
         {
           species: 'HE',
-          grade: 'A',
+          grade: 'B',
           growthIndicator: 'O',
           retrievalDate: '2026-07-01',
           updateDate: '2026-09-01',
@@ -840,7 +840,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       name: 'Hemlock average market value review',
     })
     const newHemlockCombination = within(hemlockTable).getByLabelText(
-      'Hemlock grade A September 2026 value',
+      'Hemlock grade B September 2026 value',
     )
     expect(newHemlockCombination).toHaveValue('120.00')
     expect(
@@ -888,7 +888,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     })
     expect(mockedSaveBatch.mock.calls[0][0].values).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ species: 'HE', grade: 'A', newValue: 0 }),
+        expect.objectContaining({ species: 'HE', grade: 'B', newValue: 0 }),
         expect.objectContaining({ species: 'HE', grade: 'H', newValue: 81.43 }),
       ]),
     )
@@ -1113,7 +1113,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       fileName: 'rtm-values.xlsx',
       fileSize: 1,
       message: 'Spreadsheet is valid.',
-      rowCount: 5,
+      rowCount: 6,
       retrievalDate: '2026-06-01',
       updateDate: '2026-07-01',
       errors: [],
@@ -1121,7 +1121,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       rows: [
         {
           species: 'WH',
-          grade: 'A',
+          grade: 'B',
           growthIndicator: 'O',
           retrievalDate: '2026-06-01',
           updateDate: '2026-07-01',
@@ -1131,7 +1131,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
         },
         {
           species: 'LO',
-          grade: 'A',
+          grade: 'B',
           growthIndicator: 'O',
           retrievalDate: '2026-06-01',
           updateDate: '2026-07-01',
@@ -1141,12 +1141,22 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
         },
         {
           species: 'YE',
-          grade: 'A',
+          grade: 'B',
           growthIndicator: 'O',
           retrievalDate: '2026-06-01',
           updateDate: '2026-07-01',
           currentValue: 9,
           newValue: 10,
+          returnCode: '0',
+        },
+        {
+          species: 'BA',
+          grade: 'A',
+          growthIndicator: 'O',
+          retrievalDate: '2026-06-01',
+          updateDate: '2026-07-01',
+          currentValue: 99,
+          newValue: 100,
           returnCode: '0',
         },
         {
@@ -1191,7 +1201,8 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       within(table).getByRole('columnheader', { name: 'Value in effect (June 2026)' }),
     ).toBeVisible()
     expect(within(table).getByRole('columnheader', { name: 'July 2026' })).toBeVisible()
-    expect(within(table).getByRole('row', { name: /A.*9\.00.*10\.00/ })).toBeVisible()
+    expect(within(table).getByRole('row', { name: /B.*9\.00.*10\.00/ })).toBeVisible()
+    expect(within(table).queryByRole('cell', { name: 'A' })).not.toBeInTheDocument()
     expect(within(table).queryByRole('row', { name: /W.*4\.00/ })).not.toBeInTheDocument()
     expect(within(table).queryByRole('row', { name: /BLANK.*5\.00/ })).not.toBeInTheDocument()
 
@@ -1202,12 +1213,15 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     const request = mockedSaveBatch.mock.calls[0][0]
     expect(request.values).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ species: 'PINE', grade: 'A', newValue: 10 }),
+        expect.objectContaining({ species: 'PINE', grade: 'B', newValue: 10 }),
         expect.objectContaining({ species: 'PINE', grade: 'BLANK', newValue: 1 }),
       ]),
     )
     expect(request.values).not.toEqual(
-      expect.arrayContaining([expect.objectContaining({ grade: 'W' })]),
+      expect.arrayContaining([
+        expect.objectContaining({ grade: 'A' }),
+        expect.objectContaining({ grade: 'W' }),
+      ]),
     )
   })
 

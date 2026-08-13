@@ -80,7 +80,6 @@ const RTM_AMV_SPECIES_COLUMNS: RtmAmvSpeciesColumn[] = [
 ]
 
 const RTM_AMV_GRADE_ORDER = [
-  'A',
   'B',
   'C',
   'D',

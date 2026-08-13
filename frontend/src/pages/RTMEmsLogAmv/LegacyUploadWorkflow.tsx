@@ -223,7 +223,6 @@ const RTM_REVIEW_SPECIES_COLUMNS: RtmReviewSpeciesColumn[] = [
 ]
 
 const RTM_REVIEW_GRADE_ORDER = [
-  'A',
   'B',
   'C',
   'D',
@@ -241,7 +240,7 @@ const RTM_REVIEW_GRADE_ORDER = [
   'Y',
 ]
 
-const HIDDEN_REVIEW_GRADES = new Set(['W', 'Z', '1', '2', '3', '4', '5', '6', 'BLANK'])
+const REVIEW_GRADES = new Set(RTM_REVIEW_GRADE_ORDER)
 
 const RTM_REVIEW_GROWTH_ORDER = ['O', 'S']
 const RTM_FIXED_GRADES = ['Z', 'BLANK', '1', '2', '3', '4', '5', '6']
@@ -322,7 +321,7 @@ const buildSpeciesReviewRows = (
       !grade ||
       !growthIndicator ||
       speciesColumnKey !== column.key ||
-      HIDDEN_REVIEW_GRADES.has(grade)
+      !REVIEW_GRADES.has(grade)
     ) {
       return
     }

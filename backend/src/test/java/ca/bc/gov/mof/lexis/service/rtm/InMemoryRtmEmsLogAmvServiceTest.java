@@ -3,6 +3,7 @@ package ca.bc.gov.mof.lexis.service.rtm;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvSaveRequestDto;
+import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvRowDto;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvUploadPreviewDto;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvUploadResultDto;
 import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
@@ -81,7 +82,7 @@ class InMemoryRtmEmsLogAmvServiceTest {
                             service.save(
                                 new RtmEmsLogAmvSaveRequestDto(
                                     species,
-                                    "A",
+                                    "B",
                                     growth,
                                     "2026-06-01",
                                     null,
@@ -89,7 +90,7 @@ class InMemoryRtmEmsLogAmvServiceTest {
                                     "create"))));
 
     MultipartFile workbook =
-        workbook("grouped-pine.xlsx", RtmEmsLogAmvWorkbookTestFixtures.ambiguousPineWorkbook());
+        workbook("grouped-pine.xlsx", RtmEmsLogAmvWorkbookTestFixtures.screenPineWorkbook());
     RtmEmsLogAmvUploadPreviewDto preview = service.previewUpload(workbook, "2026-07-01");
     RtmEmsLogAmvUploadResultDto upload = service.upload(workbook, "2026-07-01");
     RtmEmsLogAmvUploadResultDto reupload = service.upload(workbook, "2026-07-01");
@@ -108,12 +109,38 @@ class InMemoryRtmEmsLogAmvServiceTest {
   }
 
   @Test
+  void shouldIgnoreRetiredGradeAInTheScreenWorkbook() throws IOException {
+    Clock clock =
+        Clock.fixed(Instant.parse("2026-06-15T19:00:00Z"), LexisBusinessTime.ZONE);
+    InMemoryRtmEmsLogAmvService service = new InMemoryRtmEmsLogAmvService(clock);
+    for (String growth : List.of("O", "S")) {
+      service.save(
+          new RtmEmsLogAmvSaveRequestDto(
+              "BA", "B", growth, "2026-06-01", null, BigDecimal.ZERO, "create"));
+    }
+    MultipartFile workbook =
+        workbook(
+            "screen-grade-a-and-b.xlsx",
+            RtmEmsLogAmvWorkbookTestFixtures.screenGradeAAndBWorkbook());
+
+    var preview = service.previewUpload(workbook, "2026-07-01");
+    var upload = service.upload(workbook, "2026-07-01");
+
+    assertThat(preview.status()).isEqualTo("accepted");
+    assertThat(preview.rows()).extracting(RtmEmsLogAmvRowDto::grade).containsOnly("B");
+    assertThat(upload.status()).isEqualTo("accepted");
+    assertThat(service.find("BA", "", "2026-07-01", "2026-07-01"))
+        .extracting(RtmEmsLogAmvRowDto::grade)
+        .containsOnly("B");
+  }
+
+  @Test
   void shouldRejectCurrentPreviousAndLaterFutureScreenMonths() throws IOException {
     Clock clock =
         Clock.fixed(Instant.parse("2026-06-15T19:00:00Z"), LexisBusinessTime.ZONE);
     InMemoryRtmEmsLogAmvService service = new InMemoryRtmEmsLogAmvService(clock);
     MultipartFile workbook =
-        workbook("grouped-pine.xlsx", RtmEmsLogAmvWorkbookTestFixtures.ambiguousPineWorkbook());
+        workbook("grouped-pine.xlsx", RtmEmsLogAmvWorkbookTestFixtures.screenPineWorkbook());
 
     var currentMonth = service.previewUpload(workbook, "2026-06-01");
     var previousMonth = service.upload(workbook, "2026-05-01");
@@ -133,13 +160,15 @@ class InMemoryRtmEmsLogAmvServiceTest {
     Clock clock =
         Clock.fixed(Instant.parse("2026-06-15T19:00:00Z"), LexisBusinessTime.ZONE);
     InMemoryRtmEmsLogAmvService service = new InMemoryRtmEmsLogAmvService(clock);
-    service.save(
-        new RtmEmsLogAmvSaveRequestDto(
-            "BA", "A", "O", "2026-05-01", null, new BigDecimal("75.29"), "create"));
+    for (String growth : List.of("O", "S")) {
+      service.save(
+          new RtmEmsLogAmvSaveRequestDto(
+              "BA", "B", growth, "2026-05-01", null, new BigDecimal("75.29"), "create"));
+    }
     MultipartFile workbook =
         workbook(
             "single-balsam.xlsx",
-            RtmEmsLogAmvWorkbookTestFixtures.singleBalsamWorkbook());
+            RtmEmsLogAmvWorkbookTestFixtures.screenSingleBalsamWorkbook());
 
     var preview = service.previewUpload(workbook, "2026-07-01");
 
@@ -147,7 +176,7 @@ class InMemoryRtmEmsLogAmvServiceTest {
     assertThat(preview.retrievalDate()).isEqualTo("2026-05-01");
     assertThat(preview.updateDate()).isEqualTo("2026-07-01");
     assertThat(preview.rows())
-        .filteredOn(row -> "BA".equals(row.species()) && "A".equals(row.grade()))
+        .filteredOn(row -> "BA".equals(row.species()) && "B".equals(row.grade()))
         .singleElement()
         .satisfies(
             row -> {
@@ -232,7 +261,7 @@ class InMemoryRtmEmsLogAmvServiceTest {
             List.of(
                 new RtmEmsLogAmvSaveRequestDto(
                     "PINE",
-                    "A",
+                    "B",
                     "O",
                     "2026-07-01",
                     "2026-07-01",

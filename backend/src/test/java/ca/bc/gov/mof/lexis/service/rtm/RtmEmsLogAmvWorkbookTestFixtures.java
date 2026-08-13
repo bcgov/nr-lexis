@@ -69,6 +69,25 @@ final class RtmEmsLogAmvWorkbookTestFixtures {
             row(4, text("A4", "A"), number("B4", "10.25"))));
   }
 
+  static byte[] screenSingleBalsamWorkbook() throws IOException {
+    return workbook(
+        List.of(
+            row(1, text("A1", "Update Date (YYYY-MM-01)"), text("B1", "2026-06-01")),
+            row(2, text("A2", "Growth Indicator (O or S)"), text("B2", "O")),
+            row(3, text("A3", "GRADE"), text("B3", "BA")),
+            row(4, text("A4", "B"), number("B4", "10.25"))));
+  }
+
+  static byte[] screenGradeAAndBWorkbook() throws IOException {
+    return workbook(
+        List.of(
+            row(1, text("A1", "Update Date (YYYY-MM-01)"), text("B1", "2026-06-01")),
+            row(2, text("A2", "Growth Indicator (O or S)"), text("B2", "O")),
+            row(3, text("A3", "GRADE"), text("B3", "BA")),
+            row(4, text("A4", "A"), number("B4", "99.99")),
+            row(5, text("A5", "B"), number("B5", "10.25"))));
+  }
+
   static byte[] futureSingleBalsamWorkbook() throws IOException {
     return workbook(
         List.of(
@@ -125,6 +144,15 @@ final class RtmEmsLogAmvWorkbookTestFixtures {
             row(2, text("A2", "Growth Indicator (O or S)"), text("B2", "O")),
             row(3, text("A3", "GRADE"), text("B3", "PINE")),
             row(4, text("A4", "A"), number("B4", "30.75"))));
+  }
+
+  static byte[] screenPineWorkbook() throws IOException {
+    return workbook(
+        List.of(
+            row(1, text("A1", "Update Date (YYYY-MM-01)"), text("B1", "2026-06-01")),
+            row(2, text("A2", "Growth Indicator (O or S)"), text("B2", "O")),
+            row(3, text("A3", "GRADE"), text("B3", "PINE")),
+            row(4, text("A4", "B"), number("B4", "30.75"))));
   }
 
   static byte[] missingGrowthWorkbook() throws IOException {

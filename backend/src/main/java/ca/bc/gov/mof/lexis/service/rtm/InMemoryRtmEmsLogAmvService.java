@@ -42,7 +42,7 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
   private static final List<String> SCREEN_SPECIES =
       List.of("BA", "HE", "CE", "CY", "FI", "SP", "PINE");
   private static final List<String> SCREEN_GRADES =
-      List.of("A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "U", "X", "Y");
+      List.of("B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "U", "X", "Y");
   private static final Map<String, List<String>> BATCH_SPECIES_TARGETS =
       Map.of(
           "BA", List.of("BA"),
@@ -407,7 +407,9 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
       List<String> warnings = new ArrayList<>(parseResult.warnings());
       List<String> errors = new ArrayList<>(parseResult.errors());
       List<UploadTarget> previewTargets =
-          expandUploadTargets(parseResult.rows(), parsedEffectiveMonth != null);
+          expandUploadTargets(
+              withoutRetiredScreenGrade(parseResult.rows(), parsedEffectiveMonth != null),
+              parsedEffectiveMonth != null);
       LocalDate comparisonDate = parseResult.retrievalDate();
       List<RtmEmsLogAmvRowDto> comparisonRows = List.of();
 
@@ -552,14 +554,16 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
 
       List<String> warnings = new ArrayList<>(parseResult.warnings());
       List<String> errors = new ArrayList<>(parseResult.errors());
-      List<RtmEmsLogAmvUploadPreviewAnalyzer.UploadRow> uploadRows =
+      List<RtmEmsLogAmvUploadPreviewAnalyzer.UploadRow> structurallyValidRows =
           parseResult.rows().stream()
               .filter(row -> isUploadableRow(row.species(), row.grade()))
               .toList();
+      List<RtmEmsLogAmvUploadPreviewAnalyzer.UploadRow> uploadRows =
+          withoutRetiredScreenGrade(structurallyValidRows, parsedEffectiveMonth != null);
       LocalDate parsedRetrievalDate = parseResult.retrievalDate();
       LocalDate parsedUpdateDate = parseResult.updateDate();
 
-      if (uploadRows.size() < parseResult.rows().size()) {
+      if (structurallyValidRows.size() < parseResult.rows().size()) {
         warnings.add("Some rows were skipped because they were missing grade/species values.");
       }
 
@@ -1281,6 +1285,18 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
       }
     }
     return targets;
+  }
+
+  private List<RtmEmsLogAmvUploadPreviewAnalyzer.UploadRow> withoutRetiredScreenGrade(
+      List<RtmEmsLogAmvUploadPreviewAnalyzer.UploadRow> rows, boolean screenWorkflow) {
+    if (!screenWorkflow) {
+      return rows;
+    }
+    return rows.stream()
+        .filter(
+            row ->
+                !"A".equals(RtmEmsLogAmvDimensionValidator.normalize(row.grade())))
+        .toList();
   }
 
   private record UploadTarget(

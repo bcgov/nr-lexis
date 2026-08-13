@@ -135,7 +135,7 @@ class OracleRtmEmsLogAmvServiceTest {
             List.of(
                 new RtmEmsLogAmvSaveRequestDto(
                     "PINE",
-                    "A",
+                    "B",
                     "O",
                     "2026-07-01",
                     "2026-07-01",
@@ -189,7 +189,7 @@ class OracleRtmEmsLogAmvServiceTest {
             List.of(
                 new RtmEmsLogAmvSaveRequestDto(
                     "SP",
-                    "A",
+                    "B",
                     "O",
                     "2026-07-01",
                     "2026-07-01",
@@ -212,7 +212,7 @@ class OracleRtmEmsLogAmvServiceTest {
                             .allMatch(
                                 target ->
                                     target.species().equals("SP")
-                                        && target.grade().equals("A")
+                                        && target.grade().equals("B")
                                         && target
                                             .effectiveDate()
                                             .equals(LocalDate.of(2026, 7, 1))
@@ -257,7 +257,7 @@ class OracleRtmEmsLogAmvServiceTest {
             List.of(
                 new RtmEmsLogAmvSaveRequestDto(
                     "BA",
-                    "A",
+                    "B",
                     "O",
                     "2026-07-01",
                     "2026-07-01",
@@ -283,7 +283,7 @@ class OracleRtmEmsLogAmvServiceTest {
                     List.of(
                         new RtmEmsLogAmvSaveRequestDto(
                             "BA",
-                            "A",
+                            "B",
                             "O",
                             "2026-07-01",
                             "2026-07-01",
@@ -435,7 +435,57 @@ class OracleRtmEmsLogAmvServiceTest {
                                 target ->
                                     target.effectiveDate().equals(effectiveMonth))));
     verify(repository, times(12))
-        .existsExact(anyString(), eq("A"), anyString(), eq(retrievalMonth));
+        .existsExact(anyString(), eq("B"), anyString(), eq(retrievalMonth));
+  }
+
+  @Test
+  void shouldIgnoreRetiredGradeAInTheScreenWorkbook() throws IOException {
+    OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
+    when(repository.findLatestEffectiveDateRowsBefore(LocalDate.of(2026, 7, 1)))
+        .thenReturn(List.of());
+    when(repository.existsExact(anyString(), anyString(), anyString(), any(LocalDate.class)))
+        .thenReturn(true);
+    when(repository.upsertAtomically(any())).thenReturn(new int[] {1, 1});
+    OracleRtmEmsLogAmvService service =
+        new OracleRtmEmsLogAmvService(repository, JUNE_2026_CLOCK);
+    MultipartFile workbook = screenGradeAAndBWorkbook();
+
+    var preview = service.previewUpload(workbook, "2026-07-01");
+    var upload = service.upload(workbook, "2026-07-01");
+
+    assertThat(preview.status()).isEqualTo("accepted");
+    assertThat(preview.rows()).extracting(RtmEmsLogAmvRowDto::grade).containsOnly("B");
+    assertThat(upload.status()).isEqualTo("accepted");
+    verify(repository)
+        .upsertAtomically(
+            argThat(
+                targets ->
+                    targets.size() == 2
+                        && targets.stream().allMatch(target -> target.grade().equals("B"))));
+  }
+
+  @Test
+  void shouldRejectRetiredGradeAFromTheModernBatch() {
+    OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
+    OracleRtmEmsLogAmvService service =
+        new OracleRtmEmsLogAmvService(repository, JUNE_2026_CLOCK);
+
+    var result =
+        service.saveBatch(
+            List.of(
+                new RtmEmsLogAmvSaveRequestDto(
+                    "BA",
+                    "A",
+                    "O",
+                    "2026-07-01",
+                    "2026-07-01",
+                    new BigDecimal("10.25"),
+                    "update")));
+
+    assertThat(result.status()).isEqualTo("validation_failed");
+    assertThat(result.errors())
+        .contains("Table value 1: Grade is not supported by the modern RTM AMV grid.");
+    verifyNoInteractions(repository);
   }
 
   @Test
@@ -458,14 +508,14 @@ class OracleRtmEmsLogAmvServiceTest {
                     "0")));
     OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository, clock);
 
-    var preview = service.previewUpload(singleBalsamWorkbook(), "2026-07-01");
+    var preview = service.previewUpload(screenSingleBalsamWorkbook(), "2026-07-01");
 
     assertThat(preview.status()).isEqualTo("accepted");
     assertThat(preview.retrievalDate()).isEqualTo("2026-05-01");
     assertThat(preview.updateDate()).isEqualTo("2026-07-01");
     assertThat(preview.rows()).hasSize(2);
     assertThat(preview.rows().get(0).species()).isEqualTo("BA");
-    assertThat(preview.rows().get(0).grade()).isEqualTo("A");
+    assertThat(preview.rows().get(0).grade()).isEqualTo("B");
     assertThat(preview.rows().get(0).growthIndicator()).isEqualTo("O");
     assertThat(preview.rows().get(0).currentValue()).isNull();
     assertThat(preview.rows().get(0).newValue()).isEqualByComparingTo("10.25");
@@ -1152,7 +1202,23 @@ class OracleRtmEmsLogAmvServiceTest {
         "file",
         "grouped-pine.xlsx",
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        RtmEmsLogAmvWorkbookTestFixtures.ambiguousPineWorkbook());
+        RtmEmsLogAmvWorkbookTestFixtures.screenPineWorkbook());
+  }
+
+  private MultipartFile screenSingleBalsamWorkbook() throws IOException {
+    return new MockMultipartFile(
+        "file",
+        "screen-single-balsam.xlsx",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        RtmEmsLogAmvWorkbookTestFixtures.screenSingleBalsamWorkbook());
+  }
+
+  private MultipartFile screenGradeAAndBWorkbook() throws IOException {
+    return new MockMultipartFile(
+        "file",
+        "screen-grade-a-and-b.xlsx",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        RtmEmsLogAmvWorkbookTestFixtures.screenGradeAAndBWorkbook());
   }
 
   private MultipartFile singleBalsamWorkbook() throws IOException {
@@ -1263,11 +1329,24 @@ class OracleRtmEmsLogAmvServiceTest {
       case "BA" ->
           List.of(
               row(species, "A", growthIndicator, effectiveDate, "10.25"),
+              row(species, "B", growthIndicator, effectiveDate, "10.25"),
               row(species, "1", growthIndicator, effectiveDate, "1.25"));
-      case "HE" -> List.of(row(species, "A", growthIndicator, effectiveDate, "20.50"));
-      case "WH" -> List.of(row(species, "A", growthIndicator, effectiveDate, "30.75"));
-      case "LO" -> List.of(row(species, "A", growthIndicator, effectiveDate, "31.75"));
-      case "YE" -> List.of(row(species, "A", growthIndicator, effectiveDate, "32.75"));
+      case "HE" ->
+          List.of(
+              row(species, "A", growthIndicator, effectiveDate, "20.50"),
+              row(species, "B", growthIndicator, effectiveDate, "20.50"));
+      case "WH" ->
+          List.of(
+              row(species, "A", growthIndicator, effectiveDate, "30.75"),
+              row(species, "B", growthIndicator, effectiveDate, "30.75"));
+      case "LO" ->
+          List.of(
+              row(species, "A", growthIndicator, effectiveDate, "31.75"),
+              row(species, "B", growthIndicator, effectiveDate, "31.75"));
+      case "YE" ->
+          List.of(
+              row(species, "A", growthIndicator, effectiveDate, "32.75"),
+              row(species, "B", growthIndicator, effectiveDate, "32.75"));
       default -> List.of();
     };
   }
