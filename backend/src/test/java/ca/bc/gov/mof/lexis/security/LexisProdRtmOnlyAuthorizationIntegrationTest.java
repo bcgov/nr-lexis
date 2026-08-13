@@ -88,7 +88,7 @@ class LexisProdRtmOnlyAuthorizationIntegrationTest {
                       "values":[
                         {
                           "species":"BA",
-                          "grade":"A",
+                          "grade":"B",
                           "growthIndicator":"O",
                           "retrievalDate":"%s",
                           "updateDate":"%s",
