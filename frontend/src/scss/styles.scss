@@ -2660,8 +2660,14 @@ $notification-types: 'error', 'info', 'success', 'warning';
 }
 
 .rtm-amv-upload-header .lexis-page-header__subtitle {
-  font-size: 0.875rem;
-  line-height: 1.25rem;
+  font-size: 1rem;
+  line-height: 1.5rem;
+}
+
+.rtm-amv-upload-page .cds--inline-notification__subtitle,
+.rtm-amv-upload-page .cds--actionable-notification__subtitle {
+  font-size: 1rem;
+  line-height: 1.5rem;
 }
 
 .rtm-amv-month-summary {
@@ -2685,15 +2691,15 @@ $notification-types: 'error', 'info', 'success', 'warning';
 
 .rtm-amv-month-summary__item span {
   color: var(--fds-text-secondary);
-  font-size: 0.75rem;
-  line-height: 1rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
 }
 
 .rtm-amv-month-summary__item strong {
   color: var(--fds-text-primary);
-  font-size: 0.875rem;
+  font-size: 1rem;
   font-weight: 400;
-  line-height: 1.25rem;
+  line-height: 1.5rem;
 }
 
 .rtm-amv-values-content {
@@ -2715,6 +2721,11 @@ $notification-types: 'error', 'info', 'success', 'warning';
 .rtm-amv-values-heading h2 {
   font-size: 1.5rem;
   line-height: 2rem;
+}
+
+.admin-upload-section-heading.rtm-amv-values-heading p {
+  font-size: 1rem;
+  line-height: 1.5rem;
 }
 
 .rtm-amv-replace-file-button {
@@ -2857,8 +2868,8 @@ $notification-types: 'error', 'info', 'success', 'warning';
 .rtm-amv-upload-loading__name {
   min-inline-size: 0;
   overflow: hidden;
-  font-size: 0.75rem;
-  line-height: 1rem;
+  font-size: 1rem;
+  line-height: 1.5rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2900,8 +2911,8 @@ $notification-types: 'error', 'info', 'success', 'warning';
 .rtm-amv-rejected-file__name {
   min-inline-size: 0;
   overflow: hidden;
-  font-size: 0.75rem;
-  line-height: 1rem;
+  font-size: 1rem;
+  line-height: 1.5rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2982,8 +2993,8 @@ $notification-types: 'error', 'info', 'success', 'warning';
 .rtm-amv-uploaded-file__name {
   min-inline-size: 0;
   overflow: hidden;
-  font-size: 0.75rem;
-  line-height: 1rem;
+  font-size: 1rem;
+  line-height: 1.5rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -3090,8 +3101,8 @@ $notification-types: 'error', 'info', 'success', 'warning';
   max-inline-size: 100%;
   border-collapse: collapse;
   color: var(--fds-text-primary, var(--cds-text-primary));
-  font-size: 0.75rem;
-  line-height: 1rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
 }
 
 .rtm-amv-species-table th,
@@ -3120,6 +3131,8 @@ $notification-types: 'error', 'info', 'success', 'warning';
 
 .rtm-amv-species-table__current-value {
   color: var(--fds-text-secondary, var(--cds-text-secondary));
+  font-size: 1rem;
+  line-height: 1.25rem;
 }
 
 .rtm-amv-species-table tbody tr.has-warning > th,
@@ -3146,6 +3159,8 @@ $notification-types: 'error', 'info', 'success', 'warning';
   padding: 0.25rem 1.75rem 0.25rem 0.5rem;
   color: var(--fds-text-primary, var(--cds-text-primary));
   font: inherit;
+  font-size: 1rem;
+  line-height: 1.25rem;
   background: var(--fds-background, var(--cds-layer-accent));
   border: 0;
   border-block-end: 1px solid var(--fds-border-strong, var(--cds-border-strong));
@@ -3184,8 +3199,8 @@ $notification-types: 'error', 'info', 'success', 'warning';
   max-inline-size: 10rem;
   margin: 0.25rem 0 0;
   color: var(--fds-text-primary, var(--cds-text-primary));
-  font-size: 0.625rem;
-  line-height: 0.75rem;
+  font-size: 0.75rem;
+  line-height: 1rem;
 }
 
 .rtm-amv-species-table__message.has-error {
@@ -4459,7 +4474,7 @@ $notification-types: 'error', 'info', 'success', 'warning';
 
 .rtm-review-cell-values span span {
   color: var(--csp-text-primary);
-  font-size: 0.75rem;
+  font-size: 0.875rem;
 }
 
 .rtm-amv-content {
