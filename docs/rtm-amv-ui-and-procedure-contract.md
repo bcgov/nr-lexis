@@ -17,7 +17,7 @@ not exposed while this workflow is under review. The active workflow preserves t
   Spruce (`SP`), and one friendly Pine column.
 - Spruce maps one-to-one to physical `SP`; it does not expand like Pine.
 - Pine expands to all three legacy species codes: `WH`, `LO`, and `YE`.
-- The review exposes grades `A` through `M`, `U`, `X`, and `Y`. It does not show `W`, `Z`, grades
+- The review exposes grades `B` through `M`, `U`, `X`, and `Y`. It does not show `A`, `W`, `Z`, grades
   `1` through `6`, or the legacy blank-grade row.
 - Fixed grades `Z`, `BLANK`, and `1` through `6` are saved automatically as `$1.00` for every
   species and are described in the review notice.
@@ -168,7 +168,7 @@ does not claim to add audit metadata that the legacy data model cannot store.
 | FR-11           | Confluence correction needed | `EMS_LOG_AMV` has no submission/update timestamp column; the legacy update-date value is an effective month, not an audit timestamp.              |
 | FR-12 and FR-14 | Confluence correction needed | `BLANK` is the legacy display alias for `GRADE = ' '`; the physical table has no blank flag/column to set to `1`.                                  |
 | FR-13           | Implemented                | No blank flag is rendered or accepted from the UI.                                                                                                  |
-| FR-15           | Implemented                | The editable grade set is `A` through `M`, `U`, `X`, and `Y`; `W` and fixed grades are hidden. Fixed grades are submitted automatically at `$1.00`. |
+| FR-15           | Implemented                | The editable grade set is `B` through `M`, `U`, `X`, and `Y`; retired grade `A` is hidden along with `W` and the fixed grades. Fixed grades are submitted automatically at `$1.00`. |
 | FR-16           | Implemented                | A blank upcoming value is omitted and remains an advisory warning when the current month had a value; entering `0` persists an explicit zero.       |
 | FR-17           | Implemented                | Reviewed batches validate before direct `MERGE` writes inside one transaction.                                                                      |
 | FR-18           | Partially implemented      | Structured application audit events record the authenticated actor, server timestamp, batch outcome/status, and logical/physical row counts; durable persisted audit still requires an approved table or schema change. |

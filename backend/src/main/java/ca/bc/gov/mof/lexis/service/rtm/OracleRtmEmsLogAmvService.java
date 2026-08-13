@@ -24,6 +24,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
@@ -48,11 +49,12 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
   private static final String RETURN_SUCCESS = "accepted";
   private static final String RETURN_FAILURE = "rejected";
   private static final String RETURN_VALIDATION = "validation_failed";
+  private static final String UPLOAD_VALIDATION_FAILURE_MESSAGE = "This file couldn't be used.";
   private static final List<String> GROWTH_TARGETS = List.of("O", "S");
   private static final List<String> SCREEN_SPECIES =
       List.of("BA", "HE", "CE", "CY", "FI", "SP", "PINE");
   private static final List<String> SCREEN_GRADES =
-      List.of("A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "U", "X", "Y");
+      List.of("B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "U", "X", "Y");
   private static final Map<String, List<String>> BATCH_SPECIES_TARGETS =
       Map.of(
           "BA", List.of("BA"),
@@ -62,6 +64,15 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
           "FI", List.of("FI"),
           "SP", List.of("SP"),
           "PINE", List.of("WH", "LO", "YE"));
+  private static final Map<String, String> SCREEN_SPECIES_LABELS =
+      Map.of(
+          "BA", "Balsam",
+          "HE", "Hemlock",
+          "CE", "Cedar",
+          "CY", "Cypress",
+          "FI", "Fir",
+          "SP", "Spruce",
+          "PINE", "Pine");
   private final OracleRtmEmsLogAmvRepository repository;
   private final VirusScanService virusScanService;
   private final Clock clock;
@@ -329,7 +340,7 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
     if (enforceNextMonth && parsedEffectiveMonth == null) {
       return buildPreview(
           RETURN_VALIDATION,
-          "Upload template validation failed.",
+          UPLOAD_VALIDATION_FAILURE_MESSAGE,
           0,
           List.of("Select a valid effective month."),
           List.of());
@@ -337,7 +348,7 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
     if (enforceNextMonth && !isNextMonth(parsedEffectiveMonth, clock)) {
       return buildPreview(
           RETURN_VALIDATION,
-          "Upload template validation failed.",
+          UPLOAD_VALIDATION_FAILURE_MESSAGE,
           0,
           List.of("Average market values can only be uploaded for the next month."),
           List.of());
@@ -406,7 +417,7 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
 
       return buildPreview(
           errors.isEmpty() ? "accepted" : RETURN_VALIDATION,
-          errors.isEmpty() ? "File parsed for preview." : "Upload template validation failed.",
+          errors.isEmpty() ? "File parsed for preview." : UPLOAD_VALIDATION_FAILURE_MESSAGE,
           previewRows.size(),
           errors,
           warnings,
@@ -448,7 +459,7 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
     if (!validationErrors.isEmpty()) {
       return buildUploadResult(
           RETURN_VALIDATION,
-          "Upload template validation failed.",
+          UPLOAD_VALIDATION_FAILURE_MESSAGE,
           trimToNull(file == null ? null : file.getOriginalFilename()),
           file == null ? 0L : file.getSize(),
           0,
@@ -467,7 +478,7 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
     if (enforceNextMonth && parsedEffectiveMonth == null) {
       return buildUploadResult(
           RETURN_VALIDATION,
-          "Upload template validation failed.",
+          UPLOAD_VALIDATION_FAILURE_MESSAGE,
           fileName,
           fileSize,
           0,
@@ -479,7 +490,7 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
     if (enforceNextMonth && !isNextMonth(parsedEffectiveMonth, clock)) {
       return buildUploadResult(
           RETURN_VALIDATION,
-          "Upload template validation failed.",
+          UPLOAD_VALIDATION_FAILURE_MESSAGE,
           fileName,
           fileSize,
           0,
@@ -531,7 +542,7 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
       if (!errors.isEmpty()) {
         return buildUploadResult(
             RETURN_VALIDATION,
-            "Upload template validation failed.",
+            UPLOAD_VALIDATION_FAILURE_MESSAGE,
             fileName,
             fileSize,
             rowsToUpload.size(),
@@ -1034,6 +1045,8 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
     if (targets == null || targets.isEmpty()) {
       return;
     }
+    LinkedHashSet<String> uploadErrors = new LinkedHashSet<>();
+    LinkedHashSet<String> cellErrors = new LinkedHashSet<>();
     for (UploadTarget target : targets) {
       List<String> targetErrors =
           validateSaveRequest(
@@ -1046,28 +1059,71 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
                   target.newValue(),
                   SAVE_MODE_UPDATE));
       targetErrors.forEach(
-          error ->
-              errors.add(
-                  "Source row %d, column %s: %s"
-                      .formatted(target.sourceRow(), columnToLetter(target.sourceColumn()), error)));
+          error -> {
+            if (isUploadCellError(error)) {
+              cellErrors.add(formatUploadCellError(target, error));
+            } else {
+              uploadErrors.add(error);
+            }
+          });
     }
+    uploadErrors.stream().filter(error -> !errors.contains(error)).forEach(errors::add);
+    errors.addAll(cellErrors);
+  }
+
+  private boolean isUploadCellError(String error) {
+    return error.startsWith("New value")
+        || error.startsWith("Species")
+        || error.startsWith("Grade")
+        || error.startsWith("Growth indicator");
+  }
+
+  private String formatUploadCellError(UploadTarget target, String error) {
+    String logicalSpecies = logicalScreenSpecies(target.species());
+    String speciesLabel =
+        logicalSpecies == null ? null : SCREEN_SPECIES_LABELS.get(logicalSpecies);
+    if (speciesLabel == null) {
+      speciesLabel = trimToNull(target.species());
+    }
+    String grade = RtmEmsLogAmvDimensionValidator.normalize(target.grade());
+    return "%s grade %s: %s"
+        .formatted(
+            speciesLabel == null ? "Unknown species" : speciesLabel,
+            grade == null ? "unknown" : grade,
+            formatUploadCellErrorReason(error));
+  }
+
+  private String formatUploadCellErrorReason(String error) {
+    return switch (error) {
+      case "New value is required." -> "a value is required";
+      case "New value must be greater than or equal to zero." -> "must be zero or greater";
+      case "New value must have no more than 2 decimal places." ->
+          "more than two decimal places";
+      case "New value must not exceed 9999.99." -> "must be 9999.99 or less";
+      default -> error;
+    };
   }
 
   private List<UploadTarget> buildUploadTargets(
       List<RtmEmsLogAmvUploadPreviewAnalyzer.UploadRow> parsedRows,
       List<String> warnings,
-      boolean expandGrowthTypes) {
-    List<RtmEmsLogAmvUploadPreviewAnalyzer.UploadRow> uploadRows =
+      boolean screenWorkflow) {
+    List<RtmEmsLogAmvUploadPreviewAnalyzer.UploadRow> structurallyValidRows =
         parsedRows.stream()
             .filter(row -> isUploadableRow(row.species(), row.grade()))
             .toList();
 
-    if (uploadRows.size() < parsedRows.size()) {
+    if (structurallyValidRows.size() < parsedRows.size()) {
       warnings.add("Some rows were skipped because they were missing grade/species values.");
     }
 
+    List<RtmEmsLogAmvUploadPreviewAnalyzer.UploadRow> uploadRows =
+        structurallyValidRows.stream()
+            .filter(row -> !screenWorkflow || !isRetiredScreenGrade(row.grade()))
+            .toList();
+
     Map<String, UploadTarget> rowsBySpeciesGradeAndGrowth =
-        expandUploadTargets(uploadRows, expandGrowthTypes).stream()
+        expandUploadTargets(uploadRows, screenWorkflow).stream()
             .collect(
                 LinkedHashMap::new,
                 (map, target) -> {
@@ -1096,6 +1152,10 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
                 Map::putAll);
 
     return new ArrayList<>(rowsBySpeciesGradeAndGrowth.values());
+  }
+
+  private boolean isRetiredScreenGrade(String grade) {
+    return "A".equals(RtmEmsLogAmvDimensionValidator.normalize(grade));
   }
 
   private List<UploadTarget> expandUploadTargets(
@@ -1139,18 +1199,6 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
       BigDecimal newValue,
       int sourceRow,
       int sourceColumn) {}
-
-  private String columnToLetter(int index) {
-    StringBuilder column = new StringBuilder();
-    int current = index;
-    while (current > 0) {
-      int remainder = (current - 1) % 26;
-      column.insert(0, (char) ('A' + remainder));
-      current = (current - 1) / 26;
-    }
-
-    return column.toString();
-  }
 
   private RtmEmsLogAmvUploadResultDto buildUploadResult(
       String status,

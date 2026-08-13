@@ -71,6 +71,18 @@ class RtmEmsLogAmvUploadControllerTest {
   }
 
   @Test
+  void uploadShouldDescribeAMissingFileAsAnUnusableFile() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+
+    ResponseEntity<RtmEmsLogAmvUploadResultDto> response =
+        controller().upload(null, null, "2026-07-01");
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+    assertThat(response.getBody().message()).isEqualTo("This file couldn't be used.");
+    assertThat(response.getBody().errors()).containsExactly("No file provided.");
+  }
+
+  @Test
   void previewShouldFailWhenAuthoritativeServiceIsMissing() {
     when(serviceProvider.getIfAvailable()).thenReturn(null);
 

@@ -130,7 +130,8 @@ describe('RTM EMS Log AMV actions', () => {
     expect(
       within(table).queryByRole('columnheader', { name: /white pine|lodgepole|yellow pine/i }),
     ).not.toBeInTheDocument()
-    expect(within(table).getAllByRole('row')).toHaveLength(24)
+    expect(within(table).getAllByRole('row')).toHaveLength(23)
+    expect(screen.queryByLabelText('Balsam (BA) grade A')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Balsam (BA) grade W')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Balsam (BA) grade BLANK')).not.toBeInTheDocument()
 
@@ -144,18 +145,18 @@ describe('RTM EMS Log AMV actions', () => {
   it('uses the displayed data as the baseline and saves a single atomic batch', async () => {
     const user = userEvent.setup()
     mockRows([
-      row('BA', 'A', 'O', CURRENT_MONTH, 10),
-      row('BA', 'A', 'S', CURRENT_MONTH, 99),
-      row('WH', 'A', 'O', CURRENT_MONTH, 20),
-      row('LO', 'A', 'O', CURRENT_MONTH, 20),
-      row('YE', 'A', 'O', CURRENT_MONTH, 20),
+      row('BA', 'B', 'O', CURRENT_MONTH, 10),
+      row('BA', 'B', 'S', CURRENT_MONTH, 99),
+      row('WH', 'B', 'O', CURRENT_MONTH, 20),
+      row('LO', 'B', 'O', CURRENT_MONTH, 20),
+      row('YE', 'B', 'O', CURRENT_MONTH, 20),
     ])
 
     render(<RTMEmsLogAmvPage />)
     await waitForMonthLoad()
 
-    const balsam = amvCell('Balsam (BA)', 'A')
-    const pine = amvCell('Pine', 'A')
+    const balsam = amvCell('Balsam (BA)', 'B')
+    const pine = amvCell('Pine', 'B')
     expect(balsam).toHaveValue('10')
     expect(pine).toHaveValue('20')
 
@@ -170,14 +171,14 @@ describe('RTM EMS Log AMV actions', () => {
       values: expect.arrayContaining([
         expect.objectContaining({
           species: 'BA',
-          grade: 'A',
+          grade: 'B',
           growthIndicator: 'O',
           newValue: 12.5,
           saveMode: 'update',
         }),
         expect.objectContaining({
           species: 'PINE',
-          grade: 'A',
+          grade: 'B',
           growthIndicator: 'O',
           newValue: 24,
           saveMode: 'update',
@@ -189,17 +190,17 @@ describe('RTM EMS Log AMV actions', () => {
 
   it('treats clearing an existing value as a no-op and omits it from the batch', async () => {
     const user = userEvent.setup()
-    mockRows([row('BA', 'A', 'O', CURRENT_MONTH, 10), row('HE', 'A', 'O', CURRENT_MONTH, 20)])
+    mockRows([row('BA', 'B', 'O', CURRENT_MONTH, 10), row('HE', 'B', 'O', CURRENT_MONTH, 20)])
 
     render(<RTMEmsLogAmvPage />)
     await waitForMonthLoad()
 
-    const balsam = amvCell('Balsam (BA)', 'A')
-    const hemlock = amvCell('Hemlock (HE)', 'A')
+    const balsam = amvCell('Balsam (BA)', 'B')
+    const hemlock = amvCell('Hemlock (HE)', 'B')
     await user.clear(balsam)
     await user.type(balsam, '-')
 
-    expect(screen.queryByText(/Balsam \(BA\) grade A is required/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Balsam \(BA\) grade B is required/i)).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled()
 
     await user.tab()
@@ -214,7 +215,7 @@ describe('RTM EMS Log AMV actions', () => {
     expect(values).toEqual([
       expect.objectContaining({
         species: 'HE',
-        grade: 'A',
+        grade: 'B',
         growthIndicator: 'O',
         newValue: 21,
         saveMode: 'update',
@@ -224,20 +225,20 @@ describe('RTM EMS Log AMV actions', () => {
 
   it('treats a dash as an empty starting value instead of an invalid number', async () => {
     const user = userEvent.setup()
-    mockRows([], [row('BA', 'A', 'O', PREVIOUS_MONTH, 10), row('HE', 'A', 'O', PREVIOUS_MONTH, 20)])
+    mockRows([], [row('BA', 'B', 'O', PREVIOUS_MONTH, 10), row('HE', 'B', 'O', PREVIOUS_MONTH, 20)])
     render(<RTMEmsLogAmvPage />)
     await waitForMonthLoad()
 
-    const hemlock = amvCell('Hemlock (HE)', 'A')
+    const hemlock = amvCell('Hemlock (HE)', 'B')
     await user.clear(hemlock)
     await user.type(hemlock, '-')
 
     expect(
-      screen.queryByText(/Hemlock \(HE\) grade A must be a number from 0 to 9999.99/i),
+      screen.queryByText(/Hemlock \(HE\) grade B must be a number from 0 to 9999.99/i),
     ).not.toBeInTheDocument()
     expect(
       screen.getByText(
-        /Hemlock \(HE\) grade A had a value in the starting values and is now blank/i,
+        /Hemlock \(HE\) grade B had a value in the starting values and is now blank/i,
       ),
     ).toBeVisible()
 
@@ -248,7 +249,7 @@ describe('RTM EMS Log AMV actions', () => {
       values: [
         expect.objectContaining({
           species: 'BA',
-          grade: 'A',
+          grade: 'B',
           growthIndicator: 'O',
           newValue: 10,
           saveMode: 'update',
@@ -260,26 +261,26 @@ describe('RTM EMS Log AMV actions', () => {
   it('prefills an empty current month from the immediately previous month', async () => {
     mockRows(
       [],
-      [row('BA', 'A', 'O', PREVIOUS_MONTH, 10.25), row('BA', 'A', 'S', PREVIOUS_MONTH, 99)],
+      [row('BA', 'B', 'O', PREVIOUS_MONTH, 10.25), row('BA', 'B', 'S', PREVIOUS_MONTH, 99)],
     )
-    mockedSearchLatest.mockResolvedValue([row('BA', 'A', 'O', '2000-01-01', 999)])
+    mockedSearchLatest.mockResolvedValue([row('BA', 'B', 'O', '2000-01-01', 999)])
     render(<RTMEmsLogAmvPage />)
     await waitForMonthLoad()
 
-    expect(amvCell('Balsam (BA)', 'A')).toHaveValue('10.25')
-    expect(amvCell('Balsam (BA)', 'A')).toHaveClass('rtm-amv-cell-input')
+    expect(amvCell('Balsam (BA)', 'B')).toHaveValue('10.25')
+    expect(amvCell('Balsam (BA)', 'B')).toHaveClass('rtm-amv-cell-input')
     expect(screen.getByRole('heading', { name: 'Starting values copied' })).toBeVisible()
     expect(screen.getByText(/Prefilled from the previous month/i)).toBeVisible()
     expect(mockedSearchLatest).not.toHaveBeenCalled()
   })
 
   it('does not prefill a partially populated current month', async () => {
-    mockRows([row('BA', 'A', 'O', CURRENT_MONTH, 10.25)], [row('HE', 'A', 'O', PREVIOUS_MONTH, 20)])
+    mockRows([row('BA', 'B', 'O', CURRENT_MONTH, 10.25)], [row('HE', 'B', 'O', PREVIOUS_MONTH, 20)])
     render(<RTMEmsLogAmvPage />)
     await waitForMonthLoad()
 
-    expect(amvCell('Balsam (BA)', 'A')).toHaveValue('10.25')
-    expect(amvCell('Hemlock (HE)', 'A')).toHaveValue('')
+    expect(amvCell('Balsam (BA)', 'B')).toHaveValue('10.25')
+    expect(amvCell('Hemlock (HE)', 'B')).toHaveValue('')
     expect(
       screen.queryByRole('heading', { name: 'Starting values copied' }),
     ).not.toBeInTheDocument()
@@ -289,8 +290,8 @@ describe('RTM EMS Log AMV actions', () => {
   it('prefills a future month from the latest available values', async () => {
     const futureMonth = monthOffset(CURRENT_MONTH, 1)
     mockedSearchLatest.mockResolvedValue([
-      row('BA', 'A', 'O', PREVIOUS_MONTH, 10.25),
-      row('BA', 'A', 'S', PREVIOUS_MONTH, 99),
+      row('BA', 'B', 'O', PREVIOUS_MONTH, 10.25),
+      row('BA', 'B', 'S', PREVIOUS_MONTH, 99),
     ])
     render(<RTMEmsLogAmvPage />)
     await waitForMonthLoad()
@@ -300,7 +301,7 @@ describe('RTM EMS Log AMV actions', () => {
     })
     await waitForMonthLoad(futureMonth)
 
-    expect(amvCell('Balsam (BA)', 'A')).toHaveValue('10.25')
+    expect(amvCell('Balsam (BA)', 'B')).toHaveValue('10.25')
     expect(screen.getByRole('heading', { name: 'Starting values copied' })).toBeVisible()
     expect(screen.getByText(/Prefilled from the latest available earlier value/i)).toBeVisible()
     expect(mockedSearchLatest).toHaveBeenLastCalledWith(futureMonth)
@@ -310,7 +311,7 @@ describe('RTM EMS Log AMV actions', () => {
     const user = userEvent.setup()
     const pastMonth = monthOffset(CURRENT_MONTH, -1)
     mockRows([], [], pastMonth)
-    mockedSearchLatest.mockResolvedValue([row('BA', 'A', 'O', PREVIOUS_MONTH, 10.25)])
+    mockedSearchLatest.mockResolvedValue([row('BA', 'B', 'O', PREVIOUS_MONTH, 10.25)])
     render(<RTMEmsLogAmvPage />)
     await waitForMonthLoad()
 
@@ -319,8 +320,8 @@ describe('RTM EMS Log AMV actions', () => {
     })
     await waitForMonthLoad(pastMonth)
 
-    const balsam = amvCell('Balsam (BA)', 'A')
-    const hemlock = amvCell('Hemlock (HE)', 'A')
+    const balsam = amvCell('Balsam (BA)', 'B')
+    const hemlock = amvCell('Hemlock (HE)', 'B')
     expect(balsam).toHaveValue('')
     expect(screen.getByRole('heading', { name: 'Past month selected' })).toBeVisible()
     expect(screen.getByText(/require confirmation before saving/i)).toBeVisible()
@@ -341,8 +342,8 @@ describe('RTM EMS Log AMV actions', () => {
     await waitFor(() => expect(mockedSaveBatch).toHaveBeenCalledTimes(1))
     expect(mockedSaveBatch).toHaveBeenCalledWith({
       values: expect.arrayContaining([
-        expect.objectContaining({ species: 'BA', grade: 'A', newValue: 10 }),
-        expect.objectContaining({ species: 'HE', grade: 'A', newValue: 20 }),
+        expect.objectContaining({ species: 'BA', grade: 'B', newValue: 10 }),
+        expect.objectContaining({ species: 'HE', grade: 'B', newValue: 20 }),
       ]),
     })
     await waitFor(() => {
@@ -357,7 +358,7 @@ describe('RTM EMS Log AMV actions', () => {
     mockedSaveBatch.mockResolvedValue({
       status: 'validation_failed',
       message: 'Average monthly value validation failed.',
-      errors: ['Balsam grade A is outside the allowed range.'],
+      errors: ['Balsam grade B is outside the allowed range.'],
       rows: [],
     })
 
@@ -367,13 +368,13 @@ describe('RTM EMS Log AMV actions', () => {
       target: { value: pastMonth.slice(0, 7) },
     })
     await waitForMonthLoad(pastMonth)
-    await user.type(amvCell('Balsam (BA)', 'A'), '10')
+    await user.type(amvCell('Balsam (BA)', 'B'), '10')
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
     const dialog = await screen.findByRole('dialog', { name: 'Confirm AMV changes' })
     await user.click(within(dialog).getByRole('button', { name: 'Confirm and save' }))
 
-    expect(await screen.findByText(/Balsam grade A is outside the allowed range/)).toBeVisible()
+    expect(await screen.findByText(/Balsam grade B is outside the allowed range/)).toBeVisible()
     expect(dialog).toBeVisible()
     expect(within(dialog).getByRole('button', { name: 'Confirm and save' })).toBeEnabled()
   })
@@ -383,7 +384,7 @@ describe('RTM EMS Log AMV actions', () => {
     render(<RTMEmsLogAmvPage />)
     await waitForMonthLoad()
 
-    const balsam = amvCell('Balsam (BA)', 'A')
+    const balsam = amvCell('Balsam (BA)', 'B')
     await user.type(balsam, '-1')
     expect(screen.getByText(/must be a number from 0 to 9999.99/i)).toBeVisible()
     expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled()
@@ -395,18 +396,18 @@ describe('RTM EMS Log AMV actions', () => {
     mockedSaveBatch.mockResolvedValue({
       status: 'validation_failed',
       message: 'Average monthly value validation failed.',
-      errors: ['Pine grade A is outside the allowed range.'],
+      errors: ['Pine grade B is outside the allowed range.'],
       rows: [],
     })
     render(<RTMEmsLogAmvPage />)
     await waitForMonthLoad()
 
-    const pine = amvCell('Pine', 'A')
+    const pine = amvCell('Pine', 'B')
     await user.type(pine, '123.45')
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() => expect(mockedSaveBatch).toHaveBeenCalledTimes(1))
-    expect(screen.getByText(/Pine grade A is outside the allowed range/)).toBeVisible()
+    expect(screen.getByText(/Pine grade B is outside the allowed range/)).toBeVisible()
     expect(pine).toHaveValue('123.45')
   })
 
@@ -415,7 +416,7 @@ describe('RTM EMS Log AMV actions', () => {
     render(<RTMEmsLogAmvPage />)
     await waitForMonthLoad()
 
-    expect(amvCell('Balsam (BA)', 'A')).toBeDisabled()
+    expect(amvCell('Balsam (BA)', 'B')).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled()
   })
 })
