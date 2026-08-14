@@ -5,6 +5,7 @@ import { APP_NOTIFICATION_REGION_ID } from '@/components/AppNotification'
 import { useAuth } from '@/context/auth/useAuth'
 import RtmEmsLogAmvUploadPage from '@/pages/RTMEmsLogAmv/LegacyUploadWorkflow'
 import {
+  getRtmEmsLogAmvLastSaved,
   previewRtmEmsLogAmvUpload,
   saveRtmEmsLogAmvBatch,
   searchLatestRtmEmsLogAmv,
@@ -18,6 +19,7 @@ vi.mock('@/context/auth/useAuth', () => ({
 }))
 
 vi.mock('@/service/rtm-emslogamv-service', () => ({
+  getRtmEmsLogAmvLastSaved: vi.fn(),
   previewRtmEmsLogAmvUpload: vi.fn(),
   saveRtmEmsLogAmvBatch: vi.fn(),
   searchLatestRtmEmsLogAmv: vi.fn(),
@@ -25,6 +27,7 @@ vi.mock('@/service/rtm-emslogamv-service', () => ({
 }))
 
 const mockedUseAuth = vi.mocked(useAuth)
+const mockedLastSaved = vi.mocked(getRtmEmsLogAmvLastSaved)
 const mockedPreviewUpload = vi.mocked(previewRtmEmsLogAmvUpload)
 const mockedSaveBatch = vi.mocked(saveRtmEmsLogAmvBatch)
 const mockedSearchLatest = vi.mocked(searchLatestRtmEmsLogAmv)
@@ -55,7 +58,12 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       message: 'Values saved.',
       errors: [],
       rows: [],
+      lastSaved: {
+        savedBy: 'IDIR\\MGURJAOD',
+        savedAt: '2026-08-11T18:21:00',
+      },
     })
+    mockedLastSaved.mockResolvedValue(null)
     mockedSearch.mockResolvedValue([])
     mockedSearchLatest.mockResolvedValue([])
   })
@@ -173,6 +181,10 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
         returnCode: '0',
       },
     ])
+    mockedLastSaved.mockResolvedValue({
+      savedBy: 'IDIR\\MGURJAOD',
+      savedAt: '2026-08-11T18:21:00',
+    })
 
     await renderUploadPage()
 
@@ -186,6 +198,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       updateDate: nextMonth,
     })
     expect(mockedSearchLatest).toHaveBeenCalledWith(nextMonth)
+    expect(mockedLastSaved).toHaveBeenCalledWith(nextMonth)
     expect(
       within(table).getByRole('columnheader', {
         name: `Value in effect (${monthLabel(comparisonMonth)})`,
@@ -198,7 +211,8 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     expect(replaceFileButton).toBeVisible()
     expect(replaceFileButton).toHaveClass('cds--btn--md')
     expect(screen.queryByText('Upload spreadsheet')).not.toBeInTheDocument()
-    expect(screen.queryByText('Last saved')).not.toBeInTheDocument()
+    expect(screen.getByText('Last saved')).toBeVisible()
+    expect(screen.getByText('August 11, 2026, 6:21 PM by IDIR\\MGURJAOD')).toBeVisible()
     expect(screen.queryByText('Values saved')).not.toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: 'AL' })).not.toBeInTheDocument()
     expect(within(table).queryByRole('rowheader', { name: 'Q' })).not.toBeInTheDocument()
@@ -900,7 +914,8 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     expect(savedToast).toHaveClass('cds--toast-notification--success')
     expect(document.getElementById(APP_NOTIFICATION_REGION_ID)).toContainElement(savedToast)
     expect(screen.getByText(/They take effect on [A-Z][a-z]+ 1, \d{4}\./)).toBeVisible()
-    expect(screen.queryByText('Last saved')).not.toBeInTheDocument()
+    expect(screen.getByText('Last saved')).toBeVisible()
+    expect(screen.getByText('August 11, 2026, 6:21 PM by IDIR\\MGURJAOD')).toBeVisible()
     expect(screen.getByRole('heading', { name: 'Values', level: 2 })).toBeVisible()
     expect(screen.getByRole('button', { name: 'Replace file' })).toBeVisible()
     expect(screen.queryByLabelText('Uploaded average monthly values file')).not.toBeInTheDocument()

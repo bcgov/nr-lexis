@@ -14,6 +14,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvLastSavedDto;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvMutationResultDto;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvSaveRequestDto;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvRowDto;
@@ -26,6 +27,7 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.api.Test;
@@ -120,6 +122,69 @@ class OracleRtmEmsLogAmvServiceTest {
     assertThat(service.findLatestBefore("not-a-date")).isEmpty();
 
     verifyNoInteractions(repository);
+  }
+
+  @Test
+  void shouldLoadLastSavedAuditForTheNormalizedEffectiveMonth() {
+    OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
+    LocalDate effectiveDate = LocalDate.of(2026, 9, 1);
+    RtmEmsLogAmvLastSavedDto expected =
+        new RtmEmsLogAmvLastSavedDto(
+            "IDIR\\MGURJAOD", LocalDateTime.of(2026, 8, 11, 18, 21));
+    when(repository.findLastSaved(effectiveDate)).thenReturn(expected);
+    OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository);
+
+    assertThat(service.findLastSaved("2026-09-19")).isEqualTo(expected);
+
+    verify(repository).findLastSaved(effectiveDate);
+  }
+
+  @Test
+  void shouldReturnEmptyAuditWithoutOracleLookupForInvalidEffectiveDate() {
+    OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
+    OracleRtmEmsLogAmvService service = new OracleRtmEmsLogAmvService(repository);
+
+    assertThat(service.findLastSaved("not-a-date"))
+        .isEqualTo(new RtmEmsLogAmvLastSavedDto(null, null));
+
+    verifyNoInteractions(repository);
+  }
+
+  @Test
+  void shouldPersistTheAuthenticatedActorAndReturnTheCommittedAudit() {
+    OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
+    LocalDate effectiveDate = LocalDate.of(2026, 7, 1);
+    RtmEmsLogAmvLastSavedDto expectedAudit =
+        new RtmEmsLogAmvLastSavedDto(
+            "IDIR\\MGURJAOD", LocalDateTime.of(2026, 6, 15, 12, 0));
+    when(repository.upsertAtomically(any())).thenReturn(new int[] {1, 1});
+    when(repository.findLastSaved(effectiveDate)).thenReturn(expectedAudit);
+    OracleRtmEmsLogAmvService service =
+        new OracleRtmEmsLogAmvService(repository, JUNE_2026_CLOCK);
+
+    RtmEmsLogAmvMutationResultDto result =
+        service.saveBatch(
+            List.of(
+                new RtmEmsLogAmvSaveRequestDto(
+                    "BA",
+                    "B",
+                    "O",
+                    "2026-07-01",
+                    "2026-07-01",
+                    new BigDecimal("10.25"),
+                    "update")),
+            "IDIR\\MGURJAOD");
+
+    assertThat(result.status()).isEqualTo("accepted");
+    assertThat(result.lastSaved()).isEqualTo(expectedAudit);
+    verify(repository)
+        .upsertAtomically(
+            argThat(
+                targets ->
+                    targets.size() == 2
+                        && targets.stream()
+                            .allMatch(target -> "IDIR\\MGURJAOD".equals(target.actor()))));
+    verify(repository).findLastSaved(effectiveDate);
   }
 
   @Test

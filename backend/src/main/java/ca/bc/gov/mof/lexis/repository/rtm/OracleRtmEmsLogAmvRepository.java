@@ -3,12 +3,14 @@ package ca.bc.gov.mof.lexis.repository.rtm;
 import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.exceptionType;
 
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvRowDto;
+import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvLastSavedDto;
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import java.math.BigDecimal;
 import java.sql.CallableStatement;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.sql.Types;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -41,7 +43,8 @@ public class OracleRtmEmsLogAmvRepository extends OracleRepositorySupport {
                UPPER(?) AS GRADE,
                UPPER(?) AS GROWTH_TYPE_ST,
                ? AS EFFECTIVE_DATE,
-               ? AS AVG_MARKET_PRICE
+               ? AS AVG_MARKET_PRICE,
+               ? AS ACTOR
         FROM DUAL
       ) source
       ON (
@@ -51,16 +54,29 @@ public class OracleRtmEmsLogAmvRepository extends OracleRepositorySupport {
         AND target.EFFECTIVE_DATE = source.EFFECTIVE_DATE
       )
       WHEN MATCHED THEN
-        UPDATE SET target.AVG_MARKET_PRICE = source.AVG_MARKET_PRICE
+        UPDATE SET target.AVG_MARKET_PRICE = source.AVG_MARKET_PRICE,
+                   target.UPDATE_USER = source.ACTOR,
+                   target.UPDATE_TIMESTAMP = SYSDATE
       WHEN NOT MATCHED THEN
-        INSERT (SPECIES, GRADE, GROWTH_TYPE_ST, EFFECTIVE_DATE, AVG_MARKET_PRICE, REVISION_COUNT)
+        INSERT (
+          SPECIES,
+          GRADE,
+          GROWTH_TYPE_ST,
+          EFFECTIVE_DATE,
+          AVG_MARKET_PRICE,
+          REVISION_COUNT,
+          CREATE_USER,
+          CREATE_TIMESTAMP
+        )
         VALUES (
           source.SPECIES,
           source.GRADE,
           source.GROWTH_TYPE_ST,
           source.EFFECTIVE_DATE,
           source.AVG_MARKET_PRICE,
-          0
+          0,
+          source.ACTOR,
+          SYSDATE
         )
       """;
 
@@ -69,7 +85,8 @@ public class OracleRtmEmsLogAmvRepository extends OracleRepositorySupport {
       String grade,
       String growthIndicator,
       LocalDate effectiveDate,
-      BigDecimal newValue) {}
+      BigDecimal newValue,
+      String actor) {}
 
   public OracleRtmEmsLogAmvRepository(@Qualifier("oracleJdbcTemplate") JdbcTemplate jdbcTemplate) {
     super(jdbcTemplate);
@@ -128,6 +145,22 @@ public class OracleRtmEmsLogAmvRepository extends OracleRepositorySupport {
       } catch (DataAccessException schemaFailure) {
         throw authoritativeReadFailure(
             "find_latest_effective_date", synonymFailure, schemaFailure);
+      }
+    }
+  }
+
+  public RtmEmsLogAmvLastSavedDto findLastSaved(LocalDate effectiveDate) {
+    if (effectiveDate == null) {
+      return new RtmEmsLogAmvLastSavedDto(null, null);
+    }
+
+    try {
+      return queryLastSaved("EMS_LOG_AMV", effectiveDate);
+    } catch (DataAccessException synonymFailure) {
+      try {
+        return queryLastSaved("THE.EMS_LOG_AMV", effectiveDate);
+      } catch (DataAccessException schemaFailure) {
+        throw authoritativeReadFailure("find_last_saved", synonymFailure, schemaFailure);
       }
     }
   }
@@ -338,6 +371,43 @@ public class OracleRtmEmsLogAmvRepository extends OracleRepositorySupport {
         java.sql.Date.valueOf(effectiveDate));
   }
 
+  private RtmEmsLogAmvLastSavedDto queryLastSaved(
+      String tableName, LocalDate effectiveDate) {
+    String query =
+        """
+        SELECT SAVED_BY, SAVED_AT
+        FROM (
+          SELECT CASE
+                   WHEN UPDATE_TIMESTAMP IS NOT NULL THEN UPDATE_USER
+                   ELSE CREATE_USER
+                 END AS SAVED_BY,
+                 NVL(UPDATE_TIMESTAMP, CREATE_TIMESTAMP) AS SAVED_AT
+          FROM %s
+          WHERE EFFECTIVE_DATE >= ?
+            AND EFFECTIVE_DATE < ?
+            AND NVL(UPDATE_TIMESTAMP, CREATE_TIMESTAMP) IS NOT NULL
+          ORDER BY NVL(UPDATE_TIMESTAMP, CREATE_TIMESTAMP) DESC,
+                   SPECIES,
+                   GRADE,
+                   GROWTH_TYPE_ST
+        )
+        WHERE ROWNUM = 1
+        """.formatted(tableName);
+
+    List<RtmEmsLogAmvLastSavedDto> rows =
+        jdbcTemplate.query(
+            query,
+            (rs, rowNumber) -> {
+              Timestamp savedAt = rs.getTimestamp("SAVED_AT");
+              return new RtmEmsLogAmvLastSavedDto(
+                  trim(rs.getString("SAVED_BY")),
+                  savedAt == null ? null : savedAt.toLocalDateTime());
+            },
+            java.sql.Date.valueOf(effectiveDate),
+            java.sql.Date.valueOf(effectiveDate.plusMonths(1)));
+    return rows.isEmpty() ? new RtmEmsLogAmvLastSavedDto(null, null) : rows.getFirst();
+  }
+
   private List<RtmEmsLogAmvRowDto> executeFind(
       String species,
       String growthIndicator,
@@ -438,6 +508,7 @@ public class OracleRtmEmsLogAmvRepository extends OracleRepositorySupport {
             statement.setString(3, trim(target.growthIndicator()));
             statement.setDate(4, java.sql.Date.valueOf(target.effectiveDate()));
             statement.setBigDecimal(5, target.newValue());
+            statement.setString(6, trim(target.actor()));
           }
 
           @Override

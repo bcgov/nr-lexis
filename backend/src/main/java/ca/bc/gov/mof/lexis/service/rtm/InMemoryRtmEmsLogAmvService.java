@@ -7,6 +7,7 @@ import static ca.bc.gov.mof.lexis.service.rtm.RtmEmsLogAmvDateUtils.parseRetriev
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvMutationResultDto;
+import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvLastSavedDto;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvRowDto;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvSaveRequestDto;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvUploadPreviewDto;
@@ -18,6 +19,7 @@ import java.io.IOException;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -38,6 +40,8 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
   private static final String RETURN_FAILURE = "rejected";
   private static final String RETURN_VALIDATION = "validation_failed";
   private static final String UPLOAD_VALIDATION_FAILURE_MESSAGE = "This file couldn't be used.";
+  private static final String SYSTEM_AUDIT_ACTOR = "SERVICE\\LEXIS";
+  private static final int MAX_AUDIT_ACTOR_LENGTH = 100;
   private static final List<String> GROWTH_TARGETS = List.of("O", "S");
   private static final List<String> SCREEN_SPECIES =
       List.of("BA", "HE", "CE", "CY", "FI", "SP", "PINE");
@@ -94,6 +98,8 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
               BigDecimal.valueOf(900.89),
               BigDecimal.valueOf(900.89),
               "0")));
+  private final Map<LocalDate, RtmEmsLogAmvLastSavedDto> lastSavedByMonth =
+      new LinkedHashMap<>();
 
   InMemoryRtmEmsLogAmvService() {
     this(VirusScanService.NO_OP);
@@ -166,6 +172,16 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
                   : existing);
     }
     return sortRows(latestRowsByKey.values());
+  }
+
+  @Override
+  public RtmEmsLogAmvLastSavedDto findLastSaved(String effectiveDate) {
+    LocalDate parsedEffectiveDate = parseRetrievalDate(effectiveDate);
+    if (parsedEffectiveDate == null) {
+      return new RtmEmsLogAmvLastSavedDto(null, null);
+    }
+    return lastSavedByMonth.getOrDefault(
+        parsedEffectiveDate, new RtmEmsLogAmvLastSavedDto(null, null));
   }
 
   @Override
@@ -263,11 +279,26 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
 
   @Override
   public RtmEmsLogAmvMutationResultDto saveBatch(List<RtmEmsLogAmvSaveRequestDto> requests) {
+    return saveBatch(requests, SYSTEM_AUDIT_ACTOR);
+  }
+
+  @Override
+  public RtmEmsLogAmvMutationResultDto saveBatch(
+      List<RtmEmsLogAmvSaveRequestDto> requests, String actor) {
     if (requests == null || requests.isEmpty()) {
       return buildMutationResult(
           RETURN_VALIDATION,
           "Please correct the highlighted fields.",
           List.of("At least one AMV table value is required."),
+          List.of());
+    }
+
+    String auditActor = normalizeAuditActor(actor);
+    if (auditActor == null) {
+      return buildMutationResult(
+          RETURN_VALIDATION,
+          "Please correct the highlighted fields.",
+          List.of("An authenticated audit identity is required."),
           List.of());
     }
 
@@ -333,12 +364,15 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
 
     rows.clear();
     rows.addAll(nextRows);
+    RtmEmsLogAmvLastSavedDto lastSaved =
+        recordLastSaved(targetsByKey.values().iterator().next().effectiveDate(), auditActor);
     return buildMutationResult(
         RETURN_SUCCESS,
         "Saved %d table value%s."
             .formatted(requests.size(), requests.size() == 1 ? "" : "s"),
         List.of(),
-        savedRows);
+        savedRows,
+        lastSaved);
   }
 
   @Override
@@ -490,16 +524,22 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
 
   @Override
   public RtmEmsLogAmvUploadResultDto upload(MultipartFile file) {
-    return upload(file, null, false);
+    return upload(file, null, false, SYSTEM_AUDIT_ACTOR);
   }
 
   @Override
   public RtmEmsLogAmvUploadResultDto upload(MultipartFile file, String effectiveMonth) {
-    return upload(file, effectiveMonth, true);
+    return upload(file, effectiveMonth, true, SYSTEM_AUDIT_ACTOR);
+  }
+
+  @Override
+  public RtmEmsLogAmvUploadResultDto upload(
+      MultipartFile file, String effectiveMonth, String actor) {
+    return upload(file, effectiveMonth, true, actor);
   }
 
   private RtmEmsLogAmvUploadResultDto upload(
-      MultipartFile file, String effectiveMonth, boolean enforceNextMonth) {
+      MultipartFile file, String effectiveMonth, boolean enforceNextMonth, String actor) {
     List<String> validationErrors = validateUploadRequest(file);
     if (!validationErrors.isEmpty()) {
       return buildUploadResult(
@@ -510,6 +550,20 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
           0,
           0,
           validationErrors,
+          List.of(),
+          List.of());
+    }
+
+    String auditActor = normalizeAuditActor(actor);
+    if (auditActor == null) {
+      return buildUploadResult(
+          RETURN_VALIDATION,
+          UPLOAD_VALIDATION_FAILURE_MESSAGE,
+          trimToNull(file.getOriginalFilename()),
+          file.getSize(),
+          0,
+          0,
+          List.of("An authenticated audit identity is required."),
           List.of(),
           List.of());
     }
@@ -706,6 +760,10 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
             List.of());
       }
 
+      recordLastSaved(
+          effectiveDateForSave(SAVE_MODE_UPDATE, parsedRetrievalDate, parsedUpdateDate),
+          auditActor);
+
       return buildUploadResult(
           RETURN_SUCCESS,
           "Upload completed.",
@@ -850,6 +908,28 @@ public class InMemoryRtmEmsLogAmvService implements RtmEmsLogAmvService {
       List<String> errors,
       List<RtmEmsLogAmvRowDto> rows) {
     return new RtmEmsLogAmvMutationResultDto(status, message, errors, rows);
+  }
+
+  private RtmEmsLogAmvMutationResultDto buildMutationResult(
+      String status,
+      String message,
+      List<String> errors,
+      List<RtmEmsLogAmvRowDto> rows,
+      RtmEmsLogAmvLastSavedDto lastSaved) {
+    return new RtmEmsLogAmvMutationResultDto(status, message, errors, rows, lastSaved);
+  }
+
+  private RtmEmsLogAmvLastSavedDto recordLastSaved(LocalDate effectiveDate, String actor) {
+    RtmEmsLogAmvLastSavedDto lastSaved =
+        new RtmEmsLogAmvLastSavedDto(
+            actor, LocalDateTime.ofInstant(clock.instant(), LexisBusinessTime.ZONE));
+    lastSavedByMonth.put(effectiveDate, lastSaved);
+    return lastSaved;
+  }
+
+  private String normalizeAuditActor(String actor) {
+    String normalized = trimToNull(actor);
+    return normalized == null || normalized.length() > MAX_AUDIT_ACTOR_LENGTH ? null : normalized;
   }
 
   private RtmEmsLogAmvUploadPreviewDto buildPreview(

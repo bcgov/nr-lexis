@@ -405,6 +405,11 @@ class LexisRouteAuthorizationIntegrationTest {
             expected(HttpMethod.POST, "/api/lexis/lexisFILAdminRPC.do", null, "/lexisFILAdmin"),
             expected(HttpMethod.GET, "/api/lexis/rtm/emslogamv", null, "/lexisAgentAdmin"),
             expected(
+                HttpMethod.GET,
+                "/api/lexis/rtm/emslogamv/last-saved",
+                null,
+                "/lexisAgentAdmin"),
+            expected(
                 HttpMethod.POST,
                 "/api/lexis/rtm/emslogamv/preview",
                 null,

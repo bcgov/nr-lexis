@@ -11,12 +11,15 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvLastSavedDto;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvRowDto;
 import java.math.BigDecimal;
 import java.sql.CallableStatement;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -27,6 +30,7 @@ import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.jdbc.core.CallableStatementCallback;
+import org.springframework.jdbc.core.BatchPreparedStatementSetter;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 
@@ -123,6 +127,59 @@ class OracleRtmEmsLogAmvRepositoryTest {
         .contains("PARTITION BY SPECIES, GRADE, GROWTH_TYPE_ST")
         .contains("WHERE VALUE_RANK = 1")
         .doesNotContain("MAX(");
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void lastSavedShouldSelectTheLatestAuditForTheEffectiveMonth() {
+    RtmEmsLogAmvLastSavedDto expected =
+        new RtmEmsLogAmvLastSavedDto(
+            "IDIR\\MGURJAOD", LocalDateTime.of(2026, 8, 11, 18, 21));
+    when(jdbcTemplate.query(anyString(), any(RowMapper.class), any(Object[].class)))
+        .thenReturn(List.of(expected));
+    OracleRtmEmsLogAmvRepository repository = new OracleRtmEmsLogAmvRepository(jdbcTemplate);
+
+    assertThat(repository.findLastSaved(EFFECTIVE_DATE)).isEqualTo(expected);
+
+    ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+    ArgumentCaptor<Object[]> parameters = ArgumentCaptor.forClass(Object[].class);
+    verify(jdbcTemplate).query(sql.capture(), any(RowMapper.class), parameters.capture());
+    assertThat(sql.getValue().replaceAll("\\s+", " "))
+        .contains("WHEN UPDATE_TIMESTAMP IS NOT NULL THEN UPDATE_USER")
+        .contains("NVL(UPDATE_TIMESTAMP, CREATE_TIMESTAMP) AS SAVED_AT")
+        .contains("ORDER BY NVL(UPDATE_TIMESTAMP, CREATE_TIMESTAMP) DESC")
+        .contains("WHERE ROWNUM = 1");
+    assertThat(parameters.getValue())
+        .containsExactly(
+            java.sql.Date.valueOf(EFFECTIVE_DATE),
+            java.sql.Date.valueOf(EFFECTIVE_DATE.plusMonths(1)));
+  }
+
+  @Test
+  void atomicUpsertShouldBindActorAndPersistCreateOrUpdateAuditFields() throws SQLException {
+    when(jdbcTemplate.batchUpdate(anyString(), any(BatchPreparedStatementSetter.class)))
+        .thenReturn(new int[] {1});
+    OracleRtmEmsLogAmvRepository repository = new OracleRtmEmsLogAmvRepository(jdbcTemplate);
+    var target =
+        new OracleRtmEmsLogAmvRepository.AtomicWriteTarget(
+            "BA", "B", "O", EFFECTIVE_DATE, new BigDecimal("10.25"), "IDIR\\MGURJAOD");
+
+    assertThat(repository.upsertAtomically(List.of(target))).containsExactly(1);
+
+    ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+    ArgumentCaptor<BatchPreparedStatementSetter> setter =
+        ArgumentCaptor.forClass(BatchPreparedStatementSetter.class);
+    verify(jdbcTemplate).batchUpdate(sql.capture(), setter.capture());
+    assertThat(sql.getValue().replaceAll("\\s+", " "))
+        .contains("target.UPDATE_USER = source.ACTOR")
+        .contains("target.UPDATE_TIMESTAMP = SYSDATE")
+        .contains("CREATE_USER, CREATE_TIMESTAMP")
+        .contains("source.ACTOR, SYSDATE");
+
+    PreparedStatement statement = mock(PreparedStatement.class);
+    setter.getValue().setValues(statement, 0);
+    verify(statement).setString(6, "IDIR\\MGURJAOD");
+    assertThat(setter.getValue().getBatchSize()).isEqualTo(1);
   }
 
   @Test
