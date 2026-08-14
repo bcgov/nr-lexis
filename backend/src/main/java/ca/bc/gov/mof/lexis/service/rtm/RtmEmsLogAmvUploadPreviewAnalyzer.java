@@ -116,7 +116,7 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
       List<String> warnings,
       List<UploadRow> rows) {}
 
-  private record ParsedCell(int column, String value) {}
+  private record ParsedCell(int column, String value, boolean excelNumeric) {}
   private record ParsedRow(int rowNumber, List<ParsedCell> cells) {}
   private record ParsedWorkbook(List<ParsedRow> rows) {}
   private record UploadMetadata(LocalDate updateDate, String growthIndicator) {}
@@ -856,7 +856,7 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
         }
 
         if (isNumeric(value)) {
-          BigDecimal newValue = new BigDecimal(normalizeNumericValue(value));
+          BigDecimal newValue = parseNumericValue(cell);
           uploadRows.add(
               new UploadRow(
                   speciesCode, grade, growthIndicator, newValue, rowNumber, column));
@@ -974,6 +974,17 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
     } catch (NumberFormatException ex) {
       return false;
     }
+  }
+
+  private static BigDecimal parseNumericValue(ParsedCell cell) {
+    BigDecimal value = new BigDecimal(normalizeNumericValue(cell.value()));
+    if (!cell.excelNumeric()) {
+      return value;
+    }
+
+    // Excel numeric cells use binary64; their XML serialization can expose precision tails.
+    double excelValue = value.doubleValue();
+    return Double.isFinite(excelValue) ? BigDecimal.valueOf(excelValue) : value;
   }
 
   private static boolean isUploadableGrade(String grade) {
@@ -1256,7 +1267,8 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
                   new ParsedCell(
                       cellColumn,
                       resolveCellValue(
-                          cellValue == null ? "" : cellValue.toString(), cellType, sharedStrings)));
+                          cellValue == null ? "" : cellValue.toString(), cellType, sharedStrings),
+                      cellType == null || cellType.isBlank() || "n".equals(cellType)));
               totalCells++;
             }
             cellColumn = -1;

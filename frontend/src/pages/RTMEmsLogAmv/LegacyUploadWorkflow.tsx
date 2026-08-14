@@ -808,7 +808,7 @@ const ReviewUploadContent = ({
         lowContrast
         hideCloseButton
         title="Fixed values are not shown here"
-        subtitle="Grades Z, BLANK and 1 to 6 are always $1.00 per cubic metre. They are saved automatically and appear on the permit invoice."
+        subtitle="Grades Z, BLANK and 1 to 6 are always $1.00 per cubic metre. They are saved automatically and appear on the permit Fees tab."
       />
 
       {uploadResult && (
