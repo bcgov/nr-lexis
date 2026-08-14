@@ -91,6 +91,41 @@ class RtmEmsLogAmvUploadPreviewAnalyzerTest {
   }
 
   @Test
+  void shouldNormalizeExcelFloatingPointSerializationArtifacts() throws IOException {
+    Map<String, byte[]> entries = validWorkbookEntries();
+    entries.put(
+        "xl/worksheets/sheet1.xml",
+        textEntry(entries, "xl/worksheets/sheet1.xml")
+            .replace("<v>10.25</v>", "<v>142.41999999999999</v>")
+            .getBytes(StandardCharsets.UTF_8));
+
+    RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult result =
+        RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
+            new ByteArrayInputStream(workbook(entries)));
+
+    assertThat(result.rows().getFirst().newValue()).isEqualByComparingTo("142.42");
+    assertThat(RtmEmsLogAmvValueValidator.validate(result.rows().getFirst().newValue())).isEmpty();
+  }
+
+  @Test
+  void shouldPreserveGenuineThirdDecimalFromExcelNumericCell() throws IOException {
+    Map<String, byte[]> entries = validWorkbookEntries();
+    entries.put(
+        "xl/worksheets/sheet1.xml",
+        textEntry(entries, "xl/worksheets/sheet1.xml")
+            .replace("<v>10.25</v>", "<v>142.419</v>")
+            .getBytes(StandardCharsets.UTF_8));
+
+    RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult result =
+        RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
+            new ByteArrayInputStream(workbook(entries)));
+
+    assertThat(result.rows().getFirst().newValue()).isEqualByComparingTo("142.419");
+    assertThat(RtmEmsLogAmvValueValidator.validate(result.rows().getFirst().newValue()))
+        .containsExactly("New value must have no more than 2 decimal places.");
+  }
+
+  @Test
   void publishedTemplateShouldUseTheScreenMonthAndUserEnteredValues() throws IOException {
     byte[] templateBytes = Files.readAllBytes(resolvePublishedTemplate());
     String sheetXml = workbookEntryText(templateBytes, "xl/worksheets/sheet1.xml");
