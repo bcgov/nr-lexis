@@ -96,8 +96,11 @@ class RtmEmsLogAmvUploadPreviewAnalyzerTest {
     String sheetXml = workbookEntryText(templateBytes, "xl/worksheets/sheet1.xml");
 
     assertThat(sheetXml)
+        .contains("Enter values for month.")
         .contains("GRADE")
         .contains("PINE")
+        .doesNotContain("Enter values for one month.")
+        .doesNotContain("Choose the effective month on the upload screen")
         .doesNotContain("Update Date")
         .doesNotContain("Growth Indicator")
         .doesNotContain(">WH<")
