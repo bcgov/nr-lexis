@@ -2473,6 +2473,28 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
+  void updatePermitShouldTreatStoredZeroOverrideAsDisabledWhenTheRequestOmitsIt() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRowWithOverride(0.0d, null)));
+    stubTargetMinisterialExemption("EX-700");
+    when(repository.updatePermitDetail(
+            any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
+        .thenReturn(true);
+
+    PermitMutationRpcResponseDto response =
+        service.updatePermit(
+            updatePermitRequest(null, null, null, null), "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<PermitMutationRow> permitCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository)
+        .updatePermitDetail(
+            permitCaptor.capture(), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE));
+    assertThat(permitCaptor.getValue().overrideFee()).isNull();
+  }
+
+  @Test
   void updatePermitShouldRejectExpiredCanonicalPermitWithoutWriting() {
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(permitMutationRow("EXP")));
@@ -4894,25 +4916,26 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
-  void packageInfoShouldUsePackageEndUseForBlanketOic() {
+  void packageInfoShouldUsePackageClassificationsForBlanketOic() {
     when(repository.findPackageInfoByPackageNumber("PKG-903"))
         .thenReturn(
-            Optional.of(new PackageInfoRow("PKG-903", 1000456L, 10.25d, 6.0d, 24.0d, "S", "T")));
+            Optional.of(new PackageInfoRow("PKG-903", 1000456L, 10.25d, 6.0d, 24.0d, "S", "H")));
     when(repository.findApplicationInfoByNumber(1000456L))
         .thenReturn(
             Optional.of(
                 new ApplicationInfoRow(
-                    1000456L, "EX-701", 1835L, "Coast Region", "T", "O", "APP-ENDUSE")));
+                    1000456L, "EX-701", 1835L, "Coast Region", "S", "O", "APP-ENDUSE")));
     when(repository.findExemptionTypeCode("EX-701")).thenReturn(Optional.of("B"));
     when(repository.findEndUsesByPackageNumber("PKG-903"))
         .thenReturn(List.of(new EndUsePairRow("HE", "UT")));
     when(repository.findGrowthTypeDescription("S")).thenReturn(Optional.of("Standing"));
-    when(repository.findProductTypeDescription("T")).thenReturn(Optional.of("Unmanufactured Timber"));
+    when(repository.findProductTypeDescription("H")).thenReturn(Optional.of("Harvested Timber"));
 
     PermitPackageInfoRpcResponseDto response = service.getPackageInfo("PKG-903");
 
     assertThat(response.enduse()).isEqualTo("HE/UT\n");
     assertThat(response.ageclass()).isEqualTo("Standing");
+    assertThat(response.productType()).isEqualTo("Harvested Timber");
   }
 
   @Test

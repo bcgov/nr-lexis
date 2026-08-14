@@ -97,6 +97,7 @@ import {
 } from '@/service/provincial-exemption-detail-service'
 import { ReportRequestError, runReport } from '@/service/report-service'
 import { formatLocalIsoDate } from '@/utils/date'
+import BlanketOicPermitCreateModal from './BlanketOicPermitCreateModal'
 
 type ExemptionDetailTabKey =
   | 'owner'
@@ -728,6 +729,17 @@ const ProvincialExemptionDetailsPage = () => {
     canPerform('createPermit') &&
     (isApplicationApprover || isProvincialSubmitter) &&
     persistedTypeCode === 'M' &&
+    persistedStatusCode === 'ACT' &&
+    editContextLoaded &&
+    !exemptionEditLocked &&
+    !permitCreationRequiresReload &&
+    !editing &&
+    !isExemptionDirty
+  const canCreateBlanketOicPermit =
+    canPerform('createPermit') &&
+    canPerform('savePermit') &&
+    (isApplicationApprover || isProvincialSubmitter) &&
+    persistedTypeCode === 'B' &&
     persistedStatusCode === 'ACT' &&
     editContextLoaded &&
     !exemptionEditLocked &&
@@ -1801,7 +1813,9 @@ const ProvincialExemptionDetailsPage = () => {
                               { label: 'Author', value: displayValue(detail.author) },
                               {
                                 label: 'Owner client number',
-                                value: displayValue(detail.ownerClientNumber),
+                                value: displayValue(
+                                  detail.ownerClientNumber?.trim() || exemptionOwnerClientNumber,
+                                ),
                               },
                               ...(showAgent
                                 ? [
@@ -2007,7 +2021,7 @@ const ProvincialExemptionDetailsPage = () => {
                             Fees tab.
                           </p>
                         )}
-                        {canCreateMinisterialPermit && (
+                        {(canCreateMinisterialPermit || canCreateBlanketOicPermit) && (
                           <div className="legacy-search-actions">
                             <Button
                               kind="tertiary"
@@ -2490,6 +2504,26 @@ const ProvincialExemptionDetailsPage = () => {
             </Button>
           </div>
         </Modal>
+      )}
+      {permitCreationConfirmationOpen && canCreateBlanketOicPermit && currentDetail && (
+        <BlanketOicPermitCreateModal
+          open
+          exemptionNumber={currentDetail.exemptionNumber}
+          exemptionExpiryDate={currentDetail.expiryDate ?? ''}
+          regionOptions={regionOptions}
+          defaultRegionNumbers={editContext.regionNumbers}
+          onClose={closePermitCreationConfirmation}
+          onBusyChange={setCreatingPermit}
+          onCreated={(permitNumber) => {
+            setPermitCreationConfirmationOpen(false)
+            setPermitCreationDestination(`/provincial/permit/${encodeURIComponent(permitNumber)}`)
+          }}
+          onUnknownOutcome={(message) => {
+            setPermitCreationRequiresReload(true)
+            setPermitCreationConfirmationOpen(false)
+            setActionErrorMessage(message)
+          }}
+        />
       )}
       <UnsavedChangesGuard
         isDirty={isExemptionDirty}

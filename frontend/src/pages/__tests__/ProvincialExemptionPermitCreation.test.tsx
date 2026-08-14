@@ -6,13 +6,19 @@ import { useAuth } from '@/context/auth/useAuth'
 import type { ProvincialExemptionDetail } from '@/interfaces/LexisDetails'
 import ProvincialExemptionDetailsPage from '@/pages/ProvincialExemptionDetails'
 import { fetchProvincialExemptionDetail } from '@/service/lexis-detail-service'
+import { fetchExemptionClientLocations } from '@/service/application-client-lookup-service'
 import {
   fetchExemptionApplications,
   fetchExemptionBlanketOicTotals,
   fetchExemptionEditContext,
   fetchExemptionPermits,
 } from '@/service/provincial-exemption-detail-service'
-import { createPermitFromExemption } from '@/service/provincial-permit-documents-invoices-service'
+import {
+  addPermitDetail,
+  createPermitFromExemption,
+} from '@/service/provincial-permit-documents-invoices-service'
+import { fetchProvincialExemptionOptions } from '@/service/search-options-service'
+import { fetchShippingReferenceOptions } from '@/service/shipping-reference-service'
 import { createTestAuthContext, createTestCapabilities } from '@/test-utils/auth'
 
 vi.mock('@/context/auth/useAuth', () => ({
@@ -58,7 +64,18 @@ vi.mock('@/service/provincial-exemption-detail-service', () => ({
 }))
 
 vi.mock('@/service/provincial-permit-documents-invoices-service', () => ({
+  addPermitDetail: vi.fn(),
   createPermitFromExemption: vi.fn(),
+}))
+
+vi.mock('@/service/shipping-reference-service', () => ({
+  fetchShippingReferenceOptions: vi.fn().mockResolvedValue({
+    countries: [{ code: 'US', name: 'United States Of America' }],
+    transportTypes: [{ code: 'B', name: 'Barge' }],
+    ports: [{ code: 'CB', name: 'Cowichan Bay' }],
+  }),
+  formatShippingReferenceOption: (option: { code: string; name: string }) =>
+    `${option.name} (${option.code})`,
 }))
 
 vi.mock('@/service/report-service', () => ({
@@ -85,6 +102,21 @@ const activeMinisterialExemption: ProvincialExemptionDetail = {
   blanketOic: false,
   permitNumbers: [],
   remarks: [],
+}
+
+const activeBlanketOicExemption: ProvincialExemptionDetail = {
+  ...activeMinisterialExemption,
+  exemptionNumber: 'TEST13E2',
+  exemptionTypeCode: 'B',
+  exemptionTypeDescription: 'Blanket OIC',
+  ownerClientNumber: null,
+  agentClientNumber: null,
+  applicationNumber: null,
+  applicationStatus: null,
+  expiryDate: '2099-12-31',
+  approvedVolume: 9_999_999.9,
+  remainingVolume: 9_999_999.9,
+  blanketOic: true,
 }
 
 const mockRole = (roles: string[], allowedActions = ['createPermit']) => {
@@ -119,7 +151,45 @@ const openPermitsTab = async () => {
   await userEvent.click(await screen.findByRole('tab', { name: 'Permits' }))
 }
 
-describe('Ministerial permit creation from an exemption', () => {
+const configureBlanketOicCreationDependencies = () => {
+  vi.mocked(fetchExemptionEditContext).mockResolvedValue({
+    rateOverrideEnabled: false,
+    fixedFeeRate: '',
+    regionNumbers: ['1909'],
+    locked: false,
+    lockMessage: '',
+  })
+  vi.mocked(fetchProvincialExemptionOptions).mockResolvedValue({
+    exemptionTypes: [{ value: 'B', label: 'Blanket OIC' }],
+    exemptionStatuses: [{ value: 'ACT', label: 'Active' }],
+    regions: [{ value: '1909', label: 'South Coast Natural Resource Region' }],
+  })
+  vi.mocked(fetchExemptionClientLocations).mockResolvedValue([
+    {
+      locationCode: '00',
+      locationName: 'WOODLANDS SERVICES',
+      selected: true,
+    },
+  ])
+  vi.mocked(fetchShippingReferenceOptions).mockResolvedValue({
+    countries: [{ code: 'US', name: 'United States Of America' }],
+    transportTypes: [{ code: 'B', name: 'Barge' }],
+    ports: [{ code: 'CB', name: 'Cowichan Bay' }],
+  })
+}
+
+const fillRequiredBlanketOicFields = async (dialog: HTMLElement) => {
+  await userEvent.type(within(dialog).getByLabelText('Permit Request Pieces'), '4')
+  await userEvent.type(within(dialog).getByLabelText('Permit Request Volume (m³)'), '4')
+  await userEvent.type(within(dialog).getByLabelText('Owner client number'), '00001074')
+  await userEvent.type(within(dialog).getByLabelText('Destination company'), 'test destination')
+  await waitFor(() => expect(within(dialog).getByLabelText('Owner location')).toHaveValue('00'))
+  await userEvent.type(within(dialog).getByLabelText('Transport name'), 'test barge')
+  await userEvent.type(within(dialog).getByLabelText('Estimated shipping date'), '2099-01-01')
+  await userEvent.type(within(dialog).getByLabelText('Remarks'), 'test blanket permit')
+}
+
+describe('permit creation from an exemption', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockRole(['LEXIS_APPLICATION_APPROVER'])
@@ -142,14 +212,41 @@ describe('Ministerial permit creation from an exemption', () => {
     })
   })
 
-  it.each(['LEXIS_APPLICATION_APPROVER', 'LEXIS_ADMIN', 'LEXIS_PROVINCIAL_SUBMITTER_00012345'])(
-    'shows the action for %s',
+  it.each([
+    'LEXIS_APPLICATION_APPROVER',
+    'LEXIS_ADMIN',
+    'LEXIS_PROVINCIAL_SUBMITTER',
+    'LEXIS_PROVINCIAL_SUBMITTER_00012345',
+  ])('shows the action for %s', async (role) => {
+    mockRole([role])
+    renderPage(activeMinisterialExemption)
+
+    await openPermitsTab()
+    expect(screen.getByRole('button', { name: 'Apply for new permit' })).toBeInTheDocument()
+  })
+
+  it.each([
+    'LEXIS_APPLICATION_APPROVER',
+    'LEXIS_ADMIN',
+    'LEXIS_PROVINCIAL_SUBMITTER',
+    'LEXIS_PROVINCIAL_SUBMITTER_00012345',
+  ])('shows the Blanket OIC action for %s with both permit actions', async (role) => {
+    mockRole([role], ['createPermit', 'savePermit'])
+    renderPage(activeBlanketOicExemption)
+
+    await openPermitsTab()
+    expect(screen.getByRole('button', { name: 'Apply for new permit' })).toBeInTheDocument()
+  })
+
+  it.each(['LEXIS_EXEMPTION_APPROVER', 'LEXIS_READ_ONLY'])(
+    'does not expose Blanket OIC permit creation to %s even if permit actions are present',
     async (role) => {
-      mockRole([role])
-      renderPage(activeMinisterialExemption)
+      mockRole([role], ['createPermit', 'savePermit'])
+      renderPage(activeBlanketOicExemption)
 
       await openPermitsTab()
-      expect(screen.getByRole('button', { name: 'Apply for new permit' })).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Apply for new permit' })).not.toBeInTheDocument()
+      expect(addPermitDetail).not.toHaveBeenCalled()
     },
   )
 
@@ -243,6 +340,117 @@ describe('Ministerial permit creation from an exemption', () => {
     await waitFor(() => expect(router.state.location.pathname).toBe('/provincial/permit/98765'))
     expect(router.state.location.search).toBe('?permitFilter=987')
     expect(await screen.findByText('New permit destination')).toBeInTheDocument()
+  })
+
+  it('collects and saves the required Blanket OIC permit fields before navigating', async () => {
+    mockRole(['LEXIS_APPLICATION_APPROVER'], ['createPermit', 'savePermit'])
+    configureBlanketOicCreationDependencies()
+    vi.mocked(addPermitDetail).mockResolvedValue({
+      success: true,
+      message: 'The permit was saved successfully.',
+      errors: [],
+      warnings: [],
+      source: 'api',
+      permitNumber: '9020948',
+    })
+    const router = renderPage(activeBlanketOicExemption)
+
+    await openPermitsTab()
+    await userEvent.click(screen.getByRole('button', { name: 'Apply for new permit' }))
+
+    const dialog = screen.getByRole('dialog', { name: 'Apply for new Blanket OIC permit' })
+    expect(
+      within(dialog).getByText(/permit number is assigned only after a successful save/i),
+    ).toBeInTheDocument()
+    await fillRequiredBlanketOicFields(dialog)
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Create permit' }))
+
+    await waitFor(() => expect(addPermitDetail).toHaveBeenCalledOnce())
+    expect(addPermitDetail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        permitNumber: '',
+        permitStatus: 'ACT',
+        exemptionNumber: 'TEST13E2',
+        permitExpiryDate: '2099-12-31',
+        oicPermitTotalPieces: '4',
+        oicPermitTotalVolume: '4',
+        orgUnitNumber: '1909',
+        ownerClientNumber: '00001074',
+        ownerClientLocation: '00',
+        destinationCompanyName: 'test destination',
+        destinationCountry: 'US',
+        transportType: 'B',
+        transportName: 'test barge',
+        estimatedShippingDate: '2099-01-01',
+        portOfExport: 'CB',
+      }),
+    )
+    await waitFor(() => expect(router.state.location.pathname).toBe('/provincial/permit/9020948'))
+  })
+
+  it('validates the Blanket OIC form before calling the server', async () => {
+    mockRole(['LEXIS_APPLICATION_APPROVER'], ['createPermit', 'savePermit'])
+    configureBlanketOicCreationDependencies()
+    renderPage(activeBlanketOicExemption)
+
+    await openPermitsTab()
+    await userEvent.click(screen.getByRole('button', { name: 'Apply for new permit' }))
+
+    const dialog = screen.getByRole('dialog', { name: 'Apply for new Blanket OIC permit' })
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Create permit' }))
+
+    expect(
+      await within(dialog).findAllByText('Owner client number must be exactly 8 digits.'),
+    ).not.toHaveLength(0)
+    expect(addPermitDetail).not.toHaveBeenCalled()
+  })
+
+  it('shows an authoritative Blanket OIC rejection without navigating', async () => {
+    mockRole(['LEXIS_APPLICATION_APPROVER'], ['createPermit', 'savePermit'])
+    configureBlanketOicCreationDependencies()
+    vi.mocked(addPermitDetail).mockResolvedValue({
+      success: false,
+      message: 'Unable to create permit.',
+      errors: ['The exemption is no longer eligible.'],
+      warnings: [],
+      source: 'api',
+      permitNumber: '',
+    })
+    const router = renderPage(activeBlanketOicExemption)
+
+    await openPermitsTab()
+    await userEvent.click(screen.getByRole('button', { name: 'Apply for new permit' }))
+    const dialog = screen.getByRole('dialog', { name: 'Apply for new Blanket OIC permit' })
+    await fillRequiredBlanketOicFields(dialog)
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Create permit' }))
+
+    expect(
+      await within(dialog).findByText('The exemption is no longer eligible.'),
+    ).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/provincial/exemption/TEST13E2')
+  })
+
+  it('requires a reload after an unknown Blanket OIC creation outcome', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    mockRole(['LEXIS_APPLICATION_APPROVER'], ['createPermit', 'savePermit'])
+    configureBlanketOicCreationDependencies()
+    vi.mocked(addPermitDetail).mockRejectedValue(new Error('connection lost'))
+    const router = renderPage(activeBlanketOicExemption)
+
+    await openPermitsTab()
+    await userEvent.click(screen.getByRole('button', { name: 'Apply for new permit' }))
+    const dialog = screen.getByRole('dialog', { name: 'Apply for new Blanket OIC permit' })
+    await fillRequiredBlanketOicFields(dialog)
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Create permit' }))
+
+    expect(
+      await screen.findByText(
+        'The permit request outcome could not be confirmed. Reload this exemption and check Related permits before trying again.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Apply for new permit' })).not.toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/provincial/exemption/TEST13E2')
+    consoleError.mockRestore()
   })
 
   it('shows the authoritative creation error and stays on the exemption', async () => {
@@ -365,12 +573,6 @@ describe('Ministerial permit creation from an exemption', () => {
   })
 
   it.each([
-    {
-      caseName: 'a Blanket OIC exemption',
-      roles: ['LEXIS_APPLICATION_APPROVER'],
-      detail: { ...activeMinisterialExemption, exemptionTypeCode: 'B', blanketOic: true },
-      locked: false,
-    },
     {
       caseName: 'an OIC exemption',
       roles: ['LEXIS_APPLICATION_APPROVER'],

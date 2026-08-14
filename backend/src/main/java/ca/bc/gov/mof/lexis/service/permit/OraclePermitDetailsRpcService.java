@@ -1772,7 +1772,11 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       overrideComment =
           mergeSubmittedText(request.overrideComment(), current.overrideComment());
     } else {
-      overrideFee = firstNonNull(overrideFee, current.overrideFee());
+      Double currentOverrideFee =
+          current.overrideFee() != null && current.overrideFee() > 0.0d
+              ? current.overrideFee()
+              : null;
+      overrideFee = firstNonNull(overrideFee, currentOverrideFee);
       overrideComment =
           mergeSubmittedText(request.overrideComment(), current.overrideComment());
     }
@@ -3090,7 +3094,13 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         EXEMPTION_TYPE_BLANKET_OIC.equalsIgnoreCase(
             resolveExemptionTypeCode(applicationInfo.exemptionNumber(), lookupContext));
     String productTypeCode =
-        firstNonNull(trimToNull(applicationInfo.productTypeCode()), trimToNull(packageInfo.productTypeCode()));
+        blanketOic
+            ? firstNonNull(
+                trimToNull(packageInfo.productTypeCode()),
+                trimToNull(applicationInfo.productTypeCode()))
+            : firstNonNull(
+                trimToNull(applicationInfo.productTypeCode()),
+                trimToNull(packageInfo.productTypeCode()));
     String growthTypeCode =
         blanketOic
             ? firstNonNull(trimToNull(packageInfo.growthTypeCode()), trimToNull(applicationInfo.growthTypeCode()))
