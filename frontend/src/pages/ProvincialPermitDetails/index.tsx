@@ -1331,8 +1331,7 @@ const ProvincialPermitDetailsPage = () => {
     permitExemptionContextReady &&
     canPerform('/filePermitUpload') &&
     editContextLoaded &&
-    !permitEditLocked &&
-    !permitExpired
+    !permitEditLocked
   const canUploadInvoiceDocuments =
     permitExemptionContextReady &&
     canPerform('/fileInvoiceUpload') &&
@@ -1369,8 +1368,10 @@ const ProvincialPermitDetailsPage = () => {
     editContextLoaded &&
     !permitEditLocked &&
     !!permitStatusCode &&
-    ((adminUser && permitStatusCode !== 'EXP') ||
-      (hasDocumentActorRole && !readOnlyUser && permitStatusCode === 'ACT'))
+    (adminUser ||
+      (hasDocumentActorRole &&
+        !readOnlyUser &&
+        (permitStatusCode === 'ACT' || permitStatusCode === 'EXP')))
   const canDeleteInvoiceDocuments =
     permitExemptionContextReady &&
     editContextLoaded &&

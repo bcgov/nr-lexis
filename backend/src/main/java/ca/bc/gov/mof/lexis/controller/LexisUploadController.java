@@ -268,7 +268,7 @@ public class LexisUploadController {
             provincialAuthorizationService.requirePermitAttachmentMutation(
                 authentication, permitNumber);
           }
-          requirePermitMutable(permitNumber);
+          requirePermitAttachmentTarget(permitNumber);
           ApplicationEditLockDto lock =
               applicationEditLockService.acquirePermit(
                   permitNumber, userId(authentication), userId(authentication), false);
@@ -795,8 +795,8 @@ public class LexisUploadController {
     mutationPolicy().requireExemptionAttachmentTarget(exemptionNumber);
   }
 
-  private void requirePermitMutable(Long permitNumber) {
-    mutationPolicy().requirePermitMutable(permitNumber);
+  private void requirePermitAttachmentTarget(Long permitNumber) {
+    mutationPolicy().requirePermitAttachmentTarget(permitNumber);
   }
 
   private void requireInvoicePermitActive(Long permitNumber) {

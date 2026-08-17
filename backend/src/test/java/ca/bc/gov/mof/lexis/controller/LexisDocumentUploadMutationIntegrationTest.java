@@ -4,6 +4,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
@@ -69,23 +70,47 @@ class LexisDocumentUploadMutationIntegrationTest {
   }
 
   @Test
-  void directPersistedUploadsShouldAllowExpiredApplicationAndExemptionTargets() throws Exception {
+  void directPersistedUploadsShouldAllowExpiredApplicationExemptionAndPermitTargets()
+      throws Exception {
     canonicalStatuses("EXP", "EXP", "EXP");
     when(uploadService.uploadApplication(any(), eq(APPLICATION_NUMBER), any(), any()))
         .thenReturn(Optional.of(accepted("application")));
     when(uploadService.uploadExemption(any(), eq(EXEMPTION_NUMBER), any(), any()))
         .thenReturn(Optional.of(accepted("exemption")));
+    when(uploadService.uploadPermit(any(), eq(PERMIT_NUMBER), any(), any()))
+        .thenReturn(Optional.of(accepted("permit")));
 
     performApplicationUpload().andExpect(status().isOk());
     performExemptionUpload().andExpect(status().isOk());
-    performPermitUpload().andExpect(status().isForbidden());
+    performPermitUpload().andExpect(status().isOk());
     performInvoiceUpload().andExpect(status().isForbidden());
 
     verify(uploadService).uploadApplication(any(), eq(APPLICATION_NUMBER), any(), any());
     verify(uploadService).uploadExemption(any(), eq(EXEMPTION_NUMBER), any(), any());
-    verify(uploadService, never()).uploadPermit(any(), any(), any(), any());
+    verify(uploadService).uploadPermit(any(), eq(PERMIT_NUMBER), any(), any());
     verify(uploadService, never())
         .uploadInvoice(any(), any(), any(), any(), any(), any(), any(), any());
+  }
+
+  @Test
+  void expiredApplicationAndPermitUploadsShouldAllowApproverAndScopedSubmitter()
+      throws Exception {
+    canonicalStatuses("EXP", "EXP", "EXP");
+    when(applicationDetailsService.getApplicationEditContext(APPLICATION_NUMBER))
+        .thenReturn(Optional.of(applicationEditContext(false)));
+    when(uploadService.uploadApplication(any(), eq(APPLICATION_NUMBER), any(), any()))
+        .thenReturn(Optional.of(accepted("application")));
+    when(uploadService.uploadPermit(any(), eq(PERMIT_NUMBER), any(), any()))
+        .thenReturn(Optional.of(accepted("permit")));
+
+    performApplicationUpload(applicationApproverJwt()).andExpect(status().isOk());
+    performPermitUpload(applicationApproverJwt()).andExpect(status().isOk());
+    performApplicationUpload(submitterJwt()).andExpect(status().isOk());
+    performPermitUpload(submitterJwt()).andExpect(status().isOk());
+
+    verify(uploadService, times(2))
+        .uploadApplication(any(), eq(APPLICATION_NUMBER), any(), any());
+    verify(uploadService, times(2)).uploadPermit(any(), eq(PERMIT_NUMBER), any(), any());
   }
 
   @Test

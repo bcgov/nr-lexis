@@ -18,8 +18,6 @@ import org.springframework.stereotype.Service;
 public class DocumentUploadMutationPolicy {
 
   private static final String ACTIVE_STATUS = "ACT";
-  private static final String EXPIRED_STATUS = "EXP";
-
   private final ObjectProvider<LexisApplicationService> applicationServiceProvider;
   private final ObjectProvider<ExemptionService> exemptionServiceProvider;
   private final ObjectProvider<PermitService> permitServiceProvider;
@@ -64,11 +62,17 @@ public class DocumentUploadMutationPolicy {
         ExemptionDetailDto::exemptionStatusCode);
   }
 
-  public void requirePermitMutable(Long permitNumber) {
+  /**
+   * Validates a permit target before attaching a document.
+   *
+   * <p>INTENTIONAL_LEGACY_DIVERGENCE(EXPIRED_DOCUMENT_MAINTENANCE): Authorized users may attach
+   * reconciliation documents after a permit expires. Other expired-permit mutations remain
+   * read-only.
+   */
+  public void requirePermitAttachmentTarget(Long permitNumber) {
     PermitService service = permitServiceProvider.getIfAvailable();
-    requireMutable(
+    requireTargetStatus(
         "Permit",
-        "Expired permits are read-only.",
         service == null || permitNumber == null || permitNumber < 1
             ? Optional.empty()
             : service.findByPermitNumber(permitNumber),
@@ -84,17 +88,6 @@ public class DocumentUploadMutationPolicy {
     String status = normalizedStatus("Permit", permit, PermitDetailDto::permitStatusCode);
     if (!ACTIVE_STATUS.equals(status)) {
       throw new AccessDeniedException("Invoices can only be added to active permits.");
-    }
-  }
-
-  private <T> void requireMutable(
-      String recordType,
-      String expiredMessage,
-      Optional<T> record,
-      Function<T, String> statusExtractor) {
-    String status = requireTargetStatus(recordType, record, statusExtractor);
-    if (EXPIRED_STATUS.equals(status)) {
-      throw new AccessDeniedException(expiredMessage);
     }
   }
 

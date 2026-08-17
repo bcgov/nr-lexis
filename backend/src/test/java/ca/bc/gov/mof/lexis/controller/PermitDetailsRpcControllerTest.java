@@ -2278,7 +2278,7 @@ class PermitDetailsRpcControllerTest {
   }
 
   @Test
-  void removePermitDocumentShouldAllowAdminOutsideActiveExceptExpired() {
+  void removePermitDocumentShouldAllowAdminOutsideActive() {
     TestingAuthenticationToken authentication =
         authenticationWithRoles("idir\\admin", List.of("LEXIS_ADMIN"));
     when(serviceProvider.getIfAvailable()).thenReturn(service);
@@ -2314,19 +2314,38 @@ class PermitDetailsRpcControllerTest {
   }
 
   @Test
-  void removePermitDocumentShouldRejectAdminForExpiredPermit() {
-    TestingAuthenticationToken authentication =
-        authenticationWithRoles("idir\\admin", List.of("LEXIS_ADMIN"));
+  void removePermitDocumentShouldAllowApplicationApproverForExpiredPermit() {
+    TestingAuthenticationToken authentication = authorizedSavePermit();
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     stubPermitDocument(33L, "permit");
     when(permitService.findByPermitNumber(7000123L))
         .thenReturn(Optional.of(permitDetail("EXP")));
+    when(service.removePermitDocument(33L)).thenReturn(true);
 
-    assertThatThrownBy(
-            () -> controller.removePermitDocument("33", 7000123L, authentication))
-        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class)
-        .hasMessage("Expired permits are read-only.");
-    verify(service, never()).removePermitDocument(33L);
+    ResponseEntity<PermitDetailsRpcController.RemoveDocumentResponseDto> response =
+        controller.removePermitDocument("33", 7000123L, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    verify(service).removePermitDocument(33L);
+  }
+
+  @Test
+  void removePermitDocumentShouldAllowScopedSubmitterForExpiredPermit() {
+    TestingAuthenticationToken authentication =
+        authenticationWithRoles(
+            "bceid\\submitter",
+            List.of("LEXIS_PROVINCIAL_SUBMITTER_00077881"));
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    stubPermitDocument(33L, "permit");
+    when(permitService.findByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitDetail("EXP")));
+    when(service.removePermitDocument(33L)).thenReturn(true);
+
+    ResponseEntity<PermitDetailsRpcController.RemoveDocumentResponseDto> response =
+        controller.removePermitDocument("33", 7000123L, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    verify(service).removePermitDocument(33L);
   }
 
   @Test
