@@ -214,9 +214,6 @@ public class ProvincialAuthorizationService {
 
     String scopedClientNumber = scopedClientNumber(authentication);
     if (scopedClientNumber != null) {
-      if ("NEW".equalsIgnoreCase(exemption.exemptionStatusCode())) {
-        return false;
-      }
       if (exemption.blanketOic()) {
         return true;
       }
@@ -248,9 +245,6 @@ public class ProvincialAuthorizationService {
 
     String scopedClientNumber = scopedClientNumber(authentication);
     if (scopedClientNumber != null) {
-      if ("NEW".equalsIgnoreCase(exemption.exemptionStatusCode())) {
-        return false;
-      }
       return exemption.blanketOic()
           || matchesClient(
               scopedClientNumber, exemption.ownerClientNumber(), exemption.agentClientNumber())

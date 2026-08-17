@@ -226,7 +226,7 @@ class ExemptionRepositoryTest {
   }
 
   @Test
-  void scopedIndustrySearchShouldIncludeBothOicTypesOutsideClientMatches() {
+  void scopedIndustrySearchShouldIncludeClientOicAndGlobalBlanketOic() {
     TestExemptionRepository repository = new TestExemptionRepository();
 
     repository.search(
@@ -255,8 +255,9 @@ class ExemptionRepositoryTest {
         .contains("GROUP BY EEA_ACCESS.EXEMPTION_NUMBER")
         .contains("EEA_ACCESS.AGENT_CLIENT_NUMBER")
         .contains("EEA_ACCESS.OWNER_CLIENT_NUMBER")
-        .contains("EE_ACCESS.EXPORT_EXEMPTION_TYPE_CODE NOT IN ('B', 'O')")
-        .contains("EE_OIC.EXPORT_EXEMPTION_TYPE_CODE IN ('B', 'O')")
+        .contains("EE_ACCESS.EXPORT_EXEMPTION_TYPE_CODE != 'B'")
+        .contains("EE_BOIC.EXPORT_EXEMPTION_TYPE_CODE = 'B'")
+        .doesNotContain("EE_BOIC.EXPORT_EXEMPTION_TYPE_CODE IN ('B', 'O')")
         .contains("INNER JOIN ACCESSIBLE_EXEMPTIONS AE_CANON")
         .contains("INNER JOIN ACCESSIBLE_EXEMPTIONS AE_VOLUME")
         .contains("INNER JOIN ACCESSIBLE_EXEMPTIONS AE_IEEA")
@@ -309,7 +310,7 @@ class ExemptionRepositoryTest {
     assertThat(repository.pageSelectSql())
         .contains("WITH ACCESSIBLE_EXEMPTIONS AS")
         .contains("EE_ACCESS.EXPORT_EXEMPTION_TYPE_CODE NOT IN ('B', 'O')")
-        .doesNotContain("EE_OIC.EXPORT_EXEMPTION_TYPE_CODE IN ('B', 'O')");
+        .doesNotContain("EE_BOIC.EXPORT_EXEMPTION_TYPE_CODE = 'B'");
     assertThat(repository.countSelectSql())
         .contains("WITH ACCESSIBLE_EXEMPTIONS AS")
         .contains("INNER JOIN ACCESSIBLE_EXEMPTIONS AE_CANON")
