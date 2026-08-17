@@ -258,7 +258,7 @@ public class ExemptionRepository extends OracleRepositorySupport {
         FROM EXPORT_EXEMPTION_APPLICATION EEA_ACCESS
         INNER JOIN EXPORT_EXEMPTION EE_ACCESS
           ON EE_ACCESS.EXEMPTION_NUMBER = EEA_ACCESS.EXEMPTION_NUMBER
-        WHERE EE_ACCESS.EXPORT_EXEMPTION_TYPE_CODE NOT IN ('B', 'O')
+        WHERE EE_ACCESS.EXPORT_EXEMPTION_TYPE_CODE %s
           AND (
             EEA_ACCESS.OWNER_CLIENT_NUMBER = ?
             OR EEA_ACCESS.AGENT_CLIENT_NUMBER = ?
@@ -610,14 +610,18 @@ public class ExemptionRepository extends OracleRepositorySupport {
   }
 
   private String buildAccessibleExemptionsCte(boolean includeBlanketOic) {
-    String oicUnion =
+    // Blanket OIC is standing/global. Ordinary OIC remains client-linked, matching detail access
+    // instead of reproducing the legacy search's broader OIC result set.
+    String clientScopedTypePredicate =
+        includeBlanketOic ? "!= 'B'" : "NOT IN ('B', 'O')";
+    String blanketOicUnion =
         includeBlanketOic
             ? "  UNION\n"
-                + "  SELECT EE_OIC.EXEMPTION_NUMBER\n"
-                + "  FROM EXPORT_EXEMPTION EE_OIC\n"
-                + "  WHERE EE_OIC.EXPORT_EXEMPTION_TYPE_CODE IN ('B', 'O')\n"
+                + "  SELECT EE_BOIC.EXEMPTION_NUMBER\n"
+                + "  FROM EXPORT_EXEMPTION EE_BOIC\n"
+                + "  WHERE EE_BOIC.EXPORT_EXEMPTION_TYPE_CODE = 'B'\n"
             : "";
-    return ACCESSIBLE_EXEMPTIONS_CTE.formatted(oicUnion);
+    return ACCESSIBLE_EXEMPTIONS_CTE.formatted(clientScopedTypePredicate, blanketOicUnion);
   }
 
   private ExemptionSearchResultDto mapSearchResult(ResultSet rs) throws SQLException {
