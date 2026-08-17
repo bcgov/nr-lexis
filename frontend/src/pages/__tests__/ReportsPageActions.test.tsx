@@ -195,6 +195,27 @@ describe('Reports Page Actions', () => {
     expect(screen.queryByText('Not Granted')).not.toBeInTheDocument()
   })
 
+  it.each([
+    '/reports/applicationReport?action=generate',
+    '/reports/approvedExemptionReport?action=generate',
+    '/reports?report=applicationReport&action=generate',
+  ])('denies an explicitly requested report that is not granted: %s', async (path) => {
+    mockReportPermissions((action: string) => action === '/offerReport')
+
+    render(
+      <MemoryRouter initialEntries={[path]}>
+        <Routes>
+          <Route path="/reports" element={<ReportsPage />} />
+          <Route path="/reports/:reportId" element={<ReportsPage />} />
+          <Route path="/unauthorized" element={<div>Forbidden report</div>} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('Forbidden report')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Offer Report' })).not.toBeInTheDocument()
+  })
+
   it('preserves deep-linked report values in the selected configuration panel', async () => {
     mockReportPermissions((action: string) => action === '/exemptionReport')
     const values = encodeURIComponent(

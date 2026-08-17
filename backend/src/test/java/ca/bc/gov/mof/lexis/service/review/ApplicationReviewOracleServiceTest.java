@@ -345,7 +345,7 @@ class ApplicationReviewOracleServiceTest {
         new ApplicationReviewStatusUpdateRequestDto(" REJ ", " Missing docs ", " client@gov.bc.ca ");
     Instant remarkDate = Instant.parse("2026-01-05T10:15:00Z");
     when(repository.updateStatusWithRemarkFromAllowedSources(
-            1000456L, "REJ", "Missing docs", "idir\\jsmith", List.of("NEW", "PND")))
+            1000456L, "REJ", "Missing docs", "idir\\jsmith", List.of("NEW", "PND", "APP")))
         .thenReturn(
             new ApplicationStatusTransitionRow(
                 true,
@@ -367,7 +367,7 @@ class ApplicationReviewOracleServiceTest {
     assertThat(result.remarkDate()).isEqualTo(remarkDate);
     verify(repository)
         .updateStatusWithRemarkFromAllowedSources(
-            1000456L, "REJ", "Missing docs", "idir\\jsmith", List.of("NEW", "PND"));
+            1000456L, "REJ", "Missing docs", "idir\\jsmith", List.of("NEW", "PND", "APP"));
   }
 
   @Test
@@ -375,7 +375,7 @@ class ApplicationReviewOracleServiceTest {
     when(repository.findAuthoritativeJurisdictionCode(1000456L))
         .thenReturn(Optional.of("F"));
     when(repository.updateStatusWithRemarkFromAllowedSources(
-            1000456L, "REJ", "Review decision", "reviewer", List.of("NEW", "PND")))
+            1000456L, "REJ", "Review decision", "reviewer", List.of("NEW", "PND", "APP")))
         .thenReturn(
             new ApplicationStatusTransitionRow(
                 true,
@@ -384,7 +384,7 @@ class ApplicationReviewOracleServiceTest {
                 "NEW",
                 new ReviewRemarkRow(1L, "Review decision", "reviewer", Instant.EPOCH)));
     when(repository.updateStatusWithRemarkFromAllowedSources(
-            1000456L, "WDN", "Review decision", "reviewer", List.of("NEW", "PND")))
+            1000456L, "WDN", "Review decision", "reviewer", List.of("NEW", "PND", "APP")))
         .thenReturn(
             new ApplicationStatusTransitionRow(
                 true,
@@ -393,7 +393,7 @@ class ApplicationReviewOracleServiceTest {
                 "PND",
                 new ReviewRemarkRow(2L, "Review decision", "reviewer", Instant.EPOCH)));
     when(repository.updateStatusWithRemarkFromAllowedSources(
-            1000456L, "EXP", "Review decision", "reviewer", List.of("NEW", "PND")))
+            1000456L, "EXP", "Review decision", "reviewer", List.of("NEW", "PND", "APP")))
         .thenReturn(
             new ApplicationStatusTransitionRow(
                 true,
@@ -438,7 +438,7 @@ class ApplicationReviewOracleServiceTest {
     ApplicationReviewStatusUpdateRequestDto request =
         new ApplicationReviewStatusUpdateRequestDto("REJ", "Missing docs", "client@gov.bc.ca");
     when(repository.updateStatusWithRemarkFromAllowedSources(
-            1000456L, "REJ", "Missing docs", "idir\\jsmith", List.of("NEW", "PND")))
+            1000456L, "REJ", "Missing docs", "idir\\jsmith", List.of("NEW", "PND", "APP")))
         .thenReturn(new ApplicationStatusTransitionRow(true, true, true, "PND", null));
 
     ApplicationReviewStatusUpdateResultDto result =
@@ -452,7 +452,7 @@ class ApplicationReviewOracleServiceTest {
     assertThat(result.message()).isEqualTo("Application status remark did not persist.");
     verify(repository)
         .updateStatusWithRemarkFromAllowedSources(
-            1000456L, "REJ", "Missing docs", "idir\\jsmith", List.of("NEW", "PND"));
+            1000456L, "REJ", "Missing docs", "idir\\jsmith", List.of("NEW", "PND", "APP"));
   }
 
   @Test
@@ -466,7 +466,7 @@ class ApplicationReviewOracleServiceTest {
             "EXP",
             "Expired after manual review",
             "idir\\jsmith",
-            List.of("NEW", "PND")))
+            List.of("NEW", "PND", "APP")))
         .thenReturn(
             new ApplicationStatusTransitionRow(
                 true,
@@ -491,7 +491,7 @@ class ApplicationReviewOracleServiceTest {
             "EXP",
             "Expired after manual review",
             "idir\\jsmith",
-            List.of("NEW", "PND"));
+            List.of("NEW", "PND", "APP"));
   }
 
   @Test
@@ -499,7 +499,7 @@ class ApplicationReviewOracleServiceTest {
     ApplicationReviewStatusUpdateRequestDto request =
         new ApplicationReviewStatusUpdateRequestDto(" REJ ", " Missing docs ", " client@gov.bc.ca ");
     when(repository.updateStatusWithRemarkFromAllowedSources(
-            1000456L, "REJ", "Missing docs", "system", List.of("NEW", "PND")))
+            1000456L, "REJ", "Missing docs", "system", List.of("NEW", "PND", "APP")))
         .thenReturn(
             new ApplicationStatusTransitionRow(
                 true,
@@ -515,16 +515,23 @@ class ApplicationReviewOracleServiceTest {
     assertThat(result.updated()).isTrue();
     verify(repository)
         .updateStatusWithRemarkFromAllowedSources(
-            1000456L, "REJ", "Missing docs", "system", List.of("NEW", "PND"));
+            1000456L, "REJ", "Missing docs", "system", List.of("NEW", "PND", "APP"));
   }
 
   @Test
-  void updateStatusShouldRejectForgedTransitionFromAuthoritativeTerminalStatus() {
+  void updateStatusShouldAllowRejectedTransitionFromAuthoritativeApprovedStatus() {
     when(repository.findAuthoritativeJurisdictionCode(1000456L))
         .thenReturn(Optional.of("F"));
     when(repository.updateStatusWithRemarkFromAllowedSources(
-            1000456L, "REJ", "Missing docs", "idir\\jsmith", List.of("NEW", "PND")))
-        .thenReturn(ApplicationStatusTransitionRow.notAllowed("APP"));
+            1000456L, "REJ", "Missing docs", "idir\\jsmith", List.of("NEW", "PND", "APP")))
+        .thenReturn(
+            new ApplicationStatusTransitionRow(
+                true,
+                true,
+                true,
+                "APP",
+                new ReviewRemarkRow(
+                    99L, "Missing docs", "idir\\jsmith", Instant.EPOCH)));
 
     ApplicationReviewStatusUpdateResultDto result =
         service.updateStatus(
@@ -533,9 +540,10 @@ class ApplicationReviewOracleServiceTest {
                 "REJ", "Missing docs", "client@gov.bc.ca"),
             "idir\\jsmith");
 
-    assertThat(result.updated()).isFalse();
-    assertThat(result.valid()).isFalse();
-    assertThat(result.message()).contains("only change from NEW or PND").contains("APP");
+    assertThat(result.updated()).isTrue();
+    assertThat(result.valid()).isTrue();
+    assertThat(result.statusCode()).isEqualTo("REJ");
+    assertThat(result.remark()).isEqualTo("Missing docs");
   }
 
   @Test
@@ -545,7 +553,7 @@ class ApplicationReviewOracleServiceTest {
             "EXP",
             "Expired after manual review",
             "idir\\jsmith",
-            List.of("NEW", "PND")))
+            List.of("NEW", "PND", "APP")))
         .thenReturn(ApplicationStatusTransitionRow.notFound());
 
     ApplicationReviewStatusUpdateResultDto result =

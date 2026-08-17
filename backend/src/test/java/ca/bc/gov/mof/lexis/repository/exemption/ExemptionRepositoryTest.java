@@ -283,7 +283,7 @@ class ExemptionRepositoryTest {
   }
 
   @Test
-  void broadClientSummaryScopeShouldExcludeBothOicTypes() {
+  void broadClientScopeWithoutOicVisibilityShouldExcludeBothOicTypes() {
     TestExemptionRepository repository = new TestExemptionRepository();
 
     repository.search(

@@ -233,7 +233,7 @@ class OracleLexisSummaryServiceTest {
     assertThat(criteria.applicantClientNumber()).isEqualTo("00077881");
     assertThat(criteria.ownerClientNumber()).isNull();
     assertThat(criteria.regionNumbers()).isEmpty();
-    assertThat(criteria.includeBlanketOic()).isFalse();
+    assertThat(criteria.includeBlanketOic()).isTrue();
     assertThat(criteria.excludeBlanketOic()).isFalse();
     assertThat(criteria.broadClientMatch()).isTrue();
     assertThat(criteria.sortField()).isEqualTo("exemptionNumber DESC");

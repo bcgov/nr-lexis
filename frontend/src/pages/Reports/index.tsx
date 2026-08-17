@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useParams, useSearchParams } from 'react-router-dom'
+import { Navigate, useParams, useSearchParams } from 'react-router-dom'
 import { Button, Column, Grid, InlineNotification, TextArea, TextInput, Tile } from '@carbon/react'
 import { AppNotification } from '../../components/AppNotification'
 import EmptyState from '@/components/EmptyState'
@@ -957,7 +957,7 @@ const validateReportLaunch = (
   return null
 }
 
-const ReportsPage = () => {
+const ReportsPageContent = () => {
   const { reportId: routeReportId } = useParams<{ reportId?: string }>()
   const [searchParams, setSearchParams] = useSearchParams()
   const { canPerform } = useAuth()
@@ -1182,7 +1182,7 @@ const ReportsPage = () => {
       selectedReportId: selectedReport.id,
       selectedActionMapping,
       selectedReportValues,
-      includeReportParam: !routeReportId,
+      includeReportParam: !routeReportId && hasSelectedReportAccess,
     })
     const nextQuery = nextParams.toString()
     if (nextQuery !== searchParams.toString()) {
@@ -1191,6 +1191,7 @@ const ReportsPage = () => {
   }, [
     searchParams,
     selectedActionMapping,
+    hasSelectedReportAccess,
     selectedReport.id,
     selectedReportValues,
     setSearchParams,
@@ -1613,6 +1614,25 @@ const ReportsPage = () => {
       </Column>
     </Grid>
   )
+}
+
+const ReportsPage = () => {
+  const { reportId: routeReportId } = useParams<{ reportId?: string }>()
+  const [searchParams] = useSearchParams()
+  const { canPerform } = useAuth()
+  const explicitlyRequestedReportId = (routeReportId ?? searchParams.get('report') ?? '').trim()
+  const explicitlyRequestedReport = REPORT_DEFINITIONS.find(
+    (report) => report.id === explicitlyRequestedReportId,
+  )
+
+  if (
+    explicitlyRequestedReportId &&
+    (!explicitlyRequestedReport || !canPerform(explicitlyRequestedReport.action))
+  ) {
+    return <Navigate to="/unauthorized" replace />
+  }
+
+  return <ReportsPageContent />
 }
 
 export default ReportsPage

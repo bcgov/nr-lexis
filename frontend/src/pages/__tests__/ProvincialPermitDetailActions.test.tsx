@@ -2242,13 +2242,18 @@ describe('Provincial Permit Detail Action Smoke', () => {
   })
 
   it('adds and removes Blanket OIC scale rows from the items tab', async () => {
-    mockedFetchProvincialPermitDetail.mockResolvedValue({
+    const blanketOicPermit = {
       ...permitDetail,
       permitStatusCode: 'ACT',
       permitStatusDescription: 'Active',
       exemptionTypeDescription: 'Blanket OIC',
       blanketOic: true,
       oicApplicationNumber: 1000999,
+    }
+    mockedFetchProvincialPermitDetail.mockResolvedValueOnce(blanketOicPermit).mockResolvedValue({
+      ...blanketOicPermit,
+      permitVolume: 130.5,
+      numberOfPieces: 22,
     })
     mockedFetchProvincialPermitDetailTabs.mockResolvedValue({
       ...tabsResult,
@@ -2314,8 +2319,20 @@ describe('Provincial Permit Detail Action Smoke', () => {
         scaleVolume: '10.5',
       })
       expect(mockedFetchProvincialPermitDetailTabs).toHaveBeenCalledTimes(2)
+      expect(mockedFetchProvincialPermitDetail).toHaveBeenCalledTimes(2)
     })
 
+    await selectPermitDetailTab('Permit')
+    const permitVolumeField = screen
+      .getByText('Permit volume (m³)')
+      .closest('.detail-field-item') as HTMLElement
+    const permitPiecesField = screen
+      .getByText('Number of pieces')
+      .closest('.detail-field-item') as HTMLElement
+    expect(within(permitVolumeField).getByText('130.5')).toBeInTheDocument()
+    expect(within(permitPiecesField).getByText('22')).toBeInTheDocument()
+
+    await selectPermitDetailTab('Items')
     await userEvent.click(screen.getByRole('button', { name: 'Remove' }))
     const removalConfirmation = await screen.findByRole('dialog', {
       name: 'Remove Blanket OIC scale?',
@@ -2331,6 +2348,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
         permitNumber: '777',
       })
       expect(mockedFetchProvincialPermitDetailTabs).toHaveBeenCalledTimes(3)
+      expect(mockedFetchProvincialPermitDetail).toHaveBeenCalledTimes(3)
     })
   })
 
