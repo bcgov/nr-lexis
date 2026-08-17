@@ -38,7 +38,8 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
   private static final List<String> EMAIL_SUPPORTED_STATUS_CODES = List.of("REJ", "WDN");
   private static final List<String> STATUSES_REQUIRING_REMARK = List.of("REJ", "WDN", "EXP");
   private static final List<String> REVIEW_STATUS_UPDATE_CODES = List.of("REJ", "WDN", "EXP");
-  private static final List<String> REVIEW_STATUS_SOURCE_CODES = List.of("NEW", "PND");
+  private static final List<String> APPROVAL_SOURCE_CODES = List.of("NEW", "PND");
+  private static final List<String> REVIEW_STATUS_SOURCE_CODES = List.of("NEW", "PND", "APP");
   private static final String FEDERAL_JURISDICTION = "F";
   private static final String PROVINCIAL_JURISDICTION = "P";
 
@@ -167,7 +168,7 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
             "APP",
             null,
             defaultMutationUser(updateUserId),
-            REVIEW_STATUS_SOURCE_CODES);
+            APPROVAL_SOURCE_CODES);
     if (!updateRow.applicationFound()) {
       return statusUpdateResult(
           false,
@@ -316,7 +317,7 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
           clientEmail,
           remark,
           null,
-          "Application review status can only change from NEW or PND; current status is "
+          "Application review status can only change from NEW, PND, or APP; current status is "
               + currentStatus
               + ".");
     }

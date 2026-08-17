@@ -171,7 +171,8 @@ const REVIEW_EMAIL_UNSUPPORTED_MESSAGE =
 const REVIEW_EMAIL_REQUIRED_MESSAGE = 'Enter one valid client email address.'
 const REVIEW_EMAIL_PREVIEW_HELPER =
   "Defaults from the applicant's Oracle client-location email. Changes apply only to this notification."
-const REVIEWABLE_SOURCE_STATUS_CODES = new Set(['NEW', 'PND'])
+const APPROVABLE_SOURCE_STATUS_CODES = new Set(['NEW', 'PND'])
+const REVIEWABLE_SOURCE_STATUS_CODES = new Set(['NEW', 'PND', 'APP'])
 const productTypeSupportsPackages = (productTypeCode?: string | null): boolean =>
   ['H', 'T'].includes((productTypeCode ?? '').trim().toUpperCase())
 const APPLICATION_STATUS_LABELS: Record<string, string> = {
@@ -1096,6 +1097,9 @@ const ProvincialApplicationDetailsPage = () => {
     canReviewApplication &&
     !isApplicationExpired &&
     REVIEWABLE_SOURCE_STATUS_CODES.has(normalizeReviewStatus(detail?.applicationStatusCode ?? ''))
+  const canApproveApplicationReview =
+    canEditApplicationReview &&
+    APPROVABLE_SOURCE_STATUS_CODES.has(normalizeReviewStatus(detail?.applicationStatusCode ?? ''))
   const canViewReview = canViewRemarks && canReviewApplication
   const normalizedReviewStatusCode = useMemo(
     () => normalizeReviewStatus(reviewStatusCode),
@@ -3256,14 +3260,16 @@ const ProvincialApplicationDetailsPage = () => {
               />
             )}
             <div className="legacy-search-actions">
-              <Button
-                kind="primary"
-                size="sm"
-                disabled={isSubmittingReviewAction}
-                onClick={() => void onApproveApplicationFromEdit()}
-              >
-                Approve Application
-              </Button>
+              {canApproveApplicationReview && (
+                <Button
+                  kind="primary"
+                  size="sm"
+                  disabled={isSubmittingReviewAction}
+                  onClick={() => void onApproveApplicationFromEdit()}
+                >
+                  Approve Application
+                </Button>
+              )}
               <Button
                 kind="tertiary"
                 size="sm"
