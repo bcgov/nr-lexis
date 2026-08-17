@@ -265,6 +265,28 @@ class ProvincialAuthorizationServiceTest {
         .thenReturn(Optional.of(exemption("E-4", "00099999", null, false)));
     when(exemptionService.findByExemptionNumber("B-1"))
         .thenReturn(Optional.of(exemption("B-1", "00012345", null, true)));
+    when(exemptionService.findByExemptionNumber("E-NEW"))
+        .thenReturn(
+            Optional.of(
+                new ExemptionDetailDto(
+                    "E-NEW",
+                    "M",
+                    "Ministerial",
+                    "NEW",
+                    "New",
+                    "00012345",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    100,
+                    0,
+                    100,
+                    null,
+                    false,
+                    List.of(),
+                    List.of())));
     when(exemptionService.hasLinkedProvincialApplicationForClient("E-2", "00012345"))
         .thenReturn(false);
     when(exemptionService.hasLinkedProvincialApplicationForClient("E-3", "00012345"))
@@ -283,6 +305,10 @@ class ProvincialAuthorizationServiceTest {
         .isInstanceOf(AccessDeniedException.class)
         .hasMessageContaining("attachment-write scope");
     assertThatThrownBy(() -> service.requireExemptionAttachmentMutation(authentication, "B-1"))
+        .isInstanceOf(AccessDeniedException.class)
+        .hasMessageContaining("attachment-write scope");
+    assertThatThrownBy(
+            () -> service.requireExemptionAttachmentMutation(authentication, "E-NEW"))
         .isInstanceOf(AccessDeniedException.class)
         .hasMessageContaining("attachment-write scope");
   }
@@ -333,6 +359,18 @@ class ProvincialAuthorizationServiceTest {
             org.mockito.ArgumentMatchers.anyString(),
             org.mockito.ArgumentMatchers.anyString());
     verify(exemptionService, never()).findByExemptionNumber("BO-001");
+  }
+
+  @Test
+  void scopedSubmitterCannotOpenUnlinkedOrdinaryOicByNumber() {
+    Authentication authentication = submitter("00012345");
+    when(exemptionServiceProvider.getIfAvailable()).thenReturn(exemptionService);
+    when(exemptionService.findAccessByExemptionNumber("O-001"))
+        .thenReturn(Optional.of(new ExemptionAccessDto("O-001", "O", "ACT", false)));
+    when(exemptionService.hasLinkedProvincialApplicationForClient("O-001", "00012345"))
+        .thenReturn(false);
+
+    assertThat(service.canAccessExemption(authentication, "O-001")).isFalse();
   }
 
   @Test
@@ -491,7 +529,7 @@ class ProvincialAuthorizationServiceTest {
   }
 
   @Test
-  void scopedSubmittersCannotOpenNewExemptions() {
+  void scopedSubmittersCanOpenClientOwnedNewExemptions() {
     ExemptionDetailDto exemption =
         new ExemptionDetailDto(
             "EX-NEW",
@@ -513,7 +551,19 @@ class ProvincialAuthorizationServiceTest {
             List.of(),
             List.of());
 
-    assertThat(service.canAccessExemption(submitter("00012345"), exemption)).isFalse();
+    assertThat(service.canAccessExemption(submitter("00012345"), exemption)).isTrue();
+  }
+
+  @Test
+  void scopedSubmittersCanOpenClientLinkedNewExemptionsByNumber() {
+    Authentication authentication = submitter("00012345");
+    when(exemptionServiceProvider.getIfAvailable()).thenReturn(exemptionService);
+    when(exemptionService.findAccessByExemptionNumber("EX-NEW"))
+        .thenReturn(Optional.of(new ExemptionAccessDto("EX-NEW", "M", "NEW", false)));
+    when(exemptionService.hasLinkedProvincialApplicationForClient("EX-NEW", "00012345"))
+        .thenReturn(true);
+
+    assertThat(service.canAccessExemption(authentication, "EX-NEW")).isTrue();
   }
 
   @Test
