@@ -1884,11 +1884,12 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     )
 
     const reviewTile = await selectApplicationReviewTile()
-    const emailField = within(reviewTile)
-      .getByText('Client email address')
-      .closest('.detail-field-item')
-    expect(emailField).toBeTruthy()
-    expect(within(emailField as HTMLElement).getByText('Not provided')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00033344', '01', {
+        applicationNumber: '321',
+      })
+      expect(within(reviewTile).getByLabelText('Client email address')).toHaveValue('')
+    })
   })
 
   it('shows detail error contract when application detail endpoint fails', async () => {
