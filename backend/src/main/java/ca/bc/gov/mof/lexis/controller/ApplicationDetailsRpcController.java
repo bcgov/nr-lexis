@@ -1728,7 +1728,9 @@ public class ApplicationDetailsRpcController {
 
     List<String> normalizedRoles = normalizedRoles(roles);
     if (normalizedRoles.stream().anyMatch(APPLICATION_DOCUMENT_DELETE_ROLES::contains)) {
-      return !APPLICATION_STATUS_EXPIRED.equals(status);
+      // INTENTIONAL_LEGACY_DIVERGENCE(EXPIRED_DOCUMENT_MAINTENANCE): Expiry locks the
+      // application form, not direct application-document cleanup.
+      return true;
     }
 
     boolean industryUser =

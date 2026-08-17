@@ -1289,11 +1289,31 @@ describe('Provincial Permit Detail Action Smoke', () => {
     },
   )
 
-  it('keeps every permit mutation action unavailable for an expired permit', async () => {
+  it('allows IDIR approvers to maintain documents while other expired-permit changes stay locked', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({ roles: ['LEXIS_APPLICATION_APPROVER'] }),
+        canPerform: () => true,
+      }),
+    )
     mockedFetchProvincialPermitDetail.mockResolvedValue({
       ...permitDetail,
       permitStatusCode: 'EXP',
       permitStatusDescription: 'Expired',
+    })
+    mockedFetchPermitDocuments.mockResolvedValue({
+      rows: [
+        {
+          id: '507',
+          name: 'expired-reconciliation.pdf',
+          description: 'Post-expiry reconciliation',
+          type: 'Permit',
+          typeCode: 'PMT',
+          source: 'permit',
+          deletable: true,
+        },
+      ],
+      source: 'api',
     })
 
     render(
@@ -1316,6 +1336,9 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     await selectPermitDetailTab('Documents')
     expect(screen.queryByRole('button', { name: 'Add document' })).not.toBeInTheDocument()
+    await enterPermitDocumentEditMode()
+    expect(await screen.findByRole('button', { name: 'Add document' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeEnabled()
 
     await selectPermitDetailTab('Invoices')
     expect(screen.queryByRole('button', { name: 'Add invoice' })).not.toBeInTheDocument()
@@ -1324,6 +1347,54 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
     expect(mockedUpdatePermitShipping).not.toHaveBeenCalled()
     expect(mockedSendPermitApprovalEmail).not.toHaveBeenCalled()
+  })
+
+  it('allows scoped BCeID submitters to maintain expired permit documents', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({
+          principal: 'bceid\\scoped-submitter',
+          roles: ['LEXIS_PROVINCIAL_SUBMITTER_00067890'],
+        }),
+        canPerform: (action: string) =>
+          action === '/filePermitUpload' || action === '/permitDetails',
+      }),
+    )
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      permitStatusCode: 'EXP',
+      permitStatusDescription: 'Expired',
+    })
+    mockedFetchPermitDocuments.mockResolvedValue({
+      rows: [
+        {
+          id: '508',
+          name: 'submitter-reconciliation.pdf',
+          description: 'Post-expiry reconciliation',
+          type: 'Permit',
+          typeCode: 'PMT',
+          source: 'permit',
+          deletable: true,
+        },
+      ],
+      source: 'api',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/permit/777']}>
+        <Routes>
+          <Route
+            path="/provincial/permit/:permitNumber"
+            element={<ProvincialPermitDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectPermitDetailTab('Documents')
+    await enterPermitDocumentEditMode()
+    expect(await screen.findByRole('button', { name: 'Add document' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeEnabled()
   })
 
   it.each([

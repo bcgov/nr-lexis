@@ -470,7 +470,7 @@ const canDeleteApplicationDocuments = (
   )
 
   if (approverOrAdmin) {
-    return status.length > 0 && status !== APPLICATION_STATUS_EXPIRED
+    return status.length > 0
   }
 
   const industryUser = detail.industryUser || normalizedRoles.some(isIndustryApplicationRole)
