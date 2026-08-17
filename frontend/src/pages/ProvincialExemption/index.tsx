@@ -39,7 +39,7 @@ import type {
   ProvincialExemptionSearchSortField,
 } from '@/interfaces/ProvincialExemptionSearch'
 import { useAuth } from '@/context/auth/useAuth'
-import { hasProvincialStaffRole, hasProvincialSubmitterRole } from '@/context/auth/role-utils'
+import { hasProvincialStaffRole } from '@/context/auth/role-utils'
 import { hasInvalidIsoDateValue, isValidIsoDate } from '@/pages/shared/create-form-utils'
 import {
   buildPageDataCacheKey,
@@ -256,7 +256,6 @@ const ProvincialExemptionPage = () => {
   const totalCacheRef = useRef<SearchTotalCache>(new Map())
   const canCreateExemption = canPerform('/createExemption')
   const canApproveExemption = canPerform('approveExemption')
-  const isIndustryUser = hasProvincialSubmitterRole(capabilities.roles)
   const shouldDefaultApprovalFilters =
     capabilities?.roles.includes('EXEMPTION_APPROVER') ||
     capabilities?.roles.includes('LEXIS_EXEMPTION_APPROVER') ||
@@ -1105,8 +1104,7 @@ const ProvincialExemptionPage = () => {
                       row.canApprove &&
                       row.statusCode === 'NEW' &&
                       !row.isLocked
-                    const canViewExemption =
-                      row.canViewExemption && !(isIndustryUser && row.statusCode === 'NEW')
+                    const canViewExemption = row.canViewExemption
                     return (
                       <TableRow key={row.exemptionNumber}>
                         {canApproveExemption && (
