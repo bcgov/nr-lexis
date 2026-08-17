@@ -145,9 +145,9 @@ class OracleRtmEmsLogAmvRepositoryTest {
     ArgumentCaptor<Object[]> parameters = ArgumentCaptor.forClass(Object[].class);
     verify(jdbcTemplate).query(sql.capture(), any(RowMapper.class), parameters.capture());
     assertThat(sql.getValue().replaceAll("\\s+", " "))
-        .contains("WHEN UPDATE_TIMESTAMP IS NOT NULL THEN UPDATE_USER")
-        .contains("NVL(UPDATE_TIMESTAMP, CREATE_TIMESTAMP) AS SAVED_AT")
-        .contains("ORDER BY NVL(UPDATE_TIMESTAMP, CREATE_TIMESTAMP) DESC")
+        .contains("WHEN UPDATE_TIMESTAMP IS NOT NULL THEN UPDATE_USERID")
+        .contains("NVL(UPDATE_TIMESTAMP, ENTRY_TIMESTAMP) AS SAVED_AT")
+        .contains("ORDER BY NVL(UPDATE_TIMESTAMP, ENTRY_TIMESTAMP) DESC")
         .contains("WHERE ROWNUM = 1");
     assertThat(parameters.getValue())
         .containsExactly(
@@ -171,10 +171,10 @@ class OracleRtmEmsLogAmvRepositoryTest {
         ArgumentCaptor.forClass(BatchPreparedStatementSetter.class);
     verify(jdbcTemplate).batchUpdate(sql.capture(), setter.capture());
     assertThat(sql.getValue().replaceAll("\\s+", " "))
-        .contains("target.UPDATE_USER = source.ACTOR")
+        .contains("target.UPDATE_USERID = source.ACTOR")
         .contains("target.UPDATE_TIMESTAMP = SYSDATE")
-        .contains("CREATE_USER, CREATE_TIMESTAMP")
-        .contains("source.ACTOR, SYSDATE");
+        .contains("ENTRY_USERID, ENTRY_TIMESTAMP, UPDATE_USERID, UPDATE_TIMESTAMP")
+        .contains("source.ACTOR, SYSDATE, source.ACTOR, SYSDATE");
 
     PreparedStatement statement = mock(PreparedStatement.class);
     setter.getValue().setValues(statement, 0);

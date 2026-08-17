@@ -5,7 +5,7 @@ import org.springframework.security.core.Authentication;
 
 final class RtmEmsLogAmvAuditActor {
 
-  private static final int MAX_LENGTH = 100;
+  private static final int MAX_LENGTH = 30;
 
   private RtmEmsLogAmvAuditActor() {}
 

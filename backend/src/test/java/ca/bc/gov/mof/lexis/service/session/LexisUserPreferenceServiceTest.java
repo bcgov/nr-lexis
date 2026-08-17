@@ -38,6 +38,25 @@ class LexisUserPreferenceServiceTest {
   }
 
   @Test
+  void updatePreferencesShouldLimitTheAuditActorToTheSharedThirtyByteConvention() {
+    String userId = "BCEIDBUSINESS\\USERNAME_CLIENT_NUMBER";
+
+    service.updatePreferences(userId, "RNI");
+
+    verify(repository)
+        .saveValue(userId, "DEFAULT_REGION", "RNI", userId.substring(0, 30));
+  }
+
+  @Test
+  void updatePreferencesShouldKeepTheAuditActorWithinByteSemantics() {
+    String userId = "IDIR\\JOSÉ";
+
+    service.updatePreferences(userId, "RNI");
+
+    verify(repository).saveValue(userId, "DEFAULT_REGION", "RNI", "IDIR\\JOS_");
+  }
+
+  @Test
   void clearingTheDefaultRegionShouldDeleteOnlyThatPreference() {
     assertThat(service.updatePreferences(USER_ID, null).defaultRegion()).isNull();
 

@@ -158,6 +158,25 @@ class RtmEmsLogAmvControllerTest {
   }
 
   @Test
+  void saveBatchShouldLimitTheAuditActorToTheSharedThirtyByteConvention() {
+    RtmEmsLogAmvSaveRequestDto value = request("2026-07-01", "2026-07-01");
+    RtmEmsLogAmvBatchSaveRequestDto request = new RtmEmsLogAmvBatchSaveRequestDto(List.of(value));
+    RtmEmsLogAmvMutationResultDto result =
+        new RtmEmsLogAmvMutationResultDto("accepted", "Saved grid.", List.of(), List.of());
+    String principal = "BCEIDBUSINESS\\USERNAME_CLIENT_NUMBER";
+    String expectedActor = principal.substring(0, 30);
+    when(principalService.resolvePrincipalName(authentication)).thenReturn(principal);
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.saveBatch(request.values(), expectedActor)).thenReturn(result);
+
+    ResponseEntity<RtmEmsLogAmvMutationResultDto> response =
+        controller().saveBatch(request, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    verify(service).saveBatch(request.values(), expectedActor);
+  }
+
+  @Test
   void saveBatchShouldAuditAuthenticatedActorAndPhysicalWriteCount() {
     RtmEmsLogAmvSaveRequestDto value = request("2026-07-01", "2026-07-01");
     RtmEmsLogAmvBatchSaveRequestDto request = new RtmEmsLogAmvBatchSaveRequestDto(List.of(value));

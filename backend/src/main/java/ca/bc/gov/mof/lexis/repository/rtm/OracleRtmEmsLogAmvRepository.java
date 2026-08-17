@@ -55,7 +55,7 @@ public class OracleRtmEmsLogAmvRepository extends OracleRepositorySupport {
       )
       WHEN MATCHED THEN
         UPDATE SET target.AVG_MARKET_PRICE = source.AVG_MARKET_PRICE,
-                   target.UPDATE_USER = source.ACTOR,
+                   target.UPDATE_USERID = source.ACTOR,
                    target.UPDATE_TIMESTAMP = SYSDATE
       WHEN NOT MATCHED THEN
         INSERT (
@@ -65,8 +65,10 @@ public class OracleRtmEmsLogAmvRepository extends OracleRepositorySupport {
           EFFECTIVE_DATE,
           AVG_MARKET_PRICE,
           REVISION_COUNT,
-          CREATE_USER,
-          CREATE_TIMESTAMP
+          ENTRY_USERID,
+          ENTRY_TIMESTAMP,
+          UPDATE_USERID,
+          UPDATE_TIMESTAMP
         )
         VALUES (
           source.SPECIES,
@@ -75,6 +77,8 @@ public class OracleRtmEmsLogAmvRepository extends OracleRepositorySupport {
           source.EFFECTIVE_DATE,
           source.AVG_MARKET_PRICE,
           0,
+          source.ACTOR,
+          SYSDATE,
           source.ACTOR,
           SYSDATE
         )
@@ -378,15 +382,15 @@ public class OracleRtmEmsLogAmvRepository extends OracleRepositorySupport {
         SELECT SAVED_BY, SAVED_AT
         FROM (
           SELECT CASE
-                   WHEN UPDATE_TIMESTAMP IS NOT NULL THEN UPDATE_USER
-                   ELSE CREATE_USER
+                   WHEN UPDATE_TIMESTAMP IS NOT NULL THEN UPDATE_USERID
+                   ELSE ENTRY_USERID
                  END AS SAVED_BY,
-                 NVL(UPDATE_TIMESTAMP, CREATE_TIMESTAMP) AS SAVED_AT
+                 NVL(UPDATE_TIMESTAMP, ENTRY_TIMESTAMP) AS SAVED_AT
           FROM %s
           WHERE EFFECTIVE_DATE >= ?
             AND EFFECTIVE_DATE < ?
-            AND NVL(UPDATE_TIMESTAMP, CREATE_TIMESTAMP) IS NOT NULL
-          ORDER BY NVL(UPDATE_TIMESTAMP, CREATE_TIMESTAMP) DESC,
+            AND NVL(UPDATE_TIMESTAMP, ENTRY_TIMESTAMP) IS NOT NULL
+          ORDER BY NVL(UPDATE_TIMESTAMP, ENTRY_TIMESTAMP) DESC,
                    SPECIES,
                    GRADE,
                    GROWTH_TYPE_ST

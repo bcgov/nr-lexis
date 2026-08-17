@@ -52,7 +52,7 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
   private static final String RETURN_VALIDATION = "validation_failed";
   private static final String UPLOAD_VALIDATION_FAILURE_MESSAGE = "This file couldn't be used.";
   private static final String SYSTEM_AUDIT_ACTOR = "SERVICE\\LEXIS";
-  private static final int MAX_AUDIT_ACTOR_LENGTH = 100;
+  private static final int MAX_AUDIT_ACTOR_LENGTH = 30;
   private static final List<String> GROWTH_TARGETS = List.of("O", "S");
   private static final List<String> SCREEN_SPECIES =
       List.of("BA", "HE", "CE", "CY", "FI", "SP", "PINE");

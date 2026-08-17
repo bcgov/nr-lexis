@@ -25,7 +25,7 @@ added for LEXIS-managed writes.
 
 `THE.EMS_LOG_AMV` has no `blank` flag. Its value columns remain `SPECIES`, `GRADE`,
 `GROWTH_TYPE_ST`, `EFFECTIVE_DATE`, `AVG_MARKET_PRICE`, and `REVISION_COUNT`; LEXIS adds
-`CREATE_USER`, `CREATE_TIMESTAMP`, `UPDATE_USER`, and `UPDATE_TIMESTAMP` solely as audit metadata.
+`ENTRY_USERID`, `ENTRY_TIMESTAMP`, `UPDATE_USERID`, and `UPDATE_TIMESTAMP` solely as audit metadata.
 The UI therefore does not invent or submit a `blank = 1` field.
 
 ### Clarified legacy `BLANK` semantics
@@ -78,10 +78,11 @@ physical targets:
 - Every Pine cell becomes six writes: `WH`, `LO`, and `YE`, each for `O` and `S`.
 
 The Oracle implementation performs those writes with direct `MERGE` statements inside one Spring
-transaction. A new row receives the authenticated actor in `CREATE_USER` and `SYSDATE` in
-`CREATE_TIMESTAMP`; a matched row receives the actor in `UPDATE_USER` and `SYSDATE` in
-`UPDATE_TIMESTAMP`. The identity is resolved by `LexisPrincipalService` and is never accepted from
-the request body. The implementation requires the deployed LEXIS database user to have direct
+transaction. A new row receives the authenticated actor and `SYSDATE` in both the
+`ENTRY_USERID`/`ENTRY_TIMESTAMP` and `UPDATE_USERID`/`UPDATE_TIMESTAMP` pairs; a matched row changes
+only the update pair. The identity is resolved by `LexisPrincipalService`, limited to the shared
+30-byte audit convention, and never accepted from the request body. The implementation requires
+the deployed LEXIS database user to have direct
 `INSERT` and `UPDATE` access to `THE.EMS_LOG_AMV`; it does not call the legacy row procedures
 because they commit internally. If any write fails or is not applied, the transaction is rolled
 back. An incomplete batch is reported as rejected; a database failure uses the API's normal
@@ -128,7 +129,7 @@ Confirmation dialogs return focus to the action that opened them. The page heade
 save time or user until the upcoming month has saved rows and complete audit metadata. After an
 accepted save, and again on navigation or refresh, the page queries the immediately upcoming
 effective month. It displays `Last saved` using the newest `UPDATE_TIMESTAMP` for that month, with
-`CREATE_TIMESTAMP` as the fallback for rows that have not been updated, together with the matching
+`ENTRY_TIMESTAMP` as the fallback for legacy rows without update audit data, together with the matching
 user. This is the last durable audit value for the effective month being edited, not the effective
 date itself.
 
@@ -152,8 +153,9 @@ resolved, the controller logs `identity_rejected`, returns `403 Forbidden`, and 
 the service.
 
 The application event remains an operational summary. Durable row audit is stored directly on
-`EMS_LOG_AMV`: creates populate `CREATE_USER`/`CREATE_TIMESTAMP`, while subsequent writes populate
-`UPDATE_USER`/`UPDATE_TIMESTAMP`. The application event and row columns serve different purposes
+`EMS_LOG_AMV`: creates populate both `ENTRY_USERID`/`ENTRY_TIMESTAMP` and
+`UPDATE_USERID`/`UPDATE_TIMESTAMP`, while subsequent writes change only the update pair. The
+application event and row columns serve different purposes
 and neither trusts a client-supplied actor.
 
 `SYNC_EMSLA_EXPLA` remains the configured mechanism that mirrors successful table mutations to
@@ -170,7 +172,8 @@ direct effective-date query because the legacy select procedure requires an exac
 growth type.
 
 The audit-column database migration must be deployed before this application version. The legacy
-procedures remain unchanged and do not populate the new fields; durable audit and the `Last saved`
+procedures remain unchanged and do not populate the new fields. The columns remain nullable so
+existing rows are not assigned fabricated audit history; durable audit and the `Last saved`
 display apply to LEXIS-owned batch and compatibility workbook writes moving forward.
 
 ## Confluence requirement traceability
