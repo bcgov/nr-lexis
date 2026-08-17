@@ -65,7 +65,7 @@ public class DocumentUploadMutationPolicy {
   /**
    * Validates a permit target before attaching a document.
    *
-   * <p>INTENTIONAL_LEGACY_DIVERGENCE(EXPIRED_DOCUMENT_MAINTENANCE): Authorized users may attach
+   * INTENTIONAL_LEGACY_DIVERGENCE(EXPIRED_DOCUMENT_MAINTENANCE): Authorized users may attach
    * reconciliation documents after a permit expires. Other expired-permit mutations remain
    * read-only.
    */
