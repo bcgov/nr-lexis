@@ -747,7 +747,7 @@ describe('Provincial Exemption Search Actions', () => {
     ).not.toBeInTheDocument()
   })
 
-  it('does not link NEW exemptions for provincial submitters', async () => {
+  it('links authorized NEW exemptions for provincial submitters', async () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
         capabilities: createTestCapabilities({
@@ -760,7 +760,7 @@ describe('Provincial Exemption Search Actions', () => {
     renderPage()
     await screen.findByText('EX-1001')
 
-    expect(screen.queryByRole('link', { name: 'EX-1001' })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'EX-1001' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'EX-2002' })).toBeInTheDocument()
   })
 
