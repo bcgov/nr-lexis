@@ -476,6 +476,16 @@ export const updatePermitDetail = async (
   return parsePermitDetailMutationResponse(payload, 'api')
 }
 
+export const addPermitDetail = async (
+  request: PermitDetailMutationRequest,
+): Promise<CreatePermitFromExemptionResult> => {
+  const payload = await postFormData(
+    '/lexis/rpc/permit-details/add-permit',
+    normalizePermitDetailMutationPayload(request),
+  )
+  return parseCreatePermitFromExemptionResponse(payload)
+}
+
 export const createPermitFromExemption = async (
   exemptionNumber: string,
 ): Promise<CreatePermitFromExemptionResult> => {

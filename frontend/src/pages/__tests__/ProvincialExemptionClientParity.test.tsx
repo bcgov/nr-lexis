@@ -257,4 +257,30 @@ describe('Provincial exemption client parity', () => {
     expect(fetchExemptionClientData).not.toHaveBeenCalledWith('00002176', '12')
     expect(fetchExemptionClientLocations).not.toHaveBeenCalledWith('00002176')
   })
+
+  it('shows the linked application owner in an OIC exemption summary', async () => {
+    vi.mocked(fetchProvincialExemptionDetail).mockResolvedValue({
+      ...exemptionDetail,
+      exemptionTypeCode: 'O',
+      exemptionTypeDescription: 'OIC',
+      ownerClientNumber: null,
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/26-8758']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const summaryTile = (
+      await screen.findByRole('heading', { name: 'Exemption summary', level: 2 })
+    ).closest('.cds--tile')
+    expect(summaryTile).toBeTruthy()
+    expect(within(summaryTile as HTMLElement).getByText('00001074')).toBeInTheDocument()
+  })
 })
