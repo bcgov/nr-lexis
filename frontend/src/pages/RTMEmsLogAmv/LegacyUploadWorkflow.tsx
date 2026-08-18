@@ -39,11 +39,13 @@ import PageHeader from '@/components/PageHeader'
 import PendingIcon from '@/components/PendingIcon'
 import { useAuth } from '@/context/auth/useAuth'
 import {
+  getRtmEmsLogAmvLastSaved,
   previewRtmEmsLogAmvUpload,
   saveRtmEmsLogAmvBatch,
   searchLatestRtmEmsLogAmv,
   searchRtmEmsLogAmv,
   type RtmEmsLogAmvRow,
+  type RtmEmsLogAmvLastSaved,
   type RtmEmsLogAmvSaveRequest,
   type RtmEmsLogAmvUploadPreview,
   type RtmEmsLogAmvUploadResult,
@@ -158,6 +160,36 @@ const formatEffectiveStartDate = (dateValue: string): string => {
     timeZone: 'UTC',
   }).format(new Date(Date.UTC(year, monthIndex, 1)))
   return `${month} 1, ${year}`
+}
+
+const formatLastSavedTimestamp = (dateValue: string): string => {
+  const match = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/.exec(dateValue)
+  if (!match) {
+    return dateValue
+  }
+
+  const date = new Date(
+    Date.UTC(
+      Number(match[1]),
+      Number(match[2]) - 1,
+      Number(match[3]),
+      Number(match[4]),
+      Number(match[5]),
+    ),
+  )
+  const formattedDate = new Intl.DateTimeFormat('en-CA', {
+    day: 'numeric',
+    month: 'long',
+    timeZone: 'UTC',
+    year: 'numeric',
+  }).format(date)
+  const formattedTime = new Intl.DateTimeFormat('en-US', {
+    hour: 'numeric',
+    hour12: true,
+    minute: '2-digit',
+    timeZone: 'UTC',
+  }).format(date)
+  return `${formattedDate}, ${formattedTime}`
 }
 
 const reviewValuesMatch = (
@@ -865,6 +897,7 @@ const RtmEmsLogAmvUploadPage = () => {
   const [reviewValues, setReviewValues] = useState<Record<string, string>>({})
   const [savedReviewValues, setSavedReviewValues] = useState<Record<string, string> | null>(null)
   const [savedUploadState, setSavedUploadState] = useState<SavedUploadState | null>(null)
+  const [lastSaved, setLastSaved] = useState<RtmEmsLogAmvLastSaved | null>(null)
   const [savedNotification, setSavedNotification] = useState<SavedNotification | null>(null)
   const [selectedUploadFile, setSelectedUploadFile] = useState<File | null>(null)
   const [pendingUploadValidation, setPendingUploadValidation] =
@@ -912,6 +945,7 @@ const RtmEmsLogAmvUploadPage = () => {
       setReviewValues({})
       setSavedReviewValues(null)
       setSavedUploadState(null)
+      setLastSaved(null)
       setSavedNotification(null)
     }
 
@@ -1065,6 +1099,7 @@ const RtmEmsLogAmvUploadPage = () => {
     setReviewValues({})
     setSavedReviewValues(null)
     setSavedUploadState(null)
+    setLastSaved(null)
     setSavedNotification(null)
     setUploadResult(null)
     setPendingUploadValidation(null)
@@ -1120,11 +1155,15 @@ const RtmEmsLogAmvUploadPage = () => {
           return
         }
         if (savedRows.length === 0) {
+          setLastSaved(null)
           setIsCheckingSavedValues(false)
           return
         }
 
-        const comparisonRows = await searchLatestRtmEmsLogAmv(effectiveMonth)
+        const [comparisonRows, savedAudit] = await Promise.all([
+          searchLatestRtmEmsLogAmv(effectiveMonth),
+          getRtmEmsLogAmvLastSaved(effectiveMonth),
+        ])
         if (savedValuesRequestRef.current !== requestId) {
           return
         }
@@ -1136,6 +1175,7 @@ const RtmEmsLogAmvUploadPage = () => {
         setReviewValues(savedValues)
         setSavedReviewValues(savedValues)
         setSavedUploadState({ valueCount: savedRows.length })
+        setLastSaved(savedAudit)
         setUploadStep('review')
         setIsCheckingSavedValues(false)
       } catch (error) {
@@ -1257,6 +1297,7 @@ const RtmEmsLogAmvUploadPage = () => {
         setSavedUploadState({
           valueCount: saveRequests.length,
         })
+        setLastSaved(result.lastSaved ?? null)
         setSavedNotification('saved')
         setReplacementUploadOpen(false)
         replacementPreviewRef.current = null
@@ -1546,6 +1587,12 @@ const RtmEmsLogAmvUploadPage = () => {
             <span>Values take effect</span>
             <strong>{formatEffectiveStartDate(effectiveMonth)}</strong>
           </div>
+          {lastSaved?.savedAt && lastSaved.savedBy && (
+            <div className="rtm-amv-month-summary__item">
+              <span>Last saved</span>
+              <strong>{`${formatLastSavedTimestamp(lastSaved.savedAt)} by ${lastSaved.savedBy}`}</strong>
+            </div>
+          )}
         </div>
       </Column>
 

@@ -3,10 +3,12 @@ package ca.bc.gov.mof.lexis.controller;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvUploadPreviewDto;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvUploadResultDto;
+import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
 import ca.bc.gov.mof.lexis.service.rtm.RtmEmsLogAmvService;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -19,6 +21,7 @@ import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.multipart.MultipartFile;
 
 @ExtendWith(MockitoExtension.class)
@@ -26,6 +29,8 @@ class RtmEmsLogAmvUploadControllerTest {
 
   @Mock private ObjectProvider<RtmEmsLogAmvService> serviceProvider;
   @Mock private RtmEmsLogAmvService service;
+  @Mock private LexisPrincipalService principalService;
+  @Mock private Authentication authentication;
 
   @Test
   void previewShouldRetainWorkbookDelegation() {
@@ -60,14 +65,15 @@ class RtmEmsLogAmvUploadControllerTest {
         new RtmEmsLogAmvUploadResultDto(
             "accepted", "template.xlsx", file.getSize(), "Upload completed.", 1, 1, List.of(), List.of(), List.of());
     when(serviceProvider.getIfAvailable()).thenReturn(service);
-    when(service.upload(file, "2026-07-01")).thenReturn(result);
+    when(principalService.resolvePrincipalName(authentication)).thenReturn("IDIR\\RTMADMIN");
+    when(service.upload(file, "2026-07-01", "IDIR\\RTMADMIN")).thenReturn(result);
 
     ResponseEntity<RtmEmsLogAmvUploadResultDto> response =
-        controller().upload(file, null, "2026-07-01");
+        controller().upload(file, null, "2026-07-01", authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(result);
-    verify(service).upload(file, "2026-07-01");
+    verify(service).upload(file, "2026-07-01", "IDIR\\RTMADMIN");
   }
 
   @Test
@@ -75,11 +81,25 @@ class RtmEmsLogAmvUploadControllerTest {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
 
     ResponseEntity<RtmEmsLogAmvUploadResultDto> response =
-        controller().upload(null, null, "2026-07-01");
+        controller().upload(null, null, "2026-07-01", authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
     assertThat(response.getBody().message()).isEqualTo("This file couldn't be used.");
     assertThat(response.getBody().errors()).containsExactly("No file provided.");
+  }
+
+  @Test
+  void uploadShouldFailClosedWhenStableActorCannotBeResolved() {
+    MultipartFile file = sampleWorkbook();
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(principalService.resolvePrincipalName(authentication)).thenReturn(null);
+
+    ResponseEntity<RtmEmsLogAmvUploadResultDto> response =
+        controller().upload(file, null, "2026-07-01", authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    assertThat(response.getBody()).isNull();
+    verifyNoInteractions(service);
   }
 
   @Test
@@ -92,7 +112,7 @@ class RtmEmsLogAmvUploadControllerTest {
   }
 
   private RtmEmsLogAmvUploadController controller() {
-    return new RtmEmsLogAmvUploadController(serviceProvider);
+    return new RtmEmsLogAmvUploadController(serviceProvider, principalService);
   }
 
   private MultipartFile sampleWorkbook() {

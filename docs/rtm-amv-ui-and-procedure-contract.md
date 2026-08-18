@@ -3,7 +3,8 @@
 This note records the active RTM Average Monthly Values contract. Administrators maintain values
 through the workbook workflow at `/admin/rtm/emslogamv/upload`. The former editable-grid route is
 not exposed while this workflow is under review. The active workflow preserves the legacy
-`THE.EMS_LOG_AMV` schema and its downstream synchronization trigger.
+`THE.EMS_LOG_AMV` value model and its downstream synchronization trigger, with four audit columns
+added for LEXIS-managed writes.
 
 ## Logical AMV review
 
@@ -22,9 +23,10 @@ not exposed while this workflow is under review. The active workflow preserves t
 - Fixed grades `Z`, `BLANK`, and `1` through `6` are saved automatically as `$1.00` for every
   species and are described in the review notice.
 
-`THE.EMS_LOG_AMV` has no `blank` flag; its legacy columns are `SPECIES`, `GRADE`,
-`GROWTH_TYPE_ST`, `EFFECTIVE_DATE`, `AVG_MARKET_PRICE`, and `REVISION_COUNT`. The UI therefore
-does not invent or submit a `blank = 1` field.
+`THE.EMS_LOG_AMV` has no `blank` flag. Its value columns remain `SPECIES`, `GRADE`,
+`GROWTH_TYPE_ST`, `EFFECTIVE_DATE`, `AVG_MARKET_PRICE`, and `REVISION_COUNT`; LEXIS adds
+`ENTRY_USERID`, `ENTRY_TIMESTAMP`, `UPDATE_USERID`, and `UPDATE_TIMESTAMP` solely as audit metadata.
+The UI therefore does not invent or submit a `blank = 1` field.
 
 ### Clarified legacy `BLANK` semantics
 
@@ -76,12 +78,16 @@ physical targets:
 - Every Pine cell becomes six writes: `WH`, `LO`, and `YE`, each for `O` and `S`.
 
 The Oracle implementation performs those writes with direct `MERGE` statements inside one Spring
-transaction. It requires the deployed LEXIS database user to have direct `INSERT` and `UPDATE`
-access to `THE.EMS_LOG_AMV`; it does not call the legacy row procedures because they commit
-internally. If any write fails or is not applied, the transaction is rolled back. An incomplete
-batch is reported as rejected; a database failure uses the API's normal service-unavailable
-response. A successful response is therefore the confirmation that the complete reviewed
-submission was accepted.
+transaction. A new row receives the authenticated actor and `SYSDATE` in both the
+`ENTRY_USERID`/`ENTRY_TIMESTAMP` and `UPDATE_USERID`/`UPDATE_TIMESTAMP` pairs; a matched row changes
+only the update pair. The identity is resolved by `LexisPrincipalService`, limited to the shared
+30-byte audit convention, and never accepted from the request body. The implementation requires
+the deployed LEXIS database user to have direct
+`INSERT` and `UPDATE` access to `THE.EMS_LOG_AMV`; it does not call the legacy row procedures
+because they commit internally. If any write fails or is not applied, the transaction is rolled
+back. An incomplete batch is reported as rejected; a database failure uses the API's normal
+service-unavailable response. A successful response is therefore the confirmation that the
+complete reviewed submission was accepted.
 
 ## Workbook preview and save
 
@@ -90,6 +96,8 @@ calls `POST /api/lexis/rtm/emslogamv/preview`; the reviewed values are then subm
 atomic batch endpoint. These routes require `/lexisAgentAdmin`, including when the application
 runs in PROD RTM-only mode. The older direct `/upload` endpoint remains for compatibility but is
 not called by this page because it would re-read the original workbook and discard review edits.
+If it is called, it resolves and persists the authenticated actor through the same audit-aware
+`MERGE` implementation.
 
 The backend scans the workbook for malware, validates its shape, dates, dimensions, and values,
 uses the page's fixed upcoming effective month, and returns the union of the latest earlier and
@@ -118,14 +126,20 @@ clears the saved confirmation. Cancel then offers to save the changes or return 
 last saved values; Discard changes uses the danger-tertiary style. Restoring the saved values shows
 a dismissible confirmation that also clears on the next edit.
 Confirmation dialogs return focus to the action that opened them. The page header does not show
-save time or user because `EMS_LOG_AMV` has no durable audit data for either. On navigation or
-refresh, the page reads the immediately upcoming month's rows from
-`EMS_LOG_AMV`. If rows exist, it restores the editable review and latest-earlier comparison; if
-none exist, it restores the upload state. The workbook and filename are not persisted, so neither
-is shown after a save or in a restored review. The saved-row lookup gates the initial workflow
-render: neither upload nor review is shown while it is pending. The application shell remains
-visible around a centered, non-overlay Carbon loading indicator, matching the initial-data gate in
-NR-FSPTS. A failed lookup shows an error instead of assuming there are no saved values.
+save time or user until the upcoming month has saved rows and complete audit metadata. After an
+accepted save, and again on navigation or refresh, the page queries the immediately upcoming
+effective month. It displays `Last saved` using the newest `UPDATE_TIMESTAMP` for that month, with
+`ENTRY_TIMESTAMP` as the fallback for legacy rows without update audit data, together with the matching
+user. This is the last durable audit value for the effective month being edited, not the effective
+date itself.
+
+The page restores the editable review and latest-earlier comparison when upcoming-month rows
+exist; otherwise it restores the upload state and omits `Last saved`. The workbook and filename
+are not persisted, so neither is shown after a save or in a restored review. The saved-row lookup
+gates the initial workflow render: neither upload nor review is shown while it is pending. The
+application shell remains visible around a centered, non-overlay Carbon loading indicator,
+matching the initial-data gate in NR-FSPTS. A failed lookup shows an error instead of assuming
+there are no saved values.
 
 ## Batch audit event
 
@@ -138,8 +152,11 @@ field, so no client-supplied identity is logged or trusted. If a stable identity
 resolved, the controller logs `identity_rejected`, returns `403 Forbidden`, and does not invoke
 the service.
 
-This is an operational audit event rather than a new persisted audit table. It does not change the
-legacy RTM schema or claim to satisfy a durable row-level audit requirement by itself.
+The application event remains an operational summary. Durable row audit is stored directly on
+`EMS_LOG_AMV`: creates populate both `ENTRY_USERID`/`ENTRY_TIMESTAMP` and
+`UPDATE_USERID`/`UPDATE_TIMESTAMP`, while subsequent writes change only the update pair. The
+application event and row columns serve different purposes
+and neither trusts a client-supplied actor.
 
 `SYNC_EMSLA_EXPLA` remains the configured mechanism that mirrors successful table mutations to
 `EXPORT_LOG_AMV`. Live downstream-consumer compatibility still needs verification before this
@@ -154,8 +171,10 @@ The reviewed batch and compatibility workbook upload therefore use the same dire
 direct effective-date query because the legacy select procedure requires an exact species and
 growth type.
 
-The table has no user/timestamp audit columns. This change preserves the schema and trigger; it
-does not claim to add audit metadata that the legacy data model cannot store.
+The audit-column database migration must be deployed before this application version. The legacy
+procedures remain unchanged and do not populate the new fields. The columns remain nullable so
+existing rows are not assigned fabricated audit history; durable audit and the `Last saved`
+display apply to LEXIS-owned batch and compatibility workbook writes moving forward.
 
 ## Confluence requirement traceability
 
@@ -165,13 +184,13 @@ does not claim to add audit metadata that the legacy data model cannot store.
 | FR-02 to FR-04  | Implemented                | One user save fans out identical values to `O` and `S` without exposing either choice in the UI.                                                    |
 | FR-05 to FR-06  | Implemented                | Friendly species labels are mapped by the service; Pine expands to `WH`, `LO`, and `YE` for both growth partitions.                                 |
 | FR-07 to FR-10  | Implemented                | The UI/API normalize to a `LocalDate` month start and do not expose retrieval date input.                                                           |
-| FR-11           | Confluence correction needed | `EMS_LOG_AMV` has no submission/update timestamp column; the legacy update-date value is an effective month, not an audit timestamp.              |
+| FR-11           | Implemented                | LEXIS writes durable create/update users and timestamps; legacy `UPDATE_DATE` remains an effective month rather than audit metadata.                 |
 | FR-12 and FR-14 | Confluence correction needed | `BLANK` is the legacy display alias for `GRADE = ' '`; the physical table has no blank flag/column to set to `1`.                                  |
 | FR-13           | Implemented                | No blank flag is rendered or accepted from the UI.                                                                                                  |
 | FR-15           | Implemented                | The editable grade set is `B` through `M`, `U`, `X`, and `Y`; retired grade `A` is hidden along with `W` and the fixed grades. Fixed grades are submitted automatically at `$1.00`. |
 | FR-16           | Implemented                | A blank upcoming value is omitted and remains an advisory warning when the current month had a value; entering `0` persists an explicit zero.       |
 | FR-17           | Implemented                | Reviewed batches validate before direct `MERGE` writes inside one transaction.                                                                      |
-| FR-18           | Partially implemented      | Structured application audit events record the authenticated actor, server timestamp, batch outcome/status, and logical/physical row counts; durable persisted audit still requires an approved table or schema change. |
+| FR-18           | Implemented                | Stable authenticated identities and Oracle timestamps are persisted per row, with a structured application event summarizing each batch outcome.    |
 | FR-19 to FR-20  | Implemented                | Numeric non-negative validation occurs before save; accepted and rejected batch outcomes are returned to the user.                                  |
 | FR-21           | Live verification required | The trigger mirrors to `EXPORT_LOG_AMV`, but reports, integrations, and queries still require TEST/downstream validation.                           |
 
@@ -184,17 +203,18 @@ The implemented UI behavior is constrained by the existing data model:
   is required because `EMS_LOG_AMV` stores the partitions through `GROWTH_TYPE_ST`.
 - `BLANK` is a legacy grade sentinel (`GRADE = ' '`), not a column. The Confluence `blank = 1`
   wording needs correction before a new flag or column is considered.
-- It has no submitting-user, submission-timestamp, or update-timestamp column. A new audit table
-  or an approved schema change is required to retain that information.
+- The approved audit-column migration adds create/update identity and timestamp fields without
+  changing the effective-dated value key or the existing downstream synchronization trigger.
 - `AVG_MARKET_PRICE` is `NOT NULL`; legacy code treats an empty value as a no-op. The active UI
   preserves that behavior by omitting blank reviewed values from the batch. Product confirmation
   is still needed if a delete behavior is desired instead.
 
-No schema, trigger, or downstream consumer behavior is inferred or altered by this branch.
+No trigger or downstream consumer behavior is inferred or altered by this application branch.
 
 ## Sources reviewed
 
 - `../nr-mof-db/scripts/THE/TABLES/V2.00906__EMS_LOG_AMV.sql`
+- `../nr-mof-db/scripts/THE/TABLES/V999999999999.1__EMS_LOG_AMV_AUDIT_COLUMNS.sql`
 - `../nr-mof-db/scripts/THE/PROCEDURES/V7.02649__RTM_EMS_LOG_AMV_INSERT.sql`
 - `../nr-mof-db/scripts/THE/PROCEDURES/V7.02650__RTM_EMS_LOG_AMV_SELECT.sql`
 - `../nr-mof-db/scripts/THE/PROCEDURES/V7.02651__RTM_EMS_LOG_AMV_UPDATE.sql`

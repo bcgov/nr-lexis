@@ -33,6 +33,12 @@ export type RtmEmsLogAmvMutationResult = {
   message: string
   errors: string[]
   rows: RtmEmsLogAmvRow[]
+  lastSaved?: RtmEmsLogAmvLastSaved | null
+}
+
+export type RtmEmsLogAmvLastSaved = {
+  savedBy: string | null
+  savedAt: string | null
 }
 
 export type RtmEmsLogAmvBatchSaveRequest = {
@@ -125,6 +131,23 @@ export const searchLatestRtmEmsLogAmv = async (
     })
 
   return response.data ?? []
+}
+
+export const getRtmEmsLogAmvLastSaved = async (
+  effectiveDate: string,
+): Promise<RtmEmsLogAmvLastSaved | null> => {
+  const normalizedDate = trimOptional(effectiveDate)
+  if (!normalizedDate) {
+    return null
+  }
+
+  const response = await apiService
+    .getAxiosInstance()
+    .get<RtmEmsLogAmvLastSaved>('/lexis/rtm/emslogamv/last-saved', {
+      params: { effectiveDate: normalizedDate },
+    })
+  const lastSaved = response.data
+  return lastSaved?.savedAt && lastSaved.savedBy ? lastSaved : null
 }
 
 export const saveRtmEmsLogAmvBatch = async (

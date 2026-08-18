@@ -1,6 +1,7 @@
 package ca.bc.gov.mof.lexis.controller;
 
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvBatchSaveRequestDto;
+import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvLastSavedDto;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvMutationResultDto;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvRowDto;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvSaveRequestDto;
@@ -61,13 +62,19 @@ public class RtmEmsLogAmvController {
     return ResponseEntity.ok(service.find(species, growthIndicator, retrievalDate, updateDate));
   }
 
+  @GetMapping("/emslogamv/last-saved")
+  public ResponseEntity<RtmEmsLogAmvLastSavedDto> findLastSaved(
+      @RequestParam(name = "effectiveDate") String effectiveDate) {
+    return ResponseEntity.ok(requiredService("find_last_saved").findLastSaved(effectiveDate));
+  }
+
   @PostMapping("/emslogamv/batch")
   public ResponseEntity<RtmEmsLogAmvMutationResultDto> saveBatch(
       @RequestBody(required = false) RtmEmsLogAmvBatchSaveRequestDto request,
       Authentication authentication) {
     List<RtmEmsLogAmvSaveRequestDto> values = request == null ? List.of() : request.values();
     int requestedLogicalCells = values.size();
-    String actor = resolveStableActor(authentication);
+    String actor = RtmEmsLogAmvAuditActor.resolve(principalService, authentication);
     if (actor == null) {
       auditBatch(
           UNRESOLVED_ACTOR,
@@ -80,7 +87,7 @@ public class RtmEmsLogAmvController {
 
     try {
       RtmEmsLogAmvService service = requiredService("save_batch");
-      RtmEmsLogAmvMutationResultDto result = service.saveBatch(values);
+      RtmEmsLogAmvMutationResultDto result = service.saveBatch(values, actor);
       HttpStatus status = responseStatus(result.status());
       auditBatch(
           actor,
@@ -104,14 +111,6 @@ public class RtmEmsLogAmvController {
 
   private HttpStatus responseStatus(String status) {
     return "accepted".equalsIgnoreCase(status) ? HttpStatus.OK : HttpStatus.UNPROCESSABLE_ENTITY;
-  }
-
-  private String resolveStableActor(Authentication authentication) {
-    try {
-      return safeAuditToken(principalService.resolvePrincipalName(authentication), null);
-    } catch (RuntimeException exception) {
-      return null;
-    }
   }
 
   private void auditBatch(
