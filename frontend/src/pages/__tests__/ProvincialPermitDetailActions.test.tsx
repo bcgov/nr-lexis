@@ -3150,6 +3150,24 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(mockedUpdatePermitShipping).not.toHaveBeenCalled()
   })
 
+  it('hides permit approval email from provincial submitters without permit review authority', async () => {
+    const submitterAuth = createTestAuthContext()
+    mockedUseAuth.mockReturnValue({
+      ...submitterAuth,
+      capabilities: {
+        ...submitterAuth.capabilities,
+        roles: ['PROVINCIAL_SUBMITTER_00067890'],
+      },
+      canPerform: (action: string) => action === 'savePermit' || action === '/permitDetails',
+    })
+
+    renderPermitDetails()
+
+    expect(await screen.findByRole('heading', { name: 'Permit summary' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Email approval' })).not.toBeInTheDocument()
+    expect(mockedFetchPermitApprovalEmailDefault).not.toHaveBeenCalled()
+  })
+
   it('loads the server-resolved approval recipient and sends an edited address', async () => {
     renderPermitDetails()
 

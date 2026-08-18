@@ -201,7 +201,7 @@ public class PermitDetailsRpcController {
       @RequestParam(name = "permitNumber") Long permitNumber,
       @RequestParam(name = "clientEmailAddress", required = false) String clientEmailAddress,
       Authentication authentication) {
-    if (!canSavePermit(authentication)) {
+    if (!canSavePermit(authentication) || !canReviewPermits(authentication)) {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
     PermitDetailsRpcService service = serviceProvider.getIfAvailable();
@@ -223,7 +223,7 @@ public class PermitDetailsRpcController {
   public ResponseEntity<PermitApprovalEmailDefaultResponseDto> getApprovalPermitEmailDefault(
       @RequestParam(name = "permitNumber") Long permitNumber,
       Authentication authentication) {
-    if (!canSavePermit(authentication)) {
+    if (!canSavePermit(authentication) || !canReviewPermits(authentication)) {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
     PermitDetailsRpcService service = serviceProvider.getIfAvailable();

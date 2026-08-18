@@ -44,7 +44,10 @@ vi.mock('@/service/provincial-exemption-documents-service', () => ({
 
 vi.mock('@/service/search-options-service', () => ({
   fetchProvincialExemptionOptions: vi.fn().mockResolvedValue({
-    exemptionTypes: [{ value: 'M', label: 'Ministerial' }],
+    exemptionTypes: [
+      { value: 'M', label: 'Ministerial' },
+      { value: 'O', label: 'Order in Council' },
+    ],
     exemptionStatuses: [{ value: 'ACT', label: 'Active' }],
     regions: [],
   }),
@@ -117,6 +120,15 @@ const activeBlanketOicExemption: ProvincialExemptionDetail = {
   approvedVolume: 9_999_999.9,
   remainingVolume: 9_999_999.9,
   blanketOic: true,
+}
+
+const activeOicExemption: ProvincialExemptionDetail = {
+  ...activeMinisterialExemption,
+  exemptionNumber: 'OIC-205',
+  exemptionTypeCode: 'O',
+  exemptionTypeDescription: 'Order in Council',
+  ownerClientNumber: null,
+  agentClientNumber: null,
 }
 
 const mockRole = (roles: string[], allowedActions = ['createPermit']) => {
@@ -340,6 +352,32 @@ describe('permit creation from an exemption', () => {
     await waitFor(() => expect(router.state.location.pathname).toBe('/provincial/permit/98765'))
     expect(router.state.location.search).toBe('?permitFilter=987')
     expect(await screen.findByText('New permit destination')).toBeInTheDocument()
+  })
+
+  it('creates an Order in Council permit through the application-backed flow', async () => {
+    vi.mocked(createPermitFromExemption).mockResolvedValue({
+      success: true,
+      message: 'The permit was created successfully.',
+      errors: [],
+      warnings: [],
+      source: 'api',
+      permitNumber: '98766',
+    })
+    const router = renderPage(activeOicExemption)
+
+    await openPermitsTab()
+    await userEvent.click(screen.getByRole('button', { name: 'Apply for new permit' }))
+
+    const dialog = screen.getByRole('dialog', { name: 'Apply for new permit' })
+    expect(
+      within(dialog).getByText(
+        /creates a new active permit for Order in Council exemption OIC-205/i,
+      ),
+    ).toBeInTheDocument()
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Create permit' }))
+
+    await waitFor(() => expect(createPermitFromExemption).toHaveBeenCalledWith('OIC-205'))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/provincial/permit/98766'))
   })
 
   it('collects and saves the required Blanket OIC permit fields before navigating', async () => {
@@ -573,12 +611,6 @@ describe('permit creation from an exemption', () => {
   })
 
   it.each([
-    {
-      caseName: 'an OIC exemption',
-      roles: ['LEXIS_APPLICATION_APPROVER'],
-      detail: { ...activeMinisterialExemption, exemptionTypeCode: 'O' },
-      locked: false,
-    },
     {
       caseName: 'an inactive Ministerial exemption',
       roles: ['LEXIS_APPLICATION_APPROVER'],

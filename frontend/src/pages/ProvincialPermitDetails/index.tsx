@@ -1350,7 +1350,7 @@ const ProvincialPermitDetailsPage = () => {
   const invoiceMaterialLocked = permitStatusCode === 'COM' || permitStatusCode === 'PPD'
   const canEnterPaymentReceipt = permitStatusCode === 'PPD' && !detail?.receiptNumber?.trim()
   const canSendPermitApproval =
-    canSavePermit && (permitStatusCode === 'COM' || permitStatusCode === 'PPD')
+    canSavePermit && canReviewPermits && (permitStatusCode === 'COM' || permitStatusCode === 'PPD')
   const canRequestPermitReview =
     hasProvincialSubmitterRole(capabilities.roles) &&
     permitExemptionContextReady &&
