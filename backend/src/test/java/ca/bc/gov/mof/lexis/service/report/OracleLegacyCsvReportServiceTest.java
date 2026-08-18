@@ -36,11 +36,8 @@ class OracleLegacyCsvReportServiceTest {
   @Mock private DataSource dataSource;
   @Mock private Connection connection;
   @Mock private CallableStatement callableStatement;
-  @Mock private CallableStatement packageCallableStatement;
   @Mock private ResultSet resultSet;
-  @Mock private ResultSet packageResultSet;
   @Mock private ResultSetMetaData metaData;
-  @Mock private ResultSetMetaData packageMetaData;
   @Mock private OracleConnection oracleConnection;
   @Mock private Array bindArray;
 
@@ -241,54 +238,6 @@ class OracleLegacyCsvReportServiceTest {
     verify(resultSet).close();
     verify(callableStatement).close();
     verify(connection).close();
-  }
-
-  @Test
-  void shouldFailBiweeklyReportWhenMainProcedureReturnsNoCursor() throws Exception {
-    when(dataSource.getConnection()).thenReturn(connection);
-    when(connection.prepareCall("{ call LEXIS_REPORTING.BIWEEKLY_RPT(?,?,?,?,?) }"))
-        .thenReturn(callableStatement);
-    when(callableStatement.getObject(5)).thenReturn(null);
-    OracleLegacyCsvReportService service = new OracleLegacyCsvReportService(dataSource);
-
-    assertThatThrownBy(
-            () ->
-                service.generateLegacyCsvReport(
-                    LexisJasperReportDefinition.BIWEEKLY_LISTING,
-                    new LexisReportRequestDto(Map.of(), "CSV"),
-                    LexisReportFormat.CSV))
-        .isInstanceOf(LexisReportGenerationException.class)
-        .hasMessageContaining("biweekly report data")
-        .hasCauseInstanceOf(SQLException.class);
-  }
-
-  @Test
-  void shouldFailBiweeklyReportWhenPackageProcedureReturnsNoCursor() throws Exception {
-    when(dataSource.getConnection()).thenReturn(connection);
-    when(connection.prepareCall("{ call LEXIS_REPORTING.BIWEEKLY_RPT(?,?,?,?,?) }"))
-        .thenReturn(callableStatement);
-    when(connection.prepareCall("{ call LEXIS_REPORTING.BIWEEKLY_SUBREPORT_RPT(?,?,?) }"))
-        .thenReturn(packageCallableStatement);
-    when(callableStatement.getObject(5)).thenReturn(resultSet);
-    when(packageCallableStatement.getObject(3)).thenReturn(null);
-    when(resultSet.getMetaData()).thenReturn(metaData);
-    when(metaData.getColumnCount()).thenReturn(2);
-    when(metaData.getColumnName(1)).thenReturn("APPLICATION_NUMBER");
-    when(metaData.getColumnName(2)).thenReturn("EXPORT_JURISDICTION_CODE");
-    when(resultSet.next()).thenReturn(true, false);
-    when(resultSet.getString(1)).thenReturn("12345");
-    when(resultSet.getString(2)).thenReturn("P");
-    OracleLegacyCsvReportService service = new OracleLegacyCsvReportService(dataSource);
-
-    assertThatThrownBy(
-            () ->
-                service.generateLegacyCsvReport(
-                    LexisJasperReportDefinition.BIWEEKLY_LISTING,
-                    new LexisReportRequestDto(Map.of(), "CSV"),
-                    LexisReportFormat.CSV))
-        .isInstanceOf(LexisReportGenerationException.class)
-        .hasMessageContaining("biweekly report data")
-        .hasCauseInstanceOf(SQLException.class);
   }
 
   @Test
@@ -693,98 +642,41 @@ class OracleLegacyCsvReportServiceTest {
   }
 
   @Test
-  void shouldGenerateBiweeklyCsvFromAdvertisingListReportProcedures() throws Exception {
+  void shouldGenerateBiweeklyCsvFromLegacyDynamicProcedure() throws Exception {
     when(dataSource.getConnection()).thenReturn(connection);
-    when(connection.prepareCall("{ call LEXIS_REPORTING.BIWEEKLY_RPT(?,?,?,?,?) }"))
+    when(connection.prepareCall("{ call LEXIS_REPORTING.BIWEEKLY_REPORT_CSV(?,?,?,?) }"))
         .thenReturn(callableStatement);
-    when(connection.prepareCall("{ call LEXIS_REPORTING.BIWEEKLY_SUBREPORT_RPT(?,?,?) }"))
-        .thenReturn(packageCallableStatement);
-    when(callableStatement.getObject(5)).thenReturn(resultSet);
-    when(packageCallableStatement.getObject(3)).thenReturn(packageResultSet);
+    when(connection.unwrap(OracleConnection.class)).thenReturn(oracleConnection);
+    when(
+            oracleConnection.createOracleArray(
+                org.mockito.ArgumentMatchers.eq("CBR_VARCHAR2_ARRAY"),
+                org.mockito.ArgumentMatchers.any()))
+        .thenReturn(bindArray);
+    when(callableStatement.getObject(4)).thenReturn(resultSet);
 
     when(resultSet.getMetaData()).thenReturn(metaData);
-    List<String> reportColumns =
-        List.of(
-            "ADVERTISING_DATE",
-            "ORG_UNIT",
-            "CLIENT_NAME",
-            "ADDRESS_1",
-            "ADDRESS_2",
-            "ADDRESS_3",
-            "CITY",
-            "PROVINCE",
-            "POSTAL_CODE",
-            "OWNER_CONTACT_NAME",
-            "BUSINESS_PHONE",
-            "EMAIL_ADDRESS",
-            "EXPORT_JURISDICTION_CODE",
-            "APPLICATION_NUMBER",
-            "FED_APPLICATION_NUMBER",
-            "SPECIES_ENDUSE",
-            "PRODUCT_TYPE",
-            "PRODUCT_LOCATION",
-            "EXEMPTION_APPLICATION_VOLUME",
-            "AVERAGE_LOG_VOLUME",
-            "AGENT_CLIENT_NAME",
-            "AGENT_BUS_PHONE",
-            "AGENT_CONTACT_NAME",
-            "AGENT_EMAIL");
-    List<String> reportValues =
-        List.of(
-            "2026-05-01",
-            "Kootenay-Boundary Natural Resource Region",
-            "Owner Client",
-            "Address 1",
-            "Address 2",
-            "Address 3",
-            "Victoria",
-            "BC",
-            "V8V1X4",
-            "Owner Contact",
-            "250-555-0101",
-            "owner@example.gov.bc.ca",
-            "P",
-            "12345",
-            "",
-            "BA/PL",
-            "Harvested Timber",
-            "Landing",
-            "100",
-            "0.45",
-            "Agent Client",
-            "250-555-0102",
-            "Agent Contact",
-            "agent@example.gov.bc.ca");
-    when(metaData.getColumnCount()).thenReturn(reportColumns.size());
-    for (int index = 0; index < reportColumns.size(); index++) {
-      when(metaData.getColumnName(index + 1)).thenReturn(reportColumns.get(index));
-      when(resultSet.getString(index + 1)).thenReturn(reportValues.get(index));
-    }
+    when(metaData.getColumnCount()).thenReturn(3);
+    when(metaData.getColumnName(1)).thenReturn("Notification Date");
+    when(metaData.getColumnName(2)).thenReturn("Application Number");
+    when(metaData.getColumnName(3)).thenReturn("Age Class");
+    when(metaData.getColumnType(1)).thenReturn(Types.TIMESTAMP);
+    when(metaData.getColumnType(2)).thenReturn(Types.VARCHAR);
+    when(metaData.getColumnType(3)).thenReturn(Types.VARCHAR);
     when(resultSet.next()).thenReturn(true, false);
-
-    when(packageResultSet.getMetaData()).thenReturn(packageMetaData);
-    List<String> packageColumns =
-        List.of(
-            "PACKAGE_NUMBER",
-            "PACKAGE_VOLUME",
-            "EXPORT_GROWTH_TYPE_CODE",
-            "AVERAGE_LENGTH",
-            "AVERAGE_DIAMETER");
-    List<String> packageValues = List.of("PKG-1", "75.5", "S", "12.5", "34.1");
-    when(packageMetaData.getColumnCount()).thenReturn(packageColumns.size());
-    for (int index = 0; index < packageColumns.size(); index++) {
-      when(packageMetaData.getColumnName(index + 1)).thenReturn(packageColumns.get(index));
-      when(packageResultSet.getString(index + 1)).thenReturn(packageValues.get(index));
-    }
-    when(packageResultSet.next()).thenReturn(true, false);
+    when(resultSet.getString(1)).thenReturn("2026-08-12 00:00:00");
+    when(resultSet.getTimestamp(1))
+        .thenReturn(java.sql.Timestamp.valueOf("2026-08-12 00:00:00"));
+    when(resultSet.getString(2)).thenReturn("46175");
+    when(resultSet.getString(3)).thenReturn("S");
 
     OracleLegacyCsvReportService service = new OracleLegacyCsvReportService(dataSource);
     LexisReportRequestDto request =
         new LexisReportRequestDto(
             Map.of(
-                "fromDate", "2026-05-01",
-                "toDate", "2026-05-31",
-                "region", "1904,1905"),
+                "fromDate", "2026-08-12",
+                "toDate", "2026-08-12",
+                "region", "1903,1904,1905,1906,1907,1908,1909,1910",
+                "exportJurisdictionCode", "P"),
             "CSV");
 
     var report =
@@ -798,47 +690,63 @@ class OracleLegacyCsvReportServiceTest {
 
     String csv = new String(content(report.orElseThrow()));
     assertThat(csv)
-        .contains(
-            "\"CLIENT_CONTACT_PHONE\",\"CLIENT_CONTACT_EMAIL\",\"JURISDICTION_CODE\"");
-    assertThat(csv)
-        .contains(
-            "\"AGENT_PHONE\",\"AGENT_CONTACT_NAME\",\"AGENT_CONTACT_EMAIL\",\"PACKAGE_NUMBER\"");
-    assertThat(csv).contains("\"owner@example.gov.bc.ca\"");
-    assertThat(csv).contains("\"agent@example.gov.bc.ca\"");
-    assertThat(csv).contains("\"PKG-1\",\"75.5\",\"S\",\"12.5\",\"34.1\"");
+        .isEqualTo(
+            "\"Notification Date\",\"Application Number\",\"Age Class\"\n"
+                + "\"2026-08-12\",\"46175\",\"S\"\n");
 
-    verify(callableStatement).setString(1, "1904,1905");
-    verify(callableStatement).setNull(2, Types.VARCHAR);
-    verify(callableStatement).setString(3, "2026-05-01");
-    verify(callableStatement).setString(4, "2026-05-31");
-    verify(callableStatement).registerOutParameter(5, Types.REF_CURSOR);
-    verify(packageCallableStatement).setString(1, "12345");
-    verify(packageCallableStatement).setString(2, "P");
-    verify(packageCallableStatement).registerOutParameter(3, Types.REF_CURSOR);
+    ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
+    verify(callableStatement).setString(org.mockito.ArgumentMatchers.eq(1), sqlCaptor.capture());
+    assertThat(sqlCaptor.getValue())
+        .contains("ES.ADVERTISING_DATE BETWEEN TO_DATE(:1, 'yyyy-mm-dd')")
+        .contains("EEA.EXPORT_APPLICATION_STATUS_CODE = :12")
+        .contains("EEA.EXPORT_PRODUCT_TYPE_CODE <> :13");
+    assertBindArrayValues(
+        "2026-08-12",
+        "2026-08-12",
+        "1903",
+        "1904",
+        "1905",
+        "1906",
+        "1907",
+        "1908",
+        "1909",
+        "1910",
+        "P",
+        "APP",
+        "T");
+    verify(callableStatement).setArray(2, bindArray);
+    verify(callableStatement).setInt(3, 13);
+    verify(callableStatement).registerOutParameter(4, Types.REF_CURSOR);
+    InOrder executionOrder = Mockito.inOrder(callableStatement, bindArray);
+    executionOrder.verify(callableStatement).execute();
+    executionOrder.verify(bindArray).free();
   }
 
   @Test
-  void shouldFailBiweeklyReportWhenAdvertisingListProcedureFails() throws Exception {
+  void shouldFailBiweeklyReportWhenLegacyProcedureReturnsNoCursor() throws Exception {
     when(dataSource.getConnection()).thenReturn(connection);
-    when(connection.prepareCall("{ call LEXIS_REPORTING.BIWEEKLY_RPT(?,?,?,?,?) }"))
-        .thenThrow(new SQLException("invalid identifier"));
+    when(connection.prepareCall("{ call LEXIS_REPORTING.BIWEEKLY_REPORT_CSV(?,?,?,?) }"))
+        .thenReturn(callableStatement);
+    when(connection.unwrap(OracleConnection.class)).thenReturn(oracleConnection);
+    when(
+            oracleConnection.createOracleArray(
+                org.mockito.ArgumentMatchers.eq("CBR_VARCHAR2_ARRAY"),
+                org.mockito.ArgumentMatchers.any()))
+        .thenReturn(bindArray);
+    when(callableStatement.getObject(4)).thenReturn(null);
 
     OracleLegacyCsvReportService service = new OracleLegacyCsvReportService(dataSource);
-    LexisReportRequestDto request =
-        new LexisReportRequestDto(
-            Map.of(
-                "fromDate", "2026-05-01",
-                "toDate", "2026-05-31"),
-            "CSV");
 
     assertThatThrownBy(
             () ->
                 service.generateLegacyCsvReport(
                     LexisJasperReportDefinition.BIWEEKLY_LISTING,
-                    request,
+                    new LexisReportRequestDto(Map.of(), "CSV"),
                     LexisReportFormat.CSV))
         .isInstanceOf(LexisReportGenerationException.class)
-        .hasMessageContaining("biweekly report data");
+        .hasMessage("The biweekly report data could not be loaded")
+        .hasCauseInstanceOf(SQLException.class);
+    verify(bindArray).free();
   }
 
   @Test
