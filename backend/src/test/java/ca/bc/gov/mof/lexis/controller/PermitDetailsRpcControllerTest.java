@@ -273,6 +273,36 @@ class PermitDetailsRpcControllerTest {
   }
 
   @Test
+  void approvalEmailShouldRejectUsersWithoutPermitReviewAuthority() {
+    List<String> roles = List.of("LEXIS_PROVINCIAL_SUBMITTER");
+    TestingAuthenticationToken authentication =
+        authenticationWithRoles("bceid\\submitter", roles);
+    when(authorizationService.canPerformAction(roles, "savePermit")).thenReturn(true);
+    when(authorizationService.canPerformAction(roles, "/permitsReview")).thenReturn(false);
+
+    ResponseEntity<PermitDetailsRpcService.PermitEmailResult> response =
+        controller.sendApprovalPermitEmail(7000123L, null, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    verifyNoInteractions(serviceProvider, service);
+  }
+
+  @Test
+  void approvalEmailDefaultShouldRejectUsersWithoutPermitReviewAuthority() {
+    List<String> roles = List.of("LEXIS_PROVINCIAL_SUBMITTER");
+    TestingAuthenticationToken authentication =
+        authenticationWithRoles("bceid\\submitter", roles);
+    when(authorizationService.canPerformAction(roles, "savePermit")).thenReturn(true);
+    when(authorizationService.canPerformAction(roles, "/permitsReview")).thenReturn(false);
+
+    ResponseEntity<PermitDetailsRpcController.PermitApprovalEmailDefaultResponseDto> response =
+        controller.getApprovalPermitEmailDefault(7000123L, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    verifyNoInteractions(serviceProvider, service);
+  }
+
+  @Test
   void approvalEmailDefaultShouldRejectUsersWithoutSavePermitAuthority() {
     TestingAuthenticationToken authentication = unauthorizedSavePermit();
 

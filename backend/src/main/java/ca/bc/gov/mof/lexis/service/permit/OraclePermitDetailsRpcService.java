@@ -125,6 +125,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   private static final LocalDate FEE_MASK_EFFECTIVE_DATE = LocalDate.of(2024, 6, 27);
   private static final BigDecimal ONE_HUNDRED = BigDecimal.valueOf(100);
   private static final String EXEMPTION_TYPE_MINISTERIAL = "M";
+  private static final String EXEMPTION_TYPE_ORDER_IN_COUNCIL = "O";
   private static final String EXEMPTION_TYPE_BLANKET_OIC = "B";
   private static final String EXPORT_PRODUCT_TYPE_UNMANUFACTURED = "T";
   private static final String EXPORT_SCALE_METHOD_WEIGHT = "W";
@@ -1247,9 +1248,9 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
             : validateExemptionBinding(normalizedExemptionNumber, errors);
     List<Long> applicationNumbers = List.of();
     if (exemption != null) {
-      if (!EXEMPTION_TYPE_MINISTERIAL.equalsIgnoreCase(exemption.exemptionTypeCode())) {
+      if (!isApplicationBackedExemptionType(exemption.exemptionTypeCode())) {
         errors.add(
-            "Only a Ministerial exemption can use the one-step permit creation action.");
+            "Only a Ministerial or Order in Council exemption can use the one-step permit creation action.");
       } else {
         applicationNumbers = validatePermitCreationEligibility(exemption, errors);
       }
@@ -1257,7 +1258,8 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
 
     ApplicationInfoRow application =
         errors.isEmpty()
-            ? resolveMinisterialPermitCreationContext(exemption, applicationNumbers, errors)
+            ? resolveApplicationBackedPermitCreationContext(
+                exemption, applicationNumbers, errors)
             : null;
     if (!errors.isEmpty()) {
       return failureMutationResponse(List.copyOf(errors), null);
@@ -1392,7 +1394,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     }
   }
 
-  private ApplicationInfoRow resolveMinisterialPermitCreationContext(
+  private ApplicationInfoRow resolveApplicationBackedPermitCreationContext(
       ValidatedExemptionBinding exemption,
       List<Long> applicationNumbers,
       List<String> errors) {
@@ -1459,6 +1461,10 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       String ownerClientNumber,
       String agentClientNumber,
       List<String> errors) {
+    if (!EXEMPTION_TYPE_MINISTERIAL.equalsIgnoreCase(exemption.exemptionTypeCode())) {
+      return;
+    }
+
     String exemptionOwner = trimToNull(exemption.detail().ownerClientNumber());
     String exemptionAgent = trimToNull(exemption.detail().agentClientNumber());
     if (!java.util.Objects.equals(ownerClientNumber, exemptionOwner)) {
@@ -1488,19 +1494,17 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
 
     ValidatedExemptionBinding exemptionBinding =
         exemptionNumber == null ? null : validateExemptionBinding(exemptionNumber, errors);
-    List<Long> ministerialApplicationNumbers = List.of();
+    List<Long> applicationNumbers = List.of();
     if (exemptionBinding != null) {
-      ministerialApplicationNumbers =
-          validatePermitCreationEligibility(exemptionBinding, errors);
+      applicationNumbers = validatePermitCreationEligibility(exemptionBinding, errors);
     }
     boolean blanketOic = exemptionBinding != null && exemptionBinding.blanketOic();
-    ApplicationInfoRow ministerialApplication =
+    ApplicationInfoRow application =
         exemptionBinding != null
-                && EXEMPTION_TYPE_MINISTERIAL.equalsIgnoreCase(
-                    exemptionBinding.exemptionTypeCode())
+                && isApplicationBackedExemptionType(exemptionBinding.exemptionTypeCode())
                 && errors.isEmpty()
-            ? resolveMinisterialPermitCreationContext(
-                exemptionBinding, ministerialApplicationNumbers, errors)
+            ? resolveApplicationBackedPermitCreationContext(
+                exemptionBinding, applicationNumbers, errors)
             : null;
 
     Long submittedOrgUnitNumber =
@@ -1509,9 +1513,9 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
                 ? firstNonNull(request.oicRegion(), request.orgUnitNumber())
                 : request.orgUnitNumber());
     Long orgUnitNumber =
-        ministerialApplication == null
+        application == null
             ? submittedOrgUnitNumber
-            : ministerialApplication.orgUnitNo();
+            : application.orgUnitNo();
     if (orgUnitNumber == null) {
       errors.add("A valid region is required.");
     }
@@ -1560,13 +1564,13 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       validateClientBinding(exemptionBinding, clientNumber, agentNumber, errors);
     }
 
-    if (ministerialApplication != null) {
-      clientNumber = trimToNull(ministerialApplication.ownerClientNumber());
-      clientLocationCode = trimToNull(ministerialApplication.ownerClientLocationCode());
-      agentNumber = trimToNull(ministerialApplication.agentClientNumber());
-      agentLocationCode = trimToNull(ministerialApplication.agentClientLocationCode());
-      productTypeCode = trimToNull(ministerialApplication.productTypeCode());
-      growthTypeCode = trimToNull(ministerialApplication.growthTypeCode());
+    if (application != null) {
+      clientNumber = trimToNull(application.ownerClientNumber());
+      clientLocationCode = trimToNull(application.ownerClientLocationCode());
+      agentNumber = trimToNull(application.agentClientNumber());
+      agentLocationCode = trimToNull(application.agentClientLocationCode());
+      productTypeCode = trimToNull(application.productTypeCode());
+      growthTypeCode = trimToNull(application.growthTypeCode());
     }
 
     if (!blanketOic && exemptionNumber != null) {
@@ -3788,7 +3792,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     String detailType = trimToNull(detail.exemptionTypeCode());
     String repositoryType = trimToNull(repositoryTypeResult.get());
     boolean supportedType =
-        EXEMPTION_TYPE_MINISTERIAL.equalsIgnoreCase(detailType)
+        isApplicationBackedExemptionType(detailType)
             || EXEMPTION_TYPE_BLANKET_OIC.equalsIgnoreCase(detailType);
     boolean blanketOic = EXEMPTION_TYPE_BLANKET_OIC.equalsIgnoreCase(detailType);
     if (!normalizedExemptionNumber.equalsIgnoreCase(detailNumber)
@@ -3830,16 +3834,22 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       errors.add("A new permit can only be created from an active exemption.");
       return List.of();
     }
-    if (!EXEMPTION_TYPE_MINISTERIAL.equalsIgnoreCase(exemption.exemptionTypeCode())) {
+    if (!isApplicationBackedExemptionType(exemption.exemptionTypeCode())) {
       return List.of();
     }
 
     String exemptionNumber = exemption.detail().exemptionNumber();
+    String exemptionTypeDescription =
+        EXEMPTION_TYPE_ORDER_IN_COUNCIL.equalsIgnoreCase(exemption.exemptionTypeCode())
+            ? "Order in Council"
+            : "Ministerial";
     List<Long> applicationNumbers =
         repository.findApplicationNumbersByExemptionNumberRequired(exemptionNumber);
     if (applicationNumbers.isEmpty()) {
       errors.add(
-          "A Ministerial exemption must have at least one linked application before a permit can be created.");
+          "A "
+              + exemptionTypeDescription
+              + " exemption must have at least one linked application before a permit can be created.");
       return List.of();
     }
 
@@ -3856,7 +3866,9 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       } else if (!APPLICATION_STATUS_EXEMPTED.equals(applicationStatus)
           && !APPLICATION_STATUS_PERMITTED.equals(applicationStatus)) {
         errors.add(
-            "Every application linked to a Ministerial exemption must be exempted or permitted before a permit can be created.");
+            "Every application linked to a "
+                + exemptionTypeDescription
+                + " exemption must be exempted or permitted before a permit can be created.");
       }
     }
     return applicationNumbers;
@@ -3879,6 +3891,11 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         oicApplicationNumber, exemption.detail().exemptionNumber())) {
       errors.add("The OIC application does not belong to the selected exemption.");
     }
+  }
+
+  private static boolean isApplicationBackedExemptionType(String exemptionTypeCode) {
+    return EXEMPTION_TYPE_MINISTERIAL.equalsIgnoreCase(exemptionTypeCode)
+        || EXEMPTION_TYPE_ORDER_IN_COUNCIL.equalsIgnoreCase(exemptionTypeCode);
   }
 
   private boolean isOicApplicationBoundToExemption(
@@ -4240,10 +4257,10 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       if (trimToNull(exemptionType) == null) {
         return false;
       }
-      boolean ministerial = EXEMPTION_TYPE_MINISTERIAL.equalsIgnoreCase(exemptionType);
+      boolean applicationBacked = isApplicationBackedExemptionType(exemptionType);
       boolean blanketOic = EXEMPTION_TYPE_BLANKET_OIC.equalsIgnoreCase(exemptionType);
       boolean synchronizePackage =
-          ministerial
+          applicationBacked
               || (blanketOic && EXPORT_PERMIT_STATUS_COMPLETE.equals(targetStatus));
       if (!synchronizePackage) {
         continue;
@@ -4254,7 +4271,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       }
 
       Double derivedPackageVolume = null;
-      if (!ministerial || volumeMayChange) {
+      if (!applicationBacked || volumeMayChange) {
         derivedPackageVolume =
             repository.findScaleDetailsByPackageNumber(packageNumber).stream()
                 .filter(
@@ -4265,7 +4282,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
                 .sum();
       }
       boolean synchronizedPackage =
-          ministerial
+          applicationBacked
               ? applicationDetailsRpcService.synchronizePackageForPermitTransition(
                   packageNumber,
                   derivedPackageVolume,

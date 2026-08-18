@@ -1832,20 +1832,44 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(response.success()).isFalse();
     assertThat(response.errors())
         .containsExactly(
-            "Only a Ministerial exemption can use the one-step permit creation action.");
+            "Only a Ministerial or Order in Council exemption can use the one-step permit creation action.");
     verify(repository, never()).insertPermitDetail(any(), any());
   }
 
   @Test
-  void createPermitFromExemptionShouldRejectOrdinaryOicCreation() {
+  void createPermitFromExemptionShouldPersistAnOrderInCouncilPermitFromApplicationContext() {
     stubPermitCreationExemption("OIC-1", "O", "ACT", null, null);
+    when(repository.findApplicationNumbersByExemptionNumberRequired("OIC-1"))
+        .thenReturn(List.of(1000456L));
+    when(repository.findApplicationInfoByNumber(1000456L))
+        .thenReturn(
+            Optional.of(
+                permitCreationApplication(
+                    1000456L,
+                    "OIC-1",
+                    1835L,
+                    "00077881",
+                    "01",
+                    "00077880",
+                    "02",
+                    "T",
+                    "S")));
+    when(repository.insertPermitDetail(any(PermitMutationRow.class), eq("idir\\jsmith")))
+        .thenAnswer(
+            invocation ->
+                Optional.of(withPermitNumber(invocation.getArgument(0), 7000123L)));
 
     PermitMutationRpcResponseDto response =
         service.createPermitFromExemption("OIC-1", "idir\\jsmith");
 
-    assertThat(response.success()).isFalse();
-    assertThat(response.errors()).isNotEmpty();
-    verify(repository, never()).insertPermitDetail(any(), any());
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<PermitMutationRow> permitCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository).insertPermitDetail(permitCaptor.capture(), eq("idir\\jsmith"));
+    assertThat(permitCaptor.getValue().exemptionNumber()).isEqualTo("OIC-1");
+    assertThat(permitCaptor.getValue().clientNumber()).isEqualTo("00077881");
+    assertThat(permitCaptor.getValue().clientLocationCode()).isEqualTo("01");
+    assertThat(permitCaptor.getValue().orgUnitNo()).isEqualTo(1835L);
   }
 
   @Test
@@ -2470,6 +2494,25 @@ class OraclePermitDetailsRpcServiceTest {
         .updatePermitDetail(
             permitCaptor.capture(), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE));
     assertThat(permitCaptor.getValue().exemptionNumber()).isEqualTo("EX-700");
+  }
+
+  @Test
+  void updatePermitShouldAllowAnOrderInCouncilExemption() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow()));
+    stubPermitCreationExemption("EX-700", "O", "ACT", null, null);
+    when(repository.updatePermitDetail(
+            any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
+        .thenReturn(true);
+
+    PermitMutationRpcResponseDto response =
+        service.updatePermit(
+            updatePermitRequest(null, null, null, null), "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    verify(repository)
+        .updatePermitDetail(
+            any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE));
   }
 
   @Test
@@ -3936,16 +3979,22 @@ class OraclePermitDetailsRpcServiceTest {
             "Permit invoicing failed after GBMS processing began; reconcile before retry.");
   }
 
-  @Test
-  void updatePermitShouldSynchronizeMinisterialPackageCodesAndVolume() {
+  @ParameterizedTest
+  @ValueSource(strings = {"M", "O"})
+  void updatePermitShouldSynchronizeApplicationBackedPackageCodesAndVolume(
+      String exemptionType) {
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(permitMutationRow("ACT")));
-    when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("M"));
+    when(repository.findExemptionTypeCode("EX-700"))
+        .thenReturn(Optional.of(exemptionType));
     when(exemptionService.findByExemptionNumber("EX-700"))
         .thenReturn(
             Optional.of(
                 exemptionDetailWithClients(
-                    "EX-700", "M", "00077881", "00077880")));
+                    "EX-700",
+                    exemptionType,
+                    "M".equals(exemptionType) ? "00077881" : null,
+                    "M".equals(exemptionType) ? "00077880" : null)));
     when(repository.updatePermitDetail(
             any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
         .thenReturn(true);
@@ -4385,6 +4434,26 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(response.errors())
         .containsExactly("A valid company name on the Shipping tab is required.");
     verify(repository, never()).updatePermitDetail(any(), any(), any());
+  }
+
+  @Test
+  void updateShippingShouldAllowAnOrderInCouncilExemption() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow()));
+    stubPermitCreationExemption("EX-700", "O", "ACT", null, null);
+    when(repository.updatePermitDetail(
+            any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
+        .thenReturn(true);
+
+    PermitMutationRpcResponseDto response =
+        service.updateShipping(
+            updateShippingRequest("2026-06-10", "Updated destination"),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    verify(repository)
+        .updatePermitDetail(
+            any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE));
   }
 
   @Test
@@ -7200,10 +7269,14 @@ class OraclePermitDetailsRpcServiceTest {
       String ownerClientNumber,
       String agentClientNumber) {
     boolean blanketOic = "B".equalsIgnoreCase(exemptionType);
+    String exemptionTypeDescription =
+        blanketOic
+            ? "Blanket OIC"
+            : "O".equalsIgnoreCase(exemptionType) ? "Order in Council" : "Ministerial";
     return new ExemptionDetailDto(
         exemptionNumber,
         exemptionType,
-        blanketOic ? "Blanket OIC" : "Ministerial",
+        exemptionTypeDescription,
         exemptionStatus,
         "ACT".equalsIgnoreCase(exemptionStatus) ? "Active" : exemptionStatus,
         ownerClientNumber,
