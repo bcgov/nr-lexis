@@ -439,7 +439,11 @@ final class LexisApiAuthorizationRules {
               ACTION_UPLOAD_FEDERAL_SUBMISSION,
               "/api/lexis/federal/submissions",
               "/api/lexis/federal/submissions/validation"),
-          action(HttpMethod.GET, ACTION_LEXIS_AGENT_ADMIN, "/api/lexis/rtm/emslogamv"),
+          action(
+              HttpMethod.GET,
+              ACTION_LEXIS_AGENT_ADMIN,
+              "/api/lexis/rtm/emslogamv",
+              "/api/lexis/rtm/emslogamv/last-saved"),
           action(
               HttpMethod.POST,
               ACTION_LEXIS_AGENT_ADMIN,

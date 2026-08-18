@@ -75,6 +75,13 @@ class LexisProdRtmOnlyAuthorizationIntegrationTest {
 
     mockMvc
         .perform(
+            get("/api/lexis/rtm/emslogamv/last-saved")
+                .param("effectiveDate", nextMonth)
+                .with(jwt().authorities(admin)))
+        .andExpect(status().isOk());
+
+    mockMvc
+        .perform(
             post("/api/lexis/rtm/emslogamv")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{}")
@@ -195,6 +202,13 @@ class LexisProdRtmOnlyAuthorizationIntegrationTest {
     mockMvc
         .perform(
             get("/api/lexis/rtm/emslogamv")
+                .with(jwt().authorities(readOnly)))
+        .andExpect(status().isForbidden());
+
+    mockMvc
+        .perform(
+            get("/api/lexis/rtm/emslogamv/last-saved")
+                .param("effectiveDate", "2026-09-01")
                 .with(jwt().authorities(readOnly)))
         .andExpect(status().isForbidden());
 

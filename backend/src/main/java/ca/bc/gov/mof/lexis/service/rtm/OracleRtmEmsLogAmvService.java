@@ -8,6 +8,7 @@ import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.exceptionType;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvMutationResultDto;
+import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvLastSavedDto;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvRowDto;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvSaveRequestDto;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvUploadResultDto;
@@ -50,6 +51,8 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
   private static final String RETURN_FAILURE = "rejected";
   private static final String RETURN_VALIDATION = "validation_failed";
   private static final String UPLOAD_VALIDATION_FAILURE_MESSAGE = "This file couldn't be used.";
+  private static final String SYSTEM_AUDIT_ACTOR = "SERVICE\\LEXIS";
+  private static final int MAX_AUDIT_ACTOR_LENGTH = 30;
   private static final List<String> GROWTH_TARGETS = List.of("O", "S");
   private static final List<String> SCREEN_SPECIES =
       List.of("BA", "HE", "CE", "CY", "FI", "SP", "PINE");
@@ -146,6 +149,16 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
   }
 
   @Override
+  public RtmEmsLogAmvLastSavedDto findLastSaved(String effectiveDate) {
+    LocalDate parsedEffectiveDate = parseRetrievalDate(effectiveDate);
+    if (parsedEffectiveDate == null) {
+      return new RtmEmsLogAmvLastSavedDto(null, null);
+    }
+
+    return repository.findLastSaved(parsedEffectiveDate);
+  }
+
+  @Override
   @Transactional
   public RtmEmsLogAmvMutationResultDto save(RtmEmsLogAmvSaveRequestDto request) {
     List<String> errors = validateSaveRequest(request);
@@ -214,11 +227,27 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
   @Override
   @Transactional
   public RtmEmsLogAmvMutationResultDto saveBatch(List<RtmEmsLogAmvSaveRequestDto> requests) {
+    return saveBatch(requests, SYSTEM_AUDIT_ACTOR);
+  }
+
+  @Override
+  @Transactional
+  public RtmEmsLogAmvMutationResultDto saveBatch(
+      List<RtmEmsLogAmvSaveRequestDto> requests, String actor) {
     if (requests == null || requests.isEmpty()) {
       return buildMutationResult(
           RETURN_VALIDATION,
           "Please correct the highlighted fields.",
           List.of("At least one AMV table value is required."),
+          List.of());
+    }
+
+    String auditActor = normalizeAuditActor(actor);
+    if (auditActor == null) {
+      return buildMutationResult(
+          RETURN_VALIDATION,
+          "Please correct the highlighted fields.",
+          List.of("An authenticated audit identity is required."),
           List.of());
     }
 
@@ -246,7 +275,7 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
         for (String growthIndicator : GROWTH_TARGETS) {
           OracleRtmEmsLogAmvRepository.AtomicWriteTarget target =
               new OracleRtmEmsLogAmvRepository.AtomicWriteTarget(
-                  species, grade, growthIndicator, effectiveDate, request.newValue());
+                  species, grade, growthIndicator, effectiveDate, request.newValue(), auditActor);
           String targetKey =
               "%s|%s|%s|%s".formatted(species, grade, growthIndicator, effectiveDate);
           OracleRtmEmsLogAmvRepository.AtomicWriteTarget previous =
@@ -289,12 +318,15 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
               "0"));
     }
 
+    RtmEmsLogAmvLastSavedDto lastSaved =
+        repository.findLastSaved(targets.getFirst().effectiveDate());
     return buildMutationResult(
         RETURN_SUCCESS,
         "Saved %d table value%s."
             .formatted(requests.size(), requests.size() == 1 ? "" : "s"),
         List.of(),
-        savedRows);
+        savedRows,
+        lastSaved);
   }
 
   @Override
@@ -444,17 +476,24 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
   @Override
   @Transactional
   public RtmEmsLogAmvUploadResultDto upload(MultipartFile file) {
-    return upload(file, null, false);
+    return upload(file, null, false, SYSTEM_AUDIT_ACTOR);
   }
 
   @Override
   @Transactional
   public RtmEmsLogAmvUploadResultDto upload(MultipartFile file, String effectiveMonth) {
-    return upload(file, effectiveMonth, true);
+    return upload(file, effectiveMonth, true, SYSTEM_AUDIT_ACTOR);
+  }
+
+  @Override
+  @Transactional
+  public RtmEmsLogAmvUploadResultDto upload(
+      MultipartFile file, String effectiveMonth, String actor) {
+    return upload(file, effectiveMonth, true, actor);
   }
 
   private RtmEmsLogAmvUploadResultDto upload(
-      MultipartFile file, String effectiveMonth, boolean enforceNextMonth) {
+      MultipartFile file, String effectiveMonth, boolean enforceNextMonth, String actor) {
     List<String> validationErrors = validateUploadRequest(file);
     if (!validationErrors.isEmpty()) {
       return buildUploadResult(
@@ -465,6 +504,20 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
           0,
           0,
           validationErrors,
+          List.of(),
+          List.of());
+    }
+
+    String auditActor = normalizeAuditActor(actor);
+    if (auditActor == null) {
+      return buildUploadResult(
+          RETURN_VALIDATION,
+          UPLOAD_VALIDATION_FAILURE_MESSAGE,
+          trimToNull(file.getOriginalFilename()),
+          file.getSize(),
+          0,
+          0,
+          List.of("An authenticated audit identity is required."),
           List.of(),
           List.of());
     }
@@ -563,7 +616,8 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
                           RtmEmsLogAmvDimensionValidator.normalize(row.grade()),
                           RtmEmsLogAmvDimensionValidator.normalize(row.growthIndicator()),
                           effectiveDate,
-                          row.newValue()))
+                          row.newValue(),
+                          auditActor))
               .toList();
       int[] updateCounts = repository.upsertAtomically(targets);
       if (!allWritesApplied(updateCounts, targets.size())) {
@@ -733,6 +787,20 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
       List<String> errors,
       List<RtmEmsLogAmvRowDto> rows) {
     return new RtmEmsLogAmvMutationResultDto(status, message, errors, rows);
+  }
+
+  private RtmEmsLogAmvMutationResultDto buildMutationResult(
+      String status,
+      String message,
+      List<String> errors,
+      List<RtmEmsLogAmvRowDto> rows,
+      RtmEmsLogAmvLastSavedDto lastSaved) {
+    return new RtmEmsLogAmvMutationResultDto(status, message, errors, rows, lastSaved);
+  }
+
+  private String normalizeAuditActor(String actor) {
+    String normalized = trimToNull(actor);
+    return normalized == null || normalized.length() > MAX_AUDIT_ACTOR_LENGTH ? null : normalized;
   }
 
   private RtmEmsLogAmvUploadPreviewDto buildPreview(

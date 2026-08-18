@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockMultipartFile;
@@ -279,6 +280,31 @@ class InMemoryRtmEmsLogAmvServiceTest {
             List.of("LO", "S", new BigDecimal("10.25")),
             List.of("YE", "O", new BigDecimal("10.25")),
             List.of("YE", "S", new BigDecimal("10.25")));
+  }
+
+  @Test
+  void shouldRecordLastSavedAuditForTheEffectiveMonth() {
+    Clock clock =
+        Clock.fixed(Instant.parse("2026-06-15T19:00:00Z"), LexisBusinessTime.ZONE);
+    InMemoryRtmEmsLogAmvService service = new InMemoryRtmEmsLogAmvService(clock);
+
+    var result =
+        service.saveBatch(
+            List.of(
+                new RtmEmsLogAmvSaveRequestDto(
+                    "BA",
+                    "B",
+                    "O",
+                    "2026-07-01",
+                    "2026-07-01",
+                    new BigDecimal("10.25"),
+                    "update")),
+            "IDIR\\MGURJAOD");
+
+    assertThat(result.lastSaved().savedBy()).isEqualTo("IDIR\\MGURJAOD");
+    assertThat(result.lastSaved().savedAt()).isEqualTo(LocalDateTime.of(2026, 6, 15, 12, 0));
+    assertThat(service.findLastSaved("2026-07-19")).isEqualTo(result.lastSaved());
+    assertThat(service.findLastSaved("2026-08-01").savedAt()).isNull();
   }
 
   @Test

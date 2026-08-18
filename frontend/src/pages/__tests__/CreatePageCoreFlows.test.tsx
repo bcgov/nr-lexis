@@ -1916,7 +1916,10 @@ describe('Create Page Core Flows', () => {
         }),
       }),
     )
-    mockedSubmitProvincialOfferCreate.mockResolvedValue(successfulCreate('8080'))
+    mockedSubmitProvincialOfferCreate.mockResolvedValue({
+      ...successfulCreate('8080'),
+      warnings: ['Offer saved, but no client email address was found.'],
+    })
 
     render(
       <MemoryRouter
@@ -2018,7 +2021,13 @@ describe('Create Page Core Flows', () => {
         offerInEffectUntil: '',
       })
     })
-    expect(mockNavigate).toHaveBeenCalledWith('/provincial/offers/8080')
+    expect(mockNavigate).toHaveBeenCalledWith('/provincial/offers/8080', {
+      state: {
+        offerCreationNotice: {
+          warnings: ['Offer saved, but no client email address was found.'],
+        },
+      },
+    })
   }, 15000)
 
   it('debounces offer context lookups while an application number is typed', async () => {

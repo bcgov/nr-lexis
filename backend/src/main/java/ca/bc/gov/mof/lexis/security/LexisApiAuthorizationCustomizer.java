@@ -36,7 +36,8 @@ public class LexisApiAuthorizationCustomizer
     "/api/lexis/errorPage.do"
   };
   private static final String[] PROD_RTM_ONLY_ADMIN_GET_PATTERNS = {
-    "/api/lexis/rtm/emslogamv"
+    "/api/lexis/rtm/emslogamv",
+    "/api/lexis/rtm/emslogamv/last-saved"
   };
   private static final String[] PROD_RTM_ONLY_SHARED_GET_PATTERNS = {
     "/api/lexis/rpc/application-details/species-codes"

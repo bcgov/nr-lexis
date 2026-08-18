@@ -9,8 +9,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvMutationResultDto;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvBatchSaveRequestDto;
+import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvLastSavedDto;
+import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvMutationResultDto;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvRowDto;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvSaveRequestDto;
 import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
@@ -20,6 +21,7 @@ import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -81,6 +83,22 @@ class RtmEmsLogAmvControllerTest {
   }
 
   @Test
+  void findLastSavedShouldDelegateTheEffectiveMonth() {
+    RtmEmsLogAmvLastSavedDto expected =
+        new RtmEmsLogAmvLastSavedDto(
+            "IDIR\\MGURJAOD", LocalDateTime.of(2026, 8, 11, 18, 21));
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.findLastSaved("2026-09-01")).thenReturn(expected);
+
+    ResponseEntity<RtmEmsLogAmvLastSavedDto> response =
+        controller().findLastSaved("2026-09-01");
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isEqualTo(expected);
+    verify(service).findLastSaved("2026-09-01");
+  }
+
+  @Test
   void findShouldPropagateAuthoritativeDatabaseFailure() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(service.findLatestBefore("2026-07-01"))
@@ -129,14 +147,33 @@ class RtmEmsLogAmvControllerTest {
         new RtmEmsLogAmvMutationResultDto("accepted", "Saved grid.", List.of(), List.of());
     when(principalService.resolvePrincipalName(authentication)).thenReturn("idir\\rtm-admin");
     when(serviceProvider.getIfAvailable()).thenReturn(service);
-    when(service.saveBatch(request.values())).thenReturn(result);
+    when(service.saveBatch(request.values(), "idir\\rtm-admin")).thenReturn(result);
 
     ResponseEntity<RtmEmsLogAmvMutationResultDto> response =
         controller().saveBatch(request, authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(result);
-    verify(service).saveBatch(request.values());
+    verify(service).saveBatch(request.values(), "idir\\rtm-admin");
+  }
+
+  @Test
+  void saveBatchShouldLimitTheAuditActorToTheSharedThirtyByteConvention() {
+    RtmEmsLogAmvSaveRequestDto value = request("2026-07-01", "2026-07-01");
+    RtmEmsLogAmvBatchSaveRequestDto request = new RtmEmsLogAmvBatchSaveRequestDto(List.of(value));
+    RtmEmsLogAmvMutationResultDto result =
+        new RtmEmsLogAmvMutationResultDto("accepted", "Saved grid.", List.of(), List.of());
+    String principal = "BCEIDBUSINESS\\USERNAME_CLIENT_NUMBER";
+    String expectedActor = principal.substring(0, 30);
+    when(principalService.resolvePrincipalName(authentication)).thenReturn(principal);
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.saveBatch(request.values(), expectedActor)).thenReturn(result);
+
+    ResponseEntity<RtmEmsLogAmvMutationResultDto> response =
+        controller().saveBatch(request, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    verify(service).saveBatch(request.values(), expectedActor);
   }
 
   @Test
@@ -156,7 +193,7 @@ class RtmEmsLogAmvControllerTest {
     when(principalService.resolvePrincipalName(authentication))
         .thenReturn("idir\\rtm-admin\nforged=true");
     when(serviceProvider.getIfAvailable()).thenReturn(service);
-    when(service.saveBatch(request.values())).thenReturn(result);
+    when(service.saveBatch(request.values(), "idir\\rtm-admin_forged_true")).thenReturn(result);
 
     ResponseEntity<RtmEmsLogAmvMutationResultDto> response =
         controller().saveBatch(request, authentication);
@@ -207,7 +244,7 @@ class RtmEmsLogAmvControllerTest {
         new RtmEmsLogAmvBatchSaveRequestDto(List.of(request("2026-07-01", "2026-07-01")));
     when(principalService.resolvePrincipalName(authentication)).thenReturn("idir\\rtm-admin");
     when(serviceProvider.getIfAvailable()).thenReturn(service);
-    when(service.saveBatch(request.values()))
+    when(service.saveBatch(request.values(), "idir\\rtm-admin"))
         .thenThrow(new DataAccessResourceFailureException("Oracle unavailable"));
 
     assertThatThrownBy(() -> controller().saveBatch(request, authentication))

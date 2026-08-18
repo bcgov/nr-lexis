@@ -1,6 +1,7 @@
 package ca.bc.gov.mof.lexis.service.rtm;
 
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvMutationResultDto;
+import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvLastSavedDto;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvRowDto;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvSaveRequestDto;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvUploadResultDto;
@@ -18,9 +19,14 @@ public interface RtmEmsLogAmvService {
 
   List<RtmEmsLogAmvRowDto> findLatestBefore(String effectiveDate);
 
+  RtmEmsLogAmvLastSavedDto findLastSaved(String effectiveDate);
+
   RtmEmsLogAmvMutationResultDto save(RtmEmsLogAmvSaveRequestDto request);
 
   RtmEmsLogAmvMutationResultDto saveBatch(List<RtmEmsLogAmvSaveRequestDto> requests);
+
+  RtmEmsLogAmvMutationResultDto saveBatch(
+      List<RtmEmsLogAmvSaveRequestDto> requests, String actor);
 
   RtmEmsLogAmvUploadPreviewDto previewUpload(MultipartFile file);
 
@@ -29,4 +35,7 @@ public interface RtmEmsLogAmvService {
   RtmEmsLogAmvUploadResultDto upload(MultipartFile file);
 
   RtmEmsLogAmvUploadResultDto upload(MultipartFile file, String effectiveMonth);
+
+  RtmEmsLogAmvUploadResultDto upload(
+      MultipartFile file, String effectiveMonth, String actor);
 }

@@ -5,6 +5,7 @@ import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvRowDto;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvUploadPreviewDto;
 import ca.bc.gov.mof.lexis.dto.rtm.RtmEmsLogAmvUploadResultDto;
+import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
 import ca.bc.gov.mof.lexis.service.rtm.RtmEmsLogAmvService;
 import java.util.List;
 import org.slf4j.Logger;
@@ -14,6 +15,7 @@ import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -30,9 +32,13 @@ public class RtmEmsLogAmvUploadController {
   private static final Logger LOGGER = LoggerFactory.getLogger(RtmEmsLogAmvUploadController.class);
 
   private final ObjectProvider<RtmEmsLogAmvService> serviceProvider;
+  private final LexisPrincipalService principalService;
 
-  public RtmEmsLogAmvUploadController(ObjectProvider<RtmEmsLogAmvService> serviceProvider) {
+  public RtmEmsLogAmvUploadController(
+      ObjectProvider<RtmEmsLogAmvService> serviceProvider,
+      LexisPrincipalService principalService) {
     this.serviceProvider = serviceProvider;
+    this.principalService = principalService;
   }
 
   @PostMapping(value = "/emslogamv/preview", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -51,7 +57,8 @@ public class RtmEmsLogAmvUploadController {
   public ResponseEntity<RtmEmsLogAmvUploadResultDto> upload(
       @RequestParam(name = "file", required = false) MultipartFile file,
       @RequestParam(name = "formFile", required = false) MultipartFile formFile,
-      @RequestParam(name = "effectiveMonth", required = false) String effectiveMonth) {
+      @RequestParam(name = "effectiveMonth", required = false) String effectiveMonth,
+      Authentication authentication) {
     RtmEmsLogAmvService service = requiredService("upload");
 
     MultipartFile uploadFile = firstNonNull(file, formFile);
@@ -66,7 +73,12 @@ public class RtmEmsLogAmvUploadController {
                   List.of()));
     }
 
-    RtmEmsLogAmvUploadResultDto result = service.upload(uploadFile, effectiveMonth);
+    String actor = RtmEmsLogAmvAuditActor.resolve(principalService, authentication);
+    if (actor == null) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
+    RtmEmsLogAmvUploadResultDto result = service.upload(uploadFile, effectiveMonth, actor);
     return ResponseEntity.status(responseStatus(result.status())).body(result);
   }
 

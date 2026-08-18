@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  getRtmEmsLogAmvLastSaved,
   previewRtmEmsLogAmvUpload,
   saveRtmEmsLogAmvBatch,
   searchLatestRtmEmsLogAmv,
@@ -56,6 +57,25 @@ describe('rtm-emslogamv-service', () => {
     })
   })
 
+  it('requests last-saved audit metadata for the effective month', async () => {
+    getMock.mockResolvedValue({
+      data: {
+        savedBy: 'IDIR\\MGURJAOD',
+        savedAt: '2026-08-11T18:21:00',
+      },
+    })
+
+    const result = await getRtmEmsLogAmvLastSaved(' 2026-09-01 ')
+
+    expect(getMock).toHaveBeenCalledWith('/lexis/rtm/emslogamv/last-saved', {
+      params: { effectiveDate: '2026-09-01' },
+    })
+    expect(result).toEqual({
+      savedBy: 'IDIR\\MGURJAOD',
+      savedAt: '2026-08-11T18:21:00',
+    })
+  })
+
   it('posts the full AMV grid as one batch', async () => {
     postMock.mockResolvedValue({
       data: {
@@ -63,6 +83,10 @@ describe('rtm-emslogamv-service', () => {
         message: 'Average monthly values saved.',
         errors: [],
         rows: [],
+        lastSaved: {
+          savedBy: 'IDIR\\MGURJAOD',
+          savedAt: '2026-08-11T18:21:00',
+        },
       },
     })
     const request = {
@@ -86,7 +110,15 @@ describe('rtm-emslogamv-service', () => {
       request,
       expect.objectContaining({ validateStatus: expect.any(Function) }),
     )
-    expect(result).toEqual(expect.objectContaining({ status: 'accepted' }))
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: 'accepted',
+        lastSaved: {
+          savedBy: 'IDIR\\MGURJAOD',
+          savedAt: '2026-08-11T18:21:00',
+        },
+      }),
+    )
   })
 
   it('uses the AMV upload preview client contract', async () => {

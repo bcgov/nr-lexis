@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 public class LexisUserPreferenceService {
 
   static final String DEFAULT_REGION_PREFERENCE = "DEFAULT_REGION";
+  private static final int MAX_AUDIT_USER_ID_LENGTH = 30;
 
   private final LexisUserPreferenceRepository repository;
 
@@ -33,7 +34,10 @@ public class LexisUserPreferenceService {
     }
 
     repository.saveValue(
-        resolvedUserId, DEFAULT_REGION_PREFERENCE, defaultRegion, resolvedUserId);
+        resolvedUserId,
+        DEFAULT_REGION_PREFERENCE,
+        defaultRegion,
+        auditUserId(resolvedUserId));
     return new LexisUserPreferencesDto(defaultRegion);
   }
 
@@ -42,5 +46,17 @@ public class LexisUserPreferenceService {
       throw new AccessDeniedException("Authenticated user identity is unavailable.");
     }
     return userId.trim().toUpperCase(Locale.ROOT);
+  }
+
+  private String auditUserId(String userId) {
+    StringBuilder auditUserId =
+        new StringBuilder(Math.min(userId.length(), MAX_AUDIT_USER_ID_LENGTH));
+    for (int index = 0;
+        index < userId.length() && auditUserId.length() < MAX_AUDIT_USER_ID_LENGTH;
+        index++) {
+      char current = userId.charAt(index);
+      auditUserId.append(current <= 0x7F ? current : '_');
+    }
+    return auditUserId.toString();
   }
 }
