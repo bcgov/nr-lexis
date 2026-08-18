@@ -351,7 +351,7 @@ const normalizePackageDetailsFields = (
   const statusDescription = asString(source.statusDesc || source.statusDescription)
 
   return {
-    currentPackageVolume: asString(source.volume || source.packageVolume),
+    currentPackageVolume: asString(source.scaledVolume ?? source.currentPackageVolume),
     status: [statusCode, statusDescription].filter(Boolean).join(' - '),
     reprocessed: asString(source.reprocessed || source.reprocessedIndicator),
     comments: asString(source.comments),

@@ -6,6 +6,8 @@ import {
 import { recordOrEmpty } from '@/utils/record'
 
 const OFFER_CREATE_CACHE_TTL_MS = 30_000
+// Application edits can immediately change offer eligibility and advertising dates.
+const OFFER_APPLICATION_CONTEXT_CACHE_TTL_MS = 0
 
 export type OfferApplicationDetails = {
   success: boolean
@@ -70,7 +72,7 @@ export const fetchOfferApplicationDetails = async (
     },
     {
       cacheKey: `offer-application-details:${applicationNumber}`,
-      ttlMs: OFFER_CREATE_CACHE_TTL_MS,
+      ttlMs: OFFER_APPLICATION_CONTEXT_CACHE_TTL_MS,
     },
   )
   const source = recordOrEmpty(data)
@@ -93,7 +95,7 @@ export const validateOfferApplication = async (
     },
     {
       cacheKey: `offer-application-validation:${applicationNumber}`,
-      ttlMs: OFFER_CREATE_CACHE_TTL_MS,
+      ttlMs: OFFER_APPLICATION_CONTEXT_CACHE_TTL_MS,
     },
   )
   const source = recordOrEmpty(data)

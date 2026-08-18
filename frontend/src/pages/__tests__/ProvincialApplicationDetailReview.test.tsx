@@ -102,6 +102,33 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     expect(review.queryByRole('combobox', { name: 'Application status' })).not.toBeInTheDocument()
   })
 
+  it('keeps an approved application review editable for legacy status correction', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...reviewableApplicationDetail,
+      applicationStatusCode: 'APP',
+      statusDescription: 'Approved',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const reviewTile = await selectApplicationReviewTile(false)
+    const review = within(reviewTile)
+    await userEvent.click(review.getByRole('button', { name: 'Edit application review' }))
+
+    expect(await review.findByRole('combobox', { name: 'Application status' })).toBeInTheDocument()
+    expect(review.getByRole('button', { name: 'Update Review Status' })).toBeInTheDocument()
+    expect(review.queryByRole('button', { name: 'Approve Application' })).not.toBeInTheDocument()
+  })
+
   it('keeps remarks read-only when application detail editing is not allowed', async () => {
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
       ...reviewableApplicationDetail,
@@ -677,12 +704,10 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     )
 
     const reviewTile = await selectApplicationReviewTile()
-    const emailField = within(reviewTile)
-      .getByText('Client email address')
-      .closest('.detail-field-item')
-    expect(emailField).toBeTruthy()
     await waitFor(() =>
-      expect(within(emailField as HTMLElement).getByText('owner@example.test')).toBeInTheDocument(),
+      expect(within(reviewTile).getByLabelText('Client email address')).toHaveValue(
+        'owner@example.test',
+      ),
     )
   })
 

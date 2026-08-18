@@ -175,7 +175,8 @@ public class OracleLexisSummaryService implements LexisSummaryService {
             null,
             null,
             NO_REGION_FILTER,
-            false,
+            // Legacy summary includes client-linked OICs plus standing/global Blanket OICs.
+            true,
             false,
             true,
             firstPresent(sortField, EXEMPTION_SORT_DEFAULT),

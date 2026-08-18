@@ -1331,8 +1331,7 @@ const ProvincialPermitDetailsPage = () => {
     permitExemptionContextReady &&
     canPerform('/filePermitUpload') &&
     editContextLoaded &&
-    !permitEditLocked &&
-    !permitExpired
+    !permitEditLocked
   const canUploadInvoiceDocuments =
     permitExemptionContextReady &&
     canPerform('/fileInvoiceUpload') &&
@@ -1351,7 +1350,7 @@ const ProvincialPermitDetailsPage = () => {
   const invoiceMaterialLocked = permitStatusCode === 'COM' || permitStatusCode === 'PPD'
   const canEnterPaymentReceipt = permitStatusCode === 'PPD' && !detail?.receiptNumber?.trim()
   const canSendPermitApproval =
-    canSavePermit && (permitStatusCode === 'COM' || permitStatusCode === 'PPD')
+    canSavePermit && canReviewPermits && (permitStatusCode === 'COM' || permitStatusCode === 'PPD')
   const canRequestPermitReview =
     hasProvincialSubmitterRole(capabilities.roles) &&
     permitExemptionContextReady &&
@@ -1369,8 +1368,10 @@ const ProvincialPermitDetailsPage = () => {
     editContextLoaded &&
     !permitEditLocked &&
     !!permitStatusCode &&
-    ((adminUser && permitStatusCode !== 'EXP') ||
-      (hasDocumentActorRole && !readOnlyUser && permitStatusCode === 'ACT'))
+    (adminUser ||
+      (hasDocumentActorRole &&
+        !readOnlyUser &&
+        (permitStatusCode === 'ACT' || permitStatusCode === 'EXP')))
   const canDeleteInvoiceDocuments =
     permitExemptionContextReady &&
     editContextLoaded &&
@@ -1510,6 +1511,40 @@ const ProvincialPermitDetailsPage = () => {
       setIsPermitTablesLoading(false)
     }
   }, [beginPermitGbmsRequest, detail, loadDeferredPermitTab, loadPermitGbmsEvents, permitNumber])
+
+  const reloadPermitScaleState = useCallback(async () => {
+    const resolvedPermitNumber = String(detail?.permitNumber ?? permitNumber ?? '').trim()
+    if (!resolvedPermitNumber) {
+      return
+    }
+
+    const [, refreshedDetail] = await Promise.all([
+      reloadPermitTabs(),
+      fetchProvincialPermitDetail(resolvedPermitNumber),
+    ])
+    if (!refreshedDetail) {
+      throw new Error(`No provincial permit found for ${resolvedPermitNumber}.`)
+    }
+
+    setDetail((current) =>
+      current
+        ? {
+            ...current,
+            permitVolume: refreshedDetail.permitVolume,
+            numberOfPieces: refreshedDetail.numberOfPieces,
+          }
+        : refreshedDetail,
+    )
+    setPermitForm((current) =>
+      current
+        ? {
+            ...current,
+            permitTotalVolume: numericDetailValue(refreshedDetail.permitVolume),
+            permitNumberOfPieces: numericDetailValue(refreshedDetail.numberOfPieces),
+          }
+        : buildPermitDetailForm(refreshedDetail),
+    )
+  }, [detail?.permitNumber, permitNumber, reloadPermitTabs])
 
   const reloadAvailablePermitApplications = useCallback(async () => {
     const isLatestRequest = beginAvailablePermitApplicationsRequest()
@@ -2014,7 +2049,7 @@ const ProvincialPermitDetailsPage = () => {
           return
         }
 
-        await reloadPermitTabs()
+        await reloadPermitScaleState()
         setActionInfoMessage(result.message || 'Permit item rows were updated.')
       } catch (error) {
         console.error(error)
@@ -2023,7 +2058,7 @@ const ProvincialPermitDetailsPage = () => {
         setIsUpdatingScaleId(null)
       }
     },
-    [canEditNormalPermitScaleRows, detail?.permitNumber, permitNumber, reloadPermitTabs],
+    [canEditNormalPermitScaleRows, detail?.permitNumber, permitNumber, reloadPermitScaleState],
   )
 
   const onAddPermitApplication = useCallback(async () => {
@@ -2393,7 +2428,7 @@ const ProvincialPermitDetailsPage = () => {
       setBoicScaleForm(savedScaleBaseline)
       setBoicScaleBaselineForm(savedScaleBaseline)
       try {
-        await reloadPermitTabs()
+        await reloadPermitScaleState()
         setActionInfoMessage(result.message || 'Blanket OIC scale detail was added.')
       } catch (refreshError) {
         console.error(refreshError)
@@ -2419,7 +2454,7 @@ const ProvincialPermitDetailsPage = () => {
     detail?.permitNumber,
     isSavingBoicScale,
     permitNumber,
-    reloadPermitTabs,
+    reloadPermitScaleState,
     selectedBlanketOicPackageNumber,
   ])
 
@@ -2445,7 +2480,7 @@ const ProvincialPermitDetailsPage = () => {
         }
 
         try {
-          await reloadPermitTabs()
+          await reloadPermitScaleState()
           setActionInfoMessage(result.message || 'Blanket OIC scale detail was removed.')
         } catch (refreshError) {
           console.error(refreshError)
@@ -2465,7 +2500,7 @@ const ProvincialPermitDetailsPage = () => {
         setIsDeletingBoicScaleId(null)
       }
     },
-    [canEditBlanketOicScaleRows, detail?.permitNumber, permitNumber, reloadPermitTabs],
+    [canEditBlanketOicScaleRows, detail?.permitNumber, permitNumber, reloadPermitScaleState],
   )
 
   const refreshPermitDocuments = useCallback(async () => {

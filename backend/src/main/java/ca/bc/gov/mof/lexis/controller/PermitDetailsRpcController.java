@@ -201,7 +201,7 @@ public class PermitDetailsRpcController {
       @RequestParam(name = "permitNumber") Long permitNumber,
       @RequestParam(name = "clientEmailAddress", required = false) String clientEmailAddress,
       Authentication authentication) {
-    if (!canSavePermit(authentication)) {
+    if (!canSavePermit(authentication) || !canReviewPermits(authentication)) {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
     PermitDetailsRpcService service = serviceProvider.getIfAvailable();
@@ -223,7 +223,7 @@ public class PermitDetailsRpcController {
   public ResponseEntity<PermitApprovalEmailDefaultResponseDto> getApprovalPermitEmailDefault(
       @RequestParam(name = "permitNumber") Long permitNumber,
       Authentication authentication) {
-    if (!canSavePermit(authentication)) {
+    if (!canSavePermit(authentication) || !canReviewPermits(authentication)) {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
     PermitDetailsRpcService service = serviceProvider.getIfAvailable();
@@ -1281,7 +1281,7 @@ public class PermitDetailsRpcController {
         () -> {
           requirePermitDocumentSource(
               service, parsedDocumentId, permitNumber, authentication, "permit");
-          requirePermitEditable(permitNumber, authentication);
+          requirePermitDocumentEditable(permitNumber, authentication);
           if (!canRemovePermitDocument(permitNumber, roles, false)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
           }
@@ -1436,8 +1436,10 @@ public class PermitDetailsRpcController {
               if (invoiceDocument) {
                 return PERMIT_STATUS_ACTIVE.equals(status) && (admin || !readOnly);
               }
-              return (admin && !PERMIT_STATUS_EXPIRED.equals(status))
-                  || (PERMIT_STATUS_ACTIVE.equals(status) && !readOnly);
+              if (PERMIT_STATUS_EXPIRED.equals(status)) {
+                return admin || !readOnly;
+              }
+              return admin || (PERMIT_STATUS_ACTIVE.equals(status) && !readOnly);
             })
         .orElse(false);
   }
@@ -1718,6 +1720,18 @@ public class PermitDetailsRpcController {
 
   private void requirePermitEditable(Long permitNumber, Authentication authentication) {
     requireCanonicalPermitMutable(permitNumber);
+    requirePermitEditLock(permitNumber, authentication);
+  }
+
+  private void requirePermitDocumentEditable(
+      Long permitNumber, Authentication authentication) {
+    // INTENTIONAL_LEGACY_DIVERGENCE(EXPIRED_DOCUMENT_MAINTENANCE): Preserve canonical target and
+    // edit-lock checks while allowing direct document cleanup on an expired permit.
+    canonicalPermitStatus(permitNumber);
+    requirePermitEditLock(permitNumber, authentication);
+  }
+
+  private void requirePermitEditLock(Long permitNumber, Authentication authentication) {
     if (editLockService == null) {
       return;
     }
@@ -1729,20 +1743,23 @@ public class PermitDetailsRpcController {
   }
 
   private void requireCanonicalPermitMutable(Long permitNumber) {
-    if (permitService == null) {
-      throw new AccessDeniedException("Permit status is unavailable for mutation.");
-    }
-    String permitStatus =
-        permitService
-            .findByPermitNumber(permitNumber)
-            .map(detail -> detail.permitStatusCode())
-            .map(status -> status == null ? "" : status.trim().toUpperCase(Locale.ROOT))
-            .filter(status -> !status.isBlank())
-            .orElseThrow(
-                () -> new AccessDeniedException("Permit status is unavailable for mutation."));
+    String permitStatus = canonicalPermitStatus(permitNumber);
     if (PERMIT_STATUS_EXPIRED.equals(permitStatus)) {
       throw new AccessDeniedException("Expired permits are read-only.");
     }
+  }
+
+  private String canonicalPermitStatus(Long permitNumber) {
+    if (permitService == null) {
+      throw new AccessDeniedException("Permit status is unavailable for mutation.");
+    }
+    return permitService
+        .findByPermitNumber(permitNumber)
+        .map(detail -> detail.permitStatusCode())
+        .map(status -> status == null ? "" : status.trim().toUpperCase(Locale.ROOT))
+        .filter(status -> !status.isBlank())
+        .orElseThrow(
+            () -> new AccessDeniedException("Permit status is unavailable for mutation."));
   }
 
   private ApplicationEditLockDto acquirePermitLock(

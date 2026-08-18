@@ -46,7 +46,7 @@ class DocumentUploadMutationPolicyTest {
     assertThatThrownBy(() -> policy.requireExemptionAttachmentTarget("EX-205"))
         .isInstanceOf(AccessDeniedException.class)
         .hasMessage("Exemption status is unavailable for mutation.");
-    assertThatThrownBy(() -> policy.requirePermitMutable(7000123L))
+    assertThatThrownBy(() -> policy.requirePermitAttachmentTarget(7000123L))
         .isInstanceOf(AccessDeniedException.class)
         .hasMessage("Permit status is unavailable for mutation.");
     assertThatThrownBy(() -> policy.requireInvoicePermitActive(7000123L))
@@ -70,7 +70,7 @@ class DocumentUploadMutationPolicyTest {
     assertThatThrownBy(() -> policy.requireExemptionAttachmentTarget("EX-205"))
         .isInstanceOf(AccessDeniedException.class)
         .hasMessage("Exemption status is unavailable for mutation.");
-    assertThatThrownBy(() -> policy.requirePermitMutable(7000123L))
+    assertThatThrownBy(() -> policy.requirePermitAttachmentTarget(7000123L))
         .isInstanceOf(AccessDeniedException.class)
         .hasMessage("Permit status is unavailable for mutation.");
     assertThatThrownBy(() -> policy.requireInvoicePermitActive(7000123L))
@@ -79,7 +79,7 @@ class DocumentUploadMutationPolicyTest {
   }
 
   @Test
-  void expiredApplicationAndExemptionTargetsShouldAllowDocumentUploads() {
+  void expiredApplicationExemptionAndPermitTargetsShouldAllowDocumentUploads() {
     when(applicationServiceProvider.getIfAvailable()).thenReturn(applicationService);
     when(exemptionServiceProvider.getIfAvailable()).thenReturn(exemptionService);
     when(permitServiceProvider.getIfAvailable()).thenReturn(permitService);
@@ -93,9 +93,8 @@ class DocumentUploadMutationPolicyTest {
         .doesNotThrowAnyException();
     assertThatCode(() -> policy.requireExemptionAttachmentTarget("EX-205"))
         .doesNotThrowAnyException();
-    assertThatThrownBy(() -> policy.requirePermitMutable(7000123L))
-        .isInstanceOf(AccessDeniedException.class)
-        .hasMessage("Expired permits are read-only.");
+    assertThatCode(() -> policy.requirePermitAttachmentTarget(7000123L))
+        .doesNotThrowAnyException();
   }
 
   @Test
@@ -113,7 +112,8 @@ class DocumentUploadMutationPolicyTest {
         .doesNotThrowAnyException();
     assertThatCode(() -> policy.requireExemptionAttachmentTarget(" EX-205 "))
         .doesNotThrowAnyException();
-    assertThatCode(() -> policy.requirePermitMutable(7000123L)).doesNotThrowAnyException();
+    assertThatCode(() -> policy.requirePermitAttachmentTarget(7000123L))
+        .doesNotThrowAnyException();
     assertThatCode(() -> policy.requireInvoicePermitActive(7000123L)).doesNotThrowAnyException();
   }
 

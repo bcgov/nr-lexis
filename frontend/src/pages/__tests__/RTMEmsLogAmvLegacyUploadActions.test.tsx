@@ -866,6 +866,11 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       within(hemlockTable).getByText('July had 81.40. Enter a value, or 0 for none.'),
     ).toBeVisible()
     expect(screen.getByText('Fixed values are not shown here')).toBeVisible()
+    expect(
+      screen.getByText(
+        'Grades Z, BLANK and 1 to 6 are always $1.00 per cubic metre. They are saved automatically and appear on the permit Fees tab.',
+      ),
+    ).toBeVisible()
     expect(screen.getByRole('button', { name: 'Save values' })).toBeEnabled()
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeEnabled()
 
