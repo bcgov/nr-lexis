@@ -117,6 +117,10 @@ const cognitoSignOut = async (): Promise<void> => {
   await signOut()
 }
 
+const isUserAlreadyAuthenticatedError = (error: unknown): boolean => {
+  return error instanceof Error && error.name === 'UserAlreadyAuthenticatedException'
+}
+
 const normalizeAction = (action: string): string => {
   return action.trim().toLowerCase().replace(/\.do$/i, '').replace(/^\//, '')
 }
@@ -549,13 +553,31 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const login = useCallback(
     async (provider: LoginProvider = 'idir') => {
       sessionExpiryInFlightRef.current = false
+
+      if (isCognitoConfigured) {
+        await refresh()
+        if (authenticatedSessionRef.current) {
+          return
+        }
+      }
+
       clearActiveForestClientNumber()
       apiService.clearCachedGetData()
       clearPersistedSearchState()
       if (isCognitoConfigured) {
         const providerName =
           provider === 'business-bceid' ? businessBceidProviderName : idirProviderName
-        await signInWithRedirect({ provider: { custom: providerName } })
+        try {
+          await signInWithRedirect({ provider: { custom: providerName } })
+        } catch (error) {
+          if (isUserAlreadyAuthenticatedError(error)) {
+            await refresh()
+            if (authenticatedSessionRef.current) {
+              return
+            }
+          }
+          throw error
+        }
         return
       }
       await refresh()

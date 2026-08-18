@@ -44,12 +44,16 @@ const mockedFetchSessionCapabilities = vi.mocked(fetchSessionCapabilities)
 let consoleWarnSpy: ReturnType<typeof vi.spyOn>
 
 const LogoutProbe = () => {
-  const { isLoading, isLoggedIn, logout } = useAuth()
+  const { defaultRoute, isLoading, isLoggedIn, login, logout } = useAuth()
 
   return (
     <div>
       <div data-testid="loading">{String(isLoading)}</div>
       <div data-testid="is-logged-in">{String(isLoggedIn)}</div>
+      <div data-testid="default-route">{defaultRoute}</div>
+      <button type="button" onClick={() => void login('idir')}>
+        Login
+      </button>
       <button type="button" onClick={() => void logout()}>
         Logout
       </button>
@@ -169,6 +173,78 @@ describe('AuthProvider logout', () => {
     expect(mockedFetchSessionCapabilities).not.toHaveBeenCalled()
     expect(hasSessionExpiredLoginNotice()).toBe(true)
     expect(window.sessionStorage.getItem('lexis.search-state.v1.provincial-review')).toBeNull()
+  })
+
+  it('restores an existing Cognito session instead of starting another login flow', async () => {
+    authMocks.fetchAuthSession.mockResolvedValueOnce({ tokens: undefined }).mockResolvedValue({
+      tokens: {
+        accessToken: 'access-token',
+        idToken: {
+          payload: {},
+        },
+      },
+    })
+
+    renderProbe()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('loading')).toHaveTextContent('false')
+    })
+    expect(screen.getByTestId('is-logged-in')).toHaveTextContent('false')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Login' }))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('is-logged-in')).toHaveTextContent('true')
+    })
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/provincial/review')
+    expect(authMocks.signInWithRedirect).not.toHaveBeenCalled()
+  })
+
+  it('recovers when Cognito reports that login raced with an existing session', async () => {
+    const alreadyAuthenticated = new Error('There is already a signed in user.')
+    alreadyAuthenticated.name = 'UserAlreadyAuthenticatedException'
+    authMocks.fetchAuthSession
+      .mockResolvedValueOnce({ tokens: undefined })
+      .mockResolvedValueOnce({ tokens: undefined })
+      .mockResolvedValue({
+        tokens: {
+          accessToken: 'access-token',
+          idToken: {
+            payload: {},
+          },
+        },
+      })
+    authMocks.signInWithRedirect.mockRejectedValueOnce(alreadyAuthenticated)
+
+    renderProbe()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('loading')).toHaveTextContent('false')
+    })
+    await userEvent.click(screen.getByRole('button', { name: 'Login' }))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('is-logged-in')).toHaveTextContent('true')
+    })
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/provincial/review')
+    expect(authMocks.signInWithRedirect).toHaveBeenCalledOnce()
+  })
+
+  it('starts the configured login flow when no Cognito session exists', async () => {
+    authMocks.fetchAuthSession.mockResolvedValue({ tokens: undefined })
+
+    renderProbe()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('loading')).toHaveTextContent('false')
+    })
+    await userEvent.click(screen.getByRole('button', { name: 'Login' }))
+
+    expect(authMocks.signInWithRedirect).toHaveBeenCalledWith({
+      provider: { custom: 'DEV-IDIR' },
+    })
+    expect(mockedFetchSessionCapabilities).not.toHaveBeenCalled()
   })
 
   it('clears local auth state after Cognito signout fails', async () => {
