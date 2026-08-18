@@ -1486,6 +1486,36 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
+  void addPermitShouldAllowLegacyPermitWritersAndRejectReadOnlyRoles() throws Exception {
+    String path = "/api/lexis/rpc/permit-details/add-permit";
+
+    mockMvc.perform(post(path).with(csrf())).andExpect(status().isUnauthorized());
+    for (String forbiddenRole : List.of("LEXIS_READ_ONLY", "LEXIS_EXEMPTION_APPROVER")) {
+      mockMvc
+          .perform(
+              post(path)
+                  .with(csrf())
+                  .with(jwt().authorities(new SimpleGrantedAuthority(forbiddenRole))))
+          .andExpect(status().isForbidden());
+    }
+    for (String allowedRole :
+        List.of(
+            "LEXIS_ADMIN",
+            "LEXIS_APPLICATION_APPROVER",
+            "LEXIS_PROVINCIAL_SUBMITTER",
+            "LEXIS_PROVINCIAL_SUBMITTER_00077881")) {
+      mockMvc
+          .perform(
+              post(path)
+                  .with(csrf())
+                  .with(jwt().authorities(new SimpleGrantedAuthority(allowedRole))))
+          .andExpect(status().isNoContent())
+          .andExpect(handler().handlerType(PermitDetailsRpcController.class))
+          .andExpect(handler().methodName("addPermit"));
+    }
+  }
+
+  @Test
   void modernPermitScaleAttachmentShouldAllowCanonicalApproverRole() throws Exception {
     mockMvc.perform(
             post("/api/lexis/rpc/permit-details/update-scale-attachment")

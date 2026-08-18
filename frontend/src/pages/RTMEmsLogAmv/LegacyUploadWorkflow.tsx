@@ -189,7 +189,7 @@ const validateAcceptedPreview = (
   return {
     ...previewResult,
     status: 'validation_failed',
-    message: 'Upload template validation failed.',
+    message: "This file couldn't be used.",
     errors: [...previewResult.errors, 'Update date must be on or after the retrieval date.'],
   }
 }
@@ -198,6 +198,7 @@ const RTM_UPLOAD_ACCEPT = ['application/vnd.openxmlformats-officedocument.spread
 const RTM_TEMPLATE_DOWNLOAD_PATH = '/templates/rtm-ems-log-amv-template.xlsx'
 const RTM_TEMPLATE_DOWNLOAD_NAME = 'rtm-ems-log-amv-template.xlsx'
 const EFFECTIVE_MONTH_REFRESH_INTERVAL_MS = 1_000
+const MAX_REJECTED_UPLOAD_ISSUES = 10
 
 const RTM_UPLOAD_ONLY_DESCRIPTION =
   'Set the domestic log values used to calculate export fees for coastal permits.'
@@ -222,7 +223,6 @@ const RTM_REVIEW_SPECIES_COLUMNS: RtmReviewSpeciesColumn[] = [
 ]
 
 const RTM_REVIEW_GRADE_ORDER = [
-  'A',
   'B',
   'C',
   'D',
@@ -240,7 +240,7 @@ const RTM_REVIEW_GRADE_ORDER = [
   'Y',
 ]
 
-const HIDDEN_REVIEW_GRADES = new Set(['W', 'Z', '1', '2', '3', '4', '5', '6', 'BLANK'])
+const REVIEW_GRADES = new Set(RTM_REVIEW_GRADE_ORDER)
 
 const RTM_REVIEW_GROWTH_ORDER = ['O', 'S']
 const RTM_FIXED_GRADES = ['Z', 'BLANK', '1', '2', '3', '4', '5', '6']
@@ -321,7 +321,7 @@ const buildSpeciesReviewRows = (
       !grade ||
       !growthIndicator ||
       speciesColumnKey !== column.key ||
-      HIDDEN_REVIEW_GRADES.has(grade)
+      !REVIEW_GRADES.has(grade)
     ) {
       return
     }
@@ -543,13 +543,10 @@ const RejectedUploadFile = ({
   onClear: () => void
   removeButtonRef?: RefObject<HTMLButtonElement | null>
 }) => {
-  const hasMultipleIssues = issues.length > 1
-  const issueOccurrences = new Map<string, number>()
-  const issueItems = issues.map((issue) => {
-    const occurrence = (issueOccurrences.get(issue) ?? 0) + 1
-    issueOccurrences.set(issue, occurrence)
-    return { issue, key: `${issue}-${occurrence}` }
-  })
+  const uniqueIssues = [...new Set(issues)]
+  const hasMultipleIssues = uniqueIssues.length > 1
+  const visibleIssues = uniqueIssues.slice(0, MAX_REJECTED_UPLOAD_ISSUES)
+  const hiddenIssueCount = uniqueIssues.length - visibleIssues.length
   return (
     <div
       className="rtm-amv-rejected-file"
@@ -574,17 +571,17 @@ const RejectedUploadFile = ({
       {hasMultipleIssues ? (
         <div className="rtm-amv-rejected-file__details">
           <p className="rtm-amv-rejected-file__intro">
-            This file can&apos;t be used. Fix these issues in your spreadsheet, then upload it
-            again:
+            This file couldn&apos;t be used — {uniqueIssues.length} problems found
           </p>
           <ul className="rtm-amv-rejected-file__issues" aria-label="Upload validation issues">
-            {issueItems.map(({ issue, key }) => (
-              <li key={key}>{issue}</li>
+            {visibleIssues.map((issue) => (
+              <li key={issue}>{issue}</li>
             ))}
+            {hiddenIssueCount > 0 && <li>and {hiddenIssueCount} more</li>}
           </ul>
         </div>
       ) : (
-        <p className="rtm-amv-rejected-file__issue">{issues[0]}</p>
+        <p className="rtm-amv-rejected-file__issue">{uniqueIssues[0]}</p>
       )}
     </div>
   )
@@ -719,17 +716,12 @@ const ReviewUploadContent = ({
   )
   const comparisonMonthName =
     formatUploadMonth(previewResult.retrievalDate)?.split(' ')[0] ?? 'The comparison month'
-  const initialReviewValues = buildInitialReviewValues(previewResult.rows)
   const hasRowWarningForValues = (row: RtmSpeciesReviewRow, values: Record<string, string>) => {
     const value = values[row.key] ?? ''
     return !reviewValueError(value) && !!reviewValueWarning(row, value, comparisonMonthName)
   }
   const hasRowWarning = (row: RtmSpeciesReviewRow) => hasRowWarningForValues(row, reviewValues)
-  const warnedSpecies = speciesColumns.filter(
-    (_, index) =>
-      speciesRows[index].some(hasRowWarning) ||
-      speciesRows[index].some((row) => hasRowWarningForValues(row, initialReviewValues)),
-  )
+  const warnedSpecies = speciesColumns.filter((_, index) => speciesRows[index].some(hasRowWarning))
   const warningCellCount = speciesRows.reduce(
     (total, rows) => total + rows.filter(hasRowWarning).length,
     0,
@@ -816,7 +808,7 @@ const ReviewUploadContent = ({
         lowContrast
         hideCloseButton
         title="Fixed values are not shown here"
-        subtitle="Grades Z, BLANK and 1 to 6 are always $1.00 per cubic metre. They are saved automatically and appear on the permit invoice."
+        subtitle="Grades Z, BLANK and 1 to 6 are always $1.00 per cubic metre. They are saved automatically and appear on the permit Fees tab."
       />
 
       {uploadResult && (

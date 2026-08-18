@@ -60,7 +60,7 @@ public class RtmEmsLogAmvUploadController {
           .body(
               buildUploadFailure(
                   uploadFile,
-                  "Upload template validation failed.",
+                  "This file couldn't be used.",
                   List.of("No file provided."),
                   List.of(),
                   List.of()));

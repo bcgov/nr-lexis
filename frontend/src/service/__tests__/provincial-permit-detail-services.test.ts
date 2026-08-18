@@ -16,6 +16,7 @@ import {
   updatePermitScaleAttachment,
 } from '@/service/provincial-permit-detail-tabs-service'
 import {
+  addPermitDetail,
   addPermitInvoice,
   createPermitFromExemption,
   fetchPermitApprovalEmailDefault,
@@ -457,7 +458,8 @@ describe('provincial permit detail services', () => {
                     productType: 'Unmanufactured',
                   },
                   packageDetails: {
-                    volume: '38.5',
+                    volume: '40.0',
+                    scaledVolume: '38.5',
                     status: 'APP',
                     statusDesc: 'Approved',
                     reprocessed: 'N',
@@ -1011,6 +1013,62 @@ describe('provincial permit detail services', () => {
       warnings: ['Attach applications separately.'],
       source: 'api',
       permitNumber: '98765',
+    })
+  })
+
+  it('creates a fully entered Blanket OIC permit through the add endpoint', async () => {
+    postMock.mockResolvedValue(
+      response({
+        success: true,
+        message: 'The permit was saved successfully.',
+        permitNumber: 9020948,
+      }),
+    )
+
+    const result = await addPermitDetail({
+      permitNumber: '',
+      permitStatus: 'ACT',
+      permitSubmitDate: '2026-08-13',
+      permitIssueDate: '2026-08-13',
+      permitExpiryDate: '2027-02-09',
+      permitRequestDate: '',
+      exemptionNumber: ' TEST13E2 ',
+      permitReceiptNo: '',
+      permitRemarks: 'test blanket permit',
+      permitTotalVolume: '',
+      permitNumberOfPieces: '',
+      oicPermitTotalPieces: '4',
+      oicPermitTotalVolume: '4.0',
+      orgUnitNumber: '1909',
+      ownerClientNumber: '00001074',
+      ownerClientLocation: '00',
+      agentClientNumber: '',
+      agentClientLocation: '',
+      destinationCompanyName: 'test destination',
+      destinationCountry: 'us',
+      transportType: 'b',
+      transportName: 'test barge',
+      estimatedShippingDate: '2026-08-20',
+      portOfExport: 'cb',
+      otherPortOfExport: '',
+    })
+
+    const [path, body] = postMock.mock.calls[0]
+    expect(path).toBe('/lexis/rpc/permit-details/add-permit')
+    expect(body).toBeInstanceOf(URLSearchParams)
+    expect(body.get('permitNumber')).toBeNull()
+    expect(body.get('exemptionNumber')).toBe('TEST13E2')
+    expect(body.get('oicPermitTotalPieces')).toBe('4')
+    expect(body.get('oicPermitTotalVolume')).toBe('4.0')
+    expect(body.get('orgUnitNo')).toBe('1909')
+    expect(body.get('ownerClientNumber')).toBe('00001074')
+    expect(body.get('destinationCountry')).toBe('US')
+    expect(body.get('transportType')).toBe('B')
+    expect(body.get('portOfExport')).toBe('CB')
+    expect(result).toMatchObject({
+      success: true,
+      permitNumber: '9020948',
+      source: 'api',
     })
   })
 

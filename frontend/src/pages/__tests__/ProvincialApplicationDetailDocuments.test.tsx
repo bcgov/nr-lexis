@@ -692,7 +692,7 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
     expect(mockedRemoveApplicationDocument).not.toHaveBeenCalled()
   })
 
-  it('keeps application document delete disabled for approvers when the application is expired', async () => {
+  it('allows approvers to delete application documents after the application expires', async () => {
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
       ...applicationDetail,
       applicationStatusCode: 'EXP',
@@ -731,13 +731,12 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
     const deleteButton = within(documentRow as HTMLElement).getByRole('button', {
       name: 'Delete',
     })
-    expect(deleteButton).toBeDisabled()
-    expect(mockedRemoveApplicationDocument).not.toHaveBeenCalled()
+    expect(deleteButton).toBeEnabled()
   })
 
-  it('keeps expired application document delete available to scoped industry users', async () => {
+  it('allows scoped industry users to add and delete expired application documents', async () => {
     mockApplicationDetailAuth(
-      (action: string) => action === '/applicationDetails',
+      (action: string) => action === '/applicationDetails' || action === '/fileApplicationUpload',
       ['LEXIS_PROVINCIAL_SUBMITTER_00011122'],
     )
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
@@ -770,7 +769,7 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
     )
 
     await selectApplicationDocumentsForEditing()
-    expect(screen.queryByRole('button', { name: 'Add document' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add document' })).toBeInTheDocument()
     const documentRow = (await screen.findByText('industry-expired-doc.pdf')).closest('tr')
     expect(documentRow).toBeTruthy()
     expect(

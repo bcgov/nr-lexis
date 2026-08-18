@@ -422,21 +422,22 @@ class ApplicationDetailsRpcControllerTest {
   }
 
   @Test
-  void removeDocumentShouldRejectExpiredApplicationsForApprovers() {
+  void removeDocumentShouldAllowExpiredApplicationsForApprovers() {
     TestingAuthenticationToken authentication = authorized();
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(service.getDocumentDetails(1000456L))
         .thenReturn(List.of(directApplicationDocument(55L, "test.pdf", "Not on file", "Uploaded")));
     when(service.getApplicationSummarySnapshot(1000456L))
         .thenReturn(Optional.of(summarySnapshotWithStatus("EXP")));
+    when(service.removeDocument(55L)).thenReturn(true);
 
     ResponseEntity<ApplicationDetailsRpcController.RemoveDocumentResponseDto> response =
         controller.removeDocument("55", "1000456", authentication);
 
-    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
-    verify(service).getDocumentDetails(1000456L);
-    verify(service).getApplicationSummarySnapshot(1000456L);
-    org.mockito.Mockito.verify(service, org.mockito.Mockito.never()).removeDocument(org.mockito.ArgumentMatchers.anyLong());
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    verify(service, org.mockito.Mockito.times(2)).getDocumentDetails(1000456L);
+    verify(service, org.mockito.Mockito.times(2)).getApplicationSummarySnapshot(1000456L);
+    verify(service).removeDocument(55L);
   }
 
   @Test

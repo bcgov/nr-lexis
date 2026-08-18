@@ -40,7 +40,7 @@ describe('provincial-offer-create-service', () => {
       },
       {
         cacheKey: 'offer-application-details:45970',
-        ttlMs: 30_000,
+        ttlMs: 0,
       },
     )
     expect(result).toEqual({
@@ -67,7 +67,7 @@ describe('provincial-offer-create-service', () => {
       },
       {
         cacheKey: 'offer-application-validation:45970',
-        ttlMs: 30_000,
+        ttlMs: 0,
       },
     )
     expect(result).toEqual({

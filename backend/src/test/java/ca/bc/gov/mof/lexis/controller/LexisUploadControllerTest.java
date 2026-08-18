@@ -440,7 +440,7 @@ class LexisUploadControllerTest {
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(payload);
-    verify(documentUploadMutationPolicy).requirePermitMutable(7000123L);
+    verify(documentUploadMutationPolicy).requirePermitAttachmentTarget(7000123L);
     verify(applicationEditLockService)
         .acquirePermit(7000123L, "idir\\jsmith", "idir\\jsmith", false);
     verify(uploadService).uploadPermit(file, 7000123L, "Permit file", "idir\\jsmith");
@@ -473,23 +473,13 @@ class LexisUploadControllerTest {
   }
 
   @Test
-  void permitAndInvoiceUploadsShouldRejectExpiredCanonicalTargetBeforeLock() {
+  void invoiceUploadShouldRejectNonActiveCanonicalTargetBeforeLock() {
     LexisUploadController controller = controller();
-    MultipartFile permitFile = sampleFile("permit.pdf");
     MultipartFile invoiceFile = sampleFile("invoice.pdf");
-    doThrow(new AccessDeniedException("Expired permits are read-only."))
-        .when(documentUploadMutationPolicy)
-        .requirePermitMutable(7000123L);
     doThrow(new AccessDeniedException("Invoices can only be added to active permits."))
         .when(documentUploadMutationPolicy)
         .requireInvoicePermitActive(7000123L);
 
-    assertThatThrownBy(
-            () ->
-                controller.filePermitUpload(
-                    permitFile, null, 7000123L, "Permit file", null, null))
-        .isInstanceOf(AccessDeniedException.class)
-        .hasMessage("Expired permits are read-only.");
     assertThatThrownBy(
             () ->
                 controller.fileInvoiceUpload(
@@ -509,7 +499,6 @@ class LexisUploadControllerTest {
         .isInstanceOf(AccessDeniedException.class)
         .hasMessage("Invoices can only be added to active permits.");
 
-    verify(documentUploadMutationPolicy).requirePermitMutable(7000123L);
     verify(documentUploadMutationPolicy).requireInvoicePermitActive(7000123L);
     verify(applicationEditLockService, never()).acquirePermit(any(), any(), any(), anyBoolean());
     verify(uploadServiceProvider, never()).getIfAvailable();

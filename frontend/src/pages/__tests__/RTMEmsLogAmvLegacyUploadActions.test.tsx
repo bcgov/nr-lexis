@@ -454,7 +454,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       status: 'validation_failed',
       fileName: 'wrong-month.xlsx',
       fileSize: 1,
-      message: 'Upload template validation failed.',
+      message: "This file couldn't be used.",
       rowCount: 0,
       retrievalDate: comparisonMonth,
       updateDate: nextMonth,
@@ -578,7 +578,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       status: 'validation_failed',
       fileName: 'Filename.xlsx',
       fileSize: 1,
-      message: 'Upload template validation failed.',
+      message: "This file couldn't be used.",
       rowCount: 0,
       errors: ['The file has no numeric values. Please check your file and try again.'],
       warnings: [],
@@ -619,18 +619,16 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     expect(mockedSaveBatch).not.toHaveBeenCalled()
   })
 
-  it('lists multiple server validation issues inside the rejected-file row', async () => {
+  it('deduplicates and caps server validation issues inside the rejected-file row', async () => {
     const errors = [
-      'The file has no numeric values.',
-      'Error 2 can be listed here.',
-      'Error 3 can be listed here.',
-      'Error 4 can be listed here.',
+      ...Array.from({ length: 12 }, (_, index) => `Problem ${index + 1}.`),
+      'Problem 1.',
     ]
     mockedPreviewUpload.mockResolvedValue({
       status: 'validation_failed',
       fileName: 'Filename.xlsx',
       fileSize: 1,
-      message: 'Upload template validation failed.',
+      message: "This file couldn't be used.",
       rowCount: 0,
       errors,
       warnings: [],
@@ -650,18 +648,18 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       name: 'Rejected average monthly values upload file',
     })
     expect(
-      within(rejectedFile).getByText(
-        "This file can't be used. Fix these issues in your spreadsheet, then upload it again:",
-      ),
+      within(rejectedFile).getByText("This file couldn't be used — 12 problems found"),
     ).toBeVisible()
     const issueList = within(rejectedFile).getByRole('list', {
       name: 'Upload validation issues',
     })
-    expect(within(issueList).getAllByRole('listitem')).toHaveLength(4)
-    for (const error of errors) {
+    expect(within(issueList).getAllByRole('listitem')).toHaveLength(11)
+    for (const error of errors.slice(0, 10)) {
       expect(within(issueList).getByText(error)).toBeVisible()
     }
-    expect(screen.queryByText('4 validation issues found')).not.toBeInTheDocument()
+    expect(within(issueList).getByText('and 2 more')).toBeVisible()
+    expect(within(issueList).queryByText('Problem 11.')).not.toBeInTheDocument()
+    expect(within(issueList).getAllByText('Problem 1.')).toHaveLength(1)
     expect(
       screen.queryByRole('table', { name: 'Upload validation issues' }),
     ).not.toBeInTheDocument()
@@ -676,7 +674,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
         status: 'validation_failed',
         fileName: 'Filename.xlsx',
         fileSize: 1,
-        message: 'Upload template validation failed.',
+        message: "This file couldn't be used.",
         rowCount: 0,
         errors: ['The file has no numeric values.'],
         warnings: [],
@@ -764,7 +762,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
         },
         {
           species: 'HE',
-          grade: 'A',
+          grade: 'B',
           growthIndicator: 'O',
           retrievalDate: '2026-07-01',
           updateDate: '2026-09-01',
@@ -842,7 +840,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       name: 'Hemlock average market value review',
     })
     const newHemlockCombination = within(hemlockTable).getByLabelText(
-      'Hemlock grade A September 2026 value',
+      'Hemlock grade B September 2026 value',
     )
     expect(newHemlockCombination).toHaveValue('120.00')
     expect(
@@ -854,6 +852,11 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       within(hemlockTable).getByText('July had 81.40. Enter a value, or 0 for none.'),
     ).toBeVisible()
     expect(screen.getByText('Fixed values are not shown here')).toBeVisible()
+    expect(
+      screen.getByText(
+        'Grades Z, BLANK and 1 to 6 are always $1.00 per cubic metre. They are saved automatically and appear on the permit Fees tab.',
+      ),
+    ).toBeVisible()
     expect(screen.getByRole('button', { name: 'Save values' })).toBeEnabled()
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeEnabled()
 
@@ -865,9 +868,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     await userEvent.type(missingHemlockValue, '81.43')
 
     expect(await screen.findByText('1 cell needs a look before you save')).toBeVisible()
-    expect(
-      screen.getByText('In Hemlock and Cedar, highlighted below. You can save either way.'),
-    ).toBeVisible()
+    expect(screen.getByText('In Cedar, highlighted below. You can save either way.')).toBeVisible()
     expect(document.querySelectorAll('.rtm-amv-species-tab__status--warning')).toHaveLength(1)
     expect(
       screen
@@ -892,7 +893,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     })
     expect(mockedSaveBatch.mock.calls[0][0].values).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ species: 'HE', grade: 'A', newValue: 0 }),
+        expect.objectContaining({ species: 'HE', grade: 'B', newValue: 0 }),
         expect.objectContaining({ species: 'HE', grade: 'H', newValue: 81.43 }),
       ]),
     )
@@ -1117,7 +1118,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       fileName: 'rtm-values.xlsx',
       fileSize: 1,
       message: 'Spreadsheet is valid.',
-      rowCount: 5,
+      rowCount: 6,
       retrievalDate: '2026-06-01',
       updateDate: '2026-07-01',
       errors: [],
@@ -1125,7 +1126,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       rows: [
         {
           species: 'WH',
-          grade: 'A',
+          grade: 'B',
           growthIndicator: 'O',
           retrievalDate: '2026-06-01',
           updateDate: '2026-07-01',
@@ -1135,7 +1136,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
         },
         {
           species: 'LO',
-          grade: 'A',
+          grade: 'B',
           growthIndicator: 'O',
           retrievalDate: '2026-06-01',
           updateDate: '2026-07-01',
@@ -1145,12 +1146,22 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
         },
         {
           species: 'YE',
-          grade: 'A',
+          grade: 'B',
           growthIndicator: 'O',
           retrievalDate: '2026-06-01',
           updateDate: '2026-07-01',
           currentValue: 9,
           newValue: 10,
+          returnCode: '0',
+        },
+        {
+          species: 'BA',
+          grade: 'A',
+          growthIndicator: 'O',
+          retrievalDate: '2026-06-01',
+          updateDate: '2026-07-01',
+          currentValue: 99,
+          newValue: 100,
           returnCode: '0',
         },
         {
@@ -1195,7 +1206,8 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       within(table).getByRole('columnheader', { name: 'Value in effect (June 2026)' }),
     ).toBeVisible()
     expect(within(table).getByRole('columnheader', { name: 'July 2026' })).toBeVisible()
-    expect(within(table).getByRole('row', { name: /A.*9\.00.*10\.00/ })).toBeVisible()
+    expect(within(table).getByRole('row', { name: /B.*9\.00.*10\.00/ })).toBeVisible()
+    expect(within(table).queryByRole('cell', { name: 'A' })).not.toBeInTheDocument()
     expect(within(table).queryByRole('row', { name: /W.*4\.00/ })).not.toBeInTheDocument()
     expect(within(table).queryByRole('row', { name: /BLANK.*5\.00/ })).not.toBeInTheDocument()
 
@@ -1206,12 +1218,15 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     const request = mockedSaveBatch.mock.calls[0][0]
     expect(request.values).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ species: 'PINE', grade: 'A', newValue: 10 }),
+        expect.objectContaining({ species: 'PINE', grade: 'B', newValue: 10 }),
         expect.objectContaining({ species: 'PINE', grade: 'BLANK', newValue: 1 }),
       ]),
     )
     expect(request.values).not.toEqual(
-      expect.arrayContaining([expect.objectContaining({ grade: 'W' })]),
+      expect.arrayContaining([
+        expect.objectContaining({ grade: 'A' }),
+        expect.objectContaining({ grade: 'W' }),
+      ]),
     )
   })
 

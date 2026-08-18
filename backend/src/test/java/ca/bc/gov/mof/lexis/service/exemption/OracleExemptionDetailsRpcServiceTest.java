@@ -737,8 +737,8 @@ class OracleExemptionDetailsRpcServiceTest {
   }
 
   @Test
-  void getPermitsShouldUseOicVolumeForOicExemptions() {
-    when(repository.findExemptionTypeCodeByExemptionNumber("EX-205")).thenReturn(Optional.of("O"));
+  void getPermitsShouldUseCurrentPermitVolumeForBlanketOicExemptions() {
+    when(repository.findExemptionTypeCodeByExemptionNumber("EX-205")).thenReturn(Optional.of("B"));
     when(repository.findPermitsByExemptionNumber("EX-205"))
         .thenReturn(
             List.of(
@@ -757,7 +757,7 @@ class OracleExemptionDetailsRpcServiceTest {
             "EX-205", permit -> permit.permitNumber() == 7000123L);
 
     assertThat(response).hasSize(1);
-    assertThat(response.get(0).permitVolume()).isEqualTo("12.4");
+    assertThat(response.get(0).permitVolume()).isEqualTo("95.0");
     assertThat(response.get(0).permitIssueDate()).isEqualTo("03/10/2026");
     assertThat(response.get(0).canViewPermit()).isTrue();
   }
