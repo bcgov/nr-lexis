@@ -158,10 +158,7 @@ public class ApplicationApprovalEligibilityService {
         application.exemptionReasonCode())) {
       errors.add("Application exemption reason code does not exist.");
     }
-    if (!applicationRepository.isApplicationStatusCodeValidRequired(
-        application.applicationStatusCode())) {
-      errors.add("Application status code does not exist.");
-    }
+    // REVIEWABLE_STATUS_CODES is authoritative here; the legacy single-code lookup omits PND.
     if (!applicationRepository.isApplicantTypeCodeValidRequired(application.applicantTypeCode())) {
       errors.add("Application applicant type code does not exist.");
     }

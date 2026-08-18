@@ -59,6 +59,18 @@ class ApplicationApprovalEligibilityServiceTest {
   }
 
   @Test
+  void shouldAllowAValidPendingFederalApplicationWhenLegacySingleCodeLookupOmitsPending() {
+    stubValidApplication("F");
+    when(applicationRepository.findApplicationUpdateRecord(1000456L))
+        .thenReturn(Optional.of(validApplication(null, "F", "PND")));
+
+    var result = service.evaluate(1000456L);
+
+    assertThat(result.eligible()).isTrue();
+    assertThat(result.errors()).isEmpty();
+  }
+
+  @Test
   void shouldRejectEveryLegacyReadyForApprovalAssociation() {
     stubValidApplication();
     when(applicationRepository.findApplicationUpdateRecord(1000456L))
@@ -167,7 +179,6 @@ class ApplicationApprovalEligibilityServiceTest {
     when(applicationRepository.isProductTypeCodeValidRequired("H")).thenReturn(true);
     when(applicationRepository.isGrowthTypeCodeValidRequired("O")).thenReturn(true);
     when(applicationRepository.isExemptionReasonCodeValidRequired("S")).thenReturn(true);
-    when(applicationRepository.isApplicationStatusCodeValidRequired("NEW")).thenReturn(true);
     when(applicationRepository.isApplicantTypeCodeValidRequired("O")).thenReturn(true);
     when(applicationRepository.isJurisdictionCodeValidRequired(jurisdictionCode)).thenReturn(true);
     when(applicationRepository.isOrgUnitValidRequired(1909L)).thenReturn(true);
@@ -194,6 +205,11 @@ class ApplicationApprovalEligibilityServiceTest {
 
   private ApplicationUpdateRecord validApplication(
       String exemptionNumber, String jurisdictionCode) {
+    return validApplication(exemptionNumber, jurisdictionCode, "NEW");
+  }
+
+  private ApplicationUpdateRecord validApplication(
+      String exemptionNumber, String jurisdictionCode, String statusCode) {
     return new ApplicationUpdateRecord(
         1000456L,
         null,
@@ -214,7 +230,7 @@ class ApplicationApprovalEligibilityServiceTest {
         "01",
         exemptionNumber,
         "S",
-        "NEW",
+        statusCode,
         "O",
         1909L,
         "H",
