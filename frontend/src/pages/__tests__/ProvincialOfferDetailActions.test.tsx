@@ -168,6 +168,56 @@ describe('Provincial Offer Detail Actions', () => {
     expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument()
   })
 
+  it('shows an offer notification warning returned after an update', async () => {
+    mockedSubmitProvincialOfferUpdate.mockResolvedValue({
+      success: true,
+      message: 'The purchase offer was updated successfully.',
+      createdId: '81001',
+      errors: [],
+      warnings: ['Offer saved, but no client email address was found.'],
+    })
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'Offer 81001' })
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    const amountInput = screen.getByLabelText('Offer amount ($/m³)')
+    await userEvent.clear(amountInput)
+    await userEvent.type(amountInput, '13000')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(await screen.findByText('Offer saved with warning')).toBeInTheDocument()
+    expect(
+      screen.getByText('Offer saved, but no client email address was found.'),
+    ).toBeInTheDocument()
+  })
+
+  it('shows an offer notification warning carried from the create page', async () => {
+    render(
+      <MemoryRouter
+        initialEntries={[
+          {
+            pathname: '/provincial/offers/81001',
+            state: {
+              offerCreationNotice: {
+                warnings: ['Offer saved, but no client email address was found.'],
+              },
+            },
+          },
+        ]}
+      >
+        <Routes>
+          <Route path="/provincial/offers/:offerNumber" element={<ProvincialOfferDetailsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { name: 'Offer 81001' })
+    expect(await screen.findByText('Offer saved with warning')).toBeInTheDocument()
+    expect(
+      screen.getByText('Offer saved, but no client email address was found.'),
+    ).toBeInTheDocument()
+  })
+
   it('submits an explicitly cleared offer condition', async () => {
     renderPage()
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Button,
   Column,
@@ -9,7 +9,7 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { AppNotification } from '../../components/AppNotification'
 import ContentLoadingOverlay from '@/components/ContentLoadingOverlay'
 import DetailBreadcrumb from '@/components/DetailBreadcrumb'
@@ -52,10 +52,16 @@ import {
 type ProvincialOfferDetailField = keyof ProvincialOfferUpdateSubmission & string
 
 type PageStatus = {
-  kind: 'success' | 'error'
+  kind: 'success' | 'error' | 'warning'
   title: string
   message: string
   placement?: 'inline'
+}
+
+type OfferCreationNavigationState = Record<string, unknown> & {
+  offerCreationNotice?: {
+    warnings: string[]
+  }
 }
 
 const YES_NO_OPTIONS = [
@@ -124,13 +130,29 @@ const mergeOfferFormIntoDetail = (
 const ProvincialOfferDetailsPage = () => {
   const { offerNumber } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
+  const navigationState = location.state as OfferCreationNavigationState | null
+  const creationWarningMessage =
+    navigationState?.offerCreationNotice?.warnings
+      .map((warning) => warning.trim())
+      .filter(Boolean)
+      .join(' ') ?? ''
+  const preserveStatusOnNextLoadRef = useRef(Boolean(creationWarningMessage))
   const [detail, setDetail] = useState<ProvincialOfferDetail | null>(null)
   const [form, setForm] = useState<ProvincialOfferUpdateSubmission | null>(null)
   const [loading, setLoading] = useState(true)
   const [isEditing, setIsEditing] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
-  const [status, setStatus] = useState<PageStatus | null>(null)
+  const [status, setStatus] = useState<PageStatus | null>(() =>
+    creationWarningMessage
+      ? {
+          kind: 'warning',
+          title: 'Offer saved with warning',
+          message: creationWarningMessage,
+        }
+      : null,
+  )
   const [touchedFields, setTouchedFields] = useState<TouchedFields<ProvincialOfferDetailField>>({})
   const [showAllValidationErrors, setShowAllValidationErrors] = useState(false)
   const beginDetailRequest = useLatestRequestGuard()
@@ -178,7 +200,11 @@ const ProvincialOfferDetailsPage = () => {
 
     setLoading(true)
     setErrorMessage('')
-    setStatus(null)
+    if (preserveStatusOnNextLoadRef.current) {
+      preserveStatusOnNextLoadRef.current = false
+    } else {
+      setStatus(null)
+    }
     try {
       const response = await fetchProvincialOfferDetail(offerNumber)
       if (!isLatestRequest()) {
@@ -204,6 +230,33 @@ const ProvincialOfferDetailsPage = () => {
   useEffect(() => {
     void loadOfferDetail()
   }, [loadOfferDetail])
+
+  useEffect(() => {
+    if (!creationWarningMessage) {
+      return
+    }
+
+    const nextNavigationState = { ...(navigationState ?? {}) }
+    delete nextNavigationState.offerCreationNotice
+    navigate(
+      {
+        pathname: location.pathname,
+        search: location.search,
+        hash: location.hash,
+      },
+      {
+        replace: true,
+        state: Object.keys(nextNavigationState).length > 0 ? nextNavigationState : null,
+      },
+    )
+  }, [
+    creationWarningMessage,
+    location.hash,
+    location.pathname,
+    location.search,
+    navigate,
+    navigationState,
+  ])
 
   useEffect(() => {
     return () => {
@@ -360,6 +413,10 @@ const ProvincialOfferDetailsPage = () => {
     try {
       const result = await submitProvincialOfferUpdate(form)
       if (result.success) {
+        const warningMessage = result.warnings
+          .map((warning) => warning.trim())
+          .filter(Boolean)
+          .join(' ')
         const updatedDetail = mergeOfferFormIntoDetail(detail, form)
         setDetail(updatedDetail)
         setForm(buildOfferForm(updatedDetail))
@@ -367,9 +424,9 @@ const ProvincialOfferDetailsPage = () => {
         setShowAllValidationErrors(false)
         setIsEditing(false)
         setStatus({
-          kind: 'success',
-          title: 'Offer saved',
-          message: result.message || 'Offer saved successfully.',
+          kind: warningMessage ? 'warning' : 'success',
+          title: warningMessage ? 'Offer saved with warning' : 'Offer saved',
+          message: warningMessage || result.message || 'Offer saved successfully.',
         })
         return true
       }

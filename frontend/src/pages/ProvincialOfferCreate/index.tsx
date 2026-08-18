@@ -130,6 +130,11 @@ type PageStatus = {
   placement?: 'inline'
 }
 
+type CreatedOfferNavigation = {
+  path: string
+  warnings: string[]
+}
+
 type ScopedOfferClientContext = {
   clientNumber: string
   companyName: string
@@ -218,7 +223,8 @@ const ProvincialOfferCreatePage = () => {
   const [form, setForm] = useState<ProvincialOfferCreateForm>(() => initialForm)
   const draftBaselineRef = useRef(form)
   const [formEdited, setFormEdited] = useState(false)
-  const [createdRecordPath, setCreatedRecordPath] = useState<string | null>(null)
+  const [createdOfferNavigation, setCreatedOfferNavigation] =
+    useState<CreatedOfferNavigation | null>(null)
   const [applicationContext, dispatchApplicationContext] = useReducer(
     offerApplicationContextReducer,
     queryPackageOptions,
@@ -285,10 +291,23 @@ const ProvincialOfferCreatePage = () => {
   const packageNumberForLookup = formEdited ? debouncedPackageNumber : form.packageNumber
 
   useEffect(() => {
-    if (createdRecordPath) {
-      navigate(createdRecordPath)
+    if (!createdOfferNavigation) {
+      return
     }
-  }, [createdRecordPath, navigate])
+
+    if (createdOfferNavigation.warnings.length > 0) {
+      navigate(createdOfferNavigation.path, {
+        state: {
+          offerCreationNotice: {
+            warnings: createdOfferNavigation.warnings,
+          },
+        },
+      })
+      return
+    }
+
+    navigate(createdOfferNavigation.path)
+  }, [createdOfferNavigation, navigate])
 
   useEffect(() => {
     if (!isScopedProvincialSubmitter) {
@@ -579,7 +598,10 @@ const ProvincialOfferCreatePage = () => {
         setFormEdited(false)
         if (result.createdId) {
           if (navigateToCreatedRecord) {
-            setCreatedRecordPath(`/provincial/offers/${encodeURIComponent(result.createdId)}`)
+            setCreatedOfferNavigation({
+              path: `/provincial/offers/${encodeURIComponent(result.createdId)}`,
+              warnings: result.warnings,
+            })
           }
           return true
         }
