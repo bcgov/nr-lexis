@@ -18,6 +18,7 @@ import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -675,14 +676,29 @@ public class OracleLegacyCsvReportService {
       writeCsvRow(output, columnCount, index -> row[index - 1]);
       while (rs.next()) {
         for (int index = 1; index <= columnCount; index++) {
-          String value = rs.getString(index);
-          row[index - 1] = value == null ? "" : value;
+          row[index - 1] = readCsvValue(rs, meta, index);
         }
         writeCsvRow(output, columnCount, index -> row[index - 1]);
       }
     } catch (IOException ex) {
       throw csvRenderFailure(reportName, ex);
     }
+  }
+
+  String readCsvValue(ResultSet resultSet, ResultSetMetaData metadata, int columnIndex)
+      throws SQLException {
+    String value = resultSet.getString(columnIndex);
+    if (value == null) {
+      return "";
+    }
+    int columnType = metadata.getColumnType(columnIndex);
+    if (columnType == Types.DATE || columnType == Types.TIMESTAMP) {
+      java.sql.Timestamp timestamp = resultSet.getTimestamp(columnIndex);
+      if (timestamp != null && timestamp.toLocalDateTime().toLocalTime().equals(LocalTime.MIDNIGHT)) {
+        return timestamp.toLocalDateTime().toLocalDate().toString();
+      }
+    }
+    return value;
   }
 
   private void writeCsvRow(OutputStream output, int columnCount, CsvValueResolver resolver)

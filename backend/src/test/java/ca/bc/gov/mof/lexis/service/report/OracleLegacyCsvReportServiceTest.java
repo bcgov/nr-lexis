@@ -854,6 +854,30 @@ class OracleLegacyCsvReportServiceTest {
   }
 
   @Test
+  void shouldRenderLegacyDateColumnsWithoutMidnightTime() throws Exception {
+    OracleLegacyCsvReportService service = new OracleLegacyCsvReportService(dataSource);
+    java.sql.Timestamp value = java.sql.Timestamp.valueOf("2026-08-18 00:00:00");
+
+    when(metaData.getColumnType(1)).thenReturn(Types.TIMESTAMP);
+    when(resultSet.getString(1)).thenReturn("2026-08-18 00:00:00");
+    when(resultSet.getTimestamp(1)).thenReturn(value);
+
+    assertThat(service.readCsvValue(resultSet, metaData, 1)).isEqualTo("2026-08-18");
+  }
+
+  @Test
+  void shouldPreserveReportTimestampsWithTimeOfDay() throws Exception {
+    OracleLegacyCsvReportService service = new OracleLegacyCsvReportService(dataSource);
+    java.sql.Timestamp value = java.sql.Timestamp.valueOf("2026-08-18 14:23:45");
+
+    when(metaData.getColumnType(1)).thenReturn(Types.TIMESTAMP);
+    when(resultSet.getString(1)).thenReturn("2026-08-18 14:23:45");
+    when(resultSet.getTimestamp(1)).thenReturn(value);
+
+    assertThat(service.readCsvValue(resultSet, metaData, 1)).isEqualTo("2026-08-18 14:23:45");
+  }
+
+  @Test
   void shouldGenerateTransportCsvFromLegacyDynamicProcedure() throws Exception {
     when(dataSource.getConnection()).thenReturn(connection);
     when(connection.prepareCall("{ call LEXIS_REPORTING.TRANSPORT_REPORT_CSV(?,?,?,?) }"))
