@@ -6,6 +6,7 @@ const LOCAL_E2E_CLIENT_ID = 'local-e2e-client'
 const RUNTIME_CONFIG_REQUEST_ATTEMPTS = 4
 const RUNTIME_CONFIG_REQUEST_TIMEOUT_MS = 10_000
 const RUNTIME_CONFIG_RETRY_DELAY_MS = 3_000
+let cachedRuntimeClientId: string | undefined
 
 export const createUnsignedToken = (payload: Record<string, unknown>): string => {
   const encode = (value: Record<string, unknown>) =>
@@ -14,6 +15,10 @@ export const createUnsignedToken = (payload: Record<string, unknown>): string =>
 }
 
 const resolveCognitoClientId = async (page: Page): Promise<string> => {
+  if (cachedRuntimeClientId) {
+    return cachedRuntimeClientId
+  }
+
   let lastError: unknown
 
   for (let attempt = 1; attempt <= RUNTIME_CONFIG_REQUEST_ATTEMPTS; attempt += 1) {
@@ -30,9 +35,9 @@ const resolveCognitoClientId = async (page: Page): Promise<string> => {
         .match(/VITE_USER_POOLS_WEB_CLIENT_ID:\s*"([^"]+)"/)?.[1]
         ?.trim()
 
-      return (
+      cachedRuntimeClientId =
         runtimeClientId || process.env.VITE_USER_POOLS_WEB_CLIENT_ID?.trim() || LOCAL_E2E_CLIENT_ID
-      )
+      return cachedRuntimeClientId
     } catch (error) {
       lastError = error
       if (attempt < RUNTIME_CONFIG_REQUEST_ATTEMPTS) {

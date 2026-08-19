@@ -15,6 +15,12 @@ jobs:
   credentialed-regression:
     name: TEST Regression (${{ matrix.project }})
     if: github.ref_name == github.event.repository.default_branch
+    concurrency:
+      group: ${{ format('{0}-test-browser', github.event.repository.name) }}
+      cancel-in-progress: false
+    container:
+      image: mcr.microsoft.com/playwright:v1.60.0-noble
+      options: --user 1001
     environment:
       name: test
       deployment: false
@@ -57,9 +63,7 @@ jobs:
           echo "::add-mask::$E2E_IDIR_PASSWORD"
 
       - name: Install dependencies
-        run: |
-          npm ci
-          npx playwright install --with-deps ${{ matrix.project }}
+        run: npm ci
 
       - name: Wait for deployed frontend
         run: bash ../.github/scripts/wait-for-frontend.sh "$E2E_BASE_URL"
@@ -72,7 +76,10 @@ jobs:
           E2E_IDIR_USER: ${{ secrets.E2E_IDIR_USER }}
           E2E_IDIR_PASSWORD: ${{ secrets.E2E_IDIR_PASSWORD }}
         run: |
-          npm run e2e:regression -- --reporter=line
+          npx playwright test \
+            --config=playwright.regression.config.ts \
+            --project=${{ matrix.project }} \
+            --reporter=line
 
   regression-result:
     name: TEST Regression Result
