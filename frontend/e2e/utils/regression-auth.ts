@@ -585,6 +585,11 @@ const fillCredentialScreen = async (
 const loginWithConfig = async (page: Page, config: LoginConfig): Promise<void> => {
   const { label } = config
   const { username, password } = credentials(config)
+
+  if (page.url().startsWith(baseOrigin) && (await isSessionAuthenticated(page))) {
+    return
+  }
+
   await gotoAppRoot(page)
 
   if (await isSessionAuthenticated(page)) {

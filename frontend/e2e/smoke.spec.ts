@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { gotoSyntheticRoute } from './utils'
 
 const unauthenticatedSession = {
   authenticated: false,
@@ -22,7 +23,7 @@ test.describe('frontend smoke coverage', () => {
 
   test('landing page renders core login shell', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 })
-    await page.goto('/', { waitUntil: 'domcontentloaded' })
+    await gotoSyntheticRoute(page, '/', { waitUntil: 'domcontentloaded' })
     await expect(page.getByRole('heading', { level: 1, name: 'LEXIS' })).toBeVisible()
     await expect(
       page.getByRole('heading', { level: 2, name: 'Log Exemption Information System' }),
@@ -56,7 +57,7 @@ test.describe('frontend smoke coverage', () => {
 
   test('matches the FSPTS desktop landing composition', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
-    await page.goto('/', { waitUntil: 'domcontentloaded' })
+    await gotoSyntheticRoute(page, '/', { waitUntil: 'domcontentloaded' })
     await expect(page.getByRole('heading', { level: 1, name: 'LEXIS' })).toBeVisible()
 
     const layout = await page.evaluate(() => {
@@ -113,7 +114,7 @@ test.describe('frontend smoke coverage', () => {
       window.sessionStorage.setItem('lexis.session-expired-login-notice', 'true')
     })
     await page.setViewportSize({ width: 1440, height: 900 })
-    await page.goto('/', { waitUntil: 'domcontentloaded' })
+    await gotoSyntheticRoute(page, '/', { waitUntil: 'domcontentloaded' })
 
     const notice = page.locator('.landing-session-expired-notification')
     await expect(notice).toBeVisible()
@@ -148,7 +149,9 @@ test.describe('frontend smoke coverage', () => {
   test('protected routes are not directly accessible without authenticated session', async ({
     page,
   }) => {
-    await page.goto('/provincial/application', { waitUntil: 'domcontentloaded' })
+    await gotoSyntheticRoute(page, '/provincial/application', {
+      waitUntil: 'domcontentloaded',
+    })
     await expect(page.getByRole('heading', { name: '404' })).toBeVisible()
     await expect(page.getByText(/does not exist/i)).toBeVisible()
 
