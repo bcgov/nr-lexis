@@ -387,6 +387,45 @@ class ExemptionRepositoryTest {
   }
 
   @Test
+  void scopedSummaryCountShouldCountAccessibleRootsWithoutCanonicalEnrichment() {
+    TestExemptionRepository repository = new TestExemptionRepository();
+
+    repository.count(
+        new ExemptionSearchCriteria(
+            null,
+            null,
+            null,
+            null,
+            null,
+            "00001074",
+            null,
+            null,
+            null,
+            null,
+            null,
+            List.of(),
+            true,
+            false,
+            true,
+            "exemptionNumber DESC",
+            0,
+            10));
+
+    assertThat(repository.countSelectSql())
+        .contains("WITH ACCESSIBLE_EXEMPTIONS AS")
+        .contains("EE_BOIC.EXPORT_EXEMPTION_TYPE_CODE = 'B'")
+        .contains("INNER JOIN ACCESSIBLE_EXEMPTIONS AE")
+        .contains("INNER JOIN EXPORT_EXEMPTION_STATUS_CODE EESC")
+        .doesNotContain(
+            "CANONICAL_EXEMPTION_APPLICATION",
+            "CANONICAL_RANK",
+            "EXPORT_SCHEDULE",
+            "PERMIT_VOLUME_BY_EXEMPTION",
+            "EXEMPTION_ORG_UNIT");
+    assertThat(repository.bindValues()).containsExactly("00001074", "00001074");
+  }
+
+  @Test
   void applicantFilterShouldMatchTheAgentOrAnOwnerOnlyApplication() {
     TestExemptionRepository repository = new TestExemptionRepository();
 

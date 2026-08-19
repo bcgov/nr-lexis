@@ -387,6 +387,15 @@ public class ExemptionRepository extends OracleRepositorySupport {
       LEFT JOIN EXPORT_SCHEDULE ES
         ON ES.EXPORT_SCHEDULE_ID = EEA.EXPORT_SCHEDULE_ID
       """;
+  private static final String SCOPED_FILTER_ONLY_COUNT_EXEMPTIONS_TAIL =
+      """
+      SELECT COUNT(*)
+      FROM EXPORT_EXEMPTION EE
+      INNER JOIN ACCESSIBLE_EXEMPTIONS AE
+        ON AE.EXEMPTION_NUMBER = EE.EXEMPTION_NUMBER
+      INNER JOIN EXPORT_EXEMPTION_STATUS_CODE EESC
+        ON EESC.EXPORT_EXEMPTION_STATUS_CODE = EE.EXPORT_EXEMPTION_STATUS_CODE
+      """;
   private static final String FIND_EXEMPTION_BY_NUMBER =
       LEXIS_GROUP_5_PACKAGE + "FIND_EXEMPTION_BY_NUMBER(?,?)";
   private static final String FIND_EXEMPTION_ACCESS =
@@ -593,6 +602,11 @@ public class ExemptionRepository extends OracleRepositorySupport {
     if (supportsFilterOnlyCount(criteria, scopedClientNumber)) {
       return FILTER_ONLY_COUNT_EXEMPTIONS;
     }
+    if (supportsScopedSummaryFilterOnlyCount(criteria, scopedClientNumber)) {
+      return "WITH "
+          + buildAccessibleExemptionsCte(true)
+          + SCOPED_FILTER_ONLY_COUNT_EXEMPTIONS_TAIL;
+    }
     if (scopedClientNumber == null) {
       return COUNT_EXEMPTIONS;
     }
@@ -626,6 +640,24 @@ public class ExemptionRepository extends OracleRepositorySupport {
         && trim(criteria.applicantClientNumber()) == null
         && criteria.listingFromDate() == null
         && criteria.listingToDate() == null;
+  }
+
+  private boolean supportsScopedSummaryFilterOnlyCount(
+      ExemptionSearchCriteria criteria, String scopedClientNumber) {
+    return scopedClientNumber != null
+        && criteria.includeBlanketOic()
+        && !criteria.excludeBlanketOic()
+        && trim(criteria.applicationNumber()) == null
+        && trim(criteria.packageNumber()) == null
+        && trim(criteria.exemptionNumber()) == null
+        && trim(criteria.exemptionType()) == null
+        && trim(criteria.exemptionStatus()) == null
+        && trim(criteria.ownerClientNumber()) == null
+        && criteria.approvalFromDate() == null
+        && criteria.approvalToDate() == null
+        && criteria.listingFromDate() == null
+        && criteria.listingToDate() == null
+        && (criteria.regionNumbers() == null || criteria.regionNumbers().isEmpty());
   }
 
   private String buildAccessibleExemptionsCte(boolean includeBlanketOic) {
