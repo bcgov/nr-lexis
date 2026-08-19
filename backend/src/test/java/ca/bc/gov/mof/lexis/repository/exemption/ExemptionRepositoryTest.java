@@ -255,7 +255,10 @@ class ExemptionRepositoryTest {
         .contains("GROUP BY EEA_ACCESS.EXEMPTION_NUMBER")
         .contains("EEA_ACCESS.AGENT_CLIENT_NUMBER")
         .contains("EEA_ACCESS.OWNER_CLIENT_NUMBER")
+        .contains("EEA_ACCESS.EXPORT_JURISDICTION_CODE = 'P'")
+        .contains("EEA_ACCESS.EXPORT_JURISDICTION_CODE IS NULL")
         .contains("EE_ACCESS.EXPORT_EXEMPTION_TYPE_CODE != 'B'")
+        .doesNotContain("EE_ACCESS.EXPORT_EXEMPTION_TYPE_CODE NOT IN ('B', 'O')")
         .contains("EE_BOIC.EXPORT_EXEMPTION_TYPE_CODE = 'B'")
         .doesNotContain("EE_BOIC.EXPORT_EXEMPTION_TYPE_CODE IN ('B', 'O')")
         .contains("INNER JOIN ACCESSIBLE_EXEMPTIONS AE_CANON")
@@ -265,6 +268,11 @@ class ExemptionRepositoryTest {
         .contains("INNER JOIN ACCESSIBLE_EXEMPTIONS AE")
         .contains("EEA.CANONICAL_RANK = 1")
         .doesNotContain("OR EE.EXPORT_EXEMPTION_TYPE_CODE IN ('B', 'O')");
+    assertThat(repository.countSelectSql())
+        .contains("EEA_ACCESS.EXPORT_JURISDICTION_CODE = 'P'")
+        .contains("EEA_ACCESS.EXPORT_JURISDICTION_CODE IS NULL")
+        .contains("EE_ACCESS.EXPORT_EXEMPTION_TYPE_CODE != 'B'")
+        .contains("EE_BOIC.EXPORT_EXEMPTION_TYPE_CODE = 'B'");
     assertThat(repository.whereSql())
         .contains("EEA_REGION.ORG_UNIT_NO")
         .contains("OEO_REGION.ORG_UNIT_NO")
@@ -309,10 +317,14 @@ class ExemptionRepositoryTest {
 
     assertThat(repository.pageSelectSql())
         .contains("WITH ACCESSIBLE_EXEMPTIONS AS")
+        .contains("EEA_ACCESS.EXPORT_JURISDICTION_CODE = 'P'")
+        .contains("EEA_ACCESS.EXPORT_JURISDICTION_CODE IS NULL")
         .contains("EE_ACCESS.EXPORT_EXEMPTION_TYPE_CODE NOT IN ('B', 'O')")
         .doesNotContain("EE_BOIC.EXPORT_EXEMPTION_TYPE_CODE = 'B'");
     assertThat(repository.countSelectSql())
         .contains("WITH ACCESSIBLE_EXEMPTIONS AS")
+        .contains("EEA_ACCESS.EXPORT_JURISDICTION_CODE = 'P'")
+        .contains("EEA_ACCESS.EXPORT_JURISDICTION_CODE IS NULL")
         .contains("INNER JOIN ACCESSIBLE_EXEMPTIONS AE_CANON")
         .contains("INNER JOIN ACCESSIBLE_EXEMPTIONS AE")
         .doesNotContain("PERMIT_VOLUME_BY_EXEMPTION", "EXEMPTION_ORG_UNIT");

@@ -260,6 +260,10 @@ public class ExemptionRepository extends OracleRepositorySupport {
           ON EE_ACCESS.EXEMPTION_NUMBER = EEA_ACCESS.EXEMPTION_NUMBER
         WHERE EE_ACCESS.EXPORT_EXEMPTION_TYPE_CODE %s
           AND (
+            EEA_ACCESS.EXPORT_JURISDICTION_CODE = 'P'
+            OR EEA_ACCESS.EXPORT_JURISDICTION_CODE IS NULL
+          )
+          AND (
             EEA_ACCESS.OWNER_CLIENT_NUMBER = ?
             OR EEA_ACCESS.AGENT_CLIENT_NUMBER = ?
           )
