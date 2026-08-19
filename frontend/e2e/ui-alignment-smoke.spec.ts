@@ -683,8 +683,12 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     const themeSwitch = page.getByRole('switch', { name: 'Toggle dark mode' })
     await expect(themeSwitch).toHaveCSS('width', '48px')
     await expect(themeSwitch).toHaveCSS('height', '24px')
-    await expect(page.locator('.csp-theme-switch__thumb')).toHaveCSS('width', '18px')
-    await expect(page.locator('.csp-theme-switch__thumb')).toHaveCSS('height', '18px')
+    await expect(themeSwitch).toHaveCSS('background-color', 'rgba(255, 255, 255, 0.9)')
+    const themeSwitchThumb = page.locator('.csp-theme-switch__thumb')
+    await expect(themeSwitchThumb).toHaveCSS('width', '18px')
+    await expect(themeSwitchThumb).toHaveCSS('height', '18px')
+    await expect(themeSwitchThumb).toHaveCSS('background-color', 'rgb(0, 115, 230)')
+    await expect(themeSwitchThumb).toHaveCSS('color', 'rgb(255, 255, 255)')
 
     await page.getByRole('button', { name: 'Open profile panel' }).click()
     const profilePanel = page.getByRole('dialog', { name: 'My profile' })
@@ -730,17 +734,16 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
 
     await themeSwitch.click()
     await expect(themeSwitch).toHaveAttribute('aria-checked', 'true')
-    await expect(themeSwitch).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
-    await expect(themeSwitch).toHaveCSS('border-top-color', 'rgb(255, 255, 255)')
+    await expect(themeSwitch).toHaveCSS('background-color', 'rgb(22, 22, 22)')
     await expect(page.locator('.csp-theme-switch__thumb')).toHaveCSS(
       'transform',
       'matrix(1, 0, 0, 1, 24, 0)',
     )
     await expect(page.locator('.csp-theme-switch__thumb')).toHaveCSS(
       'background-color',
-      'rgba(0, 0, 0, 0)',
+      'rgb(255, 255, 255)',
     )
-    await expect(page.locator('.csp-theme-switch__thumb')).toHaveCSS('color', 'rgb(255, 255, 255)')
+    await expect(page.locator('.csp-theme-switch__thumb')).toHaveCSS('color', 'rgb(22, 22, 22)')
     await expect(page.locator('html')).toHaveAttribute('data-carbon-theme', 'g100')
 
     await page.getByRole('button', { name: 'Close menu' }).click()

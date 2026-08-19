@@ -358,21 +358,21 @@ body {
 
 .csp-theme-switch {
   align-items: center;
-  background-color: transparent;
-  border: 1px solid var(--csp-text-inverse);
+  background-color: rgba(255, 255, 255, 0.9);
+  border: 0;
   border-radius: 12px;
   cursor: pointer;
   display: flex;
   height: 24px;
   justify-content: flex-start;
   margin: 0;
-  padding: 2px;
+  padding: 3px;
   width: 48px;
 }
 
 .csp-theme-switch__thumb {
   align-items: center;
-  background-color: transparent;
+  background-color: var(--csp-header-bg);
   border-radius: 50%;
   color: #ffffff;
   display: flex;
@@ -383,13 +383,13 @@ body {
 }
 
 .csp-theme-switch[aria-checked='true'] {
-  background-color: transparent;
+  background-color: #161616;
 }
 
 .csp-theme-switch[aria-checked='true'] .csp-theme-switch__thumb {
   transform: translateX(24px);
-  background-color: transparent;
-  color: #ffffff;
+  background-color: #ffffff;
+  color: #161616;
 }
 
 .csp-theme-switch svg {
