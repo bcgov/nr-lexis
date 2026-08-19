@@ -452,6 +452,40 @@ class ExemptionRepositoryTest {
   }
 
   @Test
+  void scopedSummarySearchShouldPreserveNonZeroPageBeforeEnrichment() {
+    List<ExemptionSearchResultDto> rows =
+        java.util.stream.LongStream.rangeClosed(1L, 21L)
+            .mapToObj(number -> exemptionResult("EX-" + number))
+            .toList();
+    TestExemptionRepository repository = new TestExemptionRepository(rows);
+
+    Page<ExemptionSearchResultDto> results =
+        repository.search(scopedSummaryCriteria("exemptionNumber DESC", null, 1, 10));
+
+    assertThat(results.getContent())
+        .extracting(ExemptionSearchResultDto::exemptionNumber)
+        .containsExactly(
+            "EX-11",
+            "EX-12",
+            "EX-13",
+            "EX-14",
+            "EX-15",
+            "EX-16",
+            "EX-17",
+            "EX-18",
+            "EX-19",
+            "EX-20");
+    assertThat(results.getNumber()).isEqualTo(1);
+    assertThat(results.getSize()).isEqualTo(10);
+    assertThat(repository.pageSelectSql())
+        .contains("PAGE_EXEMPTIONS AS")
+        .contains("OFFSET ? ROWS FETCH NEXT ? ROWS ONLY");
+    assertThat(repository.pageSelectSql().indexOf("OFFSET ? ROWS FETCH NEXT ? ROWS ONLY"))
+        .isLessThan(repository.pageSelectSql().indexOf("CANONICAL_EXEMPTION_APPLICATION AS"));
+    assertThat(repository.pageCalls()).isEqualTo(1);
+  }
+
+  @Test
   void scopedSummarySearchShouldRetainExistingPageForEnrichedSortOrFilter() {
     TestExemptionRepository enrichedSortRepository = new TestExemptionRepository();
     enrichedSortRepository.search(scopedSummaryCriteria("balanceRemaining DESC", null));
@@ -819,6 +853,11 @@ class ExemptionRepositoryTest {
 
   private static ExemptionSearchCriteria scopedSummaryCriteria(
       String sortField, String exemptionType) {
+    return scopedSummaryCriteria(sortField, exemptionType, 0, 10);
+  }
+
+  private static ExemptionSearchCriteria scopedSummaryCriteria(
+      String sortField, String exemptionType, int page, int size) {
     return new ExemptionSearchCriteria(
         null,
         null,
@@ -836,8 +875,8 @@ class ExemptionRepositoryTest {
         false,
         true,
         sortField,
-        0,
-        10);
+        page,
+        size);
   }
 
   private static final class TestExemptionRepository extends ExemptionRepository {
