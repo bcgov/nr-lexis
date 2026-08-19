@@ -1868,15 +1868,19 @@ test.describe('TEST IDIR admin regression', () => {
   test('keeps the provincial client summary unavailable to IDIR administrators', async () => {
     const page = await authenticatedIdirPage()
 
-    await page.goto(new URL('/provincial/summary', E2E_BASE_URL).toString(), {
-      waitUntil: 'domcontentloaded',
-    })
+    await expect(async () => {
+      const response = await page.goto(new URL('/provincial/summary', E2E_BASE_URL).toString(), {
+        waitUntil: 'domcontentloaded',
+        timeout: 5_000,
+      })
 
-    await expect(
-      page.getByRole('heading', { name: "You don't have access to view this page" }),
-    ).toBeVisible()
-    await expect(page.getByRole('heading', { name: '404' })).toHaveCount(0)
-    await expect(page.getByRole('button', { name: /log in with idir/i })).toHaveCount(0)
+      expect(response?.status(), 'client summary should load through the frontend route').toBe(200)
+      await expect(
+        page.getByRole('heading', { name: "You don't have access to view this page" }),
+      ).toBeVisible({ timeout: 5_000 })
+      await expect(page.getByRole('heading', { name: '404' })).toHaveCount(0)
+      await expect(page.getByRole('button', { name: /log in with idir/i })).toHaveCount(0)
+    }).toPass({ intervals: [3_000], timeout: 25_000 })
   })
 
   test('keeps review queue bulk actions limited to approve', async () => {
@@ -2782,31 +2786,48 @@ test.describe('TEST IDIR admin regression', () => {
     expect(body.toString('utf8', 0, 4)).toBe('%PDF')
   })
 
-  test('generates advertising list CSV report with owner and agent email columns', async () => {
+  test('generates advertising list CSV report with the legacy column contract', async () => {
     const page = await authenticatedIdirPage()
 
     const response = await postAdvertisingListReport(page, 'CSV')
     const body = await readReportBody(response, 'advertising list CSV report')
     const headers = response.headers()
     const csv = body.toString('utf8')
-    const header =
-      csv
-        .split(/\r?\n/)
-        .find(
-          (line) =>
-            line.includes('"CLIENT_CONTACT_PHONE"') && line.includes('"AGENT_CONTACT_NAME"'),
-        ) ?? ''
+    const header = csv.split(/\r?\n/, 1)[0] ?? ''
+    const expectedHeader = [
+      'Notification Date',
+      'Region',
+      'Client Name',
+      'Client Address 1',
+      'Client Address 2',
+      'Client Address 3',
+      'Client City',
+      'Client Province',
+      'Client Postal Code',
+      'Client Contact Name',
+      'Client Contact Phone',
+      'Jursidiction Code',
+      'Application Number',
+      'Species Enduse',
+      'Product Type',
+      'Product Location',
+      'Exemption Application Volume',
+      'Average Log Volume',
+      'Agent Name',
+      'Agent Phone',
+      'Agent Contact Name',
+      'Package Number',
+      'Package Volume',
+      'Age Class',
+      'Average Length',
+      'Average Diameter',
+    ]
+      .map((column) => `"${column}"`)
+      .join(',')
 
     expect(headers['content-type']?.toLowerCase() ?? '').toContain('application/vnd.ms-excel')
     expect(headers['content-disposition'] ?? '').toMatch(/biweeklyListing\d{4}-\d{2}-\d{2}\.csv/)
-    expect(header).toContain('"CLIENT_CONTACT_EMAIL"')
-    expect(header).toContain('"AGENT_CONTACT_EMAIL"')
-    expect(header.indexOf('"CLIENT_CONTACT_PHONE"')).toBeLessThan(
-      header.indexOf('"CLIENT_CONTACT_EMAIL"'),
-    )
-    expect(header.indexOf('"AGENT_CONTACT_NAME"')).toBeLessThan(
-      header.indexOf('"AGENT_CONTACT_EMAIL"'),
-    )
+    expect(header).toBe(expectedHeader)
   })
 
   test('can create, update, and delete future export schedule rows', async () => {

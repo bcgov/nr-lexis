@@ -31,6 +31,7 @@ jobs:
       options: --user 1001
     defaults:
       run:
+        shell: bash
         working-directory: frontend
     runs-on: ubuntu-24.04
     timeout-minutes: 15
