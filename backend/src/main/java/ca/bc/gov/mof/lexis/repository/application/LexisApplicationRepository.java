@@ -8,6 +8,7 @@ import ca.bc.gov.mof.lexis.dto.application.ApplicationAccessContextDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResultDto;
+import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSummaryEnrichmentDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
@@ -16,6 +17,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -155,6 +157,20 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
       LEXIS_CODES_PACKAGE + "FIND_SCHEDULE_BY_APP(?,?)";
   private static final String FIND_SCALE_DETAIL_BY_APPLICATION =
       LEXIS_GROUP_5_PACKAGE + "FIND_SCALE_DETAIL_BY_APP(?,?)";
+  private static final String APPLICATION_SUMMARY_ENRICHMENT_SELECT =
+      """
+      SELECT EEA.APPLICATION_NUMBER,
+             COALESCE(EERC.DESCRIPTION, EEA.EXPORT_EXEMPTION_REASON_CODE) AS REASON,
+             EEA.RECEIVED_DATE,
+             EP.PACKAGE_NUMBER
+      FROM EXPORT_EXEMPTION_APPLICATION EEA
+      LEFT JOIN EXPORT_EXEMPTION_REASON_CODE EERC
+        ON EERC.EXPORT_EXEMPTION_REASON_CODE = EEA.EXPORT_EXEMPTION_REASON_CODE
+      LEFT JOIN EXPORT_PACKAGE EP
+        ON EP.APPLICATION_NUMBER = EEA.APPLICATION_NUMBER
+      WHERE EEA.APPLICATION_NUMBER IN (%s)
+      ORDER BY EEA.APPLICATION_NUMBER, EP.PACKAGE_NUMBER
+      """;
 
   public LexisApplicationRepository(@Qualifier("oracleJdbcTemplate") JdbcTemplate jdbcTemplate) {
     super(jdbcTemplate);
@@ -338,6 +354,59 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
             offers,
             app.jurisdictionCode(),
             app.author()));
+  }
+
+  /** Loads only the fields used by the provincial application summary for the supplied page. */
+  public Map<Long, LexisApplicationSummaryEnrichmentDto> findSummaryEnrichmentByApplicationNumbers(
+      List<Long> applicationNumbers) {
+    List<Long> normalized =
+        applicationNumbers == null
+            ? List.of()
+            : applicationNumbers.stream()
+                .filter(number -> number != null && number > 0)
+                .distinct()
+                .toList();
+    if (normalized.isEmpty()) {
+      return Map.of();
+    }
+
+    String sql = APPLICATION_SUMMARY_ENRICHMENT_SELECT.formatted(placeholders(normalized.size()));
+    List<SummaryEnrichmentRow> rows =
+        jdbcTemplate.query(
+            sql,
+            normalized.toArray(),
+            (rs, rowNumber) ->
+                new SummaryEnrichmentRow(
+                    getLong(rs, "APPLICATION_NUMBER"),
+                    getString(rs, "REASON"),
+                    getLocalDate(rs, "RECEIVED_DATE"),
+                    getString(rs, "PACKAGE_NUMBER")));
+
+    Map<Long, SummaryEnrichmentAccumulator> accumulators = new LinkedHashMap<>();
+    for (SummaryEnrichmentRow row : rows) {
+      if (row.applicationNumber() == null) {
+        continue;
+      }
+      SummaryEnrichmentAccumulator accumulator =
+          accumulators.computeIfAbsent(
+              row.applicationNumber(),
+              number -> new SummaryEnrichmentAccumulator(row.reason(), row.receivedDate()));
+      if (row.packageNumber() != null) {
+        accumulator.packageNumbers().add(row.packageNumber());
+      }
+    }
+
+    Map<Long, LexisApplicationSummaryEnrichmentDto> result = new LinkedHashMap<>();
+    accumulators.forEach(
+        (applicationNumber, accumulator) ->
+            result.put(
+                applicationNumber,
+                new LexisApplicationSummaryEnrichmentDto(
+                    applicationNumber,
+                    accumulator.reason(),
+                    accumulator.receivedDate(),
+                    accumulator.packageNumbers())));
+    return Map.copyOf(result);
   }
 
   public Optional<ApplicationAccessContextDto> findAccessByApplicationNumber(
@@ -547,6 +616,10 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
         });
   }
 
+  private static String placeholders(int count) {
+    return String.join(", ", java.util.Collections.nCopies(count, "?"));
+  }
+
   private Map<String, Long> loadPieceCountByPackage(Long applicationNumber) {
     List<PieceCountSnapshot> rows =
         queryCursorProcedureFailClosed(
@@ -748,4 +821,14 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
       LocalDate advertisingDate, LocalDate offerReceiptDate, LocalDate teacMeetingDate) {}
 
   private record PieceCountSnapshot(String packageNumber, Long pieceCount) {}
+
+  private record SummaryEnrichmentRow(
+      Long applicationNumber, String reason, LocalDate receivedDate, String packageNumber) {}
+
+  private record SummaryEnrichmentAccumulator(
+      String reason, LocalDate receivedDate, List<String> packageNumbers) {
+    private SummaryEnrichmentAccumulator(String reason, LocalDate receivedDate) {
+      this(reason, receivedDate, new ArrayList<>());
+    }
+  }
 }

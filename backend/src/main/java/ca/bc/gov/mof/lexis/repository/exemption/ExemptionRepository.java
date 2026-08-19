@@ -9,12 +9,14 @@ import ca.bc.gov.mof.lexis.dto.exemption.ExemptionAccessDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchResultDto;
+import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSummaryLookupDto;
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.LinkedHashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -396,6 +398,19 @@ public class ExemptionRepository extends OracleRepositorySupport {
       FROM EXPORT_EXEMPTION
       WHERE EXEMPTION_NUMBER = ?
       """;
+  private static final String FIND_EXEMPTION_SUMMARY_LOOKUPS =
+      """
+      SELECT
+        EE.EXEMPTION_NUMBER,
+        EETC.DESCRIPTION AS TYPE_DESCRIPTION,
+        EESC.DESCRIPTION AS STATUS_DESCRIPTION
+      FROM EXPORT_EXEMPTION EE
+      LEFT JOIN EXPORT_EXEMPTION_TYPE_CODE EETC
+        ON EETC.EXPORT_EXEMPTION_TYPE_CODE = EE.EXPORT_EXEMPTION_TYPE_CODE
+      INNER JOIN EXPORT_EXEMPTION_STATUS_CODE EESC
+        ON EESC.EXPORT_EXEMPTION_STATUS_CODE = EE.EXPORT_EXEMPTION_STATUS_CODE
+      WHERE EE.EXEMPTION_NUMBER IN (%s)
+      """;
   private static final String LINKED_PROVINCIAL_APPLICATION_BELONGS_TO_CLIENT =
       """
       SELECT CASE
@@ -768,6 +783,35 @@ public class ExemptionRepository extends OracleRepositorySupport {
           exceptionType(exception));
       throw exception;
     }
+  }
+
+  public Map<String, ExemptionSummaryLookupDto> findSummaryLookups(
+      List<String> exemptionNumbers) {
+    List<String> normalized =
+        exemptionNumbers == null
+            ? List.of()
+            : exemptionNumbers.stream()
+                .map(this::trim)
+                .filter(value -> value != null)
+                .distinct()
+                .toList();
+    if (normalized.isEmpty()) {
+      return Map.of();
+    }
+
+    String placeholders = String.join(", ", java.util.Collections.nCopies(normalized.size(), "?"));
+    List<ExemptionSummaryLookupDto> rows =
+        jdbcTemplate.query(
+            FIND_EXEMPTION_SUMMARY_LOOKUPS.formatted(placeholders),
+            (rs, rowNumber) ->
+                new ExemptionSummaryLookupDto(
+                    getString(rs, "EXEMPTION_NUMBER"),
+                    getString(rs, "TYPE_DESCRIPTION"),
+                    getString(rs, "STATUS_DESCRIPTION")),
+            normalized.toArray());
+    Map<String, ExemptionSummaryLookupDto> byExemptionNumber = new LinkedHashMap<>();
+    rows.forEach(row -> byExemptionNumber.put(row.exemptionNumber(), row));
+    return Map.copyOf(byExemptionNumber);
   }
 
   private static double calculateUsedVolume(

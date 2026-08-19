@@ -14,6 +14,7 @@ import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionAccessDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchResultDto;
+import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSummaryLookupDto;
 import java.sql.CallableStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -120,6 +121,59 @@ class ExemptionRepositoryTest {
         .contains("EXPORT_JURISDICTION_CODE = 'P'")
         .contains("OWNER_CLIENT_NUMBER = ?")
         .contains("AGENT_CLIENT_NUMBER = ?");
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void summaryLookupsShouldUseOneBoundQueryForDistinctExemptions() throws SQLException {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    ResultSet first = mock(ResultSet.class);
+    when(first.getString("EXEMPTION_NUMBER")).thenReturn("EX-2");
+    when(first.getString("TYPE_DESCRIPTION")).thenReturn("Ministerial");
+    when(first.getString("STATUS_DESCRIPTION")).thenReturn("Approved");
+    ResultSet second = mock(ResultSet.class);
+    when(second.getString("EXEMPTION_NUMBER")).thenReturn("EX-1");
+    when(second.getString("TYPE_DESCRIPTION")).thenReturn("Blanket OIC");
+    when(second.getString("STATUS_DESCRIPTION")).thenReturn("Active");
+    when(
+            jdbcTemplate.query(
+                anyString(),
+                any(RowMapper.class),
+                eq("EX-2"),
+                eq("EX-1")))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<ExemptionSummaryLookupDto> mapper = invocation.getArgument(1);
+              return List.of(mapper.mapRow(first, 0), mapper.mapRow(second, 1));
+            });
+    ExemptionRepository repository = new ExemptionRepository(jdbcTemplate);
+
+    var lookups =
+        repository.findSummaryLookups(
+            List.of(" EX-2 ", "", "EX-1", "EX-2"));
+
+    assertThat(lookups).hasSize(2);
+    assertThat(lookups.get("EX-2").exemptionTypeDescription())
+        .isEqualTo("Ministerial");
+    assertThat(lookups.get("EX-1").exemptionStatusDescription())
+        .isEqualTo("Active");
+    ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+    verify(jdbcTemplate)
+        .query(sql.capture(), any(RowMapper.class), eq("EX-2"), eq("EX-1"));
+    assertThat(sql.getValue())
+        .contains("EXPORT_EXEMPTION_TYPE_CODE")
+        .contains("EXPORT_EXEMPTION_STATUS_CODE")
+        .contains("IN (?, ?)");
+  }
+
+  @Test
+  void summaryLookupsShouldSkipDatabaseWhenNoValidNumbers() {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    ExemptionRepository repository = new ExemptionRepository(jdbcTemplate);
+
+    assertThat(repository.findSummaryLookups(List.of(" "))).isEmpty();
+
+    verifyNoInteractions(jdbcTemplate);
   }
 
   @Test

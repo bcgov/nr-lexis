@@ -14,17 +14,21 @@ import ca.bc.gov.mof.lexis.dto.application.ApplicationAccessContextDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResultDto;
+import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSummaryEnrichmentDto;
 import java.sql.CallableStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.LocalDate;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.ArgumentCaptor;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -70,6 +74,79 @@ class LexisApplicationRepositoryTest {
                         && !sql.contains("EXPORT_PURCHASE_OFFER")),
             any(RowMapper.class),
             eq(900123L));
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void summaryEnrichmentShouldBatchRowsAndPreservePackageOrder() throws Exception {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    ResultSet firstPackage = summaryEnrichmentRow(900123L, "Utilization", "2026-06-17", "PKG-A");
+    ResultSet secondPackage = summaryEnrichmentRow(900123L, "Utilization", "2026-06-17", "PKG-B");
+    ResultSet noPackages = summaryEnrichmentRow(900124L, "Emergency", "2026-06-18", null);
+    when(jdbcTemplate.query(any(String.class), any(Object[].class), any(RowMapper.class)))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<Object> rowMapper = invocation.getArgument(2);
+              return List.of(
+                  rowMapper.mapRow(firstPackage, 0),
+                  rowMapper.mapRow(secondPackage, 1),
+                  rowMapper.mapRow(noPackages, 2));
+            });
+    LexisApplicationRepository repository = new LexisApplicationRepository(jdbcTemplate);
+
+    Map<Long, LexisApplicationSummaryEnrichmentDto> result =
+        repository.findSummaryEnrichmentByApplicationNumbers(
+            Arrays.asList(900123L, null, 900123L, -1L, 900124L));
+
+    assertThat(result)
+        .containsOnlyKeys(900123L, 900124L)
+        .containsEntry(
+            900123L,
+            new LexisApplicationSummaryEnrichmentDto(
+                900123L,
+                "Utilization",
+                LocalDate.of(2026, 6, 17),
+                List.of("PKG-A", "PKG-B")))
+        .containsEntry(
+            900124L,
+            new LexisApplicationSummaryEnrichmentDto(
+                900124L, "Emergency", LocalDate.of(2026, 6, 18), List.of()));
+
+    ArgumentCaptor<Object[]> bindCaptor = ArgumentCaptor.forClass(Object[].class);
+    verify(jdbcTemplate)
+        .query(
+            argThat(
+                sql ->
+                    sql.contains("WHERE EEA.APPLICATION_NUMBER IN (?, ?)")
+                        && sql.contains("COALESCE(EERC.DESCRIPTION")
+                        && sql.contains("ORDER BY EEA.APPLICATION_NUMBER, EP.PACKAGE_NUMBER")),
+            bindCaptor.capture(),
+            any(RowMapper.class));
+    assertThat(bindCaptor.getValue()).containsExactly(900123L, 900124L);
+  }
+
+  @Test
+  void summaryEnrichmentShouldAvoidDatabaseForEmptyIds() {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    LexisApplicationRepository repository = new LexisApplicationRepository(jdbcTemplate);
+
+    assertThat(repository.findSummaryEnrichmentByApplicationNumbers(Arrays.asList(null, 0L, -1L)))
+        .isEmpty();
+    verify(jdbcTemplate, org.mockito.Mockito.never())
+        .query(any(String.class), any(Object[].class), any(RowMapper.class));
+  }
+
+  private static ResultSet summaryEnrichmentRow(
+      long applicationNumber, String reason, String receivedDate, String packageNumber)
+      throws SQLException {
+    ResultSet resultSet = mock(ResultSet.class);
+    when(resultSet.getLong("APPLICATION_NUMBER")).thenReturn(applicationNumber);
+    when(resultSet.wasNull()).thenReturn(false);
+    when(resultSet.getString("REASON")).thenReturn(reason);
+    when(resultSet.getString("PACKAGE_NUMBER")).thenReturn(packageNumber);
+    when(resultSet.getTimestamp("RECEIVED_DATE"))
+        .thenReturn(Timestamp.valueOf(receivedDate + " 00:00:00"));
+    return resultSet;
   }
 
   @Test

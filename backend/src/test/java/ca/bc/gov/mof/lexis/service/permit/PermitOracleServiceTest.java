@@ -15,11 +15,13 @@ import ca.bc.gov.mof.lexis.dto.permit.PermitSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchResultDto;
+import ca.bc.gov.mof.lexis.dto.permit.PermitSummaryEnrichmentDto;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRepository;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository;
 import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -50,6 +52,18 @@ class PermitOracleServiceTest {
 
     assertThat(response.permitStatuses()).hasSize(1);
     assertThat(response.regions()).hasSize(1);
+  }
+
+  @Test
+  void summaryEnrichmentShouldDelegateToRepository() {
+    List<Long> permitNumbers = List.of(90001L, 90002L);
+    Map<Long, PermitSummaryEnrichmentDto> expected =
+        Map.of(90001L, new PermitSummaryEnrichmentDto("EX-1", 2L, "RCPT-1"));
+    when(repository.findSummaryEnrichmentByPermitNumbers(permitNumbers)).thenReturn(expected);
+
+    assertThat(service.findSummaryEnrichmentByPermitNumbers(permitNumbers)).isEqualTo(expected);
+
+    verify(repository).findSummaryEnrichmentByPermitNumbers(permitNumbers);
   }
 
   @Test
