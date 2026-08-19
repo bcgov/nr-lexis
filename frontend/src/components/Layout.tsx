@@ -76,6 +76,9 @@ const ROLE_DISPLAY_PRIORITY = [
   'PROVINCIAL_SUBMITTER',
 ] as const
 
+// INTENTIONAL_LEGACY_DIVERGENCE(RESPONSIVE_SIDE_NAVIGATION):
+// Keep an accessible collapsed icon rail at narrow widths and treat its temporary expansion
+// separately from the persisted desktop collapsed preference.
 const NARROW_NAVIGATION_MEDIA_QUERY = '(max-width: 671px)'
 
 const isNarrowNavigationViewport = (): boolean =>

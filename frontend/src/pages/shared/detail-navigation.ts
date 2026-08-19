@@ -1,3 +1,8 @@
+/**
+ * INTENTIONAL_LEGACY_DIVERGENCE(CONTEXTUAL_RETURN_NAVIGATION):
+ * Heartwood records the actual originating list or detail target and preserves its exact URL
+ * query. Direct detail visits fall back to a canonical accessible parent or role default.
+ */
 export type DetailReturnTo = {
   label: string
   to: string
