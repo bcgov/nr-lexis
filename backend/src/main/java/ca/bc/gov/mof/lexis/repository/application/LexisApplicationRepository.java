@@ -78,7 +78,6 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
           OU.ORG_UNIT_NAME AS REGION,
           OU.ORG_UNIT_CODE AS REGION_CODE,
           OU.ORG_UNIT_CODE,
-          APK.PACKAGE_NUMBER,
           EEA.OIC_INDICATOR
         FROM EXPORT_EXEMPTION_APPLICATION EEA
         LEFT JOIN EXPORT_EXEMPTION EE
@@ -95,15 +94,6 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
           ON EATC.EXPORT_APPLICANT_TYPE_CODE = EEA.EXPORT_APPLICANT_TYPE_CODE
         LEFT JOIN ORG_UNIT OU
           ON OU.ORG_UNIT_NO = EEA.ORG_UNIT_NO
-        LEFT JOIN (
-          SELECT
-            EP.APPLICATION_NUMBER,
-            LISTAGG(EP.PACKAGE_NUMBER, ',')
-              WITHIN GROUP (ORDER BY EP.PACKAGE_NUMBER) AS PACKAGE_NUMBER
-          FROM EXPORT_PACKAGE EP
-          GROUP BY EP.APPLICATION_NUMBER
-        ) APK
-          ON APK.APPLICATION_NUMBER = EEA.APPLICATION_NUMBER
       ) v
       """;
   private static final String SEARCH_APPLICATIONS =
@@ -238,7 +228,14 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
 
     where.addNumberLike("v.APPLICATION_NUMBER", criteria.applicationNumber());
     where.addRaw(" AND v.APPLICATION_NUMBER > 0");
-    where.addLike("v.PACKAGE_NUMBER", criteria.packageNumber());
+    String packageNumber = trim(criteria.packageNumber());
+    if (packageNumber != null) {
+      where.addRawWithBinds(
+          " AND EXISTS (SELECT 1 FROM EXPORT_PACKAGE EP "
+              + "WHERE EP.APPLICATION_NUMBER = v.APPLICATION_NUMBER "
+              + "AND EP.PACKAGE_NUMBER LIKE '%' || ? || '%')",
+          packageNumber);
+    }
     where.addLike("v.EXEMPTION_NUMBER", criteria.exemptionNumber());
     where.addEquals("v.EXPORT_APPLICATION_STATUS_CODE", criteria.applicationStatus());
     where.addEquals("v.EXPORT_PRODUCT_TYPE_CODE", criteria.productTypeCode());

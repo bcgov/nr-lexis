@@ -109,7 +109,9 @@ class LexisApplicationRepositoryTest {
 
     assertThat(repository.whereSql())
         .contains("TO_CHAR(v.APPLICATION_NUMBER) LIKE '%' || ? || '%'")
-        .contains("v.PACKAGE_NUMBER LIKE '%' || ? || '%'")
+        .contains("EXISTS (SELECT 1 FROM EXPORT_PACKAGE EP")
+        .contains("EP.APPLICATION_NUMBER = v.APPLICATION_NUMBER")
+        .contains("EP.PACKAGE_NUMBER LIKE '%' || ? || '%'")
         .contains("v.EXEMPTION_NUMBER LIKE '%' || ? || '%'")
         .contains("v.EXPORT_APPLICATION_STATUS_CODE = ?")
         .contains("v.EXPORT_PRODUCT_TYPE_CODE = ?")
@@ -126,18 +128,18 @@ class LexisApplicationRepositoryTest {
         .contains("v.OIC_INDICATOR = ?")
         .contains("ORDER BY v.ADVERTISING_DATE DESC, v.APPLICATION_NUMBER ASC")
         .doesNotContain("EEA.")
-        .doesNotContain("EP.")
         .doesNotContain("ES.")
         .doesNotContain(":1");
     assertThat(repository.pageSelectSql())
         .contains("FROM EXPORT_EXEMPTION_APPLICATION EEA")
-        .contains("LISTAGG(EP.PACKAGE_NUMBER, ',')")
         .contains("INNER JOIN EXPORT_APPLICATION_STATUS_CODE EASC")
         .contains("INNER JOIN EXPORT_EXEMPTION_REASON_CODE EERC")
         .contains("INNER JOIN EXPORT_APPLICANT_TYPE_CODE EATC")
         .contains("FROM EXPORT_PURCHASE_OFFER EPO")
         .contains("EPO.VALID_OFFER_INDICATOR = 'Y'")
         .contains("EPO.OFFER_WITHDRAWAL_DATE IS NULL")
+        .doesNotContain("LISTAGG")
+        .doesNotContain("FROM EXPORT_PACKAGE EP")
         .doesNotContain("FIND_APPLICATIONS_BY_CRITERIA");
     assertThat(repository.bindValues())
         .containsExactly(
@@ -171,6 +173,18 @@ class LexisApplicationRepositoryTest {
     assertThat(repository.whereSql()).doesNotContain("EEA.ORG_UNIT_NO");
     assertThat(repository.whereSql()).doesNotContain("v.ORG_UNIT_NO");
     assertThat(repository.bindValues()).containsExactly("N");
+  }
+
+  @Test
+  void searchWithoutPackageFilterShouldNotReadPackages() {
+    TestLexisApplicationRepository repository = new TestLexisApplicationRepository();
+
+    repository.search(emptyCriteria(null, 0, 10));
+
+    assertThat(repository.pageSelectSql()).doesNotContain("EXPORT_PACKAGE");
+    assertThat(repository.whereSql()).doesNotContain("EXPORT_PACKAGE");
+    assertThat(repository.countSelectSql()).doesNotContain("EXPORT_PACKAGE");
+    assertThat(repository.countWhereSql()).doesNotContain("EXPORT_PACKAGE");
   }
 
   @Test
@@ -308,9 +322,12 @@ class LexisApplicationRepositoryTest {
     assertThat(repository.countSelectSql())
         .contains("SELECT COUNT(*)")
         .contains("FROM EXPORT_EXEMPTION_APPLICATION EEA")
+        .doesNotContain("LISTAGG")
+        .doesNotContain("EXPORT_PACKAGE")
         .doesNotContain("EXPORT_PURCHASE_OFFER");
     assertThat(repository.countWhereSql())
         .isEqualTo(pageWhere.substring(0, pageWhere.indexOf(" ORDER BY")))
+        .contains("EXISTS (SELECT 1 FROM EXPORT_PACKAGE EP")
         .doesNotContain("OFFSET")
         .doesNotContain("FETCH NEXT");
     assertThat(repository.countBindValues()).isEqualTo(pageBinds);
