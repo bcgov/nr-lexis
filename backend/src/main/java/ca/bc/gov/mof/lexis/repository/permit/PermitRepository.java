@@ -8,7 +8,9 @@ import ca.bc.gov.mof.lexis.dto.permit.PermitAccessDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitDetailDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchResultDto;
+import ca.bc.gov.mof.lexis.dto.permit.PermitSummaryEnrichmentDto;
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -127,6 +129,10 @@ public class PermitRepository extends OracleRepositorySupport {
       "SELECT EXPORT_PERMIT_DETAIL_NUMBER, AGENT_NUMBER, CLIENT_NUMBER, ORG_UNIT_NO "
           + "FROM EXPORT_PERMIT_DETAIL "
           + "WHERE EXPORT_PERMIT_DETAIL_NUMBER = ?";
+  private static final String SUMMARY_ENRICHMENT_COLUMNS =
+      "SELECT EPD.EXPORT_PERMIT_DETAIL_NUMBER, EPD.EXEMPTION_NUMBER, "
+          + "EPD.NUMBER_OF_PIECES, EPD.RECEIPT_NUMBER "
+          + "FROM EXPORT_PERMIT_DETAIL EPD WHERE EPD.EXPORT_PERMIT_DETAIL_NUMBER IN (";
 
   public PermitRepository(@Qualifier("oracleJdbcTemplate") JdbcTemplate jdbcTemplate) {
     super(jdbcTemplate);
@@ -370,6 +376,44 @@ public class PermitRepository extends OracleRepositorySupport {
         .stream()
         .findFirst();
   }
+
+  /** Loads only the fields absent from {@link PermitSearchResultDto} for one summary page. */
+  public Map<Long, PermitSummaryEnrichmentDto> findSummaryEnrichmentByPermitNumbers(
+      List<Long> permitNumbers) {
+    List<Long> ids =
+        permitNumbers == null
+            ? List.of()
+            : permitNumbers.stream()
+                .filter(id -> id != null && id > 0)
+                .distinct()
+                .toList();
+    if (ids.isEmpty()) {
+      return Map.of();
+    }
+
+    String placeholders = String.join(", ", java.util.Collections.nCopies(ids.size(), "?"));
+    List<PermitSummaryRow> rows =
+        jdbcTemplate.query(
+            SUMMARY_ENRICHMENT_COLUMNS + placeholders + ")",
+            (rs, rowNumber) ->
+                new PermitSummaryRow(
+                    getLong(rs, "EXPORT_PERMIT_DETAIL_NUMBER"),
+                    new PermitSummaryEnrichmentDto(
+                        getString(rs, "EXEMPTION_NUMBER"),
+                        java.util.Optional.ofNullable(getLong(rs, "NUMBER_OF_PIECES")).orElse(0L),
+                        getString(rs, "RECEIPT_NUMBER"))),
+            ids.toArray());
+
+    Map<Long, PermitSummaryEnrichmentDto> result = new LinkedHashMap<>();
+    for (PermitSummaryRow row : rows) {
+      if (row.permitNumber() != null) {
+        result.put(row.permitNumber(), row.enrichment());
+      }
+    }
+    return Map.copyOf(result);
+  }
+
+  private record PermitSummaryRow(Long permitNumber, PermitSummaryEnrichmentDto enrichment) {}
 
   private static long elapsedMillis(long startedAtNanos) {
     return Math.max(0L, (System.nanoTime() - startedAtNanos) / 1_000_000L);

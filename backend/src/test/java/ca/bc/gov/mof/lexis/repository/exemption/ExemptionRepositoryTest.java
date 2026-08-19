@@ -14,6 +14,7 @@ import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionAccessDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchResultDto;
+import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSummaryLookupDto;
 import java.sql.CallableStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -120,6 +121,59 @@ class ExemptionRepositoryTest {
         .contains("EXPORT_JURISDICTION_CODE = 'P'")
         .contains("OWNER_CLIENT_NUMBER = ?")
         .contains("AGENT_CLIENT_NUMBER = ?");
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void summaryLookupsShouldUseOneBoundQueryForDistinctExemptions() throws SQLException {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    ResultSet first = mock(ResultSet.class);
+    when(first.getString("EXEMPTION_NUMBER")).thenReturn("EX-2");
+    when(first.getString("TYPE_DESCRIPTION")).thenReturn("Ministerial");
+    when(first.getString("STATUS_DESCRIPTION")).thenReturn("Approved");
+    ResultSet second = mock(ResultSet.class);
+    when(second.getString("EXEMPTION_NUMBER")).thenReturn("EX-1");
+    when(second.getString("TYPE_DESCRIPTION")).thenReturn("Blanket OIC");
+    when(second.getString("STATUS_DESCRIPTION")).thenReturn("Active");
+    when(
+            jdbcTemplate.query(
+                anyString(),
+                any(RowMapper.class),
+                eq("EX-2"),
+                eq("EX-1")))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<ExemptionSummaryLookupDto> mapper = invocation.getArgument(1);
+              return List.of(mapper.mapRow(first, 0), mapper.mapRow(second, 1));
+            });
+    ExemptionRepository repository = new ExemptionRepository(jdbcTemplate);
+
+    var lookups =
+        repository.findSummaryLookups(
+            List.of(" EX-2 ", "", "EX-1", "EX-2"));
+
+    assertThat(lookups).hasSize(2);
+    assertThat(lookups.get("EX-2").exemptionTypeDescription())
+        .isEqualTo("Ministerial");
+    assertThat(lookups.get("EX-1").exemptionStatusDescription())
+        .isEqualTo("Active");
+    ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+    verify(jdbcTemplate)
+        .query(sql.capture(), any(RowMapper.class), eq("EX-2"), eq("EX-1"));
+    assertThat(sql.getValue())
+        .contains("EXPORT_EXEMPTION_TYPE_CODE")
+        .contains("EXPORT_EXEMPTION_STATUS_CODE")
+        .contains("IN (?, ?)");
+  }
+
+  @Test
+  void summaryLookupsShouldSkipDatabaseWhenNoValidNumbers() {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    ExemptionRepository repository = new ExemptionRepository(jdbcTemplate);
+
+    assertThat(repository.findSummaryLookups(List.of(" "))).isEmpty();
+
+    verifyNoInteractions(jdbcTemplate);
   }
 
   @Test
@@ -330,6 +384,122 @@ class ExemptionRepositoryTest {
         .doesNotContain("PERMIT_VOLUME_BY_EXEMPTION", "EXEMPTION_ORG_UNIT");
     assertThat(repository.whereSql()).doesNotContain("EEA_ACCESS");
     assertThat(repository.bindValues()).containsExactly("00012345", "00012345");
+  }
+
+  @Test
+  void scopedSummaryCountShouldCountAccessibleRootsWithoutCanonicalEnrichment() {
+    TestExemptionRepository repository = new TestExemptionRepository();
+
+    repository.count(
+        new ExemptionSearchCriteria(
+            null,
+            null,
+            null,
+            null,
+            null,
+            "00001074",
+            null,
+            null,
+            null,
+            null,
+            null,
+            List.of(),
+            true,
+            false,
+            true,
+            "exemptionNumber DESC",
+            0,
+            10));
+
+    assertThat(repository.countSelectSql())
+        .contains("WITH ACCESSIBLE_EXEMPTIONS AS")
+        .contains("EE_BOIC.EXPORT_EXEMPTION_TYPE_CODE = 'B'")
+        .contains("INNER JOIN ACCESSIBLE_EXEMPTIONS AE")
+        .contains("INNER JOIN EXPORT_EXEMPTION_STATUS_CODE EESC")
+        .doesNotContain(
+            "CANONICAL_EXEMPTION_APPLICATION",
+            "CANONICAL_RANK",
+            "EXPORT_SCHEDULE",
+            "PERMIT_VOLUME_BY_EXEMPTION",
+            "EXEMPTION_ORG_UNIT");
+    assertThat(repository.bindValues()).containsExactly("00001074", "00001074");
+  }
+
+  @Test
+  void scopedSummarySearchShouldPageBeforeEnrichment() {
+    TestExemptionRepository repository = new TestExemptionRepository();
+
+    repository.search(scopedSummaryCriteria("exemptionNumber DESC", null));
+
+    assertThat(repository.pageSelectSql())
+        .contains("WITH ACCESSIBLE_EXEMPTIONS AS")
+        .contains("EE_BOIC.EXPORT_EXEMPTION_TYPE_CODE = 'B'")
+        .contains("PAGE_EXEMPTIONS AS")
+        .contains("INNER JOIN ACCESSIBLE_EXEMPTIONS AE")
+        .contains("INNER JOIN EXPORT_EXEMPTION_STATUS_CODE EESC")
+        .contains("INNER JOIN PAGE_EXEMPTIONS PE_CANON")
+        .contains("INNER JOIN PAGE_EXEMPTIONS PE_VOLUME")
+        .contains("INNER JOIN PAGE_EXEMPTIONS PE_IEEA")
+        .contains("INNER JOIN PAGE_EXEMPTIONS PE_OEO")
+        .doesNotContain(
+            "INNER JOIN ACCESSIBLE_EXEMPTIONS AE_CANON",
+            "INNER JOIN ACCESSIBLE_EXEMPTIONS AE_VOLUME",
+            "INNER JOIN ACCESSIBLE_EXEMPTIONS AE_IEEA",
+            "INNER JOIN ACCESSIBLE_EXEMPTIONS AE_OEO");
+    assertThat(repository.pageSelectSql().indexOf("OFFSET ? ROWS FETCH NEXT ? ROWS ONLY"))
+        .isLessThan(repository.pageSelectSql().indexOf("CANONICAL_EXEMPTION_APPLICATION AS"));
+    assertThat(repository.bindValues()).containsExactly("00001074", "00001074");
+  }
+
+  @Test
+  void scopedSummarySearchShouldPreserveNonZeroPageBeforeEnrichment() {
+    List<ExemptionSearchResultDto> rows =
+        java.util.stream.LongStream.rangeClosed(1L, 21L)
+            .mapToObj(number -> exemptionResult("EX-" + number))
+            .toList();
+    TestExemptionRepository repository = new TestExemptionRepository(rows);
+
+    Page<ExemptionSearchResultDto> results =
+        repository.search(scopedSummaryCriteria("exemptionNumber DESC", null, 1, 10));
+
+    assertThat(results.getContent())
+        .extracting(ExemptionSearchResultDto::exemptionNumber)
+        .containsExactly(
+            "EX-11",
+            "EX-12",
+            "EX-13",
+            "EX-14",
+            "EX-15",
+            "EX-16",
+            "EX-17",
+            "EX-18",
+            "EX-19",
+            "EX-20");
+    assertThat(results.getNumber()).isEqualTo(1);
+    assertThat(results.getSize()).isEqualTo(10);
+    assertThat(repository.pageSelectSql())
+        .contains("PAGE_EXEMPTIONS AS")
+        .contains("OFFSET ? ROWS FETCH NEXT ? ROWS ONLY");
+    assertThat(repository.pageSelectSql().indexOf("OFFSET ? ROWS FETCH NEXT ? ROWS ONLY"))
+        .isLessThan(repository.pageSelectSql().indexOf("CANONICAL_EXEMPTION_APPLICATION AS"));
+    assertThat(repository.pageCalls()).isEqualTo(1);
+  }
+
+  @Test
+  void scopedSummarySearchShouldRetainExistingPageForEnrichedSortOrFilter() {
+    TestExemptionRepository enrichedSortRepository = new TestExemptionRepository();
+    enrichedSortRepository.search(scopedSummaryCriteria("balanceRemaining DESC", null));
+
+    assertThat(enrichedSortRepository.pageSelectSql())
+        .contains("INNER JOIN ACCESSIBLE_EXEMPTIONS AE_VOLUME")
+        .doesNotContain("PAGE_EXEMPTIONS AS");
+
+    TestExemptionRepository filteredRepository = new TestExemptionRepository();
+    filteredRepository.search(scopedSummaryCriteria("exemptionNumber DESC", "M"));
+
+    assertThat(filteredRepository.pageSelectSql())
+        .contains("INNER JOIN ACCESSIBLE_EXEMPTIONS AE_VOLUME")
+        .doesNotContain("PAGE_EXEMPTIONS AS");
   }
 
   @Test
@@ -679,6 +849,34 @@ class ExemptionRepositoryTest {
         Arguments.of("listingDate DESC", "ORDER BY ADVERTISING_DATE DESC"),
         Arguments.of("expiryDate", "ORDER BY EE.EXPIRY_DATE ASC"),
         Arguments.of("region DESC", "ORDER BY EO.ORG_UNIT_NAME DESC"));
+  }
+
+  private static ExemptionSearchCriteria scopedSummaryCriteria(
+      String sortField, String exemptionType) {
+    return scopedSummaryCriteria(sortField, exemptionType, 0, 10);
+  }
+
+  private static ExemptionSearchCriteria scopedSummaryCriteria(
+      String sortField, String exemptionType, int page, int size) {
+    return new ExemptionSearchCriteria(
+        null,
+        null,
+        null,
+        exemptionType,
+        null,
+        "00001074",
+        null,
+        null,
+        null,
+        null,
+        null,
+        List.of(),
+        true,
+        false,
+        true,
+        sortField,
+        page,
+        size);
   }
 
   private static final class TestExemptionRepository extends ExemptionRepository {

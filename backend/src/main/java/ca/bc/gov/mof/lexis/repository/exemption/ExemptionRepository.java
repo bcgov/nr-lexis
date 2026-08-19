@@ -9,12 +9,14 @@ import ca.bc.gov.mof.lexis.dto.exemption.ExemptionAccessDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchResultDto;
+import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSummaryLookupDto;
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.LinkedHashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -153,6 +155,16 @@ public class ExemptionRepository extends OracleRepositorySupport {
       WITH PAGE_EXEMPTIONS AS (
         SELECT EE.EXEMPTION_NUMBER
         FROM EXPORT_EXEMPTION EE
+      """;
+  private static final String SCOPED_PAGE_FIRST_SEARCH_PREFIX_TAIL =
+      """
+      , PAGE_EXEMPTIONS AS (
+        SELECT EE.EXEMPTION_NUMBER
+        FROM EXPORT_EXEMPTION EE
+        INNER JOIN ACCESSIBLE_EXEMPTIONS AE
+          ON AE.EXEMPTION_NUMBER = EE.EXEMPTION_NUMBER
+        INNER JOIN EXPORT_EXEMPTION_STATUS_CODE EESC
+          ON EESC.EXPORT_EXEMPTION_STATUS_CODE = EE.EXPORT_EXEMPTION_STATUS_CODE
       """;
   private static final String PAGE_FIRST_SEARCH_TAIL =
       """
@@ -385,6 +397,15 @@ public class ExemptionRepository extends OracleRepositorySupport {
       LEFT JOIN EXPORT_SCHEDULE ES
         ON ES.EXPORT_SCHEDULE_ID = EEA.EXPORT_SCHEDULE_ID
       """;
+  private static final String SCOPED_FILTER_ONLY_COUNT_EXEMPTIONS_TAIL =
+      """
+      SELECT COUNT(*)
+      FROM EXPORT_EXEMPTION EE
+      INNER JOIN ACCESSIBLE_EXEMPTIONS AE
+        ON AE.EXEMPTION_NUMBER = EE.EXEMPTION_NUMBER
+      INNER JOIN EXPORT_EXEMPTION_STATUS_CODE EESC
+        ON EESC.EXPORT_EXEMPTION_STATUS_CODE = EE.EXPORT_EXEMPTION_STATUS_CODE
+      """;
   private static final String FIND_EXEMPTION_BY_NUMBER =
       LEXIS_GROUP_5_PACKAGE + "FIND_EXEMPTION_BY_NUMBER(?,?)";
   private static final String FIND_EXEMPTION_ACCESS =
@@ -395,6 +416,19 @@ public class ExemptionRepository extends OracleRepositorySupport {
         EXPORT_EXEMPTION_STATUS_CODE
       FROM EXPORT_EXEMPTION
       WHERE EXEMPTION_NUMBER = ?
+      """;
+  private static final String FIND_EXEMPTION_SUMMARY_LOOKUPS =
+      """
+      SELECT
+        EE.EXEMPTION_NUMBER,
+        EETC.DESCRIPTION AS TYPE_DESCRIPTION,
+        EESC.DESCRIPTION AS STATUS_DESCRIPTION
+      FROM EXPORT_EXEMPTION EE
+      LEFT JOIN EXPORT_EXEMPTION_TYPE_CODE EETC
+        ON EETC.EXPORT_EXEMPTION_TYPE_CODE = EE.EXPORT_EXEMPTION_TYPE_CODE
+      INNER JOIN EXPORT_EXEMPTION_STATUS_CODE EESC
+        ON EESC.EXPORT_EXEMPTION_STATUS_CODE = EE.EXPORT_EXEMPTION_STATUS_CODE
+      WHERE EE.EXEMPTION_NUMBER IN (%s)
       """;
   private static final String LINKED_PROVINCIAL_APPLICATION_BELONGS_TO_CLIENT =
       """
@@ -483,6 +517,16 @@ public class ExemptionRepository extends OracleRepositorySupport {
         knownTotal == null
             ? queryDirectCount(countSelect, countSqlWhere)
             : Math.max(0, knownTotal);
+    if (supportsScopedSummaryPageFirstSearch(criteria, scopedClientNumber)) {
+      return queryDirectPageWithTail(
+          buildScopedPageFirstSearchPrefix(),
+          pageSqlWhere,
+          PAGE_FIRST_SEARCH_TAIL + buildSearchOrder(criteria.sortField()),
+          criteria.page(),
+          criteria.size(),
+          totalElements,
+          this::mapSearchResult);
+    }
     if (supportsPageFirstSearch(criteria, scopedClientNumber)) {
       return queryDirectPageWithTail(
           PAGE_FIRST_SEARCH_PREFIX,
@@ -578,6 +622,11 @@ public class ExemptionRepository extends OracleRepositorySupport {
     if (supportsFilterOnlyCount(criteria, scopedClientNumber)) {
       return FILTER_ONLY_COUNT_EXEMPTIONS;
     }
+    if (supportsScopedSummaryFilterOnlyCount(criteria, scopedClientNumber)) {
+      return "WITH "
+          + buildAccessibleExemptionsCte(true)
+          + SCOPED_FILTER_ONLY_COUNT_EXEMPTIONS_TAIL;
+    }
     if (scopedClientNumber == null) {
       return COUNT_EXEMPTIONS;
     }
@@ -594,12 +643,28 @@ public class ExemptionRepository extends OracleRepositorySupport {
       return false;
     }
 
-    String requestedSort = trim(criteria.sortField());
+    return supportsExemptionNumberSort(criteria.sortField());
+  }
+
+  private boolean supportsScopedSummaryPageFirstSearch(
+      ExemptionSearchCriteria criteria, String scopedClientNumber) {
+    return supportsScopedSummaryFilterOnlyCount(criteria, scopedClientNumber)
+        && supportsExemptionNumberSort(criteria.sortField());
+  }
+
+  private boolean supportsExemptionNumberSort(String sortField) {
+    String requestedSort = trim(sortField);
     if (requestedSort == null) {
       return true;
     }
     String normalizedSort = requestedSort.replaceFirst("(?i)\\s+(ASC|DESC)$", "").trim();
     return "exemptionNumber".equals(normalizedSort);
+  }
+
+  private String buildScopedPageFirstSearchPrefix() {
+    return "WITH "
+        + buildAccessibleExemptionsCte(true)
+        + SCOPED_PAGE_FIRST_SEARCH_PREFIX_TAIL;
   }
 
   private boolean supportsFilterOnlyCount(
@@ -611,6 +676,24 @@ public class ExemptionRepository extends OracleRepositorySupport {
         && trim(criteria.applicantClientNumber()) == null
         && criteria.listingFromDate() == null
         && criteria.listingToDate() == null;
+  }
+
+  private boolean supportsScopedSummaryFilterOnlyCount(
+      ExemptionSearchCriteria criteria, String scopedClientNumber) {
+    return scopedClientNumber != null
+        && criteria.includeBlanketOic()
+        && !criteria.excludeBlanketOic()
+        && trim(criteria.applicationNumber()) == null
+        && trim(criteria.packageNumber()) == null
+        && trim(criteria.exemptionNumber()) == null
+        && trim(criteria.exemptionType()) == null
+        && trim(criteria.exemptionStatus()) == null
+        && trim(criteria.ownerClientNumber()) == null
+        && criteria.approvalFromDate() == null
+        && criteria.approvalToDate() == null
+        && criteria.listingFromDate() == null
+        && criteria.listingToDate() == null
+        && (criteria.regionNumbers() == null || criteria.regionNumbers().isEmpty());
   }
 
   private String buildAccessibleExemptionsCte(boolean includeBlanketOic) {
@@ -768,6 +851,35 @@ public class ExemptionRepository extends OracleRepositorySupport {
           exceptionType(exception));
       throw exception;
     }
+  }
+
+  public Map<String, ExemptionSummaryLookupDto> findSummaryLookups(
+      List<String> exemptionNumbers) {
+    List<String> normalized =
+        exemptionNumbers == null
+            ? List.of()
+            : exemptionNumbers.stream()
+                .map(this::trim)
+                .filter(value -> value != null)
+                .distinct()
+                .toList();
+    if (normalized.isEmpty()) {
+      return Map.of();
+    }
+
+    String placeholders = String.join(", ", java.util.Collections.nCopies(normalized.size(), "?"));
+    List<ExemptionSummaryLookupDto> rows =
+        jdbcTemplate.query(
+            FIND_EXEMPTION_SUMMARY_LOOKUPS.formatted(placeholders),
+            (rs, rowNumber) ->
+                new ExemptionSummaryLookupDto(
+                    getString(rs, "EXEMPTION_NUMBER"),
+                    getString(rs, "TYPE_DESCRIPTION"),
+                    getString(rs, "STATUS_DESCRIPTION")),
+            normalized.toArray());
+    Map<String, ExemptionSummaryLookupDto> byExemptionNumber = new LinkedHashMap<>();
+    rows.forEach(row -> byExemptionNumber.put(row.exemptionNumber(), row));
+    return Map.copyOf(byExemptionNumber);
   }
 
   private static double calculateUsedVolume(

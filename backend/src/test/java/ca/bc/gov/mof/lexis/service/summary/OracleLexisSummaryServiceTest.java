@@ -2,25 +2,27 @@ package ca.bc.gov.mof.lexis.service.summary;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResultDto;
-import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
+import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSummaryEnrichmentDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchResultDto;
+import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSummaryLookupDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchResultDto;
-import ca.bc.gov.mof.lexis.dto.permit.PermitDetailDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchResultDto;
+import ca.bc.gov.mof.lexis.dto.permit.PermitSummaryEnrichmentDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitTotalFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.summary.SummaryApplicationsResponseDto;
 import ca.bc.gov.mof.lexis.dto.summary.SummaryExemptionsResponseDto;
@@ -34,7 +36,7 @@ import ca.bc.gov.mof.lexis.service.permit.PermitDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.permit.PermitService;
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Optional;
+import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -87,37 +89,15 @@ class OracleLexisSummaryServiceTest {
                 0,
                 10));
 
-    when(applicationService.findByApplicationNumber(1000456L))
+    when(applicationService.findSummaryEnrichmentByApplicationNumbers(List.of(1000456L)))
         .thenReturn(
-            Optional.of(
-                new LexisApplicationDetailDto(
+            Map.of(
+                1000456L,
+                new LexisApplicationSummaryEnrichmentDto(
                     1000456L,
-                    "EX-205",
-                    "REV",
-                    "In Review",
-                    "00077881",
-                    "00055667",
-                    12L,
-                    "Coast",
-                    "LUM",
                     "ER02",
-                    LocalDate.of(2026, 2, 20),
                     LocalDate.of(2026, 2, 21),
-                    LocalDate.of(2026, 2, 26),
-                    null,
-                    120L,
-                    95.0,
-                    1.6,
-                    true,
-                    false,
-                    false,
-                    false,
-                    false,
-                    null,
-                    null,
-                    List.of(new LexisApplicationDetailDto.LexisPackageDto("PKG-903", 95.0, 28)),
-                    List.of(),
-                    List.of())));
+                    List.of("PKG-903"))));
     SummaryApplicationsResponseDto response = service.applications("00077881", 0, 10, null);
 
     ArgumentCaptor<LexisApplicationSearchCriteria> criteriaCaptor =
@@ -137,6 +117,7 @@ class OracleLexisSummaryServiceTest {
     assertThat(response.results().get(0).reason()).isEqualTo("ER02");
     assertThat(response.results().get(0).exemptionType()).isEqualTo("Ministerial");
     assertThat(response.results().get(0).packageNumberAry()).containsExactly("PKG-903");
+    verify(applicationService, never()).findByApplicationNumber(anyLong());
     verifyNoInteractions(exemptionService);
   }
 
@@ -200,28 +181,11 @@ class OracleLexisSummaryServiceTest {
                 0,
                 10));
 
-    when(exemptionService.findByExemptionNumber("EX-205"))
+    when(exemptionService.findSummaryLookups(List.of("EX-205")))
         .thenReturn(
-            Optional.of(
-                new ExemptionDetailDto(
-                    "EX-205",
-                    "M",
-                    "Ministerial",
-                    "APP",
-                    "Approved",
-                    "00077881",
-                    "00055667",
-                    1000456L,
-                    "REV",
-                    LocalDate.of(2026, 2, 27),
-                    LocalDate.of(2026, 5, 27),
-                    95.0,
-                    40.0,
-                    55.0,
-                    "",
-                    false,
-                    List.of("7000123"),
-                    List.of())));
+            Map.of(
+                "EX-205",
+                new ExemptionSummaryLookupDto("EX-205", "Ministerial", "Approved")));
 
     SummaryExemptionsResponseDto response = service.exemptions("00077881", 0, 10, null);
 
@@ -243,6 +207,68 @@ class OracleLexisSummaryServiceTest {
     assertThat(response.results().get(0).exemption()).isEqualTo("EX-205");
     assertThat(response.results().get(0).exemptionType()).isEqualTo("Ministerial");
     assertThat(response.results().get(0).balanceRemaining()).isEqualTo(83.0);
+    assertThat(response.results().get(0).ownerClientNumber()).isEqualTo("00077881");
+    assertThat(response.results().get(0).agentClientNumber()).isEqualTo("00055667");
+    verify(exemptionService, never()).findByExemptionNumber(any());
+  }
+
+  @Test
+  void exemptionsShouldPreserveSearchClientRulesForOicTypes() {
+    ExemptionSearchResultDto ordinaryOic =
+        new ExemptionSearchResultDto(
+            "O-205",
+            "O",
+            "ACT",
+            "",
+            "",
+            null,
+            LocalDate.of(2026, 2, 27),
+            null,
+            LocalDate.of(2027, 2, 27),
+            "",
+            95.0,
+            83.0,
+            false);
+    ExemptionSearchResultDto blanketOic =
+        new ExemptionSearchResultDto(
+            "B-205",
+            "B",
+            "ACT",
+            "",
+            "",
+            null,
+            LocalDate.of(2026, 2, 27),
+            null,
+            LocalDate.of(2027, 2, 27),
+            "",
+            95.0,
+            83.0,
+            false);
+    when(exemptionService.search(any(ExemptionSearchCriteria.class)))
+        .thenReturn(
+            new ExemptionSearchResponseDto(
+                List.of(ordinaryOic, blanketOic), 2, 0, 10));
+    when(exemptionService.findSummaryLookups(List.of("O-205", "B-205")))
+        .thenReturn(
+            Map.of(
+                "O-205",
+                new ExemptionSummaryLookupDto("O-205", "OIC", "Active"),
+                "B-205",
+                new ExemptionSummaryLookupDto("B-205", "Blanket OIC", "Active")));
+
+    SummaryExemptionsResponseDto response =
+        service.exemptions("00077881", 0, 10, null);
+
+    assertThat(response.results())
+        .extracting(
+            item -> item.exemption(),
+            item -> item.exemptionType(),
+            item -> item.ownerClientNumber(),
+            item -> item.agentClientNumber())
+        .containsExactly(
+            org.assertj.core.groups.Tuple.tuple("O-205", "OIC", "", ""),
+            org.assertj.core.groups.Tuple.tuple("B-205", "Blanket OIC", "", ""));
+    verify(exemptionService, never()).findByExemptionNumber(any());
   }
 
   @Test
@@ -263,38 +289,11 @@ class OracleLexisSummaryServiceTest {
                 0,
                 10));
 
-    when(permitService.findByPermitNumber(7000123L))
+    when(permitService.findSummaryEnrichmentByPermitNumbers(List.of(7000123L)))
         .thenReturn(
-            Optional.of(
-                new PermitDetailDto(
-                    7000123L,
-                    1000456L,
-                    "PKG-903",
-                    "EX-205",
-                    "ISS",
-                    "Issued",
-                    "00055667",
-                    "01",
-                    "00077881",
-                    "03",
-                    "Sample Buyer",
-                    "US",
-                    "VSL",
-                    "Pacific Carrier",
-                    "VAN",
-                    null,
-                    LocalDate.of(2026, 3, 15),
-                    LocalDate.of(2026, 6, 15),
-                    LocalDate.of(2026, 3, 10),
-                    LocalDate.of(2026, 3, 20),
-                    95.0,
-                    28,
-                    "RCT-991",
-                    "FED-123",
-                    "INV-456",
-                    "",
-                    null,
-                    "R2")));
+            Map.of(
+                7000123L,
+                new PermitSummaryEnrichmentDto("EX-205", 28, "RCT-991")));
     SummaryPermitsResponseDto response = service.permits("00077881", 0, 10, null);
 
     ArgumentCaptor<PermitSearchCriteria> criteriaCaptor =
@@ -316,6 +315,7 @@ class OracleLexisSummaryServiceTest {
     assertThat(response.results().get(0).permit()).isEqualTo(7000123L);
     assertThat(response.results().get(0).exemption()).isEqualTo("EX-205");
     assertThat(response.results().get(0).totalPieces()).isEqualTo(28L);
+    verify(permitService, never()).findByPermitNumber(any());
   }
 
   @Test
@@ -336,38 +336,11 @@ class OracleLexisSummaryServiceTest {
                 0,
                 10));
 
-    when(permitService.findByPermitNumber(7000123L))
+    when(permitService.findSummaryEnrichmentByPermitNumbers(List.of(7000123L)))
         .thenReturn(
-            Optional.of(
-                new PermitDetailDto(
-                    7000123L,
-                    1000456L,
-                    "PKG-903",
-                    "EX-205",
-                    "ISS",
-                    "Issued",
-                    "00055667",
-                    "01",
-                    "00077881",
-                    "03",
-                    "Sample Buyer",
-                    "US",
-                    "VSL",
-                    "Pacific Carrier",
-                    "VAN",
-                    null,
-                    LocalDate.of(2026, 3, 15),
-                    LocalDate.of(2026, 6, 15),
-                    LocalDate.of(2026, 3, 10),
-                    LocalDate.of(2026, 3, 20),
-                    95.0,
-                    28,
-                    "RCT-991",
-                    "FED-123",
-                    "INV-456",
-                    "",
-                    null,
-                    "R2")));
+            Map.of(
+                7000123L,
+                new PermitSummaryEnrichmentDto("EX-205", 28, "RCT-991")));
     when(permitDetailsRpcService.getTotalFeesForPermit(7000123L, null, null))
         .thenReturn(new PermitTotalFeesRpcResponseDto("$1,234.50"));
 
@@ -392,6 +365,7 @@ class OracleLexisSummaryServiceTest {
     assertThat(response.results().get(0).permit()).isEqualTo(7000123L);
     assertThat(response.results().get(0).fees()).isEqualTo(1234.5);
     assertThat(response.results().get(0).receipt()).isEqualTo("RCT-991");
+    verify(permitService, never()).findByPermitNumber(any());
   }
 
   @Test
