@@ -23,7 +23,7 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import ContentLoadingOverlay from '@/components/ContentLoadingOverlay'
 import ConfirmationModal from '@/components/ConfirmationModal'
 import EmptyState from '@/components/EmptyState'
@@ -43,6 +43,11 @@ import type { FederalApplicationDetail } from '@/interfaces/LexisDetails'
 import { DetailFieldTile } from '../shared/DetailSections'
 import { displayValue } from '@/pages/shared/detail-page-utils'
 import { appendSearchParamsToPath } from '@/pages/shared/search-query-utils'
+import {
+  locationPath,
+  readDetailReturnTo,
+  withDetailReturnTo,
+} from '@/pages/shared/detail-navigation'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { useReloadPreservedTab } from '@/pages/shared/useReloadPreservedTab'
 import {
@@ -156,9 +161,14 @@ const requiredExactLengthFieldError = (
 
 const FederalApplicationDetailsPage = () => {
   const navigate = useNavigate()
-  const { capabilities, canPerform } = useAuth()
+  const { capabilities, canPerform, defaultRoute } = useAuth()
+  const location = useLocation()
   const { applicationNumber } = useParams()
   const [searchParams] = useSearchParams()
+  const fallbackReturnTo = canPerform('/federalApplicationSearch')
+    ? { label: 'Federal application search', to: '/federal' }
+    : { label: 'Your landing page', to: defaultRoute }
+  const detailReturnTo = readDetailReturnTo(location.state) ?? fallbackReturnTo
   const [detail, setDetail] = useState<FederalApplicationDetail | null>(null)
   const detailRef = useRef<FederalApplicationDetail | null>(null)
   const [documentRows, setDocumentRows] = useState<FederalApplicationDocumentRow[]>([])
@@ -821,11 +831,13 @@ const FederalApplicationDetailsPage = () => {
 
   return (
     <Grid fullWidth className="default-grid detail-page-grid">
-      {canPerform('/federalApplicationSearch') && (
-        <Column sm={4} md={8} lg={16}>
-          <DetailBreadcrumb label="Federal application search" to="/federal" />
-        </Column>
-      )}
+      <Column sm={4} md={8} lg={16}>
+        <DetailBreadcrumb
+          label={fallbackReturnTo.label}
+          to={fallbackReturnTo.to}
+          returnTo={detailReturnTo}
+        />
+      </Column>
       <Column sm={4} md={8} lg={16} className="detail-page-header">
         <PageHeader
           title={`LEXIS application ${federalApplicationDisplayNumber}`.trim()}
@@ -1344,6 +1356,12 @@ const FederalApplicationDetailsPage = () => {
                                             withCurrentSearch(
                                               `/provincial/offers/${encodeURIComponent(item.offerNumber)}`,
                                             ),
+                                            {
+                                              state: withDetailReturnTo(location.state, {
+                                                label: 'Federal application detail',
+                                                to: locationPath(location),
+                                              }),
+                                            },
                                           )
                                         }
                                       >

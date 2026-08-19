@@ -31,4 +31,26 @@ describe('DetailBreadcrumb', () => {
     await userEvent.click(parentLink)
     expect(screen.getByTestId('location')).toHaveTextContent('/provincial/application')
   })
+
+  it('prefers the originating list and preserves its exact query', () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/EX-1']}>
+        <DetailBreadcrumb
+          label="Provincial exemption search"
+          to="/provincial/exemption"
+          returnTo={{
+            label: 'Federal application search',
+            to: '/federal?applicationStatus=APP&sortField=receivedDate&page=3&pageSize=25',
+          }}
+        />
+      </MemoryRouter>,
+    )
+
+    expect(
+      screen.getByRole('link', { name: 'Back to Federal application search' }),
+    ).toHaveAttribute(
+      'href',
+      '/federal?applicationStatus=APP&sortField=receivedDate&page=3&pageSize=25',
+    )
+  })
 })

@@ -31,7 +31,7 @@
 }
 
 .notification-editor:focus-within {
-  outline: 2px solid var(--cds-focus, #0f62fe);
+  outline: 2px solid var(--cds-focus, #005cb8);
   outline-offset: 2px;
 }
 
@@ -63,7 +63,7 @@
 }
 
 .notification-editor__toolbar-button:focus-visible {
-  outline: 2px solid var(--cds-focus, #0f62fe);
+  outline: 2px solid var(--cds-focus, #005cb8);
   outline-offset: -2px;
 }
 

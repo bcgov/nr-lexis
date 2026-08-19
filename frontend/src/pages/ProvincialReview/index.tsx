@@ -1333,6 +1333,12 @@ const ProvincialReviewPage = () => {
                             to={withCurrentSearch(
                               `/provincial/application/${row.applicationNumber}`,
                             )}
+                            state={{
+                              returnTo: {
+                                label: 'Provincial application review',
+                                to: withCurrentSearch('/provincial/review'),
+                              },
+                            }}
                           >
                             {row.applicationNumber}
                           </Link>

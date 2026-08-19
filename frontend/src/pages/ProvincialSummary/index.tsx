@@ -332,6 +332,9 @@ const ProvincialSummaryPage = () => {
                             <Link
                               className="cds--link"
                               to={`/provincial/application/${row.application}`}
+                              state={{
+                                returnTo: { label: 'My Applications', to: '/provincial/summary' },
+                              }}
                             >
                               {row.application}
                             </Link>
@@ -346,6 +349,9 @@ const ProvincialSummaryPage = () => {
                               <Link
                                 className="cds--link"
                                 to={`/provincial/exemption/${encodeURIComponent(row.exemptionNumber)}`}
+                                state={{
+                                  returnTo: { label: 'My Applications', to: '/provincial/summary' },
+                                }}
                               >
                                 {row.exemptionNumber}
                               </Link>
@@ -395,6 +401,9 @@ const ProvincialSummaryPage = () => {
                             <Link
                               className="cds--link"
                               to={`/provincial/offers/${row.offerNumber}`}
+                              state={{
+                                returnTo: { label: 'My Offers', to: '/provincial/summary' },
+                              }}
                             >
                               {row.offerNumber}
                             </Link>
@@ -403,6 +412,9 @@ const ProvincialSummaryPage = () => {
                             <Link
                               className="cds--link"
                               to={`/provincial/application/${row.application}`}
+                              state={{
+                                returnTo: { label: 'My Offers', to: '/provincial/summary' },
+                              }}
                             >
                               {row.application}
                             </Link>
@@ -449,6 +461,9 @@ const ProvincialSummaryPage = () => {
                             <Link
                               className="cds--link"
                               to={`/provincial/exemption/${encodeURIComponent(row.exemption)}`}
+                              state={{
+                                returnTo: { label: 'My Exemptions', to: '/provincial/summary' },
+                              }}
                             >
                               {row.exemption}
                             </Link>
@@ -499,7 +514,13 @@ const ProvincialSummaryPage = () => {
                       {rows.map((row) => (
                         <TableRow key={row.permit}>
                           <TableCell>
-                            <Link className="cds--link" to={`/provincial/permit/${row.permit}`}>
+                            <Link
+                              className="cds--link"
+                              to={`/provincial/permit/${row.permit}`}
+                              state={{
+                                returnTo: { label: 'My Permits', to: '/provincial/summary' },
+                              }}
+                            >
                               {row.permit}
                             </Link>
                           </TableCell>
@@ -513,6 +534,9 @@ const ProvincialSummaryPage = () => {
                               <Link
                                 className="cds--link"
                                 to={`/provincial/exemption/${encodeURIComponent(row.exemption)}`}
+                                state={{
+                                  returnTo: { label: 'My Permits', to: '/provincial/summary' },
+                                }}
                               >
                                 {row.exemption}
                               </Link>
@@ -561,7 +585,13 @@ const ProvincialSummaryPage = () => {
                       {rows.map((row) => (
                         <TableRow key={row.permit}>
                           <TableCell>
-                            <Link className="cds--link" to={`/provincial/permit/${row.permit}`}>
+                            <Link
+                              className="cds--link"
+                              to={`/provincial/permit/${row.permit}`}
+                              state={{
+                                returnTo: { label: 'My Fees', to: '/provincial/summary' },
+                              }}
+                            >
                               {row.permit}
                             </Link>
                           </TableCell>
@@ -601,6 +631,9 @@ const ProvincialSummaryPage = () => {
                             <Link
                               className="cds--link"
                               to={`/provincial/offers/${row.offerNumber}`}
+                              state={{
+                                returnTo: { label: 'Offers Placed', to: '/provincial/summary' },
+                              }}
                             >
                               {row.offerNumber}
                             </Link>
@@ -609,6 +642,9 @@ const ProvincialSummaryPage = () => {
                             <Link
                               className="cds--link"
                               to={`/provincial/application/${row.application}`}
+                              state={{
+                                returnTo: { label: 'Offers Placed', to: '/provincial/summary' },
+                              }}
                             >
                               {row.application}
                             </Link>

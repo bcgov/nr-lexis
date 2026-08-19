@@ -563,8 +563,13 @@ const expectLoginShell = async (page: Page, source: string): Promise<void> => {
   await expect(page.getByRole('button', { name: /log in with business bceid/i })).toBeVisible()
   await expect(page.getByRole('heading', { level: 1, name: 'LEXIS' })).toBeVisible()
   await expect(page.getByText(landingSubtitle, { exact: true })).toBeVisible()
+  await expect(
+    page.getByText('LEXIS helps you create and manage applications and view offers and permits.'),
+  ).toBeVisible()
   await expect(page.getByAltText('Government of British Columbia')).toBeVisible()
-  await expect(page.locator('.landing-img')).toBeVisible()
+  const supportingImage = page.locator('.landing-img')
+  await expect(supportingImage).toBeVisible()
+  await expect(supportingImage).toHaveAttribute('alt', '')
 }
 
 const expectLogoutRoundTrip = async (
