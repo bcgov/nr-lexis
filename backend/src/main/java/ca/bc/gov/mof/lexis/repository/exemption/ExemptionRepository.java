@@ -156,6 +156,16 @@ public class ExemptionRepository extends OracleRepositorySupport {
         SELECT EE.EXEMPTION_NUMBER
         FROM EXPORT_EXEMPTION EE
       """;
+  private static final String SCOPED_PAGE_FIRST_SEARCH_PREFIX_TAIL =
+      """
+      , PAGE_EXEMPTIONS AS (
+        SELECT EE.EXEMPTION_NUMBER
+        FROM EXPORT_EXEMPTION EE
+        INNER JOIN ACCESSIBLE_EXEMPTIONS AE
+          ON AE.EXEMPTION_NUMBER = EE.EXEMPTION_NUMBER
+        INNER JOIN EXPORT_EXEMPTION_STATUS_CODE EESC
+          ON EESC.EXPORT_EXEMPTION_STATUS_CODE = EE.EXPORT_EXEMPTION_STATUS_CODE
+      """;
   private static final String PAGE_FIRST_SEARCH_TAIL =
       """
       ),
@@ -507,6 +517,16 @@ public class ExemptionRepository extends OracleRepositorySupport {
         knownTotal == null
             ? queryDirectCount(countSelect, countSqlWhere)
             : Math.max(0, knownTotal);
+    if (supportsScopedSummaryPageFirstSearch(criteria, scopedClientNumber)) {
+      return queryDirectPageWithTail(
+          buildScopedPageFirstSearchPrefix(),
+          pageSqlWhere,
+          PAGE_FIRST_SEARCH_TAIL + buildSearchOrder(criteria.sortField()),
+          criteria.page(),
+          criteria.size(),
+          totalElements,
+          this::mapSearchResult);
+    }
     if (supportsPageFirstSearch(criteria, scopedClientNumber)) {
       return queryDirectPageWithTail(
           PAGE_FIRST_SEARCH_PREFIX,
@@ -623,12 +643,28 @@ public class ExemptionRepository extends OracleRepositorySupport {
       return false;
     }
 
-    String requestedSort = trim(criteria.sortField());
+    return supportsExemptionNumberSort(criteria.sortField());
+  }
+
+  private boolean supportsScopedSummaryPageFirstSearch(
+      ExemptionSearchCriteria criteria, String scopedClientNumber) {
+    return supportsScopedSummaryFilterOnlyCount(criteria, scopedClientNumber)
+        && supportsExemptionNumberSort(criteria.sortField());
+  }
+
+  private boolean supportsExemptionNumberSort(String sortField) {
+    String requestedSort = trim(sortField);
     if (requestedSort == null) {
       return true;
     }
     String normalizedSort = requestedSort.replaceFirst("(?i)\\s+(ASC|DESC)$", "").trim();
     return "exemptionNumber".equals(normalizedSort);
+  }
+
+  private String buildScopedPageFirstSearchPrefix() {
+    return "WITH "
+        + buildAccessibleExemptionsCte(true)
+        + SCOPED_PAGE_FIRST_SEARCH_PREFIX_TAIL;
   }
 
   private boolean supportsFilterOnlyCount(

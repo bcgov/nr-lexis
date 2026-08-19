@@ -426,6 +426,49 @@ class ExemptionRepositoryTest {
   }
 
   @Test
+  void scopedSummarySearchShouldPageBeforeEnrichment() {
+    TestExemptionRepository repository = new TestExemptionRepository();
+
+    repository.search(scopedSummaryCriteria("exemptionNumber DESC", null));
+
+    assertThat(repository.pageSelectSql())
+        .contains("WITH ACCESSIBLE_EXEMPTIONS AS")
+        .contains("EE_BOIC.EXPORT_EXEMPTION_TYPE_CODE = 'B'")
+        .contains("PAGE_EXEMPTIONS AS")
+        .contains("INNER JOIN ACCESSIBLE_EXEMPTIONS AE")
+        .contains("INNER JOIN EXPORT_EXEMPTION_STATUS_CODE EESC")
+        .contains("INNER JOIN PAGE_EXEMPTIONS PE_CANON")
+        .contains("INNER JOIN PAGE_EXEMPTIONS PE_VOLUME")
+        .contains("INNER JOIN PAGE_EXEMPTIONS PE_IEEA")
+        .contains("INNER JOIN PAGE_EXEMPTIONS PE_OEO")
+        .doesNotContain(
+            "INNER JOIN ACCESSIBLE_EXEMPTIONS AE_CANON",
+            "INNER JOIN ACCESSIBLE_EXEMPTIONS AE_VOLUME",
+            "INNER JOIN ACCESSIBLE_EXEMPTIONS AE_IEEA",
+            "INNER JOIN ACCESSIBLE_EXEMPTIONS AE_OEO");
+    assertThat(repository.pageSelectSql().indexOf("OFFSET ? ROWS FETCH NEXT ? ROWS ONLY"))
+        .isLessThan(repository.pageSelectSql().indexOf("CANONICAL_EXEMPTION_APPLICATION AS"));
+    assertThat(repository.bindValues()).containsExactly("00001074", "00001074");
+  }
+
+  @Test
+  void scopedSummarySearchShouldRetainExistingPageForEnrichedSortOrFilter() {
+    TestExemptionRepository enrichedSortRepository = new TestExemptionRepository();
+    enrichedSortRepository.search(scopedSummaryCriteria("balanceRemaining DESC", null));
+
+    assertThat(enrichedSortRepository.pageSelectSql())
+        .contains("INNER JOIN ACCESSIBLE_EXEMPTIONS AE_VOLUME")
+        .doesNotContain("PAGE_EXEMPTIONS AS");
+
+    TestExemptionRepository filteredRepository = new TestExemptionRepository();
+    filteredRepository.search(scopedSummaryCriteria("exemptionNumber DESC", "M"));
+
+    assertThat(filteredRepository.pageSelectSql())
+        .contains("INNER JOIN ACCESSIBLE_EXEMPTIONS AE_VOLUME")
+        .doesNotContain("PAGE_EXEMPTIONS AS");
+  }
+
+  @Test
   void applicantFilterShouldMatchTheAgentOrAnOwnerOnlyApplication() {
     TestExemptionRepository repository = new TestExemptionRepository();
 
@@ -772,6 +815,29 @@ class ExemptionRepositoryTest {
         Arguments.of("listingDate DESC", "ORDER BY ADVERTISING_DATE DESC"),
         Arguments.of("expiryDate", "ORDER BY EE.EXPIRY_DATE ASC"),
         Arguments.of("region DESC", "ORDER BY EO.ORG_UNIT_NAME DESC"));
+  }
+
+  private static ExemptionSearchCriteria scopedSummaryCriteria(
+      String sortField, String exemptionType) {
+    return new ExemptionSearchCriteria(
+        null,
+        null,
+        null,
+        exemptionType,
+        null,
+        "00001074",
+        null,
+        null,
+        null,
+        null,
+        null,
+        List.of(),
+        true,
+        false,
+        true,
+        sortField,
+        0,
+        10);
   }
 
   private static final class TestExemptionRepository extends ExemptionRepository {
