@@ -1850,13 +1850,18 @@ test.describe('TEST IDIR admin regression', () => {
     for (const [path, heading] of adminAccessiblePages.filter(([routePath]) =>
       routePath.startsWith('/admin'),
     )) {
-      const response = await page.goto(new URL(path, E2E_BASE_URL).toString(), {
-        waitUntil: 'domcontentloaded',
-      })
+      await expect(async () => {
+        const response = await page.goto(new URL(path, E2E_BASE_URL).toString(), {
+          waitUntil: 'domcontentloaded',
+          timeout: 5_000,
+        })
 
-      expect(response?.status(), `${path} should not be blocked by the frontend WAF`).toBe(200)
-      await expect(page.getByRole('heading', { name: heading }).first()).toBeVisible()
-      await expect(page.getByRole('heading', { name: 'Unauthorized' })).toHaveCount(0)
+        expect(response?.status(), `${path} should not be blocked by the frontend WAF`).toBe(200)
+        await expect(page.getByRole('heading', { name: heading }).first()).toBeVisible({
+          timeout: 5_000,
+        })
+        await expect(page.getByRole('heading', { name: 'Unauthorized' })).toHaveCount(0)
+      }).toPass({ intervals: [3_000], timeout: 25_000 })
     }
   })
 

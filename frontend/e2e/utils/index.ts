@@ -3,6 +3,9 @@ import type { Page } from '@playwright/test'
 export const E2E_BASE_URL = process.env.E2E_BASE_URL ?? 'http://127.0.0.1:4173'
 
 const LOCAL_E2E_CLIENT_ID = 'local-e2e-client'
+const RUNTIME_CONFIG_REQUEST_ATTEMPTS = 4
+const RUNTIME_CONFIG_REQUEST_TIMEOUT_MS = 10_000
+const RUNTIME_CONFIG_RETRY_DELAY_MS = 3_000
 
 export const createUnsignedToken = (payload: Record<string, unknown>): string => {
   const encode = (value: Record<string, unknown>) =>
@@ -11,19 +14,36 @@ export const createUnsignedToken = (payload: Record<string, unknown>): string =>
 }
 
 const resolveCognitoClientId = async (page: Page): Promise<string> => {
-  const response = await page.request.get(new URL('/config.js', E2E_BASE_URL).toString())
-  if (!response.ok()) {
-    throw new Error(
-      `Unable to load runtime config for synthetic Cognito session (${response.status()}).`,
-    )
+  let lastError: unknown
+
+  for (let attempt = 1; attempt <= RUNTIME_CONFIG_REQUEST_ATTEMPTS; attempt += 1) {
+    try {
+      const response = await page.request.get(new URL('/config.js', E2E_BASE_URL).toString(), {
+        timeout: RUNTIME_CONFIG_REQUEST_TIMEOUT_MS,
+      })
+      if (!response.ok()) {
+        throw new Error(`Runtime config returned ${response.status()}.`)
+      }
+
+      const runtimeConfig = await response.text()
+      const runtimeClientId = runtimeConfig
+        .match(/VITE_USER_POOLS_WEB_CLIENT_ID:\s*"([^"]+)"/)?.[1]
+        ?.trim()
+
+      return (
+        runtimeClientId || process.env.VITE_USER_POOLS_WEB_CLIENT_ID?.trim() || LOCAL_E2E_CLIENT_ID
+      )
+    } catch (error) {
+      lastError = error
+      if (attempt < RUNTIME_CONFIG_REQUEST_ATTEMPTS) {
+        await page.waitForTimeout(RUNTIME_CONFIG_RETRY_DELAY_MS)
+      }
+    }
   }
 
-  const runtimeConfig = await response.text()
-  const runtimeClientId = runtimeConfig
-    .match(/VITE_USER_POOLS_WEB_CLIENT_ID:\s*"([^"]+)"/)?.[1]
-    ?.trim()
-
-  return runtimeClientId || process.env.VITE_USER_POOLS_WEB_CLIENT_ID?.trim() || LOCAL_E2E_CLIENT_ID
+  throw new Error(
+    `Unable to load runtime config for synthetic Cognito session after ${RUNTIME_CONFIG_REQUEST_ATTEMPTS} attempts. Last error: ${String(lastError)}`,
+  )
 }
 
 type SyntheticCognitoSessionOptions = {
