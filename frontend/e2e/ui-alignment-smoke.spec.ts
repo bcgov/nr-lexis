@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { installSyntheticCognitoSession } from './utils'
+import { gotoSyntheticRoute, installSyntheticCognitoSession } from './utils'
 
 const authenticatedAdminSession = {
   authenticated: true,
@@ -363,7 +363,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       })
     })
     await page.setViewportSize({ width: 1440, height: 900 })
-    await page.goto('/admin/policies', { waitUntil: 'domcontentloaded' })
+    await gotoSyntheticRoute(page, '/admin/policies', { waitUntil: 'domcontentloaded' })
 
     await expect(
       page.getByRole('heading', { level: 1, name: "You don't have access to view this page" }),
@@ -400,7 +400,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       })
     })
     await page.setViewportSize({ width: 1440, height: 900 })
-    await page.goto('/select-organization', { waitUntil: 'domcontentloaded' })
+    await gotoSyntheticRoute(page, '/select-organization', { waitUntil: 'domcontentloaded' })
 
     await expect(page.getByRole('heading', { level: 1, name: 'Select organization' })).toBeVisible()
     await expect(page.getByRole('img', { name: 'BC forest landscape' })).toBeVisible()
@@ -438,7 +438,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
 
   test('uses the shared full-width page composition for notifications', async ({ page }) => {
     await page.setViewportSize({ width: 2400, height: 1200 })
-    await page.goto('/notifications', { waitUntil: 'domcontentloaded' })
+    await gotoSyntheticRoute(page, '/notifications', { waitUntil: 'domcontentloaded' })
 
     await expect(page.getByRole('heading', { level: 1, name: 'Notifications' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'New notification' })).toBeVisible()
@@ -495,7 +495,9 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     page,
   }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
-    await page.goto('/provincial/application', { waitUntil: 'domcontentloaded' })
+    await gotoSyntheticRoute(page, '/provincial/application', {
+      waitUntil: 'domcontentloaded',
+    })
 
     await expect(page).toHaveTitle('Log Exemption Information System')
     await expect(page.locator('link[rel="icon"]')).toHaveAttribute('type', 'image/png')
@@ -778,7 +780,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
 
   test('uses the shared FSPTS Carbon interaction chrome', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
-    await page.goto('/provincial/application?exportScheduleId=1002', {
+    await gotoSyntheticRoute(page, '/provincial/application?exportScheduleId=1002', {
       waitUntil: 'domcontentloaded',
     })
 
@@ -917,7 +919,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       '/provincial/review',
       '/federal',
     ]) {
-      await page.goto(route, { waitUntil: 'domcontentloaded' })
+      await gotoSyntheticRoute(page, route, { waitUntil: 'domcontentloaded' })
       const pageGrid = page.locator('.default-grid.fullbleed-table-page')
       await expect(pageGrid).toBeVisible()
       await expect(page.locator('.legacy-search-section--filters')).toBeVisible()
@@ -960,7 +962,9 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
 
   test('uses accessible dark interactions and stable FSPTS table rows', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
-    await page.goto('/provincial/application', { waitUntil: 'domcontentloaded' })
+    await gotoSyntheticRoute(page, '/provincial/application', {
+      waitUntil: 'domcontentloaded',
+    })
     await submitApplicationSearch(page)
 
     const resultsRegion = page.getByRole('region', { name: 'Search results table' })
@@ -1084,7 +1088,9 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await rows.nth(0).hover()
     await expect(firstRowCell).toHaveCSS('background-color', 'rgb(38, 38, 38)')
 
-    await page.goto('/provincial/application/create', { waitUntil: 'domcontentloaded' })
+    await gotoSyntheticRoute(page, '/provincial/application/create', {
+      waitUntil: 'domcontentloaded',
+    })
     await page.getByRole('tab', { name: 'Remarks' }).click()
     const comments = page.getByRole('textbox', { name: 'Comments' })
     const commentsHeight = await comments.evaluate(
@@ -1102,7 +1108,9 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
 
   test('exposes only the spreadsheet RTM AMV workflow', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
-    await page.goto('/admin/rtm/emslogamv', { waitUntil: 'domcontentloaded' })
+    await gotoSyntheticRoute(page, '/admin/rtm/emslogamv', {
+      waitUntil: 'domcontentloaded',
+    })
 
     await expect(page).toHaveURL(/\/admin\/rtm\/emslogamv\/upload$/)
     await expect(
@@ -1117,7 +1125,9 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
 
   test('keeps the search shell within a mobile viewport', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 })
-    await page.goto('/provincial/application', { waitUntil: 'domcontentloaded' })
+    await gotoSyntheticRoute(page, '/provincial/application', {
+      waitUntil: 'domcontentloaded',
+    })
 
     const sideNav = page.getByRole('navigation', { name: 'Side navigation', includeHidden: true })
     const openNavigation = page.getByRole('button', { name: 'Open menu' })
@@ -1227,7 +1237,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await page.setViewportSize({ width: 320, height: 720 })
 
     for (const route of ['/provincial/application', '/federal']) {
-      await page.goto(route, { waitUntil: 'domcontentloaded' })
+      await gotoSyntheticRoute(page, route, { waitUntil: 'domcontentloaded' })
       const searchButton = page.getByRole('button', { name: 'Search', exact: true })
       await expect(searchButton).toBeEnabled()
       await searchButton.click()
@@ -1259,7 +1269,9 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
 
   test('uses FSPTS object-page chrome without mobile overflow', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
-    await page.goto('/provincial/offers/81001', { waitUntil: 'domcontentloaded' })
+    await gotoSyntheticRoute(page, '/provincial/offers/81001', {
+      waitUntil: 'domcontentloaded',
+    })
 
     await expect(page.getByRole('heading', { level: 1, name: 'Offer 81001' })).toBeVisible()
     await expect(page.getByText('Check and manage this provincial offer')).toBeVisible()
@@ -1323,7 +1335,9 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     })
 
     await page.setViewportSize({ width: 1440, height: 900 })
-    await page.goto('/provincial/offers/81001', { waitUntil: 'domcontentloaded' })
+    await gotoSyntheticRoute(page, '/provincial/offers/81001', {
+      waitUntil: 'domcontentloaded',
+    })
 
     const initialLoader = page.locator('.detail-page-loading')
     await expect(initialLoader).toBeVisible()
@@ -1357,7 +1371,9 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
 
   test('bounds detail field cards to one, two, and three columns', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
-    await page.goto('/federal/application/888', { waitUntil: 'domcontentloaded' })
+    await gotoSyntheticRoute(page, '/federal/application/888', {
+      waitUntil: 'domcontentloaded',
+    })
 
     const ownerFields = page
       .getByRole('heading', { level: 2, name: 'Owner' })
@@ -1463,7 +1479,9 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
 
   test('left-aligns table row actions with their actions heading', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
-    await page.goto('/federal/application/888', { waitUntil: 'domcontentloaded' })
+    await gotoSyntheticRoute(page, '/federal/application/888', {
+      waitUntil: 'domcontentloaded',
+    })
     await page.getByRole('tab', { name: 'Documents' }).click()
 
     const documentsTable = page.getByRole('region', { name: 'Federal application documents' })
@@ -1475,7 +1493,9 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
 
   test('gives long create forms FSPTS section rhythm without mobile overflow', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
-    await page.goto('/provincial/offers/create', { waitUntil: 'domcontentloaded' })
+    await gotoSyntheticRoute(page, '/provincial/offers/create', {
+      waitUntil: 'domcontentloaded',
+    })
 
     await expect(
       page.getByRole('heading', { level: 1, name: 'Create provincial offer' }),
@@ -1505,7 +1525,9 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
 
   test('styles the selected report configuration without changing its route', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
-    await page.goto('/reports/applicationReport', { waitUntil: 'domcontentloaded' })
+    await gotoSyntheticRoute(page, '/reports/applicationReport', {
+      waitUntil: 'domcontentloaded',
+    })
 
     await expect(page.getByRole('heading', { level: 1, name: 'Application Report' })).toBeVisible()
     const reportPanel = page.getByRole('region', { name: 'Application Report' })
@@ -1546,7 +1568,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
 
   test('contains the provincial workflow table on mobile', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 })
-    await page.goto('/provincial', { waitUntil: 'domcontentloaded' })
+    await gotoSyntheticRoute(page, '/provincial', { waitUntil: 'domcontentloaded' })
 
     await expect(
       page.getByRole('heading', { level: 1, name: 'Provincial workflows' }),
@@ -1591,7 +1613,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
 
   test('keeps admin policy editors stable while their tables scroll', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
-    await page.goto('/admin/schedules', { waitUntil: 'domcontentloaded' })
+    await gotoSyntheticRoute(page, '/admin/schedules', { waitUntil: 'domcontentloaded' })
 
     await expect(
       page.getByRole('heading', { level: 1, name: 'Export schedule administration' }),
@@ -1649,7 +1671,9 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     page,
   }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
-    await page.goto('/admin/policies/fee', { waitUntil: 'domcontentloaded' })
+    await gotoSyntheticRoute(page, '/admin/policies/fee', {
+      waitUntil: 'domcontentloaded',
+    })
 
     await expect(
       page.getByRole('heading', { level: 1, name: 'Fee policy administration' }),
@@ -1719,7 +1743,9 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(feeDialog).toBeHidden()
 
     await page.setViewportSize({ width: 390, height: 844 })
-    await page.goto('/admin/policies/fil', { waitUntil: 'domcontentloaded' })
+    await gotoSyntheticRoute(page, '/admin/policies/fil', {
+      waitUntil: 'domcontentloaded',
+    })
     const filAddButton = page.getByRole('button', { name: 'Add fee in lieu policy' })
     await expect(filAddButton).toBeEnabled()
     await expect(filAddButton).toHaveCSS('height', '40px')
@@ -1750,7 +1776,9 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     page,
   }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
-    await page.goto('/provincial/application/upload', { waitUntil: 'domcontentloaded' })
+    await gotoSyntheticRoute(page, '/provincial/application/upload', {
+      waitUntil: 'domcontentloaded',
+    })
 
     await expect(
       page.getByRole('heading', { level: 1, name: 'Upload application submission' }),
@@ -1849,7 +1877,9 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
 
   test('presents application-submission validation failures as FSPTS issues', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
-    await page.goto('/provincial/application/upload', { waitUntil: 'domcontentloaded' })
+    await gotoSyntheticRoute(page, '/provincial/application/upload', {
+      waitUntil: 'domcontentloaded',
+    })
 
     await page.getByLabel('Application submission file').setInputFiles({
       name: 'invalid-submission.xml',
@@ -1876,7 +1906,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
 
   test('keeps FSPTS upload surfaces coherent in dark mode', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
-    await page.goto('/admin/uploads', { waitUntil: 'domcontentloaded' })
+    await gotoSyntheticRoute(page, '/admin/uploads', { waitUntil: 'domcontentloaded' })
 
     await expect(page.getByRole('heading', { level: 1, name: 'Data Upload' })).toBeVisible()
     const uploadPage = page.locator('.admin-upload-fspts-page')

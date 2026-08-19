@@ -65,8 +65,9 @@ const LOGIN_SESSION_TIMEOUT_MS = 30_000
 const LOGIN_BUTTON_VISIBLE_TIMEOUT_MS = 10_000
 const LOGIN_BUTTON_CLICK_TIMEOUT_MS = 15_000
 const LOGIN_SHELL_RENDER_ATTEMPTS = 3
-const APP_ROOT_NAVIGATION_ATTEMPTS = 4
-const APP_ROOT_NAVIGATION_TIMEOUT_MS = 20_000
+const APP_ROOT_NAVIGATION_ATTEMPTS = 5
+const APP_ROOT_NAVIGATION_TIMEOUT_MS = 10_000
+const APP_ROOT_NAVIGATION_RETRY_DELAY_MS = 3_000
 const JWT_PATTERN = /^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/
 const LOGIN_ERROR_TEXT =
   /username or password.*incorrect|user id or password.*incorrect|user id and password.*don't match|invalid username|invalid password|authentication failed/i
@@ -468,7 +469,7 @@ const gotoAppRoot = async (page: Page): Promise<void> => {
     } catch (error) {
       lastError = error
       if (attempt < APP_ROOT_NAVIGATION_ATTEMPTS) {
-        await page.waitForTimeout(2_000)
+        await page.waitForTimeout(APP_ROOT_NAVIGATION_RETRY_DELAY_MS)
       }
     }
   }
@@ -584,6 +585,11 @@ const fillCredentialScreen = async (
 const loginWithConfig = async (page: Page, config: LoginConfig): Promise<void> => {
   const { label } = config
   const { username, password } = credentials(config)
+
+  if (page.url().startsWith(baseOrigin) && (await isSessionAuthenticated(page))) {
+    return
+  }
+
   await gotoAppRoot(page)
 
   if (await isSessionAuthenticated(page)) {
