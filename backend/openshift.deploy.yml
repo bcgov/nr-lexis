@@ -374,9 +374,10 @@ objects:
               emptyDir: {}
             - name: init-tmp-storage
               emptyDir: {}
+            # The init container generates the truststore for DATABASE_HOST on every pod.
+            # Per-pod storage prevents stale certificates and concurrent shared writes.
             - name: api-cert
-              persistentVolumeClaim:
-                claimName: ${NAME}-backend-api-cert-${ZONE}
+              emptyDir: {}
 
   - apiVersion: v1
     kind: Service
@@ -431,21 +432,6 @@ objects:
             - type: Percent
               value: 25
               periodSeconds: 60
-
-  - apiVersion: v1
-    kind: PersistentVolumeClaim
-    metadata:
-      name: ${NAME}-backend-api-cert-${ZONE}
-      labels:
-        app: ${NAME}-backend-${ZONE}
-        app.kubernetes.io/instance: ${ZONE}
-    spec:
-      accessModes:
-        - ReadWriteMany
-      resources:
-        requests:
-          storage: 50Mi
-      storageClassName: netapp-file-standard
 
   - apiVersion: v1
     kind: Secret
