@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   Calendar,
   ChevronDown,
@@ -76,15 +76,15 @@ const ROLE_DISPLAY_PRIORITY = [
   'PROVINCIAL_SUBMITTER',
 ] as const
 
-const MOBILE_NAVIGATION_MEDIA_QUERY = '(max-width: 671px)'
+// INTENTIONAL_LEGACY_DIVERGENCE(RESPONSIVE_SIDE_NAVIGATION):
+// Keep an accessible collapsed icon rail at narrow widths and treat its temporary expansion
+// separately from the persisted desktop collapsed preference.
+const NARROW_NAVIGATION_MEDIA_QUERY = '(max-width: 671px)'
 
-const isMobileNavigationViewport = (): boolean => {
-  return (
-    typeof window !== 'undefined' &&
-    typeof window.matchMedia === 'function' &&
-    window.matchMedia(MOBILE_NAVIGATION_MEDIA_QUERY).matches
-  )
-}
+const isNarrowNavigationViewport = (): boolean =>
+  typeof window !== 'undefined' &&
+  typeof window.matchMedia === 'function' &&
+  window.matchMedia(NARROW_NAVIGATION_MEDIA_QUERY).matches
 
 const NAVIGATION_SECTIONS: NavigationSection[] = [
   {
@@ -391,17 +391,18 @@ function Layout({ children }: LayoutProps) {
   const { capabilities, canPerform, defaultRoute, logout } = useAuth()
   const { theme, toggleTheme } = useTheme()
   const [isProfileOpen, setIsProfileOpen] = useState(false)
-  const [isSideNavCollapsed, setIsSideNavCollapsed] = useState(readSideNavCollapsedPreference)
-  const [isMobileViewport, setIsMobileViewport] = useState(isMobileNavigationViewport)
-  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false)
+  const [isSideNavCollapsedPreference, setIsSideNavCollapsedPreference] = useState(
+    readSideNavCollapsedPreference,
+  )
+  const [isNarrowViewport, setIsNarrowViewport] = useState(isNarrowNavigationViewport)
+  const [isNarrowNavExpanded, setIsNarrowNavExpanded] = useState(false)
   const [hasActiveNotifications, setHasActiveNotifications] = useState(false)
-  const previousPathRef = useRef(location.pathname)
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>(
     readCollapsedSectionsPreference,
   )
   const isDarkTheme = theme === 'g100'
-  const isDesktopSideNavCollapsed = isSideNavCollapsed && !isMobileViewport
-  const isNavigationOpen = isMobileViewport ? isMobileNavOpen : !isDesktopSideNavCollapsed
+  const isSideNavCollapsed = isNarrowViewport ? !isNarrowNavExpanded : isSideNavCollapsedPreference
+  const isNavigationOpen = !isSideNavCollapsed
   const notificationAudienceKey = `${capabilities.principal ?? ''}:${capabilities.roles?.join('|') ?? ''}`
   const profileInitials = useMemo(
     () => getProfileInitials(capabilities.principal),
@@ -455,19 +456,6 @@ function Layout({ children }: LayoutProps) {
     void logout()
   }
 
-  const focusMobileNavigationToggle = (): void => {
-    window.requestAnimationFrame(() => {
-      document.getElementById('navigation-toggle')?.focus()
-    })
-  }
-
-  const closeMobileNavigation = (returnFocus = false): void => {
-    setIsMobileNavOpen(false)
-    if (returnFocus) {
-      focusMobileNavigationToggle()
-    }
-  }
-
   const focusProfileToggle = useCallback((): void => {
     window.requestAnimationFrame(() => {
       document.getElementById('profile-panel-toggle')?.focus()
@@ -491,68 +479,28 @@ function Layout({ children }: LayoutProps) {
 
   const toggleNavigation = (): void => {
     setIsProfileOpen(false)
-    if (isMobileViewport) {
-      setIsMobileNavOpen((current) => !current)
+    if (isNarrowViewport) {
+      setIsNarrowNavExpanded((current) => !current)
       return
     }
 
-    setIsSideNavCollapsed((current) => !current)
+    setIsSideNavCollapsedPreference((current) => !current)
   }
 
   const toggleProfile = (): void => {
-    setIsMobileNavOpen(false)
     setIsProfileOpen((current) => !current)
   }
 
   useEffect(() => {
-    const mediaQuery = window.matchMedia(MOBILE_NAVIGATION_MEDIA_QUERY)
+    const mediaQuery = window.matchMedia(NARROW_NAVIGATION_MEDIA_QUERY)
     const handleViewportChange = (event: MediaQueryListEvent): void => {
-      setIsMobileViewport(event.matches)
-      if (!event.matches) {
-        setIsMobileNavOpen(false)
-      }
+      setIsNarrowViewport(event.matches)
+      setIsNarrowNavExpanded(false)
     }
 
     mediaQuery.addEventListener('change', handleViewportChange)
     return () => mediaQuery.removeEventListener('change', handleViewportChange)
   }, [])
-
-  useEffect(() => {
-    if (previousPathRef.current === location.pathname) {
-      return undefined
-    }
-
-    previousPathRef.current = location.pathname
-    const closeFrame = window.requestAnimationFrame(() => setIsMobileNavOpen(false))
-    return () => window.cancelAnimationFrame(closeFrame)
-  }, [location.pathname])
-
-  useEffect(() => {
-    if (!isMobileViewport || !isMobileNavOpen) {
-      return undefined
-    }
-
-    const focusFrame = window.requestAnimationFrame(() => {
-      document
-        .querySelector<HTMLAnchorElement>('#side-navigation-list .csp-side-nav__link')
-        ?.focus()
-    })
-
-    const handleKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') {
-        setIsMobileNavOpen(false)
-        window.requestAnimationFrame(() => {
-          document.getElementById('navigation-toggle')?.focus()
-        })
-      }
-    }
-
-    document.addEventListener('keydown', handleKeyDown)
-    return () => {
-      window.cancelAnimationFrame(focusFrame)
-      document.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [isMobileNavOpen, isMobileViewport])
 
   useEffect(() => {
     if (!isProfileOpen) {
@@ -615,8 +563,8 @@ function Layout({ children }: LayoutProps) {
   }, [capabilities.authenticated, capabilities.principal, notificationAudienceKey])
 
   useEffect(() => {
-    writeUiPreference(UI_PREFERENCE_KEYS.sideNavCollapsed, String(isSideNavCollapsed))
-  }, [isSideNavCollapsed])
+    writeUiPreference(UI_PREFERENCE_KEYS.sideNavCollapsed, String(isSideNavCollapsedPreference))
+  }, [isSideNavCollapsedPreference])
 
   useEffect(() => {
     writeUiPreference(UI_PREFERENCE_KEYS.collapsedSections, JSON.stringify(collapsedSections))
@@ -627,7 +575,7 @@ function Layout({ children }: LayoutProps) {
     const showNotificationIndicator = link.to === '/notifications' && hasActiveNotifications
     const accessibleLabel = showNotificationIndicator
       ? 'Notifications, active updates available'
-      : isDesktopSideNavCollapsed
+      : isSideNavCollapsed
         ? link.label
         : undefined
     const nestedClassName = nested ? ' cds--side-nav__link--nested' : ''
@@ -644,9 +592,8 @@ function Layout({ children }: LayoutProps) {
           }
           aria-current={location.pathname === link.to ? 'page' : undefined}
           aria-label={accessibleLabel}
-          title={isDesktopSideNavCollapsed ? link.label : undefined}
+          title={isSideNavCollapsed ? link.label : undefined}
           data-label={link.label}
-          onClick={() => closeMobileNavigation()}
         >
           <span className="cds--side-nav__icon csp-side-nav__icon" aria-hidden="true">
             <LinkIcon size={20} />
@@ -663,9 +610,7 @@ function Layout({ children }: LayoutProps) {
   return (
     <>
       <OptimisticConflictModal />
-      <div
-        className={`app-shell${isDesktopSideNavCollapsed ? ' is-side-nav-collapsed' : ''}${isMobileNavOpen ? ' is-mobile-nav-open' : ''}`}
-      >
+      <div className={`app-shell${isSideNavCollapsed ? ' is-side-nav-collapsed' : ''}`}>
         <SkipToContent />
         <header className="cds--header csp-app-header" aria-label="NR LEXIS">
           <HeaderMenuButton
@@ -789,10 +734,8 @@ function Layout({ children }: LayoutProps) {
 
         <nav
           id="side-navigation"
-          className={`cds--side-nav csp-side-nav${isDesktopSideNavCollapsed ? ' is-collapsed' : ''}${isMobileNavOpen ? ' is-mobile-open' : ''}`}
+          className={`cds--side-nav csp-side-nav${isSideNavCollapsed ? ' is-collapsed' : ''}`}
           aria-label="Side navigation"
-          aria-hidden={isMobileViewport && !isMobileNavOpen ? true : undefined}
-          inert={isMobileViewport && !isMobileNavOpen ? true : undefined}
         >
           <ul id="side-navigation-list" className="cds--side-nav__items csp-side-nav__items">
             {visibleNavigationSections.map((section) => {
@@ -813,13 +756,13 @@ function Layout({ children }: LayoutProps) {
               const isSectionCollapsed =
                 section.label !== activeSectionLabel &&
                 Boolean(collapsedSections[section.label]) &&
-                !isDesktopSideNavCollapsed
+                !isSideNavCollapsed
               return (
                 <li
                   key={section.label}
                   className={`csp-side-nav__section${isSectionCollapsed ? ' is-section-collapsed' : ''}`}
                 >
-                  {isDesktopSideNavCollapsed ? (
+                  {isSideNavCollapsed ? (
                     <span className="cds--side-nav__category csp-side-nav__category">
                       {section.label}
                     </span>
@@ -848,21 +791,7 @@ function Layout({ children }: LayoutProps) {
           </ul>
         </nav>
 
-        {isMobileViewport && isMobileNavOpen && (
-          <button
-            type="button"
-            className="csp-mobile-nav-overlay"
-            aria-label="Dismiss navigation menu"
-            onClick={() => closeMobileNavigation(true)}
-          />
-        )}
-
-        <main
-          id="main-content"
-          className="cds--content app-main"
-          aria-hidden={isMobileViewport && isMobileNavOpen ? true : undefined}
-          inert={isMobileViewport && isMobileNavOpen ? true : undefined}
-        >
+        <main id="main-content" className="cds--content app-main">
           {children}
         </main>
       </div>

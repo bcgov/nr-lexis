@@ -654,6 +654,12 @@ const ProvincialPermitPage = () => {
                         <Link
                           className="cds--link"
                           to={withCurrentSearch(`/provincial/permit/${row.permitNumber}`)}
+                          state={{
+                            returnTo: {
+                              label: 'Provincial permit search',
+                              to: withCurrentSearch('/provincial/permit'),
+                            },
+                          }}
                         >
                           {formatPermitNumber(row.permitNumber, row.status)}
                         </Link>

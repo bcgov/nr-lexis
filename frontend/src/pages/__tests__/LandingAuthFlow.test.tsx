@@ -72,6 +72,15 @@ describe('Landing auth flow smoke', () => {
     expect(
       screen.getByRole('heading', { level: 2, name: 'Log Exemption Information System' }),
     ).toBeInTheDocument()
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+    expect(
+      screen.getByText(
+        'LEXIS helps you create and manage applications and view offers and permits.',
+      ),
+    ).toBeInTheDocument()
+    const supportingImage = document.querySelector<HTMLImageElement>('.landing-img')
+    expect(supportingImage).toHaveAttribute('alt', '')
+    expect(supportingImage).toHaveAttribute('aria-hidden', 'true')
 
     const loginButton = screen.getByRole('button', { name: 'Log in with IDIR' })
     expect(loginButton).toHaveClass('cds--btn--md')

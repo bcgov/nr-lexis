@@ -23,7 +23,7 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import ContentLoadingOverlay from '@/components/ContentLoadingOverlay'
 import ConfirmationModal from '@/components/ConfirmationModal'
 import Modal from '@/components/Modal'
@@ -48,6 +48,11 @@ import { formatDocumentSource } from '@/service/document-service-utils'
 import { DetailFieldTile } from '../shared/DetailSections'
 import { displayValue, matchesFilter } from '@/pages/shared/detail-page-utils'
 import { appendSearchParamsToPath, searchParamsWithValue } from '@/pages/shared/search-query-utils'
+import {
+  locationPath,
+  readDetailReturnTo,
+  withDetailReturnTo,
+} from '@/pages/shared/detail-navigation'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { useReloadPreservedTab } from '@/pages/shared/useReloadPreservedTab'
 import { fetchProvincialExemptionDetail } from '@/service/lexis-detail-service'
@@ -263,9 +268,14 @@ const ExemptionClientTile = ({
 
 const ProvincialExemptionDetailsPage = () => {
   const navigate = useNavigate()
-  const { capabilities, canPerform } = useAuth()
+  const location = useLocation()
+  const { capabilities, canPerform, defaultRoute } = useAuth()
   const { exemptionNumber } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
+  const detailReturnTo = readDetailReturnTo(location.state) ?? {
+    label: canPerform('/exemptionSearch') ? 'Provincial exemption search' : 'Your landing page',
+    to: canPerform('/exemptionSearch') ? '/provincial/exemption' : defaultRoute,
+  }
   const [detail, setDetail] = useState<ProvincialExemptionDetail | null>(null)
   const detailRef = useRef<ProvincialExemptionDetail | null>(null)
   const [ownerClientData, setOwnerClientData] = useState<ApplicationClientData | null>(null)
@@ -358,8 +368,13 @@ const ProvincialExemptionDetailsPage = () => {
     if (creatingPermit || !permitCreationDestination) return
 
     const destination = withCurrentSearch(permitCreationDestination)
-    navigate(destination)
-  }, [creatingPermit, navigate, permitCreationDestination, withCurrentSearch])
+    navigate(destination, {
+      state: withDetailReturnTo(location.state, {
+        label: 'Provincial exemption detail',
+        to: locationPath(location),
+      }),
+    })
+  }, [creatingPermit, location, navigate, permitCreationDestination, withCurrentSearch])
 
   useEffect(() => {
     detailRef.current = detail
@@ -1407,7 +1422,11 @@ const ProvincialExemptionDetailsPage = () => {
   return (
     <Grid fullWidth className="default-grid detail-page-grid">
       <Column sm={4} md={8} lg={16}>
-        <DetailBreadcrumb label="Provincial exemption search" to="/provincial/exemption" />
+        <DetailBreadcrumb
+          label="Provincial exemption search"
+          to="/provincial/exemption"
+          returnTo={detailReturnTo}
+        />
       </Column>
       <Column sm={4} md={8} lg={16} className="detail-page-header">
         <PageHeader
@@ -1950,7 +1969,14 @@ const ProvincialExemptionDetailsPage = () => {
                                                 kind="ghost"
                                                 size="sm"
                                                 disabled={!canOpen}
-                                                onClick={() => navigate(withCurrentSearch(path))}
+                                                onClick={() =>
+                                                  navigate(withCurrentSearch(path), {
+                                                    state: withDetailReturnTo(location.state, {
+                                                      label: 'Provincial exemption detail',
+                                                      to: locationPath(location),
+                                                    }),
+                                                  })
+                                                }
                                               >
                                                 Open
                                               </Button>
@@ -2152,6 +2178,12 @@ const ProvincialExemptionDetailsPage = () => {
                                             withCurrentSearch(
                                               `/provincial/permit/${row.permitNumber}`,
                                             ),
+                                            {
+                                              state: withDetailReturnTo(location.state, {
+                                                label: 'Provincial exemption detail',
+                                                to: locationPath(location),
+                                              }),
+                                            },
                                           )
                                         }
                                       >

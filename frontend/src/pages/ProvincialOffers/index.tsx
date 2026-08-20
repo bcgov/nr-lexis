@@ -671,6 +671,12 @@ const ProvincialOffersPage = () => {
                         <Link
                           className="cds--link"
                           to={withCurrentSearch(`/provincial/offers/${row.offerNumber}`)}
+                          state={{
+                            returnTo: {
+                              label: 'Provincial offers search',
+                              to: withCurrentSearch('/provincial/offers'),
+                            },
+                          }}
                         >
                           {row.offerNumber}
                         </Link>

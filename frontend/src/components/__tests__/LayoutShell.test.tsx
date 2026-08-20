@@ -57,21 +57,6 @@ const activeNotification: LexisNotification = {
   audienceRoles: [],
 }
 
-const mockMobileViewport = (): void => {
-  vi.spyOn(window, 'matchMedia').mockImplementation(
-    (query: string): MediaQueryList => ({
-      matches: query === '(max-width: 671px)',
-      media: query,
-      onchange: null,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      addListener: vi.fn(),
-      removeListener: vi.fn(),
-      dispatchEvent: vi.fn(() => false),
-    }),
-  )
-}
-
 const LocationProbe = () => {
   const location = useLocation()
 
@@ -786,20 +771,20 @@ describe('Layout shell', () => {
     expect(document.getElementById('profile-panel')).toHaveAttribute('inert')
   })
 
-  it('keeps the persisted desktop preference separate from the closed mobile drawer', async () => {
-    mockMobileViewport()
+  it('keeps the persisted icon rail available at narrow viewport widths', async () => {
     window.localStorage.setItem(SIDE_NAV_PREFERENCE_KEY, 'true')
     renderLayout('/admin/rtm/emslogamv')
 
     const sideNav = document.getElementById('side-navigation')
-    const mainContent = document.getElementById('main-content')
     const openMenuButton = screen.getByRole('button', { name: 'Open menu' })
 
-    expect(document.querySelector('.app-shell')).not.toHaveClass('is-side-nav-collapsed')
+    expect(document.querySelector('.app-shell')).toHaveClass('is-side-nav-collapsed')
+    expect(sideNav).toHaveClass('is-collapsed')
     expect(openMenuButton).toHaveAttribute('aria-expanded', 'false')
     expect(openMenuButton).toHaveAttribute('aria-controls', 'side-navigation')
-    expect(sideNav).toHaveAttribute('aria-hidden', 'true')
-    expect(sideNav).toHaveAttribute('inert')
+    expect(sideNav).not.toHaveAttribute('aria-hidden')
+    expect(sideNav).not.toHaveAttribute('inert')
+    expect(screen.getByRole('link', { name: 'Applications' })).toBeInTheDocument()
     expect(window.localStorage.getItem(SIDE_NAV_PREFERENCE_KEY)).toBe('true')
 
     await userEvent.click(openMenuButton)
@@ -808,13 +793,8 @@ describe('Layout shell', () => {
       'aria-expanded',
       'true',
     )
-    expect(sideNav).toHaveClass('is-mobile-open')
-    expect(sideNav).not.toHaveAttribute('aria-hidden')
-    expect(sideNav).not.toHaveAttribute('inert')
-    expect(mainContent).toHaveAttribute('aria-hidden', 'true')
-    expect(mainContent).toHaveAttribute('inert')
-    expect(screen.getByRole('button', { name: 'Dismiss navigation menu' })).toBeInTheDocument()
-    expect(window.localStorage.getItem(SIDE_NAV_PREFERENCE_KEY)).toBe('true')
+    expect(sideNav).not.toHaveClass('is-collapsed')
+    expect(window.localStorage.getItem(SIDE_NAV_PREFERENCE_KEY)).toBe('false')
 
     await userEvent.click(screen.getByRole('button', { name: 'Close menu' }))
 
@@ -822,38 +802,45 @@ describe('Layout shell', () => {
       'aria-expanded',
       'false',
     )
-    expect(sideNav).not.toHaveClass('is-mobile-open')
-    expect(mainContent).not.toHaveAttribute('aria-hidden')
-    expect(mainContent).not.toHaveAttribute('inert')
-    expect(
-      screen.queryByRole('button', { name: 'Dismiss navigation menu' }),
-    ).not.toBeInTheDocument()
+    expect(sideNav).toHaveClass('is-collapsed')
+    expect(window.localStorage.getItem(SIDE_NAV_PREFERENCE_KEY)).toBe('true')
   })
 
-  it('supports Escape and navigation-link dismissal for the mobile drawer', async () => {
-    mockMobileViewport()
-    renderLayout('/admin/rtm/emslogamv')
-
-    await userEvent.click(screen.getByRole('button', { name: 'Open menu' }))
-    await waitFor(() => {
-      expect(screen.getByRole('link', { name: /^Notifications$/i })).toHaveFocus()
-    })
-
-    await userEvent.keyboard('{Escape}')
-
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Open menu' })).toHaveFocus()
-    })
-    expect(document.getElementById('side-navigation')).not.toHaveClass('is-mobile-open')
-
-    await userEvent.click(screen.getByRole('button', { name: 'Open menu' }))
-    await userEvent.click(screen.getByRole('link', { name: /^Applications$/i }))
-
-    expect(screen.getByTestId('current-path')).toHaveTextContent('/provincial/application')
-    expect(screen.getByRole('button', { name: 'Open menu' })).toHaveAttribute(
-      'aria-expanded',
-      'false',
+  it('uses a responsive icon rail without overwriting the persisted desktop preference', () => {
+    let viewportChangeListener: ((event: MediaQueryListEvent) => void) | undefined
+    vi.spyOn(window, 'matchMedia').mockImplementation(
+      (query: string) =>
+        ({
+          matches: false,
+          media: query,
+          onchange: null,
+          addEventListener: vi.fn(
+            (_eventName: string, listener: (event: MediaQueryListEvent) => void) => {
+              viewportChangeListener = listener
+            },
+          ),
+          removeEventListener: vi.fn(),
+          addListener: vi.fn(),
+          removeListener: vi.fn(),
+          dispatchEvent: vi.fn(() => false),
+        }) as MediaQueryList,
     )
-    expect(document.getElementById('side-navigation')).not.toHaveClass('is-mobile-open')
+    window.localStorage.setItem(SIDE_NAV_PREFERENCE_KEY, 'false')
+    renderLayout('/provincial/application')
+
+    expect(document.querySelector('.app-shell')).not.toHaveClass('is-side-nav-collapsed')
+
+    act(() => viewportChangeListener?.({ matches: true } as MediaQueryListEvent))
+
+    expect(document.querySelector('.app-shell')).toHaveClass('is-side-nav-collapsed')
+    expect(document.getElementById('side-navigation')).toHaveClass('is-collapsed')
+    expect(document.getElementById('side-navigation')).not.toHaveAttribute('aria-hidden')
+    expect(window.localStorage.getItem(SIDE_NAV_PREFERENCE_KEY)).toBe('false')
+
+    act(() => viewportChangeListener?.({ matches: false } as MediaQueryListEvent))
+
+    expect(document.querySelector('.app-shell')).not.toHaveClass('is-side-nav-collapsed')
+    expect(document.getElementById('side-navigation')).not.toHaveClass('is-collapsed')
+    expect(window.localStorage.getItem(SIDE_NAV_PREFERENCE_KEY)).toBe('false')
   })
 })

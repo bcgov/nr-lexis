@@ -28,10 +28,14 @@ test.describe('frontend smoke coverage', () => {
     await expect(
       page.getByRole('heading', { level: 2, name: 'Log Exemption Information System' }),
     ).toBeVisible()
-    await expect(page.getByAltText('Government of British Columbia')).toBeVisible()
     await expect(
-      page.getByAltText('Log sorting operation at a British Columbia harbour'),
+      page.getByText('LEXIS helps you create and manage applications and view offers and permits.'),
     ).toBeVisible()
+    await expect(page.getByAltText('Government of British Columbia')).toBeVisible()
+    const supportingImage = page.locator('.landing-img')
+    await expect(supportingImage).toBeVisible()
+    await expect(supportingImage).toHaveAttribute('alt', '')
+    await expect(supportingImage).toHaveAttribute('aria-hidden', 'true')
     const idirLogin = page.getByRole('button', { name: /log in with idir/i })
     const businessBceidLogin = page.getByRole('button', { name: /log in with business bceid/i })
     await expect(idirLogin).toBeVisible()
@@ -48,11 +52,15 @@ test.describe('frontend smoke coverage', () => {
         containerWidth: container.getBoundingClientRect().width,
         documentOverflows:
           document.documentElement.scrollWidth > document.documentElement.clientWidth,
+        imageFollowsContent:
+          document.querySelector('.landing-img-col')!.getBoundingClientRect().top >=
+          document.querySelector('.landing-content-col')!.getBoundingClientRect().bottom,
       }
     })
 
     expect(layoutBounds.gridWidth).toBeLessThanOrEqual(layoutBounds.containerWidth)
     expect(layoutBounds.documentOverflows).toBe(false)
+    expect(layoutBounds.imageFollowsContent).toBe(true)
   })
 
   test('matches the FSPTS desktop landing composition', async ({ page }) => {
@@ -66,18 +74,21 @@ test.describe('frontend smoke coverage', () => {
       const wrapper = document.querySelector('.landing-content-wrapper')
       const title = document.querySelector('.landing-title')
       const subtitle = document.querySelector('.landing-subtitle')
+      const description = document.querySelector('.landing-description')
       const primaryAction = document.querySelector('[data-testid="landing-button__idir"]')
       if (!(content instanceof HTMLElement)) throw new Error('Landing content not found')
       if (!(image instanceof HTMLElement)) throw new Error('Landing image not found')
       if (!(wrapper instanceof HTMLElement)) throw new Error('Landing wrapper not found')
       if (!(title instanceof HTMLElement)) throw new Error('Landing title not found')
       if (!(subtitle instanceof HTMLElement)) throw new Error('Landing subtitle not found')
+      if (!(description instanceof HTMLElement)) throw new Error('Landing description not found')
       if (!(primaryAction instanceof HTMLElement)) throw new Error('Landing action not found')
 
       const contentBounds = content.getBoundingClientRect()
       const imageBounds = image.getBoundingClientRect()
       const titleBounds = title.getBoundingClientRect()
       const subtitleBounds = subtitle.getBoundingClientRect()
+      const descriptionBounds = description.getBoundingClientRect()
       const actionBounds = primaryAction.getBoundingClientRect()
       const contentStyle = getComputedStyle(content)
       const wrapperStyle = getComputedStyle(wrapper)
@@ -92,7 +103,8 @@ test.describe('frontend smoke coverage', () => {
         contentPaddingLeft: contentStyle.paddingLeft,
         wrapperGap: wrapperStyle.gap,
         titleSubtitleGap: subtitleBounds.top - titleBounds.bottom,
-        subtitleActionGap: actionBounds.top - subtitleBounds.bottom,
+        subtitleDescriptionGap: descriptionBounds.top - subtitleBounds.bottom,
+        descriptionActionGap: actionBounds.top - descriptionBounds.bottom,
         titleColor: titleStyle.color,
         subtitleColor: subtitleStyle.color,
       }
@@ -104,8 +116,9 @@ test.describe('frontend smoke coverage', () => {
     expect(layout.imageWidth).toBe(720)
     expect(layout.contentPaddingLeft).toBe('32px')
     expect(layout.wrapperGap).toBe('96px')
-    expect(layout.titleSubtitleGap).toBe(96)
-    expect(layout.subtitleActionGap).toBe(64)
+    expect(layout.titleSubtitleGap).toBe(6)
+    expect(layout.subtitleDescriptionGap).toBe(6)
+    expect(layout.descriptionActionGap).toBe(64)
     expect(layout.subtitleColor).toBe(layout.titleColor)
   })
 
@@ -120,26 +133,26 @@ test.describe('frontend smoke coverage', () => {
     await expect(notice).toBeVisible()
 
     const layout = await page.evaluate(() => {
-      const subtitle = document.querySelector('.landing-subtitle')
+      const description = document.querySelector('.landing-description')
       const notification = document.querySelector('.landing-session-expired-notification')
       const primaryAction = document.querySelector('[data-testid="landing-button__idir"]')
-      if (!(subtitle instanceof HTMLElement)) throw new Error('Landing subtitle not found')
+      if (!(description instanceof HTMLElement)) throw new Error('Landing description not found')
       if (!(notification instanceof HTMLElement)) throw new Error('Landing notice not found')
       if (!(primaryAction instanceof HTMLElement)) throw new Error('Landing action not found')
 
-      const subtitleBounds = subtitle.getBoundingClientRect()
+      const descriptionBounds = description.getBoundingClientRect()
       const notificationBounds = notification.getBoundingClientRect()
       const actionBounds = primaryAction.getBoundingClientRect()
 
       return {
         notificationMarginTop: getComputedStyle(notification).marginTop,
-        subtitleNotificationGap: notificationBounds.top - subtitleBounds.bottom,
+        descriptionNotificationGap: notificationBounds.top - descriptionBounds.bottom,
         notificationActionGap: actionBounds.top - notificationBounds.bottom,
       }
     })
 
     expect(layout.notificationMarginTop).toBe('0px')
-    expect(layout.subtitleNotificationGap).toBe(96)
+    expect(layout.descriptionNotificationGap).toBe(96)
     expect(layout.notificationActionGap).toBe(64)
 
     await page.getByRole('button', { name: /close notification/i }).click()

@@ -692,6 +692,12 @@ const FederalPage = () => {
                         <Link
                           className="cds--link"
                           to={withCurrentSearch(`/federal/application/${row.applicationNumber}`)}
+                          state={{
+                            returnTo: {
+                              label: 'Federal application search',
+                              to: withCurrentSearch('/federal'),
+                            },
+                          }}
                         >
                           {row.federalApplicationNumber}
                         </Link>
@@ -713,6 +719,12 @@ const FederalPage = () => {
                           <Link
                             className="cds--link"
                             to={withCurrentSearch(`/provincial/exemption/${row.exemptionNumber}`)}
+                            state={{
+                              returnTo: {
+                                label: 'Federal application search',
+                                to: withCurrentSearch('/federal'),
+                              },
+                            }}
                           >
                             {row.exemptionNumber}
                           </Link>

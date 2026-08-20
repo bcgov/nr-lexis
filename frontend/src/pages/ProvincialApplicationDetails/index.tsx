@@ -52,6 +52,11 @@ import {
 } from '@/pages/shared/detail-page-utils'
 import { appendSearchParamsToPath, searchParamsWithValue } from '@/pages/shared/search-query-utils'
 import {
+  locationPath,
+  readDetailReturnTo,
+  withDetailReturnTo,
+} from '@/pages/shared/detail-navigation'
+import {
   fetchProvincialApplicationDetail,
   fetchProvincialExemptionDetail,
   releaseApplicationEditLock,
@@ -561,10 +566,14 @@ const latestPersistedReviewRemark = (
 const ProvincialApplicationDetailsPage = () => {
   const navigate = useNavigate()
   const location = useLocation()
-  const { canPerform, capabilities } = useAuth()
+  const { canPerform, capabilities, defaultRoute } = useAuth()
   const { applicationNumber } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
   const navigationState = location.state as ApplicationCreationNavigationState | null
+  const fallbackReturnTo = canPerform('/applicationSearch')
+    ? { label: 'Provincial application search', to: '/provincial/application' }
+    : { label: 'Your landing page', to: defaultRoute }
+  const detailReturnTo = readDetailReturnTo(navigationState) ?? fallbackReturnTo
   const createdApplicationNumber =
     navigationState?.applicationCreationNotice?.applicationNumber.trim()
   const [detail, setDetail] = useState<ProvincialApplicationDetail | null>(null)
@@ -3081,7 +3090,12 @@ const ProvincialApplicationDetailsPage = () => {
                       size="sm"
                       disabled={!canPerform('/permitDetails')}
                       onClick={() =>
-                        navigate(withCurrentSearch(`/provincial/permit/${item.permitNumber}`))
+                        navigate(withCurrentSearch(`/provincial/permit/${item.permitNumber}`), {
+                          state: withDetailReturnTo(navigationState, {
+                            label: 'Provincial application detail',
+                            to: locationPath(location),
+                          }),
+                        })
                       }
                     >
                       Open
@@ -3147,7 +3161,12 @@ const ProvincialApplicationDetailsPage = () => {
                         size="sm"
                         disabled={!canPerform('/offersSearch') || !canPerform('/offerDetails')}
                         onClick={() =>
-                          navigate(withCurrentSearch(`/provincial/offers/${item.offerNumber}`))
+                          navigate(withCurrentSearch(`/provincial/offers/${item.offerNumber}`), {
+                            state: withDetailReturnTo(navigationState, {
+                              label: 'Provincial application detail',
+                              to: locationPath(location),
+                            }),
+                          })
                         }
                       >
                         Open
@@ -3360,7 +3379,11 @@ const ProvincialApplicationDetailsPage = () => {
         loadingDescription="Refreshing provincial application detail…"
       />
       <Column sm={4} md={8} lg={16}>
-        <DetailBreadcrumb label="Provincial application search" to="/provincial/application" />
+        <DetailBreadcrumb
+          label={fallbackReturnTo.label}
+          to={fallbackReturnTo.to}
+          returnTo={detailReturnTo}
+        />
       </Column>
       <Column sm={4} md={8} lg={16} className="detail-page-header">
         <PageHeader
@@ -3886,6 +3909,10 @@ const ProvincialApplicationDetailsPage = () => {
                                   to={withCurrentSearch(
                                     `/provincial/exemption/${linkedExemptionNumber}`,
                                   )}
+                                  state={withDetailReturnTo(navigationState, {
+                                    label: 'Provincial application detail',
+                                    to: locationPath(location),
+                                  })}
                                 >
                                   {linkedExemptionNumber}
                                 </Link>

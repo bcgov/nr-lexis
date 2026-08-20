@@ -25,7 +25,7 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
-import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
 import { hasProvincialSubmitterRole, hasRole } from '@/context/auth/role-utils'
 import ConfirmationModal from '@/components/ConfirmationModal'
@@ -47,6 +47,11 @@ import { formatDocumentSource } from '@/service/document-service-utils'
 import { DetailFieldTile } from '../shared/DetailSections'
 import { displayValue, matchesFilter } from '@/pages/shared/detail-page-utils'
 import { searchParamsWithValue } from '@/pages/shared/search-query-utils'
+import {
+  locationPath,
+  readDetailReturnTo,
+  withDetailReturnTo,
+} from '@/pages/shared/detail-navigation'
 import {
   firstValidationError,
   getVisibleFieldError,
@@ -540,9 +545,14 @@ const permitMutationMessage = (result: PermitDetailMutationResult, fallback: str
   [result.message || fallback, ...result.warnings].filter(Boolean).join(' ')
 
 const ProvincialPermitDetailsPage = () => {
-  const { capabilities, canPerform } = useAuth()
+  const { capabilities, canPerform, defaultRoute } = useAuth()
+  const location = useLocation()
   const { permitNumber } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
+  const detailReturnTo = readDetailReturnTo(location.state) ?? {
+    label: canPerform('/permitSearch') ? 'Provincial permit search' : 'Your landing page',
+    to: canPerform('/permitSearch') ? '/provincial/permit' : defaultRoute,
+  }
   const [selectedPermitTabId, selectPermitTab] = useReloadPreservedTab({
     tabs: PERMIT_DETAIL_TAB_IDS,
     defaultTab: 'permit',
@@ -2902,7 +2912,11 @@ const ProvincialPermitDetailsPage = () => {
         loadingDescription="Refreshing provincial permit detail…"
       />
       <Column sm={4} md={8} lg={16}>
-        <DetailBreadcrumb label="Provincial permit search" to="/provincial/permit" />
+        <DetailBreadcrumb
+          label="Provincial permit search"
+          to="/provincial/permit"
+          returnTo={detailReturnTo}
+        />
       </Column>
       <Column sm={4} md={8} lg={16} className="detail-page-header">
         <PageHeader
@@ -3208,6 +3222,10 @@ const ProvincialPermitDetailsPage = () => {
                               value: detail.exemptionNumber ? (
                                 <Link
                                   to={`/provincial/exemption/${encodeURIComponent(detail.exemptionNumber)}`}
+                                  state={withDetailReturnTo(location.state, {
+                                    label: 'Provincial permit detail',
+                                    to: locationPath(location),
+                                  })}
                                 >
                                   {detail.exemptionNumber}
                                 </Link>
@@ -3418,6 +3436,10 @@ const ProvincialPermitDetailsPage = () => {
                                       <TableCell>
                                         <Link
                                           to={`/provincial/application/${encodeURIComponent(applicationNumber)}`}
+                                          state={withDetailReturnTo(location.state, {
+                                            label: 'Provincial permit detail',
+                                            to: locationPath(location),
+                                          })}
                                         >
                                           {applicationNumber}
                                         </Link>
