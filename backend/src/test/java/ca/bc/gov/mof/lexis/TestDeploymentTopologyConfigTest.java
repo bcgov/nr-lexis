@@ -31,12 +31,13 @@ class TestDeploymentTopologyConfigTest {
   }
 
   @Test
-  void productionShouldRetainDisabledAutoscalingAndExpiryConfiguration() throws IOException {
+  void productionShouldRetainAutoscalingAndExpiryConfiguration() throws IOException {
     String mergeWorkflow = Files.readString(resolve(".github/workflows/merge.yml"));
     String prodDeploy = workflowJob(mergeWorkflow, "deploy-prod", "monitor-prod");
+    String promote = mergeWorkflow.substring(mergeWorkflow.indexOf("  promote:"));
 
     assertThat(prodDeploy)
-        .contains("if: false")
+        .doesNotContain("if: false")
         .contains("backend_min_replicas: \"3\"")
         .contains("backend_max_replicas: \"10\"")
         .contains("frontend_replicas: \"3\"")
@@ -56,6 +57,9 @@ class TestDeploymentTopologyConfigTest {
             "lexis_mail_region_rni_recipients",
             "lexis_mail_region_rsi_recipients",
             "lexis_mail_permit_request_recipients");
+    assertThat(promote)
+        .contains("needs: [deploy-prod, init]")
+        .doesNotContain("if: false");
   }
 
   @Test
@@ -140,7 +144,9 @@ class TestDeploymentTopologyConfigTest {
         .doesNotContain("Enforce single-backend lock topology", "inputs.backend_replicas")
         .contains("-p MIN_REPLICAS=\"${{ inputs.backend_min_replicas }}\"")
         .contains("-p MAX_REPLICAS=\"${{ inputs.backend_max_replicas }}\"")
-        .contains("LEXIS_EXPIRY_ENABLED: ${{ inputs.expiry_enabled && 'true' || 'false' }}")
+        .contains(
+            "LEXIS_EXPIRY_ENABLED: ${{ inputs.expiry_enabled"
+                + " && secrets.lexis_prod_rtm_only != 'true' && 'true' || 'false' }}")
         .contains("LEXIS_EXPIRY_CRON: ${{ vars.LEXIS_EXPIRY_CRON || '30 0 0 * * *' }}")
         .contains("LEXIS_EXPIRY_ZONE: ${{ vars.LEXIS_EXPIRY_ZONE || 'America/Vancouver' }}")
         .contains(
@@ -387,7 +393,9 @@ class TestDeploymentTopologyConfigTest {
         .contains("DATABASE_PASSWORD: ${{ secrets.database_password }}")
         .contains("KEYSTORE_SECRET: ${{ secrets.keystore_secret }}")
         .contains("LEXIS_PROD_RTM_ONLY: ${{ secrets.lexis_prod_rtm_only || 'false' }}")
-        .contains("LEXIS_EXPIRY_ENABLED: ${{ inputs.expiry_enabled && 'true' || 'false' }}")
+        .contains(
+            "LEXIS_EXPIRY_ENABLED: ${{ inputs.expiry_enabled"
+                + " && secrets.lexis_prod_rtm_only != 'true' && 'true' || 'false' }}")
         .contains(
             "LEXIS_PERMIT_INVOICE_MODE:"
                 + " ${{ vars.LEXIS_PERMIT_INVOICE_MODE || 'legacy-best-effort' }}")
@@ -445,9 +453,50 @@ class TestDeploymentTopologyConfigTest {
     assertThat(workflow)
         .containsOnlyOnce("file: backend/openshift.deploy.yml")
         .containsOnlyOnce("file: frontend/openshift.deploy.yml")
+        .containsOnlyOnce("file: frontend/openshift.route.yml")
+        .containsOnlyOnce("file: frontend/openshift.vanity-route.yml")
         .doesNotContain("openshift/deployment.yaml");
     assertThat(resolve("backend/openshift/deployment.yaml")).doesNotExist();
     assertThat(resolve("frontend/openshift/deployment.yaml")).doesNotExist();
+  }
+
+  @Test
+  void frontendRoutesShouldBeExclusiveByEnvironment() throws IOException {
+    String workflow = Files.readString(resolve(".github/workflows/reusable-deploy.yml"));
+    String frontendDeploy = Files.readString(resolve("frontend/openshift.deploy.yml"));
+    String defaultRoute = Files.readString(resolve("frontend/openshift.route.yml"));
+    String vanityRoute = Files.readString(resolve("frontend/openshift.vanity-route.yml"));
+
+    assertThat(frontendDeploy)
+        .doesNotContain("kind: Route", "- name: SLOT", "- name: DOMAIN");
+    assertThat(defaultRoute)
+        .contains(
+            "kind: Route",
+            "host: ${NAME}-${SLOT}.${DOMAIN}",
+            "name: ${NAME}-frontend-${ZONE}",
+            "targetPort: http",
+            "termination: edge",
+            "insecureEdgeTerminationPolicy: Redirect");
+    assertThat(vanityRoute)
+        .contains(
+            "kind: Route",
+            "host: ${VANITY_HOST}",
+            "name: ${NAME}-frontend-${ZONE}",
+            "certificate: ${VANITY_TLS_CERTIFICATE}",
+            "key: ${VANITY_TLS_KEY}",
+            "caCertificate: ${VANITY_TLS_CA_CERTIFICATE}");
+    assertThat(workflow)
+        .contains(
+            "- name: Default Route (non-PROD)\n"
+                + "        if: ${{ inputs.target != 'prod' }}",
+            "file: frontend/openshift.route.yml",
+            "- name: Vanity Route (PROD)\n"
+                + "        if: ${{ inputs.target == 'prod' }}",
+            "file: frontend/openshift.vanity-route.yml",
+            "- name: Validate PROD vanity Route configuration",
+            "for setting in VANITY_HOST VANITY_TLS_CERTIFICATE VANITY_TLS_KEY"
+                + " VANITY_TLS_CA_CERTIFICATE")
+        .doesNotContain("inputs.target == 'prod' && env.VANITY_HOST != ''");
   }
 
   @Test

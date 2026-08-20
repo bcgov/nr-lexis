@@ -281,7 +281,7 @@ describe('Protected route guard access', () => {
     expect(screen.getByLabelText('Application submission file')).toBeInTheDocument()
   })
 
-  it('blocks non-RTM protected routes when PROD RTM-only mode is enabled', async () => {
+  it('blocks admin non-RTM protected routes when PROD RTM-only mode is enabled', async () => {
     window.config = { VITE_LEXIS_PROD_RTM_ONLY: 'true' }
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
@@ -293,6 +293,28 @@ describe('Protected route guard access', () => {
 
     expect(
       await screen.findByRole('heading', { name: "You don't have access to view this page" }),
+    ).toBeInTheDocument()
+  })
+
+  it('allows normal read-only protected routes when PROD RTM-only mode is enabled', async () => {
+    window.config = { VITE_LEXIS_PROD_RTM_ONLY: 'true' }
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({
+          principal: 'idir\\readonly',
+          roles: ['READ_ONLY'],
+          grantedActions: ['/federalApplicationSearch', 'viewFederalApplication'],
+        }),
+        defaultRoute: '/provincial/application',
+        canPerform: (action: string) =>
+          ['/federalApplicationSearch', 'viewFederalApplication'].includes(action),
+      }),
+    )
+
+    renderWithPath('/federal')
+
+    expect(
+      await screen.findByRole('heading', { name: 'Federal application search' }),
     ).toBeInTheDocument()
   })
 

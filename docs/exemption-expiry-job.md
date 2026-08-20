@@ -43,6 +43,10 @@ during the temporary RTM-only rollout.
 | `LEXIS_EXPIRY_LOCK_AT_MOST_FOR` | `PT6H` | Maximum duration of one Oracle scheduler lock. |
 | `LEXIS_EXPIRY_LOCK_AT_LEAST_FOR` | `PT5M` | Minimum duration of one Oracle scheduler lock. |
 
+The deployment workflow forces `LEXIS_EXPIRY_ENABLED=false` whenever the `lexis_prod_rtm_only`
+environment secret is `true`. Re-enabling expiry requires clearing the flag and redeploying; missed
+exemptions remain eligible for the next nightly run.
+
 ## Operations
 
 Prometheus exposes completed, failed, and skipped run counters plus gauges for

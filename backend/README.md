@@ -47,7 +47,7 @@ OpenShift receives sensitive values from Secrets and ordinary settings from temp
 | `AWS_COGNITO_ISSUER_URI` | Cognito issuer URI | - |
 | `KEYCLOAK_ISSUER_URI` | Keycloak issuer URI for machine-to-machine NEXCOL service-client tokens; optional locally and required for TEST/PROD deployment | - |
 | `KEYCLOAK_JWK_SET_URI` | Optional override for Keycloak JWKS URI; defaults to `<KEYCLOAK_ISSUER_URI>/protocol/openid-connect/certs` when the issuer is set | - |
-| `LEXIS_PROD_RTM_ONLY` | Backend enforcement for PROD RTM-only rollout; denies non-session/non-RTM APIs, suppresses modern exemption expiry while legacy remains active, and must be paired with `VITE_LEXIS_PROD_RTM_ONLY` | false |
+| `LEXIS_PROD_RTM_ONLY` | Restricts admins to RTM AMV, preserves normal `LEXIS_READ_ONLY` access, denies other application roles, suppresses modern exemption expiry while legacy remains active, and must be paired with `VITE_LEXIS_PROD_RTM_ONLY` | false |
 | `LEXIS_EXPIRY_ENABLED` | Enables startup and daily exemption expiry; set false only as an operational kill switch. `LEXIS_PROD_RTM_ONLY=true` suppresses both triggers while legacy remains active. | true |
 | `LEXIS_EXPIRY_CRON` | Spring six-field cron expression for the expiry scheduler | `30 0 0 * * *` |
 | `LEXIS_EXPIRY_ZONE` | Business time zone for the expiry scheduler | America/Vancouver |
@@ -83,7 +83,7 @@ The reusable deployment workflow maps these GitHub settings:
 | `DATABASE_PASSWORD` | Secret `database_password` |
 | `KEYSTORE_SECRET` | Secret `keystore_secret` |
 | `LEXIS_PROD_RTM_ONLY` | Secret `lexis_prod_rtm_only` |
-| `LEXIS_EXPIRY_ENABLED` | Workflow input `expiry_enabled` |
+| `LEXIS_EXPIRY_ENABLED` | Workflow input `expiry_enabled`, forced to false when `lexis_prod_rtm_only` is true |
 | `LEXIS_EXPIRY_CRON` | Variable `LEXIS_EXPIRY_CRON` |
 | `LEXIS_EXPIRY_ZONE` | Variable `LEXIS_EXPIRY_ZONE` |
 | `LEXIS_EXPIRY_LOCK_AT_MOST_FOR` | Variable `LEXIS_EXPIRY_LOCK_AT_MOST_FOR` |

@@ -14,9 +14,6 @@ parameters:
   - name: ZONE
     description: PR number, 'test', or 'prod'
     required: true
-  - name: SLOT
-    description: Route hostname slot — PR % 50 for previews, or test/prod
-    required: true
   - name: REPLICAS
     description: Pod count
     value: "2"
@@ -37,9 +34,6 @@ parameters:
   - name: REGISTRY
     description: Image registry path (no tag)
     value: ghcr.io/bcgov/nr-lexis/frontend
-  - name: DOMAIN
-    description: Cluster apps domain (no leading dot)
-    value: apps.gold.devops.gov.bc.ca
   - name: FRONTEND_LOG_LEVEL
     value: INFO
   - name: VITE_USER_POOLS_ID
@@ -220,25 +214,9 @@ objects:
           port: 3000
           targetPort: 3000
 
-  - apiVersion: route.openshift.io/v1
-    kind: Route
-    metadata:
-      name: ${NAME}-frontend-${ZONE}
-      labels:
-        app: ${NAME}-frontend-${ZONE}
-        app.kubernetes.io/instance: ${ZONE}
-      annotations:
-        haproxy.router.openshift.io/timeout: 300s
-    spec:
-      host: ${NAME}-${SLOT}.${DOMAIN}
-      to:
-        kind: Service
-        name: ${NAME}-frontend-${ZONE}
-      port:
-        targetPort: http
-      tls:
-        termination: edge
-        insecureEdgeTerminationPolicy: Redirect
+  # The public Route is applied separately by reusable-deploy.yml:
+  #   - DEV previews and TEST use frontend/openshift.route.yml.
+  #   - PROD uses frontend/openshift.vanity-route.yml only.
 
   - apiVersion: networking.k8s.io/v1
     kind: NetworkPolicy

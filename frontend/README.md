@@ -38,7 +38,7 @@ rollout but not an image rebuild.
 | `VITE_LOGOUT_KEYCLOAK_CLIENT_ID` | Cognito client id registered in the shared Keycloak client | - |
 | `VITE_COGNITO_SCOPES` | OAuth scopes | openid profile email |
 | `VITE_ZONE` | Environment zone used for IDIR provider selection | dev |
-| `VITE_LEXIS_PROD_RTM_ONLY` | Restricts frontend routes and navigation to the Average Monthly Values module for LEXIS admins | false |
+| `VITE_LEXIS_PROD_RTM_ONLY` | Restricts admins to Average Monthly Values, preserves normal read-only routes, and denies other application roles | false |
 
 Additional route and endpoint overrides are listed in `frontend/.env.example`.
 

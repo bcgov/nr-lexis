@@ -64,7 +64,7 @@ public class LexisAuthorizationService {
     }
 
     if (featureProperties.isProdRtmOnly()) {
-      granted.retainAll(PROD_RTM_ONLY_ACTIONS);
+      restrictProdRtmOnlyActions(roles, granted);
     }
 
     return List.copyOf(granted);
@@ -98,6 +98,11 @@ public class LexisAuthorizationService {
     }
     Set<String> configuredRoles = getConfiguredRoles();
     return roles.stream().anyMatch(configuredRoles::contains);
+  }
+
+  public boolean isReadOnlyRolloutUser(List<String> rawRoles) {
+    List<String> roles = normalizeRoles(rawRoles);
+    return !roles.contains(ROLE_ADMIN) && roles.contains(ROLE_READ_ONLY);
   }
 
   public boolean hasProvincialStaffRole(List<String> rawRoles) {
@@ -155,6 +160,22 @@ public class LexisAuthorizationService {
         granted.add(action);
       }
     }
+  }
+
+  private void restrictProdRtmOnlyActions(List<String> roles, Set<String> granted) {
+    if (roles.contains(ROLE_ADMIN)) {
+      granted.retainAll(PROD_RTM_ONLY_ACTIONS);
+      return;
+    }
+
+    if (roles.contains(ROLE_READ_ONLY)) {
+      Set<String> readOnlyActions = new LinkedHashSet<>();
+      appendRoleActions(readOnlyActions, ROLE_READ_ONLY);
+      granted.retainAll(readOnlyActions);
+      return;
+    }
+
+    granted.clear();
   }
 
   private void appendScopeActions(Set<String> granted, String scope) {

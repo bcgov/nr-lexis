@@ -29,21 +29,36 @@ class LexisAuthorizationServiceTest {
   }
 
   @Test
-  void prodRtmOnlyModeShouldLimitWildcardAdminGrantsToRtmAdminAction() {
+  void prodRtmOnlyModeShouldPreserveAdminAndReadOnlyRoleContracts() {
     LexisAuthorizationService service =
         createService(
             "LEXIS_PROVINCIAL_SUBMITTER",
             Map.of(
                 "LEXIS_ADMIN", List.of("*"),
-                "LEXIS_READ_ONLY", List.of("/applicationSearch")),
+                "LEXIS_READ_ONLY", List.of("/applicationSearch", "/applicationDetails"),
+                "LEXIS_APPLICATION_APPROVER",
+                    List.of("/applicationSearch", "createApplication")),
             true);
 
-    List<String> granted = service.resolveGrantedActions(List.of("LEXIS_ADMIN"));
-
-    assertThat(granted).containsExactly("/lexisAgentAdmin");
+    assertThat(service.resolveGrantedActions(List.of("LEXIS_ADMIN")))
+        .containsExactly("/lexisAgentAdmin");
+    assertThat(service.resolveGrantedActions(List.of("LEXIS_READ_ONLY")))
+        .containsExactly("/applicationSearch", "/applicationDetails");
+    assertThat(service.resolveGrantedActions(List.of("LEXIS_APPLICATION_APPROVER"))).isEmpty();
+    assertThat(service.resolveGrantedActions(List.of("LEXIS_ADMIN", "LEXIS_READ_ONLY")))
+        .containsExactly("/lexisAgentAdmin");
+    assertThat(
+            service.resolveGrantedActions(
+                List.of("LEXIS_READ_ONLY", "LEXIS_APPLICATION_APPROVER")))
+        .containsExactly("/applicationSearch", "/applicationDetails");
     assertThat(service.canPerformAction(List.of("LEXIS_ADMIN"), "/lexisAgentAdmin")).isTrue();
     assertThat(service.canPerformAction(List.of("LEXIS_ADMIN"), "/applicationSearch")).isFalse();
-    assertThat(service.canPerformAction(List.of("LEXIS_READ_ONLY"), "/applicationSearch")).isFalse();
+    assertThat(service.canPerformAction(List.of("LEXIS_READ_ONLY"), "/applicationSearch")).isTrue();
+    assertThat(service.isReadOnlyRolloutUser(List.of("LEXIS_READ_ONLY"))).isTrue();
+    assertThat(
+            service.isReadOnlyRolloutUser(List.of("LEXIS_READ_ONLY", "LEXIS_APPLICATION_APPROVER")))
+        .isTrue();
+    assertThat(service.isReadOnlyRolloutUser(List.of("LEXIS_ADMIN", "LEXIS_READ_ONLY"))).isFalse();
   }
 
   @Test

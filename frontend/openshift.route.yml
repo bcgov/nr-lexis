@@ -1,0 +1,43 @@
+---
+# Default Gold cluster-domain frontend Route.
+#
+# This template is separate from openshift.deploy.yml so the workflow can apply
+# it only to DEV previews and TEST. PROD is served exclusively through the
+# custom hostname in openshift.vanity-route.yml.
+apiVersion: template.openshift.io/v1
+kind: Template
+metadata:
+  name: nr-lexis-frontend-route
+parameters:
+  - name: NAME
+    description: App name prefix used by the main deployment
+    value: nr-lexis
+  - name: ZONE
+    description: PR number or 'test'; must match the main deployment
+    required: true
+  - name: SLOT
+    description: Route hostname slot — PR % 50 for previews, or test
+    required: true
+  - name: DOMAIN
+    description: Cluster apps domain (no leading dot)
+    value: apps.gold.devops.gov.bc.ca
+objects:
+  - apiVersion: route.openshift.io/v1
+    kind: Route
+    metadata:
+      name: ${NAME}-frontend-${ZONE}
+      labels:
+        app: ${NAME}-frontend-${ZONE}
+        app.kubernetes.io/instance: ${ZONE}
+      annotations:
+        haproxy.router.openshift.io/timeout: 300s
+    spec:
+      host: ${NAME}-${SLOT}.${DOMAIN}
+      to:
+        kind: Service
+        name: ${NAME}-frontend-${ZONE}
+      port:
+        targetPort: http
+      tls:
+        termination: edge
+        insecureEdgeTerminationPolicy: Redirect

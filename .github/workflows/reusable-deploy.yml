@@ -100,7 +100,7 @@ on:
         description: Oracle keystore passphrase
         required: true
       lexis_prod_rtm_only:
-        description: Enables PROD RTM-only feature restriction when set to true
+        description: Restricts admins to RTM AMV, preserves read-only users, and disables expiry
         required: false
       keycloak_sa_client_id:
         description: Keycloak service-account client id used to provision LEXIS clients/scopes
@@ -123,6 +123,15 @@ on:
       lexis_mail_region_rsi_address:
         description: RSI positional mailbox
         required: true
+      vanity_tls_certificate:
+        description: PEM leaf certificate for the required PROD vanity Route
+        required: false
+      vanity_tls_key:
+        description: PEM private key matching the PROD vanity certificate
+        required: false
+      vanity_tls_ca_certificate:
+        description: PEM intermediate and root chain for the PROD vanity certificate
+        required: false
 
     outputs:
       triggered:
@@ -165,7 +174,7 @@ jobs:
           DATABASE_PASSWORD: ${{ secrets.database_password }}
           KEYSTORE_SECRET: ${{ secrets.keystore_secret }}
           LEXIS_PROD_RTM_ONLY: ${{ secrets.lexis_prod_rtm_only || 'false' }}
-          LEXIS_EXPIRY_ENABLED: ${{ inputs.expiry_enabled && 'true' || 'false' }}
+          LEXIS_EXPIRY_ENABLED: ${{ inputs.expiry_enabled && secrets.lexis_prod_rtm_only != 'true' && 'true' || 'false' }}
           LEXIS_EXPIRY_CRON: ${{ vars.LEXIS_EXPIRY_CRON || '30 0 0 * * *' }}
           LEXIS_EXPIRY_ZONE: ${{ vars.LEXIS_EXPIRY_ZONE || 'America/Vancouver' }}
           LEXIS_EXPIRY_LOCK_AT_MOST_FOR: ${{ vars.LEXIS_EXPIRY_LOCK_AT_MOST_FOR || 'PT6H' }}
@@ -247,7 +256,24 @@ jobs:
       contents: read
     outputs:
       triggered: ${{ steps.deploy.outputs.triggered }}
+    env:
+      VANITY_HOST: ${{ vars.VANITY_HOST }}
     steps:
+      - name: Validate PROD vanity Route configuration
+        if: ${{ inputs.target == 'prod' }}
+        env:
+          VANITY_TLS_CERTIFICATE: ${{ secrets.vanity_tls_certificate }}
+          VANITY_TLS_KEY: ${{ secrets.vanity_tls_key }}
+          VANITY_TLS_CA_CERTIFICATE: ${{ secrets.vanity_tls_ca_certificate }}
+        run: |
+          set -euo pipefail
+          for setting in VANITY_HOST VANITY_TLS_CERTIFICATE VANITY_TLS_KEY VANITY_TLS_CA_CERTIFICATE; do
+            if [ -z "${!setting}" ]; then
+              echo "::error title=Missing PROD vanity Route configuration::${setting} must be configured in the PROD GitHub Environment."
+              exit 1
+            fi
+          done
+
       - name: Resolve frontend logout URL
         env:
           CONFIGURED_SIGN_OUT: ${{ vars.VITE_REDIRECT_SIGN_OUT }}
@@ -284,7 +310,6 @@ jobs:
           overwrite: true
           parameters:
             -p ZONE="${{ inputs.target }}"
-            -p SLOT="${{ inputs.slot || inputs.target }}"
             -p NAME="${{ github.event.repository.name }}"
             -p IMAGE_TAG="${{ inputs.tag }}"
             -p ROLLOUT_TRIGGER="${{ github.run_id }}-${{ github.run_attempt }}"
@@ -307,6 +332,44 @@ jobs:
             -p VITE_LEXIS_REPORT_ENDPOINT_BASE="${{ vars.VITE_LEXIS_REPORT_ENDPOINT_BASE }}"
             -p VITE_LEXIS_REPORT_API_BASE="${{ vars.VITE_LEXIS_REPORT_API_BASE }}"
           triggers: ${{ inputs.triggers }}
+
+      - name: Default Route (non-PROD)
+        if: ${{ inputs.target != 'prod' }}
+        uses: bcgov/action-deployer-openshift@f7bd61ec357fb1dfd1d43f1287bcd21382d06348 # v4.1.0
+        with:
+          file: frontend/openshift.route.yml
+          oc_namespace: ${{ secrets.oc_namespace }}
+          oc_server: ${{ vars.oc_server }}
+          oc_token: ${{ secrets.oc_token }}
+          debug: false
+          overwrite: true
+          parameters:
+            -p NAME="${{ github.event.repository.name }}"
+            -p ZONE="${{ inputs.target }}"
+            -p SLOT="${{ inputs.slot || inputs.target }}"
+          triggers: ${{ inputs.triggers }}
+
+      - name: Vanity Route (PROD)
+        if: ${{ inputs.target == 'prod' }}
+        uses: bcgov/action-deployer-openshift@f7bd61ec357fb1dfd1d43f1287bcd21382d06348 # v4.1.0
+        env:
+          VANITY_TLS_CERTIFICATE: ${{ secrets.vanity_tls_certificate }}
+          VANITY_TLS_KEY: ${{ secrets.vanity_tls_key }}
+          VANITY_TLS_CA_CERTIFICATE: ${{ secrets.vanity_tls_ca_certificate }}
+        with:
+          file: frontend/openshift.vanity-route.yml
+          oc_namespace: ${{ secrets.oc_namespace }}
+          oc_server: ${{ vars.oc_server }}
+          oc_token: ${{ secrets.oc_token }}
+          debug: false
+          overwrite: true
+          parameters:
+            -p NAME="${{ github.event.repository.name }}"
+            -p ZONE="${{ inputs.target }}"
+            -p VANITY_HOST="$VANITY_HOST"
+            -p VANITY_TLS_CERTIFICATE="$VANITY_TLS_CERTIFICATE"
+            -p VANITY_TLS_KEY="$VANITY_TLS_KEY"
+            -p VANITY_TLS_CA_CERTIFICATE="$VANITY_TLS_CA_CERTIFICATE"
 
   deployment-result:
     name: Record deployment result

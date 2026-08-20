@@ -49,6 +49,7 @@ class GoldOpenShiftConfigurationTest {
   void frontendRouteAndInternalBackendShouldUseGoldTopology() throws IOException {
     String backend = Files.readString(resolve("backend/openshift.deploy.yml"));
     String frontend = Files.readString(resolve("frontend/openshift.deploy.yml"));
+    String defaultRoute = Files.readString(resolve("frontend/openshift.route.yml"));
     String workflows = readWorkflowFiles();
 
     assertThat(backend)
@@ -59,7 +60,10 @@ class GoldOpenShiftConfigurationTest {
             "network.openshift.io/policy-group: ingress",
             "api.silver.devops.gov.bc.ca",
             GOLD_APPS);
-    assertThat(frontend).contains("value: " + GOLD_APPS).doesNotContain("silver.devops.gov.bc.ca");
+    assertThat(frontend).doesNotContain("kind: Route", "silver.devops.gov.bc.ca");
+    assertThat(defaultRoute)
+        .contains("kind: Route", "value: " + GOLD_APPS)
+        .doesNotContain("silver.devops.gov.bc.ca");
     assertThat(workflows)
         .contains(GOLD_APPS)
         .doesNotContain("api.silver.devops.gov.bc.ca", "apps.silver.devops.gov.bc.ca");

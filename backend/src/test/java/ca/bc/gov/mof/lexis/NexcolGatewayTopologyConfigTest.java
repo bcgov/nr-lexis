@@ -62,11 +62,13 @@ class NexcolGatewayTopologyConfigTest {
   @Test
   void frontendRouteShouldHideOnlyTheNexcolMachineEndpoints() throws IOException {
     String caddy = Files.readString(resolve("frontend/Caddyfile"));
-    String frontend = Files.readString(resolve("frontend/openshift.deploy.yml"));
+    String defaultRoute = Files.readString(resolve("frontend/openshift.route.yml"));
+    String vanityRoute = Files.readString(resolve("frontend/openshift.vanity-route.yml"));
     String matcher =
         "@nexcol_api path " + NEXCOL_PATH + " " + NEXCOL_PATH + "/*";
 
-    assertThat(frontend).contains("kind: Route");
+    assertThat(defaultRoute).contains("kind: Route", "name: ${NAME}-frontend-${ZONE}");
+    assertThat(vanityRoute).contains("kind: Route", "name: ${NAME}-frontend-${ZONE}");
     assertThat(caddy)
         .contains(matcher, "respond @nexcol_api 404", "reverse_proxy /api* {$BACKEND_URL}")
         .doesNotContain("@nexcol_api path /api/lexis/application-submissions");

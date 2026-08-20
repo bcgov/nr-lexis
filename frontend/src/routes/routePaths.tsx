@@ -114,7 +114,7 @@ function RouteActionGuard({
 }: RouteGuardProps) {
   const { capabilities, canPerform } = useAuth()
 
-  if (!isProdRtmOnlyPathAllowed(path)) {
+  if (!isProdRtmOnlyPathAllowed(path, capabilities.roles)) {
     return <Navigate to="/unauthorized" replace />
   }
 
@@ -227,6 +227,8 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
   {
     path: '/provincial/summary',
     id: 'Provincial Summary',
+    // INTENTIONAL_LEGACY_DIVERGENCE(PROVINCIAL_SUMMARY_CLIENT_SCOPE):
+    // Summary is a client-scoped BCeID dashboard, not a general staff data surface.
     roleScope: 'provincialSubmitter',
     requiredActions: ['/summary'],
     element: (

@@ -427,6 +427,46 @@ describe('Layout shell', () => {
     expect(screen.queryByText('Reports')).not.toBeInTheDocument()
   })
 
+  it('preserves normal read-only navigation when PROD RTM-only mode is enabled', () => {
+    window.config = { VITE_LEXIS_PROD_RTM_ONLY: 'true' }
+    const grantedActions = [
+      '/applicationSearch',
+      '/exemptionSearch',
+      '/offersSearch',
+      '/permitSearch',
+      '/federalApplicationSearch',
+      'viewFederalApplication',
+    ]
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({
+          principal: 'idir\\readonly',
+          roles: ['READ_ONLY'],
+          grantedActions,
+        }),
+        defaultRoute: '/provincial/application',
+        canPerform: (action: string) => grantedActions.includes(action),
+      }),
+    )
+
+    renderLayout('/provincial/application')
+
+    expect(screen.getByRole('link', { name: 'Applications' })).toHaveAttribute(
+      'href',
+      '/provincial/application',
+    )
+    expect(screen.getByRole('link', { name: 'Exemptions' })).toBeVisible()
+    expect(screen.getByRole('link', { name: 'Offers' })).toBeVisible()
+    expect(screen.getByRole('link', { name: 'Permits' })).toBeVisible()
+    expect(screen.getByText('Federal')).toBeVisible()
+    expect(
+      screen.queryByRole('link', { name: /Create\/Edit Application/i }),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText('Reports')).not.toBeInTheDocument()
+    expect(screen.queryByText('Admin')).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Average Monthly Values/i })).not.toBeInTheDocument()
+  })
+
   it('renders side-nav links with standard icons and collapsed labels', () => {
     renderLayout('/admin/rtm/emslogamv/upload')
 

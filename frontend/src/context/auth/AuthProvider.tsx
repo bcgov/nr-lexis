@@ -223,7 +223,10 @@ const resolveDefaultRoute = (capabilities: LexisSessionCapabilities): string => 
   )?.[1]
 
   if (isProdRtmOnlyMode()) {
-    return isAdminUser ? PROD_RTM_ONLY_ROUTE : '/unauthorized'
+    if (isAdminUser) {
+      return PROD_RTM_ONLY_ROUTE
+    }
+    return isReadOnlyUser ? '/provincial/application' : '/unauthorized'
   }
 
   if (isAdminUser) {
@@ -681,10 +684,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const canPerform = useCallback(
     (action: string): boolean => {
       if (isProdRtmOnlyMode()) {
-        return (
-          hasRole(capabilities.roles, ROLE_ADMIN) &&
-          normalizeAction(action) === normalizeAction(PROD_RTM_ONLY_ACTION)
-        )
+        if (hasRole(capabilities.roles, ROLE_ADMIN)) {
+          return normalizeAction(action) === normalizeAction(PROD_RTM_ONLY_ACTION)
+        }
+        if (!hasRole(capabilities.roles, ROLE_READ_ONLY)) {
+          return false
+        }
       }
       if (hasRole(capabilities.roles, ROLE_ADMIN)) {
         return true

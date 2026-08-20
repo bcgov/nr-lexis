@@ -106,8 +106,32 @@ through GitHub environment secrets and OpenShift Secrets; non-sensitive behavior
 environment variables and template parameters.
 
 Pull requests deploy an isolated DEV preview after their required builds and tests pass. A merge to
-`main` deploys the accepted images to the persistent TEST environment and runs the smoke suite.
-Production deployment and image promotion remain disabled until production readiness is approved.
+`main` deploys the accepted images to the persistent TEST environment, runs the smoke suite, and then
+deploys and promotes the same images to PROD. The PROD GitHub Environment remains the operational
+gate; do not merge a deployment-enabling change until production readiness is approved.
+
+### PROD vanity route
+
+DEV previews and TEST use the generated Gold cluster-domain Route in `frontend/openshift.route.yml`.
+PROD instead serves the frontend only at `https://lexis.nrs.gov.bc.ca` through the edge Route in
+`frontend/openshift.vanity-route.yml`; the deployment workflow does not create a generated PROD
+Route. The PROD deployment fails when `VANITY_HOST` or any required certificate secret is missing.
+
+Configure these values before the first PROD deployment:
+
+| GitHub PROD Environment setting | Kind     | Value                                                                                      |
+| ------------------------------- | -------- | ------------------------------------------------------------------------------------------ |
+| `VANITY_HOST`                   | Variable | `lexis.nrs.gov.bc.ca`                                                                      |
+| `VANITY_TLS_CERTIFICATE`        | Secret   | Leaf/server certificate: `lexis.nrs.gov.bc.ca.pem`                                         |
+| `VANITY_TLS_KEY`                | Secret   | Matching unencrypted private key: `lexis.nrs.gov.bc.ca.key`                                |
+| `VANITY_TLS_CA_CERTIFICATE`     | Secret   | Entrust issuing CA, Sectigo R46, and USERTrust RSA certificates concatenated in that order |
+
+The deployer passes the multiline PEM values directly to the Route with debug logging disabled. On
+renewal, replace the three certificate secrets and rerun the PROD deployment; no code change is
+required. Keep `VITE_REDIRECT_SIGN_IN=/dashboard` and set `VITE_REDIRECT_SIGN_OUT` to
+`https://lexis.nrs.gov.bc.ca` before deployment. The FAM PROD client must also allow
+`https://lexis.nrs.gov.bc.ca/dashboard` as a callback and `https://lexis.nrs.gov.bc.ca` as a logout
+URL before users authenticate through the vanity host.
 
 The backend deployment uses a CPU-based Horizontal Pod Autoscaler with environment-specific minimum
 and maximum replica counts. Interactive saves use optimistic version checks: stale saves return a
