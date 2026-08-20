@@ -251,7 +251,7 @@ class BackendRuntimeConfigTest {
   }
 
   @Test
-  void applicationShouldMountGeneratedOracleTruststoreReadOnly() throws IOException {
+  void applicationShouldMountPerPodGeneratedOracleTruststoreReadOnly() throws IOException {
     String oracleConfig =
         Files.readString(
             resolve(Path.of("backend", "src", "main", "resources", "application-oracle.yml")));
@@ -276,6 +276,12 @@ class BackendRuntimeConfigTest {
         .doesNotContain(certificateMount + "\n                  readOnly: true");
     assertThat(applicationContainer)
         .contains(certificateMount + "\n                  readOnly: true");
+    assertThat(deployment)
+        .contains("- name: api-cert\n              emptyDir: {}")
+        .doesNotContain(
+            "kind: PersistentVolumeClaim",
+            "claimName: ${NAME}-backend-api-cert-${ZONE}",
+            "storageClassName: netapp-file-standard");
   }
 
   @Test
