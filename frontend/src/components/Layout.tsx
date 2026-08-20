@@ -22,7 +22,7 @@ import {
   type CarbonIconType,
 } from '@carbon/icons-react'
 import { HeaderMenuButton, IconButton, SkipToContent } from '@carbon/react'
-import { NavLink, useLocation, useNavigate } from 'react-router-dom'
+import { Link, matchPath, useLocation, useNavigate } from 'react-router-dom'
 import {
   hasProvincialStaffRole,
   hasProvincialSubmitterRole,
@@ -44,6 +44,7 @@ type NavigationLink = {
   to: string
   label: string
   icon: CarbonIconType
+  activePathPatterns?: string[]
   requiredActions?: string[]
   requiredActionsMatch?: RouteActionMatch
   roleScope?: NavigationRoleScope
@@ -132,6 +133,7 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
         to: '/provincial/application',
         label: 'Applications',
         icon: Search,
+        activePathPatterns: ['/provincial/application/:applicationNumber'],
         requiredActions: ['/applicationSearch'],
       },
       {
@@ -145,6 +147,7 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
         to: '/provincial/exemption',
         label: 'Exemptions',
         icon: Search,
+        activePathPatterns: ['/provincial/exemption/:exemptionNumber'],
         requiredActions: ['/exemptionSearch'],
       },
       {
@@ -158,12 +161,14 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
         to: '/provincial/offers',
         label: 'Offers',
         icon: Search,
+        activePathPatterns: ['/provincial/offers/:offerNumber'],
         requiredActions: ['/offersSearch'],
       },
       {
         to: '/provincial/permit',
         label: 'Permits',
         icon: Certificate,
+        activePathPatterns: ['/provincial/permit/:permitNumber'],
         requiredActions: ['/permitSearch'],
       },
     ],
@@ -175,6 +180,7 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
         to: '/federal',
         label: 'Search',
         icon: Search,
+        activePathPatterns: ['/federal/application/:applicationNumber'],
         requiredActions: ['/federalApplicationSearch', 'viewFederalApplication'],
       },
     ],
@@ -439,11 +445,24 @@ function Layout({ children }: LayoutProps) {
       links: section.links.filter(canShowLink),
     })).filter((section) => section.links.length > 0)
   }, [canPerform, capabilities.roles])
-  const activeSectionLabel = useMemo(() => {
-    return visibleNavigationSections.find((section) =>
-      section.links.some((link) => link.to === location.pathname),
-    )?.label
+  const activeNavigationLink = useMemo(() => {
+    const visibleLinks = visibleNavigationSections.flatMap((section) => section.links)
+    return (
+      visibleLinks.find((link) => link.to === location.pathname) ??
+      visibleLinks.find((link) =>
+        link.activePathPatterns?.some((pattern) =>
+          matchPath({ path: pattern, end: true }, location.pathname),
+        ),
+      )
+    )
   }, [location.pathname, visibleNavigationSections])
+  const activeSectionLabel = useMemo(
+    () =>
+      visibleNavigationSections.find((section) =>
+        section.links.some((link) => link.to === activeNavigationLink?.to),
+      )?.label,
+    [activeNavigationLink?.to, visibleNavigationSections],
+  )
 
   const toggleSection = (sectionLabel: string): void => {
     setCollapsedSections((current) => ({
@@ -572,6 +591,7 @@ function Layout({ children }: LayoutProps) {
 
   const renderNavigationLink = (link: NavigationLink, nested = true) => {
     const LinkIcon = link.icon
+    const isActive = link.to === activeNavigationLink?.to
     const showNotificationIndicator = link.to === '/notifications' && hasActiveNotifications
     const accessibleLabel = showNotificationIndicator
       ? 'Notifications, active updates available'
@@ -582,15 +602,12 @@ function Layout({ children }: LayoutProps) {
 
     return (
       <li key={link.to}>
-        <NavLink
-          end
+        <Link
           to={link.to}
-          className={({ isActive }) =>
-            `cds--side-nav__link${nestedClassName} csp-side-nav__link${
-              isActive ? ' cds--side-nav__link--active' : ''
-            }`
-          }
-          aria-current={location.pathname === link.to ? 'page' : undefined}
+          className={`cds--side-nav__link${nestedClassName} csp-side-nav__link${
+            isActive ? ' cds--side-nav__link--active' : ''
+          }`}
+          aria-current={isActive ? 'page' : undefined}
           aria-label={accessibleLabel}
           title={isSideNavCollapsed ? link.label : undefined}
           data-label={link.label}
@@ -602,7 +619,7 @@ function Layout({ children }: LayoutProps) {
             )}
           </span>
           <span className="cds--side-nav__link-text csp-side-nav__link-text">{link.label}</span>
-        </NavLink>
+        </Link>
       </li>
     )
   }

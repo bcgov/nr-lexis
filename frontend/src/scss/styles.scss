@@ -117,7 +117,7 @@
   --csp-table-header-bg: #e0e0e0;
   --csp-table-header-text: #161616;
   --csp-table-row-alt-bg: #f4f4f4;
-  --csp-avatar-bg: var(--csp-interactive);
+  --csp-avatar-bg: var(--csp-fill-blue);
   --csp-avatar-text: #ffffff;
   --cds-background-brand: var(--csp-background-brand);
   --cds-border-interactive: var(--csp-border-interactive);
@@ -714,10 +714,10 @@ a.csp-side-nav__link.cds--side-nav__link--active[aria-current='page'] {
   height: 64px;
   justify-content: center;
   width: 64px;
-  background-color: #c7d4e7;
-  border: 2px solid #072251;
+  background-color: var(--csp-avatar-bg);
+  border: 2px solid var(--csp-avatar-bg);
   border-radius: 50%;
-  color: #072251;
+  color: var(--csp-avatar-text);
   font-size: 1.4rem;
   font-weight: 700;
   user-select: none;

@@ -315,6 +315,60 @@ describe('Layout shell', () => {
     expect(averageMarketValuesLink).not.toHaveAttribute('aria-current')
   })
 
+  it.each([
+    ['/provincial/application/321', 'Applications'],
+    ['/provincial/exemption/26-8801', 'Exemptions'],
+    ['/provincial/offers/434', 'Offers'],
+    ['/provincial/permit/9020955', 'Permits'],
+    ['/federal/application/46244', 'Search'],
+  ])('marks the owning navigation item active on detail route %s', (path, linkName) => {
+    renderLayout(path)
+
+    const owningLink = screen.getByRole('link', { name: linkName })
+    const activeLinks = document.querySelectorAll('.cds--side-nav__link--active')
+
+    expect(activeLinks).toHaveLength(1)
+    expect(owningLink).toHaveClass('cds--side-nav__link--active')
+    expect(owningLink).toHaveAttribute('aria-current', 'page')
+  })
+
+  it.each([
+    ['/provincial/application/create', 'Create/Edit Application'],
+    ['/provincial/application/upload', 'Upload'],
+  ])('gives exact route %s priority over the application detail pattern', (path, linkName) => {
+    renderLayout(path)
+
+    const applicationsLink = screen.getByRole('link', { name: /^Applications$/i })
+    const exactLink = screen.getByRole('link', { name: linkName })
+    const activeLinks = document.querySelectorAll('.cds--side-nav__link--active')
+
+    expect(activeLinks).toHaveLength(1)
+    expect(exactLink).toHaveClass('cds--side-nav__link--active')
+    expect(exactLink).toHaveAttribute('aria-current', 'page')
+    expect(applicationsLink).not.toHaveClass('cds--side-nav__link--active')
+  })
+
+  it('keeps the section containing the active detail route expanded', () => {
+    window.localStorage.setItem(
+      COLLAPSED_SECTIONS_PREFERENCE_KEY,
+      JSON.stringify({ Provincial: true }),
+    )
+
+    renderLayout('/provincial/offers/434')
+
+    expect(screen.getByRole('button', { name: 'Provincial' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    )
+    expect(screen.getByRole('link', { name: 'Offers' })).toHaveAttribute('aria-current', 'page')
+  })
+
+  it('does not select a navigation item for an unknown deeper route', () => {
+    renderLayout('/provincial/application/321/unknown')
+
+    expect(document.querySelectorAll('.cds--side-nav__link--active')).toHaveLength(0)
+  })
+
   it('renders split admin side-nav areas with distinct active routes', () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
