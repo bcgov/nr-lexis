@@ -1,10 +1,10 @@
 ---
-# PROD-only custom-hostname Route for the frontend. The normal Gold cluster
-# Route remains available and points at the same Service.
+# PROD-only custom-hostname Route for the frontend. This is the only public
+# frontend Route deployed to PROD; the default Gold cluster Route is applied
+# only to DEV previews and TEST.
 #
 # This template is deployed separately because OpenShift templates cannot
-# conditionally emit an object. The workflow applies it only when PROD has a
-# VANITY_HOST configured. Certificate material is supplied from GitHub
+# conditionally emit an object. Certificate material is supplied from GitHub
 # Environment secrets at deploy time and must never be committed.
 apiVersion: template.openshift.io/v1
 kind: Template

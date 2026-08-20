@@ -453,9 +453,50 @@ class TestDeploymentTopologyConfigTest {
     assertThat(workflow)
         .containsOnlyOnce("file: backend/openshift.deploy.yml")
         .containsOnlyOnce("file: frontend/openshift.deploy.yml")
+        .containsOnlyOnce("file: frontend/openshift.route.yml")
+        .containsOnlyOnce("file: frontend/openshift.vanity-route.yml")
         .doesNotContain("openshift/deployment.yaml");
     assertThat(resolve("backend/openshift/deployment.yaml")).doesNotExist();
     assertThat(resolve("frontend/openshift/deployment.yaml")).doesNotExist();
+  }
+
+  @Test
+  void frontendRoutesShouldBeExclusiveByEnvironment() throws IOException {
+    String workflow = Files.readString(resolve(".github/workflows/reusable-deploy.yml"));
+    String frontendDeploy = Files.readString(resolve("frontend/openshift.deploy.yml"));
+    String defaultRoute = Files.readString(resolve("frontend/openshift.route.yml"));
+    String vanityRoute = Files.readString(resolve("frontend/openshift.vanity-route.yml"));
+
+    assertThat(frontendDeploy)
+        .doesNotContain("kind: Route", "- name: SLOT", "- name: DOMAIN");
+    assertThat(defaultRoute)
+        .contains(
+            "kind: Route",
+            "host: ${NAME}-${SLOT}.${DOMAIN}",
+            "name: ${NAME}-frontend-${ZONE}",
+            "targetPort: http",
+            "termination: edge",
+            "insecureEdgeTerminationPolicy: Redirect");
+    assertThat(vanityRoute)
+        .contains(
+            "kind: Route",
+            "host: ${VANITY_HOST}",
+            "name: ${NAME}-frontend-${ZONE}",
+            "certificate: ${VANITY_TLS_CERTIFICATE}",
+            "key: ${VANITY_TLS_KEY}",
+            "caCertificate: ${VANITY_TLS_CA_CERTIFICATE}");
+    assertThat(workflow)
+        .contains(
+            "- name: Default Route (non-PROD)\n"
+                + "        if: ${{ inputs.target != 'prod' }}",
+            "file: frontend/openshift.route.yml",
+            "- name: Vanity Route (PROD)\n"
+                + "        if: ${{ inputs.target == 'prod' }}",
+            "file: frontend/openshift.vanity-route.yml",
+            "- name: Validate PROD vanity Route configuration",
+            "for setting in VANITY_HOST VANITY_TLS_CERTIFICATE VANITY_TLS_KEY"
+                + " VANITY_TLS_CA_CERTIFICATE")
+        .doesNotContain("inputs.target == 'prod' && env.VANITY_HOST != ''");
   }
 
   @Test

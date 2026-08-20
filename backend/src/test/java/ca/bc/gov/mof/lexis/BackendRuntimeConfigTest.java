@@ -231,8 +231,10 @@ class BackendRuntimeConfigTest {
     String dockerfile = Files.readString(resolve(Path.of("backend", "Dockerfile")));
     String backendDeployment =
         Files.readString(resolve(Path.of("backend", "openshift.deploy.yml")));
-    String frontendDeployment =
-        Files.readString(resolve(Path.of("frontend", "openshift.deploy.yml")));
+    String defaultFrontendRoute =
+        Files.readString(resolve(Path.of("frontend", "openshift.route.yml")));
+    String vanityFrontendRoute =
+        Files.readString(resolve(Path.of("frontend", "openshift.vanity-route.yml")));
 
     assertThat(dockerfile)
         .contains("apk add --no-cache font-dejavu")
@@ -244,8 +246,8 @@ class BackendRuntimeConfigTest {
     assertThat(backendDeployment)
         .contains("- name: HOME\n                  value: /tmp")
         .contains("- name: XDG_CACHE_HOME\n                  value: /tmp/.cache");
-    assertThat(frontendDeployment)
-        .contains("haproxy.router.openshift.io/timeout: 300s");
+    assertThat(defaultFrontendRoute).contains("haproxy.router.openshift.io/timeout: 300s");
+    assertThat(vanityFrontendRoute).contains("haproxy.router.openshift.io/timeout: 300s");
   }
 
   @Test

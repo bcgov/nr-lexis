@@ -112,11 +112,10 @@ gate; do not merge a deployment-enabling change until production readiness is ap
 
 ### PROD vanity route
 
-PROD additionally serves `https://lexis.nrs.gov.bc.ca` through a second edge Route that targets the
-same frontend Service as the normal Gold cluster-domain Route. The vanity Route is kept in
-`frontend/openshift.vanity-route.yml` and is applied only when the PROD GitHub Environment variable
-`VANITY_HOST` is set. Leaving that variable unset skips the Route, so preparing this code does not
-create or alter anything in OpenShift.
+DEV previews and TEST use the generated Gold cluster-domain Route in `frontend/openshift.route.yml`.
+PROD instead serves the frontend only at `https://lexis.nrs.gov.bc.ca` through the edge Route in
+`frontend/openshift.vanity-route.yml`; the deployment workflow does not create a generated PROD
+Route. The PROD deployment fails when `VANITY_HOST` or any required certificate secret is missing.
 
 Configure these values before the first PROD deployment:
 
