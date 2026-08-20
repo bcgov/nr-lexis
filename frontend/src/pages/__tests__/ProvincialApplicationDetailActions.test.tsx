@@ -671,6 +671,73 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(screen.getByText('OFF-77')).toBeInTheDocument()
   })
 
+  it('preserves the originating application context when opening an offer', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      offers: [
+        {
+          offerNumber: 'OFF-77',
+          companyName: 'Example Lumber',
+          receivedDate: '2026-04-05',
+          validOffer: true,
+          withdrawalDate: null,
+        },
+      ],
+    })
+
+    const router = createMemoryRouter(
+      [
+        {
+          path: '/provincial/application/:applicationNumber',
+          element: <ProvincialApplicationDetailsPage />,
+        },
+        {
+          path: '/provincial/offers/:offerNumber',
+          element: <LocationProbe />,
+        },
+      ],
+      {
+        initialEntries: [
+          {
+            pathname: '/provincial/application/321',
+            search: '?from=applications',
+            state: {
+              lexisDetailTab: 'offers',
+              returnTo: {
+                label: 'My Applications',
+                to: '/provincial/summary?tab=applications',
+              },
+            },
+          },
+        ],
+      },
+    )
+
+    render(<RouterProvider router={router} />)
+
+    const offers = await screen.findByRole('region', { name: 'Application offers' })
+    await userEvent.click(within(offers).getByRole('button', { name: 'Open' }))
+
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe('/provincial/offers/OFF-77')
+      expect(router.state.location.search).toBe('?from=applications')
+      expect(router.state.location.state).toEqual({
+        lexisDetailTab: 'offers',
+        returnTo: {
+          label: 'Provincial application detail',
+          to: '/provincial/application/321?from=applications',
+          state: {
+            lexisDetailTab: 'offers',
+            returnTo: {
+              label: 'My Applications',
+              to: '/provincial/summary?tab=applications',
+            },
+          },
+        },
+      })
+    })
+  })
+
   it('links to the contextual exemption and preserves current query parameters', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/application/321?packageFilter=PKG-1']}>

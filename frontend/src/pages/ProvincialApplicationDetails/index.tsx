@@ -3091,10 +3091,14 @@ const ProvincialApplicationDetailsPage = () => {
                       disabled={!canPerform('/permitDetails')}
                       onClick={() =>
                         navigate(withCurrentSearch(`/provincial/permit/${item.permitNumber}`), {
-                          state: withDetailReturnTo(navigationState, {
-                            label: 'Provincial application detail',
-                            to: locationPath(location),
-                          }),
+                          state: withDetailReturnTo(
+                            navigationState,
+                            {
+                              label: 'Provincial application detail',
+                              to: locationPath(location),
+                            },
+                            detailReturnTo,
+                          ),
                         })
                       }
                     >
@@ -3162,10 +3166,14 @@ const ProvincialApplicationDetailsPage = () => {
                         disabled={!canPerform('/offersSearch') || !canPerform('/offerDetails')}
                         onClick={() =>
                           navigate(withCurrentSearch(`/provincial/offers/${item.offerNumber}`), {
-                            state: withDetailReturnTo(navigationState, {
-                              label: 'Provincial application detail',
-                              to: locationPath(location),
-                            }),
+                            state: withDetailReturnTo(
+                              navigationState,
+                              {
+                                label: 'Provincial application detail',
+                                to: locationPath(location),
+                              },
+                              detailReturnTo,
+                            ),
                           })
                         }
                       >
@@ -3909,10 +3917,14 @@ const ProvincialApplicationDetailsPage = () => {
                                   to={withCurrentSearch(
                                     `/provincial/exemption/${linkedExemptionNumber}`,
                                   )}
-                                  state={withDetailReturnTo(navigationState, {
-                                    label: 'Provincial application detail',
-                                    to: locationPath(location),
-                                  })}
+                                  state={withDetailReturnTo(
+                                    navigationState,
+                                    {
+                                      label: 'Provincial application detail',
+                                      to: locationPath(location),
+                                    },
+                                    detailReturnTo,
+                                  )}
                                 >
                                   {linkedExemptionNumber}
                                 </Link>

@@ -387,10 +387,14 @@ const ProvincialOfferDetailsPage = () => {
       ? `/federal/application/${applicationNumber}`
       : `/provincial/application/${applicationNumber}`
     navigate(`${applicationPath}?${params}`, {
-      state: withDetailReturnTo(navigationState, {
-        label: 'Provincial offer detail',
-        to: locationPath(location),
-      }),
+      state: withDetailReturnTo(
+        navigationState,
+        {
+          label: 'Provincial offer detail',
+          to: locationPath(location),
+        },
+        detailReturnTo,
+      ),
     })
   }
 
@@ -569,10 +573,14 @@ const ProvincialOfferDetailsPage = () => {
                     <Link
                       className="cds--link"
                       to={applicationDetailPath}
-                      state={withDetailReturnTo(navigationState, {
-                        label: 'Provincial offer detail',
-                        to: locationPath(location),
-                      })}
+                      state={withDetailReturnTo(
+                        navigationState,
+                        {
+                          label: 'Provincial offer detail',
+                          to: locationPath(location),
+                        },
+                        detailReturnTo,
+                      )}
                     >
                       {form.applicationNumber}
                     </Link>

@@ -272,10 +272,18 @@ const ProvincialExemptionDetailsPage = () => {
   const { capabilities, canPerform, defaultRoute } = useAuth()
   const { exemptionNumber } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
-  const detailReturnTo = readDetailReturnTo(location.state) ?? {
-    label: canPerform('/exemptionSearch') ? 'Provincial exemption search' : 'Your landing page',
-    to: canPerform('/exemptionSearch') ? '/provincial/exemption' : defaultRoute,
-  }
+  const detailReturnTo = useMemo(() => {
+    const contextualReturnTo = readDetailReturnTo(location.state)
+    if (contextualReturnTo) {
+      return contextualReturnTo
+    }
+
+    const canSearchExemptions = canPerform('/exemptionSearch')
+    return {
+      label: canSearchExemptions ? 'Provincial exemption search' : 'Your landing page',
+      to: canSearchExemptions ? '/provincial/exemption' : defaultRoute,
+    }
+  }, [canPerform, defaultRoute, location.state])
   const [detail, setDetail] = useState<ProvincialExemptionDetail | null>(null)
   const detailRef = useRef<ProvincialExemptionDetail | null>(null)
   const [ownerClientData, setOwnerClientData] = useState<ApplicationClientData | null>(null)
@@ -369,12 +377,23 @@ const ProvincialExemptionDetailsPage = () => {
 
     const destination = withCurrentSearch(permitCreationDestination)
     navigate(destination, {
-      state: withDetailReturnTo(location.state, {
-        label: 'Provincial exemption detail',
-        to: locationPath(location),
-      }),
+      state: withDetailReturnTo(
+        location.state,
+        {
+          label: 'Provincial exemption detail',
+          to: locationPath(location),
+        },
+        detailReturnTo,
+      ),
     })
-  }, [creatingPermit, location, navigate, permitCreationDestination, withCurrentSearch])
+  }, [
+    creatingPermit,
+    detailReturnTo,
+    location,
+    navigate,
+    permitCreationDestination,
+    withCurrentSearch,
+  ])
 
   useEffect(() => {
     detailRef.current = detail
@@ -1971,10 +1990,14 @@ const ProvincialExemptionDetailsPage = () => {
                                                 disabled={!canOpen}
                                                 onClick={() =>
                                                   navigate(withCurrentSearch(path), {
-                                                    state: withDetailReturnTo(location.state, {
-                                                      label: 'Provincial exemption detail',
-                                                      to: locationPath(location),
-                                                    }),
+                                                    state: withDetailReturnTo(
+                                                      location.state,
+                                                      {
+                                                        label: 'Provincial exemption detail',
+                                                        to: locationPath(location),
+                                                      },
+                                                      detailReturnTo,
+                                                    ),
                                                   })
                                                 }
                                               >
@@ -2179,10 +2202,14 @@ const ProvincialExemptionDetailsPage = () => {
                                               `/provincial/permit/${row.permitNumber}`,
                                             ),
                                             {
-                                              state: withDetailReturnTo(location.state, {
-                                                label: 'Provincial exemption detail',
-                                                to: locationPath(location),
-                                              }),
+                                              state: withDetailReturnTo(
+                                                location.state,
+                                                {
+                                                  label: 'Provincial exemption detail',
+                                                  to: locationPath(location),
+                                                },
+                                                detailReturnTo,
+                                              ),
                                             },
                                           )
                                         }
