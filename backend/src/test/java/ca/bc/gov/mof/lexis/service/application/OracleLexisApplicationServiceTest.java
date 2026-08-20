@@ -15,12 +15,14 @@ import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResultDto;
+import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSummaryEnrichmentDto;
 import ca.bc.gov.mof.lexis.repository.application.LexisApplicationRepository;
 import ca.bc.gov.mof.lexis.repository.report.LexisReportScheduleRepository;
 import ca.bc.gov.mof.lexis.repository.report.LexisReportScheduleRepository.CurrentScheduleRow;
 import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -209,6 +211,31 @@ class OracleLexisApplicationServiceTest {
 
     assertThat(response).contains(detail);
     verify(repository).findByApplicationNumber(1000456L);
+  }
+
+  @Test
+  void summaryEnrichmentShouldNormalizePageApplicationNumbers() {
+    Map<Long, LexisApplicationSummaryEnrichmentDto> enrichment =
+        Map.of(
+            1000456L,
+            new LexisApplicationSummaryEnrichmentDto(
+                1000456L, "Utilization", LocalDate.of(2026, 2, 21), List.of("PKG-903")));
+    when(repository.findSummaryEnrichmentByApplicationNumbers(List.of(1000456L, 1000999L)))
+        .thenReturn(enrichment);
+
+    Map<Long, LexisApplicationSummaryEnrichmentDto> response =
+        service.findSummaryEnrichmentByApplicationNumbers(
+            Arrays.asList(1000456L, null, 0L, -1L, 1000999L, 1000456L));
+
+    assertThat(response).isSameAs(enrichment);
+    verify(repository).findSummaryEnrichmentByApplicationNumbers(List.of(1000456L, 1000999L));
+  }
+
+  @Test
+  void summaryEnrichmentShouldShortCircuitWhenPageIsEmpty() {
+    assertThat(service.findSummaryEnrichmentByApplicationNumbers(Arrays.asList(null, 0L, -1L)))
+        .isEmpty();
+    verifyNoInteractions(repository);
   }
 
   @Test

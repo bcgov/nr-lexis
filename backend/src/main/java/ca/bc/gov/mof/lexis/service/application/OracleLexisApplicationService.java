@@ -12,11 +12,13 @@ import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResultDto;
+import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSummaryEnrichmentDto;
 import ca.bc.gov.mof.lexis.repository.application.LexisApplicationRepository;
 import ca.bc.gov.mof.lexis.repository.report.LexisReportScheduleRepository;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
@@ -86,6 +88,16 @@ public class OracleLexisApplicationService implements LexisApplicationService {
       return Optional.empty();
     }
     return repository.findByApplicationNumber(applicationNumber);
+  }
+
+  @Override
+  public Map<Long, LexisApplicationSummaryEnrichmentDto>
+      findSummaryEnrichmentByApplicationNumbers(List<Long> applicationNumbers) {
+    List<Long> normalized = positiveDistinctLongs(applicationNumbers);
+    if (normalized.isEmpty()) {
+      return Map.of();
+    }
+    return repository.findSummaryEnrichmentByApplicationNumbers(normalized);
   }
 
   @Override

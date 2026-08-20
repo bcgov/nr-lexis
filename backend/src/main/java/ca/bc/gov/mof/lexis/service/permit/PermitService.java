@@ -5,7 +5,9 @@ import ca.bc.gov.mof.lexis.dto.permit.PermitDetailDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.PermitSummaryEnrichmentDto;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 public interface PermitService {
@@ -21,6 +23,9 @@ public interface PermitService {
   int count(PermitSearchCriteria criteria);
 
   Optional<PermitDetailDto> findByPermitNumber(Long permitNumber);
+
+  Map<Long, PermitSummaryEnrichmentDto> findSummaryEnrichmentByPermitNumbers(
+      List<Long> permitNumbers);
 
   Optional<PermitAccessDto> findAccessByPermitNumber(Long permitNumber);
 

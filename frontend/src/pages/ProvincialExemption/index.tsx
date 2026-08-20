@@ -1134,6 +1134,12 @@ const ProvincialExemptionPage = () => {
                             <Link
                               className="cds--link"
                               to={withCurrentSearch(`/provincial/exemption/${row.exemptionNumber}`)}
+                              state={{
+                                returnTo: {
+                                  label: 'Provincial exemption search',
+                                  to: withCurrentSearch('/provincial/exemption'),
+                                },
+                              }}
                             >
                               {row.exemptionNumber}
                             </Link>

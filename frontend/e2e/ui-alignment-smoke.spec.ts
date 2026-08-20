@@ -683,8 +683,12 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     const themeSwitch = page.getByRole('switch', { name: 'Toggle dark mode' })
     await expect(themeSwitch).toHaveCSS('width', '48px')
     await expect(themeSwitch).toHaveCSS('height', '24px')
-    await expect(page.locator('.csp-theme-switch__thumb')).toHaveCSS('width', '18px')
-    await expect(page.locator('.csp-theme-switch__thumb')).toHaveCSS('height', '18px')
+    await expect(themeSwitch).toHaveCSS('background-color', 'rgba(255, 255, 255, 0.9)')
+    const themeSwitchThumb = page.locator('.csp-theme-switch__thumb')
+    await expect(themeSwitchThumb).toHaveCSS('width', '18px')
+    await expect(themeSwitchThumb).toHaveCSS('height', '18px')
+    await expect(themeSwitchThumb).toHaveCSS('background-color', 'rgb(0, 115, 230)')
+    await expect(themeSwitchThumb).toHaveCSS('color', 'rgb(255, 255, 255)')
 
     await page.getByRole('button', { name: 'Open profile panel' }).click()
     const profilePanel = page.getByRole('dialog', { name: 'My profile' })
@@ -739,6 +743,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       'background-color',
       'rgb(255, 255, 255)',
     )
+    await expect(page.locator('.csp-theme-switch__thumb')).toHaveCSS('color', 'rgb(22, 22, 22)')
     await expect(page.locator('html')).toHaveAttribute('data-carbon-theme', 'g100')
 
     await page.getByRole('button', { name: 'Close menu' }).click()
@@ -790,7 +795,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     const fieldInput = page.getByRole('textbox', { name: 'Application number' })
     await expect(page.locator('.lexis-page-header__title')).toHaveCSS(
       'font-family',
-      'BCSans, "IBM Plex Sans", -apple-system, sans-serif',
+      '"BC Sans", "IBM Plex Sans", -apple-system, sans-serif',
     )
     await expect(fieldLabel).toHaveCSS('font-size', '14px')
     await expect(fieldInput).toHaveCSS('font-size', '16px')
@@ -799,8 +804,8 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(clearButton).toHaveCSS('height', '40px')
     await clearButton.hover()
     await expect(clearButton).toHaveCSS('background-color', 'rgb(235, 242, 252)')
-    await expect(clearButton).toHaveCSS('border-color', 'rgb(15, 98, 254)')
-    await expect(clearButton).toHaveCSS('color', 'rgb(15, 98, 254)')
+    await expect(clearButton).toHaveCSS('border-color', 'rgb(0, 92, 184)')
+    await expect(clearButton).toHaveCSS('color', 'rgb(0, 92, 184)')
 
     const addApplicationAction = page.getByRole('link', { name: 'Add application' })
     await expect(addApplicationAction).toHaveClass(/cds--btn--primary/)
@@ -809,13 +814,13 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
         Boolean(action.closest('.legacy-search-table-toolbar__actions')),
       ),
     ).toBe(true)
-    await expect(addApplicationAction).toHaveCSS('background-color', 'rgb(15, 98, 254)')
+    await expect(addApplicationAction).toHaveCSS('background-color', 'rgb(0, 115, 230)')
 
     const infoNotification = page.locator('.cds--inline-notification--info')
     await expect(infoNotification).toContainText('Export schedule filter applied')
     await expect(infoNotification).toHaveCSS('background-color', 'rgb(194, 224, 255)')
     await expect(infoNotification).toHaveCSS('border-left-width', '4px')
-    await expect(infoNotification).toHaveCSS('border-left-color', 'rgb(15, 98, 254)')
+    await expect(infoNotification).toHaveCSS('border-left-color', 'rgb(0, 92, 184)')
 
     const iconTooltipPopovers = page.locator('.cds--icon-tooltip > .cds--popover')
     expect(await iconTooltipPopovers.count()).toBeGreaterThan(0)
@@ -988,7 +993,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       'nowrap',
     )
     await expect(table.locator('.lexis-status-tag').first()).toHaveCSS('white-space', 'nowrap')
-    await expect(firstRowCell).toHaveCSS('font-size', '16px')
+    await expect(firstRowCell).toHaveCSS('font-size', '14px')
     await expect(firstRowCell).toHaveCSS('vertical-align', 'top')
     await expect(firstRowCell).toHaveCSS('background-color', 'rgb(255, 255, 255)')
     await expect(secondRowCell).toHaveCSS('background-color', 'rgb(243, 243, 245)')
@@ -1040,9 +1045,9 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     )
     await expect(page.getByRole('button', { name: 'Search', exact: true })).toHaveCSS(
       'background-color',
-      'rgb(15, 98, 254)',
+      'rgb(0, 115, 230)',
     )
-    await expect(page.locator('.csp-app-header')).toHaveCSS('background-color', 'rgb(15, 98, 254)')
+    await expect(page.locator('.csp-app-header')).toHaveCSS('background-color', 'rgb(0, 115, 230)')
     await expect(page.locator('main.app-main')).toHaveCSS('background-color', 'rgb(22, 22, 22)')
     await expect(page.locator('.csp-side-nav')).toHaveCSS('background-color', 'rgb(22, 22, 22)')
     await expect(page.locator('.legacy-search-table-toolbar')).toHaveCSS(
@@ -1129,13 +1134,15 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       waitUntil: 'domcontentloaded',
     })
 
-    const sideNav = page.getByRole('navigation', { name: 'Side navigation', includeHidden: true })
+    const sideNav = page.getByRole('navigation', { name: 'Side navigation' })
     const openNavigation = page.getByRole('button', { name: 'Open menu' })
 
     await expect(openNavigation).toBeVisible()
     await expect(openNavigation).toHaveAttribute('aria-expanded', 'false')
-    await expect(sideNav).toHaveAttribute('aria-hidden', 'true')
-    await expect(sideNav).not.toBeVisible()
+    await expect(sideNav).toBeVisible()
+    await expect(sideNav).toHaveCSS('width', '48px')
+    await expect(sideNav).not.toHaveAttribute('aria-hidden')
+    await expect(page.getByRole('link', { name: 'Applications', exact: true })).toBeVisible()
 
     await expect(
       page.getByRole('heading', { level: 1, name: 'Provincial application search' }),
@@ -1175,6 +1182,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       'true',
     )
     await expect(sideNav).toBeVisible()
+    await expect(sideNav).toHaveCSS('width', '256px')
     await expect(sideNav).not.toHaveAttribute('aria-hidden')
     await expect(page.getByRole('link', { name: 'Applications', exact: true })).toHaveAttribute(
       'aria-current',
@@ -1187,7 +1195,8 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       'aria-expanded',
       'false',
     )
-    await expect(sideNav).not.toBeVisible()
+    await expect(sideNav).toBeVisible()
+    await expect(sideNav).toHaveCSS('width', '48px')
 
     const hasHorizontalPageOverflow = await page.evaluate(
       () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
@@ -1275,7 +1284,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
 
     await expect(page.getByRole('heading', { level: 1, name: 'Offer 81001' })).toBeVisible()
     await expect(page.getByText('Check and manage this provincial offer')).toBeVisible()
-    const backLink = page.getByRole('link', { name: 'Back to Provincial offer search' })
+    const backLink = page.getByRole('link', { name: 'Back to Provincial offers search' })
     await expect(backLink).toHaveAttribute('href', '/provincial/offers')
     await expect(backLink.locator('svg')).toBeVisible()
     await expect(backLink).toHaveCSS('column-gap', '4px')
@@ -1461,7 +1470,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await page.getByRole('tab', { name: 'Items' }).click()
     const packageTable = page.getByRole('region', { name: 'Federal application packages' })
     await expect(packageTable).not.toHaveAttribute('tabindex')
-    await expect(packageTable.locator('tbody td').first()).toHaveCSS('font-size', '16px')
+    await expect(packageTable.locator('tbody td').first()).toHaveCSS('font-size', '14px')
     expect(
       await packageTable.locator(':scope > .cds--data-table-content').evaluate((content) => {
         return getComputedStyle(content).overflowX

@@ -10,9 +10,11 @@ import ca.bc.gov.mof.lexis.dto.permit.PermitSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchResultDto;
+import ca.bc.gov.mof.lexis.dto.permit.PermitSummaryEnrichmentDto;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRepository;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.springframework.context.annotation.Profile;
 import org.springframework.data.domain.Page;
@@ -71,6 +73,12 @@ public class PermitOracleService implements PermitService {
       return Optional.empty();
     }
     return repository.findByPermitNumber(permitNumber);
+  }
+
+  @Override
+  public Map<Long, PermitSummaryEnrichmentDto> findSummaryEnrichmentByPermitNumbers(
+      List<Long> permitNumbers) {
+    return repository.findSummaryEnrichmentByPermitNumbers(permitNumbers);
   }
 
   @Override

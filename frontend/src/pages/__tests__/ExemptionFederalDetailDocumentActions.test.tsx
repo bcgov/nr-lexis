@@ -1853,9 +1853,10 @@ describe('Exemption and Federal Detail Document Actions', () => {
     )
 
     expect(await screen.findByRole('tab', { name: 'Owner' })).toBeInTheDocument()
-    expect(
-      screen.queryByRole('link', { name: 'Back to Federal application search' }),
-    ).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Back to Your landing page' })).toHaveAttribute(
+      'href',
+      '/provincial/review',
+    )
     await selectDetailTab('Remarks')
     expect(await screen.findByText('Review note')).toBeInTheDocument()
     expect(screen.getByText('idir\\reviewer')).toBeInTheDocument()

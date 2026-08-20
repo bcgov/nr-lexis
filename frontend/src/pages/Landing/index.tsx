@@ -59,6 +59,9 @@ const LandingPage = () => {
             <div className="landing-title-group">
               <h1 className="landing-title">LEXIS</h1>
               <h2 className="landing-subtitle">Log Exemption Information System</h2>
+              <p className="landing-description">
+                LEXIS helps you create and manage applications and view offers and permits.
+              </p>
             </div>
 
             {showSessionExpiredMessage && (
@@ -119,11 +122,7 @@ const LandingPage = () => {
         </Column>
 
         <Column className="landing-img-col" sm={4} md={8} lg={8}>
-          <img
-            src={landingImage}
-            alt="Log sorting operation at a British Columbia harbour"
-            className="landing-img"
-          />
+          <img src={landingImage} alt="" className="landing-img" aria-hidden="true" />
         </Column>
       </Grid>
     </main>

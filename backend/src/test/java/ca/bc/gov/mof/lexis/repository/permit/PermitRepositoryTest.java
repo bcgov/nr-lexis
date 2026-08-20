@@ -13,11 +13,13 @@ import ca.bc.gov.mof.lexis.dto.permit.PermitAccessDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitDetailDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchResultDto;
+import ca.bc.gov.mof.lexis.dto.permit.PermitSummaryEnrichmentDto;
 import java.sql.CallableStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataAccessResourceFailureException;
@@ -112,6 +114,57 @@ class PermitRepositoryTest {
                         && !sql.contains("EXPORT_SALES_INVOICE")),
             any(RowMapper.class),
             eq(700001L));
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void summaryEnrichmentShouldBindDistinctPositivePermitIdsAndMapBaseColumns() {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    when(jdbcTemplate.query(any(String.class), any(RowMapper.class), any(Object[].class)))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<Object> rowMapper = invocation.getArgument(1);
+              ResultSet resultSet = mock(ResultSet.class);
+              when(resultSet.getLong("EXPORT_PERMIT_DETAIL_NUMBER")).thenReturn(700001L);
+              when(resultSet.getString("EXEMPTION_NUMBER")).thenReturn("EX-700");
+              when(resultSet.getLong("NUMBER_OF_PIECES")).thenReturn(12L);
+              when(resultSet.getString("RECEIPT_NUMBER")).thenReturn("RCPT-700");
+              return List.of(rowMapper.mapRow(resultSet, 0));
+            });
+    PermitRepository repository = new PermitRepository(jdbcTemplate);
+
+    Map<Long, PermitSummaryEnrichmentDto> result =
+        repository.findSummaryEnrichmentByPermitNumbers(
+            java.util.Arrays.asList(700001L, null, -1L, 700001L, 700002L));
+
+    assertThat(result)
+        .containsEntry(700001L, new PermitSummaryEnrichmentDto("EX-700", 12L, "RCPT-700"));
+    org.mockito.ArgumentCaptor<Object[]> binds =
+        org.mockito.ArgumentCaptor.forClass(Object[].class);
+    verify(jdbcTemplate)
+        .query(
+            argThat(
+                sql ->
+                    sql.contains("FROM EXPORT_PERMIT_DETAIL EPD")
+                        && sql.contains("EPD.EXEMPTION_NUMBER")
+                        && sql.contains("EPD.NUMBER_OF_PIECES")
+                        && sql.contains("EPD.RECEIPT_NUMBER")
+                        && sql.endsWith("IN (?, ?)")
+                        && !sql.contains("FIND_PERMIT_DET_BY_ID")),
+            any(RowMapper.class),
+            binds.capture());
+    assertThat(binds.getValue()).containsExactly(700001L, 700002L);
+  }
+
+  @Test
+  void summaryEnrichmentShouldSkipAnEmptyIdPageWithoutQueryingOracle() {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    PermitRepository repository = new PermitRepository(jdbcTemplate);
+
+    assertThat(repository.findSummaryEnrichmentByPermitNumbers(java.util.Arrays.asList(null, 0L, -1L)))
+        .isEmpty();
+
+    org.mockito.Mockito.verifyNoInteractions(jdbcTemplate);
   }
 
   @Test

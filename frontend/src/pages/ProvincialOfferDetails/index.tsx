@@ -19,6 +19,7 @@ import PageHeader from '@/components/PageHeader'
 import PendingIcon from '@/components/PendingIcon'
 import SearchableSelect from '../../components/SearchableSelect'
 import UnsavedChangesGuard, { formValuesEqual } from '@/components/UnsavedChangesGuard'
+import { useAuth } from '@/context/auth/useAuth'
 import type { ProvincialOfferDetail } from '@/interfaces/LexisDetails'
 import {
   firstValidationError,
@@ -30,6 +31,11 @@ import {
 } from '@/pages/shared/create-form-utils'
 import { displayValue } from '@/pages/shared/detail-page-utils'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
+import {
+  locationPath,
+  readDetailReturnTo,
+  withDetailReturnTo,
+} from '@/pages/shared/detail-navigation'
 import { fetchProvincialOfferDetail, releaseOfferEditLock } from '@/service/lexis-detail-service'
 import {
   submitProvincialOfferUpdate,
@@ -131,7 +137,12 @@ const ProvincialOfferDetailsPage = () => {
   const { offerNumber } = useParams()
   const navigate = useNavigate()
   const location = useLocation()
+  const { canPerform, defaultRoute } = useAuth()
   const navigationState = location.state as OfferCreationNavigationState | null
+  const fallbackReturnTo = canPerform('/offersSearch')
+    ? { label: 'Provincial offers search', to: '/provincial/offers' }
+    : { label: 'Your landing page', to: defaultRoute }
+  const detailReturnTo = readDetailReturnTo(navigationState) ?? fallbackReturnTo
   const creationWarningMessage =
     navigationState?.offerCreationNotice?.warnings
       .map((warning) => warning.trim())
@@ -375,7 +386,12 @@ const ProvincialOfferDetailsPage = () => {
     const applicationPath = isFederal
       ? `/federal/application/${applicationNumber}`
       : `/provincial/application/${applicationNumber}`
-    navigate(`${applicationPath}?${params}`)
+    navigate(`${applicationPath}?${params}`, {
+      state: withDetailReturnTo(navigationState, {
+        label: 'Provincial offer detail',
+        to: locationPath(location),
+      }),
+    })
   }
 
   const onSave = async (): Promise<boolean> => {
@@ -456,7 +472,11 @@ const ProvincialOfferDetailsPage = () => {
   return (
     <Grid fullWidth className="default-grid detail-page-grid">
       <Column sm={4} md={8} lg={16}>
-        <DetailBreadcrumb label="Provincial offer search" to="/provincial/offers" />
+        <DetailBreadcrumb
+          label={fallbackReturnTo.label}
+          to={fallbackReturnTo.to}
+          returnTo={detailReturnTo}
+        />
       </Column>
       <Column sm={4} md={8} lg={16} className="detail-page-header">
         <PageHeader
@@ -546,7 +566,14 @@ const ProvincialOfferDetailsPage = () => {
                 <div className="offer-application-link-field">
                   <span className="cds--label">Application number</span>
                   {applicationDetailPath ? (
-                    <Link className="cds--link" to={applicationDetailPath}>
+                    <Link
+                      className="cds--link"
+                      to={applicationDetailPath}
+                      state={withDetailReturnTo(navigationState, {
+                        label: 'Provincial offer detail',
+                        to: locationPath(location),
+                      })}
+                    >
                       {form.applicationNumber}
                     </Link>
                   ) : (

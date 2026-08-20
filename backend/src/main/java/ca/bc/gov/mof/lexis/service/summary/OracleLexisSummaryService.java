@@ -2,17 +2,17 @@ package ca.bc.gov.mof.lexis.service.summary;
 
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
-import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResultDto;
-import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
+import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSummaryEnrichmentDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchResultDto;
+import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSummaryLookupDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferSearchResultDto;
-import ca.bc.gov.mof.lexis.dto.permit.PermitDetailDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.permit.PermitSearchResultDto;
+import ca.bc.gov.mof.lexis.dto.permit.PermitSummaryEnrichmentDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitTotalFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.summary.SummaryApplicationItemDto;
 import ca.bc.gov.mof.lexis.dto.summary.SummaryApplicationsResponseDto;
@@ -31,6 +31,7 @@ import ca.bc.gov.mof.lexis.service.permit.PermitDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.permit.PermitService;
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
@@ -104,8 +105,18 @@ public class OracleLexisSummaryService implements LexisSummaryService {
             normalizedSize);
 
     var response = applicationService.search(criteria);
+    Map<Long, LexisApplicationSummaryEnrichmentDto> enrichmentByApplication =
+        applicationService.findSummaryEnrichmentByApplicationNumbers(
+            response.results().stream()
+                .map(LexisApplicationSearchResultDto::application)
+                .toList());
     List<SummaryApplicationItemDto> results =
-        response.results().stream().map(this::toSummaryApplication).toList();
+        response.results().stream()
+            .map(
+                result ->
+                    toSummaryApplication(
+                        result, enrichmentByApplication.get(result.application())))
+            .toList();
 
     return new SummaryApplicationsResponseDto(results, response.total(), response.page(), response.size());
   }
@@ -184,8 +195,18 @@ public class OracleLexisSummaryService implements LexisSummaryService {
             normalizedSize);
 
     var response = exemptionService.search(criteria);
+    Map<String, ExemptionSummaryLookupDto> lookupByExemption =
+        exemptionService.findSummaryLookups(
+            response.results().stream()
+                .map(ExemptionSearchResultDto::exemptionNumber)
+                .toList());
     List<SummaryExemptionItemDto> results =
-        response.results().stream().map(this::toSummaryExemption).toList();
+        response.results().stream()
+            .map(
+                result ->
+                    toSummaryExemption(
+                        result, lookupByExemption.get(result.exemptionNumber())))
+            .toList();
 
     return new SummaryExemptionsResponseDto(results, response.total(), response.page(), response.size());
   }
@@ -223,8 +244,16 @@ public class OracleLexisSummaryService implements LexisSummaryService {
             normalizedSize);
 
     var response = permitService.search(criteria);
+    Map<Long, PermitSummaryEnrichmentDto> enrichmentByPermit =
+        permitService.findSummaryEnrichmentByPermitNumbers(
+            response.results().stream().map(PermitSearchResultDto::permitNumber).toList());
     List<SummaryPermitItemDto> results =
-        response.results().stream().map(this::toSummaryPermit).toList();
+        response.results().stream()
+            .map(
+                result ->
+                    toSummaryPermit(
+                        result, enrichmentByPermit.get(result.permitNumber())))
+            .toList();
 
     return new SummaryPermitsResponseDto(results, response.total(), response.page(), response.size());
   }
@@ -262,7 +291,16 @@ public class OracleLexisSummaryService implements LexisSummaryService {
             normalizedSize);
 
     var response = permitService.search(criteria);
-    List<SummaryFeeItemDto> results = response.results().stream().map(this::toSummaryFee).toList();
+    Map<Long, PermitSummaryEnrichmentDto> enrichmentByPermit =
+        permitService.findSummaryEnrichmentByPermitNumbers(
+            response.results().stream().map(PermitSearchResultDto::permitNumber).toList());
+    List<SummaryFeeItemDto> results =
+        response.results().stream()
+            .map(
+                result ->
+                    toSummaryFee(
+                        result, enrichmentByPermit.get(result.permitNumber())))
+            .toList();
 
     return new SummaryFeesResponseDto(results, response.total(), response.page(), response.size());
   }
@@ -305,30 +343,20 @@ public class OracleLexisSummaryService implements LexisSummaryService {
     return new SummaryOffersResponseDto(results, response.total(), response.page(), response.size());
   }
 
-  private SummaryApplicationItemDto toSummaryApplication(LexisApplicationSearchResultDto result) {
-    Optional<LexisApplicationDetailDto> detail =
-        applicationService.findByApplicationNumber(result.application());
-
-    String reason = detail.map(LexisApplicationDetailDto::exemptionReasonCode).orElse(null);
+  private SummaryApplicationItemDto toSummaryApplication(
+      LexisApplicationSearchResultDto result,
+      LexisApplicationSummaryEnrichmentDto enrichment) {
     String exemptionNumber = trimToNull(result.exemptionNumber());
     String exemptionType = trimToNull(result.exemptionTypeDescription());
-    List<String> packageNumbers =
-        detail
-            .map(LexisApplicationDetailDto::packages)
-            .stream()
-            .flatMap(List::stream)
-            .map(LexisApplicationDetailDto.LexisPackageDto::packageNumber)
-            .filter(value -> value != null && !value.isBlank())
-            .toList();
     return new SummaryApplicationItemDto(
         result.application(),
         result.status(),
-        reason,
+        enrichment == null ? null : enrichment.reason(),
         exemptionType,
         exemptionNumber,
-        detail.map(LexisApplicationDetailDto::receivedDate).orElse(null),
+        enrichment == null ? null : enrichment.receivedDate(),
         result.listingDate(),
-        packageNumbers);
+        enrichment == null ? List.of() : enrichment.packageNumbers());
   }
 
   private SummaryOfferItemDto toSummaryOffer(PurchaseOfferSearchResultDto result) {
@@ -339,42 +367,46 @@ public class OracleLexisSummaryService implements LexisSummaryService {
         result.listingDate());
   }
 
-  private SummaryExemptionItemDto toSummaryExemption(ExemptionSearchResultDto result) {
-    Optional<ExemptionDetailDto> detail =
-        exemptionService.findByExemptionNumber(result.exemptionNumber());
-
+  private SummaryExemptionItemDto toSummaryExemption(
+      ExemptionSearchResultDto result,
+      ExemptionSummaryLookupDto lookup) {
+    // Legacy summary maps the search row directly. Retain the canonical search clients and load
+    // only the two code descriptions that are not exposed by the modern search DTO.
     return new SummaryExemptionItemDto(
         result.exemptionNumber(),
-        detail.map(ExemptionDetailDto::exemptionTypeDescription).orElse(result.exemptionType()),
-        detail.map(ExemptionDetailDto::ownerClientNumber).orElse(result.ownerClientNumber()),
-        detail.map(ExemptionDetailDto::agentClientNumber).orElse(result.applicantClientNumber()),
-        detail.map(ExemptionDetailDto::exemptionStatusDescription).orElse(result.status()),
-        detail.map(ExemptionDetailDto::approvedVolume).orElse(result.approvedVolume()),
+        lookup == null || trimToNull(lookup.exemptionTypeDescription()) == null
+            ? result.exemptionType()
+            : lookup.exemptionTypeDescription(),
+        result.ownerClientNumber(),
+        result.applicantClientNumber(),
+        lookup == null || trimToNull(lookup.exemptionStatusDescription()) == null
+            ? result.status()
+            : lookup.exemptionStatusDescription(),
+        result.approvedVolume(),
         result.balanceRemaining(),
-        detail.map(ExemptionDetailDto::approvalDate).orElse(result.approvalDate()),
-        detail.map(ExemptionDetailDto::expiryDate).orElse(result.expiryDate()));
+        result.approvalDate(),
+        result.expiryDate());
   }
 
-  private SummaryPermitItemDto toSummaryPermit(PermitSearchResultDto result) {
-    Optional<PermitDetailDto> detail = permitService.findByPermitNumber(result.permitNumber());
-
+  private SummaryPermitItemDto toSummaryPermit(
+      PermitSearchResultDto result,
+      PermitSummaryEnrichmentDto enrichment) {
     return new SummaryPermitItemDto(
-        detail.map(PermitDetailDto::permitNumber).orElse(result.permitNumber()),
-        detail.map(PermitDetailDto::permitStatusDescription).orElse(result.statusDescription()),
-        detail.map(PermitDetailDto::ownerClientNumber).orElse(result.ownerClientNumber()),
-        detail.map(PermitDetailDto::applicantClientNumber).orElse(result.applicantClientNumber()),
-        detail.map(PermitDetailDto::exemptionNumber).orElse(null),
-        detail.map(PermitDetailDto::numberOfPieces).orElse(0L),
-        detail.map(PermitDetailDto::permitVolume).orElse(result.totalVolume()),
-        detail.map(PermitDetailDto::receiptNumber).orElse(null),
-        detail.map(PermitDetailDto::issueDate).orElse(result.issueDate()));
+        result.permitNumber(),
+        result.statusDescription(),
+        result.ownerClientNumber(),
+        result.applicantClientNumber(),
+        enrichment == null ? null : enrichment.exemptionNumber(),
+        enrichment == null ? 0L : enrichment.numberOfPieces(),
+        result.totalVolume(),
+        enrichment == null ? null : enrichment.receiptNumber(),
+        result.issueDate());
   }
 
-  private SummaryFeeItemDto toSummaryFee(PermitSearchResultDto result) {
-    Optional<PermitDetailDto> detail = permitService.findByPermitNumber(result.permitNumber());
-
-    double volume = detail.map(PermitDetailDto::permitVolume).orElse(result.totalVolume());
-    Long permitNumber = detail.map(PermitDetailDto::permitNumber).orElse(result.permitNumber());
+  private SummaryFeeItemDto toSummaryFee(
+      PermitSearchResultDto result,
+      PermitSummaryEnrichmentDto enrichment) {
+    Long permitNumber = result.permitNumber();
     Double fees =
         Optional.ofNullable(
                 permitDetailsRpcService.getTotalFeesForPermit(permitNumber, null, null))
@@ -383,10 +415,10 @@ public class OracleLexisSummaryService implements LexisSummaryService {
             .orElse(null);
     return new SummaryFeeItemDto(
         permitNumber,
-        detail.map(PermitDetailDto::permitStatusDescription).orElse(result.statusDescription()),
-        volume,
+        result.statusDescription(),
+        result.totalVolume(),
         fees,
-        detail.map(PermitDetailDto::receiptNumber).orElse(null));
+        enrichment == null ? null : enrichment.receiptNumber());
   }
 
   private Double parseCurrency(String value) {

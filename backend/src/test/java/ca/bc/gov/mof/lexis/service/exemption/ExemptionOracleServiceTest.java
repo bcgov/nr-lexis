@@ -14,12 +14,14 @@ import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchResultDto;
+import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSummaryLookupDto;
 import ca.bc.gov.mof.lexis.repository.exemption.ExemptionRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -104,6 +106,19 @@ class ExemptionOracleServiceTest {
 
     assertThat(result).contains(dto);
     verify(repository).findByExemptionNumber("EX-205");
+  }
+
+  @Test
+  void summaryLookupsShouldPassThroughRepository() {
+    Map<String, ExemptionSummaryLookupDto> expected =
+        Map.of(
+            "EX-205",
+            new ExemptionSummaryLookupDto("EX-205", "Ministerial", "Approved"));
+    when(repository.findSummaryLookups(List.of("EX-205"))).thenReturn(expected);
+
+    assertThat(service.findSummaryLookups(List.of("EX-205"))).isEqualTo(expected);
+
+    verify(repository).findSummaryLookups(List.of("EX-205"));
   }
 
   @Test

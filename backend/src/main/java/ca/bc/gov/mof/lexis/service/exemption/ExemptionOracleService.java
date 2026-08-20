@@ -10,8 +10,10 @@ import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchResultDto;
+import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSummaryLookupDto;
 import ca.bc.gov.mof.lexis.repository.exemption.ExemptionRepository;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.springframework.context.annotation.Profile;
 import org.springframework.data.domain.Page;
@@ -62,6 +64,12 @@ public class ExemptionOracleService implements ExemptionService {
   @Override
   public int count(ExemptionSearchCriteria criteria) {
     return repository.count(normalizeCriteria(criteria));
+  }
+
+  @Override
+  public Map<String, ExemptionSummaryLookupDto> findSummaryLookups(
+      List<String> exemptionNumbers) {
+    return repository.findSummaryLookups(exemptionNumbers);
   }
 
   @Override
