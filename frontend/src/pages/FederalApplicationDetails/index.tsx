@@ -1357,10 +1357,14 @@ const FederalApplicationDetailsPage = () => {
                                               `/provincial/offers/${encodeURIComponent(item.offerNumber)}`,
                                             ),
                                             {
-                                              state: withDetailReturnTo(location.state, {
-                                                label: 'Federal application detail',
-                                                to: locationPath(location),
-                                              }),
+                                              state: withDetailReturnTo(
+                                                location.state,
+                                                {
+                                                  label: 'Federal application detail',
+                                                  to: locationPath(location),
+                                                },
+                                                detailReturnTo,
+                                              ),
                                             },
                                           )
                                         }

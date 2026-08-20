@@ -3222,10 +3222,14 @@ const ProvincialPermitDetailsPage = () => {
                               value: detail.exemptionNumber ? (
                                 <Link
                                   to={`/provincial/exemption/${encodeURIComponent(detail.exemptionNumber)}`}
-                                  state={withDetailReturnTo(location.state, {
-                                    label: 'Provincial permit detail',
-                                    to: locationPath(location),
-                                  })}
+                                  state={withDetailReturnTo(
+                                    location.state,
+                                    {
+                                      label: 'Provincial permit detail',
+                                      to: locationPath(location),
+                                    },
+                                    detailReturnTo,
+                                  )}
                                 >
                                   {detail.exemptionNumber}
                                 </Link>
@@ -3436,10 +3440,14 @@ const ProvincialPermitDetailsPage = () => {
                                       <TableCell>
                                         <Link
                                           to={`/provincial/application/${encodeURIComponent(applicationNumber)}`}
-                                          state={withDetailReturnTo(location.state, {
-                                            label: 'Provincial permit detail',
-                                            to: locationPath(location),
-                                          })}
+                                          state={withDetailReturnTo(
+                                            location.state,
+                                            {
+                                              label: 'Provincial permit detail',
+                                              to: locationPath(location),
+                                            },
+                                            detailReturnTo,
+                                          )}
                                         >
                                           {applicationNumber}
                                         </Link>
