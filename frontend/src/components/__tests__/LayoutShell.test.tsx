@@ -582,6 +582,9 @@ describe('Layout shell', () => {
       '/applicationReport',
       'mofrListing',
       '/offerReport',
+      '/teacReport',
+      '/exemptionReport',
+      '/feeReport',
     ]
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
@@ -599,6 +602,9 @@ describe('Layout shell', () => {
     renderLayout('/reports/biweeklyListing')
 
     expect(screen.queryByRole('link', { name: /^Application Report$/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /^TEAC Package$/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /^Exemptions Report$/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /^Fees Report$/i })).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Advertising List/i })).toBeVisible()
     expect(screen.getByRole('link', { name: /^Offers Report$/i })).toBeVisible()
     expect(

@@ -654,6 +654,11 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(page.locator('a.csp-side-nav__link[data-label="Application Report"]')).toHaveCount(
       0,
     )
+    await expect(page.locator('a.csp-side-nav__link[data-label="TEAC Package"]')).toHaveCount(0)
+    await expect(page.locator('a.csp-side-nav__link[data-label="Exemptions Report"]')).toHaveCount(
+      0,
+    )
+    await expect(page.locator('a.csp-side-nav__link[data-label="Fees Report"]')).toHaveCount(0)
     await expect(page.getByRole('link', { name: 'Advertising List', exact: true })).toBeVisible()
 
     const typographyFoundation = await page.evaluate(() => {

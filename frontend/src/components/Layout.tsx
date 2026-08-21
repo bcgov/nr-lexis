@@ -208,18 +208,6 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
         requiredActions: ['/offerReport'],
       },
       {
-        to: '/reports/teacReport',
-        label: 'TEAC Package',
-        icon: Report,
-        requiredActions: ['/teacReport'],
-      },
-      {
-        to: '/reports/exemptionReport',
-        label: 'Exemptions Report',
-        icon: Report,
-        requiredActions: ['/exemptionReport'],
-      },
-      {
         to: '/reports/permitLedgerReport',
         label: 'Permits Report',
         icon: Report,
@@ -236,12 +224,6 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
         label: 'Species and Grade Report',
         icon: Report,
         requiredActions: ['/speciesGradeReport'],
-      },
-      {
-        to: '/reports/feeReport',
-        label: 'Fees Report',
-        icon: Report,
-        requiredActions: ['/feeReport'],
       },
       {
         to: '/reports/tenureReport',

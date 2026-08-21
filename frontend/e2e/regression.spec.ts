@@ -765,12 +765,9 @@ const adminNavigationSections: Array<{
     links: [
       'Advertising List',
       'Offers Report',
-      'TEAC Package',
-      'Exemptions Report',
       'Permits Report',
       'Transport Report',
       'Species and Grade Report',
-      'Fees Report',
       'Tenure Analysis',
     ],
   },
