@@ -61,6 +61,8 @@ const UI_PREFERENCE_KEYS = {
   collapsedSections: 'lexis.ui.collapsedSections',
 } as const
 
+// INTENTIONAL_LEGACY_DIVERGENCE(NAVIGATION_MENU_CONTRACT): The business-approved
+// labels, initial section expansion, and role-scoped section visibility are intentional.
 const DEFAULT_COLLAPSED_SECTIONS: Record<string, boolean> = {
   Provincial: false,
   Federal: true,
