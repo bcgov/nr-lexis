@@ -783,29 +783,34 @@ const adminNavigationSections: Array<{
 ]
 
 const adminAccessiblePages: Array<[path: string, heading: RegExp]> = [
-  ['/admin/policies/fee', /fee policy administration/i],
-  ['/admin/policies/fil', /fee in lieu percent policy administration/i],
+  ['/admin/policies/fee', /multiplication factor/i],
+  ['/admin/policies/fil', /non-appraised sec\.3 fil%/i],
   ['/admin/schedules', /export schedule administration/i],
   ['/provincial/review', /provincial application review/i],
   ['/provincial/application/create', /create provincial application/i],
   ['/provincial/application/upload', /upload application submission/i],
   ['/provincial/application', /provincial application search/i],
   ['/federal', /federal application search/i],
-  ['/reports', /application report/i],
+  ['/reports', /offer report/i],
   ['/admin/rtm/emslogamv/upload', /average market values/i],
 ]
 
 const reportAccessiblePages: Array<[path: string, heading: RegExp]> = [
-  ['/reports/applicationReport', /application report/i],
   ['/reports/biweeklyListing', /advertising list/i],
   ['/reports/offerReport', /offer report/i],
-  ['/reports/teacReport', /timber export advisory committee package report/i],
-  ['/reports/exemptionReport', /exemption report/i],
   ['/reports/permitLedgerReport', /permit ledger report/i],
   ['/reports/transportReport', /transport report/i],
   ['/reports/speciesGradeReport', /species and grade report/i],
-  ['/reports/feeReport', /fee report/i],
   ['/reports/tenureReport', /tenure analysis report/i],
+]
+
+// INTENTIONAL_LEGACY_DIVERGENCE(RETIRED_REPORT_SCREENS): Regression must
+// prove these routes stay retired instead of treating them as accessible pages.
+const retiredReportPages: Array<[path: string, heading: RegExp]> = [
+  ['/reports/applicationReport', /application report/i],
+  ['/reports/teacReport', /timber export advisory committee package report/i],
+  ['/reports/exemptionReport', /exemption report/i],
+  ['/reports/feeReport', /fee report/i],
 ]
 
 const createWorkflowPages: Array<[path: string, heading: RegExp]> = [
@@ -1883,6 +1888,16 @@ test.describe('TEST IDIR admin regression', () => {
     expect(apiServerErrors).toEqual([])
   })
 
+  test('redirects retired report routes to the first active report', async () => {
+    const page = await authenticatedIdirPage()
+
+    for (const [path, retiredHeading] of retiredReportPages) {
+      await expectAccessiblePage(page, path, /offer report/i)
+      await expect.poll(() => new URL(page.url()).pathname).toBe('/reports/offerReport')
+      await expect(page.getByRole('heading', { name: retiredHeading })).toHaveCount(0)
+    }
+  })
+
   test('can load admin routes through document navigation', async () => {
     const page = await authenticatedIdirPage()
 
@@ -2759,41 +2774,6 @@ test.describe('TEST IDIR admin regression', () => {
         expect(previousAdvertisingDate >= advertisingDate).toBe(true)
       }
       previousAdvertisingDate = advertisingDate
-    }
-  })
-
-  test('shows report advertising date selector from current list dates', async () => {
-    const page = await authenticatedIdirPage()
-
-    const reportOptions = await readJsonResponse<GenericOptionsResponse>(
-      await getWithAuth(page, '/api/lexis/reports/options'),
-    )
-    const currentSchedules = asRecordArray(reportOptions.currentSchedules)
-    expectReportScheduleOptions(currentSchedules, 'report advertising date selector')
-
-    const datedSchedules = currentSchedules.filter((schedule) => optionCode(schedule))
-    const firstScheduleDate = optionName(datedSchedules[0] ?? {})
-    expect(firstScheduleDate).toMatch(isoDatePattern)
-
-    await expectAccessiblePage(
-      page,
-      '/reports/teacReport',
-      /timber export advisory committee package report/i,
-    )
-    await expect(
-      page.getByRole('heading', {
-        name: 'Timber Export Advisory Committee package report',
-      }),
-    ).toBeVisible()
-
-    const advertisingDate = page.getByRole('combobox', { name: 'Advertising date' })
-    await expect(advertisingDate).toBeVisible()
-    await expect(advertisingDate).toHaveValue(firstScheduleDate)
-
-    for (const optionLabel of datedSchedules.slice(0, 2).map(optionName)) {
-      await advertisingDate.click()
-      await advertisingDate.fill(optionLabel)
-      await expect(page.getByRole('option', { name: optionLabel, exact: true })).toBeVisible()
     }
   })
 

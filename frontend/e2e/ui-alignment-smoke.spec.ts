@@ -23,6 +23,7 @@ const authenticatedAdminSession = {
     '/federalApplicationDetails',
     'viewFederalApplication',
     '/applicationReport',
+    '/offerReport',
     '/lexisAgentAdmin',
     '/applicationDetails',
   ],
@@ -1559,14 +1560,14 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     ).toBe(false)
   })
 
-  test('styles the selected report configuration without changing its route', async ({ page }) => {
+  test('styles an active report configuration without changing its route', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
-    await gotoSyntheticRoute(page, '/reports/applicationReport', {
+    await gotoSyntheticRoute(page, '/reports/offerReport', {
       waitUntil: 'domcontentloaded',
     })
 
-    await expect(page.getByRole('heading', { level: 1, name: 'Application Report' })).toBeVisible()
-    const reportPanel = page.getByRole('region', { name: 'Application Report' })
+    await expect(page.getByRole('heading', { level: 1, name: 'Offer Report' })).toBeVisible()
+    const reportPanel = page.getByRole('region', { name: 'Offer Report' })
     const reportFields = reportPanel.locator('.report-config-fields')
     const reportActions = page.getByRole('group', { name: 'Report actions' })
     await expect(reportPanel).toHaveCSS('border-top-width', '1px')
@@ -1581,13 +1582,16 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       'height',
       '40px',
     )
-    await expect(page.getByLabel('Received from date')).toHaveAttribute('placeholder', 'YYYY-MM-DD')
+    await expect(page.getByLabel('Application from date')).toHaveAttribute(
+      'placeholder',
+      'YYYY-MM-DD',
+    )
     expect(
       await reportFields.evaluate(
         (grid) => getComputedStyle(grid).gridTemplateColumns.split(' ').length,
       ),
     ).toBe(3)
-    expect(new URL(page.url()).pathname).toBe('/reports/applicationReport')
+    expect(new URL(page.url()).pathname).toBe('/reports/offerReport')
 
     await page.setViewportSize({ width: 390, height: 844 })
     expect(
