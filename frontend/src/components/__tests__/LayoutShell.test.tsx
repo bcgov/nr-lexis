@@ -42,6 +42,12 @@ const mockedFetchNotifications = vi.mocked(fetchNotifications)
 const THEME_PREFERENCE_KEY = 'lexis.ui.theme'
 const SIDE_NAV_PREFERENCE_KEY = 'lexis.ui.sideNavCollapsed'
 const COLLAPSED_SECTIONS_PREFERENCE_KEY = 'lexis.ui.collapsedSections'
+const DEFAULT_COLLAPSED_SECTIONS = {
+  Provincial: false,
+  Federal: true,
+  Reports: true,
+  Admin: true,
+}
 const NOTIFICATION_REGION_ID = 'lexis-toast-notification-region'
 const activeNotification: LexisNotification = {
   id: 1,
@@ -100,7 +106,7 @@ describe('Layout shell', () => {
   })
 
   it('uses and persists public-safe defaults when no preferences exist', () => {
-    renderLayout('/admin/rtm/emslogamv')
+    renderLayout('/provincial/review')
 
     const themeSwitch = screen.getByRole('switch', { name: 'Toggle dark mode' })
     expect(themeSwitch).toHaveAttribute('aria-checked', 'false')
@@ -108,10 +114,24 @@ describe('Layout shell', () => {
     expect(themeSwitch.querySelector('.csp-theme-switch__thumb svg')).toBeInTheDocument()
     expect(document.documentElement).toHaveAttribute('data-carbon-theme', 'white')
     expect(document.querySelector('.app-shell')).not.toHaveClass('is-side-nav-collapsed')
-    expect(screen.getByRole('button', { name: 'Reports' })).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('button', { name: 'Provincial' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    )
+    expect(screen.getByRole('button', { name: 'Federal' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
+    expect(screen.getByRole('button', { name: 'Reports' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
+    expect(screen.getByRole('button', { name: 'Admin' })).toHaveAttribute('aria-expanded', 'false')
     expect(window.localStorage.getItem(THEME_PREFERENCE_KEY)).toBe('white')
     expect(window.localStorage.getItem(SIDE_NAV_PREFERENCE_KEY)).toBe('false')
-    expect(window.localStorage.getItem(COLLAPSED_SECTIONS_PREFERENCE_KEY)).toBe('{}')
+    expect(
+      JSON.parse(window.localStorage.getItem(COLLAPSED_SECTIONS_PREFERENCE_KEY) ?? '{}'),
+    ).toEqual(DEFAULT_COLLAPSED_SECTIONS)
   })
 
   it('shows an active-updates indicator only when the visible notifications endpoint returns data', async () => {
@@ -160,11 +180,11 @@ describe('Layout shell', () => {
         capabilities: createTestCapabilities({
           principal: 'bceid\\submitter',
           roles: ['PROVINCIAL_SUBMITTER'],
-          grantedActions: ['/summary'],
+          grantedActions: [],
           forestClientNumber: '00012345',
         }),
         defaultRoute: '/provincial/summary',
-        canPerform: (action: string) => action === '/summary',
+        canPerform: () => true,
       }),
     )
 
@@ -173,6 +193,10 @@ describe('Layout shell', () => {
       'href',
       '/provincial/summary',
     )
+    expect(screen.getByRole('button', { name: 'Provincial' })).toBeVisible()
+    expect(screen.queryByText('Federal')).not.toBeInTheDocument()
+    expect(screen.queryByText('Reports')).not.toBeInTheDocument()
+    expect(screen.queryByText('Admin')).not.toBeInTheDocument()
 
     submitterView.unmount()
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
@@ -219,7 +243,7 @@ describe('Layout shell', () => {
     expect(window.localStorage.getItem(SIDE_NAV_PREFERENCE_KEY)).toBe('true')
     expect(
       JSON.parse(window.localStorage.getItem(COLLAPSED_SECTIONS_PREFERENCE_KEY) ?? '{}'),
-    ).toEqual({ Reports: true })
+    ).toEqual({ ...DEFAULT_COLLAPSED_SECTIONS, Reports: false })
     const storedKeys = Array.from({ length: window.localStorage.length }, (_, index) =>
       window.localStorage.key(index),
     ).sort()
@@ -241,7 +265,10 @@ describe('Layout shell', () => {
     )
     expect(document.documentElement).toHaveAttribute('data-carbon-theme', 'white')
     expect(document.querySelector('.app-shell')).not.toHaveClass('is-side-nav-collapsed')
-    expect(screen.getByRole('button', { name: 'Reports' })).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('button', { name: 'Reports' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
   })
 
   it('continues with in-memory preferences when local storage fails', async () => {
@@ -304,8 +331,9 @@ describe('Layout shell', () => {
     expect(averageMarketValuesLink).toHaveAttribute('aria-current', 'page')
   })
 
-  it('does not mark the upload navigation item active on the legacy AMV grid route', () => {
+  it('does not mark the upload navigation item active on the legacy AMV grid route', async () => {
     renderLayout('/admin/rtm/emslogamv')
+    await userEvent.click(screen.getByRole('button', { name: 'Admin' }))
 
     const averageMarketValuesLink = screen.getByRole('link', {
       name: /Average market values/i,
@@ -316,17 +344,20 @@ describe('Layout shell', () => {
   })
 
   it.each([
-    ['/provincial/application/321', 'Applications'],
-    ['/provincial/exemption/26-8801', 'Exemptions'],
-    ['/provincial/offers/434', 'Offers'],
-    ['/provincial/permit/9020955', 'Permits'],
-    ['/federal/application/46244', 'Search'],
-  ])('marks the owning navigation item active on detail route %s', (path, linkName) => {
+    ['/provincial/application/321', 'Application search', '/provincial/application'],
+    ['/provincial/exemption/26-8801', 'Exemption search', '/provincial/exemption'],
+    ['/provincial/offers/434', 'Offer search', '/provincial/offers'],
+    ['/provincial/permit/9020955', 'Permit search', '/provincial/permit'],
+    ['/federal/application/46244', 'Application search', '/federal'],
+  ])('marks the owning navigation item active on detail route %s', (path, linkName, href) => {
     renderLayout(path)
 
-    const owningLink = screen.getByRole('link', { name: linkName })
+    const owningLink = screen
+      .getAllByRole('link', { name: linkName })
+      .find((link) => link.getAttribute('href') === href)
     const activeLinks = document.querySelectorAll('.cds--side-nav__link--active')
 
+    expect(owningLink).toBeDefined()
     expect(activeLinks).toHaveLength(1)
     expect(owningLink).toHaveClass('cds--side-nav__link--active')
     expect(owningLink).toHaveAttribute('aria-current', 'page')
@@ -338,7 +369,7 @@ describe('Layout shell', () => {
   ])('gives exact route %s priority over the application detail pattern', (path, linkName) => {
     renderLayout(path)
 
-    const applicationsLink = screen.getByRole('link', { name: /^Applications$/i })
+    const applicationsLink = screen.getByRole('link', { name: /^Application search$/i })
     const exactLink = screen.getByRole('link', { name: linkName })
     const activeLinks = document.querySelectorAll('.cds--side-nav__link--active')
 
@@ -360,7 +391,10 @@ describe('Layout shell', () => {
       'aria-expanded',
       'true',
     )
-    expect(screen.getByRole('link', { name: 'Offers' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('link', { name: 'Offer search' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    )
   })
 
   it('does not select a navigation item for an unknown deeper route', () => {
@@ -382,9 +416,9 @@ describe('Layout shell', () => {
 
     renderLayout('/admin/schedules')
 
-    const feePolicyLink = screen.getByRole('link', { name: /Fee Policy/i })
+    const feePolicyLink = screen.getByRole('link', { name: /Multiplication Factor/i })
     const filPolicyLink = screen.getByRole('link', {
-      name: /Fee in Lieu/i,
+      name: /Non-appraised Sec\.3 FIL%/i,
     })
     const scheduleLink = screen.getByRole('link', {
       name: /Export Schedule/i,
@@ -451,13 +485,13 @@ describe('Layout shell', () => {
 
     renderLayout('/provincial/application')
 
-    expect(screen.getByRole('link', { name: 'Applications' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'Application search' })).toHaveAttribute(
       'href',
       '/provincial/application',
     )
-    expect(screen.getByRole('link', { name: 'Exemptions' })).toBeVisible()
-    expect(screen.getByRole('link', { name: 'Offers' })).toBeVisible()
-    expect(screen.getByRole('link', { name: 'Permits' })).toBeVisible()
+    expect(screen.getByRole('link', { name: 'Exemption search' })).toBeVisible()
+    expect(screen.getByRole('link', { name: 'Offer search' })).toBeVisible()
+    expect(screen.getByRole('link', { name: 'Permit search' })).toBeVisible()
     expect(screen.getByText('Federal')).toBeVisible()
     expect(
       screen.queryByRole('link', { name: /Create\/Edit Application/i }),
@@ -527,9 +561,9 @@ describe('Layout shell', () => {
 
     renderLayout('/provincial/application')
 
-    expect(screen.getByRole('link', { name: /Applications/i })).toBeVisible()
-    expect(screen.getByRole('link', { name: /Exemptions/i })).toBeVisible()
-    expect(screen.getByRole('link', { name: /^Offers$/i })).toBeVisible()
+    expect(screen.getByRole('link', { name: /^Application search$/i })).toBeVisible()
+    expect(screen.getByRole('link', { name: /^Exemption search$/i })).toBeVisible()
+    expect(screen.getByRole('link', { name: /^Offer search$/i })).toBeVisible()
     expect(
       screen.queryByRole('link', { name: /Create\/Edit Application/i }),
     ).not.toBeInTheDocument()
@@ -562,9 +596,9 @@ describe('Layout shell', () => {
       }),
     )
 
-    renderLayout('/reports')
+    renderLayout('/reports/biweeklyListing')
 
-    expect(screen.getByRole('link', { name: /^Application Report$/i })).toBeVisible()
+    expect(screen.queryByRole('link', { name: /^Application Report$/i })).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Advertising List/i })).toBeVisible()
     expect(screen.getByRole('link', { name: /^Offers Report$/i })).toBeVisible()
     expect(
@@ -572,12 +606,14 @@ describe('Layout shell', () => {
     ).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /Create\/Edit Exemption/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /Create\/Edit Offer/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: /^Fee Policy$/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: /^Fee in Lieu$/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /^Multiplication Factor$/i })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('link', { name: /^Non-appraised Sec\.3 FIL%$/i }),
+    ).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /^Export Schedule$/i })).not.toBeInTheDocument()
   })
 
-  it('renders legacy report navigation when an auth mock omits roles', () => {
+  it('renders available report navigation when an auth mock omits roles', () => {
     const capabilitiesWithoutRoles = {
       authenticated: true,
       principal: 'idir\\partial',
@@ -597,17 +633,14 @@ describe('Layout shell', () => {
       }),
     )
 
-    renderLayout('/reports')
+    renderLayout('/reports/biweeklyListing')
 
     expect(screen.getByRole('navigation', { name: 'Side navigation' })).toBeVisible()
     expect(screen.getByRole('link', { name: /Advertising List/i })).toHaveAttribute(
       'href',
       '/reports/biweeklyListing',
     )
-    expect(screen.getByRole('link', { name: /^Application Report$/i })).toHaveAttribute(
-      'href',
-      '/reports/applicationReport',
-    )
+    expect(screen.queryByRole('link', { name: /^Application Report$/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /^Menu$/i })).not.toBeInTheDocument()
   })
 
@@ -652,14 +685,27 @@ describe('Layout shell', () => {
     renderLayout('/federal')
 
     expect(document.querySelector('.page-header__eyebrow')).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /^Search$/i })).toBeVisible()
+    const federalSearchLink = screen
+      .getAllByRole('link', { name: /^Application search$/i })
+      .find((link) => link.getAttribute('href') === '/federal')
+    expect(federalSearchLink).toBeVisible()
     expect(screen.queryByRole('link', { name: /^Upload$/i })).not.toBeInTheDocument()
   })
 
   it('supports collapsing and expanding side-nav sections', async () => {
-    renderLayout('/admin/rtm/emslogamv')
+    renderLayout('/admin/rtm/emslogamv/upload')
 
+    expect(screen.getByRole('button', { name: 'Reports' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
+    expect(screen.queryByRole('link', { name: /Advertising List/i })).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Reports' }))
+
+    expect(screen.getByRole('button', { name: 'Reports' })).toHaveAttribute('aria-expanded', 'true')
     expect(screen.getByRole('link', { name: /Advertising List/i })).toBeVisible()
+    expect(screen.getByRole('link', { name: /Average market values/i })).toBeVisible()
 
     await userEvent.click(screen.getByRole('button', { name: 'Reports' }))
 
@@ -668,18 +714,11 @@ describe('Layout shell', () => {
       'false',
     )
     expect(screen.queryByRole('link', { name: /Advertising List/i })).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /Average market values/i })).toBeVisible()
-
-    await userEvent.click(screen.getByRole('button', { name: 'Reports' }))
-
-    expect(screen.getByRole('button', { name: 'Reports' })).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByRole('link', { name: /Advertising List/i })).toBeVisible()
   })
 
   it('keeps section links available as icons when the full side nav is collapsed', async () => {
     renderLayout('/admin/rtm/emslogamv')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Reports' }))
     expect(screen.queryByRole('link', { name: /Advertising List/i })).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Close menu' }))
@@ -878,7 +917,10 @@ describe('Layout shell', () => {
     expect(openMenuButton).toHaveAttribute('aria-controls', 'side-navigation')
     expect(sideNav).not.toHaveAttribute('aria-hidden')
     expect(sideNav).not.toHaveAttribute('inert')
-    expect(screen.getByRole('link', { name: 'Applications' })).toBeInTheDocument()
+    const provincialSearchLink = screen
+      .getAllByRole('link', { name: 'Application search' })
+      .find((link) => link.getAttribute('href') === '/provincial/application')
+    expect(provincialSearchLink).toBeInTheDocument()
     expect(window.localStorage.getItem(SIDE_NAV_PREFERENCE_KEY)).toBe('true')
 
     await userEvent.click(openMenuButton)

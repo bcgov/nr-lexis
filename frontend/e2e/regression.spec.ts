@@ -748,22 +748,21 @@ const adminNavigationSections: Array<{
       'Application review',
       'Create/Edit Application',
       'Upload',
-      'Applications',
+      'Application search',
       'Create/Edit Exemption',
-      'Exemptions',
+      'Exemption search',
       'Create/Edit Offer',
-      'Offers',
-      'Permits',
+      'Offer search',
+      'Permit search',
     ],
   },
   {
     section: 'Federal',
-    links: ['Search'],
+    links: ['Application search'],
   },
   {
     section: 'Reports',
     links: [
-      'Application Report',
       'Advertising List',
       'Offers Report',
       'TEAC Package',
@@ -777,7 +776,12 @@ const adminNavigationSections: Array<{
   },
   {
     section: 'Admin',
-    links: ['Fee Policy', 'Fee in Lieu', 'Export Schedule', 'Average market values'],
+    links: [
+      'Multiplication Factor',
+      'Non-appraised Sec.3 FIL%',
+      'Export Schedule',
+      'Average market values',
+    ],
   },
 ]
 
@@ -924,10 +928,20 @@ const representativeAdminActions = [
   'mofrListing',
 ]
 
+const expandSideNavSection = async (page: Page, section: string): Promise<void> => {
+  const sectionToggle = page
+    .locator(sideNavSection(section))
+    .getByRole('button', { name: section, exact: true })
+  if ((await sectionToggle.getAttribute('aria-expanded')) === 'false') {
+    await sectionToggle.click()
+  }
+}
+
 const expectAdminNavigation = async (page: Page): Promise<void> => {
   for (const { section, links } of adminNavigationSections) {
     const navSection = page.locator(sideNavSection(section))
     await expect(navSection, `${section} navigation section should be visible`).toBeVisible()
+    await expandSideNavSection(page, section)
     await expect(
       navSection.getByRole('link'),
       `${section} navigation should not include extra links`,
@@ -1665,7 +1679,25 @@ test.describe('TEST IDIR admin regression', () => {
     const page = await authenticatedIdirPage()
     const apiServerErrors = collectApiServerErrors(page)
 
+    await page.evaluate(() => window.localStorage.removeItem('lexis.ui.collapsedSections'))
     await expectAccessiblePage(page, '/provincial/review', /provincial application review/i)
+
+    await expect(page.getByRole('button', { name: 'Provincial', exact: true })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    )
+    await expect(page.getByRole('button', { name: 'Federal', exact: true })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
+    await expect(page.getByRole('button', { name: 'Reports', exact: true })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
+    await expect(page.getByRole('button', { name: 'Admin', exact: true })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
 
     const capabilities = await fetchSessionCapabilities(page)
     const roles = asStringArray(capabilities.roles)
@@ -1739,6 +1771,7 @@ test.describe('TEST IDIR admin regression', () => {
     await expectAccessiblePage(page, '/provincial/review', /provincial application review/i)
 
     const reportsSection = page.locator(sideNavSection('Reports'))
+    await expandSideNavSection(page, 'Reports')
     await expect(reportsSection.getByRole('link', { name: 'Advertising List' })).toBeVisible()
     await reportsSection.getByRole('button', { name: 'Reports' }).click()
     await expect(reportsSection.getByRole('link', { name: 'Advertising List' })).toHaveCount(0)
@@ -1766,6 +1799,9 @@ test.describe('TEST IDIR admin regression', () => {
     const provincialSection = page.locator(sideNavSection('Provincial'))
     const federalSection = page.locator(sideNavSection('Federal'))
     const adminSection = page.locator(sideNavSection('Admin'))
+
+    await expandSideNavSection(page, 'Federal')
+    await expandSideNavSection(page, 'Admin')
 
     await expect(provincialSection.getByRole('link', { name: 'Upload' })).toHaveAttribute(
       'href',
@@ -1807,6 +1843,7 @@ test.describe('TEST IDIR admin regression', () => {
     const page = await authenticatedIdirPage()
 
     await expectAccessiblePage(page, '/provincial/review', /provincial application review/i)
+    await expandSideNavSection(page, 'Reports')
 
     for (const [linkName, path, heading] of [
       ['Offers Report', '/reports/offerReport', /offer report/i],

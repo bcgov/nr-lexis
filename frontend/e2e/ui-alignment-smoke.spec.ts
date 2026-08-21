@@ -512,7 +512,23 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(navigationToggle).toHaveCSS('height', '48px')
     await expect(page.locator('.csp-app-header > #navigation-toggle')).toHaveCount(1)
     await expect(page.locator('.csp-side-nav > .csp-side-nav__toggle')).toHaveCount(0)
-    await expect(page.getByRole('link', { name: 'Applications', exact: true })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Application search', exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Provincial', exact: true })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    )
+    await expect(page.getByRole('button', { name: 'Federal', exact: true })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
+    await expect(page.getByRole('button', { name: 'Reports', exact: true })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
+    await expect(page.getByRole('button', { name: 'Admin', exact: true })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
     await expect(page.locator('.lexis-page-header__subtitle')).toContainText(
       'Find provincial applications',
     )
@@ -618,8 +634,8 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       'background-color',
       'rgb(244, 244, 244)',
     )
-    const activeNavLink = page.locator('a.csp-side-nav__link[data-label="Applications"]')
-    const inactiveNavLink = page.locator('a.csp-side-nav__link[data-label="Exemptions"]')
+    const activeNavLink = page.locator('a.csp-side-nav__link[data-label="Application search"]')
+    const inactiveNavLink = page.locator('a.csp-side-nav__link[data-label="Exemption search"]')
     await expect(activeNavLink).toHaveCSS('height', '48px')
     await expect(activeNavLink).toHaveCSS('font-weight', '600')
     await expect(activeNavLink).toHaveCSS('background-color', 'rgb(232, 232, 232)')
@@ -633,10 +649,12 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       'color',
       'rgb(96, 96, 98)',
     )
-    await expect(
-      page.locator('a.csp-side-nav__link[data-label="Application Report"]'),
-    ).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Reports', exact: true })).toBeVisible()
+    const reportsToggle = page.getByRole('button', { name: 'Reports', exact: true })
+    await reportsToggle.click()
+    await expect(page.locator('a.csp-side-nav__link[data-label="Application Report"]')).toHaveCount(
+      0,
+    )
+    await expect(page.getByRole('link', { name: 'Advertising List', exact: true })).toBeVisible()
 
     const typographyFoundation = await page.evaluate(() => {
       const rootStyle = getComputedStyle(document.documentElement)
@@ -751,7 +769,9 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     const collapsedNav = page.locator('.csp-side-nav')
     await expect(collapsedNav).toHaveCSS('width', '48px')
     const collapsedLinkLayout = await page
-      .locator('a.csp-side-nav__link[data-label="Applications"]')
+      .locator(
+        'a.csp-side-nav__link[data-label="Application search"][href="/provincial/application"]',
+      )
       .evaluate((link) => {
         const nav = document.querySelector('.csp-side-nav')
         const icon = link.querySelector('.csp-side-nav__icon')
@@ -1058,7 +1078,9 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(table.locator('thead th').first()).toHaveCSS('background-color', 'rgb(57, 57, 57)')
     await expect(firstRowCell).toHaveCSS('background-color', 'rgb(38, 38, 38)')
     await expect(secondRowCell).toHaveCSS('background-color', 'rgb(44, 44, 44)')
-    const darkActiveNavLink = page.locator('a.csp-side-nav__link[data-label="Applications"]')
+    const darkActiveNavLink = page.locator(
+      'a.csp-side-nav__link[data-label="Application search"][href="/provincial/application"]',
+    )
     await expect(darkActiveNavLink).toHaveCSS('background-color', 'rgb(51, 51, 51)')
     await expect(darkActiveNavLink.locator('.csp-side-nav__link-text')).toHaveCSS(
       'color',
@@ -1142,7 +1164,10 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(sideNav).toBeVisible()
     await expect(sideNav).toHaveCSS('width', '48px')
     await expect(sideNav).not.toHaveAttribute('aria-hidden')
-    await expect(page.getByRole('link', { name: 'Applications', exact: true })).toBeVisible()
+    const provincialApplicationSearchLink = page.locator(
+      'a.csp-side-nav__link[data-label="Application search"][href="/provincial/application"]',
+    )
+    await expect(provincialApplicationSearchLink).toBeVisible()
 
     await expect(
       page.getByRole('heading', { level: 1, name: 'Provincial application search' }),
@@ -1184,10 +1209,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(sideNav).toBeVisible()
     await expect(sideNav).toHaveCSS('width', '256px')
     await expect(sideNav).not.toHaveAttribute('aria-hidden')
-    await expect(page.getByRole('link', { name: 'Applications', exact: true })).toHaveAttribute(
-      'aria-current',
-      'page',
-    )
+    await expect(provincialApplicationSearchLink).toHaveAttribute('aria-current', 'page')
 
     await page.getByRole('button', { name: 'Close menu' }).click()
 
