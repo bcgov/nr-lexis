@@ -1624,6 +1624,7 @@ const ProvincialApplicationCreatePage = () => {
                       invalid={!!fieldError('ownerContactName')}
                       invalidText={fieldError('ownerContactName')}
                       placeholder={ownerContactPlaceholder}
+                      allowCustomValue
                       options={ownerClientContacts
                         .filter(isSelectableClientContact)
                         .map((contact) => ({

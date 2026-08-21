@@ -90,4 +90,25 @@ describe('SearchableSelect', () => {
 
     expect(onChange).not.toHaveBeenCalled()
   })
+
+  it('emits a custom value when custom entry is enabled', async () => {
+    const onChange = vi.fn()
+    render(
+      <SearchableSelect
+        id="owner-name"
+        labelText="Owner name"
+        value="Default Owner"
+        options={[{ value: 'Default Owner', label: 'Default Owner' }]}
+        allowCustomValue
+        onChange={onChange}
+      />,
+    )
+
+    const combobox = screen.getByRole('combobox', { name: 'Owner name' })
+    await userEvent.clear(combobox)
+    await userEvent.type(combobox, 'Custom Owner')
+    await userEvent.tab()
+
+    expect(onChange).toHaveBeenLastCalledWith('Custom Owner')
+  })
 })

@@ -1010,6 +1010,38 @@ describe('Create Page Core Flows', () => {
     )
   })
 
+  it('allows a custom owner name when the lookup returns contacts', async () => {
+    mockedSubmitProvincialApplicationCreate.mockResolvedValue(successfulCreate('904'))
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&productTypeCode=LOG&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&speciesCodes=HE&endUseCode=SA&comments=Ready',
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/provincial/application/create"
+            element={<ProvincialApplicationCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationCreateTab('Clients')
+    const ownerNameInput = await screen.findByRole('combobox', { name: 'Owner name' })
+    await waitFor(() => expect(ownerNameInput).toHaveValue('Owner Contact'))
+    await userEvent.clear(ownerNameInput)
+    await userEvent.type(ownerNameInput, 'Advertising Owner')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(mockedSubmitProvincialApplicationCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ownerContactName: 'Advertising Owner',
+      }),
+    )
+  })
+
   it('blocks provincial application submit when volume precision is invalid', async () => {
     render(
       <MemoryRouter
