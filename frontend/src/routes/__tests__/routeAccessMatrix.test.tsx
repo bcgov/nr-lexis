@@ -96,12 +96,20 @@ describe('Protected route access matrix', () => {
     },
   )
 
-  it('includes advertising list action in reports route requirements', () => {
+  it('includes only active report actions in reports route requirements', () => {
     const route = findRoute('/reports')
     const detailRoute = findRoute('/reports/:reportId')
 
     expect(route.requiredActions).toContain('mofrListing')
-    expect(route.requiredActions).toContain('/applicationReport')
+    expect(route.requiredActions).toContain('/offerReport')
+    expect(route.requiredActions).not.toEqual(
+      expect.arrayContaining([
+        '/applicationReport',
+        '/teacReport',
+        '/exemptionReport',
+        '/feeReport',
+      ]),
+    )
     expect(detailRoute.requiredActions).toEqual(route.requiredActions)
   })
 
