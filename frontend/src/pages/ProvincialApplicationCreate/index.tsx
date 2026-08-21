@@ -60,8 +60,10 @@ import {
 } from '@/service/search-options-service'
 import { submitProvincialApplicationCreate } from '@/service/create-submit-service'
 import {
+  fetchApplicationClientData,
   fetchApplicationClientContacts,
   fetchApplicationClientLocations,
+  type ApplicationClientData,
   type ApplicationClientContact,
   type ApplicationClientLocation,
 } from '@/service/application-client-lookup-service'
@@ -74,6 +76,7 @@ import { useAuth } from '@/context/auth/useAuth'
 import { hasProvincialSubmitterRole } from '@/context/auth/role-utils'
 import IsoDatePicker from '../../components/IsoDatePicker'
 import { formatBusinessIsoDate } from '@/utils/date'
+import { displayValue } from '@/utils/text'
 
 type ProvincialApplicationCreateForm = {
   ownerClientNumber: string
@@ -271,6 +274,54 @@ type PageStatus = {
   placement?: 'inline'
 }
 
+type ApplicationCreateClientSummaryProps = {
+  title: string
+  clientData: ApplicationClientData | null
+}
+
+const ApplicationCreateClientSummary = ({
+  title,
+  clientData,
+}: ApplicationCreateClientSummaryProps) => {
+  if (!clientData) {
+    return null
+  }
+
+  return (
+    <section className="application-create-client-summary" aria-label={title}>
+      <h3 className="application-client-summary__title">{title}</h3>
+      <dl className="detail-field-grid">
+        {[
+          ['Company name', displayValue(clientData.companyName)],
+          ['Address', displayValue(clientData.address)],
+          ['City', displayValue(clientData.city)],
+          ['Province', displayValue(clientData.province)],
+          ['Postal code', displayValue(clientData.postalCode)],
+          ['Country', displayValue(clientData.country)],
+          ['Phone', displayValue(clientData.phone)],
+          ['Fax', displayValue(clientData.fax)],
+          ['Email', displayValue(clientData.email)],
+        ].map(([label, value]) => (
+          <div key={label} className="detail-field-item">
+            <dt className="detail-field-label">{label}</dt>
+            <dd className="detail-field-value">{value}</dd>
+          </div>
+        ))}
+      </dl>
+      {clientData.notfound && (
+        <InlineNotification
+          className="detail-context-notification"
+          kind="warning"
+          title="Client lookup"
+          subtitle={clientData.notfound}
+          lowContrast
+          hideCloseButton
+        />
+      )}
+    </section>
+  )
+}
+
 const ProvincialApplicationCreatePage = () => {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -304,6 +355,8 @@ const ProvincialApplicationCreatePage = () => {
   const [agentClientLocations, setAgentClientLocations] = useState<ApplicationClientLocation[]>([])
   const [ownerClientContacts, setOwnerClientContacts] = useState<ApplicationClientContact[]>([])
   const [agentClientContacts, setAgentClientContacts] = useState<ApplicationClientContact[]>([])
+  const [ownerClientData, setOwnerClientData] = useState<ApplicationClientData | null>(null)
+  const [agentClientData, setAgentClientData] = useState<ApplicationClientData | null>(null)
   const [applicationSpeciesOptions, setApplicationSpeciesOptions] = useState<
     ApplicationCodeOption[]
   >([])
@@ -637,6 +690,7 @@ const ProvincialApplicationCreatePage = () => {
         }
 
         setOwnerClientContacts([])
+        setOwnerClientData(null)
         setIsLoadingOwnerClientContacts(false)
       })
 
@@ -648,6 +702,7 @@ const ProvincialApplicationCreatePage = () => {
     let isActive = true
     void Promise.resolve().then(() => {
       if (isActive) {
+        setOwnerClientData(null)
         setIsLoadingOwnerClientContacts(true)
       }
     })
@@ -679,6 +734,14 @@ const ProvincialApplicationCreatePage = () => {
         }
       })
 
+    void fetchApplicationClientData(ownerClientNumber, ownerClientLocationCode).then(
+      (clientData) => {
+        if (isActive) {
+          setOwnerClientData(clientData)
+        }
+      },
+    )
+
     return () => {
       isActive = false
     }
@@ -693,6 +756,7 @@ const ProvincialApplicationCreatePage = () => {
         }
 
         setAgentClientContacts([])
+        setAgentClientData(null)
         setIsLoadingAgentClientContacts(false)
       })
 
@@ -711,6 +775,7 @@ const ProvincialApplicationCreatePage = () => {
         }
 
         setAgentClientContacts([])
+        setAgentClientData(null)
         setIsLoadingAgentClientContacts(false)
       })
 
@@ -722,6 +787,7 @@ const ProvincialApplicationCreatePage = () => {
     let isActive = true
     void Promise.resolve().then(() => {
       if (isActive) {
+        setAgentClientData(null)
         setIsLoadingAgentClientContacts(true)
       }
     })
@@ -752,6 +818,14 @@ const ProvincialApplicationCreatePage = () => {
           setIsLoadingAgentClientContacts(false)
         }
       })
+
+    void fetchApplicationClientData(agentClientNumber, agentClientLocationCode).then(
+      (clientData) => {
+        if (isActive) {
+          setAgentClientData(clientData)
+        }
+      },
+    )
 
     return () => {
       isActive = false
@@ -1695,6 +1769,10 @@ const ProvincialApplicationCreatePage = () => {
                       readOnly
                     />
                   )}
+                  <ApplicationCreateClientSummary
+                    title="Owner client details"
+                    clientData={ownerClientData}
+                  />
                   {isAgentApplicant(form.applicantTypeCode) && (
                     <>
                       <TextInput
@@ -1780,6 +1858,10 @@ const ProvincialApplicationCreatePage = () => {
                           }}
                         />
                       )}
+                      <ApplicationCreateClientSummary
+                        title="Agent client details"
+                        clientData={agentClientData}
+                      />
                     </>
                   )}
                 </div>
