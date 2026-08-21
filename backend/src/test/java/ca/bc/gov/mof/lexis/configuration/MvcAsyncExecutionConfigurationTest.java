@@ -44,12 +44,14 @@ class MvcAsyncExecutionConfigurationTest {
 
     CountDownLatch completed = new CountDownLatch(1);
     boolean[] virtualThread = new boolean[1];
-    executor.execute(
-        () -> {
-          virtualThread[0] = Thread.currentThread().isVirtual();
-          completed.countDown();
-        });
-    assertThat(completed.await(5, TimeUnit.SECONDS)).isTrue();
+    try (SimpleAsyncTaskExecutor probeExecutor = newConfiguredExecutor()) {
+      probeExecutor.execute(
+          () -> {
+            virtualThread[0] = Thread.currentThread().isVirtual();
+            completed.countDown();
+          });
+      assertThat(completed.await(5, TimeUnit.SECONDS)).isTrue();
+    }
     assertThat(virtualThread[0]).isTrue();
     assertThat(ReflectionTestUtils.getField(handlerAdapter, "taskExecutor"))
         .isSameAs(applicationTaskExecutor);
@@ -59,31 +61,36 @@ class MvcAsyncExecutionConfigurationTest {
 
   @Test
   void mvcShouldRejectTransfersBeyondTheConfiguredConcurrencyLimit() throws Exception {
-    SimpleAsyncTaskExecutor executor = (SimpleAsyncTaskExecutor) applicationTaskExecutor;
     CountDownLatch started = new CountDownLatch(2);
     CountDownLatch release = new CountDownLatch(1);
     CountDownLatch completed = new CountDownLatch(2);
 
-    try {
-      for (int index = 0; index < 2; index++) {
-        executor.execute(
-            () -> {
-              started.countDown();
-              try {
-                release.await();
-              } catch (InterruptedException interrupted) {
-                Thread.currentThread().interrupt();
-              } finally {
-                completed.countDown();
-              }
-            });
+    try (SimpleAsyncTaskExecutor executor = newConfiguredExecutor()) {
+      try {
+        for (int index = 0; index < 2; index++) {
+          executor.execute(
+              () -> {
+                started.countDown();
+                try {
+                  release.await();
+                } catch (InterruptedException interrupted) {
+                  Thread.currentThread().interrupt();
+                } finally {
+                  completed.countDown();
+                }
+              });
+        }
+        assertThat(started.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThatThrownBy(() -> executor.execute(() -> {}))
+            .isInstanceOf(TaskRejectedException.class);
+      } finally {
+        release.countDown();
       }
-      assertThat(started.await(5, TimeUnit.SECONDS)).isTrue();
-      assertThatThrownBy(() -> executor.execute(() -> {}))
-          .isInstanceOf(TaskRejectedException.class);
-    } finally {
-      release.countDown();
+      assertThat(completed.await(5, TimeUnit.SECONDS)).isTrue();
     }
-    assertThat(completed.await(5, TimeUnit.SECONDS)).isTrue();
+  }
+
+  private static SimpleAsyncTaskExecutor newConfiguredExecutor() {
+    return new MvcAsyncExecutionConfiguration().applicationTaskExecutor(2);
   }
 }
