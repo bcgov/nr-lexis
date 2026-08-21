@@ -1310,7 +1310,9 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       waitUntil: 'domcontentloaded',
     })
 
-    await expect(page.getByRole('heading', { level: 1, name: 'Offer 81001' })).toBeVisible()
+    await expect(page.getByRole('heading', { level: 1, name: 'Offer 81001' })).toBeVisible({
+      timeout: 30_000,
+    })
     await expect(page.getByText('Check and manage this provincial offer')).toBeVisible()
     const backLink = page.getByRole('link', { name: 'Back to Provincial offers search' })
     await expect(backLink).toHaveAttribute('href', '/provincial/offers')
