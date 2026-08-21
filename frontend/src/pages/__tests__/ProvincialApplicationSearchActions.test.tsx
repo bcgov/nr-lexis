@@ -123,6 +123,29 @@ describe('Provincial Application Search Actions', () => {
     })
   })
 
+  it('displays the pending exemption status supplied by the backend', async () => {
+    mockedSearchProvincialApplications.mockResolvedValueOnce({
+      content: [
+        {
+          ...searchRowsWithMixedEligibility[1],
+          applicationNumber: '108826',
+          status: 'Exempted - New',
+          exemptionNumber: '20-8562',
+        },
+      ],
+      page: {
+        number: 0,
+        size: 10,
+        totalElements: 1,
+        totalPages: 1,
+      },
+    })
+
+    renderPage()
+
+    expect(await screen.findByText('Exempted - New')).toBeVisible()
+  })
+
   it('only allows selecting eligible rows and navigates to exemption create with prefill', async () => {
     renderPage()
     await screen.findByText('321')

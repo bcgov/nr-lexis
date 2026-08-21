@@ -330,6 +330,8 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
         </MemoryRouter>,
       )
 
+      const pageHeading = await screen.findByRole('heading', { name: 'Application 321' })
+      expect(pageHeading.closest('.lexis-page-header')).toHaveTextContent(statusDescription)
       await selectApplicationDetailTab('Application')
       expect(await screen.findByText('Application summary')).toBeInTheDocument()
       expect(mockedFetchApplicationSummarySnapshot).toHaveBeenCalledWith('321')

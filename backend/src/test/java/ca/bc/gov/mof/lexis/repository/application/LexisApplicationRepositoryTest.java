@@ -23,6 +23,7 @@ import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -74,6 +75,34 @@ class LexisApplicationRepositoryTest {
                         && !sql.contains("EXPORT_PURCHASE_OFFER")),
             any(RowMapper.class),
             eq(900123L));
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void exemptionStatusLookupShouldUseOneNarrowQuery() throws Exception {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    when(jdbcTemplate.query(any(String.class), any(RowMapper.class), eq("20-8562")))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<String> rowMapper = invocation.getArgument(1);
+              ResultSet resultSet = mock(ResultSet.class);
+              when(resultSet.getString("EXPORT_EXEMPTION_STATUS_CODE")).thenReturn("NEW");
+              return List.of(rowMapper.mapRow(resultSet, 0));
+            });
+    LexisApplicationRepository repository = new LexisApplicationRepository(jdbcTemplate);
+
+    assertThat(repository.loadExemptionStatusCode(" 20-8562 ")).contains("NEW");
+
+    verify(jdbcTemplate)
+        .query(
+            argThat(
+                sql ->
+                    sql.contains("FROM EXPORT_EXEMPTION")
+                        && sql.contains("WHERE EXEMPTION_NUMBER = ?")
+                        && !sql.contains("EXPORT_EXEMPTION_APPLICATION")
+                        && !sql.contains("EXPORT_PACKAGE")),
+            any(RowMapper.class),
+            eq("20-8562"));
   }
 
   @Test
@@ -209,6 +238,7 @@ class LexisApplicationRepositoryTest {
         .doesNotContain(":1");
     assertThat(repository.pageSelectSql())
         .contains("FROM EXPORT_EXEMPTION_APPLICATION EEA")
+        .contains("EE.EXPORT_EXEMPTION_STATUS_CODE")
         .contains("INNER JOIN EXPORT_APPLICATION_STATUS_CODE EASC")
         .contains("INNER JOIN EXPORT_EXEMPTION_REASON_CODE EERC")
         .contains("INNER JOIN EXPORT_APPLICANT_TYPE_CODE EATC")
@@ -556,6 +586,41 @@ class LexisApplicationRepositoryTest {
     assertThat(repository.databaseCalls()).isEqualTo(2);
   }
 
+  @Test
+  void searchMappingShouldIdentifyExemptedApplicationsOnNewExemptions() throws SQLException {
+    ResultSet newExemption =
+        applicationSearchResultSet(108826L, 0L, "EXE", "Exempted", "NEW");
+    ResultSet activeExemption =
+        applicationSearchResultSet(108822L, 0L, "EXE", "Exempted", "ACT");
+    MappingLexisApplicationRepository repository =
+        new MappingLexisApplicationRepository(List.of(newExemption, activeExemption));
+
+    Page<LexisApplicationSearchResultDto> results =
+        repository.search(emptyCriteria(null, 0, 200));
+
+    assertThat(results.getContent())
+        .extracting(
+            LexisApplicationSearchResultDto::application,
+            LexisApplicationSearchResultDto::status)
+        .containsExactly(
+            org.assertj.core.groups.Tuple.tuple(108826L, "Exempted - New"),
+            org.assertj.core.groups.Tuple.tuple(108822L, "Exempted"));
+  }
+
+  @ParameterizedTest
+  @CsvSource({"NEW, Exempted - New", "ACT, Exempted"})
+  void detailShouldIdentifyExemptedApplicationsOnNewExemptions(
+      String exemptionStatusCode, String expectedDisplayStatus) {
+    LexisApplicationRepository repository =
+        new ExemptedDetailLexisApplicationRepository(exemptionStatusCode);
+
+    assertThat(repository.findByApplicationNumber(108826L))
+        .isPresent()
+        .get()
+        .extracting(LexisApplicationDetailDto::statusDescription)
+        .isEqualTo(expectedDisplayStatus);
+  }
+
   private static LexisApplicationSearchCriteria emptyCriteria(
       String sortField, int page, int size) {
     return new LexisApplicationSearchCriteria(
@@ -595,14 +660,27 @@ class LexisApplicationRepositoryTest {
 
   private static ResultSet applicationSearchResultSet(long applicationNumber, long activeOffer)
       throws SQLException {
+    return applicationSearchResultSet(
+        applicationNumber, activeOffer, "APP", "Approved", null);
+  }
+
+  private static ResultSet applicationSearchResultSet(
+      long applicationNumber,
+      long activeOffer,
+      String applicationStatusCode,
+      String statusDescription,
+      String exemptionStatusCode)
+      throws SQLException {
     ResultSet resultSet = org.mockito.Mockito.mock(ResultSet.class);
     when(resultSet.getLong("APPLICATION_NUMBER")).thenReturn(applicationNumber);
     when(resultSet.getLong("HAS_ACTIVE_VALID_OFFER")).thenReturn(activeOffer);
     when(resultSet.wasNull()).thenReturn(false);
-    when(resultSet.getString("EXPORT_APPLICATION_STATUS_CODE")).thenReturn("APP");
+    when(resultSet.getString("EXPORT_APPLICATION_STATUS_CODE"))
+        .thenReturn(applicationStatusCode);
+    when(resultSet.getString("EXPORT_EXEMPTION_STATUS_CODE")).thenReturn(exemptionStatusCode);
     when(resultSet.getString("EXPORT_PRODUCT_TYPE_CODE")).thenReturn("H");
     when(resultSet.getString("OWNER_CLIENT_NUMBER")).thenReturn("00000001");
-    when(resultSet.getString("STATUS_DESCRIPTION")).thenReturn("Approved");
+    when(resultSet.getString("STATUS_DESCRIPTION")).thenReturn(statusDescription);
     when(resultSet.getString("EXEMPTION_TYPE_DESCRIPTION")).thenReturn("Ministerial");
     return resultSet;
   }
@@ -766,6 +844,38 @@ class LexisApplicationRepositoryTest {
     }
   }
 
+  private static final class ExemptedDetailLexisApplicationRepository
+      extends LexisApplicationRepository {
+    private final String exemptionStatusCode;
+
+    ExemptedDetailLexisApplicationRepository(String exemptionStatusCode) {
+      super(null);
+      this.exemptionStatusCode = exemptionStatusCode;
+    }
+
+    @Override
+    protected <T> List<T> queryCursorProcedureFailClosed(
+        String procedureSignature,
+        SqlConsumer<CallableStatement> binder,
+        int cursorOutIndex,
+        SqlRowMapper<T> rowMapper) {
+      if (!"LEXIS_GROUP_5.FIND_APPLICATION_BY_NUMBER(?,?)".equals(procedureSignature)) {
+        return List.of();
+      }
+      try {
+        return List.of(rowMapper.map(exemptedApplicationDetailResultSet()));
+      } catch (SQLException ex) {
+        throw new AssertionError(ex);
+      }
+    }
+
+    @Override
+    protected Optional<String> loadExemptionStatusCode(String exemptionNumber) {
+      assertThat(exemptionNumber).isEqualTo("20-8562");
+      return Optional.of(exemptionStatusCode);
+    }
+  }
+
   private static final class DetailReadLexisApplicationRepository
       extends LexisApplicationRepository {
     private final String failingProcedure;
@@ -858,6 +968,15 @@ class LexisApplicationRepositoryTest {
     when(resultSet.getString("ENTRY_USERID")).thenReturn("idir\\application-author");
     when(resultSet.getString("UPDATE_USERID")).thenReturn("idir\\application-editor");
     when(resultSet.wasNull()).thenReturn(false);
+    return resultSet;
+  }
+
+  private static ResultSet exemptedApplicationDetailResultSet() throws SQLException {
+    ResultSet resultSet = applicationDetailResultSet();
+    when(resultSet.getLong("APPLICATION_NUMBER")).thenReturn(108826L);
+    when(resultSet.getString("EXEMPTION_NUMBER")).thenReturn("20-8562");
+    when(resultSet.getString("EXPORT_APPLICATION_STATUS_CODE")).thenReturn("EXE");
+    when(resultSet.getString("STATUS_DESCRIPTION")).thenReturn("Exempted");
     return resultSet;
   }
 
