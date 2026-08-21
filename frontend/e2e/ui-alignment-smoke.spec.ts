@@ -23,6 +23,7 @@ const authenticatedAdminSession = {
     '/federalApplicationDetails',
     'viewFederalApplication',
     '/applicationReport',
+    '/offerReport',
     '/lexisAgentAdmin',
     '/applicationDetails',
   ],
@@ -512,7 +513,23 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(navigationToggle).toHaveCSS('height', '48px')
     await expect(page.locator('.csp-app-header > #navigation-toggle')).toHaveCount(1)
     await expect(page.locator('.csp-side-nav > .csp-side-nav__toggle')).toHaveCount(0)
-    await expect(page.getByRole('link', { name: 'Applications', exact: true })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Application search', exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Provincial', exact: true })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    )
+    await expect(page.getByRole('button', { name: 'Federal', exact: true })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
+    await expect(page.getByRole('button', { name: 'Reports', exact: true })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
+    await expect(page.getByRole('button', { name: 'Admin', exact: true })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
     await expect(page.locator('.lexis-page-header__subtitle')).toContainText(
       'Find provincial applications',
     )
@@ -618,8 +635,8 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       'background-color',
       'rgb(244, 244, 244)',
     )
-    const activeNavLink = page.locator('a.csp-side-nav__link[data-label="Applications"]')
-    const inactiveNavLink = page.locator('a.csp-side-nav__link[data-label="Exemptions"]')
+    const activeNavLink = page.locator('a.csp-side-nav__link[data-label="Application search"]')
+    const inactiveNavLink = page.locator('a.csp-side-nav__link[data-label="Exemption search"]')
     await expect(activeNavLink).toHaveCSS('height', '48px')
     await expect(activeNavLink).toHaveCSS('font-weight', '600')
     await expect(activeNavLink).toHaveCSS('background-color', 'rgb(232, 232, 232)')
@@ -633,10 +650,17 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       'color',
       'rgb(96, 96, 98)',
     )
-    await expect(
-      page.locator('a.csp-side-nav__link[data-label="Application Report"]'),
-    ).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Reports', exact: true })).toBeVisible()
+    const reportsToggle = page.getByRole('button', { name: 'Reports', exact: true })
+    await reportsToggle.click()
+    await expect(page.locator('a.csp-side-nav__link[data-label="Application Report"]')).toHaveCount(
+      0,
+    )
+    await expect(page.locator('a.csp-side-nav__link[data-label="TEAC Package"]')).toHaveCount(0)
+    await expect(page.locator('a.csp-side-nav__link[data-label="Exemptions Report"]')).toHaveCount(
+      0,
+    )
+    await expect(page.locator('a.csp-side-nav__link[data-label="Fees Report"]')).toHaveCount(0)
+    await expect(page.getByRole('link', { name: 'Advertising List', exact: true })).toBeVisible()
 
     const typographyFoundation = await page.evaluate(() => {
       const rootStyle = getComputedStyle(document.documentElement)
@@ -751,7 +775,9 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     const collapsedNav = page.locator('.csp-side-nav')
     await expect(collapsedNav).toHaveCSS('width', '48px')
     const collapsedLinkLayout = await page
-      .locator('a.csp-side-nav__link[data-label="Applications"]')
+      .locator(
+        'a.csp-side-nav__link[data-label="Application search"][href="/provincial/application"]',
+      )
       .evaluate((link) => {
         const nav = document.querySelector('.csp-side-nav')
         const icon = link.querySelector('.csp-side-nav__icon')
@@ -1058,7 +1084,9 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(table.locator('thead th').first()).toHaveCSS('background-color', 'rgb(57, 57, 57)')
     await expect(firstRowCell).toHaveCSS('background-color', 'rgb(38, 38, 38)')
     await expect(secondRowCell).toHaveCSS('background-color', 'rgb(44, 44, 44)')
-    const darkActiveNavLink = page.locator('a.csp-side-nav__link[data-label="Applications"]')
+    const darkActiveNavLink = page.locator(
+      'a.csp-side-nav__link[data-label="Application search"][href="/provincial/application"]',
+    )
     await expect(darkActiveNavLink).toHaveCSS('background-color', 'rgb(51, 51, 51)')
     await expect(darkActiveNavLink.locator('.csp-side-nav__link-text')).toHaveCSS(
       'color',
@@ -1142,7 +1170,10 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(sideNav).toBeVisible()
     await expect(sideNav).toHaveCSS('width', '48px')
     await expect(sideNav).not.toHaveAttribute('aria-hidden')
-    await expect(page.getByRole('link', { name: 'Applications', exact: true })).toBeVisible()
+    const provincialApplicationSearchLink = page.locator(
+      'a.csp-side-nav__link[data-label="Application search"][href="/provincial/application"]',
+    )
+    await expect(provincialApplicationSearchLink).toBeVisible()
 
     await expect(
       page.getByRole('heading', { level: 1, name: 'Provincial application search' }),
@@ -1184,10 +1215,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(sideNav).toBeVisible()
     await expect(sideNav).toHaveCSS('width', '256px')
     await expect(sideNav).not.toHaveAttribute('aria-hidden')
-    await expect(page.getByRole('link', { name: 'Applications', exact: true })).toHaveAttribute(
-      'aria-current',
-      'page',
-    )
+    await expect(provincialApplicationSearchLink).toHaveAttribute('aria-current', 'page')
 
     await page.getByRole('button', { name: 'Close menu' }).click()
 
@@ -1282,7 +1310,9 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       waitUntil: 'domcontentloaded',
     })
 
-    await expect(page.getByRole('heading', { level: 1, name: 'Offer 81001' })).toBeVisible()
+    await expect(page.getByRole('heading', { level: 1, name: 'Offer 81001' })).toBeVisible({
+      timeout: 30_000,
+    })
     await expect(page.getByText('Check and manage this provincial offer')).toBeVisible()
     const backLink = page.getByRole('link', { name: 'Back to Provincial offers search' })
     await expect(backLink).toHaveAttribute('href', '/provincial/offers')
@@ -1532,14 +1562,14 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     ).toBe(false)
   })
 
-  test('styles the selected report configuration without changing its route', async ({ page }) => {
+  test('styles an active report configuration without changing its route', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
-    await gotoSyntheticRoute(page, '/reports/applicationReport', {
+    await gotoSyntheticRoute(page, '/reports/offerReport', {
       waitUntil: 'domcontentloaded',
     })
 
-    await expect(page.getByRole('heading', { level: 1, name: 'Application Report' })).toBeVisible()
-    const reportPanel = page.getByRole('region', { name: 'Application Report' })
+    await expect(page.getByRole('heading', { level: 1, name: 'Offer Report' })).toBeVisible()
+    const reportPanel = page.getByRole('region', { name: 'Offer Report' })
     const reportFields = reportPanel.locator('.report-config-fields')
     const reportActions = page.getByRole('group', { name: 'Report actions' })
     await expect(reportPanel).toHaveCSS('border-top-width', '1px')
@@ -1554,13 +1584,16 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       'height',
       '40px',
     )
-    await expect(page.getByLabel('Received from date')).toHaveAttribute('placeholder', 'YYYY-MM-DD')
+    await expect(page.getByLabel('Application from date')).toHaveAttribute(
+      'placeholder',
+      'YYYY-MM-DD',
+    )
     expect(
       await reportFields.evaluate(
         (grid) => getComputedStyle(grid).gridTemplateColumns.split(' ').length,
       ),
     ).toBe(3)
-    expect(new URL(page.url()).pathname).toBe('/reports/applicationReport')
+    expect(new URL(page.url()).pathname).toBe('/reports/offerReport')
 
     await page.setViewportSize({ width: 390, height: 844 })
     expect(
@@ -1685,7 +1718,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     })
 
     await expect(
-      page.getByRole('heading', { level: 1, name: 'Fee policy administration' }),
+      page.getByRole('heading', { level: 1, name: 'Multiplication Factor' }),
     ).toBeVisible()
     const feePolicyTable = page
       .getByRole('region', { name: 'Search results table' })
@@ -1755,6 +1788,9 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await gotoSyntheticRoute(page, '/admin/policies/fil', {
       waitUntil: 'domcontentloaded',
     })
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'Non-appraised Sec.3 FIL%' }),
+    ).toBeVisible()
     const filAddButton = page.getByRole('button', { name: 'Add fee in lieu policy' })
     await expect(filAddButton).toBeEnabled()
     await expect(filAddButton).toHaveCSS('height', '40px')

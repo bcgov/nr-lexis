@@ -316,6 +316,23 @@ describe('Provincial Review Action State Smoke', () => {
     ).not.toBeNull()
   })
 
+  it('clears filters and removes results without searching again', async () => {
+    renderPage()
+    await screen.findByText('1000123')
+
+    await userEvent.type(screen.getByLabelText('Application number'), '46053')
+    const resultsTable = screen.getByRole('region', { name: 'Search results table' })
+    const searchCallsBeforeClear = mockedSearchApplicationReviews.mock.calls.length
+
+    await userEvent.click(screen.getByRole('button', { name: 'Clear all' }))
+
+    expect(screen.getByLabelText('Application number')).toHaveValue('')
+    await waitFor(() => {
+      expect(resultsTable).not.toBeVisible()
+    })
+    expect(mockedSearchApplicationReviews).toHaveBeenCalledTimes(searchCallsBeforeClear)
+  })
+
   it('enables review actions and select-all for mixed NEW and PND rows', async () => {
     renderPage()
     await screen.findByText('1000123')

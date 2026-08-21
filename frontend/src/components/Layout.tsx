@@ -61,6 +61,15 @@ const UI_PREFERENCE_KEYS = {
   collapsedSections: 'lexis.ui.collapsedSections',
 } as const
 
+// INTENTIONAL_LEGACY_DIVERGENCE(NAVIGATION_MENU_CONTRACT): The business-approved
+// labels, initial section expansion, and role-scoped section visibility are intentional.
+const DEFAULT_COLLAPSED_SECTIONS: Record<string, boolean> = {
+  Provincial: false,
+  Federal: true,
+  Reports: true,
+  Admin: true,
+}
+
 const ROLE_LABELS: Record<string, string> = {
   ADMIN: 'Administrator',
   APPLICATION_APPROVER: 'Application Approver',
@@ -131,7 +140,7 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
       },
       {
         to: '/provincial/application',
-        label: 'Applications',
+        label: 'Application search',
         icon: Search,
         activePathPatterns: ['/provincial/application/:applicationNumber'],
         requiredActions: ['/applicationSearch'],
@@ -145,7 +154,7 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
       },
       {
         to: '/provincial/exemption',
-        label: 'Exemptions',
+        label: 'Exemption search',
         icon: Search,
         activePathPatterns: ['/provincial/exemption/:exemptionNumber'],
         requiredActions: ['/exemptionSearch'],
@@ -159,14 +168,14 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
       },
       {
         to: '/provincial/offers',
-        label: 'Offers',
+        label: 'Offer search',
         icon: Search,
         activePathPatterns: ['/provincial/offers/:offerNumber'],
         requiredActions: ['/offersSearch'],
       },
       {
         to: '/provincial/permit',
-        label: 'Permits',
+        label: 'Permit search',
         icon: Certificate,
         activePathPatterns: ['/provincial/permit/:permitNumber'],
         requiredActions: ['/permitSearch'],
@@ -178,7 +187,7 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
     links: [
       {
         to: '/federal',
-        label: 'Search',
+        label: 'Application search',
         icon: Search,
         activePathPatterns: ['/federal/application/:applicationNumber'],
         requiredActions: ['/federalApplicationSearch', 'viewFederalApplication'],
@@ -188,12 +197,6 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
   {
     label: 'Reports',
     links: [
-      {
-        to: '/reports/applicationReport',
-        label: 'Application Report',
-        icon: Report,
-        requiredActions: ['/applicationReport'],
-      },
       {
         to: '/reports/biweeklyListing',
         label: 'Advertising List',
@@ -205,18 +208,6 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
         label: 'Offers Report',
         icon: Report,
         requiredActions: ['/offerReport'],
-      },
-      {
-        to: '/reports/teacReport',
-        label: 'TEAC Package',
-        icon: Report,
-        requiredActions: ['/teacReport'],
-      },
-      {
-        to: '/reports/exemptionReport',
-        label: 'Exemptions Report',
-        icon: Report,
-        requiredActions: ['/exemptionReport'],
       },
       {
         to: '/reports/permitLedgerReport',
@@ -237,12 +228,6 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
         requiredActions: ['/speciesGradeReport'],
       },
       {
-        to: '/reports/feeReport',
-        label: 'Fees Report',
-        icon: Report,
-        requiredActions: ['/feeReport'],
-      },
-      {
         to: '/reports/tenureReport',
         label: 'Tenure Analysis',
         icon: Report,
@@ -255,13 +240,13 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
     links: [
       {
         to: '/admin/policies/fee',
-        label: 'Fee Policy',
+        label: 'Multiplication Factor',
         icon: Finance,
         requiredActions: ['/lexisPolicyAdmin'],
       },
       {
         to: '/admin/policies/fil',
-        label: 'Fee in Lieu',
+        label: 'Non-appraised Sec.3 FIL%',
         icon: Finance,
         requiredActions: ['/lexisFILAdmin'],
       },
@@ -313,17 +298,17 @@ const readSideNavCollapsedPreference = (): boolean => {
 const readCollapsedSectionsPreference = (): Record<string, boolean> => {
   const storedValue = readUiPreference(UI_PREFERENCE_KEYS.collapsedSections)
   if (!storedValue) {
-    return {}
+    return { ...DEFAULT_COLLAPSED_SECTIONS }
   }
 
   try {
     const parsedValue: unknown = JSON.parse(storedValue)
     if (typeof parsedValue !== 'object' || parsedValue === null || Array.isArray(parsedValue)) {
-      return {}
+      return { ...DEFAULT_COLLAPSED_SECTIONS }
     }
 
     const parsedRecord = parsedValue as Record<string, unknown>
-    const restoredSections: Record<string, boolean> = {}
+    const restoredSections: Record<string, boolean> = { ...DEFAULT_COLLAPSED_SECTIONS }
     NAVIGATION_SECTIONS.forEach(({ label }) => {
       if (typeof parsedRecord[label] === 'boolean') {
         restoredSections[label] = parsedRecord[label]
@@ -331,7 +316,7 @@ const readCollapsedSectionsPreference = (): Record<string, boolean> => {
     })
     return restoredSections
   } catch {
-    return {}
+    return { ...DEFAULT_COLLAPSED_SECTIONS }
   }
 }
 
@@ -420,6 +405,8 @@ function Layout({ children }: LayoutProps) {
   )
 
   const visibleNavigationSections = useMemo(() => {
+    const isProvincialSubmitter =
+      hasProvincialSubmitterRole(capabilities.roles) && !hasRole(capabilities.roles, 'ADMIN')
     const canShowLink = (link: NavigationLink): boolean => {
       if (!isProdRtmOnlyPathAllowed(link.to, capabilities.roles)) {
         return false
@@ -440,10 +427,17 @@ function Layout({ children }: LayoutProps) {
       return link.requiredActions.some((action) => canPerform(action))
     }
 
-    return NAVIGATION_SECTIONS.map((section) => ({
-      ...section,
-      links: section.links.filter(canShowLink),
-    })).filter((section) => section.links.length > 0)
+    return NAVIGATION_SECTIONS.filter(
+      (section) =>
+        !isProvincialSubmitter ||
+        section.label === 'Notifications' ||
+        section.label === 'Provincial',
+    )
+      .map((section) => ({
+        ...section,
+        links: section.links.filter(canShowLink),
+      }))
+      .filter((section) => section.links.length > 0)
   }, [canPerform, capabilities.roles])
   const activeNavigationLink = useMemo(() => {
     const visibleLinks = visibleNavigationSections.flatMap((section) => section.links)

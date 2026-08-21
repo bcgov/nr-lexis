@@ -70,6 +70,7 @@ public class LexisApiAuthorizationCustomizer
     for (Rule rule : LexisApiAuthorizationRules.rules()) {
       switch (rule.type()) {
         case PERMIT_ALL -> authorize.requestMatchers(rule.method(), rule.patternsArray()).permitAll();
+        case DENY_ALL -> authorize.requestMatchers(rule.patternsArray()).denyAll();
         case ADMIN_AUTHORITY ->
             authorize.requestMatchers(rule.patternsArray()).hasAuthority("LEXIS_ADMIN");
         case PROVINCIAL_STAFF_ROLE -> authorizeProvincialStaffRoles(authorize, rule.patternsArray());
@@ -107,6 +108,7 @@ public class LexisApiAuthorizationCustomizer
           authorize) {
     for (Rule rule : LexisApiAuthorizationRules.rules()) {
       switch (rule.type()) {
+        case DENY_ALL -> authorize.requestMatchers(rule.patternsArray()).denyAll();
         case KNOWN_ROLE -> authorizeProdReadOnlyKnownRole(authorize, rule);
         case ACTION -> authorizeProdReadOnlyAction(authorize, rule);
         case ANY_ACTION -> authorizeProdReadOnlyAnyAction(authorize, rule);

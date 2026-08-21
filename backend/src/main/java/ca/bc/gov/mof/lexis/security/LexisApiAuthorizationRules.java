@@ -12,6 +12,7 @@ final class LexisApiAuthorizationRules {
 
   enum RuleType {
     PERMIT_ALL,
+    DENY_ALL,
     ADMIN_AUTHORITY,
     PROVINCIAL_STAFF_ROLE,
     KNOWN_ROLE,
@@ -190,6 +191,26 @@ final class LexisApiAuthorizationRules {
               HttpMethod.GET,
               "/actuator/health/liveness",
               "/actuator/health/readiness"),
+          // INTENTIONAL_LEGACY_DIVERGENCE(RETIRED_REPORT_SCREENS): The report
+          // implementations remain compiled, but all modern and legacy HTTP entry points are
+          // denied so a stale bookmark or handcrafted request cannot generate them.
+          denyAll(
+              "/api/lexis/reports/applicationReport",
+              "/api/lexis/reports/application-report",
+              "/api/lexis/applicationReport",
+              "/api/lexis/applicationReport.do",
+              "/api/lexis/reports/teacReport",
+              "/api/lexis/reports/teac-report",
+              "/api/lexis/teacReport",
+              "/api/lexis/teacReport.do",
+              "/api/lexis/reports/exemptionReport",
+              "/api/lexis/reports/exemption-report",
+              "/api/lexis/exemptionReport",
+              "/api/lexis/exemptionReport.do",
+              "/api/lexis/reports/feeReport",
+              "/api/lexis/reports/fee-report",
+              "/api/lexis/feeReport",
+              "/api/lexis/feeReport.do"),
           adminAuthority("/actuator/**"),
           knownRole("/error"),
           provincialStaffRole("/api/lexis/session/preferences"),
@@ -771,6 +792,10 @@ final class LexisApiAuthorizationRules {
 
   private static Rule permitAll(HttpMethod method, String... paths) {
     return new Rule(RuleType.PERMIT_ALL, method, List.of(paths), null, Map.of(), List.of());
+  }
+
+  private static Rule denyAll(String... paths) {
+    return new Rule(RuleType.DENY_ALL, null, List.of(paths), null, Map.of(), List.of());
   }
 
   private static Rule adminAuthority(String... paths) {

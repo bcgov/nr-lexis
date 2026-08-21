@@ -289,7 +289,7 @@ describe('Provincial Offer Search Actions', () => {
     })
   })
 
-  it('restores legacy defaults when filters are cleared', async () => {
+  it('restores defaults and removes results without searching again', async () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => false }))
     mockedFetchProvincialApplicationOptions.mockResolvedValueOnce({
       exemptionTypes: [],
@@ -305,25 +305,21 @@ describe('Provincial Offer Search Actions', () => {
     await waitFor(() => {
       expect(screen.getByLabelText('Listing to date')).toHaveValue('2026-07-11')
     })
+    await userEvent.click(screen.getByRole('button', { name: 'Search' }))
+    await screen.findByText('OFF-1001')
 
     await userEvent.type(screen.getByLabelText('Application number'), '46053')
     await userEvent.clear(screen.getByLabelText('Listing to date'))
+    const resultsTable = screen.getByRole('region', { name: 'Search results table' })
+    const searchCallsBeforeClear = mockedSearchProvincialOffers.mock.calls.length
     await userEvent.click(screen.getByRole('button', { name: 'Clear all' }))
 
     await waitFor(() => {
       expect(screen.getByLabelText('Application number')).toHaveValue('')
       expect(screen.getByLabelText('Listing to date')).toHaveValue('2026-07-11')
-      expect(mockedSearchProvincialOffers).toHaveBeenLastCalledWith(
-        expect.objectContaining({
-          filters: expect.objectContaining({
-            applicationNumber: '',
-            listingToDate: '2026-07-11',
-            region: [],
-          }),
-        }),
-        expect.objectContaining({ knownTotal: expect.any(Number) }),
-      )
+      expect(resultsTable).not.toBeVisible()
     })
+    expect(mockedSearchProvincialOffers).toHaveBeenCalledTimes(searchCallsBeforeClear)
   })
 
   it('shows selected offer search regions in the default Carbon multi-select', async () => {

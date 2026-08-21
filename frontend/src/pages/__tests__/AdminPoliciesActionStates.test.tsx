@@ -476,7 +476,7 @@ describe('Admin policy action states', () => {
 
     renderPage()
 
-    await screen.findByRole('heading', { level: 1, name: 'Fee policy administration' })
+    await screen.findByRole('heading', { level: 1, name: 'Multiplication Factor' })
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
 
     const dialog = await openAddPolicyDialog('fee')
@@ -609,7 +609,7 @@ describe('Admin policy action states', () => {
 
     await screen.findByRole('heading', {
       level: 1,
-      name: 'Fee in lieu percent policy administration',
+      name: 'Non-appraised Sec.3 FIL%',
     })
     const policyRow = screen.getByText('2099-01-01').closest('tr')
     expect(policyRow).not.toBeNull()
@@ -672,8 +672,7 @@ describe('Admin policy action states', () => {
 
     await screen.findByRole('heading', {
       level: 1,
-      name:
-        area === 'fee' ? 'Fee policy administration' : 'Fee in lieu percent policy administration',
+      name: area === 'fee' ? 'Multiplication Factor' : 'Non-appraised Sec.3 FIL%',
     })
     const dialog = await openAddPolicyDialog(area)
     fireEvent.change(within(dialog).getByLabelText('Policy effective date'), {
@@ -740,8 +739,7 @@ describe('Admin policy action states', () => {
 
     await screen.findByRole('heading', {
       level: 1,
-      name:
-        area === 'fee' ? 'Fee policy administration' : 'Fee in lieu percent policy administration',
+      name: area === 'fee' ? 'Multiplication Factor' : 'Non-appraised Sec.3 FIL%',
     })
     const dialog = await openAddPolicyDialog(area)
     fireEvent.change(within(dialog).getByLabelText('Policy effective date'), {
@@ -768,26 +766,23 @@ describe('Admin policy action states', () => {
   it.each([
     {
       area: 'fee',
-      heading: 'Fee policy administration',
+      heading: 'Multiplication Factor',
       editorHeading: null,
       actionName: 'Add fee policy',
       expectedTileCount: 0,
       subtitle: 'Manage regional fee policy percentages and effective dates.',
-      absentHeadings: [
-        'Fee in lieu percent policy administration',
-        'Export schedule administration',
-      ],
+      absentHeadings: ['Non-appraised Sec.3 FIL%', 'Export schedule administration'],
       fetchPage: mockedFetchFeePolicyPage,
       untouchedFetches: [mockedFetchFilPolicyPage, mockedFetchExportSchedulePage],
     },
     {
       area: 'fil',
-      heading: 'Fee in lieu percent policy administration',
+      heading: 'Non-appraised Sec.3 FIL%',
       editorHeading: null,
       actionName: 'Add fee in lieu policy',
       expectedTileCount: 0,
       subtitle: 'Manage fee-in-lieu percentages and effective dates.',
-      absentHeadings: ['Fee policy administration', 'Export schedule administration'],
+      absentHeadings: ['Multiplication Factor', 'Export schedule administration'],
       fetchPage: mockedFetchFilPolicyPage,
       untouchedFetches: [mockedFetchFeePolicyPage, mockedFetchExportSchedulePage],
     },
@@ -798,7 +793,7 @@ describe('Admin policy action states', () => {
       actionName: null,
       expectedTileCount: 1,
       subtitle: 'Manage advertising, receipt, offer, and TEAC schedule dates.',
-      absentHeadings: ['Fee policy administration', 'Fee in lieu percent policy administration'],
+      absentHeadings: ['Multiplication Factor', 'Non-appraised Sec.3 FIL%'],
       fetchPage: mockedFetchExportSchedulePage,
       untouchedFetches: [mockedFetchFeePolicyPage, mockedFetchFilPolicyPage],
     },
@@ -861,9 +856,9 @@ describe('Admin policy action states', () => {
     async (area) => {
       const heading =
         area === 'fee'
-          ? 'Fee policy administration'
+          ? 'Multiplication Factor'
           : area === 'fil'
-            ? 'Fee in lieu percent policy administration'
+            ? 'Non-appraised Sec.3 FIL%'
             : 'Export schedule administration'
       const fetchPage =
         area === 'fee'
@@ -1077,14 +1072,14 @@ describe('Admin policy action states', () => {
   it.each([
     {
       area: 'fee' as const,
-      heading: 'Fee policy administration',
+      heading: 'Multiplication Factor',
       targetHeader: 'Region',
       sortField: 'org_unit_no',
       fetchPage: mockedFetchFeePolicyPage,
     },
     {
       area: 'fil' as const,
-      heading: 'Fee in lieu percent policy administration',
+      heading: 'Non-appraised Sec.3 FIL%',
       targetHeader: 'Fee in lieu %',
       sortField: 'fil_percent',
       fetchPage: mockedFetchFilPolicyPage,
@@ -1160,7 +1155,7 @@ describe('Admin policy action states', () => {
 
     renderPage()
 
-    await screen.findByRole('heading', { level: 1, name: 'Fee policy administration' })
+    await screen.findByRole('heading', { level: 1, name: 'Multiplication Factor' })
 
     expect(screen.getByRole('button', { name: 'Add fee policy' })).toBeDisabled()
   })
@@ -1475,7 +1470,7 @@ describe('Admin policy action states', () => {
   it('shows validation contract when fee policy fields are incomplete', async () => {
     renderPage()
 
-    await screen.findByRole('heading', { level: 1, name: 'Fee policy administration' })
+    await screen.findByRole('heading', { level: 1, name: 'Multiplication Factor' })
     const dialog = await openAddPolicyDialog('fee')
     expect(within(dialog).getByText('Whole numbers from 0 to 100')).toBeInTheDocument()
     await userEvent.click(within(dialog).getByRole('button', { name: 'Add fee policy' }))
@@ -1495,7 +1490,7 @@ describe('Admin policy action states', () => {
   it('blocks typed policy dates that are not valid ISO dates', async () => {
     const feeView = renderPage()
 
-    await screen.findByRole('heading', { level: 1, name: 'Fee policy administration' })
+    await screen.findByRole('heading', { level: 1, name: 'Multiplication Factor' })
 
     const feeDialog = await openAddPolicyDialog('fee')
     fireEvent.change(within(feeDialog).getByLabelText('Policy effective date'), {
@@ -1513,7 +1508,7 @@ describe('Admin policy action states', () => {
 
     await screen.findByRole('heading', {
       level: 1,
-      name: 'Fee in lieu percent policy administration',
+      name: 'Non-appraised Sec.3 FIL%',
     })
 
     const filDialog = await openAddPolicyDialog('fil')

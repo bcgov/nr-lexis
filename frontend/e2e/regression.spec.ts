@@ -748,63 +748,69 @@ const adminNavigationSections: Array<{
       'Application review',
       'Create/Edit Application',
       'Upload',
-      'Applications',
+      'Application search',
       'Create/Edit Exemption',
-      'Exemptions',
+      'Exemption search',
       'Create/Edit Offer',
-      'Offers',
-      'Permits',
+      'Offer search',
+      'Permit search',
     ],
   },
   {
     section: 'Federal',
-    links: ['Search'],
+    links: ['Application search'],
   },
   {
     section: 'Reports',
     links: [
-      'Application Report',
       'Advertising List',
       'Offers Report',
-      'TEAC Package',
-      'Exemptions Report',
       'Permits Report',
       'Transport Report',
       'Species and Grade Report',
-      'Fees Report',
       'Tenure Analysis',
     ],
   },
   {
     section: 'Admin',
-    links: ['Fee Policy', 'Fee in Lieu', 'Export Schedule', 'Average market values'],
+    links: [
+      'Multiplication Factor',
+      'Non-appraised Sec.3 FIL%',
+      'Export Schedule',
+      'Average market values',
+    ],
   },
 ]
 
 const adminAccessiblePages: Array<[path: string, heading: RegExp]> = [
-  ['/admin/policies/fee', /fee policy administration/i],
-  ['/admin/policies/fil', /fee in lieu percent policy administration/i],
+  ['/admin/policies/fee', /multiplication factor/i],
+  ['/admin/policies/fil', /non-appraised sec\.3 fil%/i],
   ['/admin/schedules', /export schedule administration/i],
   ['/provincial/review', /provincial application review/i],
   ['/provincial/application/create', /create provincial application/i],
   ['/provincial/application/upload', /upload application submission/i],
   ['/provincial/application', /provincial application search/i],
   ['/federal', /federal application search/i],
-  ['/reports', /application report/i],
+  ['/reports', /offer report/i],
   ['/admin/rtm/emslogamv/upload', /average market values/i],
 ]
 
 const reportAccessiblePages: Array<[path: string, heading: RegExp]> = [
-  ['/reports/applicationReport', /application report/i],
   ['/reports/biweeklyListing', /advertising list/i],
   ['/reports/offerReport', /offer report/i],
-  ['/reports/teacReport', /timber export advisory committee package report/i],
-  ['/reports/exemptionReport', /exemption report/i],
   ['/reports/permitLedgerReport', /permit ledger report/i],
   ['/reports/transportReport', /transport report/i],
   ['/reports/speciesGradeReport', /species and grade report/i],
-  ['/reports/feeReport', /fee report/i],
   ['/reports/tenureReport', /tenure analysis report/i],
+]
+
+// INTENTIONAL_LEGACY_DIVERGENCE(RETIRED_REPORT_SCREENS): Regression must
+// prove these routes stay retired instead of treating them as accessible pages.
+const retiredReportPages: Array<[path: string, heading: RegExp]> = [
+  ['/reports/applicationReport', /application report/i],
+  ['/reports/teacReport', /timber export advisory committee package report/i],
+  ['/reports/exemptionReport', /exemption report/i],
+  ['/reports/feeReport', /fee report/i],
 ]
 
 const createWorkflowPages: Array<[path: string, heading: RegExp]> = [
@@ -924,10 +930,20 @@ const representativeAdminActions = [
   'mofrListing',
 ]
 
+const expandSideNavSection = async (page: Page, section: string): Promise<void> => {
+  const sectionToggle = page
+    .locator(sideNavSection(section))
+    .getByRole('button', { name: section, exact: true })
+  if ((await sectionToggle.getAttribute('aria-expanded')) === 'false') {
+    await sectionToggle.click()
+  }
+}
+
 const expectAdminNavigation = async (page: Page): Promise<void> => {
   for (const { section, links } of adminNavigationSections) {
     const navSection = page.locator(sideNavSection(section))
     await expect(navSection, `${section} navigation section should be visible`).toBeVisible()
+    await expandSideNavSection(page, section)
     await expect(
       navSection.getByRole('link'),
       `${section} navigation should not include extra links`,
@@ -1665,7 +1681,25 @@ test.describe('TEST IDIR admin regression', () => {
     const page = await authenticatedIdirPage()
     const apiServerErrors = collectApiServerErrors(page)
 
+    await page.evaluate(() => window.localStorage.removeItem('lexis.ui.collapsedSections'))
     await expectAccessiblePage(page, '/provincial/review', /provincial application review/i)
+
+    await expect(page.getByRole('button', { name: 'Provincial', exact: true })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    )
+    await expect(page.getByRole('button', { name: 'Federal', exact: true })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
+    await expect(page.getByRole('button', { name: 'Reports', exact: true })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
+    await expect(page.getByRole('button', { name: 'Admin', exact: true })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
 
     const capabilities = await fetchSessionCapabilities(page)
     const roles = asStringArray(capabilities.roles)
@@ -1739,6 +1773,7 @@ test.describe('TEST IDIR admin regression', () => {
     await expectAccessiblePage(page, '/provincial/review', /provincial application review/i)
 
     const reportsSection = page.locator(sideNavSection('Reports'))
+    await expandSideNavSection(page, 'Reports')
     await expect(reportsSection.getByRole('link', { name: 'Advertising List' })).toBeVisible()
     await reportsSection.getByRole('button', { name: 'Reports' }).click()
     await expect(reportsSection.getByRole('link', { name: 'Advertising List' })).toHaveCount(0)
@@ -1766,6 +1801,9 @@ test.describe('TEST IDIR admin regression', () => {
     const provincialSection = page.locator(sideNavSection('Provincial'))
     const federalSection = page.locator(sideNavSection('Federal'))
     const adminSection = page.locator(sideNavSection('Admin'))
+
+    await expandSideNavSection(page, 'Federal')
+    await expandSideNavSection(page, 'Admin')
 
     await expect(provincialSection.getByRole('link', { name: 'Upload' })).toHaveAttribute(
       'href',
@@ -1807,6 +1845,7 @@ test.describe('TEST IDIR admin regression', () => {
     const page = await authenticatedIdirPage()
 
     await expectAccessiblePage(page, '/provincial/review', /provincial application review/i)
+    await expandSideNavSection(page, 'Reports')
 
     for (const [linkName, path, heading] of [
       ['Offers Report', '/reports/offerReport', /offer report/i],
@@ -1847,6 +1886,16 @@ test.describe('TEST IDIR admin regression', () => {
     }
 
     expect(apiServerErrors).toEqual([])
+  })
+
+  test('redirects retired report routes to the first active report', async () => {
+    const page = await authenticatedIdirPage()
+
+    for (const [path, retiredHeading] of retiredReportPages) {
+      await expectAccessiblePage(page, path, /offer report/i)
+      await expect.poll(() => new URL(page.url()).pathname).toBe('/reports/offerReport')
+      await expect(page.getByRole('heading', { name: retiredHeading })).toHaveCount(0)
+    }
   })
 
   test('can load admin routes through document navigation', async () => {
@@ -2725,41 +2774,6 @@ test.describe('TEST IDIR admin regression', () => {
         expect(previousAdvertisingDate >= advertisingDate).toBe(true)
       }
       previousAdvertisingDate = advertisingDate
-    }
-  })
-
-  test('shows report advertising date selector from current list dates', async () => {
-    const page = await authenticatedIdirPage()
-
-    const reportOptions = await readJsonResponse<GenericOptionsResponse>(
-      await getWithAuth(page, '/api/lexis/reports/options'),
-    )
-    const currentSchedules = asRecordArray(reportOptions.currentSchedules)
-    expectReportScheduleOptions(currentSchedules, 'report advertising date selector')
-
-    const datedSchedules = currentSchedules.filter((schedule) => optionCode(schedule))
-    const firstScheduleDate = optionName(datedSchedules[0] ?? {})
-    expect(firstScheduleDate).toMatch(isoDatePattern)
-
-    await expectAccessiblePage(
-      page,
-      '/reports/teacReport',
-      /timber export advisory committee package report/i,
-    )
-    await expect(
-      page.getByRole('heading', {
-        name: 'Timber Export Advisory Committee package report',
-      }),
-    ).toBeVisible()
-
-    const advertisingDate = page.getByRole('combobox', { name: 'Advertising date' })
-    await expect(advertisingDate).toBeVisible()
-    await expect(advertisingDate).toHaveValue(firstScheduleDate)
-
-    for (const optionLabel of datedSchedules.slice(0, 2).map(optionName)) {
-      await advertisingDate.click()
-      await advertisingDate.fill(optionLabel)
-      await expect(page.getByRole('option', { name: optionLabel, exact: true })).toBeVisible()
     }
   })
 

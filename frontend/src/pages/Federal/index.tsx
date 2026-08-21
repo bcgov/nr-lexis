@@ -374,9 +374,8 @@ const FederalPage = () => {
   const onClearFilters = () => {
     clearSelection()
     setFilters(INITIAL_FILTERS)
-    setSearchParams(
-      buildSearchParams(INITIAL_FILTERS, DEFAULT_SEARCH_PAGE, DEFAULT_SEARCH_PAGE_SIZE),
-    )
+    // INTENTIONAL_LEGACY_DIVERGENCE(CLEAR_ALL_RESETS_SEARCH)
+    setSearchParams(new URLSearchParams())
   }
 
   const selectableRows = useMemo(() => {

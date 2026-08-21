@@ -2671,22 +2671,66 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
-  void legacyReadOnlyReportRoutesShouldIncludeApplicationAndApprovedExemptionReports()
-      throws Exception {
+  void legacyApprovedExemptionReportShouldAllowReadOnlyRole() throws Exception {
     SimpleGrantedAuthority readOnly = new SimpleGrantedAuthority("LEXIS_READ_ONLY");
 
-    mockMvc
-        .perform(
-            get("/api/lexis/applicationReport.do")
-                .param("actionMapping", "view")
-                .with(jwt().authorities(readOnly)))
-        .andExpect(status().isNoContent());
     mockMvc
         .perform(
             get("/api/lexis/approvedExemptionReport.do")
                 .param("actionMapping", "view")
                 .with(jwt().authorities(readOnly)))
         .andExpect(status().isNoContent());
+  }
+
+  @Test
+  void retiredReportRoutesShouldRejectDirectAccess() throws Exception {
+    JwtRequestPostProcessor administrator =
+        jwt().authorities(new SimpleGrantedAuthority("LEXIS_ADMIN"));
+
+    for (String path :
+        List.of(
+            "/api/lexis/reports/applicationReport",
+            "/api/lexis/reports/application-report",
+            "/api/lexis/reports/teacReport",
+            "/api/lexis/reports/teac-report",
+            "/api/lexis/reports/exemptionReport",
+            "/api/lexis/reports/exemption-report",
+            "/api/lexis/reports/feeReport",
+            "/api/lexis/reports/fee-report")) {
+      mockMvc
+          .perform(
+              post(path)
+                  .with(csrf())
+                  .with(administrator)
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content("{}"))
+          .andExpect(status().isForbidden());
+    }
+
+    for (String path :
+        List.of(
+            "/api/lexis/applicationReport",
+            "/api/lexis/applicationReport.do",
+            "/api/lexis/teacReport",
+            "/api/lexis/teacReport.do",
+            "/api/lexis/exemptionReport",
+            "/api/lexis/exemptionReport.do",
+            "/api/lexis/feeReport",
+            "/api/lexis/feeReport.do")) {
+      mockMvc
+          .perform(
+              get(path)
+                  .param("actionMapping", "generate")
+                  .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_ADMIN"))))
+          .andExpect(status().isForbidden());
+      mockMvc
+          .perform(
+              post(path)
+                  .with(csrf())
+                  .param("actionMapping", "generate")
+                  .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_ADMIN"))))
+          .andExpect(status().isForbidden());
+    }
   }
 
   @Test

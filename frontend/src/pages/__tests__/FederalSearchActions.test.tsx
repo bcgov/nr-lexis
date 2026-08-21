@@ -111,6 +111,23 @@ describe('Federal Search Actions', () => {
     expect(resultsTable).not.toBeVisible()
   })
 
+  it('clears filters and removes results without searching again', async () => {
+    renderPage()
+    await screen.findByText('FED-1001')
+
+    await userEvent.type(screen.getByLabelText('Application number'), '46053')
+    const resultsTable = screen.getByRole('region', { name: 'Search results table' })
+    const searchCallsBeforeClear = mockedSearchFederalApplications.mock.calls.length
+
+    await userEvent.click(screen.getByRole('button', { name: 'Clear all' }))
+
+    expect(screen.getByLabelText('Application number')).toHaveValue('')
+    await waitFor(() => {
+      expect(resultsTable).not.toBeVisible()
+    })
+    expect(mockedSearchFederalApplications).toHaveBeenCalledTimes(searchCallsBeforeClear)
+  })
+
   it('applies the legacy Approved default on the first search', async () => {
     mockedFetchFederalApplicationOptions.mockResolvedValueOnce({
       applicationStatuses: [

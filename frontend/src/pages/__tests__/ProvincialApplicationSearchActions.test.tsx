@@ -123,6 +123,29 @@ describe('Provincial Application Search Actions', () => {
     })
   })
 
+  it('displays the pending exemption status supplied by the backend', async () => {
+    mockedSearchProvincialApplications.mockResolvedValueOnce({
+      content: [
+        {
+          ...searchRowsWithMixedEligibility[1],
+          applicationNumber: '108826',
+          status: 'Exempted - New',
+          exemptionNumber: '20-8562',
+        },
+      ],
+      page: {
+        number: 0,
+        size: 10,
+        totalElements: 1,
+        totalPages: 1,
+      },
+    })
+
+    renderPage()
+
+    expect(await screen.findByText('Exempted - New')).toBeVisible()
+  })
+
   it('only allows selecting eligible rows and navigates to exemption create with prefill', async () => {
     renderPage()
     await screen.findByText('321')
@@ -345,7 +368,7 @@ describe('Provincial Application Search Actions', () => {
     ])
   })
 
-  it('restores received date filters from the URL and clears them', async () => {
+  it('clears URL-backed filters and removes results without searching again', async () => {
     renderPage(
       '/provincial/application?receivedFromDate=2026-01-01&receivedToDate=2026-01-31&region=11',
     )
@@ -362,23 +385,17 @@ describe('Provincial Application Search Actions', () => {
       }),
       expect.any(Object),
     )
+    const resultsTable = screen.getByRole('region', { name: 'Search results table' })
+    const searchCallsBeforeClear = mockedSearchProvincialApplications.mock.calls.length
 
     await userEvent.click(screen.getByRole('button', { name: 'Clear all' }))
 
     expect(screen.getByLabelText('Received from date')).toHaveValue('')
     expect(screen.getByLabelText('Received to date')).toHaveValue('')
     await waitFor(() => {
-      expect(mockedSearchProvincialApplications).toHaveBeenCalledWith(
-        expect.objectContaining({
-          filters: expect.objectContaining({
-            receivedFromDate: '',
-            receivedToDate: '',
-            region: [],
-          }),
-        }),
-        expect.any(Object),
-      )
+      expect(resultsTable).not.toBeVisible()
     })
+    expect(mockedSearchProvincialApplications).toHaveBeenCalledTimes(searchCallsBeforeClear)
   })
 
   it('disables search for an invalid received date', async () => {
