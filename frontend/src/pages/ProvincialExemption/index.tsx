@@ -582,15 +582,8 @@ const ProvincialExemptionPage = () => {
       region: defaultZoneRegionIds,
     }
     setFilters(defaultFilters)
-    setSearchParams(
-      buildSearchParams(
-        defaultFilters,
-        DEFAULT_SORT_FIELD,
-        DEFAULT_SORT_DIRECTION,
-        DEFAULT_SEARCH_PAGE,
-        DEFAULT_SEARCH_PAGE_SIZE,
-      ),
-    )
+    // INTENTIONAL_LEGACY_DIVERGENCE(CLEAR_ALL_RESETS_SEARCH)
+    setSearchParams(new URLSearchParams())
   }
 
   const onHeaderClick = (column: ProvincialExemptionSearchSortField) => {

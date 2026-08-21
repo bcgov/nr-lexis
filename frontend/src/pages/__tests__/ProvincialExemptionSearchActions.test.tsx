@@ -801,16 +801,13 @@ describe('Provincial Exemption Search Actions', () => {
         expect.objectContaining({ knownTotal: expect.any(Number) }),
       )
     })
+    const searchCallsBeforeClear = mockedSearchProvincialExemptions.mock.calls.length
 
     await userEvent.click(screen.getByRole('button', { name: 'Clear all' }))
     await waitFor(() => {
-      expect(mockedSearchProvincialExemptions).toHaveBeenLastCalledWith(
-        expect.objectContaining({
-          filters: expect.objectContaining({ exemptionTypeCode: 'M' }),
-        }),
-        expect.any(Object),
-      )
+      expect(resultsTable).not.toBeVisible()
     })
+    expect(mockedSearchProvincialExemptions).toHaveBeenCalledTimes(searchCallsBeforeClear)
   })
 
   it('renders a full result page without waiting for the exact count', async () => {
@@ -967,7 +964,7 @@ describe('Provincial Exemption Search Actions', () => {
     })
   })
 
-  it('restores approval date filters from the URL and clears them', async () => {
+  it('clears approval date filters and removes results without searching again', async () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
 
     renderPage(
@@ -986,23 +983,17 @@ describe('Provincial Exemption Search Actions', () => {
       }),
       expect.any(Object),
     )
+    const resultsTable = screen.getByRole('region', { name: 'Search results table' })
+    const searchCallsBeforeClear = mockedSearchProvincialExemptions.mock.calls.length
 
     await userEvent.click(screen.getByRole('button', { name: 'Clear all' }))
 
     expect(screen.getByLabelText('Approval from date')).toHaveValue('')
     expect(screen.getByLabelText('Approval to date')).toHaveValue('')
     await waitFor(() => {
-      expect(mockedSearchProvincialExemptions).toHaveBeenCalledWith(
-        expect.objectContaining({
-          filters: expect.objectContaining({
-            approvalFromDate: '',
-            approvalToDate: '',
-            region: [],
-          }),
-        }),
-        expect.any(Object),
-      )
+      expect(resultsTable).not.toBeVisible()
     })
+    expect(mockedSearchProvincialExemptions).toHaveBeenCalledTimes(searchCallsBeforeClear)
   })
 
   it('disables search button for invalid date filters', async () => {

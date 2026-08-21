@@ -259,7 +259,7 @@ describe('Provincial Permit Search Actions', () => {
     })
   })
 
-  it('submits the invoice number to URL-backed filters and clears it with the form', async () => {
+  it('submits the invoice number then clears the search without another request', async () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => false }))
 
     renderPage(
@@ -300,6 +300,8 @@ describe('Provincial Permit Search Actions', () => {
       ).toBe(true)
     })
 
+    const resultsTable = screen.getByRole('region', { name: 'Search results table' })
+    const searchCallsBeforeClear = mockedSearchProvincialPermits.mock.calls.length
     await userEvent.click(screen.getByRole('button', { name: 'Clear all' }))
 
     expect(invoiceNumber).toHaveValue('')
@@ -307,17 +309,10 @@ describe('Provincial Permit Search Actions', () => {
       const currentParams = new URLSearchParams(
         screen.getByTestId('permit-search-location').textContent ?? '',
       )
-      expect(currentParams.has('invoiceNumber')).toBe(false)
-      expect(currentParams.has('region')).toBe(false)
-      expect(currentParams.get('sortField')).toBe('permitNumber')
-      expect(currentParams.get('sortDirection')).toBe('desc')
-      expect(currentParams.get('page')).toBe('1')
-      expect(currentParams.get('pageSize')).toBe('10')
+      expect(currentParams.toString()).toBe('')
+      expect(resultsTable).not.toBeVisible()
     })
-    await waitFor(() => {
-      const lastRequest = mockedSearchProvincialPermits.mock.calls.at(-1)?.[0]
-      expect(lastRequest?.filters.invoiceNumber).toBe('')
-    })
+    expect(mockedSearchProvincialPermits).toHaveBeenCalledTimes(searchCallsBeforeClear)
   })
 
   it('reuses cached search results when the route remounts with the same URL state', async () => {
