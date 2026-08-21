@@ -241,11 +241,13 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
   const [isPolicyEditorOpen, setIsPolicyEditorOpen] = useState(false)
   const [pendingDeletion, setPendingDeletion] = useState<PendingDeletion | null>(null)
 
+  // INTENTIONAL_LEGACY_DIVERGENCE(NAVIGATION_MENU_CONTRACT): Keep these page
+  // headings aligned with the business-approved Admin navigation terminology.
   const pageTitle =
     area === 'fee'
-      ? 'Fee policy administration'
+      ? 'Multiplication Factor'
       : area === 'fil'
-        ? 'Fee in lieu percent policy administration'
+        ? 'Non-appraised Sec.3 FIL%'
         : 'Export schedule administration'
   const pageSubtitle =
     area === 'fee'

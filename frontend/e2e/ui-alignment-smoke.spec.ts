@@ -1712,7 +1712,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     })
 
     await expect(
-      page.getByRole('heading', { level: 1, name: 'Fee policy administration' }),
+      page.getByRole('heading', { level: 1, name: 'Multiplication Factor' }),
     ).toBeVisible()
     const feePolicyTable = page
       .getByRole('region', { name: 'Search results table' })
@@ -1782,6 +1782,9 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await gotoSyntheticRoute(page, '/admin/policies/fil', {
       waitUntil: 'domcontentloaded',
     })
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'Non-appraised Sec.3 FIL%' }),
+    ).toBeVisible()
     const filAddButton = page.getByRole('button', { name: 'Add fee in lieu policy' })
     await expect(filAddButton).toBeEnabled()
     await expect(filAddButton).toHaveCSS('height', '40px')
