@@ -1083,8 +1083,8 @@ describe('Create Page Core Flows', () => {
     await selectApplicationCreateTab('Clients')
     const ownerNameInput = await screen.findByRole('combobox', { name: 'Owner name' })
     await waitFor(() => expect(ownerNameInput).toHaveValue('Owner Contact'))
-    await userEvent.clear(ownerNameInput)
-    await userEvent.type(ownerNameInput, 'Advertising Owner')
+    fireEvent.change(ownerNameInput, { target: { value: 'Advertising Owner' } })
+    await waitFor(() => expect(ownerNameInput).toHaveValue('Advertising Owner'))
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(mockedSubmitProvincialApplicationCreate).toHaveBeenCalledWith(
