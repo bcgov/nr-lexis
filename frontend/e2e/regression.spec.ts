@@ -23,7 +23,7 @@ import { E2E_BASE_URL } from './utils'
 import { formatBusinessIsoDate } from '../src/utils/date'
 
 const sideNavSection = (name: string) =>
-  `.csp-side-nav__section:has(.csp-side-nav__category-text:text-is("${name}"))`
+  `.csp-side-nav__section:has(> .cds--side-nav__submenu .cds--side-nav__submenu-title:text-is("${name}"))`
 
 const tableRowBackgrounds = (row: Locator): Promise<string[]> =>
   row.evaluate((element) =>
@@ -1681,7 +1681,6 @@ test.describe('TEST IDIR admin regression', () => {
     const page = await authenticatedIdirPage()
     const apiServerErrors = collectApiServerErrors(page)
 
-    await page.evaluate(() => window.localStorage.removeItem('lexis.ui.collapsedSections'))
     await expectAccessiblePage(page, '/provincial/review', /provincial application review/i)
 
     await expect(page.getByRole('button', { name: 'Provincial', exact: true })).toHaveAttribute(

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   Calendar,
-  ChevronDown,
   Certificate,
   Close,
   DataTable,
@@ -21,7 +20,13 @@ import {
   UserAvatar,
   type CarbonIconType,
 } from '@carbon/icons-react'
-import { HeaderMenuButton, IconButton, SkipToContent } from '@carbon/react'
+import {
+  HeaderMenuButton,
+  IconButton,
+  SideNavItems,
+  SideNavMenu,
+  SkipToContent,
+} from '@carbon/react'
 import { Link, matchPath, useLocation, useNavigate } from 'react-router-dom'
 import {
   hasProvincialStaffRole,
@@ -58,17 +63,11 @@ type NavigationSection = {
 
 const UI_PREFERENCE_KEYS = {
   sideNavCollapsed: 'lexis.ui.sideNavCollapsed',
-  collapsedSections: 'lexis.ui.collapsedSections',
 } as const
 
 // INTENTIONAL_LEGACY_DIVERGENCE(NAVIGATION_MENU_CONTRACT): The business-approved
 // labels, initial section expansion, and role-scoped section visibility are intentional.
-const DEFAULT_COLLAPSED_SECTIONS: Record<string, boolean> = {
-  Provincial: false,
-  Federal: true,
-  Reports: true,
-  Admin: true,
-}
+const DEFAULT_EXPANDED_SECTION = 'Provincial'
 
 const ROLE_LABELS: Record<string, string> = {
   ADMIN: 'Administrator',
@@ -295,31 +294,6 @@ const readSideNavCollapsedPreference = (): boolean => {
   return storedValue === 'true'
 }
 
-const readCollapsedSectionsPreference = (): Record<string, boolean> => {
-  const storedValue = readUiPreference(UI_PREFERENCE_KEYS.collapsedSections)
-  if (!storedValue) {
-    return { ...DEFAULT_COLLAPSED_SECTIONS }
-  }
-
-  try {
-    const parsedValue: unknown = JSON.parse(storedValue)
-    if (typeof parsedValue !== 'object' || parsedValue === null || Array.isArray(parsedValue)) {
-      return { ...DEFAULT_COLLAPSED_SECTIONS }
-    }
-
-    const parsedRecord = parsedValue as Record<string, unknown>
-    const restoredSections: Record<string, boolean> = { ...DEFAULT_COLLAPSED_SECTIONS }
-    NAVIGATION_SECTIONS.forEach(({ label }) => {
-      if (typeof parsedRecord[label] === 'boolean') {
-        restoredSections[label] = parsedRecord[label]
-      }
-    })
-    return restoredSections
-  } catch {
-    return { ...DEFAULT_COLLAPSED_SECTIONS }
-  }
-}
-
 const getProfileInitials = (principal: string | null): string => {
   if (!principal) {
     return 'LX'
@@ -345,10 +319,6 @@ const getPrimaryRoleLabel = (roles: string[] | null | undefined): string | null 
     return ROLE_LABELS.PROVINCIAL_SUBMITTER
   }
   return normalizedRoles[0]?.replaceAll('_', ' ') ?? null
-}
-
-const getSectionListId = (sectionLabel: string): string => {
-  return `side-navigation-section-${sectionLabel.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
 }
 
 const canShowRoleScopedLink = (
@@ -388,9 +358,6 @@ function Layout({ children }: LayoutProps) {
   const [isNarrowViewport, setIsNarrowViewport] = useState(isNarrowNavigationViewport)
   const [isNarrowNavExpanded, setIsNarrowNavExpanded] = useState(false)
   const [hasActiveNotifications, setHasActiveNotifications] = useState(false)
-  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>(
-    readCollapsedSectionsPreference,
-  )
   const isDarkTheme = theme === 'g100'
   const isSideNavCollapsed = isNarrowViewport ? !isNarrowNavExpanded : isSideNavCollapsedPreference
   const isNavigationOpen = !isSideNavCollapsed
@@ -457,13 +424,6 @@ function Layout({ children }: LayoutProps) {
       )?.label,
     [activeNavigationLink?.to, visibleNavigationSections],
   )
-
-  const toggleSection = (sectionLabel: string): void => {
-    setCollapsedSections((current) => ({
-      ...current,
-      [sectionLabel]: !current[sectionLabel],
-    }))
-  }
 
   const handleLogout = () => {
     void logout()
@@ -578,10 +538,6 @@ function Layout({ children }: LayoutProps) {
   useEffect(() => {
     writeUiPreference(UI_PREFERENCE_KEYS.sideNavCollapsed, String(isSideNavCollapsedPreference))
   }, [isSideNavCollapsedPreference])
-
-  useEffect(() => {
-    writeUiPreference(UI_PREFERENCE_KEYS.collapsedSections, JSON.stringify(collapsedSections))
-  }, [collapsedSections])
 
   const renderNavigationLink = (link: NavigationLink, nested = true) => {
     const LinkIcon = link.icon
@@ -748,7 +704,7 @@ function Layout({ children }: LayoutProps) {
           className={`cds--side-nav csp-side-nav${isSideNavCollapsed ? ' is-collapsed' : ''}`}
           aria-label="Side navigation"
         >
-          <ul id="side-navigation-list" className="cds--side-nav__items csp-side-nav__items">
+          <SideNavItems className="csp-side-nav__items" isSideNavExpanded={!isSideNavCollapsed}>
             {visibleNavigationSections.map((section) => {
               if (section.standalone) {
                 return (
@@ -763,43 +719,33 @@ function Layout({ children }: LayoutProps) {
                 )
               }
 
-              const sectionListId = getSectionListId(section.label)
-              const isSectionCollapsed =
-                section.label !== activeSectionLabel &&
-                Boolean(collapsedSections[section.label]) &&
-                !isSideNavCollapsed
-              return (
-                <li
-                  key={section.label}
-                  className={`csp-side-nav__section${isSectionCollapsed ? ' is-section-collapsed' : ''}`}
-                >
-                  {isSideNavCollapsed ? (
-                    <span className="cds--side-nav__category csp-side-nav__category">
-                      {section.label}
-                    </span>
-                  ) : (
-                    <button
-                      type="button"
-                      className="cds--side-nav__category csp-side-nav__category csp-side-nav__section-toggle"
-                      aria-expanded={!isSectionCollapsed}
-                      aria-controls={sectionListId}
-                      onClick={() => toggleSection(section.label)}
-                    >
-                      <span className="csp-side-nav__category-text">{section.label}</span>
-                      <span className="csp-side-nav__section-chevron" aria-hidden="true">
-                        <ChevronDown size={14} />
-                      </span>
-                    </button>
-                  )}
-                  {!isSectionCollapsed && (
-                    <ul id={sectionListId} className="csp-side-nav__section-list">
+              if (isSideNavCollapsed) {
+                return (
+                  <li key={section.label} className="csp-side-nav__section">
+                    <span className="csp-side-nav__collapsed-section-label">{section.label}</span>
+                    <ul className="csp-side-nav__section-list">
                       {section.links.map((link) => renderNavigationLink(link))}
                     </ul>
-                  )}
-                </li>
+                  </li>
+                )
+              }
+
+              return (
+                <SideNavMenu
+                  key={section.label}
+                  className="csp-side-nav__section"
+                  defaultExpanded={
+                    section.label === DEFAULT_EXPANDED_SECTION ||
+                    section.label === activeSectionLabel
+                  }
+                  isActive={section.label === activeSectionLabel}
+                  title={section.label}
+                >
+                  {section.links.map((link) => renderNavigationLink(link))}
+                </SideNavMenu>
               )
             })}
-          </ul>
+          </SideNavItems>
         </nav>
 
         <main id="main-content" className="cds--content app-main">

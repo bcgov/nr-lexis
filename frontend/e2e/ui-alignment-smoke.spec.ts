@@ -530,6 +530,32 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       'aria-expanded',
       'false',
     )
+    const provincialSectionToggle = page.getByRole('button', {
+      name: 'Provincial',
+      exact: true,
+    })
+    await expect(provincialSectionToggle).toHaveClass(/cds--side-nav__submenu/)
+    const sectionToggleLayout = await provincialSectionToggle.evaluate((toggle) => {
+      const title = toggle.querySelector('.cds--side-nav__submenu-title')
+      const chevron = toggle.querySelector('.cds--side-nav__submenu-chevron svg')
+      if (!(title instanceof HTMLElement)) throw new Error('Side navigation title not found')
+      if (!(chevron instanceof SVGElement)) throw new Error('Side navigation chevron not found')
+
+      const titleBounds = title.getBoundingClientRect()
+      const chevronBounds = chevron.getBoundingClientRect()
+      return {
+        display: getComputedStyle(toggle).display,
+        titleCenter: titleBounds.top + titleBounds.height / 2,
+        chevronCenter: chevronBounds.top + chevronBounds.height / 2,
+        titleRight: titleBounds.right,
+        chevronLeft: chevronBounds.left,
+      }
+    })
+    expect(sectionToggleLayout.display).toBe('flex')
+    expect(
+      Math.abs(sectionToggleLayout.titleCenter - sectionToggleLayout.chevronCenter),
+    ).toBeLessThan(1)
+    expect(sectionToggleLayout.chevronLeft).toBeGreaterThan(sectionToggleLayout.titleRight)
     await expect(page.locator('.lexis-page-header__subtitle')).toContainText(
       'Find provincial applications',
     )
@@ -635,7 +661,9 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       'background-color',
       'rgb(244, 244, 244)',
     )
-    const activeNavLink = page.locator('a.csp-side-nav__link[data-label="Application search"]')
+    const activeNavLink = page.locator(
+      'a.csp-side-nav__link[data-label="Application search"][href="/provincial/application"]',
+    )
     const inactiveNavLink = page.locator('a.csp-side-nav__link[data-label="Exemption search"]')
     await expect(activeNavLink).toHaveCSS('height', '48px')
     await expect(activeNavLink).toHaveCSS('font-weight', '600')
