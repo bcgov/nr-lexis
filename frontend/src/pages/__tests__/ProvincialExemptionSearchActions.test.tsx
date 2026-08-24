@@ -810,7 +810,7 @@ describe('Provincial Exemption Search Actions', () => {
     expect(mockedSearchProvincialExemptions).toHaveBeenCalledTimes(searchCallsBeforeClear)
   })
 
-  it('renders a full result page without waiting for the exact count', async () => {
+  it('renders a full result page before count and then prefetches the next page', async () => {
     const content = Array.from({ length: 10 }, (_, index) => ({
       exemptionNumber: `EX-${index + 1}`,
       type: 'Section 1',
@@ -852,7 +852,12 @@ describe('Provincial Exemption Search Actions', () => {
     expect(mockedSearchProvincialExemptions).toHaveBeenCalledOnce()
 
     resolveCount(809)
-    await waitFor(() => expect(mockedSearchProvincialExemptions).toHaveBeenCalledOnce())
+    await waitFor(() =>
+      expect(mockedSearchProvincialExemptions).toHaveBeenCalledWith(
+        expect.objectContaining({ page: 1, pageSize: 10 }),
+        { knownTotal: 809 },
+      ),
+    )
   })
 
   it('keeps exemption rows and pagination available when the exact count fails', async () => {
