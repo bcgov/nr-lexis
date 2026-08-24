@@ -194,6 +194,11 @@ type ReviewStatusResponse = {
   message?: string | null
 }
 
+type EmailActionResponse = {
+  success?: boolean
+  message?: string | null
+}
+
 type ExportScheduleMutationResponse = {
   success?: boolean
   message?: string | null
@@ -441,6 +446,7 @@ const throwRegressionFailures = (summary: string, failures: Error[]): void => {
 const missingApplicationNumber = '999999999'
 const virusScanRejectionMessage = 'The uploaded file failed virus scanning.'
 const regressionClientEmail = 'lexis-regression@example.test'
+const regressionEmailRemark = 'test 123'
 const naturalResourceRegionCodes = ['1903', '1904', '1905', '1906', '1907', '1908', '1909', '1910']
 const sessionExpiredEventName = 'lexis:session-expired'
 const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/
@@ -3113,7 +3119,7 @@ test.describe('TEST IDIR admin regression', () => {
     throwRegressionFailures('Notification regression and cleanup failed.', failures)
   })
 
-  test('creates, edits, terminalizes, and cleans up provincial records', async () => {
+  test('creates, edits, emails, terminalizes, and cleans up provincial records', async () => {
     test.setTimeout(300_000)
     test.skip(
       !isSharedTestRegressionBaseUrl(E2E_BASE_URL),
@@ -3313,17 +3319,31 @@ test.describe('TEST IDIR admin regression', () => {
       )
       expect(String(withdrawnOffer.payload.offerWithdrawalDate ?? '')).toBe(formatBusinessIsoDate())
 
-      await rejectRegressionApplication(
-        page,
-        offerApplicationNumber,
-        `${marker} offer application cleanup`,
-      )
+      await rejectRegressionApplication(page, offerApplicationNumber, regressionEmailRemark)
       offerApplicationCleanup.complete()
       const rejectedOfferApplication = await readVersionedJson<Record<string, unknown>>(
         page,
         `/api/lexis/applications/${offerApplicationNumber}`,
       )
       expect(rejectedOfferApplication.payload.applicationStatusCode).toBe('REJ')
+
+      const applicationStatusEmail =
+        await test.step('queue the rejected application status email', async () =>
+          readJsonResponse<EmailActionResponse>(
+            await postWithCsrf(
+              page,
+              `/api/lexis/application-reviews/${offerApplicationNumber}/status-email`,
+              {
+                data: {
+                  statusCode: 'REJ',
+                  remark: regressionEmailRemark,
+                  clientEmailAddress: regressionClientEmail,
+                },
+              },
+            ),
+          ))
+      expect(applicationStatusEmail.success).toBe(true)
+      expect(applicationStatusEmail.message).toBe('Application status email sent.')
 
       const lifecycleApplication = await readVersionedJson<Record<string, unknown>>(
         page,
@@ -3468,6 +3488,16 @@ test.describe('TEST IDIR admin regression', () => {
       expect(approvedExemption.valid).toBe(true)
       expect(asStringArray(approvedExemption.errors)).toEqual([])
 
+      const exemptionApprovalEmail =
+        await test.step('queue the exemption approval email', async () =>
+          readJsonResponse<EmailActionResponse>(
+            await postWithCsrf(page, '/api/lexis/rpc/exemption-details/approval-emails', {
+              form: { sendGrid: `${exemptionNumber}:${regressionClientEmail}` },
+            }),
+          ))
+      expect(exemptionApprovalEmail.success).toBe(true)
+      expect(exemptionApprovalEmail.message).toBe('Approval email sent.')
+
       const exemptionBeforePermit = await readVersionedJson<Record<string, unknown>>(
         page,
         `/api/lexis/exemptions/${encodeURIComponent(exemptionNumber)}`,
@@ -3484,11 +3514,11 @@ test.describe('TEST IDIR admin regression', () => {
       expect(asStringArray(createdPermit.errors)).toEqual([])
       const permitNumber = Number(createdPermit.permitNumber)
       expect(permitNumber).toBeGreaterThan(0)
-      const permitCleanup = cleanup.defer('cancel provincial permit', () =>
-        cancelRegressionPermit(page, permitNumber, lifecycleMarker, schedule.shipping),
-      )
       const detachCleanup = cleanup.defer('detach lifecycle application from permit', () =>
         detachRegressionPermitApplication(page, permitNumber, lifecycleApplicationNumber),
+      )
+      const permitCleanup = cleanup.defer('cancel provincial permit', () =>
+        cancelRegressionPermit(page, permitNumber, lifecycleMarker, schedule.shipping),
       )
 
       await expectAccessiblePage(
@@ -3574,6 +3604,52 @@ test.describe('TEST IDIR admin regression', () => {
       )
       expect(permittedApplication.payload.applicationStatusCode).toBe('PMT')
 
+      const permitBeforeCompletion = await readPermitVersionedJson<Record<string, unknown>>(
+        page,
+        permitNumber,
+      )
+      const completedPermit = await test.step('complete the permit for approval email', async () =>
+        readJsonResponse<PermitMutationResponse>(
+          await postWithCsrf(page, '/api/lexis/rpc/permit-details/update-permit', {
+            headers: versionHeaders(permitBeforeCompletion.version),
+            form: permitMutationForm(
+              permitBeforeCompletion.payload,
+              regressionEmailRemark,
+              schedule.shipping,
+              'COM',
+            ),
+          }),
+        ))
+      expect(
+        completedPermit.success,
+        permitMutationFailure(
+          completedPermit,
+          `Permit ${permitNumber} completion returned success=false.`,
+        ),
+      ).toBe(true)
+      expect(['COM', 'PPD']).toContain(completedPermit.permitStatus)
+      expect(asStringArray(completedPermit.errors)).toEqual([])
+
+      const permitApprovalEmail = await test.step('queue the permit approval email', async () =>
+        readJsonResponse<EmailActionResponse>(
+          await postWithCsrf(page, '/api/lexis/rpc/permit-details/approval-email', {
+            form: {
+              permitNumber: String(permitNumber),
+              clientEmailAddress: regressionClientEmail,
+            },
+          }),
+        ))
+      expect(permitApprovalEmail.success).toBe(true)
+      expect(permitApprovalEmail.message).toBe('Permit approval email sent.')
+
+      await cancelRegressionPermit(page, permitNumber, lifecycleMarker, schedule.shipping)
+      permitCleanup.complete()
+      const cancelledPermit = await readPermitVersionedJson<Record<string, unknown>>(
+        page,
+        permitNumber,
+      )
+      expect(cancelledPermit.payload.permitStatusCode).toBe('CAN')
+
       await detachRegressionPermitApplication(page, permitNumber, lifecycleApplicationNumber)
       detachCleanup.complete()
       expect(await permitContainsApplication(page, permitNumber, lifecycleApplicationNumber)).toBe(
@@ -3584,14 +3660,6 @@ test.describe('TEST IDIR admin regression', () => {
         `/api/lexis/applications/${lifecycleApplicationNumber}`,
       )
       expect(detachedApplication.payload.applicationStatusCode).toBe('EXE')
-
-      await cancelRegressionPermit(page, permitNumber, lifecycleMarker, schedule.shipping)
-      permitCleanup.complete()
-      const cancelledPermit = await readPermitVersionedJson<Record<string, unknown>>(
-        page,
-        permitNumber,
-      )
-      expect(cancelledPermit.payload.permitStatusCode).toBe('CAN')
 
       await cancelRegressionExemption(page, exemptionNumber, orgUnitNumber)
       exemptionCleanup.complete()
