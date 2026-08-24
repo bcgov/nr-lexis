@@ -52,7 +52,9 @@ class FederalApplicationRepositoryTest {
 
     assertThat(repository.whereSql())
         .contains("v.FED_APPLICATION_NUMBER LIKE '%' || ? || '%'")
-        .contains("v.PACKAGE_NUMBER LIKE '%' || ? || '%'")
+        .contains("EXISTS (SELECT 1 FROM EXPORT_PACKAGE EP")
+        .contains("EP.APPLICATION_NUMBER = v.APPLICATION_NUMBER")
+        .contains("EP.PACKAGE_NUMBER LIKE '%' || ? || '%'")
         .contains("v.EXPORT_JURISDICTION_CODE = ?")
         .contains("v.EXEMPTION_NUMBER LIKE '%' || ? || '%'")
         .contains("v.EXPORT_APPLICATION_STATUS_CODE = ?")
@@ -68,10 +70,10 @@ class FederalApplicationRepositoryTest {
         .doesNotContain(":1");
     assertThat(repository.pageSelectSql())
         .contains("FROM EXPORT_EXEMPTION_APPLICATION EEA")
-        .contains("LISTAGG(EP.PACKAGE_NUMBER, ',')")
         .contains("INNER JOIN EXPORT_APPLICATION_STATUS_CODE EASC")
         .contains("INNER JOIN EXPORT_EXEMPTION_REASON_CODE EERC")
         .contains("INNER JOIN EXPORT_APPLICANT_TYPE_CODE EATC")
+        .doesNotContain("LISTAGG")
         .doesNotContain("FIND_APPLICATIONS_BY_CRITERIA");
     assertThat(repository.bindValues())
         .containsExactly(
@@ -97,7 +99,9 @@ class FederalApplicationRepositoryTest {
 
     repository.search(emptyCriteria(0, 10));
 
-    assertThat(repository.whereSql()).doesNotContain("v.ORG_UNIT_NO IN");
+    assertThat(repository.whereSql())
+        .doesNotContain("v.ORG_UNIT_NO IN")
+        .doesNotContain("EXPORT_PACKAGE");
     assertThat(repository.bindValues()).containsExactly("F");
   }
 
@@ -146,7 +150,7 @@ class FederalApplicationRepositoryTest {
   }
 
   @Test
-  void countShouldUseTheSameFiltersWithoutPageSort() {
+  void countShouldUseTheSameFiltersWithoutPageSortOrPackageAggregation() {
     TestFederalApplicationRepository repository =
         new TestFederalApplicationRepository(List.of(federalResult(900001L)));
     FederalApplicationSearchCriteria criteria =
@@ -173,6 +177,7 @@ class FederalApplicationRepositoryTest {
     assertThat(repository.countSelectSql())
         .contains("SELECT COUNT(*)")
         .contains("FROM EXPORT_EXEMPTION_APPLICATION EEA")
+        .doesNotContain("LISTAGG")
         .doesNotContain("FIND_APPLICATIONS_BY_CRITERIA");
     assertThat(repository.countWhereSql())
         .isEqualTo(pageWhere.substring(0, pageWhere.indexOf(" ORDER BY")))

@@ -46,8 +46,7 @@ public class FederalApplicationRepository extends OracleRepositorySupport {
           EASC.DESCRIPTION AS STATUS_DESCRIPTION,
           EERC.DESCRIPTION AS REASON_DESCRIPTION,
           EE.EXPORT_EXEMPTION_TYPE_CODE,
-          EETC.DESCRIPTION AS TYPE_DESCRIPTION,
-          APK.PACKAGE_NUMBER
+          EETC.DESCRIPTION AS TYPE_DESCRIPTION
         FROM EXPORT_EXEMPTION_APPLICATION EEA
         LEFT JOIN EXPORT_EXEMPTION EE
           ON EE.EXEMPTION_NUMBER = EEA.EXEMPTION_NUMBER
@@ -61,15 +60,6 @@ public class FederalApplicationRepository extends OracleRepositorySupport {
           ON EATC.EXPORT_APPLICANT_TYPE_CODE = EEA.EXPORT_APPLICANT_TYPE_CODE
         LEFT JOIN EXPORT_EXEMPTION_TYPE_CODE EETC
           ON EETC.EXPORT_EXEMPTION_TYPE_CODE = EE.EXPORT_EXEMPTION_TYPE_CODE
-        LEFT JOIN (
-          SELECT
-            EP.APPLICATION_NUMBER,
-            LISTAGG(EP.PACKAGE_NUMBER, ',')
-              WITHIN GROUP (ORDER BY EP.PACKAGE_NUMBER) AS PACKAGE_NUMBER
-          FROM EXPORT_PACKAGE EP
-          GROUP BY EP.APPLICATION_NUMBER
-        ) APK
-          ON APK.APPLICATION_NUMBER = EEA.APPLICATION_NUMBER
       ) v
       """;
   private static final String SEARCH_FEDERAL_APPLICATIONS =
@@ -159,7 +149,15 @@ public class FederalApplicationRepository extends OracleRepositorySupport {
     DirectSqlBuilder where = newDirectSqlBuilder();
 
     where.addLike("v.FED_APPLICATION_NUMBER", criteria.federalApplicationNumber());
-    where.addLike("v.PACKAGE_NUMBER", criteria.packageNumber());
+    // Match packages individually so large applications cannot overflow Oracle LISTAGG limits.
+    String packageNumber = trim(criteria.packageNumber());
+    if (packageNumber != null) {
+      where.addRawWithBinds(
+          " AND EXISTS (SELECT 1 FROM EXPORT_PACKAGE EP"
+              + " WHERE EP.APPLICATION_NUMBER = v.APPLICATION_NUMBER"
+              + " AND EP.PACKAGE_NUMBER LIKE '%' || ? || '%')",
+          packageNumber);
+    }
     where.addEquals("v.EXPORT_JURISDICTION_CODE", "F");
     where.addLike("v.EXEMPTION_NUMBER", criteria.exemptionNumber());
     where.addEquals("v.EXPORT_APPLICATION_STATUS_CODE", criteria.applicationStatus());

@@ -347,6 +347,23 @@ class PermitRpcRepositoryTest {
   }
 
   @Test
+  void inPredicateShouldChunkValuesAtTheOracleLimit() {
+    String predicate = PermitRpcRepository.inPredicate("SD.PACKAGE_NUMBER", 3450);
+    String[] groups = predicate.substring(1, predicate.length() - 1).split(" OR ");
+
+    assertThat(groups).hasSize(4);
+    assertThat(groups)
+        .allSatisfy(
+            group ->
+                assertThat(group.chars().filter(character -> character == '?').count())
+                    .isLessThanOrEqualTo(1000L));
+    assertThat(groups[3].chars().filter(character -> character == '?').count())
+        .isEqualTo(450L);
+    assertThat(predicate.chars().filter(character -> character == '?').count()).isEqualTo(3450L);
+    assertThat(predicate).startsWith("(SD.PACKAGE_NUMBER IN (").endsWith("))");
+  }
+
+  @Test
   void findAllCountryCodesShouldUseOracleRowsWhenAvailable() throws Exception {
     stubCursorProcedure("{ call LEXIS_CODES.FIND_ALL_COUNTRY_CODES(?) }");
     when(resultSet.next()).thenReturn(true, true, false);

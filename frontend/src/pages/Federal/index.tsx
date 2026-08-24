@@ -61,8 +61,10 @@ import { useSearchFilterDraft } from '@/pages/shared/useSearchFilterDraft'
 import { usePersistedSearchParams } from '@/pages/shared/usePersistedSearchParams'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import {
+  formatDeferredSearchTotalLabel,
   loadSearchWithDeferredTotal,
   prefetchAdjacentSearchPages,
+  type DeferredSearchTotalStatus,
 } from '@/pages/shared/deferred-search-total'
 import {
   countFederalApplications,
@@ -136,7 +138,11 @@ const FederalPage = () => {
   const [applicationStatusOptions, setApplicationStatusOptions] = useState<SearchOption[]>([])
   const [optionsLoading, setOptionsLoading] = useState(true)
   const [optionsUnavailable, setOptionsUnavailable] = useState(false)
-  const [results, setResults] = useState<FederalApplicationSearchResponse>(EMPTY_RESULTS)
+  const [searchResult, setSearchResult] = useState<{
+    results: FederalApplicationSearchResponse
+    totalStatus: DeferredSearchTotalStatus
+  }>({ results: EMPTY_RESULTS, totalStatus: 'exact' })
+  const { results, totalStatus } = searchResult
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
   const [selectedRowsById, setSelectedRowsById] = useState<
@@ -210,9 +216,12 @@ const FederalPage = () => {
   ])
 
   const beginSearchRequest = useLatestRequestGuard()
-  const commitResults = useCallback((nextResults: FederalApplicationSearchResponse) => {
-    setResults(nextResults)
-  }, [])
+  const commitResults = useCallback(
+    (nextResults: FederalApplicationSearchResponse, nextTotalStatus: DeferredSearchTotalStatus) => {
+      setSearchResult({ results: nextResults, totalStatus: nextTotalStatus })
+    },
+    [],
+  )
 
   const runSearch = useCallback(
     async (request: FederalApplicationSearchRequest, options: { force?: boolean } = {}) => {
@@ -239,7 +248,7 @@ const FederalPage = () => {
             search: searchFederalApplications,
             onError: console.error,
           })
-          setResults(cachedResults)
+          commitResults(cachedResults, 'exact')
           setLoading(false)
           setErrorMessage('')
           return
@@ -282,24 +291,39 @@ const FederalPage = () => {
           }
           queueMicrotask(() => {
             if (isLatestRequest()) {
-              commitResults(response)
+              commitResults(response, totalIsExact ? 'exact' : 'pending')
             }
           })
         }
-        const { response, totalIsExact } = await loadSearchWithDeferredTotal({
+        const { response, totalIsExact, deferredResponse } = await loadSearchWithDeferredTotal({
           request,
           cachedTotal,
           search: searchFederalApplications,
           count: countFederalApplications,
+          deferCount: true,
         })
         if (isLatestRequest()) {
           commitSearchResponse(response, totalIsExact)
+        }
+        if (deferredResponse) {
+          void deferredResponse
+            .then((exactResponse) => {
+              if (isLatestRequest()) {
+                commitSearchResponse(exactResponse, true)
+              }
+            })
+            .catch((error) => {
+              console.error(error)
+              if (isLatestRequest()) {
+                commitResults(response, 'unavailable')
+              }
+            })
         }
       } catch (error) {
         if (isLatestRequest()) {
           console.error(error)
           setErrorMessage('Unable to retrieve federal application search results.')
-          setResults(EMPTY_RESULTS)
+          commitResults(EMPTY_RESULTS, 'exact')
         }
       } finally {
         if (isLatestRequest()) {
@@ -598,6 +622,11 @@ const FederalPage = () => {
                 ? undefined
                 : results.page.totalElements
             }
+            totalItemsLabel={formatDeferredSearchTotalLabel(
+              results.page.totalElements,
+              totalStatus,
+              results.page.number * results.page.size + results.content.length,
+            )}
             actions={
               canCreateFederalExemption ? (
                 <DisabledButtonTooltip
@@ -747,6 +776,8 @@ const FederalPage = () => {
                 pageSize={results.page.size}
                 pageSizes={[...SEARCH_PAGE_SIZE_OPTIONS]}
                 totalItems={results.page.totalElements}
+                pagesUnknown={totalStatus !== 'exact'}
+                isLastPage={totalStatus !== 'exact' && results.content.length < results.page.size}
                 onChange={({ page, pageSize: nextPageSize }) => {
                   clearSelection()
                   setSearchParams(buildSearchParams(appliedFilters, page, nextPageSize))

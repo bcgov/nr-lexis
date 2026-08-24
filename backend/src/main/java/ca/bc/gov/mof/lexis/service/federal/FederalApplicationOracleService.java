@@ -31,8 +31,10 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeMap;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
 import org.springframework.dao.DataAccessException;
@@ -681,32 +683,37 @@ public class FederalApplicationOracleService implements FederalApplicationServic
         return false;
       }
 
+      Map<String, PackageMutationRow> currentPackages =
+          packageRowsByNumber(
+              applicationNumber,
+              applicationDetailsRepository.findPackageMutationsByApplicationNumber(
+                  applicationNumber));
+      if (!packageNumbers.equals(List.copyOf(currentPackages.keySet()))) {
+        return false;
+      }
+
       for (String packageNumber : packageNumbers) {
-        Optional<PackageMutationRow> current =
-            applicationDetailsRepository.findPackageMutationByPackageNumber(packageNumber);
-        if (current
-            .filter(
-                row ->
-                    sameText(packageNumber, row.packageNumber())
-                        && java.util.Objects.equals(applicationNumber, row.applicationNumber()))
-            .isEmpty()) {
-          return false;
-        }
-        PackageMutationRow row = current.get();
-        List<ApplicationDetailsRpcRepository.EndUseMutationRecord> endUses =
-            applicationDetailsRepository.findEndUsesByPackageNumberRequired(packageNumber).stream()
-                .map(
-                    item ->
-                        new ApplicationDetailsRpcRepository.EndUseMutationRecord(
-                            item.speciesCode(), item.endUseCode()))
-                .toList();
+        PackageMutationRow row = currentPackages.get(packageNumber);
         boolean updated =
-            applicationDetailsRepository.updatePackage(
+            applicationDetailsRepository.updatePackagePreservingEndUses(
                 new PackageMutationRecord(
-                    row.packageNumber(), row.applicationNumber(), row.reprocessedIndicator(), row.packageVolume(),
-                    row.averageLength(), row.averageDiameter(), row.comments(), row.packageFee(), permitNumber,
-                    row.reservePermitNumber(), row.packageStatusCode(), row.growthTypeCode(), row.productTypeCode(),
-                    row.entryUserId(), row.entryTimestamp(), userId, endUses));
+                    row.packageNumber(),
+                    row.applicationNumber(),
+                    row.reprocessedIndicator(),
+                    row.packageVolume(),
+                    row.averageLength(),
+                    row.averageDiameter(),
+                    row.comments(),
+                    row.packageFee(),
+                    permitNumber,
+                    row.reservePermitNumber(),
+                    row.packageStatusCode(),
+                    row.growthTypeCode(),
+                    row.productTypeCode(),
+                    row.entryUserId(),
+                    row.entryTimestamp(),
+                    userId,
+                    List.of()));
         if (!updated) return false;
       }
 
@@ -716,22 +723,31 @@ public class FederalApplicationOracleService implements FederalApplicationServic
       if (!packageNumbers.equals(persistedPackageNumbers)) {
         return false;
       }
-      return packageNumbers.stream()
-          .allMatch(
-              packageNumber ->
-                  applicationDetailsRepository
-                      .findPackageMutationByPackageNumber(packageNumber)
-                      .filter(
-                          row ->
-                              sameText(packageNumber, row.packageNumber())
-                                  && java.util.Objects.equals(
-                                      applicationNumber, row.applicationNumber())
-                                  && java.util.Objects.equals(
-                                      permitNumber, row.federalPermitNumber()))
-                      .isPresent());
+      Map<String, PackageMutationRow> persistedPackages =
+          packageRowsByNumber(
+              applicationNumber,
+              applicationDetailsRepository.findPackageMutationsByApplicationNumber(
+                  applicationNumber));
+      return packageNumbers.equals(List.copyOf(persistedPackages.keySet()))
+          && persistedPackages.values().stream()
+              .allMatch(row -> java.util.Objects.equals(permitNumber, row.federalPermitNumber()));
     } catch (DataAccessException ex) {
       return false;
     }
+  }
+
+  private Map<String, PackageMutationRow> packageRowsByNumber(
+      Long applicationNumber, List<PackageMutationRow> rows) {
+    Map<String, PackageMutationRow> packagesByNumber = new TreeMap<>();
+    for (PackageMutationRow row : safeList(rows)) {
+      String packageNumber = row == null ? null : trimToNull(row.packageNumber());
+      if (packageNumber == null
+          || !java.util.Objects.equals(applicationNumber, row.applicationNumber())
+          || packagesByNumber.putIfAbsent(packageNumber, row) != null) {
+        return Map.of();
+      }
+    }
+    return packagesByNumber;
   }
 
   private List<String> normalizedPackageNumbers(List<String> packageNumbers) {
