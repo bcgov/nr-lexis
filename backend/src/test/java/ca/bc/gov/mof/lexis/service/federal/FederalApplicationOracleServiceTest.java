@@ -575,13 +575,9 @@ class FederalApplicationOracleServiceTest {
         .thenReturn(Optional.of(insertedFederalPermit()));
     when(repository.findPackageNumbersByApplicationNumberRequired(1000456L))
         .thenReturn(List.of("PKG-901"), List.of("PKG-901"));
-    when(applicationDetailsRepository.findPackageMutationByPackageNumber("PKG-901"))
-        .thenReturn(
-            Optional.of(packageMutationRow(null)),
-            Optional.of(packageMutationRow(9001L)));
-    when(applicationDetailsRepository.findEndUsesByPackageNumberRequired("PKG-901"))
-        .thenReturn(List.of());
-    when(applicationDetailsRepository.updatePackage(any())).thenReturn(true);
+    when(applicationDetailsRepository.findPackageMutationsByApplicationNumber(1000456L))
+        .thenReturn(List.of(packageMutationRow(null)), List.of(packageMutationRow(9001L)));
+    when(applicationDetailsRepository.updatePackagePreservingEndUses(any())).thenReturn(true);
 
     FederalApplicationService.FederalMutationResult result =
         service.addPermit(
@@ -610,6 +606,10 @@ class FederalApplicationOracleServiceTest {
                     && "VA".equals(row.portOfExportCode())
                     && "Carrier".equals(row.transportName())
                     && row.otherPortOfExport() == null));
+    verify(applicationDetailsRepository, org.mockito.Mockito.times(2))
+        .findPackageMutationsByApplicationNumber(1000456L);
+    verify(applicationDetailsRepository, never()).findPackageMutationByPackageNumber(any());
+    verify(applicationDetailsRepository, never()).findEndUsesByPackageNumberRequired(any());
   }
 
   @Test
@@ -647,11 +647,9 @@ class FederalApplicationOracleServiceTest {
         .thenReturn(Optional.of(insertedFederalPermit()));
     when(repository.findPackageNumbersByApplicationNumberRequired(1000456L))
         .thenReturn(List.of("PKG-901"), List.of("PKG-901"));
-    when(applicationDetailsRepository.findPackageMutationByPackageNumber("PKG-901"))
-        .thenReturn(Optional.of(packageMutationRow(null)));
-    when(applicationDetailsRepository.findEndUsesByPackageNumberRequired("PKG-901"))
-        .thenReturn(List.of());
-    when(applicationDetailsRepository.updatePackage(any())).thenReturn(true);
+    when(applicationDetailsRepository.findPackageMutationsByApplicationNumber(1000456L))
+        .thenReturn(List.of(packageMutationRow(null)), List.of(packageMutationRow(null)));
+    when(applicationDetailsRepository.updatePackagePreservingEndUses(any())).thenReturn(true);
     RecordingTransactionManager transactionManager = new RecordingTransactionManager();
 
     FederalApplicationService.FederalMutationResult result =
@@ -676,11 +674,9 @@ class FederalApplicationOracleServiceTest {
         .thenReturn(Optional.of(insertedFederalPermit()));
     when(repository.findPackageNumbersByApplicationNumberRequired(1000456L))
         .thenReturn(List.of("PKG-901"), List.of("PKG-901", "PKG-902"));
-    when(applicationDetailsRepository.findPackageMutationByPackageNumber("PKG-901"))
-        .thenReturn(Optional.of(packageMutationRow("PKG-901", 1000456L, null)));
-    when(applicationDetailsRepository.findEndUsesByPackageNumberRequired("PKG-901"))
-        .thenReturn(List.of());
-    when(applicationDetailsRepository.updatePackage(any())).thenReturn(true);
+    when(applicationDetailsRepository.findPackageMutationsByApplicationNumber(1000456L))
+        .thenReturn(List.of(packageMutationRow("PKG-901", 1000456L, null)));
+    when(applicationDetailsRepository.updatePackagePreservingEndUses(any())).thenReturn(true);
     RecordingTransactionManager transactionManager = new RecordingTransactionManager();
 
     FederalApplicationService.FederalMutationResult result =
@@ -702,13 +698,13 @@ class FederalApplicationOracleServiceTest {
         .thenReturn(Optional.of(insertedFederalPermit()));
     when(repository.findPackageNumbersByApplicationNumberRequired(1000456L))
         .thenReturn(List.of("PKG-901", "PKG-902"));
-    when(applicationDetailsRepository.findPackageMutationByPackageNumber("PKG-901"))
-        .thenReturn(Optional.of(packageMutationRow("PKG-901", 1000456L, null)));
-    when(applicationDetailsRepository.findPackageMutationByPackageNumber("PKG-902"))
-        .thenReturn(Optional.of(packageMutationRow("PKG-902", 1000456L, null)));
-    when(applicationDetailsRepository.findEndUsesByPackageNumberRequired(any()))
-        .thenReturn(List.of());
-    when(applicationDetailsRepository.updatePackage(any())).thenReturn(true, false);
+    when(applicationDetailsRepository.findPackageMutationsByApplicationNumber(1000456L))
+        .thenReturn(
+            List.of(
+                packageMutationRow("PKG-901", 1000456L, null),
+                packageMutationRow("PKG-902", 1000456L, null)));
+    when(applicationDetailsRepository.updatePackagePreservingEndUses(any()))
+        .thenReturn(true, false);
     RecordingTransactionManager transactionManager = new RecordingTransactionManager();
 
     FederalApplicationService.FederalMutationResult result =
@@ -718,7 +714,8 @@ class FederalApplicationOracleServiceTest {
     assertThat(result.success()).isFalse();
     assertThat(transactionManager.commits).isZero();
     assertThat(transactionManager.rollbacks).isEqualTo(1);
-    verify(applicationDetailsRepository, org.mockito.Mockito.times(2)).updatePackage(any());
+    verify(applicationDetailsRepository, org.mockito.Mockito.times(2))
+        .updatePackagePreservingEndUses(any());
   }
 
   @Test
@@ -731,8 +728,8 @@ class FederalApplicationOracleServiceTest {
         .thenReturn(Optional.of(insertedFederalPermit()));
     when(repository.findPackageNumbersByApplicationNumberRequired(1000456L))
         .thenReturn(List.of("PKG-901"));
-    when(applicationDetailsRepository.findPackageMutationByPackageNumber("PKG-901"))
-        .thenReturn(Optional.of(packageMutationRow(1000999L, null)));
+    when(applicationDetailsRepository.findPackageMutationsByApplicationNumber(1000456L))
+        .thenReturn(List.of(packageMutationRow(1000999L, null)));
     RecordingTransactionManager transactionManager = new RecordingTransactionManager();
 
     FederalApplicationService.FederalMutationResult result =
@@ -742,7 +739,7 @@ class FederalApplicationOracleServiceTest {
     assertThat(result.success()).isFalse();
     assertThat(transactionManager.commits).isZero();
     assertThat(transactionManager.rollbacks).isEqualTo(1);
-    verify(applicationDetailsRepository, never()).updatePackage(any());
+    verify(applicationDetailsRepository, never()).updatePackagePreservingEndUses(any());
   }
 
   @Test
@@ -894,7 +891,7 @@ class FederalApplicationOracleServiceTest {
   }
 
   @Test
-  void addPermitShouldFailClosedWhenPackageEndUseLookupFails() {
+  void addPermitShouldFailClosedWhenBulkPackageLookupFails() {
     stubValidPermitCodes();
     when(repository.findMutationContextRequired(1000456L))
         .thenReturn(Optional.of(federalContext("APP", null)));
@@ -917,13 +914,7 @@ class FederalApplicationOracleServiceTest {
                     "00077881")));
     when(repository.findPackageNumbersByApplicationNumberRequired(1000456L))
         .thenReturn(List.of("PKG-901"));
-    when(applicationDetailsRepository.findPackageMutationByPackageNumber("PKG-901"))
-        .thenReturn(
-            Optional.of(
-                new ApplicationDetailsRpcRepository.PackageMutationRow(
-                    "PKG-901", 1000456L, null, 10.0, null, null, null, null,
-                    null, null, "ACT", null, null, "idir\\creator", Instant.EPOCH)));
-    when(applicationDetailsRepository.findEndUsesByPackageNumberRequired("PKG-901"))
+    when(applicationDetailsRepository.findPackageMutationsByApplicationNumber(1000456L))
         .thenThrow(new DataRetrievalFailureException("Oracle lookup failed"));
 
     FederalApplicationService.FederalMutationResult result =
@@ -943,7 +934,7 @@ class FederalApplicationOracleServiceTest {
     assertThat(result.success()).isFalse();
     assertThat(result.errors()).containsExactly(
         "Federal permit was created, but its application packages could not be linked.");
-    verify(applicationDetailsRepository, never()).updatePackage(any());
+    verify(applicationDetailsRepository, never()).updatePackagePreservingEndUses(any());
   }
 
   @Test
