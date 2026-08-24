@@ -221,7 +221,8 @@ describe('Provincial Permit Search Actions', () => {
 
     await waitFor(() => expect(mockedCountProvincialPermits).toHaveBeenCalledOnce())
     expect(await screen.findByText('7001')).toBeInTheDocument()
-    expect(screen.getByText('At least 10 results found — counting…')).toBeInTheDocument()
+    expect(screen.getByRole('status', { name: 'Counting search results' })).toBeInTheDocument()
+    expect(screen.queryByText(/counting/i)).not.toBeInTheDocument()
     expect(screen.queryByText('Loading permit search results…')).not.toBeInTheDocument()
 
     await act(async () => {

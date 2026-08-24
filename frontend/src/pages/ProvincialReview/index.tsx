@@ -1198,7 +1198,7 @@ const ProvincialReviewPage = () => {
           aria-label="Review queue"
         >
           <div className="provincial-review-table-toolbar">
-            <p className="legacy-search-result-count">
+            <div className="legacy-search-result-count" aria-live="polite">
               {errorMessage
                 ? 'Results unavailable'
                 : loading && results.content.length === 0
@@ -1209,7 +1209,7 @@ const ProvincialReviewPage = () => {
                       results.page.number * results.page.size + results.content.length,
                     ) ??
                     `${new Intl.NumberFormat('en-CA').format(results.page.totalElements)} results found`)}
-            </p>
+            </div>
             <DisabledButtonTooltip
               disabled={
                 loading ||

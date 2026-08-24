@@ -2140,6 +2140,17 @@ $notification-types: 'error', 'info', 'success', 'warning';
   line-height: 1;
 }
 
+.legacy-search-result-count-skeleton {
+  display: flex;
+  align-items: center;
+  block-size: 1rem;
+  inline-size: 160px;
+}
+
+.legacy-search-result-count-skeleton .cds--skeleton__text {
+  margin: 0;
+}
+
 .legacy-search-table-frame {
   position: relative;
   min-height: 12rem;

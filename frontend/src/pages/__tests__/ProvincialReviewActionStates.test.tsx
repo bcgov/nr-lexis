@@ -282,7 +282,8 @@ describe('Provincial Review Action State Smoke', () => {
 
     await waitFor(() => expect(mockedCountApplicationReviews).toHaveBeenCalledOnce())
     expect(await screen.findByText('3000000')).toBeInTheDocument()
-    expect(screen.getByText('At least 10 results found — counting…')).toBeInTheDocument()
+    expect(screen.getByRole('status', { name: 'Counting search results' })).toBeInTheDocument()
+    expect(screen.queryByText(/counting/i)).not.toBeInTheDocument()
     expect(screen.queryByText('Loading results…')).not.toBeInTheDocument()
 
     await act(async () => {
