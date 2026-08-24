@@ -12,6 +12,7 @@ final class LexisApiAuthorizationRules {
 
   enum RuleType {
     PERMIT_ALL,
+    AUTHENTICATED,
     DENY_ALL,
     ADMIN_AUTHORITY,
     PROVINCIAL_STAFF_ROLE,
@@ -213,6 +214,9 @@ final class LexisApiAuthorizationRules {
               "/api/lexis/feeReport.do"),
           adminAuthority("/actuator/**"),
           knownRole("/error"),
+          // Keep this exact matcher ahead of session/** so a valid no-role identity can render
+          // the no-access page without gaining access to any other session or business endpoint.
+          authenticated(HttpMethod.GET, "/api/lexis/session/capabilities"),
           provincialStaffRole("/api/lexis/session/preferences"),
           knownRole("/api/lexis/session/**"),
           knownRole("/api/lexis/notifications"),
@@ -792,6 +796,10 @@ final class LexisApiAuthorizationRules {
 
   private static Rule permitAll(HttpMethod method, String... paths) {
     return new Rule(RuleType.PERMIT_ALL, method, List.of(paths), null, Map.of(), List.of());
+  }
+
+  private static Rule authenticated(HttpMethod method, String... paths) {
+    return new Rule(RuleType.AUTHENTICATED, method, List.of(paths), null, Map.of(), List.of());
   }
 
   private static Rule denyAll(String... paths) {

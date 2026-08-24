@@ -70,6 +70,8 @@ public class LexisApiAuthorizationCustomizer
     for (Rule rule : LexisApiAuthorizationRules.rules()) {
       switch (rule.type()) {
         case PERMIT_ALL -> authorize.requestMatchers(rule.method(), rule.patternsArray()).permitAll();
+        case AUTHENTICATED ->
+            authorize.requestMatchers(rule.method(), rule.patternsArray()).authenticated();
         case DENY_ALL -> authorize.requestMatchers(rule.patternsArray()).denyAll();
         case ADMIN_AUTHORITY ->
             authorize.requestMatchers(rule.patternsArray()).hasAuthority("LEXIS_ADMIN");
@@ -88,6 +90,10 @@ public class LexisApiAuthorizationCustomizer
           authorize) {
     authorize.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll();
     authorize.requestMatchers(HttpMethod.GET, HEALTH_PROBE_PATTERNS).permitAll();
+    // PROD RTM-only mode registers its narrow routes directly instead of using the standard loop.
+    authorize
+        .requestMatchers(HttpMethod.GET, "/api/lexis/session/capabilities")
+        .authenticated();
     authorizeProvincialStaffRoles(authorize, "/api/lexis/session/preferences");
     authorizeKnownRoles(authorize, PROD_RTM_ONLY_SESSION_PATTERNS);
     authorizeFixedAction(
@@ -112,7 +118,7 @@ public class LexisApiAuthorizationCustomizer
         case KNOWN_ROLE -> authorizeProdReadOnlyKnownRole(authorize, rule);
         case ACTION -> authorizeProdReadOnlyAction(authorize, rule);
         case ANY_ACTION -> authorizeProdReadOnlyAnyAction(authorize, rule);
-        case PERMIT_ALL, ADMIN_AUTHORITY -> {
+        case PERMIT_ALL, AUTHENTICATED, ADMIN_AUTHORITY -> {
           // PROD probes, session routes, and admin RTM access are registered above.
         }
       }

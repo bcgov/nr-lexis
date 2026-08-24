@@ -383,6 +383,35 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     expect(pageWidth.scrollWidth).toBeLessThanOrEqual(pageWidth.clientWidth)
   })
 
+  test('shows authenticated users without a LEXIS role the standalone no-access page', async ({
+    page,
+  }) => {
+    await page.route('**/api/lexis/session/capabilities', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ...authenticatedAdminSession,
+          principal: 'UI.NO.ACCESS',
+          roles: [],
+          welcomeTarget: 'noAccess',
+          legacyPath: null,
+          grantedActions: [],
+        }),
+      })
+    })
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await gotoSyntheticRoute(page, '/provincial/application', {
+      waitUntil: 'domcontentloaded',
+    })
+
+    await expect(page.getByRole('heading', { level: 1, name: 'Access not granted' })).toBeVisible()
+    await expect(page.getByText(/UI\.NO\.ACCESS/)).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible()
+    await expect(page.locator('.app-shell')).toHaveCount(0)
+    await expect(page.getByTestId('unauthorized-page')).toBeVisible()
+  })
+
   test('uses the FSPTS split-screen organization picker without mobile overflow', async ({
     page,
   }) => {

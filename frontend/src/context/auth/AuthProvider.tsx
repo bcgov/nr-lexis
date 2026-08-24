@@ -99,6 +99,12 @@ const ROLE_READ_ONLY = 'READ_ONLY'
 const ROLE_APPLICATION_APPROVER = 'APPLICATION_APPROVER'
 const ROLE_EXEMPTION_APPROVER = 'EXEMPTION_APPROVER'
 const ROLE_PROVINCIAL_SUBMITTER = 'PROVINCIAL_SUBMITTER'
+const APPLICATION_ROLE_NAMES = new Set([
+  ROLE_ADMIN,
+  ROLE_READ_ONLY,
+  ROLE_APPLICATION_APPROVER,
+  ROLE_EXEMPTION_APPROVER,
+])
 const PROD_RTM_ONLY_ACTION = '/lexisAgentAdmin'
 
 const INDUSTRY_ROLE_NAMES = new Set<string>([ROLE_PROVINCIAL_SUBMITTER])
@@ -168,6 +174,10 @@ const isIndustryRole = (role: string): boolean => {
     return true
   }
   return role.startsWith('PROVINCIAL_SUBMITTER_')
+}
+
+const isApplicationRole = (role: string): boolean => {
+  return APPLICATION_ROLE_NAMES.has(role) || isIndustryRole(role)
 }
 
 const asNonBlankString = (value: unknown): string | null => {
@@ -700,7 +710,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     [capabilities.roles, grantedActionSet],
   )
 
-  const hasAnyRole = capabilities.roles.length > 0
+  const hasAnyRole = capabilities.roles.some(isApplicationRole)
   const isLoggedIn = capabilities.authenticated
   const defaultRoute = resolveDefaultRoute(capabilities)
 

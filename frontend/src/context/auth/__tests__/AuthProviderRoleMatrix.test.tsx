@@ -200,6 +200,8 @@ describe('Auth Provider Role Matrix', () => {
     expect(screen.getByTestId('roles')).toHaveTextContent(
       'LEXIS_INDUSTRY_00012345,LOG_EXPORT_INDUSTRY_00067890',
     )
+    expect(screen.getByTestId('is-logged-in')).toHaveTextContent('true')
+    expect(screen.getByTestId('has-any-role')).toHaveTextContent('false')
     expect(screen.getByTestId('default-route')).toHaveTextContent('/unauthorized')
     expect(screen.getByTestId('action-/summary')).toHaveTextContent('false')
   })
@@ -409,6 +411,8 @@ describe('Auth Provider Role Matrix', () => {
     await waitForAuthLoad()
 
     expect(screen.getByTestId('roles')).toBeEmptyDOMElement()
+    expect(screen.getByTestId('is-logged-in')).toHaveTextContent('true')
+    expect(screen.getByTestId('has-any-role')).toHaveTextContent('false')
     expect(screen.getByTestId('default-route')).toHaveTextContent('/unauthorized')
     expect(screen.getByTestId('action-/applicationsReview')).toHaveTextContent('false')
   })
