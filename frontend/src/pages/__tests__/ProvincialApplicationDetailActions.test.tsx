@@ -394,10 +394,9 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
         }),
       ).toBeEnabled(),
     )
-    await chooseComboBoxOption(
-      ownerControls.getByRole('combobox', { name: 'Contact name' }),
-      'Owner Alternate Contact',
-    )
+    const ownerContactName = ownerControls.getByRole('combobox', { name: 'Contact name' })
+    fireEvent.change(ownerContactName, { target: { value: 'Advertising Owner' } })
+    await waitFor(() => expect(ownerContactName).toHaveValue('Advertising Owner'))
 
     await userEvent.click(ownerControls.getByRole('button', { name: 'Save changes' }))
 
@@ -407,7 +406,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
           applicationNumber: '321',
           ownerClientNumber: '00011122',
           ownerClientLocationCode: '02',
-          ownerContactName: 'Owner Alternate Contact',
+          ownerContactName: 'Advertising Owner',
           applicantTypeCode: 'M',
           agentClientNumber: '',
           agentClientLocationCode: '',
@@ -1099,6 +1098,9 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
         applicationNumber: '321',
       })
     })
+    const ownerContactName = getSummaryComboBox(summaryControls, 'Owner contact name')
+    fireEvent.change(ownerContactName, { target: { value: 'Advertising Owner' } })
+    await waitFor(() => expect(ownerContactName).toHaveValue('Advertising Owner'))
     await selectApplicationDetailTab('Owner')
     expect(await screen.findByText('Owner Forestry Ltd.')).toBeInTheDocument()
     expect(screen.getByText('owner@example.test')).toBeInTheDocument()
@@ -1131,7 +1133,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
         productTypeCode: 'TIMBER',
         growthTypeCode: 'S',
         agentContactName: 'Agent Contact',
-        ownerContactName: 'Owner Alternate Contact',
+        ownerContactName: 'Advertising Owner',
         oicIndicator: 'Y',
         endUseCode: 'LU',
         speciesCodes: ['FI'],

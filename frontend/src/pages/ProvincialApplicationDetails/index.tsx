@@ -3645,6 +3645,7 @@ const ProvincialApplicationDetailsPage = () => {
                                       value: contact.contactName,
                                       label: contact.contactName,
                                     }))}
+                                  allowCustomValue
                                   onChange={(value) =>
                                     onSummaryFormChange('ownerContactName', value)
                                   }
@@ -4110,6 +4111,7 @@ const ProvincialApplicationDetailsPage = () => {
                                       value: contact.contactName,
                                       label: contact.contactName,
                                     }))}
+                                  allowCustomValue
                                   onChange={(value) =>
                                     onSummaryFormChange('ownerContactName', value)
                                   }
