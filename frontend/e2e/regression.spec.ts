@@ -261,6 +261,7 @@ type OfferPersistenceResponse = {
   message?: string | null
   applicationNumber?: number | null
   exportPurchaseOfferNumber?: number | null
+  sendEmail?: boolean
   errors?: unknown
   warnings?: unknown
 }
@@ -1188,6 +1189,7 @@ const withdrawRegressionOffer = async (
     }),
   )
   expect(result.success).toBe(true)
+  expect(result.sendEmail).toBe(true)
   expect(asStringArray(result.errors)).toEqual([])
 }
 
@@ -3265,6 +3267,7 @@ test.describe('TEST IDIR admin regression', () => {
           }),
         ))
       expect(createdOffer.success).toBe(true)
+      expect(createdOffer.sendEmail).toBe(true)
       expect(asStringArray(createdOffer.errors)).toEqual([])
       const offerNumber = Number(createdOffer.exportPurchaseOfferNumber)
       expect(offerNumber).toBeGreaterThan(0)
@@ -3283,7 +3286,6 @@ test.describe('TEST IDIR admin regression', () => {
       )
       expect(Number(currentOffer.payload.offerVolume)).toBe(1.2)
       const offerUpdate = offerUpdateForm(offerNumber, {
-        purchaseOfferAmount: '125',
         offerRemark: `${offerMarker} edited`,
       })
       const editedOffer = await readJsonResponse<OfferPersistenceResponse>(
@@ -3293,6 +3295,7 @@ test.describe('TEST IDIR admin regression', () => {
         }),
       )
       expect(editedOffer.success).toBe(true)
+      expect(editedOffer.sendEmail).toBe(false)
       expect(asStringArray(editedOffer.errors)).toEqual([])
 
       const staleOfferUpdate = await readJsonResponseWithStatuses<Record<string, unknown>>(
@@ -3308,7 +3311,7 @@ test.describe('TEST IDIR admin regression', () => {
         page,
         `/api/lexis/purchase-offers/${offerNumber}`,
       )
-      expect(Number(persistedOffer.payload.purchaseOfferAmount)).toBe(125)
+      expect(Number(persistedOffer.payload.purchaseOfferAmount)).toBe(100)
       expect(persistedOffer.payload.offerRemark).toBe(`${offerMarker} edited`)
 
       await withdrawRegressionOffer(page, offerNumber, marker)

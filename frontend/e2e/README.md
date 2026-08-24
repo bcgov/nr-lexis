@@ -30,9 +30,10 @@ regression coverage uses a separate TEST-only Playwright config.
   reach representative UI/API contracts, and can validate/submit/review/clean fresh TEST application
   data at runtime.
 - The provincial lifecycle queues application-status, exemption-approval, and permit-approval emails
-  to TEST's configured override recipients using generic regression content. Existing offer
-  mutations continue to exercise the automatic offer-email paths. These checks prove the application
-  handed each message to the TEST mail sender, not that a mailbox received it.
+  to TEST's configured override recipients using generic regression content. Offer creation and the
+  required cleanup withdrawal exercise the automatic offer-email paths; the intermediate offer edit
+  is intentionally non-notifying. These checks prove the application handed each message to the TEST
+  mail sender, not that a mailbox received it.
 - The suite submits the EICAR test payload to document and submission uploads and expects a
   rejection. This verifies TEST LEXIS can reach its shared ClamAV service; see
   [Shared ClamAV service](../../docs/shared-clamav-service.md) for the deployment and network
