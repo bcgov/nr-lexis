@@ -491,6 +491,15 @@ class LexisRouteAuthorizationIntegrationTest {
   @Test
   void famDelegatedAdministrationShouldNotGrantLexisAccess() throws Exception {
     mockMvc.perform(
+            get("/api/lexis/session/capabilities")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_DELEGATED_ADMIN"))))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.authenticated").value(true))
+        .andExpect(jsonPath("$.roles").isEmpty())
+        .andExpect(jsonPath("$.welcomeTarget").value("noAccess"))
+        .andExpect(jsonPath("$.grantedActions").isEmpty());
+
+    mockMvc.perform(
             get("/api/lexis/session/welcome")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_DELEGATED_ADMIN"))))
         .andExpect(status().isForbidden());
@@ -498,6 +507,46 @@ class LexisRouteAuthorizationIntegrationTest {
     mockMvc.perform(
             get("/api/lexis/application-reviews/search")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_DELEGATED_ADMIN"))))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void authenticatedUsersWithoutLexisRolesShouldReceiveOnlyNoAccessCapabilities()
+      throws Exception {
+    SimpleGrantedAuthority noLexisRole = new SimpleGrantedAuthority("SCOPE_openid");
+
+    mockMvc
+        .perform(get("/api/lexis/session/capabilities"))
+        .andExpect(status().isUnauthorized());
+    mockMvc
+        .perform(get("/api/lexis/session/capabilities").with(jwt().authorities(noLexisRole)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.authenticated").value(true))
+        .andExpect(jsonPath("$.roles").isEmpty())
+        .andExpect(jsonPath("$.welcomeTarget").value("noAccess"))
+        .andExpect(jsonPath("$.grantedActions").isEmpty());
+
+    assertThat(
+            LexisApiAuthorizationRules.findRule(
+                    HttpMethod.GET, "/api/lexis/session/capabilities", null)
+                .orElseThrow()
+                .type())
+        .isEqualTo(LexisApiAuthorizationRules.RuleType.AUTHENTICATED);
+
+    mockMvc
+        .perform(get("/api/lexis/session/welcome").with(jwt().authorities(noLexisRole)))
+        .andExpect(status().isForbidden());
+    mockMvc
+        .perform(get("/api/lexis/session/preferences").with(jwt().authorities(noLexisRole)))
+        .andExpect(status().isForbidden());
+    mockMvc
+        .perform(get("/api/lexis/applications/search").with(jwt().authorities(noLexisRole)))
+        .andExpect(status().isForbidden());
+    mockMvc
+        .perform(
+            post("/api/lexis/rpc/application-details/application")
+                .with(csrf())
+                .with(jwt().authorities(noLexisRole)))
         .andExpect(status().isForbidden());
   }
 

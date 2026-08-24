@@ -17,6 +17,7 @@ import {
   fetchProvincialExemptionOptions,
 } from '@/service/search-options-service'
 import {
+  fetchApplicationClientData,
   fetchApplicationClientContacts,
   fetchApplicationClientLocations,
 } from '@/service/application-client-lookup-service'
@@ -60,6 +61,7 @@ vi.mock('@/service/create-submit-service', () => ({
 }))
 
 vi.mock('@/service/application-client-lookup-service', () => ({
+  fetchApplicationClientData: vi.fn(),
   fetchApplicationClientContacts: vi.fn(),
   fetchApplicationClientLocations: vi.fn(),
 }))
@@ -94,6 +96,7 @@ const mockedSubmitProvincialApplicationCreate = vi.mocked(submitProvincialApplic
 const mockedFetchProvincialExemptionCreatePreview = vi.mocked(fetchProvincialExemptionCreatePreview)
 const mockedSubmitProvincialExemptionCreate = vi.mocked(submitProvincialExemptionCreate)
 const mockedSubmitProvincialOfferCreate = vi.mocked(submitProvincialOfferCreate)
+const mockedFetchApplicationClientData = vi.mocked(fetchApplicationClientData)
 const mockedFetchApplicationClientContacts = vi.mocked(fetchApplicationClientContacts)
 const mockedFetchApplicationClientLocations = vi.mocked(fetchApplicationClientLocations)
 const mockedFetchApplicationRemainingSpecies = vi.mocked(fetchApplicationRemainingSpecies)
@@ -203,6 +206,22 @@ describe('Create Page Core Flows', () => {
               { contactName: 'Owner Alternate Contact', contactId: '11' },
             ],
     )
+    mockedFetchApplicationClientData.mockImplementation(async (clientNumber) => {
+      const isAgent = clientNumber === '00033333'
+      return {
+        clientNumber,
+        companyName: isAgent ? 'Agent Export Services' : 'Owner Forestry Ltd.',
+        address: isAgent ? '456 Export Road' : '123 Timber Road',
+        city: isAgent ? 'Nanaimo' : 'Victoria',
+        province: 'BC',
+        postalCode: isAgent ? 'V9R 1A1' : 'V8V 1A1',
+        country: 'Canada',
+        phone: isAgent ? '250-555-0200' : '250-555-0100',
+        fax: isAgent ? '250-555-0201' : '250-555-0101',
+        email: isAgent ? 'agent@example.test' : 'owner@example.test',
+        notfound: '',
+      }
+    })
     mockedFetchApplicationRemainingSpecies.mockResolvedValue([
       { code: 'HE', description: 'Hemlock' },
       { code: 'BA', description: 'Balsam' },
@@ -688,6 +707,39 @@ describe('Create Page Core Flows', () => {
     })
   })
 
+  it('shows selected owner and agent client details as read-only information', async () => {
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&ownerApplicantType=A&agentClientNumber=00033333&agentClientLocationCode=01&agentContactName=Agent%20Contact',
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/provincial/application/create"
+            element={<ProvincialApplicationCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationCreateTab('Clients')
+    const ownerDetails = await screen.findByRole('region', { name: 'Owner client details' })
+    expect(within(ownerDetails).getByText('Owner Forestry Ltd.')).toBeInTheDocument()
+    expect(within(ownerDetails).getByText('123 Timber Road')).toBeInTheDocument()
+    expect(within(ownerDetails).getByText('owner@example.test')).toBeInTheDocument()
+    expect(within(ownerDetails).queryByRole('textbox')).not.toBeInTheDocument()
+
+    const agentDetails = await screen.findByRole('region', { name: 'Agent client details' })
+    expect(within(agentDetails).getByText('Agent Export Services')).toBeInTheDocument()
+    expect(within(agentDetails).getByText('456 Export Road')).toBeInTheDocument()
+    expect(within(agentDetails).getByText('agent@example.test')).toBeInTheDocument()
+    expect(within(agentDetails).queryByRole('textbox')).not.toBeInTheDocument()
+
+    expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00011111', '00')
+    expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00033333', '01')
+  })
+
   it('submits a ministerial applicant type without agent fields', async () => {
     mockedSubmitProvincialApplicationCreate.mockResolvedValue(successfulCreate('904'))
 
@@ -1006,6 +1058,38 @@ describe('Create Page Core Flows', () => {
     expect(mockedSubmitProvincialApplicationCreate).toHaveBeenCalledWith(
       expect.objectContaining({
         ownerContactName: 'Typed Owner',
+      }),
+    )
+  })
+
+  it('allows a custom owner name when the lookup returns contacts', async () => {
+    mockedSubmitProvincialApplicationCreate.mockResolvedValue(successfulCreate('904'))
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&productTypeCode=LOG&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&speciesCodes=HE&endUseCode=SA&comments=Ready',
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/provincial/application/create"
+            element={<ProvincialApplicationCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationCreateTab('Clients')
+    const ownerNameInput = await screen.findByRole('combobox', { name: 'Owner name' })
+    await waitFor(() => expect(ownerNameInput).toHaveValue('Owner Contact'))
+    fireEvent.change(ownerNameInput, { target: { value: 'Advertising Owner' } })
+    await waitFor(() => expect(ownerNameInput).toHaveValue('Advertising Owner'))
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(mockedSubmitProvincialApplicationCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ownerContactName: 'Advertising Owner',
       }),
     )
   })

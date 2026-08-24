@@ -325,7 +325,6 @@ body {
 .csp-theme-switch:focus-visible,
 .csp-header-action:focus-visible,
 .csp-navigation-toggle:focus-visible,
-.csp-side-nav__section-toggle:focus-visible,
 .csp-side-nav__link:focus-visible,
 .profile-panel__close:focus-visible,
 .profile-panel__action:focus-visible,
@@ -334,7 +333,6 @@ body {
   outline-offset: -2px;
 }
 
-.csp-side-nav__section-toggle:focus-visible,
 .csp-side-nav__link:focus-visible,
 .profile-panel__close:focus-visible,
 .profile-panel__action:focus-visible,
@@ -448,66 +446,6 @@ body {
   margin-top: 8px;
 }
 
-.csp-side-nav__category {
-  display: block;
-  padding: 16px 16px 4px;
-  color: var(--csp-category-label);
-  font-size: 12px;
-  font-weight: 400;
-  letter-spacing: 0.32px;
-  line-height: 1.33;
-  opacity: 1;
-  overflow: hidden;
-  transition:
-    opacity 0.22s cubic-bezier(0.2, 0, 0.38, 0.9),
-    padding 0.22s cubic-bezier(0.2, 0, 0.38, 0.9);
-  white-space: nowrap;
-}
-
-.csp-side-nav__section-toggle {
-  align-items: center;
-  width: 100%;
-  background: transparent;
-  border: 0;
-  cursor: pointer;
-  font-family: inherit;
-  justify-content: space-between;
-  text-align: left;
-}
-
-.csp-side-nav__section-toggle:hover {
-  background-color: var(--csp-layer-hover);
-}
-
-.csp-side-nav__category-text {
-  min-inline-size: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.csp-side-nav__section-chevron {
-  align-items: center;
-  color: var(--csp-interactive);
-  display: flex;
-  flex: 0 0 14px;
-  height: 14px;
-  justify-content: center;
-  margin-left: 8px;
-  transition: transform 0.12s ease;
-  width: 14px;
-}
-
-.csp-side-nav__section-toggle[aria-expanded='false'] .csp-side-nav__section-chevron {
-  transform: rotate(-90deg);
-}
-
-.csp-side-nav__section-chevron svg {
-  display: block;
-  fill: currentcolor;
-  height: 14px;
-  width: 14px;
-}
-
 a.csp-side-nav__link.cds--side-nav__link {
   align-items: center;
   display: flex;
@@ -586,14 +524,19 @@ a.csp-side-nav__link.cds--side-nav__link--active[aria-current='page'] {
   overflow: visible;
 }
 
-.csp-side-nav.is-collapsed .csp-side-nav__category {
+.csp-side-nav__collapsed-section-label {
+  display: block;
   height: 1px;
+  padding-inline: 16px;
   padding-top: 8px;
   padding-bottom: 2px;
   border-top: 1px solid var(--csp-border-subtle-01);
+  color: var(--csp-category-label);
+  font-size: 12px;
   opacity: 0;
   overflow: hidden;
   pointer-events: none;
+  white-space: nowrap;
 }
 
 .csp-side-nav.is-collapsed .csp-side-nav__link {
@@ -4895,6 +4838,13 @@ $notification-types: 'error', 'info', 'success', 'warning';
 .application-client-summary__title {
   margin: 0 0 0.75rem;
   @include carbon-type.type-style('heading-compact-02');
+}
+
+.application-create-client-summary {
+  grid-column: 1 / -1;
+  margin-block-start: 0.5rem;
+  padding-block-start: 1rem;
+  border-block-start: 1px solid var(--csp-border-subtle-01);
 }
 
 .provincial-summary-page .detail-section-card,

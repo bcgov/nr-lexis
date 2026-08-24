@@ -196,6 +196,33 @@ class LexisProdRtmOnlyAuthorizationIntegrationTest {
   }
 
   @Test
+  void prodRtmOnlyModeShouldExposeOnlyCapabilitiesToAuthenticatedNoRoleUsers()
+      throws Exception {
+    SimpleGrantedAuthority noLexisRole = new SimpleGrantedAuthority("SCOPE_openid");
+
+    mockMvc
+        .perform(get("/api/lexis/session/capabilities"))
+        .andExpect(status().isUnauthorized());
+    mockMvc
+        .perform(get("/api/lexis/session/capabilities").with(jwt().authorities(noLexisRole)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.authenticated").value(true))
+        .andExpect(jsonPath("$.roles").isEmpty())
+        .andExpect(jsonPath("$.welcomeTarget").value("noAccess"))
+        .andExpect(jsonPath("$.grantedActions").isEmpty());
+
+    mockMvc
+        .perform(get("/api/lexis/session/welcome").with(jwt().authorities(noLexisRole)))
+        .andExpect(status().isForbidden());
+    mockMvc
+        .perform(get("/api/lexis/applications/search").with(jwt().authorities(noLexisRole)))
+        .andExpect(status().isForbidden());
+    mockMvc
+        .perform(get("/api/lexis/rtm/emslogamv").with(jwt().authorities(noLexisRole)))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
   void prodRtmOnlyModeShouldRejectRtmForNonAdminRoles() throws Exception {
     SimpleGrantedAuthority readOnly = new SimpleGrantedAuthority("LEXIS_READ_ONLY");
 
