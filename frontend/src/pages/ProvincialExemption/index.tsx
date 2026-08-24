@@ -75,7 +75,11 @@ import { useSearchFilterDraft } from '@/pages/shared/useSearchFilterDraft'
 import { usePersistedSearchParams } from '@/pages/shared/usePersistedSearchParams'
 import { useDefaultRegionPreference } from '@/pages/shared/useDefaultRegionPreference'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
-import { loadSearchWithDeferredTotal } from '@/pages/shared/deferred-search-total'
+import {
+  formatDeferredSearchTotalLabel,
+  loadSearchWithDeferredTotal,
+  type DeferredSearchTotalStatus,
+} from '@/pages/shared/deferred-search-total'
 import {
   countProvincialExemptions,
   searchProvincialExemptions,
@@ -235,7 +239,11 @@ const ProvincialExemptionPage = () => {
   const [exemptionStatusOptions, setExemptionStatusOptions] = useState<SearchOption[]>([])
   const [optionsLoading, setOptionsLoading] = useState(true)
   const [optionsUnavailable, setOptionsUnavailable] = useState(false)
-  const [results, setResults] = useState<ProvincialExemptionSearchResponse>(EMPTY_RESULTS)
+  const [searchResult, setSearchResult] = useState<{
+    results: ProvincialExemptionSearchResponse
+    totalStatus: DeferredSearchTotalStatus
+  }>({ results: EMPTY_RESULTS, totalStatus: 'exact' })
+  const { results, totalStatus } = searchResult
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
   const [selectedRowsById, setSelectedRowsById] = useState<
@@ -352,9 +360,15 @@ const ProvincialExemptionPage = () => {
   }, [filters.approvalFromDate, filters.approvalToDate, filters.listFromDate, filters.listToDate])
 
   const beginSearchRequest = useLatestRequestGuard()
-  const commitResults = useCallback((nextResults: ProvincialExemptionSearchResponse) => {
-    setResults(nextResults)
-  }, [])
+  const commitResults = useCallback(
+    (
+      nextResults: ProvincialExemptionSearchResponse,
+      nextTotalStatus: DeferredSearchTotalStatus,
+    ) => {
+      setSearchResult({ results: nextResults, totalStatus: nextTotalStatus })
+    },
+    [],
+  )
 
   const runSearch = useCallback(
     async (request: ProvincialExemptionSearchRequest, options: { force?: boolean } = {}) => {
@@ -373,7 +387,7 @@ const ProvincialExemptionPage = () => {
             buildSearchTotalCacheKey(request.filters),
             cachedResults.page.totalElements,
           )
-          setResults(cachedResults)
+          commitResults(cachedResults, 'exact')
           setLoading(false)
           setErrorMessage('')
           return
@@ -408,7 +422,7 @@ const ProvincialExemptionPage = () => {
           }
           queueMicrotask(() => {
             if (isLatestRequest()) {
-              commitResults(response)
+              commitResults(response, totalIsExact ? 'exact' : 'pending')
             }
           })
         }
@@ -429,13 +443,18 @@ const ProvincialExemptionPage = () => {
                 commitSearchResponse(exactResponse, true)
               }
             })
-            .catch(console.error)
+            .catch((error) => {
+              console.error(error)
+              if (isLatestRequest()) {
+                commitResults(response, 'unavailable')
+              }
+            })
         }
       } catch (error) {
         if (isLatestRequest()) {
           console.error(error)
           setErrorMessage('Unable to retrieve exemption search results.')
-          setResults(EMPTY_RESULTS)
+          commitResults(EMPTY_RESULTS, 'exact')
         }
       } finally {
         if (isLatestRequest()) {
@@ -1008,6 +1027,11 @@ const ProvincialExemptionPage = () => {
                 ? undefined
                 : results.page.totalElements
             }
+            totalItemsLabel={formatDeferredSearchTotalLabel(
+              results.page.totalElements,
+              totalStatus,
+              results.page.number * results.page.size + results.content.length,
+            )}
             actions={
               canApproveExemption || canCreateExemption ? (
                 <>
@@ -1172,6 +1196,8 @@ const ProvincialExemptionPage = () => {
                 pageSize={results.page.size}
                 pageSizes={[...SEARCH_PAGE_SIZE_OPTIONS]}
                 totalItems={results.page.totalElements}
+                pagesUnknown={totalStatus !== 'exact'}
+                isLastPage={totalStatus !== 'exact' && results.content.length < results.page.size}
                 onChange={({ page, pageSize: nextPageSize }) => {
                   setSearchParams(
                     buildSearchParams(appliedFilters, sortField, sortDirection, page, nextPageSize),
