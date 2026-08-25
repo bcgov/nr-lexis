@@ -9,3 +9,5 @@ spec:
     users:
       - name: alexander.mcdermid@gov.bc.ca
         role: ROLE_TEAM_MANAGER
+      - name: heartwood@gov.bc.ca
+        role: ROLE_TEAM_MANAGER
