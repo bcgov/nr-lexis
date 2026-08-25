@@ -810,7 +810,7 @@ describe('Provincial Exemption Search Actions', () => {
     expect(mockedSearchProvincialExemptions).toHaveBeenCalledTimes(searchCallsBeforeClear)
   })
 
-  it('renders a full result page without waiting for the exact count', async () => {
+  it('renders a full result page before count and then prefetches the next page', async () => {
     const content = Array.from({ length: 10 }, (_, index) => ({
       exemptionNumber: `EX-${index + 1}`,
       type: 'Section 1',
@@ -852,7 +852,63 @@ describe('Provincial Exemption Search Actions', () => {
     expect(mockedSearchProvincialExemptions).toHaveBeenCalledOnce()
 
     resolveCount(809)
-    await waitFor(() => expect(mockedSearchProvincialExemptions).toHaveBeenCalledOnce())
+    await waitFor(() =>
+      expect(mockedSearchProvincialExemptions).toHaveBeenCalledWith(
+        expect.objectContaining({ page: 1, pageSize: 10 }),
+        { knownTotal: 809 },
+      ),
+    )
+  })
+
+  it('keeps exemption rows and pagination available when the exact count fails', async () => {
+    const rows = Array.from({ length: 11 }, (_, index) => ({
+      exemptionNumber: `EX-${8100 + index}`,
+      type: 'Section 1',
+      typeCode: 'SECTION_1',
+      status: 'New',
+      statusCode: 'NEW',
+      applicantClientNumber: '11111111',
+      ownerClientNumber: '22222222',
+      approvedVolume: 100,
+      balanceRemaining: 100,
+      listingDate: '2026-01-10',
+      expiryDate: '2026-12-31',
+      region: '11',
+      canApprove: true,
+      isLocked: false,
+      canViewExemption: true,
+    }))
+    mockedSearchProvincialExemptions.mockImplementation(async (request) => {
+      const pageRows = request.page === 0 ? rows.slice(0, 10) : rows.slice(10)
+      const optimisticTotal = (request.page + 1) * request.pageSize + 1
+      return {
+        content: pageRows,
+        page: {
+          number: request.page,
+          size: request.pageSize,
+          totalElements: optimisticTotal,
+          totalPages: Math.ceil(optimisticTotal / request.pageSize),
+        },
+      }
+    })
+    mockedCountProvincialExemptions.mockRejectedValueOnce(new Error('count unavailable'))
+
+    renderPage()
+
+    expect(await screen.findByText('EX-8100')).toBeInTheDocument()
+    expect(
+      await screen.findByText('At least 10 results found — exact count unavailable'),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', { name: 'Exemption search unavailable' }),
+    ).not.toBeInTheDocument()
+
+    const nextPage = screen.getByLabelText('Next page')
+    expect(nextPage).toBeEnabled()
+    await userEvent.click(nextPage)
+
+    expect(await screen.findByText('EX-8110')).toBeInTheDocument()
+    expect(mockedCountProvincialExemptions).toHaveBeenCalledOnce()
   })
 
   it('uses the saved region to preselect exemption search areas', async () => {
