@@ -764,6 +764,39 @@ describe('Provincial Exemption Search Actions', () => {
     expect(screen.getByRole('link', { name: 'EX-2002' })).toBeInTheDocument()
   })
 
+  it('hides client-number filters for client-scoped provincial submitters', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({
+          roles: ['LEXIS_PROVINCIAL_SUBMITTER_00077881'],
+          forestClientNumber: '00077881',
+        }),
+        canPerform: () => false,
+      }),
+    )
+
+    renderPage()
+    await screen.findByText('EX-1001')
+
+    expect(screen.queryByLabelText('Applicant client number')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Owner client number')).not.toBeInTheDocument()
+  })
+
+  it('retains client-number filters for provincial staff', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({ roles: ['LEXIS_EXEMPTION_APPROVER'] }),
+        canPerform: () => false,
+      }),
+    )
+
+    renderPage()
+    await screen.findByText('EX-1001')
+
+    expect(screen.getByLabelText('Applicant client number')).toBeInTheDocument()
+    expect(screen.getByLabelText('Owner client number')).toBeInTheDocument()
+  })
+
   it('defaults approver filters without applying a region when no preference exists', async () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
