@@ -154,7 +154,7 @@ const applicationSummary = {
 const renderPage = (
   initialEntry = '/provincial/review?region=11,12&page=1&pageSize=100&sortField=applicationNumber&sortDirection=desc',
 ) => {
-  render(
+  return render(
     <MemoryRouter initialEntries={[initialEntry]}>
       <Routes>
         <Route path="/provincial/review" element={<ProvincialReviewPage />} />
@@ -255,6 +255,19 @@ describe('Provincial Review Action State Smoke', () => {
     expect(screen.queryByText('No review records found')).not.toBeInTheDocument()
   })
 
+  it('uses one shared loading toolbar for the review results', async () => {
+    mockedSearchApplicationReviews.mockReturnValueOnce(new Promise(() => {}))
+
+    const { container } = renderPage()
+    await waitFor(() => expect(mockedSearchApplicationReviews).toHaveBeenCalledTimes(1))
+
+    expect(screen.getByText('Loading review queue…')).toBeInTheDocument()
+    expect(screen.getByRole('table', { name: 'Loading review queue…' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Approve Selected Applications' })).toBeDisabled()
+    expect(container.querySelectorAll('.legacy-search-table-toolbar')).toHaveLength(1)
+    expect(container.querySelector('.provincial-review-table-toolbar')).not.toBeInTheDocument()
+  })
+
   it('paints review rows before the exact result count is available', async () => {
     const rows = Array.from({ length: 10 }, (_, index) => ({
       ...reviewResponse.content[0],
@@ -282,7 +295,8 @@ describe('Provincial Review Action State Smoke', () => {
 
     await waitFor(() => expect(mockedCountApplicationReviews).toHaveBeenCalledOnce())
     expect(await screen.findByText('3000000')).toBeInTheDocument()
-    expect(screen.getByText('At least 10 results found — counting…')).toBeInTheDocument()
+    expect(screen.getByRole('status', { name: 'Counting search results' })).toBeInTheDocument()
+    expect(screen.queryByText(/counting/i)).not.toBeInTheDocument()
     expect(screen.queryByText('Loading results…')).not.toBeInTheDocument()
 
     await act(async () => {

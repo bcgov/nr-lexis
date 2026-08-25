@@ -1197,40 +1197,28 @@ const ProvincialReviewPage = () => {
           className="legacy-search-section legacy-search-section--results"
           aria-label="Review queue"
         >
-          <div className="provincial-review-table-toolbar">
-            <p className="legacy-search-result-count">
-              {errorMessage
-                ? 'Results unavailable'
+          <SearchResultsTableFrame
+            loading={loading}
+            loadingDescription="Loading review queue…"
+            totalItems={
+              errorMessage
+                ? 0
                 : loading && results.content.length === 0
-                  ? 'Loading results…'
-                  : (formatDeferredSearchTotalLabel(
-                      results.page.totalElements,
-                      totalStatus,
-                      results.page.number * results.page.size + results.content.length,
-                    ) ??
-                    `${new Intl.NumberFormat('en-CA').format(results.page.totalElements)} results found`)}
-            </p>
-            <DisabledButtonTooltip
-              disabled={
-                loading ||
-                submittingApproval ||
-                submittingReject ||
-                selectedRowsCount === 0 ||
-                !canApproveApplications
-              }
-              description={
-                loading
-                  ? 'Wait for the review results to load.'
-                  : submittingApproval || submittingReject
-                    ? 'Wait for the current review update to finish.'
-                    : !canApproveApplications
-                      ? 'You do not have permission to approve applications.'
-                      : 'Select at least one application to approve.'
-              }
-            >
-              <Button
-                kind="tertiary"
-                onClick={() => void onApproveSelectedClick()}
+                  ? undefined
+                  : results.page.totalElements
+            }
+            totalItemsLabel={
+              errorMessage
+                ? 'Results unavailable'
+                : (formatDeferredSearchTotalLabel(
+                    results.page.totalElements,
+                    totalStatus,
+                    results.page.number * results.page.size + results.content.length,
+                  ) ??
+                  `${new Intl.NumberFormat('en-CA').format(results.page.totalElements)} results found`)
+            }
+            actions={
+              <DisabledButtonTooltip
                 disabled={
                   loading ||
                   submittingApproval ||
@@ -1238,12 +1226,32 @@ const ProvincialReviewPage = () => {
                   selectedRowsCount === 0 ||
                   !canApproveApplications
                 }
+                description={
+                  loading
+                    ? 'Wait for the review results to load.'
+                    : submittingApproval || submittingReject
+                      ? 'Wait for the current review update to finish.'
+                      : !canApproveApplications
+                        ? 'You do not have permission to approve applications.'
+                        : 'Select at least one application to approve.'
+                }
               >
-                Approve Selected Applications
-              </Button>
-            </DisabledButtonTooltip>
-          </div>
-          <SearchResultsTableFrame loading={loading} loadingDescription="Loading review queue…">
+                <Button
+                  kind="tertiary"
+                  onClick={() => void onApproveSelectedClick()}
+                  disabled={
+                    loading ||
+                    submittingApproval ||
+                    submittingReject ||
+                    selectedRowsCount === 0 ||
+                    !canApproveApplications
+                  }
+                >
+                  Approve Selected Applications
+                </Button>
+              </DisabledButtonTooltip>
+            }
+          >
             {errorMessage ? (
               <EmptyState
                 role="alert"

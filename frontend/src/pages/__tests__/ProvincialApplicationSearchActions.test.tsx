@@ -222,7 +222,8 @@ describe('Provincial Application Search Actions', () => {
 
     await waitFor(() => expect(mockedCountProvincialApplications).toHaveBeenCalledOnce())
     expect(await screen.findByText('8000')).toBeInTheDocument()
-    expect(screen.getByText('At least 10 results found — counting…')).toBeInTheDocument()
+    expect(screen.getByRole('status', { name: 'Counting search results' })).toBeInTheDocument()
+    expect(screen.queryByText(/counting/i)).not.toBeInTheDocument()
     expect(screen.queryByText('Loading application search results…')).not.toBeInTheDocument()
 
     await act(async () => {

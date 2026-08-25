@@ -1,3 +1,5 @@
+import { SkeletonText } from '@carbon/react'
+import { createElement, type ReactNode } from 'react'
 import {
   buildPageDataCacheKey,
   getPageDataCache,
@@ -73,13 +75,23 @@ export const formatDeferredSearchTotalLabel = (
   totalElements: number,
   status: DeferredSearchTotalStatus,
   knownMinimum = totalElements,
-): string | undefined => {
+): ReactNode | undefined => {
   if (status === 'exact') {
     return undefined
   }
+  if (status === 'pending') {
+    return createElement(
+      'div',
+      {
+        className: 'legacy-search-result-count-skeleton',
+        role: 'status',
+        'aria-label': 'Counting search results',
+      },
+      createElement(SkeletonText, { width: '160px' }),
+    )
+  }
   const formattedTotal = new Intl.NumberFormat('en-CA').format(knownMinimum)
-  const suffix = status === 'pending' ? 'counting…' : 'exact count unavailable'
-  return `At least ${formattedTotal} results found — ${suffix}`
+  return `At least ${formattedTotal} results found — exact count unavailable`
 }
 
 const inferExactTotalFromShortPage = <TResponse extends PagedSearchResponse>(

@@ -2113,18 +2113,6 @@ $notification-types: 'error', 'info', 'success', 'warning';
   }
 }
 
-.provincial-review-table-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  margin: 0;
-  padding: 0.75rem 1rem;
-  background-color: var(--csp-table-chrome-bg);
-  border-block-start: 1px solid var(--csp-border-subtle-01);
-}
-
 .provincial-review-row-actions {
   display: flex;
   flex-wrap: wrap;
@@ -2138,6 +2126,25 @@ $notification-types: 'error', 'info', 'success', 'warning';
   font-size: 1rem;
   font-weight: 400;
   line-height: 1;
+}
+
+.legacy-search-result-count-skeleton {
+  display: flex;
+  visibility: hidden;
+  align-items: center;
+  block-size: 1rem;
+  inline-size: 160px;
+  animation: legacy-search-result-count-skeleton-reveal 0s linear 250ms forwards;
+}
+
+.legacy-search-result-count-skeleton .cds--skeleton__text {
+  margin: 0;
+}
+
+@keyframes legacy-search-result-count-skeleton-reveal {
+  to {
+    visibility: visible;
+  }
 }
 
 .legacy-search-table-frame {

@@ -30,6 +30,11 @@ const tableRowBackgrounds = (row: Locator): Promise<string[]> =>
     Array.from(element.querySelectorAll('td'), (cell) => getComputedStyle(cell).backgroundColor),
   )
 
+const exactSearchResultCountLabel = (total: number): string => {
+  const formattedTotal = new Intl.NumberFormat('en-CA').format(total)
+  return `${formattedTotal} ${total === 1 ? 'result' : 'results'} found`
+}
+
 const expectFsptsUploadLayout = async (page: Page): Promise<void> => {
   const metrics = await page.evaluate(() => {
     const rect = (selector: string) => {
@@ -912,6 +917,50 @@ const searchDefaultPageSizePages: Array<{
     pagePath: '/provincial/permit?permitNumber=LEXIS-E2E-MISSING',
     heading: /provincial permit search/i,
     searchPath: '/api/lexis/permits/search',
+  },
+]
+
+const deferredSearchCountPages: Array<{
+  source: string
+  pagePath: string
+  heading: RegExp
+  countPath: string
+}> = [
+  {
+    source: 'application review search',
+    pagePath: '/provincial/review?page=1&pageSize=10',
+    heading: /provincial application review/i,
+    countPath: '/api/lexis/application-reviews/search/count',
+  },
+  {
+    source: 'provincial application search',
+    pagePath: '/provincial/application?page=1&pageSize=10',
+    heading: /provincial application search/i,
+    countPath: '/api/lexis/applications/search/count',
+  },
+  {
+    source: 'federal application search',
+    pagePath: '/federal?page=1&pageSize=10',
+    heading: /federal application search/i,
+    countPath: '/api/lexis/federal/applications/search/count',
+  },
+  {
+    source: 'exemption search',
+    pagePath: '/provincial/exemption?page=1&pageSize=10',
+    heading: /provincial exemption search/i,
+    countPath: '/api/lexis/exemptions/search/count',
+  },
+  {
+    source: 'purchase offer search',
+    pagePath: '/provincial/offers?page=1&pageSize=10',
+    heading: /provincial offers search/i,
+    countPath: '/api/lexis/purchase-offers/search/count',
+  },
+  {
+    source: 'permit search',
+    pagePath: '/provincial/permit?page=1&pageSize=10',
+    heading: /provincial permit search/i,
+    countPath: '/api/lexis/permits/search/count',
   },
 ]
 
@@ -2698,6 +2747,50 @@ test.describe('TEST IDIR admin regression', () => {
         searchUrl.searchParams.get('size'),
         `${contract.source} should request the configured default page size`,
       ).toBe(expectedPageSize)
+    }
+  })
+
+  test('resolves exact counts for every deferred browser search', async () => {
+    const page = await authenticatedIdirPage()
+
+    for (const contract of deferredSearchCountPages) {
+      const countResponsePromise = page.waitForResponse(
+        (response) => {
+          if (response.request().method() !== 'GET') {
+            return false
+          }
+
+          try {
+            return new URL(response.url()).pathname === contract.countPath
+          } catch {
+            return false
+          }
+        },
+        { timeout: 60_000 },
+      )
+
+      await expectAccessiblePage(page, contract.pagePath, contract.heading)
+      await expect(
+        page.locator('.legacy-search-table-content'),
+        `${contract.source} rows should become usable before the exact count resolves`,
+      ).toHaveAttribute('aria-busy', 'false', { timeout: 30_000 })
+
+      const countResponse = await countResponsePromise
+      const countResponseText = await countResponse.text()
+      expect(
+        countResponse.ok(),
+        `${contract.source} count request failed: ${redactedTextSnippet(countResponseText)}`,
+      ).toBe(true)
+
+      const count = JSON.parse(countResponseText) as SearchCountResponse
+      expect(count.total, `${contract.source} count should be numeric`).toEqual(expect.any(Number))
+
+      const resultCount = page.locator('.legacy-search-result-count')
+      await expect(
+        resultCount,
+        `${contract.source} should replace its count skeleton with the exact number`,
+      ).toHaveText(exactSearchResultCountLabel(count.total as number), { timeout: 30_000 })
+      await expect(resultCount.locator('.legacy-search-result-count-skeleton')).toHaveCount(0)
     }
   })
 
