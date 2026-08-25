@@ -154,7 +154,7 @@ const applicationSummary = {
 const renderPage = (
   initialEntry = '/provincial/review?region=11,12&page=1&pageSize=100&sortField=applicationNumber&sortDirection=desc',
 ) => {
-  render(
+  return render(
     <MemoryRouter initialEntries={[initialEntry]}>
       <Routes>
         <Route path="/provincial/review" element={<ProvincialReviewPage />} />
@@ -253,6 +253,19 @@ describe('Provincial Review Action State Smoke', () => {
 
     expect(await screen.findByText('1000123')).toBeInTheDocument()
     expect(screen.queryByText('No review records found')).not.toBeInTheDocument()
+  })
+
+  it('uses one shared loading toolbar for the review results', async () => {
+    mockedSearchApplicationReviews.mockReturnValueOnce(new Promise(() => {}))
+
+    const { container } = renderPage()
+    await waitFor(() => expect(mockedSearchApplicationReviews).toHaveBeenCalledTimes(1))
+
+    expect(screen.getByText('Loading review queue…')).toBeInTheDocument()
+    expect(screen.getByRole('table', { name: 'Loading review queue…' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Approve Selected Applications' })).toBeDisabled()
+    expect(container.querySelectorAll('.legacy-search-table-toolbar')).toHaveLength(1)
+    expect(container.querySelector('.provincial-review-table-toolbar')).not.toBeInTheDocument()
   })
 
   it('paints review rows before the exact result count is available', async () => {
