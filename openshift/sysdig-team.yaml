@@ -1,0 +1,11 @@
+apiVersion: ops.gov.bc.ca/v1alpha1
+kind: SysdigTeam
+metadata:
+  name: da5fad-sysdigteam
+  namespace: da5fad-tools
+spec:
+  team:
+    description: The Sysdig Team for the OpenShift Project Set da5fad
+    users:
+      - name: alexander.mcdermid@gov.bc.ca
+        role: ROLE_TEAM_MANAGER
