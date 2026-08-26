@@ -96,6 +96,21 @@ class LexisJasperTemplateCompileTest {
   }
 
   @Test
+  void tenureAnalysisTemplateShouldLabelBlanketOicExemptionType() throws Exception {
+    String template =
+        Files.readString(
+            new ClassPathResource("reports/lexis/LEXIS_TENURE_ANALYSIS.jrxml")
+                .getFile()
+                .toPath());
+
+    assertThat(template)
+        .contains(
+            "$P{P_EXEMPTION_TYPE}.equalsIgnoreCase( \"B\" )\n"
+                + "                ?   \"Blanket OIC\"")
+        .contains("<textFieldExpression><![CDATA[\": \" + $V{CCF6_F_EXE_TYPE}]]></textFieldExpression>");
+  }
+
+  @Test
   void exemptionLedgerShouldUseNullSafeApplicationNumberBranches() throws Exception {
     String template =
         Files.readString(
