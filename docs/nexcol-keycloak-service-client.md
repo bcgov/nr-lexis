@@ -10,15 +10,15 @@ NEXCOL
   -> Keycloak client-credentials token
   -> API gateway
   -> OpenShift backend Service
-  -> LEXIS federal validation or submission endpoint
-  -> LEXIS federal application tables
+  -> LEXIS federal prevalidation, validation or submission endpoint
+  -> legacy validation procedures or LEXIS federal application tables
 ```
 
 The API gateway is the supported external entry point. LEXIS also validates the forwarded token
 and independently enforces the same authentication and authorization requirements. The gateway
 uses the cluster-local backend Service; the deployment template declares no Spring Boot Route and
 does not admit the OpenShift ingress router, while the public frontend proxy does not forward these
-two machine-only paths.
+three machine-only paths.
 
 ## Authentication
 
@@ -33,7 +33,7 @@ The deployment provisioning client is not a NEXCOL credential and must not be us
 federal endpoints. NEXCOL receives the dedicated runtime client id and its corresponding runtime
 client secret.
 
-Both federal endpoints require this OAuth scope:
+All three federal endpoints require this OAuth scope:
 
 ```text
 lexis:federal-submission:submit
@@ -96,7 +96,7 @@ with the resulting access token; do not enter the provisioning client credential
 
 ## Endpoints
 
-Both endpoints exist in every backend deployment but are externally exposed only through a
+All three endpoints exist in every backend deployment but are externally exposed only through a
 configured API gateway. TEST provides the supported NEXCOL gateway and service-client integration;
 DEV has no supported NEXCOL gateway/client configuration, and PROD remains unprovisioned.
 
@@ -106,15 +106,53 @@ projected PROD URL documented above.
 
 | Operation | Endpoint | Successful status | Persistence |
 |---|---|---|---|
+| Prevalidate legacy fields | `POST /api/lexis/federal/submissions/prevalidation` | `200` | None |
 | Validate | `POST /api/lexis/federal/submissions/validation` | `200` | None |
 | Submit | `POST /api/lexis/federal/submissions` | `201` | Federal application and, when supplied, package and scale rows |
 
-Both endpoints consume `application/xml` and return JSON.
+Prevalidation consumes JSON. Validation and submission consume XML. All three endpoints return
+JSON.
+
+## Legacy Field Prevalidation
+
+The prevalidation endpoint preserves the legacy `lexisws` field-validation contract without
+requiring a complete submission or an `officeUseOnly` element. NEXCOL sends the same four values it
+sent to the legacy service:
+
+```json
+{
+  "boomNumber": "FED26-700123",
+  "clientNumber": "00123456",
+  "locationCode": "01",
+  "timberMark": ["TM001", "TM002"]
+}
+```
+
+The response echoes those values and adds the ordered legacy validation errors:
+
+```json
+{
+  "boomNumber": "FED26-700123",
+  "clientNumber": "00123456",
+  "errors": ["timberMark: TM002"],
+  "locationCode": "01",
+  "timberMark": ["TM001", "TM002"]
+}
+```
+
+HTTP `200` means the prevalidation operation completed. An empty `errors` array means every value
+passed; otherwise NEXCOL displays or handles the returned errors. The endpoint does not persist
+data and delegates to the existing legacy Oracle validation procedures for client number, location
+code, boom number and each timber mark.
 
 ## XML Contract
 
 The preferred payload is the legacy ESF submission envelope containing one LEXIS schema-version-2
 `LexisSubmission`. The inner `LexisSubmission` is also accepted as raw XML.
+
+XML namespace prefixes are aliases, so the literal `esf:` and `lexis:` prefixes are not required.
+LEXIS accepts an ESF envelope that uses the ESF namespace as its default namespace, as well as the
+prefixed legacy form; the namespace URIs and element structure must still match the legacy schema.
 
 The validation baseline is the legacy version-2 LEXIS XSD and legacy business-validation
 behaviour. The new authentication, HTTP and JSON response contracts do not intentionally change
@@ -167,7 +205,9 @@ The OpenAPI request example is kept identical to `pass-federal-application.xml`,
 regression coverage runs that published example through the federal validation path, including the
 legacy XSD check.
 
-## Request Contract
+## Request Examples
+
+The following metadata applies to the XML validation and submission endpoints:
 
 | Value | Location | Description |
 |---|---|---|
@@ -179,6 +219,16 @@ legacy XSD check.
 
 Each HTTP attempt uses a new request id. Retries of the same logical submission reuse the same
 idempotency key.
+
+### Prevalidate legacy fields
+
+```bash
+curl -sS -X POST \
+  "${LEXIS_GATEWAY_BASE_URL}/api/lexis/federal/submissions/prevalidation" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+  -H "Content-Type: application/json" \
+  --data-binary "@prevalidation.json"
+```
 
 ### Validate
 
@@ -216,7 +266,7 @@ identifiers when available.
 
 | Status | Meaning |
 |---|---|
-| `200` | XML validated successfully |
+| `200` | Field prevalidation completed (inspect `errors`) or XML validated successfully |
 | `201` | Submission accepted and persisted |
 | `400` | Invalid request metadata or body |
 | `401` | Missing, expired or invalid token |

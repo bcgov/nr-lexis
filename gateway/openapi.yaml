@@ -1,11 +1,11 @@
 openapi: 3.0.3
 info:
   title: LEXIS NEXCOL Federal Submission API
-  version: 1.0.1
+  version: 1.1.0
   description: |
-    Machine-to-machine API for validating and submitting federal LEXIS XML through the
-    API Services Gateway. Both operations require a Keycloak access token containing
-    the `lexis:federal-submission:submit` scope.
+    Machine-to-machine API for prevalidating legacy submission fields and validating or
+    submitting federal LEXIS XML through the API Services Gateway. All operations require
+    a Keycloak access token containing the `lexis:federal-submission:submit` scope.
 
     Use **Authorize** with the raw `access_token`. Environment token endpoints and the
     client-credentials request are documented in the authorization dialog.
@@ -24,10 +24,55 @@ servers:
     description: PROD NEXCOL gateway.
 tags:
   - name: Federal submissions
-    description: Validate or persist a federal LEXIS submission.
+    description: Prevalidate legacy fields, validate XML, or persist a federal LEXIS submission.
 security:
   - bearerAuth: []
 paths:
+  /api/lexis/federal/submissions/prevalidation:
+    post:
+      tags: [Federal submissions]
+      summary: Prevalidate legacy submission fields
+      description: |
+        Provides the same pre-submission checks as the legacy LEXIS Log Export validation
+        service. It checks the client number, client location, proposed boom/package number,
+        and each timber mark without requiring submission XML or `officeUseOnly` data.
+
+        Business validation failures return HTTP `200`; an empty `errors` array means all four
+        legacy checks passed. No application, package, or scale records are written.
+      operationId: prevalidateFederalSubmission
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FederalSubmissionPrevalidation"
+            example:
+              boomNumber: FED26-700123
+              clientNumber: "00123456"
+              locationCode: "01"
+              timberMark: [TM001, TM002]
+      responses:
+        "200":
+          description: The legacy checks completed; inspect `errors` for invalid values.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FederalSubmissionPrevalidation"
+              example:
+                boomNumber: FED26-700123
+                clientNumber: "00123456"
+                errors:
+                  - "timberMark: TM002"
+                locationCode: "01"
+                timberMark: [TM001, TM002]
+        "400":
+          description: The JSON request body is missing or malformed.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          description: The legacy reference-validation database is temporarily unavailable.
   /api/lexis/federal/submissions/validation:
     post:
       tags: [Federal submissions]
@@ -362,6 +407,39 @@ components:
           schema:
             $ref: "#/components/schemas/FederalSubmissionResponse"
   schemas:
+    FederalSubmissionPrevalidation:
+      type: object
+      required:
+        - boomNumber
+        - clientNumber
+        - errors
+        - locationCode
+        - timberMark
+      properties:
+        boomNumber:
+          type: string
+          nullable: true
+          description: Proposed boom/package number; it is valid when no matching package exists.
+        clientNumber:
+          type: string
+          nullable: true
+          description: Forest client number; the legacy check accepts only active clients.
+        errors:
+          type: array
+          readOnly: true
+          description: Legacy-compatible field errors in client, location, boom, and timber-mark order.
+          items:
+            type: string
+        locationCode:
+          type: string
+          nullable: true
+          description: Non-expired location code belonging to the supplied client.
+        timberMark:
+          type: array
+          description: Timber marks checked for legacy federal B08 eligibility.
+          items:
+            type: string
+            nullable: true
     FederalSubmissionResponse:
       type: object
       required:

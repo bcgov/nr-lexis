@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 class NexcolGatewayTopologyConfigTest {
 
   private static final String NEXCOL_PATH = "/api/lexis/federal/submissions";
+  private static final String PREVALIDATION_PATH = NEXCOL_PATH + "/prevalidation";
   private static final String TEST_SERVICE = "nr-lexis-backend-test.da5fad-test.svc";
   private static final String PROD_SERVICE = "nr-lexis-backend-prod.da5fad-prod.svc";
 
@@ -32,6 +33,7 @@ class NexcolGatewayTopologyConfigTest {
     assertThat(occurrences(gateway, "host: " + service)).isEqualTo(2);
     assertThat(occurrences(gateway, "port: 8080")).isEqualTo(2);
     assertThat(occurrences(gateway, "protocol: http")).isEqualTo(2);
+    assertThat(occurrences(gateway, "- " + PREVALIDATION_PATH)).isEqualTo(2);
     assertThat(gateway)
         .contains(
             "methods:\n          - POST",

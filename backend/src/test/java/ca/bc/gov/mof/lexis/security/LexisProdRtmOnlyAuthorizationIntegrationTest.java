@@ -73,6 +73,22 @@ class LexisProdRtmOnlyAuthorizationIntegrationTest {
 
     mockMvc
         .perform(
+            post("/api/lexis/federal/submissions/prevalidation")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    """
+                    {
+                      "boomNumber": "BOOM-1",
+                      "clientNumber": "00001234",
+                      "locationCode": "01",
+                      "timberMark": ["TM001"]
+                    }
+                    """)
+                .with(jwt().authorities(federalSubmissionScope)))
+        .andExpect(status().isServiceUnavailable());
+
+    mockMvc
+        .perform(
             post("/api/lexis/federal/submissions")
                 .param("userReference", "NEXCOL-SUBMISSION-1")
                 .param("originalFileName", "federal-submission.xml")
@@ -89,6 +105,14 @@ class LexisProdRtmOnlyAuthorizationIntegrationTest {
             post("/api/lexis/federal/submissions/validation")
                 .contentType(MediaType.APPLICATION_XML)
                 .content("<xml />")
+                .with(jwt().authorities(new SimpleGrantedAuthority("SCOPE_openid"))))
+        .andExpect(status().isForbidden());
+
+    mockMvc
+        .perform(
+            post("/api/lexis/federal/submissions/prevalidation")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{}")
                 .with(jwt().authorities(new SimpleGrantedAuthority("SCOPE_openid"))))
         .andExpect(status().isForbidden());
   }

@@ -1,7 +1,7 @@
 # TEST gateway smoke test
 
 This non-mutating smoke test verifies the published OpenAPI contract, Keycloak runtime-client
-authentication, gateway authorization, and federal XML validation behavior.
+authentication, gateway authorization, legacy field prevalidation, and federal XML validation.
 
 It uses only the dedicated NEXCOL runtime client. The deployment provisioning client is not a
 calling credential and is outside the scope of this test.
@@ -43,9 +43,10 @@ From the repository root:
 The smoke test verifies:
 
 - the raw OpenAPI contract and its viewer are reachable;
-- Swagger CORS preflights succeed for both federal operations;
+- Swagger CORS preflights succeed for the federal gateway;
 - the runtime token is active and contains `lexis:federal-submission:submit`;
 - gateway-generated `401` and optional `403` responses include the approved CORS origin;
+- legacy field prevalidation returns `200`, echoes the four input values, and reports field errors;
 - invalid XML returns `422` with CORS headers from both validation and submission operations; and
 - when `VALID_XML_FILE` is supplied, valid XML returns `200` with status `validated`.
 
