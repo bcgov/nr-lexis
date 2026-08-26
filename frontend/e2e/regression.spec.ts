@@ -2440,9 +2440,15 @@ test.describe('TEST IDIR admin regression', () => {
     await removeSpeciesButton.click()
     await expect(removeSpeciesButton).toHaveCount(0)
 
-    await expect(page.getByRole('heading', { name: 'Package Details', exact: true })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Create Package', exact: true })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Package Details', exact: true })).toHaveCount(0)
+    await expect(
+      page.getByText(
+        'Save the application before creating a package or adding Summary of Scale entries.',
+      ),
+    ).toBeVisible()
     const createPackageButton = page.getByRole('button', {
-      name: 'Create New Package',
+      name: 'Create Package',
       exact: true,
     })
     await expect(createPackageButton).toBeEnabled()

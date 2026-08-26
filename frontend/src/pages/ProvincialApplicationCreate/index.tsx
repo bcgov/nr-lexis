@@ -1960,36 +1960,12 @@ const ProvincialApplicationCreatePage = () => {
                   </div>
                 </Tile>
                 {productTypeSupportsPackages(form.productTypeCode) && (
-                  <section className="application-items-card application-items-section application-items-section--package-details">
-                    <div className="application-items-section-header">
-                      <h3>Package Details</h3>
-                      <SearchableSelect
-                        id="applicationCreatePackageSelect"
-                        labelText="Selected Package"
-                        value=""
-                        disabled
-                        placeholder="No packages"
-                        options={[]}
-                        onChange={() => undefined}
-                      />
-                    </div>
-                    <dl className="detail-field-grid application-items-summary">
-                      {[
-                        ['Package Number', 'None selected'],
-                        ['Package Volume', 'Not provided'],
-                        ['Total Scale Volume', 'Not provided'],
-                        ['Total Pieces', '0'],
-                        ['Average Length', 'Not provided'],
-                        ['Average Top Diameter', 'Not provided'],
-                        ['Package Status', 'Not provided'],
-                        ['Reprocessed', 'Not provided'],
-                      ].map(([label, value]) => (
-                        <div key={label} className="detail-field-item">
-                          <dt className="detail-field-label">{label}</dt>
-                          <dd className="detail-field-value">{value}</dd>
-                        </div>
-                      ))}
-                    </dl>
+                  <section className="application-items-card application-items-section application-items-section--create-package">
+                    <h3>Create Package</h3>
+                    <p className="detail-field-value">
+                      Save the application before creating a package or adding Summary of Scale
+                      entries.
+                    </p>
                     <div className="application-create-package-actions">
                       <Button
                         ref={createPackageButtonRef}
@@ -1998,7 +1974,7 @@ const ProvincialApplicationCreatePage = () => {
                         size="sm"
                         onClick={() => setPackageSavePromptOpen(true)}
                       >
-                        Create New Package
+                        Create Package
                       </Button>
                     </div>
                   </section>

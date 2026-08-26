@@ -1264,60 +1264,60 @@ const FederalApplicationDetailsPage = () => {
                             </Table>
                           </TableFrame>
                         ) : (
-                          <EmptyState
-                            title="No packages found"
-                            description="This federal application does not include any packages."
-                            headingLevel={3}
-                          />
+                          <p className="detail-empty-message">
+                            No package has been recorded for this federal application.
+                          </p>
                         )}
                       </Tile>
                     </Column>
-                    <Column sm={4} md={8} lg={16}>
-                      <Tile>
-                        <h2 className="detail-tile-title">Summary of scale</h2>
-                        {scaleErrorMessage ? (
-                          <EmptyState
-                            title="Scale details unavailable"
-                            description={scaleErrorMessage}
-                            headingLevel={3}
-                            role="alert"
-                          />
-                        ) : scaleRows.length > 0 ? (
-                          <TableFrame ariaLabel="Federal application scale details">
-                            <Table size="md" useZebraStyles>
-                              <TableHead>
-                                <TableRow>
-                                  <TableHeader>Package</TableHeader>
-                                  <TableHeader>Timber Mark</TableHeader>
-                                  <TableHeader>Pieces</TableHeader>
-                                  <TableHeader>Species</TableHeader>
-                                  <TableHeader>Grade</TableHeader>
-                                  <TableHeader>Volume (m³)</TableHeader>
-                                </TableRow>
-                              </TableHead>
-                              <TableBody>
-                                {scaleRows.map((row) => (
-                                  <TableRow key={`${row.packageNumber}-${row.id}`}>
-                                    <TableCell>{row.packageNumber}</TableCell>
-                                    <TableCell>{row.timberMark || '-'}</TableCell>
-                                    <TableCell>{row.pieces.toLocaleString()}</TableCell>
-                                    <TableCell>{row.species || '-'}</TableCell>
-                                    <TableCell>{row.grade || '-'}</TableCell>
-                                    <TableCell>{row.volume || '-'}</TableCell>
+                    {detail.packages.length > 0 && (
+                      <Column sm={4} md={8} lg={16}>
+                        <Tile>
+                          <h2 className="detail-tile-title">Summary of Scale</h2>
+                          {scaleErrorMessage ? (
+                            <EmptyState
+                              title="Scale details unavailable"
+                              description={scaleErrorMessage}
+                              headingLevel={3}
+                              role="alert"
+                            />
+                          ) : scaleRows.length > 0 ? (
+                            <TableFrame ariaLabel="Federal application scale details">
+                              <Table size="md" useZebraStyles>
+                                <TableHead>
+                                  <TableRow>
+                                    <TableHeader>Package</TableHeader>
+                                    <TableHeader>Timber Mark</TableHeader>
+                                    <TableHeader>Pieces</TableHeader>
+                                    <TableHeader>Species</TableHeader>
+                                    <TableHeader>Grade</TableHeader>
+                                    <TableHeader>Volume (m³)</TableHeader>
                                   </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
-                          </TableFrame>
-                        ) : (
-                          <EmptyState
-                            title="No scale details found"
-                            description="No scale details are recorded for this federal application."
-                            headingLevel={3}
-                          />
-                        )}
-                      </Tile>
-                    </Column>
+                                </TableHead>
+                                <TableBody>
+                                  {scaleRows.map((row) => (
+                                    <TableRow key={`${row.packageNumber}-${row.id}`}>
+                                      <TableCell>{row.packageNumber}</TableCell>
+                                      <TableCell>{row.timberMark || '-'}</TableCell>
+                                      <TableCell>{row.pieces.toLocaleString()}</TableCell>
+                                      <TableCell>{row.species || '-'}</TableCell>
+                                      <TableCell>{row.grade || '-'}</TableCell>
+                                      <TableCell>{row.volume || '-'}</TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </TableFrame>
+                          ) : (
+                            <EmptyState
+                              title="No scale details found"
+                              description="No scale details are recorded for this federal application."
+                              headingLevel={3}
+                            />
+                          )}
+                        </Tile>
+                      </Column>
+                    )}
                   </Grid>
                 </TabPanel>
 

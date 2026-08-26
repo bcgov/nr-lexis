@@ -1770,6 +1770,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await selectPermitDetailTab('Items')
 
     expect(await screen.findByText('Blanket OIC package details')).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: 'Summary of Scale' })).toBeInTheDocument()
     expect(
       screen.getByRole('columnheader', { name: 'Current package volume (m³)' }),
     ).toBeInTheDocument()
@@ -2102,6 +2103,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
 
     await selectPermitDetailTab('Items')
+    expect(
+      await screen.findByText('Create a package before adding Summary of Scale entries.'),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'No package details' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: 'Summary of Scale' })).not.toBeInTheDocument()
     const heading = await screen.findByRole('heading', { name: 'Create Blanket OIC package' })
     const packageEditor = heading.closest('.application-detail-edit-section') as HTMLElement
     expect(packageEditor).toBeTruthy()

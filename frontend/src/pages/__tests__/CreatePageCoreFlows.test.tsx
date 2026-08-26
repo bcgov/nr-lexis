@@ -397,7 +397,7 @@ describe('Create Page Core Flows', () => {
     })
   })
 
-  it('requires the application to be saved before creating a package', async () => {
+  it('leads with package creation while requiring the application to be saved first', async () => {
     render(
       <MemoryRouter
         initialEntries={[
@@ -414,14 +414,22 @@ describe('Create Page Core Flows', () => {
     )
 
     await selectApplicationCreateTab('Items')
-    const packageDetailsHeading = await screen.findByRole('heading', {
-      name: 'Package Details',
+    const createPackageHeading = await screen.findByRole('heading', {
+      name: 'Create Package',
     })
-    const packageDetailsCard = packageDetailsHeading.closest('section')
-    expect(packageDetailsCard).toHaveClass('application-items-card')
-    expect(packageDetailsCard?.parentElement).toHaveClass('application-items-grid')
+    const createPackageCard = createPackageHeading.closest('section')
+    expect(createPackageCard).toHaveClass('application-items-card')
+    expect(createPackageCard).toHaveClass('application-items-section--create-package')
+    expect(createPackageCard?.parentElement).toHaveClass('application-items-grid')
+    expect(screen.queryByRole('heading', { name: 'Package Details' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('combobox', { name: 'Selected Package' })).not.toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'Save the application before creating a package or adding Summary of Scale entries.',
+      ),
+    ).toBeInTheDocument()
 
-    const createPackageButton = screen.getByRole('button', { name: 'Create New Package' })
+    const createPackageButton = screen.getByRole('button', { name: 'Create Package' })
     await userEvent.click(createPackageButton)
 
     const dialog = screen.getByRole('dialog', { name: 'Application not saved' })
