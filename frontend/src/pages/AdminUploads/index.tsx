@@ -227,6 +227,9 @@ const buildInitialFormStateFromQuery = (query: URLSearchParams): UploadFormState
 
 const trimTargetNumberInput = (input: string): string => input.trim()
 
+const trimExemptionNumberInput = (input: string): string =>
+  trimTargetNumberInput(input).split(' - ', 1)[0] ?? ''
+
 const uploadTargetItemToString = (
   item: UploadTargetNumberOption | string | null | undefined,
 ): string => {
@@ -304,14 +307,20 @@ function UploadTargetNumberSelect({
       onBlur={onBlur}
       onInputChange={(inputValue) => {
         setInputText(inputValue)
-        onChange(normalizeInput(inputValue))
+        const nextValue = normalizeInput(inputValue)
+        if (nextValue !== value) {
+          onChange(nextValue)
+        }
       }}
       onChange={({ selectedItem, inputValue }) => {
-        if (typeof selectedItem === 'string') {
-          onChange(normalizeInput(selectedItem))
+        const nextValue =
+          typeof selectedItem === 'string'
+            ? normalizeInput(selectedItem)
+            : (selectedItem?.value ?? normalizeInput(inputValue ?? ''))
+        if (nextValue === value) {
           return
         }
-        onChange(selectedItem?.value ?? normalizeInput(inputValue ?? ''))
+        onChange(nextValue)
       }}
     />
   )
@@ -1433,6 +1442,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
             invalid={!!fieldError('exemptionNumber')}
             invalidText={fieldError('exemptionNumber')}
             searchOptions={searchProvincialExemptionNumberOptions}
+            normalizeInput={trimExemptionNumberInput}
             onBlur={() => markFieldTouched('exemptionNumber')}
             onChange={(value) =>
               setFormState((current) => ({
