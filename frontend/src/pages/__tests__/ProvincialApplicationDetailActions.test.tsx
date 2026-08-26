@@ -1193,6 +1193,33 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(await screen.findByText('The application was saved successfully.')).toBeInTheDocument()
   }, 30000)
 
+  it('shows the backend agent location error when an application edit is rejected', async () => {
+    mockedUpdateApplicationSummary.mockResolvedValueOnce({
+      valid: false,
+      message: '',
+      applicationNumber: '321',
+      errors: ['Application agent location does not exist.'],
+      warnings: [],
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationSummaryTile()
+    await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
+
+    expect(await screen.findByText('Action failed')).toBeVisible()
+    expect(screen.getByText('Application agent location does not exist.')).toBeVisible()
+  })
+
   it('hides and clears stale agent fields when editing an owner application summary', async () => {
     const ownerApplicationDetail: ProvincialApplicationDetail = {
       ...applicationDetail,

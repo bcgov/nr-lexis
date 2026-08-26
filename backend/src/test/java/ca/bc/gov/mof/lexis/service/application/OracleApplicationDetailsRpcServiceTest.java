@@ -366,6 +366,30 @@ class OracleApplicationDetailsRpcServiceTest {
   }
 
   @Test
+  void addApplicationShouldRejectUnconfirmedShortAgentNumberWithLegacyErrorContract() {
+    when(repository.findCandidateExcolCodesRequired(1, "HE", "PL", 11L))
+        .thenReturn(List.of(new ApplicationDetailsRpcRepository.ExcolValidationRow("HE/PL")));
+    when(clientRepository.findLocationByClientNumberCodeRequired("123", "01"))
+        .thenReturn(Optional.empty());
+
+    ApplicationDetailsRpcService.CreateApplicationResult response =
+        service.addApplication(
+            withAgentApplicant(validCreateApplicationRequest(180L), "123"),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.message()).isNull();
+    assertThat(response.applicationNumber()).isNull();
+    assertThat(response.errors())
+        .containsExactly("Application agent location does not exist.");
+    assertThat(response.warnings()).isEmpty();
+    verify(clientRepository).findLocationByClientNumberCodeRequired("123", "01");
+    verify(clientRepository, never())
+        .findLocationByClientNumberCodeRequired("00000123", "01");
+    verify(repository, never()).insertApplication(any());
+  }
+
+  @Test
   void addHiddenBlanketOicApplicationShouldUseExplicitTrustedBypass() {
     when(repository.insertApplication(any(ApplicationDetailsRpcRepository.ApplicationInsertRecord.class)))
         .thenReturn(Optional.of(new ApplicationDetailsRpcRepository.ApplicationInsertRow(1000456L)));
@@ -4042,6 +4066,52 @@ class OracleApplicationDetailsRpcServiceTest {
   }
 
   @Test
+  void updateApplicationSummaryShouldRejectUnconfirmedShortAgentNumber() {
+    stubPersistedApplicationEndUse(12L, true);
+    when(clientRepository.findLocationByClientNumberCodeRequired("123", "01"))
+        .thenReturn(Optional.empty());
+
+    ApplicationDetailsRpcService.CreateApplicationResult response =
+        service.updateApplicationSummary(
+            applicationSummaryUpdateRequest(
+                1000456L,
+                LocalDate.of(2026, 4, 1),
+                45L,
+                LocalDate.of(2026, 4, 2),
+                125.5d,
+                2.1d,
+                "U",
+                "Camp 2",
+                12L,
+                "123",
+                "01",
+                "00022222",
+                "02",
+                "NEW",
+                "A",
+                12L,
+                "S",
+                "P",
+                "S",
+                "Agent Contact",
+                "Owner Two",
+                "N",
+                false),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.message()).isNull();
+    assertThat(response.applicationNumber()).isEqualTo(1000456L);
+    assertThat(response.errors())
+        .containsExactly("Application agent location does not exist.");
+    assertThat(response.warnings()).isEmpty();
+    verify(clientRepository).findLocationByClientNumberCodeRequired("123", "01");
+    verify(clientRepository, never())
+        .findLocationByClientNumberCodeRequired("00000123", "01");
+    verify(repository, never()).updateApplication(any());
+  }
+
+  @Test
   void updateApplicationSummaryShouldRejectNonEditableStoredStatusBeforeOracleUpdate() {
     when(repository.findApplicationUpdateRecord(1000456L))
         .thenReturn(Optional.of(applicationUpdateRecordWithStatus("EXP")));
@@ -4728,6 +4798,11 @@ class OracleApplicationDetailsRpcServiceTest {
 
   private ApplicationDetailsRpcService.CreateApplicationRequest withAgentApplicant(
       ApplicationDetailsRpcService.CreateApplicationRequest request) {
+    return withAgentApplicant(request, "00022222");
+  }
+
+  private ApplicationDetailsRpcService.CreateApplicationRequest withAgentApplicant(
+      ApplicationDetailsRpcService.CreateApplicationRequest request, String agentClientNumber) {
     return new ApplicationDetailsRpcService.CreateApplicationRequest(
         request.federalApplicationNumber(),
         request.applicationDate(),
@@ -4737,7 +4812,7 @@ class OracleApplicationDetailsRpcServiceTest {
         request.averageLogVolume(),
         request.productLocation(),
         request.exportScheduleId(),
-        "00022222",
+        agentClientNumber,
         "01",
         request.ownerClientNumber(),
         request.ownerClientLocationCode(),
