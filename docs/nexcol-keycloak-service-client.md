@@ -107,7 +107,7 @@ projected PROD URL documented above.
 | Operation | Endpoint | Successful status | Persistence |
 |---|---|---|---|
 | Validate | `POST /api/lexis/federal/submissions/validation` | `200` | None |
-| Submit | `POST /api/lexis/federal/submissions` | `201` | Federal application, package and scale rows |
+| Submit | `POST /api/lexis/federal/submissions` | `201` | Federal application and, when supplied, package and scale rows |
 
 Both endpoints consume `application/xml` and return JSON.
 
@@ -116,13 +116,35 @@ Both endpoints consume `application/xml` and return JSON.
 The preferred payload is the legacy ESF submission envelope containing one LEXIS schema-version-2
 `LexisSubmission`. The inner `LexisSubmission` is also accepted as raw XML.
 
+The validation baseline is the legacy version-2 LEXIS XSD and legacy business-validation
+behaviour. The new authentication, HTTP and JSON response contracts do not intentionally change
+which submission data is accepted. Compatibility-sensitive rules include:
+
+- exemption reason codes `E`, `S` and `U`;
+- applicant type codes `A`, `M` and `O`;
+- a non-negative federal office-use reference;
+- case-insensitive federal package-number comparison;
+- federal timber-mark type and status validation, with the first scale timber mark matched to the
+  application region;
+- species validation for the selected region and grade validation for the selected region and
+  species; and
+- the effective legacy numeric limits, including up to `999,999,999` scale pieces, `99.0` for
+  average length and `99.9` for average diameter.
+
+Federal harvested-timber submissions require summary-of-scale rows and a boom/package number.
+As in legacy LEXIS, a federal standing-timber submission omits the boom/package number and may
+omit its average length and diameter; only the application record is created.
+
+The validation and submission endpoints apply the same validation before submission persists any
+records.
+
 Federal payloads include:
 
 - `jurisdictionCode=F` and `applStatusCode=A`;
 - federal applicant legal entity, contact and declaration fields;
 - `applicationDetail/officeUseOnly` reference, application date, biweekly list date, applicant
   user id and language;
-- harvested timber with or without summary-of-scale data, or standing timber; and
+- harvested timber with summary-of-scale data, or standing timber; and
 - version-2 element names and structure.
 
 Permit and shipping details are outside the federal exemption-submission contract.
@@ -140,6 +162,10 @@ Their client, location and timber-mark values are placeholders for automated tes
 guaranteed to pass live environment reference-data validation. The non-mutating TEST procedure in
 [`gateway/smoke-test/README.md`](../gateway/smoke-test/README.md) accepts an operator-owned
 live-valid fixture without storing that data in the repository.
+
+The OpenAPI request example is kept identical to `pass-federal-application.xml`, and automated
+regression coverage runs that published example through the federal validation path, including the
+legacy XSD check.
 
 ## Request Contract
 

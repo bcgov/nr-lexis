@@ -269,15 +269,27 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       PackageMutationRequest packageRequest,
       List<ScaleMutationRequest> scaleRequests) {
     CreateApplicationRequest application = normalizeCreateApplicationRequest(applicationRequest);
-    PackageMutationRequest packageMutation = normalizePackageMutationRequest(packageRequest);
+    PackageMutationRequest packageMutation =
+        packageRequest == null ? null : normalizePackageMutationRequest(packageRequest);
     List<ScaleMutationRequest> scales =
         scaleRequests == null
             ? List.of()
             : scaleRequests.stream().map(this::normalizeScaleMutationRequest).toList();
 
     List<String> errors = new ArrayList<>(validateCreateApplication(application));
-    errors.addAll(validatePackageImportPreflight(packageMutation, application));
-    errors.addAll(validateScaleImportPreflight(scales, packageMutation, application));
+    validateApplicationStorageText(application, errors);
+    validateFederalImportMetadata(application, errors);
+    if (packageMutation == null) {
+      boolean legacyFederalStandingWithoutPackage =
+          JURISDICTION_FEDERAL.equals(trimToNull(application.jurisdictionCode()))
+              && EXPORT_PRODUCT_TYPE_STANDING.equals(trimToNull(application.productTypeCode()));
+      if (!legacyFederalStandingWithoutPackage || !scales.isEmpty()) {
+        errors.add(required("package number"));
+      }
+    } else {
+      errors.addAll(validatePackageImportPreflight(packageMutation, application));
+      errors.addAll(validateScaleImportPreflight(scales, packageMutation, application));
+    }
     return new SubmissionImportValidationResult(errors.isEmpty(), errors, List.of());
   }
 
@@ -297,8 +309,8 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       ingressErrors.add("Federal application imports must use jurisdiction F.");
     }
     if (normalized.federalApplicationNumber() == null
-        || normalized.federalApplicationNumber() < 1) {
-      ingressErrors.add("A valid federal application number is required for federal imports.");
+        || normalized.federalApplicationNumber() < 0) {
+      ingressErrors.add("A non-negative federal application number is required for federal imports.");
     }
     if (!APPLICATION_STATUS_APPROVED.equals(normalized.applicationStatusCode())) {
       ingressErrors.add("Federal application imports must enter LEXIS in approved status.");
@@ -1601,8 +1613,9 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     List<String> errors = new ArrayList<>();
     List<ScaleValues> validatedScales = new ArrayList<>();
     BigDecimal scaleVolume = BigDecimal.ZERO.setScale(1, RoundingMode.HALF_UP);
-    for (ScaleMutationRequest scaleRequest : scaleRequests) {
-      validateScaleImportPreflight(scaleRequest, applicationRequest, errors);
+    for (int index = 0; index < scaleRequests.size(); index++) {
+      ScaleMutationRequest scaleRequest = scaleRequests.get(index);
+      validateScaleImportPreflight(scaleRequest, applicationRequest, index == 0, errors);
       ScaleValues scaleValues = toScaleValues(scaleRequest);
       if (ScaleDomainValidator.containsCombination(validatedScales, scaleValues)) {
         errors.add("A scale with this timber mark, species, and grade already exists.");
@@ -1625,7 +1638,10 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   }
 
   private void validateScaleImportPreflight(
-      ScaleMutationRequest request, CreateApplicationRequest applicationRequest, List<String> errors) {
+      ScaleMutationRequest request,
+      CreateApplicationRequest applicationRequest,
+      boolean validateTimberMarkRegion,
+      List<String> errors) {
     if (trimToNull(request.packageNumber()) == null) {
       errors.add(required("scale package number"));
     }
@@ -1638,6 +1654,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
           applicationRequest.orgUnitNumber(),
           applicationRequest.productTypeCode(),
           applicationRequest.jurisdictionCode(),
+          validateTimberMarkRegion,
           errors);
     }
     if (trimToNull(request.gradeCode()) == null) {
@@ -1647,8 +1664,55 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       errors.add(required("species code"));
     }
     validateScaleCodes(request, errors);
+    if (JURISDICTION_FEDERAL.equals(trimToNull(applicationRequest.jurisdictionCode()))) {
+      validateScaleCodesForRegion(request, applicationRequest.orgUnitNumber(), errors);
+    }
     errors.addAll(
         ScaleDomainValidator.validateNumericValues(request.pieces(), request.volume(), false));
+  }
+
+  private void validateScaleCodesForRegion(
+      ScaleMutationRequest request, Long orgUnitNumber, List<String> errors) {
+    String speciesCode = trimToNull(request.speciesCode());
+    String gradeCode = trimToNull(request.gradeCode());
+    if (orgUnitNumber == null || orgUnitNumber <= 0 || speciesCode == null) {
+      return;
+    }
+
+    String region = orgUnitNumber.toString();
+    boolean speciesValid =
+        repository.findSpeciesEndUsesByRegionRequired(region).stream()
+            .map(ApplicationDetailsRpcRepository.SpeciesGradeEndUseRow::speciesCode)
+            .map(TextUtils::trimToNull)
+            .anyMatch(speciesCode::equalsIgnoreCase);
+    if (!speciesValid) {
+      errors.add("Species code " + speciesCode + " is not valid for this region.");
+      return;
+    }
+
+    if (gradeCode != null
+        && repository.findSpeciesEndUsesByRegionSpeciesRequired(region, speciesCode).stream()
+            .map(ApplicationDetailsRpcRepository.SpeciesGradeEndUseRow::gradeCode)
+            .map(TextUtils::trimToNull)
+            .noneMatch(gradeCode::equalsIgnoreCase)) {
+      errors.add(
+          "Grade code "
+              + gradeCode
+              + " is not valid for species "
+              + speciesCode
+              + " in this region.");
+    }
+  }
+
+  private void validateFederalImportMetadata(
+      CreateApplicationRequest application, List<String> errors) {
+    if (!JURISDICTION_FEDERAL.equals(trimToNull(application.jurisdictionCode()))) {
+      return;
+    }
+    if (application.federalApplicationNumber() == null
+        || application.federalApplicationNumber() < 0) {
+      errors.add("A non-negative federal application number is required for federal imports.");
+    }
   }
 
   private boolean hasAtMostOneDecimal(Double value) {
@@ -1840,6 +1904,12 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         request.applicationNumber() == null || request.applicationNumber() < 1
             ? Optional.empty()
             : repository.findApplicationUpdateRecord(request.applicationNumber());
+    boolean federalApplication =
+        application
+            .map(ApplicationDetailsRpcRepository.ApplicationUpdateRecord::jurisdictionCode)
+            .map(TextUtils::trimToNull)
+            .filter(JURISDICTION_FEDERAL::equals)
+            .isPresent();
 
     if (request.applicationNumber() == null || request.applicationNumber() < 1) {
       errors.add(required("application number"));
@@ -1867,6 +1937,9 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       errors.add(required("species code"));
     }
     validateScaleCodes(request, errors);
+    if (federalApplication) {
+      validateScaleCodesForRegion(request, application.get().orgUnitNumber(), errors);
+    }
     errors.addAll(
         ScaleDomainValidator.validateNumericValues(request.pieces(), request.volume(), false));
 
@@ -1957,6 +2030,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         application.map(ApplicationDetailsRpcRepository.ApplicationUpdateRecord::orgUnitNumber).orElse(null),
         application.map(ApplicationDetailsRpcRepository.ApplicationUpdateRecord::productTypeCode).orElse(null),
         application.map(ApplicationDetailsRpcRepository.ApplicationUpdateRecord::jurisdictionCode).orElse(null),
+        true,
         errors);
   }
 
@@ -1988,6 +2062,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       Long orgUnitNumber,
       String productTypeCode,
       String jurisdictionCode,
+      boolean validateRegion,
       List<String> errors) {
     Optional<ApplicationDetailsRpcRepository.TimberMarkRow> baseMark =
         repository.findTimberMark(timberMark);
@@ -2003,7 +2078,8 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     }
 
     ApplicationDetailsRpcRepository.TimberMarkRow mark = baseMark.get();
-    if (orgUnitNumber != null) {
+    String normalizedJurisdictionCode = trimToNull(jurisdictionCode);
+    if (orgUnitNumber != null && validateRegion) {
       Optional<ApplicationDetailsRpcRepository.TimberMarkRow> regionalMark =
           repository.findTimberMarkByOrgUnit(timberMark, orgUnitNumber);
       if (regionalMark.isEmpty()) {
@@ -2011,18 +2087,17 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         return;
       }
       mark = regionalMark.get();
+    }
 
-      String fileTypeCode = trimToNull(mark.fileTypeCode());
-      String normalizedJurisdictionCode = trimToNull(jurisdictionCode);
-      if (JURISDICTION_PROVINCIAL.equals(normalizedJurisdictionCode)
-          && ("B08".equals(fileTypeCode) || "B14".equals(fileTypeCode))) {
-        errors.add("Timber mark " + timberMark + " is not valid for provincial applications.");
-        return;
-      }
-      if (JURISDICTION_FEDERAL.equals(normalizedJurisdictionCode) && !"B08".equals(fileTypeCode)) {
-        errors.add("Timber mark " + timberMark + " is not valid for federal applications.");
-        return;
-      }
+    String fileTypeCode = trimToNull(mark.fileTypeCode());
+    if (JURISDICTION_PROVINCIAL.equals(normalizedJurisdictionCode)
+        && ("B08".equals(fileTypeCode) || "B14".equals(fileTypeCode))) {
+      errors.add("Timber mark " + timberMark + " is not valid for provincial applications.");
+      return;
+    }
+    if (JURISDICTION_FEDERAL.equals(normalizedJurisdictionCode) && !"B08".equals(fileTypeCode)) {
+      errors.add("Timber mark " + timberMark + " is not valid for federal applications.");
+      return;
     }
 
     String status = trimToNull(mark.markStatus());

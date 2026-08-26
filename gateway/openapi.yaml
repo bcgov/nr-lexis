@@ -224,7 +224,11 @@ components:
       description: |
         Legacy ESF submission envelope containing one LEXIS schema-version-2
         `LexisSubmission`, or the inner `LexisSubmission` XML document.
-        The example is synthetic; replace environment reference data before live validation.
+        LEXIS validates the inner submission against the legacy version-2 XSD before
+        applying business and reference-data validation. Legacy federal standing-timber
+        submissions omit the boom/package number and may omit average length and average diameter;
+        their successful response has a null package number and zero scale rows. The example
+        is schema-valid but synthetic; replace environment reference data before live validation.
       content:
         application/xml:
           # Swagger UI needs XML root metadata to preserve the raw request example.
