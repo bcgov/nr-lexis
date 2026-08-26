@@ -207,9 +207,12 @@ describe('Create Page Core Flows', () => {
             ],
     )
     mockedFetchApplicationClientData.mockImplementation(async (clientNumber) => {
-      const isAgent = clientNumber === '00033333'
+      const confirmedClientNumber = /^\d{1,8}$/.test(clientNumber)
+        ? clientNumber.padStart(8, '0')
+        : clientNumber
+      const isAgent = ['00002176', '00033333'].includes(confirmedClientNumber)
       return {
-        clientNumber,
+        clientNumber: confirmedClientNumber,
         companyName: isAgent ? 'Agent Export Services' : 'Owner Forestry Ltd.',
         address: isAgent ? '456 Export Road' : '123 Timber Road',
         city: isAgent ? 'Nanaimo' : 'Victoria',
@@ -274,7 +277,7 @@ describe('Create Page Core Flows', () => {
     render(
       <MemoryRouter
         initialEntries={[
-          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&productTypeCode=LOG&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&speciesCodes=HE&endUseCode=SA&comments=Ready',
+          '/provincial/application/create?ownerClientNumber=11111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&productTypeCode=LOG&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&speciesCodes=HE&endUseCode=SA&comments=Ready',
         ]}
       >
         <Routes>
@@ -363,6 +366,7 @@ describe('Create Page Core Flows', () => {
     await userEvent.click(submitButton)
     expect(screen.queryByRole('dialog', { name: 'Confirm application accuracy' })).toBeNull()
 
+    expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('11111', '00')
     expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith('00011111', 'owner')
     expect(mockedSubmitProvincialApplicationCreate).toHaveBeenCalledWith({
       ownerClientNumber: '00011111',
@@ -569,15 +573,16 @@ describe('Create Page Core Flows', () => {
 
     mockedSubmitProvincialApplicationCreate.mockResolvedValueOnce({
       success: false,
-      message: 'Save rejected.',
+      message: '',
       createdId: undefined,
-      errors: ['Save rejected.'],
+      errors: ['Application agent location does not exist.'],
       warnings: [],
     })
     await userEvent.click(postSaveAcknowledgement)
     await userEvent.click(within(postSaveDialog).getByRole('button', { name: 'Save application' }))
 
     expect(await screen.findByText('Save Failed')).toBeVisible()
+    expect(screen.getByText('Application agent location does not exist.')).toBeVisible()
     expect(postSaveDialog).toBeVisible()
     expect(within(postSaveDialog).getByRole('button', { name: 'Save application' })).toBeEnabled()
   }, 20_000)
@@ -678,14 +683,14 @@ describe('Create Page Core Flows', () => {
     mockedSubmitProvincialApplicationCreate.mockResolvedValue(successfulCreate('902'))
     mockedFetchApplicationClientLocations.mockImplementation(async (clientNumber, applicantType) =>
       applicantType === 'agent'
-        ? [{ locationCode: '01', locationName: '01 - AGENT LOCATION', selected: false }]
+        ? [{ locationCode: '12', locationName: '12 - EXPORT BILLING', selected: false }]
         : [{ locationCode: '00', locationName: '00 - OWNER LOCATION', selected: false }],
     )
 
     render(
       <MemoryRouter
         initialEntries={[
-          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&ownerApplicantType=A&agentClientNumber=00033333&agentClientLocationCode=01&agentContactName=Agent%20Contact&productTypeCode=LOG&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&speciesCodes=HE&endUseCode=SA&comments=Ready',
+          '/provincial/application/create?ownerClientNumber=11111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&ownerApplicantType=A&agentClientNumber=2176&agentClientLocationCode=12&agentContactName=Agent%20Contact&productTypeCode=LOG&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&speciesCodes=HE&endUseCode=SA&comments=Ready',
         ]}
       >
         <Routes>
@@ -708,7 +713,9 @@ describe('Create Page Core Flows', () => {
       'Review',
     ])
     await selectApplicationCreateTab('Agent')
-    expect(screen.getByRole('textbox', { name: 'Agent number' })).toBeInTheDocument()
+    await waitFor(() =>
+      expect(screen.getByRole('textbox', { name: 'Agent number' })).toHaveValue('00002176'),
+    )
     expect(screen.getByRole('combobox', { name: 'Contact location' })).toBeInTheDocument()
 
     const submitButton = await screen.findByRole('button', { name: 'Save' })
@@ -716,13 +723,14 @@ describe('Create Page Core Flows', () => {
     await userEvent.click(submitButton)
 
     expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith('00011111', 'owner')
-    expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith('00033333', 'agent')
+    expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith('00002176', 'agent')
+    expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('2176', '12')
     expect(mockedSubmitProvincialApplicationCreate).toHaveBeenCalledWith({
       ownerClientNumber: '00011111',
       ownerClientLocationCode: '00',
       ownerContactName: 'Owner Contact',
-      agentClientNumber: '00033333',
-      agentClientLocationCode: '01',
+      agentClientNumber: '00002176',
+      agentClientLocationCode: '12',
       agentContactName: 'Agent Contact',
       applicantTypeCode: 'A',
       productTypeCode: 'LOG',
@@ -2292,7 +2300,7 @@ describe('Create Page Core Flows', () => {
         capabilities: createTestCapabilities({
           principal: 'bceid\\buyer',
           roles: ['PROVINCIAL_SUBMITTER_00077881'],
-          forestClientNumber: '00077881',
+          forestClientNumber: '77881',
         }),
       }),
     )
@@ -2313,6 +2321,7 @@ describe('Create Page Core Flows', () => {
     await screen.findByRole('heading', { level: 1, name: 'Create provincial offer' })
     const clientNumber = await screen.findByDisplayValue('00077881')
     expect(clientNumber).toHaveAttribute('readonly')
+    expect(mockedFetchOfferClientData).toHaveBeenCalledWith('77881')
     expect(screen.queryByDisplayValue('00099999')).not.toBeInTheDocument()
     expect(await screen.findByDisplayValue('Authoritative Buyer Ltd.')).toHaveAttribute('readonly')
     expect(screen.queryByDisplayValue('Scoped Buyer')).not.toBeInTheDocument()

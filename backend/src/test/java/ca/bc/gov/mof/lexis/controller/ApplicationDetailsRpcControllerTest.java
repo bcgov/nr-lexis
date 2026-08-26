@@ -886,6 +886,47 @@ class ApplicationDetailsRpcControllerTest {
   }
 
   @Test
+  void addApplicationShouldPreserveAgentLocationValidationErrorPayload() {
+    TestingAuthenticationToken authentication =
+        authorized("createApplication", "/changeApplicantType");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.addApplication(any(), org.mockito.ArgumentMatchers.eq("idir\\jsmith")))
+        .thenReturn(
+            new ApplicationDetailsRpcService.CreateApplicationResult(
+                false,
+                null,
+                null,
+                List.of("Application agent location does not exist."),
+                List.of()));
+
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("applicantType", "A");
+    params.add("agentClientNumber", "123");
+    params.add("agentClientLocationCode", "01");
+    params.add("ownerClientNumber", "00011111");
+    params.add("ownerClientLocationCode", "02");
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
+        controller.addApplicationLegacy(params, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().valid()).isFalse();
+    assertThat(response.getBody().message()).isNull();
+    assertThat(response.getBody().applicationNumber()).isNull();
+    assertThat(response.getBody().errors())
+        .containsExactly("Application agent location does not exist.");
+    assertThat(response.getBody().warnings()).isEmpty();
+
+    ArgumentCaptor<ApplicationDetailsRpcService.CreateApplicationRequest> requestCaptor =
+        ArgumentCaptor.forClass(ApplicationDetailsRpcService.CreateApplicationRequest.class);
+    verify(service)
+        .addApplication(
+            requestCaptor.capture(), org.mockito.ArgumentMatchers.eq("idir\\jsmith"));
+    assertThat(requestCaptor.getValue().agentClientNumber()).isEqualTo("123");
+  }
+
+  @Test
   void addApplicationShouldRejectAgentApplicantWithoutChangeApplicantTypeAuthority() {
     TestingAuthenticationToken authentication = authorized("createApplication");
     MultiValueMap<String, String> params = new LinkedMultiValueMap<>();

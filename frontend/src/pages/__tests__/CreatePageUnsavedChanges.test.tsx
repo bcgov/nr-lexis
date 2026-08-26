@@ -286,7 +286,7 @@ describe('create page unsaved changes', () => {
 
     expect(
       await screen.findByRole('dialog', { name: 'Unsaved changes' }),
-    ).toHaveAccessibleDescription(/Client locations must finish loading/)
+    ).toHaveAccessibleDescription(/Client details must finish loading/)
     expect(screen.queryByRole('button', { name: 'Save and leave' })).not.toBeInTheDocument()
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
     expect(router.state.location.pathname).toBe(testCase.createPath)
