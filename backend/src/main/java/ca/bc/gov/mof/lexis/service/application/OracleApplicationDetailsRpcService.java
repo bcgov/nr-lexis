@@ -2,7 +2,6 @@ package ca.bc.gov.mof.lexis.service.application;
 
 import static ca.bc.gov.mof.lexis.util.TextUtils.defaultSystemUser;
 import static ca.bc.gov.mof.lexis.util.TextUtils.firstNonBlank;
-import static ca.bc.gov.mof.lexis.util.TextUtils.normalizeClientNumber;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 import static ca.bc.gov.mof.lexis.util.ValueUtils.parsePositiveLong;
 
@@ -2464,9 +2463,9 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         input.averageLogVolume() == null ? 0.0d : input.averageLogVolume(),
         trimToNull(input.productLocation()),
         input.exportScheduleId(),
-        agentApplicant ? normalizeClientNumber(input.agentClientNumber()) : null,
+        agentApplicant ? trimToNull(input.agentClientNumber()) : null,
         agentApplicant ? trimToNull(input.agentClientLocationCode()) : null,
-        normalizeClientNumber(input.ownerClientNumber()),
+        trimToNull(input.ownerClientNumber()),
         trimToNull(input.ownerClientLocationCode()),
         trimToNull(input.exemptionNumber()),
         trimToNull(input.exemptionReasonCode()),

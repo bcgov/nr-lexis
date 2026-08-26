@@ -733,13 +733,17 @@ const ProvincialApplicationCreatePage = () => {
       }
     })
 
-    void fetchApplicationClientContacts(ownerClientNumber, ownerClientLocationCode, 'owner')
-      .then((contacts) => {
+    void Promise.all([
+      fetchApplicationClientContacts(ownerClientNumber, ownerClientLocationCode, 'owner'),
+      fetchApplicationClientData(ownerClientNumber, ownerClientLocationCode),
+    ])
+      .then(([contacts, clientData]) => {
         if (!isActive) {
           return
         }
 
         setOwnerClientContacts(contacts)
+        setOwnerClientData(clientData)
         setForm((current) => {
           if (
             current.ownerClientNumber.trim() !== ownerClientNumber ||
@@ -748,10 +752,16 @@ const ProvincialApplicationCreatePage = () => {
             return current
           }
 
+          const confirmedOwnerClientNumber = clientData?.clientNumber.trim() || ownerClientNumber
           const nextOwnerContactName = resolveClientContactName(contacts, current.ownerContactName)
-          return current.ownerContactName === nextOwnerContactName
+          return current.ownerClientNumber === confirmedOwnerClientNumber &&
+            current.ownerContactName === nextOwnerContactName
             ? current
-            : { ...current, ownerContactName: nextOwnerContactName }
+            : {
+                ...current,
+                ownerClientNumber: confirmedOwnerClientNumber,
+                ownerContactName: nextOwnerContactName,
+              }
         })
       })
       .finally(() => {
@@ -759,14 +769,6 @@ const ProvincialApplicationCreatePage = () => {
           setIsLoadingOwnerClientContacts(false)
         }
       })
-
-    void fetchApplicationClientData(ownerClientNumber, ownerClientLocationCode).then(
-      (clientData) => {
-        if (isActive) {
-          setOwnerClientData(clientData)
-        }
-      },
-    )
 
     return () => {
       isActive = false
@@ -818,13 +820,17 @@ const ProvincialApplicationCreatePage = () => {
       }
     })
 
-    void fetchApplicationClientContacts(agentClientNumber, agentClientLocationCode, 'agent')
-      .then((contacts) => {
+    void Promise.all([
+      fetchApplicationClientContacts(agentClientNumber, agentClientLocationCode, 'agent'),
+      fetchApplicationClientData(agentClientNumber, agentClientLocationCode),
+    ])
+      .then(([contacts, clientData]) => {
         if (!isActive) {
           return
         }
 
         setAgentClientContacts(contacts)
+        setAgentClientData(clientData)
         setForm((current) => {
           if (
             current.agentClientNumber.trim() !== agentClientNumber ||
@@ -833,10 +839,16 @@ const ProvincialApplicationCreatePage = () => {
             return current
           }
 
+          const confirmedAgentClientNumber = clientData?.clientNumber.trim() || agentClientNumber
           const nextAgentContactName = resolveClientContactName(contacts, current.agentContactName)
-          return current.agentContactName === nextAgentContactName
+          return current.agentClientNumber === confirmedAgentClientNumber &&
+            current.agentContactName === nextAgentContactName
             ? current
-            : { ...current, agentContactName: nextAgentContactName }
+            : {
+                ...current,
+                agentClientNumber: confirmedAgentClientNumber,
+                agentContactName: nextAgentContactName,
+              }
         })
       })
       .finally(() => {
@@ -844,14 +856,6 @@ const ProvincialApplicationCreatePage = () => {
           setIsLoadingAgentClientContacts(false)
         }
       })
-
-    void fetchApplicationClientData(agentClientNumber, agentClientLocationCode).then(
-      (clientData) => {
-        if (isActive) {
-          setAgentClientData(clientData)
-        }
-      },
-    )
 
     return () => {
       isActive = false
@@ -1237,33 +1241,68 @@ const ProvincialApplicationCreatePage = () => {
       requiredApplicationOptionsMissing ||
       isLoadingOwnerClientLocations ||
       isLoadingAgentClientLocations ||
+      isLoadingOwnerClientContacts ||
+      isLoadingAgentClientContacts ||
       provincialSubmitterScopeUnavailable
     ) {
       return false
     }
-    if (hasValidationError) {
-      if (firstInvalidField) {
-        setSelectedApplicationTab(APPLICATION_CREATE_FIELD_TAB[firstInvalidField] ?? 'application')
-      }
-      setShowAllValidationErrors(true)
-      setStatus({
-        kind: 'error',
-        title: 'Validation Error',
-        message: firstSubmitValidationError ?? 'Please fix validation errors before saving.',
-        placement: 'inline',
-      })
-      return false
-    }
-
     setStatus(null)
     setIsSubmitting(true)
     try {
+      const confirmClientNumber = async (
+        clientNumber: string,
+        clientLocationCode: string,
+      ): Promise<string> => {
+        const normalizedClientNumber = clientNumber.trim()
+        if (!/^\d{1,7}$/.test(normalizedClientNumber) || !clientLocationCode.trim()) {
+          return normalizedClientNumber
+        }
+
+        const clientData = await fetchApplicationClientData(
+          normalizedClientNumber,
+          clientLocationCode,
+        )
+        return clientData?.clientNumber.trim() || normalizedClientNumber
+      }
+      const [ownerClientNumber, agentClientNumber] = await Promise.all([
+        confirmClientNumber(form.ownerClientNumber, form.ownerClientLocationCode),
+        isAgentApplicant(form.applicantTypeCode)
+          ? confirmClientNumber(form.agentClientNumber, form.agentClientLocationCode)
+          : Promise.resolve(''),
+      ])
+      const confirmedForm = { ...form, ownerClientNumber, agentClientNumber }
+      setForm((current) =>
+        current.ownerClientNumber === form.ownerClientNumber &&
+        current.ownerClientLocationCode === form.ownerClientLocationCode &&
+        current.agentClientNumber === form.agentClientNumber &&
+        current.agentClientLocationCode === form.agentClientLocationCode
+          ? { ...current, ownerClientNumber, agentClientNumber }
+          : current,
+      )
+
+      if (hasValidationError) {
+        if (firstInvalidField) {
+          setSelectedApplicationTab(
+            APPLICATION_CREATE_FIELD_TAB[firstInvalidField] ?? 'application',
+          )
+        }
+        setShowAllValidationErrors(true)
+        setStatus({
+          kind: 'error',
+          title: 'Validation Error',
+          message: firstSubmitValidationError ?? 'Please fix validation errors before saving.',
+          placement: 'inline',
+        })
+        return false
+      }
+
       const result = await submitProvincialApplicationCreate({
-        ...form,
-        applicationTermDays: form.applicationTermDays.trim(),
+        ...confirmedForm,
+        applicationTermDays: confirmedForm.applicationTermDays.trim(),
       })
       if (result.success) {
-        draftBaselineRef.current = form
+        draftBaselineRef.current = confirmedForm
         setFormEdited(false)
         if (result.createdId) {
           if (navigateToCreatedRecord) {
@@ -2122,6 +2161,8 @@ const ProvincialApplicationCreatePage = () => {
               isSubmitting ||
               isLoadingOwnerClientLocations ||
               isLoadingAgentClientLocations ||
+              isLoadingOwnerClientContacts ||
+              isLoadingAgentClientContacts ||
               provincialSubmitterScopeUnavailable
             }
           >
@@ -2178,8 +2219,11 @@ const ProvincialApplicationCreatePage = () => {
         saveUnavailableReason={
           !optionsLoaded || optionsUnavailable || requiredApplicationOptionsMissing
             ? 'Authoritative application options must load before this application can be saved.'
-            : isLoadingOwnerClientLocations || isLoadingAgentClientLocations
-              ? 'Client locations must finish loading before this application can be saved.'
+            : isLoadingOwnerClientLocations ||
+                isLoadingAgentClientLocations ||
+                isLoadingOwnerClientContacts ||
+                isLoadingAgentClientContacts
+              ? 'Client details must finish loading before this application can be saved.'
               : provincialSubmitterScopeUnavailable
                 ? 'An authenticated forest client is required before this application can be saved.'
                 : undefined

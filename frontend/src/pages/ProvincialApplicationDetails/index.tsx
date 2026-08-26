@@ -1164,6 +1164,13 @@ const ProvincialApplicationDetailsPage = () => {
   const hasSelectableAgentClientLocations = agentClientLocations.some(isSelectableClientLocation)
   const hasSelectableOwnerClientContacts = ownerClientContacts.some(isSelectableClientContact)
   const hasSelectableAgentClientContacts = agentClientContacts.some(isSelectableClientContact)
+  const isSummaryClientLookupPending =
+    isLoadingOwnerClientLocations ||
+    isLoadingAgentClientLocations ||
+    isLoadingOwnerClientContacts ||
+    isLoadingAgentClientContacts ||
+    isLoadingOwnerClientData ||
+    isLoadingAgentClientData
   const ownerClientLocationPlaceholder = !summaryOwnerClientNumber
     ? 'Enter owner client number first'
     : isLoadingOwnerClientLocations
@@ -1524,9 +1531,30 @@ const ProvincialApplicationDetailsPage = () => {
       { applicationNumber: applicationNumber ?? '' },
     )
       .then((clientData) => {
-        if (isActive) {
-          setOwnerClientData(clientData)
+        if (!isActive) {
+          return
         }
+
+        setOwnerClientData(clientData)
+        if (!clientData || (!isEditingOwnerDetails && !isEditingSummary)) {
+          return
+        }
+
+        setSummaryForm((current) => {
+          if (
+            !current ||
+            current.ownerClientNumber.trim() !== summaryOwnerClientNumberForLookup ||
+            current.ownerClientLocationCode.trim() !== summaryOwnerClientLocationCode
+          ) {
+            return current
+          }
+
+          const confirmedOwnerClientNumber = clientData.clientNumber.trim()
+          return confirmedOwnerClientNumber &&
+            current.ownerClientNumber !== confirmedOwnerClientNumber
+            ? { ...current, ownerClientNumber: confirmedOwnerClientNumber }
+            : current
+        })
       })
       .finally(() => {
         if (isActive) {
@@ -1540,6 +1568,8 @@ const ProvincialApplicationDetailsPage = () => {
   }, [
     applicationNumber,
     hasSummaryForm,
+    isEditingOwnerDetails,
+    isEditingSummary,
     summaryOwnerClientLocationCode,
     summaryOwnerClientNumberForLookup,
   ])
@@ -1572,9 +1602,30 @@ const ProvincialApplicationDetailsPage = () => {
       { applicationNumber: applicationNumber ?? '' },
     )
       .then((clientData) => {
-        if (isActive) {
-          setAgentClientData(clientData)
+        if (!isActive) {
+          return
         }
+
+        setAgentClientData(clientData)
+        if (!clientData || (!isEditingAgentDetails && !isEditingSummary)) {
+          return
+        }
+
+        setSummaryForm((current) => {
+          if (
+            !current ||
+            current.agentClientNumber.trim() !== summaryAgentClientNumberForLookup ||
+            current.agentClientLocationCode.trim() !== summaryAgentClientLocationCode
+          ) {
+            return current
+          }
+
+          const confirmedAgentClientNumber = clientData.clientNumber.trim()
+          return confirmedAgentClientNumber &&
+            current.agentClientNumber !== confirmedAgentClientNumber
+            ? { ...current, agentClientNumber: confirmedAgentClientNumber }
+            : current
+        })
       })
       .finally(() => {
         if (isActive) {
@@ -1588,6 +1639,8 @@ const ProvincialApplicationDetailsPage = () => {
   }, [
     applicationNumber,
     hasSummaryForm,
+    isEditingAgentDetails,
+    isEditingSummary,
     summaryAgentClientLocationCode,
     summaryAgentClientNumberForLookup,
   ])
@@ -2451,7 +2504,8 @@ const ProvincialApplicationDetailsPage = () => {
         !summaryForm ||
         isSavingSummary ||
         summaryOptionsAvailability !== 'available' ||
-        requiredSummaryOptionsMissing
+        requiredSummaryOptionsMissing ||
+        isSummaryClientLookupPending
       ) {
         return false
       }
@@ -2465,17 +2519,59 @@ const ProvincialApplicationDetailsPage = () => {
       setActionErrorMessage('')
       setActionInfoMessage('')
       setActionWarningMessage('')
-      if (hasSummaryValidationError) {
-        setShowSummaryValidationErrors(true)
-        setActionErrorMessage(
-          Object.values(summaryFieldErrors).find((error): error is string => !!error) ??
-            'Please fix validation errors before saving the application summary.',
-        )
-        return false
-      }
-
       setIsSavingSummary(true)
       try {
+        let summaryRequestForm = normalizeSummaryAgentFields(summaryForm)
+        const confirmClientNumber = async (
+          clientNumber: string,
+          clientLocationCode: string,
+        ): Promise<string> => {
+          const normalizedClientNumber = clientNumber.trim()
+          if (!/^\d{1,7}$/.test(normalizedClientNumber) || !clientLocationCode.trim()) {
+            return normalizedClientNumber
+          }
+
+          const clientData = await fetchApplicationClientData(
+            normalizedClientNumber,
+            clientLocationCode,
+            { applicationNumber },
+          )
+          return clientData?.clientNumber.trim() || normalizedClientNumber
+        }
+        const originalOwnerClientNumber = summaryRequestForm.ownerClientNumber
+        const originalOwnerClientLocationCode = summaryRequestForm.ownerClientLocationCode
+        const originalAgentClientNumber = summaryRequestForm.agentClientNumber
+        const originalAgentClientLocationCode = summaryRequestForm.agentClientLocationCode
+        const [ownerClientNumber, agentClientNumber] = await Promise.all([
+          confirmClientNumber(originalOwnerClientNumber, originalOwnerClientLocationCode),
+          isAgentApplicant(summaryRequestForm.applicantTypeCode)
+            ? confirmClientNumber(originalAgentClientNumber, originalAgentClientLocationCode)
+            : Promise.resolve(''),
+        ])
+        summaryRequestForm = { ...summaryRequestForm, ownerClientNumber, agentClientNumber }
+        setSummaryForm((current) => {
+          if (
+            !current ||
+            current.ownerClientNumber !== originalOwnerClientNumber ||
+            current.ownerClientLocationCode !== originalOwnerClientLocationCode ||
+            current.agentClientNumber !== originalAgentClientNumber ||
+            current.agentClientLocationCode !== originalAgentClientLocationCode
+          ) {
+            return current
+          }
+
+          return { ...current, ownerClientNumber, agentClientNumber }
+        })
+
+        if (hasSummaryValidationError) {
+          setShowSummaryValidationErrors(true)
+          setActionErrorMessage(
+            Object.values(summaryFieldErrors).find((error): error is string => !!error) ??
+              'Please fix validation errors before saving the application summary.',
+          )
+          return false
+        }
+
         if (!summaryVolumeWarningAccepted) {
           const volumeUsage = await checkApplicationVolumeUsage(String(detail.applicationNumber))
           if (!volumeUsage.volumeUsed) {
@@ -2490,7 +2586,6 @@ const ProvincialApplicationDetailsPage = () => {
         // INTENTIONAL_LEGACY_DIVERGENCE(BCEID_APPLICATION_EDIT_CONTRACT):
         // Save only the application fields rendered for every authorized editor; do not make
         // BCeID edits depend on staff-only review status or remark controls.
-        const summaryRequestForm = normalizeSummaryAgentFields(summaryForm)
         const result = await updateApplicationSummary({
           applicationNumber: String(detail.applicationNumber),
           applicationDate: summaryRequestForm.applicationDate,
@@ -2563,6 +2658,7 @@ const ProvincialApplicationDetailsPage = () => {
       editingRemarkId,
       hasSummaryValidationError,
       isSavingSummary,
+      isSummaryClientLookupPending,
       loadApplicationDetail,
       remarkBody,
       requiredSummaryOptionsMissing,
@@ -3700,7 +3796,8 @@ const ProvincialApplicationDetailsPage = () => {
                                 disabled={
                                   isSavingSummary ||
                                   summaryOptionsAvailability !== 'available' ||
-                                  requiredSummaryOptionsMissing
+                                  requiredSummaryOptionsMissing ||
+                                  isSummaryClientLookupPending
                                 }
                                 renderIcon={isSavingSummary ? PendingIcon : undefined}
                                 onClick={() => onRequestSaveSummary('owner')}
@@ -3860,7 +3957,8 @@ const ProvincialApplicationDetailsPage = () => {
                                   disabled={
                                     isSavingSummary ||
                                     summaryOptionsAvailability !== 'available' ||
-                                    requiredSummaryOptionsMissing
+                                    requiredSummaryOptionsMissing ||
+                                    isSummaryClientLookupPending
                                   }
                                   renderIcon={isSavingSummary ? PendingIcon : undefined}
                                   onClick={() => onRequestSaveSummary('agent')}
@@ -4422,7 +4520,8 @@ const ProvincialApplicationDetailsPage = () => {
                                 disabled={
                                   isSavingSummary ||
                                   summaryOptionsAvailability !== 'available' ||
-                                  requiredSummaryOptionsMissing
+                                  requiredSummaryOptionsMissing ||
+                                  isSummaryClientLookupPending
                                 }
                                 renderIcon={isSavingSummary ? PendingIcon : undefined}
                                 onClick={() => onRequestSaveSummary('summary')}
@@ -4953,6 +5052,7 @@ const ProvincialApplicationDetailsPage = () => {
         isDirty={isApplicationDirty}
         isBusy={
           isSavingSummary ||
+          isSummaryClientLookupPending ||
           isSavingRemark ||
           isSubmittingReviewAction ||
           applicationItemsBusy ||
@@ -4971,14 +5071,16 @@ const ProvincialApplicationDetailsPage = () => {
           summaryDirty &&
           (summaryOptionsAvailability !== 'available' || requiredSummaryOptionsMissing)
             ? 'Authoritative application options must load before summary changes can be saved.'
-            : reviewDirty &&
-                (reviewOptionsAvailability !== 'available' || reviewStatusOptions.length === 0)
-              ? 'Authoritative review options must load before review changes can be saved.'
-              : documentUploadDirty
-                ? 'Finish or reset the queued document uploads before leaving, or discard all changes.'
-                : applicationItemsDirty
-                  ? 'Use the Items tab to save or reset package, species, and scale drafts before leaving, or discard all changes.'
-                  : undefined
+            : summaryDirty && isSummaryClientLookupPending
+              ? 'Client details must finish loading before summary changes can be saved.'
+              : reviewDirty &&
+                  (reviewOptionsAvailability !== 'available' || reviewStatusOptions.length === 0)
+                ? 'Authoritative review options must load before review changes can be saved.'
+                : documentUploadDirty
+                  ? 'Finish or reset the queued document uploads before leaving, or discard all changes.'
+                  : applicationItemsDirty
+                    ? 'Use the Items tab to save or reset package, species, and scale drafts before leaving, or discard all changes.'
+                    : undefined
         }
       />
     </Grid>
