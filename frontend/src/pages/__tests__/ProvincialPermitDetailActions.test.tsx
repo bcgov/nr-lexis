@@ -737,6 +737,10 @@ describe('Provincial Permit Detail Action Smoke', () => {
     ).closest('.cds--tile') as HTMLElement
     expect(within(permitSummaryTile).getByText('1000456, 1000457')).toBeInTheDocument()
     expect(within(permitSummaryTile).getByText('PKG-9, PKG-10')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Edit permit' }))
+    expect(screen.getByLabelText('Application number(s)')).toHaveValue('1000456, 1000457')
+    expect(screen.getByLabelText('Package number(s)')).toHaveValue('PKG-9, PKG-10')
   })
 
   it('restores the permit tab and loads deferred data after a conflict refresh', async () => {
