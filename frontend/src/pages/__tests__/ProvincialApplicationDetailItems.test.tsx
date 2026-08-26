@@ -159,7 +159,9 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     await waitFor(() => {
       expect(mockedFetchApplicationPackageDetails).toHaveBeenCalledWith('PKG-2')
     })
+    expect(screen.getByRole('heading', { level: 2, name: 'Packages' })).toBeInTheDocument()
     expect(screen.getByRole('combobox', { name: 'Selected Package' })).toHaveValue('PKG-2')
+    expect(screen.getByRole('heading', { level: 3, name: 'Summary of Scale' })).toBeInTheDocument()
     expect(document.getElementById('application-items-scales')).toBeInTheDocument()
     await waitFor(() => {
       expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith({
@@ -183,6 +185,9 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
 
     await selectApplicationDetailTab('Items')
     expect(await screen.findByRole('button', { name: 'Edit items' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { level: 2, name: 'Packages' })).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 3, name: 'Package Details' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 3, name: 'Summary of Scale' })).toBeInTheDocument()
     expect(screen.queryByLabelText('Package Comments')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save Package' })).not.toBeInTheDocument()
 
@@ -199,6 +204,48 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     )
     expect(screen.queryByLabelText('Package Comments')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Edit items' })).toBeInTheDocument()
+  })
+
+  it('leads with package creation when a harvested-timber application has no package', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      packages: [],
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationDetailTab('Items')
+    const createPackageButton = await screen.findByRole('button', { name: 'Create package' })
+    expect(screen.queryByRole('heading', { level: 2, name: 'Packages' })).not.toBeInTheDocument()
+    expect(
+      screen.getByText('Create a package before adding Summary of Scale entries.'),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Package Details' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Summary of Scale' })).not.toBeInTheDocument()
+
+    await userEvent.click(createPackageButton)
+
+    const createPackageHeading = await screen.findByRole('heading', {
+      level: 3,
+      name: 'Create Package',
+    })
+    expect(createPackageHeading).toBeInTheDocument()
+    expect(
+      within(createPackageHeading.closest('section') as HTMLElement).getByLabelText(
+        'Package Number',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Package Details' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Summary of Scale' })).not.toBeInTheDocument()
   })
 
   it('keeps a manual package selection after handling a deep-link package focus', async () => {

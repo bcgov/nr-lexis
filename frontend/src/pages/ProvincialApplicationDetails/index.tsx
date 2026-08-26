@@ -4503,70 +4503,61 @@ const ProvincialApplicationDetailsPage = () => {
                 </TabPanel>
                 <TabPanel className="application-detail-tab-panel">
                   <Grid fullWidth className="application-detail-tab-grid">
-                    <Column sm={4} md={8} lg={16}>
-                      <Tile
-                        id="application-packages"
-                        className="application-detail-section application-detail-packages"
-                      >
-                        <h2 className="detail-tile-title">Packages</h2>
-                        {detail.packages.length === 0 && (
-                          <EmptyState
-                            title="No packages found"
-                            description="This provincial application does not include any packages."
-                            headingLevel={3}
+                    {detail.packages.length > 1 && (
+                      <Column sm={4} md={8} lg={16}>
+                        <Tile
+                          id="application-packages"
+                          className="application-detail-section application-detail-packages"
+                        >
+                          <h2 className="detail-tile-title">Packages</h2>
+                          <TextInput
+                            id="applicationDetailPackageFilter"
+                            labelText="Filter packages"
+                            value={packageFilter}
+                            onChange={(event) =>
+                              updateFilterParam('packageFilter', event.target.value)
+                            }
+                            placeholder="Filter by package, pieces, or volume"
                           />
-                        )}
-                        {detail.packages.length > 0 && (
-                          <>
-                            <TextInput
-                              id="applicationDetailPackageFilter"
-                              labelText="Filter packages"
-                              value={packageFilter}
-                              onChange={(event) =>
-                                updateFilterParam('packageFilter', event.target.value)
-                              }
-                              placeholder="Filter by package, pieces, or volume"
-                            />
-                            <TableFrame ariaLabel="Application packages">
-                              <Table size="md" useZebraStyles>
-                                <TableHead>
-                                  <TableRow>
-                                    <TableHeader aria-label="Package selection" />
-                                    <TableHeader>Package number</TableHeader>
-                                    <TableHeader>Volume (m³)</TableHeader>
-                                    <TableHeader>Pieces</TableHeader>
+                          <TableFrame ariaLabel="Application packages">
+                            <Table size="md" useZebraStyles>
+                              <TableHead>
+                                <TableRow>
+                                  <TableHeader aria-label="Package selection" />
+                                  <TableHeader>Package number</TableHeader>
+                                  <TableHeader>Volume (m³)</TableHeader>
+                                  <TableHeader>Pieces</TableHeader>
+                                </TableRow>
+                              </TableHead>
+                              <TableBody>
+                                {filteredPackages.map((item) => (
+                                  <TableRow key={item.packageNumber}>
+                                    <TableSelectRow
+                                      radio
+                                      id={`application-package-select-${item.packageNumber}`}
+                                      name="application-package-selection"
+                                      ariaLabel={`Select package ${item.packageNumber}`}
+                                      checked={selectedPackageNumber === item.packageNumber}
+                                      onSelect={() => focusPackageInItems(item.packageNumber)}
+                                    />
+                                    <TableCell>{item.packageNumber}</TableCell>
+                                    <TableCell>{item.volume.toLocaleString()}</TableCell>
+                                    <TableCell>{item.pieceCount.toLocaleString()}</TableCell>
                                   </TableRow>
-                                </TableHead>
-                                <TableBody>
-                                  {filteredPackages.map((item) => (
-                                    <TableRow key={item.packageNumber}>
-                                      <TableSelectRow
-                                        radio
-                                        id={`application-package-select-${item.packageNumber}`}
-                                        name="application-package-selection"
-                                        ariaLabel={`Select package ${item.packageNumber}`}
-                                        checked={selectedPackageNumber === item.packageNumber}
-                                        onSelect={() => focusPackageInItems(item.packageNumber)}
-                                      />
-                                      <TableCell>{item.packageNumber}</TableCell>
-                                      <TableCell>{item.volume.toLocaleString()}</TableCell>
-                                      <TableCell>{item.pieceCount.toLocaleString()}</TableCell>
-                                    </TableRow>
-                                  ))}
-                                  {filteredPackages.length === 0 && (
-                                    <TableRow>
-                                      <TableCell colSpan={4}>
-                                        No package rows matched the current filter.
-                                      </TableCell>
-                                    </TableRow>
-                                  )}
-                                </TableBody>
-                              </Table>
-                            </TableFrame>
-                          </>
-                        )}
-                      </Tile>
-                    </Column>
+                                ))}
+                                {filteredPackages.length === 0 && (
+                                  <TableRow>
+                                    <TableCell colSpan={4}>
+                                      No package rows matched the current filter.
+                                    </TableCell>
+                                  </TableRow>
+                                )}
+                              </TableBody>
+                            </Table>
+                          </TableFrame>
+                        </Tile>
+                      </Column>
+                    )}
                     <Column sm={4} md={8} lg={16}>
                       <ProvincialApplicationItemsPanel
                         key={`${applicationNumber}-${applicationItemsResetKey}`}

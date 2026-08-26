@@ -311,12 +311,13 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     ).toBeInTheDocument()
 
     await selectApplicationDetailTab('Items')
+    expect(await screen.findByRole('button', { name: 'Create package' })).toBeInTheDocument()
     expect(
-      await screen.findByRole('heading', {
-        level: 3,
-        name: 'No packages found',
-      }),
+      screen.getByText('Create a package before adding Summary of Scale entries.'),
     ).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'No packages found' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Package Details' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Summary of Scale' })).not.toBeInTheDocument()
 
     await selectApplicationDetailTab('Documents')
     expect(
