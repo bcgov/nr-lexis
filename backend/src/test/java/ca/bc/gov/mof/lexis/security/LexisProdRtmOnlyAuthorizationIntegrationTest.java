@@ -56,6 +56,44 @@ class LexisProdRtmOnlyAuthorizationIntegrationTest {
   }
 
   @Test
+  void prodRtmOnlyModeShouldAllowFederalValidationButRejectSubmissionForNexcolScope()
+      throws Exception {
+    SimpleGrantedAuthority federalSubmissionScope =
+        new SimpleGrantedAuthority("SCOPE_lexis:federal-submission:submit");
+
+    mockMvc
+        .perform(
+            post("/api/lexis/federal/submissions/validation")
+                .param("userReference", "NEXCOL-VALIDATION-1")
+                .param("originalFileName", "federal-submission.xml")
+                .contentType(MediaType.APPLICATION_XML)
+                .content("<xml />")
+                .with(jwt().authorities(federalSubmissionScope)))
+        .andExpect(status().isUnprocessableEntity());
+
+    mockMvc
+        .perform(
+            post("/api/lexis/federal/submissions")
+                .param("userReference", "NEXCOL-SUBMISSION-1")
+                .param("originalFileName", "federal-submission.xml")
+                .contentType(MediaType.APPLICATION_XML)
+                .content("<xml />")
+                .with(jwt().authorities(federalSubmissionScope)))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void prodRtmOnlyModeShouldRejectFederalValidationWithoutNexcolScope() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/lexis/federal/submissions/validation")
+                .contentType(MediaType.APPLICATION_XML)
+                .content("<xml />")
+                .with(jwt().authorities(new SimpleGrantedAuthority("SCOPE_openid"))))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
   void prodRtmOnlyModeShouldExposeRtmAmvTableAndRequiredSupportApisToAdmins()
       throws Exception {
     SimpleGrantedAuthority admin = new SimpleGrantedAuthority("LEXIS_ADMIN");
