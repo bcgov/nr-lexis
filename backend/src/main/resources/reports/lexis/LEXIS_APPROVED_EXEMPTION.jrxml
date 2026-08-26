@@ -55,9 +55,9 @@
     </title>
 
     <detail>
-        <band height="386" splitType="Stretch">
+        <band height="240" splitType="Prevent">
             <frame>
-                <reportElement x="0" y="0" width="744" height="386"/>
+                <reportElement x="0" y="0" width="744" height="240"/>
                 <box><pen lineWidth="0.8"/></box>
 
                 <staticText><reportElement x="0" y="0" width="210" height="20"/><box><pen lineWidth="0.3"/></box><textElement verticalAlignment="Middle"><font fontName="Arial" size="9" isBold="true"/></textElement><text><![CDATA[Exemption number]]></text></staticText>
@@ -95,21 +95,28 @@
 
                 <staticText><reportElement x="0" y="220" width="210" height="20"/><box><pen lineWidth="0.3"/></box><textElement verticalAlignment="Middle"><font fontName="Arial" size="9" isBold="true"/></textElement><text><![CDATA[Agent client number]]></text></staticText>
                 <textField isBlankWhenNull="true"><reportElement x="210" y="220" width="534" height="20"/><box><pen lineWidth="0.3"/></box><textElement verticalAlignment="Middle"><font fontName="Arial" size="9"/></textElement><textFieldExpression><![CDATA[$F{AGENT_CLIENT_NUMBER}]]></textFieldExpression></textField>
+            </frame>
+        </band>
+        <band height="40" splitType="Stretch">
+            <staticText><reportElement stretchType="RelativeToBandHeight" x="0" y="0" width="210" height="40"/><box><pen lineWidth="0.3"/></box><textElement verticalAlignment="Middle"><font fontName="Arial" size="9" isBold="true"/></textElement><text><![CDATA[Other conditions]]></text></staticText>
+            <textField textAdjust="StretchHeight" isBlankWhenNull="true"><reportElement x="210" y="0" width="534" height="40"/><box><pen lineWidth="0.3"/></box><textElement verticalAlignment="Top"><font fontName="Arial" size="9"/></textElement><textFieldExpression><![CDATA[$F{OTHER_CONDITIONS}]]></textFieldExpression></textField>
+        </band>
+        <band height="80" splitType="Prevent">
+            <frame>
+                <reportElement x="0" y="0" width="744" height="80"/>
+                <box><pen lineWidth="0.8"/></box>
 
-                <staticText><reportElement x="0" y="240" width="210" height="40"/><box><pen lineWidth="0.3"/></box><textElement verticalAlignment="Middle"><font fontName="Arial" size="9" isBold="true"/></textElement><text><![CDATA[Other conditions]]></text></staticText>
-                <textField textAdjust="StretchHeight" isBlankWhenNull="true"><reportElement x="210" y="240" width="534" height="40"/><box><pen lineWidth="0.3"/></box><textElement verticalAlignment="Top"><font fontName="Arial" size="9"/></textElement><textFieldExpression><![CDATA[$F{OTHER_CONDITIONS}]]></textFieldExpression></textField>
+                <staticText><reportElement x="0" y="0" width="210" height="20"/><box><pen lineWidth="0.3"/></box><textElement verticalAlignment="Middle"><font fontName="Arial" size="9" isBold="true"/></textElement><text><![CDATA[Entered by]]></text></staticText>
+                <textField isBlankWhenNull="true"><reportElement x="210" y="0" width="534" height="20"/><box><pen lineWidth="0.3"/></box><textElement verticalAlignment="Middle"><font fontName="Arial" size="9"/></textElement><textFieldExpression><![CDATA[$F{ENTRY_USERID}]]></textFieldExpression></textField>
 
-                <staticText><reportElement x="0" y="280" width="210" height="20"/><box><pen lineWidth="0.3"/></box><textElement verticalAlignment="Middle"><font fontName="Arial" size="9" isBold="true"/></textElement><text><![CDATA[Entered by]]></text></staticText>
-                <textField isBlankWhenNull="true"><reportElement x="210" y="280" width="534" height="20"/><box><pen lineWidth="0.3"/></box><textElement verticalAlignment="Middle"><font fontName="Arial" size="9"/></textElement><textFieldExpression><![CDATA[$F{ENTRY_USERID}]]></textFieldExpression></textField>
+                <staticText><reportElement x="0" y="20" width="210" height="20"/><box><pen lineWidth="0.3"/></box><textElement verticalAlignment="Middle"><font fontName="Arial" size="9" isBold="true"/></textElement><text><![CDATA[Entry timestamp]]></text></staticText>
+                <textField isBlankWhenNull="true"><reportElement x="210" y="20" width="534" height="20"/><box><pen lineWidth="0.3"/></box><textElement verticalAlignment="Middle"><font fontName="Arial" size="9"/></textElement><textFieldExpression><![CDATA[$F{ENTRY_TIMESTAMP}]]></textFieldExpression></textField>
 
-                <staticText><reportElement x="0" y="300" width="210" height="20"/><box><pen lineWidth="0.3"/></box><textElement verticalAlignment="Middle"><font fontName="Arial" size="9" isBold="true"/></textElement><text><![CDATA[Entry timestamp]]></text></staticText>
-                <textField isBlankWhenNull="true"><reportElement x="210" y="300" width="534" height="20"/><box><pen lineWidth="0.3"/></box><textElement verticalAlignment="Middle"><font fontName="Arial" size="9"/></textElement><textFieldExpression><![CDATA[$F{ENTRY_TIMESTAMP}]]></textFieldExpression></textField>
+                <staticText><reportElement x="0" y="40" width="210" height="20"/><box><pen lineWidth="0.3"/></box><textElement verticalAlignment="Middle"><font fontName="Arial" size="9" isBold="true"/></textElement><text><![CDATA[Updated by]]></text></staticText>
+                <textField isBlankWhenNull="true"><reportElement x="210" y="40" width="534" height="20"/><box><pen lineWidth="0.3"/></box><textElement verticalAlignment="Middle"><font fontName="Arial" size="9"/></textElement><textFieldExpression><![CDATA[$F{UPDATE_USERID}]]></textFieldExpression></textField>
 
-                <staticText><reportElement x="0" y="320" width="210" height="20"/><box><pen lineWidth="0.3"/></box><textElement verticalAlignment="Middle"><font fontName="Arial" size="9" isBold="true"/></textElement><text><![CDATA[Updated by]]></text></staticText>
-                <textField isBlankWhenNull="true"><reportElement x="210" y="320" width="534" height="20"/><box><pen lineWidth="0.3"/></box><textElement verticalAlignment="Middle"><font fontName="Arial" size="9"/></textElement><textFieldExpression><![CDATA[$F{UPDATE_USERID}]]></textFieldExpression></textField>
-
-                <staticText><reportElement x="0" y="340" width="210" height="20"/><box><pen lineWidth="0.3"/></box><textElement verticalAlignment="Middle"><font fontName="Arial" size="9" isBold="true"/></textElement><text><![CDATA[Updated timestamp]]></text></staticText>
-                <textField isBlankWhenNull="true"><reportElement x="210" y="340" width="534" height="20"/><box><pen lineWidth="0.3"/></box><textElement verticalAlignment="Middle"><font fontName="Arial" size="9"/></textElement><textFieldExpression><![CDATA[$F{UPDATE_TIMESTAMP}]]></textFieldExpression></textField>
+                <staticText><reportElement x="0" y="60" width="210" height="20"/><box><pen lineWidth="0.3"/></box><textElement verticalAlignment="Middle"><font fontName="Arial" size="9" isBold="true"/></textElement><text><![CDATA[Updated timestamp]]></text></staticText>
+                <textField isBlankWhenNull="true"><reportElement x="210" y="60" width="534" height="20"/><box><pen lineWidth="0.3"/></box><textElement verticalAlignment="Middle"><font fontName="Arial" size="9"/></textElement><textFieldExpression><![CDATA[$F{UPDATE_TIMESTAMP}]]></textFieldExpression></textField>
             </frame>
         </band>
     </detail>

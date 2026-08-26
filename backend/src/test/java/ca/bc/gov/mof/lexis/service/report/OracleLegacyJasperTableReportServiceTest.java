@@ -95,6 +95,73 @@ class OracleLegacyJasperTableReportServiceTest {
   }
 
   @Test
+  void shouldRenderApprovedExemptionNoDataSectionForEmptyCursor() throws Exception {
+    TabularData tabularData =
+        new TabularData(List.of("EXEMPTION_NUMBER"), List.<List<String>>of());
+    LexisReportRequestDto request =
+        new LexisReportRequestDto(Map.of("exemptionNumber", "EX-NONE"), "PDF");
+    stubCursor(
+        LexisJasperReportDefinition.APPROVED_EXEMPTION_REPORT, request, tabularData);
+
+    List<String> renderedText = new java.util.ArrayList<>();
+    OracleLegacyJasperTableReportService service =
+        new OracleLegacyJasperTableReportService(legacyCsvReportService) {
+          @Override
+          void exportPdf(JasperPrint print, OutputStream output) {
+            print
+                .getPages()
+                .forEach(page -> collectText(page.getElements(), renderedText));
+          }
+        };
+
+    Optional<LexisGeneratedReport> report =
+        service.generateLegacyPdfReport(
+            LexisJasperReportDefinition.APPROVED_EXEMPTION_REPORT,
+            request,
+            LexisReportFormat.PDF);
+
+    assertThat(report).isPresent();
+    assertThat(renderedText)
+        .contains(
+            "Approved Exemption Report",
+            "Exemption Number: EX-NONE",
+            "No approved exemption data matched this exemption number.");
+  }
+
+  @Test
+  void shouldRenderSpeciesGradeNoDataSectionForEmptyCursor() throws Exception {
+    TabularData tabularData = new TabularData(List.of("PRODUCT_TYPE"), List.<List<String>>of());
+    LexisReportRequestDto request =
+        new LexisReportRequestDto(
+            Map.of("fromDate", "2026-03-05", "toDate", "2026-03-05", "permitStatus", "COM"),
+            "PDF");
+    stubCursor(LexisJasperReportDefinition.SPECIES_GRADE_REPORT, request, tabularData);
+
+    List<String> renderedText = new java.util.ArrayList<>();
+    OracleLegacyJasperTableReportService service =
+        new OracleLegacyJasperTableReportService(legacyCsvReportService) {
+          @Override
+          void exportPdf(JasperPrint print, OutputStream output) {
+            print
+                .getPages()
+                .forEach(page -> collectText(page.getElements(), renderedText));
+          }
+        };
+
+    Optional<LexisGeneratedReport> report =
+        service.generateLegacyPdfReport(
+            LexisJasperReportDefinition.SPECIES_GRADE_REPORT,
+            request,
+            LexisReportFormat.PDF);
+
+    assertThat(report).isPresent();
+    assertThat(renderedText)
+        .contains(
+            "Species and Grade Report",
+            "No Species and Grade data matched this report criteria.");
+  }
+
+  @Test
   void shouldRenderApprovedExemptionFieldsWithBusinessLabels() throws Exception {
     TabularData tabularData =
         new TabularData(
@@ -162,6 +229,153 @@ class OracleLegacyJasperTableReportServiceTest {
         .contains("Exemption number", "EX-123", "Owner client number", "00002176")
         .noneMatch(
             text -> text.contains("Additional Columns") || text.contains("EXEMPTION_NUMBER"));
+  }
+
+  @Test
+  void shouldKeepLongApprovedExemptionConditionsClearOfFollowingFields() throws Exception {
+    String otherConditions = "testing ".repeat(200).trim();
+    TabularData tabularData =
+        new TabularData(
+            List.of(
+                "EXEMPTION_NUMBER",
+                "APPROVED_VOLUME",
+                "APPROVAL_DATE",
+                "EXPIRY_DATE",
+                "OTHER_CONDITIONS",
+                "ENTRY_USERID",
+                "ENTRY_TIMESTAMP",
+                "UPDATE_USERID",
+                "UPDATE_TIMESTAMP",
+                "EXPORT_EXEMPTION_TYPE_CODE",
+                "EXPORT_EXEMPTION_STATUS_CODE",
+                "STATUS_DESCRIPTION",
+                "VOLUME_REMAINING",
+                "ADVERTISING_DATE",
+                "ORG_UNIT_NAME",
+                "AGENT_CLIENT_NUMBER",
+                "OWNER_CLIENT_NUMBER"),
+            List.of(
+                List.of(
+                    "EX-123",
+                    "1200",
+                    "2026-03-01",
+                    "2028-02-28",
+                    otherConditions,
+                    "IDIR\\CREATOR",
+                    "2026-03-01 09:00:00",
+                    "IDIR\\EDITOR",
+                    "2026-03-05 16:07:10",
+                    "B",
+                    "ACT",
+                    "Active",
+                    "999",
+                    "",
+                    "Skeena",
+                    "",
+                    "00002176")));
+    LexisReportRequestDto request =
+        new LexisReportRequestDto(Map.of("exemptionNumber", "EX-123"), "PDF");
+    stubCursor(
+        LexisJasperReportDefinition.APPROVED_EXEMPTION_REPORT, request, tabularData);
+
+    List<JasperPrint> prints = new java.util.ArrayList<>();
+    OracleLegacyJasperTableReportService service =
+        new OracleLegacyJasperTableReportService(legacyCsvReportService) {
+          @Override
+          void exportPdf(JasperPrint print, OutputStream output) {
+            prints.add(print);
+          }
+        };
+
+    Optional<LexisGeneratedReport> report =
+        service.generateLegacyPdfReport(
+            LexisJasperReportDefinition.APPROVED_EXEMPTION_REPORT,
+            request,
+            LexisReportFormat.PDF);
+
+    assertThat(report).isPresent();
+    assertThat(prints).hasSize(1);
+    List<PositionedPrintText> printedText = new java.util.ArrayList<>();
+    prints
+        .getFirst()
+        .getPages()
+        .forEach(page -> collectPositionedPrintText(page.getElements(), printedText, 0));
+    PositionedPrintText conditions =
+        printedText.stream()
+            .filter(text -> otherConditions.equals(text.text().getFullText()))
+            .findFirst()
+            .orElseThrow();
+    PositionedPrintText enteredBy =
+        printedText.stream()
+            .filter(text -> "Entered by".equals(text.text().getFullText()))
+            .findFirst()
+            .orElseThrow();
+
+    assertThat(printedText.stream().map(text -> text.text().getFullText()))
+        .contains(
+            otherConditions,
+            "Entered by",
+            "IDIR\\CREATOR",
+            "Entry timestamp",
+            "2026-03-01 09:00:00",
+            "Updated by",
+            "IDIR\\EDITOR",
+            "Updated timestamp",
+            "2026-03-05 16:07:10");
+    assertThat(conditions.y() + conditions.text().getHeight()).isLessThanOrEqualTo(enteredBy.y());
+  }
+
+  @Test
+  void shouldRenderApprovedExemptionNullFieldsAsBlank() throws Exception {
+    List<String> headers =
+        List.of(
+            "EXEMPTION_NUMBER",
+            "APPROVED_VOLUME",
+            "APPROVAL_DATE",
+            "EXPIRY_DATE",
+            "OTHER_CONDITIONS",
+            "ENTRY_USERID",
+            "ENTRY_TIMESTAMP",
+            "UPDATE_USERID",
+            "UPDATE_TIMESTAMP",
+            "EXPORT_EXEMPTION_TYPE_CODE",
+            "EXPORT_EXEMPTION_STATUS_CODE",
+            "STATUS_DESCRIPTION",
+            "VOLUME_REMAINING",
+            "ADVERTISING_DATE",
+            "ORG_UNIT_NAME",
+            "AGENT_CLIENT_NUMBER",
+            "OWNER_CLIENT_NUMBER");
+    TabularData tabularData =
+        new TabularData(
+            headers,
+            List.of(new java.util.ArrayList<>(java.util.Collections.nCopies(headers.size(), null))));
+    LexisReportRequestDto request =
+        new LexisReportRequestDto(Map.of("exemptionNumber", "EX-NULL"), "PDF");
+    stubCursor(
+        LexisJasperReportDefinition.APPROVED_EXEMPTION_REPORT, request, tabularData);
+
+    List<String> renderedText = new java.util.ArrayList<>();
+    OracleLegacyJasperTableReportService service =
+        new OracleLegacyJasperTableReportService(legacyCsvReportService) {
+          @Override
+          void exportPdf(JasperPrint print, OutputStream output) {
+            print
+                .getPages()
+                .forEach(page -> collectText(page.getElements(), renderedText));
+          }
+        };
+
+    Optional<LexisGeneratedReport> report =
+        service.generateLegacyPdfReport(
+            LexisJasperReportDefinition.APPROVED_EXEMPTION_REPORT,
+            request,
+            LexisReportFormat.PDF);
+
+    assertThat(report).isPresent();
+    assertThat(renderedText)
+        .contains("Exemption number", "Other conditions", "Entered by", "Updated timestamp")
+        .noneMatch(text -> "null".equalsIgnoreCase(text.strip()));
   }
 
   @Test
@@ -500,10 +714,14 @@ class OracleLegacyJasperTableReportServiceTest {
     AtomicInteger rowIndex = new AtomicInteger(-1);
     when(resultSet.next())
         .thenAnswer(invocation -> rowIndex.incrementAndGet() < data.rows().size());
-    when(resultSet.getString(anyInt()))
-        .thenAnswer(
-            invocation ->
-                data.rows().get(rowIndex.get()).get(invocation.getArgument(0, Integer.class) - 1));
+    if (!data.rows().isEmpty()) {
+      when(resultSet.getString(anyInt()))
+          .thenAnswer(
+              invocation ->
+                  data.rows()
+                      .get(rowIndex.get())
+                      .get(invocation.getArgument(0, Integer.class) - 1));
+    }
     return resultSet;
   }
 
@@ -518,5 +736,19 @@ class OracleLegacyJasperTableReportServiceTest {
     }
   }
 
+  private void collectPositionedPrintText(
+      List<JRPrintElement> elements, List<PositionedPrintText> renderedText, int parentY) {
+    for (JRPrintElement element : elements) {
+      if (element instanceof JRPrintText text) {
+        renderedText.add(new PositionedPrintText(text, parentY + text.getY()));
+      }
+      if (element instanceof JRPrintFrame frame) {
+        collectPositionedPrintText(frame.getElements(), renderedText, parentY + frame.getY());
+      }
+    }
+  }
+
   private record TabularData(List<String> columnHeaders, List<List<String>> rows) {}
+
+  private record PositionedPrintText(JRPrintText text, int y) {}
 }
