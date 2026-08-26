@@ -14,6 +14,7 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import net.sf.jasperreports.engine.JRDataSource;
@@ -39,11 +40,14 @@ public class OracleLegacyJasperTableReportService {
   private static final int MAX_COLUMNS = 12;
   private static final int DIRECT_COLUMNS_WHEN_OVERFLOWING = MAX_COLUMNS - 1;
   private static final String OVERFLOW_COLUMN_HEADER = "Additional Columns";
-  private static final String TEMPLATE_CLASSPATH = "reports/lexis/LEXIS_DYNAMIC_TABLE.jrxml";
+  private static final String DYNAMIC_TEMPLATE_CLASSPATH = "reports/lexis/LEXIS_DYNAMIC_TABLE.jrxml";
+  private static final String APPROVED_EXEMPTION_TEMPLATE_CLASSPATH =
+      "reports/lexis/LEXIS_APPROVED_EXEMPTION.jrxml";
 
   private final OracleLegacyCsvReportService legacyCsvReportService;
   private final LexisReportResourceManager reportResources;
   private volatile JasperReport compiledTemplate;
+  private volatile JasperReport compiledApprovedExemptionTemplate;
 
   public OracleLegacyJasperTableReportService(OracleLegacyCsvReportService legacyCsvReportService) {
     this(legacyCsvReportService, LexisReportResourceManager.defaults());
@@ -80,7 +84,7 @@ public class OracleLegacyJasperTableReportService {
                       buildTemplateParameters(
                           definition, request, dataSource.columnHeaders()));
                   return JasperFillManager.getInstance(reportResources.jasperReportsContext())
-                      .fill(getOrCompileTemplate(), parameters, dataSource);
+                      .fill(getOrCompileTemplate(definition), parameters, dataSource);
                 });
         if (print.isEmpty()) {
           return Optional.empty();
@@ -121,29 +125,39 @@ public class OracleLegacyJasperTableReportService {
         || definition == LexisJasperReportDefinition.APPROVED_EXEMPTION_REPORT;
   }
 
-  private JasperReport getOrCompileTemplate() throws JRException {
-    JasperReport current = compiledTemplate;
+  private JasperReport getOrCompileTemplate(LexisJasperReportDefinition definition)
+      throws JRException {
+    boolean approvedExemption =
+        definition == LexisJasperReportDefinition.APPROVED_EXEMPTION_REPORT;
+    JasperReport current = approvedExemption ? compiledApprovedExemptionTemplate : compiledTemplate;
     if (current != null) {
       return current;
     }
 
     synchronized (this) {
-      if (compiledTemplate != null) {
-        return compiledTemplate;
+      current = approvedExemption ? compiledApprovedExemptionTemplate : compiledTemplate;
+      if (current != null) {
+        return current;
       }
 
-      ClassPathResource templateResource = new ClassPathResource(TEMPLATE_CLASSPATH);
+      String templateClasspath =
+          approvedExemption ? APPROVED_EXEMPTION_TEMPLATE_CLASSPATH : DYNAMIC_TEMPLATE_CLASSPATH;
+      ClassPathResource templateResource = new ClassPathResource(templateClasspath);
       if (!templateResource.exists()) {
-        throw new JRException("Missing Jasper template: " + TEMPLATE_CLASSPATH);
+        throw new JRException("Missing Jasper template: " + templateClasspath);
       }
 
       try (InputStream inputStream = templateResource.getInputStream()) {
-        compiledTemplate = JasperCompileManager.compileReport(inputStream);
+        JasperReport compiled = JasperCompileManager.compileReport(inputStream);
+        if (approvedExemption) {
+          compiledApprovedExemptionTemplate = compiled;
+        } else {
+          compiledTemplate = compiled;
+        }
+        return compiled;
       } catch (IOException ex) {
-        throw new JRException("Unable to load Jasper template: " + TEMPLATE_CLASSPATH, ex);
+        throw new JRException("Unable to load Jasper template: " + templateClasspath, ex);
       }
-
-      return compiledTemplate;
     }
   }
 
@@ -155,6 +169,9 @@ public class OracleLegacyJasperTableReportService {
     parameters.put("REPORT_TITLE", titleFor(definition));
     parameters.put("REPORT_SUBTITLE", subtitleFor(definition, request));
     parameters.put("REPORT_GENERATED_DATE", LexisBusinessTime.today().toString());
+    if (definition == LexisJasperReportDefinition.APPROVED_EXEMPTION_REPORT) {
+      return parameters;
+    }
     parameters.put("P_COLUMN_COUNT", Math.min(columnHeaders.size(), MAX_COLUMNS));
 
     boolean overflowColumns = columnHeaders.size() > MAX_COLUMNS;
@@ -287,6 +304,7 @@ public class OracleLegacyJasperTableReportService {
 
     private final ResultSet resultSet;
     private final List<String> columnHeaders;
+    private final Map<String, Integer> columnIndexesByName;
     private final String[] currentRow;
 
     private LegacyResultSetDataSource(ResultSet resultSet) throws SQLException {
@@ -294,9 +312,12 @@ public class OracleLegacyJasperTableReportService {
       ResultSetMetaData metadata = resultSet.getMetaData();
       int columnCount = metadata.getColumnCount();
       this.columnHeaders = new ArrayList<>(columnCount);
+      this.columnIndexesByName = new HashMap<>(columnCount);
       this.currentRow = new String[columnCount];
       for (int index = 1; index <= columnCount; index++) {
-        columnHeaders.add(metadata.getColumnName(index));
+        String columnName = metadata.getColumnName(index);
+        columnHeaders.add(columnName);
+        columnIndexesByName.putIfAbsent(normalizeColumnName(columnName), index);
       }
     }
 
@@ -323,7 +344,10 @@ public class OracleLegacyJasperTableReportService {
     public Object getFieldValue(JRField field) {
       String fieldName = field == null ? null : field.getName();
       if (fieldName == null || !fieldName.startsWith("COL_")) {
-        return "";
+        Integer columnIndex = columnIndexesByName.get(normalizeColumnName(fieldName));
+        return columnIndex == null || columnIndex > currentRow.length
+            ? ""
+            : currentRow[columnIndex - 1];
       }
 
       int outputColumn;
@@ -341,6 +365,10 @@ public class OracleLegacyJasperTableReportService {
         return overflowColumns(columnHeaders, List.of(currentRow));
       }
       return outputColumn <= currentRow.length ? currentRow[outputColumn - 1] : "";
+    }
+
+    private String normalizeColumnName(String value) {
+      return value == null ? "" : value.trim().toUpperCase(Locale.ROOT);
     }
   }
 }
