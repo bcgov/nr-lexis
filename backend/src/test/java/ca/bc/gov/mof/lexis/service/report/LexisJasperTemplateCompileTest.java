@@ -111,6 +111,23 @@ class LexisJasperTemplateCompileTest {
   }
 
   @Test
+  void permitLedgerShouldKeepCriteriaValuesOnMatchingLines() throws Exception {
+    String template =
+        Files.readString(
+            new ClassPathResource("reports/lexis/LEXIS_PERMIT_LEDGER.jrxml")
+                .getFile()
+                .toPath());
+
+    assertThat(template)
+        .contains(
+            "uuid=\"85ef0374-a07b-4853-9f61-581cecda10b8\" "
+                + "x=\"92\" y=\"93\" width=\"160\" height=\"61\"")
+        .contains(
+            "$F{REGION} == null || $F{REGION}.isEmpty() ? \"\" : $F{REGION}")
+        .contains("$V{CCF9_F_GROWTH_TYPE} + System.getProperty(\"line.separator\")");
+  }
+
+  @Test
   void exemptionLedgerShouldUseNullSafeApplicationNumberBranches() throws Exception {
     String template =
         Files.readString(
