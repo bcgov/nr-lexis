@@ -106,19 +106,19 @@
     </detail>
 
     <noData>
-        <band height="90">
+        <band height="112">
             <textField>
                 <reportElement x="0" y="0" width="900" height="22"/>
                 <textElement><font fontName="Arial" size="16" isBold="true"/></textElement>
                 <textFieldExpression><![CDATA[$P{REPORT_TITLE} == null ? "Species and Grade Report" : $P{REPORT_TITLE}]]></textFieldExpression>
             </textField>
-            <textField>
-                <reportElement x="0" y="28" width="1176" height="18"/>
+            <textField textAdjust="StretchHeight">
+                <reportElement x="0" y="28" width="1176" height="40"/>
                 <textElement><font fontName="Arial" size="9"/></textElement>
                 <textFieldExpression><![CDATA[$P{REPORT_SUBTITLE} == null ? "" : $P{REPORT_SUBTITLE}]]></textFieldExpression>
             </textField>
             <staticText>
-                <reportElement x="0" y="58" width="1176" height="20"/>
+                <reportElement x="0" y="80" width="1176" height="20"/>
                 <textElement textAlignment="Center" verticalAlignment="Middle"><font fontName="Arial" size="11" isBold="true"/></textElement>
                 <text><![CDATA[No Species and Grade data matched this report criteria.]]></text>
             </staticText>
