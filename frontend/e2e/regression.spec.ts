@@ -2315,6 +2315,7 @@ test.describe('TEST IDIR admin regression', () => {
     )
     const today = formatBusinessIsoDate()
 
+    await page.getByRole('tab', { name: 'Application' }).click()
     await expect(page.getByRole('combobox', { name: 'Product type' })).toHaveValue(
       'Harvested Timber',
     )
@@ -2325,9 +2326,13 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(page.getByRole('textbox', { name: 'Application date (YYYY-MM-DD)' })).toHaveValue(
       today,
     )
-    await expect(page.getByRole('textbox', { name: 'Received date (YYYY-MM-DD)' })).toHaveValue('')
-    await expect(page.getByRole('combobox', { name: 'Listing date' })).toHaveValue(nextListDate)
+    await expect(page.getByRole('textbox', { name: 'Date received (YYYY-MM-DD)' })).toHaveValue('')
+    await expect(page.getByRole('combobox', { name: 'List date' })).toHaveValue(nextListDate)
+    await expect(page.getByRole('spinbutton', { name: 'Application term (days)' })).toHaveValue(
+      '180',
+    )
 
+    await page.getByRole('tab', { name: 'Items' }).click()
     const paragraphField = page.getByLabel('Location of logs')
     const normalField = page.getByLabel('Application volume')
     const [paragraphMetrics, normalFieldMetrics] = await Promise.all([
@@ -2345,7 +2350,7 @@ test.describe('TEST IDIR admin regression', () => {
     expect(paragraphMetrics.fontSize).toBe(normalFieldMetrics.fontSize)
     expect(paragraphMetrics.resize).toBe('vertical')
 
-    await page.getByRole('tab', { name: 'Clients' }).click()
+    await page.getByRole('tab', { name: 'Owner' }).click()
     await expect(page.getByRole('combobox', { name: 'Applicant type' })).toHaveValue('Owner')
   })
 
@@ -2358,17 +2363,12 @@ test.describe('TEST IDIR admin regression', () => {
       /create provincial application/i,
     )
 
-    for (const tabName of [
-      'Summary',
-      'Clients',
-      'Packages / Scales',
-      'Permits',
-      'Offers',
-      'Documents',
-      'Remarks',
-    ]) {
+    for (const tabName of ['Owner', 'Application', 'Items', 'Documents', 'Remarks', 'Offers']) {
       await expect(page.getByRole('tab', { name: tabName })).toBeVisible()
     }
+    await expect(page.getByRole('tab', { name: 'Agent' })).toHaveCount(0)
+    await expect(page.getByRole('tab', { name: 'Permits' })).toHaveCount(0)
+    await expect(page.getByRole('tab', { name: 'Review' })).toHaveCount(0)
 
     await expect(page.getByRole('button', { name: 'Save' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Cancel' })).toBeVisible()
@@ -2376,7 +2376,13 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(page.getByRole('button', { name: 'Submit' })).toHaveCount(0)
     await expect(page.getByRole('link', { name: 'Back to Search' })).toHaveCount(0)
 
+    await page.getByRole('tab', { name: 'Application' }).click()
     const regionSelect = page.getByRole('combobox', { name: 'Region' })
+    await expect(page.getByRole('spinbutton', { name: 'Application term (days)' })).toHaveValue(
+      '180',
+    )
+    await expect(page.getByLabel('Application term months')).toHaveCount(0)
+    await expect(page.getByLabel('Application term years')).toHaveCount(0)
     await expect(regionSelect).toBeEnabled({ timeout: 30_000 })
     if (!(await regionSelect.inputValue()).trim()) {
       await regionSelect.click()
@@ -2385,13 +2391,13 @@ test.describe('TEST IDIR admin regression', () => {
       await page.locator(`#${regionMenuId}`).getByRole('option').first().click()
     }
 
-    await page.getByRole('tab', { name: 'Packages / Scales' }).click()
-    const packagesPanel = page.getByRole('region', { name: 'Packages / Scales' })
-    await expect(packagesPanel).toBeVisible()
-    await expect(packagesPanel).toHaveCSS('overflow', 'visible')
+    await page.getByRole('tab', { name: 'Items' }).click()
+    const itemsPanel = page.getByRole('region', { name: 'Items' })
+    await expect(itemsPanel).toBeVisible()
+    await expect(itemsPanel).toHaveCSS('overflow', 'visible')
 
-    const speciesSelect = packagesPanel.getByRole('combobox', {
-      name: 'Application species',
+    const speciesSelect = itemsPanel.getByRole('combobox', {
+      name: 'Species list',
     })
     await expect(speciesSelect).toBeEnabled({ timeout: 30_000 })
     await expect(speciesSelect).not.toHaveValue('')
@@ -2402,14 +2408,14 @@ test.describe('TEST IDIR admin regression', () => {
       'application species should prefill the first available code',
     ).not.toBe('')
 
-    const addSpeciesButton = packagesPanel.getByRole('button', {
+    const addSpeciesButton = itemsPanel.getByRole('button', {
       name: 'Add application species',
       exact: true,
     })
     await expect(addSpeciesButton).toBeEnabled()
     await addSpeciesButton.click()
 
-    const selectedSpeciesList = packagesPanel.getByRole('list', {
+    const selectedSpeciesList = itemsPanel.getByRole('list', {
       name: 'Selected application species',
     })
     const selectedSpeciesItem = selectedSpeciesList.getByRole('listitem').filter({
@@ -2420,7 +2426,7 @@ test.describe('TEST IDIR admin regression', () => {
       exact: true,
     })
     await expect(removeSpeciesButton).toBeVisible()
-    await expect(packagesPanel.getByRole('button', { name: 'Remove', exact: true })).toHaveCount(0)
+    await expect(itemsPanel.getByRole('button', { name: 'Remove', exact: true })).toHaveCount(0)
 
     const [addSpeciesBox, selectedSpeciesBox] = await Promise.all([
       addSpeciesButton.boundingBox(),

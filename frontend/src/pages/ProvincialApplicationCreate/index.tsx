@@ -25,10 +25,7 @@ import ApplicationAccuracyConfirmation, {
   APPLICATION_ACCURACY_ACKNOWLEDGEMENT,
 } from '@/components/ApplicationAccuracyConfirmation'
 import UnsavedChangesGuard, { formValuesEqual } from '@/components/UnsavedChangesGuard'
-import {
-  calculateApplicationTermDays,
-  nonNegativeWholeNumberFieldError,
-} from '@/pages/shared/application-term-utils'
+import { nonNegativeWholeNumberFieldError } from '@/pages/shared/application-term-utils'
 import {
   averageLogVolumeFieldError,
   clientLocationLabel,
@@ -44,6 +41,7 @@ import {
 import {
   atMostTwoDecimalFieldError,
   firstValidationError,
+  greaterThanFieldError,
   getVisibleFieldError,
   isoDateFieldError,
   maxNumericValueFieldError,
@@ -92,8 +90,6 @@ type ProvincialApplicationCreateForm = {
   region: string
   applicationDate: string
   applicationTermDays: string
-  applicationTermMonths: string
-  applicationTermYears: string
   receivedDate: string
   exportScheduleId: string
   listingDate: string
@@ -112,42 +108,64 @@ type CreatedApplicationNavigation = {
   applicationNumber: string
 }
 
-const APPLICATION_CREATE_TAB_INDEX = {
-  summary: 0,
-  clients: 1,
-  packagesAndScales: 2,
-  permits: 3,
-  offers: 4,
-  documents: 5,
-  remarks: 6,
-} as const
+type ApplicationCreateTab =
+  | 'owner'
+  | 'agent'
+  | 'application'
+  | 'items'
+  | 'documents'
+  | 'remarks'
+  | 'offers'
+  | 'review'
+
+const APPLICATION_CREATE_TABS: ApplicationCreateTab[] = [
+  'owner',
+  'agent',
+  'application',
+  'items',
+  'documents',
+  'remarks',
+  'offers',
+  'review',
+]
+
+const APPLICATION_CREATE_TAB_LABELS: Record<ApplicationCreateTab, string> = {
+  owner: 'Owner',
+  agent: 'Agent',
+  application: 'Application',
+  items: 'Items',
+  documents: 'Documents',
+  remarks: 'Remarks',
+  offers: 'Offers',
+  review: 'Review',
+}
 
 const productTypeSupportsPackages = (productTypeCode: string): boolean =>
   ['H', 'T'].includes(productTypeCode.trim().toUpperCase())
 
-const APPLICATION_CREATE_FIELD_TAB: Partial<Record<ProvincialApplicationCreateField, number>> = {
-  ownerClientNumber: APPLICATION_CREATE_TAB_INDEX.clients,
-  ownerClientLocationCode: APPLICATION_CREATE_TAB_INDEX.clients,
-  ownerContactName: APPLICATION_CREATE_TAB_INDEX.clients,
-  agentClientNumber: APPLICATION_CREATE_TAB_INDEX.clients,
-  agentClientLocationCode: APPLICATION_CREATE_TAB_INDEX.clients,
-  agentContactName: APPLICATION_CREATE_TAB_INDEX.clients,
-  applicantTypeCode: APPLICATION_CREATE_TAB_INDEX.clients,
-  productTypeCode: APPLICATION_CREATE_TAB_INDEX.summary,
-  ageClass: APPLICATION_CREATE_TAB_INDEX.summary,
-  exemptionType: APPLICATION_CREATE_TAB_INDEX.summary,
-  region: APPLICATION_CREATE_TAB_INDEX.summary,
-  applicationDate: APPLICATION_CREATE_TAB_INDEX.summary,
-  applicationTermDays: APPLICATION_CREATE_TAB_INDEX.summary,
-  applicationTermMonths: APPLICATION_CREATE_TAB_INDEX.summary,
-  applicationTermYears: APPLICATION_CREATE_TAB_INDEX.summary,
-  receivedDate: APPLICATION_CREATE_TAB_INDEX.summary,
-  productLocation: APPLICATION_CREATE_TAB_INDEX.summary,
-  applicationVolume: APPLICATION_CREATE_TAB_INDEX.summary,
-  averageLogVolume: APPLICATION_CREATE_TAB_INDEX.summary,
-  speciesCodes: APPLICATION_CREATE_TAB_INDEX.packagesAndScales,
-  endUseCode: APPLICATION_CREATE_TAB_INDEX.packagesAndScales,
-  comments: APPLICATION_CREATE_TAB_INDEX.remarks,
+const APPLICATION_CREATE_FIELD_TAB: Partial<
+  Record<ProvincialApplicationCreateField, ApplicationCreateTab>
+> = {
+  ownerClientNumber: 'owner',
+  ownerClientLocationCode: 'owner',
+  ownerContactName: 'owner',
+  applicantTypeCode: 'owner',
+  agentClientNumber: 'agent',
+  agentClientLocationCode: 'agent',
+  agentContactName: 'agent',
+  productTypeCode: 'application',
+  exemptionType: 'application',
+  region: 'application',
+  applicationDate: 'application',
+  applicationTermDays: 'application',
+  receivedDate: 'application',
+  ageClass: 'items',
+  productLocation: 'items',
+  applicationVolume: 'items',
+  averageLogVolume: 'items',
+  speciesCodes: 'items',
+  endUseCode: 'items',
+  comments: 'remarks',
 }
 
 const INITIAL_FORM: ProvincialApplicationCreateForm = {
@@ -164,8 +182,6 @@ const INITIAL_FORM: ProvincialApplicationCreateForm = {
   region: '',
   applicationDate: '',
   applicationTermDays: '180',
-  applicationTermMonths: '',
-  applicationTermYears: '',
   receivedDate: '',
   exportScheduleId: '',
   listingDate: '',
@@ -220,8 +236,6 @@ const buildInitialFormFromQuery = (
       query.get('exemptionTerm') ??
       query.get('termDays') ??
       INITIAL_FORM.applicationTermDays,
-    applicationTermMonths: query.get('applicationTermMonths') ?? query.get('termMonths') ?? '',
-    applicationTermYears: query.get('applicationTermYears') ?? query.get('termYears') ?? '',
     receivedDate: query.get('receivedDate') ?? INITIAL_FORM.receivedDate,
     exportScheduleId: query.get('exportScheduleId') ?? query.get('legacyExportScheduleId') ?? '',
     listingDate: query.get('listingDate') ?? '',
@@ -327,6 +341,7 @@ const ProvincialApplicationCreatePage = () => {
   const [searchParams] = useSearchParams()
   const { capabilities, canPerform } = useAuth()
   const canChangeApplicantType = canPerform('/changeApplicantType')
+  const canReviewApplications = canPerform('/applicationsReview')
   const provincialSubmitterIdentityLocked = hasProvincialSubmitterRole(capabilities.roles)
   const authoritativeOwnerClientNumber = capabilities.forestClientNumber?.trim() ?? ''
   const authoritativeOrgUnitNo = capabilities.orgUnitNo?.trim() ?? ''
@@ -381,8 +396,19 @@ const ProvincialApplicationCreatePage = () => {
     TouchedFields<ProvincialApplicationCreateField>
   >({})
   const [showAllValidationErrors, setShowAllValidationErrors] = useState(false)
-  const [selectedApplicationTabIndex, setSelectedApplicationTabIndex] = useState<number>(
-    APPLICATION_CREATE_TAB_INDEX.summary,
+  const [selectedApplicationTab, setSelectedApplicationTab] =
+    useState<ApplicationCreateTab>('owner')
+  const hasAgentTab = isAgentApplicant(form.applicantTypeCode)
+  const visibleApplicationTabs = useMemo(
+    () =>
+      APPLICATION_CREATE_TABS.filter(
+        (tab) => (tab !== 'agent' || hasAgentTab) && (tab !== 'review' || canReviewApplications),
+      ),
+    [canReviewApplications, hasAgentTab],
+  )
+  const selectedApplicationTabIndex = Math.max(
+    0,
+    visibleApplicationTabs.indexOf(selectedApplicationTab),
   )
   const debouncedOwnerClientNumber = useDebouncedValue(form.ownerClientNumber)
   const debouncedAgentClientNumber = useDebouncedValue(form.agentClientNumber)
@@ -956,16 +982,6 @@ const ProvincialApplicationCreatePage = () => {
     }
   }, [form.region, form.speciesCodes])
 
-  const calculatedApplicationTermDays = useMemo(
-    () =>
-      calculateApplicationTermDays(
-        form.applicationTermDays,
-        form.applicationTermMonths,
-        form.applicationTermYears,
-      ),
-    [form.applicationTermDays, form.applicationTermMonths, form.applicationTermYears],
-  )
-
   const fieldErrors = useMemo<FieldErrors<ProvincialApplicationCreateField>>(
     () => ({
       ownerClientNumber:
@@ -1048,15 +1064,11 @@ const ProvincialApplicationCreatePage = () => {
         () => isoDateFieldError(form.applicationDate),
       ),
       applicationTermDays: firstValidationError(
-        () => requiredFieldError(calculatedApplicationTermDays, 'Application term'),
+        () => requiredFieldError(form.applicationTermDays, 'Application term days'),
         () => nonNegativeWholeNumberFieldError(form.applicationTermDays, 'Application term days'),
+        () => greaterThanFieldError(form.applicationTermDays, 'Application term days', 0),
+        () => maxNumericValueFieldError(form.applicationTermDays, 99999, 'Application term days'),
       ),
-      applicationTermMonths:
-        nonNegativeWholeNumberFieldError(form.applicationTermMonths, 'Application term months') ??
-        undefined,
-      applicationTermYears:
-        nonNegativeWholeNumberFieldError(form.applicationTermYears, 'Application term years') ??
-        undefined,
       receivedDate: firstValidationError(
         () => requiredFieldError(form.receivedDate, 'Received date'),
         () => isoDateFieldError(form.receivedDate),
@@ -1081,7 +1093,6 @@ const ProvincialApplicationCreatePage = () => {
     }),
     [
       applicationSpeciesOptions.length,
-      calculatedApplicationTermDays,
       currentSchedules,
       exemptionReasons,
       form,
@@ -1232,9 +1243,7 @@ const ProvincialApplicationCreatePage = () => {
     }
     if (hasValidationError) {
       if (firstInvalidField) {
-        setSelectedApplicationTabIndex(
-          APPLICATION_CREATE_FIELD_TAB[firstInvalidField] ?? APPLICATION_CREATE_TAB_INDEX.summary,
-        )
+        setSelectedApplicationTab(APPLICATION_CREATE_FIELD_TAB[firstInvalidField] ?? 'application')
       }
       setShowAllValidationErrors(true)
       setStatus({
@@ -1251,7 +1260,7 @@ const ProvincialApplicationCreatePage = () => {
     try {
       const result = await submitProvincialApplicationCreate({
         ...form,
-        applicationTermDays: calculatedApplicationTermDays,
+        applicationTermDays: form.applicationTermDays.trim(),
       })
       if (result.success) {
         draftBaselineRef.current = form
@@ -1388,264 +1397,36 @@ const ProvincialApplicationCreatePage = () => {
         )}
         <Tabs
           selectedIndex={selectedApplicationTabIndex}
-          onChange={({ selectedIndex }) => setSelectedApplicationTabIndex(selectedIndex)}
+          onChange={({ selectedIndex }) => {
+            const selectedTab = visibleApplicationTabs[selectedIndex]
+            if (selectedTab) {
+              setSelectedApplicationTab(selectedTab)
+            }
+          }}
         >
           <TabList
             aria-label="Application create sections"
             contained
             className="application-tabs__list application-detail-tab-list"
           >
-            <Tab>Summary</Tab>
-            <Tab>Clients</Tab>
-            <Tab>Packages / Scales</Tab>
-            <Tab>Permits</Tab>
-            <Tab>Offers</Tab>
-            <Tab>Documents</Tab>
-            <Tab>Remarks</Tab>
+            {visibleApplicationTabs.map((tab) => (
+              <Tab key={tab}>{APPLICATION_CREATE_TAB_LABELS[tab]}</Tab>
+            ))}
           </TabList>
           <TabPanels>
             <TabPanel className="application-detail-tab-panel">
               <Tile
                 className="create-form-tile application-detail-section"
                 role="region"
-                aria-labelledby="application-create-summary-heading"
+                aria-labelledby="application-create-owner-heading"
               >
-                <h2 id="application-create-summary-heading" className="detail-tile-title">
-                  Application summary
-                </h2>
-                <div className="legacy-search-grid create-form-grid">
-                  <SearchableSelect
-                    id="productTypeCode"
-                    labelText="Product type"
-                    value={form.productTypeCode}
-                    invalid={!!fieldError('productTypeCode')}
-                    invalidText={fieldError('productTypeCode')}
-                    placeholder="Select product type"
-                    options={productTypes}
-                    disabled={!optionsLoaded || optionsUnavailable}
-                    onBlur={() => markFieldTouched('productTypeCode')}
-                    onChange={(value) => {
-                      markFormEdited()
-                      setForm((current) => {
-                        if (current.productTypeCode === value) {
-                          return current
-                        }
-                        return {
-                          ...current,
-                          productTypeCode: value,
-                          ageClass: productTypeRequiresGrowthType(value) ? current.ageClass : '',
-                          speciesCodes: [],
-                          endUseCode: '',
-                        }
-                      })
-                    }}
-                  />
-                  {productTypeRequiresGrowthType(form.productTypeCode) && (
-                    <SearchableSelect
-                      id="ageClass"
-                      labelText="Growth type"
-                      value={form.ageClass}
-                      disabled={!optionsLoaded || optionsUnavailable}
-                      invalid={!!fieldError('ageClass')}
-                      invalidText={fieldError('ageClass')}
-                      placeholder="Select growth type"
-                      options={growthTypes}
-                      onBlur={() => markFieldTouched('ageClass')}
-                      onChange={(value) => {
-                        markFormEdited()
-                        setForm((current) => ({ ...current, ageClass: value }))
-                      }}
-                    />
-                  )}
-                  <SearchableSelect
-                    id="exemptionType"
-                    labelText="Exemption reason"
-                    value={form.exemptionType}
-                    invalid={!!fieldError('exemptionType')}
-                    invalidText={fieldError('exemptionType')}
-                    placeholder="Select exemption reason"
-                    options={exemptionReasons}
-                    disabled={!optionsLoaded || optionsUnavailable}
-                    onBlur={() => markFieldTouched('exemptionType')}
-                    onChange={(value) => {
-                      markFormEdited()
-                      setForm((current) => ({ ...current, exemptionType: value }))
-                    }}
-                  />
-                  <SearchableSelect
-                    id="region"
-                    labelText="Region"
-                    value={form.region}
-                    invalid={!!fieldError('region')}
-                    invalidText={fieldError('region')}
-                    placeholder="Select region"
-                    options={regions}
-                    disabled={!optionsLoaded || optionsUnavailable}
-                    onBlur={() => markFieldTouched('region')}
-                    onChange={(value) => {
-                      markFormEdited()
-                      setForm((current) => {
-                        if (current.region === value) {
-                          return current
-                        }
-                        return {
-                          ...current,
-                          region: value,
-                          speciesCodes: [],
-                          endUseCode: '',
-                        }
-                      })
-                    }}
-                  />
-                  <IsoDatePicker
-                    id="applicationDate"
-                    labelText="Application date (YYYY-MM-DD)"
-                    value={form.applicationDate}
-                    invalid={!!fieldError('applicationDate')}
-                    invalidText={fieldError('applicationDate')}
-                    onBlur={() => markFieldTouched('applicationDate')}
-                    onChange={(value) => {
-                      markFormEdited()
-                      setForm((current) => ({ ...current, applicationDate: value }))
-                    }}
-                  />
-                  <TextInput
-                    id="applicationTermDays"
-                    labelText="Application term days"
-                    value={form.applicationTermDays}
-                    invalid={!!fieldError('applicationTermDays')}
-                    invalidText={fieldError('applicationTermDays')}
-                    onBlur={() => markFieldTouched('applicationTermDays')}
-                    onChange={(event) => {
-                      markFormEdited()
-                      setForm((current) => ({
-                        ...current,
-                        applicationTermDays: event.target.value,
-                      }))
-                    }}
-                  />
-                  <TextInput
-                    id="applicationTermMonths"
-                    labelText="Application term months"
-                    value={form.applicationTermMonths}
-                    invalid={!!fieldError('applicationTermMonths')}
-                    invalidText={fieldError('applicationTermMonths')}
-                    onBlur={() => markFieldTouched('applicationTermMonths')}
-                    onChange={(event) => {
-                      markFormEdited()
-                      setForm((current) => ({
-                        ...current,
-                        applicationTermMonths: event.target.value,
-                      }))
-                    }}
-                  />
-                  <TextInput
-                    id="applicationTermYears"
-                    labelText="Application term years"
-                    value={form.applicationTermYears}
-                    invalid={!!fieldError('applicationTermYears')}
-                    invalidText={fieldError('applicationTermYears')}
-                    onBlur={() => markFieldTouched('applicationTermYears')}
-                    onChange={(event) => {
-                      markFormEdited()
-                      setForm((current) => ({
-                        ...current,
-                        applicationTermYears: event.target.value,
-                      }))
-                    }}
-                  />
-                  <IsoDatePicker
-                    id="receivedDate"
-                    labelText="Received date (YYYY-MM-DD)"
-                    value={form.receivedDate}
-                    invalid={!!fieldError('receivedDate')}
-                    invalidText={fieldError('receivedDate')}
-                    onBlur={() => markFieldTouched('receivedDate')}
-                    onChange={(value) => {
-                      markFormEdited()
-                      setForm((current) => ({ ...current, receivedDate: value }))
-                    }}
-                  />
-                  <SearchableSelect
-                    id="exportScheduleId"
-                    labelText="Listing date"
-                    value={form.exportScheduleId}
-                    options={currentSchedules}
-                    disabled={!optionsLoaded || optionsUnavailable}
-                    placeholder="Search listing date"
-                    onBlur={() => markFieldTouched('exportScheduleId')}
-                    onChange={(value) => {
-                      markFormEdited()
-                      setForm((current) => ({
-                        ...current,
-                        exportScheduleId: value,
-                        listingDate: value
-                          ? (currentSchedules.find((option) => option.value === value)?.label ?? '')
-                          : '',
-                      }))
-                    }}
-                  />
-                  {productTypeRequiresLogDetails(form.productTypeCode) && (
-                    <TextArea
-                      id="productLocation"
-                      labelText="Location of logs"
-                      maxCount={250}
-                      value={form.productLocation}
-                      invalid={!!fieldError('productLocation')}
-                      invalidText={fieldError('productLocation')}
-                      onBlur={() => markFieldTouched('productLocation')}
-                      onChange={(event) => {
-                        markFormEdited()
-                        setForm((current) => ({ ...current, productLocation: event.target.value }))
-                      }}
-                    />
-                  )}
-                  <TextInput
-                    id="applicationVolume"
-                    labelText="Application volume"
-                    value={form.applicationVolume}
-                    invalid={!!fieldError('applicationVolume')}
-                    invalidText={fieldError('applicationVolume')}
-                    onBlur={() => markFieldTouched('applicationVolume')}
-                    onChange={(event) => {
-                      markFormEdited()
-                      setForm((current) => ({ ...current, applicationVolume: event.target.value }))
-                    }}
-                  />
-                  {productTypeRequiresLogDetails(form.productTypeCode) && (
-                    <TextInput
-                      id="averageLogVolume"
-                      labelText="Average log volume"
-                      type="number"
-                      min={0}
-                      max={99.9}
-                      step="0.1"
-                      value={form.averageLogVolume}
-                      invalid={!!fieldError('averageLogVolume')}
-                      invalidText={fieldError('averageLogVolume')}
-                      onBlur={() => markFieldTouched('averageLogVolume')}
-                      onChange={(event) => {
-                        markFormEdited()
-                        setForm((current) => ({ ...current, averageLogVolume: event.target.value }))
-                      }}
-                    />
-                  )}
-                </div>
-              </Tile>
-            </TabPanel>
-            <TabPanel className="application-detail-tab-panel">
-              <Tile
-                className="create-form-tile application-detail-section"
-                role="region"
-                aria-labelledby="application-create-clients-heading"
-              >
-                <h2 id="application-create-clients-heading" className="detail-tile-title">
-                  Clients
+                <h2 id="application-create-owner-heading" className="detail-tile-title">
+                  Owner
                 </h2>
                 <div className="legacy-search-grid create-form-grid">
                   <TextInput
                     id="ownerClientNumber"
-                    labelText="Owner client number"
+                    labelText="Client number"
                     value={form.ownerClientNumber}
                     readOnly={provincialSubmitterIdentityLocked}
                     helperText={
@@ -1664,72 +1445,6 @@ const ProvincialApplicationCreatePage = () => {
                       }))
                     }}
                   />
-                  <SearchableSelect
-                    id="ownerClientLocationCode"
-                    labelText="Owner client location"
-                    value={form.ownerClientLocationCode}
-                    disabled={!form.ownerClientNumber.trim() || isLoadingOwnerClientLocations}
-                    invalid={!!fieldError('ownerClientLocationCode')}
-                    invalidText={fieldError('ownerClientLocationCode')}
-                    placeholder={ownerClientLocationPlaceholder}
-                    options={ownerClientLocations
-                      .filter(isSelectableClientLocation)
-                      .map((location) => ({
-                        value: location.locationCode,
-                        label: clientLocationLabel(location.locationCode, location.locationName),
-                      }))}
-                    onBlur={() => markFieldTouched('ownerClientLocationCode')}
-                    onChange={(value) => {
-                      markFormEdited()
-                      setForm((current) => ({
-                        ...current,
-                        ownerClientLocationCode: value,
-                      }))
-                    }}
-                  />
-                  {hasSelectableOwnerClientContacts || isLoadingOwnerClientContacts ? (
-                    <SearchableSelect
-                      id="ownerContactName"
-                      labelText="Owner name"
-                      value={form.ownerContactName}
-                      disabled={
-                        !form.ownerClientLocationCode.trim() || isLoadingOwnerClientContacts
-                      }
-                      invalid={!!fieldError('ownerContactName')}
-                      invalidText={fieldError('ownerContactName')}
-                      placeholder={ownerContactPlaceholder}
-                      allowCustomValue
-                      options={ownerClientContacts
-                        .filter(isSelectableClientContact)
-                        .map((contact) => ({
-                          value: contact.contactName,
-                          label: contact.contactName,
-                        }))}
-                      onBlur={() => markFieldTouched('ownerContactName')}
-                      onChange={(value) => {
-                        markFormEdited()
-                        setForm((current) => ({ ...current, ownerContactName: value }))
-                      }}
-                    />
-                  ) : (
-                    <TextInput
-                      id="ownerContactName"
-                      labelText="Owner name"
-                      value={form.ownerContactName}
-                      disabled={!form.ownerClientLocationCode.trim()}
-                      placeholder="Enter owner contact name"
-                      invalid={!!fieldError('ownerContactName')}
-                      invalidText={fieldError('ownerContactName')}
-                      onBlur={() => markFieldTouched('ownerContactName')}
-                      onChange={(event) => {
-                        markFormEdited()
-                        setForm((current) => ({
-                          ...current,
-                          ownerContactName: event.target.value,
-                        }))
-                      }}
-                    />
-                  )}
                   {canChangeApplicantType ? (
                     <SearchableSelect
                       id="applicantTypeCode"
@@ -1769,101 +1484,327 @@ const ProvincialApplicationCreatePage = () => {
                       readOnly
                     />
                   )}
+                  <SearchableSelect
+                    id="ownerClientLocationCode"
+                    labelText="Client location"
+                    value={form.ownerClientLocationCode}
+                    disabled={!form.ownerClientNumber.trim() || isLoadingOwnerClientLocations}
+                    invalid={!!fieldError('ownerClientLocationCode')}
+                    invalidText={fieldError('ownerClientLocationCode')}
+                    placeholder={ownerClientLocationPlaceholder}
+                    options={ownerClientLocations
+                      .filter(isSelectableClientLocation)
+                      .map((location) => ({
+                        value: location.locationCode,
+                        label: clientLocationLabel(location.locationCode, location.locationName),
+                      }))}
+                    onBlur={() => markFieldTouched('ownerClientLocationCode')}
+                    onChange={(value) => {
+                      markFormEdited()
+                      setForm((current) => ({
+                        ...current,
+                        ownerClientLocationCode: value,
+                      }))
+                    }}
+                  />
+                  {hasSelectableOwnerClientContacts || isLoadingOwnerClientContacts ? (
+                    <SearchableSelect
+                      id="ownerContactName"
+                      labelText="Contact name"
+                      value={form.ownerContactName}
+                      disabled={
+                        !form.ownerClientLocationCode.trim() || isLoadingOwnerClientContacts
+                      }
+                      invalid={!!fieldError('ownerContactName')}
+                      invalidText={fieldError('ownerContactName')}
+                      placeholder={ownerContactPlaceholder}
+                      allowCustomValue
+                      options={ownerClientContacts
+                        .filter(isSelectableClientContact)
+                        .map((contact) => ({
+                          value: contact.contactName,
+                          label: contact.contactName,
+                        }))}
+                      onBlur={() => markFieldTouched('ownerContactName')}
+                      onChange={(value) => {
+                        markFormEdited()
+                        setForm((current) => ({ ...current, ownerContactName: value }))
+                      }}
+                    />
+                  ) : (
+                    <TextInput
+                      id="ownerContactName"
+                      labelText="Contact name"
+                      value={form.ownerContactName}
+                      disabled={!form.ownerClientLocationCode.trim()}
+                      placeholder="Enter owner contact name"
+                      invalid={!!fieldError('ownerContactName')}
+                      invalidText={fieldError('ownerContactName')}
+                      onBlur={() => markFieldTouched('ownerContactName')}
+                      onChange={(event) => {
+                        markFormEdited()
+                        setForm((current) => ({
+                          ...current,
+                          ownerContactName: event.target.value,
+                        }))
+                      }}
+                    />
+                  )}
                   <ApplicationCreateClientSummary
                     title="Owner client details"
                     clientData={ownerClientData}
                   />
-                  {isAgentApplicant(form.applicantTypeCode) && (
-                    <>
-                      <TextInput
-                        id="agentClientNumber"
-                        labelText="Agent client number"
-                        value={form.agentClientNumber}
-                        invalid={!!fieldError('agentClientNumber')}
-                        invalidText={fieldError('agentClientNumber')}
-                        onBlur={() => markFieldTouched('agentClientNumber')}
-                        onChange={(event) => {
-                          markFormEdited()
-                          setForm((current) => ({
-                            ...current,
-                            agentClientNumber: event.target.value,
-                          }))
-                        }}
-                      />
-                      <SearchableSelect
-                        id="agentClientLocationCode"
-                        labelText="Agent client location"
-                        value={form.agentClientLocationCode}
-                        disabled={!form.agentClientNumber.trim() || isLoadingAgentClientLocations}
-                        invalid={!!fieldError('agentClientLocationCode')}
-                        invalidText={fieldError('agentClientLocationCode')}
-                        placeholder={agentClientLocationPlaceholder}
-                        options={agentClientLocations
-                          .filter(isSelectableClientLocation)
-                          .map((location) => ({
-                            value: location.locationCode,
-                            label: clientLocationLabel(
-                              location.locationCode,
-                              location.locationName,
-                            ),
-                          }))}
-                        onBlur={() => markFieldTouched('agentClientLocationCode')}
-                        onChange={(value) => {
-                          markFormEdited()
-                          setForm((current) => ({
-                            ...current,
-                            agentClientLocationCode: value,
-                          }))
-                        }}
-                      />
-                      {hasSelectableAgentClientContacts || isLoadingAgentClientContacts ? (
-                        <SearchableSelect
-                          id="agentContactName"
-                          labelText="Agent contact name"
-                          value={form.agentContactName}
-                          disabled={
-                            !form.agentClientLocationCode.trim() || isLoadingAgentClientContacts
-                          }
-                          invalid={!!fieldError('agentContactName')}
-                          invalidText={fieldError('agentContactName')}
-                          placeholder={agentContactPlaceholder}
-                          options={agentClientContacts
-                            .filter(isSelectableClientContact)
-                            .map((contact) => ({
-                              value: contact.contactName,
-                              label: contact.contactName,
-                            }))}
-                          onBlur={() => markFieldTouched('agentContactName')}
-                          onChange={(value) => {
-                            markFormEdited()
-                            setForm((current) => ({ ...current, agentContactName: value }))
-                          }}
-                        />
-                      ) : (
+                </div>
+              </Tile>
+            </TabPanel>
+            {hasAgentTab
+              ? [
+                  <TabPanel key="agent" className="application-detail-tab-panel">
+                    <Tile
+                      className="create-form-tile application-detail-section"
+                      role="region"
+                      aria-labelledby="application-create-agent-heading"
+                    >
+                      <h2 id="application-create-agent-heading" className="detail-tile-title">
+                        Agent
+                      </h2>
+                      <div className="legacy-search-grid create-form-grid">
                         <TextInput
-                          id="agentContactName"
-                          labelText="Agent contact name"
-                          value={form.agentContactName}
-                          disabled={!form.agentClientLocationCode.trim()}
-                          placeholder="Enter agent contact name"
-                          invalid={!!fieldError('agentContactName')}
-                          invalidText={fieldError('agentContactName')}
-                          onBlur={() => markFieldTouched('agentContactName')}
+                          id="agentClientNumber"
+                          labelText="Agent number"
+                          value={form.agentClientNumber}
+                          invalid={!!fieldError('agentClientNumber')}
+                          invalidText={fieldError('agentClientNumber')}
+                          onBlur={() => markFieldTouched('agentClientNumber')}
                           onChange={(event) => {
                             markFormEdited()
                             setForm((current) => ({
                               ...current,
-                              agentContactName: event.target.value,
+                              agentClientNumber: event.target.value,
                             }))
                           }}
                         />
-                      )}
-                      <ApplicationCreateClientSummary
-                        title="Agent client details"
-                        clientData={agentClientData}
-                      />
-                    </>
-                  )}
+                        <TextInput
+                          id="agentApplicantType"
+                          labelText="Applicant type"
+                          value="Agent"
+                          readOnly
+                        />
+                        <SearchableSelect
+                          id="agentClientLocationCode"
+                          labelText="Contact location"
+                          value={form.agentClientLocationCode}
+                          disabled={!form.agentClientNumber.trim() || isLoadingAgentClientLocations}
+                          invalid={!!fieldError('agentClientLocationCode')}
+                          invalidText={fieldError('agentClientLocationCode')}
+                          placeholder={agentClientLocationPlaceholder}
+                          options={agentClientLocations
+                            .filter(isSelectableClientLocation)
+                            .map((location) => ({
+                              value: location.locationCode,
+                              label: clientLocationLabel(
+                                location.locationCode,
+                                location.locationName,
+                              ),
+                            }))}
+                          onBlur={() => markFieldTouched('agentClientLocationCode')}
+                          onChange={(value) => {
+                            markFormEdited()
+                            setForm((current) => ({
+                              ...current,
+                              agentClientLocationCode: value,
+                            }))
+                          }}
+                        />
+                        {hasSelectableAgentClientContacts || isLoadingAgentClientContacts ? (
+                          <SearchableSelect
+                            id="agentContactName"
+                            labelText="Contact name"
+                            value={form.agentContactName}
+                            disabled={
+                              !form.agentClientLocationCode.trim() || isLoadingAgentClientContacts
+                            }
+                            invalid={!!fieldError('agentContactName')}
+                            invalidText={fieldError('agentContactName')}
+                            placeholder={agentContactPlaceholder}
+                            options={agentClientContacts
+                              .filter(isSelectableClientContact)
+                              .map((contact) => ({
+                                value: contact.contactName,
+                                label: contact.contactName,
+                              }))}
+                            onBlur={() => markFieldTouched('agentContactName')}
+                            onChange={(value) => {
+                              markFormEdited()
+                              setForm((current) => ({ ...current, agentContactName: value }))
+                            }}
+                          />
+                        ) : (
+                          <TextInput
+                            id="agentContactName"
+                            labelText="Contact name"
+                            value={form.agentContactName}
+                            disabled={!form.agentClientLocationCode.trim()}
+                            placeholder="Enter agent contact name"
+                            invalid={!!fieldError('agentContactName')}
+                            invalidText={fieldError('agentContactName')}
+                            onBlur={() => markFieldTouched('agentContactName')}
+                            onChange={(event) => {
+                              markFormEdited()
+                              setForm((current) => ({
+                                ...current,
+                                agentContactName: event.target.value,
+                              }))
+                            }}
+                          />
+                        )}
+                        <ApplicationCreateClientSummary
+                          title="Agent client details"
+                          clientData={agentClientData}
+                        />
+                      </div>
+                    </Tile>
+                  </TabPanel>,
+                ]
+              : []}
+            <TabPanel className="application-detail-tab-panel">
+              <Tile
+                className="create-form-tile application-detail-section"
+                role="region"
+                aria-labelledby="application-create-application-heading"
+              >
+                <h2 id="application-create-application-heading" className="detail-tile-title">
+                  Application
+                </h2>
+                <div className="legacy-search-grid create-form-grid">
+                  <SearchableSelect
+                    id="region"
+                    labelText="Region"
+                    value={form.region}
+                    invalid={!!fieldError('region')}
+                    invalidText={fieldError('region')}
+                    placeholder="Select region"
+                    options={regions}
+                    disabled={!optionsLoaded || optionsUnavailable}
+                    onBlur={() => markFieldTouched('region')}
+                    onChange={(value) => {
+                      markFormEdited()
+                      setForm((current) => {
+                        if (current.region === value) {
+                          return current
+                        }
+                        return {
+                          ...current,
+                          region: value,
+                          speciesCodes: [],
+                          endUseCode: '',
+                        }
+                      })
+                    }}
+                  />
+                  <SearchableSelect
+                    id="productTypeCode"
+                    labelText="Product type"
+                    value={form.productTypeCode}
+                    invalid={!!fieldError('productTypeCode')}
+                    invalidText={fieldError('productTypeCode')}
+                    placeholder="Select product type"
+                    options={productTypes}
+                    disabled={!optionsLoaded || optionsUnavailable}
+                    onBlur={() => markFieldTouched('productTypeCode')}
+                    onChange={(value) => {
+                      markFormEdited()
+                      setForm((current) => {
+                        if (current.productTypeCode === value) {
+                          return current
+                        }
+                        return {
+                          ...current,
+                          productTypeCode: value,
+                          ageClass: productTypeRequiresGrowthType(value) ? current.ageClass : '',
+                          speciesCodes: [],
+                          endUseCode: '',
+                        }
+                      })
+                    }}
+                  />
+                  <SearchableSelect
+                    id="exemptionType"
+                    labelText="Exemption reason"
+                    value={form.exemptionType}
+                    invalid={!!fieldError('exemptionType')}
+                    invalidText={fieldError('exemptionType')}
+                    placeholder="Select exemption reason"
+                    options={exemptionReasons}
+                    disabled={!optionsLoaded || optionsUnavailable}
+                    onBlur={() => markFieldTouched('exemptionType')}
+                    onChange={(value) => {
+                      markFormEdited()
+                      setForm((current) => ({ ...current, exemptionType: value }))
+                    }}
+                  />
+                  <IsoDatePicker
+                    id="applicationDate"
+                    labelText="Application date (YYYY-MM-DD)"
+                    value={form.applicationDate}
+                    invalid={!!fieldError('applicationDate')}
+                    invalidText={fieldError('applicationDate')}
+                    onBlur={() => markFieldTouched('applicationDate')}
+                    onChange={(value) => {
+                      markFormEdited()
+                      setForm((current) => ({ ...current, applicationDate: value }))
+                    }}
+                  />
+                  <IsoDatePicker
+                    id="receivedDate"
+                    labelText="Date received (YYYY-MM-DD)"
+                    value={form.receivedDate}
+                    invalid={!!fieldError('receivedDate')}
+                    invalidText={fieldError('receivedDate')}
+                    onBlur={() => markFieldTouched('receivedDate')}
+                    onChange={(value) => {
+                      markFormEdited()
+                      setForm((current) => ({ ...current, receivedDate: value }))
+                    }}
+                  />
+                  <SearchableSelect
+                    id="exportScheduleId"
+                    labelText="List date"
+                    value={form.exportScheduleId}
+                    options={currentSchedules}
+                    disabled={!optionsLoaded || optionsUnavailable}
+                    placeholder="Search list date"
+                    onBlur={() => markFieldTouched('exportScheduleId')}
+                    onChange={(value) => {
+                      markFormEdited()
+                      setForm((current) => ({
+                        ...current,
+                        exportScheduleId: value,
+                        listingDate: value
+                          ? (currentSchedules.find((option) => option.value === value)?.label ?? '')
+                          : '',
+                      }))
+                    }}
+                  />
+                  <TextInput
+                    id="applicationTermDays"
+                    labelText="Application term (days)"
+                    type="number"
+                    min={1}
+                    max={99999}
+                    step={1}
+                    value={form.applicationTermDays}
+                    invalid={!!fieldError('applicationTermDays')}
+                    invalidText={fieldError('applicationTermDays')}
+                    onBlur={() => markFieldTouched('applicationTermDays')}
+                    onChange={(event) => {
+                      markFormEdited()
+                      setForm((current) => ({
+                        ...current,
+                        applicationTermDays: event.target.value,
+                      }))
+                    }}
+                  />
                 </div>
               </Tile>
             </TabPanel>
@@ -1872,16 +1813,87 @@ const ProvincialApplicationCreatePage = () => {
                 <Tile
                   className="create-form-tile application-detail-section"
                   role="region"
-                  aria-labelledby="application-create-packages-heading"
+                  aria-labelledby="application-create-items-heading"
                 >
-                  <h2 id="application-create-packages-heading" className="detail-tile-title">
-                    Packages / Scales
+                  <h2 id="application-create-items-heading" className="detail-tile-title">
+                    Items
                   </h2>
                   <div className="legacy-search-grid create-form-grid">
+                    {productTypeRequiresLogDetails(form.productTypeCode) && (
+                      <TextArea
+                        id="productLocation"
+                        labelText="Location of logs"
+                        maxCount={250}
+                        value={form.productLocation}
+                        invalid={!!fieldError('productLocation')}
+                        invalidText={fieldError('productLocation')}
+                        onBlur={() => markFieldTouched('productLocation')}
+                        onChange={(event) => {
+                          markFormEdited()
+                          setForm((current) => ({
+                            ...current,
+                            productLocation: event.target.value,
+                          }))
+                        }}
+                      />
+                    )}
+                    {productTypeRequiresGrowthType(form.productTypeCode) && (
+                      <SearchableSelect
+                        id="ageClass"
+                        labelText="Growth type"
+                        value={form.ageClass}
+                        disabled={!optionsLoaded || optionsUnavailable}
+                        invalid={!!fieldError('ageClass')}
+                        invalidText={fieldError('ageClass')}
+                        placeholder="Select growth type"
+                        options={growthTypes}
+                        onBlur={() => markFieldTouched('ageClass')}
+                        onChange={(value) => {
+                          markFormEdited()
+                          setForm((current) => ({ ...current, ageClass: value }))
+                        }}
+                      />
+                    )}
+                    {productTypeRequiresLogDetails(form.productTypeCode) && (
+                      <TextInput
+                        id="averageLogVolume"
+                        labelText="Average log volume"
+                        type="number"
+                        min={0}
+                        max={99.9}
+                        step="0.1"
+                        value={form.averageLogVolume}
+                        invalid={!!fieldError('averageLogVolume')}
+                        invalidText={fieldError('averageLogVolume')}
+                        onBlur={() => markFieldTouched('averageLogVolume')}
+                        onChange={(event) => {
+                          markFormEdited()
+                          setForm((current) => ({
+                            ...current,
+                            averageLogVolume: event.target.value,
+                          }))
+                        }}
+                      />
+                    )}
+                    <TextInput
+                      id="applicationVolume"
+                      labelText="Application volume"
+                      value={form.applicationVolume}
+                      invalid={!!fieldError('applicationVolume')}
+                      invalidText={fieldError('applicationVolume')}
+                      onBlur={() => markFieldTouched('applicationVolume')}
+                      onChange={(event) => {
+                        markFormEdited()
+                        setForm((current) => ({
+                          ...current,
+                          applicationVolume: event.target.value,
+                        }))
+                      }}
+                    />
                     <div className="legacy-field-stack">
                       <SearchableSelect
                         id="applicationSpeciesCandidate"
-                        labelText="Application species"
+                        labelText="Species list"
                         value={applicationSpeciesCandidate}
                         disabled={isApplicationSpeciesSelectDisabled}
                         invalid={!!fieldError('speciesCodes')}
@@ -1931,7 +1943,7 @@ const ProvincialApplicationCreatePage = () => {
                     </div>
                     <SearchableSelect
                       id="applicationEndUse"
-                      labelText="Application end use"
+                      labelText="End use"
                       value={form.endUseCode}
                       disabled={
                         form.speciesCodes.length === 0 ||
@@ -1997,34 +2009,6 @@ const ProvincialApplicationCreatePage = () => {
               <Tile
                 className="create-form-tile application-detail-section"
                 role="region"
-                aria-labelledby="application-create-permits-heading"
-              >
-                <h2 id="application-create-permits-heading" className="detail-tile-title">
-                  Permits
-                </h2>
-                <p className="detail-empty-message">
-                  Permits are available after the application is saved.
-                </p>
-              </Tile>
-            </TabPanel>
-            <TabPanel className="application-detail-tab-panel">
-              <Tile
-                className="create-form-tile application-detail-section"
-                role="region"
-                aria-labelledby="application-create-offers-heading"
-              >
-                <h2 id="application-create-offers-heading" className="detail-tile-title">
-                  Offers
-                </h2>
-                <p className="detail-empty-message">
-                  Offers are available after the application is saved.
-                </p>
-              </Tile>
-            </TabPanel>
-            <TabPanel className="application-detail-tab-panel">
-              <Tile
-                className="create-form-tile application-detail-section"
-                role="region"
                 aria-labelledby="application-create-documents-heading"
               >
                 <h2 id="application-create-documents-heading" className="detail-tile-title">
@@ -2061,6 +2045,50 @@ const ProvincialApplicationCreatePage = () => {
                 </div>
               </Tile>
             </TabPanel>
+            <TabPanel className="application-detail-tab-panel">
+              <Tile
+                className="create-form-tile application-detail-section"
+                role="region"
+                aria-labelledby="application-create-offers-heading"
+              >
+                <h2 id="application-create-offers-heading" className="detail-tile-title">
+                  Offers
+                </h2>
+                <p className="detail-empty-message">
+                  Offers are available after the application is saved.
+                </p>
+              </Tile>
+            </TabPanel>
+            {canReviewApplications && (
+              <TabPanel className="application-detail-tab-panel">
+                <Tile
+                  className="create-form-tile application-detail-section"
+                  role="region"
+                  aria-labelledby="application-create-review-heading"
+                >
+                  <h2 id="application-create-review-heading" className="detail-tile-title">
+                    Review
+                  </h2>
+                  <div className="legacy-search-grid create-form-grid">
+                    <TextInput
+                      id="applicationCreateReviewStatus"
+                      labelText="Application status"
+                      value="New"
+                      readOnly
+                    />
+                    <TextArea
+                      id="applicationCreateReviewRemarks"
+                      labelText="Remarks"
+                      value=""
+                      disabled
+                    />
+                  </div>
+                  <p className="detail-empty-message">
+                    Save the application before changing its review status or adding review remarks.
+                  </p>
+                </Tile>
+              </TabPanel>
+            )}
           </TabPanels>
         </Tabs>
         <div

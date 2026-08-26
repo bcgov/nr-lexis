@@ -10,6 +10,39 @@ import org.junit.jupiter.api.Test;
 class DeployedSmokeWorkflowTest {
 
   @Test
+  void deployedSmokeShouldRetryOnlyAFrontendRouteProbeFailureOnAFreshRunner()
+      throws IOException {
+    String workflow = read(".github/workflows/reusable-tests.yml");
+    int initialJob = workflow.indexOf("  e2e-tests:");
+    int retryJob = workflow.indexOf("  e2e-route-retry:");
+
+    assertThat(initialJob).isNotNegative();
+    assertThat(retryJob).isGreaterThan(initialJob);
+
+    String initialAttempt = workflow.substring(initialJob, retryJob);
+    String retryAttempt = workflow.substring(retryJob);
+
+    assertThat(initialAttempt)
+        .contains("route_probe_outcome: ${{ steps.route_probe.outcome }}")
+        .contains("id: route_probe\n        continue-on-error: true")
+        .contains(
+            "- name: Verify frontend proxy to backend\n"
+                + "        if: steps.route_probe.outcome == 'success'",
+            "- name: Run basic Playwright smoke suite\n"
+                + "        if: steps.route_probe.outcome == 'success'",
+            "if: (! cancelled()) && steps.route_probe.outcome == 'success'")
+        .containsOnlyOnce("continue-on-error: true");
+    assertThat(retryAttempt)
+        .contains("name: Basic E2E retry (chromium)")
+        .contains("needs: [e2e-tests]")
+        .contains("if: needs.e2e-tests.outputs.route_probe_outcome == 'failure'")
+        .contains("runs-on: ubuntu-24.04")
+        .contains("-route-retry")
+        .doesNotContain("name: Basic E2E fresh-runner retry")
+        .doesNotContain("continue-on-error: true");
+  }
+
+  @Test
   void deployedSmokeShouldVerifyTheBackendThroughTheFrontendProxy() throws IOException {
     String workflow = read(".github/workflows/reusable-tests.yml");
     int liveGate = workflow.indexOf("- name: Verify frontend proxy to backend");

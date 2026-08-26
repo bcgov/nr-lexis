@@ -130,6 +130,15 @@ const createCases = [
   },
 ] as const
 
+const getDraftField = async (testCase: (typeof createCases)[number]) => {
+  if (testCase.name === 'application') {
+    await userEvent.click(screen.getByRole('tab', { name: 'Items' }))
+    return screen.getByRole('textbox', { name: 'Location of logs' })
+  }
+
+  return screen.getByLabelText(testCase.fieldLabel)
+}
+
 const renderCreatePage = (
   createPath: string,
   targetPath: string,
@@ -232,7 +241,7 @@ describe('create page unsaved changes', () => {
       await waitFor(() =>
         expect(screen.getByRole('button', { name: testCase.saveButtonName })).toBeEnabled(),
       )
-      await userEvent.type(screen.getByLabelText(testCase.fieldLabel), 'Draft value')
+      await userEvent.type(await getDraftField(testCase), 'Draft value')
 
       const unloadEvent = new Event('beforeunload', { cancelable: true })
       window.dispatchEvent(unloadEvent)
@@ -254,7 +263,7 @@ describe('create page unsaved changes', () => {
       testCase.createPath,
     ])
     await screen.findByRole('heading', { level: 1, name: testCase.heading })
-    await userEvent.type(screen.getByLabelText(testCase.fieldLabel), 'Draft value')
+    await userEvent.type(await getDraftField(testCase), 'Draft value')
 
     await act(async () => {
       await router.navigate(-1)
@@ -269,8 +278,8 @@ describe('create page unsaved changes', () => {
     const testCase = createCases[0]
     const router = renderCreatePage(testCase.createPath, testCase.targetPath, testCase.element)
     await screen.findByRole('heading', { level: 1, name: testCase.heading })
-    await userEvent.click(screen.getByRole('tab', { name: 'Clients' }))
-    await userEvent.type(screen.getByLabelText('Owner client number'), '00011111')
+    await userEvent.click(screen.getByRole('tab', { name: 'Owner' }))
+    await userEvent.type(screen.getByRole('textbox', { name: 'Client number' }), '00011111')
     await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled())
 
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
