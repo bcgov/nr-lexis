@@ -109,7 +109,7 @@ jobs:
   # A fresh runner avoids the intermittent runner-to-Gold connection path.
   # Only a failed route probe reaches this job; proxy and Playwright failures remain terminal.
   e2e-route-retry:
-    name: Basic E2E fresh-runner retry (${{ matrix.project }})
+    name: Basic E2E retry (chromium)
     needs: [e2e-tests]
     if: needs.e2e-tests.outputs.route_probe_outcome == 'failure'
     concurrency:

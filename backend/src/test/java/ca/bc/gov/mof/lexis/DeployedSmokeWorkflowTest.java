@@ -33,10 +33,12 @@ class DeployedSmokeWorkflowTest {
             "if: (! cancelled()) && steps.route_probe.outcome == 'success'")
         .containsOnlyOnce("continue-on-error: true");
     assertThat(retryAttempt)
+        .contains("name: Basic E2E retry (chromium)")
         .contains("needs: [e2e-tests]")
         .contains("if: needs.e2e-tests.outputs.route_probe_outcome == 'failure'")
         .contains("runs-on: ubuntu-24.04")
         .contains("-route-retry")
+        .doesNotContain("name: Basic E2E fresh-runner retry")
         .doesNotContain("continue-on-error: true");
   }
 
