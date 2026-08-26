@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -254,6 +254,38 @@ describe('Provincial Permit Search Actions', () => {
       expect(mockedSearchProvincialPermits).toHaveBeenCalledWith(
         expect.objectContaining({
           filters: expect.objectContaining({ applicationNumber: '46053' }),
+        }),
+        expect.any(Object),
+      )
+    })
+  })
+
+  it('submits a permit status selected with the mouse', async () => {
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => false }))
+    mockedFetchProvincialPermitOptions.mockResolvedValueOnce({
+      permitStatuses: [
+        { value: 'ACT', label: 'Active' },
+        { value: 'CAN', label: 'Cancelled' },
+      ],
+      regions: [{ value: '11', label: 'Cariboo' }],
+    })
+
+    renderPage('/provincial/permit?region=11')
+    await screen.findByText('7001')
+    mockedSearchProvincialPermits.mockClear()
+
+    const statusCombobox = await screen.findByRole('combobox', { name: 'Permit status' })
+    await userEvent.click(statusCombobox)
+    const listboxId = statusCombobox.getAttribute('aria-controls')
+    const listbox = listboxId ? document.getElementById(listboxId) : null
+    expect(listbox).not.toBeNull()
+    await userEvent.click(within(listbox as HTMLElement).getByRole('option', { name: 'Cancelled' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Search' }))
+
+    await waitFor(() => {
+      expect(mockedSearchProvincialPermits).toHaveBeenCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({ permitStatus: 'CAN' }),
         }),
         expect.any(Object),
       )

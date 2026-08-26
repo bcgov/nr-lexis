@@ -284,6 +284,47 @@ describe('Admin upload workflow smoke', () => {
     })
   })
 
+  it('keeps the canonical exemption number when its search label is rendered', async () => {
+    mockUploadAccess('/fileExemptionUpload')
+    mockedSearchProvincialExemptionNumberOptions.mockResolvedValue([
+      {
+        value: 'EX-555',
+        label: 'EX-555 - Active - Owner 00001012 - Region RSC',
+        status: 'Active',
+        type: 'Ministerial',
+        ownerClientNumber: '00001012',
+        region: 'RSC',
+        listingDate: '2026-06-10',
+      },
+    ])
+
+    renderPage('/admin/uploads?type=exemption')
+
+    const exemptionNumberInput = screen.getByRole('combobox', {
+      name: 'Exemption number',
+    })
+    await userEvent.type(exemptionNumberInput, 'EX-555')
+
+    await waitFor(() => {
+      expect(exemptionNumberInput).toHaveValue('EX-555 - Active - Owner 00001012 - Region RSC')
+    })
+
+    const file = new File(['exemption upload'], 'exemption.pdf', { type: 'application/pdf' })
+    await userEvent.upload(screen.getByLabelText('Document File'), file)
+    await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Submit upload' }))
+
+    await waitFor(() => {
+      expect(mockedSubmitAdminUpload).toHaveBeenCalledWith(
+        'exemption',
+        expect.objectContaining({
+          exemptionNumber: 'EX-555',
+          file,
+        }),
+      )
+    })
+  })
+
   it('searches permit numbers for invoice uploads', async () => {
     mockUploadAccess('/fileInvoiceUpload')
     mockedSearchProvincialPermitNumberOptions.mockResolvedValue([

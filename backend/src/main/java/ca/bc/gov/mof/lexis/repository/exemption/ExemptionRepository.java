@@ -595,6 +595,9 @@ public class ExemptionRepository extends OracleRepositorySupport {
     where.addDateLte("EE.APPROVAL_DATE", criteria.approvalToDate());
     where.addDateGte("ES.ADVERTISING_DATE", criteria.listingFromDate());
     where.addDateLte("ES.ADVERTISING_DATE", criteria.listingToDate());
+    // INTENTIONAL_LEGACY_DIVERGENCE(HISTORICAL_ORG_UNIT_SEARCH_VISIBILITY):
+    // Apply region scope only when the caller supplies it. Injecting today's active regions would
+    // hide exact matches belonging to historical organizational units.
     if (criteria.regionNumbers() != null && !criteria.regionNumbers().isEmpty()) {
       addRegionFilter(where, criteria.regionNumbers(), criteria.includeBlanketOic());
     }

@@ -265,6 +265,9 @@ const ProvincialExemptionPage = () => {
   const totalCacheRef = useRef<SearchTotalCache>(new Map())
   const canCreateExemption = canPerform('/createExemption')
   const canApproveExemption = canPerform('approveExemption')
+  // Provincial Submitter searches are always scoped to the authenticated forest client;
+  // client-number criteria are meaningful only for provincial staff searches.
+  const canFilterByClient = hasProvincialStaffRole(capabilities.roles)
   const shouldDefaultApprovalFilters =
     capabilities?.roles.includes('EXEMPTION_APPROVER') ||
     capabilities?.roles.includes('LEXIS_EXEMPTION_APPROVER') ||
@@ -945,18 +948,24 @@ const ProvincialExemptionPage = () => {
                     )
                   }}
                 />
-                <TextInput
-                  id="applicantClientNumber"
-                  labelText="Applicant client number"
-                  value={filters.applicantClientNumber}
-                  onChange={(event) => updateFilter('applicantClientNumber', event.target.value)}
-                />
-                <TextInput
-                  id="ownerClientNumber"
-                  labelText="Owner client number"
-                  value={filters.ownerClientNumber}
-                  onChange={(event) => updateFilter('ownerClientNumber', event.target.value)}
-                />
+                {canFilterByClient && (
+                  <>
+                    <TextInput
+                      id="applicantClientNumber"
+                      labelText="Applicant client number"
+                      value={filters.applicantClientNumber}
+                      onChange={(event) =>
+                        updateFilter('applicantClientNumber', event.target.value)
+                      }
+                    />
+                    <TextInput
+                      id="ownerClientNumber"
+                      labelText="Owner client number"
+                      value={filters.ownerClientNumber}
+                      onChange={(event) => updateFilter('ownerClientNumber', event.target.value)}
+                    />
+                  </>
+                )}
                 {/* INTENTIONAL_LEGACY_DIVERGENCE(SEARCH_FILTER_EXPANSION):
                     Modern exemption search exposes approval-date criteria not shown in legacy. */}
                 <IsoDatePicker

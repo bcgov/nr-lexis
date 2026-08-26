@@ -96,6 +96,38 @@ class LexisJasperTemplateCompileTest {
   }
 
   @Test
+  void tenureAnalysisTemplateShouldLabelBlanketOicExemptionType() throws Exception {
+    String template =
+        Files.readString(
+            new ClassPathResource("reports/lexis/LEXIS_TENURE_ANALYSIS.jrxml")
+                .getFile()
+                .toPath());
+
+    assertThat(template)
+        .contains(
+            "$P{P_EXEMPTION_TYPE}.equalsIgnoreCase( \"B\" )\n"
+                + "                ?   \"Blanket OIC\"")
+        .contains("<textFieldExpression><![CDATA[\": \" + $V{CCF6_F_EXE_TYPE}]]></textFieldExpression>");
+  }
+
+  @Test
+  void permitLedgerShouldKeepCriteriaValuesOnMatchingLines() throws Exception {
+    String template =
+        Files.readString(
+            new ClassPathResource("reports/lexis/LEXIS_PERMIT_LEDGER.jrxml")
+                .getFile()
+                .toPath());
+
+    assertThat(template)
+        .contains(
+            "uuid=\"85ef0374-a07b-4853-9f61-581cecda10b8\" "
+                + "x=\"92\" y=\"93\" width=\"160\" height=\"61\"")
+        .contains(
+            "$F{REGION} == null || $F{REGION}.isEmpty() ? \"\" : $F{REGION}")
+        .contains("$V{CCF9_F_GROWTH_TYPE} + System.getProperty(\"line.separator\")");
+  }
+
+  @Test
   void exemptionLedgerShouldUseNullSafeApplicationNumberBranches() throws Exception {
     String template =
         Files.readString(
@@ -159,6 +191,64 @@ class LexisJasperTemplateCompileTest {
         .contains("$P{REPORT_SUBTITLE} == null ? \"\" : $P{REPORT_SUBTITLE}")
         .contains("\"Generated: \" + ($P{REPORT_GENERATED_DATE} == null ? \"\" : $P{REPORT_GENERATED_DATE})")
         .contains("No rows returned for this report criteria.");
+  }
+
+  @Test
+  void speciesGradeTemplateShouldUseFixedBusinessColumns() throws Exception {
+    String template =
+        Files.readString(
+            new ClassPathResource("reports/lexis/LEXIS_SPECIES_GRADE.jrxml")
+                .getFile()
+                .toPath());
+
+    for (String fieldName :
+        List.of(
+            "EXPORT_PRODUCT_TYPE_CODE",
+            "PRODUCT_TYPE",
+            "REGION",
+            "EXPORT_GRADE_CODE",
+            "SUM_FI",
+            "SUM_CE",
+            "SUM_SP",
+            "SUM_LO",
+            "SUM_HE",
+            "SUM_BA",
+            "SUM_CY",
+            "SUM_AL",
+            "SUM_CO",
+            "SUM_HD",
+            "SUM_OT",
+            "EXPORT_JURISDICTION_CODE",
+            "SORTED_COLUMN")) {
+      assertThat(template).contains("<field name=\"" + fieldName + "\"");
+    }
+
+    for (String label :
+        List.of(
+            "Product type code",
+            "Product type",
+            "Region",
+            "Grade",
+            "Fir",
+            "Cedar",
+            "Spruce",
+            "Lodgepole pine",
+            "Hemlock",
+            "Balsam",
+            "Cypress",
+            "Alder",
+            "Cottonwood",
+            "Hardwood",
+            "Other",
+            "Jurisdiction")) {
+      assertThat(template).contains("<text><![CDATA[" + label + "]]></text>");
+    }
+
+    assertThat(template)
+        .doesNotContain("Additional Columns")
+        .doesNotContain("<text><![CDATA[SUM_")
+        .doesNotContain("<text><![CDATA[EXPORT_")
+        .doesNotContain("<text><![CDATA[SORTED_COLUMN]]></text>");
   }
 
   private String structuralSignature(InputStream inputStream) throws Exception {

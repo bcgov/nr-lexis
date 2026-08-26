@@ -2487,6 +2487,9 @@ const ProvincialApplicationDetailsPage = () => {
           }
         }
 
+        // INTENTIONAL_LEGACY_DIVERGENCE(BCEID_APPLICATION_EDIT_CONTRACT):
+        // Save only the application fields rendered for every authorized editor; do not make
+        // BCeID edits depend on staff-only review status or remark controls.
         const summaryRequestForm = normalizeSummaryAgentFields(summaryForm)
         const result = await updateApplicationSummary({
           applicationNumber: String(detail.applicationNumber),

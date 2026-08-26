@@ -26,6 +26,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Import;
+import org.springframework.core.task.SyncTaskExecutor;
+import org.springframework.core.task.support.TaskExecutorAdapter;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
@@ -37,6 +41,8 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.servlet.mvc.method.RequestMappingInfo;
 import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
+import org.springframework.web.servlet.config.annotation.AsyncSupportConfigurer;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 @SpringBootTest(
     properties = {
@@ -46,6 +52,7 @@ import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandl
       "ALLOWED_ORIGINS=http://localhost:3000,https://openapi.apps.gov.bc.ca"
     })
 @AutoConfigureMockMvc
+@Import(LexisRouteAuthorizationIntegrationTest.SynchronousMvcTestConfiguration.class)
 class LexisRouteAuthorizationIntegrationTest {
 
   private static final Pattern PATH_VARIABLE_PATTERN = Pattern.compile("\\{[^/]+}");
@@ -3036,6 +3043,15 @@ class LexisRouteAuthorizationIntegrationTest {
           <lexis:internalOfficeUseLanguage>E</lexis:internalOfficeUseLanguage>
         </lexis:officeUseOnly>
         """;
+  }
+
+  @TestConfiguration(proxyBeanMethods = false)
+  static class SynchronousMvcTestConfiguration implements WebMvcConfigurer {
+
+    @Override
+    public void configureAsyncSupport(AsyncSupportConfigurer configurer) {
+      configurer.setTaskExecutor(new TaskExecutorAdapter(new SyncTaskExecutor()));
+    }
   }
 
   private record EndpointAuthorizationLookup(
