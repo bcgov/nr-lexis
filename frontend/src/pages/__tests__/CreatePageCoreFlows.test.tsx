@@ -290,7 +290,7 @@ describe('Create Page Core Flows', () => {
       screen.getByRole('heading', { level: 1, name: 'Create provincial application' }),
     ).toBeInTheDocument()
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
-    expect(screen.getByRole('region', { name: 'Application summary' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Owner' })).toBeInTheDocument()
     const applicationFormActions = screen.getByRole('group', {
       name: 'Application form actions',
     })
@@ -309,17 +309,26 @@ describe('Create Page Core Flows', () => {
     )
     expect(screen.queryByRole('group', { name: 'New application state' })).not.toBeInTheDocument()
     expect(screen.queryByRole('textbox', { name: /application number/i })).not.toBeInTheDocument()
-    for (const tabName of [
-      'Summary',
-      'Clients',
-      'Packages / Scales',
-      'Permits',
-      'Offers',
-      'Documents',
-      'Remarks',
-    ]) {
+    for (const tabName of ['Owner', 'Application', 'Items', 'Documents', 'Remarks', 'Offers']) {
       expect(screen.getByRole('tab', { name: tabName })).toBeInTheDocument()
     }
+    expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'Permits' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'Review' })).not.toBeInTheDocument()
+
+    await selectApplicationCreateTab('Application')
+    const applicationSection = screen.getByRole('region', { name: 'Application' })
+    expect(
+      Array.from(applicationSection.querySelectorAll('input')).map((input) => input.id),
+    ).toEqual([
+      'region',
+      'productTypeCode',
+      'exemptionType',
+      'applicationDate',
+      'receivedDate',
+      'exportScheduleId',
+      'applicationTermDays',
+    ])
 
     await selectApplicationCreateTab('Documents')
     expect(screen.getByRole('button', { name: 'Add document' })).toBeDisabled()
@@ -352,8 +361,6 @@ describe('Create Page Core Flows', () => {
       region: '11',
       applicationDate: '2026-01-09',
       applicationTermDays: '30',
-      applicationTermMonths: '',
-      applicationTermYears: '',
       receivedDate: '2026-01-10',
       exportScheduleId: '987',
       listingDate: '2026-01-11',
@@ -389,7 +396,7 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationCreateTab('Packages / Scales')
+    await selectApplicationCreateTab('Items')
     const packageDetailsHeading = await screen.findByRole('heading', {
       name: 'Package Details',
     })
@@ -438,7 +445,7 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationCreateTab('Packages / Scales')
+    await selectApplicationCreateTab('Items')
     const selectedSpecies = await screen.findByRole('list', {
       name: 'Selected application species',
     })
@@ -558,7 +565,7 @@ describe('Create Page Core Flows', () => {
     expect(within(postSaveDialog).getByRole('button', { name: 'Save application' })).toBeEnabled()
   }, 20_000)
 
-  it('converts provincial application term months and years to total days on submit', async () => {
+  it('uses one application term field and submits its day value directly', async () => {
     mockedSubmitProvincialApplicationCreate.mockResolvedValue(successfulCreate('904'))
 
     render(
@@ -576,17 +583,23 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
+    await selectApplicationCreateTab('Application')
+    expect(screen.getByRole('spinbutton', { name: 'Application term (days)' })).toHaveValue(5)
+    expect(screen.queryByLabelText('Application term months')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Application term years')).not.toBeInTheDocument()
+
     const submitButton = await screen.findByRole('button', { name: 'Save' })
     await waitFor(() => expect(submitButton).toBeEnabled())
     await userEvent.click(submitButton)
 
     expect(mockedSubmitProvincialApplicationCreate).toHaveBeenCalledWith(
       expect.objectContaining({
-        applicationTermDays: '430',
-        applicationTermMonths: '2',
-        applicationTermYears: '1',
+        applicationTermDays: '5',
       }),
     )
+    const submittedForm = mockedSubmitProvincialApplicationCreate.mock.calls[0]?.[0]
+    expect(submittedForm).not.toHaveProperty('applicationTermMonths')
+    expect(submittedForm).not.toHaveProperty('applicationTermYears')
   })
 
   it('submits selected natural resource region org unit code from the region label', async () => {
@@ -619,15 +632,16 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
+    await selectApplicationCreateTab('Application')
     const regionComboBox = await screen.findByRole('combobox', { name: 'Region' })
     await waitFor(() => {
       expect(regionComboBox).toHaveValue('Cariboo Natural Resource Region')
     })
 
     await chooseComboBoxOption(regionComboBox, 'West Coast Natural Resource Region')
-    await selectApplicationCreateTab('Packages / Scales')
+    await selectApplicationCreateTab('Items')
     await chooseComboBoxOption(
-      screen.getByRole('combobox', { name: 'Application species' }),
+      screen.getByRole('combobox', { name: 'Species list' }),
       'HE - Hemlock',
     )
     await userEvent.click(screen.getByRole('button', { name: 'Add application species' }))
@@ -666,6 +680,19 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
+      'Owner',
+      'Agent',
+      'Application',
+      'Items',
+      'Documents',
+      'Remarks',
+      'Offers',
+    ])
+    await selectApplicationCreateTab('Agent')
+    expect(screen.getByRole('textbox', { name: 'Agent number' })).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: 'Contact location' })).toBeInTheDocument()
+
     const submitButton = await screen.findByRole('button', { name: 'Save' })
     await waitFor(() => expect(submitButton).toBeEnabled())
     await userEvent.click(submitButton)
@@ -686,8 +713,6 @@ describe('Create Page Core Flows', () => {
       region: '11',
       applicationDate: '2026-01-09',
       applicationTermDays: '30',
-      applicationTermMonths: '',
-      applicationTermYears: '',
       receivedDate: '2026-01-10',
       exportScheduleId: '987',
       listingDate: '2026-01-11',
@@ -723,13 +748,14 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationCreateTab('Clients')
+    await selectApplicationCreateTab('Owner')
     const ownerDetails = await screen.findByRole('region', { name: 'Owner client details' })
     expect(within(ownerDetails).getByText('Owner Forestry Ltd.')).toBeInTheDocument()
     expect(within(ownerDetails).getByText('123 Timber Road')).toBeInTheDocument()
     expect(within(ownerDetails).getByText('owner@example.test')).toBeInTheDocument()
     expect(within(ownerDetails).queryByRole('textbox')).not.toBeInTheDocument()
 
+    await selectApplicationCreateTab('Agent')
     const agentDetails = await screen.findByRole('region', { name: 'Agent client details' })
     expect(within(agentDetails).getByText('Agent Export Services')).toBeInTheDocument()
     expect(within(agentDetails).getByText('456 Export Road')).toBeInTheDocument()
@@ -758,9 +784,9 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationCreateTab('Clients')
+    await selectApplicationCreateTab('Owner')
     expect(screen.getByRole('combobox', { name: 'Applicant type' })).toHaveValue('Ministerial')
-    expect(screen.queryByLabelText('Agent client number')).not.toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
 
     const submitButton = await screen.findByRole('button', { name: 'Save' })
     await waitFor(() => expect(submitButton).toBeEnabled())
@@ -795,8 +821,8 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationCreateTab('Clients')
-    const ownerClientNumberInput = screen.getByLabelText('Owner client number')
+    await selectApplicationCreateTab('Owner')
+    const ownerClientNumberInput = screen.getByRole('textbox', { name: 'Client number' })
     mockedFetchApplicationClientLocations.mockClear()
 
     for (const value of ['0', '00', '000', '0001', '00011', '000111', '0001111', '00011111']) {
@@ -839,13 +865,11 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationCreateTab('Clients')
+    await selectApplicationCreateTab('Owner')
     const applicantType = screen.getByRole('textbox', { name: 'Applicant type' })
     expect(applicantType).toHaveValue('Owner')
     expect(applicantType).toHaveAttribute('readonly')
-    expect(screen.queryByLabelText('Agent client number')).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('Agent client location')).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('Agent contact name')).not.toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
     expect(mockedFetchApplicationClientLocations).not.toHaveBeenCalledWith('00033333', 'agent')
   })
 
@@ -911,6 +935,7 @@ describe('Create Page Core Flows', () => {
     )
 
     const today = formatBusinessIsoDate()
+    await selectApplicationCreateTab('Application')
     await waitFor(() => {
       expect(screen.getByRole('combobox', { name: 'Product type' })).toHaveValue('Harvested Timber')
       expect(screen.getByRole('combobox', { name: 'Exemption reason' })).toHaveValue('Surplus')
@@ -918,16 +943,14 @@ describe('Create Page Core Flows', () => {
       expect(screen.getByRole('textbox', { name: 'Application date (YYYY-MM-DD)' })).toHaveValue(
         today,
       )
-      expect(screen.getByRole('textbox', { name: 'Application term days' })).toHaveValue('180')
-      expect(screen.getByRole('textbox', { name: 'Received date (YYYY-MM-DD)' })).toHaveValue('')
-      expect(screen.getByRole('combobox', { name: 'Listing date' })).toHaveValue('2026-08-05')
+      expect(screen.getByRole('spinbutton', { name: 'Application term (days)' })).toHaveValue(180)
+      expect(screen.getByRole('textbox', { name: 'Date received (YYYY-MM-DD)' })).toHaveValue('')
+      expect(screen.getByRole('combobox', { name: 'List date' })).toHaveValue('2026-08-05')
     })
 
     expect(screen.getByRole('combobox', { name: 'Region' })).toBeEnabled()
-    await selectApplicationCreateTab('Clients')
-    expect(screen.getByRole('textbox', { name: 'Owner client number' })).not.toHaveAttribute(
-      'readonly',
-    )
+    await selectApplicationCreateTab('Owner')
+    expect(screen.getByRole('textbox', { name: 'Client number' })).not.toHaveAttribute('readonly')
   })
 
   it('locks a scoped submitter to its authoritative owner and defaults its valid org unit', async () => {
@@ -970,21 +993,22 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
+    await selectApplicationCreateTab('Application')
     await waitFor(() => {
       expect(screen.getByRole('combobox', { name: 'Region' })).toHaveValue(
         'West Coast Natural Resource Region',
       )
     })
     expect(screen.getByRole('combobox', { name: 'Region' })).toBeEnabled()
-    expect(screen.getByRole('textbox', { name: 'Application term days' })).toHaveValue('180')
+    expect(screen.getByRole('spinbutton', { name: 'Application term (days)' })).toHaveValue(180)
 
-    await selectApplicationCreateTab('Clients')
-    expect(screen.getByRole('textbox', { name: 'Owner client number' })).toHaveValue('00077881')
-    expect(screen.getByRole('textbox', { name: 'Owner client number' })).toHaveAttribute('readonly')
+    await selectApplicationCreateTab('Owner')
+    expect(screen.getByRole('textbox', { name: 'Client number' })).toHaveValue('00077881')
+    expect(screen.getByRole('textbox', { name: 'Client number' })).toHaveAttribute('readonly')
     await waitFor(() => {
-      expect(screen.getByRole('combobox', { name: 'Owner client location' })).toHaveValue('00')
+      expect(screen.getByRole('combobox', { name: 'Client location' })).toHaveValue('00')
     })
-    const ownerLocation = screen.getByRole('combobox', { name: 'Owner client location' })
+    const ownerLocation = screen.getByRole('combobox', { name: 'Client location' })
     expect(ownerLocation).toBeEnabled()
     await chooseComboBoxOption(ownerLocation, '01 - MAIN LOCATION')
     expect(ownerLocation).toHaveValue('01 - MAIN LOCATION')
@@ -1027,6 +1051,7 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
+    await selectApplicationCreateTab('Application')
     const region = await screen.findByRole('combobox', { name: 'Region' })
     await waitFor(() => expect(region).toHaveValue(''))
     expect(region).toBeEnabled()
@@ -1051,7 +1076,7 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    const ownerNameInput = await screen.findByLabelText('Owner name')
+    const ownerNameInput = await screen.findByRole('textbox', { name: 'Contact name' })
     fireEvent.change(ownerNameInput, { target: { value: 'Typed Owner' } })
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
@@ -1080,8 +1105,8 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationCreateTab('Clients')
-    const ownerNameInput = await screen.findByRole('combobox', { name: 'Owner name' })
+    await selectApplicationCreateTab('Owner')
+    const ownerNameInput = await screen.findByRole('combobox', { name: 'Contact name' })
     await waitFor(() => expect(ownerNameInput).toHaveValue('Owner Contact'))
     fireEvent.change(ownerNameInput, { target: { value: 'Advertising Owner' } })
     await waitFor(() => expect(ownerNameInput).toHaveValue('Advertising Owner'))
@@ -1149,7 +1174,7 @@ describe('Create Page Core Flows', () => {
     ).toBeGreaterThan(0)
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
 
-    const applicationVolume = screen.getByLabelText('Application volume')
+    const applicationVolume = screen.getByRole('textbox', { name: 'Application volume' })
     await userEvent.clear(applicationVolume)
     await userEvent.type(applicationVolume, '9999999.99')
     await userEvent.click(submitButton)
@@ -1177,21 +1202,30 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
+    await selectApplicationCreateTab('Application')
     const productType = await screen.findByRole('combobox', { name: 'Product type' })
     await waitFor(() => expect(productType).toHaveValue('Harvested Timber'))
+    await selectApplicationCreateTab('Items')
     expect(screen.getByRole('combobox', { name: 'Growth type' })).toBeInTheDocument()
-    expect(screen.getByLabelText('Location of logs')).toBeInTheDocument()
-    expect(screen.getByLabelText('Average log volume')).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Location of logs' })).toBeInTheDocument()
+    expect(screen.getByRole('spinbutton', { name: 'Average log volume' })).toBeInTheDocument()
 
-    await chooseComboBoxOption(productType, 'Standing Timber')
+    await selectApplicationCreateTab('Application')
+    await chooseComboBoxOption(
+      screen.getByRole('combobox', { name: 'Product type' }),
+      'Standing Timber',
+    )
+    await selectApplicationCreateTab('Items')
     expect(screen.getByRole('combobox', { name: 'Growth type' })).toBeInTheDocument()
-    expect(screen.queryByLabelText('Location of logs')).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('Average log volume')).not.toBeInTheDocument()
+    expect(screen.queryByRole('textbox', { name: 'Location of logs' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('spinbutton', { name: 'Average log volume' })).not.toBeInTheDocument()
 
-    await chooseComboBoxOption(productType, 'Timber')
+    await selectApplicationCreateTab('Application')
+    await chooseComboBoxOption(screen.getByRole('combobox', { name: 'Product type' }), 'Timber')
+    await selectApplicationCreateTab('Items')
     expect(screen.queryByRole('combobox', { name: 'Growth type' })).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('Location of logs')).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('Average log volume')).not.toBeInTheDocument()
+    expect(screen.queryByRole('textbox', { name: 'Location of logs' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('spinbutton', { name: 'Average log volume' })).not.toBeInTheDocument()
   })
 
   it('does not let hidden H-only values block a standing-timber application', async () => {
@@ -1321,7 +1355,7 @@ describe('Create Page Core Flows', () => {
     )
     expect(screen.queryByRole('group', { name: 'New exemption state' })).not.toBeInTheDocument()
     expect(screen.queryByRole('textbox', { name: /exemption number/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('textbox', { name: 'Owner client number' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('textbox', { name: 'Client number' })).not.toBeInTheDocument()
     expect(
       screen.queryByRole('textbox', { name: 'Applicant client number' }),
     ).not.toBeInTheDocument()
@@ -1678,6 +1712,7 @@ describe('Create Page Core Flows', () => {
     )
 
     expect(await screen.findByText('Options unavailable')).toBeInTheDocument()
+    await selectApplicationCreateTab('Application')
     expect(screen.getByRole('combobox', { name: 'Product type' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
     expect(

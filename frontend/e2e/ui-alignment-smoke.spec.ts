@@ -1190,7 +1190,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(comments).toHaveCSS('min-height', '40px')
     await expect(comments).toHaveCSS('resize', 'vertical')
 
-    await page.getByRole('tab', { name: 'Packages / Scales' }).click()
+    await page.getByRole('tab', { name: 'Items' }).click()
     const applicationItemsCard = page.locator('.application-items-card').first()
     await expect(applicationItemsCard).toBeVisible()
     await expect(applicationItemsCard).toHaveCSS('border-color', 'rgb(82, 82, 82)')
