@@ -4850,8 +4850,6 @@ $notification-types: 'error', 'info', 'success', 'warning';
 .application-create-client-summary {
   grid-column: 1 / -1;
   margin-block-start: 0.5rem;
-  padding-block-start: 1rem;
-  border-block-start: 1px solid var(--csp-border-subtle-01);
 }
 
 .provincial-summary-page .detail-section-card,
