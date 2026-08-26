@@ -309,12 +309,29 @@ describe('Create Page Core Flows', () => {
     )
     expect(screen.queryByRole('group', { name: 'New application state' })).not.toBeInTheDocument()
     expect(screen.queryByRole('textbox', { name: /application number/i })).not.toBeInTheDocument()
-    for (const tabName of ['Owner', 'Application', 'Items', 'Documents', 'Remarks', 'Offers']) {
+    for (const tabName of [
+      'Owner',
+      'Application',
+      'Items',
+      'Documents',
+      'Remarks',
+      'Offers',
+      'Review',
+    ]) {
       expect(screen.getByRole('tab', { name: tabName })).toBeInTheDocument()
     }
     expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: 'Permits' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('tab', { name: 'Review' })).not.toBeInTheDocument()
+
+    await selectApplicationCreateTab('Review')
+    expect(screen.getByRole('textbox', { name: 'Application status' })).toHaveValue('New')
+    expect(screen.getByRole('textbox', { name: 'Application status' })).toHaveAttribute('readonly')
+    expect(screen.getByRole('textbox', { name: 'Remarks' })).toBeDisabled()
+    expect(
+      screen.getByText(
+        'Save the application before changing its review status or adding review remarks.',
+      ),
+    ).toBeInTheDocument()
 
     await selectApplicationCreateTab('Application')
     const applicationSection = screen.getByRole('region', { name: 'Application' })
@@ -688,6 +705,7 @@ describe('Create Page Core Flows', () => {
       'Documents',
       'Remarks',
       'Offers',
+      'Review',
     ])
     await selectApplicationCreateTab('Agent')
     expect(screen.getByRole('textbox', { name: 'Agent number' })).toBeInTheDocument()
@@ -871,6 +889,28 @@ describe('Create Page Core Flows', () => {
     expect(applicantType).toHaveAttribute('readonly')
     expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
     expect(mockedFetchApplicationClientLocations).not.toHaveBeenCalledWith('00033333', 'agent')
+  })
+
+  it('hides Review on application create without review authority', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        canPerform: (action: string) => action !== '/applicationsReview',
+      }),
+    )
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/create']}>
+        <Routes>
+          <Route
+            path="/provincial/application/create"
+            element={<ProvincialApplicationCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(screen.queryByRole('tab', { name: 'Review' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Review' })).not.toBeInTheDocument()
   })
 
   it('blocks provincial application submit when owner has no selectable locations', async () => {

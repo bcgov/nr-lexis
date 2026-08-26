@@ -116,6 +116,7 @@ type ApplicationCreateTab =
   | 'documents'
   | 'remarks'
   | 'offers'
+  | 'review'
 
 const APPLICATION_CREATE_TABS: ApplicationCreateTab[] = [
   'owner',
@@ -125,6 +126,7 @@ const APPLICATION_CREATE_TABS: ApplicationCreateTab[] = [
   'documents',
   'remarks',
   'offers',
+  'review',
 ]
 
 const APPLICATION_CREATE_TAB_LABELS: Record<ApplicationCreateTab, string> = {
@@ -135,6 +137,7 @@ const APPLICATION_CREATE_TAB_LABELS: Record<ApplicationCreateTab, string> = {
   documents: 'Documents',
   remarks: 'Remarks',
   offers: 'Offers',
+  review: 'Review',
 }
 
 const productTypeSupportsPackages = (productTypeCode: string): boolean =>
@@ -338,6 +341,7 @@ const ProvincialApplicationCreatePage = () => {
   const [searchParams] = useSearchParams()
   const { capabilities, canPerform } = useAuth()
   const canChangeApplicantType = canPerform('/changeApplicantType')
+  const canReviewApplications = canPerform('/applicationsReview')
   const provincialSubmitterIdentityLocked = hasProvincialSubmitterRole(capabilities.roles)
   const authoritativeOwnerClientNumber = capabilities.forestClientNumber?.trim() ?? ''
   const authoritativeOrgUnitNo = capabilities.orgUnitNo?.trim() ?? ''
@@ -396,8 +400,11 @@ const ProvincialApplicationCreatePage = () => {
     useState<ApplicationCreateTab>('owner')
   const hasAgentTab = isAgentApplicant(form.applicantTypeCode)
   const visibleApplicationTabs = useMemo(
-    () => APPLICATION_CREATE_TABS.filter((tab) => tab !== 'agent' || hasAgentTab),
-    [hasAgentTab],
+    () =>
+      APPLICATION_CREATE_TABS.filter(
+        (tab) => (tab !== 'agent' || hasAgentTab) && (tab !== 'review' || canReviewApplications),
+      ),
+    [canReviewApplications, hasAgentTab],
   )
   const selectedApplicationTabIndex = Math.max(
     0,
@@ -2052,6 +2059,36 @@ const ProvincialApplicationCreatePage = () => {
                 </p>
               </Tile>
             </TabPanel>
+            {canReviewApplications && (
+              <TabPanel className="application-detail-tab-panel">
+                <Tile
+                  className="create-form-tile application-detail-section"
+                  role="region"
+                  aria-labelledby="application-create-review-heading"
+                >
+                  <h2 id="application-create-review-heading" className="detail-tile-title">
+                    Review
+                  </h2>
+                  <div className="legacy-search-grid create-form-grid">
+                    <TextInput
+                      id="applicationCreateReviewStatus"
+                      labelText="Application status"
+                      value="New"
+                      readOnly
+                    />
+                    <TextArea
+                      id="applicationCreateReviewRemarks"
+                      labelText="Remarks"
+                      value=""
+                      disabled
+                    />
+                  </div>
+                  <p className="detail-empty-message">
+                    Save the application before changing its review status or adding review remarks.
+                  </p>
+                </Tile>
+              </TabPanel>
+            )}
           </TabPanels>
         </Tabs>
         <div
