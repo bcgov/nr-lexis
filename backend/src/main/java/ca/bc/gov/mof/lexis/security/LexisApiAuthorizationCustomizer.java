@@ -21,6 +21,10 @@ public class LexisApiAuthorizationCustomizer
 
   private static final String ACTION_LEXIS_AGENT_ADMIN = "/lexisAgentAdmin";
   private static final String ACTION_APPLICATION_DETAILS = "/applicationDetails";
+  private static final String FEDERAL_SUBMISSION_SCOPE_AUTHORITY =
+      "SCOPE_lexis:federal-submission:submit";
+  private static final String PROD_RTM_ONLY_FEDERAL_VALIDATION_PATTERN =
+      "/api/lexis/federal/submissions/validation";
   private static final String[] HEALTH_PROBE_PATTERNS = {
     "/actuator/health/liveness", "/actuator/health/readiness"
   };
@@ -90,6 +94,10 @@ public class LexisApiAuthorizationCustomizer
           authorize) {
     authorize.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll();
     authorize.requestMatchers(HttpMethod.GET, HEALTH_PROBE_PATTERNS).permitAll();
+    // NEXCOL validation does not persist records and can run before the broader PROD rollout.
+    authorize
+        .requestMatchers(HttpMethod.POST, PROD_RTM_ONLY_FEDERAL_VALIDATION_PATTERN)
+        .hasAuthority(FEDERAL_SUBMISSION_SCOPE_AUTHORITY);
     // PROD RTM-only mode registers its narrow routes directly instead of using the standard loop.
     authorize
         .requestMatchers(HttpMethod.GET, "/api/lexis/session/capabilities")
