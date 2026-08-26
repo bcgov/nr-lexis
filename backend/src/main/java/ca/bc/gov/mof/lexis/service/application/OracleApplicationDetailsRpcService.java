@@ -78,7 +78,6 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   private static final int REMARK_MAX_BYTES = 254;
   private static final int PACKAGE_NUMBER_MAX_BYTES = 20;
   private static final int PACKAGE_COMMENTS_MAX_BYTES = 180;
-  private static final long LEGACY_FEDERAL_MAX_SCALE_PIECES = 9_999_999_999L;
   private static final long MAX_APPLICATION_TERM_DAYS = 99_999L;
   private static final double MAX_APPLICATION_VOLUME = 9_999_999.99d;
   private static final double MAX_AVERAGE_LOG_VOLUME = 99.9d;
@@ -270,7 +269,8 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       PackageMutationRequest packageRequest,
       List<ScaleMutationRequest> scaleRequests) {
     CreateApplicationRequest application = normalizeCreateApplicationRequest(applicationRequest);
-    PackageMutationRequest packageMutation = normalizePackageMutationRequest(packageRequest);
+    PackageMutationRequest packageMutation =
+        packageRequest == null ? null : normalizePackageMutationRequest(packageRequest);
     List<ScaleMutationRequest> scales =
         scaleRequests == null
             ? List.of()
@@ -279,8 +279,17 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     List<String> errors = new ArrayList<>(validateCreateApplication(application));
     validateApplicationStorageText(application, errors);
     validateFederalImportMetadata(application, errors);
-    errors.addAll(validatePackageImportPreflight(packageMutation, application));
-    errors.addAll(validateScaleImportPreflight(scales, packageMutation, application));
+    if (packageMutation == null) {
+      boolean legacyFederalStandingWithoutPackage =
+          JURISDICTION_FEDERAL.equals(trimToNull(application.jurisdictionCode()))
+              && EXPORT_PRODUCT_TYPE_STANDING.equals(trimToNull(application.productTypeCode()));
+      if (!legacyFederalStandingWithoutPackage || !scales.isEmpty()) {
+        errors.add(required("package number"));
+      }
+    } else {
+      errors.addAll(validatePackageImportPreflight(packageMutation, application));
+      errors.addAll(validateScaleImportPreflight(scales, packageMutation, application));
+    }
     return new SubmissionImportValidationResult(errors.isEmpty(), errors, List.of());
   }
 
@@ -1380,14 +1389,14 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
 
     if (request.averageDiameter() == null || request.averageDiameter() <= 0.0d) {
       errors.add("The package average diameter must be greater than 0.");
-    } else if (request.averageDiameter() > 99.9d) {
-      errors.add("The package average diameter must be less than or equal to 99.9.");
+    } else if (request.averageDiameter() > 99.99d) {
+      errors.add("The package average diameter must be less than 99.9.");
     }
 
     if (request.averageLength() == null || request.averageLength() <= 0.0d) {
       errors.add("The package average length must be greater than 0.");
-    } else if (request.averageLength() > 99.9d) {
-      errors.add("The package average length must be less than or equal to 99.9.");
+    } else if (request.averageLength() > 99.0d) {
+      errors.add("The package average length must be less than 99.9.");
     }
 
     if (request.volume() == null || request.volume() < 0.0d) {
@@ -1604,8 +1613,9 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     List<String> errors = new ArrayList<>();
     List<ScaleValues> validatedScales = new ArrayList<>();
     BigDecimal scaleVolume = BigDecimal.ZERO.setScale(1, RoundingMode.HALF_UP);
-    for (ScaleMutationRequest scaleRequest : scaleRequests) {
-      validateScaleImportPreflight(scaleRequest, applicationRequest, errors);
+    for (int index = 0; index < scaleRequests.size(); index++) {
+      ScaleMutationRequest scaleRequest = scaleRequests.get(index);
+      validateScaleImportPreflight(scaleRequest, applicationRequest, index == 0, errors);
       ScaleValues scaleValues = toScaleValues(scaleRequest);
       if (ScaleDomainValidator.containsCombination(validatedScales, scaleValues)) {
         errors.add("A scale with this timber mark, species, and grade already exists.");
@@ -1628,7 +1638,10 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   }
 
   private void validateScaleImportPreflight(
-      ScaleMutationRequest request, CreateApplicationRequest applicationRequest, List<String> errors) {
+      ScaleMutationRequest request,
+      CreateApplicationRequest applicationRequest,
+      boolean validateTimberMarkRegion,
+      List<String> errors) {
     if (trimToNull(request.packageNumber()) == null) {
       errors.add(required("scale package number"));
     }
@@ -1641,6 +1654,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
           applicationRequest.orgUnitNumber(),
           applicationRequest.productTypeCode(),
           applicationRequest.jurisdictionCode(),
+          validateTimberMarkRegion,
           errors);
     }
     if (trimToNull(request.gradeCode()) == null) {
@@ -1654,13 +1668,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       validateScaleCodesForRegion(request, applicationRequest.orgUnitNumber(), errors);
     }
     errors.addAll(
-        ScaleDomainValidator.validateNumericValues(
-            request.pieces(),
-            request.volume(),
-            false,
-            JURISDICTION_FEDERAL.equals(trimToNull(applicationRequest.jurisdictionCode()))
-                ? LEGACY_FEDERAL_MAX_SCALE_PIECES
-                : ScaleDomainValidator.MAX_SCALE_PIECES));
+        ScaleDomainValidator.validateNumericValues(request.pieces(), request.volume(), false));
   }
 
   private void validateScaleCodesForRegion(
@@ -1933,13 +1941,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       validateScaleCodesForRegion(request, application.get().orgUnitNumber(), errors);
     }
     errors.addAll(
-        ScaleDomainValidator.validateNumericValues(
-            request.pieces(),
-            request.volume(),
-            false,
-            federalApplication
-                ? LEGACY_FEDERAL_MAX_SCALE_PIECES
-                : ScaleDomainValidator.MAX_SCALE_PIECES));
+        ScaleDomainValidator.validateNumericValues(request.pieces(), request.volume(), false));
 
     if (packageNumber != null) {
       List<ApplicationDetailsRpcRepository.ApplicationScaleDetailRow> scaleRows =
@@ -2028,6 +2030,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         application.map(ApplicationDetailsRpcRepository.ApplicationUpdateRecord::orgUnitNumber).orElse(null),
         application.map(ApplicationDetailsRpcRepository.ApplicationUpdateRecord::productTypeCode).orElse(null),
         application.map(ApplicationDetailsRpcRepository.ApplicationUpdateRecord::jurisdictionCode).orElse(null),
+        true,
         errors);
   }
 
@@ -2059,6 +2062,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       Long orgUnitNumber,
       String productTypeCode,
       String jurisdictionCode,
+      boolean validateRegion,
       List<String> errors) {
     Optional<ApplicationDetailsRpcRepository.TimberMarkRow> baseMark =
         repository.findTimberMark(timberMark);
@@ -2075,7 +2079,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
 
     ApplicationDetailsRpcRepository.TimberMarkRow mark = baseMark.get();
     String normalizedJurisdictionCode = trimToNull(jurisdictionCode);
-    if (orgUnitNumber != null && !JURISDICTION_FEDERAL.equals(normalizedJurisdictionCode)) {
+    if (orgUnitNumber != null && validateRegion) {
       Optional<ApplicationDetailsRpcRepository.TimberMarkRow> regionalMark =
           repository.findTimberMarkByOrgUnit(timberMark, orgUnitNumber);
       if (regionalMark.isEmpty()) {

@@ -349,28 +349,30 @@ public class ApplicationSubmissionImportService {
           normalizedUserReference);
     }
 
-    ApplicationDetailsRpcService.PackageValidityItem packageValidity =
-        applicationDetailsService.isPackageValid(submission.packageNumber());
-    if (packageValidity == null) {
-      return rejected(
-          fileName,
-          fileSize,
-          List.of("Package validation is unavailable for LEXIS application submission."),
-          warnings,
-          submissionSummary,
-          normalizedUserReference);
-    }
-    if (!packageValidity.valid()) {
-      return rejected(
-          fileName,
-          fileSize,
-          List.of(
-              packageValidity.message() == null
-                  ? "Package " + submission.packageNumber() + " already exists."
-                  : packageValidity.message()),
-          warnings,
-          submissionSummary,
-          normalizedUserReference);
+    if (submission.packageNumber() != null) {
+      ApplicationDetailsRpcService.PackageValidityItem packageValidity =
+          applicationDetailsService.isPackageValid(submission.packageNumber());
+      if (packageValidity == null) {
+        return rejected(
+            fileName,
+            fileSize,
+            List.of("Package validation is unavailable for LEXIS application submission."),
+            warnings,
+            submissionSummary,
+            normalizedUserReference);
+      }
+      if (!packageValidity.valid()) {
+        return rejected(
+            fileName,
+            fileSize,
+            List.of(
+                packageValidity.message() == null
+                    ? "Package " + submission.packageNumber() + " already exists."
+                    : packageValidity.message()),
+            warnings,
+            submissionSummary,
+            normalizedUserReference);
+      }
     }
 
     ScheduleResolution scheduleResolution = resolveExportSchedule(submission);
@@ -425,11 +427,15 @@ public class ApplicationSubmissionImportService {
         fileName,
         fileSize,
         VALIDATED,
-        "LEXIS application submission validated for package "
-            + submission.packageNumber()
-            + " with "
-            + submission.scaleLines().size()
-            + " scale rows.",
+        submission.packageNumber() == null
+            ? "LEXIS application submission validated without a package with "
+                + submission.scaleLines().size()
+                + " scale rows."
+            : "LEXIS application submission validated for package "
+                + submission.packageNumber()
+                + " with "
+                + submission.scaleLines().size()
+                + " scale rows.",
         null,
         submission.packageNumber(),
         submission.scaleLines().size(),
@@ -614,28 +620,30 @@ public class ApplicationSubmissionImportService {
           normalizedUserReference);
     }
 
-    ApplicationDetailsRpcService.PackageValidityItem packageValidity =
-        applicationDetailsService.isPackageValid(submission.packageNumber());
-    if (packageValidity == null) {
-      return rejected(
-          fileName,
-          fileSize,
-          List.of("Package validation is unavailable for LEXIS application submission."),
-          warnings,
-          submissionSummary,
-          normalizedUserReference);
-    }
-    if (!packageValidity.valid()) {
-      return rejected(
-          fileName,
-          fileSize,
-          List.of(
-              packageValidity.message() == null
-                  ? "Package " + submission.packageNumber() + " already exists."
-                  : packageValidity.message()),
-          warnings,
-          submissionSummary,
-          normalizedUserReference);
+    if (submission.packageNumber() != null) {
+      ApplicationDetailsRpcService.PackageValidityItem packageValidity =
+          applicationDetailsService.isPackageValid(submission.packageNumber());
+      if (packageValidity == null) {
+        return rejected(
+            fileName,
+            fileSize,
+            List.of("Package validation is unavailable for LEXIS application submission."),
+            warnings,
+            submissionSummary,
+            normalizedUserReference);
+      }
+      if (!packageValidity.valid()) {
+        return rejected(
+            fileName,
+            fileSize,
+            List.of(
+                packageValidity.message() == null
+                    ? "Package " + submission.packageNumber() + " already exists."
+                    : packageValidity.message()),
+            warnings,
+            submissionSummary,
+            normalizedUserReference);
+      }
     }
 
     ScheduleResolution scheduleResolution = resolveExportSchedule(submission);
@@ -693,19 +701,22 @@ public class ApplicationSubmissionImportService {
     }
 
     Long applicationNumber = applicationResult.applicationNumber();
-    PackagePersistenceResult packageResult =
-        applicationDetailsService.addPackage(
-            toPackageMutationRequest(submission, applicationNumber, normalizedUserReference),
-            userId);
-    if (!packageResult.valid()) {
-      markRollbackOnly();
-      return rejected(
-          fileName,
-          fileSize,
-          packagePersistenceErrors(applicationDetailsService, submission.packageNumber(), packageResult),
-          warnings,
-          submissionSummary,
-          normalizedUserReference);
+    if (submission.packageNumber() != null) {
+      PackagePersistenceResult packageResult =
+          applicationDetailsService.addPackage(
+              toPackageMutationRequest(submission, applicationNumber, normalizedUserReference),
+              userId);
+      if (!packageResult.valid()) {
+        markRollbackOnly();
+        return rejected(
+            fileName,
+            fileSize,
+            packagePersistenceErrors(
+                applicationDetailsService, submission.packageNumber(), packageResult),
+            warnings,
+            submissionSummary,
+            normalizedUserReference);
+      }
     }
 
     int importedScales = 0;
@@ -730,13 +741,19 @@ public class ApplicationSubmissionImportService {
         fileName,
         fileSize,
         ACCEPTED,
-        "LEXIS application submission created application "
-            + applicationNumber
-            + " with package "
-            + submission.packageNumber()
-            + " and "
-            + importedScales
-            + " scale rows.",
+        submission.packageNumber() == null
+            ? "LEXIS application submission created application "
+                + applicationNumber
+                + " without a package and "
+                + importedScales
+                + " scale rows."
+            : "LEXIS application submission created application "
+                + applicationNumber
+                + " with package "
+                + submission.packageNumber()
+                + " and "
+                + importedScales
+                + " scale rows.",
         applicationNumber,
         submission.packageNumber(),
         importedScales,
@@ -1147,11 +1164,24 @@ public class ApplicationSubmissionImportService {
         upper(text(productDetail, "speciesEndUseSort", "Species/end-use sort", errors));
     String productLocation = text(productDetail, "productLocation", "Product location", errors);
     String ageClass = upper(text(productDetail, "ageClass", "Age class", errors));
+    ParsedProduct product =
+        parseProductDetail(productDetail, productTypeCode, jurisdictionCode, errors);
+    boolean federalStandingWithoutPackage =
+        FEDERAL_JURISDICTION.equals(jurisdictionCode)
+            && PRODUCT_TYPE_STANDING.equals(productTypeCode)
+            && product.packageNumber() == null;
     Double averageLength =
-        parsePositiveDouble(text(productDetail, "avgLength", "Average length", errors), "average length", errors);
+        parsePackageDimension(
+            text(productDetail, "avgLength", "Average length", errors),
+            "average length",
+            federalStandingWithoutPackage,
+            errors);
     Double averageDiameter =
-        parsePositiveDouble(
-            text(productDetail, "avgDiameter", "Average diameter", errors), "average diameter", errors);
+        parsePackageDimension(
+            text(productDetail, "avgDiameter", "Average diameter", errors),
+            "average diameter",
+            federalStandingWithoutPackage,
+            errors);
     ParsedParties parties =
         parseSubmissionParties(
             lexisSubmission,
@@ -1159,7 +1189,6 @@ public class ApplicationSubmissionImportService {
             applicantContact,
             applicantTypeCode,
             errors);
-    ParsedProduct product = parseProductDetail(productDetail, productTypeCode, errors);
     validateFederalApplicant(applicant, applicantDetails, applicantContact, jurisdictionCode, errors);
     validateFederalOwner(
         lexisSubmission, jurisdictionCode, applicantTypeCode, errors);
@@ -2204,7 +2233,10 @@ public class ApplicationSubmissionImportService {
   }
 
   private ParsedProduct parseProductDetail(
-      Element productDetail, String productTypeCode, List<String> errors) {
+      Element productDetail,
+      String productTypeCode,
+      String jurisdictionCode,
+      List<String> errors) {
     if (productDetail == null) {
       return new ParsedProduct(null, null, null, List.of());
     }
@@ -2244,13 +2276,31 @@ public class ApplicationSubmissionImportService {
       return parseHarvestedSummaryProduct(productDetail, errors);
     }
     if (hasHarvestedWithoutSummary) {
+      boolean federal = FEDERAL_JURISDICTION.equals(jurisdictionCode);
       return parseDeclaredVolumeProduct(
           productDetail,
           harvestedWithoutSummaryRows,
           "Harvested timber without summary",
+          !federal,
+          true,
+          federal
+              ? "Boom/package number must not be provided for federal harvested timber without summary of scale."
+              : null,
           errors);
     }
-    return parseDeclaredVolumeProduct(productDetail, standingTimberRows, "Standing timber", errors);
+    boolean federalStanding =
+        FEDERAL_JURISDICTION.equals(jurisdictionCode)
+            && PRODUCT_TYPE_STANDING.equals(productTypeCode);
+    return parseDeclaredVolumeProduct(
+        productDetail,
+        standingTimberRows,
+        "Standing timber",
+        !federalStanding,
+        !federalStanding,
+        federalStanding
+            ? "Boom/package number must not be provided for federal standing timber."
+            : null,
+        errors);
   }
 
   private ParsedProduct parseHarvestedSummaryProduct(
@@ -2273,20 +2323,28 @@ public class ApplicationSubmissionImportService {
       Element productDetail,
       List<Element> timberRows,
       String label,
+      boolean derivePackageFromTimberMark,
+      boolean requirePackage,
+      String providedPackageError,
       List<String> errors) {
     String packageNumber = packageNumber(productDetail, errors);
     List<String> timberMarks = parseTimberMarks(timberRows, label, errors);
-    if (packageNumber == null && !timberMarks.isEmpty()) {
+    if (derivePackageFromTimberMark && packageNumber == null && !timberMarks.isEmpty()) {
       packageNumber = timberMarks.get(0);
     }
-    validatePackageNumber(packageNumber, "Boom/package number", errors);
+    if (providedPackageError != null && packageNumber != null) {
+      errors.add(providedPackageError);
+    }
+    if (requirePackage || packageNumber != null) {
+      validatePackageNumber(packageNumber, "Boom/package number", errors);
+    }
     Double applicationVolume =
         parsePositiveDouble(
             text(productDetail, "exemptApplnVol", "Exemption application volume", errors),
             "application volume",
             errors);
     Double averageLogVolume =
-        parsePositiveDouble(
+        parseNonNegativeDouble(
             text(productDetail, "averageLogVolume", "Average log volume", errors),
             "average log volume",
             errors);
@@ -2444,6 +2502,9 @@ public class ApplicationSubmissionImportService {
 
   private PackageMutationRequest toPackageMutationRequest(
       ParsedSubmission submission, Long applicationNumber, String userReference) {
+    if (submission.packageNumber() == null) {
+      return null;
+    }
     return new PackageMutationRequest(
         submission.packageNumber(),
         null,
@@ -2688,6 +2749,17 @@ public class ApplicationSubmissionImportService {
       return null;
     }
     return parsed;
+  }
+
+  private Double parsePackageDimension(
+      String value, String label, boolean optional, List<String> errors) {
+    if (!optional) {
+      return parsePositiveDouble(value, label, errors);
+    }
+    if (value == null) {
+      return null;
+    }
+    return parseNonNegativeDouble(value, label, errors);
   }
 
   private Double parseNonNegativeDouble(String value, String label, List<String> errors) {

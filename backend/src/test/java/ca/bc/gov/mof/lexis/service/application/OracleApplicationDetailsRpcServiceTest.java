@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.groups.Tuple.tuple;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -2560,6 +2561,8 @@ class OracleApplicationDetailsRpcServiceTest {
     when(repository.packageExists("PKG-903")).thenReturn(true);
     when(repository.findScaleDetailsByPackageNumber("PKG-903")).thenReturn(List.of());
     when(repository.findTimberMark("TM001")).thenReturn(Optional.of(federalTimberMark));
+    when(repository.findTimberMarkByOrgUnit("TM001", 11L))
+        .thenReturn(Optional.of(federalTimberMark));
     when(repository.findApplicationUpdateRecord(1000456L))
         .thenReturn(Optional.of(federalApplicationUpdateRecord()));
     when(repository.findPackageDetailsByPackageNumberRequired("PKG-903"))
@@ -2585,7 +2588,7 @@ class OracleApplicationDetailsRpcServiceTest {
                     "HE",
                     "1",
                     10.0d,
-                    9_999_999_999L,
+                    999_999_999L,
                     1000456L,
                     null,
                     "PKG-903",
@@ -2594,11 +2597,11 @@ class OracleApplicationDetailsRpcServiceTest {
     ApplicationDetailsRpcService.ScalePersistenceResult response =
         service.addScaleToPackage(
             new ApplicationDetailsRpcService.ScaleMutationRequest(
-                "TM001", "PKG-903", "1", "HE", 1000456L, 9_999_999_999L, 10.0d),
+                "TM001", "PKG-903", "1", "HE", 1000456L, 999_999_999L, 10.0d),
             "idir\\jsmith");
 
     assertThat(response.valid()).isTrue();
-    verify(repository, never()).findTimberMarkByOrgUnit("TM001", 11L);
+    verify(repository).findTimberMarkByOrgUnit("TM001", 11L);
     verify(repository).findSpeciesEndUsesByRegionRequired("11");
     verify(repository).findSpeciesEndUsesByRegionSpeciesRequired("11", "HE");
     verify(repository).insertScaleDetail(any());
@@ -2739,6 +2742,8 @@ class OracleApplicationDetailsRpcServiceTest {
         .thenReturn(List.of(new ApplicationDetailsRpcRepository.ExcolValidationRow("HE/PL")));
     when(repository.packageExists("PKG-903")).thenReturn(false);
     when(repository.findTimberMark("TM001")).thenReturn(Optional.of(validTimberMarkRow()));
+    when(repository.findTimberMarkByOrgUnit("TM001", 11L))
+        .thenReturn(Optional.of(validTimberMarkRow()));
 
     ApplicationDetailsRpcService.SubmissionImportValidationResult response =
         service.validateApplicationSubmissionImport(
@@ -2781,6 +2786,8 @@ class OracleApplicationDetailsRpcServiceTest {
         .thenReturn(List.of(new ApplicationDetailsRpcRepository.ExcolValidationRow("HE/PL")));
     when(repository.packageExists("PKG-903")).thenReturn(false);
     when(repository.findTimberMark("TM001")).thenReturn(Optional.of(federalTimberMark));
+    when(repository.findTimberMarkByOrgUnit("TM001", 11L))
+        .thenReturn(Optional.of(federalTimberMark));
     when(repository.findSpeciesCodeRequired("HE"))
         .thenReturn(
             Optional.of(
@@ -2796,14 +2803,112 @@ class OracleApplicationDetailsRpcServiceTest {
             importPackageRequest(),
             List.of(
                 new ApplicationDetailsRpcService.ScaleMutationRequest(
-                    "TM001", "PKG-903", "1", "HE", null, 9_999_999_999L, 10.0d)));
+                    "TM001", "PKG-903", "1", "HE", null, 999_999_999L, 10.0d)));
 
     assertThat(response.valid()).isTrue();
     assertThat(response.errors()).isEmpty();
-    verify(repository, never()).findTimberMarkByOrgUnit("TM001", 11L);
+    verify(repository).findTimberMarkByOrgUnit("TM001", 11L);
     verify(repository, never()).insertApplication(any());
     verify(repository, never()).insertPackage(any());
     verify(repository, never()).insertScaleDetail(any());
+  }
+
+  @Test
+  void validateApplicationSubmissionImportShouldApplyLegacyRegionCheckToFirstScale() {
+    ApplicationDetailsRpcRepository.TimberMarkRow firstMark =
+        new ApplicationDetailsRpcRepository.TimberMarkRow("TM001", "ACT", "FF-1", "B08");
+    ApplicationDetailsRpcRepository.TimberMarkRow secondMark =
+        new ApplicationDetailsRpcRepository.TimberMarkRow("TM002", "ACT", "FF-2", "B08");
+    when(repository.findTimberMark("TM001")).thenReturn(Optional.of(firstMark));
+    when(repository.findTimberMark("TM002")).thenReturn(Optional.of(secondMark));
+    when(repository.findTimberMarkByOrgUnit("TM001", 11L)).thenReturn(Optional.of(firstMark));
+    when(repository.findGradeCodeRequired("1"))
+        .thenReturn(
+            Optional.of(
+                new ApplicationDetailsRpcRepository.CodeRow("1", "Sawlog", 1L, 1L)));
+
+    ApplicationDetailsRpcService.SubmissionImportValidationResult response =
+        service.validateApplicationSubmissionImport(
+            importApplicationRequest("F"),
+            importPackageRequest(),
+            List.of(
+                new ApplicationDetailsRpcService.ScaleMutationRequest(
+                    "TM001", "PKG-903", "1", "HE", null, 1L, 5.0d),
+                new ApplicationDetailsRpcService.ScaleMutationRequest(
+                    "TM002", "PKG-903", "1", "HE", null, 1L, 5.0d)));
+
+    assertThat(response.errors()).isEmpty();
+    assertThat(response.valid()).isTrue();
+    verify(repository).findTimberMarkByOrgUnit("TM001", 11L);
+    verify(repository, never()).findTimberMarkByOrgUnit("TM002", 11L);
+  }
+
+  @Test
+  void validateApplicationSubmissionImportShouldRejectPiecesAboveLegacyExecutableLimit() {
+    ApplicationDetailsRpcRepository.TimberMarkRow federalTimberMark =
+        new ApplicationDetailsRpcRepository.TimberMarkRow("TM001", "ACT", "FF-1", "B08");
+    when(repository.findTimberMark("TM001")).thenReturn(Optional.of(federalTimberMark));
+    when(repository.findTimberMarkByOrgUnit("TM001", 11L))
+        .thenReturn(Optional.of(federalTimberMark));
+
+    ApplicationDetailsRpcService.SubmissionImportValidationResult response =
+        service.validateApplicationSubmissionImport(
+            importApplicationRequest("F"),
+            importPackageRequest(),
+            List.of(
+                new ApplicationDetailsRpcService.ScaleMutationRequest(
+                    "TM001", "PKG-903", "1", "HE", null, 1_000_000_000L, 10.0d)));
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors()).contains("The scale pieces must be less than 999999999.");
+  }
+
+  @Test
+  void validateApplicationSubmissionImportShouldRejectLengthAboveLegacyExecutableLimit() {
+    ApplicationDetailsRpcService.PackageMutationRequest packageRequest = importPackageRequest();
+    packageRequest =
+        new ApplicationDetailsRpcService.PackageMutationRequest(
+            packageRequest.packageNumber(),
+            packageRequest.newPackageNumber(),
+            packageRequest.applicationNumber(),
+            packageRequest.volume(),
+            99.1d,
+            packageRequest.averageDiameter(),
+            packageRequest.status(),
+            packageRequest.comments(),
+            packageRequest.reprocessed(),
+            packageRequest.ageClass(),
+            packageRequest.productType(),
+            packageRequest.endUseCode(),
+            packageRequest.speciesCodes());
+
+    ApplicationDetailsRpcService.SubmissionImportValidationResult response =
+        service.validateApplicationSubmissionImport(
+            importApplicationRequest("F"), packageRequest, List.of());
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors()).contains("The package average length must be less than 99.9.");
+  }
+
+  @Test
+  void validateApplicationSubmissionImportShouldAcceptLegacyFederalStandingWithoutPackage() {
+    ApplicationDetailsRpcService.SubmissionImportValidationResult response =
+        service.validateApplicationSubmissionImport(
+            standingFederalImportApplicationRequest(), null, List.of());
+
+    assertThat(response.valid()).isTrue();
+    assertThat(response.errors()).isEmpty();
+    verify(repository, never()).packageExists(anyString());
+  }
+
+  @Test
+  void validateApplicationSubmissionImportShouldStillRequirePackageForFederalHarvestedTimber() {
+    ApplicationDetailsRpcService.SubmissionImportValidationResult response =
+        service.validateApplicationSubmissionImport(
+            importApplicationRequest("F"), null, List.of());
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors()).contains("A valid package number is required.");
   }
 
   @Test
@@ -2814,6 +2919,8 @@ class OracleApplicationDetailsRpcServiceTest {
         .thenReturn(List.of(new ApplicationDetailsRpcRepository.ExcolValidationRow("HE/PL")));
     when(repository.packageExists("PKG-903")).thenReturn(false);
     when(repository.findTimberMark("TM001")).thenReturn(Optional.of(federalTimberMark));
+    when(repository.findTimberMarkByOrgUnit("TM001", 11L))
+        .thenReturn(Optional.of(federalTimberMark));
     when(repository.findSpeciesCodeRequired("XX")).thenReturn(Optional.empty());
     when(repository.findGradeCodeRequired("QQ")).thenReturn(Optional.empty());
 
@@ -2837,6 +2944,8 @@ class OracleApplicationDetailsRpcServiceTest {
         new ApplicationDetailsRpcRepository.TimberMarkRow("TM001", "ACT", "FF-1", "B08");
     when(repository.packageExists("PKG-903")).thenReturn(false);
     when(repository.findTimberMark("TM001")).thenReturn(Optional.of(federalTimberMark));
+    when(repository.findTimberMarkByOrgUnit("TM001", 11L))
+        .thenReturn(Optional.of(federalTimberMark));
     when(repository.findSpeciesEndUsesByRegionSpeciesRequired("11", "HE"))
         .thenReturn(List.of());
 
@@ -5025,13 +5134,43 @@ class OracleApplicationDetailsRpcServiceTest {
         true);
   }
 
+  private ApplicationDetailsRpcService.CreateApplicationRequest
+      standingFederalImportApplicationRequest() {
+    return new ApplicationDetailsRpcService.CreateApplicationRequest(
+        700123L,
+        LocalDate.of(2026, 3, 1),
+        30L,
+        LocalDate.of(2026, 3, 2),
+        10.0d,
+        0.0d,
+        "Camp 1",
+        null,
+        null,
+        null,
+        "00011111",
+        "00",
+        null,
+        "S",
+        "O",
+        11L,
+        "S",
+        "F",
+        "S",
+        null,
+        "Owner Contact",
+        "N",
+        "PL",
+        List.of("HE"),
+        true);
+  }
+
   private ApplicationDetailsRpcService.PackageMutationRequest importPackageRequest() {
     return new ApplicationDetailsRpcService.PackageMutationRequest(
         "PKG-903",
         null,
         null,
         10.0d,
-        99.9d,
+        99.0d,
         99.9d,
         "ACT",
         "",

@@ -25,12 +25,12 @@ class ScaleDomainValidatorTest {
 
     assertThat(
             ScaleDomainValidator.validateNumericValues(
-                9_999_999_999L, 1.0d, false, 9_999_999_999L))
+                ScaleDomainValidator.MAX_SCALE_PIECES, 1.0d, false))
         .isEmpty();
     assertThat(
             ScaleDomainValidator.validateNumericValues(
-                10_000_000_000L, 1.0d, false, 9_999_999_999L))
-        .containsExactly("The scale pieces must be less than or equal to 9999999999.");
+                ScaleDomainValidator.MAX_SCALE_PIECES + 1L, 1.0d, false))
+        .containsExactly("The scale pieces must be less than 999999999.");
   }
 
   @Test

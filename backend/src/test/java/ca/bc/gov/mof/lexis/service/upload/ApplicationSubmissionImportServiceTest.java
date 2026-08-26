@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -272,6 +273,121 @@ class ApplicationSubmissionImportServiceTest {
     assertThat(requestCaptor.getValue().federalApplicationNumber()).isZero();
     assertThat(requestCaptor.getValue().exemptionReasonCode()).isEqualTo("E");
     assertThat(requestCaptor.getValue().applicantTypeCode()).isEqualTo("M");
+  }
+
+  @Test
+  void shouldValidateLegacyFederalStandingTimberWithoutPackageDimensions() {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationDetailsService.validateApplication(any(CreateApplicationRequest.class)))
+        .thenReturn(new CreateApplicationResult(true, null, null, List.of(), List.of()));
+    when(
+            applicationDetailsService.validateApplicationSubmissionImport(
+                any(CreateApplicationRequest.class), isNull(), any()))
+        .thenReturn(new SubmissionImportValidationResult(true, List.of(), List.of()));
+
+    ApplicationSubmissionImportResultDto result =
+        service()
+            .validateDedicatedFederalApplicationSubmission(
+                federalStandingWithoutPackageXmlText().getBytes(StandardCharsets.UTF_8),
+                "federal-standing.xml",
+                "FED-REF-STANDING");
+
+    assertThat(result.status()).isEqualTo("validated");
+    assertThat(result.packageNumber()).isNull();
+    assertThat(result.scaleRows()).isZero();
+    assertThat(result.message()).isEqualTo(
+        "LEXIS application submission validated without a package with 0 scale rows.");
+    assertThat(result.submissionSummary().averageLength()).isNull();
+    assertThat(result.submissionSummary().averageDiameter()).isNull();
+    assertThat(result.submissionSummary().averageLogVolume()).isZero();
+    verify(applicationDetailsService, never()).isPackageValid(anyString());
+    verify(applicationDetailsService)
+        .validateApplicationSubmissionImport(
+            any(CreateApplicationRequest.class), isNull(), any());
+  }
+
+  @Test
+  void shouldRejectFederalStandingTimberWithPackageLikeLegacy() {
+    String xml =
+        federalStandingWithoutPackageXmlText()
+            .replace(
+                "<lexis:exemptApplnVol>42.2</lexis:exemptApplnVol>",
+                """
+                <lexis:boomNumber>STAND1</lexis:boomNumber>
+                <lexis:exemptApplnVol>42.2</lexis:exemptApplnVol>""");
+
+    ApplicationSubmissionImportResultDto result =
+        service()
+            .validateDedicatedFederalApplicationSubmission(
+                xml.getBytes(StandardCharsets.UTF_8),
+                "federal-standing-package.xml",
+                "FED-REF-STANDING-PACKAGE");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors())
+        .contains("Boom/package number must not be provided for federal standing timber.");
+    verify(applicationDetailsServiceProvider, never()).getIfAvailable();
+  }
+
+  @Test
+  void shouldImportLegacyFederalStandingTimberWithoutPackage() {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(
+            applicationDetailsService.validateApplicationSubmissionImport(
+                any(CreateApplicationRequest.class), isNull(), any()))
+        .thenReturn(new SubmissionImportValidationResult(true, List.of(), List.of()));
+    when(
+            applicationDetailsService.addFederalImportedApplication(
+                any(CreateApplicationRequest.class), eq("federal-user")))
+        .thenReturn(new CreateApplicationResult(true, "saved", 9003L, List.of(), List.of()));
+
+    ApplicationSubmissionImportResultDto result =
+        service()
+            .importDedicatedFederalApplicationSubmission(
+                federalStandingWithoutPackageXmlText().getBytes(StandardCharsets.UTF_8),
+                "federal-standing.xml",
+                "federal-user",
+                "FED-REF-STANDING");
+
+    assertThat(result.status()).isEqualTo("accepted");
+    assertThat(result.applicationNumber()).isEqualTo(9003L);
+    assertThat(result.packageNumber()).isNull();
+    assertThat(result.scaleRows()).isZero();
+    assertThat(result.message()).isEqualTo(
+        "LEXIS application submission created application 9003 without a package and 0 scale rows.");
+    verify(applicationDetailsService, never()).isPackageValid(anyString());
+    verify(applicationDetailsService, never())
+        .addPackage(any(PackageMutationRequest.class), anyString());
+    verify(applicationDetailsService, never())
+        .addScaleToPackage(any(ScaleMutationRequest.class), anyString());
+  }
+
+  @Test
+  void shouldRetainLegacyFederalHarvestedWithoutSummaryBoomRules() {
+    String withoutBoom =
+        federalHarvestedWithoutSummaryXmlText().replace(
+            "<lexis:boomNumber>FED26-700123</lexis:boomNumber>\n", "");
+
+    ApplicationSubmissionImportResultDto missingBoomResult =
+        service()
+            .validateDedicatedFederalApplicationSubmission(
+                withoutBoom.getBytes(StandardCharsets.UTF_8),
+                "federal-without-summary.xml",
+                "FED-REF-NO-BOOM");
+    ApplicationSubmissionImportResultDto suppliedBoomResult =
+        service()
+            .validateDedicatedFederalApplicationSubmission(
+                federalHarvestedWithoutSummaryXmlText().getBytes(StandardCharsets.UTF_8),
+                "federal-without-summary.xml",
+                "FED-REF-WITH-BOOM");
+
+    assertThat(missingBoomResult.status()).isEqualTo("rejected");
+    assertThat(missingBoomResult.errors()).contains("Boom/package number is required.");
+    assertThat(suppliedBoomResult.status()).isEqualTo("rejected");
+    assertThat(suppliedBoomResult.errors())
+        .contains(
+            "Boom/package number must not be provided for federal harvested timber without summary of scale.");
+    verify(applicationDetailsServiceProvider, never()).getIfAvailable();
   }
 
   @Test
@@ -1393,7 +1509,7 @@ class ApplicationSubmissionImportServiceTest {
         .thenReturn(
             new SubmissionImportValidationResult(
                 false,
-                List.of("Scale pieces must be 9,999,999,999 or fewer."),
+                List.of("Scale pieces must be 999,999,999 or fewer."),
                 List.of()));
 
     ApplicationSubmissionImportResultDto result =
@@ -1406,7 +1522,7 @@ class ApplicationSubmissionImportServiceTest {
 
     assertThat(result.status()).isEqualTo("rejected");
     assertThat(result.errors())
-        .containsExactly("Scale pieces must be 9,999,999,999 or fewer.");
+        .containsExactly("Scale pieces must be 999,999,999 or fewer.");
     verify(applicationDetailsService)
         .validateApplicationSubmissionImport(
             any(CreateApplicationRequest.class),
@@ -2329,6 +2445,45 @@ class ApplicationSubmissionImportServiceTest {
             "<lexis:boomNumber>FED26-700123</lexis:boomNumber>");
   }
 
+  private static String federalStandingWithoutPackageXmlText() {
+    return replaceProductDetail(
+        federalSampleXmlText(),
+        """
+        <lexis:productDetail>
+          <lexis:productTypeCode>S</lexis:productTypeCode>
+          <lexis:exemptApplnVol>42.2</lexis:exemptApplnVol>
+          <lexis:averageLogVolume>0</lexis:averageLogVolume>
+          <lexis:speciesEndUseSort>HE/PL</lexis:speciesEndUseSort>
+          <lexis:productLocation>Generic Federal Standing Location</lexis:productLocation>
+          <lexis:ageClass>O</lexis:ageClass>
+          <lexis:standingTimber>
+            <lexis:timberMark>ZZ999</lexis:timberMark>
+          </lexis:standingTimber>
+        </lexis:productDetail>
+        """);
+  }
+
+  private static String federalHarvestedWithoutSummaryXmlText() {
+    return replaceProductDetail(
+        federalSampleXmlText(),
+        """
+        <lexis:productDetail>
+          <lexis:productTypeCode>H</lexis:productTypeCode>
+          <lexis:boomNumber>FED26-700123</lexis:boomNumber>
+          <lexis:exemptApplnVol>42.2</lexis:exemptApplnVol>
+          <lexis:averageLogVolume>0</lexis:averageLogVolume>
+          <lexis:speciesEndUseSort>HE/PL</lexis:speciesEndUseSort>
+          <lexis:productLocation>Generic Federal Harvest Location</lexis:productLocation>
+          <lexis:ageClass>O</lexis:ageClass>
+          <lexis:avgLength>6.7</lexis:avgLength>
+          <lexis:avgDiameter>12.8</lexis:avgDiameter>
+          <lexis:harvestedTimberWithoutSummaryOfScale>
+            <lexis:timberMark>ZZ999</lexis:timberMark>
+          </lexis:harvestedTimberWithoutSummaryOfScale>
+        </lexis:productDetail>
+        """);
+  }
+
   private static String federalBareSampleXmlText() {
     String federalSubmission = federalSampleXmlText();
     String startTag = "<lexis:LexisSubmission>";
@@ -2430,13 +2585,17 @@ class ApplicationSubmissionImportServiceTest {
   }
 
   private static String xmlWithProductDetail(String productDetail) {
+    return replaceProductDetail(SAMPLE_XML, productDetail);
+  }
+
+  private static String replaceProductDetail(String xml, String productDetail) {
     String startTag = "<lexis:productDetail>";
     String endTag = "</lexis:productDetail>";
-    int productStart = SAMPLE_XML.indexOf(startTag);
-    int productEnd = SAMPLE_XML.indexOf(endTag) + endTag.length();
-    return SAMPLE_XML.substring(0, productStart)
+    int productStart = xml.indexOf(startTag);
+    int productEnd = xml.indexOf(endTag) + endTag.length();
+    return xml.substring(0, productStart)
         + productDetail
-        + SAMPLE_XML.substring(productEnd);
+        + xml.substring(productEnd);
   }
 
   private MockMultipartFile zippedFile(String entryName, String xml) throws Exception {

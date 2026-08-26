@@ -15,11 +15,6 @@ public final class ScaleDomainValidator {
 
   public static List<String> validateNumericValues(
       Long pieces, Double volume, boolean requirePositive) {
-    return validateNumericValues(pieces, volume, requirePositive, MAX_SCALE_PIECES);
-  }
-
-  public static List<String> validateNumericValues(
-      Long pieces, Double volume, boolean requirePositive, long maximumPieces) {
     List<String> errors = new ArrayList<>();
     long minimumPieces = requirePositive ? 1L : 0L;
     double minimumVolume = requirePositive ? Double.MIN_VALUE : 0.0d;
@@ -29,11 +24,8 @@ public final class ScaleDomainValidator {
           requirePositive
               ? "A valid pieces count is required."
               : "The scale pieces must be greater than or equal to 0.");
-    } else if (pieces > maximumPieces) {
-      errors.add(
-          maximumPieces == MAX_SCALE_PIECES
-              ? "The scale pieces must be less than 999999999."
-              : "The scale pieces must be less than or equal to " + maximumPieces + ".");
+    } else if (pieces > MAX_SCALE_PIECES) {
+      errors.add("The scale pieces must be less than 999999999.");
     }
 
     if (volume == null || !Double.isFinite(volume) || volume < minimumVolume) {
