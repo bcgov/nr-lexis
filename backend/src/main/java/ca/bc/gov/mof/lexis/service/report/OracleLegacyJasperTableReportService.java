@@ -41,12 +41,15 @@ public class OracleLegacyJasperTableReportService {
   private static final int DIRECT_COLUMNS_WHEN_OVERFLOWING = MAX_COLUMNS - 1;
   private static final String OVERFLOW_COLUMN_HEADER = "Additional Columns";
   private static final String DYNAMIC_TEMPLATE_CLASSPATH = "reports/lexis/LEXIS_DYNAMIC_TABLE.jrxml";
+  private static final String SPECIES_GRADE_TEMPLATE_CLASSPATH =
+      "reports/lexis/LEXIS_SPECIES_GRADE.jrxml";
   private static final String APPROVED_EXEMPTION_TEMPLATE_CLASSPATH =
       "reports/lexis/LEXIS_APPROVED_EXEMPTION.jrxml";
 
   private final OracleLegacyCsvReportService legacyCsvReportService;
   private final LexisReportResourceManager reportResources;
   private volatile JasperReport compiledTemplate;
+  private volatile JasperReport compiledSpeciesGradeTemplate;
   private volatile JasperReport compiledApprovedExemptionTemplate;
 
   public OracleLegacyJasperTableReportService(OracleLegacyCsvReportService legacyCsvReportService) {
@@ -127,21 +130,30 @@ public class OracleLegacyJasperTableReportService {
 
   private JasperReport getOrCompileTemplate(LexisJasperReportDefinition definition)
       throws JRException {
+    boolean speciesGrade = definition == LexisJasperReportDefinition.SPECIES_GRADE_REPORT;
     boolean approvedExemption =
         definition == LexisJasperReportDefinition.APPROVED_EXEMPTION_REPORT;
-    JasperReport current = approvedExemption ? compiledApprovedExemptionTemplate : compiledTemplate;
+    JasperReport current =
+        speciesGrade
+            ? compiledSpeciesGradeTemplate
+            : approvedExemption ? compiledApprovedExemptionTemplate : compiledTemplate;
     if (current != null) {
       return current;
     }
 
     synchronized (this) {
-      current = approvedExemption ? compiledApprovedExemptionTemplate : compiledTemplate;
+      current =
+          speciesGrade
+              ? compiledSpeciesGradeTemplate
+              : approvedExemption ? compiledApprovedExemptionTemplate : compiledTemplate;
       if (current != null) {
         return current;
       }
 
       String templateClasspath =
-          approvedExemption ? APPROVED_EXEMPTION_TEMPLATE_CLASSPATH : DYNAMIC_TEMPLATE_CLASSPATH;
+          speciesGrade
+              ? SPECIES_GRADE_TEMPLATE_CLASSPATH
+              : approvedExemption ? APPROVED_EXEMPTION_TEMPLATE_CLASSPATH : DYNAMIC_TEMPLATE_CLASSPATH;
       ClassPathResource templateResource = new ClassPathResource(templateClasspath);
       if (!templateResource.exists()) {
         throw new JRException("Missing Jasper template: " + templateClasspath);
@@ -149,7 +161,9 @@ public class OracleLegacyJasperTableReportService {
 
       try (InputStream inputStream = templateResource.getInputStream()) {
         JasperReport compiled = JasperCompileManager.compileReport(inputStream);
-        if (approvedExemption) {
+        if (speciesGrade) {
+          compiledSpeciesGradeTemplate = compiled;
+        } else if (approvedExemption) {
           compiledApprovedExemptionTemplate = compiled;
         } else {
           compiledTemplate = compiled;
@@ -169,7 +183,8 @@ public class OracleLegacyJasperTableReportService {
     parameters.put("REPORT_TITLE", titleFor(definition));
     parameters.put("REPORT_SUBTITLE", subtitleFor(definition, request));
     parameters.put("REPORT_GENERATED_DATE", LexisBusinessTime.today().toString());
-    if (definition == LexisJasperReportDefinition.APPROVED_EXEMPTION_REPORT) {
+    if (definition == LexisJasperReportDefinition.APPROVED_EXEMPTION_REPORT
+        || definition == LexisJasperReportDefinition.SPECIES_GRADE_REPORT) {
       return parameters;
     }
     parameters.put("P_COLUMN_COUNT", Math.min(columnHeaders.size(), MAX_COLUMNS));

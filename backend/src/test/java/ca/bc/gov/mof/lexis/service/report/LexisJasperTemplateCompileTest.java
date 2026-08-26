@@ -161,6 +161,64 @@ class LexisJasperTemplateCompileTest {
         .contains("No rows returned for this report criteria.");
   }
 
+  @Test
+  void speciesGradeTemplateShouldUseFixedBusinessColumns() throws Exception {
+    String template =
+        Files.readString(
+            new ClassPathResource("reports/lexis/LEXIS_SPECIES_GRADE.jrxml")
+                .getFile()
+                .toPath());
+
+    for (String fieldName :
+        List.of(
+            "EXPORT_PRODUCT_TYPE_CODE",
+            "PRODUCT_TYPE",
+            "REGION",
+            "EXPORT_GRADE_CODE",
+            "SUM_FI",
+            "SUM_CE",
+            "SUM_SP",
+            "SUM_LO",
+            "SUM_HE",
+            "SUM_BA",
+            "SUM_CY",
+            "SUM_AL",
+            "SUM_CO",
+            "SUM_HD",
+            "SUM_OT",
+            "EXPORT_JURISDICTION_CODE",
+            "SORTED_COLUMN")) {
+      assertThat(template).contains("<field name=\"" + fieldName + "\"");
+    }
+
+    for (String label :
+        List.of(
+            "Product type code",
+            "Product type",
+            "Region",
+            "Grade",
+            "Fir",
+            "Cedar",
+            "Spruce",
+            "Lodgepole pine",
+            "Hemlock",
+            "Balsam",
+            "Cypress",
+            "Alder",
+            "Cottonwood",
+            "Hardwood",
+            "Other",
+            "Jurisdiction")) {
+      assertThat(template).contains("<text><![CDATA[" + label + "]]></text>");
+    }
+
+    assertThat(template)
+        .doesNotContain("Additional Columns")
+        .doesNotContain("<text><![CDATA[SUM_")
+        .doesNotContain("<text><![CDATA[EXPORT_")
+        .doesNotContain("<text><![CDATA[SORTED_COLUMN]]></text>");
+  }
+
   private String structuralSignature(InputStream inputStream) throws Exception {
     DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
     factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);

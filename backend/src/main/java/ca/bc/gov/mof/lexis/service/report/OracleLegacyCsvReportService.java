@@ -167,13 +167,13 @@ public class OracleLegacyCsvReportService {
     cs.setDate(1, toSqlDate(first(parameters, "fromDate")));
     cs.setDate(2, toSqlDate(first(parameters, "toDate")));
     setNullableString(cs, 3, csvValue(parameters, "region"));
-    setNullableString(cs, 4, trimToNull(first(parameters, "exemptionNumber")));
-    setNullableString(cs, 5, trimToNull(first(parameters, "exemptionType")));
-    setNullableString(cs, 6, trimToNull(first(parameters, "exemptionReason")));
-    setNullableString(cs, 7, trimToNull(first(parameters, "growthType")));
-    setNullableString(cs, 8, trimToNull(first(parameters, "timberMark")));
-    setNullableString(cs, 9, trimToNull(first(parameters, "forestFileId")));
-    setNullableString(cs, 10, trimToNull(first(parameters, "permitStatus")));
+    setNullableString(cs, 4, trimToNull(first(parameters, "permitStatus")));
+    setNullableString(cs, 5, trimToNull(first(parameters, "exemptionNumber")));
+    setNullableString(cs, 6, trimToNull(first(parameters, "exemptionType")));
+    setNullableString(cs, 7, trimToNull(first(parameters, "exemptionReason")));
+    setNullableString(cs, 8, trimToNull(first(parameters, "growthType")));
+    setNullableString(cs, 9, trimToNull(first(parameters, "timberMark")));
+    setNullableString(cs, 10, trimToNull(first(parameters, "forestFileId")));
   }
 
   private String resolveTeacProcedure(Map<String, String> parameters) {

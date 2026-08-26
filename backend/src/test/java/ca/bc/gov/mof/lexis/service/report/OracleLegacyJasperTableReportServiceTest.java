@@ -165,6 +165,102 @@ class OracleLegacyJasperTableReportServiceTest {
   }
 
   @Test
+  void shouldRenderSpeciesGradeFieldsWithBusinessLabels() throws Exception {
+    TabularData tabularData =
+        new TabularData(
+            List.of(
+                "EXPORT_PRODUCT_TYPE_CODE",
+                "PRODUCT_TYPE",
+                "REGION",
+                "EXPORT_GRADE_CODE",
+                "SUM_FI",
+                "SUM_CE",
+                "SUM_SP",
+                "SUM_LO",
+                "SUM_HE",
+                "SUM_BA",
+                "SUM_CY",
+                "SUM_AL",
+                "SUM_CO",
+                "SUM_HD",
+                "SUM_OT",
+                "EXPORT_JURISDICTION_CODE",
+                "SORTED_COLUMN"),
+            List.of(
+                List.of(
+                    "S",
+                    "Standing Timber",
+                    "Skeena Natural Resource Region",
+                    "1",
+                    "0",
+                    "0",
+                    "0",
+                    "0",
+                    "2",
+                    "0",
+                    "0",
+                    "0",
+                    "0",
+                    "0",
+                    "0",
+                    "Provincial",
+                    "2")));
+    LexisReportRequestDto request =
+        new LexisReportRequestDto(
+            Map.of("fromDate", "2026-03-05", "toDate", "2026-03-05", "permitStatus", "COM"),
+            "PDF");
+    stubCursor(LexisJasperReportDefinition.SPECIES_GRADE_REPORT, request, tabularData);
+
+    List<String> renderedText = new java.util.ArrayList<>();
+    OracleLegacyJasperTableReportService service =
+        new OracleLegacyJasperTableReportService(legacyCsvReportService) {
+          @Override
+          void exportPdf(JasperPrint print, OutputStream output) {
+            print
+                .getPages()
+                .forEach(page -> collectText(page.getElements(), renderedText));
+          }
+        };
+
+    Optional<LexisGeneratedReport> report =
+        service.generateLegacyPdfReport(
+            LexisJasperReportDefinition.SPECIES_GRADE_REPORT,
+            request,
+            LexisReportFormat.PDF);
+
+    assertThat(report).isPresent();
+    assertThat(report.orElseThrow().filename()).isEqualTo("species-and-grade-report.pdf");
+    assertThat(renderedText)
+        .contains(
+            "Species and Grade Report",
+            "Product type code",
+            "Product type",
+            "Region",
+            "Grade",
+            "Fir",
+            "Cedar",
+            "Spruce",
+            "Lodgepole pine",
+            "Hemlock",
+            "Balsam",
+            "Cypress",
+            "Alder",
+            "Cottonwood",
+            "Hardwood",
+            "Other",
+            "Jurisdiction",
+            "Standing Timber",
+            "Skeena Natural Resource Region",
+            "2",
+            "Provincial")
+        .noneMatch(
+            text ->
+                text.contains("Additional Columns")
+                    || text.contains("SUM_")
+                    || text.contains("SORTED_COLUMN"));
+  }
+
+  @Test
   void shouldReleaseLegacyCursorBeforeExportingPdfArtifact() throws Exception {
     LexisReportRequestDto request = new LexisReportRequestDto(Map.of(), "PDF");
     AtomicBoolean cursorReleased = new AtomicBoolean(false);
@@ -239,7 +335,7 @@ class OracleLegacyJasperTableReportServiceTest {
 
     Map<String, Object> parameters =
         service.buildTemplateParameters(
-            LexisJasperReportDefinition.SPECIES_GRADE_REPORT,
+            LexisJasperReportDefinition.TEAC_REPORT,
             new LexisReportRequestDto(Map.of(), "PDF"),
             tabularData.columnHeaders());
     String overflow =
