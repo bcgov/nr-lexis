@@ -644,9 +644,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(within(permitSummaryTile as HTMLElement).getByText('Permit number')).toBeInTheDocument()
     expect(within(permitSummaryTile as HTMLElement).getByText('777 (Pending)')).toBeInTheDocument()
     expect(
-      within(permitSummaryTile as HTMLElement).getByText('Application number'),
+      within(permitSummaryTile as HTMLElement).getByText('Application number(s)'),
     ).toBeInTheDocument()
-    expect(within(permitSummaryTile as HTMLElement).getByText('Package number')).toBeInTheDocument()
+    expect(
+      within(permitSummaryTile as HTMLElement).getByText('Package number(s)'),
+    ).toBeInTheDocument()
     expect(within(permitSummaryTile as HTMLElement).getByText('PKG-9')).toBeInTheDocument()
     expect(
       within(permitSummaryTile as HTMLElement).getByRole('link', { name: 'EX-9' }),
@@ -712,6 +714,30 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.queryByRole('button', { name: 'Add Invoice' })).not.toBeInTheDocument()
     expect(mockedFetchPermitInvoices).toHaveBeenCalledTimes(1)
   }, 15000)
+
+  it('shows all associated application and package numbers in the permit summary', async () => {
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      applicationNumber: null,
+      packageNumber: null,
+    })
+    mockedFetchProvincialPermitDetailTabs.mockResolvedValue({
+      ...tabsResult,
+      applications: ['1000456', '1000457'],
+      packages: [
+        { ...editableBlanketOicPackage, packageNumber: 'PKG-9' },
+        { ...editableBlanketOicPackage, packageNumber: 'PKG-10' },
+      ],
+    })
+
+    renderPermitDetails()
+
+    const permitSummaryTile = (
+      await screen.findByRole('heading', { name: 'Permit summary' })
+    ).closest('.cds--tile') as HTMLElement
+    expect(within(permitSummaryTile).getByText('1000456, 1000457')).toBeInTheDocument()
+    expect(within(permitSummaryTile).getByText('PKG-9, PKG-10')).toBeInTheDocument()
+  })
 
   it('restores the permit tab and loads deferred data after a conflict refresh', async () => {
     render(
