@@ -569,15 +569,16 @@ describe('Create Page Core Flows', () => {
 
     mockedSubmitProvincialApplicationCreate.mockResolvedValueOnce({
       success: false,
-      message: 'Save rejected.',
+      message: '',
       createdId: undefined,
-      errors: ['Save rejected.'],
+      errors: ['Application agent location does not exist.'],
       warnings: [],
     })
     await userEvent.click(postSaveAcknowledgement)
     await userEvent.click(within(postSaveDialog).getByRole('button', { name: 'Save application' }))
 
     expect(await screen.findByText('Save Failed')).toBeVisible()
+    expect(screen.getByText('Application agent location does not exist.')).toBeVisible()
     expect(postSaveDialog).toBeVisible()
     expect(within(postSaveDialog).getByRole('button', { name: 'Save application' })).toBeEnabled()
   }, 20_000)

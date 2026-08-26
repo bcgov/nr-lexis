@@ -604,7 +604,7 @@ class OracleApplicationDetailsRpcServiceTest {
   }
 
   @Test
-  void addApplicationShouldInsertWhenRequestIsValid() {
+  void addApplicationShouldNormalizeShortClientNumbersBeforeInsert() {
     when(repository.findCandidateExcolCodesRequired(2, "FI", "LU", 11L))
         .thenReturn(List.of(new ApplicationDetailsRpcRepository.ExcolValidationRow("HE/FI/LU")));
     when(repository.insertApplication(any(ApplicationDetailsRpcRepository.ApplicationInsertRecord.class)))
@@ -624,9 +624,9 @@ class OracleApplicationDetailsRpcServiceTest {
                 2.4d,
                 "Camp 1",
                 null,
-                "00022222",
+                "2176",
                 "01",
-                "00011111",
+                "11111",
                 "02",
                 null,
                 "U",
@@ -656,12 +656,14 @@ class OracleApplicationDetailsRpcServiceTest {
     assertThat(record.jurisdictionCode()).isEqualTo("P");
     assertThat(record.oicIndicator()).isEqualTo("N");
     assertThat(record.applicantTypeCode()).isEqualTo("A");
-    assertThat(record.agentClientNumber()).isEqualTo("00022222");
+    assertThat(record.agentClientNumber()).isEqualTo("00002176");
     assertThat(record.agentClientLocationCode()).isEqualTo("01");
     assertThat(record.ownerClientNumber()).isEqualTo("00011111");
     assertThat(record.ownerClientLocationCode()).isEqualTo("02");
     assertThat(record.applicationVolume()).isEqualTo(9_999_999.99d);
     assertThat(record.entryUserId()).isEqualTo("idir\\jsmith");
+    verify(clientRepository)
+        .findLocationByClientNumberCodeRequired("00002176", "01");
     verify(clientRepository)
         .findLocationByClientNumberCodeRequired("00011111", "02");
     verify(repository).replaceApplicationEndUses(

@@ -1286,7 +1286,10 @@ const ProvincialApplicationCreatePage = () => {
         kind: 'error',
         title: 'Save Failed',
         message:
-          'Application save failed. Please review the form and try again. If the problem persists, contact support.',
+          result.errors.length > 0
+            ? result.errors.join(' ')
+            : result.message.trim() ||
+              'Application save failed. Please review the form and try again. If the problem persists, contact support.',
       })
       return false
     } catch (error) {
