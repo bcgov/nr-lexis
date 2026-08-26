@@ -30,11 +30,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -48,6 +51,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.web.multipart.MultipartFile;
+import org.yaml.snakeyaml.Yaml;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("Unit Test | ApplicationSubmissionImportService")
@@ -1379,6 +1383,44 @@ class ApplicationSubmissionImportServiceTest {
   }
 
   @Test
+  void shouldRejectDedicatedFederalCreateWhenImportPreflightFails() {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(
+            applicationDetailsService.validateApplicationSubmissionImport(
+                any(CreateApplicationRequest.class),
+                any(PackageMutationRequest.class),
+                any()))
+        .thenReturn(
+            new SubmissionImportValidationResult(
+                false,
+                List.of("Scale pieces must be 9,999,999,999 or fewer."),
+                List.of()));
+
+    ApplicationSubmissionImportResultDto result =
+        service()
+            .importDedicatedFederalApplicationSubmission(
+                federalSampleXmlText().getBytes(StandardCharsets.UTF_8),
+                "federal-submission.xml",
+                "federal-user",
+                "FED-REF-PREFLIGHT");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors())
+        .containsExactly("Scale pieces must be 9,999,999,999 or fewer.");
+    verify(applicationDetailsService)
+        .validateApplicationSubmissionImport(
+            any(CreateApplicationRequest.class),
+            any(PackageMutationRequest.class),
+            any());
+    verify(applicationDetailsService, never())
+        .addFederalImportedApplication(any(CreateApplicationRequest.class), anyString());
+    verify(applicationDetailsService, never())
+        .addPackage(any(PackageMutationRequest.class), anyString());
+    verify(applicationDetailsService, never())
+        .addScaleToPackage(any(ScaleMutationRequest.class), anyString());
+  }
+
+  @Test
   void shouldRejectLexisXmlValidationWhenUserReferenceIsTooLong() {
     ApplicationSubmissionImportResultDto result = service().validateApplicationSubmission(sampleXml(), "R".repeat(51));
 
@@ -1521,6 +1563,29 @@ class ApplicationSubmissionImportServiceTest {
     assertThat(federalJurisdiction.status()).isEqualTo("rejected");
     assertThat(federalJurisdiction.errors())
         .contains("Federal office use details are required.");
+  }
+
+  @Test
+  void shouldKeepPublishedOpenApiExampleAlignedWithValidatedFederalFixture() throws Exception {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationDetailsService.validateApplication(any(CreateApplicationRequest.class)))
+        .thenReturn(new CreateApplicationResult(true, null, null, List.of(), List.of()));
+
+    String publishedExample = openApiFederalSubmissionExample();
+    String validatedFixture = sampleResourceText("pass-federal-application.xml");
+
+    assertThat(publishedExample).isEqualTo(validatedFixture);
+
+    ApplicationSubmissionImportResultDto result =
+        service()
+            .validateDedicatedFederalApplicationSubmission(
+                publishedExample.getBytes(StandardCharsets.UTF_8),
+                "federal-submission.xml",
+                "NEXCOL-OPENAPI-EXAMPLE");
+
+    assertThat(result.status()).isEqualTo("validated");
+    assertThat(result.packageNumber()).isEqualTo("FED26-700123");
+    assertThat(result.scaleRows()).isOne();
   }
 
   @Test
@@ -2315,6 +2380,43 @@ class ApplicationSubmissionImportServiceTest {
       assertThat(input).as(resourceName).isNotNull();
       return new MockMultipartFile("formFile", fileName, "application/xml", input.readAllBytes());
     }
+  }
+
+  private String sampleResourceText(String fileName) throws Exception {
+    String resourceName = "/lexis-upload-samples/" + fileName;
+    try (InputStream input = getClass().getResourceAsStream(resourceName)) {
+      assertThat(input).as(resourceName).isNotNull();
+      return new String(input.readAllBytes(), StandardCharsets.UTF_8);
+    }
+  }
+
+  private static String openApiFederalSubmissionExample() throws Exception {
+    Object value;
+    try (InputStream input =
+        Files.newInputStream(repositoryFile("gateway/openapi.yaml"))) {
+      value = new Yaml().load(input);
+    }
+    for (String key :
+        List.of(
+            "components",
+            "requestBodies",
+            "FederalSubmissionXml",
+            "content",
+            "application/xml",
+            "example")) {
+      assertThat(value).as(key).isInstanceOf(Map.class);
+      value = ((Map<?, ?>) value).get(key);
+    }
+    assertThat(value).isInstanceOf(String.class);
+    return (String) value;
+  }
+
+  private static Path repositoryFile(String relativePath) {
+    Path fromRepositoryRoot = Path.of(relativePath);
+    if (Files.isRegularFile(fromRepositoryRoot)) {
+      return fromRepositoryRoot;
+    }
+    return Path.of("..", relativePath);
   }
 
   private MockMultipartFile bareSampleXml() {

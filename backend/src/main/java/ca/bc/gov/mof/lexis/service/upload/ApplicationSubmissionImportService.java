@@ -656,6 +656,27 @@ public class ApplicationSubmissionImportService {
             importDate,
             scheduleResolution.exportScheduleId(),
             normalizedUserReference);
+    if (federalOnly) {
+      SubmissionImportValidationResult importValidation =
+          applicationDetailsService.validateApplicationSubmissionImport(
+              createRequest,
+              toPackageMutationRequest(submission, null, normalizedUserReference),
+              toScaleMutationRequests(submission, null));
+      if (importValidation != null) {
+        warnings = mergeWarnings(warnings, importValidation.warnings());
+        if (!importValidation.valid()) {
+          return rejected(
+              fileName,
+              fileSize,
+              resultErrors(
+                  importValidation.errors(),
+                  "The LEXIS application submission could not be validated."),
+              warnings,
+              submissionSummary,
+              normalizedUserReference);
+        }
+      }
+    }
     CreateApplicationResult applicationResult =
         federalOnly
             ? applicationDetailsService.addFederalImportedApplication(createRequest, userId)

@@ -1896,6 +1896,12 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         request.applicationNumber() == null || request.applicationNumber() < 1
             ? Optional.empty()
             : repository.findApplicationUpdateRecord(request.applicationNumber());
+    boolean federalApplication =
+        application
+            .map(ApplicationDetailsRpcRepository.ApplicationUpdateRecord::jurisdictionCode)
+            .map(TextUtils::trimToNull)
+            .filter(JURISDICTION_FEDERAL::equals)
+            .isPresent();
 
     if (request.applicationNumber() == null || request.applicationNumber() < 1) {
       errors.add(required("application number"));
@@ -1923,8 +1929,17 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       errors.add(required("species code"));
     }
     validateScaleCodes(request, errors);
+    if (federalApplication) {
+      validateScaleCodesForRegion(request, application.get().orgUnitNumber(), errors);
+    }
     errors.addAll(
-        ScaleDomainValidator.validateNumericValues(request.pieces(), request.volume(), false));
+        ScaleDomainValidator.validateNumericValues(
+            request.pieces(),
+            request.volume(),
+            false,
+            federalApplication
+                ? LEGACY_FEDERAL_MAX_SCALE_PIECES
+                : ScaleDomainValidator.MAX_SCALE_PIECES));
 
     if (packageNumber != null) {
       List<ApplicationDetailsRpcRepository.ApplicationScaleDetailRow> scaleRows =

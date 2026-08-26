@@ -2554,6 +2554,57 @@ class OracleApplicationDetailsRpcServiceTest {
   }
 
   @Test
+  void addScaleToPackageShouldApplyLegacyFederalScaleRules() {
+    ApplicationDetailsRpcRepository.TimberMarkRow federalTimberMark =
+        new ApplicationDetailsRpcRepository.TimberMarkRow("TM001", "ACT", "FF-1", "B08");
+    when(repository.packageExists("PKG-903")).thenReturn(true);
+    when(repository.findScaleDetailsByPackageNumber("PKG-903")).thenReturn(List.of());
+    when(repository.findTimberMark("TM001")).thenReturn(Optional.of(federalTimberMark));
+    when(repository.findApplicationUpdateRecord(1000456L))
+        .thenReturn(Optional.of(federalApplicationUpdateRecord()));
+    when(repository.findPackageDetailsByPackageNumberRequired("PKG-903"))
+        .thenReturn(Optional.of(packageDetailsRow("PKG-903", 100.0d)));
+    when(repository.findGradeCodeRequired("1"))
+        .thenReturn(
+            Optional.of(
+                new ApplicationDetailsRpcRepository.CodeRow("1", "Sawlog", 1L, 1L)));
+    when(repository.findSpeciesCode("HE"))
+        .thenReturn(
+            Optional.of(
+                new ApplicationDetailsRpcRepository.CodeRow("HE", "Hemlock", 1L, 1L)));
+    when(repository.findGradeCode("1"))
+        .thenReturn(
+            Optional.of(
+                new ApplicationDetailsRpcRepository.CodeRow("1", "Sawlog", 1L, 1L)));
+    when(repository.insertScaleDetail(any()))
+        .thenReturn(
+            Optional.of(
+                new ApplicationDetailsRpcRepository.ApplicationScaleDetailRow(
+                    "55",
+                    "TM001",
+                    "HE",
+                    "1",
+                    10.0d,
+                    9_999_999_999L,
+                    1000456L,
+                    null,
+                    "PKG-903",
+                    "")));
+
+    ApplicationDetailsRpcService.ScalePersistenceResult response =
+        service.addScaleToPackage(
+            new ApplicationDetailsRpcService.ScaleMutationRequest(
+                "TM001", "PKG-903", "1", "HE", 1000456L, 9_999_999_999L, 10.0d),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isTrue();
+    verify(repository, never()).findTimberMarkByOrgUnit("TM001", 11L);
+    verify(repository).findSpeciesEndUsesByRegionRequired("11");
+    verify(repository).findSpeciesEndUsesByRegionSpeciesRequired("11", "HE");
+    verify(repository).insertScaleDetail(any());
+  }
+
+  @Test
   void addScaleToPackageShouldRollBackWhenInsertReturnsNoRow() {
     when(repository.packageExists("PKG-903")).thenReturn(true);
     when(repository.findScaleDetailsByPackageNumber("PKG-903")).thenReturn(List.of());
@@ -4728,6 +4779,39 @@ class OracleApplicationDetailsRpcServiceTest {
         null,
         "Owner Contact",
         "N");
+  }
+
+  private ApplicationDetailsRpcRepository.ApplicationUpdateRecord federalApplicationUpdateRecord() {
+    ApplicationDetailsRpcRepository.ApplicationUpdateRecord record = applicationUpdateRecord();
+    return new ApplicationDetailsRpcRepository.ApplicationUpdateRecord(
+        record.applicationNumber(),
+        700123L,
+        record.applicationDate(),
+        record.termDays(),
+        record.receivedDate(),
+        record.applicationVolume(),
+        record.averageLogVolume(),
+        record.productLocation(),
+        record.entryUserId(),
+        record.entryTimestamp(),
+        record.updateUserId(),
+        record.updateTimestamp(),
+        record.exportScheduleId(),
+        record.agentClientNumber(),
+        record.agentClientLocationCode(),
+        record.ownerClientNumber(),
+        record.ownerClientLocationCode(),
+        record.exemptionNumber(),
+        record.exemptionReasonCode(),
+        record.applicationStatusCode(),
+        record.applicantTypeCode(),
+        record.orgUnitNumber(),
+        record.productTypeCode(),
+        "F",
+        record.growthTypeCode(),
+        record.agentContactName(),
+        record.ownerContactName(),
+        record.oicIndicator());
   }
 
   private ApplicationDetailsRpcRepository.ApplicationUpdateRecord
