@@ -232,6 +232,69 @@ class ApplicationSubmissionImportServiceTest {
   }
 
   @Test
+  void shouldValidateLegacyFederalCodesReferenceAndCaseInsensitivePackage() {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationDetailsService.isPackageValid("FED26-700123"))
+        .thenReturn(new PackageValidityItem(true, null));
+    when(applicationDetailsService.validateApplication(any(CreateApplicationRequest.class)))
+        .thenReturn(new CreateApplicationResult(true, null, null, List.of(), List.of()));
+    String xml =
+        federalSampleXmlText()
+            .replace(
+                "<lexis:exemptionRsnCde>S</lexis:exemptionRsnCde>",
+                "<lexis:exemptionRsnCde>E</lexis:exemptionRsnCde>")
+            .replace(
+                "<lexis:applicantTypeCode>O</lexis:applicantTypeCode>",
+                "<lexis:applicantTypeCode>M</lexis:applicantTypeCode>")
+            .replace(
+                "<lexis:internalOfficeUseRefId>700123</lexis:internalOfficeUseRefId>",
+                "<lexis:internalOfficeUseRefId>0</lexis:internalOfficeUseRefId>")
+            .replace(
+                "<lexis:boomNumber>FED26-700123</lexis:boomNumber>",
+                "<lexis:boomNumber>fed26-700123</lexis:boomNumber>");
+
+    ApplicationSubmissionImportResultDto result =
+        service()
+            .validateDedicatedFederalApplicationSubmission(
+                xml.getBytes(StandardCharsets.UTF_8),
+                "legacy-federal-codes.xml",
+                "FED-REF-LEGACY-CODES");
+
+    assertThat(result.status()).isEqualTo("validated");
+    assertThat(result.packageNumber()).isEqualTo("FED26-700123");
+    ArgumentCaptor<CreateApplicationRequest> requestCaptor =
+        ArgumentCaptor.forClass(CreateApplicationRequest.class);
+    verify(applicationDetailsService).validateApplication(requestCaptor.capture());
+    assertThat(requestCaptor.getValue().federalApplicationNumber()).isZero();
+    assertThat(requestCaptor.getValue().exemptionReasonCode()).isEqualTo("E");
+    assertThat(requestCaptor.getValue().applicantTypeCode()).isEqualTo("M");
+  }
+
+  @Test
+  void shouldRejectFederalXmlThatViolatesLegacySchema() {
+    String xml =
+        federalSampleXmlText()
+            .replaceFirst(
+                "<lexis:contactTelephoneNumber>2505551212</lexis:contactTelephoneNumber>",
+                "<lexis:contactTelephoneNumber>250-555-1212</lexis:contactTelephoneNumber>");
+
+    ApplicationSubmissionImportResultDto result =
+        service()
+            .validateDedicatedFederalApplicationSubmission(
+                xml.getBytes(StandardCharsets.UTF_8),
+                "invalid-legacy-schema.xml",
+                "FED-REF-INVALID-SCHEMA");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors())
+        .anyMatch(
+            error ->
+                error.startsWith("Legacy LEXIS schema validation failed:")
+                    && error.contains("contactTelephoneNumber"));
+    verify(applicationDetailsServiceProvider, never()).getIfAvailable();
+  }
+
+  @Test
   void shouldRejectProvincialRawEsfXmlSubmissionDataForLegacyFederalIngress() {
     ApplicationSubmissionImportResultDto result =
         service()
@@ -353,10 +416,12 @@ class ApplicationSubmissionImportServiceTest {
 
     assertThat(result.status()).isEqualTo("rejected");
     assertThat(result.errors())
-        .containsExactlyInAnyOrder(
+        .contains(
             "Federal applicant EICB number is required.",
             "Federal office use applicant user is required.",
             "Federal office use language is required.");
+    assertThat(result.errors())
+        .anyMatch(error -> error.startsWith("Legacy LEXIS schema validation failed:"));
     verify(applicationDetailsServiceProvider, never()).getIfAvailable();
   }
 
@@ -524,7 +589,9 @@ class ApplicationSubmissionImportServiceTest {
                 "FED-REF-UNKNOWN-STATUS");
 
     assertThat(result.status()).isEqualTo("rejected");
-    assertThat(result.errors()).containsExactly("Federal application status code must be A.");
+    assertThat(result.errors()).contains("Federal application status code must be A.");
+    assertThat(result.errors())
+        .anyMatch(error -> error.startsWith("Legacy LEXIS schema validation failed:"));
     verify(applicationDetailsServiceProvider, never()).getIfAvailable();
   }
 
@@ -2054,7 +2121,7 @@ class ApplicationSubmissionImportServiceTest {
     assertThat(result.errors())
         .contains(
             "Application status code must be A for electronic LEXIS submissions.",
-            "Exemption reason code must be S for electronic LEXIS submissions.",
+            "Exemption reason code must be E, S, or U.",
             "Product type code must be H or S.",
             "Age class must be O or S.");
     verify(applicationDetailsServiceProvider, never()).getIfAvailable();

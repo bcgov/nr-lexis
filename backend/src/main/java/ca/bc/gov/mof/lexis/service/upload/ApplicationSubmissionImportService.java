@@ -31,6 +31,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.time.Clock;
@@ -43,6 +44,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
@@ -50,6 +52,9 @@ import java.util.zip.ZipException;
 import java.util.zip.ZipInputStream;
 import javax.xml.XMLConstants;
 import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.transform.dom.DOMSource;
+import javax.xml.validation.Schema;
+import javax.xml.validation.SchemaFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -81,6 +86,8 @@ public class ApplicationSubmissionImportService {
       "http://www.for.gov.bc.ca/schema/esf/1/xsd/MOF/esf-submission.xsd";
   private static final String EXPECTED_LEXIS_SCHEMA_LOCATION =
       "http://www.for.gov.bc.ca/schema/lexis/2/xsd/MOF/mof-lexis.xsd";
+  private static final String LEGACY_LEXIS_SCHEMA_RESOURCE =
+      "/schemas/nexcol/mof-lexis.xsd";
   private static final String UPLOAD_TYPE = "applicationSubmission";
   private static final String ACCEPTED = "accepted";
   private static final String REJECTED = "rejected";
@@ -104,8 +111,9 @@ public class ApplicationSubmissionImportService {
   private static final String FEDERAL_JURISDICTION = "F";
   private static final String APPLICATION_STATUS_ACTIVE = "A";
   private static final String APPLICATION_STATUS_APPROVED = "APP";
-  private static final String EXEMPTION_REASON_SURPLUS = "S";
+  private static final Set<String> LEGACY_EXEMPTION_REASON_CODES = Set.of("E", "S", "U");
   private static final String APPLICANT_TYPE_OWNER = "O";
+  private static final String APPLICANT_TYPE_MINISTERIAL = "M";
   private static final String APPLICANT_TYPE_AGENT = "A";
   private static final String PRODUCT_TYPE_HARVESTED = "H";
   private static final String PRODUCT_TYPE_STANDING = "S";
@@ -127,6 +135,7 @@ public class ApplicationSubmissionImportService {
       Pattern.compile("Element type \"([^\"]+)\" must be followed by either attribute specifications, \">\" or \"/>\"\\.");
   private static final Pattern INVALID_XML_ATTRIBUTE_CHARACTER_PATTERN =
       Pattern.compile("The value of attribute \"([^\"]+)\".* must not contain the '([^']+)' character\\.");
+  private static final Schema LEGACY_LEXIS_SCHEMA = loadLegacyLexisSchema();
 
   private static final Map<String, Long> ORG_UNIT_BY_REGION_CODE =
       Map.ofEntries(
@@ -1093,6 +1102,9 @@ public class ApplicationSubmissionImportService {
             errors);
 
     String jurisdictionCode = upper(text(applicationDetail, "jurisdictionCode", "Jurisdiction code", errors));
+    if (FEDERAL_JURISDICTION.equals(jurisdictionCode)) {
+      validateLegacyLexisSchema(lexisSubmission, errors);
+    }
     FederalSubmissionMetadata federalMetadata =
         federalSubmissionMetadata(applicationDetail, jurisdictionCode, errors);
     Long federalApplicationNumber = federalMetadata.federalApplicationNumber();
@@ -1149,14 +1161,15 @@ public class ApplicationSubmissionImportService {
     }
     if (exemptionReasonCode == null) {
       errors.add("Exemption reason is required.");
-    } else if (!EXEMPTION_REASON_SURPLUS.equals(exemptionReasonCode)) {
-      errors.add("Exemption reason code must be S for electronic LEXIS submissions.");
+    } else if (!LEGACY_EXEMPTION_REASON_CODES.contains(exemptionReasonCode)) {
+      errors.add("Exemption reason code must be E, S, or U.");
     }
     if (applicantTypeCode == null) {
       errors.add("Applicant type is required.");
     } else if (!APPLICANT_TYPE_OWNER.equals(applicantTypeCode)
+        && !APPLICANT_TYPE_MINISTERIAL.equals(applicantTypeCode)
         && !APPLICANT_TYPE_AGENT.equals(applicantTypeCode)) {
-      errors.add("Applicant type code must be O or A.");
+      errors.add("Applicant type code must be A, M, or O.");
     }
     if (productTypeCode == null) {
       errors.add("Product type is required.");
@@ -1204,7 +1217,9 @@ public class ApplicationSubmissionImportService {
         exemptionReasonCode,
         applicantTypeCode,
         productTypeCode,
-        product.packageNumber(),
+        FEDERAL_JURISDICTION.equals(jurisdictionCode)
+            ? upper(product.packageNumber())
+            : product.packageNumber(),
         productLocation,
         ageClass,
         averageLength,
@@ -2026,6 +2041,65 @@ public class ApplicationSubmissionImportService {
     }
 
     return "The submission is not a well-formed XML document. " + normalized;
+  }
+
+  private static Schema loadLegacyLexisSchema() {
+    URL schemaResource = ApplicationSubmissionImportService.class.getResource(LEGACY_LEXIS_SCHEMA_RESOURCE);
+    if (schemaResource == null) {
+      throw new IllegalStateException(
+          "Legacy LEXIS schema resource is missing: " + LEGACY_LEXIS_SCHEMA_RESOURCE);
+    }
+    try {
+      SchemaFactory factory = SchemaFactory.newInstance(XMLConstants.W3C_XML_SCHEMA_NS_URI);
+      factory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
+      factory.setProperty(XMLConstants.ACCESS_EXTERNAL_DTD, "");
+      factory.setProperty(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "file,jar");
+      return factory.newSchema(schemaResource);
+    } catch (SAXException ex) {
+      throw new IllegalStateException("Legacy LEXIS schema could not be loaded.", ex);
+    }
+  }
+
+  private void validateLegacyLexisSchema(Element lexisSubmission, List<String> errors) {
+    List<String> schemaErrors = new ArrayList<>();
+    try {
+      var validator = LEGACY_LEXIS_SCHEMA.newValidator();
+      validator.setProperty(XMLConstants.ACCESS_EXTERNAL_DTD, "");
+      validator.setProperty(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "");
+      validator.setErrorHandler(
+          new ErrorHandler() {
+            @Override
+            public void warning(SAXParseException exception) {}
+
+            @Override
+            public void error(SAXParseException exception) {
+              schemaErrors.add(legacySchemaError(exception));
+            }
+
+            @Override
+            public void fatalError(SAXParseException exception) throws SAXException {
+              schemaErrors.add(legacySchemaError(exception));
+              throw exception;
+            }
+          });
+      validator.validate(new DOMSource(lexisSubmission));
+    } catch (SAXParseException ex) {
+      if (schemaErrors.isEmpty()) {
+        schemaErrors.add(legacySchemaError(ex));
+      }
+    } catch (SAXException | IOException ex) {
+      String message = trimToNull(ex.getMessage());
+      schemaErrors.add(
+          "Legacy LEXIS schema validation failed"
+              + (message == null ? "." : ": " + message));
+    }
+    schemaErrors.stream().distinct().forEach(errors::add);
+  }
+
+  private String legacySchemaError(SAXParseException exception) {
+    String message = trimToNull(exception.getMessage());
+    return "Legacy LEXIS schema validation failed"
+        + (message == null ? "." : ": " + message);
   }
 
   private ParsedParties parseSubmissionParties(

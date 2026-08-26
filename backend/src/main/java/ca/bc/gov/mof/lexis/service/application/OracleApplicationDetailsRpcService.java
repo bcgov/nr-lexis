@@ -78,6 +78,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   private static final int REMARK_MAX_BYTES = 254;
   private static final int PACKAGE_NUMBER_MAX_BYTES = 20;
   private static final int PACKAGE_COMMENTS_MAX_BYTES = 180;
+  private static final long LEGACY_FEDERAL_MAX_SCALE_PIECES = 9_999_999_999L;
   private static final long MAX_APPLICATION_TERM_DAYS = 99_999L;
   private static final double MAX_APPLICATION_VOLUME = 9_999_999.99d;
   private static final double MAX_AVERAGE_LOG_VOLUME = 99.9d;
@@ -276,6 +277,8 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
             : scaleRequests.stream().map(this::normalizeScaleMutationRequest).toList();
 
     List<String> errors = new ArrayList<>(validateCreateApplication(application));
+    validateApplicationStorageText(application, errors);
+    validateFederalImportMetadata(application, errors);
     errors.addAll(validatePackageImportPreflight(packageMutation, application));
     errors.addAll(validateScaleImportPreflight(scales, packageMutation, application));
     return new SubmissionImportValidationResult(errors.isEmpty(), errors, List.of());
@@ -297,8 +300,8 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       ingressErrors.add("Federal application imports must use jurisdiction F.");
     }
     if (normalized.federalApplicationNumber() == null
-        || normalized.federalApplicationNumber() < 1) {
-      ingressErrors.add("A valid federal application number is required for federal imports.");
+        || normalized.federalApplicationNumber() < 0) {
+      ingressErrors.add("A non-negative federal application number is required for federal imports.");
     }
     if (!APPLICATION_STATUS_APPROVED.equals(normalized.applicationStatusCode())) {
       ingressErrors.add("Federal application imports must enter LEXIS in approved status.");
@@ -1377,14 +1380,14 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
 
     if (request.averageDiameter() == null || request.averageDiameter() <= 0.0d) {
       errors.add("The package average diameter must be greater than 0.");
-    } else if (request.averageDiameter() > 99.99d) {
-      errors.add("The package average diameter must be less than 99.9.");
+    } else if (request.averageDiameter() > 99.9d) {
+      errors.add("The package average diameter must be less than or equal to 99.9.");
     }
 
     if (request.averageLength() == null || request.averageLength() <= 0.0d) {
       errors.add("The package average length must be greater than 0.");
-    } else if (request.averageLength() > 99.0d) {
-      errors.add("The package average length must be less than 99.9.");
+    } else if (request.averageLength() > 99.9d) {
+      errors.add("The package average length must be less than or equal to 99.9.");
     }
 
     if (request.volume() == null || request.volume() < 0.0d) {
@@ -1647,8 +1650,61 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       errors.add(required("species code"));
     }
     validateScaleCodes(request, errors);
+    if (JURISDICTION_FEDERAL.equals(trimToNull(applicationRequest.jurisdictionCode()))) {
+      validateScaleCodesForRegion(request, applicationRequest.orgUnitNumber(), errors);
+    }
     errors.addAll(
-        ScaleDomainValidator.validateNumericValues(request.pieces(), request.volume(), false));
+        ScaleDomainValidator.validateNumericValues(
+            request.pieces(),
+            request.volume(),
+            false,
+            JURISDICTION_FEDERAL.equals(trimToNull(applicationRequest.jurisdictionCode()))
+                ? LEGACY_FEDERAL_MAX_SCALE_PIECES
+                : ScaleDomainValidator.MAX_SCALE_PIECES));
+  }
+
+  private void validateScaleCodesForRegion(
+      ScaleMutationRequest request, Long orgUnitNumber, List<String> errors) {
+    String speciesCode = trimToNull(request.speciesCode());
+    String gradeCode = trimToNull(request.gradeCode());
+    if (orgUnitNumber == null || orgUnitNumber <= 0 || speciesCode == null) {
+      return;
+    }
+
+    String region = orgUnitNumber.toString();
+    boolean speciesValid =
+        repository.findSpeciesEndUsesByRegionRequired(region).stream()
+            .map(ApplicationDetailsRpcRepository.SpeciesGradeEndUseRow::speciesCode)
+            .map(TextUtils::trimToNull)
+            .anyMatch(speciesCode::equalsIgnoreCase);
+    if (!speciesValid) {
+      errors.add("Species code " + speciesCode + " is not valid for this region.");
+      return;
+    }
+
+    if (gradeCode != null
+        && repository.findSpeciesEndUsesByRegionSpeciesRequired(region, speciesCode).stream()
+            .map(ApplicationDetailsRpcRepository.SpeciesGradeEndUseRow::gradeCode)
+            .map(TextUtils::trimToNull)
+            .noneMatch(gradeCode::equalsIgnoreCase)) {
+      errors.add(
+          "Grade code "
+              + gradeCode
+              + " is not valid for species "
+              + speciesCode
+              + " in this region.");
+    }
+  }
+
+  private void validateFederalImportMetadata(
+      CreateApplicationRequest application, List<String> errors) {
+    if (!JURISDICTION_FEDERAL.equals(trimToNull(application.jurisdictionCode()))) {
+      return;
+    }
+    if (application.federalApplicationNumber() == null
+        || application.federalApplicationNumber() < 0) {
+      errors.add("A non-negative federal application number is required for federal imports.");
+    }
   }
 
   private boolean hasAtMostOneDecimal(Double value) {
@@ -2003,7 +2059,8 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     }
 
     ApplicationDetailsRpcRepository.TimberMarkRow mark = baseMark.get();
-    if (orgUnitNumber != null) {
+    String normalizedJurisdictionCode = trimToNull(jurisdictionCode);
+    if (orgUnitNumber != null && !JURISDICTION_FEDERAL.equals(normalizedJurisdictionCode)) {
       Optional<ApplicationDetailsRpcRepository.TimberMarkRow> regionalMark =
           repository.findTimberMarkByOrgUnit(timberMark, orgUnitNumber);
       if (regionalMark.isEmpty()) {
@@ -2011,18 +2068,17 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         return;
       }
       mark = regionalMark.get();
+    }
 
-      String fileTypeCode = trimToNull(mark.fileTypeCode());
-      String normalizedJurisdictionCode = trimToNull(jurisdictionCode);
-      if (JURISDICTION_PROVINCIAL.equals(normalizedJurisdictionCode)
-          && ("B08".equals(fileTypeCode) || "B14".equals(fileTypeCode))) {
-        errors.add("Timber mark " + timberMark + " is not valid for provincial applications.");
-        return;
-      }
-      if (JURISDICTION_FEDERAL.equals(normalizedJurisdictionCode) && !"B08".equals(fileTypeCode)) {
-        errors.add("Timber mark " + timberMark + " is not valid for federal applications.");
-        return;
-      }
+    String fileTypeCode = trimToNull(mark.fileTypeCode());
+    if (JURISDICTION_PROVINCIAL.equals(normalizedJurisdictionCode)
+        && ("B08".equals(fileTypeCode) || "B14".equals(fileTypeCode))) {
+      errors.add("Timber mark " + timberMark + " is not valid for provincial applications.");
+      return;
+    }
+    if (JURISDICTION_FEDERAL.equals(normalizedJurisdictionCode) && !"B08".equals(fileTypeCode)) {
+      errors.add("Timber mark " + timberMark + " is not valid for federal applications.");
+      return;
     }
 
     String status = trimToNull(mark.markStatus());

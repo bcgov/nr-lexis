@@ -22,6 +22,15 @@ class ScaleDomainValidatorTest {
             ScaleDomainValidator.validateNumericValues(
                 1L, ScaleDomainValidator.MAX_SCALE_VOLUME.doubleValue() + 0.1d, true))
         .containsExactly("The scale volume must be less than 99999.9.");
+
+    assertThat(
+            ScaleDomainValidator.validateNumericValues(
+                9_999_999_999L, 1.0d, false, 9_999_999_999L))
+        .isEmpty();
+    assertThat(
+            ScaleDomainValidator.validateNumericValues(
+                10_000_000_000L, 1.0d, false, 9_999_999_999L))
+        .containsExactly("The scale pieces must be less than or equal to 9999999999.");
   }
 
   @Test
