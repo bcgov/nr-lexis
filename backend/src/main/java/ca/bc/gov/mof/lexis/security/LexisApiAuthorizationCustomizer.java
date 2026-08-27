@@ -3,6 +3,7 @@ package ca.bc.gov.mof.lexis.security;
 import ca.bc.gov.mof.lexis.configuration.LexisFeatureProperties;
 import ca.bc.gov.mof.lexis.security.LexisApiAuthorizationRules.Rule;
 import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
+import jakarta.servlet.DispatcherType;
 import java.util.List;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authorization.AuthorizationDecision;
@@ -67,6 +68,10 @@ public class LexisApiAuthorizationCustomizer
   public void customize(
       AuthorizeHttpRequestsConfigurer<HttpSecurity>.AuthorizationManagerRequestMatcherRegistry
           authorize) {
+
+    // Preserve the status selected by Spring for an already-authorized request instead of
+    // replacing its error dispatch with an unrelated 403 response.
+    authorize.dispatcherTypeMatchers(DispatcherType.ERROR).permitAll();
 
     if (featureProperties.isProdRtmOnly()) {
       authorizeProdRtmOnlyMode(authorize);
