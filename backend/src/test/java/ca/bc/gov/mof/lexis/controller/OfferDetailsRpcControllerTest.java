@@ -364,6 +364,35 @@ class OfferDetailsRpcControllerTest {
   }
 
   @Test
+  void addOfferLegacyShouldRejectInvalidDatesBeforePersistence() {
+    when(purchaseOfferServiceProvider.getIfAvailable()).thenReturn(purchaseOfferService);
+    when(sessionService.parseRolesFromPrincipal(authentication))
+        .thenReturn(List.of("LEXIS_PROVINCIAL_SUBMITTER"));
+    when(authorizationService.canPerformAction(
+            List.of("LEXIS_PROVINCIAL_SUBMITTER"), "createOffer"))
+        .thenReturn(true);
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("applicationNumber", "1000456");
+    params.add("purchaseOfferDate", "2026-02-31");
+    params.add("offerWithdrawalDate", "not-a-date");
+    params.add("teacReviewDate", "2026-13-01");
+
+    ResponseEntity<OfferDetailsRpcController.OfferPersistenceResponseDto> response =
+        controller.addOfferLegacy(params, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().success()).isFalse();
+    assertThat(response.getBody().errors())
+        .containsExactly(
+            "Offer received date must be a valid date in YYYY-MM-DD format.",
+            "Offer withdrawal date must be a valid date in YYYY-MM-DD format.",
+            "TEAC review date must be a valid date in YYYY-MM-DD format.");
+    verify(purchaseOfferService, never())
+        .addOffer(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+  }
+
+  @Test
   void addOfferLegacyShouldAuthorizeParentApplicationAndOfferingClient() {
     controller.setProvincialAuthorizationService(provincialAuthorizationService);
     when(purchaseOfferServiceProvider.getIfAvailable()).thenReturn(purchaseOfferService);
@@ -569,6 +598,32 @@ class OfferDetailsRpcControllerTest {
     assertThat(request.offerVolume()).isEqualTo(90.0d);
     verify(provincialAuthorizationService)
         .requireApplication(authentication, 1000456L);
+  }
+
+  @Test
+  void updateOfferLegacyShouldRejectAnInvalidTeacDateBeforePersistence() {
+    when(purchaseOfferServiceProvider.getIfAvailable()).thenReturn(purchaseOfferService);
+    when(sessionService.parseRolesFromPrincipal(authentication))
+        .thenReturn(List.of("LEXIS_ADMIN"));
+    when(authorizationService.canPerformAction(List.of("LEXIS_ADMIN"), "createOffer"))
+        .thenReturn(true);
+    when(purchaseOfferService.findByOfferNumber(81001L))
+        .thenReturn(Optional.of(offerDetailForRestrictedUpdate()));
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("offerNumber", "81001");
+    params.add("teacReviewDate", "2026-02-31");
+
+    ResponseEntity<OfferDetailsRpcController.OfferPersistenceResponseDto> response =
+        controller.updateOfferLegacy(params, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().success()).isFalse();
+    assertThat(response.getBody().isUpdate()).isTrue();
+    assertThat(response.getBody().errors())
+        .containsExactly("TEAC review date must be a valid date in YYYY-MM-DD format.");
+    verify(purchaseOfferService, never())
+        .updateOfferSnapshot(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
   }
 
   @Test
