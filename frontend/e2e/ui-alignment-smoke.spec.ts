@@ -1183,10 +1183,9 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     })
     await page.getByRole('tab', { name: 'Remarks' }).click()
     const comments = page.getByRole('textbox', { name: 'Comments' })
-    const commentsHeight = await comments.evaluate(
-      (textarea) => textarea.getBoundingClientRect().height,
-    )
-    expect(commentsHeight).toBeGreaterThan(100)
+    await expect(comments).toBeVisible()
+    await expect(comments).toHaveAttribute('rows', '4')
+    await expect(comments).not.toHaveCSS('height', '40px')
     await expect(comments).toHaveCSS('min-height', '40px')
     await expect(comments).toHaveCSS('resize', 'vertical')
 

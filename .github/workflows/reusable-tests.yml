@@ -114,9 +114,8 @@ jobs:
           path: frontend/playwright-report
           retention-days: 7
 
-  # A fresh runner avoids an intermittent runner-to-Gold connection path at any live test stage.
-  # A repeated failure remains terminal.
-  e2e-route-retry:
+  # A fresh runner retries environment-dependent route, proxy, and Playwright failures.
+  e2e-retry:
     name: Basic E2E retry (chromium)
     needs: [e2e-tests]
     if: >-
@@ -196,6 +195,6 @@ jobs:
       - uses: actions/upload-artifact@v7
         if: (! cancelled())
         with:
-          name: playwright-report-${{ matrix.project }}-${{ inputs.target }}-route-retry
+          name: playwright-report-${{ matrix.project }}-${{ inputs.target }}-retry
           path: frontend/playwright-report
           retention-days: 7

@@ -3,6 +3,8 @@ package ca.bc.gov.mof.lexis.service.report;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 
+import java.awt.Font;
+import java.awt.font.FontRenderContext;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -13,6 +15,8 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeSet;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import javax.xml.parsers.DocumentBuilderFactory;
 import net.sf.jasperreports.engine.JasperCompileManager;
 import org.junit.jupiter.api.Test;
@@ -118,10 +122,30 @@ class LexisJasperTemplateCompileTest {
                 .getFile()
                 .toPath());
 
+    Matcher criteriaField =
+        Pattern.compile(
+                "uuid=\"85ef0374-a07b-4853-9f61-581cecda10b8\" "
+                    + "x=\"(\\d+)\" y=\"93\" width=\"(\\d+)\" height=\"61\"")
+            .matcher(template);
+    assertThat(criteriaField.find()).isTrue();
+
+    int fieldX = Integer.parseInt(criteriaField.group(1));
+    int fieldWidth = Integer.parseInt(criteriaField.group(2));
+    double longestRegionWidth;
+    try (InputStream fontStream =
+        new ClassPathResource("fonts/LiberationSerif-Regular.ttf").getInputStream()) {
+      Font criteriaFont = Font.createFont(Font.TRUETYPE_FONT, fontStream).deriveFont(8f);
+      longestRegionWidth =
+          criteriaFont
+              .getStringBounds(
+                  "Thompson-Okanagan Natural Resource Region",
+                  new FontRenderContext(null, true, true))
+              .getWidth();
+    }
+
+    assertThat(fieldWidth).isGreaterThanOrEqualTo((int) Math.ceil(longestRegionWidth) + 20);
+    assertThat(fieldX + fieldWidth).isLessThanOrEqualTo(684);
     assertThat(template)
-        .contains(
-            "uuid=\"85ef0374-a07b-4853-9f61-581cecda10b8\" "
-                + "x=\"92\" y=\"93\" width=\"160\" height=\"61\"")
         .contains(
             "$F{REGION} == null || $F{REGION}.isEmpty() ? \"\" : $F{REGION}")
         .contains("$V{CCF9_F_GROWTH_TYPE} + System.getProperty(\"line.separator\")");
