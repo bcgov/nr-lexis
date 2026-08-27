@@ -343,7 +343,7 @@ describe('Provincial exemption edit context', () => {
     })
 
     expect(screen.getByRole('button', { name: 'Save exemption' })).toBeDisabled()
-    expect(screen.getAllByText('Approval date is required.').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Approval date must be YYYY-MM-DD.').length).toBeGreaterThan(0)
     expect(vi.mocked(updateExemption)).not.toHaveBeenCalled()
   })
 

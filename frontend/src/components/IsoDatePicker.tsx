@@ -1,5 +1,5 @@
 import { DatePicker, DatePickerInput } from '@carbon/react'
-import type { ReactNode } from 'react'
+import { type ReactNode, useEffect, useRef } from 'react'
 import { isValidIsoDate } from '@/pages/shared/create-form-utils'
 
 const ISO_DATE_INPUT_PATTERN = String.raw`\d{4}-\d{2}-\d{2}`
@@ -33,6 +33,11 @@ export default function IsoDatePicker({
   onChange,
 }: IsoDatePickerProps) {
   const flatpickrValue = value.trim() && isValidIsoDate(value) ? value : undefined
+  const latestInputValueRef = useRef(value)
+
+  useEffect(() => {
+    latestInputValueRef.current = value
+  }, [value])
 
   return (
     <DatePicker
@@ -42,7 +47,12 @@ export default function IsoDatePicker({
       parseDate={parseIsoDate}
       value={flatpickrValue}
       onChange={(_selectedDates, dateString) => {
+        const latestInputValue = latestInputValueRef.current
+        if (!dateString && latestInputValue.trim() && !isValidIsoDate(latestInputValue)) {
+          return
+        }
         if (dateString !== value) {
+          latestInputValueRef.current = dateString
           onChange(dateString)
         }
       }}
@@ -59,6 +69,7 @@ export default function IsoDatePicker({
         disabled={disabled}
         onBlur={onBlur}
         onChange={(event) => {
+          latestInputValueRef.current = event.target.value
           if (event.target.value !== value) {
             onChange(event.target.value)
           }

@@ -63,6 +63,32 @@ describe('IsoDatePicker', () => {
     expect(input).toHaveValue('2026-06-12')
   })
 
+  it('preserves impossible typed dates for parent validation', () => {
+    const StatefulDatePicker = () => {
+      const [value, setValue] = useState('2026-08-17')
+
+      return (
+        <>
+          <IsoDatePicker
+            id="approvalDate"
+            labelText="Approval date"
+            value={value}
+            onChange={setValue}
+          />
+          <output aria-label="Current date value">{value}</output>
+        </>
+      )
+    }
+
+    render(<StatefulDatePicker />)
+
+    fireEvent.change(screen.getByLabelText('Approval date'), {
+      target: { value: '2026-02-31' },
+    })
+
+    expect(screen.getByLabelText('Current date value')).toHaveTextContent('2026-02-31')
+  })
+
   it('does not emit a change when Carbon repeats the controlled date value', () => {
     const onChange = vi.fn()
     render(
