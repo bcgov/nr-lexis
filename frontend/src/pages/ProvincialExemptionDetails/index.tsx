@@ -76,6 +76,10 @@ import RegionMultiSelect from '@/components/RegionMultiSelect'
 import PendingIcon from '@/components/PendingIcon'
 import { clientLocationLabel, isAgentApplicant } from '@/pages/shared/application-form-utils'
 import {
+  normalizeProvincialApplicationNumber,
+  provincialApplicationNumberFieldError,
+} from '@/pages/shared/create-form-utils'
+import {
   mapSelectedOptionsById,
   mapValueLabelOptionsToIdTextOptions,
   type IdTextOption,
@@ -789,11 +793,17 @@ const ProvincialExemptionDetailsPage = () => {
     !documentUploadDirty &&
     persistedTypeCode !== 'B' &&
     persistedStatusCode !== 'CAN'
+  const applicationNumberToAddError =
+    provincialApplicationNumberFieldError(applicationNumberToAdd) ?? ''
   const addApplicationDisabled =
-    Boolean(applicationMutationNumber) || !applicationNumberToAdd.trim()
+    Boolean(applicationMutationNumber) ||
+    !applicationNumberToAdd.trim() ||
+    Boolean(applicationNumberToAddError)
   const addApplicationDisabledDescription = applicationMutationNumber
     ? 'Wait for the current application link update to finish.'
-    : 'Enter an application number to add it.'
+    : applicationNumberToAddError
+      ? applicationNumberToAddError
+      : 'Enter an application number to add it.'
   const cancelledBlanketOic = persistedTypeCode === 'B' && persistedStatusCode === 'CAN'
   const cancelledExemption = persistedStatusCode === 'CAN'
   const canEditSummaryFields =
@@ -1281,9 +1291,16 @@ const ProvincialExemptionDetailsPage = () => {
   }, [detail, generatingReport])
 
   const onAddApplication = useCallback(async () => {
-    if (!detail || !applicationNumberToAdd.trim() || applicationMutationNumber) return
-    const number = applicationNumberToAdd.trim()
-    setApplicationMutationNumber(number)
+    if (
+      !detail ||
+      !applicationNumberToAdd.trim() ||
+      applicationNumberToAddError ||
+      applicationMutationNumber
+    )
+      return
+    const enteredNumber = applicationNumberToAdd.trim()
+    const number = normalizeProvincialApplicationNumber(enteredNumber)
+    setApplicationMutationNumber(enteredNumber)
     setActionErrorMessage('')
     try {
       const result = await addApplicationToExemption(detail.exemptionNumber, number)
@@ -1307,7 +1324,13 @@ const ProvincialExemptionDetailsPage = () => {
     } finally {
       setApplicationMutationNumber(null)
     }
-  }, [applicationMutationNumber, applicationNumberToAdd, detail, refreshEditableData])
+  }, [
+    applicationMutationNumber,
+    applicationNumberToAdd,
+    applicationNumberToAddError,
+    detail,
+    refreshEditableData,
+  ])
 
   const onRemoveApplication = useCallback(
     async (applicationNumber: string) => {
@@ -1919,9 +1942,9 @@ const ProvincialExemptionDetailsPage = () => {
                                 id="exemptionApplicationNumberToAdd"
                                 labelText="Application number"
                                 value={applicationNumberToAdd}
-                                onChange={(event) =>
-                                  setApplicationNumberToAdd(event.target.value.replace(/\D/g, ''))
-                                }
+                                invalid={Boolean(applicationNumberToAddError)}
+                                invalidText={applicationNumberToAddError}
+                                onChange={(event) => setApplicationNumberToAdd(event.target.value)}
                               />
                               <DisabledButtonTooltip
                                 disabled={addApplicationDisabled}

@@ -605,6 +605,54 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(screen.getByRole('button', { name: 'Add application' })).toBeEnabled()
   })
 
+  it('rejects malformed associated application numbers without rewriting them', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/EX-777']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectDetailTab('Applications')
+
+    const applicationInput = await screen.findByLabelText('Application number')
+    await userEvent.type(applicationInput, '654x')
+
+    expect(applicationInput).toHaveValue('654x')
+    expect(
+      screen.getAllByText('Application number must be a positive whole number.').length,
+    ).toBeGreaterThan(0)
+    expect(screen.getByRole('button', { name: 'Add application' })).toBeDisabled()
+  })
+
+  it('rejects associated application numbers beyond the Oracle boundary', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/EX-777']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectDetailTab('Applications')
+
+    const applicationInput = await screen.findByLabelText('Application number')
+    await userEvent.type(applicationInput, '12345678901')
+
+    expect(applicationInput).toHaveValue('12345678901')
+    expect(
+      screen.getAllByText('Application number must be 10 digits or fewer.').length,
+    ).toBeGreaterThan(0)
+    expect(screen.getByRole('button', { name: 'Add application' })).toBeDisabled()
+  })
+
   it('renders authoritative permit metadata and omits rows without record access', async () => {
     mockedFetchExemptionPermits.mockResolvedValue([
       {
