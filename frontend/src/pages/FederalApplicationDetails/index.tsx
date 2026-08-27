@@ -1270,6 +1270,8 @@ const FederalApplicationDetailsPage = () => {
                         )}
                       </Tile>
                     </Column>
+                    {/* INTENTIONAL_LEGACY_DIVERGENCE(PACKAGE_FIRST_ITEMS_WORKFLOW):
+                        Suppress dependent Summary of Scale content until a package exists. */}
                     {detail.packages.length > 0 && (
                       <Column sm={4} md={8} lg={16}>
                         <Tile>

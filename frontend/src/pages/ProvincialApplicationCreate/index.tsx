@@ -2001,6 +2001,8 @@ const ProvincialApplicationCreatePage = () => {
                     />
                   </div>
                 </Tile>
+                {/* INTENTIONAL_LEGACY_DIVERGENCE(PACKAGE_FIRST_ITEMS_WORKFLOW):
+                    Explain the save-first package prerequisite before dependent item entry. */}
                 {productTypeSupportsPackages(form.productTypeCode) && (
                   <section className="application-items-card application-items-section application-items-section--create-package">
                     <h3>Create Package</h3>

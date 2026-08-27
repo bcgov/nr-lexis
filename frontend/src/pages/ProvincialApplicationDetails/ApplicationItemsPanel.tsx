@@ -1039,6 +1039,8 @@ function ProvincialApplicationItemsPanel({
     dependentReferenceOptionsUnavailable
   const referenceOptionsAvailable = !referenceOptionsLoading && !referenceOptionsUnavailable
   const canManageItems = !hideMutationActions && (canEditPackages || canAddPackages || canAddScales)
+  // INTENTIONAL_LEGACY_DIVERGENCE(PACKAGE_FIRST_ITEMS_WORKFLOW): Lead with the prerequisite
+  // package action instead of rendering empty package and Summary of Scale sections.
   const packageFirstEmptyState =
     ['H', 'T'].includes(productTypeCode.trim().toUpperCase()) && packageNumbers.length === 0
   const canOpenItemsEditor = packageFirstEmptyState
