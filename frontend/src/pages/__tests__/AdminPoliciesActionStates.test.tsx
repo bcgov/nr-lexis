@@ -1335,6 +1335,47 @@ describe('Admin policy action states', () => {
     expect(mockedFetchExportSchedulePage).toHaveBeenCalledTimes(1)
   })
 
+  it('shows schedule validation messages returned with bad-request responses', async () => {
+    mockedCreateExportSchedule.mockRejectedValueOnce({
+      response: {
+        status: 400,
+        data: {
+          message: 'Application receipt date cannot be after the advertising date.',
+        },
+      },
+    })
+
+    renderPage('schedule')
+
+    await screen.findByRole('heading', { level: 1, name: 'Export schedule administration' })
+
+    fireEvent.change(screen.getByLabelText('Advertising date'), {
+      target: { value: '2026-07-01' },
+    })
+    fireEvent.change(screen.getByLabelText('Application receipt date'), {
+      target: { value: '2026-07-02' },
+    })
+    fireEvent.change(screen.getByLabelText('Offer receipt date'), {
+      target: { value: '2026-07-08' },
+    })
+    fireEvent.change(screen.getByLabelText('Offer end date'), {
+      target: { value: '2026-07-09' },
+    })
+    fireEvent.change(screen.getByLabelText('Offer withdrawal date'), {
+      target: { value: '2026-07-09' },
+    })
+    fireEvent.change(screen.getByLabelText('TEAC meeting date'), {
+      target: { value: '2026-07-09' },
+    })
+    await userEvent.click(screen.getByRole('button', { name: 'Add Export Schedule' }))
+
+    expect(await screen.findByText('Schedule error')).toBeInTheDocument()
+    expect(
+      await screen.findByText('Application receipt date cannot be after the advertising date.'),
+    ).toBeInTheDocument()
+    expect(mockedFetchExportSchedulePage).toHaveBeenCalledTimes(1)
+  })
+
   it('updates and deletes unreferenced export schedule rows regardless of date', async () => {
     mockedFetchExportSchedulePage
       .mockResolvedValueOnce({

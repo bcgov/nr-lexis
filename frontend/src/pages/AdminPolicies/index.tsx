@@ -64,7 +64,7 @@ import { fetchReportOptions, type SearchOption } from '@/service/search-options-
 import IsoDatePicker from '../../components/IsoDatePicker'
 import { toCarbonSortDirection } from '@/pages/shared/search-query-utils'
 import { formatBusinessIsoDate } from '@/utils/date'
-import { getResponseStatus } from '@/utils/http-error'
+import { getResponseMessage, getResponseStatus } from '@/utils/http-error'
 
 type PolicyField =
   | 'feeEffectiveDate'
@@ -767,7 +767,10 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
     } catch (error) {
       console.error(error)
       const status = getResponseStatus(error)
-      if (status) {
+      const validationMessage = status === 400 ? getResponseMessage(error) : undefined
+      if (validationMessage) {
+        setErrorMessage(validationMessage)
+      } else if (status) {
         setErrorMessage(
           'Unable to save the export schedule. Check the dates and try again, or contact support if this continues.',
         )
