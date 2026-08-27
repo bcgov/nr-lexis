@@ -1431,6 +1431,10 @@ const ProvincialPermitDetailsPage = () => {
     !!detail?.blanketOic &&
     !scaleAttachmentLockedStatuses.has(permitStatusCode ?? '') &&
     (hasRole(capabilities.roles, 'ADMIN') || hasRole(capabilities.roles, 'APPLICATION_APPROVER'))
+  // INTENTIONAL_LEGACY_DIVERGENCE(PACKAGE_FIRST_ITEMS_WORKFLOW): Blanket OIC Summary of Scale
+  // entry remains hidden until its prerequisite package exists.
+  const blanketOicPackageCreationRequired =
+    permitTablesAvailable && !!detail?.blanketOic && (tabsData?.packages ?? []).length === 0
   const canEditFeeOverride =
     permitTablesAvailable &&
     canSavePermit &&
@@ -4014,6 +4018,12 @@ const ProvincialPermitDetailsPage = () => {
                                 </TableBody>
                               </Table>
                             </TableFrame>
+                          ) : detail.blanketOic ? (
+                            <p className="detail-empty-message">
+                              {canEditBlanketOicPackages
+                                ? 'Create a package before adding Summary of Scale entries.'
+                                : 'No package has been created for this Blanket OIC permit.'}
+                            </p>
                           ) : (
                             <EmptyState
                               title="No package details"
@@ -4189,8 +4199,11 @@ const ProvincialPermitDetailsPage = () => {
                             </div>
                           )}
                         </fieldset>
-                        <fieldset className="legacy-form-fieldset">
-                          <legend>Summary of scale</legend>
+                        <fieldset
+                          className="legacy-form-fieldset"
+                          hidden={blanketOicPackageCreationRequired}
+                        >
+                          <legend>Summary of Scale</legend>
                           {canEditBlanketOicScaleRows && (
                             <>
                               <div className="legacy-search-grid">

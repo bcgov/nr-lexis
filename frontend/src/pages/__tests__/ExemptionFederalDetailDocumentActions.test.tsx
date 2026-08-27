@@ -1099,7 +1099,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(await screen.findByText('IDIR\\TESTER')).toBeInTheDocument()
 
     await selectDetailTab('Items')
-    expect(await screen.findByRole('heading', { name: 'Summary of scale' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Summary of Scale' })).toBeInTheDocument()
     expect(mockedFetchApplicationPackageScales).toHaveBeenCalledWith('PKG-1')
     expect(await screen.findByText('TM-1')).toBeInTheDocument()
 
@@ -1643,11 +1643,13 @@ describe('Exemption and Federal Detail Document Actions', () => {
 
     await selectDetailTab('Items')
     expect(
-      await screen.findByRole('heading', { name: 'No packages found', level: 3 }),
+      await screen.findByText('No package has been recorded for this federal application.'),
     ).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'No packages found' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Summary of Scale' })).not.toBeInTheDocument()
     expect(
-      screen.getByRole('heading', { name: 'No scale details found', level: 3 }),
-    ).toBeInTheDocument()
+      screen.queryByRole('heading', { name: 'No scale details found' }),
+    ).not.toBeInTheDocument()
 
     await selectDetailTab('Offers')
     expect(

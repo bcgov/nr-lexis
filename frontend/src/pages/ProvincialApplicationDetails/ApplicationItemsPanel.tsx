@@ -12,7 +12,7 @@ import {
   TextArea,
   TextInput,
 } from '@carbon/react'
-import { Box, Edit, List, TrashCan } from '@carbon/icons-react'
+import { Add, Box, Edit, List, TrashCan } from '@carbon/icons-react'
 import { AppNotification } from '../../components/AppNotification'
 import ConfirmationModal from '../../components/ConfirmationModal'
 import PendingIcon from '../../components/PendingIcon'
@@ -1039,6 +1039,13 @@ function ProvincialApplicationItemsPanel({
     dependentReferenceOptionsUnavailable
   const referenceOptionsAvailable = !referenceOptionsLoading && !referenceOptionsUnavailable
   const canManageItems = !hideMutationActions && (canEditPackages || canAddPackages || canAddScales)
+  // INTENTIONAL_LEGACY_DIVERGENCE(PACKAGE_FIRST_ITEMS_WORKFLOW): Lead with the prerequisite
+  // package action instead of rendering empty package and Summary of Scale sections.
+  const packageFirstEmptyState =
+    ['H', 'T'].includes(productTypeCode.trim().toUpperCase()) && packageNumbers.length === 0
+  const canOpenItemsEditor = packageFirstEmptyState
+    ? !hideMutationActions && canAddPackages
+    : canManageItems
   const showMutationActions = canManageItems && isEditingItems
   const canSaveSelectedPackage =
     showMutationActions &&
@@ -1414,7 +1421,7 @@ function ProvincialApplicationItemsPanel({
             <List size={20} aria-hidden="true" />
             <span>Items</span>
           </h2>
-          {canManageItems &&
+          {canOpenItemsEditor &&
             (isEditingItems ? (
               <Button kind="tertiary" size="sm" disabled={itemsBusy} onClick={cancelItemEditing}>
                 Cancel
@@ -1423,13 +1430,20 @@ function ProvincialApplicationItemsPanel({
               <Button
                 kind="tertiary"
                 size="sm"
-                renderIcon={Edit}
+                renderIcon={packageFirstEmptyState ? Add : Edit}
                 onClick={() => setIsEditingItems(true)}
               >
-                Edit items
+                {packageFirstEmptyState ? 'Create package' : 'Edit items'}
               </Button>
             ))}
         </header>
+        {packageFirstEmptyState && !isEditingItems && (
+          <p className="detail-field-value">
+            {canOpenItemsEditor
+              ? 'Create a package before adding Summary of Scale entries.'
+              : 'No package has been created for this application.'}
+          </p>
+        )}
         {itemsLoading && <InlineLoading description="Loading item data…" />}
         {isEditingItems &&
           referenceOptionsLoading &&
@@ -1469,7 +1483,11 @@ function ProvincialApplicationItemsPanel({
       </section>
 
       <div className="application-items-grid">
-        <section className="application-items-card application-items-section application-items-section--package-details">
+        <section
+          className="application-items-card application-items-section application-items-section--package-details"
+          hidden={packageFirstEmptyState}
+          style={packageFirstEmptyState ? { display: 'none' } : undefined}
+        >
           <div className="application-items-section-header">
             <h3 className="application-items-section-title--icon">
               <Box size={20} aria-hidden="true" />
@@ -1957,8 +1975,10 @@ function ProvincialApplicationItemsPanel({
           id="application-items-scales"
           ref={scalesSectionRef}
           className="application-items-card application-items-section application-items-section--scales"
+          hidden={packageFirstEmptyState}
+          style={packageFirstEmptyState ? { display: 'none' } : undefined}
         >
-          <h3>Scales</h3>
+          <h3>Summary of Scale</h3>
           {showMutationActions && (
             <>
               <div className="application-items-form">
