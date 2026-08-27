@@ -838,15 +838,25 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
       }
 
       if (!foundGrade || grade.isBlank()) {
-        warnings.add("Row %d was skipped because no grade value was found.".formatted(rowNumber));
+        if (effectiveMonth != null) {
+          errors.add("Row %d contains AMV values but has no grade.".formatted(rowNumber));
+        } else {
+          warnings.add("Row %d was skipped because no grade value was found.".formatted(rowNumber));
+        }
         continue;
       }
 
       if (!isUploadableGrade(grade)) {
         if (!isSummaryGrade(grade)) {
-          warnings.add(
-              "Row %d grade '%s' was skipped because it is not an importable grade row."
-                  .formatted(rowNumber, grade));
+          if (effectiveMonth != null) {
+            errors.add(
+                "Row %d grade '%s' is not supported by the RTM AMV review."
+                    .formatted(rowNumber, grade));
+          } else {
+            warnings.add(
+                "Row %d grade '%s' was skipped because it is not an importable grade row."
+                    .formatted(rowNumber, grade));
+          }
         }
         continue;
       }

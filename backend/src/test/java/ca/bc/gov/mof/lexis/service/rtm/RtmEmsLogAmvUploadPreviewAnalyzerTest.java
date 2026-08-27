@@ -251,6 +251,47 @@ class RtmEmsLogAmvUploadPreviewAnalyzerTest {
   }
 
   @Test
+  void shouldRejectUnsupportedScreenGradeInsteadOfPartiallyAcceptingWorkbook()
+      throws IOException {
+    Map<String, byte[]> entries = validScreenWorkbookEntries();
+    entries.put(
+        "xl/worksheets/sheet1.xml",
+        textEntry(entries, "xl/worksheets/sheet1.xml")
+            .replace(">A</t>", ">8</t>")
+            .getBytes(StandardCharsets.UTF_8));
+
+    RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult result =
+        RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
+            new ByteArrayInputStream(workbook(entries)), LocalDate.of(2026, 7, 1));
+
+    assertThat(result.numericCellCount()).isOne();
+    assertThat(result.rows()).hasSize(1);
+    assertThat(result.errors())
+        .containsExactly("Row 4 grade '8' is not supported by the RTM AMV review.");
+  }
+
+  @Test
+  void shouldRejectScreenValuesWithoutAGrade() throws IOException {
+    Map<String, byte[]> entries = validScreenWorkbookEntries();
+    entries.put(
+        "xl/worksheets/sheet1.xml",
+        textEntry(entries, "xl/worksheets/sheet1.xml")
+            .replace(
+                "<c r=\"A4\" t=\"inlineStr\"><is><t>A</t></is></c>",
+                "<c r=\"A4\" t=\"inlineStr\"><is><t></t></is></c>")
+            .getBytes(StandardCharsets.UTF_8));
+
+    RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult result =
+        RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
+            new ByteArrayInputStream(workbook(entries)), LocalDate.of(2026, 7, 1));
+
+    assertThat(result.numericCellCount()).isOne();
+    assertThat(result.rows()).hasSize(1);
+    assertThat(result.errors())
+        .containsExactly("Row 4 contains AMV values but has no grade.");
+  }
+
+  @Test
   void publishedTemplateShouldUseTheScreenMonthAndUserEnteredValues() throws IOException {
     byte[] templateBytes = Files.readAllBytes(resolvePublishedTemplate());
     String sheetXml = workbookEntryText(templateBytes, "xl/worksheets/sheet1.xml");
