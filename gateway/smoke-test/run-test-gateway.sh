@@ -6,6 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="${NEXCOL_ENV_FILE:-${SCRIPT_DIR}/.env.test.local}"
 INVALID_XML_FILE="${SCRIPT_DIR}/invalid-federal-submission.xml"
 REQUIRED_SCOPE="lexis:federal-submission:submit"
+PREVALIDATION_PATH="/api/lexis/federal/submissions/prevalidation"
 VALIDATION_PATH="/api/lexis/federal/submissions/validation"
 SUBMISSION_PATH="/api/lexis/federal/submissions"
 MODE="${1:-smoke}"
@@ -51,6 +52,10 @@ cleanup() {
     "${TMP_DIR}/cors-preflight.json" \
     "${TMP_DIR}/submission-cors-preflight.headers" \
     "${TMP_DIR}/submission-cors-preflight.json" \
+    "${TMP_DIR}/prevalidation.headers" \
+    "${TMP_DIR}/prevalidation.json" \
+    "${TMP_DIR}/no-auth-prevalidation.headers" \
+    "${TMP_DIR}/no-auth-prevalidation.json" \
     "${TMP_DIR}/no-auth.headers" \
     "${TMP_DIR}/no-auth.json" \
     "${TMP_DIR}/no-auth-submission.headers" \
@@ -95,6 +100,7 @@ echo "Checking the OpenAPI contract..."
 status="$(request_status "${TMP_DIR}/openapi.yaml" -L "${OPENAPI_SPEC_URL}")"
 expect_status 200 "${status}" "raw OpenAPI contract" "${TMP_DIR}/openapi.yaml"
 grep -Fq 'openapi: 3.0.3' "${TMP_DIR}/openapi.yaml"
+grep -Fq '  /api/lexis/federal/submissions/prevalidation:' "${TMP_DIR}/openapi.yaml"
 grep -Fq '  /api/lexis/federal/submissions/validation:' "${TMP_DIR}/openapi.yaml"
 grep -Fq '  /api/lexis/federal/submissions:' "${TMP_DIR}/openapi.yaml"
 grep -Fq 'https://test.loginproxy.gov.bc.ca/auth/realms/forests/protocol/openid-connect/token' "${TMP_DIR}/openapi.yaml"
@@ -114,6 +120,7 @@ if [[ "${MODE}" == "--docs-only" ]]; then
   exit 0
 fi
 
+prevalidation_url="${LEXIS_GATEWAY_BASE_URL%/}${PREVALIDATION_PATH}"
 validation_url="${LEXIS_GATEWAY_BASE_URL%/}${VALIDATION_PATH}"
 submission_url="${LEXIS_GATEWAY_BASE_URL%/}${SUBMISSION_PATH}"
 status="$(curl --silent --show-error \
@@ -207,6 +214,17 @@ status="$(request_status "${TMP_DIR}/no-auth.json" \
 expect_status 401 "${status}" "missing token" "${TMP_DIR}/no-auth.json"
 grep -Fqi "access-control-allow-origin: ${OPENAPI_ORIGIN}" "${TMP_DIR}/no-auth.headers"
 
+status="$(request_status "${TMP_DIR}/no-auth-prevalidation.json" \
+  --dump-header "${TMP_DIR}/no-auth-prevalidation.headers" \
+  -X POST "${prevalidation_url}" \
+  -H "Origin: ${OPENAPI_ORIGIN}" \
+  -H "Content-Type: application/json" \
+  --data-binary '{"boomNumber":"NEXCOL-SMOKE-PREVALIDATION","clientNumber":"X","locationCode":"ZZ","timberMark":["NOT-A-MARK"]}')"
+expect_status 401 "${status}" "prevalidation missing token" \
+  "${TMP_DIR}/no-auth-prevalidation.json"
+grep -Fqi "access-control-allow-origin: ${OPENAPI_ORIGIN}" \
+  "${TMP_DIR}/no-auth-prevalidation.headers"
+
 status="$(request_status "${TMP_DIR}/no-auth-submission.json" \
   --dump-header "${TMP_DIR}/no-auth-submission.headers" \
   -X POST "${submission_url}" \
@@ -218,6 +236,25 @@ expect_status 401 "${status}" "submission missing token" \
   "${TMP_DIR}/no-auth-submission.json"
 grep -Fqi "access-control-allow-origin: ${OPENAPI_ORIGIN}" \
   "${TMP_DIR}/no-auth-submission.headers"
+
+status="$(request_status "${TMP_DIR}/prevalidation.json" \
+  --dump-header "${TMP_DIR}/prevalidation.headers" \
+  -X POST "${prevalidation_url}" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+  -H "Origin: ${OPENAPI_ORIGIN}" \
+  -H "Content-Type: application/json" \
+  --data-binary '{"boomNumber":"NEXCOL-SMOKE-PREVALIDATION","clientNumber":"X","locationCode":"ZZ","timberMark":["NOT-A-MARK"]}')"
+expect_status 200 "${status}" "legacy field prevalidation" "${TMP_DIR}/prevalidation.json"
+grep -Fqi "access-control-allow-origin: ${OPENAPI_ORIGIN}" \
+  "${TMP_DIR}/prevalidation.headers"
+jq -e '
+  .boomNumber == "NEXCOL-SMOKE-PREVALIDATION"
+    and .clientNumber == "X"
+    and .locationCode == "ZZ"
+    and .timberMark == ["NOT-A-MARK"]
+    and ((.errors // null) | type == "array")
+    and ((.errors // []) | length >= 3)
+' "${TMP_DIR}/prevalidation.json" >/dev/null
 
 request_id="$(uuidgen | tr '[:upper:]' '[:lower:]')"
 status="$(request_status "${TMP_DIR}/invalid.json" \

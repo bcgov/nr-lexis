@@ -463,7 +463,8 @@ final class LexisApiAuthorizationRules {
               HttpMethod.POST,
               ACTION_UPLOAD_FEDERAL_SUBMISSION,
               "/api/lexis/federal/submissions",
-              "/api/lexis/federal/submissions/validation"),
+              "/api/lexis/federal/submissions/validation",
+              "/api/lexis/federal/submissions/prevalidation"),
           action(
               HttpMethod.GET,
               ACTION_LEXIS_AGENT_ADMIN,
