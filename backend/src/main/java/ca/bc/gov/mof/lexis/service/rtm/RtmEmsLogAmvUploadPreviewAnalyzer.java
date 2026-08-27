@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import javax.xml.stream.XMLInputFactory;
@@ -85,6 +86,8 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
           "U", "W", "X", "Y", "Z", "1", "2", "3", "4", "5", "6", "BLANK");
   private static final Set<String> SCREEN_SPECIES =
       Set.of("BA", "HE", "CE", "CY", "FI", "SP", "WH", "LO", "YE", "PINE");
+  private static final Pattern GROUPED_NUMERIC_VALUE =
+      Pattern.compile("[+-]?\\d{1,3}(?:,\\d{3})+(?:\\.\\d+)?");
 
   private RtmEmsLogAmvUploadPreviewAnalyzer() {}
 
@@ -1243,7 +1246,11 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
   }
 
   private static String normalizeNumericValue(String value) {
-    return value.replace(",", "").strip();
+    String normalized = value.strip();
+    if (normalized.contains(",") && !GROUPED_NUMERIC_VALUE.matcher(normalized).matches()) {
+      return normalized;
+    }
+    return normalized.replace(",", "");
   }
 
   private static List<ParsedRow> parseSheetRows(byte[] sheetBytes, List<String> sharedStrings)
