@@ -1449,6 +1449,39 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(screen.getByText('Truck')).toBeInTheDocument()
   })
 
+  it('rejects federal shipping text that Oracle cannot store', async () => {
+    render(
+      <MemoryRouter initialEntries={['/federal/888']}>
+        <Routes>
+          <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectDetailTab('Shipping Details')
+    await userEvent.click(screen.getByRole('button', { name: 'Edit shipping details' }))
+    const transportName = screen.getByLabelText('Transport name')
+    await userEvent.clear(transportName)
+    await userEvent.type(transportName, 'Résumé')
+
+    expect(
+      await screen.findByText('Transport name must contain ASCII characters only.'),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save federal permit' })).toBeDisabled()
+    expect(mockedSaveFederalPermit).not.toHaveBeenCalled()
+
+    await userEvent.clear(transportName)
+    await userEvent.type(transportName, 'Truck')
+    await userEvent.selectOptions(screen.getByLabelText('Port of export'), 'OT')
+    await userEvent.type(screen.getByLabelText('Other port of export'), 'Port d’été')
+
+    expect(
+      await screen.findByText('Other port of export must contain ASCII characters only.'),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save federal permit' })).toBeDisabled()
+    expect(mockedSaveFederalPermit).not.toHaveBeenCalled()
+  })
+
   it('uses shared shipping selectors, descriptions, and conditional Other Port', async () => {
     render(
       <MemoryRouter initialEntries={['/federal/888']}>
@@ -1847,6 +1880,12 @@ describe('Exemption and Federal Detail Document Actions', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save Remark' }))
     expect(await screen.findByText('Remark is required.')).toBeInTheDocument()
 
+    await userEvent.type(newRemarkInput, 'R'.repeat(251))
+    await userEvent.click(screen.getByRole('button', { name: 'Save Remark' }))
+    expect(await screen.findByText('Remark must not exceed 250 characters.')).toBeInTheDocument()
+    expect(mockedSaveFederalApplicationRemark).not.toHaveBeenCalled()
+
+    await userEvent.clear(newRemarkInput)
     await userEvent.type(newRemarkInput, 'New note')
     await userEvent.click(screen.getByRole('button', { name: 'Save Remark' }))
 
