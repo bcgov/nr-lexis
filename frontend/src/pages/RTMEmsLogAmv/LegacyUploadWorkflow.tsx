@@ -501,13 +501,14 @@ const buildSavedReviewPreview = (
 }
 
 const parseReviewValue = (value: string): number | null | undefined => {
-  const normalized = value.trim().replace(/,/g, '')
-  if (!normalized) {
+  const enteredValue = value.trim()
+  if (!enteredValue) {
     return null
   }
-  if (!/^(?:\d+(?:\.\d{1,2})?|\.\d{1,2})$/.test(normalized)) {
+  if (!/^(?:(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d{1,2})?|\.\d{1,2})$/.test(enteredValue)) {
     return undefined
   }
+  const normalized = enteredValue.replace(/,/g, '')
   const parsed = Number(normalized)
   return Number.isFinite(parsed) && parsed >= 0 && parsed <= MAX_AMV_VALUE ? parsed : undefined
 }

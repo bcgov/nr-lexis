@@ -80,6 +80,9 @@ const trimOptional = (value: string): string | undefined => {
   return normalized.length > 0 ? normalized : undefined
 }
 
+const isHandledRtmAmvResponseStatus = (status: number): boolean =>
+  (status >= 200 && status < 300) || status === 422
+
 const normalizeFilters = (filters: RtmEmsLogAmvFilters): Record<string, string> => {
   const result: Record<string, string> = {}
 
@@ -156,7 +159,7 @@ export const saveRtmEmsLogAmvBatch = async (
   const response = await apiService
     .getAxiosInstance()
     .post<RtmEmsLogAmvMutationResult>('/lexis/rtm/emslogamv/batch', request, {
-      validateStatus: (status) => status < 500,
+      validateStatus: isHandledRtmAmvResponseStatus,
     })
 
   return response.data ?? { status: 'failed', message: '', errors: [], rows: [] }
@@ -176,7 +179,7 @@ export const previewRtmEmsLogAmvUpload = async (
       headers: {
         'Content-Type': 'multipart/form-data',
       },
-      validateStatus: (status) => status < 500,
+      validateStatus: isHandledRtmAmvResponseStatus,
     })
 
   return (
@@ -206,7 +209,7 @@ export const uploadRtmEmsLogAmv = async (
       headers: {
         'Content-Type': 'multipart/form-data',
       },
-      validateStatus: (status) => status < 500,
+      validateStatus: isHandledRtmAmvResponseStatus,
     })
 
   return (
