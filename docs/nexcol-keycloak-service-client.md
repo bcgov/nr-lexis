@@ -194,6 +194,19 @@ Malformed JSON, XML, or SOAP returns `400`. A supported bearer token is authoriz
 processing. If an unsupported media type is supplied, LEXIS returns `415`; that error is not
 rewritten as an authorization `403`.
 
+### Legacy component decommissioning
+
+The legacy XML namespace URIs are wire-contract identifiers and are not network dependencies.
+Modern prevalidation does not call the `lexisws` web application or the `lexisvc` queue consumer;
+it calls the installed `THE.LEXISWS_WEB_VALIDATION` Oracle package directly.
+
+The legacy decommissioning checklist must retain `THE.LEXISWS_WEB_VALIDATION` and its `EXECUTE`
+grant to the modern application role, `FSA_LEXIS_READ_WRITE_ROLE`. Do not remove the package or
+revoke that grant unless its validation logic has first been migrated, deployed, and verified for
+modern LEXIS in every environment. Keep `lexisvc` running for as long as submissions continue to
+arrive through the legacy ESF queue; this does not affect submissions sent directly to the modern
+API.
+
 ## XML Contract
 
 The preferred payload is the legacy ESF submission envelope containing one LEXIS schema-version-2
