@@ -237,6 +237,24 @@ describe('Admin upload workflow smoke', () => {
     })
   })
 
+  it('rejects malformed application document targets without truncating them', async () => {
+    mockUploadAccess('/fileApplicationUpload')
+    mockedSearchProvincialApplicationNumberOptions.mockResolvedValue([])
+    renderPage('/admin/uploads?type=application')
+
+    const applicationNumberInput = screen.getByRole('combobox', {
+      name: 'Application number',
+    })
+    await userEvent.type(applicationNumberInput, '45963x')
+    await userEvent.tab()
+
+    expect(applicationNumberInput).toHaveValue('45963x')
+    expect(
+      screen.getByText('Application number must be a positive whole number.'),
+    ).toBeInTheDocument()
+    expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
+  })
+
   it('searches exemption numbers for exemption document uploads', async () => {
     mockUploadAccess('/fileExemptionUpload')
     mockedSearchProvincialExemptionNumberOptions.mockResolvedValue([

@@ -28,7 +28,9 @@ import {
   getVisibleFieldError,
   isoDateFieldError,
   maxNumericValueFieldError,
+  normalizeProvincialApplicationNumber,
   positiveNumericFieldError,
+  provincialApplicationNumberFieldError,
   requiredFieldError,
   type FieldErrors,
   type TouchedFields,
@@ -223,7 +225,7 @@ const ProvincialExemptionCreatePage = () => {
       Array.from(
         new Set(
           (prefillState?.selectedApplicationNumbers ?? [])
-            .map((value) => value.trim())
+            .map(normalizeProvincialApplicationNumber)
             .filter((value) => value.length > 0),
         ),
       ),
@@ -379,9 +381,9 @@ const ProvincialExemptionCreatePage = () => {
     () => ({
       applicationNumber:
         firstValidationError(
-          () => positiveNumericFieldError(form.applicationNumber),
+          () => provincialApplicationNumberFieldError(form.applicationNumber),
           () => {
-            const applicationNumber = form.applicationNumber.trim()
+            const applicationNumber = normalizeProvincialApplicationNumber(form.applicationNumber)
             return applicationNumber && selectedApplicationNumbers.includes(applicationNumber)
               ? `Application ${applicationNumber} is already selected.`
               : null
@@ -520,7 +522,7 @@ const ProvincialExemptionCreatePage = () => {
   }
 
   const onAddApplication = (): void => {
-    const applicationNumber = form.applicationNumber.trim()
+    const applicationNumber = normalizeProvincialApplicationNumber(form.applicationNumber)
     if (!applicationNumber || fieldErrors.applicationNumber) {
       markFieldTouched('applicationNumber')
       return

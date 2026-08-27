@@ -1722,6 +1722,27 @@ describe('Create Page Core Flows', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/provincial/exemption/EX-901')
   }, 20_000)
 
+  it('canonicalizes a padded application number before exemption preview', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/create']}>
+        <Routes>
+          <Route path="/provincial/exemption/create" element={<ProvincialExemptionCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const applicationNumber = await screen.findByRole('combobox', {
+      name: 'Application number (optional)',
+    })
+    fireEvent.change(applicationNumber, { target: { value: '0000046275' } })
+    await userEvent.click(screen.getByRole('button', { name: 'Add application' }))
+
+    await waitFor(() =>
+      expect(mockedFetchProvincialExemptionCreatePreview).toHaveBeenCalledWith(['46275']),
+    )
+    expect(screen.getByRole('list', { name: 'Selected applications' })).toHaveTextContent('46275')
+  })
+
   it('submits a standalone Ministerial exemption without an application', async () => {
     mockedSubmitProvincialExemptionCreate.mockResolvedValue(successfulCreate('EX-900'))
 
@@ -2396,6 +2417,30 @@ describe('Create Page Core Flows', () => {
       expect(mockedFetchOfferPackageList).toHaveBeenCalledTimes(1)
       expect(mockedFetchOfferApplicationVolume).toHaveBeenCalledTimes(1)
     })
+  })
+
+  it('rejects malformed offer application numbers before remote lookup', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/offers/create']}>
+        <Routes>
+          <Route path="/provincial/offers/create" element={<ProvincialOfferCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { level: 1, name: 'Create provincial offer' })
+    mockedValidateOfferApplication.mockClear()
+    fireEvent.change(screen.getByLabelText('Application number'), {
+      target: { value: '1e3' },
+    })
+    await userEvent.click(screen.getByRole('button', { name: 'Save new offer' }))
+
+    expect(
+      screen.getAllByText('Application number must be a positive whole number.'),
+    ).not.toHaveLength(0)
+    await new Promise((resolve) => window.setTimeout(resolve, 350))
+    expect(mockedValidateOfferApplication).not.toHaveBeenCalled()
+    expect(mockedSubmitProvincialOfferCreate).not.toHaveBeenCalled()
   })
 
   it('blocks offers against a federal application before loading offer details', async () => {

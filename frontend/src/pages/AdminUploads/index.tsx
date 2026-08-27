@@ -42,6 +42,8 @@ import type {
 import { useAuth } from '@/context/auth/useAuth'
 import {
   getVisibleFieldError,
+  normalizeProvincialApplicationNumber,
+  provincialApplicationNumberFieldError,
   requiredFieldError,
   requiredMaxLengthFieldError,
   requiredPositiveNumericFieldError,
@@ -718,7 +720,11 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
               : 'Choose at least one file to upload.',
       applicationNumber:
         selectedWorkflowType === 'application'
-          ? (requiredFieldError(formState.applicationNumber, 'Application number') ?? undefined)
+          ? (provincialApplicationNumberFieldError(
+              formState.applicationNumber,
+              'Application number',
+              true,
+            ) ?? undefined)
           : undefined,
       exemptionNumber:
         selectedWorkflowType === 'exemption'
@@ -946,7 +952,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
 
     if (selectedWorkflowType === 'application') {
       const result = await submitAdminUpload('application', {
-        applicationNumber: formState.applicationNumber.trim(),
+        applicationNumber: normalizeProvincialApplicationNumber(formState.applicationNumber),
         file,
         fileDescription: formState.fileDescription.trim(),
       })
