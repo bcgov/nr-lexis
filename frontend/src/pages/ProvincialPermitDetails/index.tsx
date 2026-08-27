@@ -1220,6 +1220,17 @@ const ProvincialPermitDetailsPage = () => {
     permitApplicationToAdd || availablePermitApplicationOptions[0]?.value || ''
   const associatedPermitApplications =
     tabsData?.applications ?? EMPTY_PROVINCIAL_PERMIT_DETAIL_TABS.applications
+  const permitApplicationNumberSummary =
+    associatedPermitApplications.length > 0
+      ? associatedPermitApplications.join(', ')
+      : detail?.applicationNumber
+  const associatedPermitPackageNumbers = Array.from(
+    new Set((tabsData?.packages ?? []).map((row) => row.packageNumber).filter(Boolean)),
+  )
+  const permitPackageNumberSummary =
+    associatedPermitPackageNumbers.length > 0
+      ? associatedPermitPackageNumbers.join(', ')
+      : detail?.packageNumber
 
   const filteredFees = useMemo(() => {
     if (!tabsData) {
@@ -3161,14 +3172,14 @@ const ProvincialPermitDetailsPage = () => {
                             {renderPermitTextInput('permitNumber', 'Permit number', true)}
                             <TextInput
                               id="permit-applicationNumber"
-                              labelText="Application number"
-                              value={displayValue(detail.applicationNumber)}
+                              labelText="Application number(s)"
+                              value={displayValue(permitApplicationNumberSummary)}
                               disabled
                             />
                             <TextInput
                               id="permit-packageNumber"
-                              labelText="Package number"
-                              value={displayValue(detail.packageNumber)}
+                              labelText="Package number(s)"
+                              value={displayValue(permitPackageNumberSummary)}
                               disabled
                             />
                             {renderPermitTextInput('exemptionNumber', 'Exemption number', true)}
@@ -3261,12 +3272,12 @@ const ProvincialPermitDetailsPage = () => {
                               ),
                             },
                             {
-                              label: 'Application number',
-                              value: displayValue(detail.applicationNumber),
+                              label: 'Application number(s)',
+                              value: displayValue(permitApplicationNumberSummary),
                             },
                             {
-                              label: 'Package number',
-                              value: displayValue(detail.packageNumber),
+                              label: 'Package number(s)',
+                              value: displayValue(permitPackageNumberSummary),
                             },
                             {
                               label: 'Exemption number',

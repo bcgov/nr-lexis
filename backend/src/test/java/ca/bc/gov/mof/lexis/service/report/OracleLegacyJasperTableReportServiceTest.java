@@ -130,21 +130,38 @@ class OracleLegacyJasperTableReportServiceTest {
 
   @Test
   void shouldRenderSpeciesGradeNoDataSectionForEmptyCursor() throws Exception {
+    String regionLabel =
+        String.join(
+            ", ",
+            "Cariboo Natural Resource Region",
+            "Kootenay-Boundary Natural Resource Region",
+            "Northeast Natural Resource Region",
+            "Omineca Natural Resource Region",
+            "Thompson-Okanagan Natural Resource Region",
+            "Skeena Natural Resource Region",
+            "South Coast Natural Resource Region",
+            "West Coast Natural Resource Region");
     TabularData tabularData = new TabularData(List.of("PRODUCT_TYPE"), List.<List<String>>of());
     LexisReportRequestDto request =
         new LexisReportRequestDto(
-            Map.of("fromDate", "2026-03-05", "toDate", "2026-03-05", "permitStatus", "COM"),
+            Map.of(
+                "fromDate",
+                "2026-03-05",
+                "toDate",
+                "2026-03-05",
+                "permitStatus",
+                "COM",
+                "regionLabel",
+                regionLabel),
             "PDF");
     stubCursor(LexisJasperReportDefinition.SPECIES_GRADE_REPORT, request, tabularData);
 
-    List<String> renderedText = new java.util.ArrayList<>();
+    List<JasperPrint> prints = new java.util.ArrayList<>();
     OracleLegacyJasperTableReportService service =
         new OracleLegacyJasperTableReportService(legacyCsvReportService) {
           @Override
           void exportPdf(JasperPrint print, OutputStream output) {
-            print
-                .getPages()
-                .forEach(page -> collectText(page.getElements(), renderedText));
+            prints.add(print);
           }
         };
 
@@ -155,10 +172,35 @@ class OracleLegacyJasperTableReportServiceTest {
             LexisReportFormat.PDF);
 
     assertThat(report).isPresent();
-    assertThat(renderedText)
+    assertThat(prints).hasSize(1);
+    List<PositionedPrintText> printedText = new java.util.ArrayList<>();
+    prints
+        .getFirst()
+        .getPages()
+        .forEach(page -> collectPositionedPrintText(page.getElements(), printedText, 0));
+    assertThat(printedText.stream().map(text -> text.text().getFullText()))
         .contains(
             "Species and Grade Report",
             "No Species and Grade data matched this report criteria.");
+    PositionedPrintText criteria =
+        printedText.stream()
+            .filter(text -> text.text().getFullText().startsWith("From: 2026-03-05"))
+            .findFirst()
+            .orElseThrow();
+    PositionedPrintText noDataMessage =
+        printedText.stream()
+            .filter(
+                text ->
+                    "No Species and Grade data matched this report criteria."
+                        .equals(text.text().getFullText()))
+            .findFirst()
+            .orElseThrow();
+
+    assertThat(criteria.text().getFullText())
+        .contains("West Coast Natural Resource Region")
+        .endsWith("Forest File: All");
+    assertThat(criteria.text().getHeight()).isGreaterThan(18);
+    assertThat(criteria.y() + criteria.text().getHeight()).isLessThanOrEqualTo(noDataMessage.y());
   }
 
   @Test

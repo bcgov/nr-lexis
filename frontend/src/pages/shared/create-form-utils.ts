@@ -16,7 +16,7 @@ export const isValidIsoDate = (value: string): boolean => {
 export const hasInvalidIsoDateValue = (...values: string[]): boolean =>
   values.some((value) => !isValidIsoDate(value))
 
-export const isPositiveNumeric = (value: string): boolean => {
+const isPositiveNumeric = (value: string): boolean => {
   if (!value.trim()) return true
   const parsed = Number(value)
   return Number.isFinite(parsed) && parsed > 0
@@ -24,7 +24,7 @@ export const isPositiveNumeric = (value: string): boolean => {
 
 const NON_NEGATIVE_DECIMAL_PATTERN = /^\d+(\.\d+)?$/
 
-export const normalizeText = (value: string): string => value.trim()
+const normalizeText = (value: string): string => value.trim()
 
 export type FieldErrors<TField extends string> = Partial<Record<TField, string>>
 
