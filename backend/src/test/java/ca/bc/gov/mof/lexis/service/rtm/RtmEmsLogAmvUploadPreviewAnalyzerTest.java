@@ -209,6 +209,25 @@ class RtmEmsLogAmvUploadPreviewAnalyzerTest {
   }
 
   @Test
+  void shouldRejectMissingSharedStringInsteadOfSkippingTheCell() throws IOException {
+    Map<String, byte[]> entries = validScreenWorkbookEntries();
+    entries.put(
+        "xl/worksheets/sheet1.xml",
+        textEntry(entries, "xl/worksheets/sheet1.xml")
+            .replace(
+                "<c r=\"B4\"><v>10.25</v></c>",
+                "<c r=\"B4\" t=\"s\"><v>999</v></c>")
+            .getBytes(StandardCharsets.UTF_8));
+
+    assertThatThrownBy(
+            () ->
+                RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
+                    new ByteArrayInputStream(workbook(entries)), LocalDate.of(2026, 7, 1)))
+        .isInstanceOf(IOException.class)
+        .hasMessageContaining("missing shared string");
+  }
+
+  @Test
   void shouldRejectFormulaCellInsteadOfTrustingItsCachedValue() throws IOException {
     for (String formulaCell :
         List.of(

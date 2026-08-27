@@ -1396,7 +1396,7 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
   }
 
   private static String resolveCellValue(
-      String rawValue, String cellType, List<String> sharedStrings) {
+      String rawValue, String cellType, List<String> sharedStrings) throws IOException {
     String normalizedRawValue = rawValue == null ? "" : rawValue.trim();
     if ("b".equals(cellType)) {
       return switch (normalizedRawValue) {
@@ -1411,7 +1411,7 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
 
     int stringIndex = parseIntSafe(normalizedRawValue);
     if (stringIndex < 0 || stringIndex >= sharedStrings.size()) {
-      return "";
+      throw new IOException("The XLSX cell references a missing shared string.");
     }
 
     return sharedStrings.get(stringIndex);
