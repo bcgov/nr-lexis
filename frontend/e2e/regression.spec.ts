@@ -1374,7 +1374,8 @@ const permitMutationForm = (
 ): Record<string, string> => ({
   permitNumber: String(permit.permitNumber ?? ''),
   permitStatus: permitStatus ?? String(permit.permitStatusCode ?? ''),
-  permitIssueDate: String(permit.issueDate ?? ''),
+  permitIssueDate:
+    String(permit.issueDate ?? '') || (permitStatus === 'COM' ? formatBusinessIsoDate() : ''),
   permitExpiryDate: String(permit.expiryDate ?? ''),
   permitRequestDate: String(permit.receivedDate ?? ''),
   exemptionNumber: String(permit.exemptionNumber ?? ''),
@@ -1403,6 +1404,30 @@ const permitMutationFailure = (result: PermitMutationResponse, fallback: string)
     .map((value) => String(value ?? '').trim())
     .filter(Boolean)
   return details.length > 0 ? details.join(' ') : fallback
+}
+
+const reactivateRegressionPermit = async (
+  page: Page,
+  permitNumber: number,
+  marker: string,
+  shipping: { transportType: string; portOfExport: string },
+): Promise<void> => {
+  const current = await readPermitVersionedJson<Record<string, unknown>>(page, permitNumber)
+  if (String(current.payload.permitStatusCode ?? '').toUpperCase() === 'ACT') {
+    return
+  }
+  const result = await readJsonResponse<PermitMutationResponse>(
+    await postWithCsrf(page, '/api/lexis/rpc/permit-details/update-permit', {
+      headers: versionHeaders(current.version),
+      form: permitMutationForm(current.payload, marker, shipping, 'ACT'),
+    }),
+  )
+  expect(
+    result.success,
+    permitMutationFailure(result, `Permit ${permitNumber} reactivation returned success=false.`),
+  ).toBe(true)
+  expect(result.permitStatus).toBe('ACT')
+  expect(asStringArray(result.errors)).toEqual([])
 }
 
 const cancelRegressionPermit = async (
@@ -2368,7 +2393,19 @@ test.describe('TEST IDIR admin regression', () => {
     }
     await expect(page.getByRole('tab', { name: 'Agent' })).toHaveCount(0)
     await expect(page.getByRole('tab', { name: 'Permits' })).toHaveCount(0)
-    await expect(page.getByRole('tab', { name: 'Review' })).toHaveCount(0)
+    const reviewTab = page.getByRole('tab', { name: 'Review' })
+    await expect(reviewTab).toBeVisible()
+    await reviewTab.click()
+    await expect(page.getByRole('textbox', { name: 'Application status' })).toHaveValue('New')
+    await expect(page.getByRole('textbox', { name: 'Application status' })).toHaveAttribute(
+      'readonly',
+    )
+    await expect(page.getByRole('textbox', { name: 'Remarks' })).toBeDisabled()
+    await expect(
+      page.getByText(
+        'Save the application before changing its review status or adding review remarks.',
+      ),
+    ).toBeVisible()
 
     await expect(page.getByRole('button', { name: 'Save' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Cancel' })).toBeVisible()
@@ -3622,12 +3659,16 @@ test.describe('TEST IDIR admin regression', () => {
       expect(asStringArray(createdPermit.errors)).toEqual([])
       const permitNumber = Number(createdPermit.permitNumber)
       expect(permitNumber).toBeGreaterThan(0)
-      const detachCleanup = cleanup.defer('detach lifecycle application from permit', () =>
-        detachRegressionPermitApplication(page, permitNumber, lifecycleApplicationNumber),
-      )
       const permitCleanup = cleanup.defer('cancel provincial permit', () =>
         cancelRegressionPermit(page, permitNumber, lifecycleMarker, schedule.shipping),
       )
+      const detachCleanup = cleanup.defer('detach lifecycle application from permit', async () => {
+        if (!(await permitContainsApplication(page, permitNumber, lifecycleApplicationNumber))) {
+          return
+        }
+        await reactivateRegressionPermit(page, permitNumber, lifecycleMarker, schedule.shipping)
+        await detachRegressionPermitApplication(page, permitNumber, lifecycleApplicationNumber)
+      })
 
       await expectAccessiblePage(
         page,
@@ -3750,13 +3791,12 @@ test.describe('TEST IDIR admin regression', () => {
       expect(permitApprovalEmail.success).toBe(true)
       expect(permitApprovalEmail.message).toBe('Permit approval email sent.')
 
-      await cancelRegressionPermit(page, permitNumber, lifecycleMarker, schedule.shipping)
-      permitCleanup.complete()
-      const cancelledPermit = await readPermitVersionedJson<Record<string, unknown>>(
+      await reactivateRegressionPermit(page, permitNumber, lifecycleMarker, schedule.shipping)
+      const reactivatedPermit = await readPermitVersionedJson<Record<string, unknown>>(
         page,
         permitNumber,
       )
-      expect(cancelledPermit.payload.permitStatusCode).toBe('CAN')
+      expect(reactivatedPermit.payload.permitStatusCode).toBe('ACT')
 
       await detachRegressionPermitApplication(page, permitNumber, lifecycleApplicationNumber)
       detachCleanup.complete()
@@ -3768,6 +3808,14 @@ test.describe('TEST IDIR admin regression', () => {
         `/api/lexis/applications/${lifecycleApplicationNumber}`,
       )
       expect(detachedApplication.payload.applicationStatusCode).toBe('EXE')
+
+      await cancelRegressionPermit(page, permitNumber, lifecycleMarker, schedule.shipping)
+      permitCleanup.complete()
+      const cancelledPermit = await readPermitVersionedJson<Record<string, unknown>>(
+        page,
+        permitNumber,
+      )
+      expect(cancelledPermit.payload.permitStatusCode).toBe('CAN')
 
       await cancelRegressionExemption(page, exemptionNumber, orgUnitNumber)
       exemptionCleanup.complete()
