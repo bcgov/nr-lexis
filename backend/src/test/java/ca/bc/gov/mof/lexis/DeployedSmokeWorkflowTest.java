@@ -10,8 +10,7 @@ import org.junit.jupiter.api.Test;
 class DeployedSmokeWorkflowTest {
 
   @Test
-  void deployedSmokeShouldRetryOnlyAFrontendRouteProbeFailureOnAFreshRunner()
-      throws IOException {
+  void deployedSmokeShouldRetryAnyLiveBrowserFailureOnAFreshRunner() throws IOException {
     String workflow = read(".github/workflows/reusable-tests.yml");
     int initialJob = workflow.indexOf("  e2e-tests:");
     int retryJob = workflow.indexOf("  e2e-route-retry:");
@@ -24,18 +23,27 @@ class DeployedSmokeWorkflowTest {
 
     assertThat(initialAttempt)
         .contains("route_probe_outcome: ${{ steps.route_probe.outcome }}")
+        .contains("proxy_probe_outcome: ${{ steps.proxy_probe.outcome }}")
+        .contains("playwright_outcome: ${{ steps.playwright.outcome }}")
         .contains("id: route_probe\n        continue-on-error: true")
         .contains(
             "- name: Verify frontend proxy to backend\n"
+                + "        id: proxy_probe\n"
+                + "        continue-on-error: true\n"
                 + "        if: steps.route_probe.outcome == 'success'",
             "- name: Run basic Playwright smoke suite\n"
-                + "        if: steps.route_probe.outcome == 'success'",
-            "if: (! cancelled()) && steps.route_probe.outcome == 'success'")
-        .containsOnlyOnce("continue-on-error: true");
+                + "        id: playwright\n"
+                + "        continue-on-error: true",
+            "steps.proxy_probe.outcome == 'success'",
+            "if: (! cancelled()) && steps.playwright.outcome != 'skipped'");
+    assertThat(initialAttempt.split("continue-on-error: true", -1)).hasSize(4);
     assertThat(retryAttempt)
         .contains("name: Basic E2E retry (chromium)")
         .contains("needs: [e2e-tests]")
-        .contains("if: needs.e2e-tests.outputs.route_probe_outcome == 'failure'")
+        .contains(
+            "needs.e2e-tests.outputs.route_probe_outcome == 'failure'",
+            "needs.e2e-tests.outputs.proxy_probe_outcome == 'failure'",
+            "needs.e2e-tests.outputs.playwright_outcome == 'failure'")
         .contains("runs-on: ubuntu-24.04")
         .contains("-route-retry")
         .doesNotContain("name: Basic E2E fresh-runner retry")

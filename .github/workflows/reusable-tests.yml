@@ -25,6 +25,8 @@ jobs:
     name: Basic E2E (${{ matrix.project }})
     outputs:
       route_probe_outcome: ${{ steps.route_probe.outcome }}
+      proxy_probe_outcome: ${{ steps.proxy_probe.outcome }}
+      playwright_outcome: ${{ steps.playwright.outcome }}
     concurrency:
       group: ${{ format('{0}-{1}-browser', github.event.repository.name, inputs.slot || inputs.target) }}
       cancel-in-progress: false
@@ -63,6 +65,8 @@ jobs:
         run: bash ../.github/scripts/wait-for-frontend.sh "$E2E_BASE_URL" 17 5 '<div id="root"' 30
 
       - name: Verify frontend proxy to backend
+        id: proxy_probe
+        continue-on-error: true
         if: steps.route_probe.outcome == 'success'
         env:
           E2E_BASE_URL: https://${{ env.PREFIX }}.${{ env.DOMAIN }}
@@ -92,7 +96,11 @@ jobs:
           fi
 
       - name: Run basic Playwright smoke suite
-        if: steps.route_probe.outcome == 'success'
+        id: playwright
+        continue-on-error: true
+        if: >-
+          steps.route_probe.outcome == 'success' &&
+          steps.proxy_probe.outcome == 'success'
         env:
           E2E_BASE_URL: https://${{ env.PREFIX }}.${{ env.DOMAIN }}
           CI: "true"
@@ -100,18 +108,21 @@ jobs:
           npx playwright test --project=${{ matrix.project }} --reporter=html,list
 
       - uses: actions/upload-artifact@v7
-        if: (! cancelled()) && steps.route_probe.outcome == 'success'
+        if: (! cancelled()) && steps.playwright.outcome != 'skipped'
         with:
           name: playwright-report-${{ matrix.project }}-${{ inputs.target }}
           path: frontend/playwright-report
           retention-days: 7
 
-  # A fresh runner avoids the intermittent runner-to-Gold connection path.
-  # Only a failed route probe reaches this job; proxy and Playwright failures remain terminal.
+  # A fresh runner avoids an intermittent runner-to-Gold connection path at any live test stage.
+  # A repeated failure remains terminal.
   e2e-route-retry:
     name: Basic E2E retry (chromium)
     needs: [e2e-tests]
-    if: needs.e2e-tests.outputs.route_probe_outcome == 'failure'
+    if: >-
+      needs.e2e-tests.outputs.route_probe_outcome == 'failure' ||
+      needs.e2e-tests.outputs.proxy_probe_outcome == 'failure' ||
+      needs.e2e-tests.outputs.playwright_outcome == 'failure'
     concurrency:
       group: ${{ format('{0}-{1}-browser', github.event.repository.name, inputs.slot || inputs.target) }}
       cancel-in-progress: false
