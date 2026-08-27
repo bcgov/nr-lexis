@@ -1634,7 +1634,7 @@ describe('Admin policy action states', () => {
     await userEvent.type(within(feeDialog).getByLabelText('Fee increase percentage'), '4')
     await userEvent.click(within(feeDialog).getByRole('button', { name: 'Add fee policy' }))
 
-    expect(await screen.findByText('Policy effective date is required.')).toBeInTheDocument()
+    expect(await within(feeDialog).findByText('Date must be YYYY-MM-DD.')).toBeInTheDocument()
     expect(mockedUpsertFeePolicy).not.toHaveBeenCalled()
 
     feeView.unmount()
@@ -1652,7 +1652,7 @@ describe('Admin policy action states', () => {
     await userEvent.type(within(filDialog).getByLabelText('Fee in lieu percentage'), '2')
     await userEvent.click(within(filDialog).getByRole('button', { name: 'Add fee in lieu policy' }))
 
-    expect(await screen.findAllByText('Policy effective date is required.')).toHaveLength(1)
+    expect(await within(filDialog).findByText('Date must be YYYY-MM-DD.')).toBeInTheDocument()
     expect(mockedUpsertFilPolicy).not.toHaveBeenCalled()
   })
 })
