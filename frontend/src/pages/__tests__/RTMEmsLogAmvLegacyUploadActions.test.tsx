@@ -1027,7 +1027,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     const valueInput = await screen.findByLabelText('Balsam grade D September 2026 value')
     const saveButton = screen.getByRole('button', { name: 'Save values' })
 
-    for (const invalidValue of ['1,2', 'abc', '-1', '12.345', '10000']) {
+    for (const invalidValue of ['1,2', 'abc', '-1', '12.345', '9,999.999', '10000', '00000']) {
       await userEvent.clear(valueInput)
       await userEvent.type(valueInput, invalidValue)
       expect(valueInput).toHaveAttribute('aria-invalid', 'true')

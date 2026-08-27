@@ -505,7 +505,7 @@ const parseReviewValue = (value: string): number | null | undefined => {
   if (!enteredValue) {
     return null
   }
-  if (!/^(?:(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d{1,2})?|\.\d{1,2})$/.test(enteredValue)) {
+  if (!/^(?:(?:\d{1,4}|[1-9],\d{3})(?:\.\d{1,2})?|\.\d{1,2})$/.test(enteredValue)) {
     return undefined
   }
   const normalized = enteredValue.replace(/,/g, '')
