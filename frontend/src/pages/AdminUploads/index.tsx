@@ -58,7 +58,6 @@ import {
 } from '@/service/admin-upload-service'
 import { searchProvincialExemptionNumberOptions } from '@/service/provincial-exemption-search-service'
 import { searchProvincialPermitNumberOptions } from '@/service/provincial-permit-search-service'
-import { leadingDigits } from '@/utils/text'
 
 type UploadWorkflowDefinition = {
   type: UploadWorkflowType
@@ -732,7 +731,8 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
           : undefined,
       permitNumber:
         selectedWorkflowType === 'permit' || selectedWorkflowType === 'invoice'
-          ? (requiredFieldError(formState.permitNumber, 'Permit number') ?? undefined)
+          ? (provincialApplicationNumberFieldError(formState.permitNumber, 'Permit number', true) ??
+            undefined)
           : undefined,
       salesInvoiceNumber:
         selectedWorkflowType === 'invoice'
@@ -1467,7 +1467,6 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
             invalid={!!fieldError('permitNumber')}
             invalidText={fieldError('permitNumber')}
             searchOptions={searchProvincialPermitNumberOptions}
-            normalizeInput={leadingDigits}
             onBlur={() => markFieldTouched('permitNumber')}
             onChange={(value) =>
               setFormState((current) => ({

@@ -539,6 +539,32 @@ describe('Admin upload workflow smoke', () => {
     expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
   })
 
+  it('rejects malformed permit document targets without truncating them', async () => {
+    mockUploadAccess('/filePermitUpload')
+    renderPage('/admin/uploads?type=permit')
+
+    const permitNumberInput = screen.getByRole('combobox', { name: 'Permit number' })
+    await userEvent.type(permitNumberInput, '5001abc')
+    await userEvent.tab()
+
+    expect(permitNumberInput).toHaveValue('5001abc')
+    expect(screen.getByText('Permit number must be a positive whole number.')).toBeInTheDocument()
+    expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
+  })
+
+  it('rejects permit document targets that exceed the Oracle number boundary', async () => {
+    mockUploadAccess('/filePermitUpload')
+    renderPage('/admin/uploads?type=permit')
+
+    const permitNumberInput = screen.getByRole('combobox', { name: 'Permit number' })
+    await userEvent.type(permitNumberInput, '12345678901')
+    await userEvent.tab()
+
+    expect(permitNumberInput).toHaveValue('12345678901')
+    expect(screen.getByText('Permit number must be 10 digits or fewer.')).toBeInTheDocument()
+    expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
+  })
+
   it('blocks invoice uploads that fail legacy invoice validation rules', async () => {
     mockUploadAccess('/fileInvoiceUpload')
 
