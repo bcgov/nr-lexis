@@ -234,6 +234,50 @@ class RtmEmsLogAmvUploadPreviewAnalyzerTest {
   }
 
   @Test
+  void shouldRejectFormulaGradeInsteadOfTrustingItsCachedValue() throws IOException {
+    Map<String, byte[]> entries = validScreenWorkbookEntries();
+    entries.put(
+        "xl/worksheets/sheet1.xml",
+        textEntry(entries, "xl/worksheets/sheet1.xml")
+            .replace(
+                "<c r=\"A4\" t=\"inlineStr\"><is><t>A</t></is></c>",
+                "<c r=\"A4\" t=\"str\"><f>\"A\"</f><v>A</v></c>")
+            .getBytes(StandardCharsets.UTF_8));
+
+    RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult result =
+        RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
+            new ByteArrayInputStream(workbook(entries)), LocalDate.of(2026, 7, 1));
+
+    assertThat(result.numericCellCount()).isOne();
+    assertThat(result.rows()).hasSize(1);
+    assertThat(result.errors())
+        .containsExactly("Row 4 contains a formula at column A; enter a fixed grade.");
+  }
+
+  @Test
+  void shouldRejectFormulaSpeciesHeaderInsteadOfTrustingItsCachedValue() throws IOException {
+    Map<String, byte[]> entries = validScreenWorkbookEntries();
+    entries.put(
+        "xl/worksheets/sheet1.xml",
+        textEntry(entries, "xl/worksheets/sheet1.xml")
+            .replace(
+                "<c r=\"B3\" t=\"inlineStr\"><is><t>BA</t></is></c>",
+                "<c r=\"B3\" t=\"str\"><f>\"BA\"</f><v>BA</v></c>")
+            .getBytes(StandardCharsets.UTF_8));
+
+    RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult result =
+        RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
+            new ByteArrayInputStream(workbook(entries)), LocalDate.of(2026, 7, 1));
+
+    assertThat(result.numericCellCount()).isEqualTo(4);
+    assertThat(result.rows()).hasSize(4);
+    assertThat(result.errors())
+        .containsExactly(
+            "Header row 3 contains a formula at column B; enter fixed header text.",
+            "Column B contains AMV values but has no supported species header.");
+  }
+
+  @Test
   void shouldRejectUnmappedScreenSpeciesHeaderInsteadOfPartiallyAcceptingWorkbook()
       throws IOException {
     Map<String, byte[]> entries = validScreenWorkbookEntries();

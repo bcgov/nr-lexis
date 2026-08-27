@@ -826,18 +826,25 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
       }
 
       String grade = "";
-      boolean foundGrade = false;
+      ParsedCell gradeCell = null;
       boolean foundNumericValue = false;
 
       for (ParsedCell cell : rowCells) {
         if (cell.column() == 1) {
           grade = cell.value().trim();
-          foundGrade = true;
+          gradeCell = cell;
           break;
         }
       }
 
-      if (!foundGrade || grade.isBlank()) {
+      if (gradeCell != null && gradeCell.formula()) {
+        errors.add(
+            "Row %d contains a formula at column A; enter a fixed grade."
+                .formatted(rowNumber));
+        continue;
+      }
+
+      if (gradeCell == null || grade.isBlank()) {
         if (effectiveMonth != null) {
           errors.add("Row %d contains AMV values but has no grade.".formatted(rowNumber));
         } else {
@@ -961,6 +968,12 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
 
     for (ParsedCell cell : cells) {
       int column = cell.column();
+      if (cell.formula()) {
+        errors.add(
+            "Header row %d contains a formula at column %s; enter fixed header text."
+                .formatted(rowNumber, columnToLetter(column)));
+        continue;
+      }
       if (column <= 1) {
         continue;
       }
