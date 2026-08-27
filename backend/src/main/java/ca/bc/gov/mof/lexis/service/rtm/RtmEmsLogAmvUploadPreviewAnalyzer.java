@@ -83,6 +83,8 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
       Set.of(
           "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M",
           "U", "W", "X", "Y", "Z", "1", "2", "3", "4", "5", "6", "BLANK");
+  private static final Set<String> SCREEN_SPECIES =
+      Set.of("BA", "HE", "CE", "CY", "FI", "SP", "WH", "LO", "YE", "PINE");
 
   private RtmEmsLogAmvUploadPreviewAnalyzer() {}
 
@@ -782,6 +784,8 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
         defaultGrowthIndicator == null ? metadata.growthIndicator() : defaultGrowthIndicator;
     Map<String, String> speciesHeaderAliases = speciesHeaderAliases(effectiveMonth != null);
     Map<Integer, String> speciesByColumn = new HashMap<>();
+    Map<String, UploadRow> firstScreenUploadByKey = new HashMap<>();
+    Set<Integer> screenUnmappedValueColumns = new HashSet<>();
     List<String> errors = new ArrayList<>();
     List<String> warnings = new ArrayList<>();
     List<UploadRow> uploadRows = new ArrayList<>();
@@ -800,7 +804,13 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
         headerDetected = true;
         headerRow = rowNumber;
         speciesByColumn =
-            parseSpeciesHeaders(rowCells, rowNumber, errors, warnings, speciesHeaderAliases);
+            parseSpeciesHeaders(
+                rowCells,
+                rowNumber,
+                errors,
+                warnings,
+                speciesHeaderAliases,
+                effectiveMonth != null);
 
         if (speciesByColumn.isEmpty()) {
           errors.add("Header row %d does not include recognized species columns.".formatted(rowNumber));
@@ -849,17 +859,40 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
 
         String speciesCode = speciesByColumn.get(column);
         if (speciesCode == null) {
-          warnings.add(
-              "Row %d includes unmapped species column %s; value '%s' was skipped."
-                  .formatted(rowNumber, columnToLetter(column), normalizeStringValue(value)));
+          if (effectiveMonth != null && screenUnmappedValueColumns.add(column)) {
+            errors.add(
+                "Column %s contains AMV values but has no supported species header."
+                    .formatted(columnToLetter(column)));
+          } else if (effectiveMonth == null) {
+            warnings.add(
+                "Row %d includes unmapped species column %s; value '%s' was skipped."
+                    .formatted(rowNumber, columnToLetter(column), normalizeStringValue(value)));
+          }
           continue;
         }
 
         if (isNumeric(value)) {
           BigDecimal newValue = parseNumericValue(cell);
-          uploadRows.add(
+          UploadRow uploadRow =
               new UploadRow(
-                  speciesCode, grade, growthIndicator, newValue, rowNumber, column));
+                  speciesCode, grade, growthIndicator, newValue, rowNumber, column);
+          if (effectiveMonth != null) {
+            String uploadKey = logicalScreenSpecies(speciesCode) + "|" + normalizeHeader(grade);
+            UploadRow firstUpload = firstScreenUploadByKey.putIfAbsent(uploadKey, uploadRow);
+            if (firstUpload != null) {
+              errors.add(
+                  ("Row %d column %s duplicates row %d column %s for species '%s' "
+                          + "and grade '%s'.")
+                      .formatted(
+                          rowNumber,
+                          columnToLetter(column),
+                          firstUpload.sourceRow(),
+                          columnToLetter(firstUpload.sourceColumn()),
+                          logicalScreenSpecies(speciesCode),
+                          normalizeHeader(grade)));
+            }
+          }
+          uploadRows.add(uploadRow);
           numericCells++;
           foundNumericValue = true;
         } else {
@@ -897,7 +930,8 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
       int rowNumber,
       List<String> errors,
       List<String> warnings,
-      Map<String, String> speciesHeaderAliases) {
+      Map<String, String> speciesHeaderAliases,
+      boolean screenWorkflow) {
     Map<Integer, String> speciesByColumn = new HashMap<>();
     Set<String> observedSpecies = new HashSet<>();
 
@@ -923,16 +957,28 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
 
       String speciesCode = resolveSpeciesCode(value, speciesHeaderAliases);
       if (speciesCode == null) {
-        warnings.add(
-            "Header row %d contains unmapped species header '%s' at column %s."
+        (screenWorkflow ? errors : warnings)
+            .add(
+                "Header row %d contains unmapped species header '%s' at column %s."
+                    .formatted(rowNumber, normalizeStringValue(value), columnToLetter(column)));
+        continue;
+      }
+
+      if (screenWorkflow && !SCREEN_SPECIES.contains(speciesCode)) {
+        errors.add(
+            "Header row %d contains unsupported species header '%s' at column %s."
                 .formatted(rowNumber, normalizeStringValue(value), columnToLetter(column)));
         continue;
       }
 
       if (observedSpecies.contains(speciesCode)) {
-        warnings.add(
-            "Header row %d contains a duplicate species column for '%s'."
-                .formatted(rowNumber, normalizedValue));
+        (screenWorkflow ? errors : warnings)
+            .add(
+                "Header row %d contains a duplicate species column for '%s'."
+                    .formatted(rowNumber, normalizedValue));
+        if (screenWorkflow) {
+          continue;
+        }
       }
 
       speciesByColumn.put(column, speciesCode);
@@ -1132,6 +1178,10 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
     }
 
     return null;
+  }
+
+  private static String logicalScreenSpecies(String speciesCode) {
+    return Set.of("WH", "LO", "YE", "PINE").contains(speciesCode) ? "PINE" : speciesCode;
   }
 
   private static String normalizeHeader(String value) {

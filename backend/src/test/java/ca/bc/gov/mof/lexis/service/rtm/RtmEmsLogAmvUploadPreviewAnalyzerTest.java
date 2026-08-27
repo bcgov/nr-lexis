@@ -128,7 +128,7 @@ class RtmEmsLogAmvUploadPreviewAnalyzerTest {
   @Test
   void shouldRejectNonNumericMappedCellInsteadOfPartiallyAcceptingWorkbook()
       throws IOException {
-    Map<String, byte[]> entries = validWorkbookEntries();
+    Map<String, byte[]> entries = validScreenWorkbookEntries();
     entries.put(
         "xl/worksheets/sheet1.xml",
         textEntry(entries, "xl/worksheets/sheet1.xml")
@@ -145,6 +145,69 @@ class RtmEmsLogAmvUploadPreviewAnalyzerTest {
     assertThat(result.rows()).hasSize(5);
     assertThat(result.errors())
         .containsExactly("Row 4 has non-numeric value '12x' at column B.");
+  }
+
+  @Test
+  void shouldRejectUnmappedScreenSpeciesHeaderInsteadOfPartiallyAcceptingWorkbook()
+      throws IOException {
+    Map<String, byte[]> entries = validScreenWorkbookEntries();
+    entries.put(
+        "xl/worksheets/sheet1.xml",
+        textEntry(entries, "xl/worksheets/sheet1.xml")
+            .replace(">BA</t>", ">BALSA</t>")
+            .getBytes(StandardCharsets.UTF_8));
+
+    RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult result =
+        RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
+            new ByteArrayInputStream(workbook(entries)), LocalDate.of(2026, 7, 1));
+
+    assertThat(result.numericCellCount()).isEqualTo(4);
+    assertThat(result.rows()).hasSize(4);
+    assertThat(result.errors())
+        .containsExactly(
+            "Header row 3 contains unmapped species header 'BALSA' at column B.",
+            "Column B contains AMV values but has no supported species header.");
+  }
+
+  @Test
+  void shouldRejectDuplicateScreenSpeciesHeader() throws IOException {
+    Map<String, byte[]> entries = validScreenWorkbookEntries();
+    entries.put(
+        "xl/worksheets/sheet1.xml",
+        textEntry(entries, "xl/worksheets/sheet1.xml")
+            .replace(">HE</t>", ">BA</t>")
+            .getBytes(StandardCharsets.UTF_8));
+
+    RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult result =
+        RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
+            new ByteArrayInputStream(workbook(entries)), LocalDate.of(2026, 7, 1));
+
+    assertThat(result.numericCellCount()).isEqualTo(5);
+    assertThat(result.rows()).hasSize(5);
+    assertThat(result.errors())
+        .containsExactly(
+            "Header row 3 contains a duplicate species column for 'BA'.",
+            "Column C contains AMV values but has no supported species header.");
+  }
+
+  @Test
+  void shouldRejectDuplicateScreenSpeciesAndGradeCell() throws IOException {
+    Map<String, byte[]> entries = validScreenWorkbookEntries();
+    entries.put(
+        "xl/worksheets/sheet1.xml",
+        textEntry(entries, "xl/worksheets/sheet1.xml")
+            .replace(">1</t>", ">A</t>")
+            .getBytes(StandardCharsets.UTF_8));
+
+    RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult result =
+        RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
+            new ByteArrayInputStream(workbook(entries)), LocalDate.of(2026, 7, 1));
+
+    assertThat(result.numericCellCount()).isEqualTo(6);
+    assertThat(result.rows()).hasSize(6);
+    assertThat(result.errors())
+        .containsExactly(
+            "Row 5 column B duplicates row 4 column B for species 'BA' and grade 'A'.");
   }
 
   @Test
@@ -213,6 +276,20 @@ class RtmEmsLogAmvUploadPreviewAnalyzerTest {
     assertThat(result.numericCellCount()).isOne();
     assertThat(result.rows()).hasSize(1);
     assertThat(result.rows()).extracting(RtmEmsLogAmvUploadPreviewAnalyzer.UploadRow::species)
+        .containsExactly("WH");
+  }
+
+  @Test
+  void shouldAcceptOnePhysicalPineColumnWithScreenContext() throws IOException {
+    RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult result =
+        RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
+            new ByteArrayInputStream(
+                RtmEmsLogAmvWorkbookTestFixtures.singleWhitePineWorkbook()),
+            LocalDate.of(2026, 7, 1));
+
+    assertThat(result.errors()).isEmpty();
+    assertThat(result.rows())
+        .extracting(RtmEmsLogAmvUploadPreviewAnalyzer.UploadRow::species)
         .containsExactly("WH");
   }
 
@@ -591,6 +668,18 @@ class RtmEmsLogAmvUploadPreviewAnalyzerTest {
 
   private static Map<String, byte[]> validWorkbookEntries() throws IOException {
     return workbookEntries(RtmEmsLogAmvWorkbookTestFixtures.matrixWorkbook());
+  }
+
+  private static Map<String, byte[]> validScreenWorkbookEntries() throws IOException {
+    Map<String, byte[]> entries = validWorkbookEntries();
+    entries.put(
+        "xl/worksheets/sheet1.xml",
+        textEntry(entries, "xl/worksheets/sheet1.xml")
+            .replace(">WH</t>", ">CE</t>")
+            .replace(">LO</t>", ">CY</t>")
+            .replace(">YE</t>", ">FI</t>")
+            .getBytes(StandardCharsets.UTF_8));
+    return entries;
   }
 
   private static Map<String, byte[]> workbookEntries(byte[] workbook) throws IOException {
