@@ -1484,6 +1484,7 @@ function ProvincialApplicationItemsPanel({
         <section
           className="application-items-card application-items-section application-items-section--package-details"
           hidden={packageFirstEmptyState}
+          style={packageFirstEmptyState ? { display: 'none' } : undefined}
         >
           <div className="application-items-section-header">
             <h3 className="application-items-section-title--icon">
@@ -1973,6 +1974,7 @@ function ProvincialApplicationItemsPanel({
           ref={scalesSectionRef}
           className="application-items-card application-items-section application-items-section--scales"
           hidden={packageFirstEmptyState}
+          style={packageFirstEmptyState ? { display: 'none' } : undefined}
         >
           <h3>Summary of Scale</h3>
           {showMutationActions && (

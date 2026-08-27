@@ -5280,18 +5280,6 @@ $notification-types: 'error', 'info', 'success', 'warning';
   scroll-margin-top: 6rem;
 }
 
-.application-items-section--package-details {
-  order: 1;
-}
-
-.application-items-section--scales {
-  order: 2;
-}
-
-.application-items-section--create-package {
-  order: 3;
-}
-
 .application-create-package-actions {
   display: flex;
   justify-content: flex-start;

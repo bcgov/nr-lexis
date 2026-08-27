@@ -231,6 +231,12 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     ).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Package Details' })).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Summary of Scale' })).not.toBeInTheDocument()
+    expect(document.querySelector('.application-items-section--package-details')).toHaveStyle({
+      display: 'none',
+    })
+    expect(document.querySelector('.application-items-section--scales')).toHaveStyle({
+      display: 'none',
+    })
 
     await userEvent.click(createPackageButton)
 
@@ -246,6 +252,12 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     ).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Package Details' })).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Summary of Scale' })).not.toBeInTheDocument()
+    expect(document.querySelector('.application-items-section--package-details')).toHaveStyle({
+      display: 'none',
+    })
+    expect(document.querySelector('.application-items-section--scales')).toHaveStyle({
+      display: 'none',
+    })
   })
 
   it('keeps a manual package selection after handling a deep-link package focus', async () => {
