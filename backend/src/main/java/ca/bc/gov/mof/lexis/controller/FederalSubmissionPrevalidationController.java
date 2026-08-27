@@ -2,6 +2,8 @@ package ca.bc.gov.mof.lexis.controller;
 
 import ca.bc.gov.mof.lexis.dto.federal.FederalSubmissionPrevalidationDto;
 import ca.bc.gov.mof.lexis.service.federal.FederalSubmissionPrevalidationService;
+import ca.bc.gov.mof.lexis.service.federal.FederalSubmissionPrevalidationXmlCodec;
+import ca.bc.gov.mof.lexis.service.federal.FederalSubmissionPrevalidationXmlCodec.ParsedRequest;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -36,5 +38,35 @@ public class FederalSubmissionPrevalidationController {
       return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
     }
     return ResponseEntity.ok(service.validate(submission));
+  }
+
+  @PostMapping(
+      value = "/prevalidation",
+      consumes = {
+        MediaType.APPLICATION_XML_VALUE,
+        MediaType.TEXT_XML_VALUE,
+        "application/soap+xml"
+      },
+      produces = {
+        MediaType.APPLICATION_XML_VALUE,
+        MediaType.TEXT_XML_VALUE,
+        "application/soap+xml"
+      })
+  public ResponseEntity<String> prevalidateXml(@RequestBody(required = false) String xml) {
+    ParsedRequest request;
+    try {
+      request = FederalSubmissionPrevalidationXmlCodec.parse(xml);
+    } catch (IllegalArgumentException exception) {
+      return ResponseEntity.badRequest().build();
+    }
+
+    FederalSubmissionPrevalidationService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
+    }
+    FederalSubmissionPrevalidationDto response = service.validate(request.submission());
+    return ResponseEntity.ok()
+        .contentType(FederalSubmissionPrevalidationXmlCodec.responseMediaType(request))
+        .body(FederalSubmissionPrevalidationXmlCodec.renderResponse(request, response));
   }
 }

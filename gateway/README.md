@@ -27,6 +27,10 @@ operations. It can be loaded into Swagger UI, Swagger Editor, Postman, or client
 Select an available environment gateway from the OpenAPI `servers` list and authorize with a
 NEXCOL runtime-client access token. The deployment provisioning client is not a calling credential.
 
+The prevalidation operation accepts JSON, raw legacy `LogExportApplication` XML, Axis SOAP 1.1,
+and SOAP 1.2. Its response follows the request format. Validation and submission retain their
+existing XML-request and JSON-response contracts.
+
 It can be rendered in the
 [BC Government OpenAPI console](https://openapi.apps.gov.bc.ca?url=https://raw.githubusercontent.com/bcgov/nr-lexis/main/gateway/openapi.yaml).
 
@@ -80,6 +84,8 @@ Environment verification covers:
 
 - missing token returns `401`;
 - missing scope returns `403`;
+- lower-camel JSON, .NET PascalCase JSON, raw XML, and Axis SOAP prevalidation return the same
+  legacy field decisions;
 - valid and invalid XML produce the expected validation results; and
 - a controlled valid submission persists the expected federal records.
 

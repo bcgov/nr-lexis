@@ -2393,6 +2393,30 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
+  void federalSubmissionPrevalidationShouldAllowLegacyXmlForFederalUploadScope()
+      throws Exception {
+    mockMvc
+        .perform(
+            post("/api/lexis/federal/submissions/prevalidation")
+                .contentType(MediaType.APPLICATION_XML)
+                .content(federalPrevalidationXml())
+                .with(federalUploadScopeJwt()))
+        .andExpect(status().isServiceUnavailable());
+  }
+
+  @Test
+  void federalSubmissionPrevalidationShouldNotMaskUnsupportedMediaTypeAsForbidden()
+      throws Exception {
+    mockMvc
+        .perform(
+            post("/api/lexis/federal/submissions/prevalidation")
+                .contentType(MediaType.TEXT_PLAIN)
+                .content(federalPrevalidationXml())
+                .with(federalUploadScopeJwt()))
+        .andExpect(status().isUnsupportedMediaType());
+  }
+
+  @Test
   void federalSubmissionPrevalidationShouldRejectDraftFederalUploadScopeAlias() throws Exception {
     mockMvc.perform(
             post("/api/lexis/federal/submissions/prevalidation")
@@ -2969,6 +2993,17 @@ class LexisRouteAuthorizationIntegrationTest {
           "locationCode": "01",
           "timberMark": ["TM001"]
         }
+        """;
+  }
+
+  private static String federalPrevalidationXml() {
+    return """
+        <LogExportApplication xmlns="http://beans.validation.lexis.ws.mof.gov.bc.ca">
+          <boomNumber>BOOM-1</boomNumber>
+          <clientNumber>00001234</clientNumber>
+          <locationCode>01</locationCode>
+          <timberMark><item>TM001</item></timberMark>
+        </LogExportApplication>
         """;
   }
 
