@@ -270,6 +270,11 @@ class LexisRouteAuthorizationIntegrationTest {
                 "uploadFederalSubmission"),
             expected(
                 HttpMethod.POST,
+                "/api/lexis/federal/submissions/prevalidation",
+                null,
+                "uploadFederalSubmission"),
+            expected(
+                HttpMethod.POST,
                 "/api/lexis/applicationDetailsRPC.do",
                 "getDocument",
                 "/applicationDetails"),
@@ -587,6 +592,20 @@ class LexisRouteAuthorizationIntegrationTest {
                 .header(
                     "Access-Control-Request-Headers",
                     "Authorization, Content-Type, X-Request-ID, X-Source-System"))
+        .andExpect(status().isOk())
+        .andExpect(
+            header().string("Access-Control-Allow-Origin", "https://openapi.apps.gov.bc.ca"))
+        .andExpect(header().string("Access-Control-Allow-Credentials", "true"));
+  }
+
+  @Test
+  void federalSubmissionPrevalidationPreflightShouldAllowOpenApiViewer() throws Exception {
+    mockMvc
+        .perform(
+            options("/api/lexis/federal/submissions/prevalidation")
+                .header("Origin", "https://openapi.apps.gov.bc.ca")
+                .header("Access-Control-Request-Method", "POST")
+                .header("Access-Control-Request-Headers", "Authorization, Content-Type"))
         .andExpect(status().isOk())
         .andExpect(
             header().string("Access-Control-Allow-Origin", "https://openapi.apps.gov.bc.ca"))
@@ -2341,6 +2360,49 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
+  void federalSubmissionPrevalidationShouldRejectUnknownRole() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/federal/submissions/prevalidation")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(federalPrevalidationJson())
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_UNKNOWN_ROLE"))))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void federalSubmissionPrevalidationShouldRejectAdminRole() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/federal/submissions/prevalidation")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(federalPrevalidationJson())
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_ADMIN"))))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void federalSubmissionPrevalidationShouldAllowFederalUploadScope() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/federal/submissions/prevalidation")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("Origin", "https://openapi.apps.gov.bc.ca")
+                .content(federalPrevalidationJson())
+                .with(federalUploadScopeJwt()))
+        .andExpect(status().isServiceUnavailable())
+        .andExpect(
+            header().string("Access-Control-Allow-Origin", "https://openapi.apps.gov.bc.ca"));
+  }
+
+  @Test
+  void federalSubmissionPrevalidationShouldRejectDraftFederalUploadScopeAlias() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/federal/submissions/prevalidation")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(federalPrevalidationJson())
+                .with(federalUploadDraftScopeJwt()))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
   void federalApplicationSubmissionValidationShouldRejectAdminRole() throws Exception {
     mockMvc.perform(
             post("/api/lexis/federal/submissions/validation")
@@ -2897,6 +2959,17 @@ class LexisRouteAuthorizationIntegrationTest {
                     .claim("client_id", clientId)
                     .claim("scope", "lexis:federal-submission:submit"))
         .authorities(new SimpleGrantedAuthority("SCOPE_lexis:federal-submission:submit"));
+  }
+
+  private static String federalPrevalidationJson() {
+    return """
+        {
+          "boomNumber": "BOOM-1",
+          "clientNumber": "00001234",
+          "locationCode": "01",
+          "timberMark": ["TM001"]
+        }
+        """;
   }
 
   private static RequestPostProcessor federalUploadDraftScopeJwt() {

@@ -6,7 +6,10 @@ import { useAuth } from '@/context/auth/useAuth'
 import type { ProvincialExemptionDetail } from '@/interfaces/LexisDetails'
 import ProvincialExemptionDetailsPage from '@/pages/ProvincialExemptionDetails'
 import { fetchProvincialExemptionDetail } from '@/service/lexis-detail-service'
-import { fetchExemptionClientLocations } from '@/service/application-client-lookup-service'
+import {
+  fetchExemptionClientData,
+  fetchExemptionClientLocations,
+} from '@/service/application-client-lookup-service'
 import {
   fetchExemptionApplications,
   fetchExemptionBlanketOicTotals,
@@ -183,6 +186,19 @@ const configureBlanketOicCreationDependencies = () => {
       selected: true,
     },
   ])
+  vi.mocked(fetchExemptionClientData).mockImplementation(async (clientNumber) => ({
+    clientNumber: clientNumber.padStart(8, '0'),
+    companyName: 'Test Client',
+    address: '',
+    city: '',
+    province: '',
+    postalCode: '',
+    country: '',
+    phone: '',
+    fax: '',
+    email: '',
+    notfound: '',
+  }))
   vi.mocked(fetchShippingReferenceOptions).mockResolvedValue({
     countries: [{ code: 'US', name: 'United States Of America' }],
     transportTypes: [{ code: 'B', name: 'Barge' }],
@@ -193,9 +209,10 @@ const configureBlanketOicCreationDependencies = () => {
 const fillRequiredBlanketOicFields = async (dialog: HTMLElement) => {
   await userEvent.type(within(dialog).getByLabelText('Permit Request Pieces'), '4')
   await userEvent.type(within(dialog).getByLabelText('Permit Request Volume (m³)'), '4')
-  await userEvent.type(within(dialog).getByLabelText('Owner client number'), '00001074')
+  await userEvent.type(within(dialog).getByLabelText('Owner client number'), '1074')
   await userEvent.type(within(dialog).getByLabelText('Destination company'), 'test destination')
   await waitFor(() => expect(within(dialog).getByLabelText('Owner location')).toHaveValue('00'))
+  expect(within(dialog).getByLabelText('Owner client number')).toHaveValue('00001074')
   await userEvent.type(within(dialog).getByLabelText('Transport name'), 'test barge')
   await userEvent.type(within(dialog).getByLabelText('Estimated shipping date'), '2099-01-01')
   await userEvent.type(within(dialog).getByLabelText('Remarks'), 'test blanket permit')

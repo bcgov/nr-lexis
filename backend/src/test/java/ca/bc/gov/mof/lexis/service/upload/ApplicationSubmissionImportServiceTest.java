@@ -499,6 +499,31 @@ class ApplicationSubmissionImportServiceTest {
   }
 
   @Test
+  void shouldValidateEsfEnvelopeUsingTheDefaultNamespaceWithoutAnEsfPrefix() {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationDetailsService.isPackageValid("FED26-700123"))
+        .thenReturn(new PackageValidityItem(true, null));
+    when(applicationDetailsService.validateApplication(any(CreateApplicationRequest.class)))
+        .thenReturn(new CreateApplicationResult(true, null, null, List.of(), List.of()));
+    String lexisSubmission =
+        federalBareSampleXmlText().replaceFirst("(?s)^\\s*<\\?xml[^>]*>\\s*", "");
+    String xml = defaultNamespaceEsfWrappedSubmissionContentText(lexisSubmission);
+
+    ApplicationSubmissionImportResultDto result =
+        service()
+            .validateDedicatedFederalApplicationSubmission(
+                xml.getBytes(StandardCharsets.UTF_8),
+                "federal-esf-default-namespace.xml",
+                "FED-REF-DEFAULT-NAMESPACE");
+
+    assertThat(result.status()).as("errors=%s", result.errors()).isEqualTo("validated");
+    assertThat(result.submissionSummary()).isNotNull();
+    assertThat(result.submissionSummary().jurisdictionCode()).isEqualTo("F");
+    assertThat(result.submissionSummary().federalApplicationNumber()).isEqualTo(700123L);
+    verify(applicationDetailsService).validateApplication(any(CreateApplicationRequest.class));
+  }
+
+  @Test
   void shouldRejectFederalSubmissionWithoutOfficeUseMetadata() {
     String xml =
         federalSampleXmlText()
@@ -2505,6 +2530,17 @@ class ApplicationSubmissionImportServiceTest {
       <esf:ESFSubmission xmlns:lexis="http://www.for.gov.bc.ca/schema/lexis" xmlns:esf="http://www.for.gov.bc.ca/schema/esf" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="%s">
         <esf:submissionContent>%s</esf:submissionContent>
       </esf:ESFSubmission>
+      """
+        .formatted(SAMPLE_SCHEMA_LOCATION, submissionContentText);
+  }
+
+  private static String defaultNamespaceEsfWrappedSubmissionContentText(
+      String submissionContentText) {
+    return """
+      <?xml version="1.0" encoding="UTF-8"?>
+      <ESFSubmission xmlns="http://www.for.gov.bc.ca/schema/esf" xmlns:lexis="http://www.for.gov.bc.ca/schema/lexis" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="%s">
+        <submissionContent>%s</submissionContent>
+      </ESFSubmission>
       """
         .formatted(SAMPLE_SCHEMA_LOCATION, submissionContentText);
   }

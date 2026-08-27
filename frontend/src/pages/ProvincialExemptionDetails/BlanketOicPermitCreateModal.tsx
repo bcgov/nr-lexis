@@ -15,6 +15,7 @@ import { clientLocationLabel } from '@/pages/shared/application-form-utils'
 import { isValidIsoDate } from '@/pages/shared/create-form-utils'
 import type { IdTextOption } from '@/pages/shared/search-query-utils'
 import {
+  fetchExemptionClientData,
   fetchExemptionClientLocations,
   type ApplicationClientLocation,
 } from '@/service/application-client-lookup-service'
@@ -275,7 +276,9 @@ const BlanketOicPermitCreateModal = ({
     setForm((current) => ({ ...current, [field]: value }))
   }
 
-  const loadClientLocations = async (kind: ClientKind): Promise<string> => {
+  const loadClientLocations = async (
+    kind: ClientKind,
+  ): Promise<{ clientNumber: string; locationCode: string }> => {
     const clientNumber =
       kind === 'owner' ? form.ownerClientNumber.trim() : form.agentClientNumber.trim()
     const setLocations = kind === 'owner' ? setOwnerLocations : setAgentLocations
@@ -283,12 +286,14 @@ const BlanketOicPermitCreateModal = ({
     const setAttempted = kind === 'owner' ? setOwnerLookupAttempted : setAgentLookupAttempted
     const locationField: FormField =
       kind === 'owner' ? 'ownerClientLocation' : 'agentClientLocation'
+    const clientNumberField: FormField =
+      kind === 'owner' ? 'ownerClientNumber' : 'agentClientNumber'
 
     setAttempted(true)
-    if (!/^\d{8}$/.test(clientNumber)) {
+    if (!/^\d{1,8}$/.test(clientNumber)) {
       setLocations([])
       setField(locationField, '')
-      return ''
+      return { clientNumber, locationCode: '' }
     }
 
     setLoading(true)
@@ -296,20 +301,28 @@ const BlanketOicPermitCreateModal = ({
       const locations = await fetchExemptionClientLocations(clientNumber)
       const selectedLocation =
         locations.find(({ selected }) => selected)?.locationCode ?? locations[0]?.locationCode ?? ''
+      const clientData = selectedLocation
+        ? await fetchExemptionClientData(clientNumber, selectedLocation)
+        : null
+      const confirmedClientNumber = clientData?.clientNumber.trim() || clientNumber
       setLocations(locations)
       setForm((current) => {
         const currentClientNumber =
           kind === 'owner' ? current.ownerClientNumber.trim() : current.agentClientNumber.trim()
         return currentClientNumber === clientNumber
-          ? { ...current, [locationField]: selectedLocation }
+          ? {
+              ...current,
+              [clientNumberField]: confirmedClientNumber,
+              [locationField]: selectedLocation,
+            }
           : current
       })
-      return selectedLocation
+      return { clientNumber: confirmedClientNumber, locationCode: selectedLocation }
     } catch (error) {
       console.error(error)
       setLocations([])
       setField(locationField, '')
-      return ''
+      return { clientNumber, locationCode: '' }
     } finally {
       setLoading(false)
     }
@@ -320,18 +333,30 @@ const BlanketOicPermitCreateModal = ({
     setShowValidationErrors(true)
     setActionError('')
 
+    let ownerClientNumber = form.ownerClientNumber.trim()
     let ownerLocation = form.ownerClientLocation.trim()
+    let agentClientNumber = agentUsed ? form.agentClientNumber.trim() : ''
     let agentLocation = agentUsed ? form.agentClientLocation.trim() : ''
-    if (!ownerLocation && /^\d{8}$/.test(form.ownerClientNumber.trim())) {
-      ownerLocation = await loadClientLocations('owner')
+    if ((!ownerLocation || ownerClientNumber.length < 8) && /^\d{1,8}$/.test(ownerClientNumber)) {
+      const confirmedOwner = await loadClientLocations('owner')
+      ownerClientNumber = confirmedOwner.clientNumber
+      ownerLocation = confirmedOwner.locationCode
     }
-    if (agentUsed && !agentLocation && /^\d{8}$/.test(form.agentClientNumber.trim())) {
-      agentLocation = await loadClientLocations('agent')
+    if (
+      agentUsed &&
+      (!agentLocation || agentClientNumber.length < 8) &&
+      /^\d{1,8}$/.test(agentClientNumber)
+    ) {
+      const confirmedAgent = await loadClientLocations('agent')
+      agentClientNumber = confirmedAgent.clientNumber
+      agentLocation = confirmedAgent.locationCode
     }
 
     const requestForm = {
       ...form,
+      ownerClientNumber,
       ownerClientLocation: ownerLocation,
+      agentClientNumber,
       agentClientLocation: agentLocation,
     }
     const errors = validateForm(requestForm, agentUsed)

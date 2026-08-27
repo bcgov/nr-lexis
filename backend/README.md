@@ -151,7 +151,7 @@ Grouped by area; see `controller/` for request and response contracts.
 | Session | `/api/lexis/session/*` | Session capabilities and logoff routes. |
 | Provincial workflows | `/api/lexis/applications`, `/api/lexis/exemptions`, `/api/lexis/permits`, `/api/lexis/purchase-offers` | Search, options, details, and workflow actions. |
 | Federal workflows | `/api/lexis/federal` | Federal application search and detail workflows. |
-| Federal submissions | `/api/lexis/federal/submissions`, `/api/lexis/federal/submissions/validation` | NEXCOL machine-to-machine XML validation/submission. Requires the `lexis:federal-submission:submit` Keycloak scope. |
+| Federal submissions | `/api/lexis/federal/submissions`, `/api/lexis/federal/submissions/validation`, `/api/lexis/federal/submissions/prevalidation` | NEXCOL machine-to-machine legacy field prevalidation and XML validation/submission. Requires the `lexis:federal-submission:submit` Keycloak scope. |
 | Reports | `/api/lexis/reports/*` | CSV, PDF, and spreadsheet outputs. |
 | Admin and uploads | `/api/lexis/admin/*`, `/api/lexis/*Upload` | Policy administration and upload workflows. |
 

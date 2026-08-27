@@ -16,6 +16,7 @@ services:
         paths:
           - /api/lexis/federal/submissions
           - /api/lexis/federal/submissions/validation
+          - /api/lexis/federal/submissions/prevalidation
         methods:
           - POST
         strip_path: false
@@ -94,6 +95,7 @@ services:
           - nr-lexis-nexcol-test.api.gov.bc.ca
         paths:
           - /api/lexis/federal/submissions/validation
+          - /api/lexis/federal/submissions/prevalidation
           - /api/lexis/federal/submissions
         methods:
           - OPTIONS
