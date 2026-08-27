@@ -4,6 +4,13 @@ import { isValidIsoDate } from '@/pages/shared/create-form-utils'
 
 const ISO_DATE_INPUT_PATTERN = String.raw`\d{4}-\d{2}-\d{2}`
 
+export const parseIsoDate = (value: string): Date | false => {
+  if (!value.trim() || !isValidIsoDate(value)) return false
+
+  const [year, month, day] = value.split('-').map(Number)
+  return new Date(year, month - 1, day)
+}
+
 export type IsoDatePickerProps = {
   id: string
   labelText: ReactNode
@@ -32,6 +39,7 @@ export default function IsoDatePicker({
       datePickerType="single"
       dateFormat="Y-m-d"
       allowInput
+      parseDate={parseIsoDate}
       value={flatpickrValue}
       onChange={(_selectedDates, dateString) => {
         if (dateString !== value) {

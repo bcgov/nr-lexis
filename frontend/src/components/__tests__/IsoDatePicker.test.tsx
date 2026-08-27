@@ -2,9 +2,14 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
-import IsoDatePicker from '../IsoDatePicker'
+import IsoDatePicker, { parseIsoDate } from '../IsoDatePicker'
 
 describe('IsoDatePicker', () => {
+  it('rejects impossible dates before Flatpickr can normalize them', () => {
+    expect(parseIsoDate('2026-02-30')).toBe(false)
+    expect(parseIsoDate('2024-02-29')).toEqual(new Date(2024, 1, 29))
+  })
+
   it('marks the editable date input for password manager ignore', () => {
     render(
       <IsoDatePicker
