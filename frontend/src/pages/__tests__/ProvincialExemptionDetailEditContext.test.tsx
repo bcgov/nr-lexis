@@ -312,6 +312,36 @@ describe('Provincial exemption edit context', () => {
     )
   })
 
+  it('rejects exemption conditions that Oracle cannot store', async () => {
+    vi.mocked(fetchExemptionEditContext).mockResolvedValue({
+      rateOverrideEnabled: false,
+      fixedFeeRate: '',
+      regionNumbers: ['1903', '1904'],
+      locked: false,
+      lockMessage: '',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/BOIC-205']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit exemption' }))
+    fireEvent.change(screen.getByLabelText('Conditions'), { target: { value: 'Résumé' } })
+    await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
+
+    expect(
+      await screen.findByText('Other conditions must contain ASCII characters only.'),
+    ).toBeInTheDocument()
+    expect(vi.mocked(updateExemption)).not.toHaveBeenCalled()
+  })
+
   it('accepts Oracle approved-volume precision when updating an exemption', async () => {
     vi.mocked(fetchProvincialExemptionDetail).mockResolvedValue({
       ...exemptionDetail,

@@ -154,6 +154,8 @@ type ExemptionEditForm = {
   regionNumbers: string[]
 }
 
+const ASCII_PATTERN = /^[\u0000-\u007f]*$/
+
 const EMPTY_EDIT_CONTEXT: ExemptionEditContext = {
   rateOverrideEnabled: false,
   fixedFeeRate: '',
@@ -911,6 +913,9 @@ const ProvincialExemptionDetailsPage = () => {
     }
     if (editForm.otherConditions.length > 250) {
       return 'Other conditions must contain at most 250 characters.'
+    }
+    if (!ASCII_PATTERN.test(editForm.otherConditions.trim())) {
+      return 'Other conditions must contain ASCII characters only.'
     }
     if (currentTypeCode === 'B' && editForm.regionNumbers.length === 0) {
       return 'Select at least one region for a Blanket Order in Council exemption.'

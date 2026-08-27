@@ -1808,6 +1808,32 @@ describe('Create Page Core Flows', () => {
     expect(screen.getByLabelText('Enable fee rate override')).toBeInTheDocument()
   })
 
+  it('rejects exemption text that Oracle cannot store', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/create']}>
+        <Routes>
+          <Route path="/provincial/exemption/create" element={<ProvincialExemptionCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await chooseComboBoxOption(
+      await screen.findByRole('combobox', { name: 'Exemption type' }),
+      'Order in Council',
+    )
+    await userEvent.type(screen.getByLabelText('Exemption number'), 'OIC-é')
+    await userEvent.type(screen.getByLabelText('Other conditions'), 'Résumé')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(
+      (await screen.findAllByText('Exemption number must contain ASCII characters only.')).length,
+    ).toBeGreaterThanOrEqual(1)
+    expect(
+      (await screen.findAllByText('Other conditions must contain ASCII characters only.')).length,
+    ).toBeGreaterThanOrEqual(1)
+    expect(mockedSubmitProvincialExemptionCreate).not.toHaveBeenCalled()
+  })
+
   it('submits standalone Blanket OIC fields and hides regular applications', async () => {
     mockedSubmitProvincialExemptionCreate.mockResolvedValue(successfulCreate('BOIC-1'))
 
