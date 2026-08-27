@@ -587,6 +587,26 @@ describe('Admin upload workflow smoke', () => {
     expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
   })
 
+  it('blocks invoice values outside the Oracle precision and scale boundaries', async () => {
+    mockUploadAccess('/fileInvoiceUpload')
+    renderPage('/admin/uploads?type=invoice&permitNumber=5001')
+
+    await userEvent.type(screen.getByLabelText('Invoice number'), 'INV123')
+    await userEvent.type(screen.getByLabelText('Export value (CAD)'), '10000000')
+    await userEvent.clear(screen.getByLabelText('Conversion rate'))
+    await userEvent.type(screen.getByLabelText('Conversion rate'), '10')
+    await userEvent.clear(screen.getByLabelText('Fee in lieu'))
+    await userEvent.type(screen.getByLabelText('Fee in lieu'), '1.001')
+    await userEvent.tab()
+
+    expect(screen.getByText('Invoice export value must be 9999999.99 or less.')).toBeInTheDocument()
+    expect(screen.getByText('Invoice conversion rate must be 9.99999 or less.')).toBeInTheDocument()
+    expect(
+      screen.getByText('Invoice fee in lieu must have no more than 2 decimal places.'),
+    ).toBeInTheDocument()
+    expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
+  })
+
   it('validates LEXIS XML before submitting an application submission', async () => {
     mockUploadAccess('uploadApplicationSubmission')
     mockedValidateApplicationSubmissionUpload.mockResolvedValue({
