@@ -122,7 +122,7 @@ export const formatUploadQueuedAt = (timestamp: number): string => {
   }).format(timestamp)
 }
 
-export const MAX_UPLOAD_BYTES = 20 * 1024 * 1024
+const MAX_UPLOAD_BYTES = 20 * 1024 * 1024
 
 export const DOCUMENT_UPLOAD_EXTENSIONS = [
   '.bmp',
