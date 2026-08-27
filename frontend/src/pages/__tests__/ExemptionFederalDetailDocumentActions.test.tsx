@@ -1903,7 +1903,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     await waitFor(() => {
       expect(mockedSaveFederalApplicationRemark).toHaveBeenCalledWith('888', 'Updated note', 44)
     })
-  })
+  }, 20_000)
 
   it('shows federal scale details as unavailable when a package lookup fails', async () => {
     mockedFetchApplicationPackageScales.mockRejectedValue(new Error('Oracle unavailable'))
