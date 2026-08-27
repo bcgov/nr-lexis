@@ -26,6 +26,25 @@ class NexcolGatewayTopologyConfigTest {
         "https://loginproxy.gov.bc.ca/auth/realms/forests");
   }
 
+  @Test
+  void openApiShouldDocumentEveryLegacyPrevalidationWireFormat() throws IOException {
+    String openApi = Files.readString(resolve("gateway/openapi.yaml"));
+    String prevalidation =
+        openApi.substring(
+            openApi.indexOf("  " + PREVALIDATION_PATH + ":"),
+            openApi.indexOf("  " + NEXCOL_PATH + "/validation:"));
+
+    assertThat(prevalidation)
+        .contains(
+            "application/json:",
+            "application/xml:",
+            "text/xml:",
+            "application/soap+xml:",
+            "LogExportApplication",
+            "isValidApplication",
+            ".NET PascalCase");
+  }
+
   private static void assertClusterLocalGateway(String path, String service, String issuer)
       throws IOException {
     String gateway = Files.readString(resolve(path));

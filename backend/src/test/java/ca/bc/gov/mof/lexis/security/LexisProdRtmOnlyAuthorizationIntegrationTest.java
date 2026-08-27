@@ -89,6 +89,30 @@ class LexisProdRtmOnlyAuthorizationIntegrationTest {
 
     mockMvc
         .perform(
+            post("/api/lexis/federal/submissions/prevalidation")
+                .contentType(MediaType.APPLICATION_XML)
+                .content(
+                    """
+                    <LogExportApplication>
+                      <boomNumber>BOOM-1</boomNumber>
+                      <clientNumber>00001234</clientNumber>
+                      <locationCode>01</locationCode>
+                      <timberMark><item>TM001</item></timberMark>
+                    </LogExportApplication>
+                    """)
+                .with(jwt().authorities(federalSubmissionScope)))
+        .andExpect(status().isServiceUnavailable());
+
+    mockMvc
+        .perform(
+            post("/api/lexis/federal/submissions/prevalidation")
+                .contentType(MediaType.TEXT_PLAIN)
+                .content("unsupported")
+                .with(jwt().authorities(federalSubmissionScope)))
+        .andExpect(status().isUnsupportedMediaType());
+
+    mockMvc
+        .perform(
             post("/api/lexis/federal/submissions")
                 .param("userReference", "NEXCOL-SUBMISSION-1")
                 .param("originalFileName", "federal-submission.xml")

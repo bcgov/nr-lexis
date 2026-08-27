@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: LEXIS NEXCOL Federal Submission API
-  version: 1.1.0
+  version: 1.2.0
   description: |
     Machine-to-machine API for prevalidating legacy submission fields and validating or
     submitting federal LEXIS XML through the API Services Gateway. All operations require
@@ -39,6 +39,11 @@ paths:
 
         Business validation failures return HTTP `200`; an empty `errors` array means all four
         legacy checks passed. No application, package, or scale records are written.
+
+        The endpoint accepts the documented JSON object, a raw legacy `LogExportApplication`
+        XML value, or the legacy Axis RPC value inside a SOAP 1.1 or SOAP 1.2 envelope. JSON
+        property names may use lower camel case or the equivalent .NET PascalCase names. The
+        response uses the same JSON, raw XML, or SOAP family as the request.
       operationId: prevalidateFederalSubmission
       requestBody:
         required: true
@@ -51,6 +56,54 @@ paths:
               clientNumber: "00123456"
               locationCode: "01"
               timberMark: [TM001, TM002]
+          application/xml:
+            schema:
+              type: string
+              format: xml
+            example: |-
+              <?xml version="1.0" encoding="UTF-8"?>
+              <LogExportApplication xmlns="http://beans.validation.lexis.ws.mof.gov.bc.ca">
+                <boomNumber>FED26-700123</boomNumber>
+                <clientNumber>00123456</clientNumber>
+                <locationCode>01</locationCode>
+                <timberMark>
+                  <item>TM001</item>
+                  <item>TM002</item>
+                </timberMark>
+              </LogExportApplication>
+          text/xml:
+            schema:
+              type: string
+              format: xml
+            example: |-
+              <?xml version="1.0" encoding="UTF-8"?>
+              <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
+                  xmlns:soapenc="http://schemas.xmlsoap.org/soap/encoding/"
+                  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+                  xmlns:ns1="http://webservices.validation.lexis.ws.mof.gov.bc.ca"
+                  xmlns:ns2="http://beans.validation.lexis.ws.mof.gov.bc.ca">
+                <soapenv:Body>
+                  <ns1:isValidApplication soapenv:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
+                    <logExportApplication href="#id0"/>
+                  </ns1:isValidApplication>
+                  <multiRef id="id0" xsi:type="ns2:LogExportApplication">
+                    <boomNumber xsi:type="xsd:string">FED26-700123</boomNumber>
+                    <clientNumber xsi:type="xsd:string">00123456</clientNumber>
+                    <locationCode xsi:type="xsd:string">01</locationCode>
+                    <timberMark href="#id1"/>
+                  </multiRef>
+                  <multiRef id="id1" xsi:type="soapenc:Array" soapenc:arrayType="xsd:string[2]">
+                    <item xsi:type="xsd:string">TM001</item>
+                    <item xsi:type="xsd:string">TM002</item>
+                  </multiRef>
+                </soapenv:Body>
+              </soapenv:Envelope>
+          application/soap+xml:
+            schema:
+              type: string
+              format: xml
+            description: SOAP 1.2 is accepted with the same `isValidApplication` payload.
       responses:
         "200":
           description: The legacy checks completed; inspect `errors` for invalid values.
@@ -65,12 +118,37 @@ paths:
                   - "timberMark: TM002"
                 locationCode: "01"
                 timberMark: [TM001, TM002]
+            application/xml:
+              schema:
+                type: string
+                format: xml
+              example: |-
+                <?xml version="1.0" encoding="UTF-8"?>
+                <LogExportApplication xmlns="http://beans.validation.lexis.ws.mof.gov.bc.ca">
+                  <boomNumber>FED26-700123</boomNumber>
+                  <clientNumber>00123456</clientNumber>
+                  <errors><item>timberMark: TM002</item></errors>
+                  <locationCode>01</locationCode>
+                  <timberMark><item>TM001</item><item>TM002</item></timberMark>
+                </LogExportApplication>
+            text/xml:
+              schema:
+                type: string
+                format: xml
+              description: SOAP 1.1 `isValidApplicationResponse` using the legacy bean contract.
+            application/soap+xml:
+              schema:
+                type: string
+                format: xml
+              description: SOAP 1.2 `isValidApplicationResponse` using the legacy bean contract.
         "400":
-          description: The JSON request body is missing or malformed.
+          description: The JSON, raw XML, or SOAP request body is missing or malformed.
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "415":
+          description: The request media type is not JSON, XML, or SOAP XML.
         "503":
           description: The legacy reference-validation database is temporarily unavailable.
   /api/lexis/federal/submissions/validation:

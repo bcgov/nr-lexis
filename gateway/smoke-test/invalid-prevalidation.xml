@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<LogExportApplication xmlns="http://beans.validation.lexis.ws.mof.gov.bc.ca">
+  <boomNumber>NEXCOL-SMOKE-PREVALIDATION</boomNumber>
+  <clientNumber>X</clientNumber>
+  <locationCode>ZZ</locationCode>
+  <timberMark>
+    <item>NOT-A-MARK</item>
+  </timberMark>
+</LogExportApplication>

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
+    xmlns:soapenc="http://schemas.xmlsoap.org/soap/encoding/"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+    xmlns:ns1="http://webservices.validation.lexis.ws.mof.gov.bc.ca"
+    xmlns:ns2="http://beans.validation.lexis.ws.mof.gov.bc.ca">
+  <soapenv:Body>
+    <ns1:isValidApplication soapenv:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
+      <logExportApplication href="#id0"/>
+    </ns1:isValidApplication>
+    <multiRef id="id0" xsi:type="ns2:LogExportApplication">
+      <boomNumber xsi:type="xsd:string">NEXCOL-SMOKE-PREVALIDATION</boomNumber>
+      <clientNumber xsi:type="xsd:string">X</clientNumber>
+      <locationCode xsi:type="xsd:string">ZZ</locationCode>
+      <timberMark href="#id1"/>
+    </multiRef>
+    <multiRef id="id1" xsi:type="soapenc:Array" soapenc:arrayType="xsd:string[1]">
+      <item xsi:type="xsd:string">NOT-A-MARK</item>
+    </multiRef>
+  </soapenv:Body>
+</soapenv:Envelope>

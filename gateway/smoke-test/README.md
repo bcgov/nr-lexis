@@ -46,7 +46,8 @@ The smoke test verifies:
 - Swagger CORS preflights succeed for the federal gateway;
 - the runtime token is active and contains `lexis:federal-submission:submit`;
 - gateway-generated `401` and optional `403` responses include the approved CORS origin;
-- legacy field prevalidation returns `200`, echoes the four input values, and reports field errors;
+- lower-camel JSON, .NET PascalCase JSON, raw XML, and Axis SOAP field prevalidation return `200`,
+  echo the four input values, and report field errors;
 - invalid XML returns `422` with CORS headers from both validation and submission operations; and
 - when `VALID_XML_FILE` is supplied, valid XML returns `200` with status `validated`.
 
