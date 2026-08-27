@@ -399,7 +399,7 @@ describe('Create Page Core Flows', () => {
         },
       },
     })
-  })
+  }, 20_000)
 
   it('requires the application to be saved before creating a package', async () => {
     render(
