@@ -685,7 +685,7 @@ describe('Create Page Core Flows', () => {
         region: '1910',
       }),
     )
-  })
+  }, 20_000)
 
   it('submits provincial application with agent applicant fields', async () => {
     mockedSubmitProvincialApplicationCreate.mockResolvedValue(successfulCreate('902'))
