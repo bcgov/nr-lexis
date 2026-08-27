@@ -2475,6 +2475,42 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
   })
 
+  it('validates permit text storage boundaries before saving', async () => {
+    configureActivePermit()
+    renderPermitDetails()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    const receiptNumber = screen.getByLabelText('Receipt number')
+    const remarks = screen.getByLabelText('Remarks')
+    const saveButton = screen.getByRole('button', { name: 'Save permit' })
+
+    expect(receiptNumber).toHaveAttribute('maxlength', '50')
+    fireEvent.change(receiptNumber, { target: { value: 'R'.repeat(51) } })
+    fireEvent.change(remarks, { target: { value: 'X'.repeat(255) } })
+    await userEvent.click(saveButton)
+
+    expect(
+      (await screen.findAllByText('Receipt number must be 50 characters or fewer.')).length,
+    ).toBeGreaterThanOrEqual(1)
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+
+    fireEvent.change(receiptNumber, { target: { value: 'R-1' } })
+    await userEvent.click(saveButton)
+
+    expect(
+      (await screen.findAllByText('Permit remarks must be 254 characters or fewer.')).length,
+    ).toBeGreaterThanOrEqual(1)
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+
+    fireEvent.change(remarks, { target: { value: 'Résumé' } })
+    await userEvent.click(saveButton)
+
+    expect(
+      (await screen.findAllByText('Permit remarks must contain ASCII characters only.')).length,
+    ).toBeGreaterThanOrEqual(1)
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+  })
+
   it('allows an approver to expire a permit like legacy', async () => {
     configureActivePermit()
     renderPermitDetails()

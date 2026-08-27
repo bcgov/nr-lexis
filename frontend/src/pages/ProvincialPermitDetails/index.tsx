@@ -1645,6 +1645,22 @@ const ProvincialPermitDetailsPage = () => {
       permitExpiryDate: isoDateFieldError(permitForm.permitExpiryDate) ?? undefined,
       permitSubmitDate: isoDateFieldError(permitForm.permitSubmitDate) ?? undefined,
       permitRequestDate: undefined,
+      permitReceiptNo:
+        firstValidationError(
+          () =>
+            ASCII_PATTERN.test(permitForm.permitReceiptNo.trim())
+              ? null
+              : 'Receipt number must contain ASCII characters only.',
+          () => maxLengthFieldError(permitForm.permitReceiptNo, 50, 'Receipt number'),
+        ) ?? undefined,
+      permitRemarks:
+        firstValidationError(
+          () =>
+            ASCII_PATTERN.test(permitForm.permitRemarks.trim())
+              ? null
+              : 'Permit remarks must contain ASCII characters only.',
+          () => maxLengthFieldError(permitForm.permitRemarks, 254, 'Permit remarks'),
+        ) ?? undefined,
       estimatedShippingDate: firstValidationError(
         () => requiredFieldError(permitForm.estimatedShippingDate, 'Estimated shipping date'),
         () => isoDateFieldError(permitForm.estimatedShippingDate),
@@ -2966,6 +2982,7 @@ const ProvincialPermitDetailsPage = () => {
     field: PermitDetailFormField,
     labelText: string,
     isDisabled: boolean,
+    maxCount?: number,
   ) => (
     <TextArea
       id={`permit-${field}`}
@@ -2977,6 +2994,7 @@ const ProvincialPermitDetailsPage = () => {
       onChange={(event) => setPermitFormField(field, event.target.value)}
       disabled={isDisabled}
       rows={3}
+      maxCount={maxCount}
     />
   )
 
@@ -3397,6 +3415,7 @@ const ProvincialPermitDetailsPage = () => {
                               'permitReceiptNo',
                               'Receipt number',
                               invoiceMaterialLocked && !canEnterPaymentReceipt,
+                              50,
                             )}
                             <TextInput
                               id="permit-invoiceNumber"
@@ -3432,7 +3451,7 @@ const ProvincialPermitDetailsPage = () => {
                             )}
                           </div>
                           <div className="legacy-search-grid">
-                            {renderPermitTextArea('permitRemarks', 'Remarks', false)}
+                            {renderPermitTextArea('permitRemarks', 'Remarks', false, 254)}
                           </div>
                         </Tile>
                       ) : (
