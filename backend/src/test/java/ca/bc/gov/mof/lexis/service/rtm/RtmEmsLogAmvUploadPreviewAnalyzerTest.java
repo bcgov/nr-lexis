@@ -209,6 +209,31 @@ class RtmEmsLogAmvUploadPreviewAnalyzerTest {
   }
 
   @Test
+  void shouldRejectFormulaCellInsteadOfTrustingItsCachedValue() throws IOException {
+    for (String formulaCell :
+        List.of(
+            "<c r=\"B4\"><f>10+2</f><v>12</v></c>",
+            "<c r=\"B4\"><f>10+2</f></c>")) {
+      Map<String, byte[]> entries = validScreenWorkbookEntries();
+      entries.put(
+          "xl/worksheets/sheet1.xml",
+          textEntry(entries, "xl/worksheets/sheet1.xml")
+              .replace("<c r=\"B4\"><v>10.25</v></c>", formulaCell)
+              .getBytes(StandardCharsets.UTF_8));
+
+      RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult result =
+          RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
+              new ByteArrayInputStream(workbook(entries)), LocalDate.of(2026, 7, 1));
+
+      assertThat(result.numericCellCount()).isEqualTo(5);
+      assertThat(result.rows()).hasSize(5);
+      assertThat(result.errors())
+          .containsExactly(
+              "Row 4 contains a formula at column B; enter a fixed numeric AMV value.");
+    }
+  }
+
+  @Test
   void shouldRejectUnmappedScreenSpeciesHeaderInsteadOfPartiallyAcceptingWorkbook()
       throws IOException {
     Map<String, byte[]> entries = validScreenWorkbookEntries();

@@ -121,7 +121,7 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
       List<String> warnings,
       List<UploadRow> rows) {}
 
-  private record ParsedCell(int column, String value, boolean excelNumeric) {}
+  private record ParsedCell(int column, String value, boolean excelNumeric, boolean formula) {}
   private record ParsedRow(int rowNumber, List<ParsedCell> cells) {}
   private record ParsedWorkbook(List<ParsedRow> rows) {}
   private record UploadMetadata(LocalDate updateDate, String growthIndicator) {}
@@ -866,7 +866,18 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
         int column = cell.column();
         String value = cell.value();
 
-        if (column <= 1 || value.isBlank()) {
+        if (column <= 1) {
+          continue;
+        }
+
+        if (cell.formula()) {
+          errors.add(
+              "Row %d contains a formula at column %s; enter a fixed numeric AMV value."
+                  .formatted(rowNumber, columnToLetter(column)));
+          continue;
+        }
+
+        if (value.isBlank()) {
           continue;
         }
 
@@ -1276,6 +1287,7 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
       int cellColumn = -1;
       String cellType = null;
       StringBuilder cellValue = null;
+      boolean cellFormula = false;
       boolean readingCellValue = false;
       int totalCells = 0;
       boolean rootSeen = false;
@@ -1309,6 +1321,9 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
             cellColumn = columnIndexFromCellReference(cellReference);
             cellType = attribute(reader, "t");
             cellValue = new StringBuilder();
+            cellFormula = false;
+          } else if (cellValue != null && "f".equals(elementName)) {
+            cellFormula = true;
           } else if (cellValue != null
               && ("v".equals(elementName)
                   || ("t".equals(elementName) && "inlineStr".equals(cellType)))) {
@@ -1335,12 +1350,14 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
                       cellColumn,
                       resolveCellValue(
                           cellValue == null ? "" : cellValue.toString(), cellType, sharedStrings),
-                      cellType == null || cellType.isBlank() || "n".equals(cellType)));
+                      cellType == null || cellType.isBlank() || "n".equals(cellType),
+                      cellFormula));
               totalCells++;
             }
             cellColumn = -1;
             cellType = null;
             cellValue = null;
+            cellFormula = false;
             readingCellValue = false;
           } else if ("row".equals(elementName) && cells != null) {
             if (rowNumber >= 0) {
