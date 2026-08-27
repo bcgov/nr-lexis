@@ -863,8 +863,8 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
           numericCells++;
           foundNumericValue = true;
         } else {
-          warnings.add(
-              "Row %d has non-numeric value '%s' at column %s; this value was skipped."
+          errors.add(
+              "Row %d has non-numeric value '%s' at column %s."
                   .formatted(rowNumber, normalizeStringValue(value), columnToLetter(column)));
         }
       }

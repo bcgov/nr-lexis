@@ -126,6 +126,28 @@ class RtmEmsLogAmvUploadPreviewAnalyzerTest {
   }
 
   @Test
+  void shouldRejectNonNumericMappedCellInsteadOfPartiallyAcceptingWorkbook()
+      throws IOException {
+    Map<String, byte[]> entries = validWorkbookEntries();
+    entries.put(
+        "xl/worksheets/sheet1.xml",
+        textEntry(entries, "xl/worksheets/sheet1.xml")
+            .replace(
+                "<c r=\"B4\"><v>10.25</v></c>",
+                "<c r=\"B4\" t=\"inlineStr\"><is><t>12x</t></is></c>")
+            .getBytes(StandardCharsets.UTF_8));
+
+    RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult result =
+        RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
+            new ByteArrayInputStream(workbook(entries)), LocalDate.of(2026, 7, 1));
+
+    assertThat(result.numericCellCount()).isEqualTo(5);
+    assertThat(result.rows()).hasSize(5);
+    assertThat(result.errors())
+        .containsExactly("Row 4 has non-numeric value '12x' at column B.");
+  }
+
+  @Test
   void publishedTemplateShouldUseTheScreenMonthAndUserEnteredValues() throws IOException {
     byte[] templateBytes = Files.readAllBytes(resolvePublishedTemplate());
     String sheetXml = workbookEntryText(templateBytes, "xl/worksheets/sheet1.xml");
