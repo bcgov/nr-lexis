@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import {
   createMemoryRouter,
@@ -3463,6 +3463,55 @@ describe('Provincial Permit Detail Action Smoke', () => {
         }),
       )
     })
+  })
+
+  it('validates permit fee override storage boundaries before saving', async () => {
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      permitStatusCode: 'ACT',
+      permitStatusDescription: 'Active',
+    })
+    mockedFetchPermitFeeOverrideContext.mockResolvedValue({
+      overrideEnabled: true,
+      overrideFee: '25.00',
+      overrideComment: 'Legacy override',
+      locked: false,
+      lockMessage: '',
+    })
+
+    renderPermitDetails()
+    await selectPermitDetailTab('Fees')
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit fee override' }))
+
+    const overrideFee = screen.getByLabelText('Override fee (CAD)')
+    const overrideComment = screen.getByLabelText('Override comment')
+    const saveButton = screen.getByRole('button', { name: 'Save fee override' })
+
+    await userEvent.clear(overrideFee)
+    await userEvent.type(overrideFee, '10000000')
+    await userEvent.click(saveButton)
+
+    expect(await screen.findByText('Override fee must be 9999999.99 or less.')).toBeInTheDocument()
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+
+    await userEvent.clear(overrideFee)
+    await userEvent.type(overrideFee, '1.001')
+    await userEvent.click(saveButton)
+
+    expect(
+      await screen.findByText('Override fee must have no more than two decimal places.'),
+    ).toBeInTheDocument()
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+
+    await userEvent.clear(overrideFee)
+    await userEvent.type(overrideFee, '1.00')
+    fireEvent.change(overrideComment, { target: { value: 'x'.repeat(255) } })
+    await userEvent.click(saveButton)
+
+    expect(
+      await screen.findByText('Override comment must be 254 characters or fewer.'),
+    ).toBeInTheDocument()
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
   })
 
   it.each([
