@@ -1167,12 +1167,12 @@ describe('Admin policy action states', () => {
         rows: [
           {
             exportScheduleId: '1002',
-            advertisingDate: '2026-07-15',
-            applicationReceiptDate: '2026-07-08',
-            offerReceiptDate: '2026-07-22',
-            offerEndDate: '2026-07-23',
-            offerWithdrawalDate: '2026-07-24',
-            teacMeetingDate: '2026-07-29',
+            advertisingDate: '2099-07-15',
+            applicationReceiptDate: '2099-07-08',
+            offerReceiptDate: '2099-07-22',
+            offerEndDate: '2099-08-02',
+            offerWithdrawalDate: '2099-07-24',
+            teacMeetingDate: '2099-07-29',
             applicationCount: 0,
             mutable: true,
           },
@@ -1187,34 +1187,34 @@ describe('Admin policy action states', () => {
     await screen.findByRole('heading', { level: 1, name: 'Export schedule administration' })
 
     fireEvent.change(screen.getByLabelText('Advertising date'), {
-      target: { value: '2026-07-15' },
+      target: { value: '2099-07-15' },
     })
     fireEvent.change(screen.getByLabelText('Application receipt date'), {
-      target: { value: '2026-07-08' },
+      target: { value: '2099-07-08' },
     })
     fireEvent.change(screen.getByLabelText('Offer receipt date'), {
-      target: { value: '2026-07-22' },
+      target: { value: '2099-07-22' },
     })
     fireEvent.change(screen.getByLabelText('Offer end date'), {
-      target: { value: '2026-07-23' },
+      target: { value: '2099-08-02' },
     })
     fireEvent.blur(screen.getByLabelText('Offer end date'))
     fireEvent.change(screen.getByLabelText('Offer withdrawal date'), {
-      target: { value: '2026-07-24' },
+      target: { value: '2099-07-24' },
     })
     fireEvent.change(screen.getByLabelText('TEAC meeting date'), {
-      target: { value: '2026-07-29' },
+      target: { value: '2099-07-29' },
     })
     await userEvent.click(screen.getByRole('button', { name: 'Add Export Schedule' }))
 
     await waitFor(() => {
       expect(mockedCreateExportSchedule).toHaveBeenCalledWith({
-        advertisingDate: '2026-07-15',
-        applicationReceiptDate: '2026-07-08',
-        offerReceiptDate: '2026-07-22',
-        offerEndDate: '2026-07-23',
-        offerWithdrawalDate: '2026-07-24',
-        teacMeetingDate: '2026-07-29',
+        advertisingDate: '2099-07-15',
+        applicationReceiptDate: '2099-07-08',
+        offerReceiptDate: '2099-07-22',
+        offerEndDate: '2099-08-02',
+        offerWithdrawalDate: '2099-07-24',
+        teacMeetingDate: '2099-07-29',
       })
     })
 
@@ -1233,7 +1233,7 @@ describe('Admin policy action states', () => {
     await waitFor(() => {
       expect(screen.getByText('Schedule error')).toBeInTheDocument()
       expect(
-        screen.getByText('Export schedule requires all schedule dates in YYYY-MM-DD format.'),
+        screen.getByText('Correct the highlighted export schedule fields before saving.'),
       ).toBeInTheDocument()
     })
     expect(screen.getByText('Advertising date is required.')).toBeInTheDocument()
@@ -1244,6 +1244,99 @@ describe('Admin policy action states', () => {
     expect(screen.getByText('TEAC meeting date is required.')).toBeInTheDocument()
     expect(mockedCreateExportSchedule).not.toHaveBeenCalled()
   })
+
+  it.each([
+    {
+      caseName: 'an advertising date in the past',
+      overrides: {
+        advertisingDate: '2000-01-10',
+        applicationReceiptDate: '2000-01-09',
+        offerReceiptDate: '2000-01-12',
+        offerEndDate: '2000-01-20',
+        offerWithdrawalDate: '2000-01-15',
+        teacMeetingDate: '2000-01-16',
+      },
+      expectedMessage: 'Advertising date must be today or a future date.',
+    },
+    {
+      caseName: 'an application receipt date after advertising',
+      overrides: { applicationReceiptDate: '2099-01-11' },
+      expectedMessage: 'Application receipt date cannot be after the advertising date.',
+    },
+    {
+      caseName: 'an offer receipt date before advertising',
+      overrides: { offerReceiptDate: '2099-01-09' },
+      expectedMessage: 'Offer receipt date cannot be before the advertising date.',
+    },
+    {
+      caseName: 'an offer end date before offer receipt',
+      overrides: {
+        offerEndDate: '2099-01-11',
+        offerWithdrawalDate: '2099-01-10',
+        teacMeetingDate: '2099-01-10',
+      },
+      expectedMessage: 'Offer end date cannot be before the offer receipt date.',
+    },
+    {
+      caseName: 'an offer withdrawal date before advertising',
+      overrides: { offerWithdrawalDate: '2099-01-09' },
+      expectedMessage: 'Offer withdrawal date cannot be before the advertising date.',
+    },
+    {
+      caseName: 'an offer withdrawal date after offer end',
+      overrides: { offerWithdrawalDate: '2099-01-21' },
+      expectedMessage: 'Offer withdrawal date cannot be after the offer end date.',
+    },
+    {
+      caseName: 'a TEAC meeting date before advertising',
+      overrides: { teacMeetingDate: '2099-01-09' },
+      expectedMessage: 'TEAC meeting date cannot be before the advertising date.',
+    },
+    {
+      caseName: 'a TEAC meeting date after offer end',
+      overrides: { teacMeetingDate: '2099-01-21' },
+      expectedMessage: 'TEAC meeting date cannot be after the offer end date.',
+    },
+  ])(
+    'blocks $caseName before creating an export schedule',
+    async ({ overrides, expectedMessage }) => {
+      const dates = {
+        advertisingDate: '2099-01-10',
+        applicationReceiptDate: '2099-01-09',
+        offerReceiptDate: '2099-01-12',
+        offerEndDate: '2099-01-20',
+        offerWithdrawalDate: '2099-01-15',
+        teacMeetingDate: '2099-01-16',
+        ...overrides,
+      }
+
+      renderPage('schedule')
+
+      await screen.findByRole('heading', { level: 1, name: 'Export schedule administration' })
+      fireEvent.change(screen.getByLabelText('Advertising date'), {
+        target: { value: dates.advertisingDate },
+      })
+      fireEvent.change(screen.getByLabelText('Application receipt date'), {
+        target: { value: dates.applicationReceiptDate },
+      })
+      fireEvent.change(screen.getByLabelText('Offer receipt date'), {
+        target: { value: dates.offerReceiptDate },
+      })
+      fireEvent.change(screen.getByLabelText('Offer end date'), {
+        target: { value: dates.offerEndDate },
+      })
+      fireEvent.change(screen.getByLabelText('Offer withdrawal date'), {
+        target: { value: dates.offerWithdrawalDate },
+      })
+      fireEvent.change(screen.getByLabelText('TEAC meeting date'), {
+        target: { value: dates.teacMeetingDate },
+      })
+      await userEvent.click(screen.getByRole('button', { name: 'Add Export Schedule' }))
+
+      expect(await screen.findByText(expectedMessage)).toBeInTheDocument()
+      expect(mockedCreateExportSchedule).not.toHaveBeenCalled()
+    },
+  )
 
   it('links application counts to an auto-filtered application search', async () => {
     mockedUseAuth.mockReturnValue(
@@ -1297,33 +1390,33 @@ describe('Admin policy action states', () => {
     })
 
     fireEvent.change(screen.getByLabelText('Advertising date'), {
-      target: { value: '2026-07-01' },
+      target: { value: '2099-07-01' },
     })
     fireEvent.change(screen.getByLabelText('Application receipt date'), {
-      target: { value: '2026-06-25' },
+      target: { value: '2099-06-25' },
     })
     fireEvent.change(screen.getByLabelText('Offer receipt date'), {
-      target: { value: '2026-07-08' },
+      target: { value: '2099-07-08' },
     })
     fireEvent.change(screen.getByLabelText('Offer end date'), {
-      target: { value: '2026-07-09' },
+      target: { value: '2099-07-20' },
     })
     fireEvent.change(screen.getByLabelText('Offer withdrawal date'), {
-      target: { value: '2026-07-10' },
+      target: { value: '2099-07-10' },
     })
     fireEvent.change(screen.getByLabelText('TEAC meeting date'), {
-      target: { value: '2026-07-15' },
+      target: { value: '2099-07-15' },
     })
     await userEvent.click(screen.getByRole('button', { name: 'Add Export Schedule' }))
 
     await waitFor(() => {
       expect(mockedCreateExportSchedule).toHaveBeenCalledWith({
-        advertisingDate: '2026-07-01',
-        applicationReceiptDate: '2026-06-25',
-        offerReceiptDate: '2026-07-08',
-        offerEndDate: '2026-07-09',
-        offerWithdrawalDate: '2026-07-10',
-        teacMeetingDate: '2026-07-15',
+        advertisingDate: '2099-07-01',
+        applicationReceiptDate: '2099-06-25',
+        offerReceiptDate: '2099-07-08',
+        offerEndDate: '2099-07-20',
+        offerWithdrawalDate: '2099-07-10',
+        teacMeetingDate: '2099-07-15',
       })
     })
     expect(await screen.findByText('Schedule error')).toBeInTheDocument()
@@ -1350,22 +1443,22 @@ describe('Admin policy action states', () => {
     await screen.findByRole('heading', { level: 1, name: 'Export schedule administration' })
 
     fireEvent.change(screen.getByLabelText('Advertising date'), {
-      target: { value: '2026-07-01' },
+      target: { value: '2099-07-01' },
     })
     fireEvent.change(screen.getByLabelText('Application receipt date'), {
-      target: { value: '2026-07-02' },
+      target: { value: '2099-06-25' },
     })
     fireEvent.change(screen.getByLabelText('Offer receipt date'), {
-      target: { value: '2026-07-08' },
+      target: { value: '2099-07-08' },
     })
     fireEvent.change(screen.getByLabelText('Offer end date'), {
-      target: { value: '2026-07-09' },
+      target: { value: '2099-07-20' },
     })
     fireEvent.change(screen.getByLabelText('Offer withdrawal date'), {
-      target: { value: '2026-07-09' },
+      target: { value: '2099-07-10' },
     })
     fireEvent.change(screen.getByLabelText('TEAC meeting date'), {
-      target: { value: '2026-07-09' },
+      target: { value: '2099-07-15' },
     })
     await userEvent.click(screen.getByRole('button', { name: 'Add Export Schedule' }))
 
@@ -1412,7 +1505,7 @@ describe('Admin policy action states', () => {
           {
             exportScheduleId: '1001',
             advertisingDate: '2026-06-24',
-            applicationReceiptDate: '2026-06-26',
+            applicationReceiptDate: '2026-06-21',
             offerReceiptDate: '2026-06-30',
             offerEndDate: '2026-07-09',
             offerWithdrawalDate: '2026-07-05',
@@ -1439,14 +1532,14 @@ describe('Admin policy action states', () => {
     expect(mutableRow).not.toBeNull()
     await userEvent.click(within(mutableRow as HTMLElement).getByRole('button', { name: 'Edit' }))
     fireEvent.change(screen.getByLabelText('Application receipt date'), {
-      target: { value: '2026-06-26' },
+      target: { value: '2026-06-21' },
     })
     await userEvent.click(screen.getByRole('button', { name: 'Update Export Schedule' }))
 
     await waitFor(() => {
       expect(mockedUpdateExportSchedule).toHaveBeenCalledWith('1001', {
         advertisingDate: '2026-06-24',
-        applicationReceiptDate: '2026-06-26',
+        applicationReceiptDate: '2026-06-21',
         offerReceiptDate: '2026-06-30',
         offerEndDate: '2026-07-09',
         offerWithdrawalDate: '2026-07-05',
