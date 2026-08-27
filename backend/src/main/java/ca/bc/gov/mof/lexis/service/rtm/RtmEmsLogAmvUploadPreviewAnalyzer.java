@@ -1368,6 +1368,13 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
   private static String resolveCellValue(
       String rawValue, String cellType, List<String> sharedStrings) {
     String normalizedRawValue = rawValue == null ? "" : rawValue.trim();
+    if ("b".equals(cellType)) {
+      return switch (normalizedRawValue) {
+        case "1" -> "TRUE";
+        case "0" -> "FALSE";
+        default -> normalizedRawValue;
+      };
+    }
     if (!"s".equals(cellType)) {
       return normalizedRawValue;
     }
