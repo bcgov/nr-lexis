@@ -30,6 +30,10 @@ public class OracleLexisUploadService implements LexisUploadService {
   private static final String ATTACHMENT_TYPE_PERMIT = "PMT";
   private static final String ATTACHMENT_TYPE_EXEMPTION = "EXE";
   private static final String ATTACHMENT_TYPE_INVOICE = "INV";
+  private static final int INVOICE_AMOUNT_PRECISION = 9;
+  private static final int INVOICE_AMOUNT_SCALE = 2;
+  private static final int INVOICE_CONVERSION_RATE_PRECISION = 6;
+  private static final int INVOICE_CONVERSION_RATE_SCALE = 5;
 
   private final UploadRepository uploadRepository;
   private final VirusScanService virusScanService;
@@ -245,9 +249,12 @@ public class OracleLexisUploadService implements LexisUploadService {
         || permitNumber < 1
         || normalizedSalesInvoiceNumber == null
         || normalizedSalesInvoiceNumber.length() > 9
-        || !positive(exportValue)
-        || !positive(currencyConversionRate)
-        || !positive(feeInLieu)) {
+        || !positiveOracleNumber(exportValue, INVOICE_AMOUNT_PRECISION, INVOICE_AMOUNT_SCALE)
+        || !positiveOracleNumber(
+            currencyConversionRate,
+            INVOICE_CONVERSION_RATE_PRECISION,
+            INVOICE_CONVERSION_RATE_SCALE)
+        || !positiveOracleNumber(feeInLieu, INVOICE_AMOUNT_PRECISION, INVOICE_AMOUNT_SCALE)) {
       return Optional.empty();
     }
     String requestedDescription = trimToNull(description);
@@ -376,6 +383,16 @@ public class OracleLexisUploadService implements LexisUploadService {
 
   private boolean positive(BigDecimal value) {
     return value != null && value.compareTo(BigDecimal.ZERO) > 0;
+  }
+
+  private boolean positiveOracleNumber(BigDecimal value, int precision, int scale) {
+    if (!positive(value)) {
+      return false;
+    }
+    BigDecimal normalized = value.stripTrailingZeros();
+    int decimalPlaces = Math.max(normalized.scale(), 0);
+    long integerDigits = Math.max((long) normalized.precision() - normalized.scale(), 0L);
+    return decimalPlaces <= scale && integerDigits <= precision - scale;
   }
 
   private UploadPersistenceResult persistFile(

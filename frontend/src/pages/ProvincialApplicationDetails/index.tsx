@@ -103,7 +103,10 @@ import {
 import DetailDocumentUploadPanel from '../../components/uploads/DetailDocumentUploadPanel'
 import IsoDatePicker from '../../components/IsoDatePicker'
 import SearchableSelect from '../../components/SearchableSelect'
-import { calculateApplicationTermDays } from '@/pages/shared/application-term-utils'
+import {
+  calculateApplicationTermDays,
+  nonNegativeWholeNumberFieldError,
+} from '@/pages/shared/application-term-utils'
 import {
   averageLogVolumeFieldError,
   clientLocationLabel,
@@ -121,6 +124,7 @@ import {
   atMostTwoDecimalFieldError,
   firstValidationError,
   isoDateFieldError,
+  maxLengthFieldError,
   maxNumericValueFieldError,
   positiveNumericFieldError,
   requiredFieldError,
@@ -353,6 +357,36 @@ type ApplicationSummaryFormState = {
 
 type ApplicationSummaryField = keyof ApplicationSummaryFormState & string
 type SummarySaveSource = 'summary' | 'owner' | 'agent'
+
+const MAX_APPLICATION_TERM_DAYS = 99_999
+const MAX_APPLICATION_TERM_MONTHS = 999
+const MAX_APPLICATION_TERM_YEARS = 99
+const APPLICATION_CONTACT_NAME_MAX_LENGTH = 120
+const APPLICATION_PRODUCT_LOCATION_MAX_LENGTH = 250
+const APPLICATION_CLIENT_NUMBER_PATTERN = /^\d{1,8}$/
+const ASCII_PATTERN = /^[\u0000-\u007f]*$/
+
+const applicationClientNumberFieldError = (value: string, label: string): string | undefined =>
+  firstValidationError(
+    () => requiredFieldError(value, label),
+    () =>
+      APPLICATION_CLIENT_NUMBER_PATTERN.test(value.trim())
+        ? null
+        : `${label} must be 1 to 8 digits.`,
+  )
+
+const applicationTextStorageFieldError = (
+  value: string,
+  maximumLength: number,
+  label: string,
+  required = false,
+): string | undefined =>
+  firstValidationError(
+    () => (required ? requiredFieldError(value, label) : null),
+    () =>
+      ASCII_PATTERN.test(value.trim()) ? null : `${label} must contain ASCII characters only.`,
+    () => maxLengthFieldError(value, maximumLength, label),
+  )
 
 const toSummaryFormState = (detail: ProvincialApplicationDetail): ApplicationSummaryFormState => ({
   applicationDate: detail.applicationDate ?? '',
@@ -1348,18 +1382,24 @@ const ProvincialApplicationDetailsPage = () => {
     }
 
     return {
-      ownerClientNumber:
-        requiredFieldError(summaryForm.ownerClientNumber, 'Owner client number') ?? undefined,
+      ownerClientNumber: applicationClientNumberFieldError(
+        summaryForm.ownerClientNumber,
+        'Owner client number',
+      ),
       ownerClientLocationCode:
         requiredMaxLengthFieldError(
           summaryForm.ownerClientLocationCode,
           2,
           'Owner client location code',
         ) ?? undefined,
-      ownerContactName:
-        requiredFieldError(summaryForm.ownerContactName, 'Owner contact name') ?? undefined,
+      ownerContactName: applicationTextStorageFieldError(
+        summaryForm.ownerContactName,
+        APPLICATION_CONTACT_NAME_MAX_LENGTH,
+        'Owner contact name',
+        true,
+      ),
       agentClientNumber: isAgentApplicant(summaryForm.applicantTypeCode)
-        ? (requiredFieldError(summaryForm.agentClientNumber, 'Agent client number') ?? undefined)
+        ? applicationClientNumberFieldError(summaryForm.agentClientNumber, 'Agent client number')
         : undefined,
       agentClientLocationCode: isAgentApplicant(summaryForm.applicantTypeCode)
         ? (requiredMaxLengthFieldError(
@@ -1369,7 +1409,12 @@ const ProvincialApplicationDetailsPage = () => {
           ) ?? undefined)
         : undefined,
       agentContactName: isAgentApplicant(summaryForm.applicantTypeCode)
-        ? (requiredFieldError(summaryForm.agentContactName, 'Agent contact name') ?? undefined)
+        ? applicationTextStorageFieldError(
+            summaryForm.agentContactName,
+            APPLICATION_CONTACT_NAME_MAX_LENGTH,
+            'Agent contact name',
+            true,
+          )
         : undefined,
       applicantTypeCode: firstValidationError(
         () => requiredFieldError(summaryForm.applicantTypeCode, 'Applicant type'),
@@ -1426,17 +1471,38 @@ const ProvincialApplicationDetailsPage = () => {
       ),
       termDays: firstValidationError(
         () => requiredFieldError(calculatedSummaryTermDays, 'Application term'),
+        () => nonNegativeWholeNumberFieldError(summaryForm.termDays, 'Application term days'),
         () =>
-          /^\d*$/.test(summaryForm.termDays.trim())
-            ? null
-            : 'Application term days must be zero or a positive whole number.',
+          maxNumericValueFieldError(
+            summaryForm.termDays,
+            MAX_APPLICATION_TERM_DAYS,
+            'Application term days',
+          ),
+        () =>
+          maxNumericValueFieldError(
+            calculatedSummaryTermDays,
+            MAX_APPLICATION_TERM_DAYS,
+            'Application term',
+          ),
       ),
-      termMonths: /^\d*$/.test(summaryForm.termMonths.trim())
-        ? undefined
-        : 'Application term months must be zero or a positive whole number.',
-      termYears: /^\d*$/.test(summaryForm.termYears.trim())
-        ? undefined
-        : 'Application term years must be zero or a positive whole number.',
+      termMonths: firstValidationError(
+        () => nonNegativeWholeNumberFieldError(summaryForm.termMonths, 'Application term months'),
+        () =>
+          maxNumericValueFieldError(
+            summaryForm.termMonths,
+            MAX_APPLICATION_TERM_MONTHS,
+            'Application term months',
+          ),
+      ),
+      termYears: firstValidationError(
+        () => nonNegativeWholeNumberFieldError(summaryForm.termYears, 'Application term years'),
+        () =>
+          maxNumericValueFieldError(
+            summaryForm.termYears,
+            MAX_APPLICATION_TERM_YEARS,
+            'Application term years',
+          ),
+      ),
       receivedDate: firstValidationError(
         () => requiredFieldError(summaryForm.receivedDate, 'Received date'),
         () => isoDateFieldError(summaryForm.receivedDate),
@@ -1451,7 +1517,12 @@ const ProvincialApplicationDetailsPage = () => {
           ? undefined
           : 'Select a valid listing date.',
       productLocation: productTypeRequiresLogDetails(summaryForm.productTypeCode)
-        ? (requiredFieldError(summaryForm.productLocation, 'Location of logs') ?? undefined)
+        ? applicationTextStorageFieldError(
+            summaryForm.productLocation,
+            APPLICATION_PRODUCT_LOCATION_MAX_LENGTH,
+            'Location of logs',
+            true,
+          )
         : undefined,
       applicationVolume: firstValidationError(
         () => requiredFieldError(summaryForm.applicationVolume, 'Application volume'),
@@ -4098,6 +4169,7 @@ const ProvincialApplicationDetailsPage = () => {
                                 labelText="Term (days)"
                                 type="number"
                                 min={1}
+                                max={MAX_APPLICATION_TERM_DAYS}
                                 value={summaryForm.termDays}
                                 invalid={Boolean(visibleSummaryFieldError('termDays'))}
                                 invalidText={visibleSummaryFieldError('termDays')}
@@ -4110,6 +4182,7 @@ const ProvincialApplicationDetailsPage = () => {
                                 labelText="Term (months)"
                                 type="number"
                                 min={0}
+                                max={MAX_APPLICATION_TERM_MONTHS}
                                 value={summaryForm.termMonths}
                                 invalid={Boolean(visibleSummaryFieldError('termMonths'))}
                                 invalidText={visibleSummaryFieldError('termMonths')}
@@ -4122,6 +4195,7 @@ const ProvincialApplicationDetailsPage = () => {
                                 labelText="Term (years)"
                                 type="number"
                                 min={0}
+                                max={MAX_APPLICATION_TERM_YEARS}
                                 value={summaryForm.termYears}
                                 invalid={Boolean(visibleSummaryFieldError('termYears'))}
                                 invalidText={visibleSummaryFieldError('termYears')}
@@ -4447,6 +4521,7 @@ const ProvincialApplicationDetailsPage = () => {
                                 <TextArea
                                   id="applicationSummaryProductLocation"
                                   labelText="Location of logs"
+                                  maxCount={APPLICATION_PRODUCT_LOCATION_MAX_LENGTH}
                                   value={summaryForm.productLocation}
                                   invalid={Boolean(visibleSummaryFieldError('productLocation'))}
                                   invalidText={visibleSummaryFieldError('productLocation')}

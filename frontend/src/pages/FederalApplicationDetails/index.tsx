@@ -116,6 +116,8 @@ const FEDERAL_APPLICATION_DETAIL_TAB_SLOTS: readonly FederalApplicationDetailTab
   'shipping',
 ]
 
+const ASCII_PATTERN = /^[\u0000-\u007f]*$/
+
 const emptyPermitForm = (): FederalPermitMutation => ({
   permitNumber: null,
   permitIssueDate: '',
@@ -309,7 +311,13 @@ const FederalApplicationDetailsPage = () => {
       transportType:
         requiredExactLengthFieldError(permitForm.transportType, 1, 'Transport type') ?? undefined,
       transportName:
-        requiredMaxLengthFieldError(permitForm.transportName, 26, 'Transport name') ?? undefined,
+        firstValidationError(
+          () => requiredMaxLengthFieldError(permitForm.transportName, 26, 'Transport name'),
+          () =>
+            ASCII_PATTERN.test(permitForm.transportName.trim())
+              ? null
+              : 'Transport name must contain ASCII characters only.',
+        ) ?? undefined,
       shippingDate: firstValidationError(
         () => requiredFieldError(permitForm.shippingDate, 'Estimated shipping date'),
         () => isoDateFieldError(permitForm.shippingDate),
@@ -318,10 +326,17 @@ const FederalApplicationDetailsPage = () => {
         requiredExactLengthFieldError(permitForm.portOfExport, 2, 'Port of export') ?? undefined,
       otherPortOfExport:
         permitForm.portOfExport.trim().toUpperCase() === 'OT'
-          ? (requiredMaxLengthFieldError(
-              permitForm.otherPortOfExport,
-              34,
-              'Other port of export',
+          ? (firstValidationError(
+              () =>
+                requiredMaxLengthFieldError(
+                  permitForm.otherPortOfExport,
+                  34,
+                  'Other port of export',
+                ),
+              () =>
+                ASCII_PATTERN.test(permitForm.otherPortOfExport.trim())
+                  ? null
+                  : 'Other port of export must contain ASCII characters only.',
             ) ?? undefined)
           : undefined,
     }),
@@ -617,6 +632,10 @@ const FederalApplicationDetailsPage = () => {
     const normalizedRemark = remarkDraft.trim()
     if (!normalizedRemark) {
       setRemarkValidationMessage('Remark is required.')
+      return false
+    }
+    if (normalizedRemark.length > 250) {
+      setRemarkValidationMessage('Remark must not exceed 250 characters.')
       return false
     }
 

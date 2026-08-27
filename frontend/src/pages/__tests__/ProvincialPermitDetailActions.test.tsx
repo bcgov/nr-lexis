@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import {
   createMemoryRouter,
@@ -2475,6 +2475,42 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
   })
 
+  it('validates permit text storage boundaries before saving', async () => {
+    configureActivePermit()
+    renderPermitDetails()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    const receiptNumber = screen.getByLabelText('Receipt number')
+    const remarks = screen.getByLabelText('Remarks')
+    const saveButton = screen.getByRole('button', { name: 'Save permit' })
+
+    expect(receiptNumber).toHaveAttribute('maxlength', '50')
+    fireEvent.change(receiptNumber, { target: { value: 'R'.repeat(51) } })
+    fireEvent.change(remarks, { target: { value: 'X'.repeat(255) } })
+    await userEvent.click(saveButton)
+
+    expect(
+      (await screen.findAllByText('Receipt number must be 50 characters or fewer.')).length,
+    ).toBeGreaterThanOrEqual(1)
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+
+    fireEvent.change(receiptNumber, { target: { value: 'R-1' } })
+    await userEvent.click(saveButton)
+
+    expect(
+      (await screen.findAllByText('Permit remarks must be 254 characters or fewer.')).length,
+    ).toBeGreaterThanOrEqual(1)
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+
+    fireEvent.change(remarks, { target: { value: 'Résumé' } })
+    await userEvent.click(saveButton)
+
+    expect(
+      (await screen.findAllByText('Permit remarks must contain ASCII characters only.')).length,
+    ).toBeGreaterThanOrEqual(1)
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+  })
+
   it('allows an approver to expire a permit like legacy', async () => {
     configureActivePermit()
     renderPermitDetails()
@@ -3463,6 +3499,55 @@ describe('Provincial Permit Detail Action Smoke', () => {
         }),
       )
     })
+  })
+
+  it('validates permit fee override storage boundaries before saving', async () => {
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      permitStatusCode: 'ACT',
+      permitStatusDescription: 'Active',
+    })
+    mockedFetchPermitFeeOverrideContext.mockResolvedValue({
+      overrideEnabled: true,
+      overrideFee: '25.00',
+      overrideComment: 'Legacy override',
+      locked: false,
+      lockMessage: '',
+    })
+
+    renderPermitDetails()
+    await selectPermitDetailTab('Fees')
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit fee override' }))
+
+    const overrideFee = screen.getByLabelText('Override fee (CAD)')
+    const overrideComment = screen.getByLabelText('Override comment')
+    const saveButton = screen.getByRole('button', { name: 'Save fee override' })
+
+    await userEvent.clear(overrideFee)
+    await userEvent.type(overrideFee, '10000000')
+    await userEvent.click(saveButton)
+
+    expect(await screen.findByText('Override fee must be 9999999.99 or less.')).toBeInTheDocument()
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+
+    await userEvent.clear(overrideFee)
+    await userEvent.type(overrideFee, '1.001')
+    await userEvent.click(saveButton)
+
+    expect(
+      await screen.findByText('Override fee must have no more than two decimal places.'),
+    ).toBeInTheDocument()
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+
+    await userEvent.clear(overrideFee)
+    await userEvent.type(overrideFee, '1.00')
+    fireEvent.change(overrideComment, { target: { value: 'x'.repeat(255) } })
+    await userEvent.click(saveButton)
+
+    expect(
+      await screen.findByText('Override comment must be 254 characters or fewer.'),
+    ).toBeInTheDocument()
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
   })
 
   it.each([

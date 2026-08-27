@@ -330,6 +330,15 @@ public class OfferDetailsRpcController {
       return ResponseEntity.noContent().build();
     }
 
+    List<String> dateErrors = validateOfferDateParameters(parameters);
+    if (!dateErrors.isEmpty()) {
+      return invalidPersistence(
+          parsePositiveLong(first(parameters, "applicationNumber")),
+          parsePositiveLong(first(parameters, "exportPurchaseOfferNumber", "offerNumber")),
+          false,
+          dateErrors);
+    }
+
     String userId = userId(authentication);
     PurchaseOfferService.CreateOfferRequest request = toCreateOfferRequest(parameters);
     String scopedClientNumber = currentForestClientNumber(sessionService, authentication);
@@ -468,6 +477,14 @@ public class OfferDetailsRpcController {
     if (currentOffer.isEmpty()
         || !expectedApplicationNumber.equals(currentOffer.get().applicationNumber())) {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+    List<String> dateErrors = validateOfferDateParameters(parameters);
+    if (!dateErrors.isEmpty()) {
+      return invalidPersistence(
+          currentOffer.get().applicationNumber(),
+          currentOffer.get().offerNumber(),
+          true,
+          dateErrors);
     }
     PurchaseOfferService.UpdateOfferRequest request =
         toUpdateOfferRequest(parameters, currentOffer.get());
@@ -725,6 +742,24 @@ public class OfferDetailsRpcController {
             update,
             List.copyOf(errors),
             List.of()));
+  }
+
+  private List<String> validateOfferDateParameters(MultiValueMap<String, String> parameters) {
+    List<String> errors = new ArrayList<>();
+    validateOfferDate(first(parameters, "purchaseOfferDate"), "Offer received date", errors);
+    validateOfferDate(
+        first(parameters, "offerWithdrawalDate", "offerEndDate"),
+        "Offer withdrawal date",
+        errors);
+    validateOfferDate(first(parameters, "teacReviewDate"), "TEAC review date", errors);
+    return List.copyOf(errors);
+  }
+
+  private void validateOfferDate(String value, String label, List<String> errors) {
+    String normalized = trimToNull(value);
+    if (normalized != null && parseDate(normalized) == null) {
+      errors.add(label + " must be a valid date in YYYY-MM-DD format.");
+    }
   }
 
   private static void auditOfferFailure(

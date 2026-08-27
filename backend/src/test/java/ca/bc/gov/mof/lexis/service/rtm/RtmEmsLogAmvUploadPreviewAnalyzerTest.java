@@ -126,6 +126,315 @@ class RtmEmsLogAmvUploadPreviewAnalyzerTest {
   }
 
   @Test
+  void shouldRejectNonNumericMappedCellInsteadOfPartiallyAcceptingWorkbook()
+      throws IOException {
+    Map<String, byte[]> entries = validScreenWorkbookEntries();
+    entries.put(
+        "xl/worksheets/sheet1.xml",
+        textEntry(entries, "xl/worksheets/sheet1.xml")
+            .replace(
+                "<c r=\"B4\"><v>10.25</v></c>",
+                "<c r=\"B4\" t=\"inlineStr\"><is><t>12x</t></is></c>")
+            .getBytes(StandardCharsets.UTF_8));
+
+    RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult result =
+        RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
+            new ByteArrayInputStream(workbook(entries)), LocalDate.of(2026, 7, 1));
+
+    assertThat(result.numericCellCount()).isEqualTo(5);
+    assertThat(result.rows()).hasSize(5);
+    assertThat(result.errors())
+        .containsExactly("Row 4 has non-numeric value '12x' at column B.");
+  }
+
+  @Test
+  void shouldRejectMalformedCommaGroupingInsteadOfCoercingTheValue() throws IOException {
+    Map<String, byte[]> entries = validScreenWorkbookEntries();
+    entries.put(
+        "xl/worksheets/sheet1.xml",
+        textEntry(entries, "xl/worksheets/sheet1.xml")
+            .replace(
+                "<c r=\"B4\"><v>10.25</v></c>",
+                "<c r=\"B4\" t=\"inlineStr\"><is><t>1,2,3</t></is></c>")
+            .getBytes(StandardCharsets.UTF_8));
+
+    RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult result =
+        RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
+            new ByteArrayInputStream(workbook(entries)), LocalDate.of(2026, 7, 1));
+
+    assertThat(result.numericCellCount()).isEqualTo(5);
+    assertThat(result.rows()).hasSize(5);
+    assertThat(result.errors())
+        .containsExactly("Row 4 has non-numeric value '1,2,3' at column B.");
+  }
+
+  @Test
+  void shouldAcceptCorrectCommaGrouping() throws IOException {
+    Map<String, byte[]> entries = validScreenWorkbookEntries();
+    entries.put(
+        "xl/worksheets/sheet1.xml",
+        textEntry(entries, "xl/worksheets/sheet1.xml")
+            .replace(
+                "<c r=\"B4\"><v>10.25</v></c>",
+                "<c r=\"B4\" t=\"inlineStr\"><is><t>1,234.56</t></is></c>")
+            .getBytes(StandardCharsets.UTF_8));
+
+    RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult result =
+        RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
+            new ByteArrayInputStream(workbook(entries)), LocalDate.of(2026, 7, 1));
+
+    assertThat(result.errors()).isEmpty();
+    assertThat(result.rows().getFirst().newValue()).isEqualByComparingTo("1234.56");
+  }
+
+  @Test
+  void shouldRejectBooleanCellInsteadOfCoercingTrueToOne() throws IOException {
+    Map<String, byte[]> entries = validScreenWorkbookEntries();
+    entries.put(
+        "xl/worksheets/sheet1.xml",
+        textEntry(entries, "xl/worksheets/sheet1.xml")
+            .replace(
+                "<c r=\"B4\"><v>10.25</v></c>",
+                "<c r=\"B4\" t=\"b\"><v>1</v></c>")
+            .getBytes(StandardCharsets.UTF_8));
+
+    RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult result =
+        RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
+            new ByteArrayInputStream(workbook(entries)), LocalDate.of(2026, 7, 1));
+
+    assertThat(result.numericCellCount()).isEqualTo(5);
+    assertThat(result.rows()).hasSize(5);
+    assertThat(result.errors())
+        .containsExactly("Row 4 has non-numeric value 'TRUE' at column B.");
+  }
+
+  @Test
+  void shouldRejectMissingSharedStringInsteadOfSkippingTheCell() throws IOException {
+    Map<String, byte[]> entries = validScreenWorkbookEntries();
+    entries.put(
+        "xl/worksheets/sheet1.xml",
+        textEntry(entries, "xl/worksheets/sheet1.xml")
+            .replace(
+                "<c r=\"B4\"><v>10.25</v></c>",
+                "<c r=\"B4\" t=\"s\"><v>999</v></c>")
+            .getBytes(StandardCharsets.UTF_8));
+
+    assertThatThrownBy(
+            () ->
+                RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
+                    new ByteArrayInputStream(workbook(entries)), LocalDate.of(2026, 7, 1)))
+        .isInstanceOf(IOException.class)
+        .hasMessageContaining("missing shared string");
+  }
+
+  @Test
+  void shouldRejectMissingCellReferenceInsteadOfDroppingTheValue() throws IOException {
+    Map<String, byte[]> entries = validScreenWorkbookEntries();
+    entries.put(
+        "xl/worksheets/sheet1.xml",
+        textEntry(entries, "xl/worksheets/sheet1.xml")
+            .replace("<c r=\"B4\"><v>10.25</v></c>", "<c><v>10.25</v></c>")
+            .getBytes(StandardCharsets.UTF_8));
+
+    assertThatThrownBy(
+            () ->
+                RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
+                    new ByteArrayInputStream(workbook(entries)), LocalDate.of(2026, 7, 1)))
+        .isInstanceOf(IOException.class)
+        .hasMessageContaining("invalid cell reference");
+  }
+
+  @Test
+  void shouldRejectMissingRowReferenceInsteadOfDroppingTheRow() throws IOException {
+    Map<String, byte[]> entries = validScreenWorkbookEntries();
+    entries.put(
+        "xl/worksheets/sheet1.xml",
+        textEntry(entries, "xl/worksheets/sheet1.xml")
+            .replace("<row r=\"4\">", "<row>")
+            .getBytes(StandardCharsets.UTF_8));
+
+    assertThatThrownBy(
+            () ->
+                RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
+                    new ByteArrayInputStream(workbook(entries)), LocalDate.of(2026, 7, 1)))
+        .isInstanceOf(IOException.class)
+        .hasMessageContaining("invalid row reference");
+  }
+
+  @Test
+  void shouldRejectFormulaCellInsteadOfTrustingItsCachedValue() throws IOException {
+    for (String formulaCell :
+        List.of(
+            "<c r=\"B4\"><f>10+2</f><v>12</v></c>",
+            "<c r=\"B4\"><f>10+2</f></c>")) {
+      Map<String, byte[]> entries = validScreenWorkbookEntries();
+      entries.put(
+          "xl/worksheets/sheet1.xml",
+          textEntry(entries, "xl/worksheets/sheet1.xml")
+              .replace("<c r=\"B4\"><v>10.25</v></c>", formulaCell)
+              .getBytes(StandardCharsets.UTF_8));
+
+      RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult result =
+          RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
+              new ByteArrayInputStream(workbook(entries)), LocalDate.of(2026, 7, 1));
+
+      assertThat(result.numericCellCount()).isEqualTo(5);
+      assertThat(result.rows()).hasSize(5);
+      assertThat(result.errors())
+          .containsExactly(
+              "Row 4 contains a formula at column B; enter a fixed numeric AMV value.");
+    }
+  }
+
+  @Test
+  void shouldRejectFormulaGradeInsteadOfTrustingItsCachedValue() throws IOException {
+    Map<String, byte[]> entries = validScreenWorkbookEntries();
+    entries.put(
+        "xl/worksheets/sheet1.xml",
+        textEntry(entries, "xl/worksheets/sheet1.xml")
+            .replace(
+                "<c r=\"A4\" t=\"inlineStr\"><is><t>A</t></is></c>",
+                "<c r=\"A4\" t=\"str\"><f>\"A\"</f><v>A</v></c>")
+            .getBytes(StandardCharsets.UTF_8));
+
+    RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult result =
+        RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
+            new ByteArrayInputStream(workbook(entries)), LocalDate.of(2026, 7, 1));
+
+    assertThat(result.numericCellCount()).isOne();
+    assertThat(result.rows()).hasSize(1);
+    assertThat(result.errors())
+        .containsExactly("Row 4 contains a formula at column A; enter a fixed grade.");
+  }
+
+  @Test
+  void shouldRejectFormulaSpeciesHeaderInsteadOfTrustingItsCachedValue() throws IOException {
+    Map<String, byte[]> entries = validScreenWorkbookEntries();
+    entries.put(
+        "xl/worksheets/sheet1.xml",
+        textEntry(entries, "xl/worksheets/sheet1.xml")
+            .replace(
+                "<c r=\"B3\" t=\"inlineStr\"><is><t>BA</t></is></c>",
+                "<c r=\"B3\" t=\"str\"><f>\"BA\"</f><v>BA</v></c>")
+            .getBytes(StandardCharsets.UTF_8));
+
+    RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult result =
+        RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
+            new ByteArrayInputStream(workbook(entries)), LocalDate.of(2026, 7, 1));
+
+    assertThat(result.numericCellCount()).isEqualTo(4);
+    assertThat(result.rows()).hasSize(4);
+    assertThat(result.errors())
+        .containsExactly(
+            "Header row 3 contains a formula at column B; enter fixed header text.",
+            "Column B contains AMV values but has no supported species header.");
+  }
+
+  @Test
+  void shouldRejectUnmappedScreenSpeciesHeaderInsteadOfPartiallyAcceptingWorkbook()
+      throws IOException {
+    Map<String, byte[]> entries = validScreenWorkbookEntries();
+    entries.put(
+        "xl/worksheets/sheet1.xml",
+        textEntry(entries, "xl/worksheets/sheet1.xml")
+            .replace(">BA</t>", ">BALSA</t>")
+            .getBytes(StandardCharsets.UTF_8));
+
+    RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult result =
+        RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
+            new ByteArrayInputStream(workbook(entries)), LocalDate.of(2026, 7, 1));
+
+    assertThat(result.numericCellCount()).isEqualTo(4);
+    assertThat(result.rows()).hasSize(4);
+    assertThat(result.errors())
+        .containsExactly(
+            "Header row 3 contains unmapped species header 'BALSA' at column B.",
+            "Column B contains AMV values but has no supported species header.");
+  }
+
+  @Test
+  void shouldRejectDuplicateScreenSpeciesHeader() throws IOException {
+    Map<String, byte[]> entries = validScreenWorkbookEntries();
+    entries.put(
+        "xl/worksheets/sheet1.xml",
+        textEntry(entries, "xl/worksheets/sheet1.xml")
+            .replace(">HE</t>", ">BA</t>")
+            .getBytes(StandardCharsets.UTF_8));
+
+    RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult result =
+        RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
+            new ByteArrayInputStream(workbook(entries)), LocalDate.of(2026, 7, 1));
+
+    assertThat(result.numericCellCount()).isEqualTo(5);
+    assertThat(result.rows()).hasSize(5);
+    assertThat(result.errors())
+        .containsExactly(
+            "Header row 3 contains a duplicate species column for 'BA'.",
+            "Column C contains AMV values but has no supported species header.");
+  }
+
+  @Test
+  void shouldRejectDuplicateScreenSpeciesAndGradeCell() throws IOException {
+    Map<String, byte[]> entries = validScreenWorkbookEntries();
+    entries.put(
+        "xl/worksheets/sheet1.xml",
+        textEntry(entries, "xl/worksheets/sheet1.xml")
+            .replace(">1</t>", ">A</t>")
+            .getBytes(StandardCharsets.UTF_8));
+
+    RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult result =
+        RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
+            new ByteArrayInputStream(workbook(entries)), LocalDate.of(2026, 7, 1));
+
+    assertThat(result.numericCellCount()).isEqualTo(6);
+    assertThat(result.rows()).hasSize(6);
+    assertThat(result.errors())
+        .containsExactly(
+            "Row 5 column B duplicates row 4 column B for species 'BA' and grade 'A'.");
+  }
+
+  @Test
+  void shouldRejectUnsupportedScreenGradeInsteadOfPartiallyAcceptingWorkbook()
+      throws IOException {
+    Map<String, byte[]> entries = validScreenWorkbookEntries();
+    entries.put(
+        "xl/worksheets/sheet1.xml",
+        textEntry(entries, "xl/worksheets/sheet1.xml")
+            .replace(">A</t>", ">8</t>")
+            .getBytes(StandardCharsets.UTF_8));
+
+    RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult result =
+        RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
+            new ByteArrayInputStream(workbook(entries)), LocalDate.of(2026, 7, 1));
+
+    assertThat(result.numericCellCount()).isOne();
+    assertThat(result.rows()).hasSize(1);
+    assertThat(result.errors())
+        .containsExactly("Row 4 grade '8' is not supported by the RTM AMV review.");
+  }
+
+  @Test
+  void shouldRejectScreenValuesWithoutAGrade() throws IOException {
+    Map<String, byte[]> entries = validScreenWorkbookEntries();
+    entries.put(
+        "xl/worksheets/sheet1.xml",
+        textEntry(entries, "xl/worksheets/sheet1.xml")
+            .replace(
+                "<c r=\"A4\" t=\"inlineStr\"><is><t>A</t></is></c>",
+                "<c r=\"A4\" t=\"inlineStr\"><is><t></t></is></c>")
+            .getBytes(StandardCharsets.UTF_8));
+
+    RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult result =
+        RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
+            new ByteArrayInputStream(workbook(entries)), LocalDate.of(2026, 7, 1));
+
+    assertThat(result.numericCellCount()).isOne();
+    assertThat(result.rows()).hasSize(1);
+    assertThat(result.errors())
+        .containsExactly("Row 4 contains AMV values but has no grade.");
+  }
+
+  @Test
   void publishedTemplateShouldUseTheScreenMonthAndUserEnteredValues() throws IOException {
     byte[] templateBytes = Files.readAllBytes(resolvePublishedTemplate());
     String sheetXml = workbookEntryText(templateBytes, "xl/worksheets/sheet1.xml");
@@ -191,6 +500,20 @@ class RtmEmsLogAmvUploadPreviewAnalyzerTest {
     assertThat(result.numericCellCount()).isOne();
     assertThat(result.rows()).hasSize(1);
     assertThat(result.rows()).extracting(RtmEmsLogAmvUploadPreviewAnalyzer.UploadRow::species)
+        .containsExactly("WH");
+  }
+
+  @Test
+  void shouldAcceptOnePhysicalPineColumnWithScreenContext() throws IOException {
+    RtmEmsLogAmvUploadPreviewAnalyzer.UploadParseResult result =
+        RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
+            new ByteArrayInputStream(
+                RtmEmsLogAmvWorkbookTestFixtures.singleWhitePineWorkbook()),
+            LocalDate.of(2026, 7, 1));
+
+    assertThat(result.errors()).isEmpty();
+    assertThat(result.rows())
+        .extracting(RtmEmsLogAmvUploadPreviewAnalyzer.UploadRow::species)
         .containsExactly("WH");
   }
 
@@ -569,6 +892,18 @@ class RtmEmsLogAmvUploadPreviewAnalyzerTest {
 
   private static Map<String, byte[]> validWorkbookEntries() throws IOException {
     return workbookEntries(RtmEmsLogAmvWorkbookTestFixtures.matrixWorkbook());
+  }
+
+  private static Map<String, byte[]> validScreenWorkbookEntries() throws IOException {
+    Map<String, byte[]> entries = validWorkbookEntries();
+    entries.put(
+        "xl/worksheets/sheet1.xml",
+        textEntry(entries, "xl/worksheets/sheet1.xml")
+            .replace(">WH</t>", ">CE</t>")
+            .replace(">LO</t>", ">CY</t>")
+            .replace(">YE</t>", ">FI</t>")
+            .getBytes(StandardCharsets.UTF_8));
+    return entries;
   }
 
   private static Map<String, byte[]> workbookEntries(byte[] workbook) throws IOException {

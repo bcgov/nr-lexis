@@ -44,6 +44,7 @@ import {
   greaterThanFieldError,
   getVisibleFieldError,
   isoDateFieldError,
+  maxLengthFieldError,
   maxNumericValueFieldError,
   positiveNumericFieldError,
   requiredFieldError,
@@ -142,6 +143,31 @@ const APPLICATION_CREATE_TAB_LABELS: Record<ApplicationCreateTab, string> = {
 
 const productTypeSupportsPackages = (productTypeCode: string): boolean =>
   ['H', 'T'].includes(productTypeCode.trim().toUpperCase())
+
+const CLIENT_NUMBER_PATTERN = /^\d{1,8}$/
+const ASCII_PATTERN = /^[\u0000-\u007f]*$/
+const APPLICATION_CONTACT_NAME_MAX_LENGTH = 120
+const APPLICATION_PRODUCT_LOCATION_MAX_LENGTH = 250
+const APPLICATION_REMARK_MAX_LENGTH = 254
+
+const clientNumberFieldError = (value: string, label: string): string | undefined =>
+  firstValidationError(
+    () => requiredFieldError(value, label),
+    () => (CLIENT_NUMBER_PATTERN.test(value.trim()) ? null : `${label} must be 1 to 8 digits.`),
+  )
+
+const applicationTextStorageFieldError = (
+  value: string,
+  maximumLength: number,
+  label: string,
+  required = false,
+): string | undefined =>
+  firstValidationError(
+    () => (required ? requiredFieldError(value, label) : null),
+    () =>
+      ASCII_PATTERN.test(value.trim()) ? null : `${label} must contain ASCII characters only.`,
+    () => maxLengthFieldError(value, maximumLength, label),
+  )
 
 const APPLICATION_CREATE_FIELD_TAB: Partial<
   Record<ProvincialApplicationCreateField, ApplicationCreateTab>
@@ -561,7 +587,7 @@ const ProvincialApplicationCreatePage = () => {
 
   useEffect(() => {
     const ownerClientNumber = ownerClientNumberForLookup.trim()
-    if (!ownerClientNumber) {
+    if (!CLIENT_NUMBER_PATTERN.test(ownerClientNumber)) {
       let isActive = true
       void Promise.resolve().then(() => {
         if (!isActive) {
@@ -569,9 +595,13 @@ const ProvincialApplicationCreatePage = () => {
         }
 
         setOwnerClientLocations([])
+        setOwnerClientContacts([])
+        setOwnerClientData(null)
         setIsLoadingOwnerClientLocations(false)
         setForm((current) =>
-          current.ownerClientLocationCode ? { ...current, ownerClientLocationCode: '' } : current,
+          current.ownerClientLocationCode || current.ownerContactName
+            ? { ...current, ownerClientLocationCode: '', ownerContactName: '' }
+            : current,
         )
       })
 
@@ -603,9 +633,18 @@ const ProvincialApplicationCreatePage = () => {
             locations,
             current.ownerClientLocationCode,
           )
-          return current.ownerClientLocationCode === nextOwnerClientLocationCode
+          const nextOwnerContactName =
+            nextOwnerClientLocationCode === current.ownerClientLocationCode
+              ? current.ownerContactName
+              : ''
+          return current.ownerClientLocationCode === nextOwnerClientLocationCode &&
+            current.ownerContactName === nextOwnerContactName
             ? current
-            : { ...current, ownerClientLocationCode: nextOwnerClientLocationCode }
+            : {
+                ...current,
+                ownerClientLocationCode: nextOwnerClientLocationCode,
+                ownerContactName: nextOwnerContactName,
+              }
         })
       })
       .finally(() => {
@@ -647,7 +686,7 @@ const ProvincialApplicationCreatePage = () => {
     }
 
     const agentClientNumber = agentClientNumberForLookup.trim()
-    if (!agentClientNumber) {
+    if (!CLIENT_NUMBER_PATTERN.test(agentClientNumber)) {
       let isActive = true
       void Promise.resolve().then(() => {
         if (!isActive) {
@@ -655,9 +694,13 @@ const ProvincialApplicationCreatePage = () => {
         }
 
         setAgentClientLocations([])
+        setAgentClientContacts([])
+        setAgentClientData(null)
         setIsLoadingAgentClientLocations(false)
         setForm((current) =>
-          current.agentClientLocationCode ? { ...current, agentClientLocationCode: '' } : current,
+          current.agentClientLocationCode || current.agentContactName
+            ? { ...current, agentClientLocationCode: '', agentContactName: '' }
+            : current,
         )
       })
 
@@ -689,9 +732,18 @@ const ProvincialApplicationCreatePage = () => {
             locations,
             current.agentClientLocationCode,
           )
-          return current.agentClientLocationCode === nextAgentClientLocationCode
+          const nextAgentContactName =
+            nextAgentClientLocationCode === current.agentClientLocationCode
+              ? current.agentContactName
+              : ''
+          return current.agentClientLocationCode === nextAgentClientLocationCode &&
+            current.agentContactName === nextAgentContactName
             ? current
-            : { ...current, agentClientLocationCode: nextAgentClientLocationCode }
+            : {
+                ...current,
+                agentClientLocationCode: nextAgentClientLocationCode,
+                agentContactName: nextAgentContactName,
+              }
         })
       })
       .finally(() => {
@@ -718,6 +770,9 @@ const ProvincialApplicationCreatePage = () => {
         setOwnerClientContacts([])
         setOwnerClientData(null)
         setIsLoadingOwnerClientContacts(false)
+        setForm((current) =>
+          current.ownerContactName ? { ...current, ownerContactName: '' } : current,
+        )
       })
 
       return () => {
@@ -786,6 +841,9 @@ const ProvincialApplicationCreatePage = () => {
         setAgentClientContacts([])
         setAgentClientData(null)
         setIsLoadingAgentClientContacts(false)
+        setForm((current) =>
+          current.agentContactName ? { ...current, agentContactName: '' } : current,
+        )
       })
 
       return () => {
@@ -988,17 +1046,21 @@ const ProvincialApplicationCreatePage = () => {
 
   const fieldErrors = useMemo<FieldErrors<ProvincialApplicationCreateField>>(
     () => ({
-      ownerClientNumber:
-        requiredFieldError(form.ownerClientNumber, 'Owner client number') ?? undefined,
+      ownerClientNumber: clientNumberFieldError(form.ownerClientNumber, 'Owner client number'),
       ownerClientLocationCode:
         requiredMaxLengthFieldError(
           form.ownerClientLocationCode,
           2,
           'Owner client location code',
         ) ?? undefined,
-      ownerContactName: requiredFieldError(form.ownerContactName, 'Owner name') ?? undefined,
+      ownerContactName: applicationTextStorageFieldError(
+        form.ownerContactName,
+        APPLICATION_CONTACT_NAME_MAX_LENGTH,
+        'Owner name',
+        true,
+      ),
       agentClientNumber: isAgentApplicant(form.applicantTypeCode)
-        ? (requiredFieldError(form.agentClientNumber, 'Agent client number') ?? undefined)
+        ? clientNumberFieldError(form.agentClientNumber, 'Agent client number')
         : undefined,
       agentClientLocationCode: isAgentApplicant(form.applicantTypeCode)
         ? (requiredMaxLengthFieldError(
@@ -1008,7 +1070,12 @@ const ProvincialApplicationCreatePage = () => {
           ) ?? undefined)
         : undefined,
       agentContactName: isAgentApplicant(form.applicantTypeCode)
-        ? (requiredFieldError(form.agentContactName, 'Agent contact name') ?? undefined)
+        ? applicationTextStorageFieldError(
+            form.agentContactName,
+            APPLICATION_CONTACT_NAME_MAX_LENGTH,
+            'Agent contact name',
+            true,
+          )
         : undefined,
       applicantTypeCode: firstValidationError(
         () => requiredFieldError(form.applicantTypeCode, 'Applicant type'),
@@ -1083,7 +1150,12 @@ const ProvincialApplicationCreatePage = () => {
           ? undefined
           : 'Select a valid listing date.',
       productLocation: productTypeRequiresLogDetails(form.productTypeCode)
-        ? (requiredFieldError(form.productLocation, 'Location of logs') ?? undefined)
+        ? applicationTextStorageFieldError(
+            form.productLocation,
+            APPLICATION_PRODUCT_LOCATION_MAX_LENGTH,
+            'Location of logs',
+            true,
+          )
         : undefined,
       applicationVolume: firstValidationError(
         () => requiredFieldError(form.applicationVolume, 'Application volume'),
@@ -1094,6 +1166,11 @@ const ProvincialApplicationCreatePage = () => {
       averageLogVolume: productTypeRequiresLogDetails(form.productTypeCode)
         ? averageLogVolumeFieldError(form.averageLogVolume)
         : undefined,
+      comments: applicationTextStorageFieldError(
+        form.comments,
+        APPLICATION_REMARK_MAX_LENGTH,
+        'Comments',
+      ),
     }),
     [
       applicationSpeciesOptions.length,
@@ -1122,6 +1199,8 @@ const ProvincialApplicationCreatePage = () => {
   const hasSelectableAgentClientLocations = agentClientLocations.some(isSelectableClientLocation)
   const hasSelectableOwnerClientContacts = ownerClientContacts.some(isSelectableClientContact)
   const hasSelectableAgentClientContacts = agentClientContacts.some(isSelectableClientContact)
+  const hasValidOwnerClientNumber = CLIENT_NUMBER_PATTERN.test(form.ownerClientNumber.trim())
+  const hasValidAgentClientNumber = CLIENT_NUMBER_PATTERN.test(form.agentClientNumber.trim())
   const availableApplicationSpeciesOptions = useMemo(
     () => applicationSpeciesOptions.filter((option) => !form.speciesCodes.includes(option.code)),
     [applicationSpeciesOptions, form.speciesCodes],
@@ -1135,18 +1214,22 @@ const ProvincialApplicationCreatePage = () => {
     applicationSpeciesSelectOptions.length === 0
   const ownerClientLocationPlaceholder = !form.ownerClientNumber.trim()
     ? 'Enter owner client number first'
-    : isLoadingOwnerClientLocations
-      ? 'Loading locations'
-      : hasSelectableOwnerClientLocations
-        ? 'Select owner client location'
-        : 'No locations on file'
+    : !hasValidOwnerClientNumber
+      ? 'Enter a valid owner client number'
+      : isLoadingOwnerClientLocations
+        ? 'Loading locations'
+        : hasSelectableOwnerClientLocations
+          ? 'Select owner client location'
+          : 'No locations on file'
   const agentClientLocationPlaceholder = !form.agentClientNumber.trim()
     ? 'Enter agent client number first'
-    : isLoadingAgentClientLocations
-      ? 'Loading locations'
-      : hasSelectableAgentClientLocations
-        ? 'Select agent client location'
-        : 'No locations on file'
+    : !hasValidAgentClientNumber
+      ? 'Enter a valid agent client number'
+      : isLoadingAgentClientLocations
+        ? 'Loading locations'
+        : hasSelectableAgentClientLocations
+          ? 'Select agent client location'
+          : 'No locations on file'
   const ownerContactPlaceholder = !form.ownerClientLocationCode.trim()
     ? 'Select owner location first'
     : isLoadingOwnerClientContacts
@@ -1481,9 +1564,14 @@ const ProvincialApplicationCreatePage = () => {
                     onBlur={() => markFieldTouched('ownerClientNumber')}
                     onChange={(event) => {
                       markFormEdited()
+                      setOwnerClientLocations([])
+                      setOwnerClientContacts([])
+                      setOwnerClientData(null)
                       setForm((current) => ({
                         ...current,
                         ownerClientNumber: event.target.value,
+                        ownerClientLocationCode: '',
+                        ownerContactName: '',
                       }))
                     }}
                   />
@@ -1530,7 +1618,7 @@ const ProvincialApplicationCreatePage = () => {
                     id="ownerClientLocationCode"
                     labelText="Client location"
                     value={form.ownerClientLocationCode}
-                    disabled={!form.ownerClientNumber.trim() || isLoadingOwnerClientLocations}
+                    disabled={!hasValidOwnerClientNumber || isLoadingOwnerClientLocations}
                     invalid={!!fieldError('ownerClientLocationCode')}
                     invalidText={fieldError('ownerClientLocationCode')}
                     placeholder={ownerClientLocationPlaceholder}
@@ -1543,9 +1631,13 @@ const ProvincialApplicationCreatePage = () => {
                     onBlur={() => markFieldTouched('ownerClientLocationCode')}
                     onChange={(value) => {
                       markFormEdited()
+                      setOwnerClientContacts([])
+                      setOwnerClientData(null)
                       setForm((current) => ({
                         ...current,
                         ownerClientLocationCode: value,
+                        ownerContactName:
+                          current.ownerClientLocationCode === value ? current.ownerContactName : '',
                       }))
                     }}
                   />
@@ -1620,9 +1712,14 @@ const ProvincialApplicationCreatePage = () => {
                           onBlur={() => markFieldTouched('agentClientNumber')}
                           onChange={(event) => {
                             markFormEdited()
+                            setAgentClientLocations([])
+                            setAgentClientContacts([])
+                            setAgentClientData(null)
                             setForm((current) => ({
                               ...current,
                               agentClientNumber: event.target.value,
+                              agentClientLocationCode: '',
+                              agentContactName: '',
                             }))
                           }}
                         />
@@ -1636,7 +1733,7 @@ const ProvincialApplicationCreatePage = () => {
                           id="agentClientLocationCode"
                           labelText="Contact location"
                           value={form.agentClientLocationCode}
-                          disabled={!form.agentClientNumber.trim() || isLoadingAgentClientLocations}
+                          disabled={!hasValidAgentClientNumber || isLoadingAgentClientLocations}
                           invalid={!!fieldError('agentClientLocationCode')}
                           invalidText={fieldError('agentClientLocationCode')}
                           placeholder={agentClientLocationPlaceholder}
@@ -1652,9 +1749,15 @@ const ProvincialApplicationCreatePage = () => {
                           onBlur={() => markFieldTouched('agentClientLocationCode')}
                           onChange={(value) => {
                             markFormEdited()
+                            setAgentClientContacts([])
+                            setAgentClientData(null)
                             setForm((current) => ({
                               ...current,
                               agentClientLocationCode: value,
+                              agentContactName:
+                                current.agentClientLocationCode === value
+                                  ? current.agentContactName
+                                  : '',
                             }))
                           }}
                         />
@@ -2056,7 +2159,11 @@ const ProvincialApplicationCreatePage = () => {
                   <TextArea
                     id="applicationComments"
                     labelText="Comments"
+                    maxCount={APPLICATION_REMARK_MAX_LENGTH}
                     value={form.comments}
+                    invalid={!!fieldError('comments')}
+                    invalidText={fieldError('comments')}
+                    onBlur={() => markFieldTouched('comments')}
                     onChange={(event) => {
                       markFormEdited()
                       setForm((current) => ({ ...current, comments: event.target.value }))

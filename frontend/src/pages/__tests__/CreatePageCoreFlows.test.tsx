@@ -871,6 +871,165 @@ describe('Create Page Core Flows', () => {
     })
   })
 
+  it.each([
+    ['non-numeric', '2176X'],
+    ['more than eight digits', '123456789'],
+  ])(
+    'blocks a %s owner client number before lookup or submit',
+    async (_description, clientNumber) => {
+      render(
+        <MemoryRouter
+          initialEntries={[
+            `/provincial/application/create?ownerClientNumber=${clientNumber}&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&productTypeCode=LOG&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&speciesCodes=HE&endUseCode=SA&comments=Ready`,
+          ]}
+        >
+          <Routes>
+            <Route
+              path="/provincial/application/create"
+              element={<ProvincialApplicationCreatePage />}
+            />
+          </Routes>
+        </MemoryRouter>,
+      )
+
+      const submitButton = await screen.findByRole('button', { name: 'Save' })
+      await waitFor(() => expect(submitButton).toBeEnabled())
+      await userEvent.click(submitButton)
+
+      expect(
+        await screen.findAllByText('Owner client number must be 1 to 8 digits.'),
+      ).not.toHaveLength(0)
+      expect(mockedFetchApplicationClientLocations).not.toHaveBeenCalled()
+      expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
+    },
+  )
+
+  it('clears stale agent location and contact when the agent number changes', async () => {
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&ownerApplicantType=A&agentClientNumber=2176&agentClientLocationCode=12&agentContactName=Agent%20Contact&productTypeCode=LOG&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&speciesCodes=HE&endUseCode=SA&comments=Ready',
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/provincial/application/create"
+            element={<ProvincialApplicationCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationCreateTab('Agent')
+    const agentSection = screen.getByRole('region', { name: 'Agent' })
+    const agentNumber = within(agentSection).getByRole('textbox', { name: 'Agent number' })
+    await waitFor(() => expect(agentNumber).toHaveValue('00002176'))
+    await waitFor(() =>
+      expect(within(agentSection).getByRole('combobox', { name: 'Contact name' })).toHaveValue(
+        'Agent Contact',
+      ),
+    )
+
+    fireEvent.change(agentNumber, { target: { value: '123456789' } })
+
+    await waitFor(() => {
+      const contactLocation = within(agentSection).getByRole('combobox', {
+        name: 'Contact location',
+      })
+      expect(contactLocation).toHaveValue('')
+      expect(contactLocation).toBeDisabled()
+      const contactName = within(agentSection).getByRole('textbox', { name: 'Contact name' })
+      expect(contactName).toHaveValue('')
+      expect(contactName).toBeDisabled()
+    })
+    expect(screen.queryByRole('region', { name: 'Agent client details' })).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(
+      await screen.findAllByText('Agent client number must be 1 to 8 digits.'),
+    ).not.toHaveLength(0)
+    expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
+  })
+
+  it('validates application text storage limits and accepts their exact boundaries', async () => {
+    mockedSubmitProvincialApplicationCreate.mockResolvedValue(successfulCreate('907'))
+    const overlongLocation = 'L'.repeat(251)
+    const overlongComments = 'R'.repeat(255)
+    const query = new URLSearchParams({
+      ownerClientNumber: '00011111',
+      ownerClientLocationCode: '00',
+      ownerContactName: 'Owner Contact',
+      productTypeCode: 'H',
+      ageClass: 'O',
+      exemptionReason: 'U',
+      region: '11',
+      applicationDate: '2026-01-09',
+      applicationTermDays: '30',
+      receivedDate: '2026-01-10',
+      listingDate: '2026-01-11',
+      productLocation: overlongLocation,
+      applicationVolume: '125.5',
+      averageLogVolume: '1.2',
+      speciesCodes: 'HE',
+      endUseCode: 'SA',
+      comments: overlongComments,
+    })
+
+    render(
+      <MemoryRouter initialEntries={[`/provincial/application/create?${query.toString()}`]}>
+        <Routes>
+          <Route
+            path="/provincial/application/create"
+            element={<ProvincialApplicationCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const ownerName = await screen.findByRole('combobox', { name: 'Contact name' })
+    await waitFor(() => expect(ownerName).toHaveValue('Owner Contact'))
+    fireEvent.change(ownerName, { target: { value: 'Café' } })
+
+    const submitButton = screen.getByRole('button', { name: 'Save' })
+    await waitFor(() => expect(submitButton).toBeEnabled())
+    await userEvent.click(submitButton)
+
+    expect(
+      await screen.findAllByText('Owner name must contain ASCII characters only.'),
+    ).not.toHaveLength(0)
+    await selectApplicationCreateTab('Items')
+    expect(
+      screen.getByText('Location of logs must be 250 characters or fewer.'),
+    ).toBeInTheDocument()
+    await selectApplicationCreateTab('Remarks')
+    expect(screen.getByText('Comments must be 254 characters or fewer.')).toBeInTheDocument()
+    expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
+
+    await selectApplicationCreateTab('Owner')
+    fireEvent.change(screen.getByRole('combobox', { name: 'Contact name' }), {
+      target: { value: 'O'.repeat(120) },
+    })
+    await selectApplicationCreateTab('Items')
+    fireEvent.change(screen.getByRole('textbox', { name: 'Location of logs' }), {
+      target: { value: 'L'.repeat(250) },
+    })
+    await selectApplicationCreateTab('Remarks')
+    fireEvent.change(screen.getByRole('textbox', { name: 'Comments' }), {
+      target: { value: 'R'.repeat(254) },
+    })
+    await userEvent.click(submitButton)
+
+    await waitFor(() =>
+      expect(mockedSubmitProvincialApplicationCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ownerContactName: 'O'.repeat(120),
+          productLocation: 'L'.repeat(250),
+          comments: 'R'.repeat(254),
+        }),
+      ),
+    )
+  }, 20_000)
+
   it('ignores forged agent prefill when applicant type changes are not authorized', async () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
@@ -1563,6 +1722,27 @@ describe('Create Page Core Flows', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/provincial/exemption/EX-901')
   }, 20_000)
 
+  it('canonicalizes a padded application number before exemption preview', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/create']}>
+        <Routes>
+          <Route path="/provincial/exemption/create" element={<ProvincialExemptionCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const applicationNumber = await screen.findByRole('combobox', {
+      name: 'Application number (optional)',
+    })
+    fireEvent.change(applicationNumber, { target: { value: '0000046275' } })
+    await userEvent.click(screen.getByRole('button', { name: 'Add application' }))
+
+    await waitFor(() =>
+      expect(mockedFetchProvincialExemptionCreatePreview).toHaveBeenCalledWith(['46275']),
+    )
+    expect(screen.getByRole('list', { name: 'Selected applications' })).toHaveTextContent('46275')
+  })
+
   it('submits a standalone Ministerial exemption without an application', async () => {
     mockedSubmitProvincialExemptionCreate.mockResolvedValue(successfulCreate('EX-900'))
 
@@ -1626,6 +1806,32 @@ describe('Create Page Core Flows', () => {
       screen.getByRole('combobox', { name: 'Application number (optional)' }),
     ).toBeInTheDocument()
     expect(screen.getByLabelText('Enable fee rate override')).toBeInTheDocument()
+  })
+
+  it('rejects exemption text that Oracle cannot store', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/create']}>
+        <Routes>
+          <Route path="/provincial/exemption/create" element={<ProvincialExemptionCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await chooseComboBoxOption(
+      await screen.findByRole('combobox', { name: 'Exemption type' }),
+      'Order in Council',
+    )
+    await userEvent.type(screen.getByLabelText('Exemption number'), 'OIC-é')
+    await userEvent.type(screen.getByLabelText('Other conditions'), 'Résumé')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(
+      (await screen.findAllByText('Exemption number must contain ASCII characters only.')).length,
+    ).toBeGreaterThanOrEqual(1)
+    expect(
+      (await screen.findAllByText('Other conditions must contain ASCII characters only.')).length,
+    ).toBeGreaterThanOrEqual(1)
+    expect(mockedSubmitProvincialExemptionCreate).not.toHaveBeenCalled()
   })
 
   it('submits standalone Blanket OIC fields and hides regular applications', async () => {
@@ -2237,6 +2443,30 @@ describe('Create Page Core Flows', () => {
       expect(mockedFetchOfferPackageList).toHaveBeenCalledTimes(1)
       expect(mockedFetchOfferApplicationVolume).toHaveBeenCalledTimes(1)
     })
+  })
+
+  it('rejects malformed offer application numbers before remote lookup', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/offers/create']}>
+        <Routes>
+          <Route path="/provincial/offers/create" element={<ProvincialOfferCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { level: 1, name: 'Create provincial offer' })
+    mockedValidateOfferApplication.mockClear()
+    fireEvent.change(screen.getByLabelText('Application number'), {
+      target: { value: '1e3' },
+    })
+    await userEvent.click(screen.getByRole('button', { name: 'Save new offer' }))
+
+    expect(
+      screen.getAllByText('Application number must be a positive whole number.'),
+    ).not.toHaveLength(0)
+    await new Promise((resolve) => window.setTimeout(resolve, 350))
+    expect(mockedValidateOfferApplication).not.toHaveBeenCalled()
+    expect(mockedSubmitProvincialOfferCreate).not.toHaveBeenCalled()
   })
 
   it('blocks offers against a federal application before loading offer details', async () => {

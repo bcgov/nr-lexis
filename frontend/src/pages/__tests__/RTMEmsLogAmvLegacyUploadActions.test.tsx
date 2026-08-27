@@ -992,6 +992,65 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     expect(screen.getByText('Values saved')).toBeVisible()
   })
 
+  it('blocks malformed or out-of-range review values without misreading commas', async () => {
+    mockedPreviewUpload.mockResolvedValue({
+      status: 'accepted',
+      fileName: 'Filename.xlsx',
+      fileSize: 3,
+      message: 'Spreadsheet is valid.',
+      rowCount: 1,
+      retrievalDate: '2026-08-01',
+      updateDate: '2026-09-01',
+      errors: [],
+      warnings: [],
+      rows: [
+        {
+          species: 'BA',
+          grade: 'D',
+          growthIndicator: 'O',
+          retrievalDate: '2026-08-01',
+          updateDate: '2026-09-01',
+          currentValue: 75.29,
+          newValue: 78.14,
+          returnCode: '0',
+        },
+      ],
+    })
+    await renderUploadPage()
+    const workbook = new File([new Uint8Array([1, 2, 3])], 'Filename.xlsx', {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    })
+    await userEvent.upload(
+      screen.getByLabelText('Average monthly values upload spreadsheet'),
+      workbook,
+    )
+    const valueInput = await screen.findByLabelText('Balsam grade D September 2026 value')
+    const saveButton = screen.getByRole('button', { name: 'Save values' })
+
+    for (const invalidValue of ['1,2', 'abc', '-1', '12.345', '9,999.999', '10000', '00000']) {
+      await userEvent.clear(valueInput)
+      await userEvent.type(valueInput, invalidValue)
+      expect(valueInput).toHaveAttribute('aria-invalid', 'true')
+      expect(
+        screen.getByText('Enter a number from 0 to 9999.99 with no more than two decimal places.'),
+      ).toBeVisible()
+      expect(saveButton).toBeDisabled()
+    }
+
+    await userEvent.clear(valueInput)
+    await userEvent.type(valueInput, '9,999.99')
+    expect(valueInput).not.toHaveAttribute('aria-invalid')
+    expect(saveButton).toBeEnabled()
+    await userEvent.click(saveButton)
+
+    await waitFor(() => expect(mockedSaveBatch).toHaveBeenCalledTimes(1))
+    expect(mockedSaveBatch.mock.calls[0][0].values).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ species: 'BA', grade: 'D', newValue: 9999.99 }),
+      ]),
+    )
+  })
+
   it('shows a clean editable review and confirms before discarding or removing it', async () => {
     mockedPreviewUpload.mockResolvedValue({
       status: 'accepted',

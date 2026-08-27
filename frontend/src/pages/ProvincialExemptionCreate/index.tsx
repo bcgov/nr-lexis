@@ -28,7 +28,9 @@ import {
   getVisibleFieldError,
   isoDateFieldError,
   maxNumericValueFieldError,
+  normalizeProvincialApplicationNumber,
   positiveNumericFieldError,
+  provincialApplicationNumberFieldError,
   requiredFieldError,
   type FieldErrors,
   type TouchedFields,
@@ -86,6 +88,7 @@ const INITIAL_FORM: ProvincialExemptionCreateForm = {
 
 const BLANKET_OIC_MAX_VOLUME = '9999999.9'
 const OIC_TYPES = new Set(['O', 'B'])
+const ASCII_PATTERN = /^[\u0000-\u007f]*$/
 
 const utf8ByteLength = (value: string): number => new TextEncoder().encode(value).length
 
@@ -223,7 +226,7 @@ const ProvincialExemptionCreatePage = () => {
       Array.from(
         new Set(
           (prefillState?.selectedApplicationNumbers ?? [])
-            .map((value) => value.trim())
+            .map(normalizeProvincialApplicationNumber)
             .filter((value) => value.length > 0),
         ),
       ),
@@ -379,9 +382,9 @@ const ProvincialExemptionCreatePage = () => {
     () => ({
       applicationNumber:
         firstValidationError(
-          () => positiveNumericFieldError(form.applicationNumber),
+          () => provincialApplicationNumberFieldError(form.applicationNumber),
           () => {
-            const applicationNumber = form.applicationNumber.trim()
+            const applicationNumber = normalizeProvincialApplicationNumber(form.applicationNumber)
             return applicationNumber && selectedApplicationNumbers.includes(applicationNumber)
               ? `Application ${applicationNumber} is already selected.`
               : null
@@ -394,6 +397,10 @@ const ProvincialExemptionCreatePage = () => {
               utf8ByteLength(form.exemptionNumber.trim()) > 8
                 ? 'Exemption number must be 8 UTF-8 bytes or fewer.'
                 : null,
+            () =>
+              ASCII_PATTERN.test(form.exemptionNumber.trim())
+                ? null
+                : 'Exemption number must contain ASCII characters only.',
           ) ?? undefined)
         : undefined,
       exemptionTypeCode: firstValidationError(
@@ -448,6 +455,17 @@ const ProvincialExemptionCreatePage = () => {
               )
             ? 'Select valid regions for a Blanket OIC exemption.'
             : undefined,
+      otherConditions:
+        firstValidationError(
+          () =>
+            ASCII_PATTERN.test(form.otherConditions.trim())
+              ? null
+              : 'Other conditions must contain ASCII characters only.',
+          () =>
+            form.otherConditions.length <= 250
+              ? null
+              : 'Other conditions must contain at most 250 characters.',
+        ) ?? undefined,
     }),
     [
       availableExemptionTypes,
@@ -520,7 +538,7 @@ const ProvincialExemptionCreatePage = () => {
   }
 
   const onAddApplication = (): void => {
-    const applicationNumber = form.applicationNumber.trim()
+    const applicationNumber = normalizeProvincialApplicationNumber(form.applicationNumber)
     if (!applicationNumber || fieldErrors.applicationNumber) {
       markFieldTouched('applicationNumber')
       return
@@ -940,6 +958,9 @@ const ProvincialExemptionCreatePage = () => {
                 labelText="Other conditions"
                 maxLength={250}
                 value={form.otherConditions}
+                invalid={!!fieldError('otherConditions')}
+                invalidText={fieldError('otherConditions')}
+                onBlur={() => markFieldTouched('otherConditions')}
                 onChange={(event) => {
                   markFormEdited()
                   setForm((current) => ({ ...current, otherConditions: event.target.value }))
