@@ -228,6 +228,40 @@ class RtmEmsLogAmvUploadPreviewAnalyzerTest {
   }
 
   @Test
+  void shouldRejectMissingCellReferenceInsteadOfDroppingTheValue() throws IOException {
+    Map<String, byte[]> entries = validScreenWorkbookEntries();
+    entries.put(
+        "xl/worksheets/sheet1.xml",
+        textEntry(entries, "xl/worksheets/sheet1.xml")
+            .replace("<c r=\"B4\"><v>10.25</v></c>", "<c><v>10.25</v></c>")
+            .getBytes(StandardCharsets.UTF_8));
+
+    assertThatThrownBy(
+            () ->
+                RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
+                    new ByteArrayInputStream(workbook(entries)), LocalDate.of(2026, 7, 1)))
+        .isInstanceOf(IOException.class)
+        .hasMessageContaining("invalid cell reference");
+  }
+
+  @Test
+  void shouldRejectMissingRowReferenceInsteadOfDroppingTheRow() throws IOException {
+    Map<String, byte[]> entries = validScreenWorkbookEntries();
+    entries.put(
+        "xl/worksheets/sheet1.xml",
+        textEntry(entries, "xl/worksheets/sheet1.xml")
+            .replace("<row r=\"4\">", "<row>")
+            .getBytes(StandardCharsets.UTF_8));
+
+    assertThatThrownBy(
+            () ->
+                RtmEmsLogAmvUploadPreviewAnalyzer.parseForUpload(
+                    new ByteArrayInputStream(workbook(entries)), LocalDate.of(2026, 7, 1)))
+        .isInstanceOf(IOException.class)
+        .hasMessageContaining("invalid row reference");
+  }
+
+  @Test
   void shouldRejectFormulaCellInsteadOfTrustingItsCachedValue() throws IOException {
     for (String formulaCell :
         List.of(

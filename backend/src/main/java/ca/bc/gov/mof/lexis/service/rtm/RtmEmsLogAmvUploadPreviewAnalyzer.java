@@ -1321,6 +1321,9 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
               throw new IOException("The XLSX worksheet contains an oversized row reference.");
             }
             rowNumber = parseIntSafe(rowReference);
+            if (rowNumber <= 0) {
+              throw new IOException("The XLSX worksheet contains an invalid row reference.");
+            }
             cells = new ArrayList<>();
           } else if (cells != null && "c".equals(elementName)) {
             if (cells.size() >= MAX_CELLS_PER_ROW || totalCells >= MAX_TOTAL_CELLS) {
@@ -1332,6 +1335,10 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
               throw new IOException("The XLSX worksheet contains an oversized cell reference.");
             }
             cellColumn = columnIndexFromCellReference(cellReference);
+            if (cellColumn <= 0
+                || rowIndexFromCellReference(cellReference) != rowNumber) {
+              throw new IOException("The XLSX worksheet contains an invalid cell reference.");
+            }
             cellType = attribute(reader, "t");
             cellValue = new StringBuilder();
             cellFormula = false;
@@ -1516,6 +1523,27 @@ final class RtmEmsLogAmvUploadPreviewAnalyzer {
     }
 
     return column.isEmpty() ? -1 : columnIndex(column.toString());
+  }
+
+  private static int rowIndexFromCellReference(String cellReference) {
+    if (cellReference == null || cellReference.isBlank()) {
+      return -1;
+    }
+
+    int rowStart = 0;
+    while (rowStart < cellReference.length()
+        && Character.isLetter(cellReference.charAt(rowStart))) {
+      rowStart++;
+    }
+    if (rowStart == 0 || rowStart == cellReference.length()) {
+      return -1;
+    }
+    for (int index = rowStart; index < cellReference.length(); index++) {
+      if (!Character.isDigit(cellReference.charAt(index))) {
+        return -1;
+      }
+    }
+    return parseIntSafe(cellReference.substring(rowStart));
   }
 
   private static String columnToLetter(int index) {
