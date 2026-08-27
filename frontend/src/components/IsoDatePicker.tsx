@@ -8,7 +8,9 @@ export const parseIsoDate = (value: string): Date | false => {
   if (!value.trim() || !isValidIsoDate(value)) return false
 
   const [year, month, day] = value.split('-').map(Number)
-  return new Date(year, month - 1, day)
+  const parsedDate = new Date(year, month - 1, day)
+  if (year < 100) parsedDate.setFullYear(year)
+  return parsedDate
 }
 
 export type IsoDatePickerProps = {

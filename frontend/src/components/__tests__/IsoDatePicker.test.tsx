@@ -10,6 +10,14 @@ describe('IsoDatePicker', () => {
     expect(parseIsoDate('2024-02-29')).toEqual(new Date(2024, 1, 29))
   })
 
+  it('preserves four-digit years below 100', () => {
+    const parsedDate = parseIsoDate('0099-01-01')
+
+    expect(parsedDate).not.toBe(false)
+    if (parsedDate === false) throw new Error('Expected a valid date')
+    expect(parsedDate.getFullYear()).toBe(99)
+  })
+
   it('marks the editable date input for password manager ignore', () => {
     render(
       <IsoDatePicker
