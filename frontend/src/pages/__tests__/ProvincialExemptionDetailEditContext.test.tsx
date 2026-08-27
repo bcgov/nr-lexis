@@ -312,6 +312,41 @@ describe('Provincial exemption edit context', () => {
     )
   })
 
+  it('rejects impossible dates instead of silently preserving stored values', async () => {
+    vi.mocked(fetchProvincialExemptionDetail).mockResolvedValue({
+      ...exemptionDetail,
+      exemptionStatusCode: 'NEW',
+      exemptionStatusDescription: 'New',
+    })
+    vi.mocked(fetchExemptionEditContext).mockResolvedValue({
+      rateOverrideEnabled: false,
+      fixedFeeRate: '',
+      regionNumbers: ['1903', '1904'],
+      locked: false,
+      lockMessage: '',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/BOIC-205']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit exemption' }))
+    fireEvent.change(screen.getByLabelText('Approval date'), {
+      target: { value: '2026-02-31' },
+    })
+
+    expect(screen.getByRole('button', { name: 'Save exemption' })).toBeDisabled()
+    expect(screen.getAllByText('Approval date is required.').length).toBeGreaterThan(0)
+    expect(vi.mocked(updateExemption)).not.toHaveBeenCalled()
+  })
+
   it('rejects exemption conditions that Oracle cannot store', async () => {
     vi.mocked(fetchExemptionEditContext).mockResolvedValue({
       rateOverrideEnabled: false,

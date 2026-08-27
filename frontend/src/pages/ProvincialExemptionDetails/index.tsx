@@ -76,6 +76,7 @@ import RegionMultiSelect from '@/components/RegionMultiSelect'
 import PendingIcon from '@/components/PendingIcon'
 import { clientLocationLabel, isAgentApplicant } from '@/pages/shared/application-form-utils'
 import {
+  isoDateFieldError,
   normalizeProvincialApplicationNumber,
   provincialApplicationNumberFieldError,
 } from '@/pages/shared/create-form-utils'
@@ -897,6 +898,15 @@ const ProvincialExemptionDetailsPage = () => {
       editForm.exemptionStatusCode.trim().toUpperCase() !== 'NEW'
     ) {
       return 'Select New to reopen this cancelled exemption.'
+    }
+    if ((currentTypeCode === 'O' || currentTypeCode === 'B') && !editForm.approvalDate.trim()) {
+      return 'Approval date is required.'
+    }
+    if (isoDateFieldError(editForm.approvalDate)) {
+      return 'Approval date must be YYYY-MM-DD.'
+    }
+    if (isoDateFieldError(editForm.expiryDate)) {
+      return 'Expiry date must be YYYY-MM-DD.'
     }
     const approvedVolume = Number(editForm.approvedVolume)
     if (
@@ -1783,6 +1793,16 @@ const ProvincialExemptionDetailsPage = () => {
                                 id="exemptionDetailApprovalDate"
                                 labelText="Approval date"
                                 value={editForm.approvalDate}
+                                invalid={
+                                  ((currentTypeCode === 'O' || currentTypeCode === 'B') &&
+                                    !editForm.approvalDate.trim()) ||
+                                  !!isoDateFieldError(editForm.approvalDate)
+                                }
+                                invalidText={
+                                  !editForm.approvalDate.trim()
+                                    ? 'Approval date is required.'
+                                    : 'Approval date must be YYYY-MM-DD.'
+                                }
                                 disabled={!canEditApprovalDate}
                                 onChange={(value) =>
                                   setEditForm((current) =>
@@ -1794,6 +1814,15 @@ const ProvincialExemptionDetailsPage = () => {
                                 id="exemptionDetailExpiryDate"
                                 labelText="Expiry date"
                                 value={editForm.expiryDate}
+                                invalid={
+                                  !editForm.expiryDate.trim() ||
+                                  !!isoDateFieldError(editForm.expiryDate)
+                                }
+                                invalidText={
+                                  !editForm.expiryDate.trim()
+                                    ? 'Expiry date is required.'
+                                    : 'Expiry date must be YYYY-MM-DD.'
+                                }
                                 disabled={!canEditExpiryDate}
                                 onChange={(value) =>
                                   setEditForm((current) =>
