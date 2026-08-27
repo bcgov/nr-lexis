@@ -2410,6 +2410,41 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.getAllByText('Active').length).toBeGreaterThan(0)
   })
 
+  it('submits the confirmed full owner client number when editing a permit', async () => {
+    configureActivePermit()
+    mockedFetchApplicationClientData.mockImplementation(
+      async (clientNumber, clientLocationCode) => ({
+        clientNumber: clientNumber === '67890' ? '00067890' : clientNumber,
+        companyName: 'Owner Co',
+        address: '1 Owner St',
+        city: 'Victoria',
+        province: 'BC',
+        postalCode: 'V8V 1A1',
+        country: 'Canada',
+        phone: '2505551111',
+        fax: '',
+        email: 'owner@example.test',
+        notfound: clientLocationCode ? '' : 'true',
+      }),
+    )
+    renderPermitDetails()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    const ownerClientNumber = screen.getByLabelText('Owner client number')
+    await userEvent.clear(ownerClientNumber)
+    await userEvent.type(ownerClientNumber, '67890')
+    await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
+
+    await waitFor(() => {
+      expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('67890', '03', {
+        permitNumber: '777',
+      })
+      expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
+        expect.objectContaining({ ownerClientNumber: '00067890' }),
+      )
+    })
+  })
+
   it('allows an approver to expire a permit like legacy', async () => {
     configureActivePermit()
     renderPermitDetails()

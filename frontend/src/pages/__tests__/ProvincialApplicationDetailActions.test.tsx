@@ -423,6 +423,56 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(screen.getByText('Owner client details saved.')).toBeInTheDocument()
   })
 
+  it('submits the confirmed full owner client number when editing an application', async () => {
+    mockedFetchApplicationClientData.mockImplementation(async (clientNumber) => ({
+      clientNumber: clientNumber === '2176' ? '00002176' : clientNumber,
+      companyName: 'Owner Forestry Ltd.',
+      address: '22 Owner Road',
+      city: 'Victoria',
+      province: 'BC',
+      postalCode: 'V8V 1A1',
+      country: 'Canada',
+      phone: '250-555-0101',
+      fax: '',
+      email: 'owner@example.test',
+      notfound: '',
+    }))
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { level: 1, name: 'Application 321' })
+    const ownerControls = within(getOwnerClientDetailsTile())
+    await userEvent.click(ownerControls.getByRole('button', { name: 'Edit owner client details' }))
+    const ownerClientNumber = ownerControls.getByLabelText('Client number')
+    await userEvent.clear(ownerClientNumber)
+    await userEvent.type(ownerClientNumber, '2176')
+
+    await waitFor(() => expect(ownerClientNumber).toHaveValue('00002176'))
+    expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('2176', '00', {
+      applicationNumber: '321',
+    })
+
+    await userEvent.click(ownerControls.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() => {
+      expect(mockedUpdateApplicationSummary).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ownerClientNumber: '00002176',
+          ownerClientLocationCode: '00',
+        }),
+      )
+    })
+  })
+
   it('cancels owner client edits without changing the persisted summary', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
@@ -1143,6 +1193,33 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     })
     expect(await screen.findByText('The application was saved successfully.')).toBeInTheDocument()
   }, 30000)
+
+  it('shows the backend agent location error when an application edit is rejected', async () => {
+    mockedUpdateApplicationSummary.mockResolvedValueOnce({
+      valid: false,
+      message: '',
+      applicationNumber: '321',
+      errors: ['Application agent location does not exist.'],
+      warnings: [],
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationSummaryTile()
+    await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
+
+    expect(await screen.findByText('Action failed')).toBeVisible()
+    expect(screen.getByText('Application agent location does not exist.')).toBeVisible()
+  })
 
   it('hides and clears stale agent fields when editing an owner application summary', async () => {
     const ownerApplicationDetail: ProvincialApplicationDetail = {

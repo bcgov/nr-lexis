@@ -137,6 +137,7 @@ type CreatedOfferNavigation = {
 
 type ScopedOfferClientContext = {
   clientNumber: string
+  confirmedClientNumber: string
   companyName: string
   errorMessage: string
 }
@@ -244,6 +245,7 @@ const ProvincialOfferCreatePage = () => {
   const [showAllValidationErrors, setShowAllValidationErrors] = useState(false)
   const [scopedClientContext, setScopedClientContext] = useState<ScopedOfferClientContext>({
     clientNumber: '',
+    confirmedClientNumber: '',
     companyName: '',
     errorMessage: '',
   })
@@ -255,12 +257,14 @@ const ProvincialOfferCreatePage = () => {
     hasProvincialSubmitterRole(capabilities.roles) &&
     Boolean(capabilities.forestClientNumber?.trim())
   const authoritativeOfferingClientNumber = capabilities.forestClientNumber?.trim() ?? ''
-  const effectiveOfferingClientNumber = isScopedProvincialSubmitter
-    ? authoritativeOfferingClientNumber
-    : ''
   const scopedClientContextIsCurrent =
     isScopedProvincialSubmitter &&
     scopedClientContext.clientNumber === authoritativeOfferingClientNumber
+  const effectiveOfferingClientNumber = isScopedProvincialSubmitter
+    ? scopedClientContextIsCurrent
+      ? scopedClientContext.confirmedClientNumber || authoritativeOfferingClientNumber
+      : authoritativeOfferingClientNumber
+    : ''
   const effectiveCompanyName = isScopedProvincialSubmitter
     ? scopedClientContextIsCurrent
       ? scopedClientContext.companyName
@@ -323,6 +327,7 @@ const ProvincialOfferCreatePage = () => {
         }
         setScopedClientContext({
           clientNumber: requestedClientNumber,
+          confirmedClientNumber: clientData?.clientNumber.trim() ?? '',
           companyName: clientData?.companyName ?? '',
           errorMessage: clientData
             ? ''
@@ -336,6 +341,7 @@ const ProvincialOfferCreatePage = () => {
         console.error(error)
         setScopedClientContext({
           clientNumber: requestedClientNumber,
+          confirmedClientNumber: '',
           companyName: '',
           errorMessage:
             'The offering company could not be loaded from the authenticated forest client.',

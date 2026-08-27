@@ -1745,15 +1745,7 @@ const ProvincialPermitDetailsPage = () => {
       ) {
         return false
       }
-
-      if (hasPermitValidationError || (includeShipping && hasShippingValidationError)) {
-        setShowPermitValidationErrors(true)
-        setActionErrorMessage(
-          Object.values(permitFieldErrors).find((error): error is string => !!error) ??
-            'Please fix validation errors before saving the permit.',
-        )
-        return false
-      }
+      let confirmedRequest: PermitDetailMutationRequest = request
 
       const isLatestRequest = tryBeginPermitMutation()
       if (!isLatestRequest) {
@@ -1764,7 +1756,65 @@ const ProvincialPermitDetailsPage = () => {
       setActionInfoMessage('')
       setIsSavingPermit(true)
       try {
-        const result = await updatePermitDetail(permitMutationRequest(request, detail.blanketOic))
+        const resolvedPermitNumber = String(detail.permitNumber ?? permitNumber ?? '').trim()
+        const confirmClientNumber = async (
+          clientNumber: string,
+          clientLocationCode: string,
+        ): Promise<string> => {
+          const normalizedClientNumber = clientNumber.trim()
+          if (
+            !/^\d{1,7}$/.test(normalizedClientNumber) ||
+            !clientLocationCode.trim() ||
+            !resolvedPermitNumber
+          ) {
+            return normalizedClientNumber
+          }
+
+          const clientData = await fetchApplicationClientData(
+            normalizedClientNumber,
+            clientLocationCode,
+            { permitNumber: resolvedPermitNumber },
+          )
+          return clientData?.clientNumber.trim() || normalizedClientNumber
+        }
+        const originalOwnerClientNumber = confirmedRequest.ownerClientNumber
+        const originalOwnerClientLocation = confirmedRequest.ownerClientLocation
+        const originalAgentClientNumber = confirmedRequest.agentClientNumber
+        const originalAgentClientLocation = confirmedRequest.agentClientLocation
+        const [ownerClientNumber, agentClientNumber] = await Promise.all([
+          confirmClientNumber(originalOwnerClientNumber, originalOwnerClientLocation),
+          confirmClientNumber(originalAgentClientNumber, originalAgentClientLocation),
+        ])
+        confirmedRequest = { ...confirmedRequest, ownerClientNumber, agentClientNumber }
+        setPermitForm((current) => {
+          if (
+            !current ||
+            current.ownerClientNumber !== originalOwnerClientNumber ||
+            current.ownerClientLocation !== originalOwnerClientLocation ||
+            current.agentClientNumber !== originalAgentClientNumber ||
+            current.agentClientLocation !== originalAgentClientLocation
+          ) {
+            return current
+          }
+
+          return current.ownerClientNumber === ownerClientNumber &&
+            current.agentClientNumber === agentClientNumber
+            ? current
+            : { ...current, ownerClientNumber, agentClientNumber }
+        })
+
+        if (hasPermitValidationError || (includeShipping && hasShippingValidationError)) {
+          setShowPermitValidationErrors(true)
+          setActionErrorMessage(
+            Object.values(permitFieldErrors).find((error): error is string => !!error) ??
+              'Please fix validation errors before saving the permit.',
+          )
+          return false
+        }
+
+        const result = await updatePermitDetail(
+          permitMutationRequest(confirmedRequest, detail.blanketOic),
+        )
         if (!isLatestRequest()) {
           return false
         }
@@ -1775,13 +1825,13 @@ const ProvincialPermitDetailsPage = () => {
 
         const detailWithPermitChanges = withUpdatedPermitDetail(
           detail,
-          request,
+          confirmedRequest,
           editablePermitStatusOptions,
           editablePermitRegionOptions,
         )
         const updatedDetail = withPermitMutationResult(
           includeShipping
-            ? withUpdatedPermitShipping(detailWithPermitChanges, request)
+            ? withUpdatedPermitShipping(detailWithPermitChanges, confirmedRequest)
             : detailWithPermitChanges,
           result,
         )
@@ -1789,13 +1839,13 @@ const ProvincialPermitDetailsPage = () => {
           if (!current) return current
           const currentWithPermitChanges = withUpdatedPermitDetail(
             current,
-            request,
+            confirmedRequest,
             editablePermitStatusOptions,
             editablePermitRegionOptions,
           )
           return withPermitMutationResult(
             includeShipping
-              ? withUpdatedPermitShipping(currentWithPermitChanges, request)
+              ? withUpdatedPermitShipping(currentWithPermitChanges, confirmedRequest)
               : currentWithPermitChanges,
             result,
           )
@@ -1850,6 +1900,7 @@ const ProvincialPermitDetailsPage = () => {
       requiredPermitOptionsMissing,
       permitFieldErrors,
       permitForm,
+      permitNumber,
       tryBeginPermitMutation,
     ],
   )
