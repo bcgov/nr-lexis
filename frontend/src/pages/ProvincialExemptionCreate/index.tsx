@@ -737,6 +737,9 @@ const ProvincialExemptionCreatePage = () => {
       )}
 
       <Column sm={4} md={8} lg={16}>
+        {/* INTENTIONAL_LEGACY_DIVERGENCE(EXEMPTION_CREATE_SAVE_FIRST): Owner data is
+            derived from linked applications, while documents, permits, and fees require
+            the persisted exemption created by this form. */}
         <Tile className="create-form-tile">
           {status?.placement === 'inline' && (
             <InlineNotification

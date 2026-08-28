@@ -1651,6 +1651,10 @@ $notification-types: 'error', 'info', 'success', 'warning';
   min-inline-size: 0;
 }
 
+.provincial-application-search-grid > .region-multi-select {
+  grid-column: span 2;
+}
+
 .federal-application-lock {
   display: inline-flex;
   align-items: center;
@@ -5510,6 +5514,10 @@ $notification-types: 'error', 'info', 'success', 'warning';
   .provincial-permit-search-grid,
   .federal-application-search-grid {
     grid-template-columns: 1fr;
+  }
+
+  .provincial-application-search-grid > .region-multi-select {
+    grid-column: auto;
   }
 
   .provincial-review-search-grid {
