@@ -45,6 +45,13 @@ describe('offer storage validation', () => {
     expect(offerVolumeContextFieldError('95.1', null)).toBeNull()
   })
 
+  it('compares against the context volume rounded half up to one decimal', () => {
+    expect(offerVolumeContextFieldError('95.6', '95.55')).toBeNull()
+    expect(offerVolumeContextFieldError('95.7', '95.55')).toBe(
+      'Offer volume cannot exceed the application/package volume.',
+    )
+  })
+
   it('enforces US7ASCII and Oracle byte lengths for offer text', () => {
     expect(
       offerTextStorageFieldError(
