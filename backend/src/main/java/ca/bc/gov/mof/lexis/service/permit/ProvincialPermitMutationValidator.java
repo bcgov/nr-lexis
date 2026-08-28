@@ -9,6 +9,7 @@ import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitMutationR
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
 import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -381,11 +382,9 @@ final class ProvincialPermitMutationValidator {
     if (value == null) {
       return;
     }
-    if (value > maximum) {
-      errors.add(description + " must not exceed 9999999.99.");
-    }
-    if (BigDecimal.valueOf(value).stripTrailingZeros().scale() > 2) {
-      errors.add(description + " must have no more than two decimal places.");
+    BigDecimal rounded = BigDecimal.valueOf(value).setScale(2, RoundingMode.HALF_UP);
+    if (rounded.compareTo(BigDecimal.valueOf(maximum)) > 0) {
+      errors.add(description + " must round to 9999999.99 or less.");
     }
   }
 

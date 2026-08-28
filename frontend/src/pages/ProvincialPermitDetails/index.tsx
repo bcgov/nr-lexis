@@ -61,7 +61,6 @@ import {
   withDetailReturnTo,
 } from '@/pages/shared/detail-navigation'
 import {
-  atMostTwoDecimalFieldError,
   firstValidationError,
   getVisibleFieldError,
   integerFieldError,
@@ -72,6 +71,7 @@ import {
   positiveNumericFieldError,
   requiredFieldError,
   requiredMaxLengthFieldError,
+  roundedNumericMaximumFieldError,
   type FieldErrors,
   type TouchedFields,
 } from '@/pages/shared/create-form-utils'
@@ -2078,11 +2078,12 @@ const ProvincialPermitDetailsPage = () => {
       () => (feeOverrideForm.overrideEnabled ? positiveNumericFieldError(normalizedFee) : null),
       () =>
         feeOverrideForm.overrideEnabled
-          ? maxNumericValueFieldError(normalizedFee, MAX_PERMIT_OVERRIDE_FEE, 'Override fee')
-          : null,
-      () =>
-        feeOverrideForm.overrideEnabled
-          ? atMostTwoDecimalFieldError(normalizedFee, 'Override fee')
+          ? roundedNumericMaximumFieldError(
+              normalizedFee,
+              MAX_PERMIT_OVERRIDE_FEE,
+              2,
+              'Override fee',
+            )
           : null,
       () =>
         feeOverrideForm.overrideEnabled && !ASCII_PATTERN.test(normalizedComment)

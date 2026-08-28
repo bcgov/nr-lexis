@@ -121,6 +121,25 @@ export const maxNumericValueFieldError = (
     : `${label} must be ${maxValue} or less.`
 }
 
+export const roundedNumericMaximumFieldError = (
+  value: string,
+  maxValue: number,
+  decimalPlaces: number,
+  label = 'Value',
+): string | null => {
+  const match = /^(\d+)(?:\.(\d+))?$/.exec(value.trim())
+  if (!match) return null
+
+  const factor = 10n ** BigInt(decimalPlaces)
+  const fraction = (match[2] ?? '').padEnd(decimalPlaces + 1, '0')
+  let roundedValue = BigInt(match[1]) * factor
+  roundedValue += BigInt(fraction.slice(0, decimalPlaces) || '0')
+  if (fraction[decimalPlaces] >= '5') roundedValue += 1n
+
+  const maximumScaled = BigInt(maxValue.toFixed(decimalPlaces).replace('.', ''))
+  return roundedValue <= maximumScaled ? null : `${label} must round to ${maxValue} or less.`
+}
+
 export const atMostOneDecimalFieldError = (value: string, label = 'Value'): string | null => {
   if (!value.trim()) return null
   return /^\d+(\.\d)?$/.test(value.trim())

@@ -348,21 +348,29 @@ class ProvincialPermitMutationValidatorTest {
   }
 
   @Test
-  void shouldEnforceOraclePermitDecimalPrecisionAndRange() {
+  void shouldAllowOracleRoundingAndRejectRoundedPermitOverflow() {
+    var accepted =
+        validator.validate(
+            permit()
+                .permitVolume(9_999_999.994d)
+                .overrideFee(9_999_999.994d)
+                .build(),
+            ministerialExemption(LocalDate.of(2026, 7, 31)));
+
+    assertThat(accepted.errors()).isEmpty();
+
     var result =
         validator.validate(
             permit()
-                .permitVolume(10_000_000.123d)
-                .overrideFee(10_000_000.123d)
+                .permitVolume(9_999_999.995d)
+                .overrideFee(9_999_999.995d)
                 .build(),
             ministerialExemption(LocalDate.of(2026, 7, 31)));
 
     assertThat(result.errors())
         .containsExactlyInAnyOrder(
-            "Permit Volume must not exceed 9999999.99.",
-            "Permit Volume must have no more than two decimal places.",
-            "Override fee must not exceed 9999999.99.",
-            "Override fee must have no more than two decimal places.");
+            "Permit Volume must round to 9999999.99 or less.",
+            "Override fee must round to 9999999.99 or less.");
   }
 
   @Test
