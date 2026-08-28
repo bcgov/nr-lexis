@@ -2188,6 +2188,32 @@ class ApplicationSubmissionImportServiceTest {
   }
 
   @Test
+  void shouldValidateSanitizedNexcolVersion3Submission() throws Exception {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationDetailsService.validateApplication(any(CreateApplicationRequest.class)))
+        .thenReturn(new CreateApplicationResult(true, null, null, List.of(), List.of()));
+    String xml = sampleResourceText("pass-federal-nexcol-v3.xml");
+
+    ApplicationSubmissionImportResultDto result =
+        service()
+            .validateDedicatedFederalApplicationSubmission(
+                xml.getBytes(StandardCharsets.UTF_8),
+                "pass-federal-nexcol-v3.xml",
+                "NEXCOL-V3-TEST");
+
+    assertThat(result.status()).isEqualTo("validated");
+    assertThat(result.errors()).isEmpty();
+    assertThat(result.packageNumber()).isEqualTo("NEXCOL-V3-TEST-001");
+    ArgumentCaptor<CreateApplicationRequest> requestCaptor =
+        ArgumentCaptor.forClass(CreateApplicationRequest.class);
+    verify(applicationDetailsService).validateApplication(requestCaptor.capture());
+    assertThat(requestCaptor.getValue().productLocation())
+        .isEqualTo("Synthetic NEXCOL product location longer than fifty-six characters");
+    assertThat(requestCaptor.getValue().speciesCodes()).containsExactly("ZZ");
+    assertThat(requestCaptor.getValue().endUseCode()).isEqualTo("XY");
+  }
+
+  @Test
   void shouldRejectUnsupportedLexisSchemaVersion() {
     ApplicationSubmissionImportService service = service();
     String xml =
@@ -2204,8 +2230,9 @@ class ApplicationSubmissionImportServiceTest {
     assertThat(result.status()).isEqualTo("rejected");
     assertThat(result.errors())
         .contains(
-            "The XML schema location must use supported LEXIS schema version "
-                + "http://www.for.gov.bc.ca/schema/lexis/2/xsd/MOF/mof-lexis.xsd.");
+            "The XML schema location must use a supported LEXIS schema version "
+                + "http://www.for.gov.bc.ca/schema/lexis/2/xsd/MOF/mof-lexis.xsd or "
+                + "http://www.for.gov.bc.ca/schema/lexis/3/xsd/MOF/mof-lexis.xsd.");
   }
 
   @Test

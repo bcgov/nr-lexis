@@ -84,10 +84,16 @@ public class ApplicationSubmissionImportService {
   private static final String XML_SCHEMA_INSTANCE_NAMESPACE = XMLConstants.W3C_XML_SCHEMA_INSTANCE_NS_URI;
   private static final String EXPECTED_ESF_SCHEMA_LOCATION =
       "http://www.for.gov.bc.ca/schema/esf/1/xsd/MOF/esf-submission.xsd";
-  private static final String EXPECTED_LEXIS_SCHEMA_LOCATION =
+  private static final String LEXIS_SCHEMA_LOCATION_V2 =
       "http://www.for.gov.bc.ca/schema/lexis/2/xsd/MOF/mof-lexis.xsd";
-  private static final String LEGACY_LEXIS_SCHEMA_RESOURCE =
+  private static final String LEXIS_SCHEMA_LOCATION_V3 =
+      "http://www.for.gov.bc.ca/schema/lexis/3/xsd/MOF/mof-lexis.xsd";
+  private static final Set<String> SUPPORTED_LEXIS_SCHEMA_LOCATIONS =
+      Set.of(LEXIS_SCHEMA_LOCATION_V2, LEXIS_SCHEMA_LOCATION_V3);
+  private static final String LEXIS_SCHEMA_V2_RESOURCE =
       "/schemas/nexcol/mof-lexis.xsd";
+  private static final String LEXIS_SCHEMA_V3_RESOURCE =
+      "/schemas/nexcol/mof-lexis-v3.xsd";
   private static final String UPLOAD_TYPE = "applicationSubmission";
   private static final String ACCEPTED = "accepted";
   private static final String REJECTED = "rejected";
@@ -135,7 +141,8 @@ public class ApplicationSubmissionImportService {
       Pattern.compile("Element type \"([^\"]+)\" must be followed by either attribute specifications, \">\" or \"/>\"\\.");
   private static final Pattern INVALID_XML_ATTRIBUTE_CHARACTER_PATTERN =
       Pattern.compile("The value of attribute \"([^\"]+)\".* must not contain the '([^']+)' character\\.");
-  private static final Schema LEGACY_LEXIS_SCHEMA = loadLegacyLexisSchema();
+  private static final Schema LEXIS_SCHEMA_V2 = loadLexisSchema(LEXIS_SCHEMA_V2_RESOURCE);
+  private static final Schema LEXIS_SCHEMA_V3 = loadLexisSchema(LEXIS_SCHEMA_V3_RESOURCE);
 
   private static final Map<String, Long> ORG_UNIT_BY_REGION_CODE =
       Map.ofEntries(
@@ -1141,7 +1148,7 @@ public class ApplicationSubmissionImportService {
 
     String jurisdictionCode = upper(text(applicationDetail, "jurisdictionCode", "Jurisdiction code", errors));
     if (FEDERAL_JURISDICTION.equals(jurisdictionCode)) {
-      validateLegacyLexisSchema(lexisSubmission, errors);
+      validateLegacyLexisSchema(lexisSubmission, lexisSchemaFor(lexisSubmission), errors);
     }
     FederalSubmissionMetadata federalMetadata =
         federalSubmissionMetadata(applicationDetail, jurisdictionCode, errors);
@@ -1537,7 +1544,7 @@ public class ApplicationSubmissionImportService {
     root.setAttributeNS(
         XML_SCHEMA_INSTANCE_NAMESPACE,
         "xsi:schemaLocation",
-        LEXIS_NAMESPACE + " " + EXPECTED_LEXIS_SCHEMA_LOCATION);
+        LEXIS_NAMESPACE + " " + LEXIS_SCHEMA_LOCATION_V2);
     document.appendChild(root);
     return document;
   }
@@ -2004,12 +2011,24 @@ public class ApplicationSubmissionImportService {
           "ESF",
           errors);
     }
-    validateExpectedSchemaLocation(
-        schemaLocationsByNamespace,
-        LEXIS_NAMESPACE,
-        EXPECTED_LEXIS_SCHEMA_LOCATION,
-        "LEXIS",
-        errors);
+    validateSupportedLexisSchemaLocation(schemaLocationsByNamespace, errors);
+  }
+
+  private void validateSupportedLexisSchemaLocation(
+      Map<String, String> schemaLocationsByNamespace, List<String> errors) {
+    String actualSchemaLocation = schemaLocationsByNamespace.get(LEXIS_NAMESPACE);
+    if (actualSchemaLocation == null) {
+      errors.add("The XML schema location must include the LEXIS schema namespace.");
+      return;
+    }
+    if (!SUPPORTED_LEXIS_SCHEMA_LOCATIONS.contains(actualSchemaLocation)) {
+      errors.add(
+          "The XML schema location must use a supported LEXIS schema version "
+              + LEXIS_SCHEMA_LOCATION_V2
+              + " or "
+              + LEXIS_SCHEMA_LOCATION_V3
+              + ".");
+    }
   }
 
   private void validateExpectedSchemaLocation(
@@ -2093,11 +2112,11 @@ public class ApplicationSubmissionImportService {
     return "The submission is not a well-formed XML document. " + normalized;
   }
 
-  private static Schema loadLegacyLexisSchema() {
-    URL schemaResource = ApplicationSubmissionImportService.class.getResource(LEGACY_LEXIS_SCHEMA_RESOURCE);
+  private static Schema loadLexisSchema(String resourceName) {
+    URL schemaResource = ApplicationSubmissionImportService.class.getResource(resourceName);
     if (schemaResource == null) {
       throw new IllegalStateException(
-          "Legacy LEXIS schema resource is missing: " + LEGACY_LEXIS_SCHEMA_RESOURCE);
+          "Legacy LEXIS schema resource is missing: " + resourceName);
     }
     try {
       SchemaFactory factory = SchemaFactory.newInstance(XMLConstants.W3C_XML_SCHEMA_NS_URI);
@@ -2110,10 +2129,31 @@ public class ApplicationSubmissionImportService {
     }
   }
 
-  private void validateLegacyLexisSchema(Element lexisSubmission, List<String> errors) {
+  private Schema lexisSchemaFor(Element lexisSubmission) {
+    Node current = lexisSubmission;
+    while (current instanceof Element element) {
+      String schemaLocation =
+          trimToNull(element.getAttributeNS(XML_SCHEMA_INSTANCE_NAMESPACE, "schemaLocation"));
+      if (schemaLocation != null) {
+        String[] tokens = schemaLocation.split("\\s+");
+        for (int index = 0; index + 1 < tokens.length; index += 2) {
+          if (LEXIS_NAMESPACE.equals(tokens[index])) {
+            return LEXIS_SCHEMA_LOCATION_V3.equals(tokens[index + 1])
+                ? LEXIS_SCHEMA_V3
+                : LEXIS_SCHEMA_V2;
+          }
+        }
+      }
+      current = current.getParentNode();
+    }
+    return LEXIS_SCHEMA_V2;
+  }
+
+  private void validateLegacyLexisSchema(
+      Element lexisSubmission, Schema lexisSchema, List<String> errors) {
     List<String> schemaErrors = new ArrayList<>();
     try {
-      var validator = LEGACY_LEXIS_SCHEMA.newValidator();
+      var validator = lexisSchema.newValidator();
       validator.setProperty(XMLConstants.ACCESS_EXTERNAL_DTD, "");
       validator.setProperty(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "");
       validator.setErrorHandler(

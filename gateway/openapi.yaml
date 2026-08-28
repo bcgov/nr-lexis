@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: LEXIS NEXCOL Federal Submission API
-  version: 1.2.0
+  version: 1.3.0
   description: |
     Machine-to-machine API for prevalidating legacy submission fields and validating or
     submitting federal LEXIS XML through the API Services Gateway. All operations require
@@ -43,7 +43,8 @@ paths:
         The endpoint accepts the documented JSON object, a raw legacy `LogExportApplication`
         XML value, or the legacy Axis RPC value inside a SOAP 1.1 or SOAP 1.2 envelope. JSON
         property names may use lower camel case or the equivalent .NET PascalCase names. The
-        response uses the same JSON, raw XML, or SOAP family as the request.
+        response uses the same JSON, raw XML, or SOAP family as the request. Raw XML responses
+        preserve the request's lower-camel/`item` or .NET PascalCase/`string` naming style.
       operationId: prevalidateFederalSubmission
       requestBody:
         required: true
@@ -62,14 +63,16 @@ paths:
               format: xml
             example: |-
               <?xml version="1.0" encoding="UTF-8"?>
-              <LogExportApplication xmlns="http://beans.validation.lexis.ws.mof.gov.bc.ca">
-                <boomNumber>FED26-700123</boomNumber>
-                <clientNumber>00123456</clientNumber>
-                <locationCode>01</locationCode>
-                <timberMark>
-                  <item>TM001</item>
-                  <item>TM002</item>
-                </timberMark>
+              <LogExportApplication xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+                <BoomNumber>FED26-700123</BoomNumber>
+                <ClientNumber>00123456</ClientNumber>
+                <Errors/>
+                <LocationCode>01</LocationCode>
+                <TimberMark>
+                  <string>TM001</string>
+                  <string>TM002</string>
+                </TimberMark>
               </LogExportApplication>
           text/xml:
             schema:
@@ -124,12 +127,12 @@ paths:
                 format: xml
               example: |-
                 <?xml version="1.0" encoding="UTF-8"?>
-                <LogExportApplication xmlns="http://beans.validation.lexis.ws.mof.gov.bc.ca">
-                  <boomNumber>FED26-700123</boomNumber>
-                  <clientNumber>00123456</clientNumber>
-                  <errors><item>timberMark: TM002</item></errors>
-                  <locationCode>01</locationCode>
-                  <timberMark><item>TM001</item><item>TM002</item></timberMark>
+                <LogExportApplication xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+                  <BoomNumber>FED26-700123</BoomNumber>
+                  <ClientNumber>00123456</ClientNumber>
+                  <Errors><string>timberMark: TM002</string></Errors>
+                  <LocationCode>01</LocationCode>
+                  <TimberMark><string>TM001</string><string>TM002</string></TimberMark>
                 </LogExportApplication>
             text/xml:
               schema:
@@ -345,9 +348,9 @@ components:
     FederalSubmissionXml:
       required: true
       description: |
-        Legacy ESF submission envelope containing one LEXIS schema-version-2
+        Legacy ESF submission envelope containing one LEXIS schema-version-2 or schema-version-3
         `LexisSubmission`, or the inner `LexisSubmission` XML document.
-        LEXIS validates the inner submission against the legacy version-2 XSD before
+        LEXIS selects the matching bundled legacy XSD from `xsi:schemaLocation` before
         applying business and reference-data validation. Legacy federal standing-timber
         submissions omit the boom/package number and may omit average length and average diameter;
         their successful response has a null package number and zero scale rows. The example
@@ -362,7 +365,7 @@ components:
               name: ESFSubmission
           example: |
                 <?xml version="1.0" encoding="UTF-8"?>
-                <esf:ESFSubmission xmlns:lexis="http://www.for.gov.bc.ca/schema/lexis" xmlns:esf="http://www.for.gov.bc.ca/schema/esf" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.for.gov.bc.ca/schema/esf http://www.for.gov.bc.ca/schema/esf/1/xsd/MOF/esf-submission.xsd http://www.for.gov.bc.ca/schema/lexis http://www.for.gov.bc.ca/schema/lexis/2/xsd/MOF/mof-lexis.xsd">
+                <esf:ESFSubmission xmlns:lexis="http://www.for.gov.bc.ca/schema/lexis" xmlns:esf="http://www.for.gov.bc.ca/schema/esf" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.for.gov.bc.ca/schema/esf http://www.for.gov.bc.ca/schema/esf/1/xsd/MOF/esf-submission.xsd http://www.for.gov.bc.ca/schema/lexis http://www.for.gov.bc.ca/schema/lexis/3/xsd/MOF/mof-lexis.xsd">
                   <esf:submissionContent>
                     <lexis:LexisSubmission>
                       <lexis:applicant>

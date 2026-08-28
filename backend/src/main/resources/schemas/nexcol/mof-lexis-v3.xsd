@@ -1,0 +1,266 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- edited with XMLSpy v2006 sp1 U (http://www.altova.com) by Chris Boreen (Vivid Solutions) -->
+<xs:schema xmlns:mof="http://www.for.gov.bc.ca/schema/simpleTypes" xmlns="http://www.for.gov.bc.ca/schema/lexis" xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="http://www.for.gov.bc.ca/schema/lexis" elementFormDefault="qualified" attributeFormDefault="unqualified" version="1">
+	<xs:import namespace="http://www.for.gov.bc.ca/schema/simpleTypes" schemaLocation="mof-simpleTypes.xsd"/>
+	<xs:complexType name="LexisSubmissionType">
+		<xs:sequence>
+			<xs:element name="applicant" type="ApplicantType" minOccurs="1" maxOccurs="1"/>
+			<xs:element name="owner" type="OwnerType" minOccurs="0" maxOccurs="1"/>
+			<xs:element name="applicationDetail" type="ApplicationDetailType" minOccurs="1" maxOccurs="1"/>
+			<xs:element name="productDetail" type="ProductDetailType" minOccurs="1" maxOccurs="1"/>
+		</xs:sequence>
+	</xs:complexType>
+	<xs:element name="LexisSubmission" type="LexisSubmissionType"/>
+	<xs:complexType name="LegalEntityType">
+		<xs:sequence>
+			<xs:element name="eicbNumber" type="mof:AlphaNumeric20" minOccurs="0" maxOccurs="1"/>
+			<xs:element name="clientNumber" type="mof:AlphaNumeric8" minOccurs="1" maxOccurs="1"/>
+			<xs:element name="clientLocnCode" type="mof:AlphaNumeric2" minOccurs="1" maxOccurs="1"/>
+			<xs:element name="name" type="mof:AlphaNumeric50" minOccurs="0" maxOccurs="1"/>
+			<xs:element name="address" type="mof:AlphaNumeric255" minOccurs="0" maxOccurs="1"/>
+			<xs:element name="city" type="mof:AlphaNumeric100" minOccurs="0" maxOccurs="1"/>
+			<xs:element name="provinceState" type="mof:AlphaNumeric50" minOccurs="0" maxOccurs="1"/>
+			<xs:element name="postalZipCode" type="mof:AlphaNumeric20" minOccurs="0" maxOccurs="1"/>
+			<xs:element name="country" type="mof:AlphaNumeric50" minOccurs="0" maxOccurs="1"/>
+			<xs:element name="telephoneNumber" type="mof:TelephoneNumberType" minOccurs="0" maxOccurs="1"/>
+			<xs:element name="telephoneExtension" type="mof:NonNegativeInteger4D" minOccurs="0" maxOccurs="1"/>
+			<xs:element name="faxNumber" type="mof:TelephoneNumberType" minOccurs="0" maxOccurs="1"/>
+		</xs:sequence>
+	</xs:complexType>
+	<xs:complexType name="OwnerType">
+		<xs:sequence>
+			<xs:element name="ownerDetails" type="LegalEntityType"/>
+			<xs:element name="ownerContact" type="ContactType"/>
+		</xs:sequence>
+	</xs:complexType>
+	<xs:complexType name="ApplicantType">
+		<xs:sequence>
+			<xs:element name="applicantDetails" type="LegalEntityType" minOccurs="1" maxOccurs="1"/>
+			<xs:element name="applicantContact" type="ContactType" minOccurs="1" maxOccurs="1"/>
+			<xs:element name="declarationCanadianResident" type="xs:boolean" minOccurs="1" maxOccurs="1"/>
+			<xs:element name="declarationSubmittedOffersPast90Days" type="xs:boolean" minOccurs="1" maxOccurs="1"/>
+		</xs:sequence>
+	</xs:complexType>
+	<xs:complexType name="ContactType">
+		<xs:sequence>
+			<xs:element name="contactSurname" type="mof:AlphaNumeric50" minOccurs="1" maxOccurs="1"/>
+			<xs:element name="contactFirstname" type="mof:AlphaNumeric50" minOccurs="1" maxOccurs="1"/>
+			<xs:element name="contactTelephoneNumber" type="mof:TelephoneNumberType" minOccurs="1" maxOccurs="1"/>
+			<xs:element name="contactTelephoneExtension" type="mof:NonNegativeInteger4D" minOccurs="0" maxOccurs="1"/>
+			<xs:element name="contactFaxNumber" type="mof:TelephoneNumberType" minOccurs="0" maxOccurs="1"/>
+			<xs:element name="contactEmailAddress" type="xs:anyURI" minOccurs="0" maxOccurs="1"/>
+		</xs:sequence>
+	</xs:complexType>
+	<xs:complexType name="ApplicationDetailType">
+		<xs:sequence>
+			<xs:element name="jurisdictionCode" type="JurisdictionCodeType" minOccurs="1" maxOccurs="1"/>
+			<xs:element name="bcForestRegionCode" type="BCForestRegionCodeType" minOccurs="1" maxOccurs="1"/>
+			<xs:element name="applStatusCode" type="ApplicationStatusCodeType" minOccurs="1" maxOccurs="1"/>
+			<xs:element name="exemptionRsnCde" type="ExemptionReasonCodeType" minOccurs="1" maxOccurs="1"/>
+			<xs:element name="applicantTypeCode" type="ApplicationTypeCodeType" minOccurs="1" maxOccurs="1"/>
+			<xs:element name="re-advertisement" type="xs:boolean" minOccurs="1" maxOccurs="1"/>
+			<xs:element name="officeUseOnly" type="OfficeUseOnlyType" minOccurs="0"/>
+		</xs:sequence>
+	</xs:complexType>
+	<xs:complexType name="ProductDetailType">
+		<xs:sequence>
+			<xs:element name="productTypeCode" type="ProductTypeCodeType" minOccurs="1" maxOccurs="1"/>
+			<xs:element name="boomNumber" type="mof:AlphaNumeric20" minOccurs="0" maxOccurs="1"/>
+			<xs:element name="exemptApplnVol" type="mof:Decimal9D1d" minOccurs="0" maxOccurs="1"/>
+			<xs:element name="averageLogVolume" type="mof:Decimal3D1d" minOccurs="0" maxOccurs="1"/>
+			<xs:element name="speciesEndUseSort" type="SpeciesEndUseSortType" minOccurs="1" maxOccurs="1"/>
+			<xs:element name="productLocation" type="mof:AlphaNumeric250" minOccurs="1" maxOccurs="1"/>
+			<xs:element name="ageClass" type="AgeClassType" minOccurs="0" maxOccurs="1"/>
+			<xs:element name="avgLength" type="mof:Decimal3D1d" minOccurs="0" maxOccurs="1"/>
+			<xs:element name="avgDiameter" type="mof:Decimal3D1d" minOccurs="0" maxOccurs="1"/>
+			<xs:choice>
+				<xs:element name="harvestedTimber" type="HarvestedTimberType" maxOccurs="unbounded" minOccurs="1"/>
+				<xs:element name="harvestedTimberWithoutSummaryOfScale" type="HarvestedTimberWithoutSummaryOfScaleType" maxOccurs="unbounded" minOccurs="1"/>
+				<xs:element name="standingTimber" type="StandingTimberType" maxOccurs="unbounded" minOccurs="1"/>
+			</xs:choice>
+		</xs:sequence>
+	</xs:complexType>
+	<xs:complexType name="HarvestedTimberType">
+		<xs:sequence>
+			<xs:element name="timberMark" type="mof:AlphaNumeric6" minOccurs="1" maxOccurs="1"/>
+			<xs:element name="numberOfPieces" type="mof:NonNegativeInteger10D" minOccurs="1" maxOccurs="1"/>
+			<xs:element name="species" type="SpeciesCodeType" minOccurs="1" maxOccurs="1"/>
+			<xs:element name="grade" type="GradeCodeType" minOccurs="1" maxOccurs="1"/>
+			<xs:element name="quantityVolume" type="mof:Decimal7D1d" minOccurs="1" maxOccurs="1"/>
+		</xs:sequence>
+	</xs:complexType>
+	<xs:complexType name="HarvestedTimberWithoutSummaryOfScaleType">
+		<xs:sequence>
+			<xs:element name="timberMark" type="mof:AlphaNumeric6" minOccurs="1" maxOccurs="1"/>
+		</xs:sequence>
+	</xs:complexType>
+	<xs:complexType name="StandingTimberType">
+		<xs:sequence>
+			<xs:element name="timberMark" type="mof:AlphaNumeric6" minOccurs="1" maxOccurs="1"/>
+		</xs:sequence>
+	</xs:complexType>
+	<xs:simpleType name="ProductTypeCodeType">
+		<xs:restriction base="xs:string">
+			<xs:maxLength value="1"/>
+			<xs:enumeration value="H"/>
+			<xs:enumeration value="S"/>
+		</xs:restriction>
+	</xs:simpleType>
+	<xs:simpleType name="JurisdictionCodeType">
+		<xs:annotation>
+			<xs:documentation>Federal=F Provincial=P</xs:documentation>
+		</xs:annotation>
+		<xs:restriction base="xs:string">
+			<xs:enumeration value="P"/>
+			<xs:enumeration value="F"/>
+		</xs:restriction>
+	</xs:simpleType>
+	<xs:simpleType name="ApplicationStatusCodeType">
+		<xs:restriction base="xs:string">
+			<xs:maxLength value="1"/>
+			<xs:enumeration value="A"/>
+		</xs:restriction>
+	</xs:simpleType>
+	<xs:simpleType name="LanguageCodeType">
+		<xs:restriction base="xs:string">
+			<xs:maxLength value="1"/>
+			<xs:enumeration value="E"/>
+			<xs:enumeration value="F"/>
+		</xs:restriction>
+	</xs:simpleType>
+	<xs:complexType name="OfficeUseOnlyType">
+		<xs:sequence>
+			<xs:element name="internalOfficeUseRefId" type="mof:NonNegativeInteger15D" minOccurs="1" maxOccurs="1"/>
+			<xs:element name="internalOfficeUseApplicationDate" type="xs:date" minOccurs="1" maxOccurs="1"/>
+			<xs:element name="internalOfficeUseBiWeeklyListDate" type="xs:date" minOccurs="1" maxOccurs="1"/>
+			<xs:element name="internalOfficeUseApplicantUserid" type="mof:AlphaNumeric50" minOccurs="1" maxOccurs="1"/>
+			<xs:element name="internalOfficeUseLanguage" type="LanguageCodeType" minOccurs="1" maxOccurs="1"/>
+		</xs:sequence>
+	</xs:complexType>
+	<xs:simpleType name="AgeClassType">
+		<xs:annotation>
+			<xs:documentation>
+				O = Old Growth S = Secondary Growth
+			</xs:documentation>
+		</xs:annotation>
+		<xs:restriction base="xs:string">
+			<xs:maxLength value="1"/>
+			<xs:enumeration value="O"/>
+			<xs:enumeration value="S"/>
+			<xs:enumeration value=""/>
+		</xs:restriction>
+	</xs:simpleType>
+	<xs:simpleType name="BCForestRegionCodeType">
+		<xs:restriction base="xs:string">
+			<xs:maxLength value="3"/>
+			<xs:enumeration value="RCB"/>
+			<xs:enumeration value="RKB"/>
+			<xs:enumeration value="RNO"/>
+			<xs:enumeration value="ROM"/>
+			<xs:enumeration value="RTO"/>
+			<xs:enumeration value="RSK"/>
+			<xs:enumeration value="RSC"/>
+			<xs:enumeration value="RWC"/>
+		</xs:restriction>
+	</xs:simpleType>
+	<xs:simpleType name="SpeciesCodeType">
+		<xs:annotation>
+			<xs:documentation>
+				Alder=AL Arbutus=AR Aspen=AS Balsam=BA Birch=BI Cedar=CE
+				Cottonwood=CO Cypress=CY Fir (Douglas)=FI Hemlock=HE
+				Larch=LA Maple=MA Spruce=SP Lodgepole Pine=LO White
+				Pine=WH Whitebark Pine=WB Yellow Pine=YE Yew=UU
+			</xs:documentation>
+		</xs:annotation>
+		<xs:restriction base="xs:string">
+			<xs:length value="2"/>
+			<xs:enumeration value="AL"/>
+			<xs:enumeration value="AR"/>
+			<xs:enumeration value="AS"/>
+			<xs:enumeration value="BA"/>
+			<xs:enumeration value="BI"/>
+			<xs:enumeration value="CE"/>
+			<xs:enumeration value="CO"/>
+			<xs:enumeration value="CY"/>
+			<xs:enumeration value="FI"/>
+			<xs:enumeration value="HE"/>
+			<xs:enumeration value="LA"/>
+			<xs:enumeration value="MA"/>
+			<xs:enumeration value="SP"/>
+			<xs:enumeration value="LO"/>
+			<xs:enumeration value="WH"/>
+			<xs:enumeration value="WB"/>
+			<xs:enumeration value="YE"/>
+			<xs:enumeration value="UU"/>
+		</xs:restriction>
+	</xs:simpleType>
+	<xs:simpleType name="SpeciesEndUseSortType">
+		<xs:annotation>
+			<xs:documentation>
+			</xs:documentation>
+		</xs:annotation>
+		<xs:restriction base="xs:string">
+			<xs:minLength value="5"/>
+			<xs:maxLength value="11"/>
+		</xs:restriction>
+	</xs:simpleType>
+	<xs:simpleType name="GradeCodeType">
+		<xs:annotation>
+			<xs:documentation>
+				Coast B, C, D, E, F, G, H, I, J, K (CE only), L (CE only), M (CE only),
+				U, W, X, Y, Z Interior "blank", 1, 2, 3, 4, 5, 6, Z
+			</xs:documentation>
+		</xs:annotation>
+		<xs:restriction base="xs:string">
+			<xs:enumeration value="B"/>
+			<xs:enumeration value="C"/>
+			<xs:enumeration value="D"/>
+			<xs:enumeration value="E"/>
+			<xs:enumeration value="F"/>
+			<xs:enumeration value="G"/>
+			<xs:enumeration value="H"/>
+			<xs:enumeration value="I"/>
+			<xs:enumeration value="J"/>
+			<xs:enumeration value="K"/>
+			<xs:enumeration value="L"/>
+			<xs:enumeration value="M"/>
+			<xs:enumeration value="U"/>
+			<xs:enumeration value="W"/>
+			<xs:enumeration value="X"/>
+			<xs:enumeration value="Y"/>
+			<xs:enumeration value="Z"/>
+			<xs:enumeration value="1"/>
+			<xs:enumeration value="2"/>
+			<xs:enumeration value="3"/>
+			<xs:enumeration value="4"/>
+			<xs:enumeration value="5"/>
+			<xs:enumeration value="6"/>
+			<xs:enumeration value="Z"/>
+			<xs:enumeration value=""/>
+		</xs:restriction>
+	</xs:simpleType>
+	<xs:simpleType name="ExemptionReasonCodeType">
+		<xs:annotation>
+			<xs:documentation>
+				Economic=E Surplus=S Utilization=U
+			</xs:documentation>
+		</xs:annotation>
+		<xs:restriction base="xs:string">
+			<xs:enumeration value="E"/>
+			<xs:enumeration value="S"/>
+			<xs:enumeration value="U"/>
+		</xs:restriction>
+	</xs:simpleType>
+	<xs:simpleType name="ApplicationTypeCodeType">
+		<xs:annotation>
+			<xs:documentation>
+				Agent=A Ministry=M Owner=O
+			</xs:documentation>
+		</xs:annotation>
+		<xs:restriction base="xs:string">
+			<xs:enumeration value="A"/>
+			<xs:enumeration value="M"/>
+			<xs:enumeration value="O"/>
+		</xs:restriction>
+	</xs:simpleType>
+</xs:schema>
