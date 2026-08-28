@@ -200,6 +200,10 @@ describe('Provincial exemption edit context', () => {
     const summaryCard = (
       await screen.findByRole('heading', { name: 'Exemption summary', level: 2 })
     ).closest('.cds--tile')
+    expect(screen.getByRole('tab', { name: 'Exemption details' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
     expect(summaryCard).toBeTruthy()
     expect(within(summaryCard as HTMLElement).queryByText('Status')).not.toBeInTheDocument()
     expect(within(summaryCard as HTMLElement).getByText('Author')).toBeInTheDocument()
