@@ -425,7 +425,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    for (const tabName of ['Summary', 'Permits', 'Documents']) {
+    for (const tabName of ['Exemption details', 'Documents', 'Permits']) {
       expect(await screen.findByRole('tab', { name: tabName })).toBeInTheDocument()
     }
     expect(screen.queryByRole('tab', { name: 'Remarks' })).not.toBeInTheDocument()

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
-  Calendar,
+  // Calendar,
   Certificate,
   Close,
   DataTable,
@@ -249,12 +249,14 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
         icon: Finance,
         requiredActions: ['/lexisFILAdmin'],
       },
-      {
-        to: '/admin/schedules',
-        label: 'Export Schedule',
-        icon: Calendar,
-        requiredActions: ['/lexisPolicyAdmin'],
-      },
+      // Export Schedule administration is disabled pending business approval. Restore this
+      // navigation item together with its route and backend mutation authorization.
+      // {
+      //   to: '/admin/schedules',
+      //   label: 'Export Schedule',
+      //   icon: Calendar,
+      //   requiredActions: ['/lexisPolicyAdmin'],
+      // },
       {
         to: '/admin/rtm/emslogamv/upload',
         label: 'Average market values',

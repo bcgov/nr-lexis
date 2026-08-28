@@ -113,12 +113,13 @@ describe('Protected route access matrix', () => {
     expect(detailRoute.requiredActions).toEqual(route.requiredActions)
   })
 
-  it('does not expose retired admin, Indian Reserve jurisdiction, or legacy advertising routes', () => {
+  it('does not expose disabled or retired routes', () => {
     const routePaths = [...PUBLIC_ROUTES, ...PROTECTED_ROUTES].map((route) =>
       route.path.toLowerCase(),
     )
 
     expect(routePaths).not.toContain('/admin')
+    expect(routePaths).not.toContain('/admin/schedules')
     expect(routePaths.some((path) => path.includes('indian'))).toBe(false)
     expect(routePaths.some((path) => path.includes('reserve'))).toBe(false)
     expect(routePaths.some((path) => path.includes('advertising'))).toBe(false)

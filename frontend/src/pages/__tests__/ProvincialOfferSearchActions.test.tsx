@@ -344,6 +344,31 @@ describe('Provincial Offer Search Actions', () => {
     expect(screen.queryByRole('list', { name: 'Selected regions' })).not.toBeInTheDocument()
   })
 
+  it('groups offer criteria and date ranges in reading order', async () => {
+    renderPage()
+    await screen.findByText('OFF-1001')
+
+    const filterGrid = document.querySelector('.provincial-offer-search-grid')
+    expect(filterGrid).toBeTruthy()
+    const fieldLabels = Array.from((filterGrid as HTMLElement).children).map((field) =>
+      field
+        .querySelector('label, .cds--label')
+        ?.textContent?.replace(/Total items selected:.*/, '')
+        .trim(),
+    )
+
+    expect(fieldLabels).toEqual([
+      'Application number',
+      'Package number',
+      'Client number',
+      'Region',
+      'Listing from date',
+      'Listing to date',
+      'Withdrawn from date',
+      'Withdrawn to date',
+    ])
+  })
+
   it('disables search for invalid dates and updates search sort direction from header click', async () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
 

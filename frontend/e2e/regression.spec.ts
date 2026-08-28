@@ -99,50 +99,8 @@ const asRecordArray = (value: unknown): Record<string, unknown>[] =>
       )
     : []
 
-const asRecord = (value: unknown): Record<string, unknown> =>
-  Boolean(value) && typeof value === 'object' && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {}
-
 const optionCode = (option: Record<string, unknown>): string => String(option.code ?? '').trim()
 const optionName = (option: Record<string, unknown>): string => String(option.name ?? '').trim()
-
-const isoDate = (date: Date): string => date.toISOString().slice(0, 10)
-
-const addUtcDays = (date: Date, days: number): Date => {
-  const next = new Date(date.getTime())
-  next.setUTCDate(next.getUTCDate() + days)
-  return next
-}
-
-const scheduleRequestForAdvertisingDate = (advertisingDate: string): ExportScheduleRequest => {
-  const date = new Date(`${advertisingDate}T00:00:00.000Z`)
-  return {
-    advertisingDate,
-    applicationReceiptDate: advertisingDate,
-    offerReceiptDate: isoDate(addUtcDays(date, 14)),
-    offerEndDate: isoDate(addUtcDays(date, 43)),
-    offerWithdrawalDate: isoDate(addUtcDays(date, 33)),
-    teacMeetingDate: isoDate(addUtcDays(date, 36)),
-  }
-}
-
-const uniqueRegressionScheduleRequests = (
-  latestAdvertisingDate: string,
-  attempt = 0,
-): {
-  createRequest: ExportScheduleRequest
-  updateRequest: ExportScheduleRequest
-} => {
-  const latestDate = new Date(`${latestAdvertisingDate}T00:00:00.000Z`)
-  const createDate = isoDate(addUtcDays(latestDate, 7 + attempt * 14))
-  const updateDate = isoDate(addUtcDays(latestDate, 14 + attempt * 14))
-
-  return {
-    createRequest: scheduleRequestForAdvertisingDate(createDate),
-    updateRequest: scheduleRequestForAdvertisingDate(updateDate),
-  }
-}
 
 const safeUrlForLog = (rawUrl: string): string => {
   try {
@@ -202,21 +160,6 @@ type ReviewStatusResponse = {
 type EmailActionResponse = {
   success?: boolean
   message?: string | null
-}
-
-type ExportScheduleMutationResponse = {
-  success?: boolean
-  message?: string | null
-  schedule?: unknown
-}
-
-type ExportScheduleRequest = {
-  advertisingDate: string
-  applicationReceiptDate: string
-  offerReceiptDate: string
-  offerEndDate: string
-  offerWithdrawalDate: string
-  teacMeetingDate: string
 }
 
 type ApplicationSubmissionResponse = {
@@ -785,19 +728,13 @@ const adminNavigationSections: Array<{
   },
   {
     section: 'Admin',
-    links: [
-      'Multiplication Factor',
-      'Non-appraised Sec.3 FIL%',
-      'Export Schedule',
-      'Average market values',
-    ],
+    links: ['Multiplication Factor', 'Non-appraised Sec.3 FIL%', 'Average market values'],
   },
 ]
 
 const adminAccessiblePages: Array<[path: string, heading: RegExp]> = [
   ['/admin/policies/fee', /multiplication factor/i],
   ['/admin/policies/fil', /non-appraised sec\.3 fil%/i],
-  ['/admin/schedules', /export schedule administration/i],
   ['/provincial/review', /provincial application review/i],
   ['/provincial/application/create', /create provincial application/i],
   ['/provincial/application/upload', /upload application submission/i],
@@ -1082,35 +1019,23 @@ const readPermitVersionedJson = async <T>(
   return { payload, version }
 }
 
-const currentOfferSchedule = async (
-  page: Page,
-): Promise<{ scheduleId: string; advertisingDate: string; offerReceiptDate: string }> => {
-  const schedulePage = await readJsonResponse<GenericSearchResponse>(
-    await getWithAuth(page, '/api/lexis/admin/schedules', {
-      params: {
-        page: '0',
-        size: '200',
-      },
-    }),
+const currentOfferSchedule = async (page: Page): Promise<{ scheduleId: string }> => {
+  const applicationOptions = await readJsonResponse<GenericOptionsResponse>(
+    await getWithAuth(page, '/api/lexis/applications/search/options'),
   )
   const today = formatBusinessIsoDate()
-  const schedule = asRecordArray(schedulePage.results).find((candidate) => {
-    const advertisingDate = String(candidate.advertisingDate ?? '').trim()
-    const offerReceiptDate = String(candidate.offerReceiptDate ?? '').trim()
-    return advertisingDate <= today && offerReceiptDate >= today
-  })
+  const currentSchedules = asRecordArray(applicationOptions.currentSchedules)
+  expectApplicationScheduleOptions(currentSchedules, 'core lifecycle current list dates')
+  const schedule = currentSchedules.find(
+    (candidate) => optionCode(candidate) && optionName(candidate) <= today,
+  )
   if (!schedule) {
     throw new Error(
-      `TEST needs an existing export schedule with advertisingDate <= ${today} <= offerReceiptDate for the CRUD regression.`,
+      `TEST needs a current dated application schedule on or before ${today} for the core lifecycle regression.`,
     )
   }
   return {
-    scheduleId: requiredString(schedule.exportScheduleId, 'Export schedule ID'),
-    advertisingDate: requiredString(schedule.advertisingDate, 'Export schedule advertising date'),
-    offerReceiptDate: requiredString(
-      schedule.offerReceiptDate,
-      'Export schedule offer receipt date',
-    ),
+    scheduleId: requiredString(optionCode(schedule), 'Current application schedule ID'),
   }
 }
 
@@ -1489,27 +1414,6 @@ const detachRegressionPermitApplication = async (
   expect(asStringArray(result.errors)).toEqual([])
 }
 
-const latestExportScheduleAdvertisingDate = async (page: Page): Promise<string> => {
-  const schedulePage = await readJsonResponse<GenericSearchResponse>(
-    await getWithAuth(page, '/api/lexis/admin/schedules', {
-      params: {
-        page: '0',
-        size: '200',
-      },
-    }),
-  )
-  const dates = asRecordArray(schedulePage.results)
-    .map((schedule) => String(schedule.advertisingDate ?? '').trim())
-    .filter((date) => isoDatePattern.test(date))
-    .sort()
-
-  expect(
-    dates.length,
-    'export schedule regression needs at least one existing schedule row',
-  ).toBeGreaterThan(0)
-  return dates[dates.length - 1]
-}
-
 const firstCurrentScheduleAdvertisingDate = async (page: Page): Promise<string> => {
   const reportOptions = await readJsonResponse<GenericOptionsResponse>(
     await getWithAuth(page, '/api/lexis/reports/options'),
@@ -1619,63 +1523,6 @@ const expectApplicationDocumentVirusScanRejection = (
   expect(response.payload.fileName).toBe('antivirus-test-application-upload.pdf')
   expect(response.payload.status).toBe('rejected')
   expect(response.payload.message ?? '').toContain(virusScanRejectionMessage)
-}
-
-const createRegressionExportSchedule = async (
-  page: Page,
-): Promise<{
-  scheduleId: string
-  createRequest: ExportScheduleRequest
-  updateRequest: ExportScheduleRequest
-  createdSchedule: Record<string, unknown>
-}> => {
-  const latestAdvertisingDate = await latestExportScheduleAdvertisingDate(page)
-  for (let attempt = 0; attempt < 6; attempt += 1) {
-    const { createRequest, updateRequest } = uniqueRegressionScheduleRequests(
-      latestAdvertisingDate,
-      attempt,
-    )
-    const created = await readJsonResponseWithStatuses<ExportScheduleMutationResponse>(
-      await postWithCsrf(page, '/api/lexis/admin/schedules', {
-        data: createRequest,
-      }),
-      [200, 400],
-    )
-
-    if (created.status === 400) {
-      const message = created.payload.message ?? ''
-      if (!message.includes('A schedule already exists for that advertising date.')) {
-        throw new Error(
-          `Export schedule create failed for ${createRequest.advertisingDate}: ${message}`,
-        )
-      }
-      continue
-    }
-
-    expect(created.payload.success).toBe(true)
-    expect(created.payload.message ?? '').toContain('added')
-
-    const createdSchedule = asRecord(created.payload.schedule)
-    const scheduleId = String(createdSchedule.exportScheduleId ?? '').trim()
-    expect(scheduleId).not.toBe('')
-
-    return {
-      scheduleId,
-      createRequest,
-      updateRequest,
-      createdSchedule,
-    }
-  }
-
-  throw new Error('Unable to find an unused future export schedule date for regression.')
-}
-
-const deleteRegressionExportSchedule = async (page: Page, scheduleId: string): Promise<void> => {
-  const deleteResponse = await readJsonResponse<ExportScheduleMutationResponse>(
-    await deleteWithCsrf(page, `/api/lexis/admin/schedules/${encodeURIComponent(scheduleId)}`),
-  )
-  expect(deleteResponse.success).toBe(true)
-  expect(deleteResponse.message ?? '').toContain('deleted')
 }
 
 const cleanupRegressionPackage = async (
@@ -2884,46 +2731,29 @@ test.describe('TEST IDIR admin regression', () => {
     expect(Array.isArray(reportOptions.reportJurisdictions)).toBe(true)
     expectNaturalResourceRegions(reportOptions.regions, 'report options')
     expectReportScheduleOptions(reportOptions.currentSchedules, 'report list dates')
-
-    const exportSchedules = await readJsonResponse<GenericSearchResponse>(
-      await getWithAuth(page, '/api/lexis/admin/schedules'),
-    )
-    expect(Array.isArray(exportSchedules.results)).toBe(true)
-    expect(exportSchedules.total).toEqual(expect.any(Number))
-    expect(exportSchedules.page).toBe(0)
-    expect(exportSchedules.size).toBe(100)
   })
 
-  test('can page and sort all export schedules', async () => {
+  test('rejects export schedule administration API access', async () => {
     const page = await authenticatedIdirPage()
 
-    const schedules = await readJsonResponse<GenericSearchResponse>(
-      await getWithAuth(page, '/api/lexis/admin/schedules', {
-        params: {
-          page: 0,
-          size: 20,
-          sortField: 'advertisingDate',
-          sortDirection: 'desc',
-        },
-      }),
-    )
-    const rows = asRecordArray(schedules.results)
-
-    expect(schedules.total, 'TEST should include historical export schedules').toBeGreaterThan(25)
-    expect(schedules.page).toBe(0)
-    expect(schedules.size).toBe(20)
-    expect(rows.length).toBeLessThanOrEqual(20)
-
-    let previousAdvertisingDate: string | null = null
-    for (const row of rows) {
-      const advertisingDate = String(row.advertisingDate ?? '').trim()
-      expect(advertisingDate).toMatch(isoDatePattern)
-      expect(row.mutable).toBe(Number(row.applicationCount ?? 0) === 0)
-      if (previousAdvertisingDate) {
-        expect(previousAdvertisingDate >= advertisingDate).toBe(true)
-      }
-      previousAdvertisingDate = advertisingDate
+    const expectForbidden = async (method: string, response: APIResponse): Promise<void> => {
+      const responseText = await response.text()
+      expect(
+        response.status(),
+        `${method} /api/lexis/admin/schedules should be forbidden: ${redactedTextSnippet(responseText)}`,
+      ).toBe(403)
     }
+
+    await expectForbidden('GET', await getWithAuth(page, '/api/lexis/admin/schedules'))
+    await expectForbidden(
+      'POST',
+      await postWithCsrf(page, '/api/lexis/admin/schedules', { data: {} }),
+    )
+    await expectForbidden(
+      'PUT',
+      await putWithCsrf(page, '/api/lexis/admin/schedules/0', { data: {} }),
+    )
+    await expectForbidden('DELETE', await deleteWithCsrf(page, '/api/lexis/admin/schedules/0'))
   })
 
   test('shows advertising list report listing date controls', async () => {
@@ -2998,74 +2828,6 @@ test.describe('TEST IDIR admin regression', () => {
     expect(header).toBe(expectedHeader)
   })
 
-  test('can create, update, and delete future export schedule rows', async () => {
-    const page = await authenticatedIdirPage()
-    let scheduleId: string | null = null
-    let deleted = false
-
-    try {
-      const {
-        createRequest,
-        updateRequest,
-        createdSchedule,
-        scheduleId: createdScheduleId,
-      } = await createRegressionExportSchedule(page)
-      scheduleId = createdScheduleId
-      expect(createdSchedule.advertisingDate).toBe(createRequest.advertisingDate)
-      expect(Number(createdSchedule.applicationCount ?? 0)).toBe(0)
-      expect(createdSchedule.mutable).toBe(true)
-
-      const updated = await readJsonResponse<ExportScheduleMutationResponse>(
-        await putWithCsrf(page, `/api/lexis/admin/schedules/${encodeURIComponent(scheduleId)}`, {
-          data: updateRequest,
-        }),
-      )
-      expect(updated.success).toBe(true)
-      expect(updated.message ?? '').toContain('updated')
-
-      const updatedSchedule = asRecord(updated.schedule)
-      expect(String(updatedSchedule.exportScheduleId ?? '')).toBe(scheduleId)
-      expect(updatedSchedule.advertisingDate).toBe(updateRequest.advertisingDate)
-      expect(Number(updatedSchedule.applicationCount ?? 0)).toBe(0)
-      expect(updatedSchedule.mutable).toBe(true)
-
-      await deleteRegressionExportSchedule(page, scheduleId)
-      deleted = true
-    } finally {
-      if (scheduleId && !deleted) {
-        await deleteRegressionExportSchedule(page, scheduleId)
-      }
-    }
-  })
-
-  test('allows legacy duplicate future export schedule advertising dates', async () => {
-    const page = await authenticatedIdirPage()
-    const scheduleIds: string[] = []
-
-    try {
-      const { createRequest, scheduleId: createdScheduleId } =
-        await createRegressionExportSchedule(page)
-      scheduleIds.push(createdScheduleId)
-
-      const duplicate = await readJsonResponse<ExportScheduleMutationResponse>(
-        await postWithCsrf(page, '/api/lexis/admin/schedules', {
-          data: createRequest,
-        }),
-      )
-      expect(duplicate.success).toBe(true)
-      const duplicateSchedule = asRecord(duplicate.schedule)
-      const duplicateScheduleId = String(duplicateSchedule.exportScheduleId ?? '').trim()
-      expect(duplicateScheduleId).not.toBe('')
-      scheduleIds.push(duplicateScheduleId)
-      expect(duplicateScheduleId).not.toBe(createdScheduleId)
-      expect(duplicateSchedule.advertisingDate).toBe(createRequest.advertisingDate)
-    } finally {
-      for (const scheduleId of scheduleIds.reverse()) {
-        await deleteRegressionExportSchedule(page, scheduleId)
-      }
-    }
-  })
-
   test('validates protected writes and rejects missing scoped resources', async () => {
     const page = await authenticatedIdirPage()
 
@@ -3123,15 +2885,6 @@ test.describe('TEST IDIR admin regression', () => {
       },
     )
     expect(emailResponse.status()).toBe(403)
-
-    const invalidScheduleResponse = await readJsonResponse<ExportScheduleMutationResponse>(
-      await postWithCsrf(page, '/api/lexis/admin/schedules', {
-        data: {},
-      }),
-      400,
-    )
-    expect(invalidScheduleResponse.success).toBe(false)
-    expect(invalidScheduleResponse.message ?? '').toContain('Advertising date is required.')
 
     const rtmSearchResponse = await getWithAuth(page, '/api/lexis/rtm/emslogamv', {
       params: {

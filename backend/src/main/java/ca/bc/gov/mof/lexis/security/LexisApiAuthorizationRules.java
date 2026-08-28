@@ -350,13 +350,18 @@ final class LexisApiAuthorizationRules {
               "/api/lexis/application-reviews/*/approve",
               "/api/lexis/application-reviews/*/status",
               "/api/lexis/application-reviews/*/status-email"),
+          // Export Schedule administration is disabled pending business approval. Existing
+          // workflows continue reading schedule data through their repositories and option APIs.
+          denyAll(HttpMethod.GET, "/api/lexis/admin/schedules"),
+          denyAll(HttpMethod.POST, "/api/lexis/admin/schedules"),
+          denyAll(HttpMethod.PUT, "/api/lexis/admin/schedules/*"),
+          denyAll(HttpMethod.DELETE, "/api/lexis/admin/schedules/*"),
           action(
               HttpMethod.GET,
               ACTION_LEXIS_POLICY_ADMIN,
               "/api/lexis/admin/policy",
               "/api/lexis/admin/lexisPolicyAdmin",
-              "/api/lexis/admin/policies/fee",
-              "/api/lexis/admin/schedules"),
+              "/api/lexis/admin/policies/fee"),
           action(
               HttpMethod.GET,
               ACTION_LEXIS_POLICY_ADMIN,
@@ -378,18 +383,15 @@ final class LexisApiAuthorizationRules {
               ACTION_LEXIS_POLICY_ADMIN,
               "/api/lexis/admin/policy/rpc",
               "/api/lexis/admin/lexisPolicyAdminRPC",
-              "/api/lexis/admin/policies/fee",
-              "/api/lexis/admin/schedules"),
+              "/api/lexis/admin/policies/fee"),
           action(
               HttpMethod.PUT,
               ACTION_LEXIS_POLICY_ADMIN,
-              "/api/lexis/admin/policies/fee/*",
-              "/api/lexis/admin/schedules/*"),
+              "/api/lexis/admin/policies/fee/*"),
           action(
               HttpMethod.DELETE,
               ACTION_LEXIS_POLICY_ADMIN,
-              "/api/lexis/admin/policies/fee/*",
-              "/api/lexis/admin/schedules/*"),
+              "/api/lexis/admin/policies/fee/*"),
           action(
               HttpMethod.GET,
               ACTION_LEXIS_POLICY_ADMIN,
@@ -805,6 +807,10 @@ final class LexisApiAuthorizationRules {
 
   private static Rule denyAll(String... paths) {
     return new Rule(RuleType.DENY_ALL, null, List.of(paths), null, Map.of(), List.of());
+  }
+
+  private static Rule denyAll(HttpMethod method, String... paths) {
+    return new Rule(RuleType.DENY_ALL, method, List.of(paths), null, Map.of(), List.of());
   }
 
   private static Rule adminAuthority(String... paths) {

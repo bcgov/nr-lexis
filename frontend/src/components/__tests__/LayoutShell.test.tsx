@@ -382,7 +382,7 @@ describe('Layout shell', () => {
     expect(document.querySelectorAll('.cds--side-nav__link--active')).toHaveLength(0)
   })
 
-  it('renders split admin side-nav areas with distinct active routes', () => {
+  it('omits export schedule from the admin side-nav', () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
         capabilities: createTestCapabilities({
@@ -399,19 +399,15 @@ describe('Layout shell', () => {
     const filPolicyLink = screen.getByRole('link', {
       name: /Non-appraised Sec\.3 FIL%/i,
     })
-    const scheduleLink = screen.getByRole('link', {
-      name: /Export Schedule/i,
-    })
     const averageMarketValuesLink = screen.getByRole('link', {
       name: /Average market values/i,
     })
 
     expect(feePolicyLink).toHaveAttribute('href', '/admin/policies/fee')
     expect(filPolicyLink).toHaveAttribute('href', '/admin/policies/fil')
-    expect(scheduleLink).toHaveAttribute('href', '/admin/schedules')
     expect(averageMarketValuesLink).toHaveAttribute('href', '/admin/rtm/emslogamv/upload')
-    expect(scheduleLink).toHaveClass('cds--side-nav__link--active')
-    expect(scheduleLink).toHaveAttribute('aria-current', 'page')
+    expect(screen.queryByRole('link', { name: /^Export Schedule$/i })).not.toBeInTheDocument()
+    expect(document.querySelectorAll('.cds--side-nav__link--active')).toHaveLength(0)
     expect(feePolicyLink).not.toHaveClass('cds--side-nav__link--active')
     expect(filPolicyLink).not.toHaveClass('cds--side-nav__link--active')
     expect(averageMarketValuesLink).not.toHaveClass('cds--side-nav__link--active')
