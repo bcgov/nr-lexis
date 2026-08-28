@@ -859,7 +859,7 @@ const FederalApplicationDetailsPage = () => {
       </Column>
       <Column sm={4} md={8} lg={16} className="detail-page-header">
         <PageHeader
-          title={`LEXIS application ${federalApplicationDisplayNumber}`.trim()}
+          title={`Federal application ${federalApplicationDisplayNumber}`.trim()}
           subtitle="Check and manage this federal application"
           status={
             currentDetail ? (

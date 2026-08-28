@@ -1099,7 +1099,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     }
 
     const federalHeading = screen.getByRole('heading', {
-      name: 'LEXIS application FED-888',
+      name: 'Federal application FED-888',
       level: 1,
     })
     const federalHeader = federalHeading.closest('header')
@@ -1193,7 +1193,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { name: 'LEXIS application FED-888', level: 1 })
+    await screen.findByRole('heading', { name: 'Federal application FED-888', level: 1 })
     await waitFor(() => {
       expect(mockedFetchApplicationPackageScales).toHaveBeenCalledWith('PKG-1')
       expect(mockedFetchFederalApplicationDocuments).toHaveBeenCalledWith('888')
@@ -1337,7 +1337,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
         </Routes>
       </MemoryRouter>,
     )
-    await screen.findByRole('heading', { name: 'LEXIS application FED-888', level: 1 })
+    await screen.findByRole('heading', { name: 'Federal application FED-888', level: 1 })
 
     rendered.unmount()
 
@@ -1383,7 +1383,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
   ])('blocks navigation for an unsaved federal $draft draft', async ({ arrange, edit }) => {
     arrange()
     const router = renderFederalDataRouter()
-    await screen.findByRole('heading', { name: 'LEXIS application FED-888', level: 1 })
+    await screen.findByRole('heading', { name: 'Federal application FED-888', level: 1 })
     await edit()
 
     await userEvent.click(screen.getByRole('link', { name: 'Leave federal application' }))
@@ -1398,7 +1398,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
   it('blocks navigation while a federal document remains queued', async () => {
     const user = userEvent.setup({ applyAccept: false })
     renderFederalDataRouter()
-    await screen.findByRole('heading', { name: 'LEXIS application FED-888', level: 1 })
+    await screen.findByRole('heading', { name: 'Federal application FED-888', level: 1 })
     await selectDetailTab('Documents')
     await enterDocumentEditMode()
     await user.click(screen.getByRole('button', { name: 'Add document' }))
@@ -1720,7 +1720,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { name: 'LEXIS application FED-888', level: 1 })
+    await screen.findByRole('heading', { name: 'Federal application FED-888', level: 1 })
 
     await selectDetailTab('Items')
     expect(
@@ -2014,7 +2014,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     )
 
     expect(
-      await screen.findByRole('heading', { name: 'LEXIS application FED-888', level: 1 }),
+      await screen.findByRole('heading', { name: 'Federal application FED-888', level: 1 }),
     ).toBeInTheDocument()
     await selectDetailTab('Application')
     expect(screen.getByText('Federal application number')).toBeInTheDocument()

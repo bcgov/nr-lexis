@@ -240,7 +240,7 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
   },
   {
     id: 'offerReport',
-    title: 'Offer Report',
+    title: 'Offers Report',
     category: 'Provincial',
     action: '/offerReport',
     description: 'Offer activity and approval outcomes.',
@@ -336,7 +336,7 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
   },
   {
     id: 'permitLedgerReport',
-    title: 'Permit Ledger Report',
+    title: 'Permits Report',
     category: 'Provincial',
     action: '/permitLedgerReport',
     description: 'Permit issuance and ledger summary.',
