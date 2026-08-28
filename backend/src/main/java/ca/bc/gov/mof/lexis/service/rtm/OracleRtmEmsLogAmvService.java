@@ -409,8 +409,8 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
         errors.add("The template header is not recognized as an RTM EMS AMV sheet.");
       }
       if (enforceNextMonth && errors.isEmpty()) {
-        comparisonRows = repository.findLatestEffectiveDateRowsBefore(parsedEffectiveMonth);
-        comparisonDate = latestComparisonDate(comparisonRows, comparisonDate);
+        comparisonDate = parsedEffectiveMonth.minusMonths(1);
+        comparisonRows = repository.findEffectiveDateRows(null, null, comparisonDate);
       }
       if (parseResult.updateDate() == null || comparisonDate == null) {
         errors.add("The update date is required in the uploaded template.");
@@ -1021,19 +1021,6 @@ public class OracleRtmEmsLogAmvService implements RtmEmsLogAmvService {
       }
     }
     return previewRows;
-  }
-
-  private LocalDate latestComparisonDate(
-      List<RtmEmsLogAmvRowDto> comparisonRows, LocalDate fallbackDate) {
-    LocalDate latestDate = null;
-    for (RtmEmsLogAmvRowDto row : comparisonRows) {
-      String dateValue = trimToNull(row.updateDate());
-      LocalDate rowDate = parseRetrievalDate(dateValue == null ? row.retrievalDate() : dateValue);
-      if (rowDate != null && (latestDate == null || rowDate.isAfter(latestDate))) {
-        latestDate = rowDate;
-      }
-    }
-    return latestDate == null ? fallbackDate : latestDate;
   }
 
   private String logicalScreenSpecies(String species) {
