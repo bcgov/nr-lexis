@@ -691,8 +691,7 @@ class LexisUploadControllerTest {
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     assertThat(response.getBody()).isNotNull();
     assertThat(response.getBody().message())
-        .isEqualTo(
-            "Invoice export value must be positive, 9999999.99 or less, and have at most 2 decimal places.");
+        .isEqualTo("Invoice export value must be positive and round to 9999999.99 or less.");
     verify(applicationEditLockService, never())
         .acquirePermit(any(), any(), any(), anyBoolean());
     verify(uploadServiceProvider, never()).getIfAvailable();

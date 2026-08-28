@@ -1,6 +1,5 @@
 import {
   firstValidationError,
-  maxNumericValueFieldError,
   requiredMaxLengthFieldError,
   requiredPositiveNumericFieldError,
 } from '@/pages/shared/create-form-utils'
@@ -12,6 +11,24 @@ export const INVOICE_CONVERSION_RATE_MAX = 9.99999
 export const INVOICE_CONVERSION_RATE_DECIMAL_PLACES = 5
 
 const PRINTABLE_US_ASCII_PATTERN = /^[\x20-\x7e]*$/
+
+const exceedsRoundedMaximum = (
+  value: string,
+  maximumValue: number,
+  decimalPlaces: number,
+): boolean => {
+  const match = /^(\d+)(?:\.(\d+))?$/.exec(value.trim())
+  if (!match) return Number(value) > maximumValue
+
+  const factor = 10n ** BigInt(decimalPlaces)
+  const fraction = (match[2] ?? '').padEnd(decimalPlaces + 1, '0')
+  let roundedValue = BigInt(match[1]) * factor
+  roundedValue += BigInt(fraction.slice(0, decimalPlaces) || '0')
+  if (fraction[decimalPlaces] >= '5') roundedValue += 1n
+
+  const maximumScaled = BigInt(Math.round(maximumValue * 10 ** decimalPlaces))
+  return roundedValue > maximumScaled
+}
 
 export const invoiceNumberStorageFieldError = (value: string): string | undefined =>
   firstValidationError(
@@ -30,13 +47,9 @@ export const invoiceDecimalStorageFieldError = (
 ): string | undefined =>
   firstValidationError(
     () => requiredPositiveNumericFieldError(value, label),
-    () => maxNumericValueFieldError(value, maximumValue, label),
     () => {
-      const normalized = value.trim()
-      if (!/^\d+(\.\d+)?$/.test(normalized)) return null
-      const decimalPlaces = normalized.split('.')[1]?.length ?? 0
-      return decimalPlaces <= maximumDecimalPlaces
-        ? null
-        : `${label} must have no more than ${maximumDecimalPlaces} decimal places.`
+      return exceedsRoundedMaximum(value, maximumValue, maximumDecimalPlaces)
+        ? `${label} must round to ${maximumValue} or less.`
+        : null
     },
   )

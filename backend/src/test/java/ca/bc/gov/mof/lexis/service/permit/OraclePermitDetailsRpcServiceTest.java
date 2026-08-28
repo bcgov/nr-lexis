@@ -4669,9 +4669,7 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(response.errors())
         .containsExactly(
             "The sales invoice number must use printable US-ASCII characters.",
-            "The export value must be 9999999.99 or less with at most 2 decimal places.",
-            "The currency conversion rate must be 9.99999 or less with at most 5 decimal places.",
-            "The fee in lieu must be 9999999.99 or less with at most 2 decimal places.");
+            "The export value must round to 9999999.99 or less.");
     verifyNoInteractions(repository);
   }
 

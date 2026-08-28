@@ -914,16 +914,13 @@ public class LexisUploadController {
       return "Invoice number must use printable US-ASCII characters.";
     }
     if (!isValidInvoiceAmount(invoiceExportValue)) {
-      return "Invoice export value must be positive, 9999999.99 or less, and have at most 2 "
-          + "decimal places.";
+      return "Invoice export value must be positive and round to 9999999.99 or less.";
     }
     if (!isValidInvoiceConversionRate(invoiceConversionRate)) {
-      return "Invoice conversion rate must be positive, 9.99999 or less, and have at most 5 "
-          + "decimal places.";
+      return "Invoice conversion rate must be positive and round to 9.99999 or less.";
     }
     if (!isValidInvoiceAmount(invoiceFeeInLieu)) {
-      return "Invoice fee in lieu must be positive, 9999999.99 or less, and have at most 2 "
-          + "decimal places.";
+      return "Invoice fee in lieu must be positive and round to 9999999.99 or less.";
     }
     return null;
   }

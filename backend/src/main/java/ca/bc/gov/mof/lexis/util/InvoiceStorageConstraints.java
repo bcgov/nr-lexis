@@ -1,6 +1,7 @@
 package ca.bc.gov.mof.lexis.util;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 
 public final class InvoiceStorageConstraints {
 
@@ -32,9 +33,9 @@ public final class InvoiceStorageConstraints {
     if (value == null || value.compareTo(BigDecimal.ZERO) <= 0) {
       return false;
     }
-    BigDecimal normalized = value.stripTrailingZeros();
-    int decimalPlaces = Math.max(normalized.scale(), 0);
-    long integerDigits = Math.max((long) normalized.precision() - normalized.scale(), 0L);
-    return decimalPlaces <= scale && integerDigits <= precision - scale;
+    BigDecimal rounded = value.setScale(scale, RoundingMode.HALF_UP);
+    BigDecimal maximum =
+        BigDecimal.TEN.pow(precision - scale).subtract(BigDecimal.ONE.movePointLeft(scale));
+    return rounded.compareTo(maximum) <= 0;
   }
 }

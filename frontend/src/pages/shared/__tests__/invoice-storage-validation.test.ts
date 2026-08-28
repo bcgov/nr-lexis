@@ -9,11 +9,11 @@ import {
 } from '@/pages/shared/invoice-storage-validation'
 
 describe('invoice storage validation', () => {
-  it('accepts invoice values at the Oracle storage boundaries', () => {
+  it('accepts values that fit after Oracle rounds them to the column scale', () => {
     expect(invoiceNumberStorageFieldError('INV-12345')).toBeUndefined()
     expect(
       invoiceDecimalStorageFieldError(
-        '9999999.99',
+        '9999999.994',
         'Invoice export value',
         INVOICE_AMOUNT_MAX,
         INVOICE_AMOUNT_DECIMAL_PLACES,
@@ -21,7 +21,15 @@ describe('invoice storage validation', () => {
     ).toBeUndefined()
     expect(
       invoiceDecimalStorageFieldError(
-        '9.99999',
+        '9.999994',
+        'Invoice conversion rate',
+        INVOICE_CONVERSION_RATE_MAX,
+        INVOICE_CONVERSION_RATE_DECIMAL_PLACES,
+      ),
+    ).toBeUndefined()
+    expect(
+      invoiceDecimalStorageFieldError(
+        '1.000001',
         'Invoice conversion rate',
         INVOICE_CONVERSION_RATE_MAX,
         INVOICE_CONVERSION_RATE_DECIMAL_PLACES,
@@ -38,22 +46,22 @@ describe('invoice storage validation', () => {
     )
   })
 
-  it('rejects invoice values outside the Oracle precision and scale boundaries', () => {
+  it('rejects invoice values that overflow after Oracle rounding', () => {
     expect(
       invoiceDecimalStorageFieldError(
-        '10000000',
+        '9999999.995',
         'Invoice export value',
         INVOICE_AMOUNT_MAX,
         INVOICE_AMOUNT_DECIMAL_PLACES,
       ),
-    ).toBe('Invoice export value must be 9999999.99 or less.')
+    ).toBe('Invoice export value must round to 9999999.99 or less.')
     expect(
       invoiceDecimalStorageFieldError(
-        '1.000001',
+        '9.999995',
         'Invoice conversion rate',
         INVOICE_CONVERSION_RATE_MAX,
         INVOICE_CONVERSION_RATE_DECIMAL_PLACES,
       ),
-    ).toBe('Invoice conversion rate must have no more than 5 decimal places.')
+    ).toBe('Invoice conversion rate must round to 9.99999 or less.')
   })
 })

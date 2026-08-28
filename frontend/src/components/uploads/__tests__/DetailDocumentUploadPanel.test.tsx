@@ -435,18 +435,20 @@ describe('DetailDocumentUploadPanel', () => {
     await userEvent.type(screen.getByLabelText('Upload invoice number'), 'é'.repeat(9))
     await userEvent.type(screen.getByLabelText('Upload invoice export value'), '10000000')
     await userEvent.clear(screen.getByLabelText('Upload invoice conversion rate'))
-    await userEvent.type(screen.getByLabelText('Upload invoice conversion rate'), '1.000001')
+    await userEvent.type(screen.getByLabelText('Upload invoice conversion rate'), '10')
     await userEvent.clear(screen.getByLabelText('Upload invoice fee in lieu'))
-    await userEvent.type(screen.getByLabelText('Upload invoice fee in lieu'), '1.001')
+    await userEvent.type(screen.getByLabelText('Upload invoice fee in lieu'), '10000000')
     await userEvent.upload(screen.getByLabelText('Document File'), file)
 
     expect(screen.getByText('Invoice number must use US-ASCII characters.')).toBeInTheDocument()
-    expect(screen.getByText('Invoice export value must be 9999999.99 or less.')).toBeInTheDocument()
     expect(
-      screen.getByText('Invoice conversion rate must have no more than 5 decimal places.'),
+      screen.getByText('Invoice export value must round to 9999999.99 or less.'),
     ).toBeInTheDocument()
     expect(
-      screen.getByText('Invoice fee in lieu must have no more than 2 decimal places.'),
+      screen.getByText('Invoice conversion rate must round to 9.99999 or less.'),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('Invoice fee in lieu must round to 9999999.99 or less.'),
     ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Review upload' })).toBeDisabled()
     expect(mockedValidateAdminUpload).not.toHaveBeenCalled()

@@ -2870,17 +2870,17 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     if (invoiceExportValue == null || invoiceExportValue.compareTo(BigDecimal.ZERO) <= 0) {
       errors.add("A valid export value is required.");
     } else if (!isValidInvoiceAmount(invoiceExportValue)) {
-      errors.add("The export value must be 9999999.99 or less with at most 2 decimal places.");
+      errors.add("The export value must round to 9999999.99 or less.");
     }
     if (invoiceConversionRate == null || invoiceConversionRate.compareTo(BigDecimal.ZERO) <= 0) {
       errors.add("A valid currency conversion rate is required.");
     } else if (!isValidInvoiceConversionRate(invoiceConversionRate)) {
-      errors.add("The currency conversion rate must be 9.99999 or less with at most 5 decimal places.");
+      errors.add("The currency conversion rate must round to 9.99999 or less.");
     }
     if (invoiceFeeInLieu == null || invoiceFeeInLieu.compareTo(BigDecimal.ZERO) <= 0) {
       errors.add("A valid fee in lieu is required.");
     } else if (!isValidInvoiceAmount(invoiceFeeInLieu)) {
-      errors.add("The fee in lieu must be 9999999.99 or less with at most 2 decimal places.");
+      errors.add("The fee in lieu must round to 9999999.99 or less.");
     }
     if (!errors.isEmpty()) {
       return new PermitPersistenceRpcResponseDto(

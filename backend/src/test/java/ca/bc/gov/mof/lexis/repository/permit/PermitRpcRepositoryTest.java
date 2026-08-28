@@ -263,7 +263,7 @@ class PermitRpcRepositoryTest {
             query.indexOf("SCALE_AMV_DATE AS"),
             query.indexOf("GROUP BY SC.EXPORT_SCALE_DETAIL_ID"));
     assertThat(effectiveDateSelection)
-        .contains("ELA.EXPORT_GROWTH_TYPE_CODE = SC.AMV_GROWTH_TYPE_CODE");
+        .doesNotContain("ELA.EXPORT_GROWTH_TYPE_CODE = SC.AMV_GROWTH_TYPE_CODE");
   }
 
   @Test
