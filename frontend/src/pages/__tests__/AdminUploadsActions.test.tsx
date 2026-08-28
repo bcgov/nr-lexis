@@ -394,6 +394,39 @@ describe('Admin upload workflow smoke', () => {
     })
   })
 
+  it('keeps the numeric permit value when the selected invoice target label is rendered', async () => {
+    mockUploadAccess('/fileInvoiceUpload')
+    const permitOption = {
+      value: '7000123',
+      label: '7000123 - Active - Owner 00001012 - Region RSC',
+      status: 'Active' as const,
+      applicantClientNumber: '00001012',
+      ownerClientNumber: '00001012',
+      totalVolume: 25,
+      issueDate: '2026-06-10',
+      region: 'RSC',
+    }
+    mockedSearchProvincialPermitNumberOptions.mockResolvedValue([permitOption])
+
+    renderPage('/admin/uploads?type=invoice')
+
+    const permitNumberInput = screen.getByRole('combobox', {
+      name: 'Permit number',
+    })
+    await userEvent.type(permitNumberInput, permitOption.value)
+    await waitFor(() =>
+      expect(mockedSearchProvincialPermitNumberOptions).toHaveBeenLastCalledWith(
+        permitOption.value,
+      ),
+    )
+    await waitFor(() => expect(permitNumberInput).toHaveValue(permitOption.label))
+    await userEvent.tab()
+
+    expect(
+      screen.queryByText('Permit number must be a positive whole number.'),
+    ).not.toBeInTheDocument()
+  })
+
   it('blocks invoice workflow when upload action is not granted', () => {
     mockUploadAccess(null)
 

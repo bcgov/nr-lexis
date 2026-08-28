@@ -254,7 +254,7 @@ const buildInitialFormStateFromQuery = (query: URLSearchParams): UploadFormState
 
 const trimTargetNumberInput = (input: string): string => input.trim()
 
-const trimExemptionNumberInput = (input: string): string =>
+const trimLabeledTargetNumberInput = (input: string): string =>
   trimTargetNumberInput(input).split(' - ', 1)[0] ?? ''
 
 const uploadTargetItemToString = (
@@ -1482,7 +1482,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
             invalid={!!fieldError('exemptionNumber')}
             invalidText={fieldError('exemptionNumber')}
             searchOptions={searchProvincialExemptionNumberOptions}
-            normalizeInput={trimExemptionNumberInput}
+            normalizeInput={trimLabeledTargetNumberInput}
             onBlur={() => markFieldTouched('exemptionNumber')}
             onChange={(value) =>
               setFormState((current) => ({
@@ -1501,6 +1501,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
             invalid={!!fieldError('permitNumber')}
             invalidText={fieldError('permitNumber')}
             searchOptions={searchProvincialPermitNumberOptions}
+            normalizeInput={trimLabeledTargetNumberInput}
             onBlur={() => markFieldTouched('permitNumber')}
             onChange={(value) =>
               setFormState((current) => ({
