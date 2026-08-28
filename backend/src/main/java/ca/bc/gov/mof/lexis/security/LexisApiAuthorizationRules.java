@@ -350,9 +350,8 @@ final class LexisApiAuthorizationRules {
               "/api/lexis/application-reviews/*/approve",
               "/api/lexis/application-reviews/*/status",
               "/api/lexis/application-reviews/*/status-email"),
-          // INTENTIONAL_LEGACY_DIVERGENCE(EXPORT_SCHEDULE_ADMINISTRATION): Existing workflows
-          // continue reading schedule data through their repositories and option APIs while the
-          // standalone administration API remains denied until business approval restores it.
+          // Export Schedule administration is disabled pending business approval. Existing
+          // workflows continue reading schedule data through their repositories and option APIs.
           denyAll(HttpMethod.GET, "/api/lexis/admin/schedules"),
           denyAll(HttpMethod.POST, "/api/lexis/admin/schedules"),
           denyAll(HttpMethod.PUT, "/api/lexis/admin/schedules/*"),
