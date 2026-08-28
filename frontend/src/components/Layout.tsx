@@ -250,7 +250,7 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
         requiredActions: ['/lexisFILAdmin'],
       },
       // Export Schedule administration is disabled pending business approval. Restore this
-      // navigation item together with its route in routePaths.tsx.
+      // navigation item together with its route and backend mutation authorization.
       // {
       //   to: '/admin/schedules',
       //   label: 'Export Schedule',

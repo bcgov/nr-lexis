@@ -523,7 +523,7 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
     isNavigation: false,
   },
   // Export Schedule administration is disabled pending business approval. Restore this route
-  // together with its navigation item in Layout.tsx.
+  // together with its navigation item and backend mutation authorization.
   // {
   //   path: '/admin/schedules',
   //   id: 'Export Schedule Administration',

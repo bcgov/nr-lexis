@@ -83,7 +83,13 @@ public class LexisApiAuthorizationCustomizer
         case PERMIT_ALL -> authorize.requestMatchers(rule.method(), rule.patternsArray()).permitAll();
         case AUTHENTICATED ->
             authorize.requestMatchers(rule.method(), rule.patternsArray()).authenticated();
-        case DENY_ALL -> authorize.requestMatchers(rule.patternsArray()).denyAll();
+        case DENY_ALL -> {
+          if (rule.method() == null) {
+            authorize.requestMatchers(rule.patternsArray()).denyAll();
+          } else {
+            authorize.requestMatchers(rule.method(), rule.patternsArray()).denyAll();
+          }
+        }
         case ADMIN_AUTHORITY ->
             authorize.requestMatchers(rule.patternsArray()).hasAuthority("LEXIS_ADMIN");
         case PROVINCIAL_STAFF_ROLE -> authorizeProvincialStaffRoles(authorize, rule.patternsArray());
@@ -129,7 +135,13 @@ public class LexisApiAuthorizationCustomizer
           authorize) {
     for (Rule rule : LexisApiAuthorizationRules.rules()) {
       switch (rule.type()) {
-        case DENY_ALL -> authorize.requestMatchers(rule.patternsArray()).denyAll();
+        case DENY_ALL -> {
+          if (rule.method() == null) {
+            authorize.requestMatchers(rule.patternsArray()).denyAll();
+          } else {
+            authorize.requestMatchers(rule.method(), rule.patternsArray()).denyAll();
+          }
+        }
         case KNOWN_ROLE -> authorizeProdReadOnlyKnownRole(authorize, rule);
         case ACTION -> authorizeProdReadOnlyAction(authorize, rule);
         case ANY_ACTION -> authorizeProdReadOnlyAnyAction(authorize, rule);
