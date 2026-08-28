@@ -686,15 +686,6 @@ const ProvincialApplicationPage = () => {
                   value={filters.applicationNumber}
                   onChange={(event) => updateFilter('applicationNumber', event.target.value)}
                 />
-                <SearchableSelect
-                  id="applicationStatus"
-                  labelText="Application status"
-                  value={filters.applicationStatus}
-                  placeholder="All statuses"
-                  options={applicationStatusOptions}
-                  disabled={optionsLoading || optionsUnavailable}
-                  onChange={(value) => updateFilter('applicationStatus', value)}
-                />
                 <TextInput
                   id="packageNumber"
                   labelText="Package number"
@@ -715,6 +706,15 @@ const ProvincialApplicationPage = () => {
                   labelText="Exemption number"
                   value={filters.exemptionNumber}
                   onChange={(event) => updateFilter('exemptionNumber', event.target.value)}
+                />
+                <SearchableSelect
+                  id="applicationStatus"
+                  labelText="Application status"
+                  value={filters.applicationStatus}
+                  placeholder="All statuses"
+                  options={applicationStatusOptions}
+                  disabled={optionsLoading || optionsUnavailable}
+                  onChange={(value) => updateFilter('applicationStatus', value)}
                 />
                 <SearchableSelect
                   id="productTypeCode"
@@ -739,24 +739,6 @@ const ProvincialApplicationPage = () => {
                     )
                   }}
                 />
-                {canCreateExemption && (
-                  <>
-                    <TextInput
-                      id="applicantClientNumber"
-                      labelText="Applicant client number"
-                      value={filters.applicantClientNumber}
-                      onChange={(event) =>
-                        updateFilter('applicantClientNumber', event.target.value)
-                      }
-                    />
-                    <TextInput
-                      id="ownerClientNumber"
-                      labelText="Owner client number"
-                      value={filters.ownerClientNumber}
-                      onChange={(event) => updateFilter('ownerClientNumber', event.target.value)}
-                    />
-                  </>
-                )}
                 {/* INTENTIONAL_LEGACY_DIVERGENCE(SEARCH_FILTER_EXPANSION):
                     Modern application search exposes received-date criteria not shown in legacy. */}
                 <IsoDatePicker
@@ -791,6 +773,24 @@ const ProvincialApplicationPage = () => {
                   invalidText="Date must be YYYY-MM-DD"
                   onChange={(value) => updateFilter('listingToDate', value)}
                 />
+                {canCreateExemption && (
+                  <>
+                    <TextInput
+                      id="applicantClientNumber"
+                      labelText="Applicant client number"
+                      value={filters.applicantClientNumber}
+                      onChange={(event) =>
+                        updateFilter('applicantClientNumber', event.target.value)
+                      }
+                    />
+                    <TextInput
+                      id="ownerClientNumber"
+                      labelText="Owner client number"
+                      value={filters.ownerClientNumber}
+                      onChange={(event) => updateFilter('ownerClientNumber', event.target.value)}
+                    />
+                  </>
+                )}
               </div>
               <div className="legacy-search-actions">
                 <Button

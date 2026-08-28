@@ -1048,6 +1048,109 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     }
   })
 
+  test('keeps related application and offer criteria together across search-grid widths', async ({
+    page,
+  }) => {
+    const readFieldLayout = async (gridSelector: string, fieldIds: string[]) =>
+      page.locator(gridSelector).evaluate((grid, ids) => {
+        const fields = Array.from(grid.children)
+        return Object.fromEntries(
+          ids.map((id) => {
+            const field = fields.find((candidate) => candidate.querySelector(`#${id}`))
+            if (!(field instanceof HTMLElement)) throw new Error(`Search field ${id} not found`)
+            const bounds = field.getBoundingClientRect()
+            return [id, { top: bounds.top, width: bounds.width }]
+          }),
+        )
+      }, fieldIds)
+
+    const expectSameRow = (
+      layout: Record<string, { top: number; width: number }>,
+      fieldIds: string[],
+    ) => {
+      const tops = fieldIds.map((id) => layout[id].top)
+      expect(Math.max(...tops) - Math.min(...tops)).toBeLessThanOrEqual(1)
+    }
+
+    for (const viewport of [
+      { width: 1440, height: 900, columns: 4 },
+      { width: 900, height: 900, columns: 2 },
+    ]) {
+      await page.setViewportSize(viewport)
+      await gotoSyntheticRoute(page, '/provincial/application', {
+        waitUntil: 'domcontentloaded',
+      })
+
+      const applicationLayout = await readFieldLayout('.provincial-application-search-grid', [
+        'applicationNumber',
+        'packageNumber',
+        'exemptionType',
+        'exemptionNumber',
+        'applicationStatus',
+        'productTypeCode',
+        'region',
+        'receivedFromDate',
+        'receivedToDate',
+        'listingFromDate',
+        'listingToDate',
+        'applicantClientNumber',
+        'ownerClientNumber',
+      ])
+
+      if (viewport.columns === 4) {
+        expectSameRow(applicationLayout, [
+          'applicationNumber',
+          'packageNumber',
+          'exemptionType',
+          'exemptionNumber',
+        ])
+        expectSameRow(applicationLayout, ['applicationStatus', 'productTypeCode', 'region'])
+        expectSameRow(applicationLayout, [
+          'receivedFromDate',
+          'receivedToDate',
+          'listingFromDate',
+          'listingToDate',
+        ])
+      } else {
+        expectSameRow(applicationLayout, ['applicationNumber', 'packageNumber'])
+        expectSameRow(applicationLayout, ['exemptionType', 'exemptionNumber'])
+        expectSameRow(applicationLayout, ['applicationStatus', 'productTypeCode'])
+        expectSameRow(applicationLayout, ['receivedFromDate', 'receivedToDate'])
+        expectSameRow(applicationLayout, ['listingFromDate', 'listingToDate'])
+      }
+      expectSameRow(applicationLayout, ['applicantClientNumber', 'ownerClientNumber'])
+
+      await gotoSyntheticRoute(page, '/provincial/offers', {
+        waitUntil: 'domcontentloaded',
+      })
+      const offerLayout = await readFieldLayout('.provincial-offer-search-grid', [
+        'applicationNumber',
+        'packageNumber',
+        'clientNumber',
+        'region',
+        'listingFromDate',
+        'listingToDate',
+        'withdrawalFromDate',
+        'withdrawalToDate',
+      ])
+
+      if (viewport.columns === 4) {
+        expectSameRow(offerLayout, ['applicationNumber', 'packageNumber', 'clientNumber', 'region'])
+        expectSameRow(offerLayout, [
+          'listingFromDate',
+          'listingToDate',
+          'withdrawalFromDate',
+          'withdrawalToDate',
+        ])
+      } else {
+        expectSameRow(offerLayout, ['applicationNumber', 'packageNumber'])
+        expectSameRow(offerLayout, ['clientNumber', 'region'])
+        expectSameRow(offerLayout, ['listingFromDate', 'listingToDate'])
+        expectSameRow(offerLayout, ['withdrawalFromDate', 'withdrawalToDate'])
+      }
+    }
+  })
+
   test('uses accessible dark interactions and stable FSPTS table rows', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
     await gotoSyntheticRoute(page, '/provincial/application', {

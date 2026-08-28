@@ -339,7 +339,7 @@ describe('Provincial Application Search Actions', () => {
     )
   })
 
-  it('renders application search filters in the legacy order', async () => {
+  it('groups legacy application criteria and modern date ranges in reading order', async () => {
     renderPage()
     await screen.findByText('321')
 
@@ -354,18 +354,18 @@ describe('Provincial Application Search Actions', () => {
 
     expect(fieldLabels).toEqual([
       'Application number',
-      'Application status',
       'Package number',
       'Exemption type',
       'Exemption number',
+      'Application status',
       'Product type',
       'Region',
-      'Applicant client number',
-      'Owner client number',
       'Received from date',
       'Received to date',
       'Listing from date',
       'Listing to date',
+      'Applicant client number',
+      'Owner client number',
     ])
   })
 
