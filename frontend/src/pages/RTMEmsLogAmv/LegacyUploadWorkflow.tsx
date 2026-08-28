@@ -42,7 +42,6 @@ import {
   getRtmEmsLogAmvLastSaved,
   previewRtmEmsLogAmvUpload,
   saveRtmEmsLogAmvBatch,
-  searchLatestRtmEmsLogAmv,
   searchRtmEmsLogAmv,
   type RtmEmsLogAmvRow,
   type RtmEmsLogAmvLastSaved,
@@ -432,9 +431,6 @@ const buildInitialReviewValues = (rows: RtmEmsLogAmvRow[]) => {
   return values
 }
 
-const rowEffectiveDate = (row: RtmEmsLogAmvRow): string | null =>
-  normalizeIsoDate(row.updateDate) ?? normalizeIsoDate(row.retrievalDate)
-
 const rowValue = (row: RtmEmsLogAmvRow): number | null => row.newValue ?? row.currentValue
 
 const buildSavedReviewPreview = (
@@ -444,12 +440,7 @@ const buildSavedReviewPreview = (
 ): RtmEmsLogAmvUploadPreview => {
   const supportedSpecies = new Set(RTM_REVIEW_SPECIES_COLUMNS.map((column) => column.key))
   const supportedGrades = new Set(RTM_REVIEW_GRADE_ORDER)
-  const comparisonDate =
-    comparisonRows
-      .map(rowEffectiveDate)
-      .filter((date): date is string => date !== null)
-      .sort()
-      .at(-1) ?? shiftEffectiveMonth(effectiveMonth, -1)
+  const comparisonDate = shiftEffectiveMonth(effectiveMonth, -1)
   const valuesByKey = (rows: RtmEmsLogAmvRow[]) => {
     const values = new Map<string, { grade: string; species: string; value: number | null }>()
 
@@ -528,7 +519,7 @@ const reviewValueWarning = (
   const hasPositiveNewValue = typeof parsedValue === 'number' && parsedValue > 0
 
   if (currentValue === null && hasPositiveNewValue) {
-    return 'No value has ever been set for this grade. Confirm this species and grade combination is valid.'
+    return `${comparisonMonthName} had no value for this grade. Confirm this species and grade combination is valid.`
   }
   if (currentValue !== null && parsedValue === null) {
     return `${comparisonMonthName} had ${formatMoney(currentValue)}. Enter a value, or 0 for none.`
@@ -664,7 +655,7 @@ const SpeciesReviewTable = ({
         <thead>
           <tr>
             <th scope="col">Grade</th>
-            <th scope="col">{`Value in effect (${currentMonthLabel})`}</th>
+            <th scope="col">{`${currentMonthLabel} value`}</th>
             <th scope="col">{nextMonthLabel}</th>
           </tr>
         </thead>
@@ -1161,8 +1152,14 @@ const RtmEmsLogAmvUploadPage = () => {
           return
         }
 
+        const comparisonMonth = shiftEffectiveMonth(effectiveMonth, -1)
         const [comparisonRows, savedAudit] = await Promise.all([
-          searchLatestRtmEmsLogAmv(effectiveMonth),
+          searchRtmEmsLogAmv({
+            species: '',
+            growthIndicator: '',
+            retrievalDate: comparisonMonth,
+            updateDate: comparisonMonth,
+          }),
           getRtmEmsLogAmvLastSaved(effectiveMonth),
         ])
         if (savedValuesRequestRef.current !== requestId) {
