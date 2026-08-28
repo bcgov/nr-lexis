@@ -1727,8 +1727,8 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       waitUntil: 'domcontentloaded',
     })
 
-    await expect(page.getByRole('heading', { level: 1, name: 'Offer Report' })).toBeVisible()
-    const reportPanel = page.getByRole('region', { name: 'Offer Report' })
+    await expect(page.getByRole('heading', { level: 1, name: 'Offers Report' })).toBeVisible()
+    const reportPanel = page.getByRole('region', { name: 'Offers Report' })
     const reportFields = reportPanel.locator('.report-config-fields')
     const reportActions = page.getByRole('group', { name: 'Report actions' })
     await expect(reportPanel).toHaveCSS('border-top-width', '1px')
