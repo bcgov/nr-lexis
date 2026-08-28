@@ -506,7 +506,7 @@ class OracleRtmEmsLogAmvServiceTest {
   @Test
   void shouldIgnoreRetiredGradeAInTheScreenWorkbook() throws IOException {
     OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
-    when(repository.findLatestEffectiveDateRowsBefore(LocalDate.of(2026, 7, 1)))
+    when(repository.findEffectiveDateRows(null, null, LocalDate.of(2026, 6, 1)))
         .thenReturn(List.of());
     when(repository.existsExact(anyString(), anyString(), anyString(), any(LocalDate.class)))
         .thenReturn(true);
@@ -554,20 +554,21 @@ class OracleRtmEmsLogAmvServiceTest {
   }
 
   @Test
-  void shouldCompareTheScreenUploadAgainstTheLatestAvailableValues() throws IOException {
+  void shouldCompareTheScreenUploadAgainstTheExactPreviousMonth() throws IOException {
     OracleRtmEmsLogAmvRepository repository = mock(OracleRtmEmsLogAmvRepository.class);
     Clock clock =
         Clock.fixed(Instant.parse("2026-06-15T19:00:00Z"), LexisBusinessTime.ZONE);
     LocalDate effectiveMonth = LocalDate.of(2026, 7, 1);
-    when(repository.findLatestEffectiveDateRowsBefore(effectiveMonth))
+    LocalDate comparisonMonth = LocalDate.of(2026, 6, 1);
+    when(repository.findEffectiveDateRows(null, null, comparisonMonth))
         .thenReturn(
             List.of(
                 new RtmEmsLogAmvRowDto(
                     "HE",
                     "H",
                     "O",
-                    "2026-05-01",
-                    "2026-05-01",
+                    "2026-06-01",
+                    "2026-06-01",
                     new BigDecimal("81.40"),
                     new BigDecimal("81.40"),
                     "0")));
@@ -576,7 +577,7 @@ class OracleRtmEmsLogAmvServiceTest {
     var preview = service.previewUpload(screenSingleBalsamWorkbook(), "2026-07-01");
 
     assertThat(preview.status()).isEqualTo("accepted");
-    assertThat(preview.retrievalDate()).isEqualTo("2026-05-01");
+    assertThat(preview.retrievalDate()).isEqualTo("2026-06-01");
     assertThat(preview.updateDate()).isEqualTo("2026-07-01");
     assertThat(preview.rows()).hasSize(2);
     assertThat(preview.rows().get(0).species()).isEqualTo("BA");
@@ -589,8 +590,8 @@ class OracleRtmEmsLogAmvServiceTest {
     assertThat(preview.rows().get(1).growthIndicator()).isEqualTo("O");
     assertThat(preview.rows().get(1).currentValue()).isEqualByComparingTo("81.40");
     assertThat(preview.rows().get(1).newValue()).isNull();
-    verify(repository).findLatestEffectiveDateRowsBefore(effectiveMonth);
-    verify(repository, never()).findEffectiveDateRows(any(), any(), any());
+    verify(repository).findEffectiveDateRows(null, null, comparisonMonth);
+    verify(repository, never()).findLatestEffectiveDateRowsBefore(any());
   }
 
   @Test
