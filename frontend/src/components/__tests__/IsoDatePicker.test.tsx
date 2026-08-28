@@ -2,9 +2,22 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
-import IsoDatePicker from '../IsoDatePicker'
+import IsoDatePicker, { parseIsoDate } from '../IsoDatePicker'
 
 describe('IsoDatePicker', () => {
+  it('rejects impossible dates before Flatpickr can normalize them', () => {
+    expect(parseIsoDate('2026-02-30')).toBe(false)
+    expect(parseIsoDate('2024-02-29')).toEqual(new Date(2024, 1, 29))
+  })
+
+  it('preserves four-digit years below 100', () => {
+    const parsedDate = parseIsoDate('0099-01-01')
+
+    expect(parsedDate).not.toBe(false)
+    if (parsedDate === false) throw new Error('Expected a valid date')
+    expect(parsedDate.getFullYear()).toBe(99)
+  })
+
   it('marks the editable date input for password manager ignore', () => {
     render(
       <IsoDatePicker
@@ -56,6 +69,32 @@ describe('IsoDatePicker', () => {
     await userEvent.type(input, '2026-06-12')
 
     expect(input).toHaveValue('2026-06-12')
+  })
+
+  it('preserves impossible typed dates for parent validation', () => {
+    const StatefulDatePicker = () => {
+      const [value, setValue] = useState('2026-08-17')
+
+      return (
+        <>
+          <IsoDatePicker
+            id="approvalDate"
+            labelText="Approval date"
+            value={value}
+            onChange={setValue}
+          />
+          <output aria-label="Current date value">{value}</output>
+        </>
+      )
+    }
+
+    render(<StatefulDatePicker />)
+
+    fireEvent.change(screen.getByLabelText('Approval date'), {
+      target: { value: '2026-02-31' },
+    })
+
+    expect(screen.getByLabelText('Current date value')).toHaveTextContent('2026-02-31')
   })
 
   it('does not emit a change when Carbon repeats the controlled date value', () => {

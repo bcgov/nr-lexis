@@ -41,7 +41,11 @@ import type {
 } from '@/components/uploads/uploadQueueTypes'
 import { useAuth } from '@/context/auth/useAuth'
 import {
+  firstValidationError,
   getVisibleFieldError,
+  maxNumericValueFieldError,
+  normalizeProvincialApplicationNumber,
+  provincialApplicationNumberFieldError,
   requiredFieldError,
   requiredMaxLengthFieldError,
   requiredPositiveNumericFieldError,
@@ -56,7 +60,6 @@ import {
 } from '@/service/admin-upload-service'
 import { searchProvincialExemptionNumberOptions } from '@/service/provincial-exemption-search-service'
 import { searchProvincialPermitNumberOptions } from '@/service/provincial-permit-search-service'
-import { leadingDigits } from '@/utils/text'
 
 type UploadWorkflowDefinition = {
   type: UploadWorkflowType
@@ -182,6 +185,30 @@ const INITIAL_FORM_STATE: UploadFormState = {
   invoiceFeeInLieu: '1.00',
   fileDescription: '',
 }
+
+const INVOICE_AMOUNT_MAX = 9_999_999.99
+const INVOICE_AMOUNT_DECIMAL_PLACES = 2
+const INVOICE_CONVERSION_RATE_MAX = 9.99999
+const INVOICE_CONVERSION_RATE_DECIMAL_PLACES = 5
+
+const requiredOracleDecimalFieldError = (
+  value: string,
+  label: string,
+  maximumValue: number,
+  maximumDecimalPlaces: number,
+): string | undefined =>
+  firstValidationError(
+    () => requiredPositiveNumericFieldError(value, label),
+    () => maxNumericValueFieldError(value, maximumValue, label),
+    () => {
+      const normalized = value.trim()
+      if (!/^\d+(\.\d+)?$/.test(normalized)) return null
+      const decimalPlaces = normalized.split('.')[1]?.length ?? 0
+      return decimalPlaces <= maximumDecimalPlaces
+        ? null
+        : `${label} must have no more than ${maximumDecimalPlaces} decimal places.`
+    },
+  )
 
 const getWorkflowFromQuery = (
   value: string | null,
@@ -718,7 +745,11 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
               : 'Choose at least one file to upload.',
       applicationNumber:
         selectedWorkflowType === 'application'
-          ? (requiredFieldError(formState.applicationNumber, 'Application number') ?? undefined)
+          ? (provincialApplicationNumberFieldError(
+              formState.applicationNumber,
+              'Application number',
+              true,
+            ) ?? undefined)
           : undefined,
       exemptionNumber:
         selectedWorkflowType === 'exemption'
@@ -726,7 +757,8 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
           : undefined,
       permitNumber:
         selectedWorkflowType === 'permit' || selectedWorkflowType === 'invoice'
-          ? (requiredFieldError(formState.permitNumber, 'Permit number') ?? undefined)
+          ? (provincialApplicationNumberFieldError(formState.permitNumber, 'Permit number', true) ??
+            undefined)
           : undefined,
       salesInvoiceNumber:
         selectedWorkflowType === 'invoice'
@@ -735,22 +767,30 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
           : undefined,
       invoiceExportValue:
         selectedWorkflowType === 'invoice'
-          ? (requiredPositiveNumericFieldError(
+          ? requiredOracleDecimalFieldError(
               formState.invoiceExportValue,
               'Invoice export value',
-            ) ?? undefined)
+              INVOICE_AMOUNT_MAX,
+              INVOICE_AMOUNT_DECIMAL_PLACES,
+            )
           : undefined,
       invoiceConversionRate:
         selectedWorkflowType === 'invoice'
-          ? (requiredPositiveNumericFieldError(
+          ? requiredOracleDecimalFieldError(
               formState.invoiceConversionRate,
               'Invoice conversion rate',
-            ) ?? undefined)
+              INVOICE_CONVERSION_RATE_MAX,
+              INVOICE_CONVERSION_RATE_DECIMAL_PLACES,
+            )
           : undefined,
       invoiceFeeInLieu:
         selectedWorkflowType === 'invoice'
-          ? (requiredPositiveNumericFieldError(formState.invoiceFeeInLieu, 'Invoice fee in lieu') ??
-            undefined)
+          ? requiredOracleDecimalFieldError(
+              formState.invoiceFeeInLieu,
+              'Invoice fee in lieu',
+              INVOICE_AMOUNT_MAX,
+              INVOICE_AMOUNT_DECIMAL_PLACES,
+            )
           : undefined,
       fileDescription:
         selectedWorkflowType === 'applicationSubmission'
@@ -946,7 +986,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
 
     if (selectedWorkflowType === 'application') {
       const result = await submitAdminUpload('application', {
-        applicationNumber: formState.applicationNumber.trim(),
+        applicationNumber: normalizeProvincialApplicationNumber(formState.applicationNumber),
         file,
         fileDescription: formState.fileDescription.trim(),
       })
@@ -1461,7 +1501,6 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
             invalid={!!fieldError('permitNumber')}
             invalidText={fieldError('permitNumber')}
             searchOptions={searchProvincialPermitNumberOptions}
-            normalizeInput={leadingDigits}
             onBlur={() => markFieldTouched('permitNumber')}
             onChange={(value) =>
               setFormState((current) => ({

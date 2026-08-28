@@ -656,6 +656,10 @@ public class ExemptionDetailsRpcController {
     }
 
     List<String> roles = sessionService.parseRolesFromPrincipal(authentication);
+    List<String> dateErrors = validateExemptionDateParameters(parameters);
+    if (!dateErrors.isEmpty()) {
+      return invalidExemptionPersistence(parameters, dateErrors);
+    }
     ExemptionDetailsRpcService.CreateExemptionRequest createRequest =
         toCreateExemptionRequest(parameters, roles);
     requireCreateExemptionAccess(createRequest, authentication);
@@ -730,6 +734,10 @@ public class ExemptionDetailsRpcController {
     }
 
     List<String> roles = sessionService.parseRolesFromPrincipal(authentication);
+    List<String> dateErrors = validateExemptionDateParameters(parameters);
+    if (!dateErrors.isEmpty()) {
+      return invalidExemptionPersistence(parameters, dateErrors);
+    }
     ExemptionDetailsRpcService.UpdateExemptionRequest updateRequest =
         toUpdateExemptionRequest(parameters);
     String existingExemptionNumber =
@@ -1061,6 +1069,34 @@ public class ExemptionDetailsRpcController {
             result.refreshPage(),
             result.errors(),
             result.warnings()));
+  }
+
+  private List<String> validateExemptionDateParameters(
+      MultiValueMap<String, String> parameters) {
+    List<String> errors = new ArrayList<>();
+    validateExemptionDate(
+        first(parameters, "approvalDate", "exemptionApprovalDate"), "Approval date", errors);
+    validateExemptionDate(
+        first(parameters, "exemptionExpiryDate", "expiryDate"), "Expiry date", errors);
+    return List.copyOf(errors);
+  }
+
+  private void validateExemptionDate(String value, String label, List<String> errors) {
+    if (value != null && parseDate(value) == null) {
+      errors.add(label + " must be a valid date in YYYY-MM-DD format.");
+    }
+  }
+
+  private ResponseEntity<ExemptionPersistenceResponseDto> invalidExemptionPersistence(
+      MultiValueMap<String, String> parameters, List<String> errors) {
+    return ResponseEntity.ok(
+        new ExemptionPersistenceResponseDto(
+            false,
+            null,
+            first(parameters, "exemptionNumber", "legacyExemptionNumber"),
+            false,
+            List.copyOf(errors),
+            List.of()));
   }
 
   private boolean canPerform(Authentication authentication, String action) {

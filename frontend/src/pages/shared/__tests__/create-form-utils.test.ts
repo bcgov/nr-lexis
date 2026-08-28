@@ -7,7 +7,9 @@ import {
   isValidIsoDate,
   joinCreateSubmitMessages,
   lessThanOrEqualFieldError,
+  normalizeProvincialApplicationNumber,
   parseNonNegativeDecimalFieldValue,
+  provincialApplicationNumberFieldError,
   requiredMaxLengthFieldError,
   requiredNumericFieldError,
   requiredPositiveNumericFieldError,
@@ -104,5 +106,24 @@ describe('create-form-utils', () => {
     expect(integerFieldError('', 'Pieces')).toBe('Pieces must be a whole number.')
     expect(integerFieldError('1.2', 'Pieces')).toBe('Pieces must be a whole number.')
     expect(integerFieldError('12', 'Pieces')).toBeNull()
+  })
+
+  it('validates and canonicalizes provincial application numbers', () => {
+    expect(provincialApplicationNumberFieldError('', 'Application number', true)).toBe(
+      'Application number is required.',
+    )
+    expect(provincialApplicationNumberFieldError('')).toBeNull()
+    expect(provincialApplicationNumberFieldError('1e3')).toBe(
+      'Application number must be a positive whole number.',
+    )
+    expect(provincialApplicationNumberFieldError('0')).toBe(
+      'Application number must be a positive whole number.',
+    )
+    expect(provincialApplicationNumberFieldError('12345678901')).toBe(
+      'Application number must be 10 digits or fewer.',
+    )
+    expect(provincialApplicationNumberFieldError('0000046275')).toBeNull()
+    expect(normalizeProvincialApplicationNumber(' 0000046275 ')).toBe('46275')
+    expect(normalizeProvincialApplicationNumber('1e3')).toBe('1e3')
   })
 })

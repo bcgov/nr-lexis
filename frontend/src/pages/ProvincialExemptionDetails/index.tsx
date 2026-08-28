@@ -76,6 +76,11 @@ import RegionMultiSelect from '@/components/RegionMultiSelect'
 import PendingIcon from '@/components/PendingIcon'
 import { clientLocationLabel, isAgentApplicant } from '@/pages/shared/application-form-utils'
 import {
+  isoDateFieldError,
+  normalizeProvincialApplicationNumber,
+  provincialApplicationNumberFieldError,
+} from '@/pages/shared/create-form-utils'
+import {
   mapSelectedOptionsById,
   mapValueLabelOptionsToIdTextOptions,
   type IdTextOption,
@@ -149,6 +154,8 @@ type ExemptionEditForm = {
   feeRate: string
   regionNumbers: string[]
 }
+
+const ASCII_PATTERN = /^[\u0000-\u007f]*$/
 
 const EMPTY_EDIT_CONTEXT: ExemptionEditContext = {
   rateOverrideEnabled: false,
@@ -789,11 +796,17 @@ const ProvincialExemptionDetailsPage = () => {
     !documentUploadDirty &&
     persistedTypeCode !== 'B' &&
     persistedStatusCode !== 'CAN'
+  const applicationNumberToAddError =
+    provincialApplicationNumberFieldError(applicationNumberToAdd) ?? ''
   const addApplicationDisabled =
-    Boolean(applicationMutationNumber) || !applicationNumberToAdd.trim()
+    Boolean(applicationMutationNumber) ||
+    !applicationNumberToAdd.trim() ||
+    Boolean(applicationNumberToAddError)
   const addApplicationDisabledDescription = applicationMutationNumber
     ? 'Wait for the current application link update to finish.'
-    : 'Enter an application number to add it.'
+    : applicationNumberToAddError
+      ? applicationNumberToAddError
+      : 'Enter an application number to add it.'
   const cancelledBlanketOic = persistedTypeCode === 'B' && persistedStatusCode === 'CAN'
   const cancelledExemption = persistedStatusCode === 'CAN'
   const canEditSummaryFields =
@@ -886,6 +899,15 @@ const ProvincialExemptionDetailsPage = () => {
     ) {
       return 'Select New to reopen this cancelled exemption.'
     }
+    if ((currentTypeCode === 'O' || currentTypeCode === 'B') && !editForm.approvalDate.trim()) {
+      return 'Approval date is required.'
+    }
+    if (isoDateFieldError(editForm.approvalDate)) {
+      return 'Approval date must be YYYY-MM-DD.'
+    }
+    if (isoDateFieldError(editForm.expiryDate)) {
+      return 'Expiry date must be YYYY-MM-DD.'
+    }
     const approvedVolume = Number(editForm.approvedVolume)
     if (
       !Number.isFinite(approvedVolume) ||
@@ -901,6 +923,9 @@ const ProvincialExemptionDetailsPage = () => {
     }
     if (editForm.otherConditions.length > 250) {
       return 'Other conditions must contain at most 250 characters.'
+    }
+    if (!ASCII_PATTERN.test(editForm.otherConditions.trim())) {
+      return 'Other conditions must contain ASCII characters only.'
     }
     if (currentTypeCode === 'B' && editForm.regionNumbers.length === 0) {
       return 'Select at least one region for a Blanket Order in Council exemption.'
@@ -1281,9 +1306,16 @@ const ProvincialExemptionDetailsPage = () => {
   }, [detail, generatingReport])
 
   const onAddApplication = useCallback(async () => {
-    if (!detail || !applicationNumberToAdd.trim() || applicationMutationNumber) return
-    const number = applicationNumberToAdd.trim()
-    setApplicationMutationNumber(number)
+    if (
+      !detail ||
+      !applicationNumberToAdd.trim() ||
+      applicationNumberToAddError ||
+      applicationMutationNumber
+    )
+      return
+    const enteredNumber = applicationNumberToAdd.trim()
+    const number = normalizeProvincialApplicationNumber(enteredNumber)
+    setApplicationMutationNumber(enteredNumber)
     setActionErrorMessage('')
     try {
       const result = await addApplicationToExemption(detail.exemptionNumber, number)
@@ -1307,7 +1339,13 @@ const ProvincialExemptionDetailsPage = () => {
     } finally {
       setApplicationMutationNumber(null)
     }
-  }, [applicationMutationNumber, applicationNumberToAdd, detail, refreshEditableData])
+  }, [
+    applicationMutationNumber,
+    applicationNumberToAdd,
+    applicationNumberToAddError,
+    detail,
+    refreshEditableData,
+  ])
 
   const onRemoveApplication = useCallback(
     async (applicationNumber: string) => {
@@ -1755,6 +1793,16 @@ const ProvincialExemptionDetailsPage = () => {
                                 id="exemptionDetailApprovalDate"
                                 labelText="Approval date"
                                 value={editForm.approvalDate}
+                                invalid={
+                                  ((currentTypeCode === 'O' || currentTypeCode === 'B') &&
+                                    !editForm.approvalDate.trim()) ||
+                                  !!isoDateFieldError(editForm.approvalDate)
+                                }
+                                invalidText={
+                                  !editForm.approvalDate.trim()
+                                    ? 'Approval date is required.'
+                                    : 'Approval date must be YYYY-MM-DD.'
+                                }
                                 disabled={!canEditApprovalDate}
                                 onChange={(value) =>
                                   setEditForm((current) =>
@@ -1766,6 +1814,15 @@ const ProvincialExemptionDetailsPage = () => {
                                 id="exemptionDetailExpiryDate"
                                 labelText="Expiry date"
                                 value={editForm.expiryDate}
+                                invalid={
+                                  !editForm.expiryDate.trim() ||
+                                  !!isoDateFieldError(editForm.expiryDate)
+                                }
+                                invalidText={
+                                  !editForm.expiryDate.trim()
+                                    ? 'Expiry date is required.'
+                                    : 'Expiry date must be YYYY-MM-DD.'
+                                }
                                 disabled={!canEditExpiryDate}
                                 onChange={(value) =>
                                   setEditForm((current) =>
@@ -1919,9 +1976,9 @@ const ProvincialExemptionDetailsPage = () => {
                                 id="exemptionApplicationNumberToAdd"
                                 labelText="Application number"
                                 value={applicationNumberToAdd}
-                                onChange={(event) =>
-                                  setApplicationNumberToAdd(event.target.value.replace(/\D/g, ''))
-                                }
+                                invalid={Boolean(applicationNumberToAddError)}
+                                invalidText={applicationNumberToAddError}
+                                onChange={(event) => setApplicationNumberToAdd(event.target.value)}
                               />
                               <DisabledButtonTooltip
                                 disabled={addApplicationDisabled}

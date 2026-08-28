@@ -157,7 +157,8 @@ class InMemoryRtmEmsLogAmvServiceTest {
   }
 
   @Test
-  void shouldCompareTheScreenUploadAgainstTheLatestAvailableValues() throws IOException {
+  void shouldCompareTheScreenUploadAgainstTheExactPreviousMonthWithoutOlderFallback()
+      throws IOException {
     Clock clock =
         Clock.fixed(Instant.parse("2026-06-15T19:00:00Z"), LexisBusinessTime.ZONE);
     InMemoryRtmEmsLogAmvService service = new InMemoryRtmEmsLogAmvService(clock);
@@ -174,14 +175,14 @@ class InMemoryRtmEmsLogAmvServiceTest {
     var preview = service.previewUpload(workbook, "2026-07-01");
 
     assertThat(preview.status()).isEqualTo("accepted");
-    assertThat(preview.retrievalDate()).isEqualTo("2026-05-01");
+    assertThat(preview.retrievalDate()).isEqualTo("2026-06-01");
     assertThat(preview.updateDate()).isEqualTo("2026-07-01");
     assertThat(preview.rows())
         .filteredOn(row -> "BA".equals(row.species()) && "B".equals(row.grade()))
         .singleElement()
         .satisfies(
             row -> {
-              assertThat(row.currentValue()).isEqualByComparingTo("75.29");
+              assertThat(row.currentValue()).isNull();
               assertThat(row.newValue()).isEqualByComparingTo("10.25");
             });
   }

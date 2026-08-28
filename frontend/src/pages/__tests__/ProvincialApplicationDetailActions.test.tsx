@@ -1194,6 +1194,74 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(await screen.findByText('The application was saved successfully.')).toBeInTheDocument()
   }, 30000)
 
+  it('enforces the legacy application term input boundaries before saving', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationSummaryTile()
+    const termDays = screen.getByLabelText('Term (days)')
+    const termMonths = screen.getByLabelText('Term (months)')
+    const termYears = screen.getByLabelText('Term (years)')
+
+    expect(termDays).toHaveAttribute('max', '99999')
+    expect(termMonths).toHaveAttribute('max', '999')
+    expect(termYears).toHaveAttribute('max', '99')
+
+    fireEvent.change(termDays, { target: { value: '100000' } })
+    await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
+
+    expect(await screen.findAllByText('Application term days must be 99999 or less.')).toHaveLength(
+      2,
+    )
+    expect(mockedCheckApplicationVolumeUsage).not.toHaveBeenCalled()
+    expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
+
+    fireEvent.change(termDays, { target: { value: '99999' } })
+    fireEvent.change(termMonths, { target: { value: '1' } })
+    await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
+
+    expect(await screen.findAllByText('Application term must be 99999 or less.')).toHaveLength(2)
+    expect(mockedCheckApplicationVolumeUsage).not.toHaveBeenCalled()
+    expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
+  })
+
+  it('validates application edit text storage boundaries before saving', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const summaryTile = await selectApplicationSummaryTile()
+    const summary = within(summaryTile)
+    fireEvent.change(summary.getByLabelText('Location of logs'), {
+      target: { value: 'L'.repeat(251) },
+    })
+    fireEvent.change(getSummaryComboBox(summary, 'Owner contact name'), {
+      target: { value: 'C'.repeat(121) },
+    })
+
+    await userEvent.click(summary.getByRole('button', { name: 'Save Summary' }))
+
+    expect(summary.getByText('Owner contact name must be 120 characters or fewer.')).toBeVisible()
+    expect(summary.getByText('Location of logs must be 250 characters or fewer.')).toBeVisible()
+    expect(mockedCheckApplicationVolumeUsage).not.toHaveBeenCalled()
+    expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
+  })
+
   it('shows the backend agent location error when an application edit is rejected', async () => {
     mockedUpdateApplicationSummary.mockResolvedValueOnce({
       valid: false,

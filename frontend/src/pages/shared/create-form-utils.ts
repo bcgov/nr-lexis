@@ -23,6 +23,7 @@ const isPositiveNumeric = (value: string): boolean => {
 }
 
 const NON_NEGATIVE_DECIMAL_PATTERN = /^\d+(\.\d+)?$/
+const PROVINCIAL_APPLICATION_NUMBER_PATTERN = /^\d{1,10}$/
 
 const normalizeText = (value: string): string => value.trim()
 
@@ -58,6 +59,28 @@ export const firstValidationError = (
 
 export const requiredFieldError = (value: string, label = 'This field'): string | null => {
   return normalizeText(value) ? null : `${label} is required.`
+}
+
+export const normalizeProvincialApplicationNumber = (value: string): string => {
+  const normalized = normalizeText(value)
+  return /^\d+$/.test(normalized) ? normalized.replace(/^0+(?=\d)/, '') : normalized
+}
+
+export const provincialApplicationNumberFieldError = (
+  value: string,
+  label = 'Application number',
+  required = false,
+): string | null => {
+  const normalized = normalizeText(value)
+  if (!normalized) {
+    return required ? `${label} is required.` : null
+  }
+  if (!/^\d+$/.test(normalized) || /^0+$/.test(normalized)) {
+    return `${label} must be a positive whole number.`
+  }
+  return PROVINCIAL_APPLICATION_NUMBER_PATTERN.test(normalized)
+    ? null
+    : `${label} must be 10 digits or fewer.`
 }
 
 export const maxLengthFieldError = (

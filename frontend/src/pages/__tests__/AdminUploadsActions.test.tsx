@@ -237,6 +237,24 @@ describe('Admin upload workflow smoke', () => {
     })
   })
 
+  it('rejects malformed application document targets without truncating them', async () => {
+    mockUploadAccess('/fileApplicationUpload')
+    mockedSearchProvincialApplicationNumberOptions.mockResolvedValue([])
+    renderPage('/admin/uploads?type=application')
+
+    const applicationNumberInput = screen.getByRole('combobox', {
+      name: 'Application number',
+    })
+    await userEvent.type(applicationNumberInput, '45963x')
+    await userEvent.tab()
+
+    expect(applicationNumberInput).toHaveValue('45963x')
+    expect(
+      screen.getByText('Application number must be a positive whole number.'),
+    ).toBeInTheDocument()
+    expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
+  })
+
   it('searches exemption numbers for exemption document uploads', async () => {
     mockUploadAccess('/fileExemptionUpload')
     mockedSearchProvincialExemptionNumberOptions.mockResolvedValue([
@@ -521,6 +539,32 @@ describe('Admin upload workflow smoke', () => {
     expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
   })
 
+  it('rejects malformed permit document targets without truncating them', async () => {
+    mockUploadAccess('/filePermitUpload')
+    renderPage('/admin/uploads?type=permit')
+
+    const permitNumberInput = screen.getByRole('combobox', { name: 'Permit number' })
+    await userEvent.type(permitNumberInput, '5001abc')
+    await userEvent.tab()
+
+    expect(permitNumberInput).toHaveValue('5001abc')
+    expect(screen.getByText('Permit number must be a positive whole number.')).toBeInTheDocument()
+    expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
+  })
+
+  it('rejects permit document targets that exceed the Oracle number boundary', async () => {
+    mockUploadAccess('/filePermitUpload')
+    renderPage('/admin/uploads?type=permit')
+
+    const permitNumberInput = screen.getByRole('combobox', { name: 'Permit number' })
+    await userEvent.type(permitNumberInput, '12345678901')
+    await userEvent.tab()
+
+    expect(permitNumberInput).toHaveValue('12345678901')
+    expect(screen.getByText('Permit number must be 10 digits or fewer.')).toBeInTheDocument()
+    expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
+  })
+
   it('blocks invoice uploads that fail legacy invoice validation rules', async () => {
     mockUploadAccess('/fileInvoiceUpload')
 
@@ -540,6 +584,26 @@ describe('Admin upload workflow smoke', () => {
 
     expect(screen.getByText('Invoice number must be 9 characters or fewer.')).toBeInTheDocument()
     expect(screen.getAllByText('Use a positive numeric value.').length).toBeGreaterThanOrEqual(3)
+    expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
+  })
+
+  it('blocks invoice values outside the Oracle precision and scale boundaries', async () => {
+    mockUploadAccess('/fileInvoiceUpload')
+    renderPage('/admin/uploads?type=invoice&permitNumber=5001')
+
+    await userEvent.type(screen.getByLabelText('Invoice number'), 'INV123')
+    await userEvent.type(screen.getByLabelText('Export value (CAD)'), '10000000')
+    await userEvent.clear(screen.getByLabelText('Conversion rate'))
+    await userEvent.type(screen.getByLabelText('Conversion rate'), '10')
+    await userEvent.clear(screen.getByLabelText('Fee in lieu'))
+    await userEvent.type(screen.getByLabelText('Fee in lieu'), '1.001')
+    await userEvent.tab()
+
+    expect(screen.getByText('Invoice export value must be 9999999.99 or less.')).toBeInTheDocument()
+    expect(screen.getByText('Invoice conversion rate must be 9.99999 or less.')).toBeInTheDocument()
+    expect(
+      screen.getByText('Invoice fee in lieu must have no more than 2 decimal places.'),
+    ).toBeInTheDocument()
     expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
   })
 

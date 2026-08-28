@@ -895,6 +895,33 @@ class ExemptionDetailsRpcControllerTest {
   }
 
   @Test
+  void addExemptionShouldRejectImpossibleDatesBeforePersistence() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken("idir\\approver", "n/a");
+    List<String> roles = List.of("LEXIS_APPLICATION_APPROVER");
+    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(roles);
+    when(authorizationService.canPerformAction(roles, "/createExemption")).thenReturn(true);
+
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("exemptionNumber", "EX-205");
+    params.add("approvalDate", "2026-02-31");
+    params.add("expiryDate", "not-a-date");
+
+    ResponseEntity<ExemptionDetailsRpcController.ExemptionPersistenceResponseDto> response =
+        controller.addExemptionLegacy(params, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().success()).isFalse();
+    assertThat(response.getBody().errors())
+        .containsExactly(
+            "Approval date must be a valid date in YYYY-MM-DD format.",
+            "Expiry date must be a valid date in YYYY-MM-DD format.");
+    verifyNoInteractions(service);
+  }
+
+  @Test
   void addExemptionShouldRejectRequestedRegionOutsideScopeBeforePersistence() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     controller.setProvincialAuthorizationService(provincialAuthorizationService);
@@ -1114,6 +1141,33 @@ class ExemptionDetailsRpcControllerTest {
             authentication,
             List.of(11L, 12L),
             ProvincialAuthorizationService.OrgUnitSurface.EXEMPTION_WRITE);
+  }
+
+  @Test
+  void updateExemptionShouldRejectImpossibleDatesBeforePersistence() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken("idir\\approver", "n/a");
+    List<String> roles = List.of("LEXIS_APPLICATION_APPROVER");
+    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(roles);
+    when(authorizationService.canPerformAction(roles, "saveExemption")).thenReturn(true);
+
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("exemptionNumber", "EX-205");
+    params.add("approvalDate", "2026-02-31");
+    params.add("exemptionExpiryDate", "2026-13-01");
+
+    ResponseEntity<ExemptionDetailsRpcController.ExemptionPersistenceResponseDto> response =
+        controller.updateExemptionLegacy(params, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().success()).isFalse();
+    assertThat(response.getBody().errors())
+        .containsExactly(
+            "Approval date must be a valid date in YYYY-MM-DD format.",
+            "Expiry date must be a valid date in YYYY-MM-DD format.");
+    verifyNoInteractions(service);
   }
 
   @Test

@@ -151,4 +151,24 @@ describe('ApplicationNumberSelect', () => {
 
     expect(onChange).not.toHaveBeenCalled()
   })
+
+  it('preserves malformed custom input so the form can reject it', async () => {
+    const onChange = vi.fn()
+    mockedSearchProvincialApplicationNumberOptions.mockResolvedValue([])
+
+    render(
+      <ApplicationNumberSelect
+        id="applicationNumber"
+        labelText="Application Number (required)"
+        value=""
+        onChange={onChange}
+      />,
+    )
+
+    const input = screen.getByRole('combobox', { name: 'Application Number (required)' })
+    await userEvent.type(input, '1e3')
+
+    expect(onChange).toHaveBeenLastCalledWith('1e3')
+    expect(input).toHaveValue('1e3')
+  })
 })

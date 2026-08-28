@@ -53,6 +53,7 @@ import {
   withDetailReturnTo,
 } from '@/pages/shared/detail-navigation'
 import {
+  atMostTwoDecimalFieldError,
   firstValidationError,
   getVisibleFieldError,
   integerFieldError,
@@ -185,6 +186,9 @@ type PermitFeeOverrideForm = PermitFeeOverrideContext
 
 const MAX_OIC_REQUEST_PIECES = 9_999_999_999
 const MAX_OIC_REQUEST_VOLUME_LENGTH = 9
+const MAX_PERMIT_OVERRIDE_FEE = 9_999_999.99
+const MAX_PERMIT_OVERRIDE_COMMENT_LENGTH = 254
+const ASCII_PATTERN = /^[\u0000-\u007f]*$/
 // Legacy allows an approver to move a permit to EXP; once expired, the record is read-only.
 const EDITABLE_PERMIT_STATUS_CODES = new Set(['ACT', 'COM', 'CAN', 'EXP'])
 const SERVER_ASSIGNED_PAYMENT_PENDING_STATUS = 'PPD'
@@ -1641,6 +1645,22 @@ const ProvincialPermitDetailsPage = () => {
       permitExpiryDate: isoDateFieldError(permitForm.permitExpiryDate) ?? undefined,
       permitSubmitDate: isoDateFieldError(permitForm.permitSubmitDate) ?? undefined,
       permitRequestDate: undefined,
+      permitReceiptNo:
+        firstValidationError(
+          () =>
+            ASCII_PATTERN.test(permitForm.permitReceiptNo.trim())
+              ? null
+              : 'Receipt number must contain ASCII characters only.',
+          () => maxLengthFieldError(permitForm.permitReceiptNo, 50, 'Receipt number'),
+        ) ?? undefined,
+      permitRemarks:
+        firstValidationError(
+          () =>
+            ASCII_PATTERN.test(permitForm.permitRemarks.trim())
+              ? null
+              : 'Permit remarks must contain ASCII characters only.',
+          () => maxLengthFieldError(permitForm.permitRemarks, 254, 'Permit remarks'),
+        ) ?? undefined,
       estimatedShippingDate: firstValidationError(
         () => requiredFieldError(permitForm.estimatedShippingDate, 'Estimated shipping date'),
         () => isoDateFieldError(permitForm.estimatedShippingDate),
@@ -2032,12 +2052,36 @@ const ProvincialPermitDetailsPage = () => {
     }
 
     const normalizedFee = feeOverrideForm.overrideFee.trim()
-    const parsedFee = Number(normalizedFee)
-    if (
-      feeOverrideForm.overrideEnabled &&
-      (!normalizedFee || !Number.isFinite(parsedFee) || parsedFee <= 0)
-    ) {
-      setActionErrorMessage('Override fee must be a dollar amount greater than zero.')
+    const normalizedComment = feeOverrideForm.overrideComment.trim()
+    const validationError = firstValidationError(
+      () =>
+        feeOverrideForm.overrideEnabled ? requiredFieldError(normalizedFee, 'Override fee') : null,
+      () =>
+        feeOverrideForm.overrideEnabled ? numericFieldError(normalizedFee, 'Override fee') : null,
+      () => (feeOverrideForm.overrideEnabled ? positiveNumericFieldError(normalizedFee) : null),
+      () =>
+        feeOverrideForm.overrideEnabled
+          ? maxNumericValueFieldError(normalizedFee, MAX_PERMIT_OVERRIDE_FEE, 'Override fee')
+          : null,
+      () =>
+        feeOverrideForm.overrideEnabled
+          ? atMostTwoDecimalFieldError(normalizedFee, 'Override fee')
+          : null,
+      () =>
+        feeOverrideForm.overrideEnabled && !ASCII_PATTERN.test(normalizedComment)
+          ? 'Override comment must contain ASCII characters only.'
+          : null,
+      () =>
+        feeOverrideForm.overrideEnabled
+          ? maxLengthFieldError(
+              normalizedComment,
+              MAX_PERMIT_OVERRIDE_COMMENT_LENGTH,
+              'Override comment',
+            )
+          : null,
+    )
+    if (validationError) {
+      setActionErrorMessage(validationError)
       return false
     }
 
@@ -2045,9 +2089,7 @@ const ProvincialPermitDetailsPage = () => {
       ...buildPermitDetailForm(detail),
       overrideInd: String(feeOverrideForm.overrideEnabled),
       overrideFee: feeOverrideForm.overrideEnabled ? normalizedFee : '',
-      overrideComment: feeOverrideForm.overrideEnabled
-        ? feeOverrideForm.overrideComment.trim()
-        : '',
+      overrideComment: feeOverrideForm.overrideEnabled ? normalizedComment : '',
     }
     const isLatestRequest = tryBeginPermitMutation()
     if (!isLatestRequest) {
@@ -2072,9 +2114,7 @@ const ProvincialPermitDetailsPage = () => {
       const savedContext: PermitFeeOverrideContext = {
         overrideEnabled: feeOverrideForm.overrideEnabled,
         overrideFee: feeOverrideForm.overrideEnabled ? normalizedFee : '',
-        overrideComment: feeOverrideForm.overrideEnabled
-          ? feeOverrideForm.overrideComment.trim()
-          : '',
+        overrideComment: feeOverrideForm.overrideEnabled ? normalizedComment : '',
         locked: false,
         lockMessage: '',
       }
@@ -2942,6 +2982,7 @@ const ProvincialPermitDetailsPage = () => {
     field: PermitDetailFormField,
     labelText: string,
     isDisabled: boolean,
+    maxCount?: number,
   ) => (
     <TextArea
       id={`permit-${field}`}
@@ -2953,6 +2994,7 @@ const ProvincialPermitDetailsPage = () => {
       onChange={(event) => setPermitFormField(field, event.target.value)}
       disabled={isDisabled}
       rows={3}
+      maxCount={maxCount}
     />
   )
 
@@ -3373,6 +3415,7 @@ const ProvincialPermitDetailsPage = () => {
                               'permitReceiptNo',
                               'Receipt number',
                               invoiceMaterialLocked && !canEnterPaymentReceipt,
+                              50,
                             )}
                             <TextInput
                               id="permit-invoiceNumber"
@@ -3408,7 +3451,7 @@ const ProvincialPermitDetailsPage = () => {
                             )}
                           </div>
                           <div className="legacy-search-grid">
-                            {renderPermitTextArea('permitRemarks', 'Remarks', false)}
+                            {renderPermitTextArea('permitRemarks', 'Remarks', false, 254)}
                           </div>
                         </Tile>
                       ) : (
@@ -4466,6 +4509,7 @@ const ProvincialPermitDetailsPage = () => {
                                   <TextArea
                                     id="permitOverrideComment"
                                     labelText="Override comment"
+                                    maxCount={MAX_PERMIT_OVERRIDE_COMMENT_LENGTH}
                                     value={feeOverrideForm.overrideComment}
                                     disabled={isSavingFeeOverride}
                                     onChange={(event) =>

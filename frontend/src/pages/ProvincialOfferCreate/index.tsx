@@ -12,7 +12,8 @@ import {
   firstValidationError,
   getVisibleFieldError,
   isoDateFieldError,
-  positiveNumericFieldError,
+  normalizeProvincialApplicationNumber,
+  provincialApplicationNumberFieldError,
   requiredFieldError,
   type FieldErrors,
   type TouchedFields,
@@ -105,7 +106,7 @@ const packageOptionsFromQuery = (query: URLSearchParams): SearchOption[] => {
 const buildInitialFormFromQuery = (query: URLSearchParams): ProvincialOfferCreateForm => {
   return {
     ...INITIAL_FORM,
-    applicationNumber: query.get('applicationNumber') ?? '',
+    applicationNumber: normalizeProvincialApplicationNumber(query.get('applicationNumber') ?? ''),
     packageNumber: query.get('packageNumber') ?? '',
     offeringClientNumber: query.get('offeringClientNumber') ?? query.get('clientNumber') ?? '',
     companyName: query.get('companyName') ?? '',
@@ -354,11 +355,16 @@ const ProvincialOfferCreatePage = () => {
   }, [authoritativeOfferingClientNumber, isScopedProvincialSubmitter])
 
   useEffect(() => {
-    const applicationNumber = applicationNumberForLookup.trim()
-    if (!applicationNumber) {
+    const rawApplicationNumber = applicationNumberForLookup.trim()
+    if (!rawApplicationNumber) {
       dispatchApplicationContext({ type: 'reset', packageOptions: queryPackageOptions })
       return
     }
+    if (provincialApplicationNumberFieldError(rawApplicationNumber, 'Application number', true)) {
+      dispatchApplicationContext({ type: 'reset', packageOptions: [] })
+      return
+    }
+    const applicationNumber = normalizeProvincialApplicationNumber(rawApplicationNumber)
 
     let isActive = true
     dispatchApplicationContext({ type: 'loadStart' })
@@ -375,7 +381,7 @@ const ProvincialOfferCreatePage = () => {
               validation.errors[0] ?? 'This application cannot accept purchase offers.',
           })
           setForm((current) =>
-            current.applicationNumber.trim() === applicationNumber
+            normalizeProvincialApplicationNumber(current.applicationNumber) === applicationNumber
               ? { ...current, packageNumber: '' }
               : current,
           )
@@ -406,7 +412,9 @@ const ProvincialOfferCreatePage = () => {
           packageOptions: nextPackageOptions,
         })
         setForm((current) => {
-          if (current.applicationNumber.trim() !== applicationNumber) {
+          if (
+            normalizeProvincialApplicationNumber(current.applicationNumber) !== applicationNumber
+          ) {
             return current
           }
           const firstPackageNumber = nextPackageOptions[0]?.value
@@ -431,7 +439,7 @@ const ProvincialOfferCreatePage = () => {
               'Application eligibility could not be verified. Reload the page and try again.',
           })
           setForm((current) =>
-            current.applicationNumber.trim() === applicationNumber
+            normalizeProvincialApplicationNumber(current.applicationNumber) === applicationNumber
               ? { ...current, packageNumber: '' }
               : current,
           )
@@ -476,7 +484,7 @@ const ProvincialOfferCreatePage = () => {
     () => ({
       applicationNumber: firstValidationError(
         () => requiredFieldError(form.applicationNumber, 'Application number'),
-        () => positiveNumericFieldError(form.applicationNumber),
+        () => provincialApplicationNumberFieldError(form.applicationNumber),
         () => applicationValidationError || null,
       ),
       packageNumber: firstValidationError(
@@ -562,7 +570,7 @@ const ProvincialOfferCreatePage = () => {
 
   const fieldError = (field: ProvincialOfferCreateField): string | undefined =>
     getVisibleFieldError(field, fieldErrors, touchedFields, showAllValidationErrors)
-  const applicationNumberError = applicationValidationError || fieldError('applicationNumber')
+  const applicationNumberError = fieldError('applicationNumber') || applicationValidationError
 
   const onSave = async (navigateToCreatedRecord = true): Promise<boolean> => {
     if (isLoadingApplicationContext || scopedClientLookupPending) {
@@ -587,6 +595,7 @@ const ProvincialOfferCreatePage = () => {
     try {
       const result = await submitProvincialOfferCreate({
         ...form,
+        applicationNumber: normalizeProvincialApplicationNumber(form.applicationNumber),
         offeringClientNumber: effectiveOfferingClientNumber,
         companyName: effectiveCompanyName,
         contactName: effectiveContactName,
@@ -769,7 +778,9 @@ const ProvincialOfferCreatePage = () => {
                     packageNumber: form.packageNumber.trim(),
                     section: 'scales',
                   })
-                  navigate(`/provincial/application/${form.applicationNumber.trim()}?${params}`)
+                  navigate(
+                    `/provincial/application/${normalizeProvincialApplicationNumber(form.applicationNumber)}?${params}`,
+                  )
                 }}
               >
                 See Scale Detail

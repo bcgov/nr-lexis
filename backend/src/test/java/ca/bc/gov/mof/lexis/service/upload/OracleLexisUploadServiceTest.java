@@ -408,7 +408,10 @@ class OracleLexisUploadServiceTest {
     OracleLexisUploadService service = service();
     MockMultipartFile file =
         new MockMultipartFile(
-            "formFile", "invoice.pdf", "application/pdf", "pdf-bytes".getBytes(StandardCharsets.UTF_8));
+            "formFile",
+            "invoice.pdf",
+            "application/pdf",
+            "pdf-bytes".getBytes(StandardCharsets.UTF_8));
 
     assertThat(
             service.uploadInvoice(
@@ -419,6 +422,49 @@ class OracleLexisUploadServiceTest {
                 BigDecimal.ZERO,
                 BigDecimal.ZERO,
                 BigDecimal.ZERO,
+                "jsmith"))
+        .isEmpty();
+    verifyNoInteractions(uploadRepository);
+  }
+
+  @Test
+  void uploadInvoiceShouldRejectValuesOutsideOraclePrecisionBeforeCallingOracle() {
+    OracleLexisUploadService service = service();
+    MockMultipartFile file =
+        new MockMultipartFile(
+            "formFile", "invoice.pdf", "application/pdf", "pdf-bytes".getBytes(StandardCharsets.UTF_8));
+
+    assertThat(
+            service.uploadInvoice(
+                file,
+                7000123L,
+                "INV-1",
+                "",
+                new BigDecimal("10000000"),
+                BigDecimal.ONE,
+                BigDecimal.ONE,
+                "jsmith"))
+        .isEmpty();
+    assertThat(
+            service.uploadInvoice(
+                file,
+                7000123L,
+                "INV-1",
+                "",
+                BigDecimal.ONE,
+                new BigDecimal("10"),
+                BigDecimal.ONE,
+                "jsmith"))
+        .isEmpty();
+    assertThat(
+            service.uploadInvoice(
+                file,
+                7000123L,
+                "INV-1",
+                "",
+                BigDecimal.ONE,
+                BigDecimal.ONE,
+                new BigDecimal("1.001"),
                 "jsmith"))
         .isEmpty();
     verifyNoInteractions(uploadRepository);
