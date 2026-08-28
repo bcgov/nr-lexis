@@ -255,6 +255,8 @@ const buildInitialFormStateFromQuery = (query: URLSearchParams): UploadFormState
 
 const trimTargetNumberInput = (input: string): string => input.trim()
 
+// INTENTIONAL_LEGACY_DIVERGENCE(CANONICAL_UPLOAD_TARGET_SELECTION): Modern searchable upload
+// options render descriptive labels, but legacy-compatible persistence requires the numeric target.
 const trimLabeledTargetNumberInput = (input: string): string =>
   trimTargetNumberInput(input).split(' - ', 1)[0] ?? ''
 

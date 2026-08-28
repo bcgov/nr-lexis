@@ -574,6 +574,8 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
     }
   }
 
+  // INTENTIONAL_LEGACY_DIVERGENCE(OFFER_VOLUME_VALIDATION_ENFORCEMENT): Preserve the legacy UI
+  // volume cap at the service boundary so direct requests cannot bypass it.
   private List<String> validateCreateOfferReferences(
       CreateOfferRequest request, Double offerVolume, boolean enforceVolumeLimit) {
     List<String> errors = new ArrayList<>();
