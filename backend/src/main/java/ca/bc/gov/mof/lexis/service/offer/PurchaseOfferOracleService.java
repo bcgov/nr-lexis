@@ -267,8 +267,7 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
     }
     if (errors.isEmpty()) {
       boolean offerVolumeChanged =
-          legacyNumberChanged(
-              normalizeLegacyOfferVolume(current.offerVolume()), normalizedOfferVolume);
+          legacyNumberChanged(current.offerVolume(), updated.offerVolume());
       boolean volumeContextChanged =
           !equalsNullable(
               normalizePackageNumber(current.packageNumber()), updated.packageNumber());

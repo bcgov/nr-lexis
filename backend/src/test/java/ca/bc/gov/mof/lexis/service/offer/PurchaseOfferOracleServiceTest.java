@@ -1182,6 +1182,47 @@ class PurchaseOfferOracleServiceTest {
   }
 
   @Test
+  void updateOfferShouldCompareRawVolumeBeforeLegacyRounding() {
+    when(repository.findUpdateSourceByOfferNumber(81001L))
+        .thenReturn(Optional.of(updateSource(1000456L, "PKG-903", "P")));
+    stubProvincialApplicationWithPackage(1000456L, "PKG-903", 500.0d, 95.5d);
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.updateOffer(
+            new PurchaseOfferService.CreateOfferRequest(
+                1000456L, 81001L, null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, 95.54d),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactly("Offer volume cannot exceed the application/package volume.");
+    verify(repository, never()).updateOffer(any());
+  }
+
+  @Test
+  void updateOfferShouldNotRevalidateExactHistoricalRawVolume() {
+    when(repository.findUpdateSourceByOfferNumber(81001L))
+        .thenReturn(Optional.of(updateSource(1000456L, "PKG-903", "P", 95.54d)));
+    stubProvincialApplicationWithPackage(1000456L, "PKG-903", 500.0d, 95.5d);
+    when(repository.updateOffer(any(PurchaseOfferRepository.PurchaseOfferUpdateRecord.class)))
+        .thenReturn(true);
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.updateOffer(
+            new PurchaseOfferService.CreateOfferRequest(
+                1000456L, 81001L, null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, 95.54d),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<PurchaseOfferRepository.PurchaseOfferUpdateRecord> captor =
+        ArgumentCaptor.forClass(PurchaseOfferRepository.PurchaseOfferUpdateRecord.class);
+    verify(repository).updateOffer(captor.capture());
+    assertThat(captor.getValue().offerVolume()).isEqualTo(95.5d);
+  }
+
+  @Test
   void updateOfferShouldRejectUnchangedVolumeAboveReplacementPackageVolume() {
     when(repository.findUpdateSourceByOfferNumber(81001L))
         .thenReturn(Optional.of(updateSource(1000456L, "PKG-903", "P")));
@@ -1856,6 +1897,14 @@ class PurchaseOfferOracleServiceTest {
 
   private PurchaseOfferRepository.PurchaseOfferUpdateSourceRow updateSource(
       Long applicationNumber, String packageNumber, String jurisdictionCode) {
+    return updateSource(applicationNumber, packageNumber, jurisdictionCode, 95.5d);
+  }
+
+  private PurchaseOfferRepository.PurchaseOfferUpdateSourceRow updateSource(
+      Long applicationNumber,
+      String packageNumber,
+      String jurisdictionCode,
+      Double offerVolume) {
     return new PurchaseOfferRepository.PurchaseOfferUpdateSourceRow(
         81001L,
         applicationNumber,
@@ -1877,7 +1926,7 @@ class PurchaseOfferOracleServiceTest {
         "Existing condition",
         "creator",
         Instant.parse("2026-03-01T18:00:00Z"),
-        95.5d);
+        offerVolume);
   }
 
   private PurchaseOfferRepository.PurchaseOfferUpdateSourceRow updateSourceWithReceivedDate(
