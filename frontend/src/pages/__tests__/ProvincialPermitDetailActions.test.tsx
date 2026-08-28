@@ -608,13 +608,24 @@ describe('Provincial Permit Detail Action Smoke', () => {
       'Agent',
       'Shipping',
       'Items',
+      'Documents',
       'Fees',
       'GBMS',
-      'Documents',
       'Invoices',
     ]) {
       expect(await screen.findByRole('tab', { name: tabName })).toBeInTheDocument()
     }
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
+      'Permit',
+      'Owner',
+      'Agent',
+      'Shipping',
+      'Items',
+      'Documents',
+      'Fees',
+      'GBMS',
+      'Invoices',
+    ])
     const pageHeading = screen.getByRole('heading', {
       name: 'Permit 777 (Pending)',
       level: 1,

@@ -744,7 +744,7 @@ describe('Provincial exemption edit context', () => {
     ).not.toBeInTheDocument()
   })
 
-  it('returns to Summary when editing starts and keeps related permits read-only', async () => {
+  it('returns to Exemption details when editing starts and keeps related permits read-only', async () => {
     vi.mocked(fetchExemptionEditContext).mockResolvedValue({
       rateOverrideEnabled: false,
       fixedFeeRate: '',
@@ -767,13 +767,16 @@ describe('Provincial exemption edit context', () => {
     await userEvent.click(await screen.findByRole('tab', { name: 'Permits' }))
     await userEvent.click(screen.getByRole('button', { name: 'Edit exemption' }))
 
-    expect(screen.getByRole('tab', { name: 'Summary' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tab', { name: 'Exemption details' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
     expect(screen.getByRole('heading', { name: 'Edit exemption', level: 2 })).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('tab', { name: 'Permits' }))
     expect(
       screen.getByText(
-        'Permit records are read-only. Edit exemption details on the Summary or Fees tab.',
+        'Permit records are read-only. Use the Exemption details or Fees tab to edit exemption values.',
       ),
     ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Save exemption' })).toBeInTheDocument()
@@ -814,7 +817,7 @@ describe('Provincial exemption edit context', () => {
     await userEvent.click(screen.getByRole('tab', { name: 'Applications' }))
     expect(screen.queryByLabelText('Application number')).not.toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('tab', { name: 'Summary' }))
+    await userEvent.click(screen.getByRole('tab', { name: 'Exemption details' }))
     await userEvent.click(screen.getByRole('button', { name: 'Cancel edit' }))
     await userEvent.click(screen.getByRole('tab', { name: 'Applications' }))
     const applicationNumber = await screen.findByLabelText('Application number')

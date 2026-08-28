@@ -1,4 +1,12 @@
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  isValidElement,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { Edit, TrashCan } from '@carbon/icons-react'
 import {
   Button,
@@ -207,9 +215,9 @@ const PERMIT_DETAIL_TABS = [
   { id: 'agent', label: 'Agent' },
   { id: 'shipping', label: 'Shipping' },
   { id: 'items', label: 'Items' },
+  { id: 'documents', label: 'Documents' },
   { id: 'fees', label: 'Fees' },
   { id: 'gbms', label: 'GBMS' },
-  { id: 'documents', label: 'Documents' },
   // INTENTIONAL_LEGACY_DIVERGENCE(PERMIT_INVOICE_VISIBILITY):
   // Modern permit detail surfaces invoice rows and invoice document actions together.
   { id: 'invoices', label: 'Invoices' },
@@ -219,9 +227,18 @@ type PermitDetailTabId = (typeof PERMIT_DETAIL_TABS)[number]['id']
 type DeferredPermitTabId = Extract<PermitDetailTabId, 'fees' | 'documents' | 'invoices'>
 const PERMIT_DETAIL_TAB_IDS: readonly PermitDetailTabId[] = PERMIT_DETAIL_TABS.map(({ id }) => id)
 
-const ContiguousTabPanels = ({ children }: { children: ReactNode }) => {
-  const panels = Array.isArray(children) ? children.filter(Boolean) : children
-  return <TabPanels>{panels}</TabPanels>
+const ContiguousTabPanels = ({
+  children,
+  order,
+}: {
+  children: ReactNode
+  order: readonly PermitDetailTabId[]
+}) => {
+  const panels = (Array.isArray(children) ? children.flat() : [children]).filter(isValidElement)
+  const panelsByTab = new Map(
+    panels.filter((panel) => panel.key !== null).map((panel) => [String(panel.key), panel]),
+  )
+  return <TabPanels>{order.map((tab) => panelsByTab.get(tab))}</TabPanels>
 }
 
 const EMPTY_DEFERRED_PERMIT_TAB_STATE: Record<DeferredPermitTabId, boolean> = {
@@ -3207,8 +3224,8 @@ const ProvincialPermitDetailsPage = () => {
                   <Tab key={id}>{label}</Tab>
                 ))}
               </TabList>
-              <ContiguousTabPanels>
-                <TabPanel className="application-detail-tab-panel">
+              <ContiguousTabPanels order={permitDetailTabs.map(({ id }) => id)}>
+                <TabPanel key="permit" className="application-detail-tab-panel">
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
                       {isEditingPermit && permitForm ? (
@@ -3684,7 +3701,7 @@ const ProvincialPermitDetailsPage = () => {
                     )}
                   </Grid>
                 </TabPanel>
-                <TabPanel className="application-detail-tab-panel">
+                <TabPanel key="owner" className="application-detail-tab-panel">
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
                       <PermitClientTile
@@ -3698,7 +3715,7 @@ const ProvincialPermitDetailsPage = () => {
                   </Grid>
                 </TabPanel>
                 {hasPermitAgent && (
-                  <TabPanel className="application-detail-tab-panel">
+                  <TabPanel key="agent" className="application-detail-tab-panel">
                     <Grid fullWidth className="application-detail-tab-grid">
                       <Column sm={4} md={8} lg={16}>
                         <PermitClientTile
@@ -3712,7 +3729,7 @@ const ProvincialPermitDetailsPage = () => {
                     </Grid>
                   </TabPanel>
                 )}
-                <TabPanel className="application-detail-tab-panel">
+                <TabPanel key="shipping" className="application-detail-tab-panel">
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
                       {isEditingShipping && permitForm ? (
@@ -3951,7 +3968,7 @@ const ProvincialPermitDetailsPage = () => {
                     )}
                   </Grid>
                 </TabPanel>
-                <TabPanel className="application-detail-tab-panel">
+                <TabPanel key="items" className="application-detail-tab-panel">
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
                       <Tile>
@@ -4432,7 +4449,7 @@ const ProvincialPermitDetailsPage = () => {
                     </Column>
                   </Grid>
                 </TabPanel>
-                <TabPanel className="application-detail-tab-panel">
+                <TabPanel key="fees" className="application-detail-tab-panel">
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
                       <Tile>
@@ -4665,7 +4682,7 @@ const ProvincialPermitDetailsPage = () => {
                   </Grid>
                 </TabPanel>
                 {hasGbmsHistory && (
-                  <TabPanel className="application-detail-tab-panel">
+                  <TabPanel key="gbms" className="application-detail-tab-panel">
                     <Grid fullWidth className="application-detail-tab-grid">
                       <Column sm={4} md={8} lg={16}>
                         <Tile>
@@ -4712,7 +4729,7 @@ const ProvincialPermitDetailsPage = () => {
                     </Grid>
                   </TabPanel>
                 )}
-                <TabPanel className="application-detail-tab-panel">
+                <TabPanel key="documents" className="application-detail-tab-panel">
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
                       <Tile>
@@ -4852,7 +4869,7 @@ const ProvincialPermitDetailsPage = () => {
                     </Column>
                   </Grid>
                 </TabPanel>
-                <TabPanel className="application-detail-tab-panel">
+                <TabPanel key="invoices" className="application-detail-tab-panel">
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
                       <Tile>
