@@ -249,6 +249,7 @@ public class OracleLexisUploadService implements LexisUploadService {
         || permitNumber < 1
         || normalizedSalesInvoiceNumber == null
         || normalizedSalesInvoiceNumber.length() > 9
+        || !isPrintableAscii(normalizedSalesInvoiceNumber)
         || !positiveOracleNumber(exportValue, INVOICE_AMOUNT_PRECISION, INVOICE_AMOUNT_SCALE)
         || !positiveOracleNumber(
             currencyConversionRate,
@@ -393,6 +394,10 @@ public class OracleLexisUploadService implements LexisUploadService {
     int decimalPlaces = Math.max(normalized.scale(), 0);
     long integerDigits = Math.max((long) normalized.precision() - normalized.scale(), 0L);
     return decimalPlaces <= scale && integerDigits <= precision - scale;
+  }
+
+  private boolean isPrintableAscii(String value) {
+    return value.chars().allMatch(character -> character >= 0x20 && character <= 0x7e);
   }
 
   private UploadPersistenceResult persistFile(

@@ -190,6 +190,7 @@ const INVOICE_AMOUNT_MAX = 9_999_999.99
 const INVOICE_AMOUNT_DECIMAL_PLACES = 2
 const INVOICE_CONVERSION_RATE_MAX = 9.99999
 const INVOICE_CONVERSION_RATE_DECIMAL_PLACES = 5
+const PRINTABLE_US_ASCII_PATTERN = /^[\x20-\x7e]*$/
 
 const requiredOracleDecimalFieldError = (
   value: string,
@@ -762,8 +763,13 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
           : undefined,
       salesInvoiceNumber:
         selectedWorkflowType === 'invoice'
-          ? (requiredMaxLengthFieldError(formState.salesInvoiceNumber, 9, 'Invoice number') ??
-            undefined)
+          ? (firstValidationError(
+              () => requiredMaxLengthFieldError(formState.salesInvoiceNumber, 9, 'Invoice number'),
+              () =>
+                PRINTABLE_US_ASCII_PATTERN.test(formState.salesInvoiceNumber.trim())
+                  ? null
+                  : 'Invoice number must use US-ASCII characters.',
+            ) ?? undefined)
           : undefined,
       invoiceExportValue:
         selectedWorkflowType === 'invoice'

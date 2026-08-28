@@ -640,6 +640,17 @@ describe('Admin upload workflow smoke', () => {
     expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
   })
 
+  it('rejects invoice numbers that cannot fit Oracle byte storage', async () => {
+    mockUploadAccess('/fileInvoiceUpload')
+    renderPage('/admin/uploads?type=invoice&permitNumber=5001')
+
+    await userEvent.type(screen.getByLabelText('Invoice number'), 'é'.repeat(9))
+    await userEvent.tab()
+
+    expect(screen.getByText('Invoice number must use US-ASCII characters.')).toBeInTheDocument()
+    expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
+  })
+
   it('validates LEXIS XML before submitting an application submission', async () => {
     mockUploadAccess('uploadApplicationSubmission')
     mockedValidateApplicationSubmissionUpload.mockResolvedValue({
