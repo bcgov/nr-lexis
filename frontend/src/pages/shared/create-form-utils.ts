@@ -1,3 +1,5 @@
+// INTENTIONAL_LEGACY_DIVERGENCE(STRICT_DATE_INPUT_VALIDATION): Reject impossible calendar dates
+// instead of allowing a date widget or lenient legacy parser to rewrite the entered value.
 export const isValidIsoDate = (value: string): boolean => {
   if (!value.trim()) return true
   const match = /^(\d{4})-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/.exec(value)
