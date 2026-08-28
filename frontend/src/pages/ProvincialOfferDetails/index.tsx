@@ -303,7 +303,7 @@ const ProvincialOfferDetailsPage = () => {
         () => {
           const currentVolume = form?.offerVolume ?? ''
           const originalVolume = detail?.offerVolume == null ? '' : String(detail.offerVolume)
-          return formatLegacyOfferVolume(currentVolume) === formatLegacyOfferVolume(originalVolume)
+          return currentVolume === originalVolume
             ? null
             : offerVolumeContextFieldError(currentVolume, detail?.packageVolume)
         },
@@ -679,7 +679,14 @@ const ProvincialOfferDetailsPage = () => {
                   invalidText={fieldError('offerVolume')}
                   onBlur={() => {
                     markFieldTouched('offerVolume')
-                    updateFormField('offerVolume', formatLegacyOfferVolume(form.offerVolume))
+                    const originalVolume =
+                      detail.offerVolume == null ? '' : String(detail.offerVolume)
+                    if (
+                      form.offerVolume !== originalVolume &&
+                      !offerVolumeContextFieldError(form.offerVolume, detail.packageVolume)
+                    ) {
+                      updateFormField('offerVolume', formatLegacyOfferVolume(form.offerVolume))
+                    }
                   }}
                   onChange={(event) => updateFormField('offerVolume', event.target.value)}
                 />

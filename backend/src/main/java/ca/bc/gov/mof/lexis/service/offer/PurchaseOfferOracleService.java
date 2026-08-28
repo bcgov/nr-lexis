@@ -269,8 +269,12 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
       boolean offerVolumeChanged =
           legacyNumberChanged(
               normalizeLegacyOfferVolume(current.offerVolume()), normalizedOfferVolume);
+      boolean volumeContextChanged =
+          !equalsNullable(
+              normalizePackageNumber(current.packageNumber()), updated.packageNumber());
       errors.addAll(
-          validateCreateOfferReferences(updated, updated.offerVolume(), offerVolumeChanged));
+          validateCreateOfferReferences(
+              updated, updated.offerVolume(), offerVolumeChanged || volumeContextChanged));
     }
     List<String> warnings = List.of();
 

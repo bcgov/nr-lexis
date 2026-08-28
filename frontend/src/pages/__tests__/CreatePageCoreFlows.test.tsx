@@ -2433,6 +2433,32 @@ describe('Create Page Core Flows', () => {
     expect(mockedSubmitProvincialOfferCreate).not.toHaveBeenCalled()
   })
 
+  it('compares the raw offer volume before legacy blur formatting', async () => {
+    mockedFetchOfferPackageVolume.mockResolvedValue('95.5')
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/offers/create?applicationNumber=2001&packageNumber=PKG-9&companyName=Example%20Lumber&contactName=Sample%20Contact&pickupLocation=Yard%20A&purchaseOfferAmount=25000',
+        ]}
+      >
+        <Routes>
+          <Route path="/provincial/offers/create" element={<ProvincialOfferCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByDisplayValue('95.5')).toBeInTheDocument()
+    const offerVolumeInput = screen.getByLabelText('Offer volume (m³)')
+    await userEvent.type(offerVolumeInput, '95.54')
+    await userEvent.click(screen.getByRole('button', { name: 'Save new offer' }))
+
+    expect(offerVolumeInput).toHaveValue('95.54')
+    expect(
+      await screen.findAllByText('Offer volume cannot exceed the application/package volume.'),
+    ).not.toHaveLength(0)
+    expect(mockedSubmitProvincialOfferCreate).not.toHaveBeenCalled()
+  })
+
   it('debounces offer context lookups while an application number is typed', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/offers/create']}>

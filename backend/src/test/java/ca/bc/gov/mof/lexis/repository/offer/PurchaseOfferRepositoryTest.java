@@ -421,6 +421,19 @@ class PurchaseOfferRepositoryTest {
   }
 
   @Test
+  void applicationReferenceLookupShouldFallBackToApplicationVolumeAlias() {
+    PurchaseOfferRepository repository = new ApplicationVolumeAliasPurchaseOfferRepository();
+
+    assertThat(repository.findApplicationReference(1000456L))
+        .hasValueSatisfying(
+            application -> {
+              assertThat(application.applicationNumber()).isEqualTo(1000456L);
+              assertThat(application.jurisdictionCode()).isEqualTo("P");
+              assertThat(application.applicationVolume()).isEqualTo(95.5d);
+            });
+  }
+
+  @Test
   void insertShouldPropagateOracleFailure() {
     FailingPurchaseOfferRepository repository = new FailingPurchaseOfferRepository();
 
@@ -681,6 +694,33 @@ class PurchaseOfferRepositoryTest {
         when(resultSet.getString("OWNER_CLIENT_LOCATION_CODE")).thenReturn("00");
         when(resultSet.getLong("ORG_UNIT_NO")).thenReturn(1903L);
         when(resultSet.wasNull()).thenReturn(false);
+        return Optional.of(rowMapper.map(resultSet));
+      } catch (SQLException exception) {
+        throw new AssertionError(exception);
+      }
+    }
+  }
+
+  private static final class ApplicationVolumeAliasPurchaseOfferRepository
+      extends PurchaseOfferRepository {
+
+    ApplicationVolumeAliasPurchaseOfferRepository() {
+      super(null);
+    }
+
+    @Override
+    protected <T> Optional<T> queryCursorSingleRequired(
+        String procedureSignature,
+        SqlConsumer<CallableStatement> binder,
+        int cursorOutIndex,
+        SqlRowMapper<T> rowMapper) {
+      ResultSet resultSet = mock(ResultSet.class);
+      try {
+        when(resultSet.getLong("APPLICATION_NUMBER")).thenReturn(1000456L);
+        when(resultSet.getString("EXPORT_JURISDICTION_CODE")).thenReturn("P");
+        when(resultSet.getDouble("EXEMPTION_APPLICATION_VOLUME")).thenReturn(0.0d);
+        when(resultSet.getDouble("APPLICATION_VOLUME")).thenReturn(95.5d);
+        when(resultSet.wasNull()).thenReturn(false, true, false);
         return Optional.of(rowMapper.map(resultSet));
       } catch (SQLException exception) {
         throw new AssertionError(exception);

@@ -1182,6 +1182,25 @@ class PurchaseOfferOracleServiceTest {
   }
 
   @Test
+  void updateOfferShouldRejectUnchangedVolumeAboveReplacementPackageVolume() {
+    when(repository.findUpdateSourceByOfferNumber(81001L))
+        .thenReturn(Optional.of(updateSource(1000456L, "PKG-903", "P")));
+    stubProvincialApplicationWithPackage(1000456L, "PKG-904", 500.0d, 80.0d);
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.updateOffer(
+            new PurchaseOfferService.CreateOfferRequest(
+                1000456L, 81001L, "PKG-904", null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactly("Offer volume cannot exceed the application/package volume.");
+    verify(repository, never()).updateOffer(any());
+  }
+
+  @Test
   void updateOfferShouldAllowReplacementPackageForCurrentApplication() {
     when(repository.findUpdateSourceByOfferNumber(81001L))
         .thenReturn(Optional.of(updateSource(1000456L, "PKG-903", "P")));

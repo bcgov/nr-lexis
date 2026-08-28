@@ -243,7 +243,9 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
             new ApplicationReferenceRow(
                 getLong(rs, "APPLICATION_NUMBER"),
                 getString(rs, "EXPORT_JURISDICTION_CODE"),
-                getDouble(rs, "EXEMPTION_APPLICATION_VOLUME")));
+                firstNonNull(
+                    getDouble(rs, "EXEMPTION_APPLICATION_VOLUME"),
+                    getDouble(rs, "APPLICATION_VOLUME"))));
   }
 
   public Optional<ApplicationRecipientRow> findApplicationRecipient(Long applicationNumber) {
