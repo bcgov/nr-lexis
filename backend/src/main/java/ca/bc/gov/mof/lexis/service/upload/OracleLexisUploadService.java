@@ -242,7 +242,7 @@ public class OracleLexisUploadService implements LexisUploadService {
       BigDecimal feeInLieu,
       String entryUserId) {
     String normalizedSalesInvoiceNumber = trimToNull(salesInvoiceNumber);
-    // INTENTIONAL_LEGACY_DIVERGENCE(INVOICE_NUMBER_STORAGE_SAFETY): Reject multibyte input before
+    // INTENTIONAL_LEGACY_DIVERGENCE(INVOICE_NUMBER_ENCODING_VALIDATION): Reject multibyte input before
     // it reaches Oracle's VARCHAR2(9 BYTE) invoice-number columns.
     if (!validFile(file)
         || permitNumber == null

@@ -218,8 +218,6 @@ const PERMIT_DETAIL_TABS = [
   { id: 'documents', label: 'Documents' },
   { id: 'fees', label: 'Fees' },
   { id: 'gbms', label: 'GBMS' },
-  // INTENTIONAL_LEGACY_DIVERGENCE(PERMIT_INVOICE_VISIBILITY):
-  // Modern permit detail surfaces invoice rows and invoice document actions together.
   { id: 'invoices', label: 'Invoices' },
 ] as const
 
