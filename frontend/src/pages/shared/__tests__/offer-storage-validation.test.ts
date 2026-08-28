@@ -32,6 +32,7 @@ describe('offer storage validation', () => {
   it('formats valid offer volumes to the legacy one-decimal scale', () => {
     expect(formatLegacyOfferVolume('12.34')).toBe('12.3')
     expect(formatLegacyOfferVolume('12.36')).toBe('12.4')
+    expect(formatLegacyOfferVolume('12.25')).toBe('12.3')
     expect(formatLegacyOfferVolume('1.234')).toBe('1.234')
   })
 
@@ -45,9 +46,9 @@ describe('offer storage validation', () => {
     expect(offerVolumeContextFieldError('95.1', null)).toBeNull()
   })
 
-  it('compares against the context volume rounded half up to one decimal', () => {
-    expect(offerVolumeContextFieldError('95.6', '95.55')).toBeNull()
-    expect(offerVolumeContextFieldError('95.7', '95.55')).toBe(
+  it('compares against the canonical one-decimal context returned by the backend', () => {
+    expect(offerVolumeContextFieldError('12.2', '12.2')).toBeNull()
+    expect(offerVolumeContextFieldError('12.3', '12.2')).toBe(
       'Offer volume cannot exceed the application/package volume.',
     )
   })

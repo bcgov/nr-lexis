@@ -420,4 +420,36 @@ describe('DetailDocumentUploadPanel', () => {
     await userEvent.type(conversionRate, '1.25')
     await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(false))
   })
+
+  it('blocks invoice review when values cannot fit Oracle storage', async () => {
+    const file = new File(['invoice upload'], 'invoice.pdf', { type: 'application/pdf' })
+    render(
+      <DetailDocumentUploadPanel
+        workflowType="invoice"
+        targetNumber="777"
+        inputId="invoiceDocuments"
+      />,
+    )
+
+    await openUploadModal('Add invoice')
+    await userEvent.type(screen.getByLabelText('Upload invoice number'), 'é'.repeat(9))
+    await userEvent.type(screen.getByLabelText('Upload invoice export value'), '10000000')
+    await userEvent.clear(screen.getByLabelText('Upload invoice conversion rate'))
+    await userEvent.type(screen.getByLabelText('Upload invoice conversion rate'), '1.000001')
+    await userEvent.clear(screen.getByLabelText('Upload invoice fee in lieu'))
+    await userEvent.type(screen.getByLabelText('Upload invoice fee in lieu'), '1.001')
+    await userEvent.upload(screen.getByLabelText('Document File'), file)
+
+    expect(screen.getByText('Invoice number must use US-ASCII characters.')).toBeInTheDocument()
+    expect(screen.getByText('Invoice export value must be 9999999.99 or less.')).toBeInTheDocument()
+    expect(
+      screen.getByText('Invoice conversion rate must have no more than 5 decimal places.'),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('Invoice fee in lieu must have no more than 2 decimal places.'),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Review upload' })).toBeDisabled()
+    expect(mockedValidateAdminUpload).not.toHaveBeenCalled()
+    expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
+  })
 })

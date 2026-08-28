@@ -244,7 +244,8 @@ class PermitRpcRepositoryTest {
     assertThat(rows.get(0).averageMarketValue()).isEqualByComparingTo("125.00");
     ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
     verify(jdbcTemplate).query(sql.capture(), any(RowMapper.class), eq(7000123L));
-    assertThat(sql.getValue())
+    String query = sql.getValue();
+    assertThat(query)
         .contains("WITH SCALE_CONTEXT AS")
         .contains("FROM EXPORT_SCALE_DETAIL SD")
         .contains("EEA.EXPORT_PRODUCT_TYPE_CODE AS APPLICATION_PRODUCT_TYPE_CODE")
@@ -257,6 +258,12 @@ class PermitRpcRepositoryTest {
         .contains("WHEN P.APPLICATION_NUMBER IS NULL THEN EPD.EXPORT_GROWTH_TYPE_CODE")
         .contains("ELA.EXPORT_GROWTH_TYPE_CODE = SC.AMV_GROWTH_TYPE_CODE")
         .contains("WHERE SD.EXPORT_PERMIT_DETAIL_NUMBER = ?");
+    String effectiveDateSelection =
+        query.substring(
+            query.indexOf("SCALE_AMV_DATE AS"),
+            query.indexOf("GROUP BY SC.EXPORT_SCALE_DETAIL_ID"));
+    assertThat(effectiveDateSelection)
+        .contains("ELA.EXPORT_GROWTH_TYPE_CODE = SC.AMV_GROWTH_TYPE_CODE");
   }
 
   @Test

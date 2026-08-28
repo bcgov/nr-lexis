@@ -41,17 +41,21 @@ import type {
 } from '@/components/uploads/uploadQueueTypes'
 import { useAuth } from '@/context/auth/useAuth'
 import {
-  firstValidationError,
   getVisibleFieldError,
-  maxNumericValueFieldError,
   normalizeProvincialApplicationNumber,
   provincialApplicationNumberFieldError,
   requiredFieldError,
-  requiredMaxLengthFieldError,
-  requiredPositiveNumericFieldError,
   type FieldErrors,
   type TouchedFields,
 } from '@/pages/shared/create-form-utils'
+import {
+  INVOICE_AMOUNT_DECIMAL_PLACES,
+  INVOICE_AMOUNT_MAX,
+  INVOICE_CONVERSION_RATE_DECIMAL_PLACES,
+  INVOICE_CONVERSION_RATE_MAX,
+  invoiceDecimalStorageFieldError,
+  invoiceNumberStorageFieldError,
+} from '@/pages/shared/invoice-storage-validation'
 import {
   submitAdminUpload,
   validateApplicationSubmissionUpload,
@@ -185,31 +189,6 @@ const INITIAL_FORM_STATE: UploadFormState = {
   invoiceFeeInLieu: '1.00',
   fileDescription: '',
 }
-
-const INVOICE_AMOUNT_MAX = 9_999_999.99
-const INVOICE_AMOUNT_DECIMAL_PLACES = 2
-const INVOICE_CONVERSION_RATE_MAX = 9.99999
-const INVOICE_CONVERSION_RATE_DECIMAL_PLACES = 5
-const PRINTABLE_US_ASCII_PATTERN = /^[\x20-\x7e]*$/
-
-const requiredOracleDecimalFieldError = (
-  value: string,
-  label: string,
-  maximumValue: number,
-  maximumDecimalPlaces: number,
-): string | undefined =>
-  firstValidationError(
-    () => requiredPositiveNumericFieldError(value, label),
-    () => maxNumericValueFieldError(value, maximumValue, label),
-    () => {
-      const normalized = value.trim()
-      if (!/^\d+(\.\d+)?$/.test(normalized)) return null
-      const decimalPlaces = normalized.split('.')[1]?.length ?? 0
-      return decimalPlaces <= maximumDecimalPlaces
-        ? null
-        : `${label} must have no more than ${maximumDecimalPlaces} decimal places.`
-    },
-  )
 
 const getWorkflowFromQuery = (
   value: string | null,
@@ -765,17 +744,11 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
           : undefined,
       salesInvoiceNumber:
         selectedWorkflowType === 'invoice'
-          ? (firstValidationError(
-              () => requiredMaxLengthFieldError(formState.salesInvoiceNumber, 9, 'Invoice number'),
-              () =>
-                PRINTABLE_US_ASCII_PATTERN.test(formState.salesInvoiceNumber.trim())
-                  ? null
-                  : 'Invoice number must use US-ASCII characters.',
-            ) ?? undefined)
+          ? invoiceNumberStorageFieldError(formState.salesInvoiceNumber)
           : undefined,
       invoiceExportValue:
         selectedWorkflowType === 'invoice'
-          ? requiredOracleDecimalFieldError(
+          ? invoiceDecimalStorageFieldError(
               formState.invoiceExportValue,
               'Invoice export value',
               INVOICE_AMOUNT_MAX,
@@ -784,7 +757,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
           : undefined,
       invoiceConversionRate:
         selectedWorkflowType === 'invoice'
-          ? requiredOracleDecimalFieldError(
+          ? invoiceDecimalStorageFieldError(
               formState.invoiceConversionRate,
               'Invoice conversion rate',
               INVOICE_CONVERSION_RATE_MAX,
@@ -793,7 +766,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
           : undefined,
       invoiceFeeInLieu:
         selectedWorkflowType === 'invoice'
-          ? requiredOracleDecimalFieldError(
+          ? invoiceDecimalStorageFieldError(
               formState.invoiceFeeInLieu,
               'Invoice fee in lieu',
               INVOICE_AMOUNT_MAX,

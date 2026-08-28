@@ -1,6 +1,10 @@
 package ca.bc.gov.mof.lexis.service.permit;
 
 import static ca.bc.gov.mof.lexis.util.DateUtils.parseIsoOrLegacyDate;
+import static ca.bc.gov.mof.lexis.util.InvoiceStorageConstraints.INVOICE_NUMBER_MAX_LENGTH;
+import static ca.bc.gov.mof.lexis.util.InvoiceStorageConstraints.isValidInvoiceAmount;
+import static ca.bc.gov.mof.lexis.util.InvoiceStorageConstraints.isValidInvoiceConversionRate;
+import static ca.bc.gov.mof.lexis.util.InvoiceStorageConstraints.isValidInvoiceNumber;
 import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.controlSafe;
 import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.exceptionType;
 import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.fingerprint;
@@ -150,7 +154,6 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   private static final String APPLICATION_STATUS_EXEMPTED = "EXE";
   private static final String EXEMPTION_STATUS_ACTIVE = "ACT";
   private static final String SPECIES_FIR = "FI";
-  private static final int MAX_SALES_INVOICE_NUMBER_LENGTH = 9;
   private static final long MAX_OIC_REQUEST_PIECES = 9_999_999_999L;
   // THE.EXPORT_PERMIT_DETAIL.OIC_REQUEST_VOLUME is VARCHAR2(9), not a numeric column.
   private static final int MAX_OIC_REQUEST_VOLUME_LENGTH = 9;
@@ -2856,20 +2859,28 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     }
     if (normalizedSalesInvoiceNumber == null) {
       errors.add("A valid sales invoice number is required.");
-    } else if (normalizedSalesInvoiceNumber.length() > MAX_SALES_INVOICE_NUMBER_LENGTH) {
+    } else if (normalizedSalesInvoiceNumber.length() > INVOICE_NUMBER_MAX_LENGTH) {
       errors.add(
           "The sales invoice number must be "
-              + MAX_SALES_INVOICE_NUMBER_LENGTH
+              + INVOICE_NUMBER_MAX_LENGTH
               + " characters or fewer.");
+    } else if (!isValidInvoiceNumber(normalizedSalesInvoiceNumber)) {
+      errors.add("The sales invoice number must use printable US-ASCII characters.");
     }
     if (invoiceExportValue == null || invoiceExportValue.compareTo(BigDecimal.ZERO) <= 0) {
       errors.add("A valid export value is required.");
+    } else if (!isValidInvoiceAmount(invoiceExportValue)) {
+      errors.add("The export value must be 9999999.99 or less with at most 2 decimal places.");
     }
     if (invoiceConversionRate == null || invoiceConversionRate.compareTo(BigDecimal.ZERO) <= 0) {
       errors.add("A valid currency conversion rate is required.");
+    } else if (!isValidInvoiceConversionRate(invoiceConversionRate)) {
+      errors.add("The currency conversion rate must be 9.99999 or less with at most 5 decimal places.");
     }
     if (invoiceFeeInLieu == null || invoiceFeeInLieu.compareTo(BigDecimal.ZERO) <= 0) {
       errors.add("A valid fee in lieu is required.");
+    } else if (!isValidInvoiceAmount(invoiceFeeInLieu)) {
+      errors.add("The fee in lieu must be 9999999.99 or less with at most 2 decimal places.");
     }
     if (!errors.isEmpty()) {
       return new PermitPersistenceRpcResponseDto(

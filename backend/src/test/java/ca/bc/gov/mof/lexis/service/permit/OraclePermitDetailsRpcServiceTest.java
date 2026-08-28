@@ -4655,6 +4655,27 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
+  void addInvoiceShouldRejectValuesThatCannotFitOracleStorage() {
+    PermitPersistenceRpcResponseDto response =
+        service.addInvoice(
+            7000123L,
+            "ééééééééé",
+            new BigDecimal("10000000"),
+            new BigDecimal("1.000001"),
+            new BigDecimal("12.001"),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactly(
+            "The sales invoice number must use printable US-ASCII characters.",
+            "The export value must be 9999999.99 or less with at most 2 decimal places.",
+            "The currency conversion rate must be 9.99999 or less with at most 5 decimal places.",
+            "The fee in lieu must be 9999999.99 or less with at most 2 decimal places.");
+    verifyNoInteractions(repository);
+  }
+
+  @Test
   void addInvoiceShouldRejectDuplicateInvoice() {
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(permitMutationRow("ACT")));

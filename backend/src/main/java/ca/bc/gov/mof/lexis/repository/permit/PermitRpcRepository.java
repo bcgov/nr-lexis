@@ -150,6 +150,8 @@ public class PermitRpcRepository extends OracleRepositorySupport {
         ON EGC.EXPORT_GRADE_CODE = SD.EXPORT_GRADE_CODE
       WHERE %s
       """;
+  // INTENTIONAL_LEGACY_DIVERGENCE(AMV_GROWTH_DATE_SELECTION): Include growth type while selecting
+  // the effective AMV date so a newer row for the other growth type cannot hide an applicable row.
   private static final String FIND_PERMIT_FEE_SCALE_ROWS =
       """
       WITH SCALE_CONTEXT AS (
@@ -205,6 +207,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
         LEFT JOIN EXPORT_LOG_AMV ELA
           ON ELA.EXPORT_SPECIES_CODE = SC.EXPORT_SPECIES_CODE
           AND ELA.EXPORT_GRADE_CODE = SC.AMV_GRADE_CODE
+          AND ELA.EXPORT_GROWTH_TYPE_CODE = SC.AMV_GROWTH_TYPE_CODE
           AND ELA.EFFECTIVE_DATE <= SC.PERMIT_APPLICATION_DATE
         GROUP BY SC.EXPORT_SCALE_DETAIL_ID
       )
@@ -486,9 +489,10 @@ public class PermitRpcRepository extends OracleRepositorySupport {
   }
 
   /**
-   * Loads all fee-display inputs for a permit in one query. The set-based AMV join deliberately
-   * mirrors {@code LEXIS.FIND_LOG_AMV(scaleId)}, including its effective-month cutoff and growth
-   * type selection.
+   * Loads all fee-display inputs for a permit in one query. The set-based AMV join preserves the
+   * {@code LEXIS.FIND_LOG_AMV(scaleId)} effective-month cutoff and dimensions while including
+   * growth type in effective-date selection so an opposite-growth row cannot hide the applicable
+   * value.
    */
   public List<PermitFeeScaleRow> findPermitFeeScaleRows(Long permitNumber) {
     if (permitNumber == null || permitNumber < 1) {

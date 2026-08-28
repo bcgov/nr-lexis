@@ -815,13 +815,26 @@ class PurchaseOfferOracleServiceTest {
         .thenReturn(Optional.of(new PurchaseOfferRepository.PurchaseOfferInsertRow(81001L)));
 
     PurchaseOfferService.CreateOfferResult response =
-        service.addOffer(validCreateRequest(1000456L, null, 95.6d), "idir\\jsmith");
+        service.addOffer(validCreateRequest(1000456L, null, 95.5d), "idir\\jsmith");
 
     assertThat(response.success()).isTrue();
     ArgumentCaptor<PurchaseOfferRepository.PurchaseOfferInsertRecord> recordCaptor =
         ArgumentCaptor.forClass(PurchaseOfferRepository.PurchaseOfferInsertRecord.class);
     verify(repository).insertOffer(recordCaptor.capture());
-    assertThat(recordCaptor.getValue().offerVolume()).isEqualTo(95.6d);
+    assertThat(recordCaptor.getValue().offerVolume()).isEqualTo(95.5d);
+  }
+
+  @Test
+  void addOfferShouldRejectVolumeAboveLegacyHalfEvenDisplayedLimit() {
+    stubProvincialApplication(1000456L, 95.55d);
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.addOffer(validCreateRequest(1000456L, null, 95.6d), "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactly("Offer volume cannot exceed the application/package volume.");
+    verify(repository, never()).insertOffer(any());
   }
 
   @Test

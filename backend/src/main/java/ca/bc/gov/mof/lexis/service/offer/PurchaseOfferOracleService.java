@@ -2,6 +2,7 @@ package ca.bc.gov.mof.lexis.service.offer;
 
 import static ca.bc.gov.mof.lexis.util.CollectionUtils.positiveDistinctLongs;
 import static ca.bc.gov.mof.lexis.util.CollectionUtils.safeList;
+import static ca.bc.gov.mof.lexis.util.LegacyOfferVolume.roundForDisplay;
 import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.exceptionType;
 import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.fingerprint;
 import static ca.bc.gov.mof.lexis.util.TextUtils.defaultSystemUser;
@@ -24,7 +25,6 @@ import ca.bc.gov.mof.lexis.service.mail.RegionalMailRoute;
 import ca.bc.gov.mof.lexis.service.mail.WorkflowEmailEvent;
 import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -152,7 +152,7 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
       validateStorageNumber(errors, normalizedOfferVolume, OFFER_VOLUME_MAX, "Offer volume");
     }
     if (errors.isEmpty()) {
-      errors.addAll(validateCreateOfferReferences(normalized, normalizedOfferVolume, true));
+      errors.addAll(validateCreateOfferReferences(normalized, normalized.offerVolume(), true));
     }
     List<String> warnings = List.of();
 
@@ -270,7 +270,7 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
           legacyNumberChanged(
               normalizeLegacyOfferVolume(current.offerVolume()), normalizedOfferVolume);
       errors.addAll(
-          validateCreateOfferReferences(updated, normalizedOfferVolume, offerVolumeChanged));
+          validateCreateOfferReferences(updated, updated.offerVolume(), offerVolumeChanged));
     }
     List<String> warnings = List.of();
 
@@ -627,7 +627,7 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
         && Double.isFinite(offerVolume)
         && Double.isFinite(contextVolume)
         && BigDecimal.valueOf(offerVolume)
-                .compareTo(BigDecimal.valueOf(contextVolume).setScale(1, RoundingMode.HALF_UP))
+                .compareTo(BigDecimal.valueOf(roundForDisplay(contextVolume)))
             > 0) {
       errors.add("Offer volume cannot exceed the application/package volume.");
     }
@@ -861,7 +861,7 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
     if (value == null || !Double.isFinite(value)) {
       return value;
     }
-    return BigDecimal.valueOf(value).setScale(1, RoundingMode.HALF_EVEN).doubleValue();
+    return roundForDisplay(value);
   }
 
   private boolean legacyNumberChanged(Double current, Double updated) {

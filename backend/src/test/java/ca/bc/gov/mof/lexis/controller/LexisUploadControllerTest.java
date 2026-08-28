@@ -181,11 +181,11 @@ class LexisUploadControllerTest {
             uploadService.uploadInvoice(
                 invoiceFile,
                 999000002L,
-                "TEST-INV-001",
+                "INV-001",
                 "Invoice",
-                null,
-                null,
-                null,
+                new BigDecimal("100.00"),
+                new BigDecimal("1.25"),
+                new BigDecimal("12.00"),
                 null))
         .thenReturn(Optional.of(uploadResult("invoice", invoiceFile)));
 
@@ -199,14 +199,14 @@ class LexisUploadControllerTest {
         invoiceFile,
         null,
         999000002L,
-        "TEST-INV-001",
+        "INV-001",
         "Invoice",
         null,
+        new BigDecimal("100.00"),
         null,
+        new BigDecimal("1.25"),
         null,
-        null,
-        null,
-        null,
+        new BigDecimal("12.00"),
         null,
         null);
 
@@ -308,7 +308,17 @@ class LexisUploadControllerTest {
     assertThat(
             controller
                 .validateInvoiceUpload(
-                    null, invoiceFile, 7000123L, "INV-1001", authentication)
+                    null,
+                    invoiceFile,
+                    7000123L,
+                    "INV-1001",
+                    new BigDecimal("100.00"),
+                    null,
+                    new BigDecimal("1.25"),
+                    null,
+                    new BigDecimal("12.00"),
+                    null,
+                    authentication)
                 .getStatusCode())
         .isEqualTo(HttpStatus.OK);
 
@@ -317,6 +327,33 @@ class LexisUploadControllerTest {
     verify(provincialAuthorizationService, times(2))
         .requirePermitAttachmentMutation(authentication, 7000123L);
     verifyNoInteractions(documentUploadMutationPolicy);
+  }
+
+  @Test
+  void validateInvoiceUploadShouldRejectUnsafeStorageValuesBeforeScanning() {
+    LexisUploadController controller = controller();
+    MultipartFile invoiceFile = sampleFile("invoice.pdf");
+
+    ResponseEntity<LexisUploadResultDto> response =
+        controller.validateInvoiceUpload(
+            null,
+            invoiceFile,
+            7000123L,
+            "ééééééééé",
+            new BigDecimal("100.00"),
+            null,
+            new BigDecimal("1.25"),
+            null,
+            new BigDecimal("12.00"),
+            null,
+            null);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().message())
+        .isEqualTo("Invoice number must use printable US-ASCII characters.");
+    verifyNoInteractions(uploadService);
+    verifyNoInteractions(provincialAuthorizationService);
   }
 
   @Test
@@ -489,11 +526,11 @@ class LexisUploadControllerTest {
                     "INV-1001",
                     "Invoice INV-1001",
                     null,
+                    new BigDecimal("100.00"),
                     null,
+                    new BigDecimal("1.25"),
                     null,
-                    null,
-                    null,
-                    null,
+                    new BigDecimal("12.00"),
                     null,
                     null))
         .isInstanceOf(AccessDeniedException.class)
@@ -628,6 +665,37 @@ class LexisUploadControllerTest {
             BigDecimal.valueOf(1.25),
             BigDecimal.valueOf(55.0),
             "idir\\jsmith");
+  }
+
+  @Test
+  void fileInvoiceUploadShouldRejectUnsafeNumericStorageBeforeLock() {
+    LexisUploadController controller = controller();
+    MultipartFile file = sampleFile("invoice.pdf");
+
+    ResponseEntity<LexisUploadResultDto> response =
+        controller.fileInvoiceUpload(
+            file,
+            null,
+            7000123L,
+            "INV-1001",
+            "Invoice INV-1001",
+            null,
+            new BigDecimal("10000000"),
+            null,
+            new BigDecimal("1.25"),
+            null,
+            new BigDecimal("55.00"),
+            null,
+            null);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().message())
+        .isEqualTo(
+            "Invoice export value must be positive, 9999999.99 or less, and have at most 2 decimal places.");
+    verify(applicationEditLockService, never())
+        .acquirePermit(any(), any(), any(), anyBoolean());
+    verify(uploadServiceProvider, never()).getIfAvailable();
   }
 
   @Test

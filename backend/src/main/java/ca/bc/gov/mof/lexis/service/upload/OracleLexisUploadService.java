@@ -1,5 +1,8 @@
 package ca.bc.gov.mof.lexis.service.upload;
 
+import static ca.bc.gov.mof.lexis.util.InvoiceStorageConstraints.isValidInvoiceAmount;
+import static ca.bc.gov.mof.lexis.util.InvoiceStorageConstraints.isValidInvoiceConversionRate;
+import static ca.bc.gov.mof.lexis.util.InvoiceStorageConstraints.isValidInvoiceNumber;
 import static ca.bc.gov.mof.lexis.util.TextUtils.defaultSystemUser;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
@@ -30,11 +33,6 @@ public class OracleLexisUploadService implements LexisUploadService {
   private static final String ATTACHMENT_TYPE_PERMIT = "PMT";
   private static final String ATTACHMENT_TYPE_EXEMPTION = "EXE";
   private static final String ATTACHMENT_TYPE_INVOICE = "INV";
-  private static final int INVOICE_AMOUNT_PRECISION = 9;
-  private static final int INVOICE_AMOUNT_SCALE = 2;
-  private static final int INVOICE_CONVERSION_RATE_PRECISION = 6;
-  private static final int INVOICE_CONVERSION_RATE_SCALE = 5;
-
   private final UploadRepository uploadRepository;
   private final VirusScanService virusScanService;
   private final AttachmentUploadValidator attachmentUploadValidator;
@@ -249,15 +247,10 @@ public class OracleLexisUploadService implements LexisUploadService {
     if (!validFile(file)
         || permitNumber == null
         || permitNumber < 1
-        || normalizedSalesInvoiceNumber == null
-        || normalizedSalesInvoiceNumber.length() > 9
-        || !isPrintableAscii(normalizedSalesInvoiceNumber)
-        || !positiveOracleNumber(exportValue, INVOICE_AMOUNT_PRECISION, INVOICE_AMOUNT_SCALE)
-        || !positiveOracleNumber(
-            currencyConversionRate,
-            INVOICE_CONVERSION_RATE_PRECISION,
-            INVOICE_CONVERSION_RATE_SCALE)
-        || !positiveOracleNumber(feeInLieu, INVOICE_AMOUNT_PRECISION, INVOICE_AMOUNT_SCALE)) {
+        || !isValidInvoiceNumber(normalizedSalesInvoiceNumber)
+        || !isValidInvoiceAmount(exportValue)
+        || !isValidInvoiceConversionRate(currencyConversionRate)
+        || !isValidInvoiceAmount(feeInLieu)) {
       return Optional.empty();
     }
     String requestedDescription = trimToNull(description);
@@ -382,24 +375,6 @@ public class OracleLexisUploadService implements LexisUploadService {
       case "application", "permit", "exemption", "invoice" -> normalized;
       default -> null;
     };
-  }
-
-  private boolean positive(BigDecimal value) {
-    return value != null && value.compareTo(BigDecimal.ZERO) > 0;
-  }
-
-  private boolean positiveOracleNumber(BigDecimal value, int precision, int scale) {
-    if (!positive(value)) {
-      return false;
-    }
-    BigDecimal normalized = value.stripTrailingZeros();
-    int decimalPlaces = Math.max(normalized.scale(), 0);
-    long integerDigits = Math.max((long) normalized.precision() - normalized.scale(), 0L);
-    return decimalPlaces <= scale && integerDigits <= precision - scale;
-  }
-
-  private boolean isPrintableAscii(String value) {
-    return value.chars().allMatch(character -> character >= 0x20 && character <= 0x7e);
   }
 
   private UploadPersistenceResult persistFile(

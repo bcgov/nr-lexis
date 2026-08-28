@@ -39,8 +39,7 @@ export const offerVolumeContextFieldError = (
   const parsedContextVolume = Number(normalizedContextVolume)
   if (!Number.isFinite(parsedOfferVolume) || !Number.isFinite(parsedContextVolume)) return null
 
-  const roundedContextVolume = Math.round(parsedContextVolume * 10) / 10
-  return parsedOfferVolume > roundedContextVolume
+  return parsedOfferVolume > parsedContextVolume
     ? 'Offer volume cannot exceed the application/package volume.'
     : null
 }

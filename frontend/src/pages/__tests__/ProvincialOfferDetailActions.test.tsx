@@ -270,29 +270,26 @@ describe('Provincial Offer Detail Actions', () => {
     expect(mockedSubmitProvincialOfferUpdate).not.toHaveBeenCalled()
   })
 
-  it('accepts the displayed one-decimal limit when the context has fractional precision', async () => {
+  it('displays and enforces the canonical legacy one-decimal context', async () => {
     mockedFetchProvincialOfferDetail.mockResolvedValue({
       ...offerDetail,
-      packageVolume: 95.55,
-      offerVolume: 95.5,
+      packageVolume: 12.2,
+      offerVolume: 12.1,
     })
     renderPage()
 
     await screen.findByRole('heading', { name: 'Offer 81001' })
+    expect(screen.getByLabelText('Application/package volume (m³)')).toHaveValue('12.2')
     await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
     const offerVolumeInput = screen.getByLabelText('Offer volume (m³)')
     await userEvent.clear(offerVolumeInput)
-    await userEvent.type(offerVolumeInput, '95.6')
+    await userEvent.type(offerVolumeInput, '12.3')
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
-    await waitFor(() =>
-      expect(mockedSubmitProvincialOfferUpdate).toHaveBeenCalledWith(
-        expect.objectContaining({ offerVolume: '95.6' }),
-      ),
-    )
     expect(
-      screen.queryByText('Offer volume cannot exceed the application/package volume.'),
-    ).not.toBeInTheDocument()
+      await screen.findAllByText('Offer volume cannot exceed the application/package volume.'),
+    ).not.toHaveLength(0)
+    expect(mockedSubmitProvincialOfferUpdate).not.toHaveBeenCalled()
   })
 
   it('keeps a null Oracle offer volume blank during an unrelated update', async () => {
