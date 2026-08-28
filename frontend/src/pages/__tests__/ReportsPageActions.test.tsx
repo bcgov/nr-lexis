@@ -190,7 +190,7 @@ describe('Reports Page Actions', () => {
     )
     expect(screen.getByText('Exemption volumes, balances, and status.')).toBeVisible()
     expect(screen.queryByText('Application Report')).not.toBeInTheDocument()
-    expect(screen.queryByText('Offer Report')).not.toBeInTheDocument()
+    expect(screen.queryByText('Offers Report')).not.toBeInTheDocument()
     expect(screen.queryByText(/Accessible reports:/)).not.toBeInTheDocument()
     expect(screen.queryByText('Not Granted')).not.toBeInTheDocument()
   })
@@ -212,7 +212,7 @@ describe('Reports Page Actions', () => {
     )
 
     expect(await screen.findByText('Forbidden report')).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: 'Offer Report' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Offers Report' })).not.toBeInTheDocument()
   })
 
   it.each([
@@ -237,8 +237,25 @@ describe('Reports Page Actions', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByRole('heading', { name: 'Offer Report' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Offers Report' })).toBeInTheDocument()
     expect(mockedRunReport).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['/reports/offerReport', 'Offers Report'],
+    ['/reports/permitLedgerReport', 'Permits Report'],
+  ])('uses the navigation wording for %s', async (path, title) => {
+    mockReportPermissions()
+
+    render(
+      <MemoryRouter initialEntries={[path]}>
+        <Routes>
+          <Route path="/reports/:reportId" element={<ReportsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByRole('heading', { name: title })).toBeInTheDocument()
   })
 
   it('denies the reports route when only retired report actions are granted', async () => {
@@ -656,7 +673,7 @@ describe('Reports Page Actions', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { name: 'Offer Report' })
+    await screen.findByRole('heading', { name: 'Offers Report' })
 
     await chooseComboBoxOption('Region', 'Cariboo Natural Resource Region')
     await chooseComboBoxOption('Region', 'Kootenay-Boundary Natural Resource Region')
@@ -1199,7 +1216,7 @@ describe('Reports Page Actions', () => {
 
     await screen.findByRole('heading', { name: 'Advertising List' })
     expect(screen.queryByText('Application Report')).not.toBeInTheDocument()
-    expect(screen.queryByText('Offer Report')).not.toBeInTheDocument()
+    expect(screen.queryByText('Offers Report')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Report variant')).not.toBeInTheDocument()
     expect(screen.queryByText('Required action:')).not.toBeInTheDocument()
     expect(screen.queryByText('mofrListing')).not.toBeInTheDocument()

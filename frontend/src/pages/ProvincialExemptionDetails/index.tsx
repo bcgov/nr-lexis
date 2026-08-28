@@ -367,7 +367,7 @@ const ProvincialExemptionDetailsPage = () => {
   const [documentUploadResetKey, setDocumentUploadResetKey] = useState(0)
   const [selectedExemptionTab, selectExemptionTab] = useReloadPreservedTab({
     tabs: EXEMPTION_DETAIL_TAB_SLOTS,
-    defaultTab: 'summary',
+    defaultTab: 'owner',
   })
   const beginDetailRequest = useLatestRequestGuard()
   const currentDetail = detail && String(detail.exemptionNumber) === exemptionNumber ? detail : null

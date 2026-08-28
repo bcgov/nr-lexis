@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ESFSubmission
+    xmlns="http://www.for.gov.bc.ca/schema/esf"
+    xmlns:lexis="http://www.for.gov.bc.ca/schema/lexis"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.for.gov.bc.ca/schema/esf http://www.for.gov.bc.ca/schema/esf/1/xsd/MOF/esf-submission.xsd http://www.for.gov.bc.ca/schema/lexis http://www.for.gov.bc.ca/schema/lexis/3/xsd/MOF/mof-lexis.xsd">
+  <submissionMetadata>
+    <emailAddress>nexcol-test@example.invalid</emailAddress>
+    <telephoneNumber>2505550100</telephoneNumber>
+  </submissionMetadata>
+  <submissionContent>
+    <lexis:LexisSubmission>
+      <lexis:applicant>
+        <lexis:applicantDetails>
+          <lexis:eicbNumber>12345</lexis:eicbNumber>
+          <lexis:clientNumber>00123456</lexis:clientNumber>
+          <lexis:clientLocnCode>01</lexis:clientLocnCode>
+          <lexis:name>NEXCOL TEST ORGANIZATION</lexis:name>
+          <lexis:address>100 TEST STREET</lexis:address>
+          <lexis:city>TEST CITY</lexis:city>
+          <lexis:provinceState>BC</lexis:provinceState>
+          <lexis:postalZipCode>V8V 8V8</lexis:postalZipCode>
+          <lexis:country>CA</lexis:country>
+          <lexis:telephoneNumber>2505550100</lexis:telephoneNumber>
+        </lexis:applicantDetails>
+        <lexis:applicantContact>
+          <lexis:contactSurname>TEST</lexis:contactSurname>
+          <lexis:contactFirstname>USER</lexis:contactFirstname>
+          <lexis:contactTelephoneNumber>2505550100</lexis:contactTelephoneNumber>
+          <lexis:contactEmailAddress>nexcol-test@example.invalid</lexis:contactEmailAddress>
+        </lexis:applicantContact>
+        <lexis:declarationCanadianResident>true</lexis:declarationCanadianResident>
+        <lexis:declarationSubmittedOffersPast90Days>false</lexis:declarationSubmittedOffersPast90Days>
+      </lexis:applicant>
+      <lexis:applicationDetail>
+        <lexis:jurisdictionCode>F</lexis:jurisdictionCode>
+        <lexis:bcForestRegionCode>RWC</lexis:bcForestRegionCode>
+        <lexis:applStatusCode>A</lexis:applStatusCode>
+        <lexis:exemptionRsnCde>S</lexis:exemptionRsnCde>
+        <lexis:applicantTypeCode>O</lexis:applicantTypeCode>
+        <lexis:re-advertisement>false</lexis:re-advertisement>
+        <lexis:officeUseOnly>
+          <lexis:internalOfficeUseRefId>700123</lexis:internalOfficeUseRefId>
+          <lexis:internalOfficeUseApplicationDate>2026-01-10</lexis:internalOfficeUseApplicationDate>
+          <lexis:internalOfficeUseBiWeeklyListDate>2026-01-16</lexis:internalOfficeUseBiWeeklyListDate>
+          <lexis:internalOfficeUseApplicantUserid>NEXCOL</lexis:internalOfficeUseApplicantUserid>
+          <lexis:internalOfficeUseLanguage>E</lexis:internalOfficeUseLanguage>
+        </lexis:officeUseOnly>
+      </lexis:applicationDetail>
+      <lexis:productDetail>
+        <lexis:productTypeCode>H</lexis:productTypeCode>
+        <lexis:boomNumber>NEXCOL-V3-TEST-001</lexis:boomNumber>
+        <lexis:speciesEndUseSort>ZZ/XY</lexis:speciesEndUseSort>
+        <lexis:productLocation>Synthetic NEXCOL product location longer than fifty-six characters</lexis:productLocation>
+        <lexis:ageClass>S</lexis:ageClass>
+        <lexis:avgLength>12.2</lexis:avgLength>
+        <lexis:avgDiameter>29</lexis:avgDiameter>
+        <lexis:harvestedTimber>
+          <lexis:timberMark>TM001</lexis:timberMark>
+          <lexis:numberOfPieces>12</lexis:numberOfPieces>
+          <lexis:species>FI</lexis:species>
+          <lexis:grade>H</lexis:grade>
+          <lexis:quantityVolume>52.1</lexis:quantityVolume>
+        </lexis:harvestedTimber>
+      </lexis:productDetail>
+    </lexis:LexisSubmission>
+  </submissionContent>
+</ESFSubmission>

@@ -11,14 +11,14 @@ import org.springframework.http.MediaType;
 class FederalSubmissionPrevalidationXmlCodecTest {
 
   @Test
-  void shouldParseAndReturnRawLegacyXml() {
+  void shouldParseAndReturnLowerCamelRawLegacyXml() {
     String xml =
         """
         <LogExportApplication xmlns="http://beans.validation.lexis.ws.mof.gov.bc.ca">
-          <BoomNumber>BOOM-1</BoomNumber>
-          <ClientNumber>00123456</ClientNumber>
-          <LocationCode>01</LocationCode>
-          <TimberMark><item>TM001</item><item>TM002</item></TimberMark>
+          <boomNumber>BOOM-1</boomNumber>
+          <clientNumber>00123456</clientNumber>
+          <locationCode>01</locationCode>
+          <timberMark><item>TM001</item><item>TM002</item></timberMark>
         </LogExportApplication>
         """;
 
@@ -48,6 +48,74 @@ class FederalSubmissionPrevalidationXmlCodecTest {
         .contains("<boomNumber>BOOM-1</boomNumber>")
         .contains("<errors><item>timberMark: TM002</item></errors>")
         .contains("<timberMark><item>TM001</item><item>TM002</item></timberMark>");
+  }
+
+  @Test
+  void shouldMirrorNexcolDotNetRawXmlShape() {
+    String xml =
+        """
+        <?xml version="1.0" encoding="utf-8"?>
+        <LogExportApplication xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+          <BoomNumber>NEXCOL-TEST-001</BoomNumber>
+          <ClientNumber>00123456</ClientNumber>
+          <Errors/>
+          <LocationCode>01</LocationCode>
+          <TimberMark>
+            <string>TM001</string>
+            <string>TM002</string>
+          </TimberMark>
+        </LogExportApplication>
+        """;
+
+    var request = FederalSubmissionPrevalidationXmlCodec.parse(xml);
+    String response =
+        FederalSubmissionPrevalidationXmlCodec.renderResponse(
+            request,
+            new FederalSubmissionPrevalidationDto(
+                "NEXCOL-TEST-001",
+                "00123456",
+                List.of("timberMark: TM002"),
+                "01",
+                List.of("TM001", "TM002")));
+
+    assertThat(request.submission().timberMark()).containsExactly("TM001", "TM002");
+    assertThat(request.pascalCaseFields()).isTrue();
+    assertThat(request.arrayItemName()).isEqualTo("string");
+    assertThat(response)
+        .contains("<BoomNumber>NEXCOL-TEST-001</BoomNumber>")
+        .contains("<ClientNumber>00123456</ClientNumber>")
+        .contains("<Errors><string>timberMark: TM002</string></Errors>")
+        .contains("<LocationCode>01</LocationCode>")
+        .contains("<TimberMark><string>TM001</string><string>TM002</string></TimberMark>")
+        .doesNotContain("<boomNumber>");
+  }
+
+  @Test
+  void shouldUseDotNetStringItemsWhenPascalCaseTimberMarkIsEmpty() {
+    var request =
+        FederalSubmissionPrevalidationXmlCodec.parse(
+            """
+            <LogExportApplication>
+              <BoomNumber>NEXCOL-TEST-001</BoomNumber>
+              <ClientNumber>00123456</ClientNumber>
+              <LocationCode>01</LocationCode>
+              <TimberMark/>
+            </LogExportApplication>
+            """);
+
+    String response =
+        FederalSubmissionPrevalidationXmlCodec.renderResponse(
+            request,
+            new FederalSubmissionPrevalidationDto(
+                "NEXCOL-TEST-001",
+                "00123456",
+                List.of("timberMark: null"),
+                "01",
+                List.of()));
+
+    assertThat(request.arrayItemName()).isEqualTo("string");
+    assertThat(response).contains("<Errors><string>timberMark: null</string></Errors>");
   }
 
   @Test

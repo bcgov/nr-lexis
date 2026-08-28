@@ -48,7 +48,9 @@ public final class FederalSubmissionPrevalidationXmlCodec {
       String operationNamespace,
       String operationName,
       String rootNamespace,
-      String rootName) {}
+      String rootName,
+      boolean pascalCaseFields,
+      String arrayItemName) {}
 
   public static ParsedRequest parse(String xml) {
     if (xml == null || xml.isBlank()) {
@@ -83,6 +85,10 @@ public final class FederalSubmissionPrevalidationXmlCodec {
           "The XML body must include a legacy LogExportApplication value.");
     }
 
+    boolean pascalCaseFields = format == Format.XML && usesPascalCaseFields(bean);
+    String arrayItemName =
+        format == Format.XML ? arrayItemName(document, bean, pascalCaseFields) : "item";
+
     FederalSubmissionPrevalidationDto submission =
         new FederalSubmissionPrevalidationDto(
             stringField(document, bean, "boomNumber"),
@@ -99,7 +105,9 @@ public final class FederalSubmissionPrevalidationXmlCodec {
             : operation.getNamespaceURI(),
         operation == null ? "isValidApplication" : localName(operation),
         rootNamespace,
-        rootName);
+        rootName,
+        pascalCaseFields,
+        arrayItemName);
   }
 
   public static MediaType responseMediaType(ParsedRequest request) {
@@ -247,6 +255,37 @@ public final class FederalSubmissionPrevalidationXmlCodec {
       }
     }
     return false;
+  }
+
+  private static boolean usesPascalCaseFields(Element element) {
+    for (Element child : directChildren(element)) {
+      String name = localName(child);
+      if ("BoomNumber".equals(name)
+          || "ClientNumber".equals(name)
+          || "LocationCode".equals(name)
+          || "TimberMark".equals(name)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private static String arrayItemName(
+      Document document, Element bean, boolean pascalCaseFields) {
+    List<Element> fields = directChildren(bean, "timberMark");
+    if (fields.isEmpty()) {
+      return pascalCaseFields ? "string" : "item";
+    }
+    Element container = resolveReference(document, fields.get(0));
+    for (Element item : directChildren(container)) {
+      if ("string".equals(localName(item))) {
+        return "string";
+      }
+      if ("item".equals(localName(item))) {
+        return "item";
+      }
+    }
+    return pascalCaseFields ? "string" : "item";
   }
 
   private static String stringField(Document document, Element bean, String fieldName) {
@@ -411,11 +450,33 @@ public final class FederalSubmissionPrevalidationXmlCodec {
         XMLConstants.W3C_XML_SCHEMA_INSTANCE_NS_URI);
     document.appendChild(root);
 
-    appendRawScalar(document, root, "boomNumber", response.boomNumber());
-    appendRawScalar(document, root, "clientNumber", response.clientNumber());
-    appendRawArray(document, root, "errors", response.errors());
-    appendRawScalar(document, root, "locationCode", response.locationCode());
-    appendRawArray(document, root, "timberMark", response.timberMark());
+    appendRawScalar(
+        document,
+        root,
+        request.pascalCaseFields() ? "BoomNumber" : "boomNumber",
+        response.boomNumber());
+    appendRawScalar(
+        document,
+        root,
+        request.pascalCaseFields() ? "ClientNumber" : "clientNumber",
+        response.clientNumber());
+    appendRawArray(
+        document,
+        root,
+        request.pascalCaseFields() ? "Errors" : "errors",
+        request.arrayItemName(),
+        response.errors());
+    appendRawScalar(
+        document,
+        root,
+        request.pascalCaseFields() ? "LocationCode" : "locationCode",
+        response.locationCode());
+    appendRawArray(
+        document,
+        root,
+        request.pascalCaseFields() ? "TimberMark" : "timberMark",
+        request.arrayItemName(),
+        response.timberMark());
   }
 
   private static void renderSoapResponse(
@@ -498,14 +559,18 @@ public final class FederalSubmissionPrevalidationXmlCodec {
   }
 
   private static void appendRawArray(
-      Document document, Element parent, String name, List<String> values) {
+      Document document,
+      Element parent,
+      String name,
+      String itemName,
+      List<String> values) {
     Element array = document.createElement(name);
     if (values == null) {
       array.setAttributeNS(
           XMLConstants.W3C_XML_SCHEMA_INSTANCE_NS_URI, "xsi:nil", "true");
     } else {
       for (String value : values) {
-        appendArrayItem(document, array, value, false);
+        appendArrayItem(document, array, itemName, value, false);
       }
     }
     parent.appendChild(array);
@@ -541,15 +606,15 @@ public final class FederalSubmissionPrevalidationXmlCodec {
       array.setAttributeNS(
           encodingNamespace, "soapenc:arrayType", "xsd:string[" + values.size() + "]");
       for (String value : values) {
-        appendArrayItem(document, array, value, true);
+        appendArrayItem(document, array, "item", value, true);
       }
     }
     parent.appendChild(array);
   }
 
   private static void appendArrayItem(
-      Document document, Element parent, String value, boolean typed) {
-    Element item = document.createElement("item");
+      Document document, Element parent, String itemName, String value, boolean typed) {
+    Element item = document.createElement(itemName);
     if (value == null) {
       item.setAttributeNS(
           XMLConstants.W3C_XML_SCHEMA_INSTANCE_NS_URI, "xsi:nil", "true");

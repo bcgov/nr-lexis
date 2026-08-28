@@ -42,7 +42,13 @@ class NexcolGatewayTopologyConfigTest {
             "application/soap+xml:",
             "LogExportApplication",
             "isValidApplication",
-            ".NET PascalCase");
+            ".NET PascalCase",
+            "<BoomNumber>",
+            "<string>TM001</string>");
+    assertThat(openApi)
+        .contains(
+            "http://www.for.gov.bc.ca/schema/lexis/3/xsd/MOF/mof-lexis.xsd",
+            "schema-version-2 or schema-version-3");
   }
 
   private static void assertClusterLocalGateway(String path, String service, String issuer)
