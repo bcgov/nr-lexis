@@ -1709,7 +1709,8 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     expect(afterScroll.columnRight).toBeLessThanOrEqual(afterScroll.viewportRight + 1)
   })
 
-  test('keeps admin policy editors stable while their tables scroll', async ({ page }) => {
+  // Restore when Export Schedule administration receives business approval.
+  test.skip('keeps admin policy editors stable while their tables scroll', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
     await gotoSyntheticRoute(page, '/admin/schedules', { waitUntil: 'domcontentloaded' })
 

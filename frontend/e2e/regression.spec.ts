@@ -785,19 +785,13 @@ const adminNavigationSections: Array<{
   },
   {
     section: 'Admin',
-    links: [
-      'Multiplication Factor',
-      'Non-appraised Sec.3 FIL%',
-      'Export Schedule',
-      'Average market values',
-    ],
+    links: ['Multiplication Factor', 'Non-appraised Sec.3 FIL%', 'Average market values'],
   },
 ]
 
 const adminAccessiblePages: Array<[path: string, heading: RegExp]> = [
   ['/admin/policies/fee', /multiplication factor/i],
   ['/admin/policies/fil', /non-appraised sec\.3 fil%/i],
-  ['/admin/schedules', /export schedule administration/i],
   ['/provincial/review', /provincial application review/i],
   ['/provincial/application/create', /create provincial application/i],
   ['/provincial/application/upload', /upload application submission/i],
