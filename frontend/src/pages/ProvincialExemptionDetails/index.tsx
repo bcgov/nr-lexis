@@ -2239,11 +2239,11 @@ const ProvincialExemptionDetailsPage = () => {
                             <Table size="md" useZebraStyles>
                               <TableHead>
                                 <TableRow>
-                                  <TableHeader>Permit number</TableHeader>
+                                  <TableHeader>Permit</TableHeader>
                                   <TableHeader>Volume (m³)</TableHeader>
                                   <TableHeader>Status</TableHeader>
                                   <TableHeader>Issue date</TableHeader>
-                                  <TableHeader>Open</TableHeader>
+                                  <TableHeader>Actions</TableHeader>
                                 </TableRow>
                               </TableHead>
                               <TableBody>
@@ -2448,7 +2448,7 @@ const ProvincialExemptionDetailsPage = () => {
                             <Table size="md" useZebraStyles>
                               <TableHead>
                                 <TableRow>
-                                  <TableHeader>File Name</TableHeader>
+                                  <TableHeader>File name</TableHeader>
                                   <TableHeader>Description</TableHeader>
                                   <TableHeader>Type</TableHeader>
                                   <TableHeader>Source</TableHeader>

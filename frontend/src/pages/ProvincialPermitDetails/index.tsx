@@ -4365,9 +4365,9 @@ const ProvincialPermitDetailsPage = () => {
                                       <TableHeader>Timber mark</TableHeader>
                                       <TableHeader>Scale type</TableHeader>
                                       <TableHeader>Permit</TableHeader>
+                                      <TableHeader>Pieces</TableHeader>
                                       <TableHeader>Species</TableHeader>
                                       <TableHeader>Grade</TableHeader>
-                                      <TableHeader>Pieces</TableHeader>
                                       <TableHeader>Volume (m³)</TableHeader>
                                       {canEditBlanketOicScaleRows && (
                                         <TableHeader>Actions</TableHeader>
@@ -4401,9 +4401,9 @@ const ProvincialPermitDetailsPage = () => {
                                         <TableCell>{row.timberMark || '-'}</TableCell>
                                         <TableCell>{row.scaleType || '-'}</TableCell>
                                         <TableCell>{row.permitNumber || '-'}</TableCell>
+                                        <TableCell>{row.pieces.toLocaleString()}</TableCell>
                                         <TableCell>{row.species || '-'}</TableCell>
                                         <TableCell>{row.grade || '-'}</TableCell>
-                                        <TableCell>{row.pieces.toLocaleString()}</TableCell>
                                         <TableCell>{row.volume.toLocaleString()}</TableCell>
                                         {canEditBlanketOicScaleRows && (
                                           <TableCell>
@@ -4627,7 +4627,7 @@ const ProvincialPermitDetailsPage = () => {
                               <TableHead>
                                 <TableRow>
                                   <TableHeader>Package</TableHeader>
-                                  <TableHeader>Timber Mark</TableHeader>
+                                  <TableHeader>Timber mark</TableHeader>
                                   <TableHeader>Species</TableHeader>
                                   <TableHeader>Grade</TableHeader>
                                   <TableHeader>AMV ($/m³ CAD)</TableHeader>
@@ -4699,13 +4699,13 @@ const ProvincialPermitDetailsPage = () => {
                               <Table size="md" useZebraStyles>
                                 <TableHead>
                                   <TableRow>
-                                    <TableHeader>GBMS Invoice Number</TableHeader>
-                                    <TableHeader>Cancelled By Invoice</TableHeader>
-                                    <TableHeader>Replaced By Invoice</TableHeader>
-                                    <TableHeader>Invoice Amount</TableHeader>
-                                    <TableHeader>Printed Date</TableHeader>
-                                    <TableHeader>Entry Date</TableHeader>
-                                    <TableHeader>Update Date</TableHeader>
+                                    <TableHeader>GBMS invoice number</TableHeader>
+                                    <TableHeader>Cancelled by invoice</TableHeader>
+                                    <TableHeader>Replaced by invoice</TableHeader>
+                                    <TableHeader>Invoice amount</TableHeader>
+                                    <TableHeader>Printed date</TableHeader>
+                                    <TableHeader>Entry date</TableHeader>
+                                    <TableHeader>Update date</TableHeader>
                                   </TableRow>
                                 </TableHead>
                                 <TableBody>
@@ -4791,7 +4791,7 @@ const ProvincialPermitDetailsPage = () => {
                             <Table size="md" useZebraStyles>
                               <TableHead>
                                 <TableRow>
-                                  <TableHeader>File Name</TableHeader>
+                                  <TableHeader>File name</TableHeader>
                                   <TableHeader>Description</TableHeader>
                                   <TableHeader>Type</TableHeader>
                                   <TableHeader>Source</TableHeader>
@@ -4933,7 +4933,7 @@ const ProvincialPermitDetailsPage = () => {
                                 <TableRow>
                                   <TableHeader>Invoice number</TableHeader>
                                   <TableHeader>Export value (CAD)</TableHeader>
-                                  <TableHeader>Conversion Rate</TableHeader>
+                                  <TableHeader>Conversion rate</TableHeader>
                                   <TableHeader>Fee in lieu</TableHeader>
                                   <TableHeader>Status</TableHeader>
                                 </TableRow>

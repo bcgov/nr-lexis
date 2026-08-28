@@ -1308,7 +1308,7 @@ const FederalApplicationDetailsPage = () => {
                                 <TableHead>
                                   <TableRow>
                                     <TableHeader>Package</TableHeader>
-                                    <TableHeader>Timber Mark</TableHeader>
+                                    <TableHeader>Timber mark</TableHeader>
                                     <TableHeader>Pieces</TableHeader>
                                     <TableHeader>Species</TableHeader>
                                     <TableHeader>Grade</TableHeader>
@@ -1355,7 +1355,7 @@ const FederalApplicationDetailsPage = () => {
                                   <TableHeader>Offer number</TableHeader>
                                   <TableHeader>Company</TableHeader>
                                   <TableHeader>Date received</TableHeader>
-                                  <TableHeader>Open</TableHeader>
+                                  <TableHeader>Actions</TableHeader>
                                 </TableRow>
                               </TableHead>
                               <TableBody>
@@ -1586,7 +1586,7 @@ const FederalApplicationDetailsPage = () => {
                             <Table size="md" useZebraStyles>
                               <TableHead>
                                 <TableRow>
-                                  <TableHeader>File Name</TableHeader>
+                                  <TableHeader>File name</TableHeader>
                                   <TableHeader>Description</TableHeader>
                                   <TableHeader>Type</TableHeader>
                                   <TableHeader>Actions</TableHeader>

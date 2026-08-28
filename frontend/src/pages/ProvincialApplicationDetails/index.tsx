@@ -3244,7 +3244,7 @@ const ProvincialApplicationDetailsPage = () => {
               <TableRow>
                 <TableHeader>Permit</TableHeader>
                 <TableHeader>Status</TableHeader>
-                <TableHeader>Open</TableHeader>
+                <TableHeader>Actions</TableHeader>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -3315,10 +3315,10 @@ const ProvincialApplicationDetailsPage = () => {
                 <TableRow>
                   <TableHeader>Offer</TableHeader>
                   <TableHeader>Company</TableHeader>
-                  <TableHeader>Date Received</TableHeader>
+                  <TableHeader>Date received</TableHeader>
                   <TableHeader>Valid</TableHeader>
-                  <TableHeader>Withdrawal Date</TableHeader>
-                  <TableHeader>Open</TableHeader>
+                  <TableHeader>Withdrawal date</TableHeader>
+                  <TableHeader>Actions</TableHeader>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -4854,7 +4854,7 @@ const ProvincialApplicationDetailsPage = () => {
                               <Table size="md" useZebraStyles>
                                 <TableHead>
                                   <TableRow>
-                                    <TableHeader>File Name</TableHeader>
+                                    <TableHeader>File name</TableHeader>
                                     <TableHeader>Description</TableHeader>
                                     <TableHeader>Type</TableHeader>
                                     <TableHeader>Source</TableHeader>
