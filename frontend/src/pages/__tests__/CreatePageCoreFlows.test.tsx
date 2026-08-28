@@ -2370,7 +2370,7 @@ describe('Create Page Core Flows', () => {
     expect(screen.getByLabelText('Offer remarks')).toBeInTheDocument()
     await userEvent.type(screen.getByLabelText('Company'), 'Example Lumber')
     await userEvent.type(screen.getByLabelText('Contact name'), 'Sample Contact')
-    await userEvent.type(screen.getByLabelText('Offer volume (m³)'), '99.9')
+    await userEvent.type(screen.getByLabelText('Offer volume (m³)'), '94.9')
     await userEvent.type(screen.getByLabelText('Offer amount ($/m³)'), '25000')
     await userEvent.type(screen.getByLabelText('Pickup location'), 'Yard A')
     await userEvent.type(screen.getByLabelText('Offer conditions / remarks'), 'No partial loads')
@@ -2390,7 +2390,7 @@ describe('Create Page Core Flows', () => {
         offeringClientNumber: '',
         companyName: 'Example Lumber',
         contactName: 'Sample Contact',
-        offerVolume: '99.9',
+        offerVolume: '94.9',
         purchaseOfferAmount: '25000',
         teacReviewDate: '',
         fairOfferIndicator: 'N',
@@ -2410,6 +2410,28 @@ describe('Create Page Core Flows', () => {
       },
     })
   }, 15000)
+
+  it('rejects an offer volume above the selected package volume', async () => {
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/offers/create?applicationNumber=2001&packageNumber=PKG-9&companyName=Example%20Lumber&contactName=Sample%20Contact&pickupLocation=Yard%20A&purchaseOfferAmount=25000&offerVolume=95.1',
+        ]}
+      >
+        <Routes>
+          <Route path="/provincial/offers/create" element={<ProvincialOfferCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByDisplayValue('95.0')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Save new offer' }))
+
+    expect(
+      await screen.findAllByText('Offer volume cannot exceed the application/package volume.'),
+    ).not.toHaveLength(0)
+    expect(mockedSubmitProvincialOfferCreate).not.toHaveBeenCalled()
+  })
 
   it('debounces offer context lookups while an application number is typed', async () => {
     render(

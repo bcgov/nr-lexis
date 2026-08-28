@@ -767,7 +767,7 @@ class PurchaseOfferOracleServiceTest {
   @Test
   void addOfferShouldRejectUnknownPackageBeforeOracleInsert() {
     stubProvincialApplication(1000456L);
-    when(repository.findPackageApplicationNumber("PKG-404")).thenReturn(Optional.empty());
+    when(repository.findPackageReference("PKG-404")).thenReturn(Optional.empty());
 
     PurchaseOfferService.CreateOfferResult response =
         service.addOffer(validCreateRequest(1000456L, "PKG-404"), "idir\\jsmith");
@@ -780,7 +780,11 @@ class PurchaseOfferOracleServiceTest {
   @Test
   void addOfferShouldRejectPackageForDifferentApplicationBeforeOracleInsert() {
     stubProvincialApplication(1000456L);
-    when(repository.findPackageApplicationNumber("PKG-903")).thenReturn(Optional.of(1000457L));
+    when(repository.findPackageReference("PKG-903"))
+        .thenReturn(
+            Optional.of(
+                new PurchaseOfferRepository.PackageReferenceRow(
+                    "PKG-903", 1000457L, 500.0d)));
 
     PurchaseOfferService.CreateOfferResult response =
         service.addOffer(validCreateRequest(1000456L, "PKG-903"), "idir\\jsmith");
@@ -788,6 +792,48 @@ class PurchaseOfferOracleServiceTest {
     assertThat(response.success()).isFalse();
     assertThat(response.errors())
         .containsExactly("Package PKG-903 does not belong to application 1000456.");
+    verify(repository, never()).insertOffer(any());
+  }
+
+  @Test
+  void addOfferShouldRejectVolumeAboveApplicationVolumeBeforeOracleInsert() {
+    stubProvincialApplication(1000456L, 100.0d);
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.addOffer(validCreateRequest(1000456L, null, 100.1d), "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactly("Offer volume cannot exceed the application/package volume.");
+    verify(repository, never()).insertOffer(any());
+  }
+
+  @Test
+  void addOfferShouldAcceptVolumeAtDisplayedRoundedApplicationLimit() {
+    stubProvincialApplication(1000456L, 95.55d);
+    when(repository.insertOffer(any(PurchaseOfferRepository.PurchaseOfferInsertRecord.class)))
+        .thenReturn(Optional.of(new PurchaseOfferRepository.PurchaseOfferInsertRow(81001L)));
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.addOffer(validCreateRequest(1000456L, null, 95.6d), "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<PurchaseOfferRepository.PurchaseOfferInsertRecord> recordCaptor =
+        ArgumentCaptor.forClass(PurchaseOfferRepository.PurchaseOfferInsertRecord.class);
+    verify(repository).insertOffer(recordCaptor.capture());
+    assertThat(recordCaptor.getValue().offerVolume()).isEqualTo(95.6d);
+  }
+
+  @Test
+  void addOfferShouldRejectVolumeAbovePackageVolumeBeforeOracleInsert() {
+    stubProvincialApplicationWithPackage(1000456L, "PKG-903", 500.0d, 80.0d);
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.addOffer(validCreateRequest(1000456L, "PKG-903", 80.1d), "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactly("Offer volume cannot exceed the application/package volume.");
     verify(repository, never()).insertOffer(any());
   }
 
@@ -1044,7 +1090,7 @@ class PurchaseOfferOracleServiceTest {
     assertThat(response.success()).isFalse();
     assertThat(response.errors())
         .containsExactly("A package cannot be added to an offer that was created without one.");
-    verify(repository, never()).findPackageApplicationNumber(any());
+    verify(repository, never()).findPackageReference(any());
     verify(repository, never()).updateOffer(any());
   }
 
@@ -1071,8 +1117,11 @@ class PurchaseOfferOracleServiceTest {
     when(repository.findUpdateSourceByOfferNumber(81001L))
         .thenReturn(Optional.of(updateSource(1000456L, "PKG-903", "P")));
     stubProvincialApplication(1000456L);
-    when(repository.findPackageApplicationNumber("PKG-904"))
-        .thenReturn(Optional.of(1000457L));
+    when(repository.findPackageReference("PKG-904"))
+        .thenReturn(
+            Optional.of(
+                new PurchaseOfferRepository.PackageReferenceRow(
+                    "PKG-904", 1000457L, 500.0d)));
 
     PurchaseOfferService.CreateOfferResult response =
         service.updateOffer(
@@ -1084,6 +1133,25 @@ class PurchaseOfferOracleServiceTest {
     assertThat(response.success()).isFalse();
     assertThat(response.errors())
         .containsExactly("Package PKG-904 does not belong to application 1000456.");
+    verify(repository, never()).updateOffer(any());
+  }
+
+  @Test
+  void updateOfferShouldRejectChangedVolumeAbovePackageVolume() {
+    when(repository.findUpdateSourceByOfferNumber(81001L))
+        .thenReturn(Optional.of(updateSource(1000456L, "PKG-903", "P")));
+    stubProvincialApplicationWithPackage(1000456L, "PKG-903", 500.0d, 95.5d);
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.updateOffer(
+            new PurchaseOfferService.CreateOfferRequest(
+                1000456L, 81001L, null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, 95.6d),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactly("Offer volume cannot exceed the application/package volume.");
     verify(repository, never()).updateOffer(any());
   }
 
@@ -1654,6 +1722,11 @@ class PurchaseOfferOracleServiceTest {
 
   private PurchaseOfferService.CreateOfferRequest validCreateRequest(
       Long applicationNumber, String packageNumber) {
+    return validCreateRequest(applicationNumber, packageNumber, null);
+  }
+
+  private PurchaseOfferService.CreateOfferRequest validCreateRequest(
+      Long applicationNumber, String packageNumber, Double offerVolume) {
     return new PurchaseOfferService.CreateOfferRequest(
         applicationNumber,
         null,
@@ -1674,7 +1747,7 @@ class PurchaseOfferOracleServiceTest {
         "00077881",
         "Port Moody",
         null,
-        null);
+        offerVolume);
   }
 
   private PermitRpcRepository.PermitScaleDetailRow scaleDetail(
@@ -1696,18 +1769,34 @@ class PurchaseOfferOracleServiceTest {
   }
 
   private void stubProvincialApplication(Long applicationNumber) {
+    stubProvincialApplication(applicationNumber, 9_999_999.99d);
+  }
+
+  private void stubProvincialApplication(Long applicationNumber, Double applicationVolume) {
     when(repository.findApplicationReference(applicationNumber))
         .thenReturn(
             Optional.of(
                 new PurchaseOfferRepository.ApplicationReferenceRow(
-                    applicationNumber, "P")));
+                    applicationNumber, "P", applicationVolume)));
   }
 
   private void stubProvincialApplicationWithPackage(
       Long applicationNumber, String packageNumber) {
-    stubProvincialApplication(applicationNumber);
-    when(repository.findPackageApplicationNumber(packageNumber))
-        .thenReturn(Optional.of(applicationNumber));
+    stubProvincialApplicationWithPackage(
+        applicationNumber, packageNumber, 9_999_999.99d, 9_999_999.99d);
+  }
+
+  private void stubProvincialApplicationWithPackage(
+      Long applicationNumber,
+      String packageNumber,
+      Double applicationVolume,
+      Double packageVolume) {
+    stubProvincialApplication(applicationNumber, applicationVolume);
+    when(repository.findPackageReference(packageNumber))
+        .thenReturn(
+            Optional.of(
+                new PurchaseOfferRepository.PackageReferenceRow(
+                    packageNumber, applicationNumber, packageVolume)));
   }
 
   private PurchaseOfferService transactionalService(

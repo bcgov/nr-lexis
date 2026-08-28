@@ -254,6 +254,22 @@ describe('Provincial Offer Detail Actions', () => {
     })
   })
 
+  it('rejects a changed offer volume above the application or package volume', async () => {
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'Offer 81001' })
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    const offerVolumeInput = screen.getByLabelText('Offer volume (m³)')
+    await userEvent.clear(offerVolumeInput)
+    await userEvent.type(offerVolumeInput, '45.6')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(
+      await screen.findAllByText('Offer volume cannot exceed the application/package volume.'),
+    ).not.toHaveLength(0)
+    expect(mockedSubmitProvincialOfferUpdate).not.toHaveBeenCalled()
+  })
+
   it('keeps a null Oracle offer volume blank during an unrelated update', async () => {
     mockedFetchProvincialOfferDetail.mockResolvedValue({
       ...offerDetail,

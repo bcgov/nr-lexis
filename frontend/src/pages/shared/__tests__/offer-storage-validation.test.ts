@@ -6,6 +6,7 @@ import {
   formatLegacyOfferVolume,
   offerDecimalStorageFieldError,
   offerTextStorageFieldError,
+  offerVolumeContextFieldError,
 } from '@/pages/shared/offer-storage-validation'
 
 describe('offer storage validation', () => {
@@ -32,6 +33,16 @@ describe('offer storage validation', () => {
     expect(formatLegacyOfferVolume('12.34')).toBe('12.3')
     expect(formatLegacyOfferVolume('12.36')).toBe('12.4')
     expect(formatLegacyOfferVolume('1.234')).toBe('1.234')
+  })
+
+  it('rejects an offer volume above the application or package volume', () => {
+    expect(offerVolumeContextFieldError('95.1', '95.0')).toBe(
+      'Offer volume cannot exceed the application/package volume.',
+    )
+    expect(offerVolumeContextFieldError('95.0', '95.0')).toBeNull()
+    expect(offerVolumeContextFieldError('', '95.0')).toBeNull()
+    expect(offerVolumeContextFieldError('95.1', '')).toBeNull()
+    expect(offerVolumeContextFieldError('95.1', null)).toBeNull()
   })
 
   it('enforces US7ASCII and Oracle byte lengths for offer text', () => {

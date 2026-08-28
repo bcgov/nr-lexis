@@ -152,7 +152,7 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
       validateStorageNumber(errors, normalizedOfferVolume, OFFER_VOLUME_MAX, "Offer volume");
     }
     if (errors.isEmpty()) {
-      errors.addAll(validateCreateOfferReferences(normalized));
+      errors.addAll(validateCreateOfferReferences(normalized, normalizedOfferVolume, true));
     }
     List<String> warnings = List.of();
 
@@ -266,7 +266,11 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
       validateStorageNumber(errors, normalizedOfferVolume, OFFER_VOLUME_MAX, "Offer volume");
     }
     if (errors.isEmpty()) {
-      errors.addAll(validateCreateOfferReferences(updated));
+      boolean offerVolumeChanged =
+          legacyNumberChanged(
+              normalizeLegacyOfferVolume(current.offerVolume()), normalizedOfferVolume);
+      errors.addAll(
+          validateCreateOfferReferences(updated, normalizedOfferVolume, offerVolumeChanged));
     }
     List<String> warnings = List.of();
 
@@ -570,7 +574,8 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
     }
   }
 
-  private List<String> validateCreateOfferReferences(CreateOfferRequest request) {
+  private List<String> validateCreateOfferReferences(
+      CreateOfferRequest request, Double offerVolume, boolean enforceVolumeLimit) {
     List<String> errors = new ArrayList<>();
     Long applicationNumber = request.applicationNumber();
     Optional<PurchaseOfferRepository.ApplicationReferenceRow> application =
@@ -589,14 +594,40 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
               + " does not have a valid jurisdiction to accept offers.");
     }
 
+    Double contextVolume =
+        application
+            .map(PurchaseOfferRepository.ApplicationReferenceRow::applicationVolume)
+            .orElse(null);
+
     String packageNumber = trimToNull(request.packageNumber());
     if (packageNumber != null) {
-      Optional<Long> packageApplicationNumber = repository.findPackageApplicationNumber(packageNumber);
-      if (packageApplicationNumber.isEmpty()) {
+      Optional<PurchaseOfferRepository.PackageReferenceRow> packageReference =
+          repository.findPackageReference(packageNumber);
+      if (packageReference.isEmpty()) {
         errors.add("Package " + packageNumber + " does not exist.");
-      } else if (applicationNumber != null && !packageApplicationNumber.get().equals(applicationNumber)) {
-        errors.add("Package " + packageNumber + " does not belong to application " + applicationNumber + ".");
+      } else if (applicationNumber != null
+          && !applicationNumber.equals(packageReference.get().applicationNumber())) {
+        errors.add(
+            "Package "
+                + packageNumber
+                + " does not belong to application "
+                + applicationNumber
+                + ".");
+      } else {
+        contextVolume = packageReference.get().packageVolume();
       }
+    }
+
+    if (errors.isEmpty()
+        && enforceVolumeLimit
+        && offerVolume != null
+        && contextVolume != null
+        && Double.isFinite(offerVolume)
+        && Double.isFinite(contextVolume)
+        && BigDecimal.valueOf(offerVolume)
+                .compareTo(BigDecimal.valueOf(contextVolume).setScale(1, RoundingMode.HALF_UP))
+            > 0) {
+      errors.add("Offer volume cannot exceed the application/package volume.");
     }
 
     return errors;

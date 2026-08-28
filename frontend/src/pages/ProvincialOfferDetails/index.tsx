@@ -53,6 +53,7 @@ import {
   formatLegacyOfferVolume,
   offerDecimalStorageFieldError,
   offerTextStorageFieldError,
+  offerVolumeContextFieldError,
 } from '@/pages/shared/offer-storage-validation'
 
 type ProvincialOfferDetailField = keyof ProvincialOfferUpdateSubmission & string
@@ -296,9 +297,17 @@ const ProvincialOfferDetailsPage = () => {
           'Contact name',
           true,
         ) ?? undefined,
-      offerVolume:
-        offerDecimalStorageFieldError(form?.offerVolume ?? '', OFFER_VOLUME_MAX, 'Offer volume') ??
-        undefined,
+      offerVolume: firstValidationError(
+        () =>
+          offerDecimalStorageFieldError(form?.offerVolume ?? '', OFFER_VOLUME_MAX, 'Offer volume'),
+        () => {
+          const currentVolume = form?.offerVolume ?? ''
+          const originalVolume = detail?.offerVolume == null ? '' : String(detail.offerVolume)
+          return formatLegacyOfferVolume(currentVolume) === formatLegacyOfferVolume(originalVolume)
+            ? null
+            : offerVolumeContextFieldError(currentVolume, detail?.packageVolume)
+        },
+      ),
       purchaseOfferAmount:
         offerDecimalStorageFieldError(
           form?.purchaseOfferAmount ?? '',
@@ -346,7 +355,7 @@ const ProvincialOfferDetailsPage = () => {
           'Offer remarks',
         ) ?? undefined,
     }),
-    [form],
+    [detail, form],
   )
   const hasValidationError = Object.values(fieldErrors).some((error) => !!error)
 

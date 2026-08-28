@@ -44,6 +44,7 @@ import {
   formatLegacyOfferVolume,
   offerDecimalStorageFieldError,
   offerTextStorageFieldError,
+  offerVolumeContextFieldError,
 } from '@/pages/shared/offer-storage-validation'
 
 type ProvincialOfferCreateForm = {
@@ -516,9 +517,10 @@ const ProvincialOfferCreatePage = () => {
           'Contact name',
           true,
         ) ?? undefined,
-      offerVolume:
-        offerDecimalStorageFieldError(form.offerVolume, OFFER_VOLUME_MAX, 'Offer volume') ??
-        undefined,
+      offerVolume: firstValidationError(
+        () => offerDecimalStorageFieldError(form.offerVolume, OFFER_VOLUME_MAX, 'Offer volume'),
+        () => offerVolumeContextFieldError(form.offerVolume, contextVolume),
+      ),
       purchaseOfferAmount:
         offerDecimalStorageFieldError(
           form.purchaseOfferAmount,
@@ -550,6 +552,7 @@ const ProvincialOfferCreatePage = () => {
     [
       applicationValidationError,
       canManageOfferApproval,
+      contextVolume,
       effectiveCompanyName,
       effectiveContactName,
       effectiveOfferingClientNumber,

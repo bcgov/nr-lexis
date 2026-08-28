@@ -26,6 +26,24 @@ export const formatLegacyOfferVolume = (value: string): string => {
   return Number.isFinite(parsed) ? parsed.toFixed(1) : value
 }
 
+export const offerVolumeContextFieldError = (
+  offerVolume: string,
+  contextVolume: string | number | null | undefined,
+): string | null => {
+  const normalizedOfferVolume = offerVolume.trim()
+  if (!ORACLE_SCALE_TWO_DECIMAL_PATTERN.test(normalizedOfferVolume)) return null
+  const normalizedContextVolume = String(contextVolume ?? '').trim()
+  if (!normalizedContextVolume) return null
+
+  const parsedOfferVolume = Number(normalizedOfferVolume)
+  const parsedContextVolume = Number(normalizedContextVolume)
+  if (!Number.isFinite(parsedOfferVolume) || !Number.isFinite(parsedContextVolume)) return null
+
+  return parsedOfferVolume > parsedContextVolume
+    ? 'Offer volume cannot exceed the application/package volume.'
+    : null
+}
+
 export const offerTextStorageFieldError = (
   value: string,
   maximumLength: number,
