@@ -5,7 +5,7 @@ import {
   roundedNumericMaximumFieldError,
 } from '@/pages/shared/create-form-utils'
 
-export const INVOICE_NUMBER_MAX_LENGTH = 9
+const INVOICE_NUMBER_MAX_LENGTH = 9
 export const INVOICE_AMOUNT_MAX = 9_999_999.99
 export const INVOICE_AMOUNT_DECIMAL_PLACES = 2
 export const INVOICE_CONVERSION_RATE_MAX = 9.99999
