@@ -559,6 +559,20 @@ const ProvincialOffersPage = () => {
                   value={filters.clientNumber}
                   onChange={(event) => updateFilter('clientNumber', event.target.value)}
                 />
+                <RegionMultiSelect
+                  id="region"
+                  titleText="Region"
+                  items={regionOptions}
+                  placeholder="Select region(s)"
+                  selectedItems={selectedRegions}
+                  disabled={!isOptionsLoaded || offerOptionsUnavailable}
+                  onChange={(nextSelected) => {
+                    updateFilter(
+                      'region',
+                      nextSelected.map((item) => item.id),
+                    )
+                  }}
+                />
                 <IsoDatePicker
                   id="listingFromDate"
                   labelText="Listing from date"
@@ -574,20 +588,6 @@ const ProvincialOffersPage = () => {
                   invalid={!isValidIsoDate(filters.listingToDate)}
                   invalidText="Date must be YYYY-MM-DD"
                   onChange={(value) => updateFilter('listingToDate', value)}
-                />
-                <RegionMultiSelect
-                  id="region"
-                  titleText="Region"
-                  items={regionOptions}
-                  placeholder="Select region(s)"
-                  selectedItems={selectedRegions}
-                  disabled={!isOptionsLoaded || offerOptionsUnavailable}
-                  onChange={(nextSelected) => {
-                    updateFilter(
-                      'region',
-                      nextSelected.map((item) => item.id),
-                    )
-                  }}
                 />
                 <IsoDatePicker
                   id="withdrawalFromDate"

@@ -164,6 +164,15 @@ describe('Provincial exemption client parity', () => {
     )
 
     await screen.findByRole('heading', { name: 'Exemption 26-8758', level: 1 })
+    await screen.findByRole('tab', { name: 'Documents' })
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
+      'Owner',
+      'Agent',
+      'Exemption details',
+      'Applications',
+      'Documents',
+      'Permits',
+    ])
 
     await userEvent.click(await screen.findByRole('tab', { name: 'Owner' }))
     const ownerTile = (
@@ -243,7 +252,7 @@ describe('Provincial exemption client parity', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByRole('tab', { name: 'Summary' })).toHaveAttribute(
+    expect(await screen.findByRole('tab', { name: 'Exemption details' })).toHaveAttribute(
       'aria-selected',
       'true',
     )

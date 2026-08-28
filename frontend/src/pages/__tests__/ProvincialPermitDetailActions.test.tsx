@@ -608,13 +608,24 @@ describe('Provincial Permit Detail Action Smoke', () => {
       'Agent',
       'Shipping',
       'Items',
+      'Documents',
       'Fees',
       'GBMS',
-      'Documents',
       'Invoices',
     ]) {
       expect(await screen.findByRole('tab', { name: tabName })).toBeInTheDocument()
     }
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
+      'Permit',
+      'Owner',
+      'Agent',
+      'Shipping',
+      'Items',
+      'Documents',
+      'Fees',
+      'GBMS',
+      'Invoices',
+    ])
     const pageHeading = screen.getByRole('heading', {
       name: 'Permit 777 (Pending)',
       level: 1,
@@ -1079,6 +1090,21 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.getByRole('cell', { name: 'Unmanufactured' })).toBeInTheDocument()
     expect(screen.getByRole('columnheader', { name: 'Scale type' })).toBeInTheDocument()
     expect(screen.getByRole('columnheader', { name: 'Permit' })).toBeInTheDocument()
+    expect(
+      within(await screen.findByRole('region', { name: 'Permit item rows' }))
+        .getAllByRole('columnheader')
+        .map((header) => header.textContent),
+    ).toEqual([
+      'Include in permit',
+      'Item',
+      'Timber mark',
+      'Scale type',
+      'Permit',
+      'Pieces',
+      'Species',
+      'Grade',
+      'Volume (m³)',
+    ])
     expect(screen.getByRole('cell', { name: 'C' })).toBeInTheDocument()
     expect(screen.getByRole('cell', { name: '777' })).toBeInTheDocument()
   })
