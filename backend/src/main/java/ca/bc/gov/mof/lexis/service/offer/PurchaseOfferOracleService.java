@@ -574,8 +574,9 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
     }
   }
 
-  // Preserve the legacy offer-volume cap at the service boundary so direct requests cannot bypass
-  // the same business rule.
+  // Legacy compares the raw offer input with the one-decimal displayed context before applying its
+  // browser rounding. Preserve that ordering at the service boundary so direct requests cannot
+  // bypass or alter the same business rule.
   private List<String> validateCreateOfferReferences(
       CreateOfferRequest request, Double offerVolume, boolean enforceVolumeLimit) {
     List<String> errors = new ArrayList<>();

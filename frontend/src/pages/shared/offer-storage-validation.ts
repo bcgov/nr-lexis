@@ -22,6 +22,8 @@ export const formatLegacyOfferVolume = (value: string): string => {
     return value
   }
 
+  // Legacy offers.js uses JavaScript toFixed on blur. Its positive tie behavior intentionally
+  // differs from the legacy server's separate DecimalFormat step.
   const parsed = Number(normalized)
   return Number.isFinite(parsed) ? parsed.toFixed(1) : value
 }

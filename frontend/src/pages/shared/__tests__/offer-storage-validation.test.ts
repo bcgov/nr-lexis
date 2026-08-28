@@ -29,7 +29,7 @@ describe('offer storage validation', () => {
     )
   })
 
-  it('formats valid offer volumes to the legacy one-decimal scale', () => {
+  it('formats valid offer volumes with the legacy browser toFixed semantics', () => {
     expect(formatLegacyOfferVolume('12.34')).toBe('12.3')
     expect(formatLegacyOfferVolume('12.36')).toBe('12.4')
     expect(formatLegacyOfferVolume('12.25')).toBe('12.3')
@@ -41,6 +41,9 @@ describe('offer storage validation', () => {
       'Offer volume cannot exceed the application/package volume.',
     )
     expect(offerVolumeContextFieldError('95.0', '95.0')).toBeNull()
+    expect(offerVolumeContextFieldError('95.54', '95.5')).toBe(
+      'Offer volume cannot exceed the application/package volume.',
+    )
     expect(offerVolumeContextFieldError('', '95.0')).toBeNull()
     expect(offerVolumeContextFieldError('95.1', '')).toBeNull()
     expect(offerVolumeContextFieldError('95.1', null)).toBeNull()

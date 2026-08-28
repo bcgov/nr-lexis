@@ -9,6 +9,8 @@ public final class LegacyOfferVolume {
 
   private LegacyOfferVolume() {}
 
+  // Mirrors legacy server-side LexisFormatUtils.truncateToDecimal. Legacy browser offer inputs use
+  // JavaScript toFixed separately before submission.
   public static String formatForDisplay(double value) {
     DecimalFormat formatter =
         new DecimalFormat("0.0", DecimalFormatSymbols.getInstance(Locale.ROOT));

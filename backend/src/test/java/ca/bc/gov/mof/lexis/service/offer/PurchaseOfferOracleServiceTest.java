@@ -838,6 +838,19 @@ class PurchaseOfferOracleServiceTest {
   }
 
   @Test
+  void addOfferShouldCompareRawVolumeBeforeLegacyBrowserRounding() {
+    stubProvincialApplication(1000456L, 95.55d);
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.addOffer(validCreateRequest(1000456L, null, 95.54d), "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactly("Offer volume cannot exceed the application/package volume.");
+    verify(repository, never()).insertOffer(any());
+  }
+
+  @Test
   void addOfferShouldRejectVolumeAbovePackageVolumeBeforeOracleInsert() {
     stubProvincialApplicationWithPackage(1000456L, "PKG-903", 500.0d, 80.0d);
 
