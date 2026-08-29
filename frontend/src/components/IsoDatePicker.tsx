@@ -69,7 +69,19 @@ export default function IsoDatePicker({
         invalid={invalid}
         invalidText={invalidText}
         disabled={disabled}
-        onBlur={onBlur}
+        onBlur={(event) => {
+          const input = event.currentTarget
+          const latestInputValue = latestInputValueRef.current
+          onBlur?.()
+
+          if (latestInputValue.trim() && !isValidIsoDate(latestInputValue)) {
+            requestAnimationFrame(() => {
+              if (latestInputValueRef.current === latestInputValue) {
+                input.value = latestInputValue
+              }
+            })
+          }
+        }}
         onChange={(event) => {
           latestInputValueRef.current = event.target.value
           if (event.target.value !== value) {

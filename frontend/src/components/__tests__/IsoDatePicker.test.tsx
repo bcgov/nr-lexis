@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
@@ -95,6 +95,35 @@ describe('IsoDatePicker', () => {
     })
 
     expect(screen.getByLabelText('Current date value')).toHaveTextContent('2026-02-31')
+  })
+
+  it('keeps an impossible typed date visible when Flatpickr clears the input on blur', async () => {
+    const onBlur = vi.fn()
+    const StatefulDatePicker = () => {
+      const [value, setValue] = useState('')
+
+      return (
+        <IsoDatePicker
+          id="approvalDate"
+          labelText="Approval date"
+          value={value}
+          onBlur={onBlur}
+          onChange={setValue}
+        />
+      )
+    }
+
+    render(<StatefulDatePicker />)
+
+    const input = screen.getByLabelText('Approval date')
+    fireEvent.change(input, { target: { value: '2026-02-31' } })
+    fireEvent.blur(input)
+
+    const dateInput = input as HTMLInputElement
+    dateInput.value = ''
+
+    await waitFor(() => expect(input).toHaveValue('2026-02-31'))
+    expect(onBlur).toHaveBeenCalledOnce()
   })
 
   it('does not emit a change when Carbon repeats the controlled date value', () => {

@@ -113,6 +113,11 @@ describe('Admin upload workflow smoke', () => {
 
     expect(screen.getByRole('combobox', { name: 'Permit number' })).toHaveValue('5001')
     expect(screen.getByRole('button', { name: 'Choose files for Upload documents' })).toBeVisible()
+    expect(
+      screen.getByText(
+        'Accepted file types: BMP, CSV, DOC, DOCX, JPG, PDF, PNG, RTF, TXT, XLS, XLSX, XML, and ZIP. Maximum file size: 20 MB. Multiple files can be queued and saved together.',
+      ),
+    ).toBeInTheDocument()
     expect(screen.queryByText(/US-ASCII|250 bytes/i)).not.toBeInTheDocument()
 
     const file = new File(['permit upload'], 'permit.pdf', { type: 'application/pdf' })
