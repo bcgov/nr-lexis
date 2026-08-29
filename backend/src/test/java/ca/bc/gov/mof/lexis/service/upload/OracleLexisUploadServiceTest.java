@@ -463,6 +463,58 @@ class OracleLexisUploadServiceTest {
   }
 
   @Test
+  void uploadInvoiceShouldRoundAcceptedValuesBeforeCallingOracle() {
+    OracleLexisUploadService service = service();
+    MockMultipartFile file =
+        new MockMultipartFile(
+            "formFile", "invoice.pdf", "application/pdf", validPdf());
+    when(uploadRepository.isFileTypeCodeValidRequired("PDF")).thenReturn(true);
+    when(uploadRepository.insertInvoiceFile(
+            eq(7000123L),
+            eq("INV-1"),
+            eq("invoice.pdf"),
+            eq("Invoice document"),
+            eq("INV"),
+            eq("PDF"),
+            eq(new BigDecimal("9999999.99")),
+            eq(new BigDecimal("1.00000")),
+            eq(new BigDecimal("12.00")),
+            eq("jsmith"),
+            any(InputStream.class),
+            eq(file.getSize())))
+        .thenReturn(UploadPersistenceResult.success());
+
+    LexisUploadResultDto result =
+        service
+            .uploadInvoice(
+                file,
+                7000123L,
+                "INV-1",
+                "Invoice document",
+                new BigDecimal("9999999.994"),
+                new BigDecimal("1.000001"),
+                new BigDecimal("12.001"),
+                "jsmith")
+            .orElseThrow();
+
+    assertThat(result.status()).isEqualTo("accepted");
+    verify(uploadRepository)
+        .insertInvoiceFile(
+            eq(7000123L),
+            eq("INV-1"),
+            eq("invoice.pdf"),
+            eq("Invoice document"),
+            eq("INV"),
+            eq("PDF"),
+            eq(new BigDecimal("9999999.99")),
+            eq(new BigDecimal("1.00000")),
+            eq(new BigDecimal("12.00")),
+            eq("jsmith"),
+            any(InputStream.class),
+            eq(file.getSize()));
+  }
+
+  @Test
   void uploadInvoiceShouldRejectNonAsciiInvoiceNumberBeforeCallingOracle() {
     OracleLexisUploadService service = service();
     MockMultipartFile file =

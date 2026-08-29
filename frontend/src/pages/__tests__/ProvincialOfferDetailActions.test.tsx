@@ -339,6 +339,49 @@ describe('Provincial Offer Detail Actions', () => {
     })
   })
 
+  it('reloads the stored offer volume after an unrelated historical update', async () => {
+    const historicalDetail = {
+      ...offerDetail,
+      packageVolume: 95.5,
+      offerVolume: 95.54,
+    }
+    const storedDetail = {
+      ...historicalDetail,
+      offerVolume: 95.5,
+      offerRemark: 'First unrelated update',
+    }
+    mockedFetchProvincialOfferDetail
+      .mockResolvedValueOnce(historicalDetail)
+      .mockResolvedValue(storedDetail)
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'Offer 81001' })
+    await userEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    const remarkInput = screen.getByLabelText('Offer remarks')
+    await userEvent.clear(remarkInput)
+    await userEvent.type(remarkInput, 'First unrelated update')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(mockedFetchProvincialOfferDetail).toHaveBeenCalledTimes(2))
+    expect(await screen.findByLabelText('Offer volume (m³)')).toHaveValue('95.5')
+    expect(mockedSubmitProvincialOfferUpdate).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ offerVolume: '95.54' }),
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    const refreshedRemarkInput = screen.getByLabelText('Offer remarks')
+    await userEvent.clear(refreshedRemarkInput)
+    await userEvent.type(refreshedRemarkInput, 'Second unrelated update')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(mockedSubmitProvincialOfferUpdate).toHaveBeenCalledTimes(2))
+    expect(mockedSubmitProvincialOfferUpdate).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ offerVolume: '95.5' }),
+    )
+  })
+
   it('allows a ministry-created legacy offer with no offering client to be updated', async () => {
     mockedFetchProvincialOfferDetail.mockResolvedValue({
       ...offerDetail,

@@ -28,4 +28,20 @@ class InvoiceStorageConstraintsTest {
                 new BigDecimal("9.999995")))
         .isFalse();
   }
+
+  @Test
+  void shouldRoundAcceptedValuesToTheirOracleColumnScales() {
+    assertThat(
+            InvoiceStorageConstraints.roundInvoiceAmountForStorage(
+                new BigDecimal("9999999.994")))
+        .isEqualByComparingTo("9999999.99");
+    assertThat(
+            InvoiceStorageConstraints.roundInvoiceConversionRateForStorage(
+                new BigDecimal("1.000001")))
+        .isEqualByComparingTo("1.00000");
+    assertThat(
+            InvoiceStorageConstraints.roundInvoiceAmountForStorage(
+                new BigDecimal("12.001")))
+        .isEqualByComparingTo("12.00");
+  }
 }

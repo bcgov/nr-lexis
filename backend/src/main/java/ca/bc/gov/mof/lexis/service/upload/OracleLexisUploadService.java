@@ -3,6 +3,8 @@ package ca.bc.gov.mof.lexis.service.upload;
 import static ca.bc.gov.mof.lexis.util.InvoiceStorageConstraints.isValidInvoiceAmount;
 import static ca.bc.gov.mof.lexis.util.InvoiceStorageConstraints.isValidInvoiceConversionRate;
 import static ca.bc.gov.mof.lexis.util.InvoiceStorageConstraints.isValidInvoiceNumber;
+import static ca.bc.gov.mof.lexis.util.InvoiceStorageConstraints.roundInvoiceAmountForStorage;
+import static ca.bc.gov.mof.lexis.util.InvoiceStorageConstraints.roundInvoiceConversionRateForStorage;
 import static ca.bc.gov.mof.lexis.util.TextUtils.defaultSystemUser;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
@@ -253,6 +255,10 @@ public class OracleLexisUploadService implements LexisUploadService {
         || !isValidInvoiceAmount(feeInLieu)) {
       return Optional.empty();
     }
+    BigDecimal storedExportValue = roundInvoiceAmountForStorage(exportValue);
+    BigDecimal storedConversionRate =
+        roundInvoiceConversionRateForStorage(currencyConversionRate);
+    BigDecimal storedFeeInLieu = roundInvoiceAmountForStorage(feeInLieu);
     String requestedDescription = trimToNull(description);
     String normalizedDescription =
         requestedDescription == null
@@ -284,9 +290,9 @@ public class OracleLexisUploadService implements LexisUploadService {
                     normalizedDescription,
                     ATTACHMENT_TYPE_INVOICE,
                     fileTypeCode,
-                    exportValue,
-                    currencyConversionRate,
-                    feeInLieu,
+                    storedExportValue,
+                    storedConversionRate,
+                    storedFeeInLieu,
                     defaultSystemUser(entryUserId),
                     content,
                     contentLength));

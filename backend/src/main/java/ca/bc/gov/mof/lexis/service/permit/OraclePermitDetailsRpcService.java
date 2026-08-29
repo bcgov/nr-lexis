@@ -5,6 +5,8 @@ import static ca.bc.gov.mof.lexis.util.InvoiceStorageConstraints.INVOICE_NUMBER_
 import static ca.bc.gov.mof.lexis.util.InvoiceStorageConstraints.isValidInvoiceAmount;
 import static ca.bc.gov.mof.lexis.util.InvoiceStorageConstraints.isValidInvoiceConversionRate;
 import static ca.bc.gov.mof.lexis.util.InvoiceStorageConstraints.isValidInvoiceNumber;
+import static ca.bc.gov.mof.lexis.util.InvoiceStorageConstraints.roundInvoiceAmountForStorage;
+import static ca.bc.gov.mof.lexis.util.InvoiceStorageConstraints.roundInvoiceConversionRateForStorage;
 import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.controlSafe;
 import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.exceptionType;
 import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.fingerprint;
@@ -2887,6 +2889,11 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
           false, "", errors, List.of(), permitNumber);
     }
 
+    BigDecimal storedInvoiceExportValue = roundInvoiceAmountForStorage(invoiceExportValue);
+    BigDecimal storedInvoiceConversionRate =
+        roundInvoiceConversionRateForStorage(invoiceConversionRate);
+    BigDecimal storedInvoiceFeeInLieu = roundInvoiceAmountForStorage(invoiceFeeInLieu);
+
     Optional<PermitMutationRow> permit = repository.findPermitMutationByPermitNumber(permitNumber);
     if (permit.isEmpty()) {
       return failurePersistenceResponse(List.of("Permit not found."), permitNumber);
@@ -2910,9 +2917,9 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         repository.insertSalesInvoice(
             permitNumber,
             normalizedSalesInvoiceNumber,
-            invoiceExportValue,
-            invoiceConversionRate,
-            invoiceFeeInLieu,
+            storedInvoiceExportValue,
+            storedInvoiceConversionRate,
+            storedInvoiceFeeInLieu,
             trimToNull(userId));
     if (inserted
         .filter(
@@ -2920,9 +2927,9 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
                 matchesInsertedSalesInvoice(
                     row,
                     normalizedSalesInvoiceNumber,
-                    invoiceExportValue,
-                    invoiceConversionRate,
-                    invoiceFeeInLieu))
+                    storedInvoiceExportValue,
+                    storedInvoiceConversionRate,
+                    storedInvoiceFeeInLieu))
         .isEmpty()) {
       markRollbackOnly();
       return new PermitPersistenceRpcResponseDto(

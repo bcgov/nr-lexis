@@ -42,7 +42,7 @@ describe('invoice storage validation', () => {
       'Invoice number must be 9 characters or fewer.',
     )
     expect(invoiceNumberStorageFieldError('é'.repeat(9))).toBe(
-      'Invoice number must use US-ASCII characters.',
+      'Invoice number must use printable US-ASCII characters.',
     )
   })
 

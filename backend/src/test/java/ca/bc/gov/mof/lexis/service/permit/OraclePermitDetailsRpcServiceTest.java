@@ -4544,7 +4544,7 @@ class OraclePermitDetailsRpcServiceTest {
             7000123L,
             "INV-100",
             new BigDecimal("100.00"),
-            new BigDecimal("1.25"),
+            new BigDecimal("1.25000"),
             new BigDecimal("12.00"),
             "idir\\jsmith"))
         .thenReturn(Optional.of(new SalesInvoiceRow("INV-100", 100.0d, 1.25d, 12.0d)));
@@ -4564,6 +4564,44 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
+  void addInvoiceShouldRoundAcceptedValuesBeforePersistenceVerification() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow("ACT")));
+    when(repository.findSalesInvoiceByNumberAndPermit("INV-100", 7000123L))
+        .thenReturn(Optional.empty());
+    when(repository.insertSalesInvoice(
+            7000123L,
+            "INV-100",
+            new BigDecimal("9999999.99"),
+            new BigDecimal("1.00000"),
+            new BigDecimal("12.00"),
+            "idir\\jsmith"))
+        .thenReturn(
+            Optional.of(
+                new SalesInvoiceRow("INV-100", 9_999_999.99d, 1.0d, 12.0d)));
+
+    PermitPersistenceRpcResponseDto response =
+        service.addInvoice(
+            7000123L,
+            "INV-100",
+            new BigDecimal("9999999.994"),
+            new BigDecimal("1.000001"),
+            new BigDecimal("12.001"),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    assertThat(response.errors()).isEmpty();
+    verify(repository)
+        .insertSalesInvoice(
+            7000123L,
+            "INV-100",
+            new BigDecimal("9999999.99"),
+            new BigDecimal("1.00000"),
+            new BigDecimal("12.00"),
+            "idir\\jsmith");
+  }
+
+  @Test
   void addInvoiceShouldRollBackWhenInsertReturnsNoRow() {
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(permitMutationRow("ACT")));
@@ -4573,7 +4611,7 @@ class OraclePermitDetailsRpcServiceTest {
             7000123L,
             "INV-100",
             new BigDecimal("100.00"),
-            new BigDecimal("1.25"),
+            new BigDecimal("1.25000"),
             new BigDecimal("12.00"),
             "idir\\jsmith"))
         .thenReturn(Optional.empty());
@@ -4605,7 +4643,7 @@ class OraclePermitDetailsRpcServiceTest {
             7000123L,
             "INV-100",
             new BigDecimal("100.00"),
-            new BigDecimal("1.25"),
+            new BigDecimal("1.25000"),
             new BigDecimal("12.00"),
             "idir\\jsmith"))
         .thenReturn(

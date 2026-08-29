@@ -29,13 +29,25 @@ public final class InvoiceStorageConstraints {
         value, INVOICE_CONVERSION_RATE_PRECISION, INVOICE_CONVERSION_RATE_SCALE);
   }
 
+  public static BigDecimal roundInvoiceAmountForStorage(BigDecimal value) {
+    return roundForStorage(value, INVOICE_AMOUNT_SCALE);
+  }
+
+  public static BigDecimal roundInvoiceConversionRateForStorage(BigDecimal value) {
+    return roundForStorage(value, INVOICE_CONVERSION_RATE_SCALE);
+  }
+
   private static boolean isPositiveOracleNumber(BigDecimal value, int precision, int scale) {
     if (value == null || value.compareTo(BigDecimal.ZERO) <= 0) {
       return false;
     }
-    BigDecimal rounded = value.setScale(scale, RoundingMode.HALF_UP);
+    BigDecimal rounded = roundForStorage(value, scale);
     BigDecimal maximum =
         BigDecimal.TEN.pow(precision - scale).subtract(BigDecimal.ONE.movePointLeft(scale));
     return rounded.compareTo(maximum) <= 0;
+  }
+
+  private static BigDecimal roundForStorage(BigDecimal value, int scale) {
+    return value == null ? null : value.setScale(scale, RoundingMode.HALF_UP);
   }
 }

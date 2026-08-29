@@ -651,7 +651,9 @@ describe('Admin upload workflow smoke', () => {
     await userEvent.type(screen.getByLabelText('Invoice number'), 'é'.repeat(9))
     await userEvent.tab()
 
-    expect(screen.getByText('Invoice number must use US-ASCII characters.')).toBeInTheDocument()
+    expect(
+      screen.getByText('Invoice number must use printable US-ASCII characters.'),
+    ).toBeInTheDocument()
     expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
   })
 

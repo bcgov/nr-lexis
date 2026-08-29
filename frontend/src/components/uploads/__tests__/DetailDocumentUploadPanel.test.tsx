@@ -440,7 +440,9 @@ describe('DetailDocumentUploadPanel', () => {
     await userEvent.type(screen.getByLabelText('Upload invoice fee in lieu'), '10000000')
     await userEvent.upload(screen.getByLabelText('Document File'), file)
 
-    expect(screen.getByText('Invoice number must use US-ASCII characters.')).toBeInTheDocument()
+    expect(
+      screen.getByText('Invoice number must use printable US-ASCII characters.'),
+    ).toBeInTheDocument()
     expect(
       screen.getByText('Invoice export value must round to 9999999.99 or less.'),
     ).toBeInTheDocument()
