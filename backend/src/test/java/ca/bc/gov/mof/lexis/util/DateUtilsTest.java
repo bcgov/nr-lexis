@@ -22,6 +22,14 @@ class DateUtilsTest {
   }
 
   @Test
+  void parseIsoOrLegacyDateShouldRejectImpossibleLegacyDates() {
+    assertThat(DateUtils.parseIsoOrLegacyDate("02/30/2024")).isNull();
+    assertThat(DateUtils.parseIsoOrLegacyDate("02/29/2023")).isNull();
+    assertThat(DateUtils.parseIsoOrLegacyDate("02/29/2024"))
+        .isEqualTo(LocalDate.of(2024, 2, 29));
+  }
+
+  @Test
   void parseIsoOrLegacyDateShouldReturnNullForUnsupportedFormats() {
     assertThat(DateUtils.parseIsoOrLegacyDate("15/06/2026")).isNull();
   }

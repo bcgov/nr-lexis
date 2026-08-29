@@ -949,9 +949,11 @@ const ProvincialOfferCreatePage = () => {
                   markFieldTouched('offerVolume')
                   setForm((current) => ({
                     ...current,
-                    offerVolume: offerVolumeContextFieldError(current.offerVolume, contextVolume)
-                      ? current.offerVolume
-                      : formatLegacyOfferVolume(current.offerVolume),
+                    offerVolume:
+                      !contextVolume.trim() ||
+                      offerVolumeContextFieldError(current.offerVolume, contextVolume)
+                        ? current.offerVolume
+                        : formatLegacyOfferVolume(current.offerVolume),
                   }))
                 }}
                 onChange={(event) => {

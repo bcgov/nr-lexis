@@ -2477,6 +2477,45 @@ describe('Create Page Core Flows', () => {
     expect(mockedSubmitProvincialOfferCreate).not.toHaveBeenCalled()
   })
 
+  it('preserves the raw offer volume while the selected package volume loads', async () => {
+    let resolvePackageVolume: (volume: string) => void = () => undefined
+    const packageVolume = new Promise<string>((resolve) => {
+      resolvePackageVolume = resolve
+    })
+    mockedFetchOfferPackageVolume.mockReturnValue(packageVolume)
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/offers/create?applicationNumber=2001&packageNumber=PKG-9&companyName=Example%20Lumber&contactName=Sample%20Contact&pickupLocation=Yard%20A&purchaseOfferAmount=25000',
+        ]}
+      >
+        <Routes>
+          <Route path="/provincial/offers/create" element={<ProvincialOfferCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => expect(mockedFetchOfferPackageVolume).toHaveBeenCalledWith('PKG-9'))
+    const saveButton = screen.getByRole('button', { name: 'Save new offer' })
+    expect(saveButton).toBeDisabled()
+
+    const offerVolumeInput = screen.getByLabelText('Offer volume (m³)')
+    await userEvent.type(offerVolumeInput, '95.54')
+    await userEvent.click(screen.getByLabelText('Offer amount ($/m³)'))
+    expect(offerVolumeInput).toHaveValue('95.54')
+
+    await act(async () => resolvePackageVolume('95.5'))
+
+    expect(await screen.findByDisplayValue('95.5')).toBeInTheDocument()
+    expect(saveButton).toBeEnabled()
+    await userEvent.click(saveButton)
+    expect(
+      await screen.findAllByText('Offer volume cannot exceed the application/package volume.'),
+    ).not.toHaveLength(0)
+    expect(mockedSubmitProvincialOfferCreate).not.toHaveBeenCalled()
+  })
+
   it('compares the raw offer volume before legacy blur formatting', async () => {
     mockedFetchOfferPackageVolume.mockResolvedValue('95.5')
     render(
