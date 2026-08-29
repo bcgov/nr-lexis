@@ -72,7 +72,6 @@ import {
   positiveNumericFieldError,
   requiredFieldError,
   requiredMaxLengthFieldError,
-  roundedNumericMaximumFieldError,
   type FieldErrors,
   type TouchedFields,
 } from '@/pages/shared/create-form-utils'
@@ -2071,28 +2070,26 @@ const ProvincialPermitDetailsPage = () => {
 
     const normalizedFee = feeOverrideForm.overrideFee.trim()
     const normalizedComment = feeOverrideForm.overrideComment.trim()
-    const roundedFee = feeOverrideForm.overrideEnabled
-      ? formatRoundedNumericFieldValue(normalizedFee, 2)
-      : null
+    let roundedFee: string | null = null
+    const roundedFeeFieldError = (): string | null => {
+      if (!feeOverrideForm.overrideEnabled) return null
+
+      roundedFee = formatRoundedNumericFieldValue(normalizedFee, 2)
+      if (roundedFee === null) return null
+
+      const storedFeeValue = Number(roundedFee)
+      if (storedFeeValue <= 0) return 'Override fee must round to at least 0.01.'
+      return storedFeeValue <= MAX_PERMIT_OVERRIDE_FEE
+        ? null
+        : `Override fee must round to ${MAX_PERMIT_OVERRIDE_FEE} or less.`
+    }
     const validationError = firstValidationError(
       () =>
         feeOverrideForm.overrideEnabled ? requiredFieldError(normalizedFee, 'Override fee') : null,
       () =>
         feeOverrideForm.overrideEnabled ? numericFieldError(normalizedFee, 'Override fee') : null,
       () => (feeOverrideForm.overrideEnabled ? positiveNumericFieldError(normalizedFee) : null),
-      () =>
-        feeOverrideForm.overrideEnabled && roundedFee !== null && Number(roundedFee) <= 0
-          ? 'Override fee must round to at least 0.01.'
-          : null,
-      () =>
-        feeOverrideForm.overrideEnabled
-          ? roundedNumericMaximumFieldError(
-              normalizedFee,
-              MAX_PERMIT_OVERRIDE_FEE,
-              2,
-              'Override fee',
-            )
-          : null,
+      roundedFeeFieldError,
       () =>
         feeOverrideForm.overrideEnabled && !ASCII_PATTERN.test(normalizedComment)
           ? 'Override comment contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.'
