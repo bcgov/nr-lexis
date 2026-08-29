@@ -2004,7 +2004,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(uploadPanel.getByText('Submission file', { exact: true })).toBeVisible()
     await expect(
       uploadPanel.getByText(
-        'Accepted formats: XML, ZIP, GeoJSON, or JSON. Maximum file size: 20 MiB.',
+        'Accepted file types: XML, ZIP, GeoJSON, and JSON. Maximum file size: 20 MB.',
         { exact: true },
       ),
     ).toBeVisible()
