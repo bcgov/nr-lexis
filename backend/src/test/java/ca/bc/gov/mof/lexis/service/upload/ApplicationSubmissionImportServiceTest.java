@@ -1580,7 +1580,7 @@ class ApplicationSubmissionImportServiceTest {
 
     assertThat(result.status()).isEqualTo("rejected");
     assertThat(result.errors())
-        .containsExactly("The LEXIS application submission file must be 20 MiB or smaller.");
+        .containsExactly("The LEXIS application submission file must be 20 MB or smaller.");
     verify(virusScanService, never()).assertClean(oversizedFile);
     verify(applicationDetailsServiceProvider, never()).getIfAvailable();
   }

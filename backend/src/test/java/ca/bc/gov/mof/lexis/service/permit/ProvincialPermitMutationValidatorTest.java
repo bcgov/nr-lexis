@@ -376,6 +376,25 @@ class ProvincialPermitMutationValidatorTest {
   }
 
   @Test
+  void shouldRequireOverrideFeeToRemainPositiveAfterOracleRounding() {
+    var rejected =
+        validator.validate(
+            permit().overrideFee(0.001d).build(),
+            ministerialExemption(LocalDate.of(2026, 7, 31)));
+
+    assertThat(rejected.errors())
+        .containsExactly("Override fee must round to at least 0.01.");
+
+    var accepted =
+        validator.validate(
+            permit().overrideFee(0.005d).build(),
+            ministerialExemption(LocalDate.of(2026, 7, 31)));
+
+    assertThat(accepted.errors()).isEmpty();
+    assertThat(accepted.permit().overrideFee()).isEqualTo(0.01d);
+  }
+
+  @Test
   void shouldConvertInteriorCompletionWithoutReceiptToPaymentPending() {
     var result =
         validator.validate(

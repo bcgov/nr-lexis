@@ -2071,12 +2071,19 @@ const ProvincialPermitDetailsPage = () => {
 
     const normalizedFee = feeOverrideForm.overrideFee.trim()
     const normalizedComment = feeOverrideForm.overrideComment.trim()
+    const roundedFee = feeOverrideForm.overrideEnabled
+      ? formatRoundedNumericFieldValue(normalizedFee, 2)
+      : null
     const validationError = firstValidationError(
       () =>
         feeOverrideForm.overrideEnabled ? requiredFieldError(normalizedFee, 'Override fee') : null,
       () =>
         feeOverrideForm.overrideEnabled ? numericFieldError(normalizedFee, 'Override fee') : null,
       () => (feeOverrideForm.overrideEnabled ? positiveNumericFieldError(normalizedFee) : null),
+      () =>
+        feeOverrideForm.overrideEnabled && roundedFee !== null && Number(roundedFee) <= 0
+          ? 'Override fee must round to at least 0.01.'
+          : null,
       () =>
         feeOverrideForm.overrideEnabled
           ? roundedNumericMaximumFieldError(
@@ -2104,9 +2111,7 @@ const ProvincialPermitDetailsPage = () => {
       return false
     }
 
-    const storedFee = feeOverrideForm.overrideEnabled
-      ? (formatRoundedNumericFieldValue(normalizedFee, 2) ?? normalizedFee)
-      : ''
+    const storedFee = feeOverrideForm.overrideEnabled ? (roundedFee ?? normalizedFee) : ''
 
     const request: PermitDetailMutationRequest = {
       ...buildPermitDetailForm(detail),

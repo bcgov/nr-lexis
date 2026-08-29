@@ -122,6 +122,7 @@ export const formatUploadQueuedAt = (timestamp: number): string => {
   }).format(timestamp)
 }
 
+// User-facing copy follows the approved "20 MB" wording; the byte ceiling remains unchanged.
 const MAX_UPLOAD_BYTES = 20 * 1024 * 1024
 
 export const DOCUMENT_UPLOAD_EXTENSIONS = [
@@ -164,7 +165,7 @@ export const validateDocumentUploadDescription = (description: string): string =
 
 export const validateUploadFileSize = (file: File): string => {
   if (file.size > MAX_UPLOAD_BYTES) {
-    return 'File must be 20 MiB or smaller.'
+    return 'File must be 20 MB or smaller.'
   }
 
   return ''

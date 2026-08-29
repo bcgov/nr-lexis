@@ -908,7 +908,9 @@ public class LexisUploadController {
     String normalizedInvoiceNumber = trimToNull(salesInvoiceNumber);
     if (normalizedInvoiceNumber != null
         && normalizedInvoiceNumber.length() > INVOICE_NUMBER_MAX_LENGTH) {
-      return "Invoice number must be 9 characters or fewer.";
+      return "Invoice number must be "
+          + INVOICE_NUMBER_MAX_LENGTH
+          + " characters or fewer.";
     }
     if (!isValidInvoiceNumber(normalizedInvoiceNumber)) {
       return "Invoice number must use printable US-ASCII characters.";
@@ -2419,7 +2421,7 @@ public class LexisUploadController {
     return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
         .body(
             applicationSubmissionFailure(
-                "The LEXIS application submission file must be 20 MiB or smaller.",
+                "The LEXIS application submission file must be 20 MB or smaller.",
                 fileName,
                 fileSize));
   }

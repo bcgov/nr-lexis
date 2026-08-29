@@ -236,6 +236,11 @@ final class ProvincialPermitMutationValidator {
     if (permit.overrideFee() != null
         && (!Double.isFinite(permit.overrideFee()) || permit.overrideFee() <= 0.0d)) {
       errors.add("Override fee must be greater than zero.");
+    } else if (permit.overrideFee() != null
+        && normalizeOracleDecimal(permit.overrideFee()) <= 0.0d) {
+      // INTENTIONAL_LEGACY_DIVERGENCE(PERMIT_OVERRIDE_STORAGE_POSITIVITY): Do not let
+      // Oracle's two-decimal storage rounding turn an enabled override into zero.
+      errors.add("Override fee must round to at least 0.01.");
     } else {
       validateOracleDecimal(
           permit.overrideFee(), "Override fee", MAX_PERMIT_DECIMAL_VALUE, errors);

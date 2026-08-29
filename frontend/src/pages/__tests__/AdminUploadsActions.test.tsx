@@ -467,7 +467,7 @@ describe('Admin upload workflow smoke', () => {
     })
     await userEvent.upload(screen.getByLabelText('Application submission file'), oversized)
 
-    expect(screen.getAllByText('File must be 20 MiB or smaller.')).not.toHaveLength(0)
+    expect(screen.getAllByText('File must be 20 MB or smaller.')).not.toHaveLength(0)
     expect(mockedValidateApplicationSubmissionUpload).not.toHaveBeenCalled()
     expect(screen.getByRole('button', { name: 'Review' })).toBeDisabled()
   })

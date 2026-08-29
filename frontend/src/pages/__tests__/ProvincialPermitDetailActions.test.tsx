@@ -3563,6 +3563,13 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
 
     await userEvent.clear(overrideFee)
+    await userEvent.type(overrideFee, '0.001')
+    await userEvent.click(saveButton)
+
+    expect(await screen.findByText('Override fee must round to at least 0.01.')).toBeInTheDocument()
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+
+    await userEvent.clear(overrideFee)
     await userEvent.type(overrideFee, '1.00')
     fireEvent.change(overrideComment, { target: { value: 'x'.repeat(255) } })
     await userEvent.click(saveButton)
@@ -3591,16 +3598,16 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await selectPermitDetailTab('Fees')
     await userEvent.click(await screen.findByRole('button', { name: 'Edit fee override' }))
     await userEvent.clear(screen.getByLabelText('Override fee (CAD)'))
-    await userEvent.type(screen.getByLabelText('Override fee (CAD)'), '1.001')
+    await userEvent.type(screen.getByLabelText('Override fee (CAD)'), '0.005')
     await userEvent.click(screen.getByRole('button', { name: 'Save fee override' }))
 
     await waitFor(() => {
       expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
-        expect.objectContaining({ overrideFee: '1.00' }),
+        expect.objectContaining({ overrideFee: '0.01' }),
       )
     })
     await userEvent.click(await screen.findByRole('button', { name: 'Edit fee override' }))
-    expect(screen.getByLabelText('Override fee (CAD)')).toHaveValue('1.00')
+    expect(screen.getByLabelText('Override fee (CAD)')).toHaveValue('0.01')
   })
 
   it.each([

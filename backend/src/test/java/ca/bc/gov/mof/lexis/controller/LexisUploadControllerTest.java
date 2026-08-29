@@ -2709,9 +2709,9 @@ class LexisUploadControllerTest {
     assertThat(createResponse.getBody()).isNotNull();
     assertThat(validationResponse.getBody()).isNotNull();
     assertThat(createResponse.getBody().errors())
-        .containsExactly("The LEXIS application submission file must be 20 MiB or smaller.");
+        .containsExactly("The LEXIS application submission file must be 20 MB or smaller.");
     assertThat(validationResponse.getBody().errors())
-        .containsExactly("The LEXIS application submission file must be 20 MiB or smaller.");
+        .containsExactly("The LEXIS application submission file must be 20 MB or smaller.");
     assertThat(streamOpens).hasValue(0);
     verifyNoInteractions(applicationSubmissionImportService);
   }
@@ -3193,7 +3193,7 @@ class LexisUploadControllerTest {
     assertThat(validateResponse.getStatusCode()).isEqualTo(HttpStatus.PAYLOAD_TOO_LARGE);
     assertThat(createResponse.getBody()).isNotNull();
     assertThat(createResponse.getBody().errors())
-        .containsExactly("The LEXIS application submission file must be 20 MiB or smaller.");
+        .containsExactly("The LEXIS application submission file must be 20 MB or smaller.");
     verify(httpServletRequest, never()).getInputStream();
     verifyNoInteractions(applicationSubmissionImportService);
   }

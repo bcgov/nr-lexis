@@ -14,8 +14,8 @@ describe('uploadQueueHelpers', () => {
   it('rejects document files above the shared 20 MiB business limit', () => {
     const oversized = new File([new Uint8Array(20 * 1024 * 1024 + 1)], 'large.pdf')
 
-    expect(validateDocumentUploadFile(oversized)).toBe('File must be 20 MiB or smaller.')
-    expect(validateUploadFileSize(oversized)).toBe('File must be 20 MiB or smaller.')
+    expect(validateDocumentUploadFile(oversized)).toBe('File must be 20 MB or smaller.')
+    expect(validateUploadFileSize(oversized)).toBe('File must be 20 MB or smaller.')
   })
 
   it('uses the authoritative attachment extension allowlist for the file picker and queue', () => {

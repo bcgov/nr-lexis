@@ -584,7 +584,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       oversized,
     )
 
-    expect(await screen.findByText('File must be 20 MiB or smaller.')).toBeVisible()
+    expect(await screen.findByText('File must be 20 MB or smaller.')).toBeVisible()
     expect(mockedPreviewUpload).not.toHaveBeenCalled()
   })
 
