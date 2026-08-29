@@ -1491,6 +1491,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     if (normalizedUserId == null) {
       errors.add("A valid user identifier is required.");
     }
+    errors.addAll(validateSubmittedPermitDates(request));
 
     String exemptionNumber = trimToNull(request.exemptionNumber());
     if (exemptionNumber == null) {
@@ -1589,10 +1590,10 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     if (permitStatus == null) {
       errors.add("A valid permit status is required.");
     }
-    if (issueDate == null) {
+    if (issueDate == null && trimToNull(request.permitIssueDate()) == null) {
       errors.add("A valid permit issue date is required.");
     }
-    if (submitDate == null) {
+    if (submitDate == null && trimToNull(request.permitSubmitDate()) == null) {
       errors.add("A valid permit submit date is required.");
     }
     if (!errors.isEmpty()) {
@@ -1705,6 +1706,10 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     if (EXPORT_PERMIT_STATUS_EXPIRED.equalsIgnoreCase(current.permitStatusCode())) {
       return failureMutationResponse(
           List.of("Expired permits are read-only."), permitNumber);
+    }
+    List<String> dateErrors = validateSubmittedPermitDates(request);
+    if (!dateErrors.isEmpty()) {
+      return failureMutationResponse(dateErrors, permitNumber);
     }
     String currentExemptionNumber = trimToNull(current.exemptionNumber());
     if (currentExemptionNumber == null) {
@@ -4835,6 +4840,25 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
 
   private LocalDate mergeSubmittedDate(String submitted, LocalDate current) {
     return submitted == null ? current : parseDate(submitted);
+  }
+
+  private List<String> validateSubmittedPermitDates(PermitMutationRequestDto request) {
+    List<String> errors = new ArrayList<>();
+    validateSubmittedPermitDate(request.permitSubmitDate(), "Permit submit date", errors);
+    validateSubmittedPermitDate(request.permitIssueDate(), "Permit issue date", errors);
+    validateSubmittedPermitDate(request.permitExpiryDate(), "Permit expiry date", errors);
+    validateSubmittedPermitDate(request.permitRequestDate(), "Permit request date", errors);
+    validateSubmittedPermitDate(
+        request.estimatedShippingDate(), "Estimated shipping date", errors);
+    return List.copyOf(errors);
+  }
+
+  private void validateSubmittedPermitDate(
+      String value, String label, List<String> errors) {
+    String normalized = trimToNull(value);
+    if (normalized != null && parseDate(normalized) == null) {
+      errors.add(label + " must be a valid date.");
+    }
   }
 
   private boolean isInvalidSubmittedDouble(String submitted, Double parsed) {

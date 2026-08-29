@@ -2496,6 +2496,28 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(permitCaptor.getValue().exemptionNumber()).isEqualTo("EX-700");
   }
 
+  @ParameterizedTest
+  @CsvSource({
+    "permitSubmitDate,Permit submit date",
+    "permitIssueDate,Permit issue date",
+    "permitExpiryDate,Permit expiry date",
+    "permitRequestDate,Permit request date",
+    "estimatedShippingDate,Estimated shipping date"
+  })
+  void updatePermitShouldRejectMalformedSubmittedDates(
+      String fieldName, String fieldLabel) {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow()));
+
+    PermitMutationRpcResponseDto response =
+        service.updatePermit(malformedPermitDateUpdateRequest(fieldName), "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactly(fieldLabel + " must be a valid date.");
+    verify(repository, never()).updatePermitDetail(any(), any(), any());
+  }
+
   @Test
   void updatePermitShouldAllowAnOrderInCouncilExemption() {
     when(repository.findPermitMutationByPermitNumber(7000123L))
@@ -7547,6 +7569,44 @@ class OraclePermitDetailsRpcServiceTest {
         agentClientNumber,
         null,
         oicApplicationNumber,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null);
+  }
+
+  private PermitMutationRequestDto malformedPermitDateUpdateRequest(String fieldName) {
+    String invalidDate = "02/30/2024";
+    return new PermitMutationRequestDto(
+        "7000123",
+        null,
+        "permitSubmitDate".equals(fieldName) ? invalidDate : null,
+        "permitIssueDate".equals(fieldName) ? invalidDate : null,
+        "permitExpiryDate".equals(fieldName) ? invalidDate : null,
+        "permitRequestDate".equals(fieldName) ? invalidDate : null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        "estimatedShippingDate".equals(fieldName) ? invalidDate : null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
         null,
         null,
         null,

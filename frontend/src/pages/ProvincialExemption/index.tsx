@@ -966,6 +966,8 @@ const ProvincialExemptionPage = () => {
                     />
                   </>
                 )}
+                {/* INTENTIONAL_LEGACY_DIVERGENCE(SEARCH_FILTER_EXPANSION):
+                    Modern exemption search exposes approval-date criteria hidden in legacy. */}
                 <IsoDatePicker
                   id="approvalFromDate"
                   labelText="Approval from date"

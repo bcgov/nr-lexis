@@ -739,6 +739,8 @@ const ProvincialApplicationPage = () => {
                     )
                   }}
                 />
+                {/* INTENTIONAL_LEGACY_DIVERGENCE(SEARCH_FILTER_EXPANSION):
+                    Modern application search exposes received-date criteria hidden in legacy. */}
                 <IsoDatePicker
                   id="receivedFromDate"
                   labelText="Received from date"
