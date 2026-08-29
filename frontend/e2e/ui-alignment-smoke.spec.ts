@@ -707,6 +707,14 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       'color',
       'rgb(96, 96, 98)',
     )
+    await expect(activeNavLink.locator('.csp-side-nav__icon svg')).toHaveCSS(
+      'fill',
+      'rgb(22, 22, 22)',
+    )
+    await expect(inactiveNavLink.locator('.csp-side-nav__icon svg')).toHaveCSS(
+      'fill',
+      'rgb(0, 92, 184)',
+    )
     const reportsToggle = page.getByRole('button', { name: 'Reports', exact: true })
     await reportsToggle.click()
     await expect(page.locator('a.csp-side-nav__link[data-label="Application Report"]')).toHaveCount(
