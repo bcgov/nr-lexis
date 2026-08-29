@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -2427,6 +2427,50 @@ describe('Create Page Core Flows', () => {
     expect(await screen.findByDisplayValue('95.0')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Save new offer' }))
 
+    expect(
+      await screen.findAllByText('Offer volume cannot exceed the application/package volume.'),
+    ).not.toHaveLength(0)
+    expect(mockedSubmitProvincialOfferCreate).not.toHaveBeenCalled()
+  })
+
+  it('waits for the selected package volume before validating or saving', async () => {
+    let resolveSelectedPackageVolume: (volume: string) => void = () => undefined
+    const selectedPackageVolume = new Promise<string>((resolve) => {
+      resolveSelectedPackageVolume = resolve
+    })
+    mockedFetchOfferPackageList.mockResolvedValue(['PKG-10', 'PKG-11'])
+    mockedFetchOfferPackageVolume.mockImplementation((packageNumber) =>
+      packageNumber === 'PKG-10' ? Promise.resolve('120.0') : selectedPackageVolume,
+    )
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/offers/create?applicationNumber=2001&packageNumber=PKG-10&packageNumbers=PKG-10%2CPKG-11&companyName=Example%20Lumber&contactName=Sample%20Contact&pickupLocation=Yard%20A&purchaseOfferAmount=25000&offerVolume=100.0',
+        ]}
+      >
+        <Routes>
+          <Route path="/provincial/offers/create" element={<ProvincialOfferCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByDisplayValue('120.0')).toBeInTheDocument()
+    const saveButton = screen.getByRole('button', { name: 'Save new offer' })
+    expect(saveButton).toBeEnabled()
+
+    await chooseComboBoxOption(screen.getByRole('combobox', { name: 'Package number' }), 'PKG-11')
+
+    await waitFor(() => expect(mockedFetchOfferPackageVolume).toHaveBeenCalledWith('PKG-11'))
+    expect(saveButton).toBeDisabled()
+    expect(screen.queryByDisplayValue('120.0')).not.toBeInTheDocument()
+    expect(mockedSubmitProvincialOfferCreate).not.toHaveBeenCalled()
+
+    await act(async () => resolveSelectedPackageVolume('80.0'))
+
+    expect(await screen.findByDisplayValue('80.0')).toBeInTheDocument()
+    expect(saveButton).toBeEnabled()
+    await userEvent.click(saveButton)
     expect(
       await screen.findAllByText('Offer volume cannot exceed the application/package volume.'),
     ).not.toHaveLength(0)

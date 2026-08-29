@@ -38,16 +38,41 @@ public final class InvoiceStorageConstraints {
   }
 
   private static boolean isPositiveOracleNumber(BigDecimal value, int precision, int scale) {
-    if (value == null || value.compareTo(BigDecimal.ZERO) <= 0) {
+    if (value == null || value.signum() <= 0) {
       return false;
     }
-    BigDecimal rounded = roundForStorage(value, scale);
+    long integerDigits = (long) value.precision() - value.scale();
+    int maximumIntegerDigits = precision - scale;
+    if (integerDigits > maximumIntegerDigits) {
+      return false;
+    }
+    if (integerDigits < maximumIntegerDigits
+        && (value.scale() <= scale || integerDigits < -(long) scale)) {
+      return true;
+    }
+
+    BigDecimal rounded;
+    try {
+      rounded = roundForStorage(value, scale);
+    } catch (ArithmeticException exception) {
+      return false;
+    }
+    if (integerDigits < maximumIntegerDigits) {
+      return true;
+    }
     BigDecimal maximum =
-        BigDecimal.TEN.pow(precision - scale).subtract(BigDecimal.ONE.movePointLeft(scale));
+        BigDecimal.TEN.pow(maximumIntegerDigits).subtract(BigDecimal.ONE.movePointLeft(scale));
     return rounded.compareTo(maximum) <= 0;
   }
 
   private static BigDecimal roundForStorage(BigDecimal value, int scale) {
-    return value == null ? null : value.setScale(scale, RoundingMode.HALF_UP);
+    if (value == null) {
+      return null;
+    }
+    long integerDigits = (long) value.precision() - value.scale();
+    if (value.signum() == 0 || integerDigits < -(long) scale) {
+      return BigDecimal.ZERO.setScale(scale);
+    }
+    return value.setScale(scale, RoundingMode.HALF_UP);
   }
 }

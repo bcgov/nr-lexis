@@ -4712,6 +4712,23 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
+  void addInvoiceShouldRejectExtremeExponentBeforeOracleInsert() {
+    PermitPersistenceRpcResponseDto response =
+        service.addInvoice(
+            7000123L,
+            "INV-100",
+            new BigDecimal("1E+2147483647"),
+            BigDecimal.ONE,
+            BigDecimal.ONE,
+            "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactly("The export value must round to 9999999.99 or less.");
+    verifyNoInteractions(repository);
+  }
+
+  @Test
   void addInvoiceShouldRejectDuplicateInvoice() {
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(permitMutationRow("ACT")));

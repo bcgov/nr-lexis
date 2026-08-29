@@ -149,6 +149,8 @@ type OfferApplicationContextState = {
   applicationVolume: string
   packageOptions: SearchOption[]
   packageVolume: string
+  packageVolumeTarget: string
+  isLoadingPackageVolume: boolean
   applicationValidationError: string
   isLoading: boolean
 }
@@ -163,7 +165,10 @@ type OfferApplicationContextAction =
       packageOptions: SearchOption[]
     }
   | { type: 'loadFailure'; applicationValidationError?: string }
-  | { type: 'setPackageVolume'; packageVolume: string }
+  | { type: 'clearPackageVolume' }
+  | { type: 'packageVolumeLoadStart'; target: string }
+  | { type: 'packageVolumeLoadSuccess'; target: string; packageVolume: string }
+  | { type: 'packageVolumeLoadFailure'; target: string }
 
 const createOfferApplicationContextState = (
   packageOptions: SearchOption[],
@@ -172,6 +177,8 @@ const createOfferApplicationContextState = (
   applicationVolume: '',
   packageOptions,
   packageVolume: '',
+  packageVolumeTarget: '',
+  isLoadingPackageVolume: false,
   applicationValidationError: '',
   isLoading: false,
 })
@@ -203,11 +210,38 @@ const offerApplicationContextReducer = (
         applicationValidationError: action.applicationValidationError ?? '',
         isLoading: false,
       }
-    case 'setPackageVolume':
-      return { ...state, packageVolume: action.packageVolume }
+    case 'clearPackageVolume':
+      return {
+        ...state,
+        packageVolume: '',
+        packageVolumeTarget: '',
+        isLoadingPackageVolume: false,
+      }
+    case 'packageVolumeLoadStart':
+      return {
+        ...state,
+        packageVolume: '',
+        packageVolumeTarget: action.target,
+        isLoadingPackageVolume: true,
+      }
+    case 'packageVolumeLoadSuccess':
+      return state.packageVolumeTarget === action.target
+        ? { ...state, packageVolume: action.packageVolume, isLoadingPackageVolume: false }
+        : state
+    case 'packageVolumeLoadFailure':
+      return state.packageVolumeTarget === action.target
+        ? { ...state, packageVolume: '', isLoadingPackageVolume: false }
+        : state
     default:
       return state
   }
+}
+
+const packageVolumeTargetKey = (applicationNumber: string, packageNumber: string): string => {
+  const normalizedPackageNumber = packageNumber.trim()
+  return normalizedPackageNumber
+    ? `${normalizeProvincialApplicationNumber(applicationNumber)}\u0000${normalizedPackageNumber}`
+    : ''
 }
 
 const ProvincialOfferCreatePage = () => {
@@ -239,6 +273,8 @@ const ProvincialOfferCreatePage = () => {
     applicationValidationError,
     packageOptions,
     packageVolume,
+    packageVolumeTarget,
+    isLoadingPackageVolume,
     isLoading: isLoadingApplicationContext,
   } = applicationContext
   const [status, setStatus] = useState<PageStatus | null>(null)
@@ -284,17 +320,45 @@ const ProvincialOfferCreatePage = () => {
   const author = displayAuditIdentity(capabilities.principal)
   const receivedDate = formatBusinessIsoDate()
   const hasApplicationNumber = form.applicationNumber.trim().length > 0
-  const hasNoPackagesForApplication =
-    hasApplicationNumber &&
-    !isLoadingApplicationContext &&
-    applicationDetails !== null &&
-    packageOptions.length === 0
   const debouncedApplicationNumber = useDebouncedValue(form.applicationNumber)
   const debouncedPackageNumber = useDebouncedValue(form.packageNumber)
   const applicationNumberForLookup = formEdited
     ? debouncedApplicationNumber
     : form.applicationNumber
   const packageNumberForLookup = formEdited ? debouncedPackageNumber : form.packageNumber
+  const isCurrentApplicationNumberValid = !provincialApplicationNumberFieldError(
+    form.applicationNumber,
+    'Application number',
+    true,
+  )
+  const isLookupApplicationNumberValid = !provincialApplicationNumberFieldError(
+    applicationNumberForLookup,
+    'Application number',
+    true,
+  )
+  const isApplicationLookupDebouncing =
+    formEdited &&
+    isCurrentApplicationNumberValid &&
+    normalizeProvincialApplicationNumber(form.applicationNumber) !==
+      normalizeProvincialApplicationNumber(applicationNumberForLookup)
+  const packageNumberForVolumeLookup =
+    packageOptions.length > 0 ? form.packageNumber.trim() : packageNumberForLookup.trim()
+  const packageVolumeLookupTarget = isLookupApplicationNumberValid
+    ? packageVolumeTargetKey(applicationNumberForLookup, packageNumberForVolumeLookup)
+    : ''
+  const currentPackageVolumeTarget = isCurrentApplicationNumberValid
+    ? packageVolumeTargetKey(form.applicationNumber, form.packageNumber)
+    : ''
+  const isPackageVolumePending =
+    Boolean(currentPackageVolumeTarget) &&
+    (packageVolumeTarget !== currentPackageVolumeTarget || isLoadingPackageVolume)
+  const isLoadingOfferContext =
+    isLoadingApplicationContext || isApplicationLookupDebouncing || isPackageVolumePending
+  const hasNoPackagesForApplication =
+    hasApplicationNumber &&
+    !isLoadingOfferContext &&
+    applicationDetails !== null &&
+    packageOptions.length === 0
 
   useEffect(() => {
     if (!createdOfferNavigation) {
@@ -454,32 +518,47 @@ const ProvincialOfferCreatePage = () => {
   }, [applicationNumberForLookup, queryPackageOptions])
 
   useEffect(() => {
-    const packageNumber =
-      packageOptions.length > 0 ? form.packageNumber.trim() : packageNumberForLookup.trim()
-    if (!packageNumber) {
-      dispatchApplicationContext({ type: 'setPackageVolume', packageVolume: '' })
+    if (!packageNumberForVolumeLookup || !packageVolumeLookupTarget) {
+      dispatchApplicationContext({ type: 'clearPackageVolume' })
       return
     }
 
     let isActive = true
-    void fetchOfferPackageVolume(packageNumber)
+    dispatchApplicationContext({
+      type: 'packageVolumeLoadStart',
+      target: packageVolumeLookupTarget,
+    })
+    void fetchOfferPackageVolume(packageNumberForVolumeLookup)
       .then((volume) => {
         if (isActive) {
-          dispatchApplicationContext({ type: 'setPackageVolume', packageVolume: volume })
+          dispatchApplicationContext({
+            type: 'packageVolumeLoadSuccess',
+            target: packageVolumeLookupTarget,
+            packageVolume: volume,
+          })
         }
       })
       .catch(() => {
         if (isActive) {
-          dispatchApplicationContext({ type: 'setPackageVolume', packageVolume: '' })
+          dispatchApplicationContext({
+            type: 'packageVolumeLoadFailure',
+            target: packageVolumeLookupTarget,
+          })
         }
       })
 
     return () => {
       isActive = false
     }
-  }, [form.packageNumber, packageNumberForLookup, packageOptions.length])
+  }, [packageNumberForVolumeLookup, packageVolumeLookupTarget])
 
-  const contextVolume = form.packageNumber.trim() ? packageVolume : applicationVolume
+  const contextVolume = form.packageNumber.trim()
+    ? packageVolumeTarget === currentPackageVolumeTarget && !isLoadingPackageVolume
+      ? packageVolume
+      : ''
+    : isLoadingApplicationContext || isApplicationLookupDebouncing
+      ? ''
+      : applicationVolume
 
   const fieldErrors = useMemo<FieldErrors<ProvincialOfferCreateField>>(
     () => ({
@@ -576,7 +655,7 @@ const ProvincialOfferCreatePage = () => {
   const applicationNumberError = fieldError('applicationNumber') || applicationValidationError
 
   const onSave = async (navigateToCreatedRecord = true): Promise<boolean> => {
-    if (isLoadingApplicationContext || scopedClientLookupPending) {
+    if (isLoadingOfferContext || scopedClientLookupPending) {
       return false
     }
     if (hasValidationError) {
@@ -1087,7 +1166,7 @@ const ProvincialOfferCreatePage = () => {
                 onClick={() => void onSave(true)}
                 disabled={
                   isSubmitting ||
-                  isLoadingApplicationContext ||
+                  isLoadingOfferContext ||
                   scopedClientLookupPending ||
                   !!applicationValidationError
                 }
@@ -1106,7 +1185,7 @@ const ProvincialOfferCreatePage = () => {
         onDiscard={onDiscardCreateDraft}
         subject="this new purchase offer"
         saveUnavailableReason={
-          isLoadingApplicationContext || scopedClientLookupPending
+          isLoadingOfferContext || scopedClientLookupPending
             ? 'Application and client details must finish loading before this offer can be saved.'
             : undefined
         }

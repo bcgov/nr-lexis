@@ -30,6 +30,23 @@ class InvoiceStorageConstraintsTest {
   }
 
   @Test
+  void shouldRejectExtremePositiveExponentsWithoutAttemptingScaleConversion() {
+    BigDecimal extremeValue = new BigDecimal("1E+2147483647");
+
+    assertThat(InvoiceStorageConstraints.isValidInvoiceAmount(extremeValue)).isFalse();
+    assertThat(InvoiceStorageConstraints.isValidInvoiceConversionRate(extremeValue)).isFalse();
+  }
+
+  @Test
+  void shouldSafelyRoundExtremeSmallPositiveValuesToZero() {
+    BigDecimal extremeValue = new BigDecimal("1E-2147483647");
+
+    assertThat(InvoiceStorageConstraints.isValidInvoiceAmount(extremeValue)).isTrue();
+    assertThat(InvoiceStorageConstraints.roundInvoiceAmountForStorage(extremeValue))
+        .isEqualByComparingTo("0.00");
+  }
+
+  @Test
   void shouldRoundAcceptedValuesToTheirOracleColumnScales() {
     assertThat(
             InvoiceStorageConstraints.roundInvoiceAmountForStorage(

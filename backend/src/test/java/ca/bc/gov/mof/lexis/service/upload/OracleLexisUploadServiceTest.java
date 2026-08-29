@@ -459,6 +459,17 @@ class OracleLexisUploadServiceTest {
                 BigDecimal.ONE,
                 "jsmith"))
         .isEmpty();
+    assertThat(
+            service.uploadInvoice(
+                file,
+                7000123L,
+                "INV-1",
+                "",
+                new BigDecimal("1E+2147483647"),
+                BigDecimal.ONE,
+                BigDecimal.ONE,
+                "jsmith"))
+        .isEmpty();
     verifyNoInteractions(uploadRepository);
   }
 
