@@ -235,7 +235,7 @@ const RTM_UPLOAD_ONLY_DESCRIPTION =
   'Set the domestic log values used to calculate export fees for coastal permits.'
 const RTM_VALUES_DESCRIPTION =
   'Your spreadsheet provides a value for each species and grade. You will be able to check them before you save.'
-const RTM_UPLOAD_FIELD_HELPER = 'Excel spreadsheet (.xlsx)'
+const RTM_UPLOAD_FIELD_HELPER = 'Accepted format: .xlsx, up to 20 MB.'
 const RTM_UPLOAD_SYSTEM_ERROR_TITLE = 'Upload could not be completed'
 const RTM_UPLOAD_SYSTEM_ERROR_MESSAGE =
   'Something went wrong on our end. Please try again. If the problem persists, contact...'
