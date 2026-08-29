@@ -62,6 +62,7 @@ import {
 } from '@/pages/shared/detail-navigation'
 import {
   firstValidationError,
+  formatRoundedNumericFieldValue,
   getVisibleFieldError,
   integerFieldError,
   isoDateFieldError,
@@ -2103,10 +2104,14 @@ const ProvincialPermitDetailsPage = () => {
       return false
     }
 
+    const storedFee = feeOverrideForm.overrideEnabled
+      ? (formatRoundedNumericFieldValue(normalizedFee, 2) ?? normalizedFee)
+      : ''
+
     const request: PermitDetailMutationRequest = {
       ...buildPermitDetailForm(detail),
       overrideInd: String(feeOverrideForm.overrideEnabled),
-      overrideFee: feeOverrideForm.overrideEnabled ? normalizedFee : '',
+      overrideFee: storedFee,
       overrideComment: feeOverrideForm.overrideEnabled ? normalizedComment : '',
     }
     const isLatestRequest = tryBeginPermitMutation()
@@ -2131,7 +2136,7 @@ const ProvincialPermitDetailsPage = () => {
 
       const savedContext: PermitFeeOverrideContext = {
         overrideEnabled: feeOverrideForm.overrideEnabled,
-        overrideFee: feeOverrideForm.overrideEnabled ? normalizedFee : '',
+        overrideFee: storedFee,
         overrideComment: feeOverrideForm.overrideEnabled ? normalizedComment : '',
         locked: false,
         lockMessage: '',

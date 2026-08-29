@@ -123,12 +123,7 @@ export const maxNumericValueFieldError = (
     : `${label} must be ${maxValue} or less.`
 }
 
-export const roundedNumericMaximumFieldError = (
-  value: string,
-  maxValue: number,
-  decimalPlaces: number,
-  label = 'Value',
-): string | null => {
+const roundedScaledNumericValue = (value: string, decimalPlaces: number): bigint | null => {
   const match = /^(\d+)(?:\.(\d+))?$/.exec(value.trim())
   if (!match) return null
 
@@ -137,6 +132,32 @@ export const roundedNumericMaximumFieldError = (
   let roundedValue = BigInt(match[1]) * factor
   roundedValue += BigInt(fraction.slice(0, decimalPlaces) || '0')
   if (fraction[decimalPlaces] >= '5') roundedValue += 1n
+  return roundedValue
+}
+
+export const formatRoundedNumericFieldValue = (
+  value: string,
+  decimalPlaces: number,
+): string | null => {
+  const roundedValue = roundedScaledNumericValue(value, decimalPlaces)
+  if (roundedValue === null) return null
+
+  const factor = 10n ** BigInt(decimalPlaces)
+  const whole = roundedValue / factor
+  if (decimalPlaces === 0) return whole.toString()
+
+  const fraction = (roundedValue % factor).toString().padStart(decimalPlaces, '0')
+  return `${whole}.${fraction}`
+}
+
+export const roundedNumericMaximumFieldError = (
+  value: string,
+  maxValue: number,
+  decimalPlaces: number,
+  label = 'Value',
+): string | null => {
+  const roundedValue = roundedScaledNumericValue(value, decimalPlaces)
+  if (roundedValue === null) return null
 
   const maximumScaled = BigInt(maxValue.toFixed(decimalPlaces).replace('.', ''))
   return roundedValue <= maximumScaled ? null : `${label} must round to ${maxValue} or less.`

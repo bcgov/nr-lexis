@@ -56,12 +56,13 @@ final class ProvincialPermitMutationValidator {
     if (permit == null) {
       return new ValidationResult(null, List.of("Permit details are required."), List.of());
     }
-    permit = normalizeShipping(permit);
+    PermitMutationRow submittedPermit = permit;
+    permit = normalizeForPersistence(permit);
 
     validateExemption(permit, exemption, errors);
     validateClient(permit, errors);
     validateAgent(permit, errors);
-    validateNumericRanges(permit, exemption, errors);
+    validateNumericRanges(submittedPermit, exemption, errors);
     validateRequiredText(
         permit.destinationCompanyName(),
         "company name on the Shipping tab",
@@ -401,7 +402,7 @@ final class ProvincialPermitMutationValidator {
     return normalizedIdentifier(value);
   }
 
-  private PermitMutationRow normalizeShipping(PermitMutationRow permit) {
+  private PermitMutationRow normalizeForPersistence(PermitMutationRow permit) {
     String portCode = normalizeCode(permit.portOfExportCode());
     return new PermitMutationRow(
         permit.permitNumber(),
@@ -414,7 +415,7 @@ final class ProvincialPermitMutationValidator {
         permit.permitIssueDate(),
         permit.receiptNumber(),
         permit.expiryDate(),
-        permit.permitVolume(),
+        normalizeOracleDecimal(permit.permitVolume()),
         permit.numberOfPieces(),
         permit.feeInLieuVolume(),
         permit.federalPermitNumber(),
@@ -433,12 +434,19 @@ final class ProvincialPermitMutationValidator {
         permit.permitStatusCode(),
         permit.growthTypeCode(),
         normalizeCode(permit.countryCode()),
-        permit.overrideFee(),
+        normalizeOracleDecimal(permit.overrideFee()),
         permit.overrideComment(),
         permit.oicApplicationNumber(),
         permit.oicRequestPieces(),
         permit.oicRequestVolume(),
         permit.productTypeCode());
+  }
+
+  private Double normalizeOracleDecimal(Double value) {
+    if (value == null || !Double.isFinite(value)) {
+      return value;
+    }
+    return BigDecimal.valueOf(value).setScale(2, RoundingMode.HALF_UP).doubleValue();
   }
 
   private PermitMutationRow withStatus(PermitMutationRow permit, String status) {

@@ -3596,9 +3596,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     await waitFor(() => {
       expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
-        expect.objectContaining({ overrideFee: '1.001' }),
+        expect.objectContaining({ overrideFee: '1.00' }),
       )
     })
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit fee override' }))
+    expect(screen.getByLabelText('Override fee (CAD)')).toHaveValue('1.00')
   })
 
   it.each([

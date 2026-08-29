@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  formatRoundedNumericFieldValue,
   greaterThanFieldError,
   greaterThanOrEqualFieldError,
   hasInvalidIsoDateValue,
@@ -106,6 +107,13 @@ describe('create-form-utils', () => {
     expect(integerFieldError('', 'Pieces')).toBe('Pieces must be a whole number.')
     expect(integerFieldError('1.2', 'Pieces')).toBe('Pieces must be a whole number.')
     expect(integerFieldError('12', 'Pieces')).toBeNull()
+  })
+
+  it('formats numeric fields with exact half-up storage rounding', () => {
+    expect(formatRoundedNumericFieldValue('1.001', 2)).toBe('1.00')
+    expect(formatRoundedNumericFieldValue('1.005', 2)).toBe('1.01')
+    expect(formatRoundedNumericFieldValue('9999999.994', 2)).toBe('9999999.99')
+    expect(formatRoundedNumericFieldValue('not-a-number', 2)).toBeNull()
   })
 
   it('validates and canonicalizes provincial application numbers', () => {

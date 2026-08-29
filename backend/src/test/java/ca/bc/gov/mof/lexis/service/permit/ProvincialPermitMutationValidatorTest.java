@@ -358,6 +358,8 @@ class ProvincialPermitMutationValidatorTest {
             ministerialExemption(LocalDate.of(2026, 7, 31)));
 
     assertThat(accepted.errors()).isEmpty();
+    assertThat(accepted.permit().permitVolume()).isEqualTo(9_999_999.99d);
+    assertThat(accepted.permit().overrideFee()).isEqualTo(9_999_999.99d);
 
     var result =
         validator.validate(

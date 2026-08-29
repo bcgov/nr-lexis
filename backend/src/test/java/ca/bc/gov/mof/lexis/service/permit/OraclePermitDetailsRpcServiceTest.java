@@ -2088,7 +2088,7 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
-  void addPermitShouldPersistWhenInputIsValid() {
+  void addPermitShouldNormalizeAcceptedOracleDecimalsBeforePersistence() {
     PermitMutationRequestDto request =
         new PermitMutationRequestDto(
             "7000123",
@@ -2108,7 +2108,7 @@ class OraclePermitDetailsRpcServiceTest {
             null,
             null,
             "S",
-            "100.0",
+            "9999999.994",
             "25",
             "1835",
             "00070001",
@@ -2121,9 +2121,9 @@ class OraclePermitDetailsRpcServiceTest {
             null,
             "S",
             "T",
-            null,
-            null,
-            null);
+            "true",
+            "1.001",
+            "Legacy rounded fee");
     when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("M"));
     when(exemptionService.findByExemptionNumber("EX-700"))
         .thenReturn(
@@ -2150,7 +2150,7 @@ class OraclePermitDetailsRpcServiceTest {
                     LocalDate.of(2026, 5, 27),
                     null,
                     LocalDate.of(2026, 6, 27),
-                    100.0d,
+                    9_999_999.99d,
                     25L,
                     0L,
                     null,
@@ -2169,8 +2169,8 @@ class OraclePermitDetailsRpcServiceTest {
                     "ACT",
                     "S",
                     "US",
-                    null,
-                    null,
+                    1.0d,
+                    "Legacy rounded fee",
                     null,
                     null,
                     null,
@@ -2181,6 +2181,11 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(response.success()).isTrue();
     assertThat(response.permitNumber()).isEqualTo(7000123L);
     assertThat(response.permitStatus()).isEqualTo("ACT");
+    ArgumentCaptor<PermitMutationRow> permitCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository).insertPermitDetail(permitCaptor.capture(), eq("idir\\jsmith"));
+    assertThat(permitCaptor.getValue().permitVolume()).isEqualTo(9_999_999.99d);
+    assertThat(permitCaptor.getValue().overrideFee()).isEqualTo(1.0d);
   }
 
   @Test
@@ -2814,6 +2819,31 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(response.success()).isFalse();
     assertThat(response.errors()).containsExactly("Override fee must be greater than zero.");
     verify(repository, never()).updatePermitDetail(any(), any(), any());
+  }
+
+  @Test
+  void updatePermitShouldNormalizeAcceptedOverrideFeeBeforePersistence() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(
+            Optional.of(
+                permitMutationRowWithOverride("ACT", 25.0d, "Reviewed calculation")));
+    stubTargetMinisterialExemption("EX-700");
+    when(repository.updatePermitDetail(
+            any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
+        .thenReturn(true);
+
+    PermitMutationRpcResponseDto response =
+        service.updatePermit(
+            feeOverrideRequest("ACT", "true", "1.001", "Legacy rounded fee"),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<PermitMutationRow> permitCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository)
+        .updatePermitDetail(
+            permitCaptor.capture(), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE));
+    assertThat(permitCaptor.getValue().overrideFee()).isEqualTo(1.0d);
   }
 
   @Test

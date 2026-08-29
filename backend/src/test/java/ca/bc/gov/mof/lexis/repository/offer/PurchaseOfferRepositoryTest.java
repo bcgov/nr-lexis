@@ -421,8 +421,8 @@ class PurchaseOfferRepositoryTest {
   }
 
   @Test
-  void applicationReferenceLookupShouldFallBackToApplicationVolumeAlias() {
-    PurchaseOfferRepository repository = new ApplicationVolumeAliasPurchaseOfferRepository();
+  void applicationReferenceLookupShouldUseTheEstablishedCursorVolumeAlias() {
+    PurchaseOfferRepository repository = new ApplicationVolumePurchaseOfferRepository();
 
     assertThat(repository.findApplicationReference(1000456L))
         .hasValueSatisfying(
@@ -701,10 +701,10 @@ class PurchaseOfferRepositoryTest {
     }
   }
 
-  private static final class ApplicationVolumeAliasPurchaseOfferRepository
+  private static final class ApplicationVolumePurchaseOfferRepository
       extends PurchaseOfferRepository {
 
-    ApplicationVolumeAliasPurchaseOfferRepository() {
+    ApplicationVolumePurchaseOfferRepository() {
       super(null);
     }
 
@@ -718,10 +718,11 @@ class PurchaseOfferRepositoryTest {
       try {
         when(resultSet.getLong("APPLICATION_NUMBER")).thenReturn(1000456L);
         when(resultSet.getString("EXPORT_JURISDICTION_CODE")).thenReturn("P");
-        when(resultSet.getDouble("EXEMPTION_APPLICATION_VOLUME")).thenReturn(0.0d);
-        when(resultSet.getDouble("APPLICATION_VOLUME")).thenReturn(95.5d);
-        when(resultSet.wasNull()).thenReturn(false, true, false);
-        return Optional.of(rowMapper.map(resultSet));
+        when(resultSet.getDouble("EXEMPTION_APPLICATION_VOLUME")).thenReturn(95.5d);
+        when(resultSet.wasNull()).thenReturn(false);
+        T row = rowMapper.map(resultSet);
+        verify(resultSet, never()).getDouble("APPLICATION_VOLUME");
+        return Optional.of(row);
       } catch (SQLException exception) {
         throw new AssertionError(exception);
       }
