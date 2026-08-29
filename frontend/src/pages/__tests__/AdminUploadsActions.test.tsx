@@ -113,6 +113,7 @@ describe('Admin upload workflow smoke', () => {
 
     expect(screen.getByRole('combobox', { name: 'Permit number' })).toHaveValue('5001')
     expect(screen.getByRole('button', { name: 'Choose files for Upload documents' })).toBeVisible()
+    expect(screen.queryByText(/US-ASCII|250 bytes/i)).not.toBeInTheDocument()
 
     const file = new File(['permit upload'], 'permit.pdf', { type: 'application/pdf' })
     await userEvent.upload(screen.getByLabelText('Document File'), file)
@@ -652,7 +653,9 @@ describe('Admin upload workflow smoke', () => {
     await userEvent.tab()
 
     expect(
-      screen.getByText('Invoice number must use printable US-ASCII characters.'),
+      screen.getByText(
+        'Invoice number contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
+      ),
     ).toBeInTheDocument()
     expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
   })
@@ -698,7 +701,9 @@ describe('Admin upload workflow smoke', () => {
     expect(screen.getByText('Submission file')).toBeInTheDocument()
     expect(screen.queryByLabelText('Upload batch summary')).not.toBeInTheDocument()
     expect(
-      screen.getByText('Accepted formats: XML, ZIP, GeoJSON, or JSON. Maximum file size: 20 MiB.'),
+      screen.getByText(
+        'Accepted file types: XML, ZIP, GeoJSON, and JSON. Maximum file size: 20 MB.',
+      ),
     ).toBeInTheDocument()
     expect(
       screen.queryByText(/Multiple files can be queued and saved together/),

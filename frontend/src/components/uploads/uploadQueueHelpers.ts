@@ -143,7 +143,7 @@ export const DOCUMENT_UPLOAD_EXTENSIONS = [
 export const DOCUMENT_UPLOAD_ACCEPT = DOCUMENT_UPLOAD_EXTENSIONS.join(',')
 
 export const DOCUMENT_UPLOAD_GUIDANCE =
-  'BMP, CSV, DOC, DOCX, JPG, PDF, PNG, RTF, TXT, XLS, XLSX, XML, or ZIP; 20 MiB maximum. File names and descriptions must use US-ASCII and be 250 bytes or fewer'
+  'Accepted file types: BMP, CSV, DOC, DOCX, JPG, PDF, PNG, RTF, TXT, XLS, XLSX, XML, and ZIP. Maximum file size: 20 MB.'
 
 const MAX_ATTACHMENT_METADATA_BYTES = 250
 const PRINTABLE_US_ASCII_PATTERN = /^[\x20-\x7e]+$/
@@ -153,10 +153,10 @@ const DOCUMENT_UPLOAD_EXTENSION_SET = new Set<string>(DOCUMENT_UPLOAD_EXTENSIONS
 export const validateDocumentUploadDescription = (description: string): string => {
   const normalizedDescription = description.trim()
   if (!DESCRIPTION_US_ASCII_PATTERN.test(normalizedDescription)) {
-    return 'Document description must use US-ASCII characters.'
+    return 'Document description contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.'
   }
   if (normalizedDescription.length > MAX_ATTACHMENT_METADATA_BYTES) {
-    return 'Document description must be 250 bytes or fewer.'
+    return 'Document description must be 250 characters or fewer.'
   }
 
   return ''
@@ -182,11 +182,11 @@ export const validateDocumentUploadFile = (file: File): string => {
     fileName.includes('/') ||
     fileName.includes('\\')
   ) {
-    return 'File name must use printable US-ASCII characters without path separators.'
+    return 'File name contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation, without slashes.'
   }
 
   if (fileName.length > MAX_ATTACHMENT_METADATA_BYTES) {
-    return 'File name must be 250 bytes or fewer.'
+    return 'File name must be 250 characters or fewer.'
   }
 
   if (file.size === 0) {

@@ -995,7 +995,9 @@ describe('Create Page Core Flows', () => {
     await userEvent.click(submitButton)
 
     expect(
-      await screen.findAllByText('Owner name must contain ASCII characters only.'),
+      await screen.findAllByText(
+        'Owner name contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
+      ),
     ).not.toHaveLength(0)
     await selectApplicationCreateTab('Items')
     expect(
@@ -1826,10 +1828,18 @@ describe('Create Page Core Flows', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(
-      (await screen.findAllByText('Exemption number must contain ASCII characters only.')).length,
+      (
+        await screen.findAllByText(
+          'Exemption number contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
+        )
+      ).length,
     ).toBeGreaterThanOrEqual(1)
     expect(
-      (await screen.findAllByText('Other conditions must contain ASCII characters only.')).length,
+      (
+        await screen.findAllByText(
+          'Other conditions contain unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
+        )
+      ).length,
     ).toBeGreaterThanOrEqual(1)
     expect(mockedSubmitProvincialExemptionCreate).not.toHaveBeenCalled()
   })
@@ -1909,7 +1919,7 @@ describe('Create Page Core Flows', () => {
     expect(volumeInput).toHaveValue('')
   })
 
-  it('rejects an OIC number beyond eight UTF-8 bytes', async () => {
+  it('rejects an OIC number beyond eight characters', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/exemption/create']}>
         <Routes>
@@ -1922,14 +1932,14 @@ describe('Create Page Core Flows', () => {
       await screen.findByRole('combobox', { name: 'Exemption type' }),
       'Order in Council',
     )
-    await userEvent.type(screen.getByLabelText('Exemption number'), 'ééééé')
+    fireEvent.change(screen.getByLabelText('Exemption number'), { target: { value: 'OIC-12345' } })
     await userEvent.type(screen.getByLabelText('Approval date (YYYY-MM-DD)'), '2026-07-01')
     await userEvent.type(screen.getByLabelText('Expiry date (YYYY-MM-DD)'), '2027-07-01')
     await userEvent.type(screen.getByLabelText('Approved volume (m³)'), '250.5')
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(
-      await screen.findAllByText('Exemption number must be 8 UTF-8 bytes or fewer.'),
+      await screen.findAllByText('Exemption number must be 8 characters or fewer.'),
     ).not.toHaveLength(0)
     expect(mockedSubmitProvincialExemptionCreate).not.toHaveBeenCalled()
   })

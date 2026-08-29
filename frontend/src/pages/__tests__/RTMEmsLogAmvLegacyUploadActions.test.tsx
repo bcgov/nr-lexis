@@ -120,7 +120,8 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     expect(within(monthSummary).getByText(/^[A-Z][a-z]+ 1, \d{4}$/)).toBeVisible()
     expect(within(monthSummary).queryByText('Compared against')).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Values', level: 2 })).toBeVisible()
-    expect(screen.getByText('Accepted format: .xlsx, up to 20 MB.')).toBeVisible()
+    expect(screen.getByText('Excel spreadsheet (.xlsx)')).toBeVisible()
+    expect(screen.queryByText(/20 MB/i)).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Download template' })).toHaveAttribute(
       'href',
       '/templates/rtm-ems-log-amv-template.xlsx',

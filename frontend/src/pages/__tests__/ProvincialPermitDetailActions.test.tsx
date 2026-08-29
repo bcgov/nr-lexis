@@ -2532,7 +2532,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.click(saveButton)
 
     expect(
-      (await screen.findAllByText('Permit remarks must contain ASCII characters only.')).length,
+      (
+        await screen.findAllByText(
+          'Permit remarks contain unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
+        )
+      ).length,
     ).toBeGreaterThanOrEqual(1)
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
   })

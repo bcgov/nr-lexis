@@ -19,7 +19,7 @@ export const invoiceNumberStorageFieldError = (value: string): string | undefine
     () =>
       PRINTABLE_US_ASCII_PATTERN.test(value.trim())
         ? null
-        : 'Invoice number must use printable US-ASCII characters.',
+        : 'Invoice number contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
   )
 
 export const invoiceDecimalStorageFieldError = (

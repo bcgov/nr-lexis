@@ -60,6 +60,7 @@ describe('DetailDocumentUploadPanel', () => {
     expect(screen.queryByLabelText(/Document description/)).not.toBeInTheDocument()
     await openUploadModal()
     expect(screen.getByRole('dialog', { name: 'Add document' })).toBeInTheDocument()
+    expect(screen.queryByText(/US-ASCII|250 bytes/i)).not.toBeInTheDocument()
 
     await userEvent.upload(screen.getByLabelText('Document File'), file)
     await waitFor(() => expect(screen.getByRole('button', { name: 'Remove' })).toBeEnabled())
@@ -441,7 +442,9 @@ describe('DetailDocumentUploadPanel', () => {
     await userEvent.upload(screen.getByLabelText('Document File'), file)
 
     expect(
-      screen.getByText('Invoice number must use printable US-ASCII characters.'),
+      screen.getByText(
+        'Invoice number contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
+      ),
     ).toBeInTheDocument()
     expect(
       screen.getByText('Invoice export value must round to 9999999.99 or less.'),

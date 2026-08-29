@@ -3654,12 +3654,6 @@ $notification-types: 'error', 'info', 'success', 'warning';
   white-space: nowrap;
 }
 
-.admin-upload-file-chip__size {
-  color: var(--fds-text-secondary, var(--csp-text-primary));
-  font-size: 0.875rem;
-  white-space: nowrap;
-}
-
 .admin-upload-file-chip__remove {
   display: inline-flex;
   align-items: center;

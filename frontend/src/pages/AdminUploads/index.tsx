@@ -669,7 +669,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
       : DOCUMENT_UPLOAD_ACCEPT
   const uploadFormatText =
     selectedWorkflowType === 'applicationSubmission'
-      ? 'Accepted formats: XML, ZIP, GeoJSON, or JSON. Maximum file size: 20 MiB.'
+      ? 'Accepted file types: XML, ZIP, GeoJSON, and JSON. Maximum file size: 20 MB.'
       : DOCUMENT_UPLOAD_GUIDANCE
   const currentUploadTargetSummary = uploadTargetSummary(selectedWorkflowType, formState)
   const resolvedPageTitle =
@@ -1559,7 +1559,6 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
             id="fileDescription"
             labelText="Document description"
             value={formState.fileDescription}
-            helperText="Optional; US-ASCII and 250 bytes or fewer."
             invalid={!!fieldError('fileDescription')}
             invalidText={fieldError('fileDescription')}
             maxCount={250}

@@ -90,8 +90,6 @@ const BLANKET_OIC_MAX_VOLUME = '9999999.9'
 const OIC_TYPES = new Set(['O', 'B'])
 const ASCII_PATTERN = /^[\u0000-\u007f]*$/
 
-const utf8ByteLength = (value: string): number => new TextEncoder().encode(value).length
-
 const feeRateError = (value: string): string | undefined => {
   const normalized = value.trim()
   if (!normalized) {
@@ -394,13 +392,13 @@ const ProvincialExemptionCreatePage = () => {
         ? (firstValidationError(
             () => requiredFieldError(form.exemptionNumber, 'Exemption number'),
             () =>
-              utf8ByteLength(form.exemptionNumber.trim()) > 8
-                ? 'Exemption number must be 8 UTF-8 bytes or fewer.'
-                : null,
-            () =>
               ASCII_PATTERN.test(form.exemptionNumber.trim())
                 ? null
-                : 'Exemption number must contain ASCII characters only.',
+                : 'Exemption number contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
+            () =>
+              form.exemptionNumber.trim().length > 8
+                ? 'Exemption number must be 8 characters or fewer.'
+                : null,
           ) ?? undefined)
         : undefined,
       exemptionTypeCode: firstValidationError(
@@ -460,7 +458,7 @@ const ProvincialExemptionCreatePage = () => {
           () =>
             ASCII_PATTERN.test(form.otherConditions.trim())
               ? null
-              : 'Other conditions must contain ASCII characters only.',
+              : 'Other conditions contain unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
           () =>
             form.otherConditions.length <= 250
               ? null

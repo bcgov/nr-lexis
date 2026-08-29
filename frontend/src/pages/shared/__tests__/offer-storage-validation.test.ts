@@ -80,6 +80,8 @@ describe('offer storage validation', () => {
         'Company name',
         true,
       ),
-    ).toBe('Company name must contain ASCII characters only.')
+    ).toBe(
+      'Company name contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
+    )
   })
 })

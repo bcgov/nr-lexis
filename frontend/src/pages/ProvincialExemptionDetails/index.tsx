@@ -942,7 +942,7 @@ const ProvincialExemptionDetailsPage = () => {
       return 'Other conditions must contain at most 250 characters.'
     }
     if (!ASCII_PATTERN.test(editForm.otherConditions.trim())) {
-      return 'Other conditions must contain ASCII characters only.'
+      return 'Other conditions contain unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.'
     }
     if (currentTypeCode === 'B' && editForm.regionNumbers.length === 0) {
       return 'Select at least one region for a Blanket Order in Council exemption.'

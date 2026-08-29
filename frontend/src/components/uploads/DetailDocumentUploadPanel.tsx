@@ -719,7 +719,6 @@ const DetailDocumentUploadPanel = ({
                 labelText="Document description (optional)"
                 value={fileDescription}
                 onChange={(event) => setFileDescription(event.target.value)}
-                helperText="US-ASCII and 250 bytes or fewer."
                 invalid={!!descriptionError}
                 invalidText={descriptionError}
                 maxCount={250}

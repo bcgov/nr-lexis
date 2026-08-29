@@ -1667,7 +1667,7 @@ const ProvincialPermitDetailsPage = () => {
           () =>
             ASCII_PATTERN.test(permitForm.permitReceiptNo.trim())
               ? null
-              : 'Receipt number must contain ASCII characters only.',
+              : 'Receipt number contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
           () => maxLengthFieldError(permitForm.permitReceiptNo, 50, 'Receipt number'),
         ) ?? undefined,
       permitRemarks:
@@ -1675,7 +1675,7 @@ const ProvincialPermitDetailsPage = () => {
           () =>
             ASCII_PATTERN.test(permitForm.permitRemarks.trim())
               ? null
-              : 'Permit remarks must contain ASCII characters only.',
+              : 'Permit remarks contain unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
           () => maxLengthFieldError(permitForm.permitRemarks, 254, 'Permit remarks'),
         ) ?? undefined,
       estimatedShippingDate: firstValidationError(
@@ -2087,7 +2087,7 @@ const ProvincialPermitDetailsPage = () => {
           : null,
       () =>
         feeOverrideForm.overrideEnabled && !ASCII_PATTERN.test(normalizedComment)
-          ? 'Override comment must contain ASCII characters only.'
+          ? 'Override comment contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.'
           : null,
       () =>
         feeOverrideForm.overrideEnabled

@@ -376,7 +376,9 @@ describe('Provincial exemption edit context', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
 
     expect(
-      await screen.findByText('Other conditions must contain ASCII characters only.'),
+      await screen.findByText(
+        'Other conditions contain unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
+      ),
     ).toBeInTheDocument()
     expect(vi.mocked(updateExemption)).not.toHaveBeenCalled()
   })
