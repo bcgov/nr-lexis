@@ -1778,7 +1778,9 @@ test.describe('TEST IDIR admin regression', () => {
       `/provincial/review?applicationNumber=${missingApplicationNumber}`,
       /provincial application review/i,
     )
-    const themeSwitch = page.getByRole('switch', { name: 'Toggle dark mode' })
+    const themeSwitch = page.getByRole('switch', {
+      name: /Switch to (?:dark|light) theme/,
+    })
     const initiallyDark = (await themeSwitch.getAttribute('aria-checked')) === 'true'
 
     if (!initiallyDark) {
@@ -2616,7 +2618,7 @@ test.describe('TEST IDIR admin regression', () => {
 
     await page.getByRole('tab', { name: 'Items' }).click()
     const paragraphField = page.getByLabel('Location of logs')
-    const normalField = page.getByLabel('Application volume')
+    const normalField = page.getByLabel('Application volume (m³)')
     const [paragraphMetrics, normalFieldMetrics] = await Promise.all([
       paragraphField.evaluate((element) => ({
         fontSize: getComputedStyle(element).fontSize,

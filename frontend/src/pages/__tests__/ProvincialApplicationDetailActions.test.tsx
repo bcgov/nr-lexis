@@ -1247,9 +1247,14 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     const summaryTile = await selectApplicationSummaryTile()
     const summary = within(summaryTile)
-    fireEvent.change(summary.getByLabelText('Location of logs'), {
+    const locationOfLogs = summary.getByLabelText('Location of logs')
+    expect(locationOfLogs).toHaveAttribute('maxlength', '250')
+    fireEvent.change(locationOfLogs, {
       target: { value: 'L'.repeat(251) },
     })
+    expect(
+      locationOfLogs.closest('.cds--form-item')?.querySelector('.cds--text-area__label-counter'),
+    ).toHaveTextContent('251/250')
     fireEvent.change(getSummaryComboBox(summary, 'Owner contact name'), {
       target: { value: 'C'.repeat(121) },
     })
@@ -1689,7 +1694,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     const summaryTile = await selectApplicationSummaryTile()
     const summaryControls = within(summaryTile)
     const applicationVolumeInput = await summaryControls.findByLabelText('Application volume (m³)')
-    const averageLogVolumeInput = await summaryControls.findByLabelText('Average log volume')
+    const averageLogVolumeInput = await summaryControls.findByLabelText('Average log volume (m³)')
 
     await waitFor(() => {
       expect(applicationVolumeInput).toHaveValue(100)
@@ -1758,7 +1763,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     const summaryControls = within(await selectApplicationSummaryTile())
     const productType = getSummaryComboBox(summaryControls, 'Product type')
-    const averageLogVolume = await summaryControls.findByLabelText('Average log volume')
+    const averageLogVolume = await summaryControls.findByLabelText('Average log volume (m³)')
     const productLocation = summaryControls.getByLabelText('Location of logs')
 
     expect(getSummaryComboBox(summaryControls, 'Growth type')).toBeInTheDocument()
@@ -1767,7 +1772,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     await chooseComboBoxOption(productType, 'Standing Timber')
     expect(getSummaryComboBox(summaryControls, 'Growth type')).toBeInTheDocument()
-    expect(summaryControls.queryByLabelText('Average log volume')).not.toBeInTheDocument()
+    expect(summaryControls.queryByLabelText('Average log volume (m³)')).not.toBeInTheDocument()
     expect(summaryControls.queryByLabelText('Location of logs')).not.toBeInTheDocument()
 
     await clearComboBox(getSummaryComboBox(summaryControls, 'Growth type'))

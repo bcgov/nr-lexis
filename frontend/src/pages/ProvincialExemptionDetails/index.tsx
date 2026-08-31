@@ -318,6 +318,7 @@ const ProvincialExemptionDetailsPage = () => {
   const [clientContextErrorMessage, setClientContextErrorMessage] = useState('')
   const [documentRows, setDocumentRows] = useState<ProvincialExemptionDocumentRow[]>([])
   const [applications, setApplications] = useState<ExemptionApplicationRow[]>([])
+  const [exemptionHolder, setExemptionHolder] = useState('')
   const [permitRows, setPermitRows] = useState<ExemptionPermitRow[]>([])
   const [blanketOicTotals, setBlanketOicTotals] = useState<ExemptionBlanketOicTotals | null>(null)
   const [containsUnmanu, setContainsUnmanu] = useState<boolean | null>(null)
@@ -528,6 +529,7 @@ const ProvincialExemptionDetailsPage = () => {
         setDetail(null)
         setDocumentRows([])
         setApplications([])
+        setExemptionHolder('')
         setPermitRows([])
         setBlanketOicTotals(null)
         setContainsUnmanu(null)
@@ -558,6 +560,7 @@ const ProvincialExemptionDetailsPage = () => {
         setEditing(false)
         setIsEditingDocuments(false)
         setApplications([])
+        setExemptionHolder('')
         setPermitRows([])
         setBlanketOicTotals(null)
         setContainsUnmanu(null)
@@ -577,6 +580,7 @@ const ProvincialExemptionDetailsPage = () => {
           setErrorMessage(`No provincial exemption found for ${exemptionNumber}.`)
           setDocumentRows([])
           setApplications([])
+          setExemptionHolder('')
           setPermitRows([])
           setBlanketOicTotals(null)
           setContainsUnmanu(null)
@@ -618,11 +622,13 @@ const ProvincialExemptionDetailsPage = () => {
 
         if (applicationsResult.status === 'fulfilled') {
           setApplications(applicationsResult.value.applications)
+          setExemptionHolder(applicationsResult.value.ownerNumber)
           setContainsUnmanu(applicationsResult.value.containsUnmanu)
           setApplicationsErrorMessage('')
         } else {
           console.error(applicationsResult.reason)
           setApplications([])
+          setExemptionHolder('')
           setContainsUnmanu(null)
           setApplicationsErrorMessage(
             'Unable to retrieve applications associated with this exemption.',
@@ -664,6 +670,7 @@ const ProvincialExemptionDetailsPage = () => {
           if (!isRefreshingCurrentExemption) {
             setDocumentRows([])
             setApplications([])
+            setExemptionHolder('')
             setPermitRows([])
             setBlanketOicTotals(null)
             setContainsUnmanu(null)
@@ -1029,6 +1036,7 @@ const ProvincialExemptionDetailsPage = () => {
         }
         setDetail(nextDetail)
         setApplications(nextApplications.applications)
+        setExemptionHolder(nextApplications.ownerNumber)
         setContainsUnmanu(nextApplications.containsUnmanu)
         setApplicationsErrorMessage('')
         setEditContext(nextContext)
@@ -1038,6 +1046,7 @@ const ProvincialExemptionDetailsPage = () => {
       } catch (error) {
         if (!preserveCurrentStateOnFailure) {
           setApplications([])
+          setExemptionHolder('')
           setContainsUnmanu(null)
           setApplicationsErrorMessage(
             'Unable to refresh applications associated with this exemption.',
@@ -1892,6 +1901,8 @@ const ProvincialExemptionDetailsPage = () => {
                             <TextArea
                               id="exemptionDetailOtherConditions"
                               labelText="Conditions"
+                              enableCounter
+                              maxCount={250}
                               maxLength={250}
                               value={editForm.otherConditions}
                               disabled={!canEditSummaryFields}
@@ -1924,9 +1935,11 @@ const ProvincialExemptionDetailsPage = () => {
                               },
                               { label: 'Author', value: displayValue(detail.author) },
                               {
-                                label: 'Owner client number',
+                                label: 'Exemption holder',
                                 value: displayValue(
-                                  detail.ownerClientNumber?.trim() || exemptionOwnerClientNumber,
+                                  exemptionHolder.trim() ||
+                                    detail.ownerClientNumber?.trim() ||
+                                    exemptionOwnerClientNumber,
                                 ),
                               },
                               ...(showAgent

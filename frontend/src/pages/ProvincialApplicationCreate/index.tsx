@@ -1375,7 +1375,7 @@ const ProvincialApplicationCreatePage = () => {
         setShowAllValidationErrors(true)
         setStatus({
           kind: 'error',
-          title: 'Validation Error',
+          title: 'Validation error',
           message: firstSubmitValidationError ?? 'Please fix validation errors before saving.',
           placement: 'inline',
         })
@@ -1970,7 +1970,9 @@ const ProvincialApplicationCreatePage = () => {
                       <TextArea
                         id="productLocation"
                         labelText="Location of logs"
+                        enableCounter
                         maxCount={250}
+                        maxLength={250}
                         value={form.productLocation}
                         invalid={!!fieldError('productLocation')}
                         invalidText={fieldError('productLocation')}
@@ -2004,7 +2006,7 @@ const ProvincialApplicationCreatePage = () => {
                     {productTypeRequiresLogDetails(form.productTypeCode) && (
                       <TextInput
                         id="averageLogVolume"
-                        labelText="Average log volume"
+                        labelText="Average log volume (m³)"
                         type="number"
                         min={0}
                         max={99.9}
@@ -2024,7 +2026,7 @@ const ProvincialApplicationCreatePage = () => {
                     )}
                     <TextInput
                       id="applicationVolume"
-                      labelText="Application volume"
+                      labelText="Application volume (m³)"
                       value={form.applicationVolume}
                       invalid={!!fieldError('applicationVolume')}
                       invalidText={fieldError('applicationVolume')}

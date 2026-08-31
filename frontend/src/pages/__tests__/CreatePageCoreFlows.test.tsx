@@ -1000,6 +1000,11 @@ describe('Create Page Core Flows', () => {
       ),
     ).not.toHaveLength(0)
     await selectApplicationCreateTab('Items')
+    const locationOfLogs = screen.getByRole('textbox', { name: 'Location of logs' })
+    expect(locationOfLogs).toHaveAttribute('maxlength', '250')
+    expect(
+      locationOfLogs.closest('.cds--form-item')?.querySelector('.cds--text-area__label-counter'),
+    ).toHaveTextContent('251/250')
     expect(
       screen.getByText('Location of logs must be 250 characters or fewer.'),
     ).toBeInTheDocument()
@@ -1391,7 +1396,7 @@ describe('Create Page Core Flows', () => {
     ).toBeGreaterThan(0)
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
 
-    const applicationVolume = screen.getByRole('textbox', { name: 'Application volume' })
+    const applicationVolume = screen.getByRole('textbox', { name: 'Application volume (m³)' })
     await userEvent.clear(applicationVolume)
     await userEvent.type(applicationVolume, '9999999.99')
     await userEvent.click(submitButton)
@@ -1425,7 +1430,7 @@ describe('Create Page Core Flows', () => {
     await selectApplicationCreateTab('Items')
     expect(screen.getByRole('combobox', { name: 'Growth type' })).toBeInTheDocument()
     expect(screen.getByRole('textbox', { name: 'Location of logs' })).toBeInTheDocument()
-    expect(screen.getByRole('spinbutton', { name: 'Average log volume' })).toBeInTheDocument()
+    expect(screen.getByRole('spinbutton', { name: 'Average log volume (m³)' })).toBeInTheDocument()
 
     await selectApplicationCreateTab('Application')
     await chooseComboBoxOption(
@@ -1435,14 +1440,18 @@ describe('Create Page Core Flows', () => {
     await selectApplicationCreateTab('Items')
     expect(screen.getByRole('combobox', { name: 'Growth type' })).toBeInTheDocument()
     expect(screen.queryByRole('textbox', { name: 'Location of logs' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('spinbutton', { name: 'Average log volume' })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('spinbutton', { name: 'Average log volume (m³)' }),
+    ).not.toBeInTheDocument()
 
     await selectApplicationCreateTab('Application')
     await chooseComboBoxOption(screen.getByRole('combobox', { name: 'Product type' }), 'Timber')
     await selectApplicationCreateTab('Items')
     expect(screen.queryByRole('combobox', { name: 'Growth type' })).not.toBeInTheDocument()
     expect(screen.queryByRole('textbox', { name: 'Location of logs' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('spinbutton', { name: 'Average log volume' })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('spinbutton', { name: 'Average log volume (m³)' }),
+    ).not.toBeInTheDocument()
   })
 
   it('does not let hidden H-only values block a standing-timber application', async () => {
@@ -1824,7 +1833,10 @@ describe('Create Page Core Flows', () => {
       'Order in Council',
     )
     await userEvent.type(screen.getByLabelText('Exemption number'), 'OIC-é')
-    await userEvent.type(screen.getByLabelText('Other conditions'), 'Résumé')
+    const conditions = screen.getByLabelText('Conditions')
+    expect(conditions).toHaveAttribute('maxlength', '250')
+    expect(document.querySelector('.cds--text-area__label-counter')).toHaveTextContent('0/250')
+    await userEvent.type(conditions, 'Résumé')
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(

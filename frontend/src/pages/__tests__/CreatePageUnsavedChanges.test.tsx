@@ -115,7 +115,7 @@ const createCases = [
     createPath: '/provincial/exemption/create',
     targetPath: '/provincial/exemption',
     heading: 'Create exemption',
-    fieldLabel: 'Other conditions',
+    fieldLabel: 'Conditions',
     saveButtonName: 'Save',
     element: <ProvincialExemptionCreatePage />,
   },
@@ -299,7 +299,7 @@ describe('create page unsaved changes', () => {
     const testCase = createCases[1]
     const router = renderCreatePage(testCase.createPath, testCase.targetPath, testCase.element)
     await screen.findByRole('heading', { level: 1, name: testCase.heading })
-    await userEvent.type(screen.getByLabelText('Other conditions'), 'Draft value')
+    await userEvent.type(screen.getByLabelText('Conditions'), 'Draft value')
 
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
 

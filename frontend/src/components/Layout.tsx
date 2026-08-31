@@ -608,7 +608,7 @@ function Layout({ children }: LayoutProps) {
                 className="csp-theme-switch"
                 role="switch"
                 aria-checked={isDarkTheme}
-                aria-label="Toggle dark mode"
+                aria-label={isDarkTheme ? 'Switch to light theme' : 'Switch to dark theme'}
                 onClick={toggleTheme}
               >
                 <span className="csp-theme-switch__thumb" aria-hidden="true">

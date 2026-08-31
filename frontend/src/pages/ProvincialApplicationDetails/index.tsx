@@ -4221,7 +4221,7 @@ const ProvincialApplicationDetailsPage = () => {
                               {productTypeRequiresLogDetails(summaryForm.productTypeCode) && (
                                 <TextInput
                                   id="applicationSummaryAverageLogVolume"
-                                  labelText="Average log volume"
+                                  labelText="Average log volume (m³)"
                                   type="number"
                                   min={0}
                                   max={99.9}
@@ -4523,7 +4523,9 @@ const ProvincialApplicationDetailsPage = () => {
                                 <TextArea
                                   id="applicationSummaryProductLocation"
                                   labelText="Location of logs"
+                                  enableCounter
                                   maxCount={APPLICATION_PRODUCT_LOCATION_MAX_LENGTH}
+                                  maxLength={APPLICATION_PRODUCT_LOCATION_MAX_LENGTH}
                                   value={summaryForm.productLocation}
                                   invalid={Boolean(visibleSummaryFieldError('productLocation'))}
                                   invalidText={visibleSummaryFieldError('productLocation')}
@@ -4630,7 +4632,12 @@ const ProvincialApplicationDetailsPage = () => {
                                 ...(productTypeRequiresLogDetails(
                                   summaryForm?.productTypeCode ?? '',
                                 )
-                                  ? [['Average log volume', displayValue(detail.averageLogVolume)]]
+                                  ? [
+                                      [
+                                        'Average log volume (m³)',
+                                        displayValue(detail.averageLogVolume),
+                                      ],
+                                    ]
                                   : []),
                                 [
                                   'Applicant type',

@@ -594,7 +594,7 @@ const ProvincialExemptionCreatePage = () => {
       setShowAllValidationErrors(true)
       setStatus({
         kind: 'error',
-        title: 'Validation Error',
+        title: 'Validation error',
         message: firstSubmitValidationError ?? 'Please fix validation errors before saving.',
         placement: 'inline',
       })
@@ -956,7 +956,9 @@ const ProvincialExemptionCreatePage = () => {
             <div className="legacy-search-actions create-form-comments">
               <TextArea
                 id="otherConditions"
-                labelText="Other conditions"
+                labelText="Conditions"
+                enableCounter
+                maxCount={250}
                 maxLength={250}
                 value={form.otherConditions}
                 invalid={!!fieldError('otherConditions')}

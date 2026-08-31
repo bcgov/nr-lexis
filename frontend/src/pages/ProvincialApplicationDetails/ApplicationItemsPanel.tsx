@@ -1508,10 +1508,10 @@ function ProvincialApplicationItemsPanel({
           <dl className="detail-field-grid application-items-summary">
             {[
               ['Package Number', selectedPackageNumber || 'None selected'],
-              ['Package Volume', packageForm.volume || 'Not provided'],
-              ['Total Scale Volume', packageForm.scaledVolume || 'Not provided'],
+              ['Package Volume (m³)', packageForm.volume || 'Not provided'],
+              ['Total Scale Volume (m³)', packageForm.scaledVolume || 'Not provided'],
               ['Total Pieces', selectedPackageTotalPieces.toLocaleString()],
-              ['Average Length', packageForm.averageLength || 'Not provided'],
+              ['Average Length (m)', packageForm.averageLength || 'Not provided'],
               ['Average Diameter', packageForm.averageDiameter || 'Not provided'],
               ['Status', optionTextForCode(selectedPackageStatusOptions, packageForm.status)],
               [
@@ -1548,7 +1548,7 @@ function ProvincialApplicationItemsPanel({
                   />
                   <TextInput
                     id="applicationItemsPackageVolume"
-                    labelText="Package Volume"
+                    labelText="Package Volume (m³)"
                     value={packageForm.volume}
                     disabled={!canSaveSelectedPackage}
                     invalid={!!packageFieldError('packageVolume')}
@@ -1558,7 +1558,7 @@ function ProvincialApplicationItemsPanel({
                   />
                   <TextInput
                     id="applicationItemsPackageLength"
-                    labelText="Average Length"
+                    labelText="Average Length (m)"
                     value={packageForm.averageLength}
                     disabled={!canSaveSelectedPackage}
                     invalid={!!packageFieldError('packageAverageLength')}
@@ -1803,7 +1803,7 @@ function ProvincialApplicationItemsPanel({
               />
               <TextInput
                 id="applicationItemsCreatePackageVolume"
-                labelText="Package Volume"
+                labelText="Package Volume (m³)"
                 value={createPackageForm.volume}
                 disabled={!canCreatePackages}
                 invalid={!!createPackageFieldError('createPackageVolume')}
@@ -1813,7 +1813,7 @@ function ProvincialApplicationItemsPanel({
               />
               <TextInput
                 id="applicationItemsCreatePackageLength"
-                labelText="Average Length"
+                labelText="Average Length (m)"
                 value={createPackageForm.averageLength}
                 disabled={!canCreatePackages}
                 invalid={!!createPackageFieldError('createPackageAverageLength')}
@@ -2044,7 +2044,7 @@ function ProvincialApplicationItemsPanel({
                 />
                 <TextInput
                   id="applicationItemsScaleVolume"
-                  labelText="Scale Volume"
+                  labelText="Scale Volume (m³)"
                   value={scaleForm.volume}
                   disabled={
                     !canAddScalesWithReferenceOptions ||
@@ -2113,7 +2113,7 @@ function ProvincialApplicationItemsPanel({
                   <TableHeader>Species</TableHeader>
                   <TableHeader>Grade</TableHeader>
                   <TableHeader>Pieces</TableHeader>
-                  <TableHeader>Volume</TableHeader>
+                  <TableHeader>Volume (m³)</TableHeader>
                   {showMutationActions && <TableHeader>Action</TableHeader>}
                 </TableRow>
               </TableHead>
