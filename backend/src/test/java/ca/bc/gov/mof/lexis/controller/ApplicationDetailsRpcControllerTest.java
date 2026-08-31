@@ -46,6 +46,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -1393,6 +1395,30 @@ class ApplicationDetailsRpcControllerTest {
         .updateApplicationSummary(
             requestCaptor.capture(), org.mockito.ArgumentMatchers.eq("idir\\jsmith"));
     assertThat(requestCaptor.getValue().validationEnabled()).isTrue();
+  }
+
+  @ParameterizedTest
+  @CsvSource({
+    "applicationDate,Application date",
+    "dateReceived,Received date"
+  })
+  void updateApplicationSummaryShouldRejectMalformedDates(
+      String fieldName, String fieldLabel) {
+    TestingAuthenticationToken authentication = authorized("createApplication");
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("applicationNumber", "1000456");
+    params.add(fieldName, "02/30/2024");
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
+        controller.updateApplicationLegacy(params, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().valid()).isFalse();
+    assertThat(response.getBody().applicationNumber()).isEqualTo(1000456L);
+    assertThat(response.getBody().errors())
+        .containsExactly(fieldLabel + " must be a valid date.");
+    verify(service, never()).updateApplicationSummary(any(), any());
   }
 
   @Test

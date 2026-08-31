@@ -384,7 +384,9 @@ const applicationTextStorageFieldError = (
   firstValidationError(
     () => (required ? requiredFieldError(value, label) : null),
     () =>
-      ASCII_PATTERN.test(value.trim()) ? null : `${label} must contain ASCII characters only.`,
+      ASCII_PATTERN.test(value.trim())
+        ? null
+        : `${label} contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.`,
     () => maxLengthFieldError(value, maximumLength, label),
   )
 

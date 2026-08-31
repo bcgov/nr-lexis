@@ -61,8 +61,8 @@ import {
   withDetailReturnTo,
 } from '@/pages/shared/detail-navigation'
 import {
-  atMostTwoDecimalFieldError,
   firstValidationError,
+  formatRoundedNumericFieldValue,
   getVisibleFieldError,
   integerFieldError,
   isoDateFieldError,
@@ -219,7 +219,7 @@ const PERMIT_DETAIL_TABS = [
   { id: 'fees', label: 'Fees' },
   { id: 'gbms', label: 'GBMS' },
   // INTENTIONAL_LEGACY_DIVERGENCE(PERMIT_INVOICE_VISIBILITY):
-  // Modern permit detail surfaces invoice rows and invoice document actions together.
+  // Modern permit detail exposes the invoice workflow that legacy keeps hidden.
   { id: 'invoices', label: 'Invoices' },
 ] as const
 
@@ -1667,7 +1667,7 @@ const ProvincialPermitDetailsPage = () => {
           () =>
             ASCII_PATTERN.test(permitForm.permitReceiptNo.trim())
               ? null
-              : 'Receipt number must contain ASCII characters only.',
+              : 'Receipt number contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
           () => maxLengthFieldError(permitForm.permitReceiptNo, 50, 'Receipt number'),
         ) ?? undefined,
       permitRemarks:
@@ -1675,7 +1675,7 @@ const ProvincialPermitDetailsPage = () => {
           () =>
             ASCII_PATTERN.test(permitForm.permitRemarks.trim())
               ? null
-              : 'Permit remarks must contain ASCII characters only.',
+              : 'Permit remarks contain unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
           () => maxLengthFieldError(permitForm.permitRemarks, 254, 'Permit remarks'),
         ) ?? undefined,
       estimatedShippingDate: firstValidationError(
@@ -2070,23 +2070,29 @@ const ProvincialPermitDetailsPage = () => {
 
     const normalizedFee = feeOverrideForm.overrideFee.trim()
     const normalizedComment = feeOverrideForm.overrideComment.trim()
+    let roundedFee: string | null = null
+    const roundedFeeFieldError = (): string | null => {
+      if (!feeOverrideForm.overrideEnabled) return null
+
+      roundedFee = formatRoundedNumericFieldValue(normalizedFee, 2)
+      if (roundedFee === null) return null
+
+      const storedFeeValue = Number(roundedFee)
+      if (storedFeeValue <= 0) return 'Override fee must round to at least 0.01.'
+      return storedFeeValue <= MAX_PERMIT_OVERRIDE_FEE
+        ? null
+        : `Override fee must round to ${MAX_PERMIT_OVERRIDE_FEE} or less.`
+    }
     const validationError = firstValidationError(
       () =>
         feeOverrideForm.overrideEnabled ? requiredFieldError(normalizedFee, 'Override fee') : null,
       () =>
         feeOverrideForm.overrideEnabled ? numericFieldError(normalizedFee, 'Override fee') : null,
       () => (feeOverrideForm.overrideEnabled ? positiveNumericFieldError(normalizedFee) : null),
-      () =>
-        feeOverrideForm.overrideEnabled
-          ? maxNumericValueFieldError(normalizedFee, MAX_PERMIT_OVERRIDE_FEE, 'Override fee')
-          : null,
-      () =>
-        feeOverrideForm.overrideEnabled
-          ? atMostTwoDecimalFieldError(normalizedFee, 'Override fee')
-          : null,
+      roundedFeeFieldError,
       () =>
         feeOverrideForm.overrideEnabled && !ASCII_PATTERN.test(normalizedComment)
-          ? 'Override comment must contain ASCII characters only.'
+          ? 'Override comment contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.'
           : null,
       () =>
         feeOverrideForm.overrideEnabled
@@ -2102,10 +2108,12 @@ const ProvincialPermitDetailsPage = () => {
       return false
     }
 
+    const storedFee = feeOverrideForm.overrideEnabled ? (roundedFee ?? normalizedFee) : ''
+
     const request: PermitDetailMutationRequest = {
       ...buildPermitDetailForm(detail),
       overrideInd: String(feeOverrideForm.overrideEnabled),
-      overrideFee: feeOverrideForm.overrideEnabled ? normalizedFee : '',
+      overrideFee: storedFee,
       overrideComment: feeOverrideForm.overrideEnabled ? normalizedComment : '',
     }
     const isLatestRequest = tryBeginPermitMutation()
@@ -2130,7 +2138,7 @@ const ProvincialPermitDetailsPage = () => {
 
       const savedContext: PermitFeeOverrideContext = {
         overrideEnabled: feeOverrideForm.overrideEnabled,
-        overrideFee: feeOverrideForm.overrideEnabled ? normalizedFee : '',
+        overrideFee: storedFee,
         overrideComment: feeOverrideForm.overrideEnabled ? normalizedComment : '',
         locked: false,
         lockMessage: '',

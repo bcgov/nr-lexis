@@ -113,6 +113,12 @@ describe('Admin upload workflow smoke', () => {
 
     expect(screen.getByRole('combobox', { name: 'Permit number' })).toHaveValue('5001')
     expect(screen.getByRole('button', { name: 'Choose files for Upload documents' })).toBeVisible()
+    expect(
+      screen.getByText(
+        'Accepted file types: BMP, CSV, DOC, DOCX, JPG, PDF, PNG, RTF, TXT, XLS, XLSX, XML, and ZIP. Maximum file size: 20 MB. Multiple files can be queued and saved together.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/US-ASCII|250 bytes/i)).not.toBeInTheDocument()
 
     const file = new File(['permit upload'], 'permit.pdf', { type: 'application/pdf' })
     await userEvent.upload(screen.getByLabelText('Document File'), file)
@@ -394,6 +400,39 @@ describe('Admin upload workflow smoke', () => {
     })
   })
 
+  it('keeps the numeric permit value when the selected invoice target label is rendered', async () => {
+    mockUploadAccess('/fileInvoiceUpload')
+    const permitOption = {
+      value: '7000123',
+      label: '7000123 - Active - Owner 00001012 - Region RSC',
+      status: 'Active' as const,
+      applicantClientNumber: '00001012',
+      ownerClientNumber: '00001012',
+      totalVolume: 25,
+      issueDate: '2026-06-10',
+      region: 'RSC',
+    }
+    mockedSearchProvincialPermitNumberOptions.mockResolvedValue([permitOption])
+
+    renderPage('/admin/uploads?type=invoice')
+
+    const permitNumberInput = screen.getByRole('combobox', {
+      name: 'Permit number',
+    })
+    await userEvent.type(permitNumberInput, permitOption.value)
+    await waitFor(() =>
+      expect(mockedSearchProvincialPermitNumberOptions).toHaveBeenLastCalledWith(
+        permitOption.value,
+      ),
+    )
+    await waitFor(() => expect(permitNumberInput).toHaveValue(permitOption.label))
+    await userEvent.tab()
+
+    expect(
+      screen.queryByText('Permit number must be a positive whole number.'),
+    ).not.toBeInTheDocument()
+  })
+
   it('blocks invoice workflow when upload action is not granted', () => {
     mockUploadAccess(null)
 
@@ -428,7 +467,7 @@ describe('Admin upload workflow smoke', () => {
     })
     await userEvent.upload(screen.getByLabelText('Application submission file'), oversized)
 
-    expect(screen.getAllByText('File must be 20 MiB or smaller.')).not.toHaveLength(0)
+    expect(screen.getAllByText('File must be 20 MB or smaller.')).not.toHaveLength(0)
     expect(mockedValidateApplicationSubmissionUpload).not.toHaveBeenCalled()
     expect(screen.getByRole('button', { name: 'Review' })).toBeDisabled()
   })
@@ -587,7 +626,7 @@ describe('Admin upload workflow smoke', () => {
     expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
   })
 
-  it('blocks invoice values outside the Oracle precision and scale boundaries', async () => {
+  it('blocks invoice values that overflow after Oracle rounding', async () => {
     mockUploadAccess('/fileInvoiceUpload')
     renderPage('/admin/uploads?type=invoice&permitNumber=5001')
 
@@ -596,13 +635,32 @@ describe('Admin upload workflow smoke', () => {
     await userEvent.clear(screen.getByLabelText('Conversion rate'))
     await userEvent.type(screen.getByLabelText('Conversion rate'), '10')
     await userEvent.clear(screen.getByLabelText('Fee in lieu'))
-    await userEvent.type(screen.getByLabelText('Fee in lieu'), '1.001')
+    await userEvent.type(screen.getByLabelText('Fee in lieu'), '10000000')
     await userEvent.tab()
 
-    expect(screen.getByText('Invoice export value must be 9999999.99 or less.')).toBeInTheDocument()
-    expect(screen.getByText('Invoice conversion rate must be 9.99999 or less.')).toBeInTheDocument()
     expect(
-      screen.getByText('Invoice fee in lieu must have no more than 2 decimal places.'),
+      screen.getByText('Invoice export value must round to 9999999.99 or less.'),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('Invoice conversion rate must round to 9.99999 or less.'),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('Invoice fee in lieu must round to 9999999.99 or less.'),
+    ).toBeInTheDocument()
+    expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
+  })
+
+  it('rejects invoice numbers that cannot fit Oracle byte storage', async () => {
+    mockUploadAccess('/fileInvoiceUpload')
+    renderPage('/admin/uploads?type=invoice&permitNumber=5001')
+
+    await userEvent.type(screen.getByLabelText('Invoice number'), 'é'.repeat(9))
+    await userEvent.tab()
+
+    expect(
+      screen.getByText(
+        'Invoice number contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
+      ),
     ).toBeInTheDocument()
     expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
   })
@@ -648,7 +706,9 @@ describe('Admin upload workflow smoke', () => {
     expect(screen.getByText('Submission file')).toBeInTheDocument()
     expect(screen.queryByLabelText('Upload batch summary')).not.toBeInTheDocument()
     expect(
-      screen.getByText('Accepted formats: XML, ZIP, GeoJSON, or JSON. Maximum file size: 20 MiB.'),
+      screen.getByText(
+        'Accepted file types: XML, ZIP, GeoJSON, and JSON. Maximum file size: 20 MB.',
+      ),
     ).toBeInTheDocument()
     expect(
       screen.queryByText(/Multiple files can be queued and saved together/),

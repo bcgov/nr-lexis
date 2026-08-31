@@ -2,6 +2,7 @@ package ca.bc.gov.mof.lexis.service.offer;
 
 import static ca.bc.gov.mof.lexis.util.CollectionUtils.positiveDistinctLongs;
 import static ca.bc.gov.mof.lexis.util.CollectionUtils.safeList;
+import static ca.bc.gov.mof.lexis.util.LegacyOfferVolume.roundForDisplay;
 import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.exceptionType;
 import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.fingerprint;
 import static ca.bc.gov.mof.lexis.util.TextUtils.defaultSystemUser;
@@ -24,7 +25,6 @@ import ca.bc.gov.mof.lexis.service.mail.RegionalMailRoute;
 import ca.bc.gov.mof.lexis.service.mail.WorkflowEmailEvent;
 import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -152,7 +152,7 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
       validateStorageNumber(errors, normalizedOfferVolume, OFFER_VOLUME_MAX, "Offer volume");
     }
     if (errors.isEmpty()) {
-      errors.addAll(validateCreateOfferReferences(normalized));
+      errors.addAll(validateCreateOfferReferences(normalized, normalized.offerVolume(), true));
     }
     List<String> warnings = List.of();
 
@@ -266,7 +266,14 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
       validateStorageNumber(errors, normalizedOfferVolume, OFFER_VOLUME_MAX, "Offer volume");
     }
     if (errors.isEmpty()) {
-      errors.addAll(validateCreateOfferReferences(updated));
+      boolean offerVolumeChanged =
+          legacyNumberChanged(current.offerVolume(), updated.offerVolume());
+      boolean volumeContextChanged =
+          !equalsNullable(
+              normalizePackageNumber(current.packageNumber()), updated.packageNumber());
+      errors.addAll(
+          validateCreateOfferReferences(
+              updated, updated.offerVolume(), offerVolumeChanged || volumeContextChanged));
     }
     List<String> warnings = List.of();
 
@@ -570,7 +577,11 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
     }
   }
 
-  private List<String> validateCreateOfferReferences(CreateOfferRequest request) {
+  // Legacy compares the raw offer input with the one-decimal displayed context before applying its
+  // browser rounding. Preserve that ordering at the service boundary so direct requests cannot
+  // bypass or alter the same business rule.
+  private List<String> validateCreateOfferReferences(
+      CreateOfferRequest request, Double offerVolume, boolean enforceVolumeLimit) {
     List<String> errors = new ArrayList<>();
     Long applicationNumber = request.applicationNumber();
     Optional<PurchaseOfferRepository.ApplicationReferenceRow> application =
@@ -589,13 +600,41 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
               + " does not have a valid jurisdiction to accept offers.");
     }
 
+    Double contextVolume =
+        application
+            .map(PurchaseOfferRepository.ApplicationReferenceRow::applicationVolume)
+            .orElse(null);
+
     String packageNumber = trimToNull(request.packageNumber());
     if (packageNumber != null) {
-      Optional<Long> packageApplicationNumber = repository.findPackageApplicationNumber(packageNumber);
-      if (packageApplicationNumber.isEmpty()) {
+      Optional<PurchaseOfferRepository.PackageReferenceRow> packageReference =
+          repository.findPackageReference(packageNumber);
+      if (packageReference.isEmpty()) {
         errors.add("Package " + packageNumber + " does not exist.");
-      } else if (applicationNumber != null && !packageApplicationNumber.get().equals(applicationNumber)) {
-        errors.add("Package " + packageNumber + " does not belong to application " + applicationNumber + ".");
+      } else if (applicationNumber != null
+          && !applicationNumber.equals(packageReference.get().applicationNumber())) {
+        errors.add(
+            "Package "
+                + packageNumber
+                + " does not belong to application "
+                + applicationNumber
+                + ".");
+      } else {
+        contextVolume = packageReference.get().packageVolume();
+      }
+    }
+
+    if (errors.isEmpty()
+        && enforceVolumeLimit
+        && offerVolume != null
+        && Double.isFinite(offerVolume)) {
+      if (contextVolume == null || !Double.isFinite(contextVolume)) {
+        errors.add(
+            "Application/package volume could not be loaded. Reload the page to try again.");
+      } else if (BigDecimal.valueOf(offerVolume)
+              .compareTo(BigDecimal.valueOf(roundForDisplay(contextVolume)))
+          > 0) {
+        errors.add("Offer volume cannot exceed the application/package volume.");
       }
     }
 
@@ -828,7 +867,7 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
     if (value == null || !Double.isFinite(value)) {
       return value;
     }
-    return BigDecimal.valueOf(value).setScale(1, RoundingMode.HALF_EVEN).doubleValue();
+    return roundForDisplay(value);
   }
 
   private boolean legacyNumberChanged(Double current, Double updated) {

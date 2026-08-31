@@ -283,7 +283,7 @@ public class ApplicationSubmissionImportService {
       return rejected(
           fileName,
           fileSize,
-          List.of("The LEXIS application submission file must be 20 MiB or smaller."),
+          List.of("The LEXIS application submission file must be 20 MB or smaller."),
           List.of(),
           null,
           normalizedUserReference);
@@ -1017,7 +1017,7 @@ public class ApplicationSubmissionImportService {
       throws Exception {
     if (remainingBytes < 0) {
       throw new ApplicationSubmissionImportException(
-          List.of("The expanded ZIP contents must be 20 MiB or smaller."));
+          List.of("The expanded ZIP contents must be 20 MB or smaller."));
     }
     byte[] buffer = new byte[8192];
     long total = 0L;
@@ -1026,7 +1026,7 @@ public class ApplicationSubmissionImportService {
       total += read;
       if (total > remainingBytes) {
         throw new ApplicationSubmissionImportException(
-            List.of("The expanded ZIP contents must be 20 MiB or smaller."));
+            List.of("The expanded ZIP contents must be 20 MB or smaller."));
       }
     }
     return total;
@@ -1036,7 +1036,7 @@ public class ApplicationSubmissionImportService {
       throws ApplicationSubmissionImportException {
     if (totalExpandedBytes > MAX_IMPORT_BYTES) {
       throw new ApplicationSubmissionImportException(
-          List.of("The expanded ZIP contents must be 20 MiB or smaller."));
+          List.of("The expanded ZIP contents must be 20 MB or smaller."));
     }
     if (file.getSize() > 0
         && totalExpandedBytes > 1024L * 1024L
@@ -1070,7 +1070,7 @@ public class ApplicationSubmissionImportService {
       totalBytes += bytesRead;
       if (totalBytes > MAX_IMPORT_BYTES) {
         throw new ApplicationSubmissionImportException(
-            List.of("The LEXIS application submission file must be 20 MiB or smaller."));
+            List.of("The LEXIS application submission file must be 20 MB or smaller."));
       }
       outputStream.write(buffer, 0, bytesRead);
     }

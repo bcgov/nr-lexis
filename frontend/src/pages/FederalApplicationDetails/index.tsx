@@ -316,7 +316,7 @@ const FederalApplicationDetailsPage = () => {
           () =>
             ASCII_PATTERN.test(permitForm.transportName.trim())
               ? null
-              : 'Transport name must contain ASCII characters only.',
+              : 'Transport name contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
         ) ?? undefined,
       shippingDate: firstValidationError(
         () => requiredFieldError(permitForm.shippingDate, 'Estimated shipping date'),
@@ -336,7 +336,7 @@ const FederalApplicationDetailsPage = () => {
               () =>
                 ASCII_PATTERN.test(permitForm.otherPortOfExport.trim())
                   ? null
-                  : 'Other port of export must contain ASCII characters only.',
+                  : 'Other port of export contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
             ) ?? undefined)
           : undefined,
     }),

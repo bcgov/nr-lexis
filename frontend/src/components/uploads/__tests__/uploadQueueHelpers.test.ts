@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   DOCUMENT_UPLOAD_ACCEPT,
   DOCUMENT_UPLOAD_EXTENSIONS,
+  DOCUMENT_UPLOAD_GUIDANCE,
   extractUploadErrorDetails,
   GENERIC_SUBMISSION_FAILURE_MESSAGE,
   validateDocumentUploadDescription,
@@ -13,8 +14,8 @@ describe('uploadQueueHelpers', () => {
   it('rejects document files above the shared 20 MiB business limit', () => {
     const oversized = new File([new Uint8Array(20 * 1024 * 1024 + 1)], 'large.pdf')
 
-    expect(validateDocumentUploadFile(oversized)).toBe('File must be 20 MiB or smaller.')
-    expect(validateUploadFileSize(oversized)).toBe('File must be 20 MiB or smaller.')
+    expect(validateDocumentUploadFile(oversized)).toBe('File must be 20 MB or smaller.')
+    expect(validateUploadFileSize(oversized)).toBe('File must be 20 MB or smaller.')
   })
 
   it('uses the authoritative attachment extension allowlist for the file picker and queue', () => {
@@ -29,20 +30,24 @@ describe('uploadQueueHelpers', () => {
     expect(validateDocumentUploadFile(new File(['content'], 'evidence.exe'))).toContain(
       'File type is not supported',
     )
+    expect(DOCUMENT_UPLOAD_GUIDANCE).toBe(
+      'Accepted file types: BMP, CSV, DOC, DOCX, JPG, PDF, PNG, RTF, TXT, XLS, XLSX, XML, and ZIP. Maximum file size: 20 MB.',
+    )
+    expect(DOCUMENT_UPLOAD_GUIDANCE).not.toMatch(/ASCII|bytes/i)
   })
 
   it('validates Oracle-compatible attachment metadata before queueing', () => {
     expect(validateDocumentUploadFile(new File(['content'], 'résumé.pdf'))).toBe(
-      'File name must use printable US-ASCII characters without path separators.',
+      'File name contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation, without slashes.',
     )
     expect(validateDocumentUploadFile(new File(['content'], `${'a'.repeat(247)}.pdf`))).toBe(
-      'File name must be 250 bytes or fewer.',
+      'File name must be 250 characters or fewer.',
     )
     expect(validateDocumentUploadDescription('Résumé')).toBe(
-      'Document description must use US-ASCII characters.',
+      'Document description contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
     )
     expect(validateDocumentUploadDescription('a'.repeat(251))).toBe(
-      'Document description must be 250 bytes or fewer.',
+      'Document description must be 250 characters or fewer.',
     )
     expect(validateDocumentUploadDescription('Line one\nLine two')).toBe('')
   })

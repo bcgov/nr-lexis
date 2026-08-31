@@ -707,6 +707,14 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       'color',
       'rgb(96, 96, 98)',
     )
+    await expect(activeNavLink.locator('.csp-side-nav__icon svg')).toHaveCSS(
+      'fill',
+      'rgb(22, 22, 22)',
+    )
+    await expect(inactiveNavLink.locator('.csp-side-nav__icon svg')).toHaveCSS(
+      'fill',
+      'rgb(0, 92, 184)',
+    )
     const reportsToggle = page.getByRole('button', { name: 'Reports', exact: true })
     await reportsToggle.click()
     await expect(page.locator('a.csp-side-nav__link[data-label="Application Report"]')).toHaveCount(
@@ -1721,6 +1729,20 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     ).toBe(false)
   })
 
+  test('keeps an impossible typed date visible for correction after blur', async ({ page }) => {
+    await gotoSyntheticRoute(page, '/provincial/offers/create', {
+      waitUntil: 'domcontentloaded',
+    })
+
+    const dateInput = page.getByLabel('TEAC review date')
+    await dateInput.click()
+    await dateInput.pressSequentially('2026-02-31')
+    await page.getByLabel('Offer remarks').click()
+
+    await expect(dateInput).toHaveValue('2026-02-31')
+    await expect(page.getByText('Date must be YYYY-MM-DD.')).toBeVisible()
+  })
+
   test('styles an active report configuration without changing its route', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
     await gotoSyntheticRoute(page, '/reports/offerReport', {
@@ -1996,7 +2018,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(uploadPanel.getByText('Submission file', { exact: true })).toBeVisible()
     await expect(
       uploadPanel.getByText(
-        'Accepted formats: XML, ZIP, GeoJSON, or JSON. Maximum file size: 20 MiB.',
+        'Accepted file types: XML, ZIP, GeoJSON, and JSON. Maximum file size: 20 MB.',
         { exact: true },
       ),
     ).toBeVisible()

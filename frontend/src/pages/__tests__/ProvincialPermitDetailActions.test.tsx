@@ -2532,7 +2532,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.click(saveButton)
 
     expect(
-      (await screen.findAllByText('Permit remarks must contain ASCII characters only.')).length,
+      (
+        await screen.findAllByText(
+          'Permit remarks contain unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
+        )
+      ).length,
     ).toBeGreaterThanOrEqual(1)
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
   })
@@ -3550,19 +3554,19 @@ describe('Provincial Permit Detail Action Smoke', () => {
     const saveButton = screen.getByRole('button', { name: 'Save fee override' })
 
     await userEvent.clear(overrideFee)
-    await userEvent.type(overrideFee, '10000000')
-    await userEvent.click(saveButton)
-
-    expect(await screen.findByText('Override fee must be 9999999.99 or less.')).toBeInTheDocument()
-    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
-
-    await userEvent.clear(overrideFee)
-    await userEvent.type(overrideFee, '1.001')
+    await userEvent.type(overrideFee, '9999999.995')
     await userEvent.click(saveButton)
 
     expect(
-      await screen.findByText('Override fee must have no more than two decimal places.'),
+      await screen.findByText('Override fee must round to 9999999.99 or less.'),
     ).toBeInTheDocument()
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+
+    await userEvent.clear(overrideFee)
+    await userEvent.type(overrideFee, '0.001')
+    await userEvent.click(saveButton)
+
+    expect(await screen.findByText('Override fee must round to at least 0.01.')).toBeInTheDocument()
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
 
     await userEvent.clear(overrideFee)
@@ -3574,6 +3578,36 @@ describe('Provincial Permit Detail Action Smoke', () => {
       await screen.findByText('Override comment must be 254 characters or fewer.'),
     ).toBeInTheDocument()
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+  })
+
+  it('preserves legacy Oracle rounding for permit fee overrides', async () => {
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      permitStatusCode: 'ACT',
+      permitStatusDescription: 'Active',
+    })
+    mockedFetchPermitFeeOverrideContext.mockResolvedValue({
+      overrideEnabled: true,
+      overrideFee: '25.00',
+      overrideComment: 'Legacy override',
+      locked: false,
+      lockMessage: '',
+    })
+
+    renderPermitDetails()
+    await selectPermitDetailTab('Fees')
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit fee override' }))
+    await userEvent.clear(screen.getByLabelText('Override fee (CAD)'))
+    await userEvent.type(screen.getByLabelText('Override fee (CAD)'), '0.005')
+    await userEvent.click(screen.getByRole('button', { name: 'Save fee override' }))
+
+    await waitFor(() => {
+      expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
+        expect.objectContaining({ overrideFee: '0.01' }),
+      )
+    })
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit fee override' }))
+    expect(screen.getByLabelText('Override fee (CAD)')).toHaveValue('0.01')
   })
 
   it.each([

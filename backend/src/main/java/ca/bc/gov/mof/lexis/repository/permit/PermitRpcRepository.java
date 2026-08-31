@@ -487,8 +487,8 @@ public class PermitRpcRepository extends OracleRepositorySupport {
 
   /**
    * Loads all fee-display inputs for a permit in one query. The set-based AMV join deliberately
-   * mirrors {@code LEXIS.FIND_LOG_AMV(scaleId)}, including its effective-month cutoff and growth
-   * type selection.
+   * mirrors {@code LEXIS.FIND_LOG_AMV(scaleId)}: it selects the effective date by species and grade,
+   * then applies the growth-type filter to the row at that date.
    */
   public List<PermitFeeScaleRow> findPermitFeeScaleRows(Long permitNumber) {
     if (permitNumber == null || permitNumber < 1) {

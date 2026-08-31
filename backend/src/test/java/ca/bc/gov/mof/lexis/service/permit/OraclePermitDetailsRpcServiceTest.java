@@ -2088,7 +2088,7 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
-  void addPermitShouldPersistWhenInputIsValid() {
+  void addPermitShouldNormalizeAcceptedOracleDecimalsBeforePersistence() {
     PermitMutationRequestDto request =
         new PermitMutationRequestDto(
             "7000123",
@@ -2108,7 +2108,7 @@ class OraclePermitDetailsRpcServiceTest {
             null,
             null,
             "S",
-            "100.0",
+            "9999999.994",
             "25",
             "1835",
             "00070001",
@@ -2121,9 +2121,9 @@ class OraclePermitDetailsRpcServiceTest {
             null,
             "S",
             "T",
-            null,
-            null,
-            null);
+            "true",
+            "1.001",
+            "Legacy rounded fee");
     when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("M"));
     when(exemptionService.findByExemptionNumber("EX-700"))
         .thenReturn(
@@ -2150,7 +2150,7 @@ class OraclePermitDetailsRpcServiceTest {
                     LocalDate.of(2026, 5, 27),
                     null,
                     LocalDate.of(2026, 6, 27),
-                    100.0d,
+                    9_999_999.99d,
                     25L,
                     0L,
                     null,
@@ -2169,8 +2169,8 @@ class OraclePermitDetailsRpcServiceTest {
                     "ACT",
                     "S",
                     "US",
-                    null,
-                    null,
+                    1.0d,
+                    "Legacy rounded fee",
                     null,
                     null,
                     null,
@@ -2181,6 +2181,11 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(response.success()).isTrue();
     assertThat(response.permitNumber()).isEqualTo(7000123L);
     assertThat(response.permitStatus()).isEqualTo("ACT");
+    ArgumentCaptor<PermitMutationRow> permitCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository).insertPermitDetail(permitCaptor.capture(), eq("idir\\jsmith"));
+    assertThat(permitCaptor.getValue().permitVolume()).isEqualTo(9_999_999.99d);
+    assertThat(permitCaptor.getValue().overrideFee()).isEqualTo(1.0d);
   }
 
   @Test
@@ -2496,6 +2501,28 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(permitCaptor.getValue().exemptionNumber()).isEqualTo("EX-700");
   }
 
+  @ParameterizedTest
+  @CsvSource({
+    "permitSubmitDate,Permit submit date",
+    "permitIssueDate,Permit issue date",
+    "permitExpiryDate,Permit expiry date",
+    "permitRequestDate,Permit request date",
+    "estimatedShippingDate,Estimated shipping date"
+  })
+  void updatePermitShouldRejectMalformedSubmittedDates(
+      String fieldName, String fieldLabel) {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow()));
+
+    PermitMutationRpcResponseDto response =
+        service.updatePermit(malformedPermitDateUpdateRequest(fieldName), "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactly(fieldLabel + " must be a valid date.");
+    verify(repository, never()).updatePermitDetail(any(), any(), any());
+  }
+
   @Test
   void updatePermitShouldAllowAnOrderInCouncilExemption() {
     when(repository.findPermitMutationByPermitNumber(7000123L))
@@ -2792,6 +2819,31 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(response.success()).isFalse();
     assertThat(response.errors()).containsExactly("Override fee must be greater than zero.");
     verify(repository, never()).updatePermitDetail(any(), any(), any());
+  }
+
+  @Test
+  void updatePermitShouldNormalizeAcceptedOverrideFeeBeforePersistence() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(
+            Optional.of(
+                permitMutationRowWithOverride("ACT", 25.0d, "Reviewed calculation")));
+    stubTargetMinisterialExemption("EX-700");
+    when(repository.updatePermitDetail(
+            any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
+        .thenReturn(true);
+
+    PermitMutationRpcResponseDto response =
+        service.updatePermit(
+            feeOverrideRequest("ACT", "true", "1.001", "Legacy rounded fee"),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<PermitMutationRow> permitCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository)
+        .updatePermitDetail(
+            permitCaptor.capture(), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE));
+    assertThat(permitCaptor.getValue().overrideFee()).isEqualTo(1.0d);
   }
 
   @Test
@@ -4544,7 +4596,7 @@ class OraclePermitDetailsRpcServiceTest {
             7000123L,
             "INV-100",
             new BigDecimal("100.00"),
-            new BigDecimal("1.25"),
+            new BigDecimal("1.25000"),
             new BigDecimal("12.00"),
             "idir\\jsmith"))
         .thenReturn(Optional.of(new SalesInvoiceRow("INV-100", 100.0d, 1.25d, 12.0d)));
@@ -4564,6 +4616,44 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
+  void addInvoiceShouldRoundAcceptedValuesBeforePersistenceVerification() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow("ACT")));
+    when(repository.findSalesInvoiceByNumberAndPermit("INV-100", 7000123L))
+        .thenReturn(Optional.empty());
+    when(repository.insertSalesInvoice(
+            7000123L,
+            "INV-100",
+            new BigDecimal("9999999.99"),
+            new BigDecimal("1.00000"),
+            new BigDecimal("12.00"),
+            "idir\\jsmith"))
+        .thenReturn(
+            Optional.of(
+                new SalesInvoiceRow("INV-100", 9_999_999.99d, 1.0d, 12.0d)));
+
+    PermitPersistenceRpcResponseDto response =
+        service.addInvoice(
+            7000123L,
+            "INV-100",
+            new BigDecimal("9999999.994"),
+            new BigDecimal("1.000001"),
+            new BigDecimal("12.001"),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    assertThat(response.errors()).isEmpty();
+    verify(repository)
+        .insertSalesInvoice(
+            7000123L,
+            "INV-100",
+            new BigDecimal("9999999.99"),
+            new BigDecimal("1.00000"),
+            new BigDecimal("12.00"),
+            "idir\\jsmith");
+  }
+
+  @Test
   void addInvoiceShouldRollBackWhenInsertReturnsNoRow() {
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(permitMutationRow("ACT")));
@@ -4573,7 +4663,7 @@ class OraclePermitDetailsRpcServiceTest {
             7000123L,
             "INV-100",
             new BigDecimal("100.00"),
-            new BigDecimal("1.25"),
+            new BigDecimal("1.25000"),
             new BigDecimal("12.00"),
             "idir\\jsmith"))
         .thenReturn(Optional.empty());
@@ -4605,7 +4695,7 @@ class OraclePermitDetailsRpcServiceTest {
             7000123L,
             "INV-100",
             new BigDecimal("100.00"),
-            new BigDecimal("1.25"),
+            new BigDecimal("1.25000"),
             new BigDecimal("12.00"),
             "idir\\jsmith"))
         .thenReturn(
@@ -4652,6 +4742,42 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(response.success()).isFalse();
     assertThat(response.errors())
         .containsExactly("The sales invoice number must be 9 characters or fewer.");
+  }
+
+  @Test
+  void addInvoiceShouldRejectValuesThatCannotFitOracleStorage() {
+    PermitPersistenceRpcResponseDto response =
+        service.addInvoice(
+            7000123L,
+            "ééééééééé",
+            new BigDecimal("10000000"),
+            new BigDecimal("1.000001"),
+            new BigDecimal("12.001"),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactly(
+            "The sales invoice number must use printable US-ASCII characters.",
+            "The export value must round to 9999999.99 or less.");
+    verifyNoInteractions(repository);
+  }
+
+  @Test
+  void addInvoiceShouldRejectExtremeExponentBeforeOracleInsert() {
+    PermitPersistenceRpcResponseDto response =
+        service.addInvoice(
+            7000123L,
+            "INV-100",
+            new BigDecimal("1E+2147483647"),
+            BigDecimal.ONE,
+            BigDecimal.ONE,
+            "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactly("The export value must round to 9999999.99 or less.");
+    verifyNoInteractions(repository);
   }
 
   @Test
@@ -7473,6 +7599,44 @@ class OraclePermitDetailsRpcServiceTest {
         agentClientNumber,
         null,
         oicApplicationNumber,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null);
+  }
+
+  private PermitMutationRequestDto malformedPermitDateUpdateRequest(String fieldName) {
+    String invalidDate = "02/30/2024";
+    return new PermitMutationRequestDto(
+        "7000123",
+        null,
+        "permitSubmitDate".equals(fieldName) ? invalidDate : null,
+        "permitIssueDate".equals(fieldName) ? invalidDate : null,
+        "permitExpiryDate".equals(fieldName) ? invalidDate : null,
+        "permitRequestDate".equals(fieldName) ? invalidDate : null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        "estimatedShippingDate".equals(fieldName) ? invalidDate : null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
         null,
         null,
         null,

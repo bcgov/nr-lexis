@@ -4,6 +4,7 @@ import static ca.bc.gov.mof.lexis.controller.SearchRequestUtils.firstPresent;
 import static ca.bc.gov.mof.lexis.controller.SearchRequestUtils.parseSearchDate;
 import static ca.bc.gov.mof.lexis.controller.ScopedClientRequestSupport.currentForestClientNumber;
 import static ca.bc.gov.mof.lexis.controller.ScopedClientRequestSupport.matchesScopedClient;
+import static ca.bc.gov.mof.lexis.util.LegacyOfferVolume.roundForDisplay;
 
 import ca.bc.gov.mof.lexis.dto.SearchCountResponseDto;
 import ca.bc.gov.mof.lexis.dto.application.ApplicationEditLockDto;
@@ -299,19 +300,22 @@ public class PurchaseOfferController {
 
     LexisApplicationDetailDto parentApplication = application.get();
     String packageNumber = detail.packageNumber();
+    Double contextVolume;
     if (packageNumber == null || packageNumber.isBlank()) {
-      return parentApplication.applicationVolume();
+      contextVolume = parentApplication.applicationVolume();
+    } else {
+      List<LexisApplicationDetailDto.LexisPackageDto> packages = parentApplication.packages();
+      if (packages == null) {
+        return null;
+      }
+      contextVolume =
+          packages.stream()
+              .filter(pack -> packageNumber.equalsIgnoreCase(pack.packageNumber()))
+              .findFirst()
+              .map(LexisApplicationDetailDto.LexisPackageDto::volume)
+              .orElse(null);
     }
-
-    List<LexisApplicationDetailDto.LexisPackageDto> packages = parentApplication.packages();
-    if (packages == null) {
-      return null;
-    }
-    return packages.stream()
-        .filter(pack -> packageNumber.equalsIgnoreCase(pack.packageNumber()))
-        .findFirst()
-        .map(LexisApplicationDetailDto.LexisPackageDto::volume)
-        .orElse(null);
+    return contextVolume == null ? null : roundForDisplay(contextVolume);
   }
 
   private String resolveApplicationSpeciesGradeCode(Long applicationNumber) {

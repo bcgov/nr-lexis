@@ -1465,7 +1465,9 @@ describe('Exemption and Federal Detail Document Actions', () => {
     await userEvent.type(transportName, 'Résumé')
 
     expect(
-      await screen.findByText('Transport name must contain ASCII characters only.'),
+      await screen.findByText(
+        'Transport name contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
+      ),
     ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Save federal permit' })).toBeDisabled()
     expect(mockedSaveFederalPermit).not.toHaveBeenCalled()
@@ -1476,7 +1478,9 @@ describe('Exemption and Federal Detail Document Actions', () => {
     await userEvent.type(screen.getByLabelText('Other port of export'), 'Port d’été')
 
     expect(
-      await screen.findByText('Other port of export must contain ASCII characters only.'),
+      await screen.findByText(
+        'Other port of export contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
+      ),
     ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Save federal permit' })).toBeDisabled()
     expect(mockedSaveFederalPermit).not.toHaveBeenCalled()

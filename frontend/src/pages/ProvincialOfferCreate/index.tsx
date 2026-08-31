@@ -44,6 +44,7 @@ import {
   formatLegacyOfferVolume,
   offerDecimalStorageFieldError,
   offerTextStorageFieldError,
+  offerVolumeContextFieldError,
 } from '@/pages/shared/offer-storage-validation'
 
 type ProvincialOfferCreateForm = {
@@ -148,6 +149,9 @@ type OfferApplicationContextState = {
   applicationVolume: string
   packageOptions: SearchOption[]
   packageVolume: string
+  packageVolumeError: string
+  packageVolumeTarget: string
+  isLoadingPackageVolume: boolean
   applicationValidationError: string
   isLoading: boolean
 }
@@ -162,7 +166,10 @@ type OfferApplicationContextAction =
       packageOptions: SearchOption[]
     }
   | { type: 'loadFailure'; applicationValidationError?: string }
-  | { type: 'setPackageVolume'; packageVolume: string }
+  | { type: 'clearPackageVolume' }
+  | { type: 'packageVolumeLoadStart'; target: string }
+  | { type: 'packageVolumeLoadSuccess'; target: string; packageVolume: string }
+  | { type: 'packageVolumeLoadFailure'; target: string }
 
 const createOfferApplicationContextState = (
   packageOptions: SearchOption[],
@@ -171,6 +178,9 @@ const createOfferApplicationContextState = (
   applicationVolume: '',
   packageOptions,
   packageVolume: '',
+  packageVolumeError: '',
+  packageVolumeTarget: '',
+  isLoadingPackageVolume: false,
   applicationValidationError: '',
   isLoading: false,
 })
@@ -183,7 +193,12 @@ const offerApplicationContextReducer = (
     case 'reset':
       return createOfferApplicationContextState(action.packageOptions)
     case 'loadStart':
-      return { ...state, applicationValidationError: '', isLoading: true }
+      return {
+        ...state,
+        applicationValidationError: '',
+        packageVolumeError: '',
+        isLoading: true,
+      }
     case 'loadSuccess':
       return {
         ...state,
@@ -200,13 +215,61 @@ const offerApplicationContextReducer = (
         applicationVolume: '',
         packageOptions: [],
         applicationValidationError: action.applicationValidationError ?? '',
+        packageVolumeError: '',
         isLoading: false,
       }
-    case 'setPackageVolume':
-      return { ...state, packageVolume: action.packageVolume }
+    case 'clearPackageVolume':
+      return {
+        ...state,
+        packageVolume: '',
+        packageVolumeError: '',
+        packageVolumeTarget: '',
+        isLoadingPackageVolume: false,
+      }
+    case 'packageVolumeLoadStart':
+      return {
+        ...state,
+        packageVolume: '',
+        packageVolumeError: '',
+        packageVolumeTarget: action.target,
+        isLoadingPackageVolume: true,
+      }
+    case 'packageVolumeLoadSuccess':
+      return state.packageVolumeTarget === action.target
+        ? {
+            ...state,
+            packageVolume: action.packageVolume,
+            packageVolumeError: '',
+            isLoadingPackageVolume: false,
+          }
+        : state
+    case 'packageVolumeLoadFailure':
+      return state.packageVolumeTarget === action.target
+        ? {
+            ...state,
+            packageVolume: '',
+            packageVolumeError:
+              'Application/package volume could not be loaded. Reload the page to try again.',
+            isLoadingPackageVolume: false,
+          }
+        : state
     default:
       return state
   }
+}
+
+const packageVolumeTargetKey = (applicationNumber: string, packageNumber: string): string => {
+  const normalizedPackageNumber = packageNumber.trim()
+  return normalizedPackageNumber
+    ? `${normalizeProvincialApplicationNumber(applicationNumber)}\u0000${normalizedPackageNumber}`
+    : ''
+}
+
+const normalizeOfferContextVolume = (value: string): string | null => {
+  const normalized = value.trim()
+  if (!/^\d+(?:\.\d+)?$/.test(normalized)) return null
+  const parsed = Number(normalized)
+  return Number.isFinite(parsed) && parsed >= 0 ? normalized : null
 }
 
 const ProvincialOfferCreatePage = () => {
@@ -238,6 +301,9 @@ const ProvincialOfferCreatePage = () => {
     applicationValidationError,
     packageOptions,
     packageVolume,
+    packageVolumeError,
+    packageVolumeTarget,
+    isLoadingPackageVolume,
     isLoading: isLoadingApplicationContext,
   } = applicationContext
   const [status, setStatus] = useState<PageStatus | null>(null)
@@ -283,17 +349,45 @@ const ProvincialOfferCreatePage = () => {
   const author = displayAuditIdentity(capabilities.principal)
   const receivedDate = formatBusinessIsoDate()
   const hasApplicationNumber = form.applicationNumber.trim().length > 0
-  const hasNoPackagesForApplication =
-    hasApplicationNumber &&
-    !isLoadingApplicationContext &&
-    applicationDetails !== null &&
-    packageOptions.length === 0
   const debouncedApplicationNumber = useDebouncedValue(form.applicationNumber)
   const debouncedPackageNumber = useDebouncedValue(form.packageNumber)
   const applicationNumberForLookup = formEdited
     ? debouncedApplicationNumber
     : form.applicationNumber
   const packageNumberForLookup = formEdited ? debouncedPackageNumber : form.packageNumber
+  const isCurrentApplicationNumberValid = !provincialApplicationNumberFieldError(
+    form.applicationNumber,
+    'Application number',
+    true,
+  )
+  const isLookupApplicationNumberValid = !provincialApplicationNumberFieldError(
+    applicationNumberForLookup,
+    'Application number',
+    true,
+  )
+  const isApplicationLookupDebouncing =
+    formEdited &&
+    isCurrentApplicationNumberValid &&
+    normalizeProvincialApplicationNumber(form.applicationNumber) !==
+      normalizeProvincialApplicationNumber(applicationNumberForLookup)
+  const packageNumberForVolumeLookup =
+    packageOptions.length > 0 ? form.packageNumber.trim() : packageNumberForLookup.trim()
+  const packageVolumeLookupTarget = isLookupApplicationNumberValid
+    ? packageVolumeTargetKey(applicationNumberForLookup, packageNumberForVolumeLookup)
+    : ''
+  const currentPackageVolumeTarget = isCurrentApplicationNumberValid
+    ? packageVolumeTargetKey(form.applicationNumber, form.packageNumber)
+    : ''
+  const isPackageVolumePending =
+    Boolean(currentPackageVolumeTarget) &&
+    (packageVolumeTarget !== currentPackageVolumeTarget || isLoadingPackageVolume)
+  const isLoadingOfferContext =
+    isLoadingApplicationContext || isApplicationLookupDebouncing || isPackageVolumePending
+  const hasNoPackagesForApplication =
+    hasApplicationNumber &&
+    !isLoadingOfferContext &&
+    applicationDetails !== null &&
+    packageOptions.length === 0
 
   useEffect(() => {
     if (!createdOfferNavigation) {
@@ -397,18 +491,49 @@ const ProvincialOfferCreatePage = () => {
           return
         }
 
-        const packageNumbers = packagesResult.status === 'fulfilled' ? packagesResult.value : []
+        if (packagesResult.status !== 'fulfilled') {
+          dispatchApplicationContext({
+            type: 'loadFailure',
+            applicationValidationError:
+              'Application packages could not be loaded. Reload the page and try again.',
+          })
+          setForm((current) =>
+            normalizeProvincialApplicationNumber(current.applicationNumber) === applicationNumber
+              ? { ...current, packageNumber: '' }
+              : current,
+          )
+          return
+        }
+
+        const packageNumbers = packagesResult.value
         const nextPackageOptions = packageNumbers.map((packageNumber) => ({
           value: packageNumber,
           label: packageNumber,
         }))
+        const nextApplicationVolume =
+          volumeResult.status === 'fulfilled'
+            ? normalizeOfferContextVolume(volumeResult.value)
+            : null
+        if (nextPackageOptions.length === 0 && nextApplicationVolume === null) {
+          dispatchApplicationContext({
+            type: 'loadFailure',
+            applicationValidationError:
+              'Application volume could not be loaded. Reload the page and try again.',
+          })
+          setForm((current) =>
+            normalizeProvincialApplicationNumber(current.applicationNumber) === applicationNumber
+              ? { ...current, packageNumber: '' }
+              : current,
+          )
+          return
+        }
         dispatchApplicationContext({
           type: 'loadSuccess',
           applicationDetails:
             detailsResult.status === 'fulfilled' && detailsResult.value.success
               ? detailsResult.value
               : null,
-          applicationVolume: volumeResult.status === 'fulfilled' ? volumeResult.value : '',
+          applicationVolume: nextApplicationVolume ?? '',
           packageOptions: nextPackageOptions,
         })
         setForm((current) => {
@@ -453,32 +578,52 @@ const ProvincialOfferCreatePage = () => {
   }, [applicationNumberForLookup, queryPackageOptions])
 
   useEffect(() => {
-    const packageNumber =
-      packageOptions.length > 0 ? form.packageNumber.trim() : packageNumberForLookup.trim()
-    if (!packageNumber) {
-      dispatchApplicationContext({ type: 'setPackageVolume', packageVolume: '' })
+    if (!packageNumberForVolumeLookup || !packageVolumeLookupTarget) {
+      dispatchApplicationContext({ type: 'clearPackageVolume' })
       return
     }
 
     let isActive = true
-    void fetchOfferPackageVolume(packageNumber)
+    dispatchApplicationContext({
+      type: 'packageVolumeLoadStart',
+      target: packageVolumeLookupTarget,
+    })
+    void fetchOfferPackageVolume(packageNumberForVolumeLookup)
       .then((volume) => {
         if (isActive) {
-          dispatchApplicationContext({ type: 'setPackageVolume', packageVolume: volume })
+          const normalizedVolume = normalizeOfferContextVolume(volume)
+          dispatchApplicationContext(
+            normalizedVolume === null
+              ? { type: 'packageVolumeLoadFailure', target: packageVolumeLookupTarget }
+              : {
+                  type: 'packageVolumeLoadSuccess',
+                  target: packageVolumeLookupTarget,
+                  packageVolume: normalizedVolume,
+                },
+          )
         }
       })
       .catch(() => {
         if (isActive) {
-          dispatchApplicationContext({ type: 'setPackageVolume', packageVolume: '' })
+          dispatchApplicationContext({
+            type: 'packageVolumeLoadFailure',
+            target: packageVolumeLookupTarget,
+          })
         }
       })
 
     return () => {
       isActive = false
     }
-  }, [form.packageNumber, packageNumberForLookup, packageOptions.length])
+  }, [packageNumberForVolumeLookup, packageVolumeLookupTarget])
 
-  const contextVolume = form.packageNumber.trim() ? packageVolume : applicationVolume
+  const contextVolume = form.packageNumber.trim()
+    ? packageVolumeTarget === currentPackageVolumeTarget && !isLoadingPackageVolume
+      ? packageVolume
+      : ''
+    : isLoadingApplicationContext || isApplicationLookupDebouncing
+      ? ''
+      : applicationVolume
 
   const fieldErrors = useMemo<FieldErrors<ProvincialOfferCreateField>>(
     () => ({
@@ -489,6 +634,7 @@ const ProvincialOfferCreatePage = () => {
       ),
       packageNumber: firstValidationError(
         () => (isLoadingApplicationContext ? 'Wait for package list to load.' : null),
+        () => packageVolumeError || null,
         () =>
           packageOptions.length > 0
             ? requiredFieldError(form.packageNumber, 'Package number')
@@ -516,9 +662,10 @@ const ProvincialOfferCreatePage = () => {
           'Contact name',
           true,
         ) ?? undefined,
-      offerVolume:
-        offerDecimalStorageFieldError(form.offerVolume, OFFER_VOLUME_MAX, 'Offer volume') ??
-        undefined,
+      offerVolume: firstValidationError(
+        () => offerDecimalStorageFieldError(form.offerVolume, OFFER_VOLUME_MAX, 'Offer volume'),
+        () => offerVolumeContextFieldError(form.offerVolume, contextVolume),
+      ),
       purchaseOfferAmount:
         offerDecimalStorageFieldError(
           form.purchaseOfferAmount,
@@ -550,6 +697,7 @@ const ProvincialOfferCreatePage = () => {
     [
       applicationValidationError,
       canManageOfferApproval,
+      contextVolume,
       effectiveCompanyName,
       effectiveContactName,
       effectiveOfferingClientNumber,
@@ -557,6 +705,7 @@ const ProvincialOfferCreatePage = () => {
       isLoadingApplicationContext,
       isScopedProvincialSubmitter,
       packageOptions,
+      packageVolumeError,
     ],
   )
   const hasValidationError = useMemo(
@@ -571,9 +720,10 @@ const ProvincialOfferCreatePage = () => {
   const fieldError = (field: ProvincialOfferCreateField): string | undefined =>
     getVisibleFieldError(field, fieldErrors, touchedFields, showAllValidationErrors)
   const applicationNumberError = fieldError('applicationNumber') || applicationValidationError
+  const packageNumberError = fieldError('packageNumber') || packageVolumeError
 
   const onSave = async (navigateToCreatedRecord = true): Promise<boolean> => {
-    if (isLoadingApplicationContext || scopedClientLookupPending) {
+    if (isLoadingOfferContext || scopedClientLookupPending) {
       return false
     }
     if (hasValidationError) {
@@ -742,8 +892,8 @@ const ProvincialOfferCreatePage = () => {
                   placeholder={
                     isLoadingApplicationContext ? 'Loading packages' : 'Select package number'
                   }
-                  invalid={!!fieldError('packageNumber')}
-                  invalidText={fieldError('packageNumber')}
+                  invalid={!!packageNumberError}
+                  invalidText={packageNumberError}
                   onBlur={() => markFieldTouched('packageNumber')}
                   onChange={(value) => {
                     markFormEdited()
@@ -756,8 +906,8 @@ const ProvincialOfferCreatePage = () => {
                   labelText="Package number"
                   value={hasNoPackagesForApplication ? 'No Packages' : form.packageNumber}
                   readOnly={hasNoPackagesForApplication}
-                  invalid={!!fieldError('packageNumber')}
-                  invalidText={fieldError('packageNumber')}
+                  invalid={!!packageNumberError}
+                  invalidText={packageNumberError}
                   onBlur={() => markFieldTouched('packageNumber')}
                   onChange={(event) => {
                     markFormEdited()
@@ -867,7 +1017,11 @@ const ProvincialOfferCreatePage = () => {
                   markFieldTouched('offerVolume')
                   setForm((current) => ({
                     ...current,
-                    offerVolume: formatLegacyOfferVolume(current.offerVolume),
+                    offerVolume:
+                      !contextVolume.trim() ||
+                      offerVolumeContextFieldError(current.offerVolume, contextVolume)
+                        ? current.offerVolume
+                        : formatLegacyOfferVolume(current.offerVolume),
                   }))
                 }}
                 onChange={(event) => {
@@ -1082,9 +1236,10 @@ const ProvincialOfferCreatePage = () => {
                 onClick={() => void onSave(true)}
                 disabled={
                   isSubmitting ||
-                  isLoadingApplicationContext ||
+                  isLoadingOfferContext ||
                   scopedClientLookupPending ||
-                  !!applicationValidationError
+                  !!applicationValidationError ||
+                  !!packageVolumeError
                 }
                 renderIcon={isSubmitting ? PendingIcon : undefined}
               >
@@ -1101,9 +1256,10 @@ const ProvincialOfferCreatePage = () => {
         onDiscard={onDiscardCreateDraft}
         subject="this new purchase offer"
         saveUnavailableReason={
-          isLoadingApplicationContext || scopedClientLookupPending
+          packageVolumeError ||
+          (isLoadingOfferContext || scopedClientLookupPending
             ? 'Application and client details must finish loading before this offer can be saved.'
-            : undefined
+            : undefined)
         }
       />
     </Grid>

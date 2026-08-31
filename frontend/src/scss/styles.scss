@@ -498,6 +498,12 @@ a.csp-side-nav__link.cds--side-nav__link--active[aria-current='page'] {
   width: 20px;
 }
 
+// Carbon marks the whole parent menu active when one child is selected, which otherwise changes
+// every icon in that menu to the primary text colour. Keep only the selected link icon black.
+a.csp-side-nav__link:not([aria-current='page']) .csp-side-nav__icon > svg {
+  fill: currentcolor;
+}
+
 .csp-side-nav__notification-indicator {
   position: absolute;
   inset-block-start: -0.125rem;
@@ -3651,12 +3657,6 @@ $notification-types: 'error', 'info', 'success', 'warning';
   min-inline-size: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.admin-upload-file-chip__size {
-  color: var(--fds-text-secondary, var(--csp-text-primary));
-  font-size: 0.875rem;
   white-space: nowrap;
 }
 

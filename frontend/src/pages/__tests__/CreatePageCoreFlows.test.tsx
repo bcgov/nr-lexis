@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -995,7 +995,9 @@ describe('Create Page Core Flows', () => {
     await userEvent.click(submitButton)
 
     expect(
-      await screen.findAllByText('Owner name must contain ASCII characters only.'),
+      await screen.findAllByText(
+        'Owner name contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
+      ),
     ).not.toHaveLength(0)
     await selectApplicationCreateTab('Items')
     expect(
@@ -1826,10 +1828,18 @@ describe('Create Page Core Flows', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(
-      (await screen.findAllByText('Exemption number must contain ASCII characters only.')).length,
+      (
+        await screen.findAllByText(
+          'Exemption number contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
+        )
+      ).length,
     ).toBeGreaterThanOrEqual(1)
     expect(
-      (await screen.findAllByText('Other conditions must contain ASCII characters only.')).length,
+      (
+        await screen.findAllByText(
+          'Other conditions contain unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
+        )
+      ).length,
     ).toBeGreaterThanOrEqual(1)
     expect(mockedSubmitProvincialExemptionCreate).not.toHaveBeenCalled()
   })
@@ -1909,7 +1919,7 @@ describe('Create Page Core Flows', () => {
     expect(volumeInput).toHaveValue('')
   })
 
-  it('rejects an OIC number beyond eight UTF-8 bytes', async () => {
+  it('rejects an OIC number beyond eight characters', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/exemption/create']}>
         <Routes>
@@ -1922,14 +1932,14 @@ describe('Create Page Core Flows', () => {
       await screen.findByRole('combobox', { name: 'Exemption type' }),
       'Order in Council',
     )
-    await userEvent.type(screen.getByLabelText('Exemption number'), 'ééééé')
+    fireEvent.change(screen.getByLabelText('Exemption number'), { target: { value: 'OIC-12345' } })
     await userEvent.type(screen.getByLabelText('Approval date (YYYY-MM-DD)'), '2026-07-01')
     await userEvent.type(screen.getByLabelText('Expiry date (YYYY-MM-DD)'), '2027-07-01')
     await userEvent.type(screen.getByLabelText('Approved volume (m³)'), '250.5')
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(
-      await screen.findAllByText('Exemption number must be 8 UTF-8 bytes or fewer.'),
+      await screen.findAllByText('Exemption number must be 8 characters or fewer.'),
     ).not.toHaveLength(0)
     expect(mockedSubmitProvincialExemptionCreate).not.toHaveBeenCalled()
   })
@@ -2370,7 +2380,7 @@ describe('Create Page Core Flows', () => {
     expect(screen.getByLabelText('Offer remarks')).toBeInTheDocument()
     await userEvent.type(screen.getByLabelText('Company'), 'Example Lumber')
     await userEvent.type(screen.getByLabelText('Contact name'), 'Sample Contact')
-    await userEvent.type(screen.getByLabelText('Offer volume (m³)'), '99.9')
+    await userEvent.type(screen.getByLabelText('Offer volume (m³)'), '94.9')
     await userEvent.type(screen.getByLabelText('Offer amount ($/m³)'), '25000')
     await userEvent.type(screen.getByLabelText('Pickup location'), 'Yard A')
     await userEvent.type(screen.getByLabelText('Offer conditions / remarks'), 'No partial loads')
@@ -2390,7 +2400,7 @@ describe('Create Page Core Flows', () => {
         offeringClientNumber: '',
         companyName: 'Example Lumber',
         contactName: 'Sample Contact',
-        offerVolume: '99.9',
+        offerVolume: '94.9',
         purchaseOfferAmount: '25000',
         teacReviewDate: '',
         fairOfferIndicator: 'N',
@@ -2410,6 +2420,234 @@ describe('Create Page Core Flows', () => {
       },
     })
   }, 15000)
+
+  it('rejects an offer volume above the selected package volume', async () => {
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/offers/create?applicationNumber=2001&packageNumber=PKG-9&companyName=Example%20Lumber&contactName=Sample%20Contact&pickupLocation=Yard%20A&purchaseOfferAmount=25000&offerVolume=95.1',
+        ]}
+      >
+        <Routes>
+          <Route path="/provincial/offers/create" element={<ProvincialOfferCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByDisplayValue('95.0')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Save new offer' }))
+
+    expect(
+      await screen.findAllByText('Offer volume cannot exceed the application/package volume.'),
+    ).not.toHaveLength(0)
+    expect(mockedSubmitProvincialOfferCreate).not.toHaveBeenCalled()
+  })
+
+  it('waits for the selected package volume before validating or saving', async () => {
+    let resolveSelectedPackageVolume: (volume: string) => void = () => undefined
+    const selectedPackageVolume = new Promise<string>((resolve) => {
+      resolveSelectedPackageVolume = resolve
+    })
+    mockedFetchOfferPackageList.mockResolvedValue(['PKG-10', 'PKG-11'])
+    mockedFetchOfferPackageVolume.mockImplementation((packageNumber) =>
+      packageNumber === 'PKG-10' ? Promise.resolve('120.0') : selectedPackageVolume,
+    )
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/offers/create?applicationNumber=2001&packageNumber=PKG-10&packageNumbers=PKG-10%2CPKG-11&companyName=Example%20Lumber&contactName=Sample%20Contact&pickupLocation=Yard%20A&purchaseOfferAmount=25000&offerVolume=100.0',
+        ]}
+      >
+        <Routes>
+          <Route path="/provincial/offers/create" element={<ProvincialOfferCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByDisplayValue('120.0')).toBeInTheDocument()
+    const saveButton = screen.getByRole('button', { name: 'Save new offer' })
+    expect(saveButton).toBeEnabled()
+
+    await chooseComboBoxOption(screen.getByRole('combobox', { name: 'Package number' }), 'PKG-11')
+
+    await waitFor(() => expect(mockedFetchOfferPackageVolume).toHaveBeenCalledWith('PKG-11'))
+    expect(saveButton).toBeDisabled()
+    expect(screen.queryByDisplayValue('120.0')).not.toBeInTheDocument()
+    expect(mockedSubmitProvincialOfferCreate).not.toHaveBeenCalled()
+
+    await act(async () => resolveSelectedPackageVolume('80.0'))
+
+    expect(await screen.findByDisplayValue('80.0')).toBeInTheDocument()
+    expect(saveButton).toBeEnabled()
+    await userEvent.click(saveButton)
+    expect(
+      await screen.findAllByText('Offer volume cannot exceed the application/package volume.'),
+    ).not.toHaveLength(0)
+    expect(mockedSubmitProvincialOfferCreate).not.toHaveBeenCalled()
+  })
+
+  it('keeps offer saving unavailable when the selected package volume fails to load', async () => {
+    mockedFetchOfferPackageVolume.mockRejectedValue(new Error('Package volume unavailable'))
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/offers/create?applicationNumber=2001&packageNumber=PKG-9&companyName=Example%20Lumber&contactName=Sample%20Contact&pickupLocation=Yard%20A&purchaseOfferAmount=25000&offerVolume=90.0',
+        ]}
+      >
+        <Routes>
+          <Route path="/provincial/offers/create" element={<ProvincialOfferCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(
+      await screen.findByText(
+        'Application/package volume could not be loaded. Reload the page to try again.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save new offer' })).toBeDisabled()
+    expect(mockedSubmitProvincialOfferCreate).not.toHaveBeenCalled()
+  })
+
+  it('keeps offer saving unavailable when the selected package volume is malformed', async () => {
+    mockedFetchOfferPackageVolume.mockResolvedValue('not-a-volume')
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/offers/create?applicationNumber=2001&packageNumber=PKG-9&companyName=Example%20Lumber&contactName=Sample%20Contact&pickupLocation=Yard%20A&purchaseOfferAmount=25000&offerVolume=90.0',
+        ]}
+      >
+        <Routes>
+          <Route path="/provincial/offers/create" element={<ProvincialOfferCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(
+      await screen.findByText(
+        'Application/package volume could not be loaded. Reload the page to try again.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save new offer' })).toBeDisabled()
+    expect(mockedSubmitProvincialOfferCreate).not.toHaveBeenCalled()
+  })
+
+  it('keeps offer saving unavailable when the application package list fails to load', async () => {
+    mockedFetchOfferPackageList.mockRejectedValue(new Error('Package list unavailable'))
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/offers/create?applicationNumber=2001&companyName=Example%20Lumber&contactName=Sample%20Contact&pickupLocation=Yard%20A&purchaseOfferAmount=25000&offerVolume=90.0',
+        ]}
+      >
+        <Routes>
+          <Route path="/provincial/offers/create" element={<ProvincialOfferCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(
+      await screen.findByText(
+        'Application packages could not be loaded. Reload the page and try again.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save new offer' })).toBeDisabled()
+    expect(mockedSubmitProvincialOfferCreate).not.toHaveBeenCalled()
+  })
+
+  it('keeps offer saving unavailable when a no-package application volume is malformed', async () => {
+    mockedFetchOfferPackageList.mockResolvedValue([])
+    mockedFetchOfferApplicationVolume.mockResolvedValue('not-a-volume')
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/offers/create?applicationNumber=2001&companyName=Example%20Lumber&contactName=Sample%20Contact&pickupLocation=Yard%20A&purchaseOfferAmount=25000&offerVolume=90.0',
+        ]}
+      >
+        <Routes>
+          <Route path="/provincial/offers/create" element={<ProvincialOfferCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(
+      await screen.findByText(
+        'Application volume could not be loaded. Reload the page and try again.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save new offer' })).toBeDisabled()
+    expect(mockedSubmitProvincialOfferCreate).not.toHaveBeenCalled()
+  })
+
+  it('preserves the raw offer volume while the selected package volume loads', async () => {
+    let resolvePackageVolume: (volume: string) => void = () => undefined
+    const packageVolume = new Promise<string>((resolve) => {
+      resolvePackageVolume = resolve
+    })
+    mockedFetchOfferPackageVolume.mockReturnValue(packageVolume)
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/offers/create?applicationNumber=2001&packageNumber=PKG-9&companyName=Example%20Lumber&contactName=Sample%20Contact&pickupLocation=Yard%20A&purchaseOfferAmount=25000',
+        ]}
+      >
+        <Routes>
+          <Route path="/provincial/offers/create" element={<ProvincialOfferCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => expect(mockedFetchOfferPackageVolume).toHaveBeenCalledWith('PKG-9'))
+    const saveButton = screen.getByRole('button', { name: 'Save new offer' })
+    expect(saveButton).toBeDisabled()
+
+    const offerVolumeInput = screen.getByLabelText('Offer volume (m³)')
+    await userEvent.type(offerVolumeInput, '95.54')
+    await userEvent.click(screen.getByLabelText('Offer amount ($/m³)'))
+    expect(offerVolumeInput).toHaveValue('95.54')
+
+    await act(async () => resolvePackageVolume('95.5'))
+
+    expect(await screen.findByDisplayValue('95.5')).toBeInTheDocument()
+    expect(saveButton).toBeEnabled()
+    await userEvent.click(saveButton)
+    expect(
+      await screen.findAllByText('Offer volume cannot exceed the application/package volume.'),
+    ).not.toHaveLength(0)
+    expect(mockedSubmitProvincialOfferCreate).not.toHaveBeenCalled()
+  })
+
+  it('compares the raw offer volume before legacy blur formatting', async () => {
+    mockedFetchOfferPackageVolume.mockResolvedValue('95.5')
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/offers/create?applicationNumber=2001&packageNumber=PKG-9&companyName=Example%20Lumber&contactName=Sample%20Contact&pickupLocation=Yard%20A&purchaseOfferAmount=25000',
+        ]}
+      >
+        <Routes>
+          <Route path="/provincial/offers/create" element={<ProvincialOfferCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByDisplayValue('95.5')).toBeInTheDocument()
+    const offerVolumeInput = screen.getByLabelText('Offer volume (m³)')
+    await userEvent.type(offerVolumeInput, '95.54')
+    await userEvent.click(screen.getByRole('button', { name: 'Save new offer' }))
+
+    expect(offerVolumeInput).toHaveValue('95.54')
+    expect(
+      await screen.findAllByText('Offer volume cannot exceed the application/package volume.'),
+    ).not.toHaveLength(0)
+    expect(mockedSubmitProvincialOfferCreate).not.toHaveBeenCalled()
+  })
 
   it('debounces offer context lookups while an application number is typed', async () => {
     render(

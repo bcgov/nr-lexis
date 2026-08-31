@@ -207,21 +207,21 @@ class OfferDetailsRpcControllerTest {
   }
 
   @Test
-  void packageVolumeShouldReturnFormattedVolume() {
+  void packageVolumeShouldUseLegacyHalfEvenFormatting() {
     controller.setProvincialAuthorizationService(provincialAuthorizationService);
     when(applicationServiceProvider.getIfAvailable()).thenReturn(applicationService);
     when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
     when(applicationDetailsService.findApplicationNumberForPackage("PKG-903"))
         .thenReturn(Optional.of(1000456L));
     when(applicationService.findPackageByPackageNumber("PKG-903"))
-        .thenReturn(Optional.of(new LexisPackageLookupDto("PKG-903", 1000456L, 95.04d, "S")));
+        .thenReturn(Optional.of(new LexisPackageLookupDto("PKG-903", 1000456L, 95.55d, "S")));
 
     ResponseEntity<OfferDetailsRpcController.OfferVolumeResponseDto> response =
         controller.getPackageVolume("PKG-903", authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isNotNull();
-    assertThat(response.getBody().volume()).isEqualTo("95.0");
+    assertThat(response.getBody().volume()).isEqualTo("95.5");
     verify(provincialAuthorizationService).requireApplication(authentication, 1000456L);
   }
 

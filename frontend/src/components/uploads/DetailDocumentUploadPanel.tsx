@@ -23,9 +23,13 @@ import type {
   UploadQueueStatus,
 } from './uploadQueueTypes'
 import {
-  requiredMaxLengthFieldError,
-  requiredPositiveNumericFieldError,
-} from '@/pages/shared/create-form-utils'
+  INVOICE_AMOUNT_DECIMAL_PLACES,
+  INVOICE_AMOUNT_MAX,
+  INVOICE_CONVERSION_RATE_DECIMAL_PLACES,
+  INVOICE_CONVERSION_RATE_MAX,
+  invoiceDecimalStorageFieldError,
+  invoiceNumberStorageFieldError,
+} from '@/pages/shared/invoice-storage-validation'
 import { submitAdminUpload, validateAdminUpload } from '@/service/admin-upload-service'
 
 type DetailDocumentUploadType = 'application' | 'exemption' | 'permit' | 'invoice'
@@ -141,10 +145,25 @@ const DetailDocumentUploadPanel = ({
     }
 
     return [
-      requiredMaxLengthFieldError(salesInvoiceNumber, 9, 'Invoice number'),
-      requiredPositiveNumericFieldError(invoiceExportValue, 'Invoice export value'),
-      requiredPositiveNumericFieldError(invoiceConversionRate, 'Invoice conversion rate'),
-      requiredPositiveNumericFieldError(invoiceFeeInLieu, 'Invoice fee in lieu'),
+      invoiceNumberStorageFieldError(salesInvoiceNumber),
+      invoiceDecimalStorageFieldError(
+        invoiceExportValue,
+        'Invoice export value',
+        INVOICE_AMOUNT_MAX,
+        INVOICE_AMOUNT_DECIMAL_PLACES,
+      ),
+      invoiceDecimalStorageFieldError(
+        invoiceConversionRate,
+        'Invoice conversion rate',
+        INVOICE_CONVERSION_RATE_MAX,
+        INVOICE_CONVERSION_RATE_DECIMAL_PLACES,
+      ),
+      invoiceDecimalStorageFieldError(
+        invoiceFeeInLieu,
+        'Invoice fee in lieu',
+        INVOICE_AMOUNT_MAX,
+        INVOICE_AMOUNT_DECIMAL_PLACES,
+      ),
     ].filter((error): error is string => !!error)
   }, [
     invoiceConversionRate,
@@ -158,18 +177,24 @@ const DetailDocumentUploadPanel = ({
     workflowType === 'invoice' && salesInvoiceNumber.trim()
       ? `${baseTargetSummary}; invoice ${salesInvoiceNumber.trim()}`
       : baseTargetSummary
-  const invoiceNumberError = requiredMaxLengthFieldError(salesInvoiceNumber, 9, 'Invoice number')
-  const invoiceExportValueError = requiredPositiveNumericFieldError(
+  const invoiceNumberError = invoiceNumberStorageFieldError(salesInvoiceNumber)
+  const invoiceExportValueError = invoiceDecimalStorageFieldError(
     invoiceExportValue,
     'Invoice export value',
+    INVOICE_AMOUNT_MAX,
+    INVOICE_AMOUNT_DECIMAL_PLACES,
   )
-  const invoiceConversionRateError = requiredPositiveNumericFieldError(
+  const invoiceConversionRateError = invoiceDecimalStorageFieldError(
     invoiceConversionRate,
     'Invoice conversion rate',
+    INVOICE_CONVERSION_RATE_MAX,
+    INVOICE_CONVERSION_RATE_DECIMAL_PLACES,
   )
-  const invoiceFeeInLieuError = requiredPositiveNumericFieldError(
+  const invoiceFeeInLieuError = invoiceDecimalStorageFieldError(
     invoiceFeeInLieu,
     'Invoice fee in lieu',
+    INVOICE_AMOUNT_MAX,
+    INVOICE_AMOUNT_DECIMAL_PLACES,
   )
   const showInvoiceFieldErrors = workflowType === 'invoice' && showInvoiceValidationErrors
   const descriptionError = validateDocumentUploadDescription(fileDescription)
@@ -694,7 +719,6 @@ const DetailDocumentUploadPanel = ({
                 labelText="Document description (optional)"
                 value={fileDescription}
                 onChange={(event) => setFileDescription(event.target.value)}
-                helperText="US-ASCII and 250 bytes or fewer."
                 invalid={!!descriptionError}
                 invalidText={descriptionError}
                 maxCount={250}

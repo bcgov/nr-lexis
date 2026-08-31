@@ -523,7 +523,7 @@ const ProvincialPermitPage = () => {
                   onChange={(event) => updateFilter('permitNumber', event.target.value)}
                 />
                 {/* INTENTIONAL_LEGACY_DIVERGENCE(SEARCH_FILTER_EXPANSION):
-                    Modern permit search makes the existing invoice-number criterion visible. */}
+                    Modern permit search makes the hidden legacy invoice-number criterion visible. */}
                 <TextInput
                   id="invoiceNumber"
                   labelText="Invoice number"

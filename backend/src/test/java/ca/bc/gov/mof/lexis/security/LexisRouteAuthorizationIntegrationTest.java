@@ -2024,6 +2024,9 @@ class LexisRouteAuthorizationIntegrationTest {
                 .file(file)
                 .param("permitNumber", "7000123")
                 .param("salesInvoiceNumber", "INV-100")
+                .param("invoiceExportValue", "100.00")
+                .param("invoiceConversionRate", "1.25")
+                .param("invoiceFeeInLieu", "12.00")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_ADMIN"))))
         .andExpect(status().isForbidden());
   }
@@ -2051,6 +2054,9 @@ class LexisRouteAuthorizationIntegrationTest {
                 .file(new MockMultipartFile("formFile", "invoice.pdf", "application/pdf", "content".getBytes()))
                 .param("permitNumber", "7000123")
                 .param("salesInvoiceNumber", "INV-100")
+                .param("invoiceExportValue", "100.00")
+                .param("invoiceConversionRate", "1.25")
+                .param("invoiceFeeInLieu", "12.00")
                 .with(jwt().authorities(readOnly)))
         .andExpect(status().isForbidden());
   }

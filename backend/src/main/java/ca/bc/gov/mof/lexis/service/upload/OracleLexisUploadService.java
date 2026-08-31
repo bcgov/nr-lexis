@@ -1,5 +1,10 @@
 package ca.bc.gov.mof.lexis.service.upload;
 
+import static ca.bc.gov.mof.lexis.util.InvoiceStorageConstraints.isValidInvoiceAmount;
+import static ca.bc.gov.mof.lexis.util.InvoiceStorageConstraints.isValidInvoiceConversionRate;
+import static ca.bc.gov.mof.lexis.util.InvoiceStorageConstraints.isValidInvoiceNumber;
+import static ca.bc.gov.mof.lexis.util.InvoiceStorageConstraints.roundInvoiceAmountForStorage;
+import static ca.bc.gov.mof.lexis.util.InvoiceStorageConstraints.roundInvoiceConversionRateForStorage;
 import static ca.bc.gov.mof.lexis.util.TextUtils.defaultSystemUser;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
@@ -30,11 +35,6 @@ public class OracleLexisUploadService implements LexisUploadService {
   private static final String ATTACHMENT_TYPE_PERMIT = "PMT";
   private static final String ATTACHMENT_TYPE_EXEMPTION = "EXE";
   private static final String ATTACHMENT_TYPE_INVOICE = "INV";
-  private static final int INVOICE_AMOUNT_PRECISION = 9;
-  private static final int INVOICE_AMOUNT_SCALE = 2;
-  private static final int INVOICE_CONVERSION_RATE_PRECISION = 6;
-  private static final int INVOICE_CONVERSION_RATE_SCALE = 5;
-
   private final UploadRepository uploadRepository;
   private final VirusScanService virusScanService;
   private final AttachmentUploadValidator attachmentUploadValidator;
@@ -244,19 +244,21 @@ public class OracleLexisUploadService implements LexisUploadService {
       BigDecimal feeInLieu,
       String entryUserId) {
     String normalizedSalesInvoiceNumber = trimToNull(salesInvoiceNumber);
+    // INTENTIONAL_LEGACY_DIVERGENCE(INVOICE_NUMBER_ENCODING_VALIDATION): Reject multibyte input before
+    // it reaches Oracle's VARCHAR2(9 BYTE) invoice-number columns.
     if (!validFile(file)
         || permitNumber == null
         || permitNumber < 1
-        || normalizedSalesInvoiceNumber == null
-        || normalizedSalesInvoiceNumber.length() > 9
-        || !positiveOracleNumber(exportValue, INVOICE_AMOUNT_PRECISION, INVOICE_AMOUNT_SCALE)
-        || !positiveOracleNumber(
-            currencyConversionRate,
-            INVOICE_CONVERSION_RATE_PRECISION,
-            INVOICE_CONVERSION_RATE_SCALE)
-        || !positiveOracleNumber(feeInLieu, INVOICE_AMOUNT_PRECISION, INVOICE_AMOUNT_SCALE)) {
+        || !isValidInvoiceNumber(normalizedSalesInvoiceNumber)
+        || !isValidInvoiceAmount(exportValue)
+        || !isValidInvoiceConversionRate(currencyConversionRate)
+        || !isValidInvoiceAmount(feeInLieu)) {
       return Optional.empty();
     }
+    BigDecimal storedExportValue = roundInvoiceAmountForStorage(exportValue);
+    BigDecimal storedConversionRate =
+        roundInvoiceConversionRateForStorage(currencyConversionRate);
+    BigDecimal storedFeeInLieu = roundInvoiceAmountForStorage(feeInLieu);
     String requestedDescription = trimToNull(description);
     String normalizedDescription =
         requestedDescription == null
@@ -288,9 +290,9 @@ public class OracleLexisUploadService implements LexisUploadService {
                     normalizedDescription,
                     ATTACHMENT_TYPE_INVOICE,
                     fileTypeCode,
-                    exportValue,
-                    currencyConversionRate,
-                    feeInLieu,
+                    storedExportValue,
+                    storedConversionRate,
+                    storedFeeInLieu,
                     defaultSystemUser(entryUserId),
                     content,
                     contentLength));
@@ -379,20 +381,6 @@ public class OracleLexisUploadService implements LexisUploadService {
       case "application", "permit", "exemption", "invoice" -> normalized;
       default -> null;
     };
-  }
-
-  private boolean positive(BigDecimal value) {
-    return value != null && value.compareTo(BigDecimal.ZERO) > 0;
-  }
-
-  private boolean positiveOracleNumber(BigDecimal value, int precision, int scale) {
-    if (!positive(value)) {
-      return false;
-    }
-    BigDecimal normalized = value.stripTrailingZeros();
-    int decimalPlaces = Math.max(normalized.scale(), 0);
-    long integerDigits = Math.max((long) normalized.precision() - normalized.scale(), 0L);
-    return decimalPlaces <= scale && integerDigits <= precision - scale;
   }
 
   private UploadPersistenceResult persistFile(

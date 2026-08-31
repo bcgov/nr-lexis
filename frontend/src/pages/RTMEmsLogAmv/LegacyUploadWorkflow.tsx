@@ -1511,9 +1511,6 @@ const RtmEmsLogAmvUploadPage = () => {
             >
               <Document size={16} aria-hidden="true" />
               <span className="admin-upload-file-chip__name">{selectedUploadFile.name}</span>
-              <span className="admin-upload-file-chip__size">
-                {selectedUploadFile.size.toLocaleString()} bytes
-              </span>
               <button
                 ref={isReplacement ? removeFileButtonRef : undefined}
                 type="button"

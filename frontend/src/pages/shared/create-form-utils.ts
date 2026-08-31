@@ -1,3 +1,5 @@
+// INTENTIONAL_LEGACY_DIVERGENCE(STRICT_DATE_INPUT_VALIDATION): Reject impossible calendar dates
+// instead of allowing a date widget or lenient legacy parser to rewrite the entered value.
 export const isValidIsoDate = (value: string): boolean => {
   if (!value.trim()) return true
   const match = /^(\d{4})-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/.exec(value)
@@ -119,6 +121,46 @@ export const maxNumericValueFieldError = (
   return Number.isFinite(parsed) && parsed <= maxValue
     ? null
     : `${label} must be ${maxValue} or less.`
+}
+
+const roundedScaledNumericValue = (value: string, decimalPlaces: number): bigint | null => {
+  const match = /^(\d+)(?:\.(\d+))?$/.exec(value.trim())
+  if (!match) return null
+
+  const factor = 10n ** BigInt(decimalPlaces)
+  const fraction = (match[2] ?? '').padEnd(decimalPlaces + 1, '0')
+  let roundedValue = BigInt(match[1]) * factor
+  roundedValue += BigInt(fraction.slice(0, decimalPlaces) || '0')
+  if (fraction[decimalPlaces] >= '5') roundedValue += 1n
+  return roundedValue
+}
+
+export const formatRoundedNumericFieldValue = (
+  value: string,
+  decimalPlaces: number,
+): string | null => {
+  const roundedValue = roundedScaledNumericValue(value, decimalPlaces)
+  if (roundedValue === null) return null
+
+  const factor = 10n ** BigInt(decimalPlaces)
+  const whole = roundedValue / factor
+  if (decimalPlaces === 0) return whole.toString()
+
+  const fraction = (roundedValue % factor).toString().padStart(decimalPlaces, '0')
+  return `${whole}.${fraction}`
+}
+
+export const roundedNumericMaximumFieldError = (
+  value: string,
+  maxValue: number,
+  decimalPlaces: number,
+  label = 'Value',
+): string | null => {
+  const roundedValue = roundedScaledNumericValue(value, decimalPlaces)
+  if (roundedValue === null) return null
+
+  const maximumScaled = BigInt(maxValue.toFixed(decimalPlaces).replace('.', ''))
+  return roundedValue <= maximumScaled ? null : `${label} must round to ${maxValue} or less.`
 }
 
 export const atMostOneDecimalFieldError = (value: string, label = 'Value'): string | null => {

@@ -53,6 +53,7 @@ import {
   formatLegacyOfferVolume,
   offerDecimalStorageFieldError,
   offerTextStorageFieldError,
+  offerVolumeContextFieldError,
 } from '@/pages/shared/offer-storage-validation'
 
 type ProvincialOfferDetailField = keyof ProvincialOfferUpdateSubmission & string
@@ -78,16 +79,6 @@ const YES_NO_OPTIONS = [
 const textValue = (value: string | number | null | undefined): string =>
   value === null || value === undefined ? '' : String(value)
 
-const nullableNumber = (value: string): number | null => {
-  const normalized = value.trim()
-  if (!normalized) {
-    return null
-  }
-
-  const parsed = Number(normalized)
-  return Number.isFinite(parsed) ? parsed : null
-}
-
 const buildOfferForm = (detail: ProvincialOfferDetail): ProvincialOfferUpdateSubmission => ({
   offerNumber: textValue(detail.offerNumber),
   applicationNumber: textValue(detail.applicationNumber),
@@ -108,29 +99,6 @@ const buildOfferForm = (detail: ProvincialOfferDetail): ProvincialOfferUpdateSub
   offerRemark: textValue(detail.offerRemark),
   pickupLocation: textValue(detail.pickupLocation),
   offerCondition: textValue(detail.offerCondition),
-})
-
-const mergeOfferFormIntoDetail = (
-  detail: ProvincialOfferDetail,
-  form: ProvincialOfferUpdateSubmission,
-): ProvincialOfferDetail => ({
-  ...detail,
-  companyName: form.companyName.trim() || null,
-  contactName: form.contactName.trim() || null,
-  purchaseOfferAmount: nullableNumber(form.purchaseOfferAmount),
-  purchaseOfferDate: form.purchaseOfferDate.trim() || null,
-  offerWithdrawalDate: form.offerWithdrawalDate.trim() || null,
-  teacReviewDate: form.teacReviewDate.trim() || null,
-  fairOfferIndicator: form.fairOfferIndicator.trim() || null,
-  validOfferIndicator: form.validOfferIndicator.trim() || null,
-  approvalIndicator: form.approvalIndicator.trim() || null,
-  offerRemark: form.offerRemark.trim() || null,
-  withdrawReason: form.withdrawReason.trim() || null,
-  offeringClientNumber: form.offeringClientNumber.trim() || null,
-  pickupLocation: form.pickupLocation.trim() || null,
-  offerCondition: form.offerCondition.trim() || null,
-  offerVolume: nullableNumber(form.offerVolume),
-  region: form.region.trim() || null,
 })
 
 const ProvincialOfferDetailsPage = () => {
@@ -296,9 +264,17 @@ const ProvincialOfferDetailsPage = () => {
           'Contact name',
           true,
         ) ?? undefined,
-      offerVolume:
-        offerDecimalStorageFieldError(form?.offerVolume ?? '', OFFER_VOLUME_MAX, 'Offer volume') ??
-        undefined,
+      offerVolume: firstValidationError(
+        () =>
+          offerDecimalStorageFieldError(form?.offerVolume ?? '', OFFER_VOLUME_MAX, 'Offer volume'),
+        () => {
+          const currentVolume = form?.offerVolume ?? ''
+          const originalVolume = detail?.offerVolume == null ? '' : String(detail.offerVolume)
+          return currentVolume === originalVolume
+            ? null
+            : offerVolumeContextFieldError(currentVolume, detail?.packageVolume)
+        },
+      ),
       purchaseOfferAmount:
         offerDecimalStorageFieldError(
           form?.purchaseOfferAmount ?? '',
@@ -346,7 +322,7 @@ const ProvincialOfferDetailsPage = () => {
           'Offer remarks',
         ) ?? undefined,
     }),
-    [form],
+    [detail, form],
   )
   const hasValidationError = Object.values(fieldErrors).some((error) => !!error)
 
@@ -437,9 +413,6 @@ const ProvincialOfferDetailsPage = () => {
           .map((warning) => warning.trim())
           .filter(Boolean)
           .join(' ')
-        const updatedDetail = mergeOfferFormIntoDetail(detail, form)
-        setDetail(updatedDetail)
-        setForm(buildOfferForm(updatedDetail))
         setTouchedFields({})
         setShowAllValidationErrors(false)
         setIsEditing(false)
@@ -448,6 +421,10 @@ const ProvincialOfferDetailsPage = () => {
           title: warningMessage ? 'Offer saved with warning' : 'Offer saved',
           message: warningMessage || result.message || 'Offer saved successfully.',
         })
+        preserveStatusOnNextLoadRef.current = true
+        setDetail(null)
+        setForm(null)
+        await loadOfferDetail()
         return true
       }
 
@@ -670,7 +647,14 @@ const ProvincialOfferDetailsPage = () => {
                   invalidText={fieldError('offerVolume')}
                   onBlur={() => {
                     markFieldTouched('offerVolume')
-                    updateFormField('offerVolume', formatLegacyOfferVolume(form.offerVolume))
+                    const originalVolume =
+                      detail.offerVolume == null ? '' : String(detail.offerVolume)
+                    if (
+                      form.offerVolume !== originalVolume &&
+                      !offerVolumeContextFieldError(form.offerVolume, detail.packageVolume)
+                    ) {
+                      updateFormField('offerVolume', formatLegacyOfferVolume(form.offerVolume))
+                    }
                   }}
                   onChange={(event) => updateFormField('offerVolume', event.target.value)}
                 />

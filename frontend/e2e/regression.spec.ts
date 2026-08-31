@@ -3532,9 +3532,14 @@ test.describe('TEST IDIR admin regression', () => {
       expect(['COM', 'PPD']).toContain(completedPermit.permitStatus)
       expect(asStringArray(completedPermit.errors)).toEqual([])
 
+      const permitBeforeApprovalEmail = await readPermitVersionedJson<Record<string, unknown>>(
+        page,
+        permitNumber,
+      )
       const permitApprovalEmail = await test.step('queue the permit approval email', async () =>
         readJsonResponse<EmailActionResponse>(
           await postWithCsrf(page, '/api/lexis/rpc/permit-details/approval-email', {
+            headers: versionHeaders(permitBeforeApprovalEmail.version),
             form: {
               permitNumber: String(permitNumber),
               clientEmailAddress: regressionClientEmail,

@@ -56,9 +56,10 @@ only and does not misrepresent it as audit metadata.
 - The review compares the upcoming values only with rows from the immediately previous calendar
   month. It does not fall back to an older row when that month has no row for a species and grade.
   This is a month-to-month reconciliation view, not a claim about the value currently in effect.
-- Downstream permit-fee calculation remains effective-dated: both legacy and modern select the
-  latest `EXPORT_LOG_AMV` row on or before the permit application date for the matching species,
-  grade, and applicable growth type. An older value can therefore remain effective downstream
+- Downstream permit-fee calculation remains effective-dated and mirrors legacy: it selects the
+  latest `EXPORT_LOG_AMV` date on or before the permit application date for the matching species
+  and grade, then applies the applicable growth type at that date. Growth type is deliberately not
+  part of the maximum-date selection. An older value can therefore remain effective downstream
   while the exact previous-month review cell is empty.
 - Values cannot be cleared: `AVG_MARKET_PRICE` is `NOT NULL` and the approved RTM contract has no
   delete operation.
@@ -165,9 +166,8 @@ and neither trusts a client-supplied actor.
 
 `SYNC_EMSLA_EXPLA` remains the configured mechanism that mirrors successful table mutations to
 `EXPORT_LOG_AMV`. Source review confirms that the modern permit-fee query preserves the legacy
-`LEXIS_CODES.FIND_LOG_AMV` effective-date, species, grade, and growth-selection rules. Live TEST
-verification is still required before claiming that every report, integration, and query is
-unaffected.
+effective-month, species, grade, and post-date growth filter. Live TEST verification is still
+required before claiming that every report, integration, and query is unaffected.
 
 ## Legacy procedure boundary
 
@@ -203,7 +203,7 @@ display apply to LEXIS-owned batch and compatibility workbook writes moving forw
 | FR-17           | Implemented                | Reviewed batches validate before direct `MERGE` writes inside one transaction.                                                                      |
 | FR-18           | Implemented                | Stable authenticated identities and Oracle timestamps are persisted per row, with a structured application event summarizing each batch outcome.    |
 | FR-19 to FR-20  | Implemented                | Numeric non-negative validation occurs before save; accepted and rejected batch outcomes are returned to the user.                                  |
-| FR-21           | Source parity verified; live verification required | The trigger mirrors to `EXPORT_LOG_AMV`; modern permit-fee lookup matches the legacy effective-date and dimension rules, while broader TEST/downstream validation remains. |
+| FR-21           | Source parity reviewed; live verification required | The trigger mirrors to `EXPORT_LOG_AMV`; modern permit-fee lookup preserves the legacy effective-date and dimension ordering, while broader TEST/downstream validation remains. |
 
 ## Legacy schema constraints
 

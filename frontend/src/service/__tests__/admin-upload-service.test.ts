@@ -128,6 +128,31 @@ describe('admin-upload-service', () => {
     expect(uploadedFile.name).toBe('application.pdf')
   })
 
+  it('posts every invoice field when validating an invoice upload', async () => {
+    const file = new File(['invoice-data'], 'invoice.pdf', { type: 'application/pdf' })
+
+    await validateAdminUpload('invoice', {
+      permitNumber: '5001',
+      salesInvoiceNumber: 'INV-9',
+      invoiceExportValue: '100.00',
+      invoiceConversionRate: '1.25',
+      invoiceFeeInLieu: '12.00',
+      file,
+      fileDescription: 'Invoice attachment',
+    })
+
+    const [path, payload] = postMock.mock.calls[0]
+
+    expect(path).toBe('/lexis/admin/uploads/invoices/validation')
+    const formData = payload as FormData
+    expect(formData.get('permitNumber')).toBe('5001')
+    expect(formData.get('salesInvoiceNumber')).toBe('INV-9')
+    expect(formData.get('invoiceExportValue')).toBe('100.00')
+    expect(formData.get('invoiceConversionRate')).toBe('1.25')
+    expect(formData.get('invoiceFeeInLieu')).toBe('12.00')
+    expect(formData.get('fileDescription')).toBe('Invoice attachment')
+  })
+
   it('posts application submission validation to the validation endpoint', async () => {
     const file = new File(['<xml />'], 'submission.xml', { type: 'application/xml' })
 

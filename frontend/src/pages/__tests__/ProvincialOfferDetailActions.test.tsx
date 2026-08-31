@@ -254,6 +254,66 @@ describe('Provincial Offer Detail Actions', () => {
     })
   })
 
+  it('rejects a changed offer volume above the application or package volume', async () => {
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'Offer 81001' })
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    const offerVolumeInput = screen.getByLabelText('Offer volume (m³)')
+    await userEvent.clear(offerVolumeInput)
+    await userEvent.type(offerVolumeInput, '45.6')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(
+      await screen.findAllByText('Offer volume cannot exceed the application/package volume.'),
+    ).not.toHaveLength(0)
+    expect(mockedSubmitProvincialOfferUpdate).not.toHaveBeenCalled()
+  })
+
+  it('displays and enforces the canonical legacy one-decimal context', async () => {
+    mockedFetchProvincialOfferDetail.mockResolvedValue({
+      ...offerDetail,
+      packageVolume: 12.2,
+      offerVolume: 12.1,
+    })
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'Offer 81001' })
+    expect(screen.getByLabelText('Application/package volume (m³)')).toHaveValue('12.2')
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    const offerVolumeInput = screen.getByLabelText('Offer volume (m³)')
+    await userEvent.clear(offerVolumeInput)
+    await userEvent.type(offerVolumeInput, '12.3')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(
+      await screen.findAllByText('Offer volume cannot exceed the application/package volume.'),
+    ).not.toHaveLength(0)
+    expect(mockedSubmitProvincialOfferUpdate).not.toHaveBeenCalled()
+  })
+
+  it('compares the raw edited volume before legacy blur formatting', async () => {
+    mockedFetchProvincialOfferDetail.mockResolvedValue({
+      ...offerDetail,
+      packageVolume: 12.2,
+      offerVolume: 12.1,
+    })
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'Offer 81001' })
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    const offerVolumeInput = screen.getByLabelText('Offer volume (m³)')
+    await userEvent.clear(offerVolumeInput)
+    await userEvent.type(offerVolumeInput, '12.24')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(offerVolumeInput).toHaveValue('12.24')
+    expect(
+      await screen.findAllByText('Offer volume cannot exceed the application/package volume.'),
+    ).not.toHaveLength(0)
+    expect(mockedSubmitProvincialOfferUpdate).not.toHaveBeenCalled()
+  })
+
   it('keeps a null Oracle offer volume blank during an unrelated update', async () => {
     mockedFetchProvincialOfferDetail.mockResolvedValue({
       ...offerDetail,
@@ -277,6 +337,49 @@ describe('Provincial Offer Detail Actions', () => {
         }),
       )
     })
+  })
+
+  it('reloads the stored offer volume after an unrelated historical update', async () => {
+    const historicalDetail = {
+      ...offerDetail,
+      packageVolume: 95.5,
+      offerVolume: 95.54,
+    }
+    const storedDetail = {
+      ...historicalDetail,
+      offerVolume: 95.5,
+      offerRemark: 'First unrelated update',
+    }
+    mockedFetchProvincialOfferDetail
+      .mockResolvedValueOnce(historicalDetail)
+      .mockResolvedValue(storedDetail)
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'Offer 81001' })
+    await userEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    const remarkInput = screen.getByLabelText('Offer remarks')
+    await userEvent.clear(remarkInput)
+    await userEvent.type(remarkInput, 'First unrelated update')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(mockedFetchProvincialOfferDetail).toHaveBeenCalledTimes(2))
+    expect(await screen.findByLabelText('Offer volume (m³)')).toHaveValue('95.5')
+    expect(mockedSubmitProvincialOfferUpdate).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ offerVolume: '95.54' }),
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    const refreshedRemarkInput = screen.getByLabelText('Offer remarks')
+    await userEvent.clear(refreshedRemarkInput)
+    await userEvent.type(refreshedRemarkInput, 'Second unrelated update')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(mockedSubmitProvincialOfferUpdate).toHaveBeenCalledTimes(2))
+    expect(mockedSubmitProvincialOfferUpdate).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ offerVolume: '95.5' }),
+    )
   })
 
   it('allows a ministry-created legacy offer with no offering client to be updated', async () => {

@@ -75,7 +75,7 @@ function MultiFileDropZone({
     .filter(Boolean)
     .join(' ')
   const helperDescription = showMultipleFileGuidance
-    ? `${description}. Multiple files can be queued and saved together.`
+    ? `${description.replace(/\.+$/, '')}. Multiple files can be queued and saved together.`
     : description
 
   const fieldContent = (

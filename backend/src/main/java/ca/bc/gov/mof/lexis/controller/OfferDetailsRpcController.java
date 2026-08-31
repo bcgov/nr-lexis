@@ -7,6 +7,7 @@ import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parseDate;
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parsePositiveLong;
 import static ca.bc.gov.mof.lexis.controller.ScopedClientRequestSupport.currentForestClientNumber;
 import static ca.bc.gov.mof.lexis.controller.ScopedClientRequestSupport.matchesScopedClient;
+import static ca.bc.gov.mof.lexis.util.LegacyOfferVolume.formatForDisplay;
 import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.fingerprint;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
@@ -28,7 +29,6 @@ import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService;
 import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import jakarta.servlet.http.HttpServletRequest;
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -1082,7 +1082,7 @@ public class OfferDetailsRpcController {
   }
 
   private String formatVolume(double value) {
-    return BigDecimal.valueOf(value).setScale(1, RoundingMode.HALF_UP).toPlainString();
+    return formatForDisplay(value);
   }
 
   private String resolveApplicationSpeciesGradeCode(Long applicationNumber) {
