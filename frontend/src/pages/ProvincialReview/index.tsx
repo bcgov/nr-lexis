@@ -1200,6 +1200,7 @@ const ProvincialReviewPage = () => {
           <SearchResultsTableFrame
             loading={loading}
             loadingDescription="Loading review queue…"
+            columnCount={RESULT_COLUMNS.length + 2}
             totalItems={
               errorMessage
                 ? 0

@@ -832,6 +832,7 @@ const ProvincialApplicationPage = () => {
           <SearchResultsTableFrame
             loading={loading}
             loadingDescription="Loading application search results…"
+            columnCount={visibleResultColumns.length + (canCreateExemption ? 1 : 0)}
             totalItems={
               errorMessage || (loading && results.content.length === 0)
                 ? undefined

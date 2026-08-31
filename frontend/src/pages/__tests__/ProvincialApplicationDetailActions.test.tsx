@@ -267,7 +267,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(screen.queryByText('Application summary options unavailable')).not.toBeInTheDocument()
   })
 
-  it('uses semantic empty states for unavailable clients and truly empty tab data', async () => {
+  it('keeps saved client values visible when enrichment is unavailable', async () => {
     mockedFetchApplicationClientData.mockResolvedValue(null)
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
       ...applicationDetail,
@@ -287,20 +287,22 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       </MemoryRouter>,
     )
 
+    const ownerDetails = await screen.findByRole('region', { name: 'Owner client details' })
+    expect(within(ownerDetails).getByText('00011122')).toBeInTheDocument()
+    expect(within(ownerDetails).getByText('00 - Owner Main Location')).toBeInTheDocument()
+    expect(within(ownerDetails).getByText('Owner Contact')).toBeInTheDocument()
+    expect(within(ownerDetails).getByText('Client details unavailable')).toBeInTheDocument()
     expect(
-      await screen.findByRole('heading', {
-        level: 3,
-        name: 'Owner details unavailable',
-      }),
-    ).toBeInTheDocument()
+      screen.queryByRole('heading', { name: 'Owner details unavailable' }),
+    ).not.toBeInTheDocument()
 
     await selectApplicationDetailTab('Agent')
-    expect(
-      await screen.findByRole('heading', {
-        level: 3,
-        name: 'No agent assigned',
-      }),
-    ).toBeInTheDocument()
+    const agentDetails = await screen.findByRole('region', { name: 'Agent details' })
+    expect(within(agentDetails).getByText('00033344')).toBeInTheDocument()
+    expect(within(agentDetails).getByText('01 - Agent Main Location')).toBeInTheDocument()
+    expect(within(agentDetails).getByText('Agent Contact')).toBeInTheDocument()
+    expect(within(agentDetails).getByText('Client details unavailable')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'No agent assigned' })).not.toBeInTheDocument()
 
     await selectApplicationDetailTab('Application')
     expect(
@@ -634,7 +636,8 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       </MemoryRouter>,
     )
 
-    expect(await screen.findByText('Owner Contact')).toBeInTheDocument()
+    const ownerDetails = await screen.findByRole('region', { name: 'Owner client details' })
+    expect(within(ownerDetails).getByText('Owner Contact')).toBeInTheDocument()
     expect(mockedFetchApplicationSummarySnapshot).toHaveBeenCalledWith('321')
     expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00011122', '00', {
       applicationNumber: '321',

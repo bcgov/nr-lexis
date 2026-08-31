@@ -1957,15 +1957,15 @@ const ProvincialExemptionDetailsPage = () => {
                               { label: 'Expiry date', value: displayValue(detail.expiryDate) },
                               {
                                 label: 'Approved volume (m³)',
-                                value: displayValue(detail.approvedVolume),
+                                value: formatExemptionVolume(detail.approvedVolume),
                               },
                               {
                                 label: 'Used volume (m³)',
-                                value: displayValue(detail.usedVolume),
+                                value: formatExemptionVolume(detail.usedVolume),
                               },
                               {
                                 label: 'Remaining volume (m³)',
-                                value: displayValue(detail.remainingVolume),
+                                value: formatExemptionVolume(detail.remainingVolume),
                               },
                               {
                                 label: 'Blanket Order in Council',
@@ -2276,33 +2276,41 @@ const ProvincialExemptionDetailsPage = () => {
                                     </TableCell>
                                     <TableCell>{displayValue(row.permitIssueDate)}</TableCell>
                                     <TableCell>
-                                      <Button
-                                        kind="ghost"
-                                        size="sm"
+                                      <DisabledButtonTooltip
                                         disabled={
                                           !canPerform('/permitSearch') ||
                                           !canPerform('/permitDetails')
                                         }
-                                        onClick={() =>
-                                          navigate(
-                                            withCurrentSearch(
-                                              `/provincial/permit/${row.permitNumber}`,
-                                            ),
-                                            {
-                                              state: withDetailReturnTo(
-                                                location.state,
-                                                {
-                                                  label: 'Provincial exemption detail',
-                                                  to: locationPath(location),
-                                                },
-                                                detailReturnTo,
-                                              ),
-                                            },
-                                          )
-                                        }
+                                        description="You do not have permission to open this permit."
                                       >
-                                        Open
-                                      </Button>
+                                        <Button
+                                          kind="ghost"
+                                          size="sm"
+                                          disabled={
+                                            !canPerform('/permitSearch') ||
+                                            !canPerform('/permitDetails')
+                                          }
+                                          onClick={() =>
+                                            navigate(
+                                              withCurrentSearch(
+                                                `/provincial/permit/${row.permitNumber}`,
+                                              ),
+                                              {
+                                                state: withDetailReturnTo(
+                                                  location.state,
+                                                  {
+                                                    label: 'Provincial exemption detail',
+                                                    to: locationPath(location),
+                                                  },
+                                                  detailReturnTo,
+                                                ),
+                                              },
+                                            )
+                                          }
+                                        >
+                                          Open
+                                        </Button>
+                                      </DisabledButtonTooltip>
                                     </TableCell>
                                   </TableRow>
                                 ))}

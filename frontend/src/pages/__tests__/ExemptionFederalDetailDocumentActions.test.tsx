@@ -696,6 +696,37 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(screen.queryByText('10-Jul-2026')).not.toBeInTheDocument()
   })
 
+  it('explains why a visible permit cannot be opened', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        canPerform: (action: string) => action !== '/permitSearch',
+      }),
+    )
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/EX-777']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectDetailTab('Permits')
+    const openPermit = await screen.findByRole('button', { name: 'Open' })
+    const tooltipTrigger = openPermit.closest('.disabled-button-tooltip') as HTMLElement
+    expect(openPermit).toBeDisabled()
+    expect(tooltipTrigger).toHaveAttribute('aria-disabled', 'true')
+
+    await userEvent.hover(tooltipTrigger)
+
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      'You do not have permission to open this permit.',
+    )
+  })
+
   it('shows Blanket OIC requested and completed permit volume totals', async () => {
     mockedFetchProvincialExemptionDetail.mockResolvedValue({
       ...exemptionDetail,

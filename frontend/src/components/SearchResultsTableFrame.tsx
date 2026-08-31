@@ -9,6 +9,7 @@ export type SearchResultsTableFrameProps = {
   totalItems?: number
   totalItemsLabel?: ReactNode
   actions?: ReactNode
+  columnCount?: number
 }
 
 const formatSearchResultCount = (totalItems: number): string => {
@@ -23,6 +24,7 @@ function SearchResultsTableFrame({
   totalItems,
   totalItemsLabel,
   actions,
+  columnCount = 6,
 }: SearchResultsTableFrameProps) {
   return (
     <div className="legacy-search-table-frame">
@@ -56,7 +58,7 @@ function SearchResultsTableFrame({
         {loading ? (
           <DataTableSkeleton
             aria-label={loadingDescription}
-            columnCount={6}
+            columnCount={columnCount}
             rowCount={5}
             showHeader={false}
             showToolbar={false}

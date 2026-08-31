@@ -1156,6 +1156,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
             <SearchResultsTableFrame
               loading={isLoadingPolicies}
               loadingDescription={loadingDescription}
+              columnCount={FEE_POLICY_SORT_COLUMNS.length + 5}
               totalItems={isLoadingPolicies && feePolicies.length === 0 ? undefined : totalRows}
               actions={
                 <Button
@@ -1283,6 +1284,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
             <SearchResultsTableFrame
               loading={isLoadingPolicies}
               loadingDescription={loadingDescription}
+              columnCount={FIL_POLICY_SORT_COLUMNS.length + 5}
               totalItems={isLoadingPolicies && filPolicies.length === 0 ? undefined : totalRows}
               actions={
                 <Button
@@ -1472,6 +1474,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
               <SearchResultsTableFrame
                 loading={isLoadingPolicies}
                 loadingDescription={loadingDescription}
+                columnCount={SCHEDULE_SORT_COLUMNS.length + 1}
                 totalItems={
                   isLoadingPolicies && exportSchedules.length === 0 ? undefined : totalRows
                 }
