@@ -3230,13 +3230,19 @@ const ProvincialApplicationDetailsPage = () => {
     ['Contact location', agentClientLocationDisplay],
     ['Contact name', summaryForm?.agentContactName ?? ''],
   ]
-  const agentClientSummaryContent = (
+  const agentClientSummaryContent = summaryAgentClientNumber ? (
     <ClientDataSummary
       title="Agent details"
       showTitle={false}
       clientData={agentClientData}
       isLoading={isLoadingAgentClientData}
       detailFields={agentClientDetailFields}
+    />
+  ) : (
+    <EmptyState
+      title="No agent assigned"
+      description="No agent is assigned to this application."
+      headingLevel={3}
     />
   )
 

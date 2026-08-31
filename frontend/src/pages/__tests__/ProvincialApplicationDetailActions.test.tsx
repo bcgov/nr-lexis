@@ -346,6 +346,42 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     ).toBeInTheDocument()
   })
 
+  it('shows an explicit empty state when no agent is assigned', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      agentClientNumber: null,
+    })
+    mockedFetchApplicationSummarySnapshot.mockResolvedValue({
+      ...applicationSummarySnapshot,
+      agentClientNumber: '',
+      agentClientLocationCode: '',
+      agentContactName: '',
+      applicantTypeCode: 'A',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationDetailTab('Agent')
+    const agentDetails = within(getAgentDetailsTile())
+    expect(
+      agentDetails.getByRole('heading', {
+        level: 3,
+        name: 'No agent assigned',
+      }),
+    ).toBeInTheDocument()
+    expect(agentDetails.getByText('No agent is assigned to this application.')).toBeInTheDocument()
+    expect(agentDetails.queryByText('Client details unavailable')).not.toBeInTheDocument()
+  })
+
   it('edits owner client details with plain applicant type labels', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
