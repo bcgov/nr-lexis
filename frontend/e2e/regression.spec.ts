@@ -323,6 +323,21 @@ type GenericSearchResponse = {
   size?: number
 }
 
+type AdminPolicyMutationResponse = {
+  success?: boolean
+  lexisFeePolicyId?: number | string | null
+  lexisFILPolicyId?: number | string | null
+  effectiveDate?: string | null
+  orgUnitNo?: number | string | null
+  percentIncrease?: number | string | null
+  filPercent?: number | string | null
+  entryUserId?: string | null
+  entryTimestamp?: string | null
+  updateUserId?: string | null
+  updateTimestamp?: string | null
+  errors?: unknown
+}
+
 type GenericOptionsResponse = Record<string, unknown>
 type ReferenceDataResponse = unknown[]
 
@@ -410,6 +425,18 @@ const regressionOwnerClientLocationCode =
 const regressionLegacyRegionCode =
   process.env.E2E_REGRESSION_LEGACY_REGION_CODE?.trim().toUpperCase() || 'RSC'
 const regressionTimberMark = process.env.E2E_REGRESSION_TIMBER_MARK?.trim().toUpperCase() || 'NCHWP'
+
+const uniqueRegressionFutureDate = (salt = 0): string => {
+  const rawSeed = process.env.GITHUB_RUN_ID ?? Date.now().toString()
+  const parsedSeed = Number(rawSeed.slice(-8))
+  const runSeed = Number.isFinite(parsedSeed) ? parsedSeed : Date.now()
+  const parsedAttempt = Number(process.env.GITHUB_RUN_ATTEMPT ?? '1')
+  const runAttempt = Number.isFinite(parsedAttempt) ? parsedAttempt : 1
+  const date = new Date()
+  const futureOffsetDays = 3_650 + ((runSeed + runAttempt * 97) % 3_650) + salt
+  date.setUTCDate(date.getUTCDate() + futureOffsetDays)
+  return formatBusinessIsoDate(date)
+}
 
 const expectNaturalResourceRegions = (value: unknown, source: string): void => {
   const regions = asRecordArray(value)
@@ -1769,6 +1796,42 @@ test.describe('TEST IDIR admin regression', () => {
     await expect.poll(() => new URL(page.url()).pathname).toBe('/federal')
   })
 
+  test('opens each administrator document upload workflow without submitting', async () => {
+    const page = await authenticatedIdirPage()
+    const apiServerErrors = collectApiServerErrors(page)
+
+    for (const [workflowType, workflowHeading, targetLabel] of [
+      ['application', 'Application upload', 'Application number'],
+      ['exemption', 'Exemption upload', 'Exemption number'],
+      ['permit', 'Permit upload', 'Permit number'],
+      ['invoice', 'Invoice upload', 'Permit number'],
+    ] as const) {
+      await expectAccessiblePage(page, `/admin/uploads?type=${workflowType}`, /data upload/i)
+      await expect.poll(() => new URL(page.url()).searchParams.get('type')).toBe(workflowType)
+      await expect(page.getByRole('heading', { name: workflowHeading, exact: true })).toBeVisible()
+      await expect(page.getByRole('combobox', { name: 'Upload type' })).toHaveValue(workflowHeading)
+      await expect(page.getByRole('combobox', { name: targetLabel })).toBeVisible()
+      await expect(page.getByRole('textbox', { name: 'Document description' })).toBeVisible()
+      await expect(
+        page.getByRole('button', { name: 'Choose files for Upload documents' }),
+      ).toBeEnabled()
+      await expect(page.getByRole('button', { name: 'Review upload' })).toBeDisabled()
+
+      if (workflowType === 'invoice') {
+        for (const fieldLabel of [
+          'Invoice number',
+          'Export value (CAD)',
+          'Conversion rate',
+          'Fee in lieu',
+        ]) {
+          await expect(page.getByRole('textbox', { name: fieldLabel })).toBeVisible()
+        }
+      }
+    }
+
+    expect(apiServerErrors).toEqual([])
+  })
+
   test('opens reports from direct sidebar report links', async () => {
     const page = await authenticatedIdirPage()
 
@@ -1776,8 +1839,11 @@ test.describe('TEST IDIR admin regression', () => {
     await expandSideNavSection(page, 'Reports')
 
     for (const [linkName, path, heading] of [
+      ['Advertising List', '/reports/biweeklyListing', /advertising list/i],
       ['Offers Report', '/reports/offerReport', /offers report/i],
       ['Permits Report', '/reports/permitLedgerReport', /permits report/i],
+      ['Transport Report', '/reports/transportReport', /transport report/i],
+      ['Species and Grade Report', '/reports/speciesGradeReport', /species and grade report/i],
       ['Tenure Analysis', '/reports/tenureReport', /tenure analysis report/i],
     ] as const) {
       await page.locator(sideNavSection('Reports')).getByRole('link', { name: linkName }).click()
@@ -2731,6 +2797,255 @@ test.describe('TEST IDIR admin regression', () => {
     expect(Array.isArray(reportOptions.reportJurisdictions)).toBe(true)
     expectNaturalResourceRegions(reportOptions.regions, 'report options')
     expectReportScheduleOptions(reportOptions.currentSchedules, 'report list dates')
+  })
+
+  test('opens legacy-equivalent administrator policy add forms without saving', async () => {
+    const page = await authenticatedIdirPage()
+    const apiServerErrors = collectApiServerErrors(page)
+
+    for (const [path, heading, regionName, addAction, fieldLabels] of [
+      [
+        '/admin/policies/fee',
+        /multiplication factor/i,
+        'Fee policies',
+        'Add fee policy',
+        ['Policy effective date', 'Region', 'Fee increase percentage'],
+      ],
+      [
+        '/admin/policies/fil',
+        /non-appraised sec\.3 fil%/i,
+        'Fee in lieu policies',
+        'Add fee in lieu policy',
+        ['Policy effective date', 'Fee in lieu percentage'],
+      ],
+    ] as const) {
+      await expectAccessiblePage(page, path, heading)
+
+      const policyRegion = page.getByRole('region', { name: regionName })
+      const addButton = policyRegion.getByRole('button', { name: addAction })
+      await expect(addButton).toBeEnabled({ timeout: 30_000 })
+      await addButton.click()
+
+      const dialog = page.getByRole('dialog', { name: addAction })
+      await expect(dialog).toBeVisible()
+      for (const fieldLabel of fieldLabels) {
+        await expect(dialog.getByLabel(fieldLabel)).toBeVisible()
+      }
+      await dialog.getByRole('button', { name: 'Cancel' }).click()
+      await expect(dialog).toHaveCount(0)
+    }
+
+    expect(apiServerErrors).toEqual([])
+  })
+
+  test('creates, updates, and cleans up future administrator policies', async () => {
+    test.skip(
+      !isSharedTestRegressionBaseUrl(E2E_BASE_URL),
+      'Persistent policy regression runs only against shared TEST.',
+    )
+
+    const page = await authenticatedIdirPage()
+    const cleanup = new RegressionCleanupStack()
+    const feePolicyPath = '/api/lexis/admin/policies/fee'
+    const filPolicyPath = '/api/lexis/admin/policies/fil'
+    const listPolicyRows = async (path: string): Promise<Record<string, unknown>[]> => {
+      const response = await readJsonResponse<GenericSearchResponse>(
+        await getWithAuth(page, path, {
+          params: {
+            page: '0',
+            size: '200',
+            sortField: 'effective_date',
+            sortDirection: 'desc',
+          },
+        }),
+      )
+      return asRecordArray(response.results)
+    }
+    const policyRowId = (row: Record<string, unknown>): string =>
+      String(row.lexisFeePolicyId ?? row.lexisFILPolicyId ?? '').trim()
+    const availableFutureDate = (
+      existingRows: Record<string, unknown>[],
+      isSameKey: (row: Record<string, unknown>, candidate: string) => boolean,
+      startSalt: number,
+    ): string => {
+      for (let attempt = 0; attempt < 30; attempt += 1) {
+        const candidate = uniqueRegressionFutureDate(startSalt + attempt)
+        if (!existingRows.some((row) => isSameKey(row, candidate))) {
+          return candidate
+        }
+      }
+      throw new Error('Unable to reserve a unique future policy date for TEST regression.')
+    }
+    const deletePolicyIfPresent = async (
+      path: string,
+      policyId: string,
+      label: string,
+    ): Promise<void> => {
+      if (!(await listPolicyRows(path)).some((row) => policyRowId(row) === policyId)) {
+        return
+      }
+      const result = await readJsonResponse<AdminPolicyMutationResponse>(
+        await deleteWithCsrf(page, `${path}/${policyId}`),
+      )
+      expect(result.success, `${label} cleanup should succeed`).toBe(true)
+      expect(
+        (await listPolicyRows(path)).some((row) => policyRowId(row) === policyId),
+        `${label} cleanup should remove the created row`,
+      ).toBe(false)
+    }
+    let primaryError: unknown
+
+    try {
+      const reportOptions = await readJsonResponse<GenericOptionsResponse>(
+        await getWithAuth(page, '/api/lexis/reports/options'),
+      )
+      const regionOptions = asRecordArray(reportOptions.regions)
+      expectNaturalResourceRegions(regionOptions, 'policy regression regions')
+      const orgUnitNo = requiredString(optionCode(regionOptions[0]), 'Policy regression region')
+      const existingFeePolicies = await listPolicyRows(feePolicyPath)
+      const existingFilPolicies = await listPolicyRows(filPolicyPath)
+      const feeEffectiveDate = availableFutureDate(
+        existingFeePolicies,
+        (row, candidate) =>
+          String(row.effectiveDate ?? '') === candidate &&
+          String(row.orgUnitNo ?? '') === orgUnitNo,
+        0,
+      )
+      const filEffectiveDate = availableFutureDate(
+        existingFilPolicies,
+        (row, candidate) => String(row.effectiveDate ?? '') === candidate,
+        100,
+      )
+
+      const addedFeePolicy = await readJsonResponse<AdminPolicyMutationResponse>(
+        await postWithCsrf(page, feePolicyPath, {
+          data: {
+            effectiveDate: feeEffectiveDate,
+            orgUnitNo,
+            policyPercentage: '12',
+          },
+        }),
+      )
+      expect(addedFeePolicy.success).toBe(true)
+      expect(asStringArray(addedFeePolicy.errors)).toEqual([])
+      const feePolicyId = requiredString(
+        addedFeePolicy.lexisFeePolicyId,
+        'Regression fee policy id',
+      )
+      expect(Number(feePolicyId)).toBeGreaterThan(0)
+      const feePolicyCleanup = cleanup.defer('delete future fee policy', () =>
+        deletePolicyIfPresent(feePolicyPath, feePolicyId, 'Fee policy'),
+      )
+      expect(addedFeePolicy.effectiveDate).toBe(feeEffectiveDate)
+      expect(String(addedFeePolicy.orgUnitNo)).toBe(orgUnitNo)
+      expect(String(addedFeePolicy.percentIncrease)).toBe('12')
+      requiredString(addedFeePolicy.entryUserId, 'Regression fee policy entry user')
+      requiredString(addedFeePolicy.entryTimestamp, 'Regression fee policy entry timestamp')
+      let listedFeePolicy = (await listPolicyRows(feePolicyPath)).find(
+        (row) => policyRowId(row) === feePolicyId,
+      )
+      expect(listedFeePolicy).toBeDefined()
+      expect(String(listedFeePolicy?.percentIncrease)).toBe('12')
+
+      const updatedFeePolicy = await readJsonResponse<AdminPolicyMutationResponse>(
+        await putWithCsrf(page, `${feePolicyPath}/${feePolicyId}`, {
+          data: {
+            effectiveDate: feeEffectiveDate,
+            orgUnitNo,
+            policyPercentage: '13',
+          },
+        }),
+      )
+      expect(updatedFeePolicy.success).toBe(true)
+      expect(asStringArray(updatedFeePolicy.errors)).toEqual([])
+      expect(updatedFeePolicy.lexisFeePolicyId).toEqual(addedFeePolicy.lexisFeePolicyId)
+      expect(String(updatedFeePolicy.percentIncrease)).toBe('13')
+      requiredString(updatedFeePolicy.updateUserId, 'Regression fee policy update user')
+      requiredString(updatedFeePolicy.updateTimestamp, 'Regression fee policy update timestamp')
+      listedFeePolicy = (await listPolicyRows(feePolicyPath)).find(
+        (row) => policyRowId(row) === feePolicyId,
+      )
+      expect(String(listedFeePolicy?.percentIncrease)).toBe('13')
+
+      const deletedFeePolicy = await readJsonResponse<AdminPolicyMutationResponse>(
+        await deleteWithCsrf(page, `${feePolicyPath}/${feePolicyId}`),
+      )
+      expect(deletedFeePolicy.success).toBe(true)
+      expect(
+        (await listPolicyRows(feePolicyPath)).some((row) => policyRowId(row) === feePolicyId),
+      ).toBe(false)
+      feePolicyCleanup.complete()
+
+      const addedFilPolicy = await readJsonResponse<AdminPolicyMutationResponse>(
+        await postWithCsrf(page, filPolicyPath, {
+          data: {
+            effectiveDate: filEffectiveDate,
+            filPercentage: '23',
+          },
+        }),
+      )
+      expect(addedFilPolicy.success).toBe(true)
+      expect(asStringArray(addedFilPolicy.errors)).toEqual([])
+      const filPolicyId = requiredString(
+        addedFilPolicy.lexisFILPolicyId,
+        'Regression fee in lieu policy id',
+      )
+      expect(Number(filPolicyId)).toBeGreaterThan(0)
+      const filPolicyCleanup = cleanup.defer('delete future fee in lieu policy', () =>
+        deletePolicyIfPresent(filPolicyPath, filPolicyId, 'Fee in lieu policy'),
+      )
+      expect(addedFilPolicy.effectiveDate).toBe(filEffectiveDate)
+      expect(String(addedFilPolicy.filPercent)).toBe('23')
+      requiredString(addedFilPolicy.entryUserId, 'Regression fee in lieu policy entry user')
+      requiredString(addedFilPolicy.entryTimestamp, 'Regression fee in lieu policy entry timestamp')
+      let listedFilPolicy = (await listPolicyRows(filPolicyPath)).find(
+        (row) => policyRowId(row) === filPolicyId,
+      )
+      expect(listedFilPolicy).toBeDefined()
+      expect(String(listedFilPolicy?.filPercent)).toBe('23')
+
+      const updatedFilPolicy = await readJsonResponse<AdminPolicyMutationResponse>(
+        await putWithCsrf(page, `${filPolicyPath}/${filPolicyId}`, {
+          data: {
+            effectiveDate: filEffectiveDate,
+            filPercentage: '24',
+          },
+        }),
+      )
+      expect(updatedFilPolicy.success).toBe(true)
+      expect(asStringArray(updatedFilPolicy.errors)).toEqual([])
+      expect(updatedFilPolicy.lexisFILPolicyId).toEqual(addedFilPolicy.lexisFILPolicyId)
+      expect(String(updatedFilPolicy.filPercent)).toBe('24')
+      requiredString(updatedFilPolicy.updateUserId, 'Regression fee in lieu policy update user')
+      requiredString(
+        updatedFilPolicy.updateTimestamp,
+        'Regression fee in lieu policy update timestamp',
+      )
+      listedFilPolicy = (await listPolicyRows(filPolicyPath)).find(
+        (row) => policyRowId(row) === filPolicyId,
+      )
+      expect(String(listedFilPolicy?.filPercent)).toBe('24')
+
+      const deletedFilPolicy = await readJsonResponse<AdminPolicyMutationResponse>(
+        await deleteWithCsrf(page, `${filPolicyPath}/${filPolicyId}`),
+      )
+      expect(deletedFilPolicy.success).toBe(true)
+      expect(
+        (await listPolicyRows(filPolicyPath)).some((row) => policyRowId(row) === filPolicyId),
+      ).toBe(false)
+      filPolicyCleanup.complete()
+    } catch (error) {
+      primaryError = error
+    }
+
+    const cleanupFailures = await cleanup.run()
+    const failures = [...cleanupFailures]
+    if (primaryError !== undefined) {
+      failures.unshift(
+        primaryError instanceof Error ? primaryError : new Error(String(primaryError)),
+      )
+    }
+    throwRegressionFailures('Administrator policy regression and cleanup failed.', failures)
   })
 
   test('rejects export schedule administration API access', async () => {
