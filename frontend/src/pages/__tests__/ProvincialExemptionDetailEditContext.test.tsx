@@ -387,7 +387,7 @@ describe('Provincial exemption edit context', () => {
 
     expect(
       await screen.findByText(
-        'Other conditions contain unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
+        'Conditions contain unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
       ),
     ).toBeInTheDocument()
     expect(vi.mocked(updateExemption)).not.toHaveBeenCalled()

@@ -1849,7 +1849,7 @@ describe('Create Page Core Flows', () => {
     expect(
       (
         await screen.findAllByText(
-          'Other conditions contain unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
+          'Conditions contain unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
         )
       ).length,
     ).toBeGreaterThanOrEqual(1)

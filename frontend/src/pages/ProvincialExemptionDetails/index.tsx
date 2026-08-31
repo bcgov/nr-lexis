@@ -946,10 +946,10 @@ const ProvincialExemptionDetailsPage = () => {
       return 'Expiry date must be after the approval date.'
     }
     if (editForm.otherConditions.length > 250) {
-      return 'Other conditions must contain at most 250 characters.'
+      return 'Conditions must contain at most 250 characters.'
     }
     if (!ASCII_PATTERN.test(editForm.otherConditions.trim())) {
-      return 'Other conditions contain unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.'
+      return 'Conditions contain unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.'
     }
     if (currentTypeCode === 'B' && editForm.regionNumbers.length === 0) {
       return 'Select at least one region for a Blanket Order in Council exemption.'

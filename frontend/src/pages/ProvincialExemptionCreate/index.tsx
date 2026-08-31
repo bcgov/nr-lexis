@@ -458,11 +458,11 @@ const ProvincialExemptionCreatePage = () => {
           () =>
             ASCII_PATTERN.test(form.otherConditions.trim())
               ? null
-              : 'Other conditions contain unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
+              : 'Conditions contain unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
           () =>
             form.otherConditions.length <= 250
               ? null
-              : 'Other conditions must contain at most 250 characters.',
+              : 'Conditions must contain at most 250 characters.',
         ) ?? undefined,
     }),
     [
