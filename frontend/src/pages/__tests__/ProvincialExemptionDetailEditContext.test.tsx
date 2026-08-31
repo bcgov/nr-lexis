@@ -216,6 +216,7 @@ describe('Provincial exemption edit context', () => {
         'Blanket OIC',
       ),
     ).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 2, name: 'Conditions' })).toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: 'Applications' })).not.toBeInTheDocument()
 
     await userEvent.click(await screen.findByRole('tab', { name: 'Fees' }))

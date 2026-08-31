@@ -799,8 +799,7 @@ const reportAccessiblePages: Array<[path: string, heading: RegExp]> = [
   ['/reports/tenureReport', /tenure analysis report/i],
 ]
 
-// INTENTIONAL_LEGACY_DIVERGENCE(RETIRED_REPORT_SCREENS): Regression must
-// prove these routes stay retired instead of treating them as accessible pages.
+// Prove intentionally retired report routes stay retired instead of treating them as accessible.
 const retiredReportPages: Array<[path: string, heading: RegExp]> = [
   ['/reports/applicationReport', /application report/i],
   ['/reports/teacReport', /timber export advisory committee package report/i],
@@ -954,7 +953,7 @@ const requiredAdminActions = [
   'uploadApplicationSubmission',
   '/applicationsReview',
   '/federalApplicationSearch',
-  '/applicationReport',
+  '/offerReport',
 ]
 
 const representativeAdminActions = [

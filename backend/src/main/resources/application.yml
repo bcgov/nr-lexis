@@ -123,8 +123,8 @@ lexis:
         - "/federalApplicationSearch"
         - "/federalApplicationDetails"
         - "viewFederalApplication"
-        # READ_ONLY can generate every non-admin report. Legacy TEST exposes the staff report
-        # workspaces below but omits Application Report and the contextual exemption print action.
+        # Preserve the legacy TEST action metadata. Modern route and API retirement rules
+        # independently hide and deny Application, TEAC, Exemption, and Fee report screens.
         - "/applicationReport"
         - "/approvedExemptionReport"
         - "/offerReport"

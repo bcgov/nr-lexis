@@ -1897,7 +1897,7 @@ const ProvincialExemptionDetailsPage = () => {
                         </Column>
                         <Column sm={4} md={4} lg={8}>
                           <Tile>
-                            <h2 className="detail-tile-title">Other conditions</h2>
+                            <h2 className="detail-tile-title">Conditions</h2>
                             <TextArea
                               id="exemptionDetailOtherConditions"
                               labelText="Conditions"
@@ -1981,7 +1981,7 @@ const ProvincialExemptionDetailsPage = () => {
 
                         <Column sm={4} md={8} lg={16}>
                           <DetailFieldTile
-                            title="Other conditions"
+                            title="Conditions"
                             fields={[
                               {
                                 label: 'Conditions',
