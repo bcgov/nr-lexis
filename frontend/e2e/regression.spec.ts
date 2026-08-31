@@ -2063,7 +2063,7 @@ test.describe('TEST IDIR admin regression', () => {
         const control =
           label === 'Region'
             ? page.getByRole('combobox', { name: /^Region\b/ })
-            : page.getByLabel(label, { exact: true }).filter({ visible: true })
+            : page.getByLabel(label, { exact: true }).and(page.locator(':visible')).first()
         await expect(control, `${contract.path} should expose ${label}`).toBeVisible()
       }
       for (const [label, value] of contract.defaults) {
