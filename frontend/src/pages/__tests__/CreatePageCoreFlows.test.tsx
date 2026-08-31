@@ -2487,6 +2487,103 @@ describe('Create Page Core Flows', () => {
     expect(mockedSubmitProvincialOfferCreate).not.toHaveBeenCalled()
   })
 
+  it('keeps offer saving unavailable when the selected package volume fails to load', async () => {
+    mockedFetchOfferPackageVolume.mockRejectedValue(new Error('Package volume unavailable'))
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/offers/create?applicationNumber=2001&packageNumber=PKG-9&companyName=Example%20Lumber&contactName=Sample%20Contact&pickupLocation=Yard%20A&purchaseOfferAmount=25000&offerVolume=90.0',
+        ]}
+      >
+        <Routes>
+          <Route path="/provincial/offers/create" element={<ProvincialOfferCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(
+      await screen.findByText(
+        'Application/package volume could not be loaded. Reload the page to try again.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save new offer' })).toBeDisabled()
+    expect(mockedSubmitProvincialOfferCreate).not.toHaveBeenCalled()
+  })
+
+  it('keeps offer saving unavailable when the selected package volume is malformed', async () => {
+    mockedFetchOfferPackageVolume.mockResolvedValue('not-a-volume')
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/offers/create?applicationNumber=2001&packageNumber=PKG-9&companyName=Example%20Lumber&contactName=Sample%20Contact&pickupLocation=Yard%20A&purchaseOfferAmount=25000&offerVolume=90.0',
+        ]}
+      >
+        <Routes>
+          <Route path="/provincial/offers/create" element={<ProvincialOfferCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(
+      await screen.findByText(
+        'Application/package volume could not be loaded. Reload the page to try again.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save new offer' })).toBeDisabled()
+    expect(mockedSubmitProvincialOfferCreate).not.toHaveBeenCalled()
+  })
+
+  it('keeps offer saving unavailable when the application package list fails to load', async () => {
+    mockedFetchOfferPackageList.mockRejectedValue(new Error('Package list unavailable'))
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/offers/create?applicationNumber=2001&companyName=Example%20Lumber&contactName=Sample%20Contact&pickupLocation=Yard%20A&purchaseOfferAmount=25000&offerVolume=90.0',
+        ]}
+      >
+        <Routes>
+          <Route path="/provincial/offers/create" element={<ProvincialOfferCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(
+      await screen.findByText(
+        'Application packages could not be loaded. Reload the page and try again.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save new offer' })).toBeDisabled()
+    expect(mockedSubmitProvincialOfferCreate).not.toHaveBeenCalled()
+  })
+
+  it('keeps offer saving unavailable when a no-package application volume is malformed', async () => {
+    mockedFetchOfferPackageList.mockResolvedValue([])
+    mockedFetchOfferApplicationVolume.mockResolvedValue('not-a-volume')
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/offers/create?applicationNumber=2001&companyName=Example%20Lumber&contactName=Sample%20Contact&pickupLocation=Yard%20A&purchaseOfferAmount=25000&offerVolume=90.0',
+        ]}
+      >
+        <Routes>
+          <Route path="/provincial/offers/create" element={<ProvincialOfferCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(
+      await screen.findByText(
+        'Application volume could not be loaded. Reload the page and try again.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save new offer' })).toBeDisabled()
+    expect(mockedSubmitProvincialOfferCreate).not.toHaveBeenCalled()
+  })
+
   it('preserves the raw offer volume while the selected package volume loads', async () => {
     let resolvePackageVolume: (volume: string) => void = () => undefined
     const packageVolume = new Promise<string>((resolve) => {
