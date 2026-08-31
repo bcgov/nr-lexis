@@ -27,6 +27,20 @@ describe('SearchResultsTableFrame', () => {
     expect(screen.queryByText('Existing rows')).not.toBeInTheDocument()
   })
 
+  it('matches the loading skeleton to the rendered result columns', () => {
+    render(
+      <SearchResultsTableFrame loading loadingDescription="Loading search results…" columnCount={9}>
+        <table />
+      </SearchResultsTableFrame>,
+    )
+
+    const firstSkeletonRow = screen
+      .getByRole('table', { name: 'Loading search results…' })
+      .querySelector('tbody tr')
+
+    expect(firstSkeletonRow?.querySelectorAll('td')).toHaveLength(9)
+  })
+
   it('omits the loading indicator when the table frame is not loading', () => {
     const { container } = render(
       <SearchResultsTableFrame loading={false} loadingDescription="Loading search results…">

@@ -458,11 +458,11 @@ const ProvincialExemptionCreatePage = () => {
           () =>
             ASCII_PATTERN.test(form.otherConditions.trim())
               ? null
-              : 'Other conditions contain unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
+              : 'Conditions contain unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
           () =>
             form.otherConditions.length <= 250
               ? null
-              : 'Other conditions must contain at most 250 characters.',
+              : 'Conditions must contain at most 250 characters.',
         ) ?? undefined,
     }),
     [
@@ -594,7 +594,7 @@ const ProvincialExemptionCreatePage = () => {
       setShowAllValidationErrors(true)
       setStatus({
         kind: 'error',
-        title: 'Validation Error',
+        title: 'Validation error',
         message: firstSubmitValidationError ?? 'Please fix validation errors before saving.',
         placement: 'inline',
       })
@@ -956,7 +956,9 @@ const ProvincialExemptionCreatePage = () => {
             <div className="legacy-search-actions create-form-comments">
               <TextArea
                 id="otherConditions"
-                labelText="Other conditions"
+                labelText="Conditions"
+                enableCounter
+                maxCount={250}
                 maxLength={250}
                 value={form.otherConditions}
                 invalid={!!fieldError('otherConditions')}

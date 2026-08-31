@@ -101,7 +101,7 @@ describe('Layout shell', () => {
   it('uses and persists public-safe defaults when no preferences exist', () => {
     renderLayout('/provincial/review')
 
-    const themeSwitch = screen.getByRole('switch', { name: 'Toggle dark mode' })
+    const themeSwitch = screen.getByRole('switch', { name: 'Dark theme' })
     expect(themeSwitch).toHaveAttribute('aria-checked', 'false')
     expect(document.querySelector('.csp-header-theme-toggle')).toHaveTextContent('')
     expect(themeSwitch.querySelector('.csp-theme-switch__thumb svg')).toBeInTheDocument()
@@ -205,7 +205,7 @@ describe('Layout shell', () => {
 
     renderLayout('/admin/rtm/emslogamv')
 
-    expect(screen.getByRole('switch', { name: 'Toggle dark mode' })).toHaveAttribute(
+    expect(screen.getByRole('switch', { name: 'Dark theme' })).toHaveAttribute(
       'aria-checked',
       'true',
     )
@@ -223,7 +223,7 @@ describe('Layout shell', () => {
   it('persists preference updates without storing auth or user data', async () => {
     renderLayout('/admin/rtm/emslogamv')
 
-    await userEvent.click(screen.getByRole('switch', { name: 'Toggle dark mode' }))
+    await userEvent.click(screen.getByRole('switch', { name: 'Dark theme' }))
     await userEvent.click(screen.getByRole('button', { name: 'Close menu' }))
 
     expect(window.localStorage.getItem(THEME_PREFERENCE_KEY)).toBe('g100')
@@ -240,7 +240,7 @@ describe('Layout shell', () => {
 
     expect(() => renderLayout('/admin/rtm/emslogamv')).not.toThrow()
 
-    expect(screen.getByRole('switch', { name: 'Toggle dark mode' })).toHaveAttribute(
+    expect(screen.getByRole('switch', { name: 'Dark theme' })).toHaveAttribute(
       'aria-checked',
       'false',
     )
@@ -262,11 +262,11 @@ describe('Layout shell', () => {
 
     expect(() => renderLayout('/admin/rtm/emslogamv')).not.toThrow()
 
-    await userEvent.click(screen.getByRole('switch', { name: 'Toggle dark mode' }))
+    await userEvent.click(screen.getByRole('switch', { name: 'Dark theme' }))
     await userEvent.click(screen.getByRole('button', { name: 'Reports' }))
     await userEvent.click(screen.getByRole('button', { name: 'Close menu' }))
 
-    expect(screen.getByRole('switch', { name: 'Toggle dark mode' })).toHaveAttribute(
+    expect(screen.getByRole('switch', { name: 'Dark theme' })).toHaveAttribute(
       'aria-checked',
       'true',
     )
@@ -278,7 +278,7 @@ describe('Layout shell', () => {
     document.documentElement.setAttribute('data-carbon-theme', 'g90')
     const firstRender = renderLayout('/admin/rtm/emslogamv')
 
-    await userEvent.click(screen.getByRole('switch', { name: 'Toggle dark mode' }))
+    await userEvent.click(screen.getByRole('switch', { name: 'Dark theme' }))
     expect(document.documentElement).toHaveAttribute('data-carbon-theme', 'g100')
 
     firstRender.unmount()
@@ -288,7 +288,7 @@ describe('Layout shell', () => {
     window.localStorage.clear()
     const secondRender = renderLayout('/admin/rtm/emslogamv')
 
-    expect(screen.getByRole('switch', { name: 'Toggle dark mode' })).toHaveAttribute(
+    expect(screen.getByRole('switch', { name: 'Dark theme' })).toHaveAttribute(
       'aria-checked',
       'false',
     )

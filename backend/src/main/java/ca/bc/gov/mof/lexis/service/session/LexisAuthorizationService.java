@@ -48,6 +48,8 @@ public class LexisAuthorizationService {
     List<String> scopes = normalizeScopes(rawAuthorities);
     Set<String> granted = new LinkedHashSet<>();
 
+    // INTENTIONAL_LEGACY_DIVERGENCE(ADMINISTRATOR_SUPER_ROLE): Modern Administrators receive
+    // every catalogued action; dedicated security rules still deny retired report surfaces.
     if (roles.contains(ROLE_ADMIN)) {
       granted.addAll(LexisLegacyActionCatalog.ACTIONS);
     }

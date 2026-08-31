@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import {
   createMemoryRouter,
@@ -304,7 +304,19 @@ describe('Detail Quick Action Smoke', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByText('Exemption summary')
+    const summary = (await screen.findByText('Exemption summary')).closest('.cds--tile')
+    expect(summary).toBeTruthy()
+    for (const [label, value] of [
+      ['Approved volume (m³)', '99.0'],
+      ['Used volume (m³)', '5.0'],
+      ['Remaining volume (m³)', '94.0'],
+    ]) {
+      const field = within(summary as HTMLElement)
+        .getByText(label)
+        .closest('.detail-field-item')
+      expect(field).toBeTruthy()
+      expect(within(field as HTMLElement).getByText(value)).toBeInTheDocument()
+    }
     expect(screen.queryByRole('button', { name: /Create permit/i })).not.toBeInTheDocument()
   })
 })

@@ -300,6 +300,11 @@ describe('Provincial exemption client parity', () => {
       await screen.findByRole('heading', { name: 'Exemption summary', level: 2 })
     ).closest('.cds--tile')
     expect(summaryTile).toBeTruthy()
-    expect(within(summaryTile as HTMLElement).getByText('00001074')).toBeInTheDocument()
+    const exemptionHolderLabel = within(summaryTile as HTMLElement).getByText('Exemption holder')
+    expect(
+      within(exemptionHolderLabel.closest('.detail-field-item') as HTMLElement).getByText(
+        '00001074',
+      ),
+    ).toBeInTheDocument()
   })
 })

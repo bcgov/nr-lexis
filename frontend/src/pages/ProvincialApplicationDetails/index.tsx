@@ -247,8 +247,9 @@ function ClientDataSummary({
   const [dismissedClientLookupMessageKey, setDismissedClientLookupMessageKey] = useState<
     string | null
   >(null)
+  const persistedDetailFields = detailFields ?? []
 
-  if (!clientData) {
+  if (!clientData && persistedDetailFields.length === 0) {
     return isLoading ? <InlineLoading description={`Loading ${title.toLowerCase()}...`} /> : null
   }
 
@@ -266,16 +267,20 @@ function ClientDataSummary({
       {showTitle && <h3 className="application-client-summary__title">{title}</h3>}
       <dl className="detail-field-grid">
         {[
-          ...(detailFields ?? []),
-          ['Company name', displayValue(clientData.companyName)],
-          ['Address', displayValue(clientData.address)],
-          ['City', displayValue(clientData.city)],
-          ['Province', displayValue(clientData.province)],
-          ['Postal code', displayValue(clientData.postalCode)],
-          ['Country', displayValue(clientData.country)],
-          ['Phone', displayValue(clientData.phone)],
-          ['Fax', displayValue(clientData.fax)],
-          ['Email', displayValue(clientData.email)],
+          ...persistedDetailFields,
+          ...(clientData
+            ? [
+                ['Company name', displayValue(clientData.companyName)],
+                ['Address', displayValue(clientData.address)],
+                ['City', displayValue(clientData.city)],
+                ['Province', displayValue(clientData.province)],
+                ['Postal code', displayValue(clientData.postalCode)],
+                ['Country', displayValue(clientData.country)],
+                ['Phone', displayValue(clientData.phone)],
+                ['Fax', displayValue(clientData.fax)],
+                ['Email', displayValue(clientData.email)],
+              ]
+            : []),
         ].map(([label, value]) => (
           <div key={label} className="detail-field-item">
             <dt className="detail-field-label">{label}</dt>
@@ -283,6 +288,16 @@ function ClientDataSummary({
           </div>
         ))}
       </dl>
+      {!clientData && !isLoading && (
+        <InlineNotification
+          className="detail-context-notification"
+          kind="warning"
+          title="Client details unavailable"
+          subtitle="The saved application values are shown above. Additional client details could not be loaded."
+          lowContrast
+          hideCloseButton
+        />
+      )}
       {clientLookupMessage && dismissedClientLookupMessageKey !== clientLookupMessageKey && (
         <InlineNotification
           className="detail-context-notification"
@@ -3200,32 +3215,36 @@ const ProvincialApplicationDetailsPage = () => {
     ['Contact name', summaryForm?.ownerContactName ?? ''],
     ['I am an agent', summaryForm?.applicantTypeCode === 'A' ? 'Yes' : 'No'],
   ]
-  const ownerClientSummaryContent =
-    ownerClientData || isLoadingOwnerClientData ? (
-      <ClientDataSummary
-        title="Owner client details"
-        showTitle={false}
-        clientData={ownerClientData}
-        isLoading={isLoadingOwnerClientData}
-        detailFields={ownerClientDetailFields}
-      />
-    ) : null
+  const ownerClientSummaryContent = (
+    <ClientDataSummary
+      title="Owner client details"
+      showTitle={false}
+      clientData={ownerClientData}
+      isLoading={isLoadingOwnerClientData}
+      detailFields={ownerClientDetailFields}
+    />
+  )
   const agentClientDetailFields: Array<[string, string]> = [
     ['Agent number', summaryForm?.agentClientNumber ?? String(detail?.agentClientNumber ?? '')],
     ['Applicant type', 'Agent'],
     ['Contact location', agentClientLocationDisplay],
     ['Contact name', summaryForm?.agentContactName ?? ''],
   ]
-  const agentClientSummaryContent =
-    agentClientData || isLoadingAgentClientData ? (
-      <ClientDataSummary
-        title="Agent details"
-        showTitle={false}
-        clientData={agentClientData}
-        isLoading={isLoadingAgentClientData}
-        detailFields={agentClientDetailFields}
-      />
-    ) : null
+  const agentClientSummaryContent = summaryAgentClientNumber ? (
+    <ClientDataSummary
+      title="Agent details"
+      showTitle={false}
+      clientData={agentClientData}
+      isLoading={isLoadingAgentClientData}
+      detailFields={agentClientDetailFields}
+    />
+  ) : (
+    <EmptyState
+      title="No agent assigned"
+      description="No agent is assigned to this application."
+      headingLevel={3}
+    />
+  )
 
   const applicationPermitsContent = detail ? (
     <Tile id="application-permits" className="application-detail-section">
@@ -3880,13 +3899,7 @@ const ProvincialApplicationDetailsPage = () => {
                             </div>
                           </>
                         ) : (
-                          (ownerClientSummaryContent ?? (
-                            <EmptyState
-                              title="Owner details unavailable"
-                              description="No owner client lookup details are available for this application."
-                              headingLevel={3}
-                            />
-                          ))
+                          ownerClientSummaryContent
                         )}
                       </Tile>
                     </Column>
@@ -4041,13 +4054,7 @@ const ProvincialApplicationDetailsPage = () => {
                               </div>
                             </>
                           ) : (
-                            (agentClientSummaryContent ?? (
-                              <EmptyState
-                                title="No agent assigned"
-                                description="No agent is assigned to this application."
-                                headingLevel={3}
-                              />
-                            ))
+                            agentClientSummaryContent
                           )}
                         </Tile>
                       </Column>
@@ -4221,7 +4228,7 @@ const ProvincialApplicationDetailsPage = () => {
                               {productTypeRequiresLogDetails(summaryForm.productTypeCode) && (
                                 <TextInput
                                   id="applicationSummaryAverageLogVolume"
-                                  labelText="Average log volume"
+                                  labelText="Average log volume (m³)"
                                   type="number"
                                   min={0}
                                   max={99.9}
@@ -4523,7 +4530,9 @@ const ProvincialApplicationDetailsPage = () => {
                                 <TextArea
                                   id="applicationSummaryProductLocation"
                                   labelText="Location of logs"
+                                  enableCounter
                                   maxCount={APPLICATION_PRODUCT_LOCATION_MAX_LENGTH}
+                                  maxLength={APPLICATION_PRODUCT_LOCATION_MAX_LENGTH}
                                   value={summaryForm.productLocation}
                                   invalid={Boolean(visibleSummaryFieldError('productLocation'))}
                                   invalidText={visibleSummaryFieldError('productLocation')}
@@ -4630,7 +4639,12 @@ const ProvincialApplicationDetailsPage = () => {
                                 ...(productTypeRequiresLogDetails(
                                   summaryForm?.productTypeCode ?? '',
                                 )
-                                  ? [['Average log volume', displayValue(detail.averageLogVolume)]]
+                                  ? [
+                                      [
+                                        'Average log volume (m³)',
+                                        displayValue(detail.averageLogVolume),
+                                      ],
+                                    ]
                                   : []),
                                 [
                                   'Applicant type',

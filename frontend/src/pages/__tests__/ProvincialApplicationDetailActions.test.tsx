@@ -267,7 +267,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(screen.queryByText('Application summary options unavailable')).not.toBeInTheDocument()
   })
 
-  it('uses semantic empty states for unavailable clients and truly empty tab data', async () => {
+  it('keeps saved client values visible when enrichment is unavailable', async () => {
     mockedFetchApplicationClientData.mockResolvedValue(null)
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
       ...applicationDetail,
@@ -287,20 +287,22 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       </MemoryRouter>,
     )
 
+    const ownerDetails = await screen.findByRole('region', { name: 'Owner client details' })
+    expect(within(ownerDetails).getByText('00011122')).toBeInTheDocument()
+    expect(within(ownerDetails).getByText('00 - Owner Main Location')).toBeInTheDocument()
+    expect(within(ownerDetails).getByText('Owner Contact')).toBeInTheDocument()
+    expect(within(ownerDetails).getByText('Client details unavailable')).toBeInTheDocument()
     expect(
-      await screen.findByRole('heading', {
-        level: 3,
-        name: 'Owner details unavailable',
-      }),
-    ).toBeInTheDocument()
+      screen.queryByRole('heading', { name: 'Owner details unavailable' }),
+    ).not.toBeInTheDocument()
 
     await selectApplicationDetailTab('Agent')
-    expect(
-      await screen.findByRole('heading', {
-        level: 3,
-        name: 'No agent assigned',
-      }),
-    ).toBeInTheDocument()
+    const agentDetails = await screen.findByRole('region', { name: 'Agent details' })
+    expect(within(agentDetails).getByText('00033344')).toBeInTheDocument()
+    expect(within(agentDetails).getByText('01 - Agent Main Location')).toBeInTheDocument()
+    expect(within(agentDetails).getByText('Agent Contact')).toBeInTheDocument()
+    expect(within(agentDetails).getByText('Client details unavailable')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'No agent assigned' })).not.toBeInTheDocument()
 
     await selectApplicationDetailTab('Application')
     expect(
@@ -342,6 +344,42 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
         name: 'No offers found',
       }),
     ).toBeInTheDocument()
+  })
+
+  it('shows an explicit empty state when no agent is assigned', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      agentClientNumber: null,
+    })
+    mockedFetchApplicationSummarySnapshot.mockResolvedValue({
+      ...applicationSummarySnapshot,
+      agentClientNumber: '',
+      agentClientLocationCode: '',
+      agentContactName: '',
+      applicantTypeCode: 'A',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationDetailTab('Agent')
+    const agentDetails = within(getAgentDetailsTile())
+    expect(
+      agentDetails.getByRole('heading', {
+        level: 3,
+        name: 'No agent assigned',
+      }),
+    ).toBeInTheDocument()
+    expect(agentDetails.getByText('No agent is assigned to this application.')).toBeInTheDocument()
+    expect(agentDetails.queryByText('Client details unavailable')).not.toBeInTheDocument()
   })
 
   it('edits owner client details with plain applicant type labels', async () => {
@@ -634,7 +672,8 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       </MemoryRouter>,
     )
 
-    expect(await screen.findByText('Owner Contact')).toBeInTheDocument()
+    const ownerDetails = await screen.findByRole('region', { name: 'Owner client details' })
+    expect(within(ownerDetails).getByText('Owner Contact')).toBeInTheDocument()
     expect(mockedFetchApplicationSummarySnapshot).toHaveBeenCalledWith('321')
     expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00011122', '00', {
       applicationNumber: '321',
@@ -1247,9 +1286,14 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     const summaryTile = await selectApplicationSummaryTile()
     const summary = within(summaryTile)
-    fireEvent.change(summary.getByLabelText('Location of logs'), {
+    const locationOfLogs = summary.getByLabelText('Location of logs')
+    expect(locationOfLogs).toHaveAttribute('maxlength', '250')
+    fireEvent.change(locationOfLogs, {
       target: { value: 'L'.repeat(251) },
     })
+    expect(
+      locationOfLogs.closest('.cds--form-item')?.querySelector('.cds--text-area__label-counter'),
+    ).toHaveTextContent('251/250')
     fireEvent.change(getSummaryComboBox(summary, 'Owner contact name'), {
       target: { value: 'C'.repeat(121) },
     })
@@ -1689,7 +1733,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     const summaryTile = await selectApplicationSummaryTile()
     const summaryControls = within(summaryTile)
     const applicationVolumeInput = await summaryControls.findByLabelText('Application volume (m³)')
-    const averageLogVolumeInput = await summaryControls.findByLabelText('Average log volume')
+    const averageLogVolumeInput = await summaryControls.findByLabelText('Average log volume (m³)')
 
     await waitFor(() => {
       expect(applicationVolumeInput).toHaveValue(100)
@@ -1758,7 +1802,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     const summaryControls = within(await selectApplicationSummaryTile())
     const productType = getSummaryComboBox(summaryControls, 'Product type')
-    const averageLogVolume = await summaryControls.findByLabelText('Average log volume')
+    const averageLogVolume = await summaryControls.findByLabelText('Average log volume (m³)')
     const productLocation = summaryControls.getByLabelText('Location of logs')
 
     expect(getSummaryComboBox(summaryControls, 'Growth type')).toBeInTheDocument()
@@ -1767,7 +1811,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     await chooseComboBoxOption(productType, 'Standing Timber')
     expect(getSummaryComboBox(summaryControls, 'Growth type')).toBeInTheDocument()
-    expect(summaryControls.queryByLabelText('Average log volume')).not.toBeInTheDocument()
+    expect(summaryControls.queryByLabelText('Average log volume (m³)')).not.toBeInTheDocument()
     expect(summaryControls.queryByLabelText('Location of logs')).not.toBeInTheDocument()
 
     await clearComboBox(getSummaryComboBox(summaryControls, 'Growth type'))

@@ -154,7 +154,7 @@ test.describe('session timeout regression', () => {
     await expect(
       page.getByRole('heading', { level: 1, name: 'Provincial application search' }),
     ).toBeVisible()
-    await page.getByRole('switch', { name: 'Toggle dark mode' }).click()
+    await page.getByRole('switch', { name: 'Dark theme' }).click()
     await expect(page.locator('html')).toHaveAttribute('data-carbon-theme', 'g100')
 
     await page.clock.fastForward(SESSION_IDLE_WARNING_DELAY_MS)

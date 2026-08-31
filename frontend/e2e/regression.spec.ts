@@ -799,8 +799,7 @@ const reportAccessiblePages: Array<[path: string, heading: RegExp]> = [
   ['/reports/tenureReport', /tenure analysis report/i],
 ]
 
-// INTENTIONAL_LEGACY_DIVERGENCE(RETIRED_REPORT_SCREENS): Regression must
-// prove these routes stay retired instead of treating them as accessible pages.
+// Prove intentionally retired report routes stay retired instead of treating them as accessible.
 const retiredReportPages: Array<[path: string, heading: RegExp]> = [
   ['/reports/applicationReport', /application report/i],
   ['/reports/teacReport', /timber export advisory committee package report/i],
@@ -954,7 +953,7 @@ const requiredAdminActions = [
   'uploadApplicationSubmission',
   '/applicationsReview',
   '/federalApplicationSearch',
-  '/applicationReport',
+  '/offerReport',
 ]
 
 const representativeAdminActions = [
@@ -1778,7 +1777,7 @@ test.describe('TEST IDIR admin regression', () => {
       `/provincial/review?applicationNumber=${missingApplicationNumber}`,
       /provincial application review/i,
     )
-    const themeSwitch = page.getByRole('switch', { name: 'Toggle dark mode' })
+    const themeSwitch = page.getByRole('switch', { name: 'Dark theme' })
     const initiallyDark = (await themeSwitch.getAttribute('aria-checked')) === 'true'
 
     if (!initiallyDark) {
@@ -2064,7 +2063,7 @@ test.describe('TEST IDIR admin regression', () => {
         const control =
           label === 'Region'
             ? page.getByRole('combobox', { name: /^Region\b/ })
-            : page.getByLabel(label, { exact: true })
+            : page.getByLabel(label, { exact: true }).and(page.locator(':visible')).first()
         await expect(control, `${contract.path} should expose ${label}`).toBeVisible()
       }
       for (const [label, value] of contract.defaults) {
@@ -2616,7 +2615,7 @@ test.describe('TEST IDIR admin regression', () => {
 
     await page.getByRole('tab', { name: 'Items' }).click()
     const paragraphField = page.getByLabel('Location of logs')
-    const normalField = page.getByLabel('Application volume')
+    const normalField = page.getByLabel('Application volume (m³)')
     const [paragraphMetrics, normalFieldMetrics] = await Promise.all([
       paragraphField.evaluate((element) => ({
         fontSize: getComputedStyle(element).fontSize,

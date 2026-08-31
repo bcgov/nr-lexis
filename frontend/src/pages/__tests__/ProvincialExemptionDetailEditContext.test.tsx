@@ -210,6 +210,13 @@ describe('Provincial exemption edit context', () => {
     expect(
       within(summaryCard as HTMLElement).getByText('idir\\exemption-author'),
     ).toBeInTheDocument()
+    const exemptionHolderLabel = within(summaryCard as HTMLElement).getByText('Exemption holder')
+    expect(
+      within(exemptionHolderLabel.closest('.detail-field-item') as HTMLElement).getByText(
+        'Blanket OIC',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 2, name: 'Conditions' })).toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: 'Applications' })).not.toBeInTheDocument()
 
     await userEvent.click(await screen.findByRole('tab', { name: 'Fees' }))
@@ -372,12 +379,16 @@ describe('Provincial exemption edit context', () => {
     )
 
     await userEvent.click(await screen.findByRole('button', { name: 'Edit exemption' }))
-    fireEvent.change(screen.getByLabelText('Conditions'), { target: { value: 'Résumé' } })
+    const conditions = screen.getByLabelText('Conditions')
+    fireEvent.change(conditions, { target: { value: 'Résumé' } })
+    expect(
+      conditions.closest('.cds--form-item')?.querySelector('.cds--text-area__label-counter'),
+    ).toHaveTextContent('6/250')
     await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
 
     expect(
       await screen.findByText(
-        'Other conditions contain unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
+        'Conditions contain unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
       ),
     ).toBeInTheDocument()
     expect(vi.mocked(updateExemption)).not.toHaveBeenCalled()

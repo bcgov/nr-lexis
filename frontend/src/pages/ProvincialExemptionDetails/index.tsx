@@ -318,6 +318,7 @@ const ProvincialExemptionDetailsPage = () => {
   const [clientContextErrorMessage, setClientContextErrorMessage] = useState('')
   const [documentRows, setDocumentRows] = useState<ProvincialExemptionDocumentRow[]>([])
   const [applications, setApplications] = useState<ExemptionApplicationRow[]>([])
+  const [exemptionHolder, setExemptionHolder] = useState('')
   const [permitRows, setPermitRows] = useState<ExemptionPermitRow[]>([])
   const [blanketOicTotals, setBlanketOicTotals] = useState<ExemptionBlanketOicTotals | null>(null)
   const [containsUnmanu, setContainsUnmanu] = useState<boolean | null>(null)
@@ -528,6 +529,7 @@ const ProvincialExemptionDetailsPage = () => {
         setDetail(null)
         setDocumentRows([])
         setApplications([])
+        setExemptionHolder('')
         setPermitRows([])
         setBlanketOicTotals(null)
         setContainsUnmanu(null)
@@ -558,6 +560,7 @@ const ProvincialExemptionDetailsPage = () => {
         setEditing(false)
         setIsEditingDocuments(false)
         setApplications([])
+        setExemptionHolder('')
         setPermitRows([])
         setBlanketOicTotals(null)
         setContainsUnmanu(null)
@@ -577,6 +580,7 @@ const ProvincialExemptionDetailsPage = () => {
           setErrorMessage(`No provincial exemption found for ${exemptionNumber}.`)
           setDocumentRows([])
           setApplications([])
+          setExemptionHolder('')
           setPermitRows([])
           setBlanketOicTotals(null)
           setContainsUnmanu(null)
@@ -618,11 +622,13 @@ const ProvincialExemptionDetailsPage = () => {
 
         if (applicationsResult.status === 'fulfilled') {
           setApplications(applicationsResult.value.applications)
+          setExemptionHolder(applicationsResult.value.ownerNumber)
           setContainsUnmanu(applicationsResult.value.containsUnmanu)
           setApplicationsErrorMessage('')
         } else {
           console.error(applicationsResult.reason)
           setApplications([])
+          setExemptionHolder('')
           setContainsUnmanu(null)
           setApplicationsErrorMessage(
             'Unable to retrieve applications associated with this exemption.',
@@ -664,6 +670,7 @@ const ProvincialExemptionDetailsPage = () => {
           if (!isRefreshingCurrentExemption) {
             setDocumentRows([])
             setApplications([])
+            setExemptionHolder('')
             setPermitRows([])
             setBlanketOicTotals(null)
             setContainsUnmanu(null)
@@ -939,10 +946,10 @@ const ProvincialExemptionDetailsPage = () => {
       return 'Expiry date must be after the approval date.'
     }
     if (editForm.otherConditions.length > 250) {
-      return 'Other conditions must contain at most 250 characters.'
+      return 'Conditions must contain at most 250 characters.'
     }
     if (!ASCII_PATTERN.test(editForm.otherConditions.trim())) {
-      return 'Other conditions contain unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.'
+      return 'Conditions contain unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.'
     }
     if (currentTypeCode === 'B' && editForm.regionNumbers.length === 0) {
       return 'Select at least one region for a Blanket Order in Council exemption.'
@@ -1029,6 +1036,7 @@ const ProvincialExemptionDetailsPage = () => {
         }
         setDetail(nextDetail)
         setApplications(nextApplications.applications)
+        setExemptionHolder(nextApplications.ownerNumber)
         setContainsUnmanu(nextApplications.containsUnmanu)
         setApplicationsErrorMessage('')
         setEditContext(nextContext)
@@ -1038,6 +1046,7 @@ const ProvincialExemptionDetailsPage = () => {
       } catch (error) {
         if (!preserveCurrentStateOnFailure) {
           setApplications([])
+          setExemptionHolder('')
           setContainsUnmanu(null)
           setApplicationsErrorMessage(
             'Unable to refresh applications associated with this exemption.',
@@ -1888,10 +1897,12 @@ const ProvincialExemptionDetailsPage = () => {
                         </Column>
                         <Column sm={4} md={4} lg={8}>
                           <Tile>
-                            <h2 className="detail-tile-title">Other conditions</h2>
+                            <h2 className="detail-tile-title">Conditions</h2>
                             <TextArea
                               id="exemptionDetailOtherConditions"
                               labelText="Conditions"
+                              enableCounter
+                              maxCount={250}
                               maxLength={250}
                               value={editForm.otherConditions}
                               disabled={!canEditSummaryFields}
@@ -1924,9 +1935,11 @@ const ProvincialExemptionDetailsPage = () => {
                               },
                               { label: 'Author', value: displayValue(detail.author) },
                               {
-                                label: 'Owner client number',
+                                label: 'Exemption holder',
                                 value: displayValue(
-                                  detail.ownerClientNumber?.trim() || exemptionOwnerClientNumber,
+                                  exemptionHolder.trim() ||
+                                    detail.ownerClientNumber?.trim() ||
+                                    exemptionOwnerClientNumber,
                                 ),
                               },
                               ...(showAgent
@@ -1944,15 +1957,15 @@ const ProvincialExemptionDetailsPage = () => {
                               { label: 'Expiry date', value: displayValue(detail.expiryDate) },
                               {
                                 label: 'Approved volume (m³)',
-                                value: displayValue(detail.approvedVolume),
+                                value: formatExemptionVolume(detail.approvedVolume),
                               },
                               {
                                 label: 'Used volume (m³)',
-                                value: displayValue(detail.usedVolume),
+                                value: formatExemptionVolume(detail.usedVolume),
                               },
                               {
                                 label: 'Remaining volume (m³)',
-                                value: displayValue(detail.remainingVolume),
+                                value: formatExemptionVolume(detail.remainingVolume),
                               },
                               {
                                 label: 'Blanket Order in Council',
@@ -1968,7 +1981,7 @@ const ProvincialExemptionDetailsPage = () => {
 
                         <Column sm={4} md={8} lg={16}>
                           <DetailFieldTile
-                            title="Other conditions"
+                            title="Conditions"
                             fields={[
                               {
                                 label: 'Conditions',
@@ -2263,33 +2276,41 @@ const ProvincialExemptionDetailsPage = () => {
                                     </TableCell>
                                     <TableCell>{displayValue(row.permitIssueDate)}</TableCell>
                                     <TableCell>
-                                      <Button
-                                        kind="ghost"
-                                        size="sm"
+                                      <DisabledButtonTooltip
                                         disabled={
                                           !canPerform('/permitSearch') ||
                                           !canPerform('/permitDetails')
                                         }
-                                        onClick={() =>
-                                          navigate(
-                                            withCurrentSearch(
-                                              `/provincial/permit/${row.permitNumber}`,
-                                            ),
-                                            {
-                                              state: withDetailReturnTo(
-                                                location.state,
-                                                {
-                                                  label: 'Provincial exemption detail',
-                                                  to: locationPath(location),
-                                                },
-                                                detailReturnTo,
-                                              ),
-                                            },
-                                          )
-                                        }
+                                        description="You do not have permission to open this permit."
                                       >
-                                        Open
-                                      </Button>
+                                        <Button
+                                          kind="ghost"
+                                          size="sm"
+                                          disabled={
+                                            !canPerform('/permitSearch') ||
+                                            !canPerform('/permitDetails')
+                                          }
+                                          onClick={() =>
+                                            navigate(
+                                              withCurrentSearch(
+                                                `/provincial/permit/${row.permitNumber}`,
+                                              ),
+                                              {
+                                                state: withDetailReturnTo(
+                                                  location.state,
+                                                  {
+                                                    label: 'Provincial exemption detail',
+                                                    to: locationPath(location),
+                                                  },
+                                                  detailReturnTo,
+                                                ),
+                                              },
+                                            )
+                                          }
+                                        >
+                                          Open
+                                        </Button>
+                                      </DisabledButtonTooltip>
                                     </TableCell>
                                   </TableRow>
                                 ))}

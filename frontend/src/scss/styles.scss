@@ -1745,6 +1745,10 @@ $notification-types: 'error', 'info', 'success', 'warning';
   overflow: visible;
 }
 
+.provincial-exemption-create-page .create-form-tile {
+  overflow: visible;
+}
+
 .create-form-tile .cds--label {
   margin-block-end: 0.25rem;
   color: var(--csp-text-primary);

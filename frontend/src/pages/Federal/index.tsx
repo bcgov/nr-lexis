@@ -617,6 +617,7 @@ const FederalPage = () => {
           <SearchResultsTableFrame
             loading={loading}
             loadingDescription="Loading federal application search results…"
+            columnCount={RESULT_COLUMNS.length + 2 + (canCreateFederalExemption ? 1 : 0)}
             totalItems={
               errorMessage || (loading && results.content.length === 0)
                 ? undefined

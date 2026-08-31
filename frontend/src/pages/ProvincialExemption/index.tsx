@@ -1048,6 +1048,7 @@ const ProvincialExemptionPage = () => {
           <SearchResultsTableFrame
             loading={loading}
             loadingDescription="Loading exemption search results…"
+            columnCount={SORT_COLUMNS.length + (canApproveExemption ? 1 : 0)}
             totalItems={
               errorMessage || (loading && results.content.length === 0)
                 ? undefined

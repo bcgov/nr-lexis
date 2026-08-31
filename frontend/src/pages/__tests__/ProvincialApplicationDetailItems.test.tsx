@@ -574,7 +574,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     expect(packageDetailsSection).toBeTruthy()
     expect(packageDetailsSection).toHaveClass('application-items-card')
     expect(
-      within(packageDetailsSection as HTMLElement).getByText('Total Scale Volume'),
+      within(packageDetailsSection as HTMLElement).getByText('Total Scale Volume (m³)'),
     ).toBeInTheDocument()
     expect(within(packageDetailsSection as HTMLElement).getByText('20')).toBeInTheDocument()
     expect(
@@ -834,10 +834,10 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     fireEvent.change(createPackageControls.getByLabelText('Package Number'), {
       target: { value: 'pkg-new' },
     })
-    fireEvent.change(createPackageControls.getByLabelText('Package Volume'), {
+    fireEvent.change(createPackageControls.getByLabelText('Package Volume (m³)'), {
       target: { value: '25.55' },
     })
-    fireEvent.change(createPackageControls.getByLabelText('Average Length'), {
+    fireEvent.change(createPackageControls.getByLabelText('Average Length (m)'), {
       target: { value: '100' },
     })
     fireEvent.change(createPackageControls.getByLabelText('Average Diameter'), {
@@ -877,10 +877,10 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       target: { value: 'PKG-NEW' },
     })
     fireEvent.blur(createPackageControls.getByLabelText('Package Number'))
-    fireEvent.change(createPackageControls.getByLabelText('Package Volume'), {
+    fireEvent.change(createPackageControls.getByLabelText('Package Volume (m³)'), {
       target: { value: '25.0' },
     })
-    fireEvent.change(createPackageControls.getByLabelText('Average Length'), {
+    fireEvent.change(createPackageControls.getByLabelText('Average Length (m)'), {
       target: { value: '12.0' },
     })
     fireEvent.change(createPackageControls.getByLabelText('Average Diameter'), {
@@ -937,10 +937,10 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     fireEvent.change(createPackageControls.getByLabelText('Package Number'), {
       target: { value: 'PKG-NEW' },
     })
-    fireEvent.change(createPackageControls.getByLabelText('Package Volume'), {
+    fireEvent.change(createPackageControls.getByLabelText('Package Volume (m³)'), {
       target: { value: '25.0' },
     })
-    fireEvent.change(createPackageControls.getByLabelText('Average Length'), {
+    fireEvent.change(createPackageControls.getByLabelText('Average Length (m)'), {
       target: { value: '12.0' },
     })
     fireEvent.change(createPackageControls.getByLabelText('Average Diameter'), {
@@ -1385,7 +1385,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     fireEvent.change(screen.getByLabelText('Pieces'), {
       target: { value: '2' },
     })
-    fireEvent.change(screen.getByLabelText('Scale Volume'), {
+    fireEvent.change(screen.getByLabelText('Scale Volume (m³)'), {
       target: { value: '8.0' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Add Scale' }))
@@ -1505,7 +1505,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     fireEvent.change(screen.getByLabelText('Pieces'), {
       target: { value: '1.5' },
     })
-    fireEvent.change(screen.getByLabelText('Scale Volume'), {
+    fireEvent.change(screen.getByLabelText('Scale Volume (m³)'), {
       target: { value: '100000' },
     })
     await userEvent.click(screen.getByRole('button', { name: 'Add Scale' }))
@@ -1540,7 +1540,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     fireEvent.change(screen.getByLabelText('Pieces'), {
       target: { value: '1' },
     })
-    fireEvent.change(screen.getByLabelText('Scale Volume'), {
+    fireEvent.change(screen.getByLabelText('Scale Volume (m³)'), {
       target: { value: '80.1' },
     })
     await userEvent.click(screen.getByRole('button', { name: 'Add Scale' }))
