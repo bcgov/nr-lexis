@@ -20,7 +20,7 @@ import {
   redactedTextSnippet,
 } from './utils/regression-auth'
 import { E2E_BASE_URL } from './utils'
-import { formatBusinessIsoDate } from '../src/utils/date'
+import { businessDateParts, formatBusinessIsoDate, formatIsoDateParts } from '../src/utils/date'
 
 const sideNavSection = (name: string) =>
   `.csp-side-nav__section:has(> .cds--side-nav__submenu .cds--side-nav__submenu-title:text-is("${name}"))`
@@ -436,6 +436,25 @@ const uniqueRegressionFutureDate = (salt = 0): string => {
   const futureOffsetDays = 3_650 + ((runSeed + runAttempt * 97) % 3_650) + salt
   date.setUTCDate(date.getUTCDate() + futureOffsetDays)
   return formatBusinessIsoDate(date)
+}
+
+const legacyTenureReportDateRange = (): { fromDate: string; toDate: string } => {
+  const today = businessDateParts()
+  const previousMonth = new Date(Date.UTC(today.year, today.month - 1, 0))
+  return {
+    fromDate: formatIsoDateParts(today.year - 1, today.month, 1),
+    toDate: formatIsoDateParts(
+      previousMonth.getUTCFullYear(),
+      previousMonth.getUTCMonth() + 1,
+      previousMonth.getUTCDate(),
+    ),
+  }
+}
+
+const noDataRegressionReportDateRange = (): { fromDate: string; toDate: string } => {
+  // Exercise deployed Oracle/Jasper rendering without exporting a broad set of TEST records.
+  const futureDate = uniqueRegressionFutureDate(31)
+  return { fromDate: futureDate, toDate: futureDate }
 }
 
 const expectNaturalResourceRegions = (value: unknown, source: string): void => {
@@ -1663,6 +1682,9 @@ test.describe('TEST IDIR admin regression', () => {
     expect(capabilities.authenticated).toBe(true)
     expect(String(capabilities.principal ?? '').trim()).not.toBe('')
     expect(hasAdminRole(roles)).toBe(true)
+    await expect(
+      page.getByRole('link', { name: /LEXIS Log Exemption Information System/ }),
+    ).toHaveAttribute('href', '/provincial/review')
 
     for (const action of requiredAdminActions) {
       expect(hasGrantedAction(grantedActions, action), `Expected admin grant for ${action}`).toBe(
@@ -1746,6 +1768,54 @@ test.describe('TEST IDIR admin regression', () => {
       'Advertising List',
     )
     await page.getByRole('button', { name: 'Open menu' }).click()
+  })
+
+  test('keeps header and tertiary actions accessible in dark mode', async () => {
+    const page = await authenticatedIdirPage()
+
+    await expectAccessiblePage(
+      page,
+      `/provincial/review?applicationNumber=${missingApplicationNumber}`,
+      /provincial application review/i,
+    )
+    const themeSwitch = page.getByRole('switch', { name: 'Toggle dark mode' })
+    const initiallyDark = (await themeSwitch.getAttribute('aria-checked')) === 'true'
+
+    if (!initiallyDark) {
+      await themeSwitch.click()
+    }
+
+    try {
+      await expect(page.locator('html')).toHaveAttribute('data-carbon-theme', 'g100')
+      await expect(
+        page.getByRole('link', { name: /LEXIS Log Exemption Information System/ }),
+      ).toHaveCSS('color', 'rgb(255, 255, 255)')
+
+      const clearAll = page.getByRole('button', { name: 'Clear all', exact: true })
+      await expect(clearAll).toBeEnabled({ timeout: 30_000 })
+      await clearAll.hover()
+      await expect(clearAll).toHaveCSS('background-color', 'rgb(51, 51, 51)')
+      await expect(clearAll).toHaveCSS('color', 'rgb(255, 255, 255)')
+
+      const approveSelected = page.getByRole('button', {
+        name: 'Approve Selected Applications',
+      })
+      await expect(approveSelected).toBeDisabled()
+      const beforeHover = await approveSelected.evaluate((element) => {
+        const style = getComputedStyle(element)
+        return { backgroundColor: style.backgroundColor, color: style.color }
+      })
+      await approveSelected.hover({ force: true })
+      const afterHover = await approveSelected.evaluate((element) => {
+        const style = getComputedStyle(element)
+        return { backgroundColor: style.backgroundColor, color: style.color }
+      })
+      expect(afterHover).toEqual(beforeHover)
+    } finally {
+      if (!initiallyDark) {
+        await themeSwitch.click()
+      }
+    }
   })
 
   test('keeps upload navigation scoped to provincial application submissions', async () => {
@@ -1849,6 +1919,280 @@ test.describe('TEST IDIR admin regression', () => {
       await page.locator(sideNavSection('Reports')).getByRole('link', { name: linkName }).click()
       await expect(page.getByRole('heading', { name: heading }).first()).toBeVisible()
       await expect.poll(() => new URL(page.url()).pathname).toBe(path)
+    }
+  })
+
+  test('matches legacy fields and defaults on active report forms', async () => {
+    const page = await authenticatedIdirPage()
+    const apiServerErrors = collectApiServerErrors(page)
+    const tenureDates = legacyTenureReportDateRange()
+
+    const reportContracts: Array<{
+      path: string
+      heading: RegExp
+      labels: string[]
+      defaults: Array<[string, string]>
+      dates?: Array<[string, string]>
+    }> = [
+      {
+        path: '/reports/offerReport',
+        heading: /offers report/i,
+        labels: [
+          'Region',
+          'Jurisdiction',
+          'Client number',
+          'Application from date',
+          'Application to date',
+          'Withdrawn from date',
+          'Withdrawn to date',
+          'Output format',
+        ],
+        defaults: [
+          ['Jurisdiction', 'All'],
+          ['Output format', 'PDF'],
+        ],
+      },
+      {
+        path: '/reports/permitLedgerReport',
+        heading: /permits report/i,
+        labels: [
+          'Region',
+          'Client number',
+          'Exemption number',
+          'Exemption type',
+          'Exemption reason',
+          'Permit status',
+          'Growth type',
+          'Timber mark',
+          'Final destination country',
+          'Issued from date',
+          'Issued to date',
+          'Output format',
+        ],
+        defaults: [
+          ['Exemption type', 'All'],
+          ['Exemption reason', 'All'],
+          ['Permit status', 'All'],
+          ['Growth type', 'All'],
+          ['Final destination country', 'All'],
+          ['Output format', 'PDF'],
+        ],
+      },
+      {
+        path: '/reports/transportReport',
+        heading: /transport report/i,
+        labels: [
+          'Jurisdiction',
+          'Region',
+          'Final destination country',
+          'Customs port of export',
+          'Permit status',
+          'Permit issued from date',
+          'Permit issued to date',
+          'Output format',
+        ],
+        defaults: [
+          ['Jurisdiction', 'All'],
+          ['Final destination country', 'All'],
+          ['Customs port of export', 'All'],
+          ['Permit status', 'All'],
+          ['Output format', 'PDF'],
+        ],
+      },
+      {
+        path: '/reports/speciesGradeReport',
+        heading: /species and grade report/i,
+        labels: [
+          'Region',
+          'Permit status',
+          'Exemption number',
+          'Exemption type',
+          'Exemption reason',
+          'Growth type',
+          'Timber mark',
+          'Forest file ID',
+          'Permit issued from date',
+          'Permit issued to date',
+          'Output format',
+        ],
+        defaults: [
+          ['Permit status', 'Complete'],
+          ['Exemption type', 'All'],
+          ['Exemption reason', 'All'],
+          ['Growth type', 'All'],
+          ['Output format', 'PDF'],
+        ],
+      },
+      {
+        path: '/reports/tenureReport',
+        heading: /tenure analysis report/i,
+        labels: [
+          'Report variant',
+          'Issued from date',
+          'Issued to date',
+          'Region',
+          'Exemption number',
+          'Exemption type',
+          'Client number',
+          'Forest file ID',
+          'Exemption reason',
+          'Client type',
+          ...Array.from({ length: 6 }, (_, index) => `Tenure type ${index + 1}`),
+          ...Array.from({ length: 6 }, (_, index) => `Timber mark ${index + 1}`),
+          'Output format',
+        ],
+        defaults: [
+          ['Report variant', 'Permit details report'],
+          ['Exemption type', 'Ministerial'],
+          ['Client type', 'Permit holder'],
+          ['Output format', 'PDF'],
+        ],
+        dates: [
+          ['Issued from date', tenureDates.fromDate],
+          ['Issued to date', tenureDates.toDate],
+        ],
+      },
+    ]
+
+    for (const contract of reportContracts) {
+      await expectAccessiblePage(page, contract.path, contract.heading)
+      await expect(page.getByRole('button', { name: 'Generate report' })).toBeEnabled({
+        timeout: 30_000,
+      })
+
+      for (const label of contract.labels) {
+        const control =
+          label === 'Region'
+            ? page.getByRole('combobox', { name: /^Region\b/ })
+            : page.getByLabel(label, { exact: true })
+        await expect(control, `${contract.path} should expose ${label}`).toBeVisible()
+      }
+      for (const [label, value] of contract.defaults) {
+        await expect(page.getByRole('combobox', { name: label })).toHaveValue(value)
+      }
+      for (const [label, value] of contract.dates ?? []) {
+        await expect(page.getByLabel(label, { exact: true })).toHaveValue(value)
+      }
+    }
+
+    expect(apiServerErrors).toEqual([])
+  })
+
+  test('enforces legacy report input edge cases before generation', async () => {
+    const page = await authenticatedIdirPage()
+
+    await expectAccessiblePage(page, '/reports/speciesGradeReport', /species and grade report/i)
+    await expect(page.getByRole('button', { name: 'Generate report' })).toBeEnabled({
+      timeout: 30_000,
+    })
+    const timberMark = page.getByLabel('Timber mark', { exact: true })
+    const forestFileId = page.getByLabel('Forest file ID', { exact: true })
+
+    await timberMark.fill('regression123')
+    await expect(forestFileId).toBeDisabled()
+    await page.getByRole('button', { name: 'Clear all' }).click()
+    await expect(timberMark).toHaveValue('')
+    await expect(forestFileId).toBeEnabled()
+
+    await forestFileId.fill('regression123')
+    await expect(timberMark).toBeDisabled()
+    await page.getByRole('button', { name: 'Clear all' }).click()
+    await expect(forestFileId).toHaveValue('')
+    await expect(timberMark).toBeEnabled()
+
+    await expectAccessiblePage(page, '/reports/tenureReport', /tenure analysis report/i)
+    const issuedFromDate = page.getByLabel('Issued from date', { exact: true })
+    const issuedToDate = page.getByLabel('Issued to date', { exact: true })
+    const generateReport = page.getByRole('button', { name: 'Generate report' })
+    await expect(generateReport).toBeEnabled({ timeout: 30_000 })
+
+    await issuedFromDate.fill('2030-02-31')
+    await expect(generateReport).toBeDisabled()
+    await issuedFromDate.fill('2030-01-01')
+    await expect(issuedToDate).toHaveValue('2030-12-31')
+    await expect(generateReport).toBeEnabled()
+  })
+
+  test('generates each active legacy-equivalent report artifact', async () => {
+    test.setTimeout(300_000)
+    const page = await authenticatedIdirPage()
+    const reportOptions = await readJsonResponse<GenericOptionsResponse>(
+      await getWithAuth(page, '/api/lexis/reports/options'),
+    )
+    expectNaturalResourceRegions(reportOptions.regions, 'active report generation')
+    const region = asRecordArray(reportOptions.regions).map(optionCode).sort().join(',')
+    const dateRange = noDataRegressionReportDateRange()
+
+    const reports: Array<{
+      source: string
+      path: string
+      format: 'PDF' | 'XLS'
+      filename: string
+      parameters: Record<string, string>
+    }> = [
+      {
+        source: 'offers report',
+        path: '/api/lexis/reports/offerReport',
+        format: 'PDF',
+        filename: 'offer-report.pdf',
+        parameters: { legacyActionMapping: 'generate', region, ...dateRange },
+      },
+      {
+        source: 'permits report',
+        path: '/api/lexis/reports/permitLedgerReport',
+        format: 'PDF',
+        filename: 'permit-ledger-report.pdf',
+        parameters: { legacyActionMapping: 'generate', region, ...dateRange },
+      },
+      {
+        source: 'transport report',
+        path: '/api/lexis/reports/transportReport',
+        format: 'PDF',
+        filename: 'transport-report.pdf',
+        parameters: { legacyActionMapping: 'generate', region, ...dateRange },
+      },
+      {
+        source: 'species and grade report',
+        path: '/api/lexis/reports/speciesGradeReport',
+        format: 'PDF',
+        filename: 'species-and-grade-report.pdf',
+        parameters: {
+          legacyActionMapping: 'generate',
+          region,
+          permitStatus: 'COM',
+          ...dateRange,
+        },
+      },
+      {
+        source: 'tenure analysis report',
+        path: '/api/lexis/reports/tenureReport',
+        format: 'XLS',
+        filename: 'tenure-analysis-report.xls',
+        parameters: {
+          legacyActionMapping: 'generatePermitReport',
+          region,
+          exemptionType: 'M',
+          ...dateRange,
+        },
+      },
+    ]
+
+    for (const report of reports) {
+      const response = await postWithCsrf(page, report.path, {
+        data: { parameters: report.parameters, format: report.format },
+      })
+      const body = await readReportBody(response, report.source)
+      const headers = response.headers()
+
+      expect(headers['content-disposition'] ?? '').toContain(report.filename)
+      expect(body.length, `${report.source} should not be empty`).toBeGreaterThan(100)
+      if (report.format === 'PDF') {
+        expect(headers['content-type']?.toLowerCase() ?? '').toContain('application/pdf')
+        expect(body.toString('utf8', 0, 4)).toBe('%PDF')
+      } else {
+        expect(headers['content-type']?.toLowerCase() ?? '').toContain('application/vnd.ms-excel')
+        expect(body.subarray(0, 8).toString('hex')).toBe('d0cf11e0a1b11ae1')
+      }
     }
   })
 

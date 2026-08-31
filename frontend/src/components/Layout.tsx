@@ -592,15 +592,14 @@ function Layout({ children }: LayoutProps) {
             onClick={toggleNavigation}
           />
 
-          <button
-            type="button"
+          <Link
+            to={defaultRoute}
             className="cds--header__name csp-header-name"
-            onClick={() => navigate(defaultRoute)}
-            aria-label="Go to your landing page"
+            aria-label="LEXIS Log Exemption Information System"
           >
             <span className="csp-header-prefix">LEXIS</span>
             <span className="csp-header-title">Log Exemption Information System</span>
-          </button>
+          </Link>
 
           <div className="cds--header__global csp-header-global">
             <div className="csp-header-theme-toggle">
