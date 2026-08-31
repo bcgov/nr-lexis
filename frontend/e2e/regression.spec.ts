@@ -740,14 +740,14 @@ const adminAccessiblePages: Array<[path: string, heading: RegExp]> = [
   ['/provincial/application/upload', /upload application submission/i],
   ['/provincial/application', /provincial application search/i],
   ['/federal', /federal application search/i],
-  ['/reports', /offer report/i],
+  ['/reports', /offers report/i],
   ['/admin/rtm/emslogamv/upload', /average market values/i],
 ]
 
 const reportAccessiblePages: Array<[path: string, heading: RegExp]> = [
   ['/reports/biweeklyListing', /advertising list/i],
-  ['/reports/offerReport', /offer report/i],
-  ['/reports/permitLedgerReport', /permit ledger report/i],
+  ['/reports/offerReport', /offers report/i],
+  ['/reports/permitLedgerReport', /permits report/i],
   ['/reports/transportReport', /transport report/i],
   ['/reports/speciesGradeReport', /species and grade report/i],
   ['/reports/tenureReport', /tenure analysis report/i],
@@ -1776,8 +1776,8 @@ test.describe('TEST IDIR admin regression', () => {
     await expandSideNavSection(page, 'Reports')
 
     for (const [linkName, path, heading] of [
-      ['Offers Report', '/reports/offerReport', /offer report/i],
-      ['Permits Report', '/reports/permitLedgerReport', /permit ledger report/i],
+      ['Offers Report', '/reports/offerReport', /offers report/i],
+      ['Permits Report', '/reports/permitLedgerReport', /permits report/i],
       ['Tenure Analysis', '/reports/tenureReport', /tenure analysis report/i],
     ] as const) {
       await page.locator(sideNavSection('Reports')).getByRole('link', { name: linkName }).click()
@@ -1820,7 +1820,7 @@ test.describe('TEST IDIR admin regression', () => {
     const page = await authenticatedIdirPage()
 
     for (const [path, retiredHeading] of retiredReportPages) {
-      await expectAccessiblePage(page, path, /offer report/i)
+      await expectAccessiblePage(page, path, /offers report/i)
       await expect.poll(() => new URL(page.url()).pathname).toBe('/reports/offerReport')
       await expect(page.getByRole('heading', { name: retiredHeading })).toHaveCount(0)
     }
