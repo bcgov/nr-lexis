@@ -506,7 +506,11 @@ describe('Layout shell', () => {
     renderLayout('/admin/rtm/emslogamv')
 
     expect(screen.queryByRole('link', { name: 'Dashboard' })).not.toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Go to your landing page' }))
+    const applicationName = screen.getByRole('link', {
+      name: /LEXIS Log Exemption Information System/,
+    })
+    expect(applicationName).toHaveAttribute('href', '/provincial/review')
+    await userEvent.click(applicationName)
 
     expect(screen.getByTestId('current-path')).toHaveTextContent('/provincial/review')
   })

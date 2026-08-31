@@ -536,6 +536,11 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       page.getByRole('heading', { level: 1, name: 'Provincial application search' }),
     ).toBeVisible()
     await expect(page.locator('.csp-header-prefix')).toHaveText('LEXIS')
+    const applicationName = page.getByRole('link', {
+      name: /LEXIS Log Exemption Information System/,
+    })
+    await expect(applicationName).toHaveAttribute('href', '/provincial/review')
+    await expect(applicationName).toHaveCSS('color', 'rgb(255, 255, 255)')
     const navigationToggle = page.getByRole('button', { name: 'Close menu' })
     await expect(navigationToggle).toBeVisible()
     await expect(navigationToggle).toHaveCSS('width', '48px')
@@ -1173,6 +1178,10 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     const secondRowCell = rows.nth(1).locator('td').first()
 
     await expect(rows).toHaveCount(2)
+    const disabledCreateExemptionAction = page.getByRole('button', {
+      name: 'Create exemption for selected applications',
+    })
+    await expect(disabledCreateExemptionAction).toBeDisabled()
     await expect(table).toHaveClass(/cds--data-table--md/)
     await expect(rows.first().getByRole('cell', { name: '—', exact: true })).toBeVisible()
     const firstRowHeight = await rows.first().evaluate((row) => row.getBoundingClientRect().height)
@@ -1233,10 +1242,21 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await page.getByRole('switch', { name: 'Toggle dark mode' }).click()
     await expect(page.locator('html')).toHaveAttribute('data-carbon-theme', 'g100')
     await expect(addApplicationAction).toHaveCSS('color', 'rgb(255, 255, 255)')
-    await expect(page.getByRole('button', { name: 'Clear all', exact: true })).toHaveCSS(
-      'color',
-      'rgb(255, 255, 255)',
-    )
+    const clearAllButton = page.getByRole('button', { name: 'Clear all', exact: true })
+    await expect(clearAllButton).toHaveCSS('color', 'rgb(255, 255, 255)')
+    await clearAllButton.hover()
+    await expect(clearAllButton).toHaveCSS('background-color', 'rgb(51, 51, 51)')
+    await expect(clearAllButton).toHaveCSS('color', 'rgb(255, 255, 255)')
+    const disabledStylesBeforeHover = await disabledCreateExemptionAction.evaluate((element) => {
+      const style = getComputedStyle(element)
+      return { backgroundColor: style.backgroundColor, color: style.color }
+    })
+    await disabledCreateExemptionAction.hover({ force: true })
+    const disabledStylesAfterHover = await disabledCreateExemptionAction.evaluate((element) => {
+      const style = getComputedStyle(element)
+      return { backgroundColor: style.backgroundColor, color: style.color }
+    })
+    expect(disabledStylesAfterHover).toEqual(disabledStylesBeforeHover)
     await expect(page.getByRole('button', { name: 'Search', exact: true })).toHaveCSS(
       'background-color',
       'rgb(0, 115, 230)',

@@ -20,7 +20,7 @@ import {
   redactedTextSnippet,
 } from './utils/regression-auth'
 import { E2E_BASE_URL } from './utils'
-import { formatBusinessIsoDate } from '../src/utils/date'
+import { businessDateParts, formatBusinessIsoDate, formatIsoDateParts } from '../src/utils/date'
 
 const sideNavSection = (name: string) =>
   `.csp-side-nav__section:has(> .cds--side-nav__submenu .cds--side-nav__submenu-title:text-is("${name}"))`
@@ -323,6 +323,21 @@ type GenericSearchResponse = {
   size?: number
 }
 
+type AdminPolicyMutationResponse = {
+  success?: boolean
+  lexisFeePolicyId?: number | string | null
+  lexisFILPolicyId?: number | string | null
+  effectiveDate?: string | null
+  orgUnitNo?: number | string | null
+  percentIncrease?: number | string | null
+  filPercent?: number | string | null
+  entryUserId?: string | null
+  entryTimestamp?: string | null
+  updateUserId?: string | null
+  updateTimestamp?: string | null
+  errors?: unknown
+}
+
 type GenericOptionsResponse = Record<string, unknown>
 type ReferenceDataResponse = unknown[]
 
@@ -410,6 +425,37 @@ const regressionOwnerClientLocationCode =
 const regressionLegacyRegionCode =
   process.env.E2E_REGRESSION_LEGACY_REGION_CODE?.trim().toUpperCase() || 'RSC'
 const regressionTimberMark = process.env.E2E_REGRESSION_TIMBER_MARK?.trim().toUpperCase() || 'NCHWP'
+
+const uniqueRegressionFutureDate = (salt = 0): string => {
+  const rawSeed = process.env.GITHUB_RUN_ID ?? Date.now().toString()
+  const parsedSeed = Number(rawSeed.slice(-8))
+  const runSeed = Number.isFinite(parsedSeed) ? parsedSeed : Date.now()
+  const parsedAttempt = Number(process.env.GITHUB_RUN_ATTEMPT ?? '1')
+  const runAttempt = Number.isFinite(parsedAttempt) ? parsedAttempt : 1
+  const date = new Date()
+  const futureOffsetDays = 3_650 + ((runSeed + runAttempt * 97) % 3_650) + salt
+  date.setUTCDate(date.getUTCDate() + futureOffsetDays)
+  return formatBusinessIsoDate(date)
+}
+
+const legacyTenureReportDateRange = (): { fromDate: string; toDate: string } => {
+  const today = businessDateParts()
+  const previousMonth = new Date(Date.UTC(today.year, today.month - 1, 0))
+  return {
+    fromDate: formatIsoDateParts(today.year - 1, today.month, 1),
+    toDate: formatIsoDateParts(
+      previousMonth.getUTCFullYear(),
+      previousMonth.getUTCMonth() + 1,
+      previousMonth.getUTCDate(),
+    ),
+  }
+}
+
+const noDataRegressionReportDateRange = (): { fromDate: string; toDate: string } => {
+  // Exercise deployed Oracle/Jasper rendering without exporting a broad set of TEST records.
+  const futureDate = uniqueRegressionFutureDate(31)
+  return { fromDate: futureDate, toDate: futureDate }
+}
 
 const expectNaturalResourceRegions = (value: unknown, source: string): void => {
   const regions = asRecordArray(value)
@@ -740,14 +786,14 @@ const adminAccessiblePages: Array<[path: string, heading: RegExp]> = [
   ['/provincial/application/upload', /upload application submission/i],
   ['/provincial/application', /provincial application search/i],
   ['/federal', /federal application search/i],
-  ['/reports', /offer report/i],
+  ['/reports', /offers report/i],
   ['/admin/rtm/emslogamv/upload', /average market values/i],
 ]
 
 const reportAccessiblePages: Array<[path: string, heading: RegExp]> = [
   ['/reports/biweeklyListing', /advertising list/i],
-  ['/reports/offerReport', /offer report/i],
-  ['/reports/permitLedgerReport', /permit ledger report/i],
+  ['/reports/offerReport', /offers report/i],
+  ['/reports/permitLedgerReport', /permits report/i],
   ['/reports/transportReport', /transport report/i],
   ['/reports/speciesGradeReport', /species and grade report/i],
   ['/reports/tenureReport', /tenure analysis report/i],
@@ -1636,6 +1682,9 @@ test.describe('TEST IDIR admin regression', () => {
     expect(capabilities.authenticated).toBe(true)
     expect(String(capabilities.principal ?? '').trim()).not.toBe('')
     expect(hasAdminRole(roles)).toBe(true)
+    await expect(
+      page.getByRole('link', { name: /LEXIS Log Exemption Information System/ }),
+    ).toHaveAttribute('href', '/provincial/review')
 
     for (const action of requiredAdminActions) {
       expect(hasGrantedAction(grantedActions, action), `Expected admin grant for ${action}`).toBe(
@@ -1721,6 +1770,54 @@ test.describe('TEST IDIR admin regression', () => {
     await page.getByRole('button', { name: 'Open menu' }).click()
   })
 
+  test('keeps header and tertiary actions accessible in dark mode', async () => {
+    const page = await authenticatedIdirPage()
+
+    await expectAccessiblePage(
+      page,
+      `/provincial/review?applicationNumber=${missingApplicationNumber}`,
+      /provincial application review/i,
+    )
+    const themeSwitch = page.getByRole('switch', { name: 'Toggle dark mode' })
+    const initiallyDark = (await themeSwitch.getAttribute('aria-checked')) === 'true'
+
+    if (!initiallyDark) {
+      await themeSwitch.click()
+    }
+
+    try {
+      await expect(page.locator('html')).toHaveAttribute('data-carbon-theme', 'g100')
+      await expect(
+        page.getByRole('link', { name: /LEXIS Log Exemption Information System/ }),
+      ).toHaveCSS('color', 'rgb(255, 255, 255)')
+
+      const clearAll = page.getByRole('button', { name: 'Clear all', exact: true })
+      await expect(clearAll).toBeEnabled({ timeout: 30_000 })
+      await clearAll.hover()
+      await expect(clearAll).toHaveCSS('background-color', 'rgb(51, 51, 51)')
+      await expect(clearAll).toHaveCSS('color', 'rgb(255, 255, 255)')
+
+      const approveSelected = page.getByRole('button', {
+        name: 'Approve Selected Applications',
+      })
+      await expect(approveSelected).toBeDisabled()
+      const beforeHover = await approveSelected.evaluate((element) => {
+        const style = getComputedStyle(element)
+        return { backgroundColor: style.backgroundColor, color: style.color }
+      })
+      await approveSelected.hover({ force: true })
+      const afterHover = await approveSelected.evaluate((element) => {
+        const style = getComputedStyle(element)
+        return { backgroundColor: style.backgroundColor, color: style.color }
+      })
+      expect(afterHover).toEqual(beforeHover)
+    } finally {
+      if (!initiallyDark) {
+        await themeSwitch.click()
+      }
+    }
+  })
+
   test('keeps upload navigation scoped to provincial application submissions', async () => {
     const page = await authenticatedIdirPage()
 
@@ -1769,6 +1866,42 @@ test.describe('TEST IDIR admin regression', () => {
     await expect.poll(() => new URL(page.url()).pathname).toBe('/federal')
   })
 
+  test('opens each administrator document upload workflow without submitting', async () => {
+    const page = await authenticatedIdirPage()
+    const apiServerErrors = collectApiServerErrors(page)
+
+    for (const [workflowType, workflowHeading, targetLabel] of [
+      ['application', 'Application upload', 'Application number'],
+      ['exemption', 'Exemption upload', 'Exemption number'],
+      ['permit', 'Permit upload', 'Permit number'],
+      ['invoice', 'Invoice upload', 'Permit number'],
+    ] as const) {
+      await expectAccessiblePage(page, `/admin/uploads?type=${workflowType}`, /data upload/i)
+      await expect.poll(() => new URL(page.url()).searchParams.get('type')).toBe(workflowType)
+      await expect(page.getByRole('heading', { name: workflowHeading, exact: true })).toBeVisible()
+      await expect(page.getByRole('combobox', { name: 'Upload type' })).toHaveValue(workflowHeading)
+      await expect(page.getByRole('combobox', { name: targetLabel })).toBeVisible()
+      await expect(page.getByRole('textbox', { name: 'Document description' })).toBeVisible()
+      await expect(
+        page.getByRole('button', { name: 'Choose files for Upload documents' }),
+      ).toBeEnabled()
+      await expect(page.getByRole('button', { name: 'Review upload' })).toBeDisabled()
+
+      if (workflowType === 'invoice') {
+        for (const fieldLabel of [
+          'Invoice number',
+          'Export value (CAD)',
+          'Conversion rate',
+          'Fee in lieu',
+        ]) {
+          await expect(page.getByRole('textbox', { name: fieldLabel })).toBeVisible()
+        }
+      }
+    }
+
+    expect(apiServerErrors).toEqual([])
+  })
+
   test('opens reports from direct sidebar report links', async () => {
     const page = await authenticatedIdirPage()
 
@@ -1776,13 +1909,290 @@ test.describe('TEST IDIR admin regression', () => {
     await expandSideNavSection(page, 'Reports')
 
     for (const [linkName, path, heading] of [
-      ['Offers Report', '/reports/offerReport', /offer report/i],
-      ['Permits Report', '/reports/permitLedgerReport', /permit ledger report/i],
+      ['Advertising List', '/reports/biweeklyListing', /advertising list/i],
+      ['Offers Report', '/reports/offerReport', /offers report/i],
+      ['Permits Report', '/reports/permitLedgerReport', /permits report/i],
+      ['Transport Report', '/reports/transportReport', /transport report/i],
+      ['Species and Grade Report', '/reports/speciesGradeReport', /species and grade report/i],
       ['Tenure Analysis', '/reports/tenureReport', /tenure analysis report/i],
     ] as const) {
       await page.locator(sideNavSection('Reports')).getByRole('link', { name: linkName }).click()
       await expect(page.getByRole('heading', { name: heading }).first()).toBeVisible()
       await expect.poll(() => new URL(page.url()).pathname).toBe(path)
+    }
+  })
+
+  test('matches legacy fields and defaults on active report forms', async () => {
+    const page = await authenticatedIdirPage()
+    const apiServerErrors = collectApiServerErrors(page)
+    const tenureDates = legacyTenureReportDateRange()
+
+    const reportContracts: Array<{
+      path: string
+      heading: RegExp
+      labels: string[]
+      defaults: Array<[string, string]>
+      dates?: Array<[string, string]>
+    }> = [
+      {
+        path: '/reports/offerReport',
+        heading: /offers report/i,
+        labels: [
+          'Region',
+          'Jurisdiction',
+          'Client number',
+          'Application from date',
+          'Application to date',
+          'Withdrawn from date',
+          'Withdrawn to date',
+          'Output format',
+        ],
+        defaults: [
+          ['Jurisdiction', 'All'],
+          ['Output format', 'PDF'],
+        ],
+      },
+      {
+        path: '/reports/permitLedgerReport',
+        heading: /permits report/i,
+        labels: [
+          'Region',
+          'Client number',
+          'Exemption number',
+          'Exemption type',
+          'Exemption reason',
+          'Permit status',
+          'Growth type',
+          'Timber mark',
+          'Final destination country',
+          'Issued from date',
+          'Issued to date',
+          'Output format',
+        ],
+        defaults: [
+          ['Exemption type', 'All'],
+          ['Exemption reason', 'All'],
+          ['Permit status', 'All'],
+          ['Growth type', 'All'],
+          ['Final destination country', 'All'],
+          ['Output format', 'PDF'],
+        ],
+      },
+      {
+        path: '/reports/transportReport',
+        heading: /transport report/i,
+        labels: [
+          'Jurisdiction',
+          'Region',
+          'Final destination country',
+          'Customs port of export',
+          'Permit status',
+          'Permit issued from date',
+          'Permit issued to date',
+          'Output format',
+        ],
+        defaults: [
+          ['Jurisdiction', 'All'],
+          ['Final destination country', 'All'],
+          ['Customs port of export', 'All'],
+          ['Permit status', 'All'],
+          ['Output format', 'PDF'],
+        ],
+      },
+      {
+        path: '/reports/speciesGradeReport',
+        heading: /species and grade report/i,
+        labels: [
+          'Region',
+          'Permit status',
+          'Exemption number',
+          'Exemption type',
+          'Exemption reason',
+          'Growth type',
+          'Timber mark',
+          'Forest file ID',
+          'Permit issued from date',
+          'Permit issued to date',
+          'Output format',
+        ],
+        defaults: [
+          ['Permit status', 'Complete'],
+          ['Exemption type', 'All'],
+          ['Exemption reason', 'All'],
+          ['Growth type', 'All'],
+          ['Output format', 'PDF'],
+        ],
+      },
+      {
+        path: '/reports/tenureReport',
+        heading: /tenure analysis report/i,
+        labels: [
+          'Report variant',
+          'Issued from date',
+          'Issued to date',
+          'Region',
+          'Exemption number',
+          'Exemption type',
+          'Client number',
+          'Forest file ID',
+          'Exemption reason',
+          'Client type',
+          ...Array.from({ length: 6 }, (_, index) => `Tenure type ${index + 1}`),
+          ...Array.from({ length: 6 }, (_, index) => `Timber mark ${index + 1}`),
+          'Output format',
+        ],
+        defaults: [
+          ['Report variant', 'Permit details report'],
+          ['Exemption type', 'Ministerial'],
+          ['Client type', 'Permit holder'],
+          ['Output format', 'PDF'],
+        ],
+        dates: [
+          ['Issued from date', tenureDates.fromDate],
+          ['Issued to date', tenureDates.toDate],
+        ],
+      },
+    ]
+
+    for (const contract of reportContracts) {
+      await expectAccessiblePage(page, contract.path, contract.heading)
+      await expect(page.getByRole('button', { name: 'Generate report' })).toBeEnabled({
+        timeout: 30_000,
+      })
+
+      for (const label of contract.labels) {
+        const control =
+          label === 'Region'
+            ? page.getByRole('combobox', { name: /^Region\b/ })
+            : page.getByLabel(label, { exact: true })
+        await expect(control, `${contract.path} should expose ${label}`).toBeVisible()
+      }
+      for (const [label, value] of contract.defaults) {
+        await expect(page.getByRole('combobox', { name: label })).toHaveValue(value)
+      }
+      for (const [label, value] of contract.dates ?? []) {
+        await expect(page.getByLabel(label, { exact: true })).toHaveValue(value)
+      }
+    }
+
+    expect(apiServerErrors).toEqual([])
+  })
+
+  test('enforces legacy report input edge cases before generation', async () => {
+    const page = await authenticatedIdirPage()
+
+    await expectAccessiblePage(page, '/reports/speciesGradeReport', /species and grade report/i)
+    await expect(page.getByRole('button', { name: 'Generate report' })).toBeEnabled({
+      timeout: 30_000,
+    })
+    const timberMark = page.getByLabel('Timber mark', { exact: true })
+    const forestFileId = page.getByLabel('Forest file ID', { exact: true })
+
+    await timberMark.fill('regression123')
+    await expect(forestFileId).toBeDisabled()
+    await page.getByRole('button', { name: 'Clear all' }).click()
+    await expect(timberMark).toHaveValue('')
+    await expect(forestFileId).toBeEnabled()
+
+    await forestFileId.fill('regression123')
+    await expect(timberMark).toBeDisabled()
+    await page.getByRole('button', { name: 'Clear all' }).click()
+    await expect(forestFileId).toHaveValue('')
+    await expect(timberMark).toBeEnabled()
+
+    await expectAccessiblePage(page, '/reports/tenureReport', /tenure analysis report/i)
+    const issuedFromDate = page.getByLabel('Issued from date', { exact: true })
+    const issuedToDate = page.getByLabel('Issued to date', { exact: true })
+    const generateReport = page.getByRole('button', { name: 'Generate report' })
+    await expect(generateReport).toBeEnabled({ timeout: 30_000 })
+
+    await issuedFromDate.fill('2030-02-31')
+    await expect(generateReport).toBeDisabled()
+    await issuedFromDate.fill('2030-01-01')
+    await expect(issuedToDate).toHaveValue('2030-12-31')
+    await expect(generateReport).toBeEnabled()
+  })
+
+  test('generates each active legacy-equivalent report artifact', async () => {
+    test.setTimeout(300_000)
+    const page = await authenticatedIdirPage()
+    const reportOptions = await readJsonResponse<GenericOptionsResponse>(
+      await getWithAuth(page, '/api/lexis/reports/options'),
+    )
+    expectNaturalResourceRegions(reportOptions.regions, 'active report generation')
+    const region = asRecordArray(reportOptions.regions).map(optionCode).sort().join(',')
+    const dateRange = noDataRegressionReportDateRange()
+
+    const reports: Array<{
+      source: string
+      path: string
+      format: 'PDF' | 'XLS'
+      filename: string
+      parameters: Record<string, string>
+    }> = [
+      {
+        source: 'offers report',
+        path: '/api/lexis/reports/offerReport',
+        format: 'PDF',
+        filename: 'offer-report.pdf',
+        parameters: { legacyActionMapping: 'generate', region, ...dateRange },
+      },
+      {
+        source: 'permits report',
+        path: '/api/lexis/reports/permitLedgerReport',
+        format: 'PDF',
+        filename: 'permit-ledger-report.pdf',
+        parameters: { legacyActionMapping: 'generate', region, ...dateRange },
+      },
+      {
+        source: 'transport report',
+        path: '/api/lexis/reports/transportReport',
+        format: 'PDF',
+        filename: 'transport-report.pdf',
+        parameters: { legacyActionMapping: 'generate', region, ...dateRange },
+      },
+      {
+        source: 'species and grade report',
+        path: '/api/lexis/reports/speciesGradeReport',
+        format: 'PDF',
+        filename: 'species-and-grade-report.pdf',
+        parameters: {
+          legacyActionMapping: 'generate',
+          region,
+          permitStatus: 'COM',
+          ...dateRange,
+        },
+      },
+      {
+        source: 'tenure analysis report',
+        path: '/api/lexis/reports/tenureReport',
+        format: 'XLS',
+        filename: 'tenure-analysis-report.xls',
+        parameters: {
+          legacyActionMapping: 'generatePermitReport',
+          region,
+          exemptionType: 'M',
+          ...dateRange,
+        },
+      },
+    ]
+
+    for (const report of reports) {
+      const response = await postWithCsrf(page, report.path, {
+        data: { parameters: report.parameters, format: report.format },
+      })
+      const body = await readReportBody(response, report.source)
+      const headers = response.headers()
+
+      expect(headers['content-disposition'] ?? '').toContain(report.filename)
+      expect(body.length, `${report.source} should not be empty`).toBeGreaterThan(100)
+      if (report.format === 'PDF') {
+        expect(headers['content-type']?.toLowerCase() ?? '').toContain('application/pdf')
+        expect(body.toString('utf8', 0, 4)).toBe('%PDF')
+      } else {
+        expect(headers['content-type']?.toLowerCase() ?? '').toContain('application/vnd.ms-excel')
+        expect(body.subarray(0, 8).toString('hex')).toBe('d0cf11e0a1b11ae1')
+      }
     }
   })
 
@@ -1820,7 +2230,7 @@ test.describe('TEST IDIR admin regression', () => {
     const page = await authenticatedIdirPage()
 
     for (const [path, retiredHeading] of retiredReportPages) {
-      await expectAccessiblePage(page, path, /offer report/i)
+      await expectAccessiblePage(page, path, /offers report/i)
       await expect.poll(() => new URL(page.url()).pathname).toBe('/reports/offerReport')
       await expect(page.getByRole('heading', { name: retiredHeading })).toHaveCount(0)
     }
@@ -2731,6 +3141,255 @@ test.describe('TEST IDIR admin regression', () => {
     expect(Array.isArray(reportOptions.reportJurisdictions)).toBe(true)
     expectNaturalResourceRegions(reportOptions.regions, 'report options')
     expectReportScheduleOptions(reportOptions.currentSchedules, 'report list dates')
+  })
+
+  test('opens legacy-equivalent administrator policy add forms without saving', async () => {
+    const page = await authenticatedIdirPage()
+    const apiServerErrors = collectApiServerErrors(page)
+
+    for (const [path, heading, regionName, addAction, fieldLabels] of [
+      [
+        '/admin/policies/fee',
+        /multiplication factor/i,
+        'Fee policies',
+        'Add fee policy',
+        ['Policy effective date', 'Region', 'Fee increase percentage'],
+      ],
+      [
+        '/admin/policies/fil',
+        /non-appraised sec\.3 fil%/i,
+        'Fee in lieu policies',
+        'Add fee in lieu policy',
+        ['Policy effective date', 'Fee in lieu percentage'],
+      ],
+    ] as const) {
+      await expectAccessiblePage(page, path, heading)
+
+      const policyRegion = page.getByRole('region', { name: regionName })
+      const addButton = policyRegion.getByRole('button', { name: addAction })
+      await expect(addButton).toBeEnabled({ timeout: 30_000 })
+      await addButton.click()
+
+      const dialog = page.getByRole('dialog', { name: addAction })
+      await expect(dialog).toBeVisible()
+      for (const fieldLabel of fieldLabels) {
+        await expect(dialog.getByLabel(fieldLabel)).toBeVisible()
+      }
+      await dialog.getByRole('button', { name: 'Cancel' }).click()
+      await expect(dialog).toHaveCount(0)
+    }
+
+    expect(apiServerErrors).toEqual([])
+  })
+
+  test('creates, updates, and cleans up future administrator policies', async () => {
+    test.skip(
+      !isSharedTestRegressionBaseUrl(E2E_BASE_URL),
+      'Persistent policy regression runs only against shared TEST.',
+    )
+
+    const page = await authenticatedIdirPage()
+    const cleanup = new RegressionCleanupStack()
+    const feePolicyPath = '/api/lexis/admin/policies/fee'
+    const filPolicyPath = '/api/lexis/admin/policies/fil'
+    const listPolicyRows = async (path: string): Promise<Record<string, unknown>[]> => {
+      const response = await readJsonResponse<GenericSearchResponse>(
+        await getWithAuth(page, path, {
+          params: {
+            page: '0',
+            size: '200',
+            sortField: 'effective_date',
+            sortDirection: 'desc',
+          },
+        }),
+      )
+      return asRecordArray(response.results)
+    }
+    const policyRowId = (row: Record<string, unknown>): string =>
+      String(row.lexisFeePolicyId ?? row.lexisFILPolicyId ?? '').trim()
+    const availableFutureDate = (
+      existingRows: Record<string, unknown>[],
+      isSameKey: (row: Record<string, unknown>, candidate: string) => boolean,
+      startSalt: number,
+    ): string => {
+      for (let attempt = 0; attempt < 30; attempt += 1) {
+        const candidate = uniqueRegressionFutureDate(startSalt + attempt)
+        if (!existingRows.some((row) => isSameKey(row, candidate))) {
+          return candidate
+        }
+      }
+      throw new Error('Unable to reserve a unique future policy date for TEST regression.')
+    }
+    const deletePolicyIfPresent = async (
+      path: string,
+      policyId: string,
+      label: string,
+    ): Promise<void> => {
+      if (!(await listPolicyRows(path)).some((row) => policyRowId(row) === policyId)) {
+        return
+      }
+      const result = await readJsonResponse<AdminPolicyMutationResponse>(
+        await deleteWithCsrf(page, `${path}/${policyId}`),
+      )
+      expect(result.success, `${label} cleanup should succeed`).toBe(true)
+      expect(
+        (await listPolicyRows(path)).some((row) => policyRowId(row) === policyId),
+        `${label} cleanup should remove the created row`,
+      ).toBe(false)
+    }
+    let primaryError: unknown
+
+    try {
+      const reportOptions = await readJsonResponse<GenericOptionsResponse>(
+        await getWithAuth(page, '/api/lexis/reports/options'),
+      )
+      const regionOptions = asRecordArray(reportOptions.regions)
+      expectNaturalResourceRegions(regionOptions, 'policy regression regions')
+      const orgUnitNo = requiredString(optionCode(regionOptions[0]), 'Policy regression region')
+      const existingFeePolicies = await listPolicyRows(feePolicyPath)
+      const existingFilPolicies = await listPolicyRows(filPolicyPath)
+      const feeEffectiveDate = availableFutureDate(
+        existingFeePolicies,
+        (row, candidate) =>
+          String(row.effectiveDate ?? '') === candidate &&
+          String(row.orgUnitNo ?? '') === orgUnitNo,
+        0,
+      )
+      const filEffectiveDate = availableFutureDate(
+        existingFilPolicies,
+        (row, candidate) => String(row.effectiveDate ?? '') === candidate,
+        100,
+      )
+
+      const addedFeePolicy = await readJsonResponse<AdminPolicyMutationResponse>(
+        await postWithCsrf(page, feePolicyPath, {
+          data: {
+            effectiveDate: feeEffectiveDate,
+            orgUnitNo,
+            policyPercentage: '12',
+          },
+        }),
+      )
+      expect(addedFeePolicy.success).toBe(true)
+      expect(asStringArray(addedFeePolicy.errors)).toEqual([])
+      const feePolicyId = requiredString(
+        addedFeePolicy.lexisFeePolicyId,
+        'Regression fee policy id',
+      )
+      expect(Number(feePolicyId)).toBeGreaterThan(0)
+      const feePolicyCleanup = cleanup.defer('delete future fee policy', () =>
+        deletePolicyIfPresent(feePolicyPath, feePolicyId, 'Fee policy'),
+      )
+      expect(addedFeePolicy.effectiveDate).toBe(feeEffectiveDate)
+      expect(String(addedFeePolicy.orgUnitNo)).toBe(orgUnitNo)
+      expect(String(addedFeePolicy.percentIncrease)).toBe('12')
+      requiredString(addedFeePolicy.entryUserId, 'Regression fee policy entry user')
+      requiredString(addedFeePolicy.entryTimestamp, 'Regression fee policy entry timestamp')
+      let listedFeePolicy = (await listPolicyRows(feePolicyPath)).find(
+        (row) => policyRowId(row) === feePolicyId,
+      )
+      expect(listedFeePolicy).toBeDefined()
+      expect(String(listedFeePolicy?.percentIncrease)).toBe('12')
+
+      const updatedFeePolicy = await readJsonResponse<AdminPolicyMutationResponse>(
+        await putWithCsrf(page, `${feePolicyPath}/${feePolicyId}`, {
+          data: {
+            effectiveDate: feeEffectiveDate,
+            orgUnitNo,
+            policyPercentage: '13',
+          },
+        }),
+      )
+      expect(updatedFeePolicy.success).toBe(true)
+      expect(asStringArray(updatedFeePolicy.errors)).toEqual([])
+      expect(updatedFeePolicy.lexisFeePolicyId).toEqual(addedFeePolicy.lexisFeePolicyId)
+      expect(String(updatedFeePolicy.percentIncrease)).toBe('13')
+      requiredString(updatedFeePolicy.updateUserId, 'Regression fee policy update user')
+      requiredString(updatedFeePolicy.updateTimestamp, 'Regression fee policy update timestamp')
+      listedFeePolicy = (await listPolicyRows(feePolicyPath)).find(
+        (row) => policyRowId(row) === feePolicyId,
+      )
+      expect(String(listedFeePolicy?.percentIncrease)).toBe('13')
+
+      const deletedFeePolicy = await readJsonResponse<AdminPolicyMutationResponse>(
+        await deleteWithCsrf(page, `${feePolicyPath}/${feePolicyId}`),
+      )
+      expect(deletedFeePolicy.success).toBe(true)
+      expect(
+        (await listPolicyRows(feePolicyPath)).some((row) => policyRowId(row) === feePolicyId),
+      ).toBe(false)
+      feePolicyCleanup.complete()
+
+      const addedFilPolicy = await readJsonResponse<AdminPolicyMutationResponse>(
+        await postWithCsrf(page, filPolicyPath, {
+          data: {
+            effectiveDate: filEffectiveDate,
+            filPercentage: '23',
+          },
+        }),
+      )
+      expect(addedFilPolicy.success).toBe(true)
+      expect(asStringArray(addedFilPolicy.errors)).toEqual([])
+      const filPolicyId = requiredString(
+        addedFilPolicy.lexisFILPolicyId,
+        'Regression fee in lieu policy id',
+      )
+      expect(Number(filPolicyId)).toBeGreaterThan(0)
+      const filPolicyCleanup = cleanup.defer('delete future fee in lieu policy', () =>
+        deletePolicyIfPresent(filPolicyPath, filPolicyId, 'Fee in lieu policy'),
+      )
+      expect(addedFilPolicy.effectiveDate).toBe(filEffectiveDate)
+      expect(String(addedFilPolicy.filPercent)).toBe('23')
+      requiredString(addedFilPolicy.entryUserId, 'Regression fee in lieu policy entry user')
+      requiredString(addedFilPolicy.entryTimestamp, 'Regression fee in lieu policy entry timestamp')
+      let listedFilPolicy = (await listPolicyRows(filPolicyPath)).find(
+        (row) => policyRowId(row) === filPolicyId,
+      )
+      expect(listedFilPolicy).toBeDefined()
+      expect(String(listedFilPolicy?.filPercent)).toBe('23')
+
+      const updatedFilPolicy = await readJsonResponse<AdminPolicyMutationResponse>(
+        await putWithCsrf(page, `${filPolicyPath}/${filPolicyId}`, {
+          data: {
+            effectiveDate: filEffectiveDate,
+            filPercentage: '24',
+          },
+        }),
+      )
+      expect(updatedFilPolicy.success).toBe(true)
+      expect(asStringArray(updatedFilPolicy.errors)).toEqual([])
+      expect(updatedFilPolicy.lexisFILPolicyId).toEqual(addedFilPolicy.lexisFILPolicyId)
+      expect(String(updatedFilPolicy.filPercent)).toBe('24')
+      requiredString(updatedFilPolicy.updateUserId, 'Regression fee in lieu policy update user')
+      requiredString(
+        updatedFilPolicy.updateTimestamp,
+        'Regression fee in lieu policy update timestamp',
+      )
+      listedFilPolicy = (await listPolicyRows(filPolicyPath)).find(
+        (row) => policyRowId(row) === filPolicyId,
+      )
+      expect(String(listedFilPolicy?.filPercent)).toBe('24')
+
+      const deletedFilPolicy = await readJsonResponse<AdminPolicyMutationResponse>(
+        await deleteWithCsrf(page, `${filPolicyPath}/${filPolicyId}`),
+      )
+      expect(deletedFilPolicy.success).toBe(true)
+      expect(
+        (await listPolicyRows(filPolicyPath)).some((row) => policyRowId(row) === filPolicyId),
+      ).toBe(false)
+      filPolicyCleanup.complete()
+    } catch (error) {
+      primaryError = error
+    }
+
+    const cleanupFailures = await cleanup.run()
+    const failures = [...cleanupFailures]
+    if (primaryError !== undefined) {
+      failures.unshift(
+        primaryError instanceof Error ? primaryError : new Error(String(primaryError)),
+      )
+    }
+    throwRegressionFailures('Administrator policy regression and cleanup failed.', failures)
   })
 
   test('rejects export schedule administration API access', async () => {

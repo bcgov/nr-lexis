@@ -281,6 +281,7 @@ body {
   letter-spacing: 0.1px;
   overflow: hidden;
   text-align: left;
+  text-decoration: none;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -300,6 +301,13 @@ body {
 .csp-header-name:hover,
 .csp-header-name:focus-visible {
   background-color: var(--csp-header-hover);
+}
+
+.csp-app-header .csp-header-name,
+.csp-app-header .csp-header-name:hover,
+.csp-app-header .csp-header-name:focus-visible {
+  color: var(--csp-text-inverse);
+  text-decoration: none;
 }
 
 .csp-navigation-toggle {
@@ -836,11 +844,11 @@ a.csp-side-nav__link:not([aria-current='page']) .csp-side-nav__icon > svg {
   display: none;
 }
 
-.app-shell a:not(.csp-side-nav__link):not(.cds--btn) {
+.app-shell a:not(.csp-side-nav__link):not(.cds--btn):not(.csp-header-name) {
   color: var(--csp-link-primary);
 }
 
-.app-shell a:not(.csp-side-nav__link):not(.cds--btn):hover {
+.app-shell a:not(.csp-side-nav__link):not(.cds--btn):not(.csp-header-name):hover {
   color: var(--csp-link-hover);
 }
 
@@ -896,6 +904,13 @@ b {
 
 .cds--btn--tertiary:hover {
   background-color: #ebf2fc;
+  border-color: var(--cds-button-tertiary);
+  color: var(--cds-button-tertiary);
+}
+
+:root[data-carbon-theme='g100'] .cds--btn--tertiary:not(:disabled):not(.cds--btn--disabled):hover,
+.cds--g100 .app-shell .cds--btn--tertiary:not(:disabled):not(.cds--btn--disabled):hover {
+  background-color: var(--cds-layer-hover-01);
   border-color: var(--cds-button-tertiary);
   color: var(--cds-button-tertiary);
 }
