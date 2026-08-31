@@ -41,19 +41,35 @@ describe('getWithAuth', () => {
     expect(waitForTimeout).not.toHaveBeenCalled()
   })
 
-  it('preserves the final transient error after three attempts', async () => {
+  it('recovers when the fourth authenticated request succeeds', async () => {
+    const response = {} as APIResponse
+    const get = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('apiRequestContext.get: connect ECONNREFUSED first'))
+      .mockRejectedValueOnce(new Error('apiRequestContext.get: connect ECONNREFUSED second'))
+      .mockRejectedValueOnce(new Error('apiRequestContext.get: connect ECONNREFUSED third'))
+      .mockResolvedValue(response)
+    const { page, waitForTimeout } = pageWithGet(get)
+
+    await expect(getWithAuth(page, '/api/lexis/shipping-reference-options')).resolves.toBe(response)
+    expect(get).toHaveBeenCalledTimes(4)
+    expect(waitForTimeout).toHaveBeenCalledTimes(3)
+  })
+
+  it('preserves the final transient error after four attempts', async () => {
     const finalError = new Error('apiRequestContext.get: connect ETIMEDOUT final')
     const get = vi
       .fn()
       .mockRejectedValueOnce(new Error('apiRequestContext.get: connect ETIMEDOUT first'))
       .mockRejectedValueOnce(new Error('apiRequestContext.get: connect ETIMEDOUT second'))
+      .mockRejectedValueOnce(new Error('apiRequestContext.get: connect ETIMEDOUT third'))
       .mockRejectedValueOnce(finalError)
     const { page, waitForTimeout } = pageWithGet(get)
 
     await expect(getWithAuth(page, '/api/lexis/shipping-reference-options')).rejects.toBe(
       finalError,
     )
-    expect(get).toHaveBeenCalledTimes(3)
-    expect(waitForTimeout).toHaveBeenCalledTimes(2)
+    expect(get).toHaveBeenCalledTimes(4)
+    expect(waitForTimeout).toHaveBeenCalledTimes(3)
   })
 })
