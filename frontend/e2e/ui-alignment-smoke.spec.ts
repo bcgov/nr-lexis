@@ -774,10 +774,8 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     )
     expect(typographyFoundation.dateFontFamily).toContain('BC Sans')
 
-    const themeSwitch = page.getByRole('switch', {
-      name: /Switch to (?:dark|light) theme/,
-    })
-    await expect(themeSwitch).toHaveAccessibleName('Switch to dark theme')
+    const themeSwitch = page.getByRole('switch', { name: 'Dark theme' })
+    await expect(themeSwitch).toHaveAccessibleName('Dark theme')
     await expect(themeSwitch).toHaveCSS('width', '48px')
     await expect(themeSwitch).toHaveCSS('height', '24px')
     await expect(themeSwitch).toHaveCSS('background-color', 'rgba(255, 255, 255, 0.9)')
@@ -831,7 +829,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
 
     await themeSwitch.click()
     await expect(themeSwitch).toHaveAttribute('aria-checked', 'true')
-    await expect(themeSwitch).toHaveAccessibleName('Switch to light theme')
+    await expect(themeSwitch).toHaveAccessibleName('Dark theme')
     await expect(themeSwitch).toHaveCSS('background-color', 'rgb(22, 22, 22)')
     await expect(page.locator('.csp-theme-switch__thumb')).toHaveCSS(
       'transform',
@@ -875,7 +873,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
 
     await page.reload({ waitUntil: 'domcontentloaded' })
 
-    await expect(page.getByRole('switch', { name: 'Switch to light theme' })).toHaveAttribute(
+    await expect(page.getByRole('switch', { name: 'Dark theme' })).toHaveAttribute(
       'aria-checked',
       'true',
     )
@@ -1243,7 +1241,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(firstRowCell).toHaveCSS('background-color', 'rgb(255, 255, 255)')
 
     const addApplicationAction = page.getByRole('link', { name: 'Add application' })
-    await page.getByRole('switch', { name: 'Switch to dark theme' }).click()
+    await page.getByRole('switch', { name: 'Dark theme' }).click()
     await expect(page.locator('html')).toHaveAttribute('data-carbon-theme', 'g100')
     await expect(addApplicationAction).toHaveCSS('color', 'rgb(255, 255, 255)')
     const clearAllButton = page.getByRole('button', { name: 'Clear all', exact: true })
@@ -2177,7 +2175,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     const uploadPanel = page.locator('.admin-upload-panel').first()
     await expect(uploadPanel).toBeVisible()
 
-    await page.getByRole('switch', { name: 'Switch to dark theme' }).click()
+    await page.getByRole('switch', { name: 'Dark theme' }).click()
     await expect(page.locator('html')).toHaveAttribute('data-carbon-theme', 'g100')
 
     const darkSurfaces = await uploadPage.evaluate((root) => {

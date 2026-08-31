@@ -1777,9 +1777,7 @@ test.describe('TEST IDIR admin regression', () => {
       `/provincial/review?applicationNumber=${missingApplicationNumber}`,
       /provincial application review/i,
     )
-    const themeSwitch = page.getByRole('switch', {
-      name: /Switch to (?:dark|light) theme/,
-    })
+    const themeSwitch = page.getByRole('switch', { name: 'Dark theme' })
     const initiallyDark = (await themeSwitch.getAttribute('aria-checked')) === 'true'
 
     if (!initiallyDark) {
