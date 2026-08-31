@@ -627,13 +627,15 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
     if (errors.isEmpty()
         && enforceVolumeLimit
         && offerVolume != null
-        && contextVolume != null
-        && Double.isFinite(offerVolume)
-        && Double.isFinite(contextVolume)
-        && BigDecimal.valueOf(offerVolume)
-                .compareTo(BigDecimal.valueOf(roundForDisplay(contextVolume)))
-            > 0) {
-      errors.add("Offer volume cannot exceed the application/package volume.");
+        && Double.isFinite(offerVolume)) {
+      if (contextVolume == null || !Double.isFinite(contextVolume)) {
+        errors.add(
+            "Application/package volume could not be loaded. Reload the page to try again.");
+      } else if (BigDecimal.valueOf(offerVolume)
+              .compareTo(BigDecimal.valueOf(roundForDisplay(contextVolume)))
+          > 0) {
+        errors.add("Offer volume cannot exceed the application/package volume.");
+      }
     }
 
     return errors;

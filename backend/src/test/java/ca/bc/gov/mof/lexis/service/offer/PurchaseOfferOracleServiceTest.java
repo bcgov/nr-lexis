@@ -864,6 +864,34 @@ class PurchaseOfferOracleServiceTest {
   }
 
   @Test
+  void addOfferShouldRejectVolumeWhenApplicationVolumeIsUnavailable() {
+    stubProvincialApplication(1000456L, null);
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.addOffer(validCreateRequest(1000456L, null, 80.0d), "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactly(
+            "Application/package volume could not be loaded. Reload the page to try again.");
+    verify(repository, never()).insertOffer(any());
+  }
+
+  @Test
+  void addOfferShouldRejectVolumeWhenPackageVolumeIsNotFinite() {
+    stubProvincialApplicationWithPackage(1000456L, "PKG-903", 500.0d, Double.NaN);
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.addOffer(validCreateRequest(1000456L, "PKG-903", 80.0d), "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactly(
+            "Application/package volume could not be loaded. Reload the page to try again.");
+    verify(repository, never()).insertOffer(any());
+  }
+
+  @Test
   void addOfferShouldRejectNonProvincialParentBeforeOracleInsert() {
     when(repository.findApplicationReference(1000456L))
         .thenReturn(
@@ -1182,6 +1210,26 @@ class PurchaseOfferOracleServiceTest {
   }
 
   @Test
+  void updateOfferShouldRejectChangedVolumeWhenPackageVolumeIsUnavailable() {
+    when(repository.findUpdateSourceByOfferNumber(81001L))
+        .thenReturn(Optional.of(updateSource(1000456L, "PKG-903", "P")));
+    stubProvincialApplicationWithPackage(1000456L, "PKG-903", 500.0d, null);
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.updateOffer(
+            new PurchaseOfferService.CreateOfferRequest(
+                1000456L, 81001L, null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, 95.4d),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactly(
+            "Application/package volume could not be loaded. Reload the page to try again.");
+    verify(repository, never()).updateOffer(any());
+  }
+
+  @Test
   void updateOfferShouldCompareRawVolumeBeforeLegacyRounding() {
     when(repository.findUpdateSourceByOfferNumber(81001L))
         .thenReturn(Optional.of(updateSource(1000456L, "PKG-903", "P")));
@@ -1204,7 +1252,7 @@ class PurchaseOfferOracleServiceTest {
   void updateOfferShouldNotRevalidateExactHistoricalRawVolume() {
     when(repository.findUpdateSourceByOfferNumber(81001L))
         .thenReturn(Optional.of(updateSource(1000456L, "PKG-903", "P", 95.54d)));
-    stubProvincialApplicationWithPackage(1000456L, "PKG-903", 500.0d, 95.5d);
+    stubProvincialApplicationWithPackage(1000456L, "PKG-903", 500.0d, null);
     when(repository.updateOffer(any(PurchaseOfferRepository.PurchaseOfferUpdateRecord.class)))
         .thenReturn(true);
 
