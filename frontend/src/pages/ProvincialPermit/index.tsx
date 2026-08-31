@@ -462,15 +462,8 @@ const ProvincialPermitPage = () => {
       region: defaultZoneRegionIds,
     }
     setFilters(defaultFilters)
-    setSearchParams(
-      buildSearchParams(
-        defaultFilters,
-        DEFAULT_SORT_FIELD,
-        DEFAULT_SORT_DIRECTION,
-        DEFAULT_SEARCH_PAGE,
-        DEFAULT_SEARCH_PAGE_SIZE,
-      ),
-    )
+    // INTENTIONAL_LEGACY_DIVERGENCE(CLEAR_ALL_RESETS_SEARCH)
+    setSearchParams(new URLSearchParams())
   }
 
   const onHeaderClick = (column: ProvincialPermitSearchSortField) => {
@@ -530,7 +523,7 @@ const ProvincialPermitPage = () => {
                   onChange={(event) => updateFilter('permitNumber', event.target.value)}
                 />
                 {/* INTENTIONAL_LEGACY_DIVERGENCE(SEARCH_FILTER_EXPANSION):
-                    Modern permit search makes the existing invoice-number criterion visible. */}
+                    Modern permit search makes the hidden legacy invoice-number criterion visible. */}
                 <TextInput
                   id="invoiceNumber"
                   labelText="Invoice number"

@@ -1,4 +1,12 @@
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  isValidElement,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { Edit, TrashCan } from '@carbon/icons-react'
 import {
   Button,
@@ -54,6 +62,7 @@ import {
 } from '@/pages/shared/detail-navigation'
 import {
   firstValidationError,
+  formatRoundedNumericFieldValue,
   getVisibleFieldError,
   integerFieldError,
   isoDateFieldError,
@@ -185,6 +194,9 @@ type PermitFeeOverrideForm = PermitFeeOverrideContext
 
 const MAX_OIC_REQUEST_PIECES = 9_999_999_999
 const MAX_OIC_REQUEST_VOLUME_LENGTH = 9
+const MAX_PERMIT_OVERRIDE_FEE = 9_999_999.99
+const MAX_PERMIT_OVERRIDE_COMMENT_LENGTH = 254
+const ASCII_PATTERN = /^[\u0000-\u007f]*$/
 // Legacy allows an approver to move a permit to EXP; once expired, the record is read-only.
 const EDITABLE_PERMIT_STATUS_CODES = new Set(['ACT', 'COM', 'CAN', 'EXP'])
 const SERVER_ASSIGNED_PAYMENT_PENDING_STATUS = 'PPD'
@@ -203,11 +215,11 @@ const PERMIT_DETAIL_TABS = [
   { id: 'agent', label: 'Agent' },
   { id: 'shipping', label: 'Shipping' },
   { id: 'items', label: 'Items' },
+  { id: 'documents', label: 'Documents' },
   { id: 'fees', label: 'Fees' },
   { id: 'gbms', label: 'GBMS' },
-  { id: 'documents', label: 'Documents' },
   // INTENTIONAL_LEGACY_DIVERGENCE(PERMIT_INVOICE_VISIBILITY):
-  // Modern permit detail surfaces invoice rows and invoice document actions together.
+  // Modern permit detail exposes the invoice workflow that legacy keeps hidden.
   { id: 'invoices', label: 'Invoices' },
 ] as const
 
@@ -215,9 +227,18 @@ type PermitDetailTabId = (typeof PERMIT_DETAIL_TABS)[number]['id']
 type DeferredPermitTabId = Extract<PermitDetailTabId, 'fees' | 'documents' | 'invoices'>
 const PERMIT_DETAIL_TAB_IDS: readonly PermitDetailTabId[] = PERMIT_DETAIL_TABS.map(({ id }) => id)
 
-const ContiguousTabPanels = ({ children }: { children: ReactNode }) => {
-  const panels = Array.isArray(children) ? children.filter(Boolean) : children
-  return <TabPanels>{panels}</TabPanels>
+const ContiguousTabPanels = ({
+  children,
+  order,
+}: {
+  children: ReactNode
+  order: readonly PermitDetailTabId[]
+}) => {
+  const panels = (Array.isArray(children) ? children.flat() : [children]).filter(isValidElement)
+  const panelsByTab = new Map(
+    panels.filter((panel) => panel.key !== null).map((panel) => [String(panel.key), panel]),
+  )
+  return <TabPanels>{order.map((tab) => panelsByTab.get(tab))}</TabPanels>
 }
 
 const EMPTY_DEFERRED_PERMIT_TAB_STATE: Record<DeferredPermitTabId, boolean> = {
@@ -1220,6 +1241,17 @@ const ProvincialPermitDetailsPage = () => {
     permitApplicationToAdd || availablePermitApplicationOptions[0]?.value || ''
   const associatedPermitApplications =
     tabsData?.applications ?? EMPTY_PROVINCIAL_PERMIT_DETAIL_TABS.applications
+  const permitApplicationNumberSummary =
+    associatedPermitApplications.length > 0
+      ? associatedPermitApplications.join(', ')
+      : detail?.applicationNumber
+  const associatedPermitPackageNumbers = Array.from(
+    new Set((tabsData?.packages ?? []).map((row) => row.packageNumber).filter(Boolean)),
+  )
+  const permitPackageNumberSummary =
+    associatedPermitPackageNumbers.length > 0
+      ? associatedPermitPackageNumbers.join(', ')
+      : detail?.packageNumber
 
   const filteredFees = useMemo(() => {
     if (!tabsData) {
@@ -1420,6 +1452,10 @@ const ProvincialPermitDetailsPage = () => {
     !!detail?.blanketOic &&
     !scaleAttachmentLockedStatuses.has(permitStatusCode ?? '') &&
     (hasRole(capabilities.roles, 'ADMIN') || hasRole(capabilities.roles, 'APPLICATION_APPROVER'))
+  // INTENTIONAL_LEGACY_DIVERGENCE(PACKAGE_FIRST_ITEMS_WORKFLOW): Blanket OIC Summary of Scale
+  // entry remains hidden until its prerequisite package exists.
+  const blanketOicPackageCreationRequired =
+    permitTablesAvailable && !!detail?.blanketOic && (tabsData?.packages ?? []).length === 0
   const canEditFeeOverride =
     permitTablesAvailable &&
     canSavePermit &&
@@ -1626,6 +1662,22 @@ const ProvincialPermitDetailsPage = () => {
       permitExpiryDate: isoDateFieldError(permitForm.permitExpiryDate) ?? undefined,
       permitSubmitDate: isoDateFieldError(permitForm.permitSubmitDate) ?? undefined,
       permitRequestDate: undefined,
+      permitReceiptNo:
+        firstValidationError(
+          () =>
+            ASCII_PATTERN.test(permitForm.permitReceiptNo.trim())
+              ? null
+              : 'Receipt number contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
+          () => maxLengthFieldError(permitForm.permitReceiptNo, 50, 'Receipt number'),
+        ) ?? undefined,
+      permitRemarks:
+        firstValidationError(
+          () =>
+            ASCII_PATTERN.test(permitForm.permitRemarks.trim())
+              ? null
+              : 'Permit remarks contain unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
+          () => maxLengthFieldError(permitForm.permitRemarks, 254, 'Permit remarks'),
+        ) ?? undefined,
       estimatedShippingDate: firstValidationError(
         () => requiredFieldError(permitForm.estimatedShippingDate, 'Estimated shipping date'),
         () => isoDateFieldError(permitForm.estimatedShippingDate),
@@ -1743,15 +1795,7 @@ const ProvincialPermitDetailsPage = () => {
       ) {
         return false
       }
-
-      if (hasPermitValidationError || (includeShipping && hasShippingValidationError)) {
-        setShowPermitValidationErrors(true)
-        setActionErrorMessage(
-          Object.values(permitFieldErrors).find((error): error is string => !!error) ??
-            'Please fix validation errors before saving the permit.',
-        )
-        return false
-      }
+      let confirmedRequest: PermitDetailMutationRequest = request
 
       const isLatestRequest = tryBeginPermitMutation()
       if (!isLatestRequest) {
@@ -1762,7 +1806,65 @@ const ProvincialPermitDetailsPage = () => {
       setActionInfoMessage('')
       setIsSavingPermit(true)
       try {
-        const result = await updatePermitDetail(permitMutationRequest(request, detail.blanketOic))
+        const resolvedPermitNumber = String(detail.permitNumber ?? permitNumber ?? '').trim()
+        const confirmClientNumber = async (
+          clientNumber: string,
+          clientLocationCode: string,
+        ): Promise<string> => {
+          const normalizedClientNumber = clientNumber.trim()
+          if (
+            !/^\d{1,7}$/.test(normalizedClientNumber) ||
+            !clientLocationCode.trim() ||
+            !resolvedPermitNumber
+          ) {
+            return normalizedClientNumber
+          }
+
+          const clientData = await fetchApplicationClientData(
+            normalizedClientNumber,
+            clientLocationCode,
+            { permitNumber: resolvedPermitNumber },
+          )
+          return clientData?.clientNumber.trim() || normalizedClientNumber
+        }
+        const originalOwnerClientNumber = confirmedRequest.ownerClientNumber
+        const originalOwnerClientLocation = confirmedRequest.ownerClientLocation
+        const originalAgentClientNumber = confirmedRequest.agentClientNumber
+        const originalAgentClientLocation = confirmedRequest.agentClientLocation
+        const [ownerClientNumber, agentClientNumber] = await Promise.all([
+          confirmClientNumber(originalOwnerClientNumber, originalOwnerClientLocation),
+          confirmClientNumber(originalAgentClientNumber, originalAgentClientLocation),
+        ])
+        confirmedRequest = { ...confirmedRequest, ownerClientNumber, agentClientNumber }
+        setPermitForm((current) => {
+          if (
+            !current ||
+            current.ownerClientNumber !== originalOwnerClientNumber ||
+            current.ownerClientLocation !== originalOwnerClientLocation ||
+            current.agentClientNumber !== originalAgentClientNumber ||
+            current.agentClientLocation !== originalAgentClientLocation
+          ) {
+            return current
+          }
+
+          return current.ownerClientNumber === ownerClientNumber &&
+            current.agentClientNumber === agentClientNumber
+            ? current
+            : { ...current, ownerClientNumber, agentClientNumber }
+        })
+
+        if (hasPermitValidationError || (includeShipping && hasShippingValidationError)) {
+          setShowPermitValidationErrors(true)
+          setActionErrorMessage(
+            Object.values(permitFieldErrors).find((error): error is string => !!error) ??
+              'Please fix validation errors before saving the permit.',
+          )
+          return false
+        }
+
+        const result = await updatePermitDetail(
+          permitMutationRequest(confirmedRequest, detail.blanketOic),
+        )
         if (!isLatestRequest()) {
           return false
         }
@@ -1773,13 +1875,13 @@ const ProvincialPermitDetailsPage = () => {
 
         const detailWithPermitChanges = withUpdatedPermitDetail(
           detail,
-          request,
+          confirmedRequest,
           editablePermitStatusOptions,
           editablePermitRegionOptions,
         )
         const updatedDetail = withPermitMutationResult(
           includeShipping
-            ? withUpdatedPermitShipping(detailWithPermitChanges, request)
+            ? withUpdatedPermitShipping(detailWithPermitChanges, confirmedRequest)
             : detailWithPermitChanges,
           result,
         )
@@ -1787,13 +1889,13 @@ const ProvincialPermitDetailsPage = () => {
           if (!current) return current
           const currentWithPermitChanges = withUpdatedPermitDetail(
             current,
-            request,
+            confirmedRequest,
             editablePermitStatusOptions,
             editablePermitRegionOptions,
           )
           return withPermitMutationResult(
             includeShipping
-              ? withUpdatedPermitShipping(currentWithPermitChanges, request)
+              ? withUpdatedPermitShipping(currentWithPermitChanges, confirmedRequest)
               : currentWithPermitChanges,
             result,
           )
@@ -1848,6 +1950,7 @@ const ProvincialPermitDetailsPage = () => {
       requiredPermitOptionsMissing,
       permitFieldErrors,
       permitForm,
+      permitNumber,
       tryBeginPermitMutation,
     ],
   )
@@ -1966,22 +2069,52 @@ const ProvincialPermitDetailsPage = () => {
     }
 
     const normalizedFee = feeOverrideForm.overrideFee.trim()
-    const parsedFee = Number(normalizedFee)
-    if (
-      feeOverrideForm.overrideEnabled &&
-      (!normalizedFee || !Number.isFinite(parsedFee) || parsedFee <= 0)
-    ) {
-      setActionErrorMessage('Override fee must be a dollar amount greater than zero.')
+    const normalizedComment = feeOverrideForm.overrideComment.trim()
+    let roundedFee: string | null = null
+    const roundedFeeFieldError = (): string | null => {
+      if (!feeOverrideForm.overrideEnabled) return null
+
+      roundedFee = formatRoundedNumericFieldValue(normalizedFee, 2)
+      if (roundedFee === null) return null
+
+      const storedFeeValue = Number(roundedFee)
+      if (storedFeeValue <= 0) return 'Override fee must round to at least 0.01.'
+      return storedFeeValue <= MAX_PERMIT_OVERRIDE_FEE
+        ? null
+        : `Override fee must round to ${MAX_PERMIT_OVERRIDE_FEE} or less.`
+    }
+    const validationError = firstValidationError(
+      () =>
+        feeOverrideForm.overrideEnabled ? requiredFieldError(normalizedFee, 'Override fee') : null,
+      () =>
+        feeOverrideForm.overrideEnabled ? numericFieldError(normalizedFee, 'Override fee') : null,
+      () => (feeOverrideForm.overrideEnabled ? positiveNumericFieldError(normalizedFee) : null),
+      roundedFeeFieldError,
+      () =>
+        feeOverrideForm.overrideEnabled && !ASCII_PATTERN.test(normalizedComment)
+          ? 'Override comment contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.'
+          : null,
+      () =>
+        feeOverrideForm.overrideEnabled
+          ? maxLengthFieldError(
+              normalizedComment,
+              MAX_PERMIT_OVERRIDE_COMMENT_LENGTH,
+              'Override comment',
+            )
+          : null,
+    )
+    if (validationError) {
+      setActionErrorMessage(validationError)
       return false
     }
+
+    const storedFee = feeOverrideForm.overrideEnabled ? (roundedFee ?? normalizedFee) : ''
 
     const request: PermitDetailMutationRequest = {
       ...buildPermitDetailForm(detail),
       overrideInd: String(feeOverrideForm.overrideEnabled),
-      overrideFee: feeOverrideForm.overrideEnabled ? normalizedFee : '',
-      overrideComment: feeOverrideForm.overrideEnabled
-        ? feeOverrideForm.overrideComment.trim()
-        : '',
+      overrideFee: storedFee,
+      overrideComment: feeOverrideForm.overrideEnabled ? normalizedComment : '',
     }
     const isLatestRequest = tryBeginPermitMutation()
     if (!isLatestRequest) {
@@ -2005,10 +2138,8 @@ const ProvincialPermitDetailsPage = () => {
 
       const savedContext: PermitFeeOverrideContext = {
         overrideEnabled: feeOverrideForm.overrideEnabled,
-        overrideFee: feeOverrideForm.overrideEnabled ? normalizedFee : '',
-        overrideComment: feeOverrideForm.overrideEnabled
-          ? feeOverrideForm.overrideComment.trim()
-          : '',
+        overrideFee: storedFee,
+        overrideComment: feeOverrideForm.overrideEnabled ? normalizedComment : '',
         locked: false,
         lockMessage: '',
       }
@@ -2876,6 +3007,7 @@ const ProvincialPermitDetailsPage = () => {
     field: PermitDetailFormField,
     labelText: string,
     isDisabled: boolean,
+    maxCount?: number,
   ) => (
     <TextArea
       id={`permit-${field}`}
@@ -2887,6 +3019,7 @@ const ProvincialPermitDetailsPage = () => {
       onChange={(event) => setPermitFormField(field, event.target.value)}
       disabled={isDisabled}
       rows={3}
+      maxCount={maxCount}
     />
   )
 
@@ -3099,8 +3232,8 @@ const ProvincialPermitDetailsPage = () => {
                   <Tab key={id}>{label}</Tab>
                 ))}
               </TabList>
-              <ContiguousTabPanels>
-                <TabPanel className="application-detail-tab-panel">
+              <ContiguousTabPanels order={permitDetailTabs.map(({ id }) => id)}>
+                <TabPanel key="permit" className="application-detail-tab-panel">
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
                       {isEditingPermit && permitForm ? (
@@ -3110,14 +3243,14 @@ const ProvincialPermitDetailsPage = () => {
                             {renderPermitTextInput('permitNumber', 'Permit number', true)}
                             <TextInput
                               id="permit-applicationNumber"
-                              labelText="Application number"
-                              value={displayValue(detail.applicationNumber)}
+                              labelText="Application number(s)"
+                              value={displayValue(permitApplicationNumberSummary)}
                               disabled
                             />
                             <TextInput
                               id="permit-packageNumber"
-                              labelText="Package number"
-                              value={displayValue(detail.packageNumber)}
+                              labelText="Package number(s)"
+                              value={displayValue(permitPackageNumberSummary)}
                               disabled
                             />
                             {renderPermitTextInput('exemptionNumber', 'Exemption number', true)}
@@ -3210,12 +3343,12 @@ const ProvincialPermitDetailsPage = () => {
                               ),
                             },
                             {
-                              label: 'Application number',
-                              value: displayValue(detail.applicationNumber),
+                              label: 'Application number(s)',
+                              value: displayValue(permitApplicationNumberSummary),
                             },
                             {
-                              label: 'Package number',
-                              value: displayValue(detail.packageNumber),
+                              label: 'Package number(s)',
+                              value: displayValue(permitPackageNumberSummary),
                             },
                             {
                               label: 'Exemption number',
@@ -3307,6 +3440,7 @@ const ProvincialPermitDetailsPage = () => {
                               'permitReceiptNo',
                               'Receipt number',
                               invoiceMaterialLocked && !canEnterPaymentReceipt,
+                              50,
                             )}
                             <TextInput
                               id="permit-invoiceNumber"
@@ -3342,7 +3476,7 @@ const ProvincialPermitDetailsPage = () => {
                             )}
                           </div>
                           <div className="legacy-search-grid">
-                            {renderPermitTextArea('permitRemarks', 'Remarks', false)}
+                            {renderPermitTextArea('permitRemarks', 'Remarks', false, 254)}
                           </div>
                         </Tile>
                       ) : (
@@ -3575,7 +3709,7 @@ const ProvincialPermitDetailsPage = () => {
                     )}
                   </Grid>
                 </TabPanel>
-                <TabPanel className="application-detail-tab-panel">
+                <TabPanel key="owner" className="application-detail-tab-panel">
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
                       <PermitClientTile
@@ -3589,7 +3723,7 @@ const ProvincialPermitDetailsPage = () => {
                   </Grid>
                 </TabPanel>
                 {hasPermitAgent && (
-                  <TabPanel className="application-detail-tab-panel">
+                  <TabPanel key="agent" className="application-detail-tab-panel">
                     <Grid fullWidth className="application-detail-tab-grid">
                       <Column sm={4} md={8} lg={16}>
                         <PermitClientTile
@@ -3603,7 +3737,7 @@ const ProvincialPermitDetailsPage = () => {
                     </Grid>
                   </TabPanel>
                 )}
-                <TabPanel className="application-detail-tab-panel">
+                <TabPanel key="shipping" className="application-detail-tab-panel">
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
                       {isEditingShipping && permitForm ? (
@@ -3842,7 +3976,7 @@ const ProvincialPermitDetailsPage = () => {
                     )}
                   </Grid>
                 </TabPanel>
-                <TabPanel className="application-detail-tab-panel">
+                <TabPanel key="items" className="application-detail-tab-panel">
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
                       <Tile>
@@ -3952,6 +4086,12 @@ const ProvincialPermitDetailsPage = () => {
                                 </TableBody>
                               </Table>
                             </TableFrame>
+                          ) : detail.blanketOic ? (
+                            <p className="detail-empty-message">
+                              {canEditBlanketOicPackages
+                                ? 'Create a package before adding Summary of Scale entries.'
+                                : 'No package has been created for this Blanket OIC permit.'}
+                            </p>
                           ) : (
                             <EmptyState
                               title="No package details"
@@ -4127,8 +4267,11 @@ const ProvincialPermitDetailsPage = () => {
                             </div>
                           )}
                         </fieldset>
-                        <fieldset className="legacy-form-fieldset">
-                          <legend>Summary of scale</legend>
+                        <fieldset
+                          className="legacy-form-fieldset"
+                          hidden={blanketOicPackageCreationRequired}
+                        >
+                          <legend>Summary of Scale</legend>
                           {canEditBlanketOicScaleRows && (
                             <>
                               <div className="legacy-search-grid">
@@ -4230,9 +4373,9 @@ const ProvincialPermitDetailsPage = () => {
                                       <TableHeader>Timber mark</TableHeader>
                                       <TableHeader>Scale type</TableHeader>
                                       <TableHeader>Permit</TableHeader>
+                                      <TableHeader>Pieces</TableHeader>
                                       <TableHeader>Species</TableHeader>
                                       <TableHeader>Grade</TableHeader>
-                                      <TableHeader>Pieces</TableHeader>
                                       <TableHeader>Volume (m³)</TableHeader>
                                       {canEditBlanketOicScaleRows && (
                                         <TableHeader>Actions</TableHeader>
@@ -4266,9 +4409,9 @@ const ProvincialPermitDetailsPage = () => {
                                         <TableCell>{row.timberMark || '-'}</TableCell>
                                         <TableCell>{row.scaleType || '-'}</TableCell>
                                         <TableCell>{row.permitNumber || '-'}</TableCell>
+                                        <TableCell>{row.pieces.toLocaleString()}</TableCell>
                                         <TableCell>{row.species || '-'}</TableCell>
                                         <TableCell>{row.grade || '-'}</TableCell>
-                                        <TableCell>{row.pieces.toLocaleString()}</TableCell>
                                         <TableCell>{row.volume.toLocaleString()}</TableCell>
                                         {canEditBlanketOicScaleRows && (
                                           <TableCell>
@@ -4314,7 +4457,7 @@ const ProvincialPermitDetailsPage = () => {
                     </Column>
                   </Grid>
                 </TabPanel>
-                <TabPanel className="application-detail-tab-panel">
+                <TabPanel key="fees" className="application-detail-tab-panel">
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
                       <Tile>
@@ -4391,6 +4534,7 @@ const ProvincialPermitDetailsPage = () => {
                                   <TextArea
                                     id="permitOverrideComment"
                                     labelText="Override comment"
+                                    maxCount={MAX_PERMIT_OVERRIDE_COMMENT_LENGTH}
                                     value={feeOverrideForm.overrideComment}
                                     disabled={isSavingFeeOverride}
                                     onChange={(event) =>
@@ -4491,7 +4635,7 @@ const ProvincialPermitDetailsPage = () => {
                               <TableHead>
                                 <TableRow>
                                   <TableHeader>Package</TableHeader>
-                                  <TableHeader>Timber Mark</TableHeader>
+                                  <TableHeader>Timber mark</TableHeader>
                                   <TableHeader>Species</TableHeader>
                                   <TableHeader>Grade</TableHeader>
                                   <TableHeader>AMV ($/m³ CAD)</TableHeader>
@@ -4546,7 +4690,7 @@ const ProvincialPermitDetailsPage = () => {
                   </Grid>
                 </TabPanel>
                 {hasGbmsHistory && (
-                  <TabPanel className="application-detail-tab-panel">
+                  <TabPanel key="gbms" className="application-detail-tab-panel">
                     <Grid fullWidth className="application-detail-tab-grid">
                       <Column sm={4} md={8} lg={16}>
                         <Tile>
@@ -4563,13 +4707,13 @@ const ProvincialPermitDetailsPage = () => {
                               <Table size="md" useZebraStyles>
                                 <TableHead>
                                   <TableRow>
-                                    <TableHeader>GBMS Invoice Number</TableHeader>
-                                    <TableHeader>Cancelled By Invoice</TableHeader>
-                                    <TableHeader>Replaced By Invoice</TableHeader>
-                                    <TableHeader>Invoice Amount</TableHeader>
-                                    <TableHeader>Printed Date</TableHeader>
-                                    <TableHeader>Entry Date</TableHeader>
-                                    <TableHeader>Update Date</TableHeader>
+                                    <TableHeader>GBMS invoice number</TableHeader>
+                                    <TableHeader>Cancelled by invoice</TableHeader>
+                                    <TableHeader>Replaced by invoice</TableHeader>
+                                    <TableHeader>Invoice amount</TableHeader>
+                                    <TableHeader>Printed date</TableHeader>
+                                    <TableHeader>Entry date</TableHeader>
+                                    <TableHeader>Update date</TableHeader>
                                   </TableRow>
                                 </TableHead>
                                 <TableBody>
@@ -4593,7 +4737,7 @@ const ProvincialPermitDetailsPage = () => {
                     </Grid>
                   </TabPanel>
                 )}
-                <TabPanel className="application-detail-tab-panel">
+                <TabPanel key="documents" className="application-detail-tab-panel">
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
                       <Tile>
@@ -4655,7 +4799,7 @@ const ProvincialPermitDetailsPage = () => {
                             <Table size="md" useZebraStyles>
                               <TableHead>
                                 <TableRow>
-                                  <TableHeader>File Name</TableHeader>
+                                  <TableHeader>File name</TableHeader>
                                   <TableHeader>Description</TableHeader>
                                   <TableHeader>Type</TableHeader>
                                   <TableHeader>Source</TableHeader>
@@ -4733,7 +4877,7 @@ const ProvincialPermitDetailsPage = () => {
                     </Column>
                   </Grid>
                 </TabPanel>
-                <TabPanel className="application-detail-tab-panel">
+                <TabPanel key="invoices" className="application-detail-tab-panel">
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
                       <Tile>
@@ -4797,7 +4941,7 @@ const ProvincialPermitDetailsPage = () => {
                                 <TableRow>
                                   <TableHeader>Invoice number</TableHeader>
                                   <TableHeader>Export value (CAD)</TableHeader>
-                                  <TableHeader>Conversion Rate</TableHeader>
+                                  <TableHeader>Conversion rate</TableHeader>
                                   <TableHeader>Fee in lieu</TableHeader>
                                   <TableHeader>Status</TableHeader>
                                 </TableRow>

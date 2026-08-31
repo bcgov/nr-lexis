@@ -12,6 +12,8 @@ final class LexisApiAuthorizationRules {
 
   enum RuleType {
     PERMIT_ALL,
+    AUTHENTICATED,
+    DENY_ALL,
     ADMIN_AUTHORITY,
     PROVINCIAL_STAFF_ROLE,
     KNOWN_ROLE,
@@ -190,8 +192,31 @@ final class LexisApiAuthorizationRules {
               HttpMethod.GET,
               "/actuator/health/liveness",
               "/actuator/health/readiness"),
+          // INTENTIONAL_LEGACY_DIVERGENCE(RETIRED_REPORT_SCREENS): The report
+          // implementations remain compiled, but all modern and legacy HTTP entry points are
+          // denied so a stale bookmark or handcrafted request cannot generate them.
+          denyAll(
+              "/api/lexis/reports/applicationReport",
+              "/api/lexis/reports/application-report",
+              "/api/lexis/applicationReport",
+              "/api/lexis/applicationReport.do",
+              "/api/lexis/reports/teacReport",
+              "/api/lexis/reports/teac-report",
+              "/api/lexis/teacReport",
+              "/api/lexis/teacReport.do",
+              "/api/lexis/reports/exemptionReport",
+              "/api/lexis/reports/exemption-report",
+              "/api/lexis/exemptionReport",
+              "/api/lexis/exemptionReport.do",
+              "/api/lexis/reports/feeReport",
+              "/api/lexis/reports/fee-report",
+              "/api/lexis/feeReport",
+              "/api/lexis/feeReport.do"),
           adminAuthority("/actuator/**"),
           knownRole("/error"),
+          // Keep this exact matcher ahead of session/** so a valid no-role identity can render
+          // the no-access page without gaining access to any other session or business endpoint.
+          authenticated(HttpMethod.GET, "/api/lexis/session/capabilities"),
           provincialStaffRole("/api/lexis/session/preferences"),
           knownRole("/api/lexis/session/**"),
           knownRole("/api/lexis/notifications"),
@@ -325,13 +350,18 @@ final class LexisApiAuthorizationRules {
               "/api/lexis/application-reviews/*/approve",
               "/api/lexis/application-reviews/*/status",
               "/api/lexis/application-reviews/*/status-email"),
+          // Export Schedule administration is disabled pending business approval. Existing
+          // workflows continue reading schedule data through their repositories and option APIs.
+          denyAll(HttpMethod.GET, "/api/lexis/admin/schedules"),
+          denyAll(HttpMethod.POST, "/api/lexis/admin/schedules"),
+          denyAll(HttpMethod.PUT, "/api/lexis/admin/schedules/*"),
+          denyAll(HttpMethod.DELETE, "/api/lexis/admin/schedules/*"),
           action(
               HttpMethod.GET,
               ACTION_LEXIS_POLICY_ADMIN,
               "/api/lexis/admin/policy",
               "/api/lexis/admin/lexisPolicyAdmin",
-              "/api/lexis/admin/policies/fee",
-              "/api/lexis/admin/schedules"),
+              "/api/lexis/admin/policies/fee"),
           action(
               HttpMethod.GET,
               ACTION_LEXIS_POLICY_ADMIN,
@@ -353,18 +383,15 @@ final class LexisApiAuthorizationRules {
               ACTION_LEXIS_POLICY_ADMIN,
               "/api/lexis/admin/policy/rpc",
               "/api/lexis/admin/lexisPolicyAdminRPC",
-              "/api/lexis/admin/policies/fee",
-              "/api/lexis/admin/schedules"),
+              "/api/lexis/admin/policies/fee"),
           action(
               HttpMethod.PUT,
               ACTION_LEXIS_POLICY_ADMIN,
-              "/api/lexis/admin/policies/fee/*",
-              "/api/lexis/admin/schedules/*"),
+              "/api/lexis/admin/policies/fee/*"),
           action(
               HttpMethod.DELETE,
               ACTION_LEXIS_POLICY_ADMIN,
-              "/api/lexis/admin/policies/fee/*",
-              "/api/lexis/admin/schedules/*"),
+              "/api/lexis/admin/policies/fee/*"),
           action(
               HttpMethod.GET,
               ACTION_LEXIS_POLICY_ADMIN,
@@ -438,7 +465,8 @@ final class LexisApiAuthorizationRules {
               HttpMethod.POST,
               ACTION_UPLOAD_FEDERAL_SUBMISSION,
               "/api/lexis/federal/submissions",
-              "/api/lexis/federal/submissions/validation"),
+              "/api/lexis/federal/submissions/validation",
+              "/api/lexis/federal/submissions/prevalidation"),
           action(
               HttpMethod.GET,
               ACTION_LEXIS_AGENT_ADMIN,
@@ -771,6 +799,18 @@ final class LexisApiAuthorizationRules {
 
   private static Rule permitAll(HttpMethod method, String... paths) {
     return new Rule(RuleType.PERMIT_ALL, method, List.of(paths), null, Map.of(), List.of());
+  }
+
+  private static Rule authenticated(HttpMethod method, String... paths) {
+    return new Rule(RuleType.AUTHENTICATED, method, List.of(paths), null, Map.of(), List.of());
+  }
+
+  private static Rule denyAll(String... paths) {
+    return new Rule(RuleType.DENY_ALL, null, List.of(paths), null, Map.of(), List.of());
+  }
+
+  private static Rule denyAll(HttpMethod method, String... paths) {
+    return new Rule(RuleType.DENY_ALL, method, List.of(paths), null, Map.of(), List.of());
   }
 
   private static Rule adminAuthority(String... paths) {

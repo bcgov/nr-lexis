@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
-import ReportsPage from '@/pages/Reports'
+import ReportsPageRoute, { ReportsPageContent as ReportsPage } from '@/pages/Reports'
 import { ReportRequestError, runReport } from '@/service/report-service'
 import {
   fetchReportOptions,
@@ -190,30 +190,88 @@ describe('Reports Page Actions', () => {
     )
     expect(screen.getByText('Exemption volumes, balances, and status.')).toBeVisible()
     expect(screen.queryByText('Application Report')).not.toBeInTheDocument()
-    expect(screen.queryByText('Offer Report')).not.toBeInTheDocument()
+    expect(screen.queryByText('Offers Report')).not.toBeInTheDocument()
     expect(screen.queryByText(/Accessible reports:/)).not.toBeInTheDocument()
     expect(screen.queryByText('Not Granted')).not.toBeInTheDocument()
   })
 
   it.each([
-    '/reports/applicationReport?action=generate',
+    '/reports/permitLedgerReport?action=generate',
     '/reports/approvedExemptionReport?action=generate',
-    '/reports?report=applicationReport&action=generate',
   ])('denies an explicitly requested report that is not granted: %s', async (path) => {
     mockReportPermissions((action: string) => action === '/offerReport')
 
     render(
       <MemoryRouter initialEntries={[path]}>
         <Routes>
-          <Route path="/reports" element={<ReportsPage />} />
-          <Route path="/reports/:reportId" element={<ReportsPage />} />
+          <Route path="/reports" element={<ReportsPageRoute />} />
+          <Route path="/reports/:reportId" element={<ReportsPageRoute />} />
           <Route path="/unauthorized" element={<div>Forbidden report</div>} />
         </Routes>
       </MemoryRouter>,
     )
 
     expect(await screen.findByText('Forbidden report')).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: 'Offer Report' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Offers Report' })).not.toBeInTheDocument()
+  })
+
+  it.each([
+    '/reports/applicationReport?action=generate',
+    '/reports/teacReport?action=generate',
+    '/reports/exemptionReport?action=generate',
+    '/reports/feeReport?action=generate',
+    '/reports?report=applicationReport&action=generate',
+    '/reports?report=teacReport&action=generate',
+    '/reports?report=exemptionReport&action=generate',
+    '/reports?report=feeReport&action=generate',
+  ])('redirects retired report links without generating: %s', async (path) => {
+    mockReportPermissions((action: string) => action === '/offerReport')
+
+    render(
+      <MemoryRouter initialEntries={[path]}>
+        <Routes>
+          <Route path="/reports" element={<ReportsPageRoute />} />
+          <Route path="/reports/:reportId" element={<ReportsPageRoute />} />
+          <Route path="/unauthorized" element={<div>Forbidden report</div>} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByRole('heading', { name: 'Offers Report' })).toBeInTheDocument()
+    expect(mockedRunReport).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['/reports/offerReport', 'Offers Report'],
+    ['/reports/permitLedgerReport', 'Permits Report'],
+  ])('uses the navigation wording for %s', async (path, title) => {
+    mockReportPermissions()
+
+    render(
+      <MemoryRouter initialEntries={[path]}>
+        <Routes>
+          <Route path="/reports/:reportId" element={<ReportsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByRole('heading', { name: title })).toBeInTheDocument()
+  })
+
+  it('denies the reports route when only retired report actions are granted', async () => {
+    mockReportPermissions((action: string) => action === '/applicationReport')
+
+    render(
+      <MemoryRouter initialEntries={['/reports/applicationReport?action=generate']}>
+        <Routes>
+          <Route path="/reports/:reportId" element={<ReportsPageRoute />} />
+          <Route path="/unauthorized" element={<div>Forbidden report</div>} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('Forbidden report')).toBeInTheDocument()
+    expect(mockedRunReport).not.toHaveBeenCalled()
   })
 
   it('preserves deep-linked report values in the selected configuration panel', async () => {
@@ -615,7 +673,7 @@ describe('Reports Page Actions', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { name: 'Offer Report' })
+    await screen.findByRole('heading', { name: 'Offers Report' })
 
     await chooseComboBoxOption('Region', 'Cariboo Natural Resource Region')
     await chooseComboBoxOption('Region', 'Kootenay-Boundary Natural Resource Region')
@@ -1158,7 +1216,7 @@ describe('Reports Page Actions', () => {
 
     await screen.findByRole('heading', { name: 'Advertising List' })
     expect(screen.queryByText('Application Report')).not.toBeInTheDocument()
-    expect(screen.queryByText('Offer Report')).not.toBeInTheDocument()
+    expect(screen.queryByText('Offers Report')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Report variant')).not.toBeInTheDocument()
     expect(screen.queryByText('Required action:')).not.toBeInTheDocument()
     expect(screen.queryByText('mofrListing')).not.toBeInTheDocument()

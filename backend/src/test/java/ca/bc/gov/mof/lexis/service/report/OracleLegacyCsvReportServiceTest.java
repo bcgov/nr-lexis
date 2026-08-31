@@ -318,7 +318,7 @@ class OracleLegacyCsvReportServiceTest {
   }
 
   @Test
-  void shouldGenerateSpeciesGradeCsvUsingLegacyCsvParameterOrder() throws Exception {
+  void shouldGenerateSpeciesGradeCsvUsingOracleProcedureParameterOrder() throws Exception {
     when(dataSource.getConnection()).thenReturn(connection);
     when(connection.prepareCall("{ call LEXIS_REPORTING.SPECIES_GRADE_REPORT_CSV(?,?,?,?,?,?,?,?,?,?,?) }"))
         .thenReturn(callableStatement);
@@ -358,13 +358,13 @@ class OracleLegacyCsvReportServiceTest {
     verify(callableStatement).setDate(1, java.sql.Date.valueOf("2026-01-01"));
     verify(callableStatement).setDate(2, java.sql.Date.valueOf("2026-01-31"));
     verify(callableStatement).setString(3, "1904,1905");
-    verify(callableStatement).setString(4, "EX-123");
-    verify(callableStatement).setString(5, "O");
-    verify(callableStatement).setString(6, "S");
-    verify(callableStatement).setString(7, "OLD");
-    verify(callableStatement).setString(8, "TM123");
-    verify(callableStatement).setString(9, "A12345");
-    verify(callableStatement).setString(10, "COM");
+    verify(callableStatement).setString(4, "COM");
+    verify(callableStatement).setString(5, "EX-123");
+    verify(callableStatement).setString(6, "O");
+    verify(callableStatement).setString(7, "S");
+    verify(callableStatement).setString(8, "OLD");
+    verify(callableStatement).setString(9, "TM123");
+    verify(callableStatement).setString(10, "A12345");
     verify(callableStatement).registerOutParameter(11, Types.REF_CURSOR);
   }
 

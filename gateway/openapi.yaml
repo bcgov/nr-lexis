@@ -1,11 +1,11 @@
 openapi: 3.0.3
 info:
   title: LEXIS NEXCOL Federal Submission API
-  version: 1.0.1
+  version: 1.3.0
   description: |
-    Machine-to-machine API for validating and submitting federal LEXIS XML through the
-    API Services Gateway. Both operations require a Keycloak access token containing
-    the `lexis:federal-submission:submit` scope.
+    Machine-to-machine API for prevalidating legacy submission fields and validating or
+    submitting federal LEXIS XML through the API Services Gateway. All operations require
+    a Keycloak access token containing the `lexis:federal-submission:submit` scope.
 
     Use **Authorize** with the raw `access_token`. Environment token endpoints and the
     client-credentials request are documented in the authorization dialog.
@@ -24,10 +24,136 @@ servers:
     description: PROD NEXCOL gateway.
 tags:
   - name: Federal submissions
-    description: Validate or persist a federal LEXIS submission.
+    description: Prevalidate legacy fields, validate XML, or persist a federal LEXIS submission.
 security:
   - bearerAuth: []
 paths:
+  /api/lexis/federal/submissions/prevalidation:
+    post:
+      tags: [Federal submissions]
+      summary: Prevalidate legacy submission fields
+      description: |
+        Provides the same pre-submission checks as the legacy LEXIS Log Export validation
+        service. It checks the client number, client location, proposed boom/package number,
+        and each timber mark without requiring submission XML or `officeUseOnly` data.
+
+        Business validation failures return HTTP `200`; an empty `errors` array means all four
+        legacy checks passed. No application, package, or scale records are written.
+
+        The endpoint accepts the documented JSON object, a raw legacy `LogExportApplication`
+        XML value, or the legacy Axis RPC value inside a SOAP 1.1 or SOAP 1.2 envelope. JSON
+        property names may use lower camel case or the equivalent .NET PascalCase names. The
+        response uses the same JSON, raw XML, or SOAP family as the request. Raw XML responses
+        preserve the request's lower-camel/`item` or .NET PascalCase/`string` naming style.
+      operationId: prevalidateFederalSubmission
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FederalSubmissionPrevalidation"
+            example:
+              boomNumber: FED26-700123
+              clientNumber: "00123456"
+              locationCode: "01"
+              timberMark: [TM001, TM002]
+          application/xml:
+            schema:
+              type: string
+              format: xml
+            example: |-
+              <?xml version="1.0" encoding="UTF-8"?>
+              <LogExportApplication xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+                <BoomNumber>FED26-700123</BoomNumber>
+                <ClientNumber>00123456</ClientNumber>
+                <Errors/>
+                <LocationCode>01</LocationCode>
+                <TimberMark>
+                  <string>TM001</string>
+                  <string>TM002</string>
+                </TimberMark>
+              </LogExportApplication>
+          text/xml:
+            schema:
+              type: string
+              format: xml
+            example: |-
+              <?xml version="1.0" encoding="UTF-8"?>
+              <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
+                  xmlns:soapenc="http://schemas.xmlsoap.org/soap/encoding/"
+                  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+                  xmlns:ns1="http://webservices.validation.lexis.ws.mof.gov.bc.ca"
+                  xmlns:ns2="http://beans.validation.lexis.ws.mof.gov.bc.ca">
+                <soapenv:Body>
+                  <ns1:isValidApplication soapenv:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
+                    <logExportApplication href="#id0"/>
+                  </ns1:isValidApplication>
+                  <multiRef id="id0" xsi:type="ns2:LogExportApplication">
+                    <boomNumber xsi:type="xsd:string">FED26-700123</boomNumber>
+                    <clientNumber xsi:type="xsd:string">00123456</clientNumber>
+                    <locationCode xsi:type="xsd:string">01</locationCode>
+                    <timberMark href="#id1"/>
+                  </multiRef>
+                  <multiRef id="id1" xsi:type="soapenc:Array" soapenc:arrayType="xsd:string[2]">
+                    <item xsi:type="xsd:string">TM001</item>
+                    <item xsi:type="xsd:string">TM002</item>
+                  </multiRef>
+                </soapenv:Body>
+              </soapenv:Envelope>
+          application/soap+xml:
+            schema:
+              type: string
+              format: xml
+            description: SOAP 1.2 is accepted with the same `isValidApplication` payload.
+      responses:
+        "200":
+          description: The legacy checks completed; inspect `errors` for invalid values.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FederalSubmissionPrevalidation"
+              example:
+                boomNumber: FED26-700123
+                clientNumber: "00123456"
+                errors:
+                  - "timberMark: TM002"
+                locationCode: "01"
+                timberMark: [TM001, TM002]
+            application/xml:
+              schema:
+                type: string
+                format: xml
+              example: |-
+                <?xml version="1.0" encoding="UTF-8"?>
+                <LogExportApplication xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+                  <BoomNumber>FED26-700123</BoomNumber>
+                  <ClientNumber>00123456</ClientNumber>
+                  <Errors><string>timberMark: TM002</string></Errors>
+                  <LocationCode>01</LocationCode>
+                  <TimberMark><string>TM001</string><string>TM002</string></TimberMark>
+                </LogExportApplication>
+            text/xml:
+              schema:
+                type: string
+                format: xml
+              description: SOAP 1.1 `isValidApplicationResponse` using the legacy bean contract.
+            application/soap+xml:
+              schema:
+                type: string
+                format: xml
+              description: SOAP 1.2 `isValidApplicationResponse` using the legacy bean contract.
+        "400":
+          description: The JSON, raw XML, or SOAP request body is missing or malformed.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "415":
+          description: The request media type is not JSON, XML, or SOAP XML.
+        "503":
+          description: The legacy reference-validation database is temporarily unavailable.
   /api/lexis/federal/submissions/validation:
     post:
       tags: [Federal submissions]
@@ -222,9 +348,13 @@ components:
     FederalSubmissionXml:
       required: true
       description: |
-        Legacy ESF submission envelope containing one LEXIS schema-version-2
+        Legacy ESF submission envelope containing one LEXIS schema-version-2 or schema-version-3
         `LexisSubmission`, or the inner `LexisSubmission` XML document.
-        The example is synthetic; replace environment reference data before live validation.
+        LEXIS selects the matching bundled legacy XSD from `xsi:schemaLocation` before
+        applying business and reference-data validation. Legacy federal standing-timber
+        submissions omit the boom/package number and may omit average length and average diameter;
+        their successful response has a null package number and zero scale rows. The example
+        is schema-valid but synthetic; replace environment reference data before live validation.
       content:
         application/xml:
           # Swagger UI needs XML root metadata to preserve the raw request example.
@@ -235,7 +365,7 @@ components:
               name: ESFSubmission
           example: |
                 <?xml version="1.0" encoding="UTF-8"?>
-                <esf:ESFSubmission xmlns:lexis="http://www.for.gov.bc.ca/schema/lexis" xmlns:esf="http://www.for.gov.bc.ca/schema/esf" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.for.gov.bc.ca/schema/esf http://www.for.gov.bc.ca/schema/esf/1/xsd/MOF/esf-submission.xsd http://www.for.gov.bc.ca/schema/lexis http://www.for.gov.bc.ca/schema/lexis/2/xsd/MOF/mof-lexis.xsd">
+                <esf:ESFSubmission xmlns:lexis="http://www.for.gov.bc.ca/schema/lexis" xmlns:esf="http://www.for.gov.bc.ca/schema/esf" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.for.gov.bc.ca/schema/esf http://www.for.gov.bc.ca/schema/esf/1/xsd/MOF/esf-submission.xsd http://www.for.gov.bc.ca/schema/lexis http://www.for.gov.bc.ca/schema/lexis/3/xsd/MOF/mof-lexis.xsd">
                   <esf:submissionContent>
                     <lexis:LexisSubmission>
                       <lexis:applicant>
@@ -358,6 +488,39 @@ components:
           schema:
             $ref: "#/components/schemas/FederalSubmissionResponse"
   schemas:
+    FederalSubmissionPrevalidation:
+      type: object
+      required:
+        - boomNumber
+        - clientNumber
+        - errors
+        - locationCode
+        - timberMark
+      properties:
+        boomNumber:
+          type: string
+          nullable: true
+          description: Proposed boom/package number; it is valid when no matching package exists.
+        clientNumber:
+          type: string
+          nullable: true
+          description: Forest client number; the legacy check accepts only active clients.
+        errors:
+          type: array
+          readOnly: true
+          description: Legacy-compatible field errors in client, location, boom, and timber-mark order.
+          items:
+            type: string
+        locationCode:
+          type: string
+          nullable: true
+          description: Non-expired location code belonging to the supplied client.
+        timberMark:
+          type: array
+          description: Timber marks checked for legacy federal B08 eligibility.
+          items:
+            type: string
+            nullable: true
     FederalSubmissionResponse:
       type: object
       required:

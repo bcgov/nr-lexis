@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
+import { formatDeferredSearchTotalLabel } from '@/pages/shared/deferred-search-total'
 import SearchResultsTableFrame from '../SearchResultsTableFrame'
 
 describe('SearchResultsTableFrame', () => {
@@ -116,6 +117,29 @@ describe('SearchResultsTableFrame', () => {
     )
 
     expect(screen.getByText(expectedLabel)).toBeInTheDocument()
+  })
+
+  it('shows a Carbon text skeleton instead of count text while the total is pending', () => {
+    const { container } = render(
+      <SearchResultsTableFrame
+        loading={false}
+        loadingDescription="Loading search results…"
+        totalItems={11}
+        totalItemsLabel={formatDeferredSearchTotalLabel(11, 'pending', 10)}
+      >
+        <table>
+          <tbody>
+            <tr>
+              <td>Rows</td>
+            </tr>
+          </tbody>
+        </table>
+      </SearchResultsTableFrame>,
+    )
+
+    expect(screen.getByRole('status', { name: 'Counting search results' })).toBeInTheDocument()
+    expect(container.querySelector('.cds--skeleton__text')).toBeInTheDocument()
+    expect(screen.queryByText(/counting/i)).not.toBeInTheDocument()
   })
 
   it('places page actions in the result-count toolbar', () => {

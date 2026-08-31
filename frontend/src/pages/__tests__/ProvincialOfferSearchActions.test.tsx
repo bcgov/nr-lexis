@@ -6,7 +6,10 @@ import { useAuth } from '@/context/auth/useAuth'
 import { useDefaultRegionPreference } from '@/pages/shared/useDefaultRegionPreference'
 import type { ProvincialOfferSearchResponse } from '@/interfaces/ProvincialOfferSearch'
 import ProvincialOffersPage from '@/pages/ProvincialOffers'
-import { searchProvincialOffers } from '@/service/provincial-offer-search-service'
+import {
+  countProvincialOffers,
+  searchProvincialOffers,
+} from '@/service/provincial-offer-search-service'
 import {
   fetchProvincialApplicationOptions,
   fetchProvincialOfferOptions,
@@ -33,6 +36,7 @@ vi.mock('@/service/search-options-service', () => ({
 
 const mockedUseAuth = vi.mocked(useAuth)
 const mockedUseDefaultRegionPreference = vi.mocked(useDefaultRegionPreference)
+const mockedCountProvincialOffers = vi.mocked(countProvincialOffers)
 const mockedSearchProvincialOffers = vi.mocked(searchProvincialOffers)
 const mockedFetchProvincialApplicationOptions = vi.mocked(fetchProvincialApplicationOptions)
 const mockedFetchProvincialOfferOptions = vi.mocked(fetchProvincialOfferOptions)
@@ -289,7 +293,7 @@ describe('Provincial Offer Search Actions', () => {
     })
   })
 
-  it('restores legacy defaults when filters are cleared', async () => {
+  it('restores defaults and removes results without searching again', async () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => false }))
     mockedFetchProvincialApplicationOptions.mockResolvedValueOnce({
       exemptionTypes: [],
@@ -305,25 +309,21 @@ describe('Provincial Offer Search Actions', () => {
     await waitFor(() => {
       expect(screen.getByLabelText('Listing to date')).toHaveValue('2026-07-11')
     })
+    await userEvent.click(screen.getByRole('button', { name: 'Search' }))
+    await screen.findByText('OFF-1001')
 
     await userEvent.type(screen.getByLabelText('Application number'), '46053')
     await userEvent.clear(screen.getByLabelText('Listing to date'))
+    const resultsTable = screen.getByRole('region', { name: 'Search results table' })
+    const searchCallsBeforeClear = mockedSearchProvincialOffers.mock.calls.length
     await userEvent.click(screen.getByRole('button', { name: 'Clear all' }))
 
     await waitFor(() => {
       expect(screen.getByLabelText('Application number')).toHaveValue('')
       expect(screen.getByLabelText('Listing to date')).toHaveValue('2026-07-11')
-      expect(mockedSearchProvincialOffers).toHaveBeenLastCalledWith(
-        expect.objectContaining({
-          filters: expect.objectContaining({
-            applicationNumber: '',
-            listingToDate: '2026-07-11',
-            region: [],
-          }),
-        }),
-        expect.objectContaining({ knownTotal: expect.any(Number) }),
-      )
+      expect(resultsTable).not.toBeVisible()
     })
+    expect(mockedSearchProvincialOffers).toHaveBeenCalledTimes(searchCallsBeforeClear)
   })
 
   it('shows selected offer search regions in the default Carbon multi-select', async () => {
@@ -342,6 +342,31 @@ describe('Provincial Offer Search Actions', () => {
       await screen.findByRole('combobox', { name: /^Region\s*Total items selected:\s*2/ }),
     ).toBeVisible()
     expect(screen.queryByRole('list', { name: 'Selected regions' })).not.toBeInTheDocument()
+  })
+
+  it('groups offer criteria and date ranges in reading order', async () => {
+    renderPage()
+    await screen.findByText('OFF-1001')
+
+    const filterGrid = document.querySelector('.provincial-offer-search-grid')
+    expect(filterGrid).toBeTruthy()
+    const fieldLabels = Array.from((filterGrid as HTMLElement).children).map((field) =>
+      field
+        .querySelector('label, .cds--label')
+        ?.textContent?.replace(/Total items selected:.*/, '')
+        .trim(),
+    )
+
+    expect(fieldLabels).toEqual([
+      'Application number',
+      'Package number',
+      'Client number',
+      'Region',
+      'Listing from date',
+      'Listing to date',
+      'Withdrawn from date',
+      'Withdrawn to date',
+    ])
   })
 
   it('disables search for invalid dates and updates search sort direction from header click', async () => {
@@ -386,5 +411,49 @@ describe('Provincial Offer Search Actions', () => {
     ).toBeInTheDocument()
     expect(screen.getByText('Unable to retrieve offer search results.')).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'No offers found' })).not.toBeInTheDocument()
+  })
+
+  it('keeps offer rows and pagination available when the exact count fails', async () => {
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => false }))
+    const rows = Array.from({ length: 11 }, (_, index) => ({
+      offerNumber: `OFF-${8100 + index}`,
+      applicationNumber: String(9100 + index),
+      packageNumber: `PKG-${index + 1}`,
+      listingDate: '2026-01-10',
+      region: '11',
+      offerWithdrawalDate: '',
+      clientNumber: '11111111',
+    }))
+    mockedSearchProvincialOffers.mockImplementation(async (request) => {
+      const pageRows = request.page === 0 ? rows.slice(0, 10) : rows.slice(10)
+      const optimisticTotal = (request.page + 1) * request.pageSize + 1
+      return {
+        content: pageRows,
+        page: {
+          number: request.page,
+          size: request.pageSize,
+          totalElements: optimisticTotal,
+          totalPages: Math.ceil(optimisticTotal / request.pageSize),
+        },
+      }
+    })
+    mockedCountProvincialOffers.mockRejectedValueOnce(new Error('count unavailable'))
+
+    renderPage()
+
+    expect(await screen.findByText('OFF-8100')).toBeInTheDocument()
+    expect(
+      await screen.findByText('At least 10 results found — exact count unavailable'),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', { name: 'Offer search unavailable' }),
+    ).not.toBeInTheDocument()
+
+    const nextPage = screen.getByLabelText('Next page')
+    expect(nextPage).toBeEnabled()
+    await userEvent.click(nextPage)
+
+    expect(await screen.findByText('OFF-8110')).toBeInTheDocument()
+    expect(mockedCountProvincialOffers).toHaveBeenCalledOnce()
   })
 })

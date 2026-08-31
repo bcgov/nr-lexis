@@ -68,7 +68,11 @@ const LOGIN_SHELL_RENDER_ATTEMPTS = 3
 const APP_ROOT_NAVIGATION_ATTEMPTS = 5
 const APP_ROOT_NAVIGATION_TIMEOUT_MS = 10_000
 const APP_ROOT_NAVIGATION_RETRY_DELAY_MS = 3_000
+const AUTHENTICATED_GET_ATTEMPTS = 3
+const AUTHENTICATED_GET_RETRY_DELAY_MS = 3_000
 const JWT_PATTERN = /^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/
+const TRANSIENT_REQUEST_ERROR =
+  /\b(?:EAI_AGAIN|ECONNREFUSED|ECONNRESET|EHOSTUNREACH|ENETUNREACH|ETIMEDOUT)\b|socket hang up|network socket disconnected/i
 const LOGIN_ERROR_TEXT =
   /username or password.*incorrect|user id or password.*incorrect|user id and password.*don't match|invalid username|invalid password|authentication failed/i
 const SENSITIVE_URL_PARAM_PATTERN =
@@ -298,14 +302,30 @@ export const getWithAuth = async (
   path: string,
   options: GetWithAuthOptions = {},
 ): Promise<APIResponse> => {
-  return page.request.get(path, {
-    ...options,
-    failOnStatusCode: options.failOnStatusCode ?? false,
-    headers: {
-      ...options.headers,
-      ...(await authHeaders(page)),
-    },
-  })
+  let lastError: unknown
+
+  for (let attempt = 1; attempt <= AUTHENTICATED_GET_ATTEMPTS; attempt += 1) {
+    try {
+      return await page.request.get(path, {
+        ...options,
+        failOnStatusCode: options.failOnStatusCode ?? false,
+        headers: {
+          ...options.headers,
+          ...(await authHeaders(page)),
+        },
+      })
+    } catch (error) {
+      lastError = error
+      if (!TRANSIENT_REQUEST_ERROR.test(String(error))) {
+        throw error
+      }
+      if (attempt < AUTHENTICATED_GET_ATTEMPTS) {
+        await page.waitForTimeout(AUTHENTICATED_GET_RETRY_DELAY_MS)
+      }
+    }
+  }
+
+  throw lastError
 }
 
 const base64UrlDecode = (value: string): string => {

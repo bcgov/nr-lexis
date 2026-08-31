@@ -6,6 +6,7 @@ import {
   formatLegacyOfferVolume,
   offerDecimalStorageFieldError,
   offerTextStorageFieldError,
+  offerVolumeContextFieldError,
 } from '@/pages/shared/offer-storage-validation'
 
 describe('offer storage validation', () => {
@@ -28,10 +29,31 @@ describe('offer storage validation', () => {
     )
   })
 
-  it('formats valid offer volumes to the legacy one-decimal scale', () => {
+  it('formats valid offer volumes with the legacy browser toFixed semantics', () => {
     expect(formatLegacyOfferVolume('12.34')).toBe('12.3')
     expect(formatLegacyOfferVolume('12.36')).toBe('12.4')
+    expect(formatLegacyOfferVolume('12.25')).toBe('12.3')
     expect(formatLegacyOfferVolume('1.234')).toBe('1.234')
+  })
+
+  it('rejects an offer volume above the application or package volume', () => {
+    expect(offerVolumeContextFieldError('95.1', '95.0')).toBe(
+      'Offer volume cannot exceed the application/package volume.',
+    )
+    expect(offerVolumeContextFieldError('95.0', '95.0')).toBeNull()
+    expect(offerVolumeContextFieldError('95.54', '95.5')).toBe(
+      'Offer volume cannot exceed the application/package volume.',
+    )
+    expect(offerVolumeContextFieldError('', '95.0')).toBeNull()
+    expect(offerVolumeContextFieldError('95.1', '')).toBeNull()
+    expect(offerVolumeContextFieldError('95.1', null)).toBeNull()
+  })
+
+  it('compares against the canonical one-decimal context returned by the backend', () => {
+    expect(offerVolumeContextFieldError('12.2', '12.2')).toBeNull()
+    expect(offerVolumeContextFieldError('12.3', '12.2')).toBe(
+      'Offer volume cannot exceed the application/package volume.',
+    )
   })
 
   it('enforces US7ASCII and Oracle byte lengths for offer text', () => {
@@ -58,6 +80,8 @@ describe('offer storage validation', () => {
         'Company name',
         true,
       ),
-    ).toBe('Company name must contain ASCII characters only.')
+    ).toBe(
+      'Company name contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
+    )
   })
 })

@@ -311,12 +311,13 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     ).toBeInTheDocument()
 
     await selectApplicationDetailTab('Items')
+    expect(await screen.findByRole('button', { name: 'Create package' })).toBeInTheDocument()
     expect(
-      await screen.findByRole('heading', {
-        level: 3,
-        name: 'No packages found',
-      }),
+      screen.getByText('Create a package before adding Summary of Scale entries.'),
     ).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'No packages found' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Package Details' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Summary of Scale' })).not.toBeInTheDocument()
 
     await selectApplicationDetailTab('Documents')
     expect(
@@ -394,10 +395,9 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
         }),
       ).toBeEnabled(),
     )
-    await chooseComboBoxOption(
-      ownerControls.getByRole('combobox', { name: 'Contact name' }),
-      'Owner Alternate Contact',
-    )
+    const ownerContactName = ownerControls.getByRole('combobox', { name: 'Contact name' })
+    fireEvent.change(ownerContactName, { target: { value: 'Advertising Owner' } })
+    await waitFor(() => expect(ownerContactName).toHaveValue('Advertising Owner'))
 
     await userEvent.click(ownerControls.getByRole('button', { name: 'Save changes' }))
 
@@ -407,7 +407,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
           applicationNumber: '321',
           ownerClientNumber: '00011122',
           ownerClientLocationCode: '02',
-          ownerContactName: 'Owner Alternate Contact',
+          ownerContactName: 'Advertising Owner',
           applicantTypeCode: 'M',
           agentClientNumber: '',
           agentClientLocationCode: '',
@@ -421,6 +421,56 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       }),
     ).toBeInTheDocument()
     expect(screen.getByText('Owner client details saved.')).toBeInTheDocument()
+  })
+
+  it('submits the confirmed full owner client number when editing an application', async () => {
+    mockedFetchApplicationClientData.mockImplementation(async (clientNumber) => ({
+      clientNumber: clientNumber === '2176' ? '00002176' : clientNumber,
+      companyName: 'Owner Forestry Ltd.',
+      address: '22 Owner Road',
+      city: 'Victoria',
+      province: 'BC',
+      postalCode: 'V8V 1A1',
+      country: 'Canada',
+      phone: '250-555-0101',
+      fax: '',
+      email: 'owner@example.test',
+      notfound: '',
+    }))
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { level: 1, name: 'Application 321' })
+    const ownerControls = within(getOwnerClientDetailsTile())
+    await userEvent.click(ownerControls.getByRole('button', { name: 'Edit owner client details' }))
+    const ownerClientNumber = ownerControls.getByLabelText('Client number')
+    await userEvent.clear(ownerClientNumber)
+    await userEvent.type(ownerClientNumber, '2176')
+
+    await waitFor(() => expect(ownerClientNumber).toHaveValue('00002176'))
+    expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('2176', '00', {
+      applicationNumber: '321',
+    })
+
+    await userEvent.click(ownerControls.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() => {
+      expect(mockedUpdateApplicationSummary).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ownerClientNumber: '00002176',
+          ownerClientLocationCode: '00',
+        }),
+      )
+    })
   })
 
   it('cancels owner client edits without changing the persisted summary', async () => {
@@ -1099,6 +1149,9 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
         applicationNumber: '321',
       })
     })
+    const ownerContactName = getSummaryComboBox(summaryControls, 'Owner contact name')
+    fireEvent.change(ownerContactName, { target: { value: 'Advertising Owner' } })
+    await waitFor(() => expect(ownerContactName).toHaveValue('Advertising Owner'))
     await selectApplicationDetailTab('Owner')
     expect(await screen.findByText('Owner Forestry Ltd.')).toBeInTheDocument()
     expect(screen.getByText('owner@example.test')).toBeInTheDocument()
@@ -1131,7 +1184,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
         productTypeCode: 'TIMBER',
         growthTypeCode: 'S',
         agentContactName: 'Agent Contact',
-        ownerContactName: 'Owner Alternate Contact',
+        ownerContactName: 'Advertising Owner',
         oicIndicator: 'Y',
         endUseCode: 'LU',
         speciesCodes: ['FI'],
@@ -1140,6 +1193,101 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     })
     expect(await screen.findByText('The application was saved successfully.')).toBeInTheDocument()
   }, 30000)
+
+  it('enforces the legacy application term input boundaries before saving', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationSummaryTile()
+    const termDays = screen.getByLabelText('Term (days)')
+    const termMonths = screen.getByLabelText('Term (months)')
+    const termYears = screen.getByLabelText('Term (years)')
+
+    expect(termDays).toHaveAttribute('max', '99999')
+    expect(termMonths).toHaveAttribute('max', '999')
+    expect(termYears).toHaveAttribute('max', '99')
+
+    fireEvent.change(termDays, { target: { value: '100000' } })
+    await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
+
+    expect(await screen.findAllByText('Application term days must be 99999 or less.')).toHaveLength(
+      2,
+    )
+    expect(mockedCheckApplicationVolumeUsage).not.toHaveBeenCalled()
+    expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
+
+    fireEvent.change(termDays, { target: { value: '99999' } })
+    fireEvent.change(termMonths, { target: { value: '1' } })
+    await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
+
+    expect(await screen.findAllByText('Application term must be 99999 or less.')).toHaveLength(2)
+    expect(mockedCheckApplicationVolumeUsage).not.toHaveBeenCalled()
+    expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
+  })
+
+  it('validates application edit text storage boundaries before saving', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const summaryTile = await selectApplicationSummaryTile()
+    const summary = within(summaryTile)
+    fireEvent.change(summary.getByLabelText('Location of logs'), {
+      target: { value: 'L'.repeat(251) },
+    })
+    fireEvent.change(getSummaryComboBox(summary, 'Owner contact name'), {
+      target: { value: 'C'.repeat(121) },
+    })
+
+    await userEvent.click(summary.getByRole('button', { name: 'Save Summary' }))
+
+    expect(summary.getByText('Owner contact name must be 120 characters or fewer.')).toBeVisible()
+    expect(summary.getByText('Location of logs must be 250 characters or fewer.')).toBeVisible()
+    expect(mockedCheckApplicationVolumeUsage).not.toHaveBeenCalled()
+    expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
+  })
+
+  it('shows the backend agent location error when an application edit is rejected', async () => {
+    mockedUpdateApplicationSummary.mockResolvedValueOnce({
+      valid: false,
+      message: '',
+      applicationNumber: '321',
+      errors: ['Application agent location does not exist.'],
+      warnings: [],
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationSummaryTile()
+    await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
+
+    expect(await screen.findByText('Action failed')).toBeVisible()
+    expect(screen.getByText('Application agent location does not exist.')).toBeVisible()
+  })
 
   it('hides and clears stale agent fields when editing an owner application summary', async () => {
     const ownerApplicationDetail: ProvincialApplicationDetail = {

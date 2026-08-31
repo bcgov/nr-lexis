@@ -110,6 +110,12 @@ describe('rtm-emslogamv-service', () => {
       request,
       expect.objectContaining({ validateStatus: expect.any(Function) }),
     )
+    const [, , config] = postMock.mock.calls[0]
+    expect(config.validateStatus(200)).toBe(true)
+    expect(config.validateStatus(401)).toBe(false)
+    expect(config.validateStatus(403)).toBe(false)
+    expect(config.validateStatus(422)).toBe(true)
+    expect(config.validateStatus(500)).toBe(false)
     expect(result).toEqual(
       expect.objectContaining({
         status: 'accepted',
@@ -153,6 +159,9 @@ describe('rtm-emslogamv-service', () => {
     const [, payload, config] = postMock.mock.calls[0]
     expect(payload.get('file')).toBe(file)
     expect(payload.get('effectiveMonth')).toBe('2026-06-01')
+    expect(config.validateStatus(200)).toBe(true)
+    expect(config.validateStatus(401)).toBe(false)
+    expect(config.validateStatus(403)).toBe(false)
     expect(config.validateStatus(422)).toBe(true)
     expect(config.validateStatus(500)).toBe(false)
     expect(result).toEqual(expect.objectContaining({ status: 'accepted', rowCount: 2 }))
@@ -189,6 +198,9 @@ describe('rtm-emslogamv-service', () => {
     const [, payload, config] = postMock.mock.calls[0]
     expect(payload.get('file')).toBe(file)
     expect(payload.get('effectiveMonth')).toBe('2026-06-01')
+    expect(config.validateStatus(200)).toBe(true)
+    expect(config.validateStatus(401)).toBe(false)
+    expect(config.validateStatus(403)).toBe(false)
     expect(config.validateStatus(422)).toBe(true)
     expect(config.validateStatus(500)).toBe(false)
     expect(result).toEqual(

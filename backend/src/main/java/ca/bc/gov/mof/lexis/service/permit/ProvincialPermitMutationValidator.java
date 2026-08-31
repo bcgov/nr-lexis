@@ -9,6 +9,7 @@ import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitMutationR
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
 import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -55,12 +56,13 @@ final class ProvincialPermitMutationValidator {
     if (permit == null) {
       return new ValidationResult(null, List.of("Permit details are required."), List.of());
     }
-    permit = normalizeShipping(permit);
+    PermitMutationRow submittedPermit = permit;
+    permit = normalizeForPersistence(permit);
 
     validateExemption(permit, exemption, errors);
     validateClient(permit, errors);
     validateAgent(permit, errors);
-    validateNumericRanges(permit, exemption, errors);
+    validateNumericRanges(submittedPermit, exemption, errors);
     validateRequiredText(
         permit.destinationCompanyName(),
         "company name on the Shipping tab",
@@ -234,6 +236,11 @@ final class ProvincialPermitMutationValidator {
     if (permit.overrideFee() != null
         && (!Double.isFinite(permit.overrideFee()) || permit.overrideFee() <= 0.0d)) {
       errors.add("Override fee must be greater than zero.");
+    } else if (permit.overrideFee() != null
+        && normalizeOracleDecimal(permit.overrideFee()) <= 0.0d) {
+      // INTENTIONAL_LEGACY_DIVERGENCE(PERMIT_OVERRIDE_STORAGE_POSITIVITY): Do not let
+      // Oracle's two-decimal storage rounding turn an enabled override into zero.
+      errors.add("Override fee must round to at least 0.01.");
     } else {
       validateOracleDecimal(
           permit.overrideFee(), "Override fee", MAX_PERMIT_DECIMAL_VALUE, errors);
@@ -381,11 +388,9 @@ final class ProvincialPermitMutationValidator {
     if (value == null) {
       return;
     }
-    if (value > maximum) {
-      errors.add(description + " must not exceed 9999999.99.");
-    }
-    if (BigDecimal.valueOf(value).stripTrailingZeros().scale() > 2) {
-      errors.add(description + " must have no more than two decimal places.");
+    BigDecimal rounded = BigDecimal.valueOf(value).setScale(2, RoundingMode.HALF_UP);
+    if (rounded.compareTo(BigDecimal.valueOf(maximum)) > 0) {
+      errors.add(description + " must round to 9999999.99 or less.");
     }
   }
 
@@ -402,7 +407,7 @@ final class ProvincialPermitMutationValidator {
     return normalizedIdentifier(value);
   }
 
-  private PermitMutationRow normalizeShipping(PermitMutationRow permit) {
+  private PermitMutationRow normalizeForPersistence(PermitMutationRow permit) {
     String portCode = normalizeCode(permit.portOfExportCode());
     return new PermitMutationRow(
         permit.permitNumber(),
@@ -415,7 +420,7 @@ final class ProvincialPermitMutationValidator {
         permit.permitIssueDate(),
         permit.receiptNumber(),
         permit.expiryDate(),
-        permit.permitVolume(),
+        normalizeOracleDecimal(permit.permitVolume()),
         permit.numberOfPieces(),
         permit.feeInLieuVolume(),
         permit.federalPermitNumber(),
@@ -434,12 +439,19 @@ final class ProvincialPermitMutationValidator {
         permit.permitStatusCode(),
         permit.growthTypeCode(),
         normalizeCode(permit.countryCode()),
-        permit.overrideFee(),
+        normalizeOracleDecimal(permit.overrideFee()),
         permit.overrideComment(),
         permit.oicApplicationNumber(),
         permit.oicRequestPieces(),
         permit.oicRequestVolume(),
         permit.productTypeCode());
+  }
+
+  private Double normalizeOracleDecimal(Double value) {
+    if (value == null || !Double.isFinite(value)) {
+      return value;
+    }
+    return BigDecimal.valueOf(value).setScale(2, RoundingMode.HALF_UP).doubleValue();
   }
 
   private PermitMutationRow withStatus(PermitMutationRow permit, String status) {

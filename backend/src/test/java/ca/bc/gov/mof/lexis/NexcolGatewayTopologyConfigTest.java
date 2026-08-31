@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 class NexcolGatewayTopologyConfigTest {
 
   private static final String NEXCOL_PATH = "/api/lexis/federal/submissions";
+  private static final String PREVALIDATION_PATH = NEXCOL_PATH + "/prevalidation";
   private static final String TEST_SERVICE = "nr-lexis-backend-test.da5fad-test.svc";
   private static final String PROD_SERVICE = "nr-lexis-backend-prod.da5fad-prod.svc";
 
@@ -25,6 +26,31 @@ class NexcolGatewayTopologyConfigTest {
         "https://loginproxy.gov.bc.ca/auth/realms/forests");
   }
 
+  @Test
+  void openApiShouldDocumentEveryLegacyPrevalidationWireFormat() throws IOException {
+    String openApi = Files.readString(resolve("gateway/openapi.yaml"));
+    String prevalidation =
+        openApi.substring(
+            openApi.indexOf("  " + PREVALIDATION_PATH + ":"),
+            openApi.indexOf("  " + NEXCOL_PATH + "/validation:"));
+
+    assertThat(prevalidation)
+        .contains(
+            "application/json:",
+            "application/xml:",
+            "text/xml:",
+            "application/soap+xml:",
+            "LogExportApplication",
+            "isValidApplication",
+            ".NET PascalCase",
+            "<BoomNumber>",
+            "<string>TM001</string>");
+    assertThat(openApi)
+        .contains(
+            "http://www.for.gov.bc.ca/schema/lexis/3/xsd/MOF/mof-lexis.xsd",
+            "schema-version-2 or schema-version-3");
+  }
+
   private static void assertClusterLocalGateway(String path, String service, String issuer)
       throws IOException {
     String gateway = Files.readString(resolve(path));
@@ -32,6 +58,7 @@ class NexcolGatewayTopologyConfigTest {
     assertThat(occurrences(gateway, "host: " + service)).isEqualTo(2);
     assertThat(occurrences(gateway, "port: 8080")).isEqualTo(2);
     assertThat(occurrences(gateway, "protocol: http")).isEqualTo(2);
+    assertThat(occurrences(gateway, "- " + PREVALIDATION_PATH)).isEqualTo(2);
     assertThat(gateway)
         .contains(
             "methods:\n          - POST",

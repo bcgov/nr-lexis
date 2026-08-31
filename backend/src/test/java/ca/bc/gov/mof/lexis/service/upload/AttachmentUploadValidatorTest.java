@@ -281,7 +281,7 @@ class AttachmentUploadValidatorTest {
     ValidationResult result = validator.validate(file, null);
 
     assertThat(result.accepted()).isFalse();
-    assertThat(result.rejectionMessage()).isEqualTo("Files must be 20 MiB or smaller.");
+    assertThat(result.rejectionMessage()).isEqualTo("Files must be 20 MB or smaller.");
     verify(file, never()).getInputStream();
   }
 

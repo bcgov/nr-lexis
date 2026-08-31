@@ -90,4 +90,51 @@ describe('SearchableSelect', () => {
 
     expect(onChange).not.toHaveBeenCalled()
   })
+
+  it('emits the selected value when a different option is chosen with the mouse', async () => {
+    const onChange = vi.fn()
+    render(
+      <SearchableSelect
+        id="permit-status"
+        labelText="Permit status"
+        value=""
+        options={[
+          { value: 'ACT', label: 'Active' },
+          { value: 'CAN', label: 'Cancelled' },
+        ]}
+        onChange={onChange}
+      />,
+    )
+
+    const combobox = screen.getByRole('combobox', { name: 'Permit status' })
+    await userEvent.click(combobox)
+    const listboxId = combobox.getAttribute('aria-controls')
+    const listbox = listboxId ? document.getElementById(listboxId) : null
+    expect(listbox).not.toBeNull()
+
+    await userEvent.click(within(listbox as HTMLElement).getByRole('option', { name: 'Cancelled' }))
+
+    expect(onChange).toHaveBeenLastCalledWith('CAN')
+  })
+
+  it('emits a custom value when custom entry is enabled', async () => {
+    const onChange = vi.fn()
+    render(
+      <SearchableSelect
+        id="owner-name"
+        labelText="Owner name"
+        value="Default Owner"
+        options={[{ value: 'Default Owner', label: 'Default Owner' }]}
+        allowCustomValue
+        onChange={onChange}
+      />,
+    )
+
+    const combobox = screen.getByRole('combobox', { name: 'Owner name' })
+    await userEvent.clear(combobox)
+    await userEvent.type(combobox, 'Custom Owner')
+    await userEvent.tab()
+
+    expect(onChange).toHaveBeenLastCalledWith('Custom Owner')
+  })
 })

@@ -3,6 +3,7 @@ package ca.bc.gov.mof.lexis.security;
 import ca.bc.gov.mof.lexis.configuration.LexisFeatureProperties;
 import ca.bc.gov.mof.lexis.security.LexisApiAuthorizationRules.Rule;
 import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
+import jakarta.servlet.DispatcherType;
 import java.util.List;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authorization.AuthorizationDecision;
@@ -21,6 +22,12 @@ public class LexisApiAuthorizationCustomizer
 
   private static final String ACTION_LEXIS_AGENT_ADMIN = "/lexisAgentAdmin";
   private static final String ACTION_APPLICATION_DETAILS = "/applicationDetails";
+  private static final String FEDERAL_SUBMISSION_SCOPE_AUTHORITY =
+      "SCOPE_lexis:federal-submission:submit";
+  private static final String[] PROD_RTM_ONLY_FEDERAL_VALIDATION_PATTERNS = {
+    "/api/lexis/federal/submissions/validation",
+    "/api/lexis/federal/submissions/prevalidation"
+  };
   private static final String[] HEALTH_PROBE_PATTERNS = {
     "/actuator/health/liveness", "/actuator/health/readiness"
   };
@@ -62,6 +69,10 @@ public class LexisApiAuthorizationCustomizer
       AuthorizeHttpRequestsConfigurer<HttpSecurity>.AuthorizationManagerRequestMatcherRegistry
           authorize) {
 
+    // Preserve the status selected by Spring for an already-authorized request instead of
+    // replacing its error dispatch with an unrelated 403 response.
+    authorize.dispatcherTypeMatchers(DispatcherType.ERROR).permitAll();
+
     if (featureProperties.isProdRtmOnly()) {
       authorizeProdRtmOnlyMode(authorize);
       return;
@@ -70,6 +81,15 @@ public class LexisApiAuthorizationCustomizer
     for (Rule rule : LexisApiAuthorizationRules.rules()) {
       switch (rule.type()) {
         case PERMIT_ALL -> authorize.requestMatchers(rule.method(), rule.patternsArray()).permitAll();
+        case AUTHENTICATED ->
+            authorize.requestMatchers(rule.method(), rule.patternsArray()).authenticated();
+        case DENY_ALL -> {
+          if (rule.method() == null) {
+            authorize.requestMatchers(rule.patternsArray()).denyAll();
+          } else {
+            authorize.requestMatchers(rule.method(), rule.patternsArray()).denyAll();
+          }
+        }
         case ADMIN_AUTHORITY ->
             authorize.requestMatchers(rule.patternsArray()).hasAuthority("LEXIS_ADMIN");
         case PROVINCIAL_STAFF_ROLE -> authorizeProvincialStaffRoles(authorize, rule.patternsArray());
@@ -87,6 +107,14 @@ public class LexisApiAuthorizationCustomizer
           authorize) {
     authorize.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll();
     authorize.requestMatchers(HttpMethod.GET, HEALTH_PROBE_PATTERNS).permitAll();
+    // NEXCOL validation routes do not persist records and can run before the broader PROD rollout.
+    authorize
+        .requestMatchers(HttpMethod.POST, PROD_RTM_ONLY_FEDERAL_VALIDATION_PATTERNS)
+        .hasAuthority(FEDERAL_SUBMISSION_SCOPE_AUTHORITY);
+    // PROD RTM-only mode registers its narrow routes directly instead of using the standard loop.
+    authorize
+        .requestMatchers(HttpMethod.GET, "/api/lexis/session/capabilities")
+        .authenticated();
     authorizeProvincialStaffRoles(authorize, "/api/lexis/session/preferences");
     authorizeKnownRoles(authorize, PROD_RTM_ONLY_SESSION_PATTERNS);
     authorizeFixedAction(
@@ -107,10 +135,17 @@ public class LexisApiAuthorizationCustomizer
           authorize) {
     for (Rule rule : LexisApiAuthorizationRules.rules()) {
       switch (rule.type()) {
+        case DENY_ALL -> {
+          if (rule.method() == null) {
+            authorize.requestMatchers(rule.patternsArray()).denyAll();
+          } else {
+            authorize.requestMatchers(rule.method(), rule.patternsArray()).denyAll();
+          }
+        }
         case KNOWN_ROLE -> authorizeProdReadOnlyKnownRole(authorize, rule);
         case ACTION -> authorizeProdReadOnlyAction(authorize, rule);
         case ANY_ACTION -> authorizeProdReadOnlyAnyAction(authorize, rule);
-        case PERMIT_ALL, ADMIN_AUTHORITY -> {
+        case PERMIT_ALL, AUTHENTICATED, ADMIN_AUTHORITY -> {
           // PROD probes, session routes, and admin RTM access are registered above.
         }
       }

@@ -4,7 +4,10 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
 import FederalPage from '@/pages/Federal'
-import { searchFederalApplications } from '@/service/federal-application-search-service'
+import {
+  countFederalApplications,
+  searchFederalApplications,
+} from '@/service/federal-application-search-service'
 import { fetchFederalApplicationOptions } from '@/service/search-options-service'
 import { createTestAuthContext, createTestCapabilities } from '@/test-utils/auth'
 
@@ -32,6 +35,7 @@ vi.mock('@/service/search-options-service', () => ({
 }))
 
 const mockedUseAuth = vi.mocked(useAuth)
+const mockedCountFederalApplications = vi.mocked(countFederalApplications)
 const mockedSearchFederalApplications = vi.mocked(searchFederalApplications)
 const mockedFetchFederalApplicationOptions = vi.mocked(fetchFederalApplicationOptions)
 
@@ -109,6 +113,23 @@ describe('Federal Search Actions', () => {
     const resultsTable = screen.getByRole('region', { name: 'Search results table', hidden: true })
     expect(resultsTable.closest('[hidden]')).toHaveStyle({ display: 'none' })
     expect(resultsTable).not.toBeVisible()
+  })
+
+  it('clears filters and removes results without searching again', async () => {
+    renderPage()
+    await screen.findByText('FED-1001')
+
+    await userEvent.type(screen.getByLabelText('Application number'), '46053')
+    const resultsTable = screen.getByRole('region', { name: 'Search results table' })
+    const searchCallsBeforeClear = mockedSearchFederalApplications.mock.calls.length
+
+    await userEvent.click(screen.getByRole('button', { name: 'Clear all' }))
+
+    expect(screen.getByLabelText('Application number')).toHaveValue('')
+    await waitFor(() => {
+      expect(resultsTable).not.toBeVisible()
+    })
+    expect(mockedSearchFederalApplications).toHaveBeenCalledTimes(searchCallsBeforeClear)
   })
 
   it('applies the legacy Approved default on the first search', async () => {
@@ -428,6 +449,45 @@ describe('Federal Search Actions', () => {
     expect(screen.getByLabelText('Listing from date')).toBeInTheDocument()
     expect(screen.getByLabelText('Listing to date')).toBeInTheDocument()
     expect(screen.queryByLabelText('Received from date (YYYY-MM-DD)')).not.toBeInTheDocument()
+  })
+
+  it('keeps federal rows and pagination available when the exact count fails', async () => {
+    const rows = Array.from({ length: 11 }, (_, index) => ({
+      ...defaultRows[0],
+      applicationNumber: String(8100 + index),
+      federalApplicationNumber: `FED-${8100 + index}`,
+    }))
+    mockedSearchFederalApplications.mockImplementation(async (request) => {
+      const pageRows = request.page === 0 ? rows.slice(0, 10) : rows.slice(10)
+      const optimisticTotal = (request.page + 1) * request.pageSize + 1
+      return {
+        content: pageRows,
+        page: {
+          number: request.page,
+          size: request.pageSize,
+          totalElements: optimisticTotal,
+          totalPages: Math.ceil(optimisticTotal / request.pageSize),
+        },
+      }
+    })
+    mockedCountFederalApplications.mockRejectedValueOnce(new Error('count unavailable'))
+
+    renderPage()
+
+    expect(await screen.findByText('FED-8100')).toBeInTheDocument()
+    expect(
+      await screen.findByText('At least 10 results found — exact count unavailable'),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', { name: 'Federal application search unavailable' }),
+    ).not.toBeInTheDocument()
+
+    const nextPage = screen.getByLabelText('Next page')
+    expect(nextPage).toBeEnabled()
+    await userEvent.click(nextPage)
+
+    expect(await screen.findByText('FED-8110')).toBeInTheDocument()
+    expect(mockedCountFederalApplications).toHaveBeenCalledOnce()
   })
 
   it('shows a request failure instead of a no-results state', async () => {

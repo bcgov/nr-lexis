@@ -13,6 +13,7 @@ export type SearchableSelectProps = {
   value: string
   options: SearchableSelectOption[]
   placeholder?: string
+  allowCustomValue?: boolean
   disabled?: boolean
   invalid?: boolean
   invalidText?: ReactNode
@@ -21,7 +22,8 @@ export type SearchableSelectProps = {
   onChange: (value: string) => void
 }
 
-const itemToString = (item: SearchableSelectOption | null | undefined): string => item?.label ?? ''
+const itemToString = (item: SearchableSelectOption | string | null | undefined): string =>
+  typeof item === 'string' ? item : (item?.label ?? '')
 
 export default function SearchableSelect({
   id,
@@ -29,6 +31,7 @@ export default function SearchableSelect({
   value,
   options,
   placeholder = 'Search and select',
+  allowCustomValue = false,
   disabled = false,
   invalid = false,
   invalidText,
@@ -50,13 +53,22 @@ export default function SearchableSelect({
         shouldFilterSearchableDropdownItem({ item, inputValue, optionCount: options.length })
       }
       placeholder={placeholder}
+      allowCustomValue={allowCustomValue}
       disabled={disabled}
       invalid={invalid}
       invalidText={invalidText}
       onBlur={onBlur}
       onFocus={() => onFocus?.()}
-      onChange={({ selectedItem }) => {
-        const nextValue = selectedItem?.value ?? ''
+      onInputChange={(inputValue) => {
+        if (allowCustomValue && inputValue !== value) {
+          onChange(inputValue)
+        }
+      }}
+      onChange={({ selectedItem, inputValue }) => {
+        const nextValue =
+          typeof selectedItem === 'string'
+            ? selectedItem
+            : (selectedItem?.value ?? (allowCustomValue ? (inputValue ?? '') : ''))
         if (nextValue !== value) {
           onChange(nextValue)
         }

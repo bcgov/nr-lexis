@@ -425,7 +425,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    for (const tabName of ['Summary', 'Permits', 'Documents']) {
+    for (const tabName of ['Exemption details', 'Documents', 'Permits']) {
       expect(await screen.findByRole('tab', { name: tabName })).toBeInTheDocument()
     }
     expect(screen.queryByRole('tab', { name: 'Remarks' })).not.toBeInTheDocument()
@@ -603,6 +603,54 @@ describe('Exemption and Federal Detail Document Actions', () => {
 
     await userEvent.type(applicationInput, '654')
     expect(screen.getByRole('button', { name: 'Add application' })).toBeEnabled()
+  })
+
+  it('rejects malformed associated application numbers without rewriting them', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/EX-777']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectDetailTab('Applications')
+
+    const applicationInput = await screen.findByLabelText('Application number')
+    await userEvent.type(applicationInput, '654x')
+
+    expect(applicationInput).toHaveValue('654x')
+    expect(
+      screen.getAllByText('Application number must be a positive whole number.').length,
+    ).toBeGreaterThan(0)
+    expect(screen.getByRole('button', { name: 'Add application' })).toBeDisabled()
+  })
+
+  it('rejects associated application numbers beyond the Oracle boundary', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/EX-777']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectDetailTab('Applications')
+
+    const applicationInput = await screen.findByLabelText('Application number')
+    await userEvent.type(applicationInput, '12345678901')
+
+    expect(applicationInput).toHaveValue('12345678901')
+    expect(
+      screen.getAllByText('Application number must be 10 digits or fewer.').length,
+    ).toBeGreaterThan(0)
+    expect(screen.getByRole('button', { name: 'Add application' })).toBeDisabled()
   })
 
   it('renders authoritative permit metadata and omits rows without record access', async () => {
@@ -1051,7 +1099,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     }
 
     const federalHeading = screen.getByRole('heading', {
-      name: 'LEXIS application FED-888',
+      name: 'Federal application FED-888',
       level: 1,
     })
     const federalHeader = federalHeading.closest('header')
@@ -1099,7 +1147,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(await screen.findByText('IDIR\\TESTER')).toBeInTheDocument()
 
     await selectDetailTab('Items')
-    expect(await screen.findByRole('heading', { name: 'Summary of scale' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Summary of Scale' })).toBeInTheDocument()
     expect(mockedFetchApplicationPackageScales).toHaveBeenCalledWith('PKG-1')
     expect(await screen.findByText('TM-1')).toBeInTheDocument()
 
@@ -1145,7 +1193,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { name: 'LEXIS application FED-888', level: 1 })
+    await screen.findByRole('heading', { name: 'Federal application FED-888', level: 1 })
     await waitFor(() => {
       expect(mockedFetchApplicationPackageScales).toHaveBeenCalledWith('PKG-1')
       expect(mockedFetchFederalApplicationDocuments).toHaveBeenCalledWith('888')
@@ -1289,7 +1337,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
         </Routes>
       </MemoryRouter>,
     )
-    await screen.findByRole('heading', { name: 'LEXIS application FED-888', level: 1 })
+    await screen.findByRole('heading', { name: 'Federal application FED-888', level: 1 })
 
     rendered.unmount()
 
@@ -1335,7 +1383,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
   ])('blocks navigation for an unsaved federal $draft draft', async ({ arrange, edit }) => {
     arrange()
     const router = renderFederalDataRouter()
-    await screen.findByRole('heading', { name: 'LEXIS application FED-888', level: 1 })
+    await screen.findByRole('heading', { name: 'Federal application FED-888', level: 1 })
     await edit()
 
     await userEvent.click(screen.getByRole('link', { name: 'Leave federal application' }))
@@ -1350,7 +1398,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
   it('blocks navigation while a federal document remains queued', async () => {
     const user = userEvent.setup({ applyAccept: false })
     renderFederalDataRouter()
-    await screen.findByRole('heading', { name: 'LEXIS application FED-888', level: 1 })
+    await screen.findByRole('heading', { name: 'Federal application FED-888', level: 1 })
     await selectDetailTab('Documents')
     await enterDocumentEditMode()
     await user.click(screen.getByRole('button', { name: 'Add document' }))
@@ -1399,6 +1447,43 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(screen.getByRole('heading', { name: 'Shipping details', level: 2 })).toBeInTheDocument()
     expect(screen.queryByLabelText('Transport name')).not.toBeInTheDocument()
     expect(screen.getByText('Truck')).toBeInTheDocument()
+  })
+
+  it('rejects federal shipping text that Oracle cannot store', async () => {
+    render(
+      <MemoryRouter initialEntries={['/federal/888']}>
+        <Routes>
+          <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectDetailTab('Shipping Details')
+    await userEvent.click(screen.getByRole('button', { name: 'Edit shipping details' }))
+    const transportName = screen.getByLabelText('Transport name')
+    await userEvent.clear(transportName)
+    await userEvent.type(transportName, 'Résumé')
+
+    expect(
+      await screen.findByText(
+        'Transport name contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save federal permit' })).toBeDisabled()
+    expect(mockedSaveFederalPermit).not.toHaveBeenCalled()
+
+    await userEvent.clear(transportName)
+    await userEvent.type(transportName, 'Truck')
+    await userEvent.selectOptions(screen.getByLabelText('Port of export'), 'OT')
+    await userEvent.type(screen.getByLabelText('Other port of export'), 'Port d’été')
+
+    expect(
+      await screen.findByText(
+        'Other port of export contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save federal permit' })).toBeDisabled()
+    expect(mockedSaveFederalPermit).not.toHaveBeenCalled()
   })
 
   it('uses shared shipping selectors, descriptions, and conditional Other Port', async () => {
@@ -1639,15 +1724,17 @@ describe('Exemption and Federal Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { name: 'LEXIS application FED-888', level: 1 })
+    await screen.findByRole('heading', { name: 'Federal application FED-888', level: 1 })
 
     await selectDetailTab('Items')
     expect(
-      await screen.findByRole('heading', { name: 'No packages found', level: 3 }),
+      await screen.findByText('No package has been recorded for this federal application.'),
     ).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'No packages found' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Summary of Scale' })).not.toBeInTheDocument()
     expect(
-      screen.getByRole('heading', { name: 'No scale details found', level: 3 }),
-    ).toBeInTheDocument()
+      screen.queryByRole('heading', { name: 'No scale details found' }),
+    ).not.toBeInTheDocument()
 
     await selectDetailTab('Offers')
     expect(
@@ -1797,6 +1884,12 @@ describe('Exemption and Federal Detail Document Actions', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save Remark' }))
     expect(await screen.findByText('Remark is required.')).toBeInTheDocument()
 
+    await userEvent.type(newRemarkInput, 'R'.repeat(251))
+    await userEvent.click(screen.getByRole('button', { name: 'Save Remark' }))
+    expect(await screen.findByText('Remark must not exceed 250 characters.')).toBeInTheDocument()
+    expect(mockedSaveFederalApplicationRemark).not.toHaveBeenCalled()
+
+    await userEvent.clear(newRemarkInput)
     await userEvent.type(newRemarkInput, 'New note')
     await userEvent.click(screen.getByRole('button', { name: 'Save Remark' }))
 
@@ -1814,7 +1907,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     await waitFor(() => {
       expect(mockedSaveFederalApplicationRemark).toHaveBeenCalledWith('888', 'Updated note', 44)
     })
-  })
+  }, 20_000)
 
   it('shows federal scale details as unavailable when a package lookup fails', async () => {
     mockedFetchApplicationPackageScales.mockRejectedValue(new Error('Oracle unavailable'))
@@ -1925,7 +2018,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     )
 
     expect(
-      await screen.findByRole('heading', { name: 'LEXIS application FED-888', level: 1 }),
+      await screen.findByRole('heading', { name: 'Federal application FED-888', level: 1 }),
     ).toBeInTheDocument()
     await selectDetailTab('Application')
     expect(screen.getByText('Federal application number')).toBeInTheDocument()

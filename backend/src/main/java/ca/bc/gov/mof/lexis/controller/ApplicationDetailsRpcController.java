@@ -38,6 +38,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -684,12 +685,26 @@ public class ApplicationDetailsRpcController {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
 
-    ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest request =
-        toApplicationSummaryUpdateRequest(parameters);
-    if (trimToNull(request.applicantTypeCode()) != null
+    String requestedApplicantType =
+        trimToNull(first(parameters, "ownerApplicantType", "applicantType"));
+    if (requestedApplicantType != null
         && !canPerform(authentication, LEGACY_ACTION_CHANGE_APPLICANT_TYPE)) {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
+
+    List<String> dateErrors = validateApplicationSummaryDateParameters(parameters);
+    if (!dateErrors.isEmpty()) {
+      return ResponseEntity.ok(
+          new ApplicationPersistenceResponseDto(
+              false,
+              null,
+              parsePositiveLong(first(parameters, "applicationNumber")),
+              dateErrors,
+              List.of()));
+    }
+
+    ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest request =
+        toApplicationSummaryUpdateRequest(parameters);
 
     ApplicationDetailsRpcService service = serviceProvider.getIfAvailable();
     if (service == null) {
@@ -1865,6 +1880,24 @@ public class ApplicationDetailsRpcController {
   private String canonicalExemptionNumber(String exemptionNumber) {
     String normalized = trimToNull(exemptionNumber);
     return normalized == null ? null : normalized.toUpperCase(Locale.ROOT);
+  }
+
+  private List<String> validateApplicationSummaryDateParameters(
+      MultiValueMap<String, String> parameters) {
+    List<String> errors = new ArrayList<>();
+    validateApplicationSummaryDate(
+        first(parameters, "applicationDate"), "Application date", errors);
+    validateApplicationSummaryDate(
+        first(parameters, "dateReceived", "receivedDate"), "Received date", errors);
+    return List.copyOf(errors);
+  }
+
+  private void validateApplicationSummaryDate(
+      String value, String label, List<String> errors) {
+    String normalized = trimToNull(value);
+    if (normalized != null && parseDate(normalized) == null) {
+      errors.add(label + " must be a valid date.");
+    }
   }
 
   private ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest toApplicationSummaryUpdateRequest(

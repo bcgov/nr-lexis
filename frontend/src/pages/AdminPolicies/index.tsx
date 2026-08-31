@@ -64,7 +64,7 @@ import { fetchReportOptions, type SearchOption } from '@/service/search-options-
 import IsoDatePicker from '../../components/IsoDatePicker'
 import { toCarbonSortDirection } from '@/pages/shared/search-query-utils'
 import { formatBusinessIsoDate } from '@/utils/date'
-import { getResponseStatus } from '@/utils/http-error'
+import { getResponseMessage, getResponseStatus } from '@/utils/http-error'
 
 type PolicyField =
   | 'feeEffectiveDate'
@@ -141,6 +141,20 @@ const boundedIntegerFieldError = (
     greaterThanOrEqualFieldError(value, label, minimum) ??
     lessThanOrEqualFieldError(value, label, maximum)
   )
+}
+
+const dateBeforeFieldError = (value: string, minimum: string, message: string): string | null => {
+  if (isoDateFieldError(value) || isoDateFieldError(minimum)) {
+    return null
+  }
+  return value < minimum ? message : null
+}
+
+const dateAfterFieldError = (value: string, maximum: string, message: string): string | null => {
+  if (isoDateFieldError(value) || isoDateFieldError(maximum)) {
+    return null
+  }
+  return value > maximum ? message : null
 }
 
 const SCHEDULE_SORT_COLUMNS: Array<{ id: ExportScheduleSortField; label: string }> = [
@@ -241,11 +255,13 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
   const [isPolicyEditorOpen, setIsPolicyEditorOpen] = useState(false)
   const [pendingDeletion, setPendingDeletion] = useState<PendingDeletion | null>(null)
 
+  // INTENTIONAL_LEGACY_DIVERGENCE(NAVIGATION_MENU_CONTRACT): Keep these page
+  // headings aligned with the business-approved Admin navigation terminology.
   const pageTitle =
     area === 'fee'
-      ? 'Fee policy administration'
+      ? 'Multiplication Factor'
       : area === 'fil'
-        ? 'Fee in lieu percent policy administration'
+        ? 'Non-appraised Sec.3 FIL%'
         : 'Export schedule administration'
   const pageSubtitle =
     area === 'fee'
@@ -286,31 +302,81 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
         firstValidationError(
           () => requiredFieldError(scheduleAdvertisingDate, 'Advertising date'),
           () => isoDateFieldError(scheduleAdvertisingDate),
+          () =>
+            editingScheduleId
+              ? null
+              : dateBeforeFieldError(
+                  scheduleAdvertisingDate,
+                  formatBusinessIsoDate(),
+                  'Advertising date must be today or a future date.',
+                ),
         ) ?? undefined,
       scheduleApplicationReceiptDate:
         firstValidationError(
           () => requiredFieldError(scheduleApplicationReceiptDate, 'Application receipt date'),
           () => isoDateFieldError(scheduleApplicationReceiptDate),
+          () =>
+            dateAfterFieldError(
+              scheduleApplicationReceiptDate,
+              scheduleAdvertisingDate,
+              'Application receipt date cannot be after the advertising date.',
+            ),
         ) ?? undefined,
       scheduleOfferReceiptDate:
         firstValidationError(
           () => requiredFieldError(scheduleOfferReceiptDate, 'Offer receipt date'),
           () => isoDateFieldError(scheduleOfferReceiptDate),
+          () =>
+            dateBeforeFieldError(
+              scheduleOfferReceiptDate,
+              scheduleAdvertisingDate,
+              'Offer receipt date cannot be before the advertising date.',
+            ),
         ) ?? undefined,
       scheduleOfferEndDate:
         firstValidationError(
           () => requiredFieldError(scheduleOfferEndDate, 'Offer end date'),
           () => isoDateFieldError(scheduleOfferEndDate),
+          () =>
+            dateBeforeFieldError(
+              scheduleOfferEndDate,
+              scheduleOfferReceiptDate,
+              'Offer end date cannot be before the offer receipt date.',
+            ),
         ) ?? undefined,
       scheduleOfferWithdrawalDate:
         firstValidationError(
           () => requiredFieldError(scheduleOfferWithdrawalDate, 'Offer withdrawal date'),
           () => isoDateFieldError(scheduleOfferWithdrawalDate),
+          () =>
+            dateBeforeFieldError(
+              scheduleOfferWithdrawalDate,
+              scheduleAdvertisingDate,
+              'Offer withdrawal date cannot be before the advertising date.',
+            ),
+          () =>
+            dateAfterFieldError(
+              scheduleOfferWithdrawalDate,
+              scheduleOfferEndDate,
+              'Offer withdrawal date cannot be after the offer end date.',
+            ),
         ) ?? undefined,
       scheduleTeacMeetingDate:
         firstValidationError(
           () => requiredFieldError(scheduleTeacMeetingDate, 'TEAC meeting date'),
           () => isoDateFieldError(scheduleTeacMeetingDate),
+          () =>
+            dateBeforeFieldError(
+              scheduleTeacMeetingDate,
+              scheduleAdvertisingDate,
+              'TEAC meeting date cannot be before the advertising date.',
+            ),
+          () =>
+            dateAfterFieldError(
+              scheduleTeacMeetingDate,
+              scheduleOfferEndDate,
+              'TEAC meeting date cannot be after the offer end date.',
+            ),
         ) ?? undefined,
     }),
     [
@@ -319,6 +385,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
       feePolicyPercentage,
       filEffectiveDate,
       filPolicyPercentage,
+      editingScheduleId,
       scheduleAdvertisingDate,
       scheduleApplicationReceiptDate,
       scheduleOfferReceiptDate,
@@ -734,7 +801,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
 
     if (scheduleHasValidationError) {
       setShowScheduleValidationErrors(true)
-      setErrorMessage('Export schedule requires all schedule dates in YYYY-MM-DD format.')
+      setErrorMessage('Correct the highlighted export schedule fields before saving.')
       return
     }
 
@@ -765,7 +832,10 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
     } catch (error) {
       console.error(error)
       const status = getResponseStatus(error)
-      if (status) {
+      const validationMessage = status === 400 ? getResponseMessage(error) : undefined
+      if (validationMessage) {
+        setErrorMessage(validationMessage)
+      } else if (status) {
         setErrorMessage(
           'Unable to save the export schedule. Check the dates and try again, or contact support if this continues.',
         )

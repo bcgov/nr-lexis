@@ -164,8 +164,17 @@ describe('Provincial exemption client parity', () => {
     )
 
     await screen.findByRole('heading', { name: 'Exemption 26-8758', level: 1 })
+    await screen.findByRole('tab', { name: 'Documents' })
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
+      'Owner',
+      'Agent',
+      'Exemption details',
+      'Applications',
+      'Documents',
+      'Permits',
+    ])
 
-    await userEvent.click(await screen.findByRole('tab', { name: 'Owner' }))
+    expect(screen.getByRole('tab', { name: 'Owner' })).toHaveAttribute('aria-selected', 'true')
     const ownerTile = (
       await screen.findByRole('heading', { name: 'Owner client details', level: 2 })
     ).closest('.cds--tile')
@@ -243,11 +252,16 @@ describe('Provincial exemption client parity', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByRole('tab', { name: 'Summary' })).toHaveAttribute(
+    expect(await screen.findByRole('tab', { name: 'Owner' })).toHaveAttribute(
       'aria-selected',
       'true',
     )
     expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: 'Owner client details', level: 2 }),
+    ).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Exemption details' }))
     expect(screen.getByRole('heading', { name: 'Exemption summary', level: 2 })).toBeInTheDocument()
     expect(screen.queryByText('Agent client number')).not.toBeInTheDocument()
 
@@ -277,6 +291,11 @@ describe('Provincial exemption client parity', () => {
       </MemoryRouter>,
     )
 
+    expect(await screen.findByRole('tab', { name: 'Owner' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+    await userEvent.click(screen.getByRole('tab', { name: 'Exemption details' }))
     const summaryTile = (
       await screen.findByRole('heading', { name: 'Exemption summary', level: 2 })
     ).closest('.cds--tile')

@@ -22,8 +22,28 @@ export const formatLegacyOfferVolume = (value: string): string => {
     return value
   }
 
+  // Legacy offers.js uses JavaScript toFixed on blur. Its positive tie behavior intentionally
+  // differs from the legacy server's separate DecimalFormat step.
   const parsed = Number(normalized)
   return Number.isFinite(parsed) ? parsed.toFixed(1) : value
+}
+
+export const offerVolumeContextFieldError = (
+  offerVolume: string,
+  contextVolume: string | number | null | undefined,
+): string | null => {
+  const normalizedOfferVolume = offerVolume.trim()
+  if (!ORACLE_SCALE_TWO_DECIMAL_PATTERN.test(normalizedOfferVolume)) return null
+  const normalizedContextVolume = String(contextVolume ?? '').trim()
+  if (!normalizedContextVolume) return null
+
+  const parsedOfferVolume = Number(normalizedOfferVolume)
+  const parsedContextVolume = Number(normalizedContextVolume)
+  if (!Number.isFinite(parsedOfferVolume) || !Number.isFinite(parsedContextVolume)) return null
+
+  return parsedOfferVolume > parsedContextVolume
+    ? 'Offer volume cannot exceed the application/package volume.'
+    : null
 }
 
 export const offerTextStorageFieldError = (
@@ -35,7 +55,9 @@ export const offerTextStorageFieldError = (
   firstValidationError(
     () => (required ? requiredFieldError(value, label) : null),
     () =>
-      ASCII_PATTERN.test(value.trim()) ? null : `${label} must contain ASCII characters only.`,
+      ASCII_PATTERN.test(value.trim())
+        ? null
+        : `${label} contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.`,
     () => maxLengthFieldError(value, maximumLength, label),
   ) ?? null
 

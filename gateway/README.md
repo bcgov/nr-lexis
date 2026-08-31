@@ -1,6 +1,7 @@
 # NEXCOL API Gateway
 
-The gateway is the external entry point for NEXCOL federal validation and submission traffic.
+The gateway is the external entry point for NEXCOL federal prevalidation, validation, and submission
+traffic.
 
 ```text
 NEXCOL -> Keycloak token -> API gateway -> OpenShift Service -> LEXIS backend
@@ -9,7 +10,7 @@ NEXCOL -> Keycloak token -> API gateway -> OpenShift Service -> LEXIS backend
 ## Responsibilities
 
 - Keycloak owns the dedicated NEXCOL client and OAuth scope assignment.
-- The gateway exposes only the two federal `POST` endpoints.
+- The gateway exposes only the three federal `POST` endpoints.
 - The gateway validates issuer, expiry, required scope and audience when configured.
 - Bearer tokens are accepted through the `Authorization` header, not URL query parameters.
 - The gateway provides centralized routing, traffic controls, metrics and operational visibility.
@@ -21,10 +22,14 @@ application.
 
 ## API contract
 
-[`openapi.yaml`](openapi.yaml) is the machine-readable external contract for the two gateway
+[`openapi.yaml`](openapi.yaml) is the machine-readable external contract for the three gateway
 operations. It can be loaded into Swagger UI, Swagger Editor, Postman, or client-generation tools.
 Select an available environment gateway from the OpenAPI `servers` list and authorize with a
 NEXCOL runtime-client access token. The deployment provisioning client is not a calling credential.
+
+The prevalidation operation accepts JSON, raw legacy `LogExportApplication` XML, Axis SOAP 1.1,
+and SOAP 1.2. Its response follows the request format. Validation and submission retain their
+existing XML-request and JSON-response contracts.
 
 It can be rendered in the
 [BC Government OpenAPI console](https://openapi.apps.gov.bc.ca?url=https://raw.githubusercontent.com/bcgov/nr-lexis/main/gateway/openapi.yaml).
@@ -54,7 +59,7 @@ consumers can prepare environment configuration before production provisioning i
 configurations for the TEST and PROD gateways. They define:
 
 - the corresponding cluster-local `nr-lexis-backend-${ZONE}.da5fad-${ZONE}.svc:8080` upstream;
-- validation and submission routes;
+- prevalidation, validation, and submission routes;
 - the trusted Keycloak issuer;
 - the `lexis:federal-submission:submit` OAuth scope; and
 - exact-origin Swagger CORS behavior.
@@ -64,7 +69,7 @@ NetworkPolicy admits the APS Gold gateway namespace (`name=b8840c`) only when it
 label matches the LEXIS deployment zone. The backend template declares no public Route and does not
 admit the OpenShift ingress router, so a Route left by an earlier `oc apply` cannot reach the pods.
 The public frontend Route remains available for interactive LEXIS traffic, but Caddy returns `404`
-for the two NEXCOL-only paths instead of proxying them.
+for the NEXCOL-only submission path and its child paths instead of proxying them.
 
 DEV uses ephemeral application deployments and has no long-lived NEXCOL gateway. The PROD gateway
 configuration is ready for the future application rollout, but the upstream cannot become healthy
@@ -79,6 +84,8 @@ Environment verification covers:
 
 - missing token returns `401`;
 - missing scope returns `403`;
+- lower-camel JSON, .NET PascalCase JSON, raw XML, and Axis SOAP prevalidation return the same
+  legacy field decisions;
 - valid and invalid XML produce the expected validation results; and
 - a controlled valid submission persists the expected federal records.
 

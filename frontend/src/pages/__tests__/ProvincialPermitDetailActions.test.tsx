@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import {
   createMemoryRouter,
@@ -608,13 +608,24 @@ describe('Provincial Permit Detail Action Smoke', () => {
       'Agent',
       'Shipping',
       'Items',
+      'Documents',
       'Fees',
       'GBMS',
-      'Documents',
       'Invoices',
     ]) {
       expect(await screen.findByRole('tab', { name: tabName })).toBeInTheDocument()
     }
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
+      'Permit',
+      'Owner',
+      'Agent',
+      'Shipping',
+      'Items',
+      'Documents',
+      'Fees',
+      'GBMS',
+      'Invoices',
+    ])
     const pageHeading = screen.getByRole('heading', {
       name: 'Permit 777 (Pending)',
       level: 1,
@@ -644,9 +655,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(within(permitSummaryTile as HTMLElement).getByText('Permit number')).toBeInTheDocument()
     expect(within(permitSummaryTile as HTMLElement).getByText('777 (Pending)')).toBeInTheDocument()
     expect(
-      within(permitSummaryTile as HTMLElement).getByText('Application number'),
+      within(permitSummaryTile as HTMLElement).getByText('Application number(s)'),
     ).toBeInTheDocument()
-    expect(within(permitSummaryTile as HTMLElement).getByText('Package number')).toBeInTheDocument()
+    expect(
+      within(permitSummaryTile as HTMLElement).getByText('Package number(s)'),
+    ).toBeInTheDocument()
     expect(within(permitSummaryTile as HTMLElement).getByText('PKG-9')).toBeInTheDocument()
     expect(
       within(permitSummaryTile as HTMLElement).getByRole('link', { name: 'EX-9' }),
@@ -712,6 +725,34 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.queryByRole('button', { name: 'Add Invoice' })).not.toBeInTheDocument()
     expect(mockedFetchPermitInvoices).toHaveBeenCalledTimes(1)
   }, 15000)
+
+  it('shows all associated application and package numbers in the permit summary', async () => {
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      applicationNumber: null,
+      packageNumber: null,
+    })
+    mockedFetchProvincialPermitDetailTabs.mockResolvedValue({
+      ...tabsResult,
+      applications: ['1000456', '1000457'],
+      packages: [
+        { ...editableBlanketOicPackage, packageNumber: 'PKG-9' },
+        { ...editableBlanketOicPackage, packageNumber: 'PKG-10' },
+      ],
+    })
+
+    renderPermitDetails()
+
+    const permitSummaryTile = (
+      await screen.findByRole('heading', { name: 'Permit summary' })
+    ).closest('.cds--tile') as HTMLElement
+    expect(within(permitSummaryTile).getByText('1000456, 1000457')).toBeInTheDocument()
+    expect(within(permitSummaryTile).getByText('PKG-9, PKG-10')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Edit permit' }))
+    expect(screen.getByLabelText('Application number(s)')).toHaveValue('1000456, 1000457')
+    expect(screen.getByLabelText('Package number(s)')).toHaveValue('PKG-9, PKG-10')
+  })
 
   it('restores the permit tab and loads deferred data after a conflict refresh', async () => {
     render(
@@ -1049,6 +1090,21 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.getByRole('cell', { name: 'Unmanufactured' })).toBeInTheDocument()
     expect(screen.getByRole('columnheader', { name: 'Scale type' })).toBeInTheDocument()
     expect(screen.getByRole('columnheader', { name: 'Permit' })).toBeInTheDocument()
+    expect(
+      within(await screen.findByRole('region', { name: 'Permit item rows' }))
+        .getAllByRole('columnheader')
+        .map((header) => header.textContent),
+    ).toEqual([
+      'Include in permit',
+      'Item',
+      'Timber mark',
+      'Scale type',
+      'Permit',
+      'Pieces',
+      'Species',
+      'Grade',
+      'Volume (m³)',
+    ])
     expect(screen.getByRole('cell', { name: 'C' })).toBeInTheDocument()
     expect(screen.getByRole('cell', { name: '777' })).toBeInTheDocument()
   })
@@ -1770,6 +1826,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await selectPermitDetailTab('Items')
 
     expect(await screen.findByText('Blanket OIC package details')).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: 'Summary of Scale' })).toBeInTheDocument()
     expect(
       screen.getByRole('columnheader', { name: 'Current package volume (m³)' }),
     ).toBeInTheDocument()
@@ -2102,6 +2159,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
 
     await selectPermitDetailTab('Items')
+    expect(
+      await screen.findByText('Create a package before adding Summary of Scale entries.'),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'No package details' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: 'Summary of Scale' })).not.toBeInTheDocument()
     const heading = await screen.findByRole('heading', { name: 'Create Blanket OIC package' })
     const packageEditor = heading.closest('.application-detail-edit-section') as HTMLElement
     expect(packageEditor).toBeTruthy()
@@ -2402,6 +2464,81 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
     expect(await screen.findByText('The permit was updated successfully.')).toBeInTheDocument()
     expect(screen.getAllByText('Active').length).toBeGreaterThan(0)
+  })
+
+  it('submits the confirmed full owner client number when editing a permit', async () => {
+    configureActivePermit()
+    mockedFetchApplicationClientData.mockImplementation(
+      async (clientNumber, clientLocationCode) => ({
+        clientNumber: clientNumber === '67890' ? '00067890' : clientNumber,
+        companyName: 'Owner Co',
+        address: '1 Owner St',
+        city: 'Victoria',
+        province: 'BC',
+        postalCode: 'V8V 1A1',
+        country: 'Canada',
+        phone: '2505551111',
+        fax: '',
+        email: 'owner@example.test',
+        notfound: clientLocationCode ? '' : 'true',
+      }),
+    )
+    renderPermitDetails()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    const ownerClientNumber = screen.getByLabelText('Owner client number')
+    await userEvent.clear(ownerClientNumber)
+    await userEvent.type(ownerClientNumber, '67890')
+    await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
+
+    await waitFor(() => {
+      expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('67890', '03', {
+        permitNumber: '777',
+      })
+      expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
+        expect.objectContaining({ ownerClientNumber: '00067890' }),
+      )
+    })
+  })
+
+  it('validates permit text storage boundaries before saving', async () => {
+    configureActivePermit()
+    renderPermitDetails()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    const receiptNumber = screen.getByLabelText('Receipt number')
+    const remarks = screen.getByLabelText('Remarks')
+    const saveButton = screen.getByRole('button', { name: 'Save permit' })
+
+    expect(receiptNumber).toHaveAttribute('maxlength', '50')
+    fireEvent.change(receiptNumber, { target: { value: 'R'.repeat(51) } })
+    fireEvent.change(remarks, { target: { value: 'X'.repeat(255) } })
+    await userEvent.click(saveButton)
+
+    expect(
+      (await screen.findAllByText('Receipt number must be 50 characters or fewer.')).length,
+    ).toBeGreaterThanOrEqual(1)
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+
+    fireEvent.change(receiptNumber, { target: { value: 'R-1' } })
+    await userEvent.click(saveButton)
+
+    expect(
+      (await screen.findAllByText('Permit remarks must be 254 characters or fewer.')).length,
+    ).toBeGreaterThanOrEqual(1)
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+
+    fireEvent.change(remarks, { target: { value: 'Résumé' } })
+    await userEvent.click(saveButton)
+
+    expect(
+      (
+        await screen.findAllByText(
+          'Permit remarks contain unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
+        )
+      ).length,
+    ).toBeGreaterThanOrEqual(1)
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
   })
 
   it('allows an approver to expire a permit like legacy', async () => {
@@ -3392,6 +3529,85 @@ describe('Provincial Permit Detail Action Smoke', () => {
         }),
       )
     })
+  })
+
+  it('validates permit fee override storage boundaries before saving', async () => {
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      permitStatusCode: 'ACT',
+      permitStatusDescription: 'Active',
+    })
+    mockedFetchPermitFeeOverrideContext.mockResolvedValue({
+      overrideEnabled: true,
+      overrideFee: '25.00',
+      overrideComment: 'Legacy override',
+      locked: false,
+      lockMessage: '',
+    })
+
+    renderPermitDetails()
+    await selectPermitDetailTab('Fees')
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit fee override' }))
+
+    const overrideFee = screen.getByLabelText('Override fee (CAD)')
+    const overrideComment = screen.getByLabelText('Override comment')
+    const saveButton = screen.getByRole('button', { name: 'Save fee override' })
+
+    await userEvent.clear(overrideFee)
+    await userEvent.type(overrideFee, '9999999.995')
+    await userEvent.click(saveButton)
+
+    expect(
+      await screen.findByText('Override fee must round to 9999999.99 or less.'),
+    ).toBeInTheDocument()
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+
+    await userEvent.clear(overrideFee)
+    await userEvent.type(overrideFee, '0.001')
+    await userEvent.click(saveButton)
+
+    expect(await screen.findByText('Override fee must round to at least 0.01.')).toBeInTheDocument()
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+
+    await userEvent.clear(overrideFee)
+    await userEvent.type(overrideFee, '1.00')
+    fireEvent.change(overrideComment, { target: { value: 'x'.repeat(255) } })
+    await userEvent.click(saveButton)
+
+    expect(
+      await screen.findByText('Override comment must be 254 characters or fewer.'),
+    ).toBeInTheDocument()
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+  })
+
+  it('preserves legacy Oracle rounding for permit fee overrides', async () => {
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      permitStatusCode: 'ACT',
+      permitStatusDescription: 'Active',
+    })
+    mockedFetchPermitFeeOverrideContext.mockResolvedValue({
+      overrideEnabled: true,
+      overrideFee: '25.00',
+      overrideComment: 'Legacy override',
+      locked: false,
+      lockMessage: '',
+    })
+
+    renderPermitDetails()
+    await selectPermitDetailTab('Fees')
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit fee override' }))
+    await userEvent.clear(screen.getByLabelText('Override fee (CAD)'))
+    await userEvent.type(screen.getByLabelText('Override fee (CAD)'), '0.005')
+    await userEvent.click(screen.getByRole('button', { name: 'Save fee override' }))
+
+    await waitFor(() => {
+      expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
+        expect.objectContaining({ overrideFee: '0.01' }),
+      )
+    })
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit fee override' }))
+    expect(screen.getByLabelText('Override fee (CAD)')).toHaveValue('0.01')
   })
 
   it.each([

@@ -17,7 +17,7 @@ const TECHNICAL_ERROR_PATTERNS = [
   /(?:^|\s|")\/(?:api|lexis)\//i,
 ]
 
-export const isTechnicalErrorText = (value: string): boolean => {
+const isTechnicalErrorText = (value: string): boolean => {
   const normalized = value.trim()
   if (!normalized) {
     return false

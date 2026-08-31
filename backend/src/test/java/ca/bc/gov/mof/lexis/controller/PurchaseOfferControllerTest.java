@@ -379,6 +379,23 @@ class PurchaseOfferControllerTest {
   }
 
   @Test
+  void detailShouldExposeTheLegacyRoundedPackageVolume() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    PurchaseOfferDetailDto dto = offerDetail();
+    when(service.findByOfferNumber(81009L)).thenReturn(Optional.of(dto));
+    when(applicationService.findByApplicationNumber(1000456L))
+        .thenReturn(Optional.of(applicationDetail("00077881", null, 95.55)));
+    mockApplicationSpeciesGradeCode();
+
+    ResponseEntity<PurchaseOfferDetailDto> response =
+        controller.getByOfferNumber(81009L, null);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().packageVolume()).isEqualTo(95.5);
+  }
+
+  @Test
   void detailShouldReturnPayloadWhenScopedUserOwnsParentApplication() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(sessionService.resolveForestClientNumber(authentication)).thenReturn("00077881");
@@ -636,6 +653,11 @@ class PurchaseOfferControllerTest {
 
   private static LexisApplicationDetailDto applicationDetail(
       String ownerClientNumber, String agentClientNumber) {
+    return applicationDetail(ownerClientNumber, agentClientNumber, 45.5);
+  }
+
+  private static LexisApplicationDetailDto applicationDetail(
+      String ownerClientNumber, String agentClientNumber, double packageVolume) {
     return new LexisApplicationDetailDto(
         1000456L,
         null,
@@ -661,7 +683,7 @@ class PurchaseOfferControllerTest {
         false,
         null,
         null,
-        List.of(new LexisApplicationDetailDto.LexisPackageDto("PKG-903", 45.5, 12L)),
+        List.of(new LexisApplicationDetailDto.LexisPackageDto("PKG-903", packageVolume, 12L)),
         List.of(),
         List.of());
   }

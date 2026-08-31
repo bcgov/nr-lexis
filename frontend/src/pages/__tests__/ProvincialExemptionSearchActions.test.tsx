@@ -764,6 +764,39 @@ describe('Provincial Exemption Search Actions', () => {
     expect(screen.getByRole('link', { name: 'EX-2002' })).toBeInTheDocument()
   })
 
+  it('hides client-number filters for client-scoped provincial submitters', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({
+          roles: ['LEXIS_PROVINCIAL_SUBMITTER_00077881'],
+          forestClientNumber: '00077881',
+        }),
+        canPerform: () => false,
+      }),
+    )
+
+    renderPage()
+    await screen.findByText('EX-1001')
+
+    expect(screen.queryByLabelText('Applicant client number')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Owner client number')).not.toBeInTheDocument()
+  })
+
+  it('retains client-number filters for provincial staff', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({ roles: ['LEXIS_EXEMPTION_APPROVER'] }),
+        canPerform: () => false,
+      }),
+    )
+
+    renderPage()
+    await screen.findByText('EX-1001')
+
+    expect(screen.getByLabelText('Applicant client number')).toBeInTheDocument()
+    expect(screen.getByLabelText('Owner client number')).toBeInTheDocument()
+  })
+
   it('defaults approver filters without applying a region when no preference exists', async () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
@@ -801,19 +834,16 @@ describe('Provincial Exemption Search Actions', () => {
         expect.objectContaining({ knownTotal: expect.any(Number) }),
       )
     })
+    const searchCallsBeforeClear = mockedSearchProvincialExemptions.mock.calls.length
 
     await userEvent.click(screen.getByRole('button', { name: 'Clear all' }))
     await waitFor(() => {
-      expect(mockedSearchProvincialExemptions).toHaveBeenLastCalledWith(
-        expect.objectContaining({
-          filters: expect.objectContaining({ exemptionTypeCode: 'M' }),
-        }),
-        expect.any(Object),
-      )
+      expect(resultsTable).not.toBeVisible()
     })
+    expect(mockedSearchProvincialExemptions).toHaveBeenCalledTimes(searchCallsBeforeClear)
   })
 
-  it('renders a full result page without waiting for the exact count', async () => {
+  it('renders a full result page before count and then prefetches the next page', async () => {
     const content = Array.from({ length: 10 }, (_, index) => ({
       exemptionNumber: `EX-${index + 1}`,
       type: 'Section 1',
@@ -855,7 +885,63 @@ describe('Provincial Exemption Search Actions', () => {
     expect(mockedSearchProvincialExemptions).toHaveBeenCalledOnce()
 
     resolveCount(809)
-    await waitFor(() => expect(mockedSearchProvincialExemptions).toHaveBeenCalledOnce())
+    await waitFor(() =>
+      expect(mockedSearchProvincialExemptions).toHaveBeenCalledWith(
+        expect.objectContaining({ page: 1, pageSize: 10 }),
+        { knownTotal: 809 },
+      ),
+    )
+  })
+
+  it('keeps exemption rows and pagination available when the exact count fails', async () => {
+    const rows = Array.from({ length: 11 }, (_, index) => ({
+      exemptionNumber: `EX-${8100 + index}`,
+      type: 'Section 1',
+      typeCode: 'SECTION_1',
+      status: 'New',
+      statusCode: 'NEW',
+      applicantClientNumber: '11111111',
+      ownerClientNumber: '22222222',
+      approvedVolume: 100,
+      balanceRemaining: 100,
+      listingDate: '2026-01-10',
+      expiryDate: '2026-12-31',
+      region: '11',
+      canApprove: true,
+      isLocked: false,
+      canViewExemption: true,
+    }))
+    mockedSearchProvincialExemptions.mockImplementation(async (request) => {
+      const pageRows = request.page === 0 ? rows.slice(0, 10) : rows.slice(10)
+      const optimisticTotal = (request.page + 1) * request.pageSize + 1
+      return {
+        content: pageRows,
+        page: {
+          number: request.page,
+          size: request.pageSize,
+          totalElements: optimisticTotal,
+          totalPages: Math.ceil(optimisticTotal / request.pageSize),
+        },
+      }
+    })
+    mockedCountProvincialExemptions.mockRejectedValueOnce(new Error('count unavailable'))
+
+    renderPage()
+
+    expect(await screen.findByText('EX-8100')).toBeInTheDocument()
+    expect(
+      await screen.findByText('At least 10 results found — exact count unavailable'),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', { name: 'Exemption search unavailable' }),
+    ).not.toBeInTheDocument()
+
+    const nextPage = screen.getByLabelText('Next page')
+    expect(nextPage).toBeEnabled()
+    await userEvent.click(nextPage)
+
+    expect(await screen.findByText('EX-8110')).toBeInTheDocument()
+    expect(mockedCountProvincialExemptions).toHaveBeenCalledOnce()
   })
 
   it('uses the saved region to preselect exemption search areas', async () => {
@@ -967,7 +1053,7 @@ describe('Provincial Exemption Search Actions', () => {
     })
   })
 
-  it('restores approval date filters from the URL and clears them', async () => {
+  it('clears approval date filters and removes results without searching again', async () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
 
     renderPage(
@@ -986,23 +1072,17 @@ describe('Provincial Exemption Search Actions', () => {
       }),
       expect.any(Object),
     )
+    const resultsTable = screen.getByRole('region', { name: 'Search results table' })
+    const searchCallsBeforeClear = mockedSearchProvincialExemptions.mock.calls.length
 
     await userEvent.click(screen.getByRole('button', { name: 'Clear all' }))
 
     expect(screen.getByLabelText('Approval from date')).toHaveValue('')
     expect(screen.getByLabelText('Approval to date')).toHaveValue('')
     await waitFor(() => {
-      expect(mockedSearchProvincialExemptions).toHaveBeenCalledWith(
-        expect.objectContaining({
-          filters: expect.objectContaining({
-            approvalFromDate: '',
-            approvalToDate: '',
-            region: [],
-          }),
-        }),
-        expect.any(Object),
-      )
+      expect(resultsTable).not.toBeVisible()
     })
+    expect(mockedSearchProvincialExemptions).toHaveBeenCalledTimes(searchCallsBeforeClear)
   })
 
   it('disables search button for invalid date filters', async () => {

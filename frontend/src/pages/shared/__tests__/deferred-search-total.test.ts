@@ -1,3 +1,4 @@
+import { isValidElement } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   formatDeferredSearchTotalLabel,
@@ -122,10 +123,8 @@ describe('loadSearchWithDeferredTotal', () => {
     })
   })
 
-  it('labels a deferred total using only the known row minimum', () => {
-    expect(formatDeferredSearchTotalLabel(11, 'pending', 10)).toBe(
-      'At least 10 results found — counting…',
-    )
+  it('renders a skeleton while counting and labels an unavailable exact total', () => {
+    expect(isValidElement(formatDeferredSearchTotalLabel(11, 'pending', 10))).toBe(true)
     expect(formatDeferredSearchTotalLabel(11, 'unavailable', 10)).toBe(
       'At least 10 results found — exact count unavailable',
     )

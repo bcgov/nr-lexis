@@ -218,7 +218,9 @@ $P{P_EXEMPTION_TYPE} == null || $P{P_EXEMPTION_TYPE}.isEmpty()
         ?   "Federal"
         :   $P{P_EXEMPTION_TYPE}.equalsIgnoreCase( "O" )
             ?   "Order In Council"
-            :   "All"]]></variableExpression>
+            :   $P{P_EXEMPTION_TYPE}.equalsIgnoreCase( "B" )
+                ?   "Blanket OIC"
+                :   "All"]]></variableExpression>
 	</variable>
 	<variable name="CCF7_F_CLIENT_TYPE" class="java.lang.String" resetType="None">
 		<variableExpression><![CDATA[//if isnull({?P_CLIENT_TYPE}) or {?P_CLIENT_TYPE} = '' then

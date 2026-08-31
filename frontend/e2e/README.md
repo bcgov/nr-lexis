@@ -29,13 +29,18 @@ regression coverage uses a separate TEST-only Playwright config.
 - The IDIR suite asserts the account establishes an authenticated session, has admin grants, can
   reach representative UI/API contracts, and can validate/submit/review/clean fresh TEST application
   data at runtime.
+- The provincial lifecycle queues application-status, exemption-approval, and permit-approval emails
+  to TEST's configured override recipients using generic regression content. Offer creation and the
+  required cleanup withdrawal exercise the automatic offer-email paths; the intermediate offer edit
+  is intentionally non-notifying. These checks prove the application handed each message to the TEST
+  mail sender, not that a mailbox received it.
 - The suite submits the EICAR test payload to document and submission uploads and expects a
   rejection. This verifies TEST LEXIS can reach its shared ClamAV service; see
   [Shared ClamAV service](../../docs/shared-clamav-service.md) for the deployment and network
   requirements.
 - Business BCeID browser regression is intentionally not scheduled because repeated automated login
   attempts can lock the TEST account. BCeID button and routing behavior stay covered by smoke and
-  unit tests.
+  unit tests; the BCeID-only permit review-request email remains outside the scheduled suite.
 - Credentialed regression jobs are scoped to the `test` GitHub environment, so dev preview deploys
   stay on smoke coverage.
 - CI explicitly masks the credential values and suppresses Playwright HTML reports, screenshots,

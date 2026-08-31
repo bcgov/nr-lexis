@@ -198,6 +198,15 @@ const PORT_OF_EXPORT_FIELD: ReportFieldDefinition = {
   type: 'select',
 }
 
+// INTENTIONAL_LEGACY_DIVERGENCE(RETIRED_REPORT_SCREENS): Keep these report
+// implementations in source, but never expose or launch them through the application routes.
+const RETIRED_REPORT_IDS = new Set([
+  'applicationReport',
+  'teacReport',
+  'exemptionReport',
+  'feeReport',
+])
+
 const REPORT_DEFINITIONS: ReportDefinition[] = [
   {
     id: 'applicationReport',
@@ -231,7 +240,7 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
   },
   {
     id: 'offerReport',
-    title: 'Offer Report',
+    title: 'Offers Report',
     category: 'Provincial',
     action: '/offerReport',
     description: 'Offer activity and approval outcomes.',
@@ -327,7 +336,7 @@ const REPORT_DEFINITIONS: ReportDefinition[] = [
   },
   {
     id: 'permitLedgerReport',
-    title: 'Permit Ledger Report',
+    title: 'Permits Report',
     category: 'Provincial',
     action: '/permitLedgerReport',
     description: 'Permit issuance and ledger summary.',
@@ -957,7 +966,7 @@ const validateReportLaunch = (
   return null
 }
 
-const ReportsPageContent = () => {
+export const ReportsPageContent = () => {
   const { reportId: routeReportId } = useParams<{ reportId?: string }>()
   const [searchParams, setSearchParams] = useSearchParams()
   const { canPerform } = useAuth()
@@ -1624,11 +1633,19 @@ const ReportsPage = () => {
   const explicitlyRequestedReport = REPORT_DEFINITIONS.find(
     (report) => report.id === explicitlyRequestedReportId,
   )
+  const firstAccessibleActiveReport = REPORT_DEFINITIONS.find(
+    (report) => !RETIRED_REPORT_IDS.has(report.id) && canPerform(report.action),
+  )
 
-  if (
-    explicitlyRequestedReportId &&
-    (!explicitlyRequestedReport || !canPerform(explicitlyRequestedReport.action))
-  ) {
+  if (!explicitlyRequestedReportId || RETIRED_REPORT_IDS.has(explicitlyRequestedReportId)) {
+    if (!firstAccessibleActiveReport) {
+      return <Navigate to="/unauthorized" replace />
+    }
+
+    return <Navigate to={`/reports/${firstAccessibleActiveReport.id}`} replace />
+  }
+
+  if (!explicitlyRequestedReport || !canPerform(explicitlyRequestedReport.action)) {
     return <Navigate to="/unauthorized" replace />
   }
 

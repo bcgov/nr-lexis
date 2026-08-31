@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  formatRoundedNumericFieldValue,
   greaterThanFieldError,
   greaterThanOrEqualFieldError,
   hasInvalidIsoDateValue,
@@ -7,7 +8,9 @@ import {
   isValidIsoDate,
   joinCreateSubmitMessages,
   lessThanOrEqualFieldError,
+  normalizeProvincialApplicationNumber,
   parseNonNegativeDecimalFieldValue,
+  provincialApplicationNumberFieldError,
   requiredMaxLengthFieldError,
   requiredNumericFieldError,
   requiredPositiveNumericFieldError,
@@ -104,5 +107,31 @@ describe('create-form-utils', () => {
     expect(integerFieldError('', 'Pieces')).toBe('Pieces must be a whole number.')
     expect(integerFieldError('1.2', 'Pieces')).toBe('Pieces must be a whole number.')
     expect(integerFieldError('12', 'Pieces')).toBeNull()
+  })
+
+  it('formats numeric fields with exact half-up storage rounding', () => {
+    expect(formatRoundedNumericFieldValue('1.001', 2)).toBe('1.00')
+    expect(formatRoundedNumericFieldValue('1.005', 2)).toBe('1.01')
+    expect(formatRoundedNumericFieldValue('9999999.994', 2)).toBe('9999999.99')
+    expect(formatRoundedNumericFieldValue('not-a-number', 2)).toBeNull()
+  })
+
+  it('validates and canonicalizes provincial application numbers', () => {
+    expect(provincialApplicationNumberFieldError('', 'Application number', true)).toBe(
+      'Application number is required.',
+    )
+    expect(provincialApplicationNumberFieldError('')).toBeNull()
+    expect(provincialApplicationNumberFieldError('1e3')).toBe(
+      'Application number must be a positive whole number.',
+    )
+    expect(provincialApplicationNumberFieldError('0')).toBe(
+      'Application number must be a positive whole number.',
+    )
+    expect(provincialApplicationNumberFieldError('12345678901')).toBe(
+      'Application number must be 10 digits or fewer.',
+    )
+    expect(provincialApplicationNumberFieldError('0000046275')).toBeNull()
+    expect(normalizeProvincialApplicationNumber(' 0000046275 ')).toBe('46275')
+    expect(normalizeProvincialApplicationNumber('1e3')).toBe('1e3')
   })
 })

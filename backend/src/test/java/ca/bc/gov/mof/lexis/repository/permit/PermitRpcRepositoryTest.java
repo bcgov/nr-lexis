@@ -245,7 +245,8 @@ class PermitRpcRepositoryTest {
     assertThat(rows.get(0).scaleRow().cascadeSplitCode()).isNull();
     ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
     verify(jdbcTemplate).query(sql.capture(), any(RowMapper.class), eq(7000123L));
-    assertThat(sql.getValue())
+    String query = sql.getValue();
+    assertThat(query)
         .contains("WITH SCALE_CONTEXT AS")
         .contains("FROM EXPORT_SCALE_DETAIL SD")
         .contains("LEFT JOIN TIMBER_MARK TM")
@@ -253,12 +254,21 @@ class PermitRpcRepositoryTest {
         .doesNotContain("HARVESTING_HAULING_XREF")
         .doesNotContain("HARVESTING_AUTHORITY")
         .contains("EEA.EXPORT_PRODUCT_TYPE_CODE AS APPLICATION_PRODUCT_TYPE_CODE")
+        .contains("NVL(SD.EXPORT_GRADE_CODE, ' ') AS AMV_GRADE_CODE")
         .contains("SCALE_AMV_DATE AS")
         .contains("MAX(ELA.EFFECTIVE_DATE) AS EFFECTIVE_DATE")
         .contains("LEFT JOIN EXPORT_LOG_AMV ELA")
-        .contains("ELA.EFFECTIVE_DATE <= TRUNC(SC.PERMIT_APPLICATION_DATE, 'MONTH')")
+        .contains("ELA.EFFECTIVE_DATE <= SC.PERMIT_APPLICATION_DATE")
+        .contains("ELA.EXPORT_GRADE_CODE = SC.AMV_GRADE_CODE")
         .contains("WHEN P.APPLICATION_NUMBER IS NULL THEN EPD.EXPORT_GROWTH_TYPE_CODE")
+        .contains("ELA.EXPORT_GROWTH_TYPE_CODE = SC.AMV_GROWTH_TYPE_CODE")
         .contains("WHERE SD.EXPORT_PERMIT_DETAIL_NUMBER = ?");
+    String effectiveDateSelection =
+        query.substring(
+            query.indexOf("SCALE_AMV_DATE AS"),
+            query.indexOf("GROUP BY SC.EXPORT_SCALE_DETAIL_ID"));
+    assertThat(effectiveDateSelection)
+        .doesNotContain("ELA.EXPORT_GROWTH_TYPE_CODE = SC.AMV_GROWTH_TYPE_CODE");
   }
 
   @Test
@@ -353,6 +363,23 @@ class PermitRpcRepositoryTest {
         .contains("'APPLICATION' AS ROW_KIND")
         .contains("'PACKAGE' AS ROW_KIND")
         .contains("'CANDIDATE' AS ROW_KIND");
+  }
+
+  @Test
+  void inPredicateShouldChunkValuesAtTheOracleLimit() {
+    String predicate = PermitRpcRepository.inPredicate("SD.PACKAGE_NUMBER", 3450);
+    String[] groups = predicate.substring(1, predicate.length() - 1).split(" OR ");
+
+    assertThat(groups).hasSize(4);
+    assertThat(groups)
+        .allSatisfy(
+            group ->
+                assertThat(group.chars().filter(character -> character == '?').count())
+                    .isLessThanOrEqualTo(1000L));
+    assertThat(groups[3].chars().filter(character -> character == '?').count())
+        .isEqualTo(450L);
+    assertThat(predicate.chars().filter(character -> character == '?').count()).isEqualTo(3450L);
+    assertThat(predicate).startsWith("(SD.PACKAGE_NUMBER IN (").endsWith("))");
   }
 
   @Test

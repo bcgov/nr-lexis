@@ -421,6 +421,19 @@ class PurchaseOfferRepositoryTest {
   }
 
   @Test
+  void applicationReferenceLookupShouldUseTheEstablishedCursorVolumeAlias() {
+    PurchaseOfferRepository repository = new ApplicationVolumePurchaseOfferRepository();
+
+    assertThat(repository.findApplicationReference(1000456L))
+        .hasValueSatisfying(
+            application -> {
+              assertThat(application.applicationNumber()).isEqualTo(1000456L);
+              assertThat(application.jurisdictionCode()).isEqualTo("P");
+              assertThat(application.applicationVolume()).isEqualTo(95.5d);
+            });
+  }
+
+  @Test
   void insertShouldPropagateOracleFailure() {
     FailingPurchaseOfferRepository repository = new FailingPurchaseOfferRepository();
 
@@ -682,6 +695,34 @@ class PurchaseOfferRepositoryTest {
         when(resultSet.getLong("ORG_UNIT_NO")).thenReturn(1903L);
         when(resultSet.wasNull()).thenReturn(false);
         return Optional.of(rowMapper.map(resultSet));
+      } catch (SQLException exception) {
+        throw new AssertionError(exception);
+      }
+    }
+  }
+
+  private static final class ApplicationVolumePurchaseOfferRepository
+      extends PurchaseOfferRepository {
+
+    ApplicationVolumePurchaseOfferRepository() {
+      super(null);
+    }
+
+    @Override
+    protected <T> Optional<T> queryCursorSingleRequired(
+        String procedureSignature,
+        SqlConsumer<CallableStatement> binder,
+        int cursorOutIndex,
+        SqlRowMapper<T> rowMapper) {
+      ResultSet resultSet = mock(ResultSet.class);
+      try {
+        when(resultSet.getLong("APPLICATION_NUMBER")).thenReturn(1000456L);
+        when(resultSet.getString("EXPORT_JURISDICTION_CODE")).thenReturn("P");
+        when(resultSet.getDouble("EXEMPTION_APPLICATION_VOLUME")).thenReturn(95.5d);
+        when(resultSet.wasNull()).thenReturn(false);
+        T row = rowMapper.map(resultSet);
+        verify(resultSet, never()).getDouble("APPLICATION_VOLUME");
+        return Optional.of(row);
       } catch (SQLException exception) {
         throw new AssertionError(exception);
       }

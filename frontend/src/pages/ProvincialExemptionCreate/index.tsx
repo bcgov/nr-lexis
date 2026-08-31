@@ -28,7 +28,9 @@ import {
   getVisibleFieldError,
   isoDateFieldError,
   maxNumericValueFieldError,
+  normalizeProvincialApplicationNumber,
   positiveNumericFieldError,
+  provincialApplicationNumberFieldError,
   requiredFieldError,
   type FieldErrors,
   type TouchedFields,
@@ -86,8 +88,7 @@ const INITIAL_FORM: ProvincialExemptionCreateForm = {
 
 const BLANKET_OIC_MAX_VOLUME = '9999999.9'
 const OIC_TYPES = new Set(['O', 'B'])
-
-const utf8ByteLength = (value: string): number => new TextEncoder().encode(value).length
+const ASCII_PATTERN = /^[\u0000-\u007f]*$/
 
 const feeRateError = (value: string): string | undefined => {
   const normalized = value.trim()
@@ -223,7 +224,7 @@ const ProvincialExemptionCreatePage = () => {
       Array.from(
         new Set(
           (prefillState?.selectedApplicationNumbers ?? [])
-            .map((value) => value.trim())
+            .map(normalizeProvincialApplicationNumber)
             .filter((value) => value.length > 0),
         ),
       ),
@@ -379,9 +380,9 @@ const ProvincialExemptionCreatePage = () => {
     () => ({
       applicationNumber:
         firstValidationError(
-          () => positiveNumericFieldError(form.applicationNumber),
+          () => provincialApplicationNumberFieldError(form.applicationNumber),
           () => {
-            const applicationNumber = form.applicationNumber.trim()
+            const applicationNumber = normalizeProvincialApplicationNumber(form.applicationNumber)
             return applicationNumber && selectedApplicationNumbers.includes(applicationNumber)
               ? `Application ${applicationNumber} is already selected.`
               : null
@@ -391,8 +392,12 @@ const ProvincialExemptionCreatePage = () => {
         ? (firstValidationError(
             () => requiredFieldError(form.exemptionNumber, 'Exemption number'),
             () =>
-              utf8ByteLength(form.exemptionNumber.trim()) > 8
-                ? 'Exemption number must be 8 UTF-8 bytes or fewer.'
+              ASCII_PATTERN.test(form.exemptionNumber.trim())
+                ? null
+                : 'Exemption number contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
+            () =>
+              form.exemptionNumber.trim().length > 8
+                ? 'Exemption number must be 8 characters or fewer.'
                 : null,
           ) ?? undefined)
         : undefined,
@@ -448,6 +453,17 @@ const ProvincialExemptionCreatePage = () => {
               )
             ? 'Select valid regions for a Blanket OIC exemption.'
             : undefined,
+      otherConditions:
+        firstValidationError(
+          () =>
+            ASCII_PATTERN.test(form.otherConditions.trim())
+              ? null
+              : 'Other conditions contain unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
+          () =>
+            form.otherConditions.length <= 250
+              ? null
+              : 'Other conditions must contain at most 250 characters.',
+        ) ?? undefined,
     }),
     [
       availableExemptionTypes,
@@ -520,7 +536,7 @@ const ProvincialExemptionCreatePage = () => {
   }
 
   const onAddApplication = (): void => {
-    const applicationNumber = form.applicationNumber.trim()
+    const applicationNumber = normalizeProvincialApplicationNumber(form.applicationNumber)
     if (!applicationNumber || fieldErrors.applicationNumber) {
       markFieldTouched('applicationNumber')
       return
@@ -719,6 +735,9 @@ const ProvincialExemptionCreatePage = () => {
       )}
 
       <Column sm={4} md={8} lg={16}>
+        {/* INTENTIONAL_LEGACY_DIVERGENCE(EXEMPTION_CREATE_SAVE_FIRST): Owner data is
+            derived from linked applications, while documents, permits, and fees require
+            the persisted exemption created by this form. */}
         <Tile className="create-form-tile">
           {status?.placement === 'inline' && (
             <InlineNotification
@@ -940,6 +959,9 @@ const ProvincialExemptionCreatePage = () => {
                 labelText="Other conditions"
                 maxLength={250}
                 value={form.otherConditions}
+                invalid={!!fieldError('otherConditions')}
+                invalidText={fieldError('otherConditions')}
+                onBlur={() => markFieldTouched('otherConditions')}
                 onChange={(event) => {
                   markFormEdited()
                   setForm((current) => ({ ...current, otherConditions: event.target.value }))

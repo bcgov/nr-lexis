@@ -7,7 +7,7 @@ export type SearchResultsTableFrameProps = {
   loading: boolean
   loadingDescription: string
   totalItems?: number
-  totalItemsLabel?: string
+  totalItemsLabel?: ReactNode
   actions?: ReactNode
 }
 
@@ -37,9 +37,9 @@ function SearchResultsTableFrame({
                   <InlineLoading description={loadingDescription} />
                 </div>
               ) : totalItems !== undefined ? (
-                <p className="legacy-search-result-count">
+                <div className="legacy-search-result-count" aria-live="polite">
                   {totalItemsLabel ?? formatSearchResultCount(totalItems)}
-                </p>
+                </div>
               ) : null}
               {actions ? (
                 <div className="legacy-search-table-toolbar__actions">{actions}</div>

@@ -92,7 +92,7 @@ public class AttachmentUploadValidator {
       return ValidationResult.rejected(metadataRejection);
     }
     if (file.getSize() <= 0 || file.getSize() > MAX_UPLOAD_BYTES) {
-      return ValidationResult.rejected("Files must be 20 MiB or smaller.");
+      return ValidationResult.rejected("Files must be 20 MB or smaller.");
     }
 
     String fileTypeCode = extension(fileName);

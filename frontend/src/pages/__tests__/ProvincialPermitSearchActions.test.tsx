@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -221,7 +221,8 @@ describe('Provincial Permit Search Actions', () => {
 
     await waitFor(() => expect(mockedCountProvincialPermits).toHaveBeenCalledOnce())
     expect(await screen.findByText('7001')).toBeInTheDocument()
-    expect(screen.getByText('At least 10 results found — counting…')).toBeInTheDocument()
+    expect(screen.getByRole('status', { name: 'Counting search results' })).toBeInTheDocument()
+    expect(screen.queryByText(/counting/i)).not.toBeInTheDocument()
     expect(screen.queryByText('Loading permit search results…')).not.toBeInTheDocument()
 
     await act(async () => {
@@ -259,7 +260,39 @@ describe('Provincial Permit Search Actions', () => {
     })
   })
 
-  it('submits the invoice number to URL-backed filters and clears it with the form', async () => {
+  it('submits a permit status selected with the mouse', async () => {
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => false }))
+    mockedFetchProvincialPermitOptions.mockResolvedValueOnce({
+      permitStatuses: [
+        { value: 'ACT', label: 'Active' },
+        { value: 'CAN', label: 'Cancelled' },
+      ],
+      regions: [{ value: '11', label: 'Cariboo' }],
+    })
+
+    renderPage('/provincial/permit?region=11')
+    await screen.findByText('7001')
+    mockedSearchProvincialPermits.mockClear()
+
+    const statusCombobox = await screen.findByRole('combobox', { name: 'Permit status' })
+    await userEvent.click(statusCombobox)
+    const listboxId = statusCombobox.getAttribute('aria-controls')
+    const listbox = listboxId ? document.getElementById(listboxId) : null
+    expect(listbox).not.toBeNull()
+    await userEvent.click(within(listbox as HTMLElement).getByRole('option', { name: 'Cancelled' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Search' }))
+
+    await waitFor(() => {
+      expect(mockedSearchProvincialPermits).toHaveBeenCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({ permitStatus: 'CAN' }),
+        }),
+        expect.any(Object),
+      )
+    })
+  })
+
+  it('submits the invoice number then clears the search without another request', async () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => false }))
 
     renderPage(
@@ -300,6 +333,8 @@ describe('Provincial Permit Search Actions', () => {
       ).toBe(true)
     })
 
+    const resultsTable = screen.getByRole('region', { name: 'Search results table' })
+    const searchCallsBeforeClear = mockedSearchProvincialPermits.mock.calls.length
     await userEvent.click(screen.getByRole('button', { name: 'Clear all' }))
 
     expect(invoiceNumber).toHaveValue('')
@@ -307,17 +342,10 @@ describe('Provincial Permit Search Actions', () => {
       const currentParams = new URLSearchParams(
         screen.getByTestId('permit-search-location').textContent ?? '',
       )
-      expect(currentParams.has('invoiceNumber')).toBe(false)
-      expect(currentParams.has('region')).toBe(false)
-      expect(currentParams.get('sortField')).toBe('permitNumber')
-      expect(currentParams.get('sortDirection')).toBe('desc')
-      expect(currentParams.get('page')).toBe('1')
-      expect(currentParams.get('pageSize')).toBe('10')
+      expect(currentParams.toString()).toBe('')
+      expect(resultsTable).not.toBeVisible()
     })
-    await waitFor(() => {
-      const lastRequest = mockedSearchProvincialPermits.mock.calls.at(-1)?.[0]
-      expect(lastRequest?.filters.invoiceNumber).toBe('')
-    })
+    expect(mockedSearchProvincialPermits).toHaveBeenCalledTimes(searchCallsBeforeClear)
   })
 
   it('reuses cached search results when the route remounts with the same URL state', async () => {

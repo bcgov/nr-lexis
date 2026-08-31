@@ -286,6 +286,9 @@ class LexisDocumentUploadMutationIntegrationTest {
                 .file(file("invoice.pdf"))
                 .param("permitNumber", Long.toString(PERMIT_NUMBER))
                 .param("salesInvoiceNumber", "INV-1001")
+                .param("invoiceExportValue", "100.00")
+                .param("invoiceConversionRate", "1.25")
+                .param("invoiceFeeInLieu", "12.00")
                 .with(adminJwt()))
         .andExpect(status().isOk());
   }
@@ -494,6 +497,9 @@ class LexisDocumentUploadMutationIntegrationTest {
             .file(file("invoice.pdf"))
             .param("permitNumber", Long.toString(PERMIT_NUMBER))
             .param("salesInvoiceNumber", "INV-1001")
+            .param("invoiceExportValue", "100.00")
+            .param("invoiceConversionRate", "1.25")
+            .param("invoiceFeeInLieu", "12.00")
             .param("fileDescription", "Invoice document")
             .with(authentication));
   }
@@ -532,6 +538,9 @@ class LexisDocumentUploadMutationIntegrationTest {
             .file(file("invoice.pdf"))
             .param("permitNumber", Long.toString(PERMIT_NUMBER))
             .param("salesInvoiceNumber", "INV-1001")
+            .param("invoiceExportValue", "100.00")
+            .param("invoiceConversionRate", "1.25")
+            .param("invoiceFeeInLieu", "12.00")
             .with(authentication));
   }
 

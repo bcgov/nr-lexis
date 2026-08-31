@@ -242,7 +242,8 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
         rs ->
             new ApplicationReferenceRow(
                 getLong(rs, "APPLICATION_NUMBER"),
-                getString(rs, "EXPORT_JURISDICTION_CODE")));
+                getString(rs, "EXPORT_JURISDICTION_CODE"),
+                getDouble(rs, "EXEMPTION_APPLICATION_VOLUME")));
   }
 
   public Optional<ApplicationRecipientRow> findApplicationRecipient(Long applicationNumber) {
@@ -263,7 +264,7 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
                 getLong(rs, "ORG_UNIT_NO")));
   }
 
-  public Optional<Long> findPackageApplicationNumber(String packageNumber) {
+  public Optional<PackageReferenceRow> findPackageReference(String packageNumber) {
     String normalized = trim(packageNumber);
     if (normalized == null) {
       return Optional.empty();
@@ -272,7 +273,11 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
         FIND_PACKAGE_BY_NUMBER,
         cs -> cs.setString(1, normalized),
         2,
-        rs -> getLong(rs, "APPLICATION_NUMBER"));
+        rs ->
+            new PackageReferenceRow(
+                getString(rs, "PACKAGE_NUMBER"),
+                getLong(rs, "APPLICATION_NUMBER"),
+                getDouble(rs, "PACKAGE_VOLUME")));
   }
 
   public Optional<PurchaseOfferUpdateSourceRow> findUpdateSourceByOfferNumber(Long offerNumber) {
@@ -429,7 +434,15 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
     }
   }
 
-  public record ApplicationReferenceRow(Long applicationNumber, String jurisdictionCode) {}
+  public record ApplicationReferenceRow(
+      Long applicationNumber, String jurisdictionCode, Double applicationVolume) {
+    public ApplicationReferenceRow(Long applicationNumber, String jurisdictionCode) {
+      this(applicationNumber, jurisdictionCode, null);
+    }
+  }
+
+  public record PackageReferenceRow(
+      String packageNumber, Long applicationNumber, Double packageVolume) {}
 
   public record PurchaseOfferUpdateSourceRow(
       Long exportPurchaseOfferNumber,

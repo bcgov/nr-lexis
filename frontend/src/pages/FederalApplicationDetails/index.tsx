@@ -116,6 +116,8 @@ const FEDERAL_APPLICATION_DETAIL_TAB_SLOTS: readonly FederalApplicationDetailTab
   'shipping',
 ]
 
+const ASCII_PATTERN = /^[\u0000-\u007f]*$/
+
 const emptyPermitForm = (): FederalPermitMutation => ({
   permitNumber: null,
   permitIssueDate: '',
@@ -309,7 +311,13 @@ const FederalApplicationDetailsPage = () => {
       transportType:
         requiredExactLengthFieldError(permitForm.transportType, 1, 'Transport type') ?? undefined,
       transportName:
-        requiredMaxLengthFieldError(permitForm.transportName, 26, 'Transport name') ?? undefined,
+        firstValidationError(
+          () => requiredMaxLengthFieldError(permitForm.transportName, 26, 'Transport name'),
+          () =>
+            ASCII_PATTERN.test(permitForm.transportName.trim())
+              ? null
+              : 'Transport name contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
+        ) ?? undefined,
       shippingDate: firstValidationError(
         () => requiredFieldError(permitForm.shippingDate, 'Estimated shipping date'),
         () => isoDateFieldError(permitForm.shippingDate),
@@ -318,10 +326,17 @@ const FederalApplicationDetailsPage = () => {
         requiredExactLengthFieldError(permitForm.portOfExport, 2, 'Port of export') ?? undefined,
       otherPortOfExport:
         permitForm.portOfExport.trim().toUpperCase() === 'OT'
-          ? (requiredMaxLengthFieldError(
-              permitForm.otherPortOfExport,
-              34,
-              'Other port of export',
+          ? (firstValidationError(
+              () =>
+                requiredMaxLengthFieldError(
+                  permitForm.otherPortOfExport,
+                  34,
+                  'Other port of export',
+                ),
+              () =>
+                ASCII_PATTERN.test(permitForm.otherPortOfExport.trim())
+                  ? null
+                  : 'Other port of export contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
             ) ?? undefined)
           : undefined,
     }),
@@ -619,6 +634,10 @@ const FederalApplicationDetailsPage = () => {
       setRemarkValidationMessage('Remark is required.')
       return false
     }
+    if (normalizedRemark.length > 250) {
+      setRemarkValidationMessage('Remark must not exceed 250 characters.')
+      return false
+    }
 
     setRemarkValidationMessage('')
     setActionErrorMessage('')
@@ -840,7 +859,7 @@ const FederalApplicationDetailsPage = () => {
       </Column>
       <Column sm={4} md={8} lg={16} className="detail-page-header">
         <PageHeader
-          title={`LEXIS application ${federalApplicationDisplayNumber}`.trim()}
+          title={`Federal application ${federalApplicationDisplayNumber}`.trim()}
           subtitle="Check and manage this federal application"
           status={
             currentDetail ? (
@@ -1264,60 +1283,62 @@ const FederalApplicationDetailsPage = () => {
                             </Table>
                           </TableFrame>
                         ) : (
-                          <EmptyState
-                            title="No packages found"
-                            description="This federal application does not include any packages."
-                            headingLevel={3}
-                          />
+                          <p className="detail-empty-message">
+                            No package has been recorded for this federal application.
+                          </p>
                         )}
                       </Tile>
                     </Column>
-                    <Column sm={4} md={8} lg={16}>
-                      <Tile>
-                        <h2 className="detail-tile-title">Summary of scale</h2>
-                        {scaleErrorMessage ? (
-                          <EmptyState
-                            title="Scale details unavailable"
-                            description={scaleErrorMessage}
-                            headingLevel={3}
-                            role="alert"
-                          />
-                        ) : scaleRows.length > 0 ? (
-                          <TableFrame ariaLabel="Federal application scale details">
-                            <Table size="md" useZebraStyles>
-                              <TableHead>
-                                <TableRow>
-                                  <TableHeader>Package</TableHeader>
-                                  <TableHeader>Timber Mark</TableHeader>
-                                  <TableHeader>Pieces</TableHeader>
-                                  <TableHeader>Species</TableHeader>
-                                  <TableHeader>Grade</TableHeader>
-                                  <TableHeader>Volume (m³)</TableHeader>
-                                </TableRow>
-                              </TableHead>
-                              <TableBody>
-                                {scaleRows.map((row) => (
-                                  <TableRow key={`${row.packageNumber}-${row.id}`}>
-                                    <TableCell>{row.packageNumber}</TableCell>
-                                    <TableCell>{row.timberMark || '-'}</TableCell>
-                                    <TableCell>{row.pieces.toLocaleString()}</TableCell>
-                                    <TableCell>{row.species || '-'}</TableCell>
-                                    <TableCell>{row.grade || '-'}</TableCell>
-                                    <TableCell>{row.volume || '-'}</TableCell>
+                    {/* INTENTIONAL_LEGACY_DIVERGENCE(PACKAGE_FIRST_ITEMS_WORKFLOW):
+                        Suppress dependent Summary of Scale content until a package exists. */}
+                    {detail.packages.length > 0 && (
+                      <Column sm={4} md={8} lg={16}>
+                        <Tile>
+                          <h2 className="detail-tile-title">Summary of Scale</h2>
+                          {scaleErrorMessage ? (
+                            <EmptyState
+                              title="Scale details unavailable"
+                              description={scaleErrorMessage}
+                              headingLevel={3}
+                              role="alert"
+                            />
+                          ) : scaleRows.length > 0 ? (
+                            <TableFrame ariaLabel="Federal application scale details">
+                              <Table size="md" useZebraStyles>
+                                <TableHead>
+                                  <TableRow>
+                                    <TableHeader>Package</TableHeader>
+                                    <TableHeader>Timber mark</TableHeader>
+                                    <TableHeader>Pieces</TableHeader>
+                                    <TableHeader>Species</TableHeader>
+                                    <TableHeader>Grade</TableHeader>
+                                    <TableHeader>Volume (m³)</TableHeader>
                                   </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
-                          </TableFrame>
-                        ) : (
-                          <EmptyState
-                            title="No scale details found"
-                            description="No scale details are recorded for this federal application."
-                            headingLevel={3}
-                          />
-                        )}
-                      </Tile>
-                    </Column>
+                                </TableHead>
+                                <TableBody>
+                                  {scaleRows.map((row) => (
+                                    <TableRow key={`${row.packageNumber}-${row.id}`}>
+                                      <TableCell>{row.packageNumber}</TableCell>
+                                      <TableCell>{row.timberMark || '-'}</TableCell>
+                                      <TableCell>{row.pieces.toLocaleString()}</TableCell>
+                                      <TableCell>{row.species || '-'}</TableCell>
+                                      <TableCell>{row.grade || '-'}</TableCell>
+                                      <TableCell>{row.volume || '-'}</TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </TableFrame>
+                          ) : (
+                            <EmptyState
+                              title="No scale details found"
+                              description="No scale details are recorded for this federal application."
+                              headingLevel={3}
+                            />
+                          )}
+                        </Tile>
+                      </Column>
+                    )}
                   </Grid>
                 </TabPanel>
 
@@ -1334,7 +1355,7 @@ const FederalApplicationDetailsPage = () => {
                                   <TableHeader>Offer number</TableHeader>
                                   <TableHeader>Company</TableHeader>
                                   <TableHeader>Date received</TableHeader>
-                                  <TableHeader>Open</TableHeader>
+                                  <TableHeader>Actions</TableHeader>
                                 </TableRow>
                               </TableHead>
                               <TableBody>
@@ -1565,7 +1586,7 @@ const FederalApplicationDetailsPage = () => {
                             <Table size="md" useZebraStyles>
                               <TableHead>
                                 <TableRow>
-                                  <TableHeader>File Name</TableHeader>
+                                  <TableHeader>File name</TableHeader>
                                   <TableHeader>Description</TableHeader>
                                   <TableHeader>Type</TableHeader>
                                   <TableHeader>Actions</TableHeader>

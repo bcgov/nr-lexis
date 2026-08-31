@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports"
+              xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+              xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd"
+              name="LEXIS_SPECIES_GRADE"
+              pageWidth="1224"
+              pageHeight="792"
+              orientation="Landscape"
+              whenNoDataType="NoDataSection"
+              columnWidth="1176"
+              leftMargin="24"
+              rightMargin="24"
+              topMargin="24"
+              bottomMargin="24">
+    <parameter name="REPORT_TITLE" class="java.lang.String"/>
+    <parameter name="REPORT_SUBTITLE" class="java.lang.String"/>
+    <parameter name="REPORT_GENERATED_DATE" class="java.lang.String"/>
+
+    <field name="EXPORT_PRODUCT_TYPE_CODE" class="java.lang.String"/>
+    <field name="PRODUCT_TYPE" class="java.lang.String"/>
+    <field name="REGION" class="java.lang.String"/>
+    <field name="EXPORT_GRADE_CODE" class="java.lang.String"/>
+    <field name="SUM_FI" class="java.lang.String"/>
+    <field name="SUM_CE" class="java.lang.String"/>
+    <field name="SUM_SP" class="java.lang.String"/>
+    <field name="SUM_LO" class="java.lang.String"/>
+    <field name="SUM_HE" class="java.lang.String"/>
+    <field name="SUM_BA" class="java.lang.String"/>
+    <field name="SUM_CY" class="java.lang.String"/>
+    <field name="SUM_AL" class="java.lang.String"/>
+    <field name="SUM_CO" class="java.lang.String"/>
+    <field name="SUM_HD" class="java.lang.String"/>
+    <field name="SUM_OT" class="java.lang.String"/>
+    <field name="EXPORT_JURISDICTION_CODE" class="java.lang.String"/>
+    <field name="SORTED_COLUMN" class="java.lang.String"/>
+
+    <title>
+        <band height="56" splitType="Prevent">
+            <textField>
+                <reportElement x="0" y="0" width="900" height="22"/>
+                <textElement><font fontName="Arial" size="16" isBold="true"/></textElement>
+                <textFieldExpression><![CDATA[$P{REPORT_TITLE} == null ? "Species and Grade Report" : $P{REPORT_TITLE}]]></textFieldExpression>
+            </textField>
+            <textField>
+                <reportElement x="950" y="0" width="226" height="18"/>
+                <textElement textAlignment="Right"><font fontName="Arial" size="9"/></textElement>
+                <textFieldExpression><![CDATA["Generated: " + ($P{REPORT_GENERATED_DATE} == null ? "" : $P{REPORT_GENERATED_DATE})]]></textFieldExpression>
+            </textField>
+            <textField textAdjust="StretchHeight">
+                <reportElement x="0" y="28" width="1176" height="20"/>
+                <textElement><font fontName="Arial" size="9"/></textElement>
+                <textFieldExpression><![CDATA[$P{REPORT_SUBTITLE} == null ? "" : $P{REPORT_SUBTITLE}]]></textFieldExpression>
+            </textField>
+        </band>
+    </title>
+
+    <columnHeader>
+        <band height="54" splitType="Prevent">
+            <frame>
+                <reportElement x="0" y="0" width="1176" height="54"/>
+                <box><pen lineWidth="0.8"/></box>
+
+                <staticText><reportElement x="0" y="0" width="455" height="18"/><box><pen lineWidth="0.5"/></box><textElement textAlignment="Center" verticalAlignment="Middle"><font fontName="Arial" size="8" isBold="true"/></textElement><text><![CDATA[Permit and product details]]></text></staticText>
+                <staticText><reportElement x="455" y="0" width="605" height="18"/><box><pen lineWidth="0.5"/></box><textElement textAlignment="Center" verticalAlignment="Middle"><font fontName="Arial" size="8" isBold="true"/></textElement><text><![CDATA[Species volume (m³)]]></text></staticText>
+                <staticText><reportElement x="1060" y="0" width="116" height="18"/><box><pen lineWidth="0.5"/></box><textElement textAlignment="Center" verticalAlignment="Middle"><font fontName="Arial" size="8" isBold="true"/></textElement><text><![CDATA[Jurisdiction]]></text></staticText>
+
+                <staticText><reportElement x="0" y="18" width="70" height="36"/><box><pen lineWidth="0.5"/></box><textElement textAlignment="Center" verticalAlignment="Middle"><font fontName="Arial" size="7" isBold="true"/></textElement><text><![CDATA[Product type code]]></text></staticText>
+                <staticText><reportElement x="70" y="18" width="130" height="36"/><box><pen lineWidth="0.5"/></box><textElement textAlignment="Center" verticalAlignment="Middle"><font fontName="Arial" size="7" isBold="true"/></textElement><text><![CDATA[Product type]]></text></staticText>
+                <staticText><reportElement x="200" y="18" width="200" height="36"/><box><pen lineWidth="0.5"/></box><textElement textAlignment="Center" verticalAlignment="Middle"><font fontName="Arial" size="7" isBold="true"/></textElement><text><![CDATA[Region]]></text></staticText>
+                <staticText><reportElement x="400" y="18" width="55" height="36"/><box><pen lineWidth="0.5"/></box><textElement textAlignment="Center" verticalAlignment="Middle"><font fontName="Arial" size="7" isBold="true"/></textElement><text><![CDATA[Grade]]></text></staticText>
+                <staticText><reportElement x="455" y="18" width="55" height="36"/><box><pen lineWidth="0.5"/></box><textElement textAlignment="Center" verticalAlignment="Middle"><font fontName="Arial" size="7" isBold="true"/></textElement><text><![CDATA[Fir]]></text></staticText>
+                <staticText><reportElement x="510" y="18" width="55" height="36"/><box><pen lineWidth="0.5"/></box><textElement textAlignment="Center" verticalAlignment="Middle"><font fontName="Arial" size="7" isBold="true"/></textElement><text><![CDATA[Cedar]]></text></staticText>
+                <staticText><reportElement x="565" y="18" width="55" height="36"/><box><pen lineWidth="0.5"/></box><textElement textAlignment="Center" verticalAlignment="Middle"><font fontName="Arial" size="7" isBold="true"/></textElement><text><![CDATA[Spruce]]></text></staticText>
+                <staticText><reportElement x="620" y="18" width="55" height="36"/><box><pen lineWidth="0.5"/></box><textElement textAlignment="Center" verticalAlignment="Middle"><font fontName="Arial" size="7" isBold="true"/></textElement><text><![CDATA[Lodgepole pine]]></text></staticText>
+                <staticText><reportElement x="675" y="18" width="55" height="36"/><box><pen lineWidth="0.5"/></box><textElement textAlignment="Center" verticalAlignment="Middle"><font fontName="Arial" size="7" isBold="true"/></textElement><text><![CDATA[Hemlock]]></text></staticText>
+                <staticText><reportElement x="730" y="18" width="55" height="36"/><box><pen lineWidth="0.5"/></box><textElement textAlignment="Center" verticalAlignment="Middle"><font fontName="Arial" size="7" isBold="true"/></textElement><text><![CDATA[Balsam]]></text></staticText>
+                <staticText><reportElement x="785" y="18" width="55" height="36"/><box><pen lineWidth="0.5"/></box><textElement textAlignment="Center" verticalAlignment="Middle"><font fontName="Arial" size="7" isBold="true"/></textElement><text><![CDATA[Cypress]]></text></staticText>
+                <staticText><reportElement x="840" y="18" width="55" height="36"/><box><pen lineWidth="0.5"/></box><textElement textAlignment="Center" verticalAlignment="Middle"><font fontName="Arial" size="7" isBold="true"/></textElement><text><![CDATA[Alder]]></text></staticText>
+                <staticText><reportElement x="895" y="18" width="55" height="36"/><box><pen lineWidth="0.5"/></box><textElement textAlignment="Center" verticalAlignment="Middle"><font fontName="Arial" size="7" isBold="true"/></textElement><text><![CDATA[Cottonwood]]></text></staticText>
+                <staticText><reportElement x="950" y="18" width="55" height="36"/><box><pen lineWidth="0.5"/></box><textElement textAlignment="Center" verticalAlignment="Middle"><font fontName="Arial" size="7" isBold="true"/></textElement><text><![CDATA[Hardwood]]></text></staticText>
+                <staticText><reportElement x="1005" y="18" width="55" height="36"/><box><pen lineWidth="0.5"/></box><textElement textAlignment="Center" verticalAlignment="Middle"><font fontName="Arial" size="7" isBold="true"/></textElement><text><![CDATA[Other]]></text></staticText>
+                <staticText><reportElement x="1060" y="18" width="116" height="36"/><box><pen lineWidth="0.5"/></box><textElement textAlignment="Center" verticalAlignment="Middle"><font fontName="Arial" size="7" isBold="true"/></textElement><text><![CDATA[Jurisdiction]]></text></staticText>
+            </frame>
+        </band>
+    </columnHeader>
+
+    <detail>
+        <band height="24" splitType="Stretch">
+            <textField isBlankWhenNull="true"><reportElement x="0" y="0" width="70" height="24"/><box><pen lineWidth="0.3"/></box><textElement textAlignment="Center" verticalAlignment="Middle"><font fontName="Arial" size="8"/></textElement><textFieldExpression><![CDATA[$F{EXPORT_PRODUCT_TYPE_CODE}]]></textFieldExpression></textField>
+            <textField isBlankWhenNull="true"><reportElement x="70" y="0" width="130" height="24"/><box><pen lineWidth="0.3"/></box><textElement verticalAlignment="Middle"><font fontName="Arial" size="8"/></textElement><textFieldExpression><![CDATA[$F{PRODUCT_TYPE}]]></textFieldExpression></textField>
+            <textField isBlankWhenNull="true"><reportElement x="200" y="0" width="200" height="24"/><box><pen lineWidth="0.3"/></box><textElement verticalAlignment="Middle"><font fontName="Arial" size="8"/></textElement><textFieldExpression><![CDATA[$F{REGION}]]></textFieldExpression></textField>
+            <textField isBlankWhenNull="true"><reportElement x="400" y="0" width="55" height="24"/><box><pen lineWidth="0.3"/></box><textElement textAlignment="Center" verticalAlignment="Middle"><font fontName="Arial" size="8"/></textElement><textFieldExpression><![CDATA[$F{EXPORT_GRADE_CODE}]]></textFieldExpression></textField>
+            <textField isBlankWhenNull="true"><reportElement x="455" y="0" width="55" height="24"/><box><pen lineWidth="0.3"/></box><textElement textAlignment="Right" verticalAlignment="Middle"><font fontName="Arial" size="8"/></textElement><textFieldExpression><![CDATA[$F{SUM_FI}]]></textFieldExpression></textField>
+            <textField isBlankWhenNull="true"><reportElement x="510" y="0" width="55" height="24"/><box><pen lineWidth="0.3"/></box><textElement textAlignment="Right" verticalAlignment="Middle"><font fontName="Arial" size="8"/></textElement><textFieldExpression><![CDATA[$F{SUM_CE}]]></textFieldExpression></textField>
+            <textField isBlankWhenNull="true"><reportElement x="565" y="0" width="55" height="24"/><box><pen lineWidth="0.3"/></box><textElement textAlignment="Right" verticalAlignment="Middle"><font fontName="Arial" size="8"/></textElement><textFieldExpression><![CDATA[$F{SUM_SP}]]></textFieldExpression></textField>
+            <textField isBlankWhenNull="true"><reportElement x="620" y="0" width="55" height="24"/><box><pen lineWidth="0.3"/></box><textElement textAlignment="Right" verticalAlignment="Middle"><font fontName="Arial" size="8"/></textElement><textFieldExpression><![CDATA[$F{SUM_LO}]]></textFieldExpression></textField>
+            <textField isBlankWhenNull="true"><reportElement x="675" y="0" width="55" height="24"/><box><pen lineWidth="0.3"/></box><textElement textAlignment="Right" verticalAlignment="Middle"><font fontName="Arial" size="8"/></textElement><textFieldExpression><![CDATA[$F{SUM_HE}]]></textFieldExpression></textField>
+            <textField isBlankWhenNull="true"><reportElement x="730" y="0" width="55" height="24"/><box><pen lineWidth="0.3"/></box><textElement textAlignment="Right" verticalAlignment="Middle"><font fontName="Arial" size="8"/></textElement><textFieldExpression><![CDATA[$F{SUM_BA}]]></textFieldExpression></textField>
+            <textField isBlankWhenNull="true"><reportElement x="785" y="0" width="55" height="24"/><box><pen lineWidth="0.3"/></box><textElement textAlignment="Right" verticalAlignment="Middle"><font fontName="Arial" size="8"/></textElement><textFieldExpression><![CDATA[$F{SUM_CY}]]></textFieldExpression></textField>
+            <textField isBlankWhenNull="true"><reportElement x="840" y="0" width="55" height="24"/><box><pen lineWidth="0.3"/></box><textElement textAlignment="Right" verticalAlignment="Middle"><font fontName="Arial" size="8"/></textElement><textFieldExpression><![CDATA[$F{SUM_AL}]]></textFieldExpression></textField>
+            <textField isBlankWhenNull="true"><reportElement x="895" y="0" width="55" height="24"/><box><pen lineWidth="0.3"/></box><textElement textAlignment="Right" verticalAlignment="Middle"><font fontName="Arial" size="8"/></textElement><textFieldExpression><![CDATA[$F{SUM_CO}]]></textFieldExpression></textField>
+            <textField isBlankWhenNull="true"><reportElement x="950" y="0" width="55" height="24"/><box><pen lineWidth="0.3"/></box><textElement textAlignment="Right" verticalAlignment="Middle"><font fontName="Arial" size="8"/></textElement><textFieldExpression><![CDATA[$F{SUM_HD}]]></textFieldExpression></textField>
+            <textField isBlankWhenNull="true"><reportElement x="1005" y="0" width="55" height="24"/><box><pen lineWidth="0.3"/></box><textElement textAlignment="Right" verticalAlignment="Middle"><font fontName="Arial" size="8"/></textElement><textFieldExpression><![CDATA[$F{SUM_OT}]]></textFieldExpression></textField>
+            <textField isBlankWhenNull="true"><reportElement x="1060" y="0" width="116" height="24"/><box><pen lineWidth="0.3"/></box><textElement verticalAlignment="Middle"><font fontName="Arial" size="8"/></textElement><textFieldExpression><![CDATA[$F{EXPORT_JURISDICTION_CODE}]]></textFieldExpression></textField>
+        </band>
+    </detail>
+
+    <noData>
+        <band height="112">
+            <textField>
+                <reportElement x="0" y="0" width="900" height="22"/>
+                <textElement><font fontName="Arial" size="16" isBold="true"/></textElement>
+                <textFieldExpression><![CDATA[$P{REPORT_TITLE} == null ? "Species and Grade Report" : $P{REPORT_TITLE}]]></textFieldExpression>
+            </textField>
+            <textField textAdjust="StretchHeight">
+                <reportElement x="0" y="28" width="1176" height="40"/>
+                <textElement><font fontName="Arial" size="9"/></textElement>
+                <textFieldExpression><![CDATA[$P{REPORT_SUBTITLE} == null ? "" : $P{REPORT_SUBTITLE}]]></textFieldExpression>
+            </textField>
+            <staticText>
+                <reportElement x="0" y="80" width="1176" height="20"/>
+                <textElement textAlignment="Center" verticalAlignment="Middle"><font fontName="Arial" size="11" isBold="true"/></textElement>
+                <text><![CDATA[No Species and Grade data matched this report criteria.]]></text>
+            </staticText>
+        </band>
+    </noData>
+</jasperReport>

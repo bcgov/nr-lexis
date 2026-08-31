@@ -1,6 +1,12 @@
 package ca.bc.gov.mof.lexis.service.permit;
 
 import static ca.bc.gov.mof.lexis.util.DateUtils.parseIsoOrLegacyDate;
+import static ca.bc.gov.mof.lexis.util.InvoiceStorageConstraints.INVOICE_NUMBER_MAX_LENGTH;
+import static ca.bc.gov.mof.lexis.util.InvoiceStorageConstraints.isValidInvoiceAmount;
+import static ca.bc.gov.mof.lexis.util.InvoiceStorageConstraints.isValidInvoiceConversionRate;
+import static ca.bc.gov.mof.lexis.util.InvoiceStorageConstraints.isValidInvoiceNumber;
+import static ca.bc.gov.mof.lexis.util.InvoiceStorageConstraints.roundInvoiceAmountForStorage;
+import static ca.bc.gov.mof.lexis.util.InvoiceStorageConstraints.roundInvoiceConversionRateForStorage;
 import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.controlSafe;
 import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.exceptionType;
 import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.fingerprint;
@@ -150,7 +156,6 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   private static final String APPLICATION_STATUS_EXEMPTED = "EXE";
   private static final String EXEMPTION_STATUS_ACTIVE = "ACT";
   private static final String SPECIES_FIR = "FI";
-  private static final int MAX_SALES_INVOICE_NUMBER_LENGTH = 9;
   private static final long MAX_OIC_REQUEST_PIECES = 9_999_999_999L;
   // THE.EXPORT_PERMIT_DETAIL.OIC_REQUEST_VOLUME is VARCHAR2(9), not a numeric column.
   private static final int MAX_OIC_REQUEST_VOLUME_LENGTH = 9;
@@ -1486,6 +1491,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     if (normalizedUserId == null) {
       errors.add("A valid user identifier is required.");
     }
+    errors.addAll(validateSubmittedPermitDates(request));
 
     String exemptionNumber = trimToNull(request.exemptionNumber());
     if (exemptionNumber == null) {
@@ -1584,10 +1590,10 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     if (permitStatus == null) {
       errors.add("A valid permit status is required.");
     }
-    if (issueDate == null) {
+    if (issueDate == null && trimToNull(request.permitIssueDate()) == null) {
       errors.add("A valid permit issue date is required.");
     }
-    if (submitDate == null) {
+    if (submitDate == null && trimToNull(request.permitSubmitDate()) == null) {
       errors.add("A valid permit submit date is required.");
     }
     if (!errors.isEmpty()) {
@@ -1700,6 +1706,10 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     if (EXPORT_PERMIT_STATUS_EXPIRED.equalsIgnoreCase(current.permitStatusCode())) {
       return failureMutationResponse(
           List.of("Expired permits are read-only."), permitNumber);
+    }
+    List<String> dateErrors = validateSubmittedPermitDates(request);
+    if (!dateErrors.isEmpty()) {
+      return failureMutationResponse(dateErrors, permitNumber);
     }
     String currentExemptionNumber = trimToNull(current.exemptionNumber());
     if (currentExemptionNumber == null) {
@@ -2856,25 +2866,38 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     }
     if (normalizedSalesInvoiceNumber == null) {
       errors.add("A valid sales invoice number is required.");
-    } else if (normalizedSalesInvoiceNumber.length() > MAX_SALES_INVOICE_NUMBER_LENGTH) {
+    } else if (normalizedSalesInvoiceNumber.length() > INVOICE_NUMBER_MAX_LENGTH) {
       errors.add(
           "The sales invoice number must be "
-              + MAX_SALES_INVOICE_NUMBER_LENGTH
+              + INVOICE_NUMBER_MAX_LENGTH
               + " characters or fewer.");
+    } else if (!isValidInvoiceNumber(normalizedSalesInvoiceNumber)) {
+      errors.add("The sales invoice number must use printable US-ASCII characters.");
     }
     if (invoiceExportValue == null || invoiceExportValue.compareTo(BigDecimal.ZERO) <= 0) {
       errors.add("A valid export value is required.");
+    } else if (!isValidInvoiceAmount(invoiceExportValue)) {
+      errors.add("The export value must round to 9999999.99 or less.");
     }
     if (invoiceConversionRate == null || invoiceConversionRate.compareTo(BigDecimal.ZERO) <= 0) {
       errors.add("A valid currency conversion rate is required.");
+    } else if (!isValidInvoiceConversionRate(invoiceConversionRate)) {
+      errors.add("The currency conversion rate must round to 9.99999 or less.");
     }
     if (invoiceFeeInLieu == null || invoiceFeeInLieu.compareTo(BigDecimal.ZERO) <= 0) {
       errors.add("A valid fee in lieu is required.");
+    } else if (!isValidInvoiceAmount(invoiceFeeInLieu)) {
+      errors.add("The fee in lieu must round to 9999999.99 or less.");
     }
     if (!errors.isEmpty()) {
       return new PermitPersistenceRpcResponseDto(
           false, "", errors, List.of(), permitNumber);
     }
+
+    BigDecimal storedInvoiceExportValue = roundInvoiceAmountForStorage(invoiceExportValue);
+    BigDecimal storedInvoiceConversionRate =
+        roundInvoiceConversionRateForStorage(invoiceConversionRate);
+    BigDecimal storedInvoiceFeeInLieu = roundInvoiceAmountForStorage(invoiceFeeInLieu);
 
     Optional<PermitMutationRow> permit = repository.findPermitMutationByPermitNumber(permitNumber);
     if (permit.isEmpty()) {
@@ -2899,9 +2922,9 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         repository.insertSalesInvoice(
             permitNumber,
             normalizedSalesInvoiceNumber,
-            invoiceExportValue,
-            invoiceConversionRate,
-            invoiceFeeInLieu,
+            storedInvoiceExportValue,
+            storedInvoiceConversionRate,
+            storedInvoiceFeeInLieu,
             trimToNull(userId));
     if (inserted
         .filter(
@@ -2909,9 +2932,9 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
                 matchesInsertedSalesInvoice(
                     row,
                     normalizedSalesInvoiceNumber,
-                    invoiceExportValue,
-                    invoiceConversionRate,
-                    invoiceFeeInLieu))
+                    storedInvoiceExportValue,
+                    storedInvoiceConversionRate,
+                    storedInvoiceFeeInLieu))
         .isEmpty()) {
       markRollbackOnly();
       return new PermitPersistenceRpcResponseDto(
@@ -4817,6 +4840,25 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
 
   private LocalDate mergeSubmittedDate(String submitted, LocalDate current) {
     return submitted == null ? current : parseDate(submitted);
+  }
+
+  private List<String> validateSubmittedPermitDates(PermitMutationRequestDto request) {
+    List<String> errors = new ArrayList<>();
+    validateSubmittedPermitDate(request.permitSubmitDate(), "Permit submit date", errors);
+    validateSubmittedPermitDate(request.permitIssueDate(), "Permit issue date", errors);
+    validateSubmittedPermitDate(request.permitExpiryDate(), "Permit expiry date", errors);
+    validateSubmittedPermitDate(request.permitRequestDate(), "Permit request date", errors);
+    validateSubmittedPermitDate(
+        request.estimatedShippingDate(), "Estimated shipping date", errors);
+    return List.copyOf(errors);
+  }
+
+  private void validateSubmittedPermitDate(
+      String value, String label, List<String> errors) {
+    String normalized = trimToNull(value);
+    if (normalized != null && parseDate(normalized) == null) {
+      errors.add(label + " must be a valid date.");
+    }
   }
 
   private boolean isInvalidSubmittedDouble(String submitted, Double parsed) {

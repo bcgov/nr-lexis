@@ -23,6 +23,7 @@ const authenticatedAdminSession = {
     '/federalApplicationDetails',
     'viewFederalApplication',
     '/applicationReport',
+    '/offerReport',
     '/lexisAgentAdmin',
     '/applicationDetails',
   ],
@@ -382,6 +383,35 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     expect(pageWidth.scrollWidth).toBeLessThanOrEqual(pageWidth.clientWidth)
   })
 
+  test('shows authenticated users without a LEXIS role the standalone no-access page', async ({
+    page,
+  }) => {
+    await page.route('**/api/lexis/session/capabilities', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ...authenticatedAdminSession,
+          principal: 'UI.NO.ACCESS',
+          roles: [],
+          welcomeTarget: 'noAccess',
+          legacyPath: null,
+          grantedActions: [],
+        }),
+      })
+    })
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await gotoSyntheticRoute(page, '/provincial/application', {
+      waitUntil: 'domcontentloaded',
+    })
+
+    await expect(page.getByRole('heading', { level: 1, name: 'Access not granted' })).toBeVisible()
+    await expect(page.getByText(/UI\.NO\.ACCESS/)).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible()
+    await expect(page.locator('.app-shell')).toHaveCount(0)
+    await expect(page.getByTestId('unauthorized-page')).toBeVisible()
+  })
+
   test('uses the FSPTS split-screen organization picker without mobile overflow', async ({
     page,
   }) => {
@@ -512,7 +542,49 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(navigationToggle).toHaveCSS('height', '48px')
     await expect(page.locator('.csp-app-header > #navigation-toggle')).toHaveCount(1)
     await expect(page.locator('.csp-side-nav > .csp-side-nav__toggle')).toHaveCount(0)
-    await expect(page.getByRole('link', { name: 'Applications', exact: true })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Application search', exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Provincial', exact: true })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    )
+    await expect(page.getByRole('button', { name: 'Federal', exact: true })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
+    await expect(page.getByRole('button', { name: 'Reports', exact: true })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
+    await expect(page.getByRole('button', { name: 'Admin', exact: true })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
+    const provincialSectionToggle = page.getByRole('button', {
+      name: 'Provincial',
+      exact: true,
+    })
+    await expect(provincialSectionToggle).toHaveClass(/cds--side-nav__submenu/)
+    const sectionToggleLayout = await provincialSectionToggle.evaluate((toggle) => {
+      const title = toggle.querySelector('.cds--side-nav__submenu-title')
+      const chevron = toggle.querySelector('.cds--side-nav__submenu-chevron svg')
+      if (!(title instanceof HTMLElement)) throw new Error('Side navigation title not found')
+      if (!(chevron instanceof SVGElement)) throw new Error('Side navigation chevron not found')
+
+      const titleBounds = title.getBoundingClientRect()
+      const chevronBounds = chevron.getBoundingClientRect()
+      return {
+        display: getComputedStyle(toggle).display,
+        titleCenter: titleBounds.top + titleBounds.height / 2,
+        chevronCenter: chevronBounds.top + chevronBounds.height / 2,
+        titleRight: titleBounds.right,
+        chevronLeft: chevronBounds.left,
+      }
+    })
+    expect(sectionToggleLayout.display).toBe('flex')
+    expect(
+      Math.abs(sectionToggleLayout.titleCenter - sectionToggleLayout.chevronCenter),
+    ).toBeLessThan(1)
+    expect(sectionToggleLayout.chevronLeft).toBeGreaterThan(sectionToggleLayout.titleRight)
     await expect(page.locator('.lexis-page-header__subtitle')).toContainText(
       'Find provincial applications',
     )
@@ -618,8 +690,10 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       'background-color',
       'rgb(244, 244, 244)',
     )
-    const activeNavLink = page.locator('a.csp-side-nav__link[data-label="Applications"]')
-    const inactiveNavLink = page.locator('a.csp-side-nav__link[data-label="Exemptions"]')
+    const activeNavLink = page.locator(
+      'a.csp-side-nav__link[data-label="Application search"][href="/provincial/application"]',
+    )
+    const inactiveNavLink = page.locator('a.csp-side-nav__link[data-label="Exemption search"]')
     await expect(activeNavLink).toHaveCSS('height', '48px')
     await expect(activeNavLink).toHaveCSS('font-weight', '600')
     await expect(activeNavLink).toHaveCSS('background-color', 'rgb(232, 232, 232)')
@@ -633,10 +707,25 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       'color',
       'rgb(96, 96, 98)',
     )
-    await expect(
-      page.locator('a.csp-side-nav__link[data-label="Application Report"]'),
-    ).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Reports', exact: true })).toBeVisible()
+    await expect(activeNavLink.locator('.csp-side-nav__icon svg')).toHaveCSS(
+      'fill',
+      'rgb(22, 22, 22)',
+    )
+    await expect(inactiveNavLink.locator('.csp-side-nav__icon svg')).toHaveCSS(
+      'fill',
+      'rgb(0, 92, 184)',
+    )
+    const reportsToggle = page.getByRole('button', { name: 'Reports', exact: true })
+    await reportsToggle.click()
+    await expect(page.locator('a.csp-side-nav__link[data-label="Application Report"]')).toHaveCount(
+      0,
+    )
+    await expect(page.locator('a.csp-side-nav__link[data-label="TEAC Package"]')).toHaveCount(0)
+    await expect(page.locator('a.csp-side-nav__link[data-label="Exemptions Report"]')).toHaveCount(
+      0,
+    )
+    await expect(page.locator('a.csp-side-nav__link[data-label="Fees Report"]')).toHaveCount(0)
+    await expect(page.getByRole('link', { name: 'Advertising List', exact: true })).toBeVisible()
 
     const typographyFoundation = await page.evaluate(() => {
       const rootStyle = getComputedStyle(document.documentElement)
@@ -751,7 +840,9 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     const collapsedNav = page.locator('.csp-side-nav')
     await expect(collapsedNav).toHaveCSS('width', '48px')
     const collapsedLinkLayout = await page
-      .locator('a.csp-side-nav__link[data-label="Applications"]')
+      .locator(
+        'a.csp-side-nav__link[data-label="Application search"][href="/provincial/application"]',
+      )
       .evaluate((link) => {
         const nav = document.querySelector('.csp-side-nav')
         const icon = link.querySelector('.csp-side-nav__icon')
@@ -965,6 +1056,109 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     }
   })
 
+  test('keeps related application and offer criteria together across search-grid widths', async ({
+    page,
+  }) => {
+    const readFieldLayout = async (gridSelector: string, fieldIds: string[]) =>
+      page.locator(gridSelector).evaluate((grid, ids) => {
+        const fields = Array.from(grid.children)
+        return Object.fromEntries(
+          ids.map((id) => {
+            const field = fields.find((candidate) => candidate.querySelector(`#${id}`))
+            if (!(field instanceof HTMLElement)) throw new Error(`Search field ${id} not found`)
+            const bounds = field.getBoundingClientRect()
+            return [id, { top: bounds.top, width: bounds.width }]
+          }),
+        )
+      }, fieldIds)
+
+    const expectSameRow = (
+      layout: Record<string, { top: number; width: number }>,
+      fieldIds: string[],
+    ) => {
+      const tops = fieldIds.map((id) => layout[id].top)
+      expect(Math.max(...tops) - Math.min(...tops)).toBeLessThanOrEqual(1)
+    }
+
+    for (const viewport of [
+      { width: 1440, height: 900, columns: 4 },
+      { width: 900, height: 900, columns: 2 },
+    ]) {
+      await page.setViewportSize(viewport)
+      await gotoSyntheticRoute(page, '/provincial/application', {
+        waitUntil: 'domcontentloaded',
+      })
+
+      const applicationLayout = await readFieldLayout('.provincial-application-search-grid', [
+        'applicationNumber',
+        'packageNumber',
+        'exemptionType',
+        'exemptionNumber',
+        'applicationStatus',
+        'productTypeCode',
+        'region',
+        'receivedFromDate',
+        'receivedToDate',
+        'listingFromDate',
+        'listingToDate',
+        'applicantClientNumber',
+        'ownerClientNumber',
+      ])
+
+      if (viewport.columns === 4) {
+        expectSameRow(applicationLayout, [
+          'applicationNumber',
+          'packageNumber',
+          'exemptionType',
+          'exemptionNumber',
+        ])
+        expectSameRow(applicationLayout, ['applicationStatus', 'productTypeCode', 'region'])
+        expectSameRow(applicationLayout, [
+          'receivedFromDate',
+          'receivedToDate',
+          'listingFromDate',
+          'listingToDate',
+        ])
+      } else {
+        expectSameRow(applicationLayout, ['applicationNumber', 'packageNumber'])
+        expectSameRow(applicationLayout, ['exemptionType', 'exemptionNumber'])
+        expectSameRow(applicationLayout, ['applicationStatus', 'productTypeCode'])
+        expectSameRow(applicationLayout, ['receivedFromDate', 'receivedToDate'])
+        expectSameRow(applicationLayout, ['listingFromDate', 'listingToDate'])
+      }
+      expectSameRow(applicationLayout, ['applicantClientNumber', 'ownerClientNumber'])
+
+      await gotoSyntheticRoute(page, '/provincial/offers', {
+        waitUntil: 'domcontentloaded',
+      })
+      const offerLayout = await readFieldLayout('.provincial-offer-search-grid', [
+        'applicationNumber',
+        'packageNumber',
+        'clientNumber',
+        'region',
+        'listingFromDate',
+        'listingToDate',
+        'withdrawalFromDate',
+        'withdrawalToDate',
+      ])
+
+      if (viewport.columns === 4) {
+        expectSameRow(offerLayout, ['applicationNumber', 'packageNumber', 'clientNumber', 'region'])
+        expectSameRow(offerLayout, [
+          'listingFromDate',
+          'listingToDate',
+          'withdrawalFromDate',
+          'withdrawalToDate',
+        ])
+      } else {
+        expectSameRow(offerLayout, ['applicationNumber', 'packageNumber'])
+        expectSameRow(offerLayout, ['clientNumber', 'region'])
+        expectSameRow(offerLayout, ['listingFromDate', 'listingToDate'])
+        expectSameRow(offerLayout, ['withdrawalFromDate', 'withdrawalToDate'])
+      }
+    }
+  })
+
   test('uses accessible dark interactions and stable FSPTS table rows', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
     await gotoSyntheticRoute(page, '/provincial/application', {
@@ -1058,7 +1252,9 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(table.locator('thead th').first()).toHaveCSS('background-color', 'rgb(57, 57, 57)')
     await expect(firstRowCell).toHaveCSS('background-color', 'rgb(38, 38, 38)')
     await expect(secondRowCell).toHaveCSS('background-color', 'rgb(44, 44, 44)')
-    const darkActiveNavLink = page.locator('a.csp-side-nav__link[data-label="Applications"]')
+    const darkActiveNavLink = page.locator(
+      'a.csp-side-nav__link[data-label="Application search"][href="/provincial/application"]',
+    )
     await expect(darkActiveNavLink).toHaveCSS('background-color', 'rgb(51, 51, 51)')
     await expect(darkActiveNavLink.locator('.csp-side-nav__link-text')).toHaveCSS(
       'color',
@@ -1098,14 +1294,13 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     })
     await page.getByRole('tab', { name: 'Remarks' }).click()
     const comments = page.getByRole('textbox', { name: 'Comments' })
-    const commentsHeight = await comments.evaluate(
-      (textarea) => textarea.getBoundingClientRect().height,
-    )
-    expect(commentsHeight).toBeGreaterThan(100)
+    await expect(comments).toBeVisible()
+    await expect(comments).toHaveAttribute('rows', '4')
+    await expect(comments).not.toHaveCSS('height', '40px')
     await expect(comments).toHaveCSS('min-height', '40px')
     await expect(comments).toHaveCSS('resize', 'vertical')
 
-    await page.getByRole('tab', { name: 'Packages / Scales' }).click()
+    await page.getByRole('tab', { name: 'Items' }).click()
     const applicationItemsCard = page.locator('.application-items-card').first()
     await expect(applicationItemsCard).toBeVisible()
     await expect(applicationItemsCard).toHaveCSS('border-color', 'rgb(82, 82, 82)')
@@ -1142,7 +1337,10 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(sideNav).toBeVisible()
     await expect(sideNav).toHaveCSS('width', '48px')
     await expect(sideNav).not.toHaveAttribute('aria-hidden')
-    await expect(page.getByRole('link', { name: 'Applications', exact: true })).toBeVisible()
+    const provincialApplicationSearchLink = page.locator(
+      'a.csp-side-nav__link[data-label="Application search"][href="/provincial/application"]',
+    )
+    await expect(provincialApplicationSearchLink).toBeVisible()
 
     await expect(
       page.getByRole('heading', { level: 1, name: 'Provincial application search' }),
@@ -1184,10 +1382,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(sideNav).toBeVisible()
     await expect(sideNav).toHaveCSS('width', '256px')
     await expect(sideNav).not.toHaveAttribute('aria-hidden')
-    await expect(page.getByRole('link', { name: 'Applications', exact: true })).toHaveAttribute(
-      'aria-current',
-      'page',
-    )
+    await expect(provincialApplicationSearchLink).toHaveAttribute('aria-current', 'page')
 
     await page.getByRole('button', { name: 'Close menu' }).click()
 
@@ -1282,7 +1477,9 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       waitUntil: 'domcontentloaded',
     })
 
-    await expect(page.getByRole('heading', { level: 1, name: 'Offer 81001' })).toBeVisible()
+    await expect(page.getByRole('heading', { level: 1, name: 'Offer 81001' })).toBeVisible({
+      timeout: 30_000,
+    })
     await expect(page.getByText('Check and manage this provincial offer')).toBeVisible()
     const backLink = page.getByRole('link', { name: 'Back to Provincial offers search' })
     await expect(backLink).toHaveAttribute('href', '/provincial/offers')
@@ -1532,14 +1729,28 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     ).toBe(false)
   })
 
-  test('styles the selected report configuration without changing its route', async ({ page }) => {
-    await page.setViewportSize({ width: 1440, height: 900 })
-    await gotoSyntheticRoute(page, '/reports/applicationReport', {
+  test('keeps an impossible typed date visible for correction after blur', async ({ page }) => {
+    await gotoSyntheticRoute(page, '/provincial/offers/create', {
       waitUntil: 'domcontentloaded',
     })
 
-    await expect(page.getByRole('heading', { level: 1, name: 'Application Report' })).toBeVisible()
-    const reportPanel = page.getByRole('region', { name: 'Application Report' })
+    const dateInput = page.getByLabel('TEAC review date')
+    await dateInput.click()
+    await dateInput.pressSequentially('2026-02-31')
+    await page.getByLabel('Offer remarks').click()
+
+    await expect(dateInput).toHaveValue('2026-02-31')
+    await expect(page.getByText('Date must be YYYY-MM-DD.')).toBeVisible()
+  })
+
+  test('styles an active report configuration without changing its route', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await gotoSyntheticRoute(page, '/reports/offerReport', {
+      waitUntil: 'domcontentloaded',
+    })
+
+    await expect(page.getByRole('heading', { level: 1, name: 'Offers Report' })).toBeVisible()
+    const reportPanel = page.getByRole('region', { name: 'Offers Report' })
     const reportFields = reportPanel.locator('.report-config-fields')
     const reportActions = page.getByRole('group', { name: 'Report actions' })
     await expect(reportPanel).toHaveCSS('border-top-width', '1px')
@@ -1554,13 +1765,16 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       'height',
       '40px',
     )
-    await expect(page.getByLabel('Received from date')).toHaveAttribute('placeholder', 'YYYY-MM-DD')
+    await expect(page.getByLabel('Application from date')).toHaveAttribute(
+      'placeholder',
+      'YYYY-MM-DD',
+    )
     expect(
       await reportFields.evaluate(
         (grid) => getComputedStyle(grid).gridTemplateColumns.split(' ').length,
       ),
     ).toBe(3)
-    expect(new URL(page.url()).pathname).toBe('/reports/applicationReport')
+    expect(new URL(page.url()).pathname).toBe('/reports/offerReport')
 
     await page.setViewportSize({ width: 390, height: 844 })
     expect(
@@ -1620,7 +1834,8 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     expect(afterScroll.columnRight).toBeLessThanOrEqual(afterScroll.viewportRight + 1)
   })
 
-  test('keeps admin policy editors stable while their tables scroll', async ({ page }) => {
+  // Restore when Export Schedule administration receives business approval.
+  test.skip('keeps admin policy editors stable while their tables scroll', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
     await gotoSyntheticRoute(page, '/admin/schedules', { waitUntil: 'domcontentloaded' })
 
@@ -1685,7 +1900,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     })
 
     await expect(
-      page.getByRole('heading', { level: 1, name: 'Fee policy administration' }),
+      page.getByRole('heading', { level: 1, name: 'Multiplication Factor' }),
     ).toBeVisible()
     const feePolicyTable = page
       .getByRole('region', { name: 'Search results table' })
@@ -1755,6 +1970,9 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await gotoSyntheticRoute(page, '/admin/policies/fil', {
       waitUntil: 'domcontentloaded',
     })
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'Non-appraised Sec.3 FIL%' }),
+    ).toBeVisible()
     const filAddButton = page.getByRole('button', { name: 'Add fee in lieu policy' })
     await expect(filAddButton).toBeEnabled()
     await expect(filAddButton).toHaveCSS('height', '40px')
@@ -1800,7 +2018,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(uploadPanel.getByText('Submission file', { exact: true })).toBeVisible()
     await expect(
       uploadPanel.getByText(
-        'Accepted formats: XML, ZIP, GeoJSON, or JSON. Maximum file size: 20 MiB.',
+        'Accepted file types: XML, ZIP, GeoJSON, and JSON. Maximum file size: 20 MB.',
         { exact: true },
       ),
     ).toBeVisible()

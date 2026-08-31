@@ -26,6 +26,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Import;
+import org.springframework.core.task.SyncTaskExecutor;
+import org.springframework.core.task.support.TaskExecutorAdapter;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
@@ -37,6 +41,8 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.servlet.mvc.method.RequestMappingInfo;
 import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
+import org.springframework.web.servlet.config.annotation.AsyncSupportConfigurer;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 @SpringBootTest(
     properties = {
@@ -46,6 +52,7 @@ import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandl
       "ALLOWED_ORIGINS=http://localhost:3000,https://openapi.apps.gov.bc.ca"
     })
 @AutoConfigureMockMvc
+@Import(LexisRouteAuthorizationIntegrationTest.SynchronousMvcTestConfiguration.class)
 class LexisRouteAuthorizationIntegrationTest {
 
   private static final Pattern PATH_VARIABLE_PATTERN = Pattern.compile("\\{[^/]+}");
@@ -259,6 +266,11 @@ class LexisRouteAuthorizationIntegrationTest {
             expected(
                 HttpMethod.POST,
                 "/api/lexis/federal/submissions/validation",
+                null,
+                "uploadFederalSubmission"),
+            expected(
+                HttpMethod.POST,
+                "/api/lexis/federal/submissions/prevalidation",
                 null,
                 "uploadFederalSubmission"),
             expected(
@@ -491,6 +503,15 @@ class LexisRouteAuthorizationIntegrationTest {
   @Test
   void famDelegatedAdministrationShouldNotGrantLexisAccess() throws Exception {
     mockMvc.perform(
+            get("/api/lexis/session/capabilities")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_DELEGATED_ADMIN"))))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.authenticated").value(true))
+        .andExpect(jsonPath("$.roles").isEmpty())
+        .andExpect(jsonPath("$.welcomeTarget").value("noAccess"))
+        .andExpect(jsonPath("$.grantedActions").isEmpty());
+
+    mockMvc.perform(
             get("/api/lexis/session/welcome")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_DELEGATED_ADMIN"))))
         .andExpect(status().isForbidden());
@@ -498,6 +519,46 @@ class LexisRouteAuthorizationIntegrationTest {
     mockMvc.perform(
             get("/api/lexis/application-reviews/search")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_DELEGATED_ADMIN"))))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void authenticatedUsersWithoutLexisRolesShouldReceiveOnlyNoAccessCapabilities()
+      throws Exception {
+    SimpleGrantedAuthority noLexisRole = new SimpleGrantedAuthority("SCOPE_openid");
+
+    mockMvc
+        .perform(get("/api/lexis/session/capabilities"))
+        .andExpect(status().isUnauthorized());
+    mockMvc
+        .perform(get("/api/lexis/session/capabilities").with(jwt().authorities(noLexisRole)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.authenticated").value(true))
+        .andExpect(jsonPath("$.roles").isEmpty())
+        .andExpect(jsonPath("$.welcomeTarget").value("noAccess"))
+        .andExpect(jsonPath("$.grantedActions").isEmpty());
+
+    assertThat(
+            LexisApiAuthorizationRules.findRule(
+                    HttpMethod.GET, "/api/lexis/session/capabilities", null)
+                .orElseThrow()
+                .type())
+        .isEqualTo(LexisApiAuthorizationRules.RuleType.AUTHENTICATED);
+
+    mockMvc
+        .perform(get("/api/lexis/session/welcome").with(jwt().authorities(noLexisRole)))
+        .andExpect(status().isForbidden());
+    mockMvc
+        .perform(get("/api/lexis/session/preferences").with(jwt().authorities(noLexisRole)))
+        .andExpect(status().isForbidden());
+    mockMvc
+        .perform(get("/api/lexis/applications/search").with(jwt().authorities(noLexisRole)))
+        .andExpect(status().isForbidden());
+    mockMvc
+        .perform(
+            post("/api/lexis/rpc/application-details/application")
+                .with(csrf())
+                .with(jwt().authorities(noLexisRole)))
         .andExpect(status().isForbidden());
   }
 
@@ -531,6 +592,20 @@ class LexisRouteAuthorizationIntegrationTest {
                 .header(
                     "Access-Control-Request-Headers",
                     "Authorization, Content-Type, X-Request-ID, X-Source-System"))
+        .andExpect(status().isOk())
+        .andExpect(
+            header().string("Access-Control-Allow-Origin", "https://openapi.apps.gov.bc.ca"))
+        .andExpect(header().string("Access-Control-Allow-Credentials", "true"));
+  }
+
+  @Test
+  void federalSubmissionPrevalidationPreflightShouldAllowOpenApiViewer() throws Exception {
+    mockMvc
+        .perform(
+            options("/api/lexis/federal/submissions/prevalidation")
+                .header("Origin", "https://openapi.apps.gov.bc.ca")
+                .header("Access-Control-Request-Method", "POST")
+                .header("Access-Control-Request-Headers", "Authorization, Content-Type"))
         .andExpect(status().isOk())
         .andExpect(
             header().string("Access-Control-Allow-Origin", "https://openapi.apps.gov.bc.ca"))
@@ -1764,22 +1839,40 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
-  void modernExportSchedulesShouldAllowPolicyAdminMutationsForAdminRole() throws Exception {
+  void modernExportSchedulesShouldRejectAdministrationForAdminRole() throws Exception {
+    mockMvc
+        .perform(
+            get("/api/lexis/admin/schedules")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_ADMIN"))))
+        .andExpect(status().isForbidden());
+
+    mockMvc.perform(
+            post("/api/lexis/admin/schedules")
+                .with(csrf())
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_ADMIN"))))
+        .andExpect(status().isForbidden());
+
     mockMvc.perform(
             put("/api/lexis/admin/schedules/1001")
                 .with(csrf())
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_ADMIN"))))
-        .andExpect(status().is2xxSuccessful());
+        .andExpect(status().isForbidden());
 
     mockMvc.perform(
             delete("/api/lexis/admin/schedules/1001")
                 .with(csrf())
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_ADMIN"))))
-        .andExpect(status().is2xxSuccessful());
+        .andExpect(status().isForbidden());
   }
 
   @Test
   void modernExportSchedulesShouldRejectReadOnlyMutations() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/admin/schedules")
+                .with(csrf())
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
+        .andExpect(status().isForbidden());
+
     mockMvc.perform(
             put("/api/lexis/admin/schedules/1001")
                 .with(csrf())
@@ -1931,6 +2024,9 @@ class LexisRouteAuthorizationIntegrationTest {
                 .file(file)
                 .param("permitNumber", "7000123")
                 .param("salesInvoiceNumber", "INV-100")
+                .param("invoiceExportValue", "100.00")
+                .param("invoiceConversionRate", "1.25")
+                .param("invoiceFeeInLieu", "12.00")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_ADMIN"))))
         .andExpect(status().isForbidden());
   }
@@ -1958,6 +2054,9 @@ class LexisRouteAuthorizationIntegrationTest {
                 .file(new MockMultipartFile("formFile", "invoice.pdf", "application/pdf", "content".getBytes()))
                 .param("permitNumber", "7000123")
                 .param("salesInvoiceNumber", "INV-100")
+                .param("invoiceExportValue", "100.00")
+                .param("invoiceConversionRate", "1.25")
+                .param("invoiceFeeInLieu", "12.00")
                 .with(jwt().authorities(readOnly)))
         .andExpect(status().isForbidden());
   }
@@ -2281,6 +2380,73 @@ class LexisRouteAuthorizationIntegrationTest {
                 .contentType(MediaType.APPLICATION_XML)
                 .content("<xml />")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_UNKNOWN_ROLE"))))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void federalSubmissionPrevalidationShouldRejectUnknownRole() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/federal/submissions/prevalidation")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(federalPrevalidationJson())
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_UNKNOWN_ROLE"))))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void federalSubmissionPrevalidationShouldRejectAdminRole() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/federal/submissions/prevalidation")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(federalPrevalidationJson())
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_ADMIN"))))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void federalSubmissionPrevalidationShouldAllowFederalUploadScope() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/federal/submissions/prevalidation")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("Origin", "https://openapi.apps.gov.bc.ca")
+                .content(federalPrevalidationJson())
+                .with(federalUploadScopeJwt()))
+        .andExpect(status().isServiceUnavailable())
+        .andExpect(
+            header().string("Access-Control-Allow-Origin", "https://openapi.apps.gov.bc.ca"));
+  }
+
+  @Test
+  void federalSubmissionPrevalidationShouldAllowLegacyXmlForFederalUploadScope()
+      throws Exception {
+    mockMvc
+        .perform(
+            post("/api/lexis/federal/submissions/prevalidation")
+                .contentType(MediaType.APPLICATION_XML)
+                .content(federalPrevalidationXml())
+                .with(federalUploadScopeJwt()))
+        .andExpect(status().isServiceUnavailable());
+  }
+
+  @Test
+  void federalSubmissionPrevalidationShouldNotMaskUnsupportedMediaTypeAsForbidden()
+      throws Exception {
+    mockMvc
+        .perform(
+            post("/api/lexis/federal/submissions/prevalidation")
+                .contentType(MediaType.TEXT_PLAIN)
+                .content(federalPrevalidationXml())
+                .with(federalUploadScopeJwt()))
+        .andExpect(status().isUnsupportedMediaType());
+  }
+
+  @Test
+  void federalSubmissionPrevalidationShouldRejectDraftFederalUploadScopeAlias() throws Exception {
+    mockMvc.perform(
+            post("/api/lexis/federal/submissions/prevalidation")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(federalPrevalidationJson())
+                .with(federalUploadDraftScopeJwt()))
         .andExpect(status().isForbidden());
   }
 
@@ -2671,22 +2837,66 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
-  void legacyReadOnlyReportRoutesShouldIncludeApplicationAndApprovedExemptionReports()
-      throws Exception {
+  void legacyApprovedExemptionReportShouldAllowReadOnlyRole() throws Exception {
     SimpleGrantedAuthority readOnly = new SimpleGrantedAuthority("LEXIS_READ_ONLY");
 
-    mockMvc
-        .perform(
-            get("/api/lexis/applicationReport.do")
-                .param("actionMapping", "view")
-                .with(jwt().authorities(readOnly)))
-        .andExpect(status().isNoContent());
     mockMvc
         .perform(
             get("/api/lexis/approvedExemptionReport.do")
                 .param("actionMapping", "view")
                 .with(jwt().authorities(readOnly)))
         .andExpect(status().isNoContent());
+  }
+
+  @Test
+  void retiredReportRoutesShouldRejectDirectAccess() throws Exception {
+    JwtRequestPostProcessor administrator =
+        jwt().authorities(new SimpleGrantedAuthority("LEXIS_ADMIN"));
+
+    for (String path :
+        List.of(
+            "/api/lexis/reports/applicationReport",
+            "/api/lexis/reports/application-report",
+            "/api/lexis/reports/teacReport",
+            "/api/lexis/reports/teac-report",
+            "/api/lexis/reports/exemptionReport",
+            "/api/lexis/reports/exemption-report",
+            "/api/lexis/reports/feeReport",
+            "/api/lexis/reports/fee-report")) {
+      mockMvc
+          .perform(
+              post(path)
+                  .with(csrf())
+                  .with(administrator)
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content("{}"))
+          .andExpect(status().isForbidden());
+    }
+
+    for (String path :
+        List.of(
+            "/api/lexis/applicationReport",
+            "/api/lexis/applicationReport.do",
+            "/api/lexis/teacReport",
+            "/api/lexis/teacReport.do",
+            "/api/lexis/exemptionReport",
+            "/api/lexis/exemptionReport.do",
+            "/api/lexis/feeReport",
+            "/api/lexis/feeReport.do")) {
+      mockMvc
+          .perform(
+              get(path)
+                  .param("actionMapping", "generate")
+                  .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_ADMIN"))))
+          .andExpect(status().isForbidden());
+      mockMvc
+          .perform(
+              post(path)
+                  .with(csrf())
+                  .param("actionMapping", "generate")
+                  .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_ADMIN"))))
+          .andExpect(status().isForbidden());
+    }
   }
 
   @Test
@@ -2797,6 +3007,28 @@ class LexisRouteAuthorizationIntegrationTest {
                     .claim("client_id", clientId)
                     .claim("scope", "lexis:federal-submission:submit"))
         .authorities(new SimpleGrantedAuthority("SCOPE_lexis:federal-submission:submit"));
+  }
+
+  private static String federalPrevalidationJson() {
+    return """
+        {
+          "boomNumber": "BOOM-1",
+          "clientNumber": "00001234",
+          "locationCode": "01",
+          "timberMark": ["TM001"]
+        }
+        """;
+  }
+
+  private static String federalPrevalidationXml() {
+    return """
+        <LogExportApplication xmlns="http://beans.validation.lexis.ws.mof.gov.bc.ca">
+          <boomNumber>BOOM-1</boomNumber>
+          <clientNumber>00001234</clientNumber>
+          <locationCode>01</locationCode>
+          <timberMark><item>TM001</item></timberMark>
+        </LogExportApplication>
+        """;
   }
 
   private static RequestPostProcessor federalUploadDraftScopeJwt() {
@@ -2943,6 +3175,15 @@ class LexisRouteAuthorizationIntegrationTest {
           <lexis:internalOfficeUseLanguage>E</lexis:internalOfficeUseLanguage>
         </lexis:officeUseOnly>
         """;
+  }
+
+  @TestConfiguration(proxyBeanMethods = false)
+  static class SynchronousMvcTestConfiguration implements WebMvcConfigurer {
+
+    @Override
+    public void configureAsyncSupport(AsyncSupportConfigurer configurer) {
+      configurer.setTaskExecutor(new TaskExecutorAdapter(new SyncTaskExecutor()));
+    }
   }
 
   private record EndpointAuthorizationLookup(

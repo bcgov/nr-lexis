@@ -8,8 +8,8 @@ added for LEXIS-managed writes.
 
 ## Logical AMV review
 
-- The page shows one species tab at a time with last-entered and upcoming-month columns. It has no
-  old-growth/second-growth control.
+- The page shows one species tab at a time with exact previous-month and upcoming-month columns. It
+  has no old-growth/second-growth control.
 - The displayed value is the old-growth (`O`) baseline. When saved, the same value is written to
   both old growth (`O`) and second growth (`S`).
 - User-facing copy intentionally describes one monthly value only; it does not expose the
@@ -53,15 +53,21 @@ only and does not misrepresent it as audit metadata.
 - Current and previous months are never editable. At month rollover, the page advances to the new
   immediately upcoming month and loads that month's saved rows when they exist; otherwise it
   returns to the empty upload state.
-- The review compares the upcoming values with the latest earlier values in the table. That
-  comparison month is not necessarily the immediately previous month.
+- The review compares the upcoming values only with rows from the immediately previous calendar
+  month. It does not fall back to an older row when that month has no row for a species and grade.
+  This is a month-to-month reconciliation view, not a claim about the value currently in effect.
+- Downstream permit-fee calculation remains effective-dated and mirrors legacy: it selects the
+  latest `EXPORT_LOG_AMV` date on or before the permit application date for the matching species
+  and grade, then applies the applicable growth type at that date. Growth type is deliberately not
+  part of the maximum-date selection. An older value can therefore remain effective downstream
+  while the exact previous-month review cell is empty.
 - Values cannot be cleared: `AVG_MARKET_PRICE` is `NOT NULL` and the approved RTM contract has no
   delete operation.
 - A blank upcoming value is omitted from the batch. When the current month had a value, the blank
   cell receives an advisory warning and the user can enter `0` to persist an explicit zero.
-- A positive value for a species/grade combination that had no current-month value also receives
-  an advisory warning. Entering `0` records none and resolves that warning. Both advisory cases
-  may be saved without correction.
+- A positive value for a species/grade combination that had no exact previous-month value also
+  receives an advisory warning. Entering `0` records none and resolves that warning. Both advisory
+  cases may be saved without correction.
 
 ## Atomic reviewed saves
 
@@ -100,8 +106,8 @@ If it is called, it resolves and persists the authenticated actor through the sa
 `MERGE` implementation.
 
 The backend scans the workbook for malware, validates its shape, dates, dimensions, and values,
-uses the page's fixed upcoming effective month, and returns the union of the latest earlier and
-uploaded logical cells. This union allows the client to show both missing-upcoming and
+uses the page's fixed upcoming effective month, and returns the union of the exact previous-month
+and uploaded logical cells. This union allows the client to show both missing-upcoming and
 new-combination warnings. Final submission expands the reviewed values to direct `MERGE` targets
 and writes them in one Spring transaction. It does not call the legacy row procedures. If any
 target is not applied or the database write fails, the complete batch transaction rolls back.
@@ -133,7 +139,7 @@ effective month. It displays `Last saved` using the newest `UPDATE_TIMESTAMP` fo
 user. This is the last durable audit value for the effective month being edited, not the effective
 date itself.
 
-The page restores the editable review and latest-earlier comparison when upcoming-month rows
+The page restores the editable review and exact previous-month comparison when upcoming-month rows
 exist; otherwise it restores the upload state and omits `Last saved`. The workbook and filename
 are not persisted, so neither is shown after a save or in a restored review. The saved-row lookup
 gates the initial workflow render: neither upload nor review is shown while it is pending. The
@@ -159,10 +165,15 @@ application event and row columns serve different purposes
 and neither trusts a client-supplied actor.
 
 `SYNC_EMSLA_EXPLA` remains the configured mechanism that mirrors successful table mutations to
-`EXPORT_LOG_AMV`. Live downstream-consumer compatibility still needs verification before this
-change can claim that every report, integration, and query is unaffected.
+`EXPORT_LOG_AMV`. Source review confirms that the modern permit-fee query preserves the legacy
+effective-month, species, grade, and post-date growth filter. Live TEST verification is still
+required before claiming that every report, integration, and query is unaffected.
 
 ## Legacy procedure boundary
+
+The legacy RTM screen converted its user-entered retrieval `CCYYMM` to the first day of that month,
+and `RTM_EMS_LOG_AMV_SELECT` required `EFFECTIVE_DATE = V_RETRIEVAL_DATE`. The active workflow
+preserves that exact-month comparison while supplying the immediately previous month automatically.
 
 `RTM_EMS_LOG_AMV_INSERT` and `RTM_EMS_LOG_AMV_UPDATE` are retained in the database for legacy
 compatibility. Both issue `COMMIT`, which makes them unsuitable for either active multi-row save.
@@ -192,7 +203,7 @@ display apply to LEXIS-owned batch and compatibility workbook writes moving forw
 | FR-17           | Implemented                | Reviewed batches validate before direct `MERGE` writes inside one transaction.                                                                      |
 | FR-18           | Implemented                | Stable authenticated identities and Oracle timestamps are persisted per row, with a structured application event summarizing each batch outcome.    |
 | FR-19 to FR-20  | Implemented                | Numeric non-negative validation occurs before save; accepted and rejected batch outcomes are returned to the user.                                  |
-| FR-21           | Live verification required | The trigger mirrors to `EXPORT_LOG_AMV`, but reports, integrations, and queries still require TEST/downstream validation.                           |
+| FR-21           | Source parity reviewed; live verification required | The trigger mirrors to `EXPORT_LOG_AMV`; modern permit-fee lookup preserves the legacy effective-date and dimension ordering, while broader TEST/downstream validation remains. |
 
 ## Legacy schema constraints
 
@@ -224,3 +235,6 @@ No trigger or downstream consumer behavior is inferred or altered by this applic
 - `../nr-rtm/src/main/webapp/manager/EMSLOGAMV/summary.jsp`
 - `../nr-rtm/src/main/java/ca/bc/gov/mof/rtm/controller/EMSLOGAMVAction.java`
 - `../nr-rtm/src/main/webapp/resources/help/EMS_LOG_AMVHelp.html`
+- `../nr-lexis-main/src/main/java/ca/bc/gov/mof/lexis/dao/oracle/OracleLogAmvDAO.java`
+- `../nr-mof-db/scripts/THE/PACKAGE_BODIES/V9.00386__LEXIS.sql`
+- `backend/src/main/java/ca/bc/gov/mof/lexis/repository/permit/PermitRpcRepository.java`

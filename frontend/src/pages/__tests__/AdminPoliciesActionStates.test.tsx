@@ -476,7 +476,7 @@ describe('Admin policy action states', () => {
 
     renderPage()
 
-    await screen.findByRole('heading', { level: 1, name: 'Fee policy administration' })
+    await screen.findByRole('heading', { level: 1, name: 'Multiplication Factor' })
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
 
     const dialog = await openAddPolicyDialog('fee')
@@ -609,7 +609,7 @@ describe('Admin policy action states', () => {
 
     await screen.findByRole('heading', {
       level: 1,
-      name: 'Fee in lieu percent policy administration',
+      name: 'Non-appraised Sec.3 FIL%',
     })
     const policyRow = screen.getByText('2099-01-01').closest('tr')
     expect(policyRow).not.toBeNull()
@@ -672,8 +672,7 @@ describe('Admin policy action states', () => {
 
     await screen.findByRole('heading', {
       level: 1,
-      name:
-        area === 'fee' ? 'Fee policy administration' : 'Fee in lieu percent policy administration',
+      name: area === 'fee' ? 'Multiplication Factor' : 'Non-appraised Sec.3 FIL%',
     })
     const dialog = await openAddPolicyDialog(area)
     fireEvent.change(within(dialog).getByLabelText('Policy effective date'), {
@@ -740,8 +739,7 @@ describe('Admin policy action states', () => {
 
     await screen.findByRole('heading', {
       level: 1,
-      name:
-        area === 'fee' ? 'Fee policy administration' : 'Fee in lieu percent policy administration',
+      name: area === 'fee' ? 'Multiplication Factor' : 'Non-appraised Sec.3 FIL%',
     })
     const dialog = await openAddPolicyDialog(area)
     fireEvent.change(within(dialog).getByLabelText('Policy effective date'), {
@@ -768,26 +766,23 @@ describe('Admin policy action states', () => {
   it.each([
     {
       area: 'fee',
-      heading: 'Fee policy administration',
+      heading: 'Multiplication Factor',
       editorHeading: null,
       actionName: 'Add fee policy',
       expectedTileCount: 0,
       subtitle: 'Manage regional fee policy percentages and effective dates.',
-      absentHeadings: [
-        'Fee in lieu percent policy administration',
-        'Export schedule administration',
-      ],
+      absentHeadings: ['Non-appraised Sec.3 FIL%', 'Export schedule administration'],
       fetchPage: mockedFetchFeePolicyPage,
       untouchedFetches: [mockedFetchFilPolicyPage, mockedFetchExportSchedulePage],
     },
     {
       area: 'fil',
-      heading: 'Fee in lieu percent policy administration',
+      heading: 'Non-appraised Sec.3 FIL%',
       editorHeading: null,
       actionName: 'Add fee in lieu policy',
       expectedTileCount: 0,
       subtitle: 'Manage fee-in-lieu percentages and effective dates.',
-      absentHeadings: ['Fee policy administration', 'Export schedule administration'],
+      absentHeadings: ['Multiplication Factor', 'Export schedule administration'],
       fetchPage: mockedFetchFilPolicyPage,
       untouchedFetches: [mockedFetchFeePolicyPage, mockedFetchExportSchedulePage],
     },
@@ -798,7 +793,7 @@ describe('Admin policy action states', () => {
       actionName: null,
       expectedTileCount: 1,
       subtitle: 'Manage advertising, receipt, offer, and TEAC schedule dates.',
-      absentHeadings: ['Fee policy administration', 'Fee in lieu percent policy administration'],
+      absentHeadings: ['Multiplication Factor', 'Non-appraised Sec.3 FIL%'],
       fetchPage: mockedFetchExportSchedulePage,
       untouchedFetches: [mockedFetchFeePolicyPage, mockedFetchFilPolicyPage],
     },
@@ -861,9 +856,9 @@ describe('Admin policy action states', () => {
     async (area) => {
       const heading =
         area === 'fee'
-          ? 'Fee policy administration'
+          ? 'Multiplication Factor'
           : area === 'fil'
-            ? 'Fee in lieu percent policy administration'
+            ? 'Non-appraised Sec.3 FIL%'
             : 'Export schedule administration'
       const fetchPage =
         area === 'fee'
@@ -1077,14 +1072,14 @@ describe('Admin policy action states', () => {
   it.each([
     {
       area: 'fee' as const,
-      heading: 'Fee policy administration',
+      heading: 'Multiplication Factor',
       targetHeader: 'Region',
       sortField: 'org_unit_no',
       fetchPage: mockedFetchFeePolicyPage,
     },
     {
       area: 'fil' as const,
-      heading: 'Fee in lieu percent policy administration',
+      heading: 'Non-appraised Sec.3 FIL%',
       targetHeader: 'Fee in lieu %',
       sortField: 'fil_percent',
       fetchPage: mockedFetchFilPolicyPage,
@@ -1160,7 +1155,7 @@ describe('Admin policy action states', () => {
 
     renderPage()
 
-    await screen.findByRole('heading', { level: 1, name: 'Fee policy administration' })
+    await screen.findByRole('heading', { level: 1, name: 'Multiplication Factor' })
 
     expect(screen.getByRole('button', { name: 'Add fee policy' })).toBeDisabled()
   })
@@ -1172,12 +1167,12 @@ describe('Admin policy action states', () => {
         rows: [
           {
             exportScheduleId: '1002',
-            advertisingDate: '2026-07-15',
-            applicationReceiptDate: '2026-07-08',
-            offerReceiptDate: '2026-07-22',
-            offerEndDate: '2026-07-23',
-            offerWithdrawalDate: '2026-07-24',
-            teacMeetingDate: '2026-07-29',
+            advertisingDate: '2099-07-15',
+            applicationReceiptDate: '2099-07-08',
+            offerReceiptDate: '2099-07-22',
+            offerEndDate: '2099-08-02',
+            offerWithdrawalDate: '2099-07-24',
+            teacMeetingDate: '2099-07-29',
             applicationCount: 0,
             mutable: true,
           },
@@ -1192,34 +1187,34 @@ describe('Admin policy action states', () => {
     await screen.findByRole('heading', { level: 1, name: 'Export schedule administration' })
 
     fireEvent.change(screen.getByLabelText('Advertising date'), {
-      target: { value: '2026-07-15' },
+      target: { value: '2099-07-15' },
     })
     fireEvent.change(screen.getByLabelText('Application receipt date'), {
-      target: { value: '2026-07-08' },
+      target: { value: '2099-07-08' },
     })
     fireEvent.change(screen.getByLabelText('Offer receipt date'), {
-      target: { value: '2026-07-22' },
+      target: { value: '2099-07-22' },
     })
     fireEvent.change(screen.getByLabelText('Offer end date'), {
-      target: { value: '2026-07-23' },
+      target: { value: '2099-08-02' },
     })
     fireEvent.blur(screen.getByLabelText('Offer end date'))
     fireEvent.change(screen.getByLabelText('Offer withdrawal date'), {
-      target: { value: '2026-07-24' },
+      target: { value: '2099-07-24' },
     })
     fireEvent.change(screen.getByLabelText('TEAC meeting date'), {
-      target: { value: '2026-07-29' },
+      target: { value: '2099-07-29' },
     })
     await userEvent.click(screen.getByRole('button', { name: 'Add Export Schedule' }))
 
     await waitFor(() => {
       expect(mockedCreateExportSchedule).toHaveBeenCalledWith({
-        advertisingDate: '2026-07-15',
-        applicationReceiptDate: '2026-07-08',
-        offerReceiptDate: '2026-07-22',
-        offerEndDate: '2026-07-23',
-        offerWithdrawalDate: '2026-07-24',
-        teacMeetingDate: '2026-07-29',
+        advertisingDate: '2099-07-15',
+        applicationReceiptDate: '2099-07-08',
+        offerReceiptDate: '2099-07-22',
+        offerEndDate: '2099-08-02',
+        offerWithdrawalDate: '2099-07-24',
+        teacMeetingDate: '2099-07-29',
       })
     })
 
@@ -1238,7 +1233,7 @@ describe('Admin policy action states', () => {
     await waitFor(() => {
       expect(screen.getByText('Schedule error')).toBeInTheDocument()
       expect(
-        screen.getByText('Export schedule requires all schedule dates in YYYY-MM-DD format.'),
+        screen.getByText('Correct the highlighted export schedule fields before saving.'),
       ).toBeInTheDocument()
     })
     expect(screen.getByText('Advertising date is required.')).toBeInTheDocument()
@@ -1249,6 +1244,99 @@ describe('Admin policy action states', () => {
     expect(screen.getByText('TEAC meeting date is required.')).toBeInTheDocument()
     expect(mockedCreateExportSchedule).not.toHaveBeenCalled()
   })
+
+  it.each([
+    {
+      caseName: 'an advertising date in the past',
+      overrides: {
+        advertisingDate: '2000-01-10',
+        applicationReceiptDate: '2000-01-09',
+        offerReceiptDate: '2000-01-12',
+        offerEndDate: '2000-01-20',
+        offerWithdrawalDate: '2000-01-15',
+        teacMeetingDate: '2000-01-16',
+      },
+      expectedMessage: 'Advertising date must be today or a future date.',
+    },
+    {
+      caseName: 'an application receipt date after advertising',
+      overrides: { applicationReceiptDate: '2099-01-11' },
+      expectedMessage: 'Application receipt date cannot be after the advertising date.',
+    },
+    {
+      caseName: 'an offer receipt date before advertising',
+      overrides: { offerReceiptDate: '2099-01-09' },
+      expectedMessage: 'Offer receipt date cannot be before the advertising date.',
+    },
+    {
+      caseName: 'an offer end date before offer receipt',
+      overrides: {
+        offerEndDate: '2099-01-11',
+        offerWithdrawalDate: '2099-01-10',
+        teacMeetingDate: '2099-01-10',
+      },
+      expectedMessage: 'Offer end date cannot be before the offer receipt date.',
+    },
+    {
+      caseName: 'an offer withdrawal date before advertising',
+      overrides: { offerWithdrawalDate: '2099-01-09' },
+      expectedMessage: 'Offer withdrawal date cannot be before the advertising date.',
+    },
+    {
+      caseName: 'an offer withdrawal date after offer end',
+      overrides: { offerWithdrawalDate: '2099-01-21' },
+      expectedMessage: 'Offer withdrawal date cannot be after the offer end date.',
+    },
+    {
+      caseName: 'a TEAC meeting date before advertising',
+      overrides: { teacMeetingDate: '2099-01-09' },
+      expectedMessage: 'TEAC meeting date cannot be before the advertising date.',
+    },
+    {
+      caseName: 'a TEAC meeting date after offer end',
+      overrides: { teacMeetingDate: '2099-01-21' },
+      expectedMessage: 'TEAC meeting date cannot be after the offer end date.',
+    },
+  ])(
+    'blocks $caseName before creating an export schedule',
+    async ({ overrides, expectedMessage }) => {
+      const dates = {
+        advertisingDate: '2099-01-10',
+        applicationReceiptDate: '2099-01-09',
+        offerReceiptDate: '2099-01-12',
+        offerEndDate: '2099-01-20',
+        offerWithdrawalDate: '2099-01-15',
+        teacMeetingDate: '2099-01-16',
+        ...overrides,
+      }
+
+      renderPage('schedule')
+
+      await screen.findByRole('heading', { level: 1, name: 'Export schedule administration' })
+      fireEvent.change(screen.getByLabelText('Advertising date'), {
+        target: { value: dates.advertisingDate },
+      })
+      fireEvent.change(screen.getByLabelText('Application receipt date'), {
+        target: { value: dates.applicationReceiptDate },
+      })
+      fireEvent.change(screen.getByLabelText('Offer receipt date'), {
+        target: { value: dates.offerReceiptDate },
+      })
+      fireEvent.change(screen.getByLabelText('Offer end date'), {
+        target: { value: dates.offerEndDate },
+      })
+      fireEvent.change(screen.getByLabelText('Offer withdrawal date'), {
+        target: { value: dates.offerWithdrawalDate },
+      })
+      fireEvent.change(screen.getByLabelText('TEAC meeting date'), {
+        target: { value: dates.teacMeetingDate },
+      })
+      await userEvent.click(screen.getByRole('button', { name: 'Add Export Schedule' }))
+
+      expect(await screen.findByText(expectedMessage)).toBeInTheDocument()
+      expect(mockedCreateExportSchedule).not.toHaveBeenCalled()
+    },
+  )
 
   it('links application counts to an auto-filtered application search', async () => {
     mockedUseAuth.mockReturnValue(
@@ -1302,33 +1390,33 @@ describe('Admin policy action states', () => {
     })
 
     fireEvent.change(screen.getByLabelText('Advertising date'), {
-      target: { value: '2026-07-01' },
+      target: { value: '2099-07-01' },
     })
     fireEvent.change(screen.getByLabelText('Application receipt date'), {
-      target: { value: '2026-06-25' },
+      target: { value: '2099-06-25' },
     })
     fireEvent.change(screen.getByLabelText('Offer receipt date'), {
-      target: { value: '2026-07-08' },
+      target: { value: '2099-07-08' },
     })
     fireEvent.change(screen.getByLabelText('Offer end date'), {
-      target: { value: '2026-07-09' },
+      target: { value: '2099-07-20' },
     })
     fireEvent.change(screen.getByLabelText('Offer withdrawal date'), {
-      target: { value: '2026-07-10' },
+      target: { value: '2099-07-10' },
     })
     fireEvent.change(screen.getByLabelText('TEAC meeting date'), {
-      target: { value: '2026-07-15' },
+      target: { value: '2099-07-15' },
     })
     await userEvent.click(screen.getByRole('button', { name: 'Add Export Schedule' }))
 
     await waitFor(() => {
       expect(mockedCreateExportSchedule).toHaveBeenCalledWith({
-        advertisingDate: '2026-07-01',
-        applicationReceiptDate: '2026-06-25',
-        offerReceiptDate: '2026-07-08',
-        offerEndDate: '2026-07-09',
-        offerWithdrawalDate: '2026-07-10',
-        teacMeetingDate: '2026-07-15',
+        advertisingDate: '2099-07-01',
+        applicationReceiptDate: '2099-06-25',
+        offerReceiptDate: '2099-07-08',
+        offerEndDate: '2099-07-20',
+        offerWithdrawalDate: '2099-07-10',
+        teacMeetingDate: '2099-07-15',
       })
     })
     expect(await screen.findByText('Schedule error')).toBeInTheDocument()
@@ -1336,6 +1424,47 @@ describe('Admin policy action states', () => {
       await screen.findByText(
         'Export schedule is used by existing applications and cannot be changed.',
       ),
+    ).toBeInTheDocument()
+    expect(mockedFetchExportSchedulePage).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows schedule validation messages returned with bad-request responses', async () => {
+    mockedCreateExportSchedule.mockRejectedValueOnce({
+      response: {
+        status: 400,
+        data: {
+          message: 'Application receipt date cannot be after the advertising date.',
+        },
+      },
+    })
+
+    renderPage('schedule')
+
+    await screen.findByRole('heading', { level: 1, name: 'Export schedule administration' })
+
+    fireEvent.change(screen.getByLabelText('Advertising date'), {
+      target: { value: '2099-07-01' },
+    })
+    fireEvent.change(screen.getByLabelText('Application receipt date'), {
+      target: { value: '2099-06-25' },
+    })
+    fireEvent.change(screen.getByLabelText('Offer receipt date'), {
+      target: { value: '2099-07-08' },
+    })
+    fireEvent.change(screen.getByLabelText('Offer end date'), {
+      target: { value: '2099-07-20' },
+    })
+    fireEvent.change(screen.getByLabelText('Offer withdrawal date'), {
+      target: { value: '2099-07-10' },
+    })
+    fireEvent.change(screen.getByLabelText('TEAC meeting date'), {
+      target: { value: '2099-07-15' },
+    })
+    await userEvent.click(screen.getByRole('button', { name: 'Add Export Schedule' }))
+
+    expect(await screen.findByText('Schedule error')).toBeInTheDocument()
+    expect(
+      await screen.findByText('Application receipt date cannot be after the advertising date.'),
     ).toBeInTheDocument()
     expect(mockedFetchExportSchedulePage).toHaveBeenCalledTimes(1)
   })
@@ -1376,7 +1505,7 @@ describe('Admin policy action states', () => {
           {
             exportScheduleId: '1001',
             advertisingDate: '2026-06-24',
-            applicationReceiptDate: '2026-06-26',
+            applicationReceiptDate: '2026-06-21',
             offerReceiptDate: '2026-06-30',
             offerEndDate: '2026-07-09',
             offerWithdrawalDate: '2026-07-05',
@@ -1403,14 +1532,14 @@ describe('Admin policy action states', () => {
     expect(mutableRow).not.toBeNull()
     await userEvent.click(within(mutableRow as HTMLElement).getByRole('button', { name: 'Edit' }))
     fireEvent.change(screen.getByLabelText('Application receipt date'), {
-      target: { value: '2026-06-26' },
+      target: { value: '2026-06-21' },
     })
     await userEvent.click(screen.getByRole('button', { name: 'Update Export Schedule' }))
 
     await waitFor(() => {
       expect(mockedUpdateExportSchedule).toHaveBeenCalledWith('1001', {
         advertisingDate: '2026-06-24',
-        applicationReceiptDate: '2026-06-26',
+        applicationReceiptDate: '2026-06-21',
         offerReceiptDate: '2026-06-30',
         offerEndDate: '2026-07-09',
         offerWithdrawalDate: '2026-07-05',
@@ -1475,7 +1604,7 @@ describe('Admin policy action states', () => {
   it('shows validation contract when fee policy fields are incomplete', async () => {
     renderPage()
 
-    await screen.findByRole('heading', { level: 1, name: 'Fee policy administration' })
+    await screen.findByRole('heading', { level: 1, name: 'Multiplication Factor' })
     const dialog = await openAddPolicyDialog('fee')
     expect(within(dialog).getByText('Whole numbers from 0 to 100')).toBeInTheDocument()
     await userEvent.click(within(dialog).getByRole('button', { name: 'Add fee policy' }))
@@ -1495,7 +1624,7 @@ describe('Admin policy action states', () => {
   it('blocks typed policy dates that are not valid ISO dates', async () => {
     const feeView = renderPage()
 
-    await screen.findByRole('heading', { level: 1, name: 'Fee policy administration' })
+    await screen.findByRole('heading', { level: 1, name: 'Multiplication Factor' })
 
     const feeDialog = await openAddPolicyDialog('fee')
     fireEvent.change(within(feeDialog).getByLabelText('Policy effective date'), {
@@ -1505,7 +1634,7 @@ describe('Admin policy action states', () => {
     await userEvent.type(within(feeDialog).getByLabelText('Fee increase percentage'), '4')
     await userEvent.click(within(feeDialog).getByRole('button', { name: 'Add fee policy' }))
 
-    expect(await screen.findByText('Policy effective date is required.')).toBeInTheDocument()
+    expect(await within(feeDialog).findByText('Date must be YYYY-MM-DD.')).toBeInTheDocument()
     expect(mockedUpsertFeePolicy).not.toHaveBeenCalled()
 
     feeView.unmount()
@@ -1513,7 +1642,7 @@ describe('Admin policy action states', () => {
 
     await screen.findByRole('heading', {
       level: 1,
-      name: 'Fee in lieu percent policy administration',
+      name: 'Non-appraised Sec.3 FIL%',
     })
 
     const filDialog = await openAddPolicyDialog('fil')
@@ -1523,7 +1652,7 @@ describe('Admin policy action states', () => {
     await userEvent.type(within(filDialog).getByLabelText('Fee in lieu percentage'), '2')
     await userEvent.click(within(filDialog).getByRole('button', { name: 'Add fee in lieu policy' }))
 
-    expect(await screen.findAllByText('Policy effective date is required.')).toHaveLength(1)
+    expect(await within(filDialog).findByText('Date must be YYYY-MM-DD.')).toBeInTheDocument()
     expect(mockedUpsertFilPolicy).not.toHaveBeenCalled()
   })
 })

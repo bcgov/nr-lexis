@@ -33,6 +33,8 @@ import org.springframework.stereotype.Repository;
 public class LexisApplicationRepository extends OracleRepositorySupport {
 
   private static final String APPLICATION_STATUS_APPROVED = "APP";
+  private static final String APPLICATION_STATUS_EXEMPTED = "EXE";
+  private static final String EXEMPTION_STATUS_NEW = "NEW";
   private static final String APPLICANT_TYPE_AGENT = "A";
   private static final String APPLICANT_TYPE_OWNER = "O";
   private static final String JURISDICTION_FEDERAL = "F";
@@ -76,6 +78,7 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
           ES.ADVERTISING_DATE,
           EASC.DESCRIPTION AS STATUS_DESCRIPTION,
           EE.EXPORT_EXEMPTION_TYPE_CODE,
+          EE.EXPORT_EXEMPTION_STATUS_CODE,
           EETC.DESCRIPTION AS EXEMPTION_TYPE_DESCRIPTION,
           OU.ORG_UNIT_NAME AS REGION,
           OU.ORG_UNIT_CODE AS REGION_CODE,
@@ -144,6 +147,12 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
              AGENT_CLIENT_NUMBER
       FROM EXPORT_EXEMPTION_APPLICATION
       WHERE APPLICATION_NUMBER = ?
+      """;
+  private static final String FIND_EXEMPTION_STATUS_BY_NUMBER =
+      """
+      SELECT EXPORT_EXEMPTION_STATUS_CODE
+      FROM EXPORT_EXEMPTION
+      WHERE EXEMPTION_NUMBER = ?
       """;
   private static final String FIND_PACKAGE_BY_NUMBER =
       LEXIS_GROUP_5_PACKAGE + "FIND_PACKAGE_BY_NUMBER(?,?)";
@@ -311,6 +320,10 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
     }
 
     ApplicationSnapshot app = snapshot.get();
+    String exemptionStatusCode =
+        APPLICATION_STATUS_EXEMPTED.equalsIgnoreCase(app.applicationStatusCode())
+            ? loadExemptionStatusCode(app.exemptionNumber()).orElse(null)
+            : null;
     Optional<ScheduleSnapshot> schedule = loadScheduleByApplication(applicationNumber);
     List<LexisApplicationDetailDto.LexisPackageDto> packages =
         loadPackagesByApplication(applicationNumber);
@@ -323,7 +336,8 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
             app.applicationNumber(),
             app.exemptionNumber(),
             app.applicationStatusCode(),
-            app.statusDescription(),
+            displayStatus(
+                app.applicationStatusCode(), app.statusDescription(), exemptionStatusCode),
             app.ownerClientNumber(),
             app.agentClientNumber(),
             app.orgUnitNumber(),
@@ -527,7 +541,11 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
   private LexisApplicationSearchResultDto toSearchResult(ResultSet rs, LocalDate today) {
     Long applicationNumber = getLong(rs, "APPLICATION_NUMBER");
     String statusCode = getString(rs, "EXPORT_APPLICATION_STATUS_CODE");
-    String statusDescription = firstNonNull(getString(rs, "STATUS_DESCRIPTION"), statusCode);
+    String statusDescription =
+        displayStatus(
+            statusCode,
+            getString(rs, "STATUS_DESCRIPTION"),
+            getString(rs, "EXPORT_EXEMPTION_STATUS_CODE"));
     String ownerClientNumber = getString(rs, "OWNER_CLIENT_NUMBER");
     String agentClientNumber = getString(rs, "AGENT_CLIENT_NUMBER");
     String applicantType = getString(rs, "EXPORT_APPLICANT_TYPE_CODE");
@@ -570,6 +588,18 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
         showCheckbox,
         false,
         getString(rs, "EXEMPTION_TYPE_DESCRIPTION"));
+  }
+
+  private String displayStatus(
+      String applicationStatusCode,
+      String applicationStatusDescription,
+      String exemptionStatusCode) {
+    String description = firstNonNull(applicationStatusDescription, applicationStatusCode);
+    if (APPLICATION_STATUS_EXEMPTED.equalsIgnoreCase(applicationStatusCode)
+        && EXEMPTION_STATUS_NEW.equalsIgnoreCase(exemptionStatusCode)) {
+      return description + " - New";
+    }
+    return description;
   }
 
   private boolean canBeExempted(
@@ -712,6 +742,20 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
                 getLocalDate(rs, "ADVERTISING_DATE"),
                 getLocalDate(rs, "OFFER_RECEIPT_DATE"),
                 getLocalDate(rs, "TEAC_MEETING_DATE")));
+  }
+
+  protected Optional<String> loadExemptionStatusCode(String exemptionNumber) {
+    String normalized = trim(exemptionNumber);
+    if (normalized == null) {
+      return Optional.empty();
+    }
+    return jdbcTemplate
+        .query(
+            FIND_EXEMPTION_STATUS_BY_NUMBER,
+            (rs, rowNumber) -> getString(rs, "EXPORT_EXEMPTION_STATUS_CODE"),
+            normalized)
+        .stream()
+        .findFirst();
   }
 
   private boolean canCreateOffers(Optional<ScheduleSnapshot> schedule) {

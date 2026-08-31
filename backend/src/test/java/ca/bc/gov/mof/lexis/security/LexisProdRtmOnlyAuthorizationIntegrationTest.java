@@ -56,6 +56,92 @@ class LexisProdRtmOnlyAuthorizationIntegrationTest {
   }
 
   @Test
+  void prodRtmOnlyModeShouldAllowFederalValidationButRejectSubmissionForNexcolScope()
+      throws Exception {
+    SimpleGrantedAuthority federalSubmissionScope =
+        new SimpleGrantedAuthority("SCOPE_lexis:federal-submission:submit");
+
+    mockMvc
+        .perform(
+            post("/api/lexis/federal/submissions/validation")
+                .param("userReference", "NEXCOL-VALIDATION-1")
+                .param("originalFileName", "federal-submission.xml")
+                .contentType(MediaType.APPLICATION_XML)
+                .content("<xml />")
+                .with(jwt().authorities(federalSubmissionScope)))
+        .andExpect(status().isUnprocessableEntity());
+
+    mockMvc
+        .perform(
+            post("/api/lexis/federal/submissions/prevalidation")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    """
+                    {
+                      "boomNumber": "BOOM-1",
+                      "clientNumber": "00001234",
+                      "locationCode": "01",
+                      "timberMark": ["TM001"]
+                    }
+                    """)
+                .with(jwt().authorities(federalSubmissionScope)))
+        .andExpect(status().isServiceUnavailable());
+
+    mockMvc
+        .perform(
+            post("/api/lexis/federal/submissions/prevalidation")
+                .contentType(MediaType.APPLICATION_XML)
+                .content(
+                    """
+                    <LogExportApplication>
+                      <boomNumber>BOOM-1</boomNumber>
+                      <clientNumber>00001234</clientNumber>
+                      <locationCode>01</locationCode>
+                      <timberMark><item>TM001</item></timberMark>
+                    </LogExportApplication>
+                    """)
+                .with(jwt().authorities(federalSubmissionScope)))
+        .andExpect(status().isServiceUnavailable());
+
+    mockMvc
+        .perform(
+            post("/api/lexis/federal/submissions/prevalidation")
+                .contentType(MediaType.TEXT_PLAIN)
+                .content("unsupported")
+                .with(jwt().authorities(federalSubmissionScope)))
+        .andExpect(status().isUnsupportedMediaType());
+
+    mockMvc
+        .perform(
+            post("/api/lexis/federal/submissions")
+                .param("userReference", "NEXCOL-SUBMISSION-1")
+                .param("originalFileName", "federal-submission.xml")
+                .contentType(MediaType.APPLICATION_XML)
+                .content("<xml />")
+                .with(jwt().authorities(federalSubmissionScope)))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void prodRtmOnlyModeShouldRejectFederalValidationWithoutNexcolScope() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/lexis/federal/submissions/validation")
+                .contentType(MediaType.APPLICATION_XML)
+                .content("<xml />")
+                .with(jwt().authorities(new SimpleGrantedAuthority("SCOPE_openid"))))
+        .andExpect(status().isForbidden());
+
+    mockMvc
+        .perform(
+            post("/api/lexis/federal/submissions/prevalidation")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{}")
+                .with(jwt().authorities(new SimpleGrantedAuthority("SCOPE_openid"))))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
   void prodRtmOnlyModeShouldExposeRtmAmvTableAndRequiredSupportApisToAdmins()
       throws Exception {
     SimpleGrantedAuthority admin = new SimpleGrantedAuthority("LEXIS_ADMIN");
@@ -193,6 +279,33 @@ class LexisProdRtmOnlyAuthorizationIntegrationTest {
     mockMvc
         .perform(get("/api/lexis/rtm/emslogamv").with(jwt().authorities(admin, readOnly)))
         .andExpect(status().isOk());
+  }
+
+  @Test
+  void prodRtmOnlyModeShouldExposeOnlyCapabilitiesToAuthenticatedNoRoleUsers()
+      throws Exception {
+    SimpleGrantedAuthority noLexisRole = new SimpleGrantedAuthority("SCOPE_openid");
+
+    mockMvc
+        .perform(get("/api/lexis/session/capabilities"))
+        .andExpect(status().isUnauthorized());
+    mockMvc
+        .perform(get("/api/lexis/session/capabilities").with(jwt().authorities(noLexisRole)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.authenticated").value(true))
+        .andExpect(jsonPath("$.roles").isEmpty())
+        .andExpect(jsonPath("$.welcomeTarget").value("noAccess"))
+        .andExpect(jsonPath("$.grantedActions").isEmpty());
+
+    mockMvc
+        .perform(get("/api/lexis/session/welcome").with(jwt().authorities(noLexisRole)))
+        .andExpect(status().isForbidden());
+    mockMvc
+        .perform(get("/api/lexis/applications/search").with(jwt().authorities(noLexisRole)))
+        .andExpect(status().isForbidden());
+    mockMvc
+        .perform(get("/api/lexis/rtm/emslogamv").with(jwt().authorities(noLexisRole)))
+        .andExpect(status().isForbidden());
   }
 
   @Test

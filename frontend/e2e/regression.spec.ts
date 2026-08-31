@@ -23,12 +23,17 @@ import { E2E_BASE_URL } from './utils'
 import { formatBusinessIsoDate } from '../src/utils/date'
 
 const sideNavSection = (name: string) =>
-  `.csp-side-nav__section:has(.csp-side-nav__category-text:text-is("${name}"))`
+  `.csp-side-nav__section:has(> .cds--side-nav__submenu .cds--side-nav__submenu-title:text-is("${name}"))`
 
 const tableRowBackgrounds = (row: Locator): Promise<string[]> =>
   row.evaluate((element) =>
     Array.from(element.querySelectorAll('td'), (cell) => getComputedStyle(cell).backgroundColor),
   )
+
+const exactSearchResultCountLabel = (total: number): string => {
+  const formattedTotal = new Intl.NumberFormat('en-CA').format(total)
+  return `${formattedTotal} ${total === 1 ? 'result' : 'results'} found`
+}
 
 const expectFsptsUploadLayout = async (page: Page): Promise<void> => {
   const metrics = await page.evaluate(() => {
@@ -94,50 +99,8 @@ const asRecordArray = (value: unknown): Record<string, unknown>[] =>
       )
     : []
 
-const asRecord = (value: unknown): Record<string, unknown> =>
-  Boolean(value) && typeof value === 'object' && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {}
-
 const optionCode = (option: Record<string, unknown>): string => String(option.code ?? '').trim()
 const optionName = (option: Record<string, unknown>): string => String(option.name ?? '').trim()
-
-const isoDate = (date: Date): string => date.toISOString().slice(0, 10)
-
-const addUtcDays = (date: Date, days: number): Date => {
-  const next = new Date(date.getTime())
-  next.setUTCDate(next.getUTCDate() + days)
-  return next
-}
-
-const scheduleRequestForAdvertisingDate = (advertisingDate: string): ExportScheduleRequest => {
-  const date = new Date(`${advertisingDate}T00:00:00.000Z`)
-  return {
-    advertisingDate,
-    applicationReceiptDate: advertisingDate,
-    offerReceiptDate: isoDate(addUtcDays(date, 14)),
-    offerEndDate: isoDate(addUtcDays(date, 43)),
-    offerWithdrawalDate: isoDate(addUtcDays(date, 33)),
-    teacMeetingDate: isoDate(addUtcDays(date, 36)),
-  }
-}
-
-const uniqueRegressionScheduleRequests = (
-  latestAdvertisingDate: string,
-  attempt = 0,
-): {
-  createRequest: ExportScheduleRequest
-  updateRequest: ExportScheduleRequest
-} => {
-  const latestDate = new Date(`${latestAdvertisingDate}T00:00:00.000Z`)
-  const createDate = isoDate(addUtcDays(latestDate, 7 + attempt * 14))
-  const updateDate = isoDate(addUtcDays(latestDate, 14 + attempt * 14))
-
-  return {
-    createRequest: scheduleRequestForAdvertisingDate(createDate),
-    updateRequest: scheduleRequestForAdvertisingDate(updateDate),
-  }
-}
 
 const safeUrlForLog = (rawUrl: string): string => {
   try {
@@ -194,19 +157,9 @@ type ReviewStatusResponse = {
   message?: string | null
 }
 
-type ExportScheduleMutationResponse = {
+type EmailActionResponse = {
   success?: boolean
   message?: string | null
-  schedule?: unknown
-}
-
-type ExportScheduleRequest = {
-  advertisingDate: string
-  applicationReceiptDate: string
-  offerReceiptDate: string
-  offerEndDate: string
-  offerWithdrawalDate: string
-  teacMeetingDate: string
 }
 
 type ApplicationSubmissionResponse = {
@@ -256,6 +209,7 @@ type OfferPersistenceResponse = {
   message?: string | null
   applicationNumber?: number | null
   exportPurchaseOfferNumber?: number | null
+  sendEmail?: boolean
   errors?: unknown
   warnings?: unknown
 }
@@ -441,6 +395,7 @@ const throwRegressionFailures = (summary: string, failures: Error[]): void => {
 const missingApplicationNumber = '999999999'
 const virusScanRejectionMessage = 'The uploaded file failed virus scanning.'
 const regressionClientEmail = 'lexis-regression@example.test'
+const regressionEmailRemark = 'test 123'
 const naturalResourceRegionCodes = ['1903', '1904', '1905', '1906', '1907', '1908', '1909', '1910']
 const sessionExpiredEventName = 'lexis:session-expired'
 const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/
@@ -748,63 +703,63 @@ const adminNavigationSections: Array<{
       'Application review',
       'Create/Edit Application',
       'Upload',
-      'Applications',
+      'Application search',
       'Create/Edit Exemption',
-      'Exemptions',
+      'Exemption search',
       'Create/Edit Offer',
-      'Offers',
-      'Permits',
+      'Offer search',
+      'Permit search',
     ],
   },
   {
     section: 'Federal',
-    links: ['Search'],
+    links: ['Application search'],
   },
   {
     section: 'Reports',
     links: [
-      'Application Report',
       'Advertising List',
       'Offers Report',
-      'TEAC Package',
-      'Exemptions Report',
       'Permits Report',
       'Transport Report',
       'Species and Grade Report',
-      'Fees Report',
       'Tenure Analysis',
     ],
   },
   {
     section: 'Admin',
-    links: ['Fee Policy', 'Fee in Lieu', 'Export Schedule', 'Average market values'],
+    links: ['Multiplication Factor', 'Non-appraised Sec.3 FIL%', 'Average market values'],
   },
 ]
 
 const adminAccessiblePages: Array<[path: string, heading: RegExp]> = [
-  ['/admin/policies/fee', /fee policy administration/i],
-  ['/admin/policies/fil', /fee in lieu percent policy administration/i],
-  ['/admin/schedules', /export schedule administration/i],
+  ['/admin/policies/fee', /multiplication factor/i],
+  ['/admin/policies/fil', /non-appraised sec\.3 fil%/i],
   ['/provincial/review', /provincial application review/i],
   ['/provincial/application/create', /create provincial application/i],
   ['/provincial/application/upload', /upload application submission/i],
   ['/provincial/application', /provincial application search/i],
   ['/federal', /federal application search/i],
-  ['/reports', /application report/i],
+  ['/reports', /offer report/i],
   ['/admin/rtm/emslogamv/upload', /average market values/i],
 ]
 
 const reportAccessiblePages: Array<[path: string, heading: RegExp]> = [
-  ['/reports/applicationReport', /application report/i],
   ['/reports/biweeklyListing', /advertising list/i],
   ['/reports/offerReport', /offer report/i],
-  ['/reports/teacReport', /timber export advisory committee package report/i],
-  ['/reports/exemptionReport', /exemption report/i],
   ['/reports/permitLedgerReport', /permit ledger report/i],
   ['/reports/transportReport', /transport report/i],
   ['/reports/speciesGradeReport', /species and grade report/i],
-  ['/reports/feeReport', /fee report/i],
   ['/reports/tenureReport', /tenure analysis report/i],
+]
+
+// INTENTIONAL_LEGACY_DIVERGENCE(RETIRED_REPORT_SCREENS): Regression must
+// prove these routes stay retired instead of treating them as accessible pages.
+const retiredReportPages: Array<[path: string, heading: RegExp]> = [
+  ['/reports/applicationReport', /application report/i],
+  ['/reports/teacReport', /timber export advisory committee package report/i],
+  ['/reports/exemptionReport', /exemption report/i],
+  ['/reports/feeReport', /fee report/i],
 ]
 
 const createWorkflowPages: Array<[path: string, heading: RegExp]> = [
@@ -902,6 +857,50 @@ const searchDefaultPageSizePages: Array<{
   },
 ]
 
+const deferredSearchCountPages: Array<{
+  source: string
+  pagePath: string
+  heading: RegExp
+  countPath: string
+}> = [
+  {
+    source: 'application review search',
+    pagePath: '/provincial/review?page=1&pageSize=10',
+    heading: /provincial application review/i,
+    countPath: '/api/lexis/application-reviews/search/count',
+  },
+  {
+    source: 'provincial application search',
+    pagePath: '/provincial/application?page=1&pageSize=10',
+    heading: /provincial application search/i,
+    countPath: '/api/lexis/applications/search/count',
+  },
+  {
+    source: 'federal application search',
+    pagePath: '/federal?page=1&pageSize=10',
+    heading: /federal application search/i,
+    countPath: '/api/lexis/federal/applications/search/count',
+  },
+  {
+    source: 'exemption search',
+    pagePath: '/provincial/exemption?page=1&pageSize=10',
+    heading: /provincial exemption search/i,
+    countPath: '/api/lexis/exemptions/search/count',
+  },
+  {
+    source: 'purchase offer search',
+    pagePath: '/provincial/offers?page=1&pageSize=10',
+    heading: /provincial offers search/i,
+    countPath: '/api/lexis/purchase-offers/search/count',
+  },
+  {
+    source: 'permit search',
+    pagePath: '/provincial/permit?page=1&pageSize=10',
+    heading: /provincial permit search/i,
+    countPath: '/api/lexis/permits/search/count',
+  },
+]
+
 const requiredAdminActions = [
   '/lexisAgentAdmin',
   '/applicationSearch',
@@ -924,10 +923,20 @@ const representativeAdminActions = [
   'mofrListing',
 ]
 
+const expandSideNavSection = async (page: Page, section: string): Promise<void> => {
+  const sectionToggle = page
+    .locator(sideNavSection(section))
+    .getByRole('button', { name: section, exact: true })
+  if ((await sectionToggle.getAttribute('aria-expanded')) === 'false') {
+    await sectionToggle.click()
+  }
+}
+
 const expectAdminNavigation = async (page: Page): Promise<void> => {
   for (const { section, links } of adminNavigationSections) {
     const navSection = page.locator(sideNavSection(section))
     await expect(navSection, `${section} navigation section should be visible`).toBeVisible()
+    await expandSideNavSection(page, section)
     await expect(
       navSection.getByRole('link'),
       `${section} navigation should not include extra links`,
@@ -1010,35 +1019,23 @@ const readPermitVersionedJson = async <T>(
   return { payload, version }
 }
 
-const currentOfferSchedule = async (
-  page: Page,
-): Promise<{ scheduleId: string; advertisingDate: string; offerReceiptDate: string }> => {
-  const schedulePage = await readJsonResponse<GenericSearchResponse>(
-    await getWithAuth(page, '/api/lexis/admin/schedules', {
-      params: {
-        page: '0',
-        size: '200',
-      },
-    }),
+const currentOfferSchedule = async (page: Page): Promise<{ scheduleId: string }> => {
+  const applicationOptions = await readJsonResponse<GenericOptionsResponse>(
+    await getWithAuth(page, '/api/lexis/applications/search/options'),
   )
   const today = formatBusinessIsoDate()
-  const schedule = asRecordArray(schedulePage.results).find((candidate) => {
-    const advertisingDate = String(candidate.advertisingDate ?? '').trim()
-    const offerReceiptDate = String(candidate.offerReceiptDate ?? '').trim()
-    return advertisingDate <= today && offerReceiptDate >= today
-  })
+  const currentSchedules = asRecordArray(applicationOptions.currentSchedules)
+  expectApplicationScheduleOptions(currentSchedules, 'core lifecycle current list dates')
+  const schedule = currentSchedules.find(
+    (candidate) => optionCode(candidate) && optionName(candidate) <= today,
+  )
   if (!schedule) {
     throw new Error(
-      `TEST needs an existing export schedule with advertisingDate <= ${today} <= offerReceiptDate for the CRUD regression.`,
+      `TEST needs a current dated application schedule on or before ${today} for the core lifecycle regression.`,
     )
   }
   return {
-    scheduleId: requiredString(schedule.exportScheduleId, 'Export schedule ID'),
-    advertisingDate: requiredString(schedule.advertisingDate, 'Export schedule advertising date'),
-    offerReceiptDate: requiredString(
-      schedule.offerReceiptDate,
-      'Export schedule offer receipt date',
-    ),
+    scheduleId: requiredString(optionCode(schedule), 'Current application schedule ID'),
   }
 }
 
@@ -1166,6 +1163,7 @@ const withdrawRegressionOffer = async (
     }),
   )
   expect(result.success).toBe(true)
+  expect(result.sendEmail).toBe(true)
   expect(asStringArray(result.errors)).toEqual([])
 }
 
@@ -1301,7 +1299,8 @@ const permitMutationForm = (
 ): Record<string, string> => ({
   permitNumber: String(permit.permitNumber ?? ''),
   permitStatus: permitStatus ?? String(permit.permitStatusCode ?? ''),
-  permitIssueDate: String(permit.issueDate ?? ''),
+  permitIssueDate:
+    String(permit.issueDate ?? '') || (permitStatus === 'COM' ? formatBusinessIsoDate() : ''),
   permitExpiryDate: String(permit.expiryDate ?? ''),
   permitRequestDate: String(permit.receivedDate ?? ''),
   exemptionNumber: String(permit.exemptionNumber ?? ''),
@@ -1330,6 +1329,30 @@ const permitMutationFailure = (result: PermitMutationResponse, fallback: string)
     .map((value) => String(value ?? '').trim())
     .filter(Boolean)
   return details.length > 0 ? details.join(' ') : fallback
+}
+
+const reactivateRegressionPermit = async (
+  page: Page,
+  permitNumber: number,
+  marker: string,
+  shipping: { transportType: string; portOfExport: string },
+): Promise<void> => {
+  const current = await readPermitVersionedJson<Record<string, unknown>>(page, permitNumber)
+  if (String(current.payload.permitStatusCode ?? '').toUpperCase() === 'ACT') {
+    return
+  }
+  const result = await readJsonResponse<PermitMutationResponse>(
+    await postWithCsrf(page, '/api/lexis/rpc/permit-details/update-permit', {
+      headers: versionHeaders(current.version),
+      form: permitMutationForm(current.payload, marker, shipping, 'ACT'),
+    }),
+  )
+  expect(
+    result.success,
+    permitMutationFailure(result, `Permit ${permitNumber} reactivation returned success=false.`),
+  ).toBe(true)
+  expect(result.permitStatus).toBe('ACT')
+  expect(asStringArray(result.errors)).toEqual([])
 }
 
 const cancelRegressionPermit = async (
@@ -1389,27 +1412,6 @@ const detachRegressionPermitApplication = async (
   )
   expect(result.success).toBe(true)
   expect(asStringArray(result.errors)).toEqual([])
-}
-
-const latestExportScheduleAdvertisingDate = async (page: Page): Promise<string> => {
-  const schedulePage = await readJsonResponse<GenericSearchResponse>(
-    await getWithAuth(page, '/api/lexis/admin/schedules', {
-      params: {
-        page: '0',
-        size: '200',
-      },
-    }),
-  )
-  const dates = asRecordArray(schedulePage.results)
-    .map((schedule) => String(schedule.advertisingDate ?? '').trim())
-    .filter((date) => isoDatePattern.test(date))
-    .sort()
-
-  expect(
-    dates.length,
-    'export schedule regression needs at least one existing schedule row',
-  ).toBeGreaterThan(0)
-  return dates[dates.length - 1]
 }
 
 const firstCurrentScheduleAdvertisingDate = async (page: Page): Promise<string> => {
@@ -1523,63 +1525,6 @@ const expectApplicationDocumentVirusScanRejection = (
   expect(response.payload.message ?? '').toContain(virusScanRejectionMessage)
 }
 
-const createRegressionExportSchedule = async (
-  page: Page,
-): Promise<{
-  scheduleId: string
-  createRequest: ExportScheduleRequest
-  updateRequest: ExportScheduleRequest
-  createdSchedule: Record<string, unknown>
-}> => {
-  const latestAdvertisingDate = await latestExportScheduleAdvertisingDate(page)
-  for (let attempt = 0; attempt < 6; attempt += 1) {
-    const { createRequest, updateRequest } = uniqueRegressionScheduleRequests(
-      latestAdvertisingDate,
-      attempt,
-    )
-    const created = await readJsonResponseWithStatuses<ExportScheduleMutationResponse>(
-      await postWithCsrf(page, '/api/lexis/admin/schedules', {
-        data: createRequest,
-      }),
-      [200, 400],
-    )
-
-    if (created.status === 400) {
-      const message = created.payload.message ?? ''
-      if (!message.includes('A schedule already exists for that advertising date.')) {
-        throw new Error(
-          `Export schedule create failed for ${createRequest.advertisingDate}: ${message}`,
-        )
-      }
-      continue
-    }
-
-    expect(created.payload.success).toBe(true)
-    expect(created.payload.message ?? '').toContain('added')
-
-    const createdSchedule = asRecord(created.payload.schedule)
-    const scheduleId = String(createdSchedule.exportScheduleId ?? '').trim()
-    expect(scheduleId).not.toBe('')
-
-    return {
-      scheduleId,
-      createRequest,
-      updateRequest,
-      createdSchedule,
-    }
-  }
-
-  throw new Error('Unable to find an unused future export schedule date for regression.')
-}
-
-const deleteRegressionExportSchedule = async (page: Page, scheduleId: string): Promise<void> => {
-  const deleteResponse = await readJsonResponse<ExportScheduleMutationResponse>(
-    await deleteWithCsrf(page, `/api/lexis/admin/schedules/${encodeURIComponent(scheduleId)}`),
-  )
-  expect(deleteResponse.success).toBe(true)
-  expect(deleteResponse.message ?? '').toContain('deleted')
-}
-
 const cleanupRegressionPackage = async (
   page: Page,
   applicationNumber: number,
@@ -1667,6 +1612,23 @@ test.describe('TEST IDIR admin regression', () => {
 
     await expectAccessiblePage(page, '/provincial/review', /provincial application review/i)
 
+    await expect(page.getByRole('button', { name: 'Provincial', exact: true })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    )
+    await expect(page.getByRole('button', { name: 'Federal', exact: true })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
+    await expect(page.getByRole('button', { name: 'Reports', exact: true })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
+    await expect(page.getByRole('button', { name: 'Admin', exact: true })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
+
     const capabilities = await fetchSessionCapabilities(page)
     const roles = asStringArray(capabilities.roles)
     const grantedActions = asStringArray(capabilities.grantedActions)
@@ -1739,6 +1701,7 @@ test.describe('TEST IDIR admin regression', () => {
     await expectAccessiblePage(page, '/provincial/review', /provincial application review/i)
 
     const reportsSection = page.locator(sideNavSection('Reports'))
+    await expandSideNavSection(page, 'Reports')
     await expect(reportsSection.getByRole('link', { name: 'Advertising List' })).toBeVisible()
     await reportsSection.getByRole('button', { name: 'Reports' }).click()
     await expect(reportsSection.getByRole('link', { name: 'Advertising List' })).toHaveCount(0)
@@ -1766,6 +1729,9 @@ test.describe('TEST IDIR admin regression', () => {
     const provincialSection = page.locator(sideNavSection('Provincial'))
     const federalSection = page.locator(sideNavSection('Federal'))
     const adminSection = page.locator(sideNavSection('Admin'))
+
+    await expandSideNavSection(page, 'Federal')
+    await expandSideNavSection(page, 'Admin')
 
     await expect(provincialSection.getByRole('link', { name: 'Upload' })).toHaveAttribute(
       'href',
@@ -1807,6 +1773,7 @@ test.describe('TEST IDIR admin regression', () => {
     const page = await authenticatedIdirPage()
 
     await expectAccessiblePage(page, '/provincial/review', /provincial application review/i)
+    await expandSideNavSection(page, 'Reports')
 
     for (const [linkName, path, heading] of [
       ['Offers Report', '/reports/offerReport', /offer report/i],
@@ -1847,6 +1814,16 @@ test.describe('TEST IDIR admin regression', () => {
     }
 
     expect(apiServerErrors).toEqual([])
+  })
+
+  test('redirects retired report routes to the first active report', async () => {
+    const page = await authenticatedIdirPage()
+
+    for (const [path, retiredHeading] of retiredReportPages) {
+      await expectAccessiblePage(page, path, /offer report/i)
+      await expect.poll(() => new URL(page.url()).pathname).toBe('/reports/offerReport')
+      await expect(page.getByRole('heading', { name: retiredHeading })).toHaveCount(0)
+    }
   })
 
   test('can load admin routes through document navigation', async () => {
@@ -2210,6 +2187,7 @@ test.describe('TEST IDIR admin regression', () => {
     )
     const today = formatBusinessIsoDate()
 
+    await page.getByRole('tab', { name: 'Application' }).click()
     await expect(page.getByRole('combobox', { name: 'Product type' })).toHaveValue(
       'Harvested Timber',
     )
@@ -2220,9 +2198,13 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(page.getByRole('textbox', { name: 'Application date (YYYY-MM-DD)' })).toHaveValue(
       today,
     )
-    await expect(page.getByRole('textbox', { name: 'Received date (YYYY-MM-DD)' })).toHaveValue('')
-    await expect(page.getByRole('combobox', { name: 'Listing date' })).toHaveValue(nextListDate)
+    await expect(page.getByRole('textbox', { name: 'Date received (YYYY-MM-DD)' })).toHaveValue('')
+    await expect(page.getByRole('combobox', { name: 'List date' })).toHaveValue(nextListDate)
+    await expect(page.getByRole('spinbutton', { name: 'Application term (days)' })).toHaveValue(
+      '180',
+    )
 
+    await page.getByRole('tab', { name: 'Items' }).click()
     const paragraphField = page.getByLabel('Location of logs')
     const normalField = page.getByLabel('Application volume')
     const [paragraphMetrics, normalFieldMetrics] = await Promise.all([
@@ -2240,7 +2222,7 @@ test.describe('TEST IDIR admin regression', () => {
     expect(paragraphMetrics.fontSize).toBe(normalFieldMetrics.fontSize)
     expect(paragraphMetrics.resize).toBe('vertical')
 
-    await page.getByRole('tab', { name: 'Clients' }).click()
+    await page.getByRole('tab', { name: 'Owner' }).click()
     await expect(page.getByRole('combobox', { name: 'Applicant type' })).toHaveValue('Owner')
   })
 
@@ -2253,17 +2235,24 @@ test.describe('TEST IDIR admin regression', () => {
       /create provincial application/i,
     )
 
-    for (const tabName of [
-      'Summary',
-      'Clients',
-      'Packages / Scales',
-      'Permits',
-      'Offers',
-      'Documents',
-      'Remarks',
-    ]) {
+    for (const tabName of ['Owner', 'Application', 'Items', 'Documents', 'Remarks', 'Offers']) {
       await expect(page.getByRole('tab', { name: tabName })).toBeVisible()
     }
+    await expect(page.getByRole('tab', { name: 'Agent' })).toHaveCount(0)
+    await expect(page.getByRole('tab', { name: 'Permits' })).toHaveCount(0)
+    const reviewTab = page.getByRole('tab', { name: 'Review' })
+    await expect(reviewTab).toBeVisible()
+    await reviewTab.click()
+    await expect(page.getByRole('textbox', { name: 'Application status' })).toHaveValue('New')
+    await expect(page.getByRole('textbox', { name: 'Application status' })).toHaveAttribute(
+      'readonly',
+    )
+    await expect(page.getByRole('textbox', { name: 'Remarks' })).toBeDisabled()
+    await expect(
+      page.getByText(
+        'Save the application before changing its review status or adding review remarks.',
+      ),
+    ).toBeVisible()
 
     await expect(page.getByRole('button', { name: 'Save' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Cancel' })).toBeVisible()
@@ -2271,7 +2260,13 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(page.getByRole('button', { name: 'Submit' })).toHaveCount(0)
     await expect(page.getByRole('link', { name: 'Back to Search' })).toHaveCount(0)
 
+    await page.getByRole('tab', { name: 'Application' }).click()
     const regionSelect = page.getByRole('combobox', { name: 'Region' })
+    await expect(page.getByRole('spinbutton', { name: 'Application term (days)' })).toHaveValue(
+      '180',
+    )
+    await expect(page.getByLabel('Application term months')).toHaveCount(0)
+    await expect(page.getByLabel('Application term years')).toHaveCount(0)
     await expect(regionSelect).toBeEnabled({ timeout: 30_000 })
     if (!(await regionSelect.inputValue()).trim()) {
       await regionSelect.click()
@@ -2280,13 +2275,13 @@ test.describe('TEST IDIR admin regression', () => {
       await page.locator(`#${regionMenuId}`).getByRole('option').first().click()
     }
 
-    await page.getByRole('tab', { name: 'Packages / Scales' }).click()
-    const packagesPanel = page.getByRole('region', { name: 'Packages / Scales' })
-    await expect(packagesPanel).toBeVisible()
-    await expect(packagesPanel).toHaveCSS('overflow', 'visible')
+    await page.getByRole('tab', { name: 'Items' }).click()
+    const itemsPanel = page.getByRole('region', { name: 'Items' })
+    await expect(itemsPanel).toBeVisible()
+    await expect(itemsPanel).toHaveCSS('overflow', 'visible')
 
-    const speciesSelect = packagesPanel.getByRole('combobox', {
-      name: 'Application species',
+    const speciesSelect = itemsPanel.getByRole('combobox', {
+      name: 'Species list',
     })
     await expect(speciesSelect).toBeEnabled({ timeout: 30_000 })
     await expect(speciesSelect).not.toHaveValue('')
@@ -2297,14 +2292,14 @@ test.describe('TEST IDIR admin regression', () => {
       'application species should prefill the first available code',
     ).not.toBe('')
 
-    const addSpeciesButton = packagesPanel.getByRole('button', {
+    const addSpeciesButton = itemsPanel.getByRole('button', {
       name: 'Add application species',
       exact: true,
     })
     await expect(addSpeciesButton).toBeEnabled()
     await addSpeciesButton.click()
 
-    const selectedSpeciesList = packagesPanel.getByRole('list', {
+    const selectedSpeciesList = itemsPanel.getByRole('list', {
       name: 'Selected application species',
     })
     const selectedSpeciesItem = selectedSpeciesList.getByRole('listitem').filter({
@@ -2315,7 +2310,7 @@ test.describe('TEST IDIR admin regression', () => {
       exact: true,
     })
     await expect(removeSpeciesButton).toBeVisible()
-    await expect(packagesPanel.getByRole('button', { name: 'Remove', exact: true })).toHaveCount(0)
+    await expect(itemsPanel.getByRole('button', { name: 'Remove', exact: true })).toHaveCount(0)
 
     const [addSpeciesBox, selectedSpeciesBox] = await Promise.all([
       addSpeciesButton.boundingBox(),
@@ -2329,9 +2324,15 @@ test.describe('TEST IDIR admin regression', () => {
     await removeSpeciesButton.click()
     await expect(removeSpeciesButton).toHaveCount(0)
 
-    await expect(page.getByRole('heading', { name: 'Package Details', exact: true })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Create Package', exact: true })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Package Details', exact: true })).toHaveCount(0)
+    await expect(
+      page.getByText(
+        'Save the application before creating a package or adding Summary of Scale entries.',
+      ),
+    ).toBeVisible()
     const createPackageButton = page.getByRole('button', {
-      name: 'Create New Package',
+      name: 'Create Package',
       exact: true,
     })
     await expect(createPackageButton).toBeEnabled()
@@ -2645,6 +2646,50 @@ test.describe('TEST IDIR admin regression', () => {
     }
   })
 
+  test('resolves exact counts for every deferred browser search', async () => {
+    const page = await authenticatedIdirPage()
+
+    for (const contract of deferredSearchCountPages) {
+      const countResponsePromise = page.waitForResponse(
+        (response) => {
+          if (response.request().method() !== 'GET') {
+            return false
+          }
+
+          try {
+            return new URL(response.url()).pathname === contract.countPath
+          } catch {
+            return false
+          }
+        },
+        { timeout: 60_000 },
+      )
+
+      await expectAccessiblePage(page, contract.pagePath, contract.heading)
+      await expect(
+        page.locator('.legacy-search-table-content'),
+        `${contract.source} rows should become usable before the exact count resolves`,
+      ).toHaveAttribute('aria-busy', 'false', { timeout: 30_000 })
+
+      const countResponse = await countResponsePromise
+      const countResponseText = await countResponse.text()
+      expect(
+        countResponse.ok(),
+        `${contract.source} count request failed: ${redactedTextSnippet(countResponseText)}`,
+      ).toBe(true)
+
+      const count = JSON.parse(countResponseText) as SearchCountResponse
+      expect(count.total, `${contract.source} count should be numeric`).toEqual(expect.any(Number))
+
+      const resultCount = page.locator('.legacy-search-result-count')
+      await expect(
+        resultCount,
+        `${contract.source} should replace its count skeleton with the exact number`,
+      ).toHaveText(exactSearchResultCountLabel(count.total as number), { timeout: 30_000 })
+      await expect(resultCount.locator('.legacy-search-result-count-skeleton')).toHaveCount(0)
+    }
+  })
+
   test('can query application maintenance reference data contracts', async () => {
     const page = await authenticatedIdirPage()
 
@@ -2686,81 +2731,29 @@ test.describe('TEST IDIR admin regression', () => {
     expect(Array.isArray(reportOptions.reportJurisdictions)).toBe(true)
     expectNaturalResourceRegions(reportOptions.regions, 'report options')
     expectReportScheduleOptions(reportOptions.currentSchedules, 'report list dates')
-
-    const exportSchedules = await readJsonResponse<GenericSearchResponse>(
-      await getWithAuth(page, '/api/lexis/admin/schedules'),
-    )
-    expect(Array.isArray(exportSchedules.results)).toBe(true)
-    expect(exportSchedules.total).toEqual(expect.any(Number))
-    expect(exportSchedules.page).toBe(0)
-    expect(exportSchedules.size).toBe(100)
   })
 
-  test('can page and sort all export schedules', async () => {
+  test('rejects export schedule administration API access', async () => {
     const page = await authenticatedIdirPage()
 
-    const schedules = await readJsonResponse<GenericSearchResponse>(
-      await getWithAuth(page, '/api/lexis/admin/schedules', {
-        params: {
-          page: 0,
-          size: 20,
-          sortField: 'advertisingDate',
-          sortDirection: 'desc',
-        },
-      }),
-    )
-    const rows = asRecordArray(schedules.results)
-
-    expect(schedules.total, 'TEST should include historical export schedules').toBeGreaterThan(25)
-    expect(schedules.page).toBe(0)
-    expect(schedules.size).toBe(20)
-    expect(rows.length).toBeLessThanOrEqual(20)
-
-    let previousAdvertisingDate: string | null = null
-    for (const row of rows) {
-      const advertisingDate = String(row.advertisingDate ?? '').trim()
-      expect(advertisingDate).toMatch(isoDatePattern)
-      expect(row.mutable).toBe(Number(row.applicationCount ?? 0) === 0)
-      if (previousAdvertisingDate) {
-        expect(previousAdvertisingDate >= advertisingDate).toBe(true)
-      }
-      previousAdvertisingDate = advertisingDate
+    const expectForbidden = async (method: string, response: APIResponse): Promise<void> => {
+      const responseText = await response.text()
+      expect(
+        response.status(),
+        `${method} /api/lexis/admin/schedules should be forbidden: ${redactedTextSnippet(responseText)}`,
+      ).toBe(403)
     }
-  })
 
-  test('shows report advertising date selector from current list dates', async () => {
-    const page = await authenticatedIdirPage()
-
-    const reportOptions = await readJsonResponse<GenericOptionsResponse>(
-      await getWithAuth(page, '/api/lexis/reports/options'),
+    await expectForbidden('GET', await getWithAuth(page, '/api/lexis/admin/schedules'))
+    await expectForbidden(
+      'POST',
+      await postWithCsrf(page, '/api/lexis/admin/schedules', { data: {} }),
     )
-    const currentSchedules = asRecordArray(reportOptions.currentSchedules)
-    expectReportScheduleOptions(currentSchedules, 'report advertising date selector')
-
-    const datedSchedules = currentSchedules.filter((schedule) => optionCode(schedule))
-    const firstScheduleDate = optionName(datedSchedules[0] ?? {})
-    expect(firstScheduleDate).toMatch(isoDatePattern)
-
-    await expectAccessiblePage(
-      page,
-      '/reports/teacReport',
-      /timber export advisory committee package report/i,
+    await expectForbidden(
+      'PUT',
+      await putWithCsrf(page, '/api/lexis/admin/schedules/0', { data: {} }),
     )
-    await expect(
-      page.getByRole('heading', {
-        name: 'Timber Export Advisory Committee package report',
-      }),
-    ).toBeVisible()
-
-    const advertisingDate = page.getByRole('combobox', { name: 'Advertising date' })
-    await expect(advertisingDate).toBeVisible()
-    await expect(advertisingDate).toHaveValue(firstScheduleDate)
-
-    for (const optionLabel of datedSchedules.slice(0, 2).map(optionName)) {
-      await advertisingDate.click()
-      await advertisingDate.fill(optionLabel)
-      await expect(page.getByRole('option', { name: optionLabel, exact: true })).toBeVisible()
-    }
+    await expectForbidden('DELETE', await deleteWithCsrf(page, '/api/lexis/admin/schedules/0'))
   })
 
   test('shows advertising list report listing date controls', async () => {
@@ -2835,74 +2828,6 @@ test.describe('TEST IDIR admin regression', () => {
     expect(header).toBe(expectedHeader)
   })
 
-  test('can create, update, and delete future export schedule rows', async () => {
-    const page = await authenticatedIdirPage()
-    let scheduleId: string | null = null
-    let deleted = false
-
-    try {
-      const {
-        createRequest,
-        updateRequest,
-        createdSchedule,
-        scheduleId: createdScheduleId,
-      } = await createRegressionExportSchedule(page)
-      scheduleId = createdScheduleId
-      expect(createdSchedule.advertisingDate).toBe(createRequest.advertisingDate)
-      expect(Number(createdSchedule.applicationCount ?? 0)).toBe(0)
-      expect(createdSchedule.mutable).toBe(true)
-
-      const updated = await readJsonResponse<ExportScheduleMutationResponse>(
-        await putWithCsrf(page, `/api/lexis/admin/schedules/${encodeURIComponent(scheduleId)}`, {
-          data: updateRequest,
-        }),
-      )
-      expect(updated.success).toBe(true)
-      expect(updated.message ?? '').toContain('updated')
-
-      const updatedSchedule = asRecord(updated.schedule)
-      expect(String(updatedSchedule.exportScheduleId ?? '')).toBe(scheduleId)
-      expect(updatedSchedule.advertisingDate).toBe(updateRequest.advertisingDate)
-      expect(Number(updatedSchedule.applicationCount ?? 0)).toBe(0)
-      expect(updatedSchedule.mutable).toBe(true)
-
-      await deleteRegressionExportSchedule(page, scheduleId)
-      deleted = true
-    } finally {
-      if (scheduleId && !deleted) {
-        await deleteRegressionExportSchedule(page, scheduleId)
-      }
-    }
-  })
-
-  test('allows legacy duplicate future export schedule advertising dates', async () => {
-    const page = await authenticatedIdirPage()
-    const scheduleIds: string[] = []
-
-    try {
-      const { createRequest, scheduleId: createdScheduleId } =
-        await createRegressionExportSchedule(page)
-      scheduleIds.push(createdScheduleId)
-
-      const duplicate = await readJsonResponse<ExportScheduleMutationResponse>(
-        await postWithCsrf(page, '/api/lexis/admin/schedules', {
-          data: createRequest,
-        }),
-      )
-      expect(duplicate.success).toBe(true)
-      const duplicateSchedule = asRecord(duplicate.schedule)
-      const duplicateScheduleId = String(duplicateSchedule.exportScheduleId ?? '').trim()
-      expect(duplicateScheduleId).not.toBe('')
-      scheduleIds.push(duplicateScheduleId)
-      expect(duplicateScheduleId).not.toBe(createdScheduleId)
-      expect(duplicateSchedule.advertisingDate).toBe(createRequest.advertisingDate)
-    } finally {
-      for (const scheduleId of scheduleIds.reverse()) {
-        await deleteRegressionExportSchedule(page, scheduleId)
-      }
-    }
-  })
-
   test('validates protected writes and rejects missing scoped resources', async () => {
     const page = await authenticatedIdirPage()
 
@@ -2960,15 +2885,6 @@ test.describe('TEST IDIR admin regression', () => {
       },
     )
     expect(emailResponse.status()).toBe(403)
-
-    const invalidScheduleResponse = await readJsonResponse<ExportScheduleMutationResponse>(
-      await postWithCsrf(page, '/api/lexis/admin/schedules', {
-        data: {},
-      }),
-      400,
-    )
-    expect(invalidScheduleResponse.success).toBe(false)
-    expect(invalidScheduleResponse.message ?? '').toContain('Advertising date is required.')
 
     const rtmSearchResponse = await getWithAuth(page, '/api/lexis/rtm/emslogamv', {
       params: {
@@ -3100,7 +3016,7 @@ test.describe('TEST IDIR admin regression', () => {
     throwRegressionFailures('Notification regression and cleanup failed.', failures)
   })
 
-  test('creates, edits, terminalizes, and cleans up provincial records', async () => {
+  test('creates, edits, emails, terminalizes, and cleans up provincial records', async () => {
     test.setTimeout(300_000)
     test.skip(
       !isSharedTestRegressionBaseUrl(E2E_BASE_URL),
@@ -3246,6 +3162,7 @@ test.describe('TEST IDIR admin regression', () => {
           }),
         ))
       expect(createdOffer.success).toBe(true)
+      expect(createdOffer.sendEmail).toBe(true)
       expect(asStringArray(createdOffer.errors)).toEqual([])
       const offerNumber = Number(createdOffer.exportPurchaseOfferNumber)
       expect(offerNumber).toBeGreaterThan(0)
@@ -3264,7 +3181,6 @@ test.describe('TEST IDIR admin regression', () => {
       )
       expect(Number(currentOffer.payload.offerVolume)).toBe(1.2)
       const offerUpdate = offerUpdateForm(offerNumber, {
-        purchaseOfferAmount: '125',
         offerRemark: `${offerMarker} edited`,
       })
       const editedOffer = await readJsonResponse<OfferPersistenceResponse>(
@@ -3274,6 +3190,7 @@ test.describe('TEST IDIR admin regression', () => {
         }),
       )
       expect(editedOffer.success).toBe(true)
+      expect(editedOffer.sendEmail).toBe(false)
       expect(asStringArray(editedOffer.errors)).toEqual([])
 
       const staleOfferUpdate = await readJsonResponseWithStatuses<Record<string, unknown>>(
@@ -3289,7 +3206,7 @@ test.describe('TEST IDIR admin regression', () => {
         page,
         `/api/lexis/purchase-offers/${offerNumber}`,
       )
-      expect(Number(persistedOffer.payload.purchaseOfferAmount)).toBe(125)
+      expect(Number(persistedOffer.payload.purchaseOfferAmount)).toBe(100)
       expect(persistedOffer.payload.offerRemark).toBe(`${offerMarker} edited`)
 
       await withdrawRegressionOffer(page, offerNumber, marker)
@@ -3300,17 +3217,31 @@ test.describe('TEST IDIR admin regression', () => {
       )
       expect(String(withdrawnOffer.payload.offerWithdrawalDate ?? '')).toBe(formatBusinessIsoDate())
 
-      await rejectRegressionApplication(
-        page,
-        offerApplicationNumber,
-        `${marker} offer application cleanup`,
-      )
+      await rejectRegressionApplication(page, offerApplicationNumber, regressionEmailRemark)
       offerApplicationCleanup.complete()
       const rejectedOfferApplication = await readVersionedJson<Record<string, unknown>>(
         page,
         `/api/lexis/applications/${offerApplicationNumber}`,
       )
       expect(rejectedOfferApplication.payload.applicationStatusCode).toBe('REJ')
+
+      const applicationStatusEmail =
+        await test.step('queue the rejected application status email', async () =>
+          readJsonResponse<EmailActionResponse>(
+            await postWithCsrf(
+              page,
+              `/api/lexis/application-reviews/${offerApplicationNumber}/status-email`,
+              {
+                data: {
+                  statusCode: 'REJ',
+                  remark: regressionEmailRemark,
+                  clientEmailAddress: regressionClientEmail,
+                },
+              },
+            ),
+          ))
+      expect(applicationStatusEmail.success).toBe(true)
+      expect(applicationStatusEmail.message).toBe('Application status email sent.')
 
       const lifecycleApplication = await readVersionedJson<Record<string, unknown>>(
         page,
@@ -3455,6 +3386,16 @@ test.describe('TEST IDIR admin regression', () => {
       expect(approvedExemption.valid).toBe(true)
       expect(asStringArray(approvedExemption.errors)).toEqual([])
 
+      const exemptionApprovalEmail =
+        await test.step('queue the exemption approval email', async () =>
+          readJsonResponse<EmailActionResponse>(
+            await postWithCsrf(page, '/api/lexis/rpc/exemption-details/approval-emails', {
+              form: { sendGrid: `${exemptionNumber}:${regressionClientEmail}` },
+            }),
+          ))
+      expect(exemptionApprovalEmail.success).toBe(true)
+      expect(exemptionApprovalEmail.message).toBe('Approval email sent.')
+
       const exemptionBeforePermit = await readVersionedJson<Record<string, unknown>>(
         page,
         `/api/lexis/exemptions/${encodeURIComponent(exemptionNumber)}`,
@@ -3474,9 +3415,13 @@ test.describe('TEST IDIR admin regression', () => {
       const permitCleanup = cleanup.defer('cancel provincial permit', () =>
         cancelRegressionPermit(page, permitNumber, lifecycleMarker, schedule.shipping),
       )
-      const detachCleanup = cleanup.defer('detach lifecycle application from permit', () =>
-        detachRegressionPermitApplication(page, permitNumber, lifecycleApplicationNumber),
-      )
+      const detachCleanup = cleanup.defer('detach lifecycle application from permit', async () => {
+        if (!(await permitContainsApplication(page, permitNumber, lifecycleApplicationNumber))) {
+          return
+        }
+        await reactivateRegressionPermit(page, permitNumber, lifecycleMarker, schedule.shipping)
+        await detachRegressionPermitApplication(page, permitNumber, lifecycleApplicationNumber)
+      })
 
       await expectAccessiblePage(
         page,
@@ -3560,6 +3505,56 @@ test.describe('TEST IDIR admin regression', () => {
         `/api/lexis/applications/${lifecycleApplicationNumber}`,
       )
       expect(permittedApplication.payload.applicationStatusCode).toBe('PMT')
+
+      const permitBeforeCompletion = await readPermitVersionedJson<Record<string, unknown>>(
+        page,
+        permitNumber,
+      )
+      const completedPermit = await test.step('complete the permit for approval email', async () =>
+        readJsonResponse<PermitMutationResponse>(
+          await postWithCsrf(page, '/api/lexis/rpc/permit-details/update-permit', {
+            headers: versionHeaders(permitBeforeCompletion.version),
+            form: permitMutationForm(
+              permitBeforeCompletion.payload,
+              regressionEmailRemark,
+              schedule.shipping,
+              'COM',
+            ),
+          }),
+        ))
+      expect(
+        completedPermit.success,
+        permitMutationFailure(
+          completedPermit,
+          `Permit ${permitNumber} completion returned success=false.`,
+        ),
+      ).toBe(true)
+      expect(['COM', 'PPD']).toContain(completedPermit.permitStatus)
+      expect(asStringArray(completedPermit.errors)).toEqual([])
+
+      const permitBeforeApprovalEmail = await readPermitVersionedJson<Record<string, unknown>>(
+        page,
+        permitNumber,
+      )
+      const permitApprovalEmail = await test.step('queue the permit approval email', async () =>
+        readJsonResponse<EmailActionResponse>(
+          await postWithCsrf(page, '/api/lexis/rpc/permit-details/approval-email', {
+            headers: versionHeaders(permitBeforeApprovalEmail.version),
+            form: {
+              permitNumber: String(permitNumber),
+              clientEmailAddress: regressionClientEmail,
+            },
+          }),
+        ))
+      expect(permitApprovalEmail.success).toBe(true)
+      expect(permitApprovalEmail.message).toBe('Permit approval email sent.')
+
+      await reactivateRegressionPermit(page, permitNumber, lifecycleMarker, schedule.shipping)
+      const reactivatedPermit = await readPermitVersionedJson<Record<string, unknown>>(
+        page,
+        permitNumber,
+      )
+      expect(reactivatedPermit.payload.permitStatusCode).toBe('ACT')
 
       await detachRegressionPermitApplication(page, permitNumber, lifecycleApplicationNumber)
       detachCleanup.complete()

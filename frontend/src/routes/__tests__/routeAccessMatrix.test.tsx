@@ -96,21 +96,30 @@ describe('Protected route access matrix', () => {
     },
   )
 
-  it('includes advertising list action in reports route requirements', () => {
+  it('includes only active report actions in reports route requirements', () => {
     const route = findRoute('/reports')
     const detailRoute = findRoute('/reports/:reportId')
 
     expect(route.requiredActions).toContain('mofrListing')
-    expect(route.requiredActions).toContain('/applicationReport')
+    expect(route.requiredActions).toContain('/offerReport')
+    expect(route.requiredActions).not.toEqual(
+      expect.arrayContaining([
+        '/applicationReport',
+        '/teacReport',
+        '/exemptionReport',
+        '/feeReport',
+      ]),
+    )
     expect(detailRoute.requiredActions).toEqual(route.requiredActions)
   })
 
-  it('does not expose retired admin, Indian Reserve jurisdiction, or legacy advertising routes', () => {
+  it('does not expose disabled or retired routes', () => {
     const routePaths = [...PUBLIC_ROUTES, ...PROTECTED_ROUTES].map((route) =>
       route.path.toLowerCase(),
     )
 
     expect(routePaths).not.toContain('/admin')
+    expect(routePaths).not.toContain('/admin/schedules')
     expect(routePaths.some((path) => path.includes('indian'))).toBe(false)
     expect(routePaths.some((path) => path.includes('reserve'))).toBe(false)
     expect(routePaths.some((path) => path.includes('advertising'))).toBe(false)

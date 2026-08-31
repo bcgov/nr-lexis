@@ -23,6 +23,105 @@ permissions: {}
 jobs:
   e2e-tests:
     name: Basic E2E (${{ matrix.project }})
+    outputs:
+      route_probe_outcome: ${{ steps.route_probe.outcome }}
+      proxy_probe_outcome: ${{ steps.proxy_probe.outcome }}
+      playwright_outcome: ${{ steps.playwright.outcome }}
+    concurrency:
+      group: ${{ format('{0}-{1}-browser', github.event.repository.name, inputs.slot || inputs.target) }}
+      cancel-in-progress: false
+    container:
+      image: mcr.microsoft.com/playwright:v1.60.0-noble
+      options: --user 1001
+    defaults:
+      run:
+        shell: bash
+        working-directory: frontend
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [chromium]
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Wait for deployed frontend
+        id: route_probe
+        continue-on-error: true
+        env:
+          E2E_BASE_URL: https://${{ env.PREFIX }}.${{ env.DOMAIN }}
+        run: bash ../.github/scripts/wait-for-frontend.sh "$E2E_BASE_URL" 17 5 '<div id="root"' 30
+
+      - name: Verify frontend proxy to backend
+        id: proxy_probe
+        continue-on-error: true
+        if: steps.route_probe.outcome == 'success'
+        env:
+          E2E_BASE_URL: https://${{ env.PREFIX }}.${{ env.DOMAIN }}
+        run: |
+          set -euo pipefail
+
+          capabilities_status=""
+          for attempt in $(seq 1 24); do
+            capabilities_status="$(curl --silent --show-error \
+              --output "${RUNNER_TEMP}/lexis-capabilities.json" \
+              --write-out '%{http_code}' \
+              --connect-timeout 5 \
+              --max-time 15 \
+              "${E2E_BASE_URL}/api/lexis/session/capabilities" || true)"
+            if [ "${capabilities_status}" = "401" ]; then
+              break
+            fi
+            echo "Frontend proxy to backend is not available yet (attempt ${attempt}/24, status ${capabilities_status:-none})."
+            if [ "${attempt}" -lt 24 ]; then
+              sleep 5
+            fi
+          done
+
+          if [ "${capabilities_status}" != "401" ]; then
+            echo "Expected unauthenticated frontend-proxied capabilities HTTP 401; received ${capabilities_status:-none}."
+            exit 1
+          fi
+
+      - name: Run basic Playwright smoke suite
+        id: playwright
+        continue-on-error: true
+        if: >-
+          steps.route_probe.outcome == 'success' &&
+          steps.proxy_probe.outcome == 'success'
+        env:
+          E2E_BASE_URL: https://${{ env.PREFIX }}.${{ env.DOMAIN }}
+          CI: "true"
+        run: |
+          npx playwright test --project=${{ matrix.project }} --reporter=html,list
+
+      - uses: actions/upload-artifact@v7
+        if: (! cancelled()) && steps.playwright.outcome != 'skipped'
+        with:
+          name: playwright-report-${{ matrix.project }}-${{ inputs.target }}
+          path: frontend/playwright-report
+          retention-days: 7
+
+  # A fresh runner retries environment-dependent route, proxy, and Playwright failures.
+  e2e-retry:
+    name: Basic E2E retry (chromium)
+    needs: [e2e-tests]
+    if: >-
+      needs.e2e-tests.outputs.route_probe_outcome == 'failure' ||
+      needs.e2e-tests.outputs.proxy_probe_outcome == 'failure' ||
+      needs.e2e-tests.outputs.playwright_outcome == 'failure'
     concurrency:
       group: ${{ format('{0}-{1}-browser', github.event.repository.name, inputs.slot || inputs.target) }}
       cancel-in-progress: false
@@ -96,6 +195,6 @@ jobs:
       - uses: actions/upload-artifact@v7
         if: (! cancelled())
         with:
-          name: playwright-report-${{ matrix.project }}-${{ inputs.target }}
+          name: playwright-report-${{ matrix.project }}-${{ inputs.target }}-retry
           path: frontend/playwright-report
           retention-days: 7

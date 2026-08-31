@@ -8,7 +8,6 @@ import {
   getRtmEmsLogAmvLastSaved,
   previewRtmEmsLogAmvUpload,
   saveRtmEmsLogAmvBatch,
-  searchLatestRtmEmsLogAmv,
   searchRtmEmsLogAmv,
 } from '@/service/rtm-emslogamv-service'
 import { createTestAuthContext } from '@/test-utils/auth'
@@ -22,7 +21,6 @@ vi.mock('@/service/rtm-emslogamv-service', () => ({
   getRtmEmsLogAmvLastSaved: vi.fn(),
   previewRtmEmsLogAmvUpload: vi.fn(),
   saveRtmEmsLogAmvBatch: vi.fn(),
-  searchLatestRtmEmsLogAmv: vi.fn(),
   searchRtmEmsLogAmv: vi.fn(),
 }))
 
@@ -30,7 +28,6 @@ const mockedUseAuth = vi.mocked(useAuth)
 const mockedLastSaved = vi.mocked(getRtmEmsLogAmvLastSaved)
 const mockedPreviewUpload = vi.mocked(previewRtmEmsLogAmvUpload)
 const mockedSaveBatch = vi.mocked(saveRtmEmsLogAmvBatch)
-const mockedSearchLatest = vi.mocked(searchLatestRtmEmsLogAmv)
 const mockedSearch = vi.mocked(searchRtmEmsLogAmv)
 
 const monthOffset = (dateValue: string, offset: number) => {
@@ -65,7 +62,6 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     })
     mockedLastSaved.mockResolvedValue(null)
     mockedSearch.mockResolvedValue([])
-    mockedSearchLatest.mockResolvedValue([])
   })
 
   afterEach(() => {
@@ -136,8 +132,8 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
   it('restores next-month saved values as an editable review without file metadata', async () => {
     const currentMonth = `${formatBusinessIsoDate().slice(0, 7)}-01`
     const nextMonth = monthOffset(currentMonth, 1)
-    const comparisonMonth = monthOffset(nextMonth, -2)
-    mockedSearch.mockResolvedValue([
+    const comparisonMonth = monthOffset(nextMonth, -1)
+    mockedSearch.mockResolvedValueOnce([
       {
         species: 'BA',
         grade: 'D',
@@ -169,7 +165,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
         returnCode: '0',
       },
     ])
-    mockedSearchLatest.mockResolvedValue([
+    mockedSearch.mockResolvedValueOnce([
       {
         species: 'BA',
         grade: 'D',
@@ -191,17 +187,22 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     const table = await screen.findByRole('table', {
       name: 'Balsam average market value review',
     })
-    expect(mockedSearch).toHaveBeenCalledWith({
+    expect(mockedSearch).toHaveBeenNthCalledWith(1, {
       species: '',
       growthIndicator: '',
       retrievalDate: nextMonth,
       updateDate: nextMonth,
     })
-    expect(mockedSearchLatest).toHaveBeenCalledWith(nextMonth)
+    expect(mockedSearch).toHaveBeenNthCalledWith(2, {
+      species: '',
+      growthIndicator: '',
+      retrievalDate: comparisonMonth,
+      updateDate: comparisonMonth,
+    })
     expect(mockedLastSaved).toHaveBeenCalledWith(nextMonth)
     expect(
       within(table).getByRole('columnheader', {
-        name: `Value in effect (${monthLabel(comparisonMonth)})`,
+        name: `${monthLabel(comparisonMonth)} value`,
       }),
     ).toBeVisible()
     const value = within(table).getByLabelText(`Balsam grade D ${monthLabel(nextMonth)} value`)
@@ -245,7 +246,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     const currentMonth = `${formatBusinessIsoDate().slice(0, 7)}-01`
     const nextMonth = monthOffset(currentMonth, 1)
     const comparisonMonth = monthOffset(nextMonth, -1)
-    mockedSearch.mockResolvedValue([
+    mockedSearch.mockResolvedValueOnce([
       {
         species: 'BA',
         grade: 'D',
@@ -257,7 +258,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
         returnCode: '0',
       },
     ])
-    mockedSearchLatest.mockResolvedValue([
+    mockedSearch.mockResolvedValueOnce([
       {
         species: 'BA',
         grade: 'D',
@@ -440,7 +441,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     const currentMonth = `${formatBusinessIsoDate().slice(0, 7)}-01`
     const nextMonth = monthOffset(currentMonth, 1)
     const comparisonMonth = monthOffset(nextMonth, -1)
-    mockedSearch.mockResolvedValue([
+    mockedSearch.mockResolvedValueOnce([
       {
         species: 'BA',
         grade: 'D',
@@ -452,7 +453,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
         returnCode: '0',
       },
     ])
-    mockedSearchLatest.mockResolvedValue([
+    mockedSearch.mockResolvedValueOnce([
       {
         species: 'BA',
         grade: 'D',
@@ -583,7 +584,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       oversized,
     )
 
-    expect(await screen.findByText('File must be 20 MiB or smaller.')).toBeVisible()
+    expect(await screen.findByText('File must be 20 MB or smaller.')).toBeVisible()
     expect(mockedPreviewUpload).not.toHaveBeenCalled()
   })
 
@@ -759,7 +760,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       fileSize: 3,
       message: 'Spreadsheet is valid.',
       rowCount: 4,
-      retrievalDate: '2026-07-01',
+      retrievalDate: '2026-08-01',
       updateDate: '2026-09-01',
       errors: [],
       warnings: [],
@@ -768,7 +769,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
           species: 'BA',
           grade: 'D',
           growthIndicator: 'O',
-          retrievalDate: '2026-07-01',
+          retrievalDate: '2026-08-01',
           updateDate: '2026-09-01',
           currentValue: 75.29,
           newValue: 78.14,
@@ -778,7 +779,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
           species: 'HE',
           grade: 'B',
           growthIndicator: 'O',
-          retrievalDate: '2026-07-01',
+          retrievalDate: '2026-08-01',
           updateDate: '2026-09-01',
           currentValue: null,
           newValue: 120,
@@ -788,7 +789,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
           species: 'HE',
           grade: 'H',
           growthIndicator: 'O',
-          retrievalDate: '2026-07-01',
+          retrievalDate: '2026-08-01',
           updateDate: '2026-09-01',
           currentValue: 81.4,
           newValue: null,
@@ -798,7 +799,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
           species: 'CE',
           grade: 'B',
           growthIndicator: 'O',
-          retrievalDate: '2026-07-01',
+          retrievalDate: '2026-08-01',
           updateDate: '2026-09-01',
           currentValue: 200,
           newValue: null,
@@ -808,7 +809,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
           species: 'AL',
           grade: 'D',
           growthIndicator: 'O',
-          retrievalDate: '2026-07-01',
+          retrievalDate: '2026-08-01',
           updateDate: '2026-09-01',
           currentValue: 65,
           newValue: 66,
@@ -844,7 +845,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       name: 'Balsam average market value review',
     })
     expect(
-      within(balsamTable).getByRole('columnheader', { name: 'Value in effect (July 2026)' }),
+      within(balsamTable).getByRole('columnheader', { name: 'August 2026 value' }),
     ).toBeVisible()
     expect(within(balsamTable).getByRole('columnheader', { name: 'September 2026' })).toBeVisible()
     expect(within(balsamTable).getByRole('row', { name: /D.*75\.29.*78\.14/ })).toBeVisible()
@@ -859,11 +860,11 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     expect(newHemlockCombination).toHaveValue('120.00')
     expect(
       within(hemlockTable).getByText(
-        'No value has ever been set for this grade. Confirm this species and grade combination is valid.',
+        'August had no value for this grade. Confirm this species and grade combination is valid.',
       ),
     ).toBeVisible()
     expect(
-      within(hemlockTable).getByText('July had 81.40. Enter a value, or 0 for none.'),
+      within(hemlockTable).getByText('August had 81.40. Enter a value, or 0 for none.'),
     ).toBeVisible()
     expect(screen.getByText('Fixed values are not shown here')).toBeVisible()
     expect(
@@ -894,11 +895,11 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     expect(missingHemlockValue).toHaveValue('81.43')
     expect(
       within(hemlockTable).queryByText(
-        'No value has ever been set for this grade. Confirm this species and grade combination is valid.',
+        'August had no value for this grade. Confirm this species and grade combination is valid.',
       ),
     ).not.toBeInTheDocument()
     expect(
-      within(hemlockTable).queryByText('July had 81.40. Enter a value, or 0 for none.'),
+      within(hemlockTable).queryByText('August had 81.40. Enter a value, or 0 for none.'),
     ).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Save values' }))
@@ -990,6 +991,65 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       'true',
     )
     expect(screen.getByText('Values saved')).toBeVisible()
+  })
+
+  it('blocks malformed or out-of-range review values without misreading commas', async () => {
+    mockedPreviewUpload.mockResolvedValue({
+      status: 'accepted',
+      fileName: 'Filename.xlsx',
+      fileSize: 3,
+      message: 'Spreadsheet is valid.',
+      rowCount: 1,
+      retrievalDate: '2026-08-01',
+      updateDate: '2026-09-01',
+      errors: [],
+      warnings: [],
+      rows: [
+        {
+          species: 'BA',
+          grade: 'D',
+          growthIndicator: 'O',
+          retrievalDate: '2026-08-01',
+          updateDate: '2026-09-01',
+          currentValue: 75.29,
+          newValue: 78.14,
+          returnCode: '0',
+        },
+      ],
+    })
+    await renderUploadPage()
+    const workbook = new File([new Uint8Array([1, 2, 3])], 'Filename.xlsx', {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    })
+    await userEvent.upload(
+      screen.getByLabelText('Average monthly values upload spreadsheet'),
+      workbook,
+    )
+    const valueInput = await screen.findByLabelText('Balsam grade D September 2026 value')
+    const saveButton = screen.getByRole('button', { name: 'Save values' })
+
+    for (const invalidValue of ['1,2', 'abc', '-1', '12.345', '9,999.999', '10000', '00000']) {
+      await userEvent.clear(valueInput)
+      await userEvent.type(valueInput, invalidValue)
+      expect(valueInput).toHaveAttribute('aria-invalid', 'true')
+      expect(
+        screen.getByText('Enter a number from 0 to 9999.99 with no more than two decimal places.'),
+      ).toBeVisible()
+      expect(saveButton).toBeDisabled()
+    }
+
+    await userEvent.clear(valueInput)
+    await userEvent.type(valueInput, '9,999.99')
+    expect(valueInput).not.toHaveAttribute('aria-invalid')
+    expect(saveButton).toBeEnabled()
+    await userEvent.click(saveButton)
+
+    await waitFor(() => expect(mockedSaveBatch).toHaveBeenCalledTimes(1))
+    expect(mockedSaveBatch.mock.calls[0][0].values).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ species: 'BA', grade: 'D', newValue: 9999.99 }),
+      ]),
+    )
   })
 
   it('shows a clean editable review and confirms before discarding or removing it', async () => {
@@ -1217,9 +1277,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     await userEvent.click(await screen.findByRole('tab', { name: /Pine/ }))
 
     const table = screen.getByRole('table', { name: 'Pine average market value review' })
-    expect(
-      within(table).getByRole('columnheader', { name: 'Value in effect (June 2026)' }),
-    ).toBeVisible()
+    expect(within(table).getByRole('columnheader', { name: 'June 2026 value' })).toBeVisible()
     expect(within(table).getByRole('columnheader', { name: 'July 2026' })).toBeVisible()
     expect(within(table).getByRole('row', { name: /B.*9\.00.*10\.00/ })).toBeVisible()
     expect(within(table).queryByRole('cell', { name: 'A' })).not.toBeInTheDocument()

@@ -31,6 +31,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.time.Clock;
@@ -43,6 +44,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
@@ -50,6 +52,9 @@ import java.util.zip.ZipException;
 import java.util.zip.ZipInputStream;
 import javax.xml.XMLConstants;
 import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.transform.dom.DOMSource;
+import javax.xml.validation.Schema;
+import javax.xml.validation.SchemaFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -79,8 +84,16 @@ public class ApplicationSubmissionImportService {
   private static final String XML_SCHEMA_INSTANCE_NAMESPACE = XMLConstants.W3C_XML_SCHEMA_INSTANCE_NS_URI;
   private static final String EXPECTED_ESF_SCHEMA_LOCATION =
       "http://www.for.gov.bc.ca/schema/esf/1/xsd/MOF/esf-submission.xsd";
-  private static final String EXPECTED_LEXIS_SCHEMA_LOCATION =
+  private static final String LEXIS_SCHEMA_LOCATION_V2 =
       "http://www.for.gov.bc.ca/schema/lexis/2/xsd/MOF/mof-lexis.xsd";
+  private static final String LEXIS_SCHEMA_LOCATION_V3 =
+      "http://www.for.gov.bc.ca/schema/lexis/3/xsd/MOF/mof-lexis.xsd";
+  private static final Set<String> SUPPORTED_LEXIS_SCHEMA_LOCATIONS =
+      Set.of(LEXIS_SCHEMA_LOCATION_V2, LEXIS_SCHEMA_LOCATION_V3);
+  private static final String LEXIS_SCHEMA_V2_RESOURCE =
+      "/schemas/nexcol/mof-lexis.xsd";
+  private static final String LEXIS_SCHEMA_V3_RESOURCE =
+      "/schemas/nexcol/mof-lexis-v3.xsd";
   private static final String UPLOAD_TYPE = "applicationSubmission";
   private static final String ACCEPTED = "accepted";
   private static final String REJECTED = "rejected";
@@ -104,8 +117,9 @@ public class ApplicationSubmissionImportService {
   private static final String FEDERAL_JURISDICTION = "F";
   private static final String APPLICATION_STATUS_ACTIVE = "A";
   private static final String APPLICATION_STATUS_APPROVED = "APP";
-  private static final String EXEMPTION_REASON_SURPLUS = "S";
+  private static final Set<String> LEGACY_EXEMPTION_REASON_CODES = Set.of("E", "S", "U");
   private static final String APPLICANT_TYPE_OWNER = "O";
+  private static final String APPLICANT_TYPE_MINISTERIAL = "M";
   private static final String APPLICANT_TYPE_AGENT = "A";
   private static final String PRODUCT_TYPE_HARVESTED = "H";
   private static final String PRODUCT_TYPE_STANDING = "S";
@@ -127,6 +141,8 @@ public class ApplicationSubmissionImportService {
       Pattern.compile("Element type \"([^\"]+)\" must be followed by either attribute specifications, \">\" or \"/>\"\\.");
   private static final Pattern INVALID_XML_ATTRIBUTE_CHARACTER_PATTERN =
       Pattern.compile("The value of attribute \"([^\"]+)\".* must not contain the '([^']+)' character\\.");
+  private static final Schema LEXIS_SCHEMA_V2 = loadLexisSchema(LEXIS_SCHEMA_V2_RESOURCE);
+  private static final Schema LEXIS_SCHEMA_V3 = loadLexisSchema(LEXIS_SCHEMA_V3_RESOURCE);
 
   private static final Map<String, Long> ORG_UNIT_BY_REGION_CODE =
       Map.ofEntries(
@@ -267,7 +283,7 @@ public class ApplicationSubmissionImportService {
       return rejected(
           fileName,
           fileSize,
-          List.of("The LEXIS application submission file must be 20 MiB or smaller."),
+          List.of("The LEXIS application submission file must be 20 MB or smaller."),
           List.of(),
           null,
           normalizedUserReference);
@@ -340,28 +356,30 @@ public class ApplicationSubmissionImportService {
           normalizedUserReference);
     }
 
-    ApplicationDetailsRpcService.PackageValidityItem packageValidity =
-        applicationDetailsService.isPackageValid(submission.packageNumber());
-    if (packageValidity == null) {
-      return rejected(
-          fileName,
-          fileSize,
-          List.of("Package validation is unavailable for LEXIS application submission."),
-          warnings,
-          submissionSummary,
-          normalizedUserReference);
-    }
-    if (!packageValidity.valid()) {
-      return rejected(
-          fileName,
-          fileSize,
-          List.of(
-              packageValidity.message() == null
-                  ? "Package " + submission.packageNumber() + " already exists."
-                  : packageValidity.message()),
-          warnings,
-          submissionSummary,
-          normalizedUserReference);
+    if (submission.packageNumber() != null) {
+      ApplicationDetailsRpcService.PackageValidityItem packageValidity =
+          applicationDetailsService.isPackageValid(submission.packageNumber());
+      if (packageValidity == null) {
+        return rejected(
+            fileName,
+            fileSize,
+            List.of("Package validation is unavailable for LEXIS application submission."),
+            warnings,
+            submissionSummary,
+            normalizedUserReference);
+      }
+      if (!packageValidity.valid()) {
+        return rejected(
+            fileName,
+            fileSize,
+            List.of(
+                packageValidity.message() == null
+                    ? "Package " + submission.packageNumber() + " already exists."
+                    : packageValidity.message()),
+            warnings,
+            submissionSummary,
+            normalizedUserReference);
+      }
     }
 
     ScheduleResolution scheduleResolution = resolveExportSchedule(submission);
@@ -416,11 +434,15 @@ public class ApplicationSubmissionImportService {
         fileName,
         fileSize,
         VALIDATED,
-        "LEXIS application submission validated for package "
-            + submission.packageNumber()
-            + " with "
-            + submission.scaleLines().size()
-            + " scale rows.",
+        submission.packageNumber() == null
+            ? "LEXIS application submission validated without a package with "
+                + submission.scaleLines().size()
+                + " scale rows."
+            : "LEXIS application submission validated for package "
+                + submission.packageNumber()
+                + " with "
+                + submission.scaleLines().size()
+                + " scale rows.",
         null,
         submission.packageNumber(),
         submission.scaleLines().size(),
@@ -605,28 +627,30 @@ public class ApplicationSubmissionImportService {
           normalizedUserReference);
     }
 
-    ApplicationDetailsRpcService.PackageValidityItem packageValidity =
-        applicationDetailsService.isPackageValid(submission.packageNumber());
-    if (packageValidity == null) {
-      return rejected(
-          fileName,
-          fileSize,
-          List.of("Package validation is unavailable for LEXIS application submission."),
-          warnings,
-          submissionSummary,
-          normalizedUserReference);
-    }
-    if (!packageValidity.valid()) {
-      return rejected(
-          fileName,
-          fileSize,
-          List.of(
-              packageValidity.message() == null
-                  ? "Package " + submission.packageNumber() + " already exists."
-                  : packageValidity.message()),
-          warnings,
-          submissionSummary,
-          normalizedUserReference);
+    if (submission.packageNumber() != null) {
+      ApplicationDetailsRpcService.PackageValidityItem packageValidity =
+          applicationDetailsService.isPackageValid(submission.packageNumber());
+      if (packageValidity == null) {
+        return rejected(
+            fileName,
+            fileSize,
+            List.of("Package validation is unavailable for LEXIS application submission."),
+            warnings,
+            submissionSummary,
+            normalizedUserReference);
+      }
+      if (!packageValidity.valid()) {
+        return rejected(
+            fileName,
+            fileSize,
+            List.of(
+                packageValidity.message() == null
+                    ? "Package " + submission.packageNumber() + " already exists."
+                    : packageValidity.message()),
+            warnings,
+            submissionSummary,
+            normalizedUserReference);
+      }
     }
 
     ScheduleResolution scheduleResolution = resolveExportSchedule(submission);
@@ -647,6 +671,27 @@ public class ApplicationSubmissionImportService {
             importDate,
             scheduleResolution.exportScheduleId(),
             normalizedUserReference);
+    if (federalOnly) {
+      SubmissionImportValidationResult importValidation =
+          applicationDetailsService.validateApplicationSubmissionImport(
+              createRequest,
+              toPackageMutationRequest(submission, null, normalizedUserReference),
+              toScaleMutationRequests(submission, null));
+      if (importValidation != null) {
+        warnings = mergeWarnings(warnings, importValidation.warnings());
+        if (!importValidation.valid()) {
+          return rejected(
+              fileName,
+              fileSize,
+              resultErrors(
+                  importValidation.errors(),
+                  "The LEXIS application submission could not be validated."),
+              warnings,
+              submissionSummary,
+              normalizedUserReference);
+        }
+      }
+    }
     CreateApplicationResult applicationResult =
         federalOnly
             ? applicationDetailsService.addFederalImportedApplication(createRequest, userId)
@@ -663,19 +708,22 @@ public class ApplicationSubmissionImportService {
     }
 
     Long applicationNumber = applicationResult.applicationNumber();
-    PackagePersistenceResult packageResult =
-        applicationDetailsService.addPackage(
-            toPackageMutationRequest(submission, applicationNumber, normalizedUserReference),
-            userId);
-    if (!packageResult.valid()) {
-      markRollbackOnly();
-      return rejected(
-          fileName,
-          fileSize,
-          packagePersistenceErrors(applicationDetailsService, submission.packageNumber(), packageResult),
-          warnings,
-          submissionSummary,
-          normalizedUserReference);
+    if (submission.packageNumber() != null) {
+      PackagePersistenceResult packageResult =
+          applicationDetailsService.addPackage(
+              toPackageMutationRequest(submission, applicationNumber, normalizedUserReference),
+              userId);
+      if (!packageResult.valid()) {
+        markRollbackOnly();
+        return rejected(
+            fileName,
+            fileSize,
+            packagePersistenceErrors(
+                applicationDetailsService, submission.packageNumber(), packageResult),
+            warnings,
+            submissionSummary,
+            normalizedUserReference);
+      }
     }
 
     int importedScales = 0;
@@ -700,13 +748,19 @@ public class ApplicationSubmissionImportService {
         fileName,
         fileSize,
         ACCEPTED,
-        "LEXIS application submission created application "
-            + applicationNumber
-            + " with package "
-            + submission.packageNumber()
-            + " and "
-            + importedScales
-            + " scale rows.",
+        submission.packageNumber() == null
+            ? "LEXIS application submission created application "
+                + applicationNumber
+                + " without a package and "
+                + importedScales
+                + " scale rows."
+            : "LEXIS application submission created application "
+                + applicationNumber
+                + " with package "
+                + submission.packageNumber()
+                + " and "
+                + importedScales
+                + " scale rows.",
         applicationNumber,
         submission.packageNumber(),
         importedScales,
@@ -963,7 +1017,7 @@ public class ApplicationSubmissionImportService {
       throws Exception {
     if (remainingBytes < 0) {
       throw new ApplicationSubmissionImportException(
-          List.of("The expanded ZIP contents must be 20 MiB or smaller."));
+          List.of("The expanded ZIP contents must be 20 MB or smaller."));
     }
     byte[] buffer = new byte[8192];
     long total = 0L;
@@ -972,7 +1026,7 @@ public class ApplicationSubmissionImportService {
       total += read;
       if (total > remainingBytes) {
         throw new ApplicationSubmissionImportException(
-            List.of("The expanded ZIP contents must be 20 MiB or smaller."));
+            List.of("The expanded ZIP contents must be 20 MB or smaller."));
       }
     }
     return total;
@@ -982,7 +1036,7 @@ public class ApplicationSubmissionImportService {
       throws ApplicationSubmissionImportException {
     if (totalExpandedBytes > MAX_IMPORT_BYTES) {
       throw new ApplicationSubmissionImportException(
-          List.of("The expanded ZIP contents must be 20 MiB or smaller."));
+          List.of("The expanded ZIP contents must be 20 MB or smaller."));
     }
     if (file.getSize() > 0
         && totalExpandedBytes > 1024L * 1024L
@@ -1016,7 +1070,7 @@ public class ApplicationSubmissionImportService {
       totalBytes += bytesRead;
       if (totalBytes > MAX_IMPORT_BYTES) {
         throw new ApplicationSubmissionImportException(
-            List.of("The LEXIS application submission file must be 20 MiB or smaller."));
+            List.of("The LEXIS application submission file must be 20 MB or smaller."));
       }
       outputStream.write(buffer, 0, bytesRead);
     }
@@ -1093,6 +1147,9 @@ public class ApplicationSubmissionImportService {
             errors);
 
     String jurisdictionCode = upper(text(applicationDetail, "jurisdictionCode", "Jurisdiction code", errors));
+    if (FEDERAL_JURISDICTION.equals(jurisdictionCode)) {
+      validateLegacyLexisSchema(lexisSubmission, lexisSchemaFor(lexisSubmission), errors);
+    }
     FederalSubmissionMetadata federalMetadata =
         federalSubmissionMetadata(applicationDetail, jurisdictionCode, errors);
     Long federalApplicationNumber = federalMetadata.federalApplicationNumber();
@@ -1114,11 +1171,24 @@ public class ApplicationSubmissionImportService {
         upper(text(productDetail, "speciesEndUseSort", "Species/end-use sort", errors));
     String productLocation = text(productDetail, "productLocation", "Product location", errors);
     String ageClass = upper(text(productDetail, "ageClass", "Age class", errors));
+    ParsedProduct product =
+        parseProductDetail(productDetail, productTypeCode, jurisdictionCode, errors);
+    boolean federalStandingWithoutPackage =
+        FEDERAL_JURISDICTION.equals(jurisdictionCode)
+            && PRODUCT_TYPE_STANDING.equals(productTypeCode)
+            && product.packageNumber() == null;
     Double averageLength =
-        parsePositiveDouble(text(productDetail, "avgLength", "Average length", errors), "average length", errors);
+        parsePackageDimension(
+            text(productDetail, "avgLength", "Average length", errors),
+            "average length",
+            federalStandingWithoutPackage,
+            errors);
     Double averageDiameter =
-        parsePositiveDouble(
-            text(productDetail, "avgDiameter", "Average diameter", errors), "average diameter", errors);
+        parsePackageDimension(
+            text(productDetail, "avgDiameter", "Average diameter", errors),
+            "average diameter",
+            federalStandingWithoutPackage,
+            errors);
     ParsedParties parties =
         parseSubmissionParties(
             lexisSubmission,
@@ -1126,7 +1196,6 @@ public class ApplicationSubmissionImportService {
             applicantContact,
             applicantTypeCode,
             errors);
-    ParsedProduct product = parseProductDetail(productDetail, productTypeCode, errors);
     validateFederalApplicant(applicant, applicantDetails, applicantContact, jurisdictionCode, errors);
     validateFederalOwner(
         lexisSubmission, jurisdictionCode, applicantTypeCode, errors);
@@ -1149,14 +1218,15 @@ public class ApplicationSubmissionImportService {
     }
     if (exemptionReasonCode == null) {
       errors.add("Exemption reason is required.");
-    } else if (!EXEMPTION_REASON_SURPLUS.equals(exemptionReasonCode)) {
-      errors.add("Exemption reason code must be S for electronic LEXIS submissions.");
+    } else if (!LEGACY_EXEMPTION_REASON_CODES.contains(exemptionReasonCode)) {
+      errors.add("Exemption reason code must be E, S, or U.");
     }
     if (applicantTypeCode == null) {
       errors.add("Applicant type is required.");
     } else if (!APPLICANT_TYPE_OWNER.equals(applicantTypeCode)
+        && !APPLICANT_TYPE_MINISTERIAL.equals(applicantTypeCode)
         && !APPLICANT_TYPE_AGENT.equals(applicantTypeCode)) {
-      errors.add("Applicant type code must be O or A.");
+      errors.add("Applicant type code must be A, M, or O.");
     }
     if (productTypeCode == null) {
       errors.add("Product type is required.");
@@ -1204,7 +1274,9 @@ public class ApplicationSubmissionImportService {
         exemptionReasonCode,
         applicantTypeCode,
         productTypeCode,
-        product.packageNumber(),
+        FEDERAL_JURISDICTION.equals(jurisdictionCode)
+            ? upper(product.packageNumber())
+            : product.packageNumber(),
         productLocation,
         ageClass,
         averageLength,
@@ -1472,7 +1544,7 @@ public class ApplicationSubmissionImportService {
     root.setAttributeNS(
         XML_SCHEMA_INSTANCE_NAMESPACE,
         "xsi:schemaLocation",
-        LEXIS_NAMESPACE + " " + EXPECTED_LEXIS_SCHEMA_LOCATION);
+        LEXIS_NAMESPACE + " " + LEXIS_SCHEMA_LOCATION_V2);
     document.appendChild(root);
     return document;
   }
@@ -1939,12 +2011,24 @@ public class ApplicationSubmissionImportService {
           "ESF",
           errors);
     }
-    validateExpectedSchemaLocation(
-        schemaLocationsByNamespace,
-        LEXIS_NAMESPACE,
-        EXPECTED_LEXIS_SCHEMA_LOCATION,
-        "LEXIS",
-        errors);
+    validateSupportedLexisSchemaLocation(schemaLocationsByNamespace, errors);
+  }
+
+  private void validateSupportedLexisSchemaLocation(
+      Map<String, String> schemaLocationsByNamespace, List<String> errors) {
+    String actualSchemaLocation = schemaLocationsByNamespace.get(LEXIS_NAMESPACE);
+    if (actualSchemaLocation == null) {
+      errors.add("The XML schema location must include the LEXIS schema namespace.");
+      return;
+    }
+    if (!SUPPORTED_LEXIS_SCHEMA_LOCATIONS.contains(actualSchemaLocation)) {
+      errors.add(
+          "The XML schema location must use a supported LEXIS schema version "
+              + LEXIS_SCHEMA_LOCATION_V2
+              + " or "
+              + LEXIS_SCHEMA_LOCATION_V3
+              + ".");
+    }
   }
 
   private void validateExpectedSchemaLocation(
@@ -2028,6 +2112,86 @@ public class ApplicationSubmissionImportService {
     return "The submission is not a well-formed XML document. " + normalized;
   }
 
+  private static Schema loadLexisSchema(String resourceName) {
+    URL schemaResource = ApplicationSubmissionImportService.class.getResource(resourceName);
+    if (schemaResource == null) {
+      throw new IllegalStateException(
+          "Legacy LEXIS schema resource is missing: " + resourceName);
+    }
+    try {
+      SchemaFactory factory = SchemaFactory.newInstance(XMLConstants.W3C_XML_SCHEMA_NS_URI);
+      factory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
+      factory.setProperty(XMLConstants.ACCESS_EXTERNAL_DTD, "");
+      factory.setProperty(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "file,jar");
+      return factory.newSchema(schemaResource);
+    } catch (SAXException ex) {
+      throw new IllegalStateException("Legacy LEXIS schema could not be loaded.", ex);
+    }
+  }
+
+  private Schema lexisSchemaFor(Element lexisSubmission) {
+    Node current = lexisSubmission;
+    while (current instanceof Element element) {
+      String schemaLocation =
+          trimToNull(element.getAttributeNS(XML_SCHEMA_INSTANCE_NAMESPACE, "schemaLocation"));
+      if (schemaLocation != null) {
+        String[] tokens = schemaLocation.split("\\s+");
+        for (int index = 0; index + 1 < tokens.length; index += 2) {
+          if (LEXIS_NAMESPACE.equals(tokens[index])) {
+            return LEXIS_SCHEMA_LOCATION_V3.equals(tokens[index + 1])
+                ? LEXIS_SCHEMA_V3
+                : LEXIS_SCHEMA_V2;
+          }
+        }
+      }
+      current = current.getParentNode();
+    }
+    return LEXIS_SCHEMA_V2;
+  }
+
+  private void validateLegacyLexisSchema(
+      Element lexisSubmission, Schema lexisSchema, List<String> errors) {
+    List<String> schemaErrors = new ArrayList<>();
+    try {
+      var validator = lexisSchema.newValidator();
+      validator.setProperty(XMLConstants.ACCESS_EXTERNAL_DTD, "");
+      validator.setProperty(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "");
+      validator.setErrorHandler(
+          new ErrorHandler() {
+            @Override
+            public void warning(SAXParseException exception) {}
+
+            @Override
+            public void error(SAXParseException exception) {
+              schemaErrors.add(legacySchemaError(exception));
+            }
+
+            @Override
+            public void fatalError(SAXParseException exception) throws SAXException {
+              schemaErrors.add(legacySchemaError(exception));
+              throw exception;
+            }
+          });
+      validator.validate(new DOMSource(lexisSubmission));
+    } catch (SAXParseException ex) {
+      if (schemaErrors.isEmpty()) {
+        schemaErrors.add(legacySchemaError(ex));
+      }
+    } catch (SAXException | IOException ex) {
+      String message = trimToNull(ex.getMessage());
+      schemaErrors.add(
+          "Legacy LEXIS schema validation failed"
+              + (message == null ? "." : ": " + message));
+    }
+    schemaErrors.stream().distinct().forEach(errors::add);
+  }
+
+  private String legacySchemaError(SAXParseException exception) {
+    String message = trimToNull(exception.getMessage());
+    return "Legacy LEXIS schema validation failed"
+        + (message == null ? "." : ": " + message);
+  }
+
   private ParsedParties parseSubmissionParties(
       Element lexisSubmission,
       Element applicantDetails,
@@ -2109,7 +2273,10 @@ public class ApplicationSubmissionImportService {
   }
 
   private ParsedProduct parseProductDetail(
-      Element productDetail, String productTypeCode, List<String> errors) {
+      Element productDetail,
+      String productTypeCode,
+      String jurisdictionCode,
+      List<String> errors) {
     if (productDetail == null) {
       return new ParsedProduct(null, null, null, List.of());
     }
@@ -2149,13 +2316,31 @@ public class ApplicationSubmissionImportService {
       return parseHarvestedSummaryProduct(productDetail, errors);
     }
     if (hasHarvestedWithoutSummary) {
+      boolean federal = FEDERAL_JURISDICTION.equals(jurisdictionCode);
       return parseDeclaredVolumeProduct(
           productDetail,
           harvestedWithoutSummaryRows,
           "Harvested timber without summary",
+          !federal,
+          true,
+          federal
+              ? "Boom/package number must not be provided for federal harvested timber without summary of scale."
+              : null,
           errors);
     }
-    return parseDeclaredVolumeProduct(productDetail, standingTimberRows, "Standing timber", errors);
+    boolean federalStanding =
+        FEDERAL_JURISDICTION.equals(jurisdictionCode)
+            && PRODUCT_TYPE_STANDING.equals(productTypeCode);
+    return parseDeclaredVolumeProduct(
+        productDetail,
+        standingTimberRows,
+        "Standing timber",
+        !federalStanding,
+        !federalStanding,
+        federalStanding
+            ? "Boom/package number must not be provided for federal standing timber."
+            : null,
+        errors);
   }
 
   private ParsedProduct parseHarvestedSummaryProduct(
@@ -2178,20 +2363,28 @@ public class ApplicationSubmissionImportService {
       Element productDetail,
       List<Element> timberRows,
       String label,
+      boolean derivePackageFromTimberMark,
+      boolean requirePackage,
+      String providedPackageError,
       List<String> errors) {
     String packageNumber = packageNumber(productDetail, errors);
     List<String> timberMarks = parseTimberMarks(timberRows, label, errors);
-    if (packageNumber == null && !timberMarks.isEmpty()) {
+    if (derivePackageFromTimberMark && packageNumber == null && !timberMarks.isEmpty()) {
       packageNumber = timberMarks.get(0);
     }
-    validatePackageNumber(packageNumber, "Boom/package number", errors);
+    if (providedPackageError != null && packageNumber != null) {
+      errors.add(providedPackageError);
+    }
+    if (requirePackage || packageNumber != null) {
+      validatePackageNumber(packageNumber, "Boom/package number", errors);
+    }
     Double applicationVolume =
         parsePositiveDouble(
             text(productDetail, "exemptApplnVol", "Exemption application volume", errors),
             "application volume",
             errors);
     Double averageLogVolume =
-        parsePositiveDouble(
+        parseNonNegativeDouble(
             text(productDetail, "averageLogVolume", "Average log volume", errors),
             "average log volume",
             errors);
@@ -2349,6 +2542,9 @@ public class ApplicationSubmissionImportService {
 
   private PackageMutationRequest toPackageMutationRequest(
       ParsedSubmission submission, Long applicationNumber, String userReference) {
+    if (submission.packageNumber() == null) {
+      return null;
+    }
     return new PackageMutationRequest(
         submission.packageNumber(),
         null,
@@ -2593,6 +2789,17 @@ public class ApplicationSubmissionImportService {
       return null;
     }
     return parsed;
+  }
+
+  private Double parsePackageDimension(
+      String value, String label, boolean optional, List<String> errors) {
+    if (!optional) {
+      return parsePositiveDouble(value, label, errors);
+    }
+    if (value == null) {
+      return null;
+    }
+    return parseNonNegativeDouble(value, label, errors);
   }
 
   private Double parseNonNegativeDouble(String value, String label, List<String> errors) {

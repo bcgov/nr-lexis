@@ -1,4 +1,5 @@
 const SEARCH_TOTAL_CACHE_TTL_MS = 60_000
+const SEARCH_TOTAL_CACHE_MAX_ENTRIES = 200
 
 export type SearchTotalCacheEntry = {
   total: number
@@ -55,6 +56,21 @@ export const setCachedSearchTotal = (
   total: number,
   now = Date.now(),
 ): void => {
+  for (const [key, entry] of cache) {
+    if (entry.expiresAt <= now) {
+      cache.delete(key)
+    }
+  }
+
+  cache.delete(cacheKey)
+  while (cache.size >= SEARCH_TOTAL_CACHE_MAX_ENTRIES) {
+    const oldestKey = cache.keys().next().value
+    if (oldestKey === undefined) {
+      break
+    }
+    cache.delete(oldestKey)
+  }
+
   cache.set(cacheKey, {
     total,
     expiresAt: now + SEARCH_TOTAL_CACHE_TTL_MS,

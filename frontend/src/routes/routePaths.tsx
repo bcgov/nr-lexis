@@ -409,14 +409,10 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
     path: '/reports',
     id: 'Reports',
     requiredActions: [
-      '/applicationReport',
       '/offerReport',
-      '/teacReport',
-      '/exemptionReport',
       '/permitLedgerReport',
       '/transportReport',
       '/speciesGradeReport',
-      '/feeReport',
       '/tenureReport',
       'mofrListing',
     ],
@@ -431,14 +427,10 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
     path: '/reports/:reportId',
     id: 'Report Details',
     requiredActions: [
-      '/applicationReport',
       '/offerReport',
-      '/teacReport',
-      '/exemptionReport',
       '/permitLedgerReport',
       '/transportReport',
       '/speciesGradeReport',
-      '/feeReport',
       '/tenureReport',
       'mofrListing',
     ],
@@ -530,17 +522,19 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
     ),
     isNavigation: false,
   },
-  {
-    path: '/admin/schedules',
-    id: 'Export Schedule Administration',
-    requiredActions: ['/lexisPolicyAdmin'],
-    element: (
-      <Layout>
-        <AdminPoliciesPage area="schedule" />
-      </Layout>
-    ),
-    isNavigation: false,
-  },
+  // Export Schedule administration is disabled pending business approval. Restore this route
+  // together with its navigation item and backend mutation authorization.
+  // {
+  //   path: '/admin/schedules',
+  //   id: 'Export Schedule Administration',
+  //   requiredActions: ['/lexisPolicyAdmin'],
+  //   element: (
+  //     <Layout>
+  //       <AdminPoliciesPage area="schedule" />
+  //     </Layout>
+  //   ),
+  //   isNavigation: false,
+  // },
   {
     path: '/unauthorized',
     id: 'Forbidden',

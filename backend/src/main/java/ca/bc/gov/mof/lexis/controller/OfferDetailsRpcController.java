@@ -7,6 +7,7 @@ import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parseDate;
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parsePositiveLong;
 import static ca.bc.gov.mof.lexis.controller.ScopedClientRequestSupport.currentForestClientNumber;
 import static ca.bc.gov.mof.lexis.controller.ScopedClientRequestSupport.matchesScopedClient;
+import static ca.bc.gov.mof.lexis.util.LegacyOfferVolume.formatForDisplay;
 import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.fingerprint;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
@@ -28,7 +29,6 @@ import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService;
 import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import jakarta.servlet.http.HttpServletRequest;
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -330,6 +330,15 @@ public class OfferDetailsRpcController {
       return ResponseEntity.noContent().build();
     }
 
+    List<String> dateErrors = validateOfferDateParameters(parameters);
+    if (!dateErrors.isEmpty()) {
+      return invalidPersistence(
+          parsePositiveLong(first(parameters, "applicationNumber")),
+          parsePositiveLong(first(parameters, "exportPurchaseOfferNumber", "offerNumber")),
+          false,
+          dateErrors);
+    }
+
     String userId = userId(authentication);
     PurchaseOfferService.CreateOfferRequest request = toCreateOfferRequest(parameters);
     String scopedClientNumber = currentForestClientNumber(sessionService, authentication);
@@ -468,6 +477,14 @@ public class OfferDetailsRpcController {
     if (currentOffer.isEmpty()
         || !expectedApplicationNumber.equals(currentOffer.get().applicationNumber())) {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+    List<String> dateErrors = validateOfferDateParameters(parameters);
+    if (!dateErrors.isEmpty()) {
+      return invalidPersistence(
+          currentOffer.get().applicationNumber(),
+          currentOffer.get().offerNumber(),
+          true,
+          dateErrors);
     }
     PurchaseOfferService.UpdateOfferRequest request =
         toUpdateOfferRequest(parameters, currentOffer.get());
@@ -725,6 +742,24 @@ public class OfferDetailsRpcController {
             update,
             List.copyOf(errors),
             List.of()));
+  }
+
+  private List<String> validateOfferDateParameters(MultiValueMap<String, String> parameters) {
+    List<String> errors = new ArrayList<>();
+    validateOfferDate(first(parameters, "purchaseOfferDate"), "Offer received date", errors);
+    validateOfferDate(
+        first(parameters, "offerWithdrawalDate", "offerEndDate"),
+        "Offer withdrawal date",
+        errors);
+    validateOfferDate(first(parameters, "teacReviewDate"), "TEAC review date", errors);
+    return List.copyOf(errors);
+  }
+
+  private void validateOfferDate(String value, String label, List<String> errors) {
+    String normalized = trimToNull(value);
+    if (normalized != null && parseDate(normalized) == null) {
+      errors.add(label + " must be a valid date in YYYY-MM-DD format.");
+    }
   }
 
   private static void auditOfferFailure(
@@ -1047,7 +1082,7 @@ public class OfferDetailsRpcController {
   }
 
   private String formatVolume(double value) {
-    return BigDecimal.valueOf(value).setScale(1, RoundingMode.HALF_UP).toPlainString();
+    return formatForDisplay(value);
   }
 
   private String resolveApplicationSpeciesGradeCode(Long applicationNumber) {

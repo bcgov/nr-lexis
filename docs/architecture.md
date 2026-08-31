@@ -60,9 +60,9 @@ should prevent incompatible identity/role assignments at provisioning time; the 
 is the authoritative runtime control.
 
 NEXCOL does not use an interactive FAM role. It obtains a Keycloak service-client token with the
-`lexis:federal-submission:submit` scope and reaches only the federal validation and submission
-endpoints exposed by the API gateway. The backend independently validates the forwarded token and
-scope.
+`lexis:federal-submission:submit` scope and reaches only the federal field-prevalidation, XML
+validation, and submission endpoints exposed by the API gateway. The backend independently
+validates the forwarded token and scope.
 
 ## Data, files, reports, and integrations
 

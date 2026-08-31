@@ -1,3 +1,5 @@
+// INTENTIONAL_LEGACY_DIVERGENCE(STRICT_DATE_INPUT_VALIDATION): Reject impossible calendar dates
+// instead of allowing a date widget or lenient legacy parser to rewrite the entered value.
 export const isValidIsoDate = (value: string): boolean => {
   if (!value.trim()) return true
   const match = /^(\d{4})-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/.exec(value)
@@ -16,15 +18,16 @@ export const isValidIsoDate = (value: string): boolean => {
 export const hasInvalidIsoDateValue = (...values: string[]): boolean =>
   values.some((value) => !isValidIsoDate(value))
 
-export const isPositiveNumeric = (value: string): boolean => {
+const isPositiveNumeric = (value: string): boolean => {
   if (!value.trim()) return true
   const parsed = Number(value)
   return Number.isFinite(parsed) && parsed > 0
 }
 
 const NON_NEGATIVE_DECIMAL_PATTERN = /^\d+(\.\d+)?$/
+const PROVINCIAL_APPLICATION_NUMBER_PATTERN = /^\d{1,10}$/
 
-export const normalizeText = (value: string): string => value.trim()
+const normalizeText = (value: string): string => value.trim()
 
 export type FieldErrors<TField extends string> = Partial<Record<TField, string>>
 
@@ -58,6 +61,28 @@ export const firstValidationError = (
 
 export const requiredFieldError = (value: string, label = 'This field'): string | null => {
   return normalizeText(value) ? null : `${label} is required.`
+}
+
+export const normalizeProvincialApplicationNumber = (value: string): string => {
+  const normalized = normalizeText(value)
+  return /^\d+$/.test(normalized) ? normalized.replace(/^0+(?=\d)/, '') : normalized
+}
+
+export const provincialApplicationNumberFieldError = (
+  value: string,
+  label = 'Application number',
+  required = false,
+): string | null => {
+  const normalized = normalizeText(value)
+  if (!normalized) {
+    return required ? `${label} is required.` : null
+  }
+  if (!/^\d+$/.test(normalized) || /^0+$/.test(normalized)) {
+    return `${label} must be a positive whole number.`
+  }
+  return PROVINCIAL_APPLICATION_NUMBER_PATTERN.test(normalized)
+    ? null
+    : `${label} must be 10 digits or fewer.`
 }
 
 export const maxLengthFieldError = (
@@ -96,6 +121,46 @@ export const maxNumericValueFieldError = (
   return Number.isFinite(parsed) && parsed <= maxValue
     ? null
     : `${label} must be ${maxValue} or less.`
+}
+
+const roundedScaledNumericValue = (value: string, decimalPlaces: number): bigint | null => {
+  const match = /^(\d+)(?:\.(\d+))?$/.exec(value.trim())
+  if (!match) return null
+
+  const factor = 10n ** BigInt(decimalPlaces)
+  const fraction = (match[2] ?? '').padEnd(decimalPlaces + 1, '0')
+  let roundedValue = BigInt(match[1]) * factor
+  roundedValue += BigInt(fraction.slice(0, decimalPlaces) || '0')
+  if (fraction[decimalPlaces] >= '5') roundedValue += 1n
+  return roundedValue
+}
+
+export const formatRoundedNumericFieldValue = (
+  value: string,
+  decimalPlaces: number,
+): string | null => {
+  const roundedValue = roundedScaledNumericValue(value, decimalPlaces)
+  if (roundedValue === null) return null
+
+  const factor = 10n ** BigInt(decimalPlaces)
+  const whole = roundedValue / factor
+  if (decimalPlaces === 0) return whole.toString()
+
+  const fraction = (roundedValue % factor).toString().padStart(decimalPlaces, '0')
+  return `${whole}.${fraction}`
+}
+
+export const roundedNumericMaximumFieldError = (
+  value: string,
+  maxValue: number,
+  decimalPlaces: number,
+  label = 'Value',
+): string | null => {
+  const roundedValue = roundedScaledNumericValue(value, decimalPlaces)
+  if (roundedValue === null) return null
+
+  const maximumScaled = BigInt(maxValue.toFixed(decimalPlaces).replace('.', ''))
+  return roundedValue <= maximumScaled ? null : `${label} must round to ${maxValue} or less.`
 }
 
 export const atMostOneDecimalFieldError = (value: string, label = 'Value'): string | null => {

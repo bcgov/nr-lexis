@@ -66,8 +66,10 @@ import { usePersistedSearchParams } from '@/pages/shared/usePersistedSearchParam
 import { useDefaultRegionPreference } from '@/pages/shared/useDefaultRegionPreference'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import {
+  formatDeferredSearchTotalLabel,
   loadSearchWithDeferredTotal,
   prefetchAdjacentSearchPages,
+  type DeferredSearchTotalStatus,
 } from '@/pages/shared/deferred-search-total'
 import {
   countProvincialOffers,
@@ -141,7 +143,11 @@ const ProvincialOffersPage = () => {
   const { defaultRegion: defaultZone, preferenceLoading } = useDefaultRegionPreference(
     hasProvincialStaffRole(capabilities.roles),
   )
-  const [results, setResults] = useState<ProvincialOfferSearchResponse>(EMPTY_RESULTS)
+  const [searchResult, setSearchResult] = useState<{
+    results: ProvincialOfferSearchResponse
+    totalStatus: DeferredSearchTotalStatus
+  }>({ results: EMPTY_RESULTS, totalStatus: 'exact' })
+  const { results, totalStatus } = searchResult
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
   const [defaultListingToDate, setDefaultListingToDate] = useState('')
@@ -236,9 +242,12 @@ const ProvincialOffersPage = () => {
   ])
 
   const beginSearchRequest = useLatestRequestGuard()
-  const commitResults = useCallback((nextResults: ProvincialOfferSearchResponse) => {
-    setResults(nextResults)
-  }, [])
+  const commitResults = useCallback(
+    (nextResults: ProvincialOfferSearchResponse, nextTotalStatus: DeferredSearchTotalStatus) => {
+      setSearchResult({ results: nextResults, totalStatus: nextTotalStatus })
+    },
+    [],
+  )
 
   const runSearch = useCallback(
     async (request: ProvincialOfferSearchRequest, options: { force?: boolean } = {}) => {
@@ -265,7 +274,7 @@ const ProvincialOffersPage = () => {
             search: searchProvincialOffers,
             onError: console.error,
           })
-          setResults(cachedResults)
+          commitResults(cachedResults, 'exact')
           setLoading(false)
           setErrorMessage('')
           return
@@ -308,24 +317,39 @@ const ProvincialOffersPage = () => {
           }
           queueMicrotask(() => {
             if (isLatestRequest()) {
-              commitResults(response)
+              commitResults(response, totalIsExact ? 'exact' : 'pending')
             }
           })
         }
-        const { response, totalIsExact } = await loadSearchWithDeferredTotal({
+        const { response, totalIsExact, deferredResponse } = await loadSearchWithDeferredTotal({
           request,
           cachedTotal,
           search: searchProvincialOffers,
           count: countProvincialOffers,
+          deferCount: true,
         })
         if (isLatestRequest()) {
           commitSearchResponse(response, totalIsExact)
+        }
+        if (deferredResponse) {
+          void deferredResponse
+            .then((exactResponse) => {
+              if (isLatestRequest()) {
+                commitSearchResponse(exactResponse, true)
+              }
+            })
+            .catch((error) => {
+              console.error(error)
+              if (isLatestRequest()) {
+                commitResults(response, 'unavailable')
+              }
+            })
         }
       } catch (error) {
         if (isLatestRequest()) {
           console.error(error)
           setErrorMessage('Unable to retrieve offer search results.')
-          setResults(EMPTY_RESULTS)
+          commitResults(EMPTY_RESULTS, 'exact')
         }
       } finally {
         if (isLatestRequest()) {
@@ -482,15 +506,8 @@ const ProvincialOffersPage = () => {
       region: defaultZoneRegionIds,
     }
     setFilters(defaultFilters)
-    setSearchParams(
-      buildSearchParams(
-        defaultFilters,
-        DEFAULT_SORT_FIELD,
-        DEFAULT_SORT_DIRECTION,
-        DEFAULT_SEARCH_PAGE,
-        DEFAULT_SEARCH_PAGE_SIZE,
-      ),
-    )
+    // INTENTIONAL_LEGACY_DIVERGENCE(CLEAR_ALL_RESETS_SEARCH)
+    setSearchParams(new URLSearchParams())
   }
 
   const onHeaderClick = (column: ProvincialOfferSearchSortField) => {
@@ -542,6 +559,20 @@ const ProvincialOffersPage = () => {
                   value={filters.clientNumber}
                   onChange={(event) => updateFilter('clientNumber', event.target.value)}
                 />
+                <RegionMultiSelect
+                  id="region"
+                  titleText="Region"
+                  items={regionOptions}
+                  placeholder="Select region(s)"
+                  selectedItems={selectedRegions}
+                  disabled={!isOptionsLoaded || offerOptionsUnavailable}
+                  onChange={(nextSelected) => {
+                    updateFilter(
+                      'region',
+                      nextSelected.map((item) => item.id),
+                    )
+                  }}
+                />
                 <IsoDatePicker
                   id="listingFromDate"
                   labelText="Listing from date"
@@ -557,20 +588,6 @@ const ProvincialOffersPage = () => {
                   invalid={!isValidIsoDate(filters.listingToDate)}
                   invalidText="Date must be YYYY-MM-DD"
                   onChange={(value) => updateFilter('listingToDate', value)}
-                />
-                <RegionMultiSelect
-                  id="region"
-                  titleText="Region"
-                  items={regionOptions}
-                  placeholder="Select region(s)"
-                  selectedItems={selectedRegions}
-                  disabled={!isOptionsLoaded || offerOptionsUnavailable}
-                  onChange={(nextSelected) => {
-                    updateFilter(
-                      'region',
-                      nextSelected.map((item) => item.id),
-                    )
-                  }}
                 />
                 <IsoDatePicker
                   id="withdrawalFromDate"
@@ -625,6 +642,11 @@ const ProvincialOffersPage = () => {
                 ? undefined
                 : results.page.totalElements
             }
+            totalItemsLabel={formatDeferredSearchTotalLabel(
+              results.page.totalElements,
+              totalStatus,
+              results.page.number * results.page.size + results.content.length,
+            )}
             actions={
               canCreateOffer ? (
                 <Button
@@ -706,6 +728,8 @@ const ProvincialOffersPage = () => {
                 pageSize={results.page.size}
                 pageSizes={[...SEARCH_PAGE_SIZE_OPTIONS]}
                 totalItems={results.page.totalElements}
+                pagesUnknown={totalStatus !== 'exact'}
+                isLastPage={totalStatus !== 'exact' && results.content.length < results.page.size}
                 onChange={({ page, pageSize: nextPageSize }) => {
                   setSearchParams(
                     buildSearchParams(appliedFilters, sortField, sortDirection, page, nextPageSize),

@@ -200,6 +200,10 @@ describe('Provincial exemption edit context', () => {
     const summaryCard = (
       await screen.findByRole('heading', { name: 'Exemption summary', level: 2 })
     ).closest('.cds--tile')
+    expect(screen.getByRole('tab', { name: 'Exemption details' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
     expect(summaryCard).toBeTruthy()
     expect(within(summaryCard as HTMLElement).queryByText('Status')).not.toBeInTheDocument()
     expect(within(summaryCard as HTMLElement).getByText('Author')).toBeInTheDocument()
@@ -310,6 +314,73 @@ describe('Provincial exemption edit context', () => {
         }),
       ),
     )
+  })
+
+  it('rejects impossible dates instead of silently preserving stored values', async () => {
+    vi.mocked(fetchProvincialExemptionDetail).mockResolvedValue({
+      ...exemptionDetail,
+      exemptionStatusCode: 'NEW',
+      exemptionStatusDescription: 'New',
+    })
+    vi.mocked(fetchExemptionEditContext).mockResolvedValue({
+      rateOverrideEnabled: false,
+      fixedFeeRate: '',
+      regionNumbers: ['1903', '1904'],
+      locked: false,
+      lockMessage: '',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/BOIC-205']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit exemption' }))
+    fireEvent.change(screen.getByLabelText('Approval date'), {
+      target: { value: '2026-02-31' },
+    })
+
+    expect(screen.getByRole('button', { name: 'Save exemption' })).toBeDisabled()
+    expect(screen.getAllByText('Approval date must be YYYY-MM-DD.').length).toBeGreaterThan(0)
+    expect(vi.mocked(updateExemption)).not.toHaveBeenCalled()
+  })
+
+  it('rejects exemption conditions that Oracle cannot store', async () => {
+    vi.mocked(fetchExemptionEditContext).mockResolvedValue({
+      rateOverrideEnabled: false,
+      fixedFeeRate: '',
+      regionNumbers: ['1903', '1904'],
+      locked: false,
+      lockMessage: '',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/BOIC-205']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit exemption' }))
+    fireEvent.change(screen.getByLabelText('Conditions'), { target: { value: 'Résumé' } })
+    await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
+
+    expect(
+      await screen.findByText(
+        'Other conditions contain unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
+      ),
+    ).toBeInTheDocument()
+    expect(vi.mocked(updateExemption)).not.toHaveBeenCalled()
   })
 
   it('accepts Oracle approved-volume precision when updating an exemption', async () => {
@@ -679,7 +750,7 @@ describe('Provincial exemption edit context', () => {
     ).not.toBeInTheDocument()
   })
 
-  it('returns to Summary when editing starts and keeps related permits read-only', async () => {
+  it('returns to Exemption details when editing starts and keeps related permits read-only', async () => {
     vi.mocked(fetchExemptionEditContext).mockResolvedValue({
       rateOverrideEnabled: false,
       fixedFeeRate: '',
@@ -702,13 +773,16 @@ describe('Provincial exemption edit context', () => {
     await userEvent.click(await screen.findByRole('tab', { name: 'Permits' }))
     await userEvent.click(screen.getByRole('button', { name: 'Edit exemption' }))
 
-    expect(screen.getByRole('tab', { name: 'Summary' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tab', { name: 'Exemption details' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
     expect(screen.getByRole('heading', { name: 'Edit exemption', level: 2 })).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('tab', { name: 'Permits' }))
     expect(
       screen.getByText(
-        'Permit records are read-only. Edit exemption details on the Summary or Fees tab.',
+        'Permit records are read-only. Use the Exemption details or Fees tab to edit exemption values.',
       ),
     ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Save exemption' })).toBeInTheDocument()
@@ -749,7 +823,7 @@ describe('Provincial exemption edit context', () => {
     await userEvent.click(screen.getByRole('tab', { name: 'Applications' }))
     expect(screen.queryByLabelText('Application number')).not.toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('tab', { name: 'Summary' }))
+    await userEvent.click(screen.getByRole('tab', { name: 'Exemption details' }))
     await userEvent.click(screen.getByRole('button', { name: 'Cancel edit' }))
     await userEvent.click(screen.getByRole('tab', { name: 'Applications' }))
     const applicationNumber = await screen.findByLabelText('Application number')

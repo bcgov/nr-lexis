@@ -103,7 +103,10 @@ import {
 import DetailDocumentUploadPanel from '../../components/uploads/DetailDocumentUploadPanel'
 import IsoDatePicker from '../../components/IsoDatePicker'
 import SearchableSelect from '../../components/SearchableSelect'
-import { calculateApplicationTermDays } from '@/pages/shared/application-term-utils'
+import {
+  calculateApplicationTermDays,
+  nonNegativeWholeNumberFieldError,
+} from '@/pages/shared/application-term-utils'
 import {
   averageLogVolumeFieldError,
   clientLocationLabel,
@@ -121,6 +124,7 @@ import {
   atMostTwoDecimalFieldError,
   firstValidationError,
   isoDateFieldError,
+  maxLengthFieldError,
   maxNumericValueFieldError,
   positiveNumericFieldError,
   requiredFieldError,
@@ -353,6 +357,38 @@ type ApplicationSummaryFormState = {
 
 type ApplicationSummaryField = keyof ApplicationSummaryFormState & string
 type SummarySaveSource = 'summary' | 'owner' | 'agent'
+
+const MAX_APPLICATION_TERM_DAYS = 99_999
+const MAX_APPLICATION_TERM_MONTHS = 999
+const MAX_APPLICATION_TERM_YEARS = 99
+const APPLICATION_CONTACT_NAME_MAX_LENGTH = 120
+const APPLICATION_PRODUCT_LOCATION_MAX_LENGTH = 250
+const APPLICATION_CLIENT_NUMBER_PATTERN = /^\d{1,8}$/
+const ASCII_PATTERN = /^[\u0000-\u007f]*$/
+
+const applicationClientNumberFieldError = (value: string, label: string): string | undefined =>
+  firstValidationError(
+    () => requiredFieldError(value, label),
+    () =>
+      APPLICATION_CLIENT_NUMBER_PATTERN.test(value.trim())
+        ? null
+        : `${label} must be 1 to 8 digits.`,
+  )
+
+const applicationTextStorageFieldError = (
+  value: string,
+  maximumLength: number,
+  label: string,
+  required = false,
+): string | undefined =>
+  firstValidationError(
+    () => (required ? requiredFieldError(value, label) : null),
+    () =>
+      ASCII_PATTERN.test(value.trim())
+        ? null
+        : `${label} contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.`,
+    () => maxLengthFieldError(value, maximumLength, label),
+  )
 
 const toSummaryFormState = (detail: ProvincialApplicationDetail): ApplicationSummaryFormState => ({
   applicationDate: detail.applicationDate ?? '',
@@ -1164,6 +1200,13 @@ const ProvincialApplicationDetailsPage = () => {
   const hasSelectableAgentClientLocations = agentClientLocations.some(isSelectableClientLocation)
   const hasSelectableOwnerClientContacts = ownerClientContacts.some(isSelectableClientContact)
   const hasSelectableAgentClientContacts = agentClientContacts.some(isSelectableClientContact)
+  const isSummaryClientLookupPending =
+    isLoadingOwnerClientLocations ||
+    isLoadingAgentClientLocations ||
+    isLoadingOwnerClientContacts ||
+    isLoadingAgentClientContacts ||
+    isLoadingOwnerClientData ||
+    isLoadingAgentClientData
   const ownerClientLocationPlaceholder = !summaryOwnerClientNumber
     ? 'Enter owner client number first'
     : isLoadingOwnerClientLocations
@@ -1341,18 +1384,24 @@ const ProvincialApplicationDetailsPage = () => {
     }
 
     return {
-      ownerClientNumber:
-        requiredFieldError(summaryForm.ownerClientNumber, 'Owner client number') ?? undefined,
+      ownerClientNumber: applicationClientNumberFieldError(
+        summaryForm.ownerClientNumber,
+        'Owner client number',
+      ),
       ownerClientLocationCode:
         requiredMaxLengthFieldError(
           summaryForm.ownerClientLocationCode,
           2,
           'Owner client location code',
         ) ?? undefined,
-      ownerContactName:
-        requiredFieldError(summaryForm.ownerContactName, 'Owner contact name') ?? undefined,
+      ownerContactName: applicationTextStorageFieldError(
+        summaryForm.ownerContactName,
+        APPLICATION_CONTACT_NAME_MAX_LENGTH,
+        'Owner contact name',
+        true,
+      ),
       agentClientNumber: isAgentApplicant(summaryForm.applicantTypeCode)
-        ? (requiredFieldError(summaryForm.agentClientNumber, 'Agent client number') ?? undefined)
+        ? applicationClientNumberFieldError(summaryForm.agentClientNumber, 'Agent client number')
         : undefined,
       agentClientLocationCode: isAgentApplicant(summaryForm.applicantTypeCode)
         ? (requiredMaxLengthFieldError(
@@ -1362,7 +1411,12 @@ const ProvincialApplicationDetailsPage = () => {
           ) ?? undefined)
         : undefined,
       agentContactName: isAgentApplicant(summaryForm.applicantTypeCode)
-        ? (requiredFieldError(summaryForm.agentContactName, 'Agent contact name') ?? undefined)
+        ? applicationTextStorageFieldError(
+            summaryForm.agentContactName,
+            APPLICATION_CONTACT_NAME_MAX_LENGTH,
+            'Agent contact name',
+            true,
+          )
         : undefined,
       applicantTypeCode: firstValidationError(
         () => requiredFieldError(summaryForm.applicantTypeCode, 'Applicant type'),
@@ -1419,17 +1473,38 @@ const ProvincialApplicationDetailsPage = () => {
       ),
       termDays: firstValidationError(
         () => requiredFieldError(calculatedSummaryTermDays, 'Application term'),
+        () => nonNegativeWholeNumberFieldError(summaryForm.termDays, 'Application term days'),
         () =>
-          /^\d*$/.test(summaryForm.termDays.trim())
-            ? null
-            : 'Application term days must be zero or a positive whole number.',
+          maxNumericValueFieldError(
+            summaryForm.termDays,
+            MAX_APPLICATION_TERM_DAYS,
+            'Application term days',
+          ),
+        () =>
+          maxNumericValueFieldError(
+            calculatedSummaryTermDays,
+            MAX_APPLICATION_TERM_DAYS,
+            'Application term',
+          ),
       ),
-      termMonths: /^\d*$/.test(summaryForm.termMonths.trim())
-        ? undefined
-        : 'Application term months must be zero or a positive whole number.',
-      termYears: /^\d*$/.test(summaryForm.termYears.trim())
-        ? undefined
-        : 'Application term years must be zero or a positive whole number.',
+      termMonths: firstValidationError(
+        () => nonNegativeWholeNumberFieldError(summaryForm.termMonths, 'Application term months'),
+        () =>
+          maxNumericValueFieldError(
+            summaryForm.termMonths,
+            MAX_APPLICATION_TERM_MONTHS,
+            'Application term months',
+          ),
+      ),
+      termYears: firstValidationError(
+        () => nonNegativeWholeNumberFieldError(summaryForm.termYears, 'Application term years'),
+        () =>
+          maxNumericValueFieldError(
+            summaryForm.termYears,
+            MAX_APPLICATION_TERM_YEARS,
+            'Application term years',
+          ),
+      ),
       receivedDate: firstValidationError(
         () => requiredFieldError(summaryForm.receivedDate, 'Received date'),
         () => isoDateFieldError(summaryForm.receivedDate),
@@ -1444,7 +1519,12 @@ const ProvincialApplicationDetailsPage = () => {
           ? undefined
           : 'Select a valid listing date.',
       productLocation: productTypeRequiresLogDetails(summaryForm.productTypeCode)
-        ? (requiredFieldError(summaryForm.productLocation, 'Location of logs') ?? undefined)
+        ? applicationTextStorageFieldError(
+            summaryForm.productLocation,
+            APPLICATION_PRODUCT_LOCATION_MAX_LENGTH,
+            'Location of logs',
+            true,
+          )
         : undefined,
       applicationVolume: firstValidationError(
         () => requiredFieldError(summaryForm.applicationVolume, 'Application volume'),
@@ -1524,9 +1604,30 @@ const ProvincialApplicationDetailsPage = () => {
       { applicationNumber: applicationNumber ?? '' },
     )
       .then((clientData) => {
-        if (isActive) {
-          setOwnerClientData(clientData)
+        if (!isActive) {
+          return
         }
+
+        setOwnerClientData(clientData)
+        if (!clientData || (!isEditingOwnerDetails && !isEditingSummary)) {
+          return
+        }
+
+        setSummaryForm((current) => {
+          if (
+            !current ||
+            current.ownerClientNumber.trim() !== summaryOwnerClientNumberForLookup ||
+            current.ownerClientLocationCode.trim() !== summaryOwnerClientLocationCode
+          ) {
+            return current
+          }
+
+          const confirmedOwnerClientNumber = clientData.clientNumber.trim()
+          return confirmedOwnerClientNumber &&
+            current.ownerClientNumber !== confirmedOwnerClientNumber
+            ? { ...current, ownerClientNumber: confirmedOwnerClientNumber }
+            : current
+        })
       })
       .finally(() => {
         if (isActive) {
@@ -1540,6 +1641,8 @@ const ProvincialApplicationDetailsPage = () => {
   }, [
     applicationNumber,
     hasSummaryForm,
+    isEditingOwnerDetails,
+    isEditingSummary,
     summaryOwnerClientLocationCode,
     summaryOwnerClientNumberForLookup,
   ])
@@ -1572,9 +1675,30 @@ const ProvincialApplicationDetailsPage = () => {
       { applicationNumber: applicationNumber ?? '' },
     )
       .then((clientData) => {
-        if (isActive) {
-          setAgentClientData(clientData)
+        if (!isActive) {
+          return
         }
+
+        setAgentClientData(clientData)
+        if (!clientData || (!isEditingAgentDetails && !isEditingSummary)) {
+          return
+        }
+
+        setSummaryForm((current) => {
+          if (
+            !current ||
+            current.agentClientNumber.trim() !== summaryAgentClientNumberForLookup ||
+            current.agentClientLocationCode.trim() !== summaryAgentClientLocationCode
+          ) {
+            return current
+          }
+
+          const confirmedAgentClientNumber = clientData.clientNumber.trim()
+          return confirmedAgentClientNumber &&
+            current.agentClientNumber !== confirmedAgentClientNumber
+            ? { ...current, agentClientNumber: confirmedAgentClientNumber }
+            : current
+        })
       })
       .finally(() => {
         if (isActive) {
@@ -1588,6 +1712,8 @@ const ProvincialApplicationDetailsPage = () => {
   }, [
     applicationNumber,
     hasSummaryForm,
+    isEditingAgentDetails,
+    isEditingSummary,
     summaryAgentClientLocationCode,
     summaryAgentClientNumberForLookup,
   ])
@@ -2451,7 +2577,8 @@ const ProvincialApplicationDetailsPage = () => {
         !summaryForm ||
         isSavingSummary ||
         summaryOptionsAvailability !== 'available' ||
-        requiredSummaryOptionsMissing
+        requiredSummaryOptionsMissing ||
+        isSummaryClientLookupPending
       ) {
         return false
       }
@@ -2465,17 +2592,59 @@ const ProvincialApplicationDetailsPage = () => {
       setActionErrorMessage('')
       setActionInfoMessage('')
       setActionWarningMessage('')
-      if (hasSummaryValidationError) {
-        setShowSummaryValidationErrors(true)
-        setActionErrorMessage(
-          Object.values(summaryFieldErrors).find((error): error is string => !!error) ??
-            'Please fix validation errors before saving the application summary.',
-        )
-        return false
-      }
-
       setIsSavingSummary(true)
       try {
+        let summaryRequestForm = normalizeSummaryAgentFields(summaryForm)
+        const confirmClientNumber = async (
+          clientNumber: string,
+          clientLocationCode: string,
+        ): Promise<string> => {
+          const normalizedClientNumber = clientNumber.trim()
+          if (!/^\d{1,7}$/.test(normalizedClientNumber) || !clientLocationCode.trim()) {
+            return normalizedClientNumber
+          }
+
+          const clientData = await fetchApplicationClientData(
+            normalizedClientNumber,
+            clientLocationCode,
+            { applicationNumber },
+          )
+          return clientData?.clientNumber.trim() || normalizedClientNumber
+        }
+        const originalOwnerClientNumber = summaryRequestForm.ownerClientNumber
+        const originalOwnerClientLocationCode = summaryRequestForm.ownerClientLocationCode
+        const originalAgentClientNumber = summaryRequestForm.agentClientNumber
+        const originalAgentClientLocationCode = summaryRequestForm.agentClientLocationCode
+        const [ownerClientNumber, agentClientNumber] = await Promise.all([
+          confirmClientNumber(originalOwnerClientNumber, originalOwnerClientLocationCode),
+          isAgentApplicant(summaryRequestForm.applicantTypeCode)
+            ? confirmClientNumber(originalAgentClientNumber, originalAgentClientLocationCode)
+            : Promise.resolve(''),
+        ])
+        summaryRequestForm = { ...summaryRequestForm, ownerClientNumber, agentClientNumber }
+        setSummaryForm((current) => {
+          if (
+            !current ||
+            current.ownerClientNumber !== originalOwnerClientNumber ||
+            current.ownerClientLocationCode !== originalOwnerClientLocationCode ||
+            current.agentClientNumber !== originalAgentClientNumber ||
+            current.agentClientLocationCode !== originalAgentClientLocationCode
+          ) {
+            return current
+          }
+
+          return { ...current, ownerClientNumber, agentClientNumber }
+        })
+
+        if (hasSummaryValidationError) {
+          setShowSummaryValidationErrors(true)
+          setActionErrorMessage(
+            Object.values(summaryFieldErrors).find((error): error is string => !!error) ??
+              'Please fix validation errors before saving the application summary.',
+          )
+          return false
+        }
+
         if (!summaryVolumeWarningAccepted) {
           const volumeUsage = await checkApplicationVolumeUsage(String(detail.applicationNumber))
           if (!volumeUsage.volumeUsed) {
@@ -2487,7 +2656,9 @@ const ProvincialApplicationDetailsPage = () => {
           }
         }
 
-        const summaryRequestForm = normalizeSummaryAgentFields(summaryForm)
+        // INTENTIONAL_LEGACY_DIVERGENCE(BCEID_APPLICATION_EDIT_CONTRACT):
+        // Save only the application fields rendered for every authorized editor; do not make
+        // BCeID edits depend on staff-only review status or remark controls.
         const result = await updateApplicationSummary({
           applicationNumber: String(detail.applicationNumber),
           applicationDate: summaryRequestForm.applicationDate,
@@ -2560,6 +2731,7 @@ const ProvincialApplicationDetailsPage = () => {
       editingRemarkId,
       hasSummaryValidationError,
       isSavingSummary,
+      isSummaryClientLookupPending,
       loadApplicationDetail,
       remarkBody,
       requiredSummaryOptionsMissing,
@@ -3074,7 +3246,7 @@ const ProvincialApplicationDetailsPage = () => {
               <TableRow>
                 <TableHeader>Permit</TableHeader>
                 <TableHeader>Status</TableHeader>
-                <TableHeader>Open</TableHeader>
+                <TableHeader>Actions</TableHeader>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -3145,10 +3317,10 @@ const ProvincialApplicationDetailsPage = () => {
                 <TableRow>
                   <TableHeader>Offer</TableHeader>
                   <TableHeader>Company</TableHeader>
-                  <TableHeader>Date Received</TableHeader>
+                  <TableHeader>Date received</TableHeader>
                   <TableHeader>Valid</TableHeader>
-                  <TableHeader>Withdrawal Date</TableHeader>
-                  <TableHeader>Open</TableHeader>
+                  <TableHeader>Withdrawal date</TableHeader>
+                  <TableHeader>Actions</TableHeader>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -3645,6 +3817,7 @@ const ProvincialApplicationDetailsPage = () => {
                                       value: contact.contactName,
                                       label: contact.contactName,
                                     }))}
+                                  allowCustomValue
                                   onChange={(value) =>
                                     onSummaryFormChange('ownerContactName', value)
                                   }
@@ -3696,7 +3869,8 @@ const ProvincialApplicationDetailsPage = () => {
                                 disabled={
                                   isSavingSummary ||
                                   summaryOptionsAvailability !== 'available' ||
-                                  requiredSummaryOptionsMissing
+                                  requiredSummaryOptionsMissing ||
+                                  isSummaryClientLookupPending
                                 }
                                 renderIcon={isSavingSummary ? PendingIcon : undefined}
                                 onClick={() => onRequestSaveSummary('owner')}
@@ -3856,7 +4030,8 @@ const ProvincialApplicationDetailsPage = () => {
                                   disabled={
                                     isSavingSummary ||
                                     summaryOptionsAvailability !== 'available' ||
-                                    requiredSummaryOptionsMissing
+                                    requiredSummaryOptionsMissing ||
+                                    isSummaryClientLookupPending
                                   }
                                   renderIcon={isSavingSummary ? PendingIcon : undefined}
                                   onClick={() => onRequestSaveSummary('agent')}
@@ -3996,6 +4171,7 @@ const ProvincialApplicationDetailsPage = () => {
                                 labelText="Term (days)"
                                 type="number"
                                 min={1}
+                                max={MAX_APPLICATION_TERM_DAYS}
                                 value={summaryForm.termDays}
                                 invalid={Boolean(visibleSummaryFieldError('termDays'))}
                                 invalidText={visibleSummaryFieldError('termDays')}
@@ -4008,6 +4184,7 @@ const ProvincialApplicationDetailsPage = () => {
                                 labelText="Term (months)"
                                 type="number"
                                 min={0}
+                                max={MAX_APPLICATION_TERM_MONTHS}
                                 value={summaryForm.termMonths}
                                 invalid={Boolean(visibleSummaryFieldError('termMonths'))}
                                 invalidText={visibleSummaryFieldError('termMonths')}
@@ -4020,6 +4197,7 @@ const ProvincialApplicationDetailsPage = () => {
                                 labelText="Term (years)"
                                 type="number"
                                 min={0}
+                                max={MAX_APPLICATION_TERM_YEARS}
                                 value={summaryForm.termYears}
                                 invalid={Boolean(visibleSummaryFieldError('termYears'))}
                                 invalidText={visibleSummaryFieldError('termYears')}
@@ -4110,6 +4288,7 @@ const ProvincialApplicationDetailsPage = () => {
                                       value: contact.contactName,
                                       label: contact.contactName,
                                     }))}
+                                  allowCustomValue
                                   onChange={(value) =>
                                     onSummaryFormChange('ownerContactName', value)
                                   }
@@ -4344,6 +4523,7 @@ const ProvincialApplicationDetailsPage = () => {
                                 <TextArea
                                   id="applicationSummaryProductLocation"
                                   labelText="Location of logs"
+                                  maxCount={APPLICATION_PRODUCT_LOCATION_MAX_LENGTH}
                                   value={summaryForm.productLocation}
                                   invalid={Boolean(visibleSummaryFieldError('productLocation'))}
                                   invalidText={visibleSummaryFieldError('productLocation')}
@@ -4417,7 +4597,8 @@ const ProvincialApplicationDetailsPage = () => {
                                 disabled={
                                   isSavingSummary ||
                                   summaryOptionsAvailability !== 'available' ||
-                                  requiredSummaryOptionsMissing
+                                  requiredSummaryOptionsMissing ||
+                                  isSummaryClientLookupPending
                                 }
                                 renderIcon={isSavingSummary ? PendingIcon : undefined}
                                 onClick={() => onRequestSaveSummary('summary')}
@@ -4498,70 +4679,61 @@ const ProvincialApplicationDetailsPage = () => {
                 </TabPanel>
                 <TabPanel className="application-detail-tab-panel">
                   <Grid fullWidth className="application-detail-tab-grid">
-                    <Column sm={4} md={8} lg={16}>
-                      <Tile
-                        id="application-packages"
-                        className="application-detail-section application-detail-packages"
-                      >
-                        <h2 className="detail-tile-title">Packages</h2>
-                        {detail.packages.length === 0 && (
-                          <EmptyState
-                            title="No packages found"
-                            description="This provincial application does not include any packages."
-                            headingLevel={3}
+                    {detail.packages.length > 1 && (
+                      <Column sm={4} md={8} lg={16}>
+                        <Tile
+                          id="application-packages"
+                          className="application-detail-section application-detail-packages"
+                        >
+                          <h2 className="detail-tile-title">Packages</h2>
+                          <TextInput
+                            id="applicationDetailPackageFilter"
+                            labelText="Filter packages"
+                            value={packageFilter}
+                            onChange={(event) =>
+                              updateFilterParam('packageFilter', event.target.value)
+                            }
+                            placeholder="Filter by package, pieces, or volume"
                           />
-                        )}
-                        {detail.packages.length > 0 && (
-                          <>
-                            <TextInput
-                              id="applicationDetailPackageFilter"
-                              labelText="Filter packages"
-                              value={packageFilter}
-                              onChange={(event) =>
-                                updateFilterParam('packageFilter', event.target.value)
-                              }
-                              placeholder="Filter by package, pieces, or volume"
-                            />
-                            <TableFrame ariaLabel="Application packages">
-                              <Table size="md" useZebraStyles>
-                                <TableHead>
-                                  <TableRow>
-                                    <TableHeader aria-label="Package selection" />
-                                    <TableHeader>Package number</TableHeader>
-                                    <TableHeader>Volume (m³)</TableHeader>
-                                    <TableHeader>Pieces</TableHeader>
+                          <TableFrame ariaLabel="Application packages">
+                            <Table size="md" useZebraStyles>
+                              <TableHead>
+                                <TableRow>
+                                  <TableHeader aria-label="Package selection" />
+                                  <TableHeader>Package number</TableHeader>
+                                  <TableHeader>Volume (m³)</TableHeader>
+                                  <TableHeader>Pieces</TableHeader>
+                                </TableRow>
+                              </TableHead>
+                              <TableBody>
+                                {filteredPackages.map((item) => (
+                                  <TableRow key={item.packageNumber}>
+                                    <TableSelectRow
+                                      radio
+                                      id={`application-package-select-${item.packageNumber}`}
+                                      name="application-package-selection"
+                                      ariaLabel={`Select package ${item.packageNumber}`}
+                                      checked={selectedPackageNumber === item.packageNumber}
+                                      onSelect={() => focusPackageInItems(item.packageNumber)}
+                                    />
+                                    <TableCell>{item.packageNumber}</TableCell>
+                                    <TableCell>{item.volume.toLocaleString()}</TableCell>
+                                    <TableCell>{item.pieceCount.toLocaleString()}</TableCell>
                                   </TableRow>
-                                </TableHead>
-                                <TableBody>
-                                  {filteredPackages.map((item) => (
-                                    <TableRow key={item.packageNumber}>
-                                      <TableSelectRow
-                                        radio
-                                        id={`application-package-select-${item.packageNumber}`}
-                                        name="application-package-selection"
-                                        ariaLabel={`Select package ${item.packageNumber}`}
-                                        checked={selectedPackageNumber === item.packageNumber}
-                                        onSelect={() => focusPackageInItems(item.packageNumber)}
-                                      />
-                                      <TableCell>{item.packageNumber}</TableCell>
-                                      <TableCell>{item.volume.toLocaleString()}</TableCell>
-                                      <TableCell>{item.pieceCount.toLocaleString()}</TableCell>
-                                    </TableRow>
-                                  ))}
-                                  {filteredPackages.length === 0 && (
-                                    <TableRow>
-                                      <TableCell colSpan={4}>
-                                        No package rows matched the current filter.
-                                      </TableCell>
-                                    </TableRow>
-                                  )}
-                                </TableBody>
-                              </Table>
-                            </TableFrame>
-                          </>
-                        )}
-                      </Tile>
-                    </Column>
+                                ))}
+                                {filteredPackages.length === 0 && (
+                                  <TableRow>
+                                    <TableCell colSpan={4}>
+                                      No package rows matched the current filter.
+                                    </TableCell>
+                                  </TableRow>
+                                )}
+                              </TableBody>
+                            </Table>
+                          </TableFrame>
+                        </Tile>
+                      </Column>
+                    )}
                     <Column sm={4} md={8} lg={16}>
                       <ProvincialApplicationItemsPanel
                         key={`${applicationNumber}-${applicationItemsResetKey}`}
@@ -4684,7 +4856,7 @@ const ProvincialApplicationDetailsPage = () => {
                               <Table size="md" useZebraStyles>
                                 <TableHead>
                                   <TableRow>
-                                    <TableHeader>File Name</TableHeader>
+                                    <TableHeader>File name</TableHeader>
                                     <TableHeader>Description</TableHeader>
                                     <TableHeader>Type</TableHeader>
                                     <TableHeader>Source</TableHeader>
@@ -4948,6 +5120,7 @@ const ProvincialApplicationDetailsPage = () => {
         isDirty={isApplicationDirty}
         isBusy={
           isSavingSummary ||
+          isSummaryClientLookupPending ||
           isSavingRemark ||
           isSubmittingReviewAction ||
           applicationItemsBusy ||
@@ -4966,14 +5139,16 @@ const ProvincialApplicationDetailsPage = () => {
           summaryDirty &&
           (summaryOptionsAvailability !== 'available' || requiredSummaryOptionsMissing)
             ? 'Authoritative application options must load before summary changes can be saved.'
-            : reviewDirty &&
-                (reviewOptionsAvailability !== 'available' || reviewStatusOptions.length === 0)
-              ? 'Authoritative review options must load before review changes can be saved.'
-              : documentUploadDirty
-                ? 'Finish or reset the queued document uploads before leaving, or discard all changes.'
-                : applicationItemsDirty
-                  ? 'Use the Items tab to save or reset package, species, and scale drafts before leaving, or discard all changes.'
-                  : undefined
+            : summaryDirty && isSummaryClientLookupPending
+              ? 'Client details must finish loading before summary changes can be saved.'
+              : reviewDirty &&
+                  (reviewOptionsAvailability !== 'available' || reviewStatusOptions.length === 0)
+                ? 'Authoritative review options must load before review changes can be saved.'
+                : documentUploadDirty
+                  ? 'Finish or reset the queued document uploads before leaving, or discard all changes.'
+                  : applicationItemsDirty
+                    ? 'Use the Items tab to save or reset package, species, and scale drafts before leaving, or discard all changes.'
+                    : undefined
         }
       />
     </Grid>

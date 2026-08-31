@@ -68,23 +68,20 @@ export const getCachedSearchResponse = async <T>(
   )
 }
 
-export const appendSearchParam = (params: URLSearchParams, key: string, value: string): void => {
+const appendSearchParam = (params: URLSearchParams, key: string, value: string): void => {
   const trimmed = value.trim()
   if (trimmed.length > 0) {
     params.append(key, trimmed)
   }
 }
 
-export const appendSearchParams = (
-  params: URLSearchParams,
-  entries: SearchTextParamEntry[],
-): void => {
+const appendSearchParams = (params: URLSearchParams, entries: SearchTextParamEntry[]): void => {
   entries.forEach(([key, value]) => {
     appendSearchParam(params, key, value)
   })
 }
 
-export const appendNumericSearchParams = (
+const appendNumericSearchParams = (
   params: URLSearchParams,
   key: string,
   values: string[],
@@ -117,15 +114,12 @@ export const requireParsedSearchResponse = <T>(response: T | null, message: stri
   return response
 }
 
-export const appendSearchPageParams = (
-  params: URLSearchParams,
-  request: SearchPageRequest,
-): void => {
+const appendSearchPageParams = (params: URLSearchParams, request: SearchPageRequest): void => {
   params.append('page', String(request.page))
   params.append('size', String(request.pageSize))
 }
 
-export const appendSearchSortAndPageParams = (
+const appendSearchSortAndPageParams = (
   params: URLSearchParams,
   request: SearchSortRequest,
 ): void => {

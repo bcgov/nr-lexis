@@ -1,5 +1,9 @@
 package ca.bc.gov.mof.lexis.controller;
 
+import static ca.bc.gov.mof.lexis.util.InvoiceStorageConstraints.INVOICE_NUMBER_MAX_LENGTH;
+import static ca.bc.gov.mof.lexis.util.InvoiceStorageConstraints.isValidInvoiceAmount;
+import static ca.bc.gov.mof.lexis.util.InvoiceStorageConstraints.isValidInvoiceConversionRate;
+import static ca.bc.gov.mof.lexis.util.InvoiceStorageConstraints.isValidInvoiceNumber;
 import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.controlSafe;
 import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.exceptionType;
 import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.fingerprint;
@@ -436,6 +440,19 @@ public class LexisUploadController {
       return uploadBadRequest(
           "invoice", "Choose a file and enter valid permit and invoice numbers before uploading documents.");
     }
+    BigDecimal resolvedExportValue = firstNonNull(invoiceExportValue, exportValueAlias);
+    BigDecimal resolvedConversionRate =
+        firstNonNull(invoiceConversionRate, conversionRateAlias);
+    BigDecimal resolvedFeeInLieu = firstNonNull(invoiceFeeInLieu, feeInLieuAlias);
+    String invoiceValidationMessage =
+        invoiceStorageValidationMessage(
+            salesInvoiceNumber,
+            resolvedExportValue,
+            resolvedConversionRate,
+            resolvedFeeInLieu);
+    if (invoiceValidationMessage != null) {
+      return uploadBadRequest("invoice", invoiceValidationMessage);
+    }
     if (provincialAuthorizationService != null) {
       provincialAuthorizationService.requirePermitAttachmentMutation(authentication, permitNumber);
     }
@@ -470,9 +487,9 @@ public class LexisUploadController {
                   permitNumber,
                   salesInvoiceNumber,
                   firstNonBlank(fileDescription, descriptionAlias),
-                  firstNonNull(invoiceExportValue, exportValueAlias),
-                  firstNonNull(invoiceConversionRate, conversionRateAlias),
-                  firstNonNull(invoiceFeeInLieu, feeInLieuAlias),
+                  resolvedExportValue,
+                  resolvedConversionRate,
+                  resolvedFeeInLieu,
                   resolveEntryUserId(authentication))
               .map(this::uploadResponse)
               .orElseGet(
@@ -491,6 +508,14 @@ public class LexisUploadController {
       @RequestParam(name = "formFile", required = false) MultipartFile formFile,
       @RequestParam(name = "permitNumber", required = false) Long permitNumber,
       @RequestParam(name = "salesInvoiceNumber", required = false) String salesInvoiceNumber,
+      @RequestParam(name = "invoiceExportValue", required = false) BigDecimal invoiceExportValue,
+      @RequestParam(name = "exportValue", required = false) BigDecimal exportValueAlias,
+      @RequestParam(name = "invoiceConversionRate", required = false)
+          BigDecimal invoiceConversionRate,
+      @RequestParam(name = "currencyConversionRate", required = false)
+          BigDecimal conversionRateAlias,
+      @RequestParam(name = "invoiceFeeInLieu", required = false) BigDecimal invoiceFeeInLieu,
+      @RequestParam(name = "feeInLieu", required = false) BigDecimal feeInLieuAlias,
       Authentication authentication) {
     MultipartFile uploadFile = firstNonNull(file, formFile);
     if (uploadFile == null
@@ -501,6 +526,15 @@ public class LexisUploadController {
         || salesInvoiceNumber.isBlank()) {
       return uploadBadRequest(
           "invoice", "Choose a file and enter valid permit and invoice numbers before validating documents.");
+    }
+    String invoiceValidationMessage =
+        invoiceStorageValidationMessage(
+            salesInvoiceNumber,
+            firstNonNull(invoiceExportValue, exportValueAlias),
+            firstNonNull(invoiceConversionRate, conversionRateAlias),
+            firstNonNull(invoiceFeeInLieu, feeInLieuAlias));
+    if (invoiceValidationMessage != null) {
+      return uploadBadRequest("invoice", invoiceValidationMessage);
     }
     if (provincialAuthorizationService != null) {
       provincialAuthorizationService.requirePermitAttachmentMutation(authentication, permitNumber);
@@ -864,6 +898,33 @@ public class LexisUploadController {
 
   private LexisUploadResultDto uploadFailure(String uploadType, String message) {
     return new LexisUploadResultDto(uploadType, null, 0L, "rejected", message);
+  }
+
+  private String invoiceStorageValidationMessage(
+      String salesInvoiceNumber,
+      BigDecimal invoiceExportValue,
+      BigDecimal invoiceConversionRate,
+      BigDecimal invoiceFeeInLieu) {
+    String normalizedInvoiceNumber = trimToNull(salesInvoiceNumber);
+    if (normalizedInvoiceNumber != null
+        && normalizedInvoiceNumber.length() > INVOICE_NUMBER_MAX_LENGTH) {
+      return "Invoice number must be "
+          + INVOICE_NUMBER_MAX_LENGTH
+          + " characters or fewer.";
+    }
+    if (!isValidInvoiceNumber(normalizedInvoiceNumber)) {
+      return "Invoice number must use printable US-ASCII characters.";
+    }
+    if (!isValidInvoiceAmount(invoiceExportValue)) {
+      return "Invoice export value must be positive and round to 9999999.99 or less.";
+    }
+    if (!isValidInvoiceConversionRate(invoiceConversionRate)) {
+      return "Invoice conversion rate must be positive and round to 9.99999 or less.";
+    }
+    if (!isValidInvoiceAmount(invoiceFeeInLieu)) {
+      return "Invoice fee in lieu must be positive and round to 9999999.99 or less.";
+    }
+    return null;
   }
 
   private ApplicationSubmissionImportResultDto applicationSubmissionFailure(String message) {
@@ -2360,7 +2421,7 @@ public class LexisUploadController {
     return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
         .body(
             applicationSubmissionFailure(
-                "The LEXIS application submission file must be 20 MiB or smaller.",
+                "The LEXIS application submission file must be 20 MB or smaller.",
                 fileName,
                 fileSize));
   }

@@ -42,12 +42,20 @@ import type {
 import { useAuth } from '@/context/auth/useAuth'
 import {
   getVisibleFieldError,
+  normalizeProvincialApplicationNumber,
+  provincialApplicationNumberFieldError,
   requiredFieldError,
-  requiredMaxLengthFieldError,
-  requiredPositiveNumericFieldError,
   type FieldErrors,
   type TouchedFields,
 } from '@/pages/shared/create-form-utils'
+import {
+  INVOICE_AMOUNT_DECIMAL_PLACES,
+  INVOICE_AMOUNT_MAX,
+  INVOICE_CONVERSION_RATE_DECIMAL_PLACES,
+  INVOICE_CONVERSION_RATE_MAX,
+  invoiceDecimalStorageFieldError,
+  invoiceNumberStorageFieldError,
+} from '@/pages/shared/invoice-storage-validation'
 import {
   submitAdminUpload,
   validateApplicationSubmissionUpload,
@@ -56,7 +64,6 @@ import {
 } from '@/service/admin-upload-service'
 import { searchProvincialExemptionNumberOptions } from '@/service/provincial-exemption-search-service'
 import { searchProvincialPermitNumberOptions } from '@/service/provincial-permit-search-service'
-import { leadingDigits } from '@/utils/text'
 
 type UploadWorkflowDefinition = {
   type: UploadWorkflowType
@@ -227,6 +234,11 @@ const buildInitialFormStateFromQuery = (query: URLSearchParams): UploadFormState
 
 const trimTargetNumberInput = (input: string): string => input.trim()
 
+// INTENTIONAL_LEGACY_DIVERGENCE(SEARCHABLE_UPLOAD_TARGET_WORKFLOW): Modern consolidates record-bound
+// legacy upload pop-ups into searchable labelled inputs; both workflows persist the numeric target.
+const trimLabeledTargetNumberInput = (input: string): string =>
+  trimTargetNumberInput(input).split(' - ', 1)[0] ?? ''
+
 const uploadTargetItemToString = (
   item: UploadTargetNumberOption | string | null | undefined,
 ): string => {
@@ -304,14 +316,20 @@ function UploadTargetNumberSelect({
       onBlur={onBlur}
       onInputChange={(inputValue) => {
         setInputText(inputValue)
-        onChange(normalizeInput(inputValue))
+        const nextValue = normalizeInput(inputValue)
+        if (nextValue !== value) {
+          onChange(nextValue)
+        }
       }}
       onChange={({ selectedItem, inputValue }) => {
-        if (typeof selectedItem === 'string') {
-          onChange(normalizeInput(selectedItem))
+        const nextValue =
+          typeof selectedItem === 'string'
+            ? normalizeInput(selectedItem)
+            : (selectedItem?.value ?? normalizeInput(inputValue ?? ''))
+        if (nextValue === value) {
           return
         }
-        onChange(selectedItem?.value ?? normalizeInput(inputValue ?? ''))
+        onChange(nextValue)
       }}
     />
   )
@@ -651,7 +669,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
       : DOCUMENT_UPLOAD_ACCEPT
   const uploadFormatText =
     selectedWorkflowType === 'applicationSubmission'
-      ? 'Accepted formats: XML, ZIP, GeoJSON, or JSON. Maximum file size: 20 MiB.'
+      ? 'Accepted file types: XML, ZIP, GeoJSON, and JSON. Maximum file size: 20 MB.'
       : DOCUMENT_UPLOAD_GUIDANCE
   const currentUploadTargetSummary = uploadTargetSummary(selectedWorkflowType, formState)
   const resolvedPageTitle =
@@ -709,7 +727,11 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
               : 'Choose at least one file to upload.',
       applicationNumber:
         selectedWorkflowType === 'application'
-          ? (requiredFieldError(formState.applicationNumber, 'Application number') ?? undefined)
+          ? (provincialApplicationNumberFieldError(
+              formState.applicationNumber,
+              'Application number',
+              true,
+            ) ?? undefined)
           : undefined,
       exemptionNumber:
         selectedWorkflowType === 'exemption'
@@ -717,31 +739,39 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
           : undefined,
       permitNumber:
         selectedWorkflowType === 'permit' || selectedWorkflowType === 'invoice'
-          ? (requiredFieldError(formState.permitNumber, 'Permit number') ?? undefined)
+          ? (provincialApplicationNumberFieldError(formState.permitNumber, 'Permit number', true) ??
+            undefined)
           : undefined,
       salesInvoiceNumber:
         selectedWorkflowType === 'invoice'
-          ? (requiredMaxLengthFieldError(formState.salesInvoiceNumber, 9, 'Invoice number') ??
-            undefined)
+          ? invoiceNumberStorageFieldError(formState.salesInvoiceNumber)
           : undefined,
       invoiceExportValue:
         selectedWorkflowType === 'invoice'
-          ? (requiredPositiveNumericFieldError(
+          ? invoiceDecimalStorageFieldError(
               formState.invoiceExportValue,
               'Invoice export value',
-            ) ?? undefined)
+              INVOICE_AMOUNT_MAX,
+              INVOICE_AMOUNT_DECIMAL_PLACES,
+            )
           : undefined,
       invoiceConversionRate:
         selectedWorkflowType === 'invoice'
-          ? (requiredPositiveNumericFieldError(
+          ? invoiceDecimalStorageFieldError(
               formState.invoiceConversionRate,
               'Invoice conversion rate',
-            ) ?? undefined)
+              INVOICE_CONVERSION_RATE_MAX,
+              INVOICE_CONVERSION_RATE_DECIMAL_PLACES,
+            )
           : undefined,
       invoiceFeeInLieu:
         selectedWorkflowType === 'invoice'
-          ? (requiredPositiveNumericFieldError(formState.invoiceFeeInLieu, 'Invoice fee in lieu') ??
-            undefined)
+          ? invoiceDecimalStorageFieldError(
+              formState.invoiceFeeInLieu,
+              'Invoice fee in lieu',
+              INVOICE_AMOUNT_MAX,
+              INVOICE_AMOUNT_DECIMAL_PLACES,
+            )
           : undefined,
       fileDescription:
         selectedWorkflowType === 'applicationSubmission'
@@ -937,7 +967,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
 
     if (selectedWorkflowType === 'application') {
       const result = await submitAdminUpload('application', {
-        applicationNumber: formState.applicationNumber.trim(),
+        applicationNumber: normalizeProvincialApplicationNumber(formState.applicationNumber),
         file,
         fileDescription: formState.fileDescription.trim(),
       })
@@ -1433,6 +1463,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
             invalid={!!fieldError('exemptionNumber')}
             invalidText={fieldError('exemptionNumber')}
             searchOptions={searchProvincialExemptionNumberOptions}
+            normalizeInput={trimLabeledTargetNumberInput}
             onBlur={() => markFieldTouched('exemptionNumber')}
             onChange={(value) =>
               setFormState((current) => ({
@@ -1451,7 +1482,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
             invalid={!!fieldError('permitNumber')}
             invalidText={fieldError('permitNumber')}
             searchOptions={searchProvincialPermitNumberOptions}
-            normalizeInput={leadingDigits}
+            normalizeInput={trimLabeledTargetNumberInput}
             onBlur={() => markFieldTouched('permitNumber')}
             onChange={(value) =>
               setFormState((current) => ({
@@ -1528,7 +1559,6 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
             id="fileDescription"
             labelText="Document description"
             value={formState.fileDescription}
-            helperText="Optional; US-ASCII and 250 bytes or fewer."
             invalid={!!fieldError('fileDescription')}
             invalidText={fieldError('fileDescription')}
             maxCount={250}

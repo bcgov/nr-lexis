@@ -135,6 +135,21 @@ class LexisJasperReportParameterProviderTest {
   }
 
   @Test
+  void tenurePermitAnalysisShouldBindBlanketOicExemptionTypeCode() {
+    LexisReportRequestDto request =
+        new LexisReportRequestDto(
+            Map.of("exemptionType", "B", "clientNumber", "00001074", "clientType", "P"), "PDF");
+
+    Map<String, Object> parameters =
+        provider.buildParameters(LexisJasperReportDefinition.TENURE_REPORT, request);
+
+    assertThat(parameters)
+        .containsEntry("P_EXEMPTION_TYPE", "B")
+        .containsEntry("P_CLIENT_NUMBER", "00001074")
+        .containsEntry("P_CLIENT_TYPE", "P");
+  }
+
+  @Test
   void tenureGenerateTenureReportShouldForceOrgUnitAndClientFieldsToLegacyDefaults() {
     LexisReportRequestDto request =
         new LexisReportRequestDto(

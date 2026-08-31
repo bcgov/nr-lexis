@@ -34,6 +34,7 @@ import org.springframework.stereotype.Repository;
 public class PermitRpcRepository extends OracleRepositorySupport {
 
   private static final int ORACLE_NO_DATA_FOUND = 1403;
+  private static final int ORACLE_IN_LIST_LIMIT = 1000;
   private static final String FIND_SCALE_DETAIL_BY_PACKAGE =
       LEXIS_GROUP_5_PACKAGE + "FIND_SCALE_DETAIL_BY_PKG(?,?)";
   private static final String FIND_SCALE_DETAIL_BY_APPLICATION =
@@ -145,7 +146,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
         ON ESC.EXPORT_SPECIES_CODE = SD.EXPORT_SPECIES_CODE
       LEFT JOIN EXPORT_GRADE_CODE EGC
         ON EGC.EXPORT_GRADE_CODE = SD.EXPORT_GRADE_CODE
-      WHERE SD.PACKAGE_NUMBER IN (%s)
+      WHERE %s
       """;
   private static final String FIND_PERMIT_FEE_SCALE_ROWS =
       """
@@ -482,8 +483,8 @@ public class PermitRpcRepository extends OracleRepositorySupport {
 
   /**
    * Loads all fee-display inputs for a permit in one query. The set-based AMV join deliberately
-   * mirrors {@code LEXIS.FIND_LOG_AMV(scaleId)}, including its effective-month cutoff and growth
-   * type selection.
+   * mirrors {@code LEXIS.FIND_LOG_AMV(scaleId)}: it selects the effective date by species and grade,
+   * then applies the growth-type filter to the row at that date.
    */
   public List<PermitFeeScaleRow> findPermitFeeScaleRows(Long permitNumber) {
     if (permitNumber == null || permitNumber < 1) {
@@ -798,7 +799,9 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       return List.of();
     }
 
-    String sql = CORE_SCALE_SELECT.formatted(placeholders(normalizedPackages.size()));
+    String sql =
+        CORE_SCALE_SELECT.formatted(
+            inPredicate("SD.PACKAGE_NUMBER", normalizedPackages.size()));
     List<Object> bindValues = new ArrayList<>(normalizedPackages);
     if (!blanketOic) {
       sql += " AND (SD.EXPORT_PERMIT_DETAIL_NUMBER IS NULL "
@@ -846,11 +849,11 @@ public class PermitRpcRepository extends OracleRepositorySupport {
     String applicationFilter =
         normalizedApplications.isEmpty()
             ? "1=0"
-            : "EEASE.APPLICATION_NUMBER IN (" + placeholders(normalizedApplications.size()) + ")";
+            : inPredicate("EEASE.APPLICATION_NUMBER", normalizedApplications.size());
     String packageFilter =
         normalizedPackages.isEmpty()
             ? "1=0"
-            : "EEASE.PACKAGE_NUMBER IN (" + placeholders(normalizedPackages.size()) + ")";
+            : inPredicate("EEASE.PACKAGE_NUMBER", normalizedPackages.size());
     String sql =
         """
         WITH APPLICATION_END_USES AS (
@@ -2224,6 +2227,22 @@ public class PermitRpcRepository extends OracleRepositorySupport {
 
   private static String placeholders(int count) {
     return String.join(", ", java.util.Collections.nCopies(Math.max(0, count), "?"));
+  }
+
+  static String inPredicate(String column, int bindCount) {
+    if (bindCount < 1) {
+      return "1=0";
+    }
+
+    List<String> groups = new ArrayList<>();
+    for (int remaining = bindCount; remaining > 0; remaining -= ORACLE_IN_LIST_LIMIT) {
+      groups.add(
+          column
+              + " IN ("
+              + placeholders(Math.min(remaining, ORACLE_IN_LIST_LIMIT))
+              + ")");
+    }
+    return groups.size() == 1 ? groups.get(0) : "(" + String.join(" OR ", groups) + ")";
   }
 
   private Timestamp getTimestamp(ResultSet rs, String column) {
