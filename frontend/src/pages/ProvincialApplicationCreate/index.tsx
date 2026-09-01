@@ -228,6 +228,7 @@ const buildInitialFormFromQuery = (
   provincialSubmitterIdentityLocked: boolean,
   authoritativeOwnerClientNumber: string,
   canChangeApplicantType: boolean,
+  canViewRemarks: boolean,
 ): ProvincialApplicationCreateForm => {
   const today = formatBusinessIsoDate()
   return {
@@ -278,7 +279,7 @@ const buildInitialFormFromQuery = (
       .filter((value) => value.length > 0),
     endUseCode:
       query.get('applicationEndUseCode') ?? query.get('endUseCode') ?? query.get('endUse') ?? '',
-    comments: query.get('comments') ?? '',
+    comments: canViewRemarks ? (query.get('comments') ?? '') : '',
   }
 }
 
@@ -392,6 +393,7 @@ const ProvincialApplicationCreatePage = () => {
       provincialSubmitterIdentityLocked,
       authoritativeOwnerClientNumber,
       canChangeApplicantType,
+      canViewRemarks,
     ),
   )
   const draftBaselineRef = useRef(form)
@@ -1267,14 +1269,13 @@ const ProvincialApplicationCreatePage = () => {
       averageLogVolume: productTypeRequiresLogDetails(form.productTypeCode)
         ? averageLogVolumeFieldError(form.averageLogVolume)
         : undefined,
-      comments: applicationTextStorageFieldError(
-        form.comments,
-        APPLICATION_REMARK_MAX_LENGTH,
-        'Remarks',
-      ),
+      comments: canViewRemarks
+        ? applicationTextStorageFieldError(form.comments, APPLICATION_REMARK_MAX_LENGTH, 'Remarks')
+        : undefined,
     }),
     [
       applicationSpeciesOptions.length,
+      canViewRemarks,
       currentSchedules,
       exemptionReasons,
       form,
@@ -1481,9 +1482,11 @@ const ProvincialApplicationCreatePage = () => {
         return false
       }
 
+      const { comments, ...confirmedFormWithoutComments } = confirmedForm
       const result = await submitProvincialApplicationCreate({
-        ...confirmedForm,
+        ...confirmedFormWithoutComments,
         applicationTermDays: confirmedForm.applicationTermDays.trim(),
+        ...(canViewRemarks ? { comments } : {}),
       })
       if (result.success) {
         draftBaselineRef.current = confirmedForm

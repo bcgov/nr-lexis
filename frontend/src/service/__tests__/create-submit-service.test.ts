@@ -167,6 +167,43 @@ describe('create-submit-service', () => {
     expect(body.get('applicationEndUseCode')).toBe('SA')
     expect(body.get('endUseCode')).toBe('SA')
     expect(body.get('endUse')).toBe('SA')
+    expect(body.get('comments')).toBe('ready')
+    expect(body.get('additionalRemarks')).toBe('ready')
+  })
+
+  it('omits provincial application remarks when they are not provided', async () => {
+    postMock.mockResolvedValue({
+      data: {
+        success: true,
+        message: 'saved',
+        applicationNumber: '1001',
+      },
+    })
+
+    await submitProvincialApplicationCreate({
+      ownerClientNumber: '00011111',
+      ownerClientLocationCode: '00',
+      ownerContactName: 'Owner Contact',
+      applicantTypeCode: 'O',
+      productTypeCode: 'LOG',
+      ageClass: '',
+      exemptionType: 'U',
+      region: '11',
+      applicationDate: '2026-01-01',
+      applicationTermDays: '30',
+      receivedDate: '2026-01-01',
+      listingDate: '2026-01-02',
+      productLocation: 'Camp 1',
+      applicationVolume: '125.5',
+      averageLogVolume: '1.2',
+      speciesCodes: ['HE'],
+      endUseCode: 'SA',
+    })
+
+    const [, body] = postMock.mock.calls[0]
+    expect(body).toBeInstanceOf(URLSearchParams)
+    expect(body.get('comments')).toBeNull()
+    expect(body.get('additionalRemarks')).toBeNull()
   })
 
   it('returns offer created id from exportPurchaseOfferNumber payload', async () => {

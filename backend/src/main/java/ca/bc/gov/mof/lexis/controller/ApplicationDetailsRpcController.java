@@ -585,7 +585,10 @@ public class ApplicationDetailsRpcController {
     String userId = userId(authentication);
     ApplicationDetailsRpcService.CreateApplicationRequest createRequest =
         withScopedSubmitterOwnerIdentity(
-            toCreateApplicationRequest(parameters), authentication);
+            toCreateApplicationRequest(
+                parameters,
+                canPerform(authentication, LEGACY_ACTION_APPLICATION_REMARKS)),
+            authentication);
     provincialAuthorizationService.requireOrgUnit(
         authentication, createRequest.orgUnitNumber(), OrgUnitSurface.APPLICATION_WRITE);
     String exemptionNumber = createRequest.exemptionNumber();
@@ -1779,7 +1782,7 @@ public class ApplicationDetailsRpcController {
   }
 
   private ApplicationDetailsRpcService.CreateApplicationRequest toCreateApplicationRequest(
-      MultiValueMap<String, String> parameters) {
+      MultiValueMap<String, String> parameters, boolean canCreateInitialRemark) {
     String applicantTypeCode =
         firstTrimmedNonBlank(
             first(parameters, "ownerApplicantType", "applicantType"),
@@ -1817,7 +1820,9 @@ public class ApplicationDetailsRpcController {
         first(parameters, "oicIndicator"),
         first(parameters, "applicationEndUseCode", "endUseCode", "endUse"),
         parseSpeciesSelection(parameters),
-        first(parameters, "additionalRemarks", "comments", "remarkBody", "remark"),
+        canCreateInitialRemark
+            ? first(parameters, "additionalRemarks", "comments", "remarkBody", "remark")
+            : null,
         true);
   }
 

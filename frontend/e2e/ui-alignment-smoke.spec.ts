@@ -1315,12 +1315,12 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       waitUntil: 'domcontentloaded',
     })
     await page.getByRole('tab', { name: 'Remarks' }).click()
-    const comments = page.getByRole('textbox', { name: 'Comments' })
-    await expect(comments).toBeVisible()
-    await expect(comments).toHaveAttribute('rows', '4')
-    await expect(comments).not.toHaveCSS('height', '40px')
-    await expect(comments).toHaveCSS('min-height', '40px')
-    await expect(comments).toHaveCSS('resize', 'vertical')
+    const remarks = page.getByRole('textbox', { name: 'Remarks' })
+    await expect(remarks).toBeVisible()
+    await expect(remarks).toHaveAttribute('rows', '4')
+    await expect(remarks).not.toHaveCSS('height', '40px')
+    await expect(remarks).toHaveCSS('min-height', '40px')
+    await expect(remarks).toHaveCSS('resize', 'vertical')
 
     await page.getByRole('tab', { name: 'Items' }).click()
     const applicationItemsCard = page.locator('.application-items-card').first()

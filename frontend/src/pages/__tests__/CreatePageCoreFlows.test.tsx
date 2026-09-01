@@ -1198,9 +1198,14 @@ describe('Create Page Core Flows', () => {
         canPerform: (action: string) => action !== '/applicationRemarks',
       }),
     )
+    mockedSubmitProvincialApplicationCreate.mockResolvedValue(successfulCreate('907'))
 
     render(
-      <MemoryRouter initialEntries={['/provincial/application/create']}>
+      <MemoryRouter
+        initialEntries={[
+          `/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&productTypeCode=LOG&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&speciesCodes=HE&endUseCode=SA&comments=${encodeURIComponent('R'.repeat(255))}`,
+        ]}
+      >
         <Routes>
           <Route
             path="/provincial/application/create"
@@ -1214,6 +1219,15 @@ describe('Create Page Core Flows', () => {
     expect(screen.queryByRole('region', { name: 'Remarks' })).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('tab', { name: 'Offers' }))
     expect(screen.getByRole('region', { name: 'Offers' })).toBeInTheDocument()
+
+    const saveButton = screen.getByRole('button', { name: 'Save' })
+    await waitFor(() => expect(saveButton).toBeEnabled())
+    await userEvent.click(saveButton)
+
+    await waitFor(() => expect(mockedSubmitProvincialApplicationCreate).toHaveBeenCalledTimes(1))
+    expect(mockedSubmitProvincialApplicationCreate.mock.calls[0]?.[0]).not.toHaveProperty(
+      'comments',
+    )
   })
 
   it('blocks provincial application submit when owner has no selectable locations', async () => {
