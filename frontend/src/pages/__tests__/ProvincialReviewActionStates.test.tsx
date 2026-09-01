@@ -604,6 +604,65 @@ describe('Provincial Review Action State Smoke', () => {
     })
   })
 
+  it('does not apply a late disapproval email lookup to another application', async () => {
+    let resolveFirstSummary: (
+      summary: Awaited<ReturnType<typeof fetchApplicationSummarySnapshot>>,
+    ) => void = () => undefined
+    const firstSummary = new Promise<Awaited<ReturnType<typeof fetchApplicationSummarySnapshot>>>(
+      (resolve) => {
+        resolveFirstSummary = resolve
+      },
+    )
+    mockedFetchApplicationSummarySnapshot.mockReturnValueOnce(firstSummary).mockResolvedValueOnce({
+      ...applicationSummary,
+      applicationNumber: '1000456',
+      ownerClientNumber: '00099999',
+    })
+    mockedFetchApplicationClientData.mockImplementation(async (clientNumber) => ({
+      clientNumber,
+      companyName: clientNumber === '00099999' ? 'Second Client Ltd.' : 'First Client Ltd.',
+      address: '',
+      city: '',
+      province: '',
+      postalCode: '',
+      country: '',
+      phone: '',
+      fax: '',
+      email: clientNumber === '00099999' ? 'second.client@example.com' : 'first.client@example.com',
+      notfound: '',
+    }))
+
+    renderPage()
+    await screen.findByText('1000123')
+    await userEvent.click(screen.getAllByRole('button', { name: 'Disapprove' })[0])
+    await waitFor(() =>
+      expect(mockedFetchApplicationSummarySnapshot).toHaveBeenCalledWith('1000123'),
+    )
+    await userEvent.click(
+      within(screen.getByRole('dialog', { name: 'Update application 1000123' })).getByRole(
+        'button',
+        { name: 'Cancel' },
+      ),
+    )
+    await userEvent.click(screen.getAllByRole('button', { name: 'Disapprove' })[1])
+
+    expect(
+      await screen.findByRole('dialog', { name: 'Update application 1000456' }),
+    ).toBeInTheDocument()
+    await waitFor(() =>
+      expect(screen.getByLabelText('Send to:')).toHaveValue('second.client@example.com'),
+    )
+
+    await act(async () => {
+      resolveFirstSummary(applicationSummary)
+      await firstSummary
+    })
+
+    expect(screen.getByLabelText('Send to:')).toHaveValue('second.client@example.com')
+    expect(mockedFetchApplicationClientData).toHaveBeenCalledTimes(1)
+    expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00099999', '00')
+  })
+
   it('disapproves a single PND row through the same review workflow', async () => {
     mockedFetchApplicationSummarySnapshot.mockResolvedValueOnce({
       ...applicationSummary,

@@ -273,6 +273,7 @@ const ProvincialReviewPage = () => {
   const [rejectValidationMessage, setRejectValidationMessage] = useState('')
   const [loadingRejectEmail, setLoadingRejectEmail] = useState(false)
   const [submittingReject, setSubmittingReject] = useState(false)
+  const rejectEmailRequestRef = useRef(0)
   const [reviewActionStatus, setReviewActionStatus] = useState<ReviewActionStatus | null>(null)
   const totalCacheRef = useRef<SearchTotalCache>(new Map())
   const canApproveApplications = canPerform('/applicationsReview')
@@ -677,6 +678,7 @@ const ProvincialReviewPage = () => {
   }
 
   const closeRejectPanel = useCallback(() => {
+    rejectEmailRequestRef.current += 1
     setRejectApplicationNumber('')
     setRejectStatusCode(REJECT_STATUS_CODE)
     setRejectEmailAddress('')
@@ -704,6 +706,7 @@ const ProvincialReviewPage = () => {
       }
 
       setReviewActionStatus(null)
+      const requestId = ++rejectEmailRequestRef.current
       setRejectApplicationNumber(applicationNumber)
       setRejectStatusCode(REJECT_STATUS_CODE)
       setRejectEmailAddress('')
@@ -714,6 +717,9 @@ const ProvincialReviewPage = () => {
 
       try {
         const summary = await fetchApplicationSummarySnapshot(applicationNumber)
+        if (rejectEmailRequestRef.current !== requestId) {
+          return
+        }
         if (!summary) {
           setRejectValidationMessage('Unable to load client email for this application.')
           return
@@ -725,14 +731,21 @@ const ProvincialReviewPage = () => {
             ? fetchApplicationClientData(summary.agentClientNumber, summary.agentClientLocationCode)
             : Promise.resolve(null),
         ])
+        if (rejectEmailRequestRef.current !== requestId) {
+          return
+        }
 
         const candidateEmail = reviewEmailCandidate(summary, ownerClientData, agentClientData)
         setRejectEmailAddress(candidateEmail)
       } catch (error) {
-        console.error(error)
-        setRejectValidationMessage('Unable to load client email for this application.')
+        if (rejectEmailRequestRef.current === requestId) {
+          console.error(error)
+          setRejectValidationMessage('Unable to load client email for this application.')
+        }
       } finally {
-        setLoadingRejectEmail(false)
+        if (rejectEmailRequestRef.current === requestId) {
+          setLoadingRejectEmail(false)
+        }
       }
     },
     [canApproveApplications, optionsUnavailable, rejectStatusAvailable],

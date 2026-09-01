@@ -174,6 +174,14 @@ class APIService {
         return response
       },
       (error: unknown) => {
+        const requestMethod =
+          error && typeof error === 'object'
+            ? (error as { config?: { method?: string } }).config?.method
+            : undefined
+        if (isCacheInvalidatingMethod(requestMethod)) {
+          this.clearCachedGetData()
+          clearAllPageDataCache()
+        }
         const status = this.responseStatus(error)
         if (status === 401) {
           this.clearCachedGetData()

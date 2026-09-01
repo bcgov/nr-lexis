@@ -474,6 +474,63 @@ describe('permit creation from an exemption', () => {
     consoleError.mockRestore()
   })
 
+  it('ignores a late Blanket OIC client lookup after the client number changes', async () => {
+    mockRole(['LEXIS_APPLICATION_APPROVER'], ['createPermit', 'savePermit'])
+    configureBlanketOicCreationDependencies()
+    let resolveFirstLookup: (
+      locations: Awaited<ReturnType<typeof fetchExemptionClientLocations>>,
+    ) => void = () => undefined
+    const firstLookup = new Promise<Awaited<ReturnType<typeof fetchExemptionClientLocations>>>(
+      (resolve) => {
+        resolveFirstLookup = resolve
+      },
+    )
+    vi.mocked(fetchExemptionClientLocations).mockImplementation((clientNumber) =>
+      clientNumber === '11111111'
+        ? firstLookup
+        : Promise.resolve([
+            {
+              locationCode: '22',
+              locationName: 'SECOND CLIENT LOCATION',
+              selected: true,
+            },
+          ]),
+    )
+    renderPage(activeBlanketOicExemption)
+
+    await openPermitsTab()
+    await userEvent.click(screen.getByRole('button', { name: 'Apply for new permit' }))
+    const dialog = screen.getByRole('dialog', { name: 'Apply for new Blanket OIC permit' })
+    const ownerClientNumber = within(dialog).getByLabelText('Owner client number')
+    const ownerLocation = within(dialog).getByLabelText('Owner location')
+
+    await userEvent.type(ownerClientNumber, '11111111')
+    await userEvent.tab()
+    await waitFor(() => expect(fetchExemptionClientLocations).toHaveBeenCalledWith('11111111'))
+
+    await userEvent.click(ownerClientNumber)
+    await userEvent.clear(ownerClientNumber)
+    await userEvent.type(ownerClientNumber, '22222222')
+    await userEvent.tab()
+    await waitFor(() => expect(ownerLocation).toHaveValue('22'))
+
+    resolveFirstLookup([
+      {
+        locationCode: '11',
+        locationName: 'FIRST CLIENT LOCATION',
+        selected: true,
+      },
+    ])
+    await firstLookup
+    await Promise.resolve()
+
+    expect(ownerClientNumber).toHaveValue('22222222')
+    expect(ownerLocation).toHaveValue('22')
+    expect(
+      within(ownerLocation).queryByRole('option', { name: /FIRST CLIENT LOCATION/ }),
+    ).toBeNull()
+  })
+
   it('validates the Blanket OIC form before calling the server', async () => {
     mockRole(['LEXIS_APPLICATION_APPROVER'], ['createPermit', 'savePermit'])
     configureBlanketOicCreationDependencies()

@@ -1462,4 +1462,32 @@ describe('api-service cached GET support', () => {
     })
     expect(getMock).toHaveBeenCalledTimes(2)
   })
+
+  it('invalidates a GET cached while a write is pending when the write fails ambiguously', async () => {
+    getMock
+      .mockResolvedValueOnce(buildResponse({ count: 1 }))
+      .mockResolvedValueOnce(buildResponse({ count: 2 }))
+
+    await registeredRequestInterceptor()({
+      method: 'post',
+      headers: {},
+    })
+    await expect(apiService.getCachedData<{ count: number }>('/lexis/example')).resolves.toEqual({
+      count: 1,
+    })
+    await expect(apiService.getCachedData<{ count: number }>('/lexis/example')).resolves.toEqual({
+      count: 1,
+    })
+
+    const pageCacheKey = buildPageDataCacheKey('status-search', 'user-1', { status: 'APP' })
+    setPageDataCache(pageCacheKey, { rows: ['stale'] }, getPageDataCacheGeneration())
+    const failedWrite = { config: { method: 'post' }, response: { status: 500 } }
+    await expect(registeredResponseRejectedInterceptor()(failedWrite)).rejects.toBe(failedWrite)
+
+    expect(getPageDataCache(pageCacheKey)).toBeNull()
+    await expect(apiService.getCachedData<{ count: number }>('/lexis/example')).resolves.toEqual({
+      count: 2,
+    })
+    expect(getMock).toHaveBeenCalledTimes(2)
+  })
 })
