@@ -27,7 +27,9 @@ import ApplicationAccuracyConfirmation, {
 import UnsavedChangesGuard, { formValuesEqual } from '@/components/UnsavedChangesGuard'
 import { nonNegativeWholeNumberFieldError } from '@/pages/shared/application-term-utils'
 import {
+  CLIENT_LOOKUP_UNAVAILABLE_MESSAGE,
   averageLogVolumeFieldError,
+  clientLookupNumbersMatch,
   clientLocationLabel,
   isAgentApplicant,
   isSelectableClientContact,
@@ -149,14 +151,6 @@ const ASCII_PATTERN = /^[\u0000-\u007f]*$/
 const APPLICATION_CONTACT_NAME_MAX_LENGTH = 120
 const APPLICATION_PRODUCT_LOCATION_MAX_LENGTH = 250
 const APPLICATION_REMARK_MAX_LENGTH = 254
-
-const comparableClientNumber = (value: string): string => {
-  const normalized = value.trim()
-  return CLIENT_NUMBER_PATTERN.test(normalized) ? normalized.padStart(8, '0') : normalized
-}
-
-const clientLookupNumbersMatch = (left: string, right: string): boolean =>
-  comparableClientNumber(left) === comparableClientNumber(right)
 
 const clientNumberFieldError = (value: string, label: string): string | undefined =>
   firstValidationError(
@@ -329,8 +323,7 @@ type ClientLookupFailure = 'owner-locations' | 'agent-locations' | 'owner-detail
 const CLIENT_LOOKUP_UNAVAILABLE_STATUS: PageStatus = {
   kind: 'error',
   title: 'Client details unavailable',
-  message:
-    'Client details could not be retrieved. Existing selections were preserved. Please try again.',
+  message: CLIENT_LOOKUP_UNAVAILABLE_MESSAGE,
 }
 
 type ApplicationCreateClientSummaryProps = {

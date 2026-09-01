@@ -292,12 +292,12 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(await within(ownerDetails).findByText('00 - Owner Main Location')).toBeInTheDocument()
     expect(within(ownerDetails).getByText('Owner Contact')).toBeInTheDocument()
     expect(within(ownerDetails).getByText('Client details unavailable')).toBeInTheDocument()
-    expect(await screen.findByText('Action failed')).toBeInTheDocument()
     expect(
-      screen.getByText(
+      await screen.findByText(
         'Client details could not be retrieved. Existing selections were preserved. Please try again.',
       ),
     ).toBeInTheDocument()
+    expect(screen.queryByText('Action failed')).not.toBeInTheDocument()
     expect(
       screen.queryByRole('heading', { name: 'Owner details unavailable' }),
     ).not.toBeInTheDocument()
@@ -402,6 +402,51 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     ).toBeInTheDocument()
     expect(ownerControls.queryByText('Owner Main Location')).not.toBeInTheDocument()
     expect(ownerControls.queryByText('Owner Contact')).not.toBeInTheDocument()
+  })
+
+  it('clears a client lookup warning after the latest lookup succeeds', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { level: 2, name: 'Owner client details' })
+    const ownerControls = within(getOwnerClientDetailsTile())
+    expect(await ownerControls.findByText('Owner Forestry Ltd.')).toBeInTheDocument()
+    await userEvent.click(ownerControls.getByRole('button', { name: 'Edit owner client details' }))
+
+    mockedFetchApplicationClientLocations.mockRejectedValueOnce(
+      new Error('changed client endpoint unavailable'),
+    )
+    fireEvent.change(ownerControls.getByLabelText('Client number'), {
+      target: { value: '00099988' },
+    })
+
+    const lookupErrorMessage =
+      'Client details could not be retrieved. Existing selections were preserved. Please try again.'
+    expect(await screen.findByText(lookupErrorMessage)).toBeInTheDocument()
+
+    fireEvent.change(ownerControls.getByLabelText('Client number'), {
+      target: { value: '00099989' },
+    })
+
+    await waitFor(() =>
+      expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith(
+        '00099989',
+        'owner',
+        '321',
+      ),
+    )
+    await waitFor(() => expect(screen.queryByText(lookupErrorMessage)).not.toBeInTheDocument())
+    expect(ownerControls.getByRole('combobox', { name: 'Client location' })).toHaveValue(
+      '00 - Owner Main Location',
+    )
   })
 
   it('shows an explicit empty state when no agent is assigned', async () => {

@@ -11,7 +11,10 @@ import {
 import IsoDatePicker from '@/components/IsoDatePicker'
 import Modal from '@/components/Modal'
 import PendingIcon from '@/components/PendingIcon'
-import { clientLocationLabel } from '@/pages/shared/application-form-utils'
+import {
+  CLIENT_LOOKUP_UNAVAILABLE_MESSAGE,
+  clientLocationLabel,
+} from '@/pages/shared/application-form-utils'
 import { isValidIsoDate } from '@/pages/shared/create-form-utils'
 import type { IdTextOption } from '@/pages/shared/search-query-utils'
 import {
@@ -70,8 +73,6 @@ type BlanketOicPermitCreateModalProps = {
 
 const MAX_OIC_REQUEST_PIECES = 9_999_999_999
 const MAX_OIC_REQUEST_VOLUME_LENGTH = 9
-const CLIENT_LOOKUP_ERROR_MESSAGE =
-  'Client details could not be retrieved. Existing selections were preserved. Please try again.'
 
 const initialForm = (
   exemptionExpiryDate: string,
@@ -516,7 +517,7 @@ const BlanketOicPermitCreateModal = ({
         <InlineNotification
           kind="error"
           title="Client details unavailable"
-          subtitle={CLIENT_LOOKUP_ERROR_MESSAGE}
+          subtitle={CLIENT_LOOKUP_UNAVAILABLE_MESSAGE}
           lowContrast
           onCloseButtonClick={() => setClientLookupFailures(new Set())}
         />

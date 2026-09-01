@@ -12,6 +12,19 @@ import {
   requiredFieldError,
 } from '@/pages/shared/create-form-utils'
 
+const CLIENT_NUMBER_PATTERN = /^\d{1,8}$/
+
+export const CLIENT_LOOKUP_UNAVAILABLE_MESSAGE =
+  'Client details could not be retrieved. Existing selections were preserved. Please try again.'
+
+const comparableClientNumber = (value: string): string => {
+  const normalized = value.trim()
+  return CLIENT_NUMBER_PATTERN.test(normalized) ? normalized.padStart(8, '0') : normalized
+}
+
+export const clientLookupNumbersMatch = (left: string, right: string): boolean =>
+  comparableClientNumber(left) === comparableClientNumber(right)
+
 export const isSelectableClientLocation = (location: ApplicationClientLocation): boolean =>
   location.locationCode !== '0'
 
