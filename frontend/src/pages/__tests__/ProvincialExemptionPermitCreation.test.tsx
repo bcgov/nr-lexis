@@ -443,6 +443,37 @@ describe('permit creation from an exemption', () => {
     await waitFor(() => expect(router.state.location.pathname).toBe('/provincial/permit/9020948'))
   })
 
+  it('preserves a verified Blanket OIC client selection when a refresh fails', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    mockRole(['LEXIS_APPLICATION_APPROVER'], ['createPermit', 'savePermit'])
+    configureBlanketOicCreationDependencies()
+    renderPage(activeBlanketOicExemption)
+
+    await openPermitsTab()
+    await userEvent.click(screen.getByRole('button', { name: 'Apply for new permit' }))
+    const dialog = screen.getByRole('dialog', { name: 'Apply for new Blanket OIC permit' })
+    const ownerClientNumber = within(dialog).getByLabelText('Owner client number')
+    await userEvent.type(ownerClientNumber, '1074')
+    await userEvent.tab()
+    await waitFor(() => expect(within(dialog).getByLabelText('Owner location')).toHaveValue('00'))
+
+    vi.mocked(fetchExemptionClientLocations).mockRejectedValueOnce(
+      new Error('client endpoint unavailable'),
+    )
+    await userEvent.click(ownerClientNumber)
+    await userEvent.tab()
+
+    expect(
+      await within(dialog).findByText(
+        'Client details could not be retrieved. Existing selections were preserved. Please try again.',
+      ),
+    ).toBeInTheDocument()
+    expect(within(dialog).getByLabelText('Owner client number')).toHaveValue('00001074')
+    expect(within(dialog).getByLabelText('Owner location')).toHaveValue('00')
+
+    consoleError.mockRestore()
+  })
+
   it('validates the Blanket OIC form before calling the server', async () => {
     mockRole(['LEXIS_APPLICATION_APPROVER'], ['createPermit', 'savePermit'])
     configureBlanketOicCreationDependencies()

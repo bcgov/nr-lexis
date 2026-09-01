@@ -245,15 +245,20 @@ describe('application-client-lookup-service', () => {
     expect(getCachedDataMock).not.toHaveBeenCalled()
   })
 
-  it('returns an empty list when the endpoint fails', async () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    getCachedDataMock.mockRejectedValue(new Error('network'))
+  it('propagates endpoint failures so callers can distinguish unavailable from no data', async () => {
+    const error = new Error('network')
+    const lookups = [
+      () => fetchApplicationClientData('00011111', '01'),
+      () => fetchExemptionClientData('00011111', '01'),
+      () => fetchApplicationClientLocations('00011111'),
+      () => fetchExemptionClientLocations('00011111'),
+      () => fetchApplicationClientContacts('00011111', '01'),
+    ]
 
-    const result = await fetchApplicationClientLocations('00011111')
-
-    expect(result).toEqual([])
-    expect(warnSpy).toHaveBeenCalledTimes(1)
-    warnSpy.mockRestore()
+    for (const lookup of lookups) {
+      getCachedDataMock.mockRejectedValueOnce(error)
+      await expect(lookup()).rejects.toBe(error)
+    }
   })
 
   it('loads and parses contacts for a client location', async () => {

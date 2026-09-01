@@ -216,9 +216,11 @@ const ProvincialSummaryPage = () => {
   const [clientDetails, setClientDetails] = useState<{
     clientNumber: string
     companyName: string
+    error: string
   } | null>(null)
   const activeClientDetails = clientDetails?.clientNumber === clientNumber ? clientDetails : null
   const companyName = activeClientDetails?.companyName ?? ''
+  const clientDetailsError = activeClientDetails?.error ?? ''
   const clientLoading = Boolean(clientNumber) && activeClientDetails === null
 
   const applications = useSummarySection(
@@ -261,11 +263,21 @@ const ProvincialSummaryPage = () => {
       }
     }
 
-    void fetchApplicationClientData(clientNumber, '00').then((client) => {
-      if (active) {
-        setClientDetails({ clientNumber, companyName: client?.companyName ?? '' })
-      }
-    })
+    void fetchApplicationClientData(clientNumber, '00')
+      .then((client) => {
+        if (active) {
+          setClientDetails({ clientNumber, companyName: client?.companyName ?? '', error: '' })
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setClientDetails({
+            clientNumber,
+            companyName: '',
+            error: 'Client details could not be retrieved. Please try again.',
+          })
+        }
+      })
 
     return () => {
       active = false
@@ -292,6 +304,14 @@ const ProvincialSummaryPage = () => {
             },
           ]}
         />
+        {clientDetailsError ? (
+          <EmptyState
+            role="alert"
+            headingLevel={3}
+            title="Client details unavailable"
+            description={clientDetailsError}
+          />
+        ) : null}
 
         {!clientNumber ? (
           <EmptyState

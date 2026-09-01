@@ -380,6 +380,8 @@ const APPLICATION_CONTACT_NAME_MAX_LENGTH = 120
 const APPLICATION_PRODUCT_LOCATION_MAX_LENGTH = 250
 const APPLICATION_CLIENT_NUMBER_PATTERN = /^\d{1,8}$/
 const ASCII_PATTERN = /^[\u0000-\u007f]*$/
+const CLIENT_LOOKUP_UNAVAILABLE_MESSAGE =
+  'Client details could not be retrieved. Existing selections were preserved. Please try again.'
 
 const applicationClientNumberFieldError = (value: string, label: string): string | undefined =>
   firstValidationError(
@@ -1644,6 +1646,11 @@ const ProvincialApplicationDetailsPage = () => {
             : current
         })
       })
+      .catch(() => {
+        if (isActive) {
+          setActionErrorMessage(CLIENT_LOOKUP_UNAVAILABLE_MESSAGE)
+        }
+      })
       .finally(() => {
         if (isActive) {
           setIsLoadingOwnerClientData(false)
@@ -1714,6 +1721,11 @@ const ProvincialApplicationDetailsPage = () => {
             ? { ...current, agentClientNumber: confirmedAgentClientNumber }
             : current
         })
+      })
+      .catch(() => {
+        if (isActive) {
+          setActionErrorMessage(CLIENT_LOOKUP_UNAVAILABLE_MESSAGE)
+        }
       })
       .finally(() => {
         if (isActive) {
@@ -1800,6 +1812,11 @@ const ProvincialApplicationDetailsPage = () => {
             : { ...current, ownerClientLocationCode: nextOwnerClientLocationCode }
         })
       })
+      .catch(() => {
+        if (isActive) {
+          setActionErrorMessage(CLIENT_LOOKUP_UNAVAILABLE_MESSAGE)
+        }
+      })
       .finally(() => {
         if (isActive) {
           setIsLoadingOwnerClientLocations(false)
@@ -1878,6 +1895,11 @@ const ProvincialApplicationDetailsPage = () => {
             : { ...current, agentClientLocationCode: nextAgentClientLocationCode }
         })
       })
+      .catch(() => {
+        if (isActive) {
+          setActionErrorMessage(CLIENT_LOOKUP_UNAVAILABLE_MESSAGE)
+        }
+      })
       .finally(() => {
         if (isActive) {
           setIsLoadingAgentClientLocations(false)
@@ -1951,6 +1973,11 @@ const ProvincialApplicationDetailsPage = () => {
             ? current
             : { ...current, ownerContactName: nextOwnerContactName }
         })
+      })
+      .catch(() => {
+        if (isActive) {
+          setActionErrorMessage(CLIENT_LOOKUP_UNAVAILABLE_MESSAGE)
+        }
       })
       .finally(() => {
         if (isActive) {
@@ -2031,6 +2058,11 @@ const ProvincialApplicationDetailsPage = () => {
             ? current
             : { ...current, agentContactName: nextAgentContactName }
         })
+      })
+      .catch(() => {
+        if (isActive) {
+          setActionErrorMessage(CLIENT_LOOKUP_UNAVAILABLE_MESSAGE)
+        }
       })
       .finally(() => {
         if (isActive) {

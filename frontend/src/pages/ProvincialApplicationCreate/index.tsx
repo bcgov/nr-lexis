@@ -316,6 +316,13 @@ type PageStatus = {
   placement?: 'inline'
 }
 
+const CLIENT_LOOKUP_UNAVAILABLE_STATUS: PageStatus = {
+  kind: 'error',
+  title: 'Client details unavailable',
+  message:
+    'Client details could not be retrieved. Existing selections were preserved. Please try again.',
+}
+
 type ApplicationCreateClientSummaryProps = {
   title: string
   clientData: ApplicationClientData | null
@@ -649,6 +656,11 @@ const ProvincialApplicationCreatePage = () => {
               }
         })
       })
+      .catch(() => {
+        if (isActive) {
+          setStatus(CLIENT_LOOKUP_UNAVAILABLE_STATUS)
+        }
+      })
       .finally(() => {
         if (isActive) {
           setIsLoadingOwnerClientLocations(false)
@@ -748,6 +760,11 @@ const ProvincialApplicationCreatePage = () => {
               }
         })
       })
+      .catch(() => {
+        if (isActive) {
+          setStatus(CLIENT_LOOKUP_UNAVAILABLE_STATUS)
+        }
+      })
       .finally(() => {
         if (isActive) {
           setIsLoadingAgentClientLocations(false)
@@ -785,7 +802,6 @@ const ProvincialApplicationCreatePage = () => {
     let isActive = true
     void Promise.resolve().then(() => {
       if (isActive) {
-        setOwnerClientData(null)
         setIsLoadingOwnerClientContacts(true)
       }
     })
@@ -820,6 +836,11 @@ const ProvincialApplicationCreatePage = () => {
                 ownerContactName: nextOwnerContactName,
               }
         })
+      })
+      .catch(() => {
+        if (isActive) {
+          setStatus(CLIENT_LOOKUP_UNAVAILABLE_STATUS)
+        }
       })
       .finally(() => {
         if (isActive) {
@@ -875,7 +896,6 @@ const ProvincialApplicationCreatePage = () => {
     let isActive = true
     void Promise.resolve().then(() => {
       if (isActive) {
-        setAgentClientData(null)
         setIsLoadingAgentClientContacts(true)
       }
     })
@@ -910,6 +930,11 @@ const ProvincialApplicationCreatePage = () => {
                 agentContactName: nextAgentContactName,
               }
         })
+      })
+      .catch(() => {
+        if (isActive) {
+          setStatus(CLIENT_LOOKUP_UNAVAILABLE_STATUS)
+        }
       })
       .finally(() => {
         if (isActive) {

@@ -320,9 +320,14 @@ const BlanketOicPermitCreateModal = ({
       return { clientNumber: confirmedClientNumber, locationCode: selectedLocation }
     } catch (error) {
       console.error(error)
-      setLocations([])
-      setField(locationField, '')
-      return { clientNumber, locationCode: '' }
+      setActionError(
+        'Client details could not be retrieved. Existing selections were preserved. Please try again.',
+      )
+      return {
+        clientNumber,
+        locationCode:
+          kind === 'owner' ? form.ownerClientLocation.trim() : form.agentClientLocation.trim(),
+      }
     } finally {
       setLoading(false)
     }

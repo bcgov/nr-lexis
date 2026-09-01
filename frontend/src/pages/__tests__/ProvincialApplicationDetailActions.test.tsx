@@ -267,8 +267,8 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(screen.queryByText('Application summary options unavailable')).not.toBeInTheDocument()
   })
 
-  it('keeps saved client values visible when enrichment is unavailable', async () => {
-    mockedFetchApplicationClientData.mockResolvedValue(null)
+  it('keeps saved client values visible when enrichment fails', async () => {
+    mockedFetchApplicationClientData.mockRejectedValue(new Error('client endpoint unavailable'))
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
       ...applicationDetail,
       packages: [],
@@ -289,9 +289,15 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     const ownerDetails = await screen.findByRole('region', { name: 'Owner client details' })
     expect(within(ownerDetails).getByText('00011122')).toBeInTheDocument()
-    expect(within(ownerDetails).getByText('00 - Owner Main Location')).toBeInTheDocument()
+    expect(await within(ownerDetails).findByText('00 - Owner Main Location')).toBeInTheDocument()
     expect(within(ownerDetails).getByText('Owner Contact')).toBeInTheDocument()
     expect(within(ownerDetails).getByText('Client details unavailable')).toBeInTheDocument()
+    expect(await screen.findByText('Action failed')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'Client details could not be retrieved. Existing selections were preserved. Please try again.',
+      ),
+    ).toBeInTheDocument()
     expect(
       screen.queryByRole('heading', { name: 'Owner details unavailable' }),
     ).not.toBeInTheDocument()
@@ -299,7 +305,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     await selectApplicationDetailTab('Agent')
     const agentDetails = await screen.findByRole('region', { name: 'Agent details' })
     expect(within(agentDetails).getByText('00033344')).toBeInTheDocument()
-    expect(within(agentDetails).getByText('01 - Agent Main Location')).toBeInTheDocument()
+    expect(await within(agentDetails).findByText('01 - Agent Main Location')).toBeInTheDocument()
     expect(within(agentDetails).getByText('Agent Contact')).toBeInTheDocument()
     expect(within(agentDetails).getByText('Client details unavailable')).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'No agent assigned' })).not.toBeInTheDocument()

@@ -297,6 +297,20 @@ describe('Provincial Summary', () => {
     expect(mockedFetchSummaryApplications).toHaveBeenCalledTimes(2)
   })
 
+  it('shows client lookup failures without hiding summary sections', async () => {
+    mockedFetchApplicationClientData.mockRejectedValue(new Error('client endpoint unavailable'))
+
+    renderPage()
+
+    expect(
+      await screen.findByRole('heading', { name: 'Client details unavailable' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('Client details could not be retrieved. Please try again.'),
+    ).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'My Applications' })).toBeInTheDocument()
+  })
+
   it('does not request client data when no forest client is active', async () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({

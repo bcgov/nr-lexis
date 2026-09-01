@@ -217,6 +217,36 @@ describe('Provincial exemption client parity', () => {
     })
   })
 
+  it('shows an unavailable state when client lookups fail', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    vi.mocked(fetchExemptionClientLocations).mockRejectedValue(
+      new Error('client endpoint unavailable'),
+    )
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/26-8758']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(
+      await screen.findByRole('heading', { name: 'Client details unavailable' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getAllByText(
+        'Owner and agent details could not be retrieved from the linked application.',
+      ),
+    ).not.toHaveLength(0)
+    expect(screen.getByRole('tab', { name: 'Agent' })).toBeInTheDocument()
+
+    consoleError.mockRestore()
+  })
+
   it('hides residual agent data for owner-filed exemption applications', async () => {
     vi.mocked(fetchExemptionApplications).mockResolvedValue({
       applications: [

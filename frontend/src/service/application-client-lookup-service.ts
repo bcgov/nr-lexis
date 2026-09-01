@@ -123,29 +123,21 @@ export const fetchApplicationClientData = async (
       ? `:permit:${normalizedPermitNumber}`
       : ''
 
-  try {
-    const data = await apiService.getCachedData<unknown>(
-      '/lexis/rpc/application-details/client-data',
-      {
-        params: {
-          ...contextParams,
-          clientLocationCode: normalizedClientLocationCode,
-          clientNumber: normalizedClientNumber,
-        },
+  const data = await apiService.getCachedData<unknown>(
+    '/lexis/rpc/application-details/client-data',
+    {
+      params: {
+        ...contextParams,
+        clientLocationCode: normalizedClientLocationCode,
+        clientNumber: normalizedClientNumber,
       },
-      {
-        cacheKey: `application-client-data:${normalizedClientNumber}:${normalizedClientLocationCode}${contextCacheKey}`,
-        ttlMs: CLIENT_LOCATION_CACHE_TTL_MS,
-      },
-    )
-    return parseClientData(data)
-  } catch (error) {
-    console.warn(
-      `Unable to load client data for client ${normalizedClientNumber} location ${normalizedClientLocationCode}.`,
-      error,
-    )
-    return null
-  }
+    },
+    {
+      cacheKey: `application-client-data:${normalizedClientNumber}:${normalizedClientLocationCode}${contextCacheKey}`,
+      ttlMs: CLIENT_LOCATION_CACHE_TTL_MS,
+    },
+  )
+  return parseClientData(data)
 }
 
 export const fetchExemptionClientData = async (
@@ -158,28 +150,20 @@ export const fetchExemptionClientData = async (
     return null
   }
 
-  try {
-    const data = await apiService.getCachedData<unknown>(
-      '/lexis/rpc/exemption-details/client-data',
-      {
-        params: {
-          clientLocationCode: normalizedClientLocationCode,
-          clientNumber: normalizedClientNumber,
-        },
+  const data = await apiService.getCachedData<unknown>(
+    '/lexis/rpc/exemption-details/client-data',
+    {
+      params: {
+        clientLocationCode: normalizedClientLocationCode,
+        clientNumber: normalizedClientNumber,
       },
-      {
-        cacheKey: `exemption-client-data:${normalizedClientNumber}:${normalizedClientLocationCode}`,
-        ttlMs: CLIENT_LOCATION_CACHE_TTL_MS,
-      },
-    )
-    return parseClientData(data)
-  } catch (error) {
-    console.warn(
-      `Unable to load exemption client data for client ${normalizedClientNumber} location ${normalizedClientLocationCode}.`,
-      error,
-    )
-    return null
-  }
+    },
+    {
+      cacheKey: `exemption-client-data:${normalizedClientNumber}:${normalizedClientLocationCode}`,
+      ttlMs: CLIENT_LOCATION_CACHE_TTL_MS,
+    },
+  )
+  return parseClientData(data)
 }
 
 export const fetchApplicationClientLocations = async (
@@ -193,38 +177,28 @@ export const fetchApplicationClientLocations = async (
     return []
   }
 
-  try {
-    const data = await apiService.getCachedData<unknown>(
-      '/lexis/rpc/application-details/client-locations',
-      {
-        params: {
-          applicantType,
-          ...(normalizedApplicationNumber
-            ? { applicationNumber: normalizedApplicationNumber }
-            : {}),
-          clientNumber: normalizedClientNumber,
-        },
+  const data = await apiService.getCachedData<unknown>(
+    '/lexis/rpc/application-details/client-locations',
+    {
+      params: {
+        applicantType,
+        ...(normalizedApplicationNumber ? { applicationNumber: normalizedApplicationNumber } : {}),
+        clientNumber: normalizedClientNumber,
       },
-      {
-        cacheKey: [
-          'application-client-locations',
-          applicantType,
-          normalizedClientNumber,
-          normalizedApplicationNumber,
-        ]
-          .filter(Boolean)
-          .join(':'),
-        ttlMs: CLIENT_LOCATION_CACHE_TTL_MS,
-      },
-    )
-    return parseClientLocations(data)
-  } catch (error) {
-    console.warn(
-      `Unable to load ${applicantType} locations for client ${normalizedClientNumber}.`,
-      error,
-    )
-    return []
-  }
+    },
+    {
+      cacheKey: [
+        'application-client-locations',
+        applicantType,
+        normalizedClientNumber,
+        normalizedApplicationNumber,
+      ]
+        .filter(Boolean)
+        .join(':'),
+      ttlMs: CLIENT_LOCATION_CACHE_TTL_MS,
+    },
+  )
+  return parseClientLocations(data)
 }
 
 export const fetchExemptionClientLocations = async (
@@ -235,24 +209,19 @@ export const fetchExemptionClientLocations = async (
     return []
   }
 
-  try {
-    const data = await apiService.getCachedData<unknown>(
-      '/lexis/rpc/exemption-details/client-locations',
-      {
-        params: {
-          clientNumber: normalizedClientNumber,
-        },
+  const data = await apiService.getCachedData<unknown>(
+    '/lexis/rpc/exemption-details/client-locations',
+    {
+      params: {
+        clientNumber: normalizedClientNumber,
       },
-      {
-        cacheKey: `exemption-client-locations:${normalizedClientNumber}`,
-        ttlMs: CLIENT_LOCATION_CACHE_TTL_MS,
-      },
-    )
-    return parseClientLocations(data)
-  } catch (error) {
-    console.warn(`Unable to load exemption client locations for ${normalizedClientNumber}.`, error)
-    return []
-  }
+    },
+    {
+      cacheKey: `exemption-client-locations:${normalizedClientNumber}`,
+      ttlMs: CLIENT_LOCATION_CACHE_TTL_MS,
+    },
+  )
+  return parseClientLocations(data)
 }
 
 export const fetchApplicationClientContacts = async (
@@ -268,34 +237,26 @@ export const fetchApplicationClientContacts = async (
     return []
   }
 
-  try {
-    const data = await apiService.getCachedData<unknown>(
-      '/lexis/rpc/application-details/contacts-for-location',
-      {
-        params: {
-          applicantType,
-          applicationNumber: normalizedApplicationNumber,
-          clientLocationCode: normalizedClientLocationCode,
-          clientNumber: normalizedClientNumber,
-        },
+  const data = await apiService.getCachedData<unknown>(
+    '/lexis/rpc/application-details/contacts-for-location',
+    {
+      params: {
+        applicantType,
+        applicationNumber: normalizedApplicationNumber,
+        clientLocationCode: normalizedClientLocationCode,
+        clientNumber: normalizedClientNumber,
       },
-      {
-        cacheKey: [
-          'application-client-contacts',
-          applicantType,
-          normalizedClientNumber,
-          normalizedClientLocationCode,
-          normalizedApplicationNumber,
-        ].join(':'),
-        ttlMs: CLIENT_LOCATION_CACHE_TTL_MS,
-      },
-    )
-    return parseClientContacts(data)
-  } catch (error) {
-    console.warn(
-      `Unable to load ${applicantType} contacts for client ${normalizedClientNumber} location ${normalizedClientLocationCode}.`,
-      error,
-    )
-    return []
-  }
+    },
+    {
+      cacheKey: [
+        'application-client-contacts',
+        applicantType,
+        normalizedClientNumber,
+        normalizedClientLocationCode,
+        normalizedApplicationNumber,
+      ].join(':'),
+      ttlMs: CLIENT_LOCATION_CACHE_TTL_MS,
+    },
+  )
+  return parseClientContacts(data)
 }

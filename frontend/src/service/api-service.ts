@@ -167,6 +167,10 @@ class APIService {
     this.client.interceptors.response.use(
       (response) => {
         this.registerSuccessfulMutationVersion(response)
+        if (isCacheInvalidatingMethod(response.config?.method)) {
+          this.clearCachedGetData()
+          clearAllPageDataCache()
+        }
         return response
       },
       (error: unknown) => {
