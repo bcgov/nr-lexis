@@ -2609,9 +2609,7 @@ test.describe('TEST IDIR admin regression', () => {
     )
     await expect(page.getByRole('textbox', { name: 'Date received (YYYY-MM-DD)' })).toHaveValue('')
     await expect(page.getByRole('combobox', { name: 'List date' })).toHaveValue(nextListDate)
-    await expect(page.getByRole('spinbutton', { name: 'Application term (days)' })).toHaveValue(
-      '180',
-    )
+    await expect(page.getByRole('spinbutton', { name: 'Exemption term (days)' })).toHaveValue('180')
 
     await page.getByRole('tab', { name: 'Items' }).click()
     const paragraphField = page.getByLabel('Location of logs')
@@ -2671,11 +2669,9 @@ test.describe('TEST IDIR admin regression', () => {
 
     await page.getByRole('tab', { name: 'Application' }).click()
     const regionSelect = page.getByRole('combobox', { name: 'Region' })
-    await expect(page.getByRole('spinbutton', { name: 'Application term (days)' })).toHaveValue(
-      '180',
-    )
-    await expect(page.getByLabel('Application term months')).toHaveCount(0)
-    await expect(page.getByLabel('Application term years')).toHaveCount(0)
+    await expect(page.getByRole('spinbutton', { name: 'Exemption term (days)' })).toHaveValue('180')
+    await expect(page.getByLabel('Exemption term (months)')).toHaveCount(0)
+    await expect(page.getByLabel('Exemption term (years)')).toHaveCount(0)
     await expect(regionSelect).toBeEnabled({ timeout: 30_000 })
     if (!(await regionSelect.inputValue()).trim()) {
       await regionSelect.click()
@@ -2702,14 +2698,14 @@ test.describe('TEST IDIR admin regression', () => {
     ).not.toBe('')
 
     const addSpeciesButton = itemsPanel.getByRole('button', {
-      name: 'Add application species',
+      name: 'Add species',
       exact: true,
     })
     await expect(addSpeciesButton).toBeEnabled()
     await addSpeciesButton.click()
 
     const selectedSpeciesList = itemsPanel.getByRole('list', {
-      name: 'Selected application species',
+      name: 'Selected species',
     })
     const selectedSpeciesItem = selectedSpeciesList.getByRole('listitem').filter({
       hasText: firstSpeciesCode,
