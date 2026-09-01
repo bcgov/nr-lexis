@@ -918,6 +918,56 @@ describe('Create Page Core Flows', () => {
     )
   })
 
+  it('keeps concurrent client lookup failures visible until each lookup succeeds', async () => {
+    mockedFetchApplicationClientLocations.mockImplementation((clientNumber, applicantType) => {
+      if (
+        (applicantType === 'owner' && clientNumber === '00011111') ||
+        (applicantType === 'agent' && clientNumber === '00002176')
+      ) {
+        return Promise.reject(new Error('client locations unavailable'))
+      }
+
+      return Promise.resolve([
+        { locationCode: '00', locationName: '00', selected: true },
+        { locationCode: '01', locationName: '01 - MAIN LOCATION', selected: false },
+      ])
+    })
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerApplicantType=A&agentClientNumber=00002176&agentClientLocationCode=00',
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/provincial/application/create"
+            element={<ProvincialApplicationCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('Client details unavailable')).toBeInTheDocument()
+
+    const ownerClientNumber = screen.getByRole('textbox', { name: 'Client number' })
+    fireEvent.change(ownerClientNumber, { target: { value: '00099988' } })
+    await waitFor(() =>
+      expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith('00099988', 'owner'),
+    )
+    expect(screen.getByText('Client details unavailable')).toBeInTheDocument()
+
+    await selectApplicationCreateTab('Agent')
+    const agentClientNumber = screen.getByRole('textbox', { name: 'Agent number' })
+    fireEvent.change(agentClientNumber, { target: { value: '00033333' } })
+    await waitFor(() =>
+      expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith('00033333', 'agent'),
+    )
+    await waitFor(() =>
+      expect(screen.queryByText('Client details unavailable')).not.toBeInTheDocument(),
+    )
+  })
+
   it.each([
     ['non-numeric', '2176X'],
     ['more than eight digits', '123456789'],

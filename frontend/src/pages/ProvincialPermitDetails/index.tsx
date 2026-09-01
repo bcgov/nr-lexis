@@ -1105,9 +1105,9 @@ const ProvincialPermitDetailsPage = () => {
         }
       } catch (error) {
         if (!isCancelled) {
-          console.warn('Unable to load permit owner or agent client data.', error)
+          console.warn('Unable to load permit client data.', error)
           setClientDataErrorMessage(
-            'Owner and agent details could not be retrieved. The saved permit values are still shown.',
+            'Client details could not be retrieved. The saved permit values are still shown.',
           )
         }
       } finally {
