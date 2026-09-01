@@ -998,7 +998,7 @@ describe('Provincial Exemption Search Actions', () => {
     expect(screen.queryByRole('list', { name: 'Selected regions' })).not.toBeInTheDocument()
   })
 
-  it('uses the application search filter order and labels', async () => {
+  it('preserves the legacy exemption filter order with expanded approval dates', async () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
 
     renderPage()
@@ -1012,17 +1012,17 @@ describe('Provincial Exemption Search Actions', () => {
     )
     expect(filterLabels).toEqual([
       'Application number',
-      'Exemption status',
       'Package number',
-      'Exemption type',
       'Exemption number',
       'Region',
-      'Applicant client number',
-      'Owner client number',
       'Approval from date',
       'Approval to date',
       'Listing from date',
       'Listing to date',
+      'Exemption type',
+      'Exemption status',
+      'Applicant client number',
+      'Owner client number',
     ])
   })
 

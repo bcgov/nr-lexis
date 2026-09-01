@@ -676,7 +676,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       .closest('.cds--tile')
     expect(permitFinancialTile).toBeTruthy()
     expect(
-      within(permitFinancialTile as HTMLElement).getByText('Permit volume (m³)'),
+      within(permitFinancialTile as HTMLElement).getByText('Current permit volume (m³)'),
     ).toBeInTheDocument()
     expect(
       within(permitFinancialTile as HTMLElement).getByText('Total exemption volume (m³)'),
@@ -1124,7 +1124,6 @@ describe('Provincial Permit Detail Action Smoke', () => {
         .map((header) => header.textContent),
     ).toEqual([
       'Include in permit',
-      'Item',
       'Timber mark',
       'Scale type',
       'Permit',
@@ -1358,7 +1357,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
       await selectPermitDetailTab('Items')
 
-      expect(await screen.findByText('SCALE-1')).toBeInTheDocument()
+      expect(await screen.findByText('TM-1')).toBeInTheDocument()
+      expect(screen.queryByText('SCALE-1')).not.toBeInTheDocument()
       expect(screen.getByRole('columnheader', { name: 'Include in permit' })).toBeInTheDocument()
       const includeScale = screen.getByRole('checkbox', {
         name: 'Include scale SCALE-1 in permit',
@@ -2414,10 +2414,10 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     await selectPermitDetailTab('Permit')
     const permitVolumeField = screen
-      .getByText('Permit volume (m³)')
+      .getByText('Current permit volume (m³)')
       .closest('.detail-field-item') as HTMLElement
     const permitPiecesField = screen
-      .getByText('Number of pieces')
+      .getByText('Current permit pieces')
       .closest('.detail-field-item') as HTMLElement
     expect(within(permitVolumeField).getByText('130.5')).toBeInTheDocument()
     expect(within(permitPiecesField).getByText('22')).toBeInTheDocument()
@@ -2597,8 +2597,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(submitDate).toBeEnabled()
     expect(screen.getByLabelText('Exemption number')).toBeDisabled()
     expect(screen.getByLabelText('Received date')).toBeDisabled()
-    expect(screen.getByLabelText('Permit volume (m³)')).toBeDisabled()
-    expect(screen.getByLabelText('Number of pieces')).toBeDisabled()
+    expect(screen.getByLabelText('Current permit volume (m³)')).toBeDisabled()
+    expect(screen.getByLabelText('Current permit pieces')).toBeDisabled()
 
     await userEvent.clear(submitDate)
     await userEvent.type(submitDate, '2026-04-09')
@@ -2706,8 +2706,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.type(screen.getByLabelText('Remarks'), 'Updated permit remarks')
     await selectPermitDetailTab('Shipping')
     await userEvent.click(await screen.findByRole('button', { name: 'Edit shipping' }))
-    await userEvent.clear(screen.getByLabelText('Destination company'))
-    await userEvent.type(screen.getByLabelText('Destination company'), 'Updated Destination')
+    await userEvent.clear(screen.getByLabelText('Purchaser'))
+    await userEvent.type(screen.getByLabelText('Purchaser'), 'Updated Destination')
 
     await userEvent.click(screen.getByRole('link', { name: 'Leave permit' }))
     await screen.findByRole('dialog', { name: 'Unsaved changes' })
@@ -2751,8 +2751,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     await selectPermitDetailTab('Shipping')
     await userEvent.click(await screen.findByRole('button', { name: 'Edit shipping' }))
-    await userEvent.clear(screen.getByLabelText('Destination company'))
-    await userEvent.type(screen.getByLabelText('Destination company'), 'Queued shipping change')
+    await userEvent.clear(screen.getByLabelText('Purchaser'))
+    await userEvent.type(screen.getByLabelText('Purchaser'), 'Queued shipping change')
     await userEvent.click(screen.getByRole('button', { name: 'Save shipping' }))
 
     expect(mockedUpdatePermitShipping).not.toHaveBeenCalled()
@@ -2795,7 +2795,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     await selectPermitDetailTab('Shipping')
     await userEvent.click(await screen.findByRole('button', { name: 'Edit shipping' }))
-    await userEvent.selectOptions(screen.getByLabelText('Destination country'), 'US')
+    await userEvent.selectOptions(screen.getByLabelText('Final destination country'), 'US')
     await selectPermitDetailTab('Permit')
     await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
     await userEvent.selectOptions(screen.getByLabelText('Region'), '1908')
@@ -2906,8 +2906,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.getByLabelText('Exemption number')).toBeDisabled()
     expect(screen.getByLabelText('Submit date')).toBeEnabled()
     expect(screen.getByLabelText('Received date')).toBeDisabled()
-    expect(screen.getByLabelText('Permit volume (m³)')).toBeDisabled()
-    expect(screen.getByLabelText('Number of pieces')).toBeDisabled()
+    expect(screen.getByLabelText('Current permit volume (m³)')).toBeDisabled()
+    expect(screen.getByLabelText('Current permit pieces')).toBeDisabled()
     await userEvent.clear(screen.getByLabelText('Permit Request Pieces'))
     await userEvent.type(screen.getByLabelText('Permit Request Pieces'), '250')
     await userEvent.clear(screen.getByLabelText('Permit Request Volume (m³)'))
@@ -3097,8 +3097,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.getByLabelText('Exemption number')).toBeDisabled()
     expect(screen.getByLabelText('Issue date')).toBeDisabled()
     expect(screen.getByLabelText('Region')).toBeDisabled()
-    expect(screen.getByLabelText('Permit volume (m³)')).toBeDisabled()
-    expect(screen.getByLabelText('Number of pieces')).toBeDisabled()
+    expect(screen.getByLabelText('Current permit volume (m³)')).toBeDisabled()
+    expect(screen.getByLabelText('Current permit pieces')).toBeDisabled()
     expect(screen.getByLabelText('Agent client number')).toBeDisabled()
     expect(screen.getByLabelText('Owner client number')).toBeDisabled()
 
@@ -3145,8 +3145,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     await selectPermitDetailTab('Shipping')
     await userEvent.click(await screen.findByRole('button', { name: 'Edit shipping' }))
-    await userEvent.clear(screen.getByLabelText('Destination company'))
-    await userEvent.type(screen.getByLabelText('Destination company'), 'Updated Destination')
+    await userEvent.clear(screen.getByLabelText('Purchaser'))
+    await userEvent.type(screen.getByLabelText('Purchaser'), 'Updated Destination')
     await userEvent.clear(screen.getByLabelText('Estimated shipping date'))
     await userEvent.type(screen.getByLabelText('Estimated shipping date'), '2026-05-25')
     await userEvent.click(screen.getByRole('button', { name: 'Save shipping' }))
@@ -3175,9 +3175,9 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.queryByText('Other port of export')).not.toBeInTheDocument()
 
     await userEvent.click(await screen.findByRole('button', { name: 'Edit shipping' }))
-    await userEvent.selectOptions(screen.getByLabelText('Port of export'), 'OT')
+    await userEvent.selectOptions(screen.getByLabelText('Customs port of export'), 'OT')
     await userEvent.type(screen.getByLabelText('Other port of export'), 'Boundary Bay')
-    await userEvent.selectOptions(screen.getByLabelText('Port of export'), 'VA')
+    await userEvent.selectOptions(screen.getByLabelText('Customs port of export'), 'VA')
 
     expect(screen.queryByLabelText('Other port of export')).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Save shipping' }))
@@ -3236,8 +3236,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
       await selectPermitDetailTab('Shipping')
       await userEvent.click(await screen.findByRole('button', { name: 'Edit shipping' }))
 
-      expect(screen.getByLabelText('Destination country')).toBeDisabled()
-      expect(screen.getByLabelText('Destination company')).toBeEnabled()
+      expect(screen.getByLabelText('Final destination country')).toBeDisabled()
+      expect(screen.getByLabelText('Purchaser')).toBeEnabled()
     },
   )
 

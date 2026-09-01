@@ -132,18 +132,17 @@ const validateForm = (form: BlanketOicPermitForm, agentUsed: boolean): FormError
     ownerClientLocation: form.ownerClientLocation.trim()
       ? undefined
       : 'Owner location is required.',
-    destinationCompanyName: requiredTextError(
-      form.destinationCompanyName,
-      'Destination company',
-      52,
-    ),
+    destinationCompanyName: requiredTextError(form.destinationCompanyName, 'Purchaser', 52),
     destinationCountry:
-      form.destinationCountry.trim().length === 2 ? undefined : 'Destination country is required.',
+      form.destinationCountry.trim().length === 2
+        ? undefined
+        : 'Final destination country is required.',
     transportType:
       form.transportType.trim().length === 1 ? undefined : 'Transport type is required.',
     transportName: requiredTextError(form.transportName, 'Transport name', 26),
     estimatedShippingDate: requiredDateError(form.estimatedShippingDate, 'Estimated shipping date'),
-    portOfExport: form.portOfExport.trim().length === 2 ? undefined : 'Port of export is required.',
+    portOfExport:
+      form.portOfExport.trim().length === 2 ? undefined : 'Customs port of export is required.',
     otherPortOfExport:
       form.portOfExport.trim().toUpperCase() === 'OT'
         ? requiredTextError(form.otherPortOfExport, 'Other port of export', 34)
@@ -722,7 +721,7 @@ const BlanketOicPermitCreateModal = ({
         <div className="legacy-search-grid">
           <TextInput
             id="boic-permit-destination-company"
-            labelText="Destination company"
+            labelText="Purchaser"
             value={form.destinationCompanyName}
             invalid={!!fieldError('destinationCompanyName')}
             invalidText={fieldError('destinationCompanyName')}
@@ -731,14 +730,14 @@ const BlanketOicPermitCreateModal = ({
           />
           <Select
             id="boic-permit-destination-country"
-            labelText="Destination country"
+            labelText="Final destination country"
             value={form.destinationCountry}
             invalid={!!fieldError('destinationCountry')}
             invalidText={fieldError('destinationCountry')}
             disabled={shippingReferencesLoading || !shippingReferences}
             onChange={(event) => setField('destinationCountry', event.target.value)}
           >
-            <SelectItem value="" text="Select a destination country" />
+            <SelectItem value="" text="Select a final destination country" />
             {(shippingReferences?.countries ?? []).map((option) => (
               <SelectItem
                 key={option.code}
@@ -784,7 +783,7 @@ const BlanketOicPermitCreateModal = ({
           />
           <Select
             id="boic-permit-port-of-export"
-            labelText="Port of export"
+            labelText="Customs port of export"
             value={form.portOfExport}
             invalid={!!fieldError('portOfExport')}
             invalidText={fieldError('portOfExport')}
@@ -795,7 +794,7 @@ const BlanketOicPermitCreateModal = ({
               if (port.toUpperCase() !== 'OT') setField('otherPortOfExport', '')
             }}
           >
-            <SelectItem value="" text="Select a port of export" />
+            <SelectItem value="" text="Select a customs port of export" />
             {(shippingReferences?.ports ?? []).map((option) => (
               <SelectItem
                 key={option.code}

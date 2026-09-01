@@ -228,6 +228,7 @@ const buildInitialFormFromQuery = (
   provincialSubmitterIdentityLocked: boolean,
   authoritativeOwnerClientNumber: string,
   canChangeApplicantType: boolean,
+  canViewRemarks: boolean,
 ): ProvincialApplicationCreateForm => {
   const today = formatBusinessIsoDate()
   return {
@@ -278,7 +279,7 @@ const buildInitialFormFromQuery = (
       .filter((value) => value.length > 0),
     endUseCode:
       query.get('applicationEndUseCode') ?? query.get('endUseCode') ?? query.get('endUse') ?? '',
-    comments: query.get('comments') ?? '',
+    comments: canViewRemarks ? (query.get('comments') ?? '') : '',
   }
 }
 
@@ -380,6 +381,7 @@ const ProvincialApplicationCreatePage = () => {
   const { capabilities, canPerform } = useAuth()
   const canChangeApplicantType = canPerform('/changeApplicantType')
   const canReviewApplications = canPerform('/applicationsReview')
+  const canViewRemarks = canPerform('/applicationRemarks')
   const provincialSubmitterIdentityLocked = hasProvincialSubmitterRole(capabilities.roles)
   const authoritativeOwnerClientNumber = capabilities.forestClientNumber?.trim() ?? ''
   const authoritativeOrgUnitNo = capabilities.orgUnitNo?.trim() ?? ''
@@ -391,6 +393,7 @@ const ProvincialApplicationCreatePage = () => {
       provincialSubmitterIdentityLocked,
       authoritativeOwnerClientNumber,
       canChangeApplicantType,
+      canViewRemarks,
     ),
   )
   const draftBaselineRef = useRef(form)
@@ -460,9 +463,12 @@ const ProvincialApplicationCreatePage = () => {
   const visibleApplicationTabs = useMemo(
     () =>
       APPLICATION_CREATE_TABS.filter(
-        (tab) => (tab !== 'agent' || hasAgentTab) && (tab !== 'review' || canReviewApplications),
+        (tab) =>
+          (tab !== 'agent' || hasAgentTab) &&
+          (tab !== 'remarks' || canViewRemarks) &&
+          (tab !== 'review' || canReviewApplications),
       ),
-    [canReviewApplications, hasAgentTab],
+    [canReviewApplications, canViewRemarks, hasAgentTab],
   )
   const selectedApplicationTabIndex = Math.max(
     0,
@@ -1192,22 +1198,22 @@ const ProvincialApplicationCreatePage = () => {
       ),
       ageClass: productTypeRequiresGrowthType(form.productTypeCode)
         ? firstValidationError(
-            () => requiredFieldError(form.ageClass, 'Growth type'),
+            () => requiredFieldError(form.ageClass, 'Age class'),
             () =>
               growthTypes.some((option) => option.value === form.ageClass)
                 ? null
-                : 'Select a valid growth type.',
+                : 'Select a valid age class.',
           )
         : undefined,
       speciesCodes:
         form.speciesCodes.length === 0
           ? !form.region.trim()
-            ? 'Select a region before adding application species.'
+            ? 'Select a region before adding species.'
             : !form.productTypeCode.trim()
-              ? 'Select a product type before adding application species.'
+              ? 'Select a product type before adding species.'
               : !isLoadingApplicationSpecies && applicationSpeciesOptions.length === 0
-                ? 'At least one application species is required, but no species are available for the selected region and product type.'
-                : 'At least one application species is required.'
+                ? 'At least one species is required, but no species are available for the selected region and product type.'
+                : 'At least one species is required.'
           : undefined,
       exemptionType: firstValidationError(
         () =>
@@ -1232,10 +1238,10 @@ const ProvincialApplicationCreatePage = () => {
         () => isoDateFieldError(form.applicationDate),
       ),
       applicationTermDays: firstValidationError(
-        () => requiredFieldError(form.applicationTermDays, 'Application term days'),
-        () => nonNegativeWholeNumberFieldError(form.applicationTermDays, 'Application term days'),
-        () => greaterThanFieldError(form.applicationTermDays, 'Application term days', 0),
-        () => maxNumericValueFieldError(form.applicationTermDays, 99999, 'Application term days'),
+        () => requiredFieldError(form.applicationTermDays, 'Exemption term days'),
+        () => nonNegativeWholeNumberFieldError(form.applicationTermDays, 'Exemption term days'),
+        () => greaterThanFieldError(form.applicationTermDays, 'Exemption term days', 0),
+        () => maxNumericValueFieldError(form.applicationTermDays, 99999, 'Exemption term days'),
       ),
       receivedDate: firstValidationError(
         () => requiredFieldError(form.receivedDate, 'Received date'),
@@ -1263,14 +1269,13 @@ const ProvincialApplicationCreatePage = () => {
       averageLogVolume: productTypeRequiresLogDetails(form.productTypeCode)
         ? averageLogVolumeFieldError(form.averageLogVolume)
         : undefined,
-      comments: applicationTextStorageFieldError(
-        form.comments,
-        APPLICATION_REMARK_MAX_LENGTH,
-        'Comments',
-      ),
+      comments: canViewRemarks
+        ? applicationTextStorageFieldError(form.comments, APPLICATION_REMARK_MAX_LENGTH, 'Remarks')
+        : undefined,
     }),
     [
       applicationSpeciesOptions.length,
+      canViewRemarks,
       currentSchedules,
       exemptionReasons,
       form,
@@ -1477,9 +1482,11 @@ const ProvincialApplicationCreatePage = () => {
         return false
       }
 
+      const { comments, ...confirmedFormWithoutComments } = confirmedForm
       const result = await submitProvincialApplicationCreate({
-        ...confirmedForm,
+        ...confirmedFormWithoutComments,
         applicationTermDays: confirmedForm.applicationTermDays.trim(),
+        ...(canViewRemarks ? { comments } : {}),
       })
       if (result.success) {
         draftBaselineRef.current = confirmedForm
@@ -1585,7 +1592,7 @@ const ProvincialApplicationCreatePage = () => {
           <AppNotification
             kind="warning"
             title="Required options not configured"
-            subtitle="A required product type, exemption reason, growth type, or region list is empty. Save remains disabled."
+            subtitle="A required product type, exemption reason, age class, or region list is empty. Save remains disabled."
             lowContrast
             autoDismissMs={undefined}
             onCloseButtonClick={() => setShowMissingRequiredOptions(false)}
@@ -2042,7 +2049,7 @@ const ProvincialApplicationCreatePage = () => {
                   />
                   <TextInput
                     id="applicationTermDays"
-                    labelText="Application term (days)"
+                    labelText="Exemption term (days)"
                     type="number"
                     min={1}
                     max={99999}
@@ -2096,12 +2103,12 @@ const ProvincialApplicationCreatePage = () => {
                     {productTypeRequiresGrowthType(form.productTypeCode) && (
                       <SearchableSelect
                         id="ageClass"
-                        labelText="Growth type"
+                        labelText="Age class"
                         value={form.ageClass}
                         disabled={!optionsLoaded || optionsUnavailable}
                         invalid={!!fieldError('ageClass')}
                         invalidText={fieldError('ageClass')}
-                        placeholder="Select growth type"
+                        placeholder="Select age class"
                         options={growthTypes}
                         onBlur={() => markFieldTouched('ageClass')}
                         onChange={(value) => {
@@ -2177,12 +2184,9 @@ const ProvincialApplicationCreatePage = () => {
                           }
                           onClick={onAddApplicationSpecies}
                         >
-                          Add application species
+                          Add species
                         </Button>
-                        <ul
-                          className="application-species-list"
-                          aria-label="Selected application species"
-                        >
+                        <ul className="application-species-list" aria-label="Selected species">
                           {form.speciesCodes.map((speciesCode) => (
                             <li key={speciesCode}>
                               <DismissibleTag
@@ -2257,32 +2261,36 @@ const ProvincialApplicationCreatePage = () => {
                 />
               </Tile>
             </TabPanel>
-            <TabPanel className="application-detail-tab-panel">
-              <Tile
-                className="create-form-tile application-detail-section"
-                role="region"
-                aria-labelledby="application-create-remarks-heading"
-              >
-                <h2 id="application-create-remarks-heading" className="detail-tile-title">
-                  Remarks
-                </h2>
-                <div className="legacy-search-actions create-form-comments">
-                  <TextArea
-                    id="applicationComments"
-                    labelText="Comments"
-                    maxCount={APPLICATION_REMARK_MAX_LENGTH}
-                    value={form.comments}
-                    invalid={!!fieldError('comments')}
-                    invalidText={fieldError('comments')}
-                    onBlur={() => markFieldTouched('comments')}
-                    onChange={(event) => {
-                      markFormEdited()
-                      setForm((current) => ({ ...current, comments: event.target.value }))
-                    }}
-                  />
-                </div>
-              </Tile>
-            </TabPanel>
+            {canViewRemarks
+              ? [
+                  <TabPanel key="remarks" className="application-detail-tab-panel">
+                    <Tile
+                      className="create-form-tile application-detail-section"
+                      role="region"
+                      aria-labelledby="application-create-remarks-heading"
+                    >
+                      <h2 id="application-create-remarks-heading" className="detail-tile-title">
+                        Remarks
+                      </h2>
+                      <div className="legacy-search-actions create-form-comments">
+                        <TextArea
+                          id="applicationComments"
+                          labelText="Remarks"
+                          maxCount={APPLICATION_REMARK_MAX_LENGTH}
+                          value={form.comments}
+                          invalid={!!fieldError('comments')}
+                          invalidText={fieldError('comments')}
+                          onBlur={() => markFieldTouched('comments')}
+                          onChange={(event) => {
+                            markFormEdited()
+                            setForm((current) => ({ ...current, comments: event.target.value }))
+                          }}
+                        />
+                      </div>
+                    </Tile>
+                  </TabPanel>,
+                ]
+              : []}
             <TabPanel className="application-detail-tab-panel">
               <Tile
                 className="create-form-tile application-detail-section"
@@ -2297,36 +2305,39 @@ const ProvincialApplicationCreatePage = () => {
                 </p>
               </Tile>
             </TabPanel>
-            {canReviewApplications && (
-              <TabPanel className="application-detail-tab-panel">
-                <Tile
-                  className="create-form-tile application-detail-section"
-                  role="region"
-                  aria-labelledby="application-create-review-heading"
-                >
-                  <h2 id="application-create-review-heading" className="detail-tile-title">
-                    Review
-                  </h2>
-                  <div className="legacy-search-grid create-form-grid">
-                    <TextInput
-                      id="applicationCreateReviewStatus"
-                      labelText="Application status"
-                      value="New"
-                      readOnly
-                    />
-                    <TextArea
-                      id="applicationCreateReviewRemarks"
-                      labelText="Remarks"
-                      value=""
-                      disabled
-                    />
-                  </div>
-                  <p className="detail-empty-message">
-                    Save the application before changing its review status or adding review remarks.
-                  </p>
-                </Tile>
-              </TabPanel>
-            )}
+            {canReviewApplications
+              ? [
+                  <TabPanel key="review" className="application-detail-tab-panel">
+                    <Tile
+                      className="create-form-tile application-detail-section"
+                      role="region"
+                      aria-labelledby="application-create-review-heading"
+                    >
+                      <h2 id="application-create-review-heading" className="detail-tile-title">
+                        Review
+                      </h2>
+                      <div className="legacy-search-grid create-form-grid">
+                        <TextInput
+                          id="applicationCreateReviewStatus"
+                          labelText="Application status"
+                          value="New"
+                          readOnly
+                        />
+                        <TextArea
+                          id="applicationCreateReviewRemarks"
+                          labelText="Remarks"
+                          value=""
+                          disabled
+                        />
+                      </div>
+                      <p className="detail-empty-message">
+                        Save the application before changing its review status or adding review
+                        remarks.
+                      </p>
+                    </Tile>
+                  </TabPanel>,
+                ]
+              : []}
           </TabPanels>
         </Tabs>
         <div

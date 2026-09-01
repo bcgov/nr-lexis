@@ -104,7 +104,7 @@ const SORT_COLUMNS: {
   { id: 'applicationNumber', label: 'Application' },
   { id: 'packageNumber', label: 'Package' },
   { id: 'listingDate', label: 'Listing date' },
-  { id: 'region', label: 'Natural resource region code' },
+  { id: 'region', label: 'Region' },
   { id: 'offerWithdrawalDate', label: 'Offer withdrawn date' },
 ]
 

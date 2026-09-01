@@ -496,6 +496,10 @@ describe('Admin upload workflow smoke', () => {
 
     expect(screen.getAllByText('permit.pdf').length).toBeGreaterThan(0)
     expect(screen.getAllByText('scale.csv').length).toBeGreaterThan(0)
+    const queuedFilesTable = screen.getByRole('table', { name: 'Queued files' })
+    for (const header of within(queuedFilesTable).getAllByRole('columnheader')) {
+      expect(header).toHaveAttribute('scope', 'col')
+    }
     expect(screen.queryByText('Showing 2 of 2 files')).not.toBeInTheDocument()
     const workflowProgress = screen.getByRole('list', { name: 'Upload queue workflow progress' })
     expect(
@@ -789,6 +793,9 @@ describe('Admin upload workflow smoke', () => {
       within(applicationDetailsTable).getByRole('rowheader', { name: 'Exemption reason' }),
     ).toBeInTheDocument()
     const productDetailsTable = screen.getByRole('table', { name: 'Product details review' })
+    for (const header of within(productDetailsTable).getAllByRole('columnheader')) {
+      expect(header).toHaveAttribute('scope', 'col')
+    }
     expect(
       within(productDetailsTable).getByRole('columnheader', { name: 'Product type' }),
     ).toBeInTheDocument()
@@ -910,6 +917,9 @@ describe('Admin upload workflow smoke', () => {
     expect(
       within(validationIssuesTable).getByRole('columnheader', { name: 'Submission file' }),
     ).toBeInTheDocument()
+    for (const header of within(validationIssuesTable).getAllByRole('columnheader')) {
+      expect(header).toHaveAttribute('scope', 'col')
+    }
     expect(within(validationIssuesTable).getByText('invalid.xml')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Download issues as CSV' })).toHaveAttribute(
       'download',

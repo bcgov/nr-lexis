@@ -831,7 +831,7 @@ class ApplicationDetailsRpcControllerTest {
   @Test
   void addApplicationLegacyShouldMapAliasesAndReturnLegacyPersistencePayload() {
     TestingAuthenticationToken authentication =
-        authorized("createApplication", "/changeApplicantType");
+        authorized("createApplication", "/changeApplicantType", "/applicationRemarks");
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(service.addApplication(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq("idir\\jsmith")))
         .thenReturn(
@@ -885,6 +885,31 @@ class ApplicationDetailsRpcControllerTest {
             authentication,
             11L,
             ProvincialAuthorizationService.OrgUnitSurface.APPLICATION_WRITE);
+  }
+
+  @Test
+  void addApplicationShouldDiscardRemarkWithoutApplicationRemarksAuthority() {
+    TestingAuthenticationToken authentication = authorized("createApplication");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.addApplication(any(), org.mockito.ArgumentMatchers.eq("idir\\jsmith")))
+        .thenReturn(
+            new ApplicationDetailsRpcService.CreateApplicationResult(
+                true, "Saved", 1000456L, List.of(), List.of()));
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("ownerClientNumber", "00011111");
+    params.add("comments", "Hidden comment");
+    params.add("additionalRemarks", "Hidden additional remark");
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
+        controller.addApplicationLegacy(params, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    ArgumentCaptor<ApplicationDetailsRpcService.CreateApplicationRequest> requestCaptor =
+        ArgumentCaptor.forClass(ApplicationDetailsRpcService.CreateApplicationRequest.class);
+    verify(service)
+        .addApplication(
+            requestCaptor.capture(), org.mockito.ArgumentMatchers.eq("idir\\jsmith"));
+    assertThat(requestCaptor.getValue().remarkBody()).isNull();
   }
 
   @Test

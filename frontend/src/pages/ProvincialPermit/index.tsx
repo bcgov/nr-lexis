@@ -501,34 +501,11 @@ const ProvincialPermitPage = () => {
                   value={filters.applicationNumber}
                   onChange={(event) => updateFilter('applicationNumber', event.target.value)}
                 />
-                <SearchableSelect
-                  id="permitStatus"
-                  labelText="Permit status"
-                  value={filters.permitStatus}
-                  placeholder="All statuses"
-                  options={permitStatusOptions}
-                  disabled={optionsLoading || optionsUnavailable}
-                  onChange={(value) => updateFilter('permitStatus', value)}
-                />
                 <TextInput
                   id="packageNumber"
                   labelText="Package number"
                   value={filters.packageNumber}
                   onChange={(event) => updateFilter('packageNumber', event.target.value)}
-                />
-                <TextInput
-                  id="permitNumber"
-                  labelText="Permit number"
-                  value={filters.permitNumber}
-                  onChange={(event) => updateFilter('permitNumber', event.target.value)}
-                />
-                {/* INTENTIONAL_LEGACY_DIVERGENCE(SEARCH_FILTER_EXPANSION):
-                    Modern permit search makes the hidden legacy invoice-number criterion visible. */}
-                <TextInput
-                  id="invoiceNumber"
-                  labelText="Invoice number"
-                  value={filters.invoiceNumber}
-                  onChange={(event) => updateFilter('invoiceNumber', event.target.value)}
                 />
                 <RegionMultiSelect
                   id="region"
@@ -543,18 +520,6 @@ const ProvincialPermitPage = () => {
                       nextSelected.map((item) => item.id),
                     )
                   }}
-                />
-                <TextInput
-                  id="applicantClientNumber"
-                  labelText="Applicant client number"
-                  value={filters.applicantClientNumber}
-                  onChange={(event) => updateFilter('applicantClientNumber', event.target.value)}
-                />
-                <TextInput
-                  id="ownerClientNumber"
-                  labelText="Owner client number"
-                  value={filters.ownerClientNumber}
-                  onChange={(event) => updateFilter('ownerClientNumber', event.target.value)}
                 />
                 <IsoDatePicker
                   id="issuedFromDate"
@@ -571,6 +536,41 @@ const ProvincialPermitPage = () => {
                   invalid={!isValidIsoDate(filters.issuedToDate)}
                   invalidText="Date must be YYYY-MM-DD"
                   onChange={(value) => updateFilter('issuedToDate', value)}
+                />
+                <SearchableSelect
+                  id="permitStatus"
+                  labelText="Permit status"
+                  value={filters.permitStatus}
+                  placeholder="All statuses"
+                  options={permitStatusOptions}
+                  disabled={optionsLoading || optionsUnavailable}
+                  onChange={(value) => updateFilter('permitStatus', value)}
+                />
+                <TextInput
+                  id="permitNumber"
+                  labelText="Permit number"
+                  value={filters.permitNumber}
+                  onChange={(event) => updateFilter('permitNumber', event.target.value)}
+                />
+                {/* INTENTIONAL_LEGACY_DIVERGENCE(SEARCH_FILTER_EXPANSION):
+                    Modern permit search makes the hidden legacy invoice-number criterion visible. */}
+                <TextInput
+                  id="invoiceNumber"
+                  labelText="Invoice number"
+                  value={filters.invoiceNumber}
+                  onChange={(event) => updateFilter('invoiceNumber', event.target.value)}
+                />
+                <TextInput
+                  id="applicantClientNumber"
+                  labelText="Applicant client number"
+                  value={filters.applicantClientNumber}
+                  onChange={(event) => updateFilter('applicantClientNumber', event.target.value)}
+                />
+                <TextInput
+                  id="ownerClientNumber"
+                  labelText="Owner client number"
+                  value={filters.ownerClientNumber}
+                  onChange={(event) => updateFilter('ownerClientNumber', event.target.value)}
                 />
               </div>
               <div className="legacy-search-actions">

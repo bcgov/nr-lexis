@@ -904,29 +904,11 @@ const ProvincialExemptionPage = () => {
                   value={filters.applicationNumber}
                   onChange={(event) => updateFilter('applicationNumber', event.target.value)}
                 />
-                <SearchableSelect
-                  id="exemptionStatusCode"
-                  labelText="Exemption status"
-                  value={filters.exemptionStatusCode}
-                  placeholder="All statuses"
-                  options={exemptionStatusOptions}
-                  disabled={optionsLoading || optionsUnavailable}
-                  onChange={(value) => updateFilter('exemptionStatusCode', value)}
-                />
                 <TextInput
                   id="packageNumber"
                   labelText="Package number"
                   value={filters.packageNumber}
                   onChange={(event) => updateFilter('packageNumber', event.target.value)}
-                />
-                <SearchableSelect
-                  id="exemptionTypeCode"
-                  labelText="Exemption type"
-                  value={filters.exemptionTypeCode}
-                  placeholder="All types"
-                  options={exemptionTypeOptions}
-                  disabled={optionsLoading || optionsUnavailable}
-                  onChange={(value) => updateFilter('exemptionTypeCode', value)}
                 />
                 <TextInput
                   id="exemptionNumber"
@@ -948,24 +930,6 @@ const ProvincialExemptionPage = () => {
                     )
                   }}
                 />
-                {canFilterByClient && (
-                  <>
-                    <TextInput
-                      id="applicantClientNumber"
-                      labelText="Applicant client number"
-                      value={filters.applicantClientNumber}
-                      onChange={(event) =>
-                        updateFilter('applicantClientNumber', event.target.value)
-                      }
-                    />
-                    <TextInput
-                      id="ownerClientNumber"
-                      labelText="Owner client number"
-                      value={filters.ownerClientNumber}
-                      onChange={(event) => updateFilter('ownerClientNumber', event.target.value)}
-                    />
-                  </>
-                )}
                 {/* INTENTIONAL_LEGACY_DIVERGENCE(SEARCH_FILTER_EXPANSION):
                     Modern exemption search exposes approval-date criteria hidden in legacy. */}
                 <IsoDatePicker
@@ -1000,6 +964,42 @@ const ProvincialExemptionPage = () => {
                   invalidText="Date must be YYYY-MM-DD"
                   onChange={(value) => updateFilter('listToDate', value)}
                 />
+                <SearchableSelect
+                  id="exemptionTypeCode"
+                  labelText="Exemption type"
+                  value={filters.exemptionTypeCode}
+                  placeholder="All types"
+                  options={exemptionTypeOptions}
+                  disabled={optionsLoading || optionsUnavailable}
+                  onChange={(value) => updateFilter('exemptionTypeCode', value)}
+                />
+                <SearchableSelect
+                  id="exemptionStatusCode"
+                  labelText="Exemption status"
+                  value={filters.exemptionStatusCode}
+                  placeholder="All statuses"
+                  options={exemptionStatusOptions}
+                  disabled={optionsLoading || optionsUnavailable}
+                  onChange={(value) => updateFilter('exemptionStatusCode', value)}
+                />
+                {canFilterByClient && (
+                  <>
+                    <TextInput
+                      id="applicantClientNumber"
+                      labelText="Applicant client number"
+                      value={filters.applicantClientNumber}
+                      onChange={(event) =>
+                        updateFilter('applicantClientNumber', event.target.value)
+                      }
+                    />
+                    <TextInput
+                      id="ownerClientNumber"
+                      labelText="Owner client number"
+                      value={filters.ownerClientNumber}
+                      onChange={(event) => updateFilter('ownerClientNumber', event.target.value)}
+                    />
+                  </>
+                )}
               </div>
               <div className="legacy-search-actions">
                 <Button

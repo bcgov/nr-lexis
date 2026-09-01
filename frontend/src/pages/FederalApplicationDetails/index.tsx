@@ -306,8 +306,11 @@ const FederalApplicationDetailsPage = () => {
         () => isoDateFieldError(permitForm.permitIssueDate),
       ),
       destinationCountry:
-        requiredExactLengthFieldError(permitForm.destinationCountry, 2, 'Destination country') ??
-        undefined,
+        requiredExactLengthFieldError(
+          permitForm.destinationCountry,
+          2,
+          'Final destination country',
+        ) ?? undefined,
       transportType:
         requiredExactLengthFieldError(permitForm.transportType, 1, 'Transport type') ?? undefined,
       transportName:
@@ -323,7 +326,8 @@ const FederalApplicationDetailsPage = () => {
         () => isoDateFieldError(permitForm.shippingDate),
       ),
       portOfExport:
-        requiredExactLengthFieldError(permitForm.portOfExport, 2, 'Port of export') ?? undefined,
+        requiredExactLengthFieldError(permitForm.portOfExport, 2, 'Customs port of export') ??
+        undefined,
       otherPortOfExport:
         permitForm.portOfExport.trim().toUpperCase() === 'OT'
           ? (firstValidationError(
@@ -961,7 +965,7 @@ const FederalApplicationDetailsPage = () => {
                 <Tab>Offers</Tab>
                 {canViewFederalApplication && <Tab>Remarks</Tab>}
                 <Tab>Documents</Tab>
-                <Tab>Shipping Details</Tab>
+                <Tab>Shipping details</Tab>
               </TabList>
               <TabPanels>
                 <TabPanel className="application-detail-tab-panel">
@@ -1171,7 +1175,7 @@ const FederalApplicationDetailsPage = () => {
                             value: displayValue(detail.exemptionReason),
                           },
                           {
-                            label: 'Term days',
+                            label: 'Exemption term (days)',
                             value: displayValue(detail.termDays),
                           },
                         ]}
@@ -1248,11 +1252,11 @@ const FederalApplicationDetailsPage = () => {
                             value: displayValue(detail.ageClass),
                           },
                           {
-                            label: 'Average log volume',
+                            label: 'Average log volume (m³)',
                             value: displayValue(detail.averageLogVolume),
                           },
                           {
-                            label: 'Application volume',
+                            label: 'Application volume (m³)',
                             value: displayValue(detail.applicationVolume),
                           },
                           {
@@ -1691,7 +1695,7 @@ const FederalApplicationDetailsPage = () => {
                               />
                               <Select
                                 id="federalPermitDestinationCountry"
-                                labelText="Destination country"
+                                labelText="Final destination country"
                                 value={permitForm.destinationCountry}
                                 invalid={!!permitFieldErrors.destinationCountry}
                                 invalidText={permitFieldErrors.destinationCountry}
@@ -1702,7 +1706,7 @@ const FederalApplicationDetailsPage = () => {
                                   }))
                                 }
                               >
-                                <SelectItem value="" text="Select a destination country" />
+                                <SelectItem value="" text="Select a final destination country" />
                                 {(shippingReferences?.countries ?? []).map((option) => (
                                   <SelectItem
                                     key={option.code}
@@ -1762,7 +1766,7 @@ const FederalApplicationDetailsPage = () => {
                               />
                               <Select
                                 id="federalPermitPortOfExport"
-                                labelText="Port of export"
+                                labelText="Customs port of export"
                                 value={permitForm.portOfExport}
                                 invalid={!!permitFieldErrors.portOfExport}
                                 invalidText={permitFieldErrors.portOfExport}
@@ -1778,7 +1782,7 @@ const FederalApplicationDetailsPage = () => {
                                   }))
                                 }}
                               >
-                                <SelectItem value="" text="Select a port of export" />
+                                <SelectItem value="" text="Select a customs port of export" />
                                 {(shippingReferences?.ports ?? []).map((option) => (
                                   <SelectItem
                                     key={option.code}

@@ -862,15 +862,15 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     }
     await waitFor(() => {
       expectSummaryField('Product type', 'Harvested Timber')
-      expectSummaryField('Org Unit', 'Coast')
+      expectSummaryField('Region', 'Coast')
       expectSummaryField('Applicant type', 'Agent')
       expectSummaryField('Owner client location', '00 - Owner Main Location')
       expectSummaryField('Owner contact name', 'Owner Contact')
       expectSummaryField('Agent client location', '01 - Agent Main Location')
-      expectSummaryField('Growth type', 'Old Growth')
+      expectSummaryField('Age class', 'Old Growth')
       expectSummaryField('Location of logs', 'BC')
-      expectSummaryField('Application species', 'FI')
-      expectSummaryField('Application end use', 'Lumber')
+      expectSummaryField('Species list', 'FI')
+      expectSummaryField('End use', 'Lumber')
     })
     expect(within(summaryTile).queryByRole('button', { name: 'Save Summary' })).toBeNull()
 
@@ -1312,12 +1312,12 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(summaryControls.getByLabelText('Jurisdiction')).toHaveAttribute('readonly')
     expect(summaryControls.getByLabelText('Jurisdiction')).toHaveValue('F - Federal')
     expect(getSummaryComboBox(summaryControls, 'Applicant type')).toBeInTheDocument()
-    const termInput = await screen.findByLabelText('Term (days)')
+    const termInput = await screen.findByLabelText('Exemption term (days)')
     fireEvent.change(termInput, { target: { value: '5' } })
-    fireEvent.change(screen.getByLabelText('Term (months)'), {
+    fireEvent.change(screen.getByLabelText('Exemption term (months)'), {
       target: { value: '2' },
     })
-    fireEvent.change(screen.getByLabelText('Term (years)'), {
+    fireEvent.change(screen.getByLabelText('Exemption term (years)'), {
       target: { value: '1' },
     })
 
@@ -1405,9 +1405,9 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     )
 
     await selectApplicationSummaryTile()
-    const termDays = screen.getByLabelText('Term (days)')
-    const termMonths = screen.getByLabelText('Term (months)')
-    const termYears = screen.getByLabelText('Term (years)')
+    const termDays = screen.getByLabelText('Exemption term (days)')
+    const termMonths = screen.getByLabelText('Exemption term (months)')
+    const termYears = screen.getByLabelText('Exemption term (years)')
 
     expect(termDays).toHaveAttribute('max', '99999')
     expect(termMonths).toHaveAttribute('max', '999')
@@ -1416,9 +1416,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     fireEvent.change(termDays, { target: { value: '100000' } })
     await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
 
-    expect(await screen.findAllByText('Application term days must be 99999 or less.')).toHaveLength(
-      2,
-    )
+    expect(await screen.findAllByText('Exemption term days must be 99999 or less.')).toHaveLength(2)
     expect(mockedCheckApplicationVolumeUsage).not.toHaveBeenCalled()
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
 
@@ -1426,7 +1424,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     fireEvent.change(termMonths, { target: { value: '1' } })
     await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
 
-    expect(await screen.findAllByText('Application term must be 99999 or less.')).toHaveLength(2)
+    expect(await screen.findAllByText('Exemption term must be 99999 or less.')).toHaveLength(2)
     expect(mockedCheckApplicationVolumeUsage).not.toHaveBeenCalled()
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
   })
@@ -1718,7 +1716,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     const summaryControls = within(await selectApplicationSummaryTile())
     const selectedSpecies = summaryControls.getByRole('list', {
-      name: 'Selected application species',
+      name: 'Selected species',
     })
     const removeFir = within(selectedSpecies).getByRole('button', {
       name: 'Remove FI from application',
@@ -1964,22 +1962,22 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     const averageLogVolume = await summaryControls.findByLabelText('Average log volume (m³)')
     const productLocation = summaryControls.getByLabelText('Location of logs')
 
-    expect(getSummaryComboBox(summaryControls, 'Growth type')).toBeInTheDocument()
+    expect(getSummaryComboBox(summaryControls, 'Age class')).toBeInTheDocument()
     fireEvent.change(averageLogVolume, { target: { value: '-0.1' } })
     fireEvent.change(productLocation, { target: { value: '' } })
 
     await chooseComboBoxOption(productType, 'Standing Timber')
-    expect(getSummaryComboBox(summaryControls, 'Growth type')).toBeInTheDocument()
+    expect(getSummaryComboBox(summaryControls, 'Age class')).toBeInTheDocument()
     expect(summaryControls.queryByLabelText('Average log volume (m³)')).not.toBeInTheDocument()
     expect(summaryControls.queryByLabelText('Location of logs')).not.toBeInTheDocument()
 
-    await clearComboBox(getSummaryComboBox(summaryControls, 'Growth type'))
+    await clearComboBox(getSummaryComboBox(summaryControls, 'Age class'))
     await userEvent.click(summaryControls.getByRole('button', { name: 'Save Summary' }))
-    expect(screen.getAllByText('Growth type is required.').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Age class is required.').length).toBeGreaterThan(0)
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
 
     await chooseComboBoxOption(productType, 'Timber')
-    expect(summaryControls.queryByRole('combobox', { name: 'Growth type' })).not.toBeInTheDocument()
+    expect(summaryControls.queryByRole('combobox', { name: 'Age class' })).not.toBeInTheDocument()
     await userEvent.click(summaryControls.getByRole('button', { name: 'Save Summary' }))
 
     await waitFor(() => {

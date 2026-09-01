@@ -182,13 +182,20 @@ export type ProvincialApplicationCreateSubmission = {
   averageLogVolume: string
   speciesCodes?: string[]
   endUseCode?: string
-  comments: string
+  comments?: string
 }
 
 export const submitProvincialApplicationCreate = async (
   form: ProvincialApplicationCreateSubmission,
 ): Promise<CreateSubmissionResult> => {
   const selectedSpecies = (form.speciesCodes ?? []).join(',')
+  const remarksPayload =
+    form.comments === undefined
+      ? {}
+      : {
+          comments: form.comments,
+          additionalRemarks: form.comments,
+        }
   try {
     const payload = await postLegacyForm(
       getProvincialApplicationCreatePath(),
@@ -232,8 +239,7 @@ export const submitProvincialApplicationCreate = async (
         applicationEndUseCode: form.endUseCode,
         endUseCode: form.endUseCode,
         endUse: form.endUseCode,
-        comments: form.comments,
-        additionalRemarks: form.comments,
+        ...remarksPayload,
       }),
     )
     return parseCreateResponse(payload, ['applicationNumber'])
