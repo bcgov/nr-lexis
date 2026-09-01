@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   Button,
   Checkbox,
@@ -11,7 +11,10 @@ import {
 import IsoDatePicker from '@/components/IsoDatePicker'
 import Modal from '@/components/Modal'
 import PendingIcon from '@/components/PendingIcon'
-import { clientLocationLabel } from '@/pages/shared/application-form-utils'
+import {
+  CLIENT_LOOKUP_UNAVAILABLE_MESSAGE,
+  clientLocationLabel,
+} from '@/pages/shared/application-form-utils'
 import { isValidIsoDate } from '@/pages/shared/create-form-utils'
 import type { IdTextOption } from '@/pages/shared/search-query-utils'
 import {
@@ -228,6 +231,13 @@ const BlanketOicPermitCreateModal = ({
   const [showValidationErrors, setShowValidationErrors] = useState(false)
   const [saving, setSaving] = useState(false)
   const [actionError, setActionError] = useState('')
+  const [clientLookupFailures, setClientLookupFailures] = useState<ReadonlySet<ClientKind>>(
+    () => new Set(),
+  )
+  const currentFormRef = useRef(form)
+  const ownerLookupRequestRef = useRef(0)
+  const agentLookupRequestRef = useRef(0)
+  currentFormRef.current = form
   const formErrors = validateForm(form, agentUsed)
 
   useEffect(() => {
@@ -276,6 +286,22 @@ const BlanketOicPermitCreateModal = ({
     setForm((current) => ({ ...current, [field]: value }))
   }
 
+  const updateClientLookupFailure = (kind: ClientKind, failed: boolean) => {
+    setClientLookupFailures((current) => {
+      if (current.has(kind) === failed) {
+        return current
+      }
+
+      const next = new Set(current)
+      if (failed) {
+        next.add(kind)
+      } else {
+        next.delete(kind)
+      }
+      return next
+    })
+  }
+
   const loadClientLocations = async (
     kind: ClientKind,
   ): Promise<{ clientNumber: string; locationCode: string }> => {
@@ -284,13 +310,32 @@ const BlanketOicPermitCreateModal = ({
     const setLocations = kind === 'owner' ? setOwnerLocations : setAgentLocations
     const setLoading = kind === 'owner' ? setOwnerLookupLoading : setAgentLookupLoading
     const setAttempted = kind === 'owner' ? setOwnerLookupAttempted : setAgentLookupAttempted
+    const requestRef = kind === 'owner' ? ownerLookupRequestRef : agentLookupRequestRef
+    const requestId = ++requestRef.current
     const locationField: FormField =
       kind === 'owner' ? 'ownerClientLocation' : 'agentClientLocation'
     const clientNumberField: FormField =
       kind === 'owner' ? 'ownerClientNumber' : 'agentClientNumber'
+    const currentSelection = (): { clientNumber: string; locationCode: string } => {
+      const current = currentFormRef.current
+      return kind === 'owner'
+        ? {
+            clientNumber: current.ownerClientNumber.trim(),
+            locationCode: current.ownerClientLocation.trim(),
+          }
+        : {
+            clientNumber: current.agentClientNumber.trim(),
+            locationCode: current.agentClientLocation.trim(),
+          }
+    }
+    const isLatestRequest = (): boolean => {
+      const current = currentSelection()
+      return requestRef.current === requestId && current.clientNumber === clientNumber
+    }
 
     setAttempted(true)
     if (!/^\d{1,8}$/.test(clientNumber)) {
+      updateClientLookupFailure(kind, false)
       setLocations([])
       setField(locationField, '')
       return { clientNumber, locationCode: '' }
@@ -299,12 +344,19 @@ const BlanketOicPermitCreateModal = ({
     setLoading(true)
     try {
       const locations = await fetchExemptionClientLocations(clientNumber)
+      if (!isLatestRequest()) {
+        return currentSelection()
+      }
       const selectedLocation =
         locations.find(({ selected }) => selected)?.locationCode ?? locations[0]?.locationCode ?? ''
       const clientData = selectedLocation
         ? await fetchExemptionClientData(clientNumber, selectedLocation)
         : null
+      if (!isLatestRequest()) {
+        return currentSelection()
+      }
       const confirmedClientNumber = clientData?.clientNumber.trim() || clientNumber
+      updateClientLookupFailure(kind, false)
       setLocations(locations)
       setForm((current) => {
         const currentClientNumber =
@@ -319,12 +371,16 @@ const BlanketOicPermitCreateModal = ({
       })
       return { clientNumber: confirmedClientNumber, locationCode: selectedLocation }
     } catch (error) {
+      if (!isLatestRequest()) {
+        return currentSelection()
+      }
       console.error(error)
-      setLocations([])
-      setField(locationField, '')
-      return { clientNumber, locationCode: '' }
+      updateClientLookupFailure(kind, true)
+      return currentSelection()
     } finally {
-      setLoading(false)
+      if (requestRef.current === requestId) {
+        setLoading(false)
+      }
     }
   }
 
@@ -457,6 +513,15 @@ const BlanketOicPermitCreateModal = ({
           hideCloseButton
         />
       )}
+      {clientLookupFailures.size > 0 && (
+        <InlineNotification
+          kind="error"
+          title="Client details unavailable"
+          subtitle={CLIENT_LOOKUP_UNAVAILABLE_MESSAGE}
+          lowContrast
+          onCloseButtonClick={() => setClientLookupFailures(new Set())}
+        />
+      )}
       {actionError && (
         <InlineNotification
           kind="error"
@@ -553,6 +618,8 @@ const BlanketOicPermitCreateModal = ({
             }
             maxLength={8}
             onChange={(event) => {
+              ownerLookupRequestRef.current += 1
+              setOwnerLookupLoading(false)
               setField('ownerClientNumber', event.target.value)
               setField('ownerClientLocation', '')
               setOwnerLocations([])
@@ -589,6 +656,9 @@ const BlanketOicPermitCreateModal = ({
               const enabled = Boolean(checked)
               setAgentUsed(enabled)
               if (!enabled) {
+                agentLookupRequestRef.current += 1
+                setAgentLookupLoading(false)
+                updateClientLookupFailure('agent', false)
                 setField('agentClientNumber', '')
                 setField('agentClientLocation', '')
                 setAgentLocations([])
@@ -612,6 +682,8 @@ const BlanketOicPermitCreateModal = ({
                 }
                 maxLength={8}
                 onChange={(event) => {
+                  agentLookupRequestRef.current += 1
+                  setAgentLookupLoading(false)
                   setField('agentClientNumber', event.target.value)
                   setField('agentClientLocation', '')
                   setAgentLocations([])

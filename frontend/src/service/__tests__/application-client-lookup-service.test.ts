@@ -193,6 +193,20 @@ describe('application-client-lookup-service', () => {
     expect(getCachedDataMock).not.toHaveBeenCalled()
   })
 
+  it('keeps an explicit not-found client response distinct from an unavailable response', async () => {
+    getCachedDataMock.mockResolvedValue({ notfound: 'true' })
+
+    await expect(fetchApplicationClientData('00011111', '01')).resolves.toBeNull()
+  })
+
+  it('rejects a malformed not-found client response', async () => {
+    getCachedDataMock.mockResolvedValue({ notfound: 'false' })
+
+    await expect(fetchApplicationClientData('00011111', '01')).rejects.toThrow(
+      'empty or malformed response',
+    )
+  })
+
   it('scopes related client data lookups to their parent record', async () => {
     getCachedDataMock.mockResolvedValue({
       clientNumber: '00022222',
@@ -245,15 +259,40 @@ describe('application-client-lookup-service', () => {
     expect(getCachedDataMock).not.toHaveBeenCalled()
   })
 
-  it('returns an empty list when the endpoint fails', async () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    getCachedDataMock.mockRejectedValue(new Error('network'))
+  it('propagates endpoint failures so callers can distinguish unavailable from no data', async () => {
+    const error = new Error('network')
+    const lookups = [
+      () => fetchApplicationClientData('00011111', '01'),
+      () => fetchExemptionClientData('00011111', '01'),
+      () => fetchApplicationClientLocations('00011111'),
+      () => fetchExemptionClientLocations('00011111'),
+      () => fetchApplicationClientContacts('00011111', '01'),
+    ]
 
-    const result = await fetchApplicationClientLocations('00011111')
+    for (const lookup of lookups) {
+      getCachedDataMock.mockRejectedValueOnce(error)
+      await expect(lookup()).rejects.toBe(error)
+    }
+  })
 
-    expect(result).toEqual([])
-    expect(warnSpy).toHaveBeenCalledTimes(1)
-    warnSpy.mockRestore()
+  it('rejects empty successful responses so a 204 is not treated as no client data', async () => {
+    const lookups = [
+      () => fetchApplicationClientData('00011111', '01'),
+      () => fetchExemptionClientData('00011111', '01'),
+      () => fetchApplicationClientLocations('00011111'),
+      () => fetchExemptionClientLocations('00011111'),
+      () => fetchApplicationClientContacts('00011111', '01'),
+    ]
+
+    for (const lookup of lookups) {
+      getCachedDataMock.mockResolvedValueOnce(undefined)
+      await expect(lookup()).rejects.toThrow('empty or malformed response')
+    }
+
+    getCachedDataMock.mockResolvedValueOnce({})
+    await expect(fetchApplicationClientData('00011111', '01')).rejects.toThrow(
+      'empty or malformed response',
+    )
   })
 
   it('loads and parses contacts for a client location', async () => {

@@ -267,8 +267,8 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(screen.queryByText('Application summary options unavailable')).not.toBeInTheDocument()
   })
 
-  it('keeps saved client values visible when enrichment is unavailable', async () => {
-    mockedFetchApplicationClientData.mockResolvedValue(null)
+  it('keeps saved client values visible when enrichment fails', async () => {
+    mockedFetchApplicationClientData.mockRejectedValue(new Error('client endpoint unavailable'))
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
       ...applicationDetail,
       packages: [],
@@ -289,9 +289,15 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     const ownerDetails = await screen.findByRole('region', { name: 'Owner client details' })
     expect(within(ownerDetails).getByText('00011122')).toBeInTheDocument()
-    expect(within(ownerDetails).getByText('00 - Owner Main Location')).toBeInTheDocument()
+    expect(await within(ownerDetails).findByText('00 - Owner Main Location')).toBeInTheDocument()
     expect(within(ownerDetails).getByText('Owner Contact')).toBeInTheDocument()
     expect(within(ownerDetails).getByText('Client details unavailable')).toBeInTheDocument()
+    expect(
+      await screen.findByText(
+        'Client details could not be retrieved. Existing selections were preserved. Please try again.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('Action failed')).not.toBeInTheDocument()
     expect(
       screen.queryByRole('heading', { name: 'Owner details unavailable' }),
     ).not.toBeInTheDocument()
@@ -299,7 +305,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     await selectApplicationDetailTab('Agent')
     const agentDetails = await screen.findByRole('region', { name: 'Agent details' })
     expect(within(agentDetails).getByText('00033344')).toBeInTheDocument()
-    expect(within(agentDetails).getByText('01 - Agent Main Location')).toBeInTheDocument()
+    expect(await within(agentDetails).findByText('01 - Agent Main Location')).toBeInTheDocument()
     expect(within(agentDetails).getByText('Agent Contact')).toBeInTheDocument()
     expect(within(agentDetails).getByText('Client details unavailable')).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'No agent assigned' })).not.toBeInTheDocument()
@@ -344,6 +350,103 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
         name: 'No offers found',
       }),
     ).toBeInTheDocument()
+  })
+
+  it('does not show the previous client enrichment when a changed client lookup fails', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { level: 2, name: 'Owner client details' })
+    const ownerTile = getOwnerClientDetailsTile()
+    const ownerControls = within(ownerTile)
+    expect(await ownerControls.findByText('Owner Forestry Ltd.')).toBeInTheDocument()
+    await waitFor(() =>
+      expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith(
+        '00011122',
+        'owner',
+        '321',
+      ),
+    )
+
+    await userEvent.click(ownerControls.getByRole('button', { name: 'Edit owner client details' }))
+    mockedFetchApplicationClientLocations.mockRejectedValueOnce(
+      new Error('changed client endpoint unavailable'),
+    )
+    fireEvent.change(ownerControls.getByLabelText('Client number'), {
+      target: { value: '00099988' },
+    })
+
+    expect(ownerControls.getByLabelText('Client number')).toHaveValue('00099988')
+    expect(ownerControls.queryByText('Owner Forestry Ltd.')).not.toBeInTheDocument()
+    expect(ownerControls.getByRole('combobox', { name: 'Client location' })).toHaveValue('')
+
+    await waitFor(() =>
+      expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith(
+        '00099988',
+        'owner',
+        '321',
+      ),
+    )
+    expect(
+      await screen.findByText(
+        'Client details could not be retrieved. Existing selections were preserved. Please try again.',
+      ),
+    ).toBeInTheDocument()
+    expect(ownerControls.queryByText('Owner Main Location')).not.toBeInTheDocument()
+    expect(ownerControls.queryByText('Owner Contact')).not.toBeInTheDocument()
+  })
+
+  it('clears a client lookup warning after the latest lookup succeeds', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { level: 2, name: 'Owner client details' })
+    const ownerControls = within(getOwnerClientDetailsTile())
+    expect(await ownerControls.findByText('Owner Forestry Ltd.')).toBeInTheDocument()
+    await userEvent.click(ownerControls.getByRole('button', { name: 'Edit owner client details' }))
+
+    mockedFetchApplicationClientLocations.mockRejectedValueOnce(
+      new Error('changed client endpoint unavailable'),
+    )
+    fireEvent.change(ownerControls.getByLabelText('Client number'), {
+      target: { value: '00099988' },
+    })
+
+    const lookupErrorMessage =
+      'Client details could not be retrieved. Existing selections were preserved. Please try again.'
+    expect(await screen.findByText(lookupErrorMessage)).toBeInTheDocument()
+
+    fireEvent.change(ownerControls.getByLabelText('Client number'), {
+      target: { value: '00099989' },
+    })
+
+    await waitFor(() =>
+      expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith(
+        '00099989',
+        'owner',
+        '321',
+      ),
+    )
+    await waitFor(() => expect(screen.queryByText(lookupErrorMessage)).not.toBeInTheDocument())
+    expect(ownerControls.getByRole('combobox', { name: 'Client location' })).toHaveValue(
+      '00 - Owner Main Location',
+    )
   })
 
   it('shows an explicit empty state when no agent is assigned', async () => {
@@ -537,6 +640,62 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
     expect(ownerControls.queryByLabelText('Client number')).not.toBeInTheDocument()
+    const clientNumberField = ownerControls.getByText('Client number').closest('.detail-field-item')
+    expect(clientNumberField).toBeTruthy()
+    expect(within(clientNumberField as HTMLElement).getByText('00011122')).toBeInTheDocument()
+  })
+
+  it('clears discarded client enrichment when the saved client refresh fails after cancel', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { level: 1, name: 'Application 321' })
+    const ownerControls = within(getOwnerClientDetailsTile())
+    expect(await ownerControls.findByText('Owner Forestry Ltd.')).toBeInTheDocument()
+
+    const callsBeforeEdit = mockedFetchApplicationClientData.mock.calls.length
+    await userEvent.click(ownerControls.getByRole('button', { name: 'Edit owner client details' }))
+    await waitFor(() =>
+      expect(mockedFetchApplicationClientData.mock.calls.length).toBeGreaterThan(callsBeforeEdit),
+    )
+
+    mockedFetchApplicationClientData.mockResolvedValueOnce({
+      clientNumber: '00099988',
+      companyName: 'Discarded Client Ltd.',
+      address: '99 Discarded Road',
+      city: 'Victoria',
+      province: 'BC',
+      postalCode: 'V8V 9Z9',
+      country: 'Canada',
+      phone: '250-555-9999',
+      fax: '',
+      email: 'discarded@example.test',
+      notfound: '',
+    })
+    fireEvent.change(ownerControls.getByLabelText('Client number'), {
+      target: { value: '00099988' },
+    })
+    expect(await ownerControls.findByText('Discarded Client Ltd.')).toBeInTheDocument()
+
+    mockedFetchApplicationClientData.mockRejectedValueOnce(
+      new Error('saved client refresh unavailable'),
+    )
+    await userEvent.click(ownerControls.getByRole('button', { name: 'Cancel' }))
+
+    expect(
+      await screen.findByText(
+        'Client details could not be retrieved. Existing selections were preserved. Please try again.',
+      ),
+    ).toBeInTheDocument()
+    expect(ownerControls.queryByText('Discarded Client Ltd.')).not.toBeInTheDocument()
     const clientNumberField = ownerControls.getByText('Client number').closest('.detail-field-item')
     expect(clientNumberField).toBeTruthy()
     expect(within(clientNumberField as HTMLElement).getByText('00011122')).toBeInTheDocument()
@@ -2102,18 +2261,25 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(mockedFetchApplicationClientLocations).not.toHaveBeenCalled()
     expect(mockedFetchApplicationClientContacts).not.toHaveBeenCalled()
 
-    await waitFor(() => {
-      expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00044444', '00', {
-        applicationNumber: '321',
-      })
-      expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith('00044444', 'owner', '321')
-      expect(mockedFetchApplicationClientContacts).toHaveBeenCalledWith(
-        '00044444',
-        '00',
-        'owner',
-        '321',
-      )
-    })
+    await waitFor(
+      () => {
+        expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00044444', '00', {
+          applicationNumber: '321',
+        })
+        expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith(
+          '00044444',
+          'owner',
+          '321',
+        )
+        expect(mockedFetchApplicationClientContacts).toHaveBeenCalledWith(
+          '00044444',
+          '00',
+          'owner',
+          '321',
+        )
+      },
+      { timeout: 5_000 },
+    )
   })
 
   it('does not substitute the owner email when an agent applicant has no email', async () => {

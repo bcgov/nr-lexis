@@ -167,9 +167,21 @@ class APIService {
     this.client.interceptors.response.use(
       (response) => {
         this.registerSuccessfulMutationVersion(response)
+        if (isCacheInvalidatingMethod(response.config?.method)) {
+          this.clearCachedGetData()
+          clearAllPageDataCache()
+        }
         return response
       },
       (error: unknown) => {
+        const requestMethod =
+          error && typeof error === 'object'
+            ? (error as { config?: { method?: string } }).config?.method
+            : undefined
+        if (isCacheInvalidatingMethod(requestMethod)) {
+          this.clearCachedGetData()
+          clearAllPageDataCache()
+        }
         const status = this.responseStatus(error)
         if (status === 401) {
           this.clearCachedGetData()
@@ -286,7 +298,7 @@ class APIService {
     const request = this.client
       .get<T>(path, requestConfig)
       .then((response) => {
-        if (this.cacheGeneration === cacheGeneration) {
+        if (this.cacheGeneration === cacheGeneration && response.status !== 204) {
           this.removeExpiredCachedResponses()
           this.responseCache.set(key, {
             expiresAt: Date.now() + ttlMs,

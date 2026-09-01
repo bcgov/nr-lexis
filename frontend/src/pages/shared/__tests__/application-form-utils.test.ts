@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   averageLogVolumeFieldError,
+  clientLookupNumbersMatch,
   clientLocationLabel,
   codeOptionLabel,
   isAgentApplicant,
@@ -15,6 +16,15 @@ import {
 } from '@/pages/shared/application-form-utils'
 
 describe('application-form-utils', () => {
+  it.each([
+    ['123', '00000123', true],
+    [' 00000123 ', '123', true],
+    ['123', '00000124', false],
+    ['invalid', ' invalid ', true],
+  ])('compares client lookup numbers %j and %j', (left, right, expected) => {
+    expect(clientLookupNumbersMatch(left, right)).toBe(expected)
+  })
+
   it('resolves selectable client locations from current, selected, or first selectable values', () => {
     const locations = [
       { locationCode: '0', locationName: 'Placeholder', selected: false },

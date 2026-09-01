@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Button,
@@ -27,7 +27,9 @@ import ApplicationAccuracyConfirmation, {
 import UnsavedChangesGuard, { formValuesEqual } from '@/components/UnsavedChangesGuard'
 import { nonNegativeWholeNumberFieldError } from '@/pages/shared/application-term-utils'
 import {
+  CLIENT_LOOKUP_UNAVAILABLE_MESSAGE,
   averageLogVolumeFieldError,
+  clientLookupNumbersMatch,
   clientLocationLabel,
   isAgentApplicant,
   isSelectableClientContact,
@@ -316,6 +318,14 @@ type PageStatus = {
   placement?: 'inline'
 }
 
+type ClientLookupFailure = 'owner-locations' | 'agent-locations' | 'owner-details' | 'agent-details'
+
+const CLIENT_LOOKUP_UNAVAILABLE_STATUS: PageStatus = {
+  kind: 'error',
+  title: 'Client details unavailable',
+  message: CLIENT_LOOKUP_UNAVAILABLE_MESSAGE,
+}
+
 type ApplicationCreateClientSummaryProps = {
   title: string
   clientData: ApplicationClientData | null
@@ -384,6 +394,8 @@ const ProvincialApplicationCreatePage = () => {
     ),
   )
   const draftBaselineRef = useRef(form)
+  const currentFormRef = useRef(form)
+  currentFormRef.current = form
   const [formEdited, setFormEdited] = useState(false)
   const [createdApplicationNavigation, setCreatedApplicationNavigation] =
     useState<CreatedApplicationNavigation | null>(null)
@@ -414,6 +426,24 @@ const ProvincialApplicationCreatePage = () => {
   const [isLoadingApplicationSpecies, setIsLoadingApplicationSpecies] = useState(false)
   const [isLoadingApplicationEndUses, setIsLoadingApplicationEndUses] = useState(false)
   const [status, setStatus] = useState<PageStatus | null>(null)
+  const [clientLookupFailures, setClientLookupFailures] = useState<
+    ReadonlySet<ClientLookupFailure>
+  >(() => new Set())
+  const updateClientLookupFailure = useCallback((lookup: ClientLookupFailure, failed: boolean) => {
+    setClientLookupFailures((current) => {
+      if (current.has(lookup) === failed) {
+        return current
+      }
+
+      const next = new Set(current)
+      if (failed) {
+        next.add(lookup)
+      } else {
+        next.delete(lookup)
+      }
+      return next
+    })
+  }, [])
   const [showMissingRequiredOptions, setShowMissingRequiredOptions] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [accuracyConfirmationOpen, setAccuracyConfirmationOpen] = useState(false)
@@ -600,6 +630,7 @@ const ProvincialApplicationCreatePage = () => {
         setOwnerClientContacts([])
         setOwnerClientData(null)
         setIsLoadingOwnerClientLocations(false)
+        updateClientLookupFailure('owner-locations', false)
         setForm((current) =>
           current.ownerClientLocationCode || current.ownerContactName
             ? { ...current, ownerClientLocationCode: '', ownerContactName: '' }
@@ -621,13 +652,17 @@ const ProvincialApplicationCreatePage = () => {
 
     void fetchApplicationClientLocations(ownerClientNumber, 'owner')
       .then((locations) => {
-        if (!isActive) {
+        if (
+          !isActive ||
+          !clientLookupNumbersMatch(currentFormRef.current.ownerClientNumber, ownerClientNumber)
+        ) {
           return
         }
 
         setOwnerClientLocations(locations)
+        updateClientLookupFailure('owner-locations', false)
         setForm((current) => {
-          if (current.ownerClientNumber.trim() !== ownerClientNumber) {
+          if (!clientLookupNumbersMatch(current.ownerClientNumber, ownerClientNumber)) {
             return current
           }
 
@@ -649,6 +684,14 @@ const ProvincialApplicationCreatePage = () => {
               }
         })
       })
+      .catch(() => {
+        if (
+          isActive &&
+          clientLookupNumbersMatch(currentFormRef.current.ownerClientNumber, ownerClientNumber)
+        ) {
+          updateClientLookupFailure('owner-locations', true)
+        }
+      })
       .finally(() => {
         if (isActive) {
           setIsLoadingOwnerClientLocations(false)
@@ -658,7 +701,7 @@ const ProvincialApplicationCreatePage = () => {
     return () => {
       isActive = false
     }
-  }, [ownerClientNumberForLookup])
+  }, [ownerClientNumberForLookup, updateClientLookupFailure])
 
   useEffect(() => {
     if (!isAgentApplicant(form.applicantTypeCode)) {
@@ -670,6 +713,7 @@ const ProvincialApplicationCreatePage = () => {
 
         setAgentClientLocations([])
         setIsLoadingAgentClientLocations(false)
+        updateClientLookupFailure('agent-locations', false)
         setForm((current) =>
           current.agentClientNumber || current.agentClientLocationCode || current.agentContactName
             ? {
@@ -699,6 +743,7 @@ const ProvincialApplicationCreatePage = () => {
         setAgentClientContacts([])
         setAgentClientData(null)
         setIsLoadingAgentClientLocations(false)
+        updateClientLookupFailure('agent-locations', false)
         setForm((current) =>
           current.agentClientLocationCode || current.agentContactName
             ? { ...current, agentClientLocationCode: '', agentContactName: '' }
@@ -720,13 +765,17 @@ const ProvincialApplicationCreatePage = () => {
 
     void fetchApplicationClientLocations(agentClientNumber, 'agent')
       .then((locations) => {
-        if (!isActive) {
+        if (
+          !isActive ||
+          !clientLookupNumbersMatch(currentFormRef.current.agentClientNumber, agentClientNumber)
+        ) {
           return
         }
 
         setAgentClientLocations(locations)
+        updateClientLookupFailure('agent-locations', false)
         setForm((current) => {
-          if (current.agentClientNumber.trim() !== agentClientNumber) {
+          if (!clientLookupNumbersMatch(current.agentClientNumber, agentClientNumber)) {
             return current
           }
 
@@ -748,6 +797,14 @@ const ProvincialApplicationCreatePage = () => {
               }
         })
       })
+      .catch(() => {
+        if (
+          isActive &&
+          clientLookupNumbersMatch(currentFormRef.current.agentClientNumber, agentClientNumber)
+        ) {
+          updateClientLookupFailure('agent-locations', true)
+        }
+      })
       .finally(() => {
         if (isActive) {
           setIsLoadingAgentClientLocations(false)
@@ -757,7 +814,7 @@ const ProvincialApplicationCreatePage = () => {
     return () => {
       isActive = false
     }
-  }, [agentClientNumberForLookup, form.applicantTypeCode])
+  }, [agentClientNumberForLookup, form.applicantTypeCode, updateClientLookupFailure])
 
   useEffect(() => {
     const ownerClientNumber = ownerClientNumberForLookup.trim()
@@ -772,6 +829,7 @@ const ProvincialApplicationCreatePage = () => {
         setOwnerClientContacts([])
         setOwnerClientData(null)
         setIsLoadingOwnerClientContacts(false)
+        updateClientLookupFailure('owner-details', false)
         setForm((current) =>
           current.ownerContactName ? { ...current, ownerContactName: '' } : current,
         )
@@ -785,7 +843,6 @@ const ProvincialApplicationCreatePage = () => {
     let isActive = true
     void Promise.resolve().then(() => {
       if (isActive) {
-        setOwnerClientData(null)
         setIsLoadingOwnerClientContacts(true)
       }
     })
@@ -795,15 +852,21 @@ const ProvincialApplicationCreatePage = () => {
       fetchApplicationClientData(ownerClientNumber, ownerClientLocationCode),
     ])
       .then(([contacts, clientData]) => {
-        if (!isActive) {
+        const currentForm = currentFormRef.current
+        if (
+          !isActive ||
+          !clientLookupNumbersMatch(currentForm.ownerClientNumber, ownerClientNumber) ||
+          currentForm.ownerClientLocationCode.trim() !== ownerClientLocationCode
+        ) {
           return
         }
 
         setOwnerClientContacts(contacts)
         setOwnerClientData(clientData)
+        updateClientLookupFailure('owner-details', false)
         setForm((current) => {
           if (
-            current.ownerClientNumber.trim() !== ownerClientNumber ||
+            !clientLookupNumbersMatch(current.ownerClientNumber, ownerClientNumber) ||
             current.ownerClientLocationCode.trim() !== ownerClientLocationCode
           ) {
             return current
@@ -821,6 +884,16 @@ const ProvincialApplicationCreatePage = () => {
               }
         })
       })
+      .catch(() => {
+        const currentForm = currentFormRef.current
+        if (
+          isActive &&
+          clientLookupNumbersMatch(currentForm.ownerClientNumber, ownerClientNumber) &&
+          currentForm.ownerClientLocationCode.trim() === ownerClientLocationCode
+        ) {
+          updateClientLookupFailure('owner-details', true)
+        }
+      })
       .finally(() => {
         if (isActive) {
           setIsLoadingOwnerClientContacts(false)
@@ -830,7 +903,7 @@ const ProvincialApplicationCreatePage = () => {
     return () => {
       isActive = false
     }
-  }, [form.ownerClientLocationCode, ownerClientNumberForLookup])
+  }, [form.ownerClientLocationCode, ownerClientNumberForLookup, updateClientLookupFailure])
 
   useEffect(() => {
     if (!isAgentApplicant(form.applicantTypeCode)) {
@@ -843,6 +916,7 @@ const ProvincialApplicationCreatePage = () => {
         setAgentClientContacts([])
         setAgentClientData(null)
         setIsLoadingAgentClientContacts(false)
+        updateClientLookupFailure('agent-details', false)
         setForm((current) =>
           current.agentContactName ? { ...current, agentContactName: '' } : current,
         )
@@ -865,6 +939,7 @@ const ProvincialApplicationCreatePage = () => {
         setAgentClientContacts([])
         setAgentClientData(null)
         setIsLoadingAgentClientContacts(false)
+        updateClientLookupFailure('agent-details', false)
       })
 
       return () => {
@@ -875,7 +950,6 @@ const ProvincialApplicationCreatePage = () => {
     let isActive = true
     void Promise.resolve().then(() => {
       if (isActive) {
-        setAgentClientData(null)
         setIsLoadingAgentClientContacts(true)
       }
     })
@@ -885,15 +959,21 @@ const ProvincialApplicationCreatePage = () => {
       fetchApplicationClientData(agentClientNumber, agentClientLocationCode),
     ])
       .then(([contacts, clientData]) => {
-        if (!isActive) {
+        const currentForm = currentFormRef.current
+        if (
+          !isActive ||
+          !clientLookupNumbersMatch(currentForm.agentClientNumber, agentClientNumber) ||
+          currentForm.agentClientLocationCode.trim() !== agentClientLocationCode
+        ) {
           return
         }
 
         setAgentClientContacts(contacts)
         setAgentClientData(clientData)
+        updateClientLookupFailure('agent-details', false)
         setForm((current) => {
           if (
-            current.agentClientNumber.trim() !== agentClientNumber ||
+            !clientLookupNumbersMatch(current.agentClientNumber, agentClientNumber) ||
             current.agentClientLocationCode.trim() !== agentClientLocationCode
           ) {
             return current
@@ -911,6 +991,16 @@ const ProvincialApplicationCreatePage = () => {
               }
         })
       })
+      .catch(() => {
+        const currentForm = currentFormRef.current
+        if (
+          isActive &&
+          clientLookupNumbersMatch(currentForm.agentClientNumber, agentClientNumber) &&
+          currentForm.agentClientLocationCode.trim() === agentClientLocationCode
+        ) {
+          updateClientLookupFailure('agent-details', true)
+        }
+      })
       .finally(() => {
         if (isActive) {
           setIsLoadingAgentClientContacts(false)
@@ -920,7 +1010,12 @@ const ProvincialApplicationCreatePage = () => {
     return () => {
       isActive = false
     }
-  }, [agentClientNumberForLookup, form.agentClientLocationCode, form.applicantTypeCode])
+  }, [
+    agentClientNumberForLookup,
+    form.agentClientLocationCode,
+    form.applicantTypeCode,
+    updateClientLookupFailure,
+  ])
 
   useEffect(() => {
     const region = form.region.trim()
@@ -1494,6 +1589,18 @@ const ProvincialApplicationCreatePage = () => {
             lowContrast
             autoDismissMs={undefined}
             onCloseButtonClick={() => setShowMissingRequiredOptions(false)}
+          />
+        </Column>
+      )}
+
+      {clientLookupFailures.size > 0 && (
+        <Column sm={4} md={8} lg={16}>
+          <AppNotification
+            kind={CLIENT_LOOKUP_UNAVAILABLE_STATUS.kind}
+            title={CLIENT_LOOKUP_UNAVAILABLE_STATUS.title}
+            subtitle={CLIENT_LOOKUP_UNAVAILABLE_STATUS.message}
+            lowContrast
+            onCloseButtonClick={() => setClientLookupFailures(new Set())}
           />
         </Column>
       )}

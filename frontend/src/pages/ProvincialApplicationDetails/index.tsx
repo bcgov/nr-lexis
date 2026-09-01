@@ -108,7 +108,9 @@ import {
   nonNegativeWholeNumberFieldError,
 } from '@/pages/shared/application-term-utils'
 import {
+  CLIENT_LOOKUP_UNAVAILABLE_MESSAGE,
   averageLogVolumeFieldError,
+  clientLookupNumbersMatch,
   clientLocationLabel,
   isAgentApplicant,
   isSelectableClientContact,
@@ -372,6 +374,13 @@ type ApplicationSummaryFormState = {
 
 type ApplicationSummaryField = keyof ApplicationSummaryFormState & string
 type SummarySaveSource = 'summary' | 'owner' | 'agent'
+type ApplicationClientLookupFailure =
+  | 'owner-data'
+  | 'agent-data'
+  | 'owner-locations'
+  | 'agent-locations'
+  | 'owner-contacts'
+  | 'agent-contacts'
 
 const MAX_APPLICATION_TERM_DAYS = 99_999
 const MAX_APPLICATION_TERM_MONTHS = 999
@@ -641,6 +650,27 @@ const ProvincialApplicationDetailsPage = () => {
   const [errorMessage, setErrorMessage] = useState('')
   const [documentsErrorMessage, setDocumentsErrorMessage] = useState('')
   const [actionErrorMessage, setActionErrorMessage] = useState('')
+  const [clientLookupFailures, setClientLookupFailures] = useState<
+    ReadonlySet<ApplicationClientLookupFailure>
+  >(() => new Set())
+  const updateClientLookupFailure = useCallback(
+    (lookup: ApplicationClientLookupFailure, failed: boolean) => {
+      setClientLookupFailures((current) => {
+        if (current.has(lookup) === failed) {
+          return current
+        }
+
+        const next = new Set(current)
+        if (failed) {
+          next.add(lookup)
+        } else {
+          next.delete(lookup)
+        }
+        return next
+      })
+    },
+    [],
+  )
   const [actionInfoMessage, setActionInfoMessage] = useState('')
   const [creationSuccessMessage, setCreationSuccessMessage] = useState(() =>
     createdApplicationNumber ? `Created application ${createdApplicationNumber}.` : '',
@@ -761,6 +791,8 @@ const ProvincialApplicationDetailsPage = () => {
   currentApplicationNumberRef.current = applicationNumber
   const currentDetailRef = useRef<ProvincialApplicationDetail | null>(null)
   currentDetailRef.current = detail
+  const currentSummaryFormRef = useRef<ApplicationSummaryFormState | null>(null)
+  currentSummaryFormRef.current = summaryForm
   const packageFilter = searchParams.get('packageFilter') ?? ''
   const offerFilter = searchParams.get('offerFilter') ?? ''
   const remarkFilter = searchParams.get('remarkFilter') ?? ''
@@ -1600,6 +1632,7 @@ const ProvincialApplicationDetailsPage = () => {
         }
         setOwnerClientData(null)
         setIsLoadingOwnerClientData(false)
+        updateClientLookupFailure('owner-data', false)
       })
       return () => {
         isActive = false
@@ -1619,11 +1652,20 @@ const ProvincialApplicationDetailsPage = () => {
       { applicationNumber: applicationNumber ?? '' },
     )
       .then((clientData) => {
-        if (!isActive) {
+        const currentForm = currentSummaryFormRef.current
+        if (
+          !isActive ||
+          !clientLookupNumbersMatch(
+            currentForm?.ownerClientNumber ?? '',
+            summaryOwnerClientNumberForLookup,
+          ) ||
+          (currentForm?.ownerClientLocationCode ?? '').trim() !== summaryOwnerClientLocationCode
+        ) {
           return
         }
 
         setOwnerClientData(clientData)
+        updateClientLookupFailure('owner-data', false)
         if (!clientData || (!isEditingOwnerDetails && !isEditingSummary)) {
           return
         }
@@ -1631,7 +1673,10 @@ const ProvincialApplicationDetailsPage = () => {
         setSummaryForm((current) => {
           if (
             !current ||
-            current.ownerClientNumber.trim() !== summaryOwnerClientNumberForLookup ||
+            !clientLookupNumbersMatch(
+              current.ownerClientNumber,
+              summaryOwnerClientNumberForLookup,
+            ) ||
             current.ownerClientLocationCode.trim() !== summaryOwnerClientLocationCode
           ) {
             return current
@@ -1643,6 +1688,20 @@ const ProvincialApplicationDetailsPage = () => {
             ? { ...current, ownerClientNumber: confirmedOwnerClientNumber }
             : current
         })
+      })
+      .catch(() => {
+        const currentForm = currentSummaryFormRef.current
+        if (
+          isActive &&
+          clientLookupNumbersMatch(
+            currentForm?.ownerClientNumber ?? '',
+            summaryOwnerClientNumberForLookup,
+          ) &&
+          (currentForm?.ownerClientLocationCode ?? '').trim() === summaryOwnerClientLocationCode
+        ) {
+          setOwnerClientData(null)
+          updateClientLookupFailure('owner-data', true)
+        }
       })
       .finally(() => {
         if (isActive) {
@@ -1660,6 +1719,7 @@ const ProvincialApplicationDetailsPage = () => {
     isEditingSummary,
     summaryOwnerClientLocationCode,
     summaryOwnerClientNumberForLookup,
+    updateClientLookupFailure,
   ])
 
   useEffect(() => {
@@ -1671,6 +1731,7 @@ const ProvincialApplicationDetailsPage = () => {
         }
         setAgentClientData(null)
         setIsLoadingAgentClientData(false)
+        updateClientLookupFailure('agent-data', false)
       })
       return () => {
         isActive = false
@@ -1690,11 +1751,20 @@ const ProvincialApplicationDetailsPage = () => {
       { applicationNumber: applicationNumber ?? '' },
     )
       .then((clientData) => {
-        if (!isActive) {
+        const currentForm = currentSummaryFormRef.current
+        if (
+          !isActive ||
+          !clientLookupNumbersMatch(
+            currentForm?.agentClientNumber ?? '',
+            summaryAgentClientNumberForLookup,
+          ) ||
+          (currentForm?.agentClientLocationCode ?? '').trim() !== summaryAgentClientLocationCode
+        ) {
           return
         }
 
         setAgentClientData(clientData)
+        updateClientLookupFailure('agent-data', false)
         if (!clientData || (!isEditingAgentDetails && !isEditingSummary)) {
           return
         }
@@ -1702,7 +1772,10 @@ const ProvincialApplicationDetailsPage = () => {
         setSummaryForm((current) => {
           if (
             !current ||
-            current.agentClientNumber.trim() !== summaryAgentClientNumberForLookup ||
+            !clientLookupNumbersMatch(
+              current.agentClientNumber,
+              summaryAgentClientNumberForLookup,
+            ) ||
             current.agentClientLocationCode.trim() !== summaryAgentClientLocationCode
           ) {
             return current
@@ -1714,6 +1787,20 @@ const ProvincialApplicationDetailsPage = () => {
             ? { ...current, agentClientNumber: confirmedAgentClientNumber }
             : current
         })
+      })
+      .catch(() => {
+        const currentForm = currentSummaryFormRef.current
+        if (
+          isActive &&
+          clientLookupNumbersMatch(
+            currentForm?.agentClientNumber ?? '',
+            summaryAgentClientNumberForLookup,
+          ) &&
+          (currentForm?.agentClientLocationCode ?? '').trim() === summaryAgentClientLocationCode
+        ) {
+          setAgentClientData(null)
+          updateClientLookupFailure('agent-data', true)
+        }
       })
       .finally(() => {
         if (isActive) {
@@ -1731,6 +1818,7 @@ const ProvincialApplicationDetailsPage = () => {
     isEditingSummary,
     summaryAgentClientLocationCode,
     summaryAgentClientNumberForLookup,
+    updateClientLookupFailure,
   ])
 
   useEffect(() => {
@@ -1742,6 +1830,7 @@ const ProvincialApplicationDetailsPage = () => {
         }
         setOwnerClientLocations([])
         setIsLoadingOwnerClientLocations(false)
+        updateClientLookupFailure('owner-locations', false)
       })
       return () => {
         isActive = false
@@ -1756,6 +1845,7 @@ const ProvincialApplicationDetailsPage = () => {
         }
         setOwnerClientLocations([])
         setIsLoadingOwnerClientLocations(false)
+        updateClientLookupFailure('owner-locations', false)
         setSummaryForm((current) =>
           current?.ownerClientLocationCode ? { ...current, ownerClientLocationCode: '' } : current,
         )
@@ -1778,16 +1868,26 @@ const ProvincialApplicationDetailsPage = () => {
       applicationNumber ?? '',
     )
       .then((locations) => {
-        if (!isActive) {
+        if (
+          !isActive ||
+          !clientLookupNumbersMatch(
+            currentSummaryFormRef.current?.ownerClientNumber ?? '',
+            summaryOwnerClientNumberForLookup,
+          )
+        ) {
           return
         }
 
         setOwnerClientLocations(locations)
+        updateClientLookupFailure('owner-locations', false)
         if (!canEditSummary) {
           return
         }
         setSummaryForm((current) => {
-          if (!current || current.ownerClientNumber.trim() !== summaryOwnerClientNumberForLookup) {
+          if (
+            !current ||
+            !clientLookupNumbersMatch(current.ownerClientNumber, summaryOwnerClientNumberForLookup)
+          ) {
             return current
           }
 
@@ -1800,6 +1900,18 @@ const ProvincialApplicationDetailsPage = () => {
             : { ...current, ownerClientLocationCode: nextOwnerClientLocationCode }
         })
       })
+      .catch(() => {
+        if (
+          isActive &&
+          clientLookupNumbersMatch(
+            currentSummaryFormRef.current?.ownerClientNumber ?? '',
+            summaryOwnerClientNumberForLookup,
+          )
+        ) {
+          setOwnerClientLocations([])
+          updateClientLookupFailure('owner-locations', true)
+        }
+      })
       .finally(() => {
         if (isActive) {
           setIsLoadingOwnerClientLocations(false)
@@ -1809,7 +1921,13 @@ const ProvincialApplicationDetailsPage = () => {
     return () => {
       isActive = false
     }
-  }, [applicationNumber, canEditSummary, hasSummaryForm, summaryOwnerClientNumberForLookup])
+  }, [
+    applicationNumber,
+    canEditSummary,
+    hasSummaryForm,
+    summaryOwnerClientNumberForLookup,
+    updateClientLookupFailure,
+  ])
 
   useEffect(() => {
     if (!hasSummaryForm) {
@@ -1820,6 +1938,7 @@ const ProvincialApplicationDetailsPage = () => {
         }
         setAgentClientLocations([])
         setIsLoadingAgentClientLocations(false)
+        updateClientLookupFailure('agent-locations', false)
       })
       return () => {
         isActive = false
@@ -1834,6 +1953,7 @@ const ProvincialApplicationDetailsPage = () => {
         }
         setAgentClientLocations([])
         setIsLoadingAgentClientLocations(false)
+        updateClientLookupFailure('agent-locations', false)
         setSummaryForm((current) =>
           current?.agentClientLocationCode ? { ...current, agentClientLocationCode: '' } : current,
         )
@@ -1856,16 +1976,26 @@ const ProvincialApplicationDetailsPage = () => {
       applicationNumber ?? '',
     )
       .then((locations) => {
-        if (!isActive) {
+        if (
+          !isActive ||
+          !clientLookupNumbersMatch(
+            currentSummaryFormRef.current?.agentClientNumber ?? '',
+            summaryAgentClientNumberForLookup,
+          )
+        ) {
           return
         }
 
         setAgentClientLocations(locations)
+        updateClientLookupFailure('agent-locations', false)
         if (!canEditSummary) {
           return
         }
         setSummaryForm((current) => {
-          if (!current || current.agentClientNumber.trim() !== summaryAgentClientNumberForLookup) {
+          if (
+            !current ||
+            !clientLookupNumbersMatch(current.agentClientNumber, summaryAgentClientNumberForLookup)
+          ) {
             return current
           }
 
@@ -1878,6 +2008,18 @@ const ProvincialApplicationDetailsPage = () => {
             : { ...current, agentClientLocationCode: nextAgentClientLocationCode }
         })
       })
+      .catch(() => {
+        if (
+          isActive &&
+          clientLookupNumbersMatch(
+            currentSummaryFormRef.current?.agentClientNumber ?? '',
+            summaryAgentClientNumberForLookup,
+          )
+        ) {
+          setAgentClientLocations([])
+          updateClientLookupFailure('agent-locations', true)
+        }
+      })
       .finally(() => {
         if (isActive) {
           setIsLoadingAgentClientLocations(false)
@@ -1887,7 +2029,13 @@ const ProvincialApplicationDetailsPage = () => {
     return () => {
       isActive = false
     }
-  }, [applicationNumber, canEditSummary, hasSummaryForm, summaryAgentClientNumberForLookup])
+  }, [
+    applicationNumber,
+    canEditSummary,
+    hasSummaryForm,
+    summaryAgentClientNumberForLookup,
+    updateClientLookupFailure,
+  ])
 
   useEffect(() => {
     if (!canEditSummary || !hasSummaryForm) {
@@ -1898,6 +2046,7 @@ const ProvincialApplicationDetailsPage = () => {
         }
         setOwnerClientContacts([])
         setIsLoadingOwnerClientContacts(false)
+        updateClientLookupFailure('owner-contacts', false)
       })
       return () => {
         isActive = false
@@ -1912,6 +2061,7 @@ const ProvincialApplicationDetailsPage = () => {
         }
         setOwnerClientContacts([])
         setIsLoadingOwnerClientContacts(false)
+        updateClientLookupFailure('owner-contacts', false)
       })
       return () => {
         isActive = false
@@ -1932,15 +2082,27 @@ const ProvincialApplicationDetailsPage = () => {
       applicationNumber ?? '',
     )
       .then((contacts) => {
-        if (!isActive) {
+        const currentForm = currentSummaryFormRef.current
+        if (
+          !isActive ||
+          !clientLookupNumbersMatch(
+            currentForm?.ownerClientNumber ?? '',
+            summaryOwnerClientNumberForLookup,
+          ) ||
+          (currentForm?.ownerClientLocationCode ?? '').trim() !== summaryOwnerClientLocationCode
+        ) {
           return
         }
 
         setOwnerClientContacts(contacts)
+        updateClientLookupFailure('owner-contacts', false)
         setSummaryForm((current) => {
           if (
             !current ||
-            current.ownerClientNumber.trim() !== summaryOwnerClientNumberForLookup ||
+            !clientLookupNumbersMatch(
+              current.ownerClientNumber,
+              summaryOwnerClientNumberForLookup,
+            ) ||
             current.ownerClientLocationCode.trim() !== summaryOwnerClientLocationCode
           ) {
             return current
@@ -1951,6 +2113,20 @@ const ProvincialApplicationDetailsPage = () => {
             ? current
             : { ...current, ownerContactName: nextOwnerContactName }
         })
+      })
+      .catch(() => {
+        const currentForm = currentSummaryFormRef.current
+        if (
+          isActive &&
+          clientLookupNumbersMatch(
+            currentForm?.ownerClientNumber ?? '',
+            summaryOwnerClientNumberForLookup,
+          ) &&
+          (currentForm?.ownerClientLocationCode ?? '').trim() === summaryOwnerClientLocationCode
+        ) {
+          setOwnerClientContacts([])
+          updateClientLookupFailure('owner-contacts', true)
+        }
       })
       .finally(() => {
         if (isActive) {
@@ -1967,6 +2143,7 @@ const ProvincialApplicationDetailsPage = () => {
     hasSummaryForm,
     summaryOwnerClientLocationCode,
     summaryOwnerClientNumberForLookup,
+    updateClientLookupFailure,
   ])
 
   useEffect(() => {
@@ -1978,6 +2155,7 @@ const ProvincialApplicationDetailsPage = () => {
         }
         setAgentClientContacts([])
         setIsLoadingAgentClientContacts(false)
+        updateClientLookupFailure('agent-contacts', false)
       })
       return () => {
         isActive = false
@@ -1992,6 +2170,7 @@ const ProvincialApplicationDetailsPage = () => {
         }
         setAgentClientContacts([])
         setIsLoadingAgentClientContacts(false)
+        updateClientLookupFailure('agent-contacts', false)
       })
       return () => {
         isActive = false
@@ -2012,15 +2191,27 @@ const ProvincialApplicationDetailsPage = () => {
       applicationNumber ?? '',
     )
       .then((contacts) => {
-        if (!isActive) {
+        const currentForm = currentSummaryFormRef.current
+        if (
+          !isActive ||
+          !clientLookupNumbersMatch(
+            currentForm?.agentClientNumber ?? '',
+            summaryAgentClientNumberForLookup,
+          ) ||
+          (currentForm?.agentClientLocationCode ?? '').trim() !== summaryAgentClientLocationCode
+        ) {
           return
         }
 
         setAgentClientContacts(contacts)
+        updateClientLookupFailure('agent-contacts', false)
         setSummaryForm((current) => {
           if (
             !current ||
-            current.agentClientNumber.trim() !== summaryAgentClientNumberForLookup ||
+            !clientLookupNumbersMatch(
+              current.agentClientNumber,
+              summaryAgentClientNumberForLookup,
+            ) ||
             current.agentClientLocationCode.trim() !== summaryAgentClientLocationCode
           ) {
             return current
@@ -2031,6 +2222,20 @@ const ProvincialApplicationDetailsPage = () => {
             ? current
             : { ...current, agentContactName: nextAgentContactName }
         })
+      })
+      .catch(() => {
+        const currentForm = currentSummaryFormRef.current
+        if (
+          isActive &&
+          clientLookupNumbersMatch(
+            currentForm?.agentClientNumber ?? '',
+            summaryAgentClientNumberForLookup,
+          ) &&
+          (currentForm?.agentClientLocationCode ?? '').trim() === summaryAgentClientLocationCode
+        ) {
+          setAgentClientContacts([])
+          updateClientLookupFailure('agent-contacts', true)
+        }
       })
       .finally(() => {
         if (isActive) {
@@ -2047,6 +2252,7 @@ const ProvincialApplicationDetailsPage = () => {
     hasSummaryForm,
     summaryAgentClientLocationCode,
     summaryAgentClientNumberForLookup,
+    updateClientLookupFailure,
   ])
 
   useEffect(() => {
@@ -2441,9 +2647,58 @@ const ProvincialApplicationDetailsPage = () => {
 
   const onSummaryFormChange = useCallback(
     (key: keyof ApplicationSummaryFormState, value: string) => {
+      if (key === 'ownerClientNumber') {
+        setOwnerClientLocations([])
+        setOwnerClientContacts([])
+        setOwnerClientData(null)
+      } else if (key === 'ownerClientLocationCode') {
+        setOwnerClientContacts([])
+        setOwnerClientData(null)
+      } else if (key === 'agentClientNumber') {
+        setAgentClientLocations([])
+        setAgentClientContacts([])
+        setAgentClientData(null)
+      } else if (key === 'agentClientLocationCode') {
+        setAgentClientContacts([])
+        setAgentClientData(null)
+      }
+
       setSummaryForm((current) => {
         if (!current) {
           return current
+        }
+
+        if (key === 'ownerClientNumber') {
+          return {
+            ...current,
+            ownerClientNumber: value,
+            ownerClientLocationCode: '',
+            ownerContactName: '',
+          }
+        }
+        if (key === 'ownerClientLocationCode') {
+          return {
+            ...current,
+            ownerClientLocationCode: value,
+            ownerContactName:
+              current.ownerClientLocationCode === value ? current.ownerContactName : '',
+          }
+        }
+        if (key === 'agentClientNumber') {
+          return {
+            ...current,
+            agentClientNumber: value,
+            agentClientLocationCode: '',
+            agentContactName: '',
+          }
+        }
+        if (key === 'agentClientLocationCode') {
+          return {
+            ...current,
+            agentClientLocationCode: value,
+            agentContactName:
+              current.agentClientLocationCode === value ? current.agentContactName : '',
+          }
         }
 
         const next = { ...current, [key]: value }
@@ -3655,6 +3910,15 @@ const ProvincialApplicationDetailsPage = () => {
               subtitle="No authoritative review statuses are configured. Review status updates are disabled."
               lowContrast
               hideCloseButton
+            />
+          )}
+          {clientLookupFailures.size > 0 && (
+            <AppNotification
+              kind="error"
+              title="Client details unavailable"
+              subtitle={CLIENT_LOOKUP_UNAVAILABLE_MESSAGE}
+              lowContrast
+              onCloseButtonClick={() => setClientLookupFailures(new Set())}
             />
           )}
           {!!actionErrorMessage && (

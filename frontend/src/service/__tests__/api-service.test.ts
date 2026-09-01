@@ -219,6 +219,23 @@ describe('api-service cached GET support', () => {
     expect(getMock).toHaveBeenCalledTimes(1)
   })
 
+  it('does not cache a 204 GET response', async () => {
+    getMock
+      .mockResolvedValueOnce({
+        ...buildResponse(undefined),
+        status: 204,
+        statusText: 'No Content',
+      })
+      .mockResolvedValueOnce(buildResponse({ count: 2 }))
+
+    await expect(apiService.getCachedData<unknown>('/lexis/example')).resolves.toBeUndefined()
+    await expect(apiService.getCachedData<{ count: number }>('/lexis/example')).resolves.toEqual({
+      count: 2,
+    })
+
+    expect(getMock).toHaveBeenCalledTimes(2)
+  })
+
   it('uses the resolved auth token on cached GET requests', async () => {
     getMock.mockResolvedValueOnce(buildResponse({ count: 1 }))
 
@@ -1402,6 +1419,75 @@ describe('api-service cached GET support', () => {
       count: 2,
     })
 
+    expect(getMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('invalidates a GET cached while a write is pending when the write succeeds', async () => {
+    let resolveStaleGet: (response: ReturnType<typeof buildResponse>) => void = () => {}
+    getMock
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveStaleGet = resolve
+        }),
+      )
+      .mockResolvedValueOnce(buildResponse({ count: 2 }))
+
+    await registeredRequestInterceptor()({
+      method: 'post',
+      headers: {},
+    })
+
+    const staleRequest = apiService.getCachedData<{ count: number }>('/lexis/example')
+    await vi.waitFor(() => {
+      expect(getMock).toHaveBeenCalledTimes(1)
+    })
+
+    resolveStaleGet(buildResponse({ count: 1 }))
+    await expect(staleRequest).resolves.toEqual({ count: 1 })
+    await expect(apiService.getCachedData<{ count: number }>('/lexis/example')).resolves.toEqual({
+      count: 1,
+    })
+
+    const pageCacheKey = buildPageDataCacheKey('status-search', 'user-1', { status: 'APP' })
+    setPageDataCache(pageCacheKey, { rows: ['stale'] }, getPageDataCacheGeneration())
+
+    registeredResponseResolvedInterceptor()({
+      ...buildResponse({ success: true }),
+      config: { method: 'post' },
+    } as unknown as AxiosResponse<unknown>)
+
+    expect(getPageDataCache(pageCacheKey)).toBeNull()
+    await expect(apiService.getCachedData<{ count: number }>('/lexis/example')).resolves.toEqual({
+      count: 2,
+    })
+    expect(getMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('invalidates a GET cached while a write is pending when the write fails ambiguously', async () => {
+    getMock
+      .mockResolvedValueOnce(buildResponse({ count: 1 }))
+      .mockResolvedValueOnce(buildResponse({ count: 2 }))
+
+    await registeredRequestInterceptor()({
+      method: 'post',
+      headers: {},
+    })
+    await expect(apiService.getCachedData<{ count: number }>('/lexis/example')).resolves.toEqual({
+      count: 1,
+    })
+    await expect(apiService.getCachedData<{ count: number }>('/lexis/example')).resolves.toEqual({
+      count: 1,
+    })
+
+    const pageCacheKey = buildPageDataCacheKey('status-search', 'user-1', { status: 'APP' })
+    setPageDataCache(pageCacheKey, { rows: ['stale'] }, getPageDataCacheGeneration())
+    const failedWrite = { config: { method: 'post' }, response: { status: 500 } }
+    await expect(registeredResponseRejectedInterceptor()(failedWrite)).rejects.toBe(failedWrite)
+
+    expect(getPageDataCache(pageCacheKey)).toBeNull()
+    await expect(apiService.getCachedData<{ count: number }>('/lexis/example')).resolves.toEqual({
+      count: 2,
+    })
     expect(getMock).toHaveBeenCalledTimes(2)
   })
 })
