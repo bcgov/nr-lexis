@@ -242,12 +242,17 @@ class PermitRpcRepositoryTest {
     assertThat(rows.get(0).applicationProductTypeCode()).isEqualTo("T");
     assertThat(rows.get(0).speciesDescription()).isEqualTo("Hemlock");
     assertThat(rows.get(0).averageMarketValue()).isEqualByComparingTo("125.00");
+    assertThat(rows.get(0).scaleRow().cascadeSplitCode()).isNull();
     ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
     verify(jdbcTemplate).query(sql.capture(), any(RowMapper.class), eq(7000123L));
     String query = sql.getValue();
     assertThat(query)
         .contains("WITH SCALE_CONTEXT AS")
         .contains("FROM EXPORT_SCALE_DETAIL SD")
+        .contains("LEFT JOIN TIMBER_MARK TM")
+        .contains("TM.CASCADE_SPLIT_CODE")
+        .doesNotContain("HARVESTING_HAULING_XREF")
+        .doesNotContain("HARVESTING_AUTHORITY")
         .contains("EEA.EXPORT_PRODUCT_TYPE_CODE AS APPLICATION_PRODUCT_TYPE_CODE")
         .contains("NVL(SD.EXPORT_GRADE_CODE, ' ') AS AMV_GRADE_CODE")
         .contains("SCALE_AMV_DATE AS")
@@ -316,6 +321,10 @@ class PermitRpcRepositoryTest {
             eq("PKG-200"),
             eq(7000123L));
     assertThat(sql.getValue())
+        .contains("LEFT JOIN TIMBER_MARK TM")
+        .contains("TM.CASCADE_SPLIT_CODE")
+        .doesNotContain("HARVESTING_HAULING_XREF")
+        .doesNotContain("HARVESTING_AUTHORITY")
         .contains("WHERE SD.PACKAGE_NUMBER IN (?, ?)")
         .contains("SD.EXPORT_PERMIT_DETAIL_NUMBER IS NULL")
         .contains("OR SD.EXPORT_PERMIT_DETAIL_NUMBER = ?")
