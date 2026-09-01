@@ -70,6 +70,8 @@ type BlanketOicPermitCreateModalProps = {
 
 const MAX_OIC_REQUEST_PIECES = 9_999_999_999
 const MAX_OIC_REQUEST_VOLUME_LENGTH = 9
+const CLIENT_LOOKUP_ERROR_MESSAGE =
+  'Client details could not be retrieved. Existing selections were preserved. Please try again.'
 
 const initialForm = (
   exemptionExpiryDate: string,
@@ -228,6 +230,9 @@ const BlanketOicPermitCreateModal = ({
   const [showValidationErrors, setShowValidationErrors] = useState(false)
   const [saving, setSaving] = useState(false)
   const [actionError, setActionError] = useState('')
+  const [clientLookupFailures, setClientLookupFailures] = useState<ReadonlySet<ClientKind>>(
+    () => new Set(),
+  )
   const currentFormRef = useRef(form)
   const ownerLookupRequestRef = useRef(0)
   const agentLookupRequestRef = useRef(0)
@@ -280,6 +285,22 @@ const BlanketOicPermitCreateModal = ({
     setForm((current) => ({ ...current, [field]: value }))
   }
 
+  const updateClientLookupFailure = (kind: ClientKind, failed: boolean) => {
+    setClientLookupFailures((current) => {
+      if (current.has(kind) === failed) {
+        return current
+      }
+
+      const next = new Set(current)
+      if (failed) {
+        next.add(kind)
+      } else {
+        next.delete(kind)
+      }
+      return next
+    })
+  }
+
   const loadClientLocations = async (
     kind: ClientKind,
   ): Promise<{ clientNumber: string; locationCode: string }> => {
@@ -313,6 +334,7 @@ const BlanketOicPermitCreateModal = ({
 
     setAttempted(true)
     if (!/^\d{1,8}$/.test(clientNumber)) {
+      updateClientLookupFailure(kind, false)
       setLocations([])
       setField(locationField, '')
       return { clientNumber, locationCode: '' }
@@ -333,6 +355,7 @@ const BlanketOicPermitCreateModal = ({
         return currentSelection()
       }
       const confirmedClientNumber = clientData?.clientNumber.trim() || clientNumber
+      updateClientLookupFailure(kind, false)
       setLocations(locations)
       setForm((current) => {
         const currentClientNumber =
@@ -351,9 +374,7 @@ const BlanketOicPermitCreateModal = ({
         return currentSelection()
       }
       console.error(error)
-      setActionError(
-        'Client details could not be retrieved. Existing selections were preserved. Please try again.',
-      )
+      updateClientLookupFailure(kind, true)
       return currentSelection()
     } finally {
       if (requestRef.current === requestId) {
@@ -489,6 +510,15 @@ const BlanketOicPermitCreateModal = ({
           subtitle={shippingReferencesError}
           lowContrast
           hideCloseButton
+        />
+      )}
+      {clientLookupFailures.size > 0 && (
+        <InlineNotification
+          kind="error"
+          title="Client details unavailable"
+          subtitle={CLIENT_LOOKUP_ERROR_MESSAGE}
+          lowContrast
+          onCloseButtonClick={() => setClientLookupFailures(new Set())}
         />
       )}
       {actionError && (
@@ -627,6 +657,7 @@ const BlanketOicPermitCreateModal = ({
               if (!enabled) {
                 agentLookupRequestRef.current += 1
                 setAgentLookupLoading(false)
+                updateClientLookupFailure('agent', false)
                 setField('agentClientNumber', '')
                 setField('agentClientLocation', '')
                 setAgentLocations([])

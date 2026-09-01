@@ -474,6 +474,55 @@ describe('permit creation from an exemption', () => {
     consoleError.mockRestore()
   })
 
+  it('keeps another Blanket OIC client lookup failure visible after a successful retry', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    mockRole(['LEXIS_APPLICATION_APPROVER'], ['createPermit', 'savePermit'])
+    configureBlanketOicCreationDependencies()
+    const lookupAttempts = new Map<string, number>()
+    vi.mocked(fetchExemptionClientLocations).mockImplementation((clientNumber) => {
+      const attempt = (lookupAttempts.get(clientNumber) ?? 0) + 1
+      lookupAttempts.set(clientNumber, attempt)
+      return attempt === 1
+        ? Promise.reject(new Error('client endpoint unavailable'))
+        : Promise.resolve([
+            {
+              locationCode: '00',
+              locationName: 'WOODLANDS SERVICES',
+              selected: true,
+            },
+          ])
+    })
+    renderPage(activeBlanketOicExemption)
+
+    await openPermitsTab()
+    await userEvent.click(screen.getByRole('button', { name: 'Apply for new permit' }))
+    const dialog = screen.getByRole('dialog', { name: 'Apply for new Blanket OIC permit' })
+    const ownerClientNumber = within(dialog).getByLabelText('Owner client number')
+    await userEvent.type(ownerClientNumber, '11111111')
+    await userEvent.tab()
+    expect(await within(dialog).findByText('Client details unavailable')).toBeInTheDocument()
+
+    await userEvent.click(
+      within(dialog).getByRole('checkbox', { name: 'An agent is acting for the owner' }),
+    )
+    const agentClientNumber = within(dialog).getByLabelText('Agent client number')
+    await userEvent.type(agentClientNumber, '22222222')
+    await userEvent.tab()
+    await waitFor(() => expect(lookupAttempts.get('22222222')).toBe(1))
+
+    await userEvent.click(ownerClientNumber)
+    await userEvent.tab()
+    await waitFor(() => expect(within(dialog).getByLabelText('Owner location')).toHaveValue('00'))
+    expect(within(dialog).getByText('Client details unavailable')).toBeInTheDocument()
+
+    await userEvent.click(agentClientNumber)
+    await userEvent.tab()
+    await waitFor(() => expect(within(dialog).getByLabelText('Agent location')).toHaveValue('00'))
+    expect(within(dialog).queryByText('Client details unavailable')).not.toBeInTheDocument()
+
+    consoleError.mockRestore()
+  })
+
   it('ignores a late Blanket OIC client lookup after the client number changes', async () => {
     mockRole(['LEXIS_APPLICATION_APPROVER'], ['createPermit', 'savePermit'])
     configureBlanketOicCreationDependencies()
