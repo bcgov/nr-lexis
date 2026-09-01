@@ -348,6 +348,11 @@ describe('Provincial Offer Search Actions', () => {
     renderPage()
     await screen.findByText('OFF-1001')
 
+    expect(screen.getByRole('button', { name: 'Region' })).toBeVisible()
+    expect(
+      screen.queryByRole('button', { name: 'Natural resource region code' }),
+    ).not.toBeInTheDocument()
+
     const filterGrid = document.querySelector('.provincial-offer-search-grid')
     expect(filterGrid).toBeTruthy()
     const fieldLabels = Array.from((filterGrid as HTMLElement).children).map((field) =>

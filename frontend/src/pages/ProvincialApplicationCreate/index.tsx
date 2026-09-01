@@ -2258,34 +2258,36 @@ const ProvincialApplicationCreatePage = () => {
                 />
               </Tile>
             </TabPanel>
-            {canViewRemarks && (
-              <TabPanel className="application-detail-tab-panel">
-                <Tile
-                  className="create-form-tile application-detail-section"
-                  role="region"
-                  aria-labelledby="application-create-remarks-heading"
-                >
-                  <h2 id="application-create-remarks-heading" className="detail-tile-title">
-                    Remarks
-                  </h2>
-                  <div className="legacy-search-actions create-form-comments">
-                    <TextArea
-                      id="applicationComments"
-                      labelText="Remarks"
-                      maxCount={APPLICATION_REMARK_MAX_LENGTH}
-                      value={form.comments}
-                      invalid={!!fieldError('comments')}
-                      invalidText={fieldError('comments')}
-                      onBlur={() => markFieldTouched('comments')}
-                      onChange={(event) => {
-                        markFormEdited()
-                        setForm((current) => ({ ...current, comments: event.target.value }))
-                      }}
-                    />
-                  </div>
-                </Tile>
-              </TabPanel>
-            )}
+            {canViewRemarks
+              ? [
+                  <TabPanel key="remarks" className="application-detail-tab-panel">
+                    <Tile
+                      className="create-form-tile application-detail-section"
+                      role="region"
+                      aria-labelledby="application-create-remarks-heading"
+                    >
+                      <h2 id="application-create-remarks-heading" className="detail-tile-title">
+                        Remarks
+                      </h2>
+                      <div className="legacy-search-actions create-form-comments">
+                        <TextArea
+                          id="applicationComments"
+                          labelText="Remarks"
+                          maxCount={APPLICATION_REMARK_MAX_LENGTH}
+                          value={form.comments}
+                          invalid={!!fieldError('comments')}
+                          invalidText={fieldError('comments')}
+                          onBlur={() => markFieldTouched('comments')}
+                          onChange={(event) => {
+                            markFormEdited()
+                            setForm((current) => ({ ...current, comments: event.target.value }))
+                          }}
+                        />
+                      </div>
+                    </Tile>
+                  </TabPanel>,
+                ]
+              : []}
             <TabPanel className="application-detail-tab-panel">
               <Tile
                 className="create-form-tile application-detail-section"
@@ -2300,36 +2302,39 @@ const ProvincialApplicationCreatePage = () => {
                 </p>
               </Tile>
             </TabPanel>
-            {canReviewApplications && (
-              <TabPanel className="application-detail-tab-panel">
-                <Tile
-                  className="create-form-tile application-detail-section"
-                  role="region"
-                  aria-labelledby="application-create-review-heading"
-                >
-                  <h2 id="application-create-review-heading" className="detail-tile-title">
-                    Review
-                  </h2>
-                  <div className="legacy-search-grid create-form-grid">
-                    <TextInput
-                      id="applicationCreateReviewStatus"
-                      labelText="Application status"
-                      value="New"
-                      readOnly
-                    />
-                    <TextArea
-                      id="applicationCreateReviewRemarks"
-                      labelText="Remarks"
-                      value=""
-                      disabled
-                    />
-                  </div>
-                  <p className="detail-empty-message">
-                    Save the application before changing its review status or adding review remarks.
-                  </p>
-                </Tile>
-              </TabPanel>
-            )}
+            {canReviewApplications
+              ? [
+                  <TabPanel key="review" className="application-detail-tab-panel">
+                    <Tile
+                      className="create-form-tile application-detail-section"
+                      role="region"
+                      aria-labelledby="application-create-review-heading"
+                    >
+                      <h2 id="application-create-review-heading" className="detail-tile-title">
+                        Review
+                      </h2>
+                      <div className="legacy-search-grid create-form-grid">
+                        <TextInput
+                          id="applicationCreateReviewStatus"
+                          labelText="Application status"
+                          value="New"
+                          readOnly
+                        />
+                        <TextArea
+                          id="applicationCreateReviewRemarks"
+                          labelText="Remarks"
+                          value=""
+                          disabled
+                        />
+                      </div>
+                      <p className="detail-empty-message">
+                        Save the application before changing its review status or adding review
+                        remarks.
+                      </p>
+                    </Tile>
+                  </TabPanel>,
+                ]
+              : []}
           </TabPanels>
         </Tabs>
         <div
