@@ -1679,6 +1679,7 @@ const ProvincialApplicationDetailsPage = () => {
           ) &&
           (currentForm?.ownerClientLocationCode ?? '').trim() === summaryOwnerClientLocationCode
         ) {
+          setOwnerClientData(null)
           setActionErrorMessage(CLIENT_LOOKUP_UNAVAILABLE_MESSAGE)
         }
       })
@@ -1774,6 +1775,7 @@ const ProvincialApplicationDetailsPage = () => {
           ) &&
           (currentForm?.agentClientLocationCode ?? '').trim() === summaryAgentClientLocationCode
         ) {
+          setAgentClientData(null)
           setActionErrorMessage(CLIENT_LOOKUP_UNAVAILABLE_MESSAGE)
         }
       })
@@ -1879,6 +1881,7 @@ const ProvincialApplicationDetailsPage = () => {
             summaryOwnerClientNumberForLookup,
           )
         ) {
+          setOwnerClientLocations([])
           setActionErrorMessage(CLIENT_LOOKUP_UNAVAILABLE_MESSAGE)
         }
       })
@@ -1977,6 +1980,7 @@ const ProvincialApplicationDetailsPage = () => {
             summaryAgentClientNumberForLookup,
           )
         ) {
+          setAgentClientLocations([])
           setActionErrorMessage(CLIENT_LOOKUP_UNAVAILABLE_MESSAGE)
         }
       })
@@ -2075,6 +2079,7 @@ const ProvincialApplicationDetailsPage = () => {
           ) &&
           (currentForm?.ownerClientLocationCode ?? '').trim() === summaryOwnerClientLocationCode
         ) {
+          setOwnerClientContacts([])
           setActionErrorMessage(CLIENT_LOOKUP_UNAVAILABLE_MESSAGE)
         }
       })
@@ -2179,6 +2184,7 @@ const ProvincialApplicationDetailsPage = () => {
           ) &&
           (currentForm?.agentClientLocationCode ?? '').trim() === summaryAgentClientLocationCode
         ) {
+          setAgentClientContacts([])
           setActionErrorMessage(CLIENT_LOOKUP_UNAVAILABLE_MESSAGE)
         }
       })

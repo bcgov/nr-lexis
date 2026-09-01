@@ -600,6 +600,62 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(within(clientNumberField as HTMLElement).getByText('00011122')).toBeInTheDocument()
   })
 
+  it('clears discarded client enrichment when the saved client refresh fails after cancel', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { level: 1, name: 'Application 321' })
+    const ownerControls = within(getOwnerClientDetailsTile())
+    expect(await ownerControls.findByText('Owner Forestry Ltd.')).toBeInTheDocument()
+
+    const callsBeforeEdit = mockedFetchApplicationClientData.mock.calls.length
+    await userEvent.click(ownerControls.getByRole('button', { name: 'Edit owner client details' }))
+    await waitFor(() =>
+      expect(mockedFetchApplicationClientData.mock.calls.length).toBeGreaterThan(callsBeforeEdit),
+    )
+
+    mockedFetchApplicationClientData.mockResolvedValueOnce({
+      clientNumber: '00099988',
+      companyName: 'Discarded Client Ltd.',
+      address: '99 Discarded Road',
+      city: 'Victoria',
+      province: 'BC',
+      postalCode: 'V8V 9Z9',
+      country: 'Canada',
+      phone: '250-555-9999',
+      fax: '',
+      email: 'discarded@example.test',
+      notfound: '',
+    })
+    fireEvent.change(ownerControls.getByLabelText('Client number'), {
+      target: { value: '00099988' },
+    })
+    expect(await ownerControls.findByText('Discarded Client Ltd.')).toBeInTheDocument()
+
+    mockedFetchApplicationClientData.mockRejectedValueOnce(
+      new Error('saved client refresh unavailable'),
+    )
+    await userEvent.click(ownerControls.getByRole('button', { name: 'Cancel' }))
+
+    expect(
+      await screen.findByText(
+        'Client details could not be retrieved. Existing selections were preserved. Please try again.',
+      ),
+    ).toBeInTheDocument()
+    expect(ownerControls.queryByText('Discarded Client Ltd.')).not.toBeInTheDocument()
+    const clientNumberField = ownerControls.getByText('Client number').closest('.detail-field-item')
+    expect(clientNumberField).toBeTruthy()
+    expect(within(clientNumberField as HTMLElement).getByText('00011122')).toBeInTheDocument()
+  })
+
   it('edits agent details using the legacy editable fields', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
