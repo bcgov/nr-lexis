@@ -290,7 +290,7 @@ class APIService {
     const request = this.client
       .get<T>(path, requestConfig)
       .then((response) => {
-        if (this.cacheGeneration === cacheGeneration) {
+        if (this.cacheGeneration === cacheGeneration && response.status !== 204) {
           this.removeExpiredCachedResponses()
           this.responseCache.set(key, {
             expiresAt: Date.now() + ttlMs,

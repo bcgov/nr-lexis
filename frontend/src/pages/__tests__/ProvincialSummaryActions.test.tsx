@@ -298,7 +298,7 @@ describe('Provincial Summary', () => {
   })
 
   it('shows client lookup failures without hiding summary sections', async () => {
-    mockedFetchApplicationClientData.mockRejectedValue(new Error('client endpoint unavailable'))
+    mockedFetchApplicationClientData.mockRejectedValueOnce(new Error('client endpoint unavailable'))
 
     renderPage()
 
@@ -309,6 +309,14 @@ describe('Provincial Summary', () => {
       screen.getByText('Client details could not be retrieved. Please try again.'),
     ).toBeInTheDocument()
     expect(await screen.findByRole('heading', { name: 'My Applications' })).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
+
+    expect(await screen.findByText('NORSKE SKOG CANADA LIMITED')).toBeInTheDocument()
+    expect(mockedFetchApplicationClientData).toHaveBeenCalledTimes(2)
+    expect(
+      screen.queryByRole('heading', { name: 'Client details unavailable' }),
+    ).not.toBeInTheDocument()
   })
 
   it('does not request client data when no forest client is active', async () => {

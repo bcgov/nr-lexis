@@ -219,6 +219,23 @@ describe('api-service cached GET support', () => {
     expect(getMock).toHaveBeenCalledTimes(1)
   })
 
+  it('does not cache a 204 GET response', async () => {
+    getMock
+      .mockResolvedValueOnce({
+        ...buildResponse(undefined),
+        status: 204,
+        statusText: 'No Content',
+      })
+      .mockResolvedValueOnce(buildResponse({ count: 2 }))
+
+    await expect(apiService.getCachedData<unknown>('/lexis/example')).resolves.toBeUndefined()
+    await expect(apiService.getCachedData<{ count: number }>('/lexis/example')).resolves.toEqual({
+      count: 2,
+    })
+
+    expect(getMock).toHaveBeenCalledTimes(2)
+  })
+
   it('uses the resolved auth token on cached GET requests', async () => {
     getMock.mockResolvedValueOnce(buildResponse({ count: 1 }))
 

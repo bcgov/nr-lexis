@@ -726,6 +726,27 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(mockedFetchPermitInvoices).toHaveBeenCalledTimes(1)
   }, 15000)
 
+  it('shows saved permit client values when client enrichment is unavailable', async () => {
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    configureActivePermit()
+    mockedFetchApplicationClientData.mockRejectedValue(new Error('client endpoint unavailable'))
+    renderPermitDetails()
+
+    await selectPermitDetailTab('Owner')
+
+    expect(
+      await screen.findByText(
+        'Owner and agent details could not be retrieved. The saved permit values are still shown.',
+      ),
+    ).toBeInTheDocument()
+    const ownerTile = screen.getByRole('heading', { level: 2, name: 'Owner' }).closest('.cds--tile')
+    expect(ownerTile).toBeTruthy()
+    expect(within(ownerTile as HTMLElement).getByText('00067890')).toBeInTheDocument()
+    expect(within(ownerTile as HTMLElement).getByText('03')).toBeInTheDocument()
+
+    consoleWarn.mockRestore()
+  })
+
   it('shows all associated application and package numbers in the permit summary', async () => {
     mockedFetchProvincialPermitDetail.mockResolvedValue({
       ...permitDetail,

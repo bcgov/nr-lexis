@@ -288,6 +288,7 @@ type PermitClientTileProps = {
   locationCode: string | null
   clientData: ApplicationClientData | null
   isLoading: boolean
+  errorMessage: string
 }
 
 const PermitClientTile = ({
@@ -296,29 +297,42 @@ const PermitClientTile = ({
   locationCode,
   clientData,
   isLoading,
+  errorMessage,
 }: PermitClientTileProps) => (
-  <DetailFieldTile
-    title={title}
-    fields={[
-      { label: 'Client number', value: displayValue(clientNumber) },
-      { label: 'Location', value: displayValue(locationCode) },
-      {
-        label: 'Company name',
-        value: isLoading ? 'Loading…' : displayValue(clientData?.companyName),
-      },
-      { label: 'Address', value: isLoading ? 'Loading…' : displayValue(clientData?.address) },
-      { label: 'City', value: isLoading ? 'Loading…' : displayValue(clientData?.city) },
-      { label: 'Province', value: isLoading ? 'Loading…' : displayValue(clientData?.province) },
-      {
-        label: 'Postal code',
-        value: isLoading ? 'Loading…' : displayValue(clientData?.postalCode),
-      },
-      { label: 'Country', value: isLoading ? 'Loading…' : displayValue(clientData?.country) },
-      { label: 'Phone', value: isLoading ? 'Loading…' : displayValue(clientData?.phone) },
-      { label: 'Fax', value: isLoading ? 'Loading…' : displayValue(clientData?.fax) },
-      { label: 'Email', value: isLoading ? 'Loading…' : displayValue(clientData?.email) },
-    ]}
-  />
+  <>
+    <DetailFieldTile
+      title={title}
+      fields={[
+        { label: 'Client number', value: displayValue(clientNumber) },
+        { label: 'Location', value: displayValue(locationCode) },
+        {
+          label: 'Company name',
+          value: isLoading ? 'Loading…' : displayValue(clientData?.companyName),
+        },
+        { label: 'Address', value: isLoading ? 'Loading…' : displayValue(clientData?.address) },
+        { label: 'City', value: isLoading ? 'Loading…' : displayValue(clientData?.city) },
+        { label: 'Province', value: isLoading ? 'Loading…' : displayValue(clientData?.province) },
+        {
+          label: 'Postal code',
+          value: isLoading ? 'Loading…' : displayValue(clientData?.postalCode),
+        },
+        { label: 'Country', value: isLoading ? 'Loading…' : displayValue(clientData?.country) },
+        { label: 'Phone', value: isLoading ? 'Loading…' : displayValue(clientData?.phone) },
+        { label: 'Fax', value: isLoading ? 'Loading…' : displayValue(clientData?.fax) },
+        { label: 'Email', value: isLoading ? 'Loading…' : displayValue(clientData?.email) },
+      ]}
+    />
+    {errorMessage ? (
+      <InlineNotification
+        className="detail-context-notification"
+        kind="warning"
+        lowContrast
+        hideCloseButton
+        title="Client details unavailable"
+        subtitle={errorMessage}
+      />
+    ) : null}
+  </>
 )
 
 type PermitDetailFormField =
@@ -583,6 +597,7 @@ const ProvincialPermitDetailsPage = () => {
   const [ownerClientData, setOwnerClientData] = useState<ApplicationClientData | null>(null)
   const [agentClientData, setAgentClientData] = useState<ApplicationClientData | null>(null)
   const [isClientDataLoading, setIsClientDataLoading] = useState(false)
+  const [clientDataErrorMessage, setClientDataErrorMessage] = useState('')
   const [clientDataRequested, setClientDataRequested] = useState(false)
   const [documentRows, setDocumentRows] = useState<PermitDocumentRow[]>([])
   const [invoiceRows, setInvoiceRows] = useState<PermitInvoiceRow[]>([])
@@ -754,6 +769,7 @@ const ProvincialPermitDetailsPage = () => {
     setDocumentRows([])
     setInvoiceRows([])
     setClientDataRequested(false)
+    setClientDataErrorMessage('')
     setAvailablePermitApplications([])
     setPermitApplicationToAdd('')
     setHasLoadedAvailablePermitApplications(false)
@@ -1055,6 +1071,7 @@ const ProvincialPermitDetailsPage = () => {
     const loadClientData = async () => {
       setOwnerClientData(null)
       setAgentClientData(null)
+      setClientDataErrorMessage('')
 
       if (!detail || !shouldLoadClientData) {
         setIsClientDataLoading(false)
@@ -1084,10 +1101,14 @@ const ProvincialPermitDetailsPage = () => {
         if (!isCancelled) {
           setOwnerClientData(ownerResult)
           setAgentClientData(agentResult)
+          setClientDataErrorMessage('')
         }
       } catch (error) {
         if (!isCancelled) {
           console.warn('Unable to load permit owner or agent client data.', error)
+          setClientDataErrorMessage(
+            'Owner and agent details could not be retrieved. The saved permit values are still shown.',
+          )
         }
       } finally {
         if (!isCancelled) {
@@ -3718,6 +3739,7 @@ const ProvincialPermitDetailsPage = () => {
                         locationCode={detail.ownerClientLocationCode}
                         clientData={ownerClientData}
                         isLoading={isClientDataLoading}
+                        errorMessage={activePermitTabId === 'owner' ? clientDataErrorMessage : ''}
                       />
                     </Column>
                   </Grid>
@@ -3732,6 +3754,7 @@ const ProvincialPermitDetailsPage = () => {
                           locationCode={detail.agentClientLocationCode}
                           clientData={agentClientData}
                           isLoading={isClientDataLoading}
+                          errorMessage={activePermitTabId === 'agent' ? clientDataErrorMessage : ''}
                         />
                       </Column>
                     </Grid>

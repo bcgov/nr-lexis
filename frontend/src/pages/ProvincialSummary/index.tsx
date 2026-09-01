@@ -218,6 +218,7 @@ const ProvincialSummaryPage = () => {
     companyName: string
     error: string
   } | null>(null)
+  const [clientDetailsRetryKey, setClientDetailsRetryKey] = useState(0)
   const activeClientDetails = clientDetails?.clientNumber === clientNumber ? clientDetails : null
   const companyName = activeClientDetails?.companyName ?? ''
   const clientDetailsError = activeClientDetails?.error ?? ''
@@ -282,7 +283,7 @@ const ProvincialSummaryPage = () => {
     return () => {
       active = false
     }
-  }, [clientNumber])
+  }, [clientDetailsRetryKey, clientNumber])
 
   return (
     <Grid fullWidth className="default-grid provincial-summary-page">
@@ -310,6 +311,18 @@ const ProvincialSummaryPage = () => {
             headingLevel={3}
             title="Client details unavailable"
             description={clientDetailsError}
+            action={
+              <Button
+                kind="tertiary"
+                size="sm"
+                onClick={() => {
+                  setClientDetails(null)
+                  setClientDetailsRetryKey((current) => current + 1)
+                }}
+              >
+                Try again
+              </Button>
+            }
           />
         ) : null}
 

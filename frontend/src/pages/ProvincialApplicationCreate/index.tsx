@@ -150,6 +150,14 @@ const APPLICATION_CONTACT_NAME_MAX_LENGTH = 120
 const APPLICATION_PRODUCT_LOCATION_MAX_LENGTH = 250
 const APPLICATION_REMARK_MAX_LENGTH = 254
 
+const comparableClientNumber = (value: string): string => {
+  const normalized = value.trim()
+  return CLIENT_NUMBER_PATTERN.test(normalized) ? normalized.padStart(8, '0') : normalized
+}
+
+const clientLookupNumbersMatch = (left: string, right: string): boolean =>
+  comparableClientNumber(left) === comparableClientNumber(right)
+
 const clientNumberFieldError = (value: string, label: string): string | undefined =>
   firstValidationError(
     () => requiredFieldError(value, label),
@@ -391,6 +399,8 @@ const ProvincialApplicationCreatePage = () => {
     ),
   )
   const draftBaselineRef = useRef(form)
+  const currentFormRef = useRef(form)
+  currentFormRef.current = form
   const [formEdited, setFormEdited] = useState(false)
   const [createdApplicationNavigation, setCreatedApplicationNavigation] =
     useState<CreatedApplicationNavigation | null>(null)
@@ -628,13 +638,16 @@ const ProvincialApplicationCreatePage = () => {
 
     void fetchApplicationClientLocations(ownerClientNumber, 'owner')
       .then((locations) => {
-        if (!isActive) {
+        if (
+          !isActive ||
+          !clientLookupNumbersMatch(currentFormRef.current.ownerClientNumber, ownerClientNumber)
+        ) {
           return
         }
 
         setOwnerClientLocations(locations)
         setForm((current) => {
-          if (current.ownerClientNumber.trim() !== ownerClientNumber) {
+          if (!clientLookupNumbersMatch(current.ownerClientNumber, ownerClientNumber)) {
             return current
           }
 
@@ -657,7 +670,10 @@ const ProvincialApplicationCreatePage = () => {
         })
       })
       .catch(() => {
-        if (isActive) {
+        if (
+          isActive &&
+          clientLookupNumbersMatch(currentFormRef.current.ownerClientNumber, ownerClientNumber)
+        ) {
           setStatus(CLIENT_LOOKUP_UNAVAILABLE_STATUS)
         }
       })
@@ -732,13 +748,16 @@ const ProvincialApplicationCreatePage = () => {
 
     void fetchApplicationClientLocations(agentClientNumber, 'agent')
       .then((locations) => {
-        if (!isActive) {
+        if (
+          !isActive ||
+          !clientLookupNumbersMatch(currentFormRef.current.agentClientNumber, agentClientNumber)
+        ) {
           return
         }
 
         setAgentClientLocations(locations)
         setForm((current) => {
-          if (current.agentClientNumber.trim() !== agentClientNumber) {
+          if (!clientLookupNumbersMatch(current.agentClientNumber, agentClientNumber)) {
             return current
           }
 
@@ -761,7 +780,10 @@ const ProvincialApplicationCreatePage = () => {
         })
       })
       .catch(() => {
-        if (isActive) {
+        if (
+          isActive &&
+          clientLookupNumbersMatch(currentFormRef.current.agentClientNumber, agentClientNumber)
+        ) {
           setStatus(CLIENT_LOOKUP_UNAVAILABLE_STATUS)
         }
       })
@@ -811,7 +833,12 @@ const ProvincialApplicationCreatePage = () => {
       fetchApplicationClientData(ownerClientNumber, ownerClientLocationCode),
     ])
       .then(([contacts, clientData]) => {
-        if (!isActive) {
+        const currentForm = currentFormRef.current
+        if (
+          !isActive ||
+          !clientLookupNumbersMatch(currentForm.ownerClientNumber, ownerClientNumber) ||
+          currentForm.ownerClientLocationCode.trim() !== ownerClientLocationCode
+        ) {
           return
         }
 
@@ -819,7 +846,7 @@ const ProvincialApplicationCreatePage = () => {
         setOwnerClientData(clientData)
         setForm((current) => {
           if (
-            current.ownerClientNumber.trim() !== ownerClientNumber ||
+            !clientLookupNumbersMatch(current.ownerClientNumber, ownerClientNumber) ||
             current.ownerClientLocationCode.trim() !== ownerClientLocationCode
           ) {
             return current
@@ -838,7 +865,12 @@ const ProvincialApplicationCreatePage = () => {
         })
       })
       .catch(() => {
-        if (isActive) {
+        const currentForm = currentFormRef.current
+        if (
+          isActive &&
+          clientLookupNumbersMatch(currentForm.ownerClientNumber, ownerClientNumber) &&
+          currentForm.ownerClientLocationCode.trim() === ownerClientLocationCode
+        ) {
           setStatus(CLIENT_LOOKUP_UNAVAILABLE_STATUS)
         }
       })
@@ -905,7 +937,12 @@ const ProvincialApplicationCreatePage = () => {
       fetchApplicationClientData(agentClientNumber, agentClientLocationCode),
     ])
       .then(([contacts, clientData]) => {
-        if (!isActive) {
+        const currentForm = currentFormRef.current
+        if (
+          !isActive ||
+          !clientLookupNumbersMatch(currentForm.agentClientNumber, agentClientNumber) ||
+          currentForm.agentClientLocationCode.trim() !== agentClientLocationCode
+        ) {
           return
         }
 
@@ -913,7 +950,7 @@ const ProvincialApplicationCreatePage = () => {
         setAgentClientData(clientData)
         setForm((current) => {
           if (
-            current.agentClientNumber.trim() !== agentClientNumber ||
+            !clientLookupNumbersMatch(current.agentClientNumber, agentClientNumber) ||
             current.agentClientLocationCode.trim() !== agentClientLocationCode
           ) {
             return current
@@ -932,7 +969,12 @@ const ProvincialApplicationCreatePage = () => {
         })
       })
       .catch(() => {
-        if (isActive) {
+        const currentForm = currentFormRef.current
+        if (
+          isActive &&
+          clientLookupNumbersMatch(currentForm.agentClientNumber, agentClientNumber) &&
+          currentForm.agentClientLocationCode.trim() === agentClientLocationCode
+        ) {
           setStatus(CLIENT_LOOKUP_UNAVAILABLE_STATUS)
         }
       })

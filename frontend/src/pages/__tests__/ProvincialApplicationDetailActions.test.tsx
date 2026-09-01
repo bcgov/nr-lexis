@@ -352,6 +352,58 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     ).toBeInTheDocument()
   })
 
+  it('does not show the previous client enrichment when a changed client lookup fails', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { level: 2, name: 'Owner client details' })
+    const ownerTile = getOwnerClientDetailsTile()
+    const ownerControls = within(ownerTile)
+    expect(await ownerControls.findByText('Owner Forestry Ltd.')).toBeInTheDocument()
+    await waitFor(() =>
+      expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith(
+        '00011122',
+        'owner',
+        '321',
+      ),
+    )
+
+    await userEvent.click(ownerControls.getByRole('button', { name: 'Edit owner client details' }))
+    mockedFetchApplicationClientLocations.mockRejectedValueOnce(
+      new Error('changed client endpoint unavailable'),
+    )
+    fireEvent.change(ownerControls.getByLabelText('Client number'), {
+      target: { value: '00099988' },
+    })
+
+    expect(ownerControls.getByLabelText('Client number')).toHaveValue('00099988')
+    expect(ownerControls.queryByText('Owner Forestry Ltd.')).not.toBeInTheDocument()
+    expect(ownerControls.getByRole('combobox', { name: 'Client location' })).toHaveValue('')
+
+    await waitFor(() =>
+      expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith(
+        '00099988',
+        'owner',
+        '321',
+      ),
+    )
+    expect(
+      await screen.findByText(
+        'Client details could not be retrieved. Existing selections were preserved. Please try again.',
+      ),
+    ).toBeInTheDocument()
+    expect(ownerControls.queryByText('Owner Main Location')).not.toBeInTheDocument()
+    expect(ownerControls.queryByText('Owner Contact')).not.toBeInTheDocument()
+  })
+
   it('shows an explicit empty state when no agent is assigned', async () => {
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
       ...applicationDetail,

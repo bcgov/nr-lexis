@@ -41,13 +41,17 @@ type ClientLookupContext = {
 
 const parseClientData = (input: unknown): ApplicationClientData | null => {
   if (!isRecord(input)) {
-    return null
+    throw new Error('Client lookup returned an empty or malformed response.')
   }
 
   const clientNumber = stringField(input, 'clientNumber')
+  const notfound = stringField(input, 'notfound')
 
   if (!clientNumber) {
-    return null
+    if (notfound.toLowerCase() === 'true') {
+      return null
+    }
+    throw new Error('Client lookup returned an empty or malformed response.')
   }
 
   return {
@@ -61,11 +65,15 @@ const parseClientData = (input: unknown): ApplicationClientData | null => {
     phone: stringField(input, 'phone'),
     fax: stringField(input, 'fax'),
     email: stringField(input, 'email'),
-    notfound: stringField(input, 'notfound'),
+    notfound,
   }
 }
 
 const parseClientLocations = (input: unknown): ApplicationClientLocation[] => {
+  if (!Array.isArray(input)) {
+    throw new Error('Client location lookup returned an empty or malformed response.')
+  }
+
   return mapRecordArray(input, (item) => {
     const locationCode = firstStringField(item, ['locationCode', 'code'])
     const locationName = firstStringField(item, ['locationName', 'name'])
@@ -83,6 +91,10 @@ const parseClientLocations = (input: unknown): ApplicationClientLocation[] => {
 }
 
 const parseClientContacts = (input: unknown): ApplicationClientContact[] => {
+  if (!Array.isArray(input)) {
+    throw new Error('Client contact lookup returned an empty or malformed response.')
+  }
+
   return mapRecordArray(input, (item) => {
     const contactName = firstStringField(item, ['contactName', 'name'])
     const contactId = firstStringField(item, ['contactId', 'id'])

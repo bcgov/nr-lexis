@@ -871,6 +871,53 @@ describe('Create Page Core Flows', () => {
     })
   })
 
+  it('ignores an earlier client lookup that resolves after the client number changes', async () => {
+    let resolveInitialLocations: (
+      locations: Awaited<ReturnType<typeof fetchApplicationClientLocations>>,
+    ) => void = () => undefined
+    mockedFetchApplicationClientLocations.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveInitialLocations = resolve
+      }),
+    )
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00',
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/provincial/application/create"
+            element={<ProvincialApplicationCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const ownerClientNumberInput = await screen.findByRole('textbox', { name: 'Client number' })
+    await waitFor(() =>
+      expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith('00011111', 'owner'),
+    )
+
+    fireEvent.change(ownerClientNumberInput, { target: { value: '00099988' } })
+    await act(async () => {
+      resolveInitialLocations([
+        { locationCode: '99', locationName: 'STALE LOCATION', selected: true },
+      ])
+    })
+
+    const ownerLocation = screen.getByRole('combobox', { name: 'Client location' })
+    expect(ownerLocation).toHaveValue('')
+    fireEvent.click(ownerLocation)
+    expect(screen.queryByRole('option', { name: '99 - STALE LOCATION' })).not.toBeInTheDocument()
+
+    await waitFor(() =>
+      expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith('00099988', 'owner'),
+    )
+  })
+
   it.each([
     ['non-numeric', '2176X'],
     ['more than eight digits', '123456789'],

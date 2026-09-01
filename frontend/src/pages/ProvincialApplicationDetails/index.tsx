@@ -383,6 +383,16 @@ const ASCII_PATTERN = /^[\u0000-\u007f]*$/
 const CLIENT_LOOKUP_UNAVAILABLE_MESSAGE =
   'Client details could not be retrieved. Existing selections were preserved. Please try again.'
 
+const comparableClientNumber = (value: string): string => {
+  const normalized = value.trim()
+  return APPLICATION_CLIENT_NUMBER_PATTERN.test(normalized)
+    ? normalized.padStart(8, '0')
+    : normalized
+}
+
+const clientLookupNumbersMatch = (left: string, right: string): boolean =>
+  comparableClientNumber(left) === comparableClientNumber(right)
+
 const applicationClientNumberFieldError = (value: string, label: string): string | undefined =>
   firstValidationError(
     () => requiredFieldError(value, label),
@@ -763,6 +773,8 @@ const ProvincialApplicationDetailsPage = () => {
   currentApplicationNumberRef.current = applicationNumber
   const currentDetailRef = useRef<ProvincialApplicationDetail | null>(null)
   currentDetailRef.current = detail
+  const currentSummaryFormRef = useRef<ApplicationSummaryFormState | null>(null)
+  currentSummaryFormRef.current = summaryForm
   const packageFilter = searchParams.get('packageFilter') ?? ''
   const offerFilter = searchParams.get('offerFilter') ?? ''
   const remarkFilter = searchParams.get('remarkFilter') ?? ''
@@ -1621,7 +1633,15 @@ const ProvincialApplicationDetailsPage = () => {
       { applicationNumber: applicationNumber ?? '' },
     )
       .then((clientData) => {
-        if (!isActive) {
+        const currentForm = currentSummaryFormRef.current
+        if (
+          !isActive ||
+          !clientLookupNumbersMatch(
+            currentForm?.ownerClientNumber ?? '',
+            summaryOwnerClientNumberForLookup,
+          ) ||
+          (currentForm?.ownerClientLocationCode ?? '').trim() !== summaryOwnerClientLocationCode
+        ) {
           return
         }
 
@@ -1633,7 +1653,10 @@ const ProvincialApplicationDetailsPage = () => {
         setSummaryForm((current) => {
           if (
             !current ||
-            current.ownerClientNumber.trim() !== summaryOwnerClientNumberForLookup ||
+            !clientLookupNumbersMatch(
+              current.ownerClientNumber,
+              summaryOwnerClientNumberForLookup,
+            ) ||
             current.ownerClientLocationCode.trim() !== summaryOwnerClientLocationCode
           ) {
             return current
@@ -1647,7 +1670,15 @@ const ProvincialApplicationDetailsPage = () => {
         })
       })
       .catch(() => {
-        if (isActive) {
+        const currentForm = currentSummaryFormRef.current
+        if (
+          isActive &&
+          clientLookupNumbersMatch(
+            currentForm?.ownerClientNumber ?? '',
+            summaryOwnerClientNumberForLookup,
+          ) &&
+          (currentForm?.ownerClientLocationCode ?? '').trim() === summaryOwnerClientLocationCode
+        ) {
           setActionErrorMessage(CLIENT_LOOKUP_UNAVAILABLE_MESSAGE)
         }
       })
@@ -1697,7 +1728,15 @@ const ProvincialApplicationDetailsPage = () => {
       { applicationNumber: applicationNumber ?? '' },
     )
       .then((clientData) => {
-        if (!isActive) {
+        const currentForm = currentSummaryFormRef.current
+        if (
+          !isActive ||
+          !clientLookupNumbersMatch(
+            currentForm?.agentClientNumber ?? '',
+            summaryAgentClientNumberForLookup,
+          ) ||
+          (currentForm?.agentClientLocationCode ?? '').trim() !== summaryAgentClientLocationCode
+        ) {
           return
         }
 
@@ -1709,7 +1748,10 @@ const ProvincialApplicationDetailsPage = () => {
         setSummaryForm((current) => {
           if (
             !current ||
-            current.agentClientNumber.trim() !== summaryAgentClientNumberForLookup ||
+            !clientLookupNumbersMatch(
+              current.agentClientNumber,
+              summaryAgentClientNumberForLookup,
+            ) ||
             current.agentClientLocationCode.trim() !== summaryAgentClientLocationCode
           ) {
             return current
@@ -1723,7 +1765,15 @@ const ProvincialApplicationDetailsPage = () => {
         })
       })
       .catch(() => {
-        if (isActive) {
+        const currentForm = currentSummaryFormRef.current
+        if (
+          isActive &&
+          clientLookupNumbersMatch(
+            currentForm?.agentClientNumber ?? '',
+            summaryAgentClientNumberForLookup,
+          ) &&
+          (currentForm?.agentClientLocationCode ?? '').trim() === summaryAgentClientLocationCode
+        ) {
           setActionErrorMessage(CLIENT_LOOKUP_UNAVAILABLE_MESSAGE)
         }
       })
@@ -1790,7 +1840,13 @@ const ProvincialApplicationDetailsPage = () => {
       applicationNumber ?? '',
     )
       .then((locations) => {
-        if (!isActive) {
+        if (
+          !isActive ||
+          !clientLookupNumbersMatch(
+            currentSummaryFormRef.current?.ownerClientNumber ?? '',
+            summaryOwnerClientNumberForLookup,
+          )
+        ) {
           return
         }
 
@@ -1799,7 +1855,10 @@ const ProvincialApplicationDetailsPage = () => {
           return
         }
         setSummaryForm((current) => {
-          if (!current || current.ownerClientNumber.trim() !== summaryOwnerClientNumberForLookup) {
+          if (
+            !current ||
+            !clientLookupNumbersMatch(current.ownerClientNumber, summaryOwnerClientNumberForLookup)
+          ) {
             return current
           }
 
@@ -1813,7 +1872,13 @@ const ProvincialApplicationDetailsPage = () => {
         })
       })
       .catch(() => {
-        if (isActive) {
+        if (
+          isActive &&
+          clientLookupNumbersMatch(
+            currentSummaryFormRef.current?.ownerClientNumber ?? '',
+            summaryOwnerClientNumberForLookup,
+          )
+        ) {
           setActionErrorMessage(CLIENT_LOOKUP_UNAVAILABLE_MESSAGE)
         }
       })
@@ -1873,7 +1938,13 @@ const ProvincialApplicationDetailsPage = () => {
       applicationNumber ?? '',
     )
       .then((locations) => {
-        if (!isActive) {
+        if (
+          !isActive ||
+          !clientLookupNumbersMatch(
+            currentSummaryFormRef.current?.agentClientNumber ?? '',
+            summaryAgentClientNumberForLookup,
+          )
+        ) {
           return
         }
 
@@ -1882,7 +1953,10 @@ const ProvincialApplicationDetailsPage = () => {
           return
         }
         setSummaryForm((current) => {
-          if (!current || current.agentClientNumber.trim() !== summaryAgentClientNumberForLookup) {
+          if (
+            !current ||
+            !clientLookupNumbersMatch(current.agentClientNumber, summaryAgentClientNumberForLookup)
+          ) {
             return current
           }
 
@@ -1896,7 +1970,13 @@ const ProvincialApplicationDetailsPage = () => {
         })
       })
       .catch(() => {
-        if (isActive) {
+        if (
+          isActive &&
+          clientLookupNumbersMatch(
+            currentSummaryFormRef.current?.agentClientNumber ?? '',
+            summaryAgentClientNumberForLookup,
+          )
+        ) {
           setActionErrorMessage(CLIENT_LOOKUP_UNAVAILABLE_MESSAGE)
         }
       })
@@ -1954,7 +2034,15 @@ const ProvincialApplicationDetailsPage = () => {
       applicationNumber ?? '',
     )
       .then((contacts) => {
-        if (!isActive) {
+        const currentForm = currentSummaryFormRef.current
+        if (
+          !isActive ||
+          !clientLookupNumbersMatch(
+            currentForm?.ownerClientNumber ?? '',
+            summaryOwnerClientNumberForLookup,
+          ) ||
+          (currentForm?.ownerClientLocationCode ?? '').trim() !== summaryOwnerClientLocationCode
+        ) {
           return
         }
 
@@ -1962,7 +2050,10 @@ const ProvincialApplicationDetailsPage = () => {
         setSummaryForm((current) => {
           if (
             !current ||
-            current.ownerClientNumber.trim() !== summaryOwnerClientNumberForLookup ||
+            !clientLookupNumbersMatch(
+              current.ownerClientNumber,
+              summaryOwnerClientNumberForLookup,
+            ) ||
             current.ownerClientLocationCode.trim() !== summaryOwnerClientLocationCode
           ) {
             return current
@@ -1975,7 +2066,15 @@ const ProvincialApplicationDetailsPage = () => {
         })
       })
       .catch(() => {
-        if (isActive) {
+        const currentForm = currentSummaryFormRef.current
+        if (
+          isActive &&
+          clientLookupNumbersMatch(
+            currentForm?.ownerClientNumber ?? '',
+            summaryOwnerClientNumberForLookup,
+          ) &&
+          (currentForm?.ownerClientLocationCode ?? '').trim() === summaryOwnerClientLocationCode
+        ) {
           setActionErrorMessage(CLIENT_LOOKUP_UNAVAILABLE_MESSAGE)
         }
       })
@@ -2039,7 +2138,15 @@ const ProvincialApplicationDetailsPage = () => {
       applicationNumber ?? '',
     )
       .then((contacts) => {
-        if (!isActive) {
+        const currentForm = currentSummaryFormRef.current
+        if (
+          !isActive ||
+          !clientLookupNumbersMatch(
+            currentForm?.agentClientNumber ?? '',
+            summaryAgentClientNumberForLookup,
+          ) ||
+          (currentForm?.agentClientLocationCode ?? '').trim() !== summaryAgentClientLocationCode
+        ) {
           return
         }
 
@@ -2047,7 +2154,10 @@ const ProvincialApplicationDetailsPage = () => {
         setSummaryForm((current) => {
           if (
             !current ||
-            current.agentClientNumber.trim() !== summaryAgentClientNumberForLookup ||
+            !clientLookupNumbersMatch(
+              current.agentClientNumber,
+              summaryAgentClientNumberForLookup,
+            ) ||
             current.agentClientLocationCode.trim() !== summaryAgentClientLocationCode
           ) {
             return current
@@ -2060,7 +2170,15 @@ const ProvincialApplicationDetailsPage = () => {
         })
       })
       .catch(() => {
-        if (isActive) {
+        const currentForm = currentSummaryFormRef.current
+        if (
+          isActive &&
+          clientLookupNumbersMatch(
+            currentForm?.agentClientNumber ?? '',
+            summaryAgentClientNumberForLookup,
+          ) &&
+          (currentForm?.agentClientLocationCode ?? '').trim() === summaryAgentClientLocationCode
+        ) {
           setActionErrorMessage(CLIENT_LOOKUP_UNAVAILABLE_MESSAGE)
         }
       })
@@ -2473,15 +2591,67 @@ const ProvincialApplicationDetailsPage = () => {
 
   const onSummaryFormChange = useCallback(
     (key: keyof ApplicationSummaryFormState, value: string) => {
+      if (key === 'ownerClientNumber') {
+        setOwnerClientLocations([])
+        setOwnerClientContacts([])
+        setOwnerClientData(null)
+      } else if (key === 'ownerClientLocationCode') {
+        setOwnerClientContacts([])
+        setOwnerClientData(null)
+      } else if (key === 'agentClientNumber') {
+        setAgentClientLocations([])
+        setAgentClientContacts([])
+        setAgentClientData(null)
+      } else if (key === 'agentClientLocationCode') {
+        setAgentClientContacts([])
+        setAgentClientData(null)
+      }
+
       setSummaryForm((current) => {
         if (!current) {
           return current
+        }
+
+        if (key === 'ownerClientNumber') {
+          return {
+            ...current,
+            ownerClientNumber: value,
+            ownerClientLocationCode: '',
+            ownerContactName: '',
+          }
+        }
+        if (key === 'ownerClientLocationCode') {
+          return {
+            ...current,
+            ownerClientLocationCode: value,
+            ownerContactName:
+              current.ownerClientLocationCode === value ? current.ownerContactName : '',
+          }
+        }
+        if (key === 'agentClientNumber') {
+          return {
+            ...current,
+            agentClientNumber: value,
+            agentClientLocationCode: '',
+            agentContactName: '',
+          }
+        }
+        if (key === 'agentClientLocationCode') {
+          return {
+            ...current,
+            agentClientLocationCode: value,
+            agentContactName:
+              current.agentClientLocationCode === value ? current.agentContactName : '',
+          }
         }
 
         const next = { ...current, [key]: value }
         return key === 'applicantTypeCode' ? normalizeSummaryAgentFields(next) : next
       })
       setSummaryVolumeWarningAccepted(false)
+      setActionErrorMessage((current) =>
+        current === CLIENT_LOOKUP_UNAVAILABLE_MESSAGE ? '' : current,
+      )
       setActionWarningMessage('')
     },
     [],
