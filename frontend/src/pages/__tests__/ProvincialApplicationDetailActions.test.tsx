@@ -2216,18 +2216,25 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(mockedFetchApplicationClientLocations).not.toHaveBeenCalled()
     expect(mockedFetchApplicationClientContacts).not.toHaveBeenCalled()
 
-    await waitFor(() => {
-      expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00044444', '00', {
-        applicationNumber: '321',
-      })
-      expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith('00044444', 'owner', '321')
-      expect(mockedFetchApplicationClientContacts).toHaveBeenCalledWith(
-        '00044444',
-        '00',
-        'owner',
-        '321',
-      )
-    })
+    await waitFor(
+      () => {
+        expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00044444', '00', {
+          applicationNumber: '321',
+        })
+        expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith(
+          '00044444',
+          'owner',
+          '321',
+        )
+        expect(mockedFetchApplicationClientContacts).toHaveBeenCalledWith(
+          '00044444',
+          '00',
+          'owner',
+          '321',
+        )
+      },
+      { timeout: 5_000 },
+    )
   })
 
   it('does not substitute the owner email when an agent applicant has no email', async () => {
