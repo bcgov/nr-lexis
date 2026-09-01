@@ -476,7 +476,7 @@ describe('Create Page Core Flows', () => {
 
     await selectApplicationCreateTab('Items')
     const selectedSpecies = await screen.findByRole('list', {
-      name: 'Selected application species',
+      name: 'Selected species',
     })
     const removeHemlock = within(selectedSpecies).getByRole('button', {
       name: 'Remove HE from application',
@@ -614,9 +614,9 @@ describe('Create Page Core Flows', () => {
     )
 
     await selectApplicationCreateTab('Application')
-    expect(screen.getByRole('spinbutton', { name: 'Application term (days)' })).toHaveValue(5)
-    expect(screen.queryByLabelText('Application term months')).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('Application term years')).not.toBeInTheDocument()
+    expect(screen.getByRole('spinbutton', { name: 'Exemption term (days)' })).toHaveValue(5)
+    expect(screen.queryByLabelText('Exemption term (months)')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Exemption term (years)')).not.toBeInTheDocument()
 
     const submitButton = await screen.findByRole('button', { name: 'Save' })
     await waitFor(() => expect(submitButton).toBeEnabled())
@@ -674,7 +674,7 @@ describe('Create Page Core Flows', () => {
       screen.getByRole('combobox', { name: 'Species list' }),
       'HE - Hemlock',
     )
-    await userEvent.click(screen.getByRole('button', { name: 'Add application species' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Add species' }))
     expect(await screen.findByText('HE')).toBeInTheDocument()
     const submitButton = await screen.findByRole('button', { name: 'Save' })
     await waitFor(() => expect(submitButton).toBeEnabled())
@@ -1106,7 +1106,7 @@ describe('Create Page Core Flows', () => {
       screen.getByText('Location of logs must be 250 characters or fewer.'),
     ).toBeInTheDocument()
     await selectApplicationCreateTab('Remarks')
-    expect(screen.getByText('Comments must be 254 characters or fewer.')).toBeInTheDocument()
+    expect(screen.getByText('Remarks must be 254 characters or fewer.')).toBeInTheDocument()
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
 
     await selectApplicationCreateTab('Owner')
@@ -1118,7 +1118,7 @@ describe('Create Page Core Flows', () => {
       target: { value: 'L'.repeat(250) },
     })
     await selectApplicationCreateTab('Remarks')
-    fireEvent.change(screen.getByRole('textbox', { name: 'Comments' }), {
+    fireEvent.change(screen.getByRole('textbox', { name: 'Remarks' }), {
       target: { value: 'R'.repeat(254) },
     })
     await userEvent.click(submitButton)
@@ -1192,6 +1192,30 @@ describe('Create Page Core Flows', () => {
     expect(screen.queryByRole('region', { name: 'Review' })).not.toBeInTheDocument()
   })
 
+  it('hides Remarks on application create without application remarks authority', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        canPerform: (action: string) => action !== '/applicationRemarks',
+      }),
+    )
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/create']}>
+        <Routes>
+          <Route
+            path="/provincial/application/create"
+            element={<ProvincialApplicationCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(screen.queryByRole('tab', { name: 'Remarks' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Remarks' })).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('tab', { name: 'Offers' }))
+    expect(screen.getByRole('region', { name: 'Offers' })).toBeInTheDocument()
+  })
+
   it('blocks provincial application submit when owner has no selectable locations', async () => {
     mockedFetchApplicationClientLocations.mockResolvedValueOnce([
       { locationCode: '0', locationName: 'No locations on file', selected: false },
@@ -1262,7 +1286,7 @@ describe('Create Page Core Flows', () => {
       expect(screen.getByRole('textbox', { name: 'Application date (YYYY-MM-DD)' })).toHaveValue(
         today,
       )
-      expect(screen.getByRole('spinbutton', { name: 'Application term (days)' })).toHaveValue(180)
+      expect(screen.getByRole('spinbutton', { name: 'Exemption term (days)' })).toHaveValue(180)
       expect(screen.getByRole('textbox', { name: 'Date received (YYYY-MM-DD)' })).toHaveValue('')
       expect(screen.getByRole('combobox', { name: 'List date' })).toHaveValue('2026-08-05')
     })
@@ -1319,7 +1343,7 @@ describe('Create Page Core Flows', () => {
       )
     })
     expect(screen.getByRole('combobox', { name: 'Region' })).toBeEnabled()
-    expect(screen.getByRole('spinbutton', { name: 'Application term (days)' })).toHaveValue(180)
+    expect(screen.getByRole('spinbutton', { name: 'Exemption term (days)' })).toHaveValue(180)
 
     await selectApplicationCreateTab('Owner')
     expect(screen.getByRole('textbox', { name: 'Client number' })).toHaveValue('00077881')
@@ -1525,7 +1549,7 @@ describe('Create Page Core Flows', () => {
     const productType = await screen.findByRole('combobox', { name: 'Product type' })
     await waitFor(() => expect(productType).toHaveValue('Harvested Timber'))
     await selectApplicationCreateTab('Items')
-    expect(screen.getByRole('combobox', { name: 'Growth type' })).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: 'Age class' })).toBeInTheDocument()
     expect(screen.getByRole('textbox', { name: 'Location of logs' })).toBeInTheDocument()
     expect(screen.getByRole('spinbutton', { name: 'Average log volume (m³)' })).toBeInTheDocument()
 
@@ -1535,7 +1559,7 @@ describe('Create Page Core Flows', () => {
       'Standing Timber',
     )
     await selectApplicationCreateTab('Items')
-    expect(screen.getByRole('combobox', { name: 'Growth type' })).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: 'Age class' })).toBeInTheDocument()
     expect(screen.queryByRole('textbox', { name: 'Location of logs' })).not.toBeInTheDocument()
     expect(
       screen.queryByRole('spinbutton', { name: 'Average log volume (m³)' }),
@@ -1544,7 +1568,7 @@ describe('Create Page Core Flows', () => {
     await selectApplicationCreateTab('Application')
     await chooseComboBoxOption(screen.getByRole('combobox', { name: 'Product type' }), 'Timber')
     await selectApplicationCreateTab('Items')
-    expect(screen.queryByRole('combobox', { name: 'Growth type' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('combobox', { name: 'Age class' })).not.toBeInTheDocument()
     expect(screen.queryByRole('textbox', { name: 'Location of logs' })).not.toBeInTheDocument()
     expect(
       screen.queryByRole('spinbutton', { name: 'Average log volume (m³)' }),
@@ -1610,7 +1634,7 @@ describe('Create Page Core Flows', () => {
     await userEvent.click(submitButton)
 
     const speciesErrors = await screen.findAllByText(
-      'At least one application species is required, but no species are available for the selected region and product type.',
+      'At least one species is required, but no species are available for the selected region and product type.',
     )
     expect(speciesErrors.length).toBeGreaterThan(0)
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()

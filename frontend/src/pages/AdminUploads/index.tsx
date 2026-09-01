@@ -577,9 +577,13 @@ function ApplicationSubmissionValidationContent({
             <table className="admin-upload-validation-table" aria-label="Validation issues">
               <thead>
                 <tr>
-                  <th className="admin-upload-validation-table__issue">Issue</th>
-                  <th className="admin-upload-validation-table__location">Submission file</th>
-                  <th>Detail</th>
+                  <th scope="col" className="admin-upload-validation-table__issue">
+                    Issue
+                  </th>
+                  <th scope="col" className="admin-upload-validation-table__location">
+                    Submission file
+                  </th>
+                  <th scope="col">Detail</th>
                 </tr>
               </thead>
               <tbody>

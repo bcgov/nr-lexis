@@ -706,11 +706,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     )
 
     expect(await screen.findByText('Upload could not be completed')).toBeVisible()
-    expect(
-      screen.getByText(
-        'Something went wrong on our end. Please try again. If the problem persists, contact...',
-      ),
-    ).toBeVisible()
+    expect(screen.getByText('Something went wrong on our end. Please try again.')).toBeVisible()
     expect(screen.queryByText('Filename.xlsx')).not.toBeInTheDocument()
     expect(
       screen.queryByRole('alert', { name: 'Rejected average monthly values upload file' }),

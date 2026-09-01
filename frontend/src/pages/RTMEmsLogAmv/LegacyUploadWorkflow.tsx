@@ -237,11 +237,10 @@ const RTM_VALUES_DESCRIPTION =
   'Your spreadsheet provides a value for each species and grade. You will be able to check them before you save.'
 const RTM_UPLOAD_FIELD_HELPER = 'Accepted format: .xlsx, up to 20 MB.'
 const RTM_UPLOAD_SYSTEM_ERROR_TITLE = 'Upload could not be completed'
-const RTM_UPLOAD_SYSTEM_ERROR_MESSAGE =
-  'Something went wrong on our end. Please try again. If the problem persists, contact...'
+const RTM_UPLOAD_SYSTEM_ERROR_MESSAGE = 'Something went wrong on our end. Please try again.'
 const RTM_VALUES_LOAD_ERROR_TITLE = 'Average market values could not be loaded'
 const RTM_VALUES_LOAD_ERROR_MESSAGE =
-  'Something went wrong on our end. Refresh the page to try again. If the problem persists, contact...'
+  'Something went wrong on our end. Refresh the page to try again.'
 
 const RTM_REVIEW_SPECIES_COLUMNS: RtmReviewSpeciesColumn[] = [
   { key: 'BA', label: 'Balsam', speciesCodes: ['BA'] },

@@ -1,3 +1,5 @@
+@use '@carbon/react/scss/type' as carbon-type;
+
 .notifications-page {
   width: 100%;
   padding-top: 1.5rem;
@@ -386,10 +388,10 @@
 }
 
 .notifications-page__notification-content {
+  @include carbon-type.type-style('body-02');
+
   max-width: 51.25rem;
-  color: var(--cds-text-secondary);
-  font-size: 0.875rem;
-  line-height: 1.45;
+  color: var(--cds-text-primary);
 }
 
 .notifications-page__notification-content p {

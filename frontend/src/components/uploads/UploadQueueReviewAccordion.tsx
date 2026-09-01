@@ -239,15 +239,15 @@ function SubmissionReview({
                   >
                     <thead>
                       <tr>
-                        <th>Product type</th>
-                        <th>Age class</th>
-                        <th>Product location</th>
-                        <th>Application volume</th>
-                        <th>Average log volume</th>
-                        <th>Average length</th>
-                        <th>Average diameter</th>
-                        <th>Species</th>
-                        <th>End use</th>
+                        <th scope="col">Product type</th>
+                        <th scope="col">Age class</th>
+                        <th scope="col">Product location</th>
+                        <th scope="col">Application volume</th>
+                        <th scope="col">Average log volume</th>
+                        <th scope="col">Average length</th>
+                        <th scope="col">Average diameter</th>
+                        <th scope="col">Species</th>
+                        <th scope="col">End use</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -284,8 +284,8 @@ function SubmissionReview({
                   >
                     <thead>
                       <tr>
-                        <th>Issue</th>
-                        <th>Detail</th>
+                        <th scope="col">Issue</th>
+                        <th scope="col">Detail</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -321,8 +321,8 @@ const renderFieldValueTable = (
       >
         <thead>
           <tr>
-            <th>Field</th>
-            <th>Value</th>
+            <th scope="col">Field</th>
+            <th scope="col">Value</th>
           </tr>
         </thead>
         <tbody>
@@ -528,15 +528,15 @@ function UploadQueueReviewAccordion({
                         >
                           <thead>
                             <tr>
-                              <th>Product type</th>
-                              <th>Age class</th>
-                              <th>Product location</th>
-                              <th>Application volume</th>
-                              <th>Average log volume</th>
-                              <th>Average length</th>
-                              <th>Average diameter</th>
-                              <th>Species</th>
-                              <th>End use</th>
+                              <th scope="col">Product type</th>
+                              <th scope="col">Age class</th>
+                              <th scope="col">Product location</th>
+                              <th scope="col">Application volume</th>
+                              <th scope="col">Average log volume</th>
+                              <th scope="col">Average length</th>
+                              <th scope="col">Average diameter</th>
+                              <th scope="col">Species</th>
+                              <th scope="col">End use</th>
                             </tr>
                           </thead>
                           <tbody>

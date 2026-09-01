@@ -987,7 +987,7 @@ const ProvincialApplicationDetailsPage = () => {
           applicationSpeciesResult.value,
         )
       } else if (applicationSpeciesResult.status === 'rejected') {
-        setActionErrorMessage('Unable to retrieve application species fields.')
+        setActionErrorMessage('Unable to retrieve species and end-use fields.')
       }
 
       if (editableSummaryForm) {
@@ -1322,7 +1322,7 @@ const ProvincialApplicationDetailsPage = () => {
     summaryRegionOptions.length === 0 ? 'region' : null,
     productTypeRequiresGrowthType(summaryForm?.productTypeCode ?? '') &&
     summaryGrowthTypeOptions.length === 0
-      ? 'growth type'
+      ? 'age class'
       : null,
   ].filter((label): label is string => label !== null)
   const requiredSummaryOptionsMissing =
@@ -1481,11 +1481,11 @@ const ProvincialApplicationDetailsPage = () => {
       ),
       growthTypeCode: productTypeRequiresGrowthType(summaryForm.productTypeCode)
         ? firstValidationError(
-            () => requiredFieldError(summaryForm.growthTypeCode, 'Growth type'),
+            () => requiredFieldError(summaryForm.growthTypeCode, 'Age class'),
             () =>
               summaryGrowthTypeOptions.some((option) => option.value === summaryForm.growthTypeCode)
                 ? null
-                : 'Select a valid growth type.',
+                : 'Select a valid age class.',
           )
         : undefined,
       exemptionReasonCode: firstValidationError(
@@ -1519,37 +1519,37 @@ const ProvincialApplicationDetailsPage = () => {
         () => isoDateFieldError(summaryForm.applicationDate),
       ),
       termDays: firstValidationError(
-        () => requiredFieldError(calculatedSummaryTermDays, 'Application term'),
-        () => nonNegativeWholeNumberFieldError(summaryForm.termDays, 'Application term days'),
+        () => requiredFieldError(calculatedSummaryTermDays, 'Exemption term'),
+        () => nonNegativeWholeNumberFieldError(summaryForm.termDays, 'Exemption term days'),
         () =>
           maxNumericValueFieldError(
             summaryForm.termDays,
             MAX_APPLICATION_TERM_DAYS,
-            'Application term days',
+            'Exemption term days',
           ),
         () =>
           maxNumericValueFieldError(
             calculatedSummaryTermDays,
             MAX_APPLICATION_TERM_DAYS,
-            'Application term',
+            'Exemption term',
           ),
       ),
       termMonths: firstValidationError(
-        () => nonNegativeWholeNumberFieldError(summaryForm.termMonths, 'Application term months'),
+        () => nonNegativeWholeNumberFieldError(summaryForm.termMonths, 'Exemption term months'),
         () =>
           maxNumericValueFieldError(
             summaryForm.termMonths,
             MAX_APPLICATION_TERM_MONTHS,
-            'Application term months',
+            'Exemption term months',
           ),
       ),
       termYears: firstValidationError(
-        () => nonNegativeWholeNumberFieldError(summaryForm.termYears, 'Application term years'),
+        () => nonNegativeWholeNumberFieldError(summaryForm.termYears, 'Exemption term years'),
         () =>
           maxNumericValueFieldError(
             summaryForm.termYears,
             MAX_APPLICATION_TERM_YEARS,
-            'Application term years',
+            'Exemption term years',
           ),
       ),
       receivedDate: firstValidationError(
@@ -4390,7 +4390,7 @@ const ProvincialApplicationDetailsPage = () => {
                             ['Product type', displayValue(summaryProductTypeDescription)],
                             ['Owner client number', displayValue(detail.ownerClientNumber)],
                             ['Agent client number', displayValue(detail.agentClientNumber)],
-                            ['Org Unit', displayValue(summaryRegionDescription)],
+                            ['Region', displayValue(summaryRegionDescription)],
                             ['Listing date', displayValue(detail.listingDate)],
                           ].map(([label, value]) => (
                             <div key={label} className="detail-field-item">
@@ -4439,7 +4439,7 @@ const ProvincialApplicationDetailsPage = () => {
                               />
                               <TextInput
                                 id="applicationSummaryTermDays"
-                                labelText="Term (days)"
+                                labelText="Exemption term (days)"
                                 type="number"
                                 min={1}
                                 max={MAX_APPLICATION_TERM_DAYS}
@@ -4452,7 +4452,7 @@ const ProvincialApplicationDetailsPage = () => {
                               />
                               <TextInput
                                 id="applicationSummaryTermMonths"
-                                labelText="Term (months)"
+                                labelText="Exemption term (months)"
                                 type="number"
                                 min={0}
                                 max={MAX_APPLICATION_TERM_MONTHS}
@@ -4465,7 +4465,7 @@ const ProvincialApplicationDetailsPage = () => {
                               />
                               <TextInput
                                 id="applicationSummaryTermYears"
-                                labelText="Term (years)"
+                                labelText="Exemption term (years)"
                                 type="number"
                                 min={0}
                                 max={MAX_APPLICATION_TERM_YEARS}
@@ -4724,7 +4724,7 @@ const ProvincialApplicationDetailsPage = () => {
                               {productTypeRequiresGrowthType(summaryForm.productTypeCode) && (
                                 <SearchableSelect
                                   id="applicationSummaryGrowthType"
-                                  labelText="Growth type"
+                                  labelText="Age class"
                                   value={summaryForm.growthTypeCode}
                                   invalid={Boolean(visibleSummaryFieldError('growthTypeCode'))}
                                   invalidText={visibleSummaryFieldError('growthTypeCode')}
@@ -4732,7 +4732,7 @@ const ProvincialApplicationDetailsPage = () => {
                                     summaryOptionsAvailability !== 'available' ||
                                     summaryGrowthTypeOptions.length === 0
                                   }
-                                  placeholder="Select growth type"
+                                  placeholder="Select age class"
                                   options={optionsWithCurrentValue(
                                     growthTypeOptions,
                                     summaryForm.growthTypeCode,
@@ -4810,7 +4810,7 @@ const ProvincialApplicationDetailsPage = () => {
                               <div className="legacy-field-stack">
                                 <SearchableSelect
                                   id="applicationSummarySpeciesCandidate"
-                                  labelText="Application species"
+                                  labelText="Species list"
                                   value={applicationSpeciesCandidate}
                                   disabled={applicationSpeciesSelectOptions.length === 0}
                                   placeholder={speciesPlaceholder}
@@ -4830,11 +4830,11 @@ const ProvincialApplicationDetailsPage = () => {
                                     }
                                     onClick={onAddApplicationSpecies}
                                   >
-                                    Add application species
+                                    Add species
                                   </Button>
                                   <ul
                                     className="application-species-list"
-                                    aria-label="Selected application species"
+                                    aria-label="Selected species"
                                   >
                                     {(summaryForm.speciesCodes ?? []).map((speciesCode) => (
                                       <li key={speciesCode}>
@@ -4852,7 +4852,7 @@ const ProvincialApplicationDetailsPage = () => {
                               </div>
                               <SearchableSelect
                                 id="applicationSummaryEndUse"
-                                labelText="Application end use"
+                                labelText="End use"
                                 value={summaryForm.endUseCode}
                                 disabled={
                                   (summaryForm.speciesCodes ?? []).length === 0 ||
@@ -4898,7 +4898,7 @@ const ProvincialApplicationDetailsPage = () => {
                                 ],
                                 ['Application date', displayValue(detail.applicationDate)],
                                 ['Received date', displayValue(detail.receivedDate)],
-                                ['Term (days)', displayValue(detail.termDays)],
+                                ['Exemption term (days)', displayValue(detail.termDays)],
                                 ['Application volume (m³)', displayValue(detail.applicationVolume)],
                                 ...(productTypeRequiresLogDetails(
                                   summaryForm?.productTypeCode ?? '',
@@ -4921,7 +4921,7 @@ const ProvincialApplicationDetailsPage = () => {
                                 ...(productTypeRequiresGrowthType(
                                   summaryForm?.productTypeCode ?? '',
                                 )
-                                  ? [['Growth type', displayValue(summaryGrowthTypeDescription)]]
+                                  ? [['Age class', displayValue(summaryGrowthTypeDescription)]]
                                   : []),
                                 ...(productTypeRequiresLogDetails(
                                   summaryForm?.productTypeCode ?? '',
@@ -4934,10 +4934,10 @@ const ProvincialApplicationDetailsPage = () => {
                                     ]
                                   : []),
                                 [
-                                  'Application species',
+                                  'Species list',
                                   displayValue(summaryForm?.speciesCodes.join(', ')),
                                 ],
-                                ['Application end use', displayValue(summaryEndUseDescription)],
+                                ['End use', displayValue(summaryEndUseDescription)],
                               ].map(([label, value]) => (
                                 <div key={label} className="detail-field-item">
                                   <dt className="detail-field-label">{label}</dt>

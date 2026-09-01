@@ -298,15 +298,18 @@ function UploadQueuePreview({
           )}
           {(!isReviewStep || showReviewQueueTable) && (
             <div className="admin-upload-fspts-table-wrap">
-              <table className="admin-upload-queue__table admin-upload-queue__table--generic">
+              <table
+                className="admin-upload-queue__table admin-upload-queue__table--generic"
+                aria-label={`Queued ${itemNounPlural}`}
+              >
                 <thead>
                   <tr>
-                    <th>{workflowColumnLabel}</th>
-                    <th>{fileColumnLabel}</th>
-                    <th>Target</th>
-                    <th>Status</th>
-                    <th>Message</th>
-                    <th>Action</th>
+                    <th scope="col">{workflowColumnLabel}</th>
+                    <th scope="col">{fileColumnLabel}</th>
+                    <th scope="col">Target</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Message</th>
+                    <th scope="col">Action</th>
                   </tr>
                 </thead>
                 <tbody>

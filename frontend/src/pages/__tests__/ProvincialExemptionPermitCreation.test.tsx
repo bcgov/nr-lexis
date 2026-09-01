@@ -210,7 +210,7 @@ const fillRequiredBlanketOicFields = async (dialog: HTMLElement) => {
   await userEvent.type(within(dialog).getByLabelText('Permit Request Pieces'), '4')
   await userEvent.type(within(dialog).getByLabelText('Permit Request Volume (m³)'), '4')
   await userEvent.type(within(dialog).getByLabelText('Owner client number'), '1074')
-  await userEvent.type(within(dialog).getByLabelText('Destination company'), 'test destination')
+  await userEvent.type(within(dialog).getByLabelText('Purchaser'), 'test destination')
   await waitFor(() => expect(within(dialog).getByLabelText('Owner location')).toHaveValue('00'))
   expect(within(dialog).getByLabelText('Owner client number')).toHaveValue('00001074')
   await userEvent.type(within(dialog).getByLabelText('Transport name'), 'test barge')

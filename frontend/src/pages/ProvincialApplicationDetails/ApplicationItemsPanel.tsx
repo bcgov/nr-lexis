@@ -2109,12 +2109,12 @@ function ProvincialApplicationItemsPanel({
               <TableHead>
                 <TableRow>
                   <TableHeader>Timber mark</TableHeader>
-                  <TableHeader>Scale Type</TableHeader>
+                  <TableHeader>Scale type</TableHeader>
+                  <TableHeader>Pieces</TableHeader>
                   <TableHeader>Species</TableHeader>
                   <TableHeader>Grade</TableHeader>
-                  <TableHeader>Pieces</TableHeader>
                   <TableHeader>Volume (m³)</TableHeader>
-                  {showMutationActions && <TableHeader>Action</TableHeader>}
+                  {showMutationActions && <TableHeader>Delete</TableHeader>}
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -2122,9 +2122,9 @@ function ProvincialApplicationItemsPanel({
                   <TableRow key={row.id}>
                     <TableCell>{row.timberMark}</TableCell>
                     <TableCell>{displayScaleType(row.cascadeSplitCode)}</TableCell>
+                    <TableCell>{row.pieces.toLocaleString()}</TableCell>
                     <TableCell>{row.species}</TableCell>
                     <TableCell>{row.grade}</TableCell>
-                    <TableCell>{row.pieces.toLocaleString()}</TableCell>
                     <TableCell>{row.volume}</TableCell>
                     {showMutationActions && (
                       <TableCell>

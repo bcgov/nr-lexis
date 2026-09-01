@@ -1704,17 +1704,21 @@ const ProvincialPermitDetailsPage = () => {
         () => isoDateFieldError(permitForm.estimatedShippingDate),
       ),
       destinationCompanyName:
-        requiredMaxLengthFieldError(permitForm.destinationCompanyName, 52, 'Destination company') ??
+        requiredMaxLengthFieldError(permitForm.destinationCompanyName, 52, 'Purchaser') ??
         undefined,
       destinationCountry:
-        requiredExactLengthFieldError(permitForm.destinationCountry, 2, 'Destination country') ??
-        undefined,
+        requiredExactLengthFieldError(
+          permitForm.destinationCountry,
+          2,
+          'Final destination country',
+        ) ?? undefined,
       transportType:
         requiredExactLengthFieldError(permitForm.transportType, 1, 'Transport type') ?? undefined,
       transportName:
         requiredMaxLengthFieldError(permitForm.transportName, 26, 'Transport name') ?? undefined,
       portOfExport:
-        requiredExactLengthFieldError(permitForm.portOfExport, 2, 'Port of export') ?? undefined,
+        requiredExactLengthFieldError(permitForm.portOfExport, 2, 'Customs port of export') ??
+        undefined,
       otherPortOfExport:
         permitForm.portOfExport.trim().toUpperCase() === 'OT'
           ? (requiredMaxLengthFieldError(
@@ -1724,9 +1728,9 @@ const ProvincialPermitDetailsPage = () => {
             ) ?? undefined)
           : undefined,
       permitTotalVolume:
-        numericFieldError(permitForm.permitTotalVolume, 'Permit volume') ?? undefined,
+        numericFieldError(permitForm.permitTotalVolume, 'Current permit volume') ?? undefined,
       permitNumberOfPieces: permitForm.permitNumberOfPieces.trim()
-        ? (integerFieldError(permitForm.permitNumberOfPieces, 'Number of pieces') ?? undefined)
+        ? (integerFieldError(permitForm.permitNumberOfPieces, 'Current permit pieces') ?? undefined)
         : undefined,
       oicPermitTotalPieces:
         detail?.blanketOic && !invoiceMaterialLocked
@@ -3451,10 +3455,14 @@ const ProvincialPermitDetailsPage = () => {
                                 'Permit Request Volume (m³)',
                                 invoiceMaterialLocked,
                               )}
-                            {renderPermitTextInput('permitTotalVolume', 'Permit volume (m³)', true)}
+                            {renderPermitTextInput(
+                              'permitTotalVolume',
+                              'Current permit volume (m³)',
+                              true,
+                            )}
                             {renderPermitTextInput(
                               'permitNumberOfPieces',
-                              'Number of pieces',
+                              'Current permit pieces',
                               true,
                             )}
                             {renderPermitTextInput(
@@ -3525,11 +3533,11 @@ const ProvincialPermitDetailsPage = () => {
                                 ]
                               : []),
                             {
-                              label: 'Permit volume (m³)',
+                              label: 'Current permit volume (m³)',
                               value: displayValue(detail.permitVolume),
                             },
                             {
-                              label: 'Number of pieces',
+                              label: 'Current permit pieces',
                               value: displayValue(detail.numberOfPieces),
                             },
                             {
@@ -3779,13 +3787,13 @@ const ProvincialPermitDetailsPage = () => {
                           <div className="legacy-search-grid">
                             {renderPermitTextInput(
                               'destinationCompanyName',
-                              'Destination company',
+                              'Purchaser',
                               false,
                               52,
                             )}
                             <Select
                               id="permit-destinationCountry"
-                              labelText="Destination country"
+                              labelText="Final destination country"
                               value={permitForm.destinationCountry}
                               invalid={!!permitFieldError('destinationCountry')}
                               invalidText={permitFieldError('destinationCountry')}
@@ -3799,7 +3807,7 @@ const ProvincialPermitDetailsPage = () => {
                                 !shippingReferences
                               }
                             >
-                              <SelectItem value="" text="Select a destination country" />
+                              <SelectItem value="" text="Select a final destination country" />
                               {(shippingReferences?.countries ?? []).map((option) => (
                                 <SelectItem
                                   key={option.code}
@@ -3832,7 +3840,7 @@ const ProvincialPermitDetailsPage = () => {
                             {renderPermitTextInput('transportName', 'Transport name', false, 26)}
                             <Select
                               id="permit-portOfExport"
-                              labelText="Port of export"
+                              labelText="Customs port of export"
                               value={permitForm.portOfExport}
                               invalid={!!permitFieldError('portOfExport')}
                               invalidText={permitFieldError('portOfExport')}
@@ -3854,7 +3862,7 @@ const ProvincialPermitDetailsPage = () => {
                               }}
                               disabled={isShippingReferencesLoading || !shippingReferences}
                             >
-                              <SelectItem value="" text="Select a port of export" />
+                              <SelectItem value="" text="Select a customs port of export" />
                               {(shippingReferences?.ports ?? []).map((option) => (
                                 <SelectItem
                                   key={option.code}
@@ -3899,11 +3907,11 @@ const ProvincialPermitDetailsPage = () => {
                             title="Shipping"
                             fields={[
                               {
-                                label: 'Destination company',
+                                label: 'Purchaser',
                                 value: displayValue(detail.destinationCompanyName),
                               },
                               {
-                                label: 'Destination country',
+                                label: 'Final destination country',
                                 value: displayValue(
                                   shippingReferenceLabel(
                                     shippingReferences?.countries,
@@ -3925,7 +3933,7 @@ const ProvincialPermitDetailsPage = () => {
                                 value: displayValue(detail.transportName),
                               },
                               {
-                                label: 'Port of export',
+                                label: 'Customs port of export',
                                 value: displayValue(
                                   shippingReferenceLabel(
                                     shippingReferences?.ports,
@@ -4392,7 +4400,6 @@ const ProvincialPermitDetailsPage = () => {
                                       {canDisplayNormalPermitScaleMembership && (
                                         <TableHeader>Include in permit</TableHeader>
                                       )}
-                                      <TableHeader>Item</TableHeader>
                                       <TableHeader>Timber mark</TableHeader>
                                       <TableHeader>Scale type</TableHeader>
                                       <TableHeader>Permit</TableHeader>
@@ -4428,7 +4435,6 @@ const ProvincialPermitDetailsPage = () => {
                                             />
                                           </TableCell>
                                         )}
-                                        <TableCell>{row.id}</TableCell>
                                         <TableCell>{row.timberMark || '-'}</TableCell>
                                         <TableCell>{row.scaleType || '-'}</TableCell>
                                         <TableCell>{row.permitNumber || '-'}</TableCell>

@@ -188,12 +188,24 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     expect(screen.queryByRole('heading', { level: 2, name: 'Packages' })).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { level: 3, name: 'Package Details' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { level: 3, name: 'Summary of Scale' })).toBeInTheDocument()
+    const summaryOfScale = document.getElementById('application-items-scales')
+    expect(summaryOfScale).toBeInTheDocument()
+    expect(
+      within(summaryOfScale as HTMLElement)
+        .getAllByRole('columnheader')
+        .map((header) => header.textContent),
+    ).toEqual(['Timber mark', 'Scale type', 'Pieces', 'Species', 'Grade', 'Volume (m³)'])
     expect(screen.queryByLabelText('Package Comments')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save Package' })).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Edit items' }))
     expect(await screen.findByLabelText('Package Comments')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Save Package' })).toBeInTheDocument()
+    expect(
+      within(summaryOfScale as HTMLElement)
+        .getAllByRole('columnheader')
+        .map((header) => header.textContent),
+    ).toEqual(['Timber mark', 'Scale type', 'Pieces', 'Species', 'Grade', 'Volume (m³)', 'Delete'])
 
     await userEvent.click(
       within(

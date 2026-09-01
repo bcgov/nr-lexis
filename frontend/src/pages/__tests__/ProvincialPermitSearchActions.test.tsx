@@ -479,6 +479,32 @@ describe('Provincial Permit Search Actions', () => {
     expect(screen.queryByRole('list', { name: 'Selected regions' })).not.toBeInTheDocument()
   })
 
+  it('preserves the legacy permit filter order with visible invoice number', async () => {
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
+
+    renderPage()
+    await screen.findByText('7001')
+
+    const filterGrid = document.querySelector('.provincial-permit-search-grid')
+    expect(filterGrid).toBeInTheDocument()
+
+    const filterLabels = Array.from(filterGrid?.querySelectorAll('label') ?? []).map((label) =>
+      label.textContent?.replace(/Total items selected:.*$/, '').trim(),
+    )
+    expect(filterLabels).toEqual([
+      'Application number',
+      'Package number',
+      'Region',
+      'Issued from date',
+      'Issued to date',
+      'Permit status',
+      'Permit number',
+      'Invoice number',
+      'Applicant client number',
+      'Owner client number',
+    ])
+  })
+
   it('disables search for invalid dates and requests descending sort when permit header is clicked', async () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
 
