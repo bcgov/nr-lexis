@@ -367,7 +367,7 @@ const refreshExpiringRegressionAuthSession = async (page: Page): Promise<void> =
 }
 
 // APIRequestContext bypasses the app's Amplify request path, so rotate its browser token here.
-export const ensureFreshRegressionAuthSession = async (page: Page): Promise<void> => {
+const ensureFreshRegressionAuthSession = async (page: Page): Promise<void> => {
   const activeRefresh = authSessionRefreshes.get(page)
   if (activeRefresh) {
     return activeRefresh
