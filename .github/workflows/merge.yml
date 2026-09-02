@@ -13,6 +13,10 @@ concurrency:
 permissions: {}
 
 jobs:
+  # Intentional quickstart-openshift build-once/promote model. This workflow deploys
+  # PR-numbered images, not images built from the merged main SHA. Before sequential
+  # merges, synchronize each later PR with main and confirm its images were refreshed
+  # from that current baseline. See docs/architecture.md#image-promotion-model.
   init:
     name: Initialize
     permissions:
@@ -52,7 +56,7 @@ jobs:
       environment: test
       target: test
       tag: ${{ needs.init.outputs.pr }}
-      # Current TEST quota cannot admit another backend at this request profile.
+      # Keep TEST at 2 replicas until quota can accommodate a third backend pod.
       backend_min_replicas: "2"
       backend_max_replicas: "2"
       frontend_replicas: "2"
@@ -104,7 +108,7 @@ jobs:
       environment: prod
       target: prod
       tag: ${{ needs.init.outputs.pr }}
-      # Current PROD quota cannot admit another backend at this request profile.
+      # Keep PROD at 3 replicas until quota can accommodate a fourth backend pod.
       backend_min_replicas: "3"
       backend_max_replicas: "3"
       frontend_replicas: "3"
