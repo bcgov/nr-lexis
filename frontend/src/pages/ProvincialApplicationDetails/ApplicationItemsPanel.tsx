@@ -124,7 +124,7 @@ type PackageSelectionAction =
   | { type: 'delete'; packageNumber: string }
   | { type: 'rename'; previousPackageNumber: string; nextPackageNumber: string }
 
-export type ProvincialApplicationItemsPanelProps = {
+type ProvincialApplicationItemsPanelProps = {
   detail: ProvincialApplicationDetail
   canEditPackages: boolean
   canAddPackages: boolean

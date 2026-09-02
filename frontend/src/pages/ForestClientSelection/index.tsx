@@ -14,7 +14,7 @@ import logo from '@/assets/BCID_H_rgb_pos.png'
 import landingImage from '@/assets/landing.jpg'
 import reverseLogo from '@/assets/gov-bc-logo-horiz.png'
 
-export type ForestClientSelectionPageProps = {
+type ForestClientSelectionPageProps = {
   onSelected?: () => void
 }
 

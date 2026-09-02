@@ -195,7 +195,7 @@ describe('Create Page Core Flows', () => {
       { locationCode: '01', locationName: '01 - MAIN LOCATION', selected: false },
     ])
     mockedFetchApplicationClientContacts.mockImplementation(
-      async (clientNumber, clientLocationCode, applicantType) =>
+      async (_clientNumber, _clientLocationCode, applicantType) =>
         applicantType === 'agent'
           ? [
               { contactName: 'Agent Contact', contactId: '-1' },
@@ -689,10 +689,11 @@ describe('Create Page Core Flows', () => {
 
   it('submits provincial application with agent applicant fields', async () => {
     mockedSubmitProvincialApplicationCreate.mockResolvedValue(successfulCreate('902'))
-    mockedFetchApplicationClientLocations.mockImplementation(async (clientNumber, applicantType) =>
-      applicantType === 'agent'
-        ? [{ locationCode: '12', locationName: '12 - EXPORT BILLING', selected: false }]
-        : [{ locationCode: '00', locationName: '00 - OWNER LOCATION', selected: false }],
+    mockedFetchApplicationClientLocations.mockImplementation(
+      async (_clientNumber, applicantType) =>
+        applicantType === 'agent'
+          ? [{ locationCode: '12', locationName: '12 - EXPORT BILLING', selected: false }]
+          : [{ locationCode: '00', locationName: '00 - OWNER LOCATION', selected: false }],
     )
 
     render(

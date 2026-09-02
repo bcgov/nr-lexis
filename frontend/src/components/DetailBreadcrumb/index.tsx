@@ -3,7 +3,7 @@ import { Breadcrumb, BreadcrumbItem } from '@carbon/react'
 import { Link, type To, useLocation } from 'react-router-dom'
 import { readDetailReturnTrail, type DetailReturnTo } from '@/pages/shared/detail-navigation'
 
-export type DetailBreadcrumbProps = {
+type DetailBreadcrumbProps = {
   label: string
   to: To
   returnTo?: DetailReturnTo

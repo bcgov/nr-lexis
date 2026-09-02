@@ -1,7 +1,7 @@
 const SEARCH_TOTAL_CACHE_TTL_MS = 60_000
 const SEARCH_TOTAL_CACHE_MAX_ENTRIES = 200
 
-export type SearchTotalCacheEntry = {
+type SearchTotalCacheEntry = {
   total: number
   expiresAt: number
 }

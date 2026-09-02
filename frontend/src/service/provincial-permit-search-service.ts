@@ -28,7 +28,7 @@ type ProvincialPermitSearchOptions = {
   knownTotal?: number
 }
 
-export type ProvincialPermitNumberOption = {
+type ProvincialPermitNumberOption = {
   value: string
   label: string
   status: ProvincialPermitStatus

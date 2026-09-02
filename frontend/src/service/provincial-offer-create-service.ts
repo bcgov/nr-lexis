@@ -17,12 +17,12 @@ export type OfferApplicationDetails = {
   region: string
 }
 
-export type OfferApplicationValidation = {
+type OfferApplicationValidation = {
   isValid: boolean
   errors: string[]
 }
 
-export type OfferClientData = {
+type OfferClientData = {
   clientNumber: string
   companyName: string
 }

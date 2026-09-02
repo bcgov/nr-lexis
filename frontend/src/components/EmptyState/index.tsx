@@ -26,7 +26,7 @@ const DefaultEmptyStatePictogram = () => (
   </svg>
 )
 
-export type EmptyStateProps = {
+type EmptyStateProps = {
   title: ReactNode
   description: ReactNode
   icon?: ReactNode

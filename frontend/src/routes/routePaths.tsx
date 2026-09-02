@@ -40,7 +40,7 @@ const Layout = ({ children }: { children: ReactNode }) => (
   </AppLayout>
 )
 
-export type RouteDescription = {
+type RouteDescription = {
   id: string
   path: string
   element: ReactNode
@@ -66,7 +66,7 @@ function ForestClientSelectionRoute() {
   return <ForestClientSelectionPage onSelected={() => navigate(defaultRoute, { replace: true })} />
 }
 
-export type RouteGuardProps = {
+type RouteGuardProps = {
   path: string
   requiredActions?: string[]
   requiredActionsMatch?: RouteActionMatch

@@ -17,7 +17,7 @@ export type ProvincialOfferSearchSortField =
   | 'region'
   | 'offerWithdrawalDate'
 
-export type ProvincialOfferSearchItem = {
+type ProvincialOfferSearchItem = {
   offerNumber: string
   applicationNumber: string
   packageNumber: string

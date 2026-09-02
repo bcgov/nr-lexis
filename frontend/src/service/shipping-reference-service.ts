@@ -1,6 +1,6 @@
 import apiService from '@/service/api-service'
 
-export type ShippingReferenceOption = {
+type ShippingReferenceOption = {
   code: string
   name: string
 }

@@ -11,7 +11,7 @@ export type RtmEmsLogAmvRow = {
   returnCode: string | null
 }
 
-export type RtmEmsLogAmvFilters = {
+type RtmEmsLogAmvFilters = {
   species: string
   growthIndicator: string
   retrievalDate: string
@@ -28,7 +28,7 @@ export type RtmEmsLogAmvSaveRequest = {
   saveMode: 'create' | 'update'
 }
 
-export type RtmEmsLogAmvMutationResult = {
+type RtmEmsLogAmvMutationResult = {
   status: string
   message: string
   errors: string[]
@@ -41,7 +41,7 @@ export type RtmEmsLogAmvLastSaved = {
   savedAt: string | null
 }
 
-export type RtmEmsLogAmvBatchSaveRequest = {
+type RtmEmsLogAmvBatchSaveRequest = {
   values: RtmEmsLogAmvSaveRequest[]
 }
 
@@ -58,7 +58,7 @@ export type RtmEmsLogAmvUploadPreview = {
   rows: RtmEmsLogAmvRow[]
 }
 
-export type RtmEmsLogAmvUploadRequest = {
+type RtmEmsLogAmvUploadRequest = {
   effectiveMonth: string
   file: File
 }

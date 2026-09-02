@@ -22,7 +22,7 @@ export type ProvincialPermitSearchSortField =
   | 'dateIssued'
   | 'region'
 
-export type ProvincialPermitSearchItem = {
+type ProvincialPermitSearchItem = {
   applicationNumber: string
   packageNumber: string
   permitNumber: string

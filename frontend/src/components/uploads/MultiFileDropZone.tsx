@@ -1,7 +1,7 @@
 import { useRef, useState, type DragEvent, type KeyboardEvent } from 'react'
 import { ErrorFilled, Upload } from '@carbon/icons-react'
 
-export type MultiFileDropZoneProps = {
+type MultiFileDropZoneProps = {
   title: string
   description: string
   inputId: string

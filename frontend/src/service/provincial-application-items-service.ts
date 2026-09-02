@@ -58,7 +58,7 @@ export type ApplicationScaleSummaryRow = {
   timberMark: string
 }
 
-export type ApplicationScaleDetails = {
+type ApplicationScaleDetails = {
   success: boolean
   timberMark: string
   species: string
@@ -73,7 +73,7 @@ export type ApplicationPermitRow = {
   permitStatusDescription: string
 }
 
-export type ApplicationPackageMutation = {
+type ApplicationPackageMutation = {
   packageNumber: string
   newPackageNumber?: string
   applicationNumber: string
@@ -89,7 +89,7 @@ export type ApplicationPackageMutation = {
   speciesCodes: string[]
 }
 
-export type ApplicationScaleMutation = {
+type ApplicationScaleMutation = {
   timberMark: string
   packageNumber: string
   gradeCode: string
@@ -99,31 +99,31 @@ export type ApplicationScaleMutation = {
   volume: string
 }
 
-export type ApplicationPackageMutationResult = {
+type ApplicationPackageMutationResult = {
   valid: boolean
   packageNumber: string
   errors: string[]
   warnings: string[]
 }
 
-export type ApplicationScaleMutationResult = {
+type ApplicationScaleMutationResult = {
   valid: boolean
   result: ApplicationPackageScaleRow | null
   errors: string[]
   warnings: string[]
 }
 
-export type DeleteApplicationItemResult = {
+type DeleteApplicationItemResult = {
   success: boolean
 }
 
-export type ApplicationRemarkMutation = {
+type ApplicationRemarkMutation = {
   applicationNumber: string
   remarkBody: string
   remarkId?: string
 }
 
-export type ApplicationSummaryMutation = {
+type ApplicationSummaryMutation = {
   applicationNumber: string
   applicationDate: string
   receivedDate: string
@@ -148,7 +148,7 @@ export type ApplicationSummaryMutation = {
   speciesCodes: string[]
 }
 
-export type ApplicationRemarkMutationResult = {
+type ApplicationRemarkMutationResult = {
   success: boolean
   remarkId: string
   remark: string
@@ -158,7 +158,7 @@ export type ApplicationRemarkMutationResult = {
   message?: string
 }
 
-export type ApplicationSummaryMutationResult = {
+type ApplicationSummaryMutationResult = {
   valid: boolean
   message: string
   applicationNumber: string
@@ -166,7 +166,7 @@ export type ApplicationSummaryMutationResult = {
   warnings: string[]
 }
 
-export type ApplicationVolumeUsageResult = {
+type ApplicationVolumeUsageResult = {
   volumeUsed: boolean
 }
 

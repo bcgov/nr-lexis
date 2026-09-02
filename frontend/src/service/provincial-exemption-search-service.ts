@@ -32,7 +32,7 @@ type ProvincialExemptionSearchOptions = {
   knownTotal?: number
 }
 
-export type ProvincialExemptionNumberOption = {
+type ProvincialExemptionNumberOption = {
   value: string
   label: string
   status: string

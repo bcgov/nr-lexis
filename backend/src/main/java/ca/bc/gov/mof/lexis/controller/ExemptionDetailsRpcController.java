@@ -65,7 +65,6 @@ public class ExemptionDetailsRpcController {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(ExemptionDetailsRpcController.class);
 
-  private static final String ROLE_READ_ONLY = "LEXIS_READ_ONLY";
   private static final String ROLE_ADMIN = "LEXIS_ADMIN";
   private static final String ROLE_APPLICATION_APPROVER = "LEXIS_APPLICATION_APPROVER";
   private static final String EXEMPTION_STATUS_EXPIRED = "EXP";

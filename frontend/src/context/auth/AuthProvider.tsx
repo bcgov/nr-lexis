@@ -33,7 +33,7 @@ import {
 } from '@/service/forest-client-selection'
 import { fetchSessionCapabilities } from '@/service/session-service'
 
-export type AuthProviderProps = {
+type AuthProviderProps = {
   children: ReactNode
 }
 

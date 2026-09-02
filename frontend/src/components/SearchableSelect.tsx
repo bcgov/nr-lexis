@@ -2,12 +2,12 @@ import { ComboBox } from '@carbon/react'
 import type { ReactNode } from 'react'
 import { shouldFilterSearchableDropdownItem } from './dropdown-filtering'
 
-export type SearchableSelectOption = {
+type SearchableSelectOption = {
   value: string
   label: string
 }
 
-export type SearchableSelectProps = {
+type SearchableSelectProps = {
   id: string
   labelText: ReactNode
   value: string

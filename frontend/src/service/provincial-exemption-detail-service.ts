@@ -25,7 +25,7 @@ export type ExemptionApplicationRow = {
   agentCompanyName: string
 }
 
-export type ExemptionApplicationsResult = {
+type ExemptionApplicationsResult = {
   applications: ExemptionApplicationRow[]
   containsUnmanu: boolean
   ownerNumber: string
@@ -52,7 +52,7 @@ export type ExemptionEditContext = {
   lockMessage: string
 }
 
-export type ExemptionMutationResult = {
+type ExemptionMutationResult = {
   success: boolean
   message: string
   exemptionNumber: string
@@ -69,12 +69,12 @@ export type ExemptionApprovalResult = {
   warnings: string[]
 }
 
-export type ExemptionEmailResult = {
+type ExemptionEmailResult = {
   success: boolean
   message: string
 }
 
-export type UpdateExemptionRequest = {
+type UpdateExemptionRequest = {
   exemptionNumber: string
   approvedVolume: string
   approvalDate: string

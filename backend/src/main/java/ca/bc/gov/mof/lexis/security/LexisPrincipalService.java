@@ -8,7 +8,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Stream;
 import org.springframework.security.access.AccessDeniedException;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.stereotype.Service;
 

@@ -15,7 +15,7 @@ export type ExportScheduleRow = {
   provincialApplicationCount?: number
 }
 
-export type ExportScheduleCreateRequest = {
+type ExportScheduleCreateRequest = {
   advertisingDate: string
   applicationReceiptDate: string
   offerReceiptDate: string
@@ -24,13 +24,13 @@ export type ExportScheduleCreateRequest = {
   teacMeetingDate: string
 }
 
-export type ExportScheduleMutationResult = {
+type ExportScheduleMutationResult = {
   success: boolean
   message: string
   schedule: ExportScheduleRow | null
 }
 
-export type ExportSchedulePage = {
+type ExportSchedulePage = {
   rows: ExportScheduleRow[]
   total: number
   page: number

@@ -4,20 +4,20 @@ import { booleanField, isRecord, type UnknownRecord } from '@/utils/record'
 
 const SEARCH_CACHE_TTL_MS = 10_000
 
-export type SearchPageRequest = {
+type SearchPageRequest = {
   page: number
   pageSize: number
 }
 
-export type SearchSortRequest = SearchPageRequest & {
+type SearchSortRequest = SearchPageRequest & {
   sortField: string
   sortDirection: 'asc' | 'desc'
 }
 
-export type SearchTextParamEntry = readonly [key: string, value: string]
-export type SearchNumericParamEntry = readonly [key: string, values: string[]]
+type SearchTextParamEntry = readonly [key: string, value: string]
+type SearchNumericParamEntry = readonly [key: string, values: string[]]
 
-export type PagedSearchResponse<T> = {
+type PagedSearchResponse<T> = {
   content: T[]
   page: {
     number: number
@@ -27,7 +27,7 @@ export type PagedSearchResponse<T> = {
   }
 }
 
-export type PreviewSearchResponse<T> = {
+type PreviewSearchResponse<T> = {
   content: T[]
   page: {
     number: number

@@ -35,7 +35,7 @@ import { submitAdminUpload, validateAdminUpload } from '@/service/admin-upload-s
 type DetailDocumentUploadType = 'application' | 'exemption' | 'permit' | 'invoice'
 type DetailDocumentUploadStep = 'upload' | 'review'
 
-export type DetailDocumentUploadPanelProps = {
+type DetailDocumentUploadPanelProps = {
   workflowType: DetailDocumentUploadType
   targetNumber: string
   inputId: string

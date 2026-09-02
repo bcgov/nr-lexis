@@ -1100,10 +1100,6 @@ public class OfferDetailsRpcController {
     return normalized == null ? "" : normalized;
   }
 
-  private String nonNull(String value) {
-    return value == null ? "" : value;
-  }
-
   private String applicationRegion(LexisApplicationDetailDto application) {
     String regionName = trimToNull(application.orgUnitName());
     if (regionName != null) {

@@ -330,11 +330,6 @@ public class OracleLegacyPermitInvoiceOrchestrationService
     }
   }
 
-  private static String normalizedInvoiceNumber(String invoiceNumber) {
-    String normalized = trimToNull(invoiceNumber);
-    return normalized == null ? null : normalized.toUpperCase(java.util.Locale.ROOT);
-  }
-
   private boolean isOneOf(String value, String first, String second) {
     String normalized = trimToNull(value);
     return first.equalsIgnoreCase(normalized) || second.equalsIgnoreCase(normalized);

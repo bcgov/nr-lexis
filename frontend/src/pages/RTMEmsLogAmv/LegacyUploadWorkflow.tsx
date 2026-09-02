@@ -111,7 +111,7 @@ const formatMoney = (value: number | null) => {
   })
 }
 
-const createResultMessage = (status: string, message: string, errors: string[]): string => {
+const createResultMessage = (message: string, errors: string[]): string => {
   return [message, ...errors].filter(Boolean).join(' ')
 }
 
@@ -841,9 +841,7 @@ const ReviewUploadContent = ({
           >
             {uploadResult.status}
           </span>
-          <p>
-            {createResultMessage(uploadResult.status, uploadResult.message, uploadResult.errors)}
-          </p>
+          <p>{createResultMessage(uploadResult.message, uploadResult.errors)}</p>
           <p>
             Attempted rows: {uploadResult.attemptedRowCount} | Uploaded rows:{' '}
             {uploadResult.uploadedRowCount}
@@ -977,13 +975,7 @@ const RtmEmsLogAmvUploadPage = () => {
       } else if (validatedResponse.status === 'validation_failed') {
         setPendingUploadValidation(null)
         if (isReplacingSavedValues) {
-          setUploadError(
-            createResultMessage(
-              validatedResponse.status,
-              validatedResponse.message,
-              validatedResponse.errors,
-            ),
-          )
+          setUploadError(createResultMessage(validatedResponse.message, validatedResponse.errors))
         } else {
           setPreviewResult(validatedResponse)
         }
@@ -1307,7 +1299,7 @@ const RtmEmsLogAmvUploadPage = () => {
       } else {
         setUploadResult(response)
         setNotificationTitle('Average monthly values')
-        setNotification(createResultMessage(response.status, response.message, response.errors))
+        setNotification(createResultMessage(response.message, response.errors))
       }
     } catch (error) {
       if (saveRequestRef.current !== requestId) {

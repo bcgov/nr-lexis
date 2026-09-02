@@ -11,7 +11,7 @@ export type ProvincialApplicationDocumentRow = DocumentRowBase
 
 export type ProvincialApplicationDocumentSource = 'api'
 
-export type ProvincialApplicationDocumentsResult = {
+type ProvincialApplicationDocumentsResult = {
   rows: ProvincialApplicationDocumentRow[]
   source: ProvincialApplicationDocumentSource
 }
@@ -22,7 +22,7 @@ export type OpenApplicationDocumentResult = {
   filename: string
 }
 
-export type RemoveApplicationDocumentResult = {
+type RemoveApplicationDocumentResult = {
   success: boolean
   source: ProvincialApplicationDocumentSource
 }

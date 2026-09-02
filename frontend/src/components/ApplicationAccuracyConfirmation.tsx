@@ -3,9 +3,9 @@ import { useId } from 'react'
 
 import ConfirmationModal from '@/components/ConfirmationModal'
 
-export const APPLICATION_ACCURACY_DESCRIPTION =
+const APPLICATION_ACCURACY_DESCRIPTION =
   'Checking "I Agree" confirms that I have submitted accurate application details'
-export const APPLICATION_ACCURACY_LABEL = 'I Agree'
+const APPLICATION_ACCURACY_LABEL = 'I Agree'
 export const APPLICATION_ACCURACY_ACKNOWLEDGEMENT = {
   description: APPLICATION_ACCURACY_DESCRIPTION,
   label: APPLICATION_ACCURACY_LABEL,

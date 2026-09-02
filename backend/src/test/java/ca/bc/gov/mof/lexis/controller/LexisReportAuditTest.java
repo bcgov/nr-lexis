@@ -10,7 +10,6 @@ import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.report.LexisReportRequestDto;
 import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
-import ca.bc.gov.mof.lexis.service.report.LexisGeneratedReport;
 import ca.bc.gov.mof.lexis.service.report.LexisReportGenerationException;
 import ca.bc.gov.mof.lexis.service.report.LexisReportService;
 import ca.bc.gov.mof.lexis.service.report.LexisReportValidationException;

@@ -2,7 +2,7 @@ import { createContext } from 'react'
 
 export type UiTheme = 'white' | 'g100'
 
-export type ThemeContextValue = {
+type ThemeContextValue = {
   theme: UiTheme
   toggleTheme: () => void
 }

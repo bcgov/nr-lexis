@@ -73,7 +73,7 @@ type UploadWorkflowDefinition = {
   numberFieldPlaceholder: string
 }
 
-export type AdminUploadsPageProps = {
+type AdminUploadsPageProps = {
   lockedWorkflowType?: UploadWorkflowType
   pageTitle?: string
 }
@@ -167,7 +167,7 @@ type UploadTargetNumberOption = {
   label: string
 }
 
-export type UploadTargetNumberSelectProps = {
+type UploadTargetNumberSelectProps = {
   id: string
   labelText: ReactNode
   value: string

@@ -474,7 +474,7 @@ export const setupApplicationDetailTests = (): void => {
     remarkDate: '2026-01-05T10:15:00Z',
     message: 'Application status updated.',
   })
-  mockedFetchApplicationClientLocations.mockImplementation((clientNumber, applicantType) => {
+  mockedFetchApplicationClientLocations.mockImplementation((_clientNumber, applicantType) => {
     if (applicantType === 'agent') {
       return Promise.resolve([
         { locationCode: '0', locationName: 'Do not use', selected: false },
@@ -506,7 +506,7 @@ export const setupApplicationDetailTests = (): void => {
     ])
   })
   mockedFetchApplicationClientContacts.mockImplementation(
-    (clientNumber, clientLocationCode, applicantType) => {
+    (_clientNumber, _clientLocationCode, applicantType) => {
       if (applicantType === 'agent') {
         return Promise.resolve([
           { contactName: 'Agent Contact', contactId: '-1' },

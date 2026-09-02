@@ -1,9 +1,6 @@
 import { useEffect, useRef, type ComponentPropsWithoutRef, type ReactNode } from 'react'
 
-export type TableFrameProps = Omit<
-  ComponentPropsWithoutRef<'div'>,
-  'aria-label' | 'role' | 'tabIndex'
-> & {
+type TableFrameProps = Omit<ComponentPropsWithoutRef<'div'>, 'aria-label' | 'role' | 'tabIndex'> & {
   ariaLabel: string
   children: ReactNode
 }

@@ -137,7 +137,7 @@ export const releaseOfferEditLock = async (offerNumber: string): Promise<void> =
   }
 }
 
-export type ProvincialPermitExemptionContext = Pick<
+type ProvincialPermitExemptionContext = Pick<
   ProvincialPermitDetail,
   'approvedExemptionVolume' | 'exemptionVolumeRemaining' | 'exemptionTypeDescription' | 'blanketOic'
 >

@@ -8,13 +8,13 @@ import {
 } from '@/service/provincial-application-documents-service'
 
 export type FederalApplicationDocumentRow = ProvincialApplicationDocumentRow
-export type FederalApplicationDocumentSource = ProvincialApplicationDocumentSource
-export type FederalApplicationDocumentsResult = {
+type FederalApplicationDocumentSource = ProvincialApplicationDocumentSource
+type FederalApplicationDocumentsResult = {
   rows: FederalApplicationDocumentRow[]
   source: FederalApplicationDocumentSource
 }
-export type OpenFederalApplicationDocumentResult = OpenApplicationDocumentResult
-export type RemoveFederalApplicationDocumentResult = {
+type OpenFederalApplicationDocumentResult = OpenApplicationDocumentResult
+type RemoveFederalApplicationDocumentResult = {
   success: boolean
   source: FederalApplicationDocumentSource
 }

@@ -1939,14 +1939,6 @@ public class ApplicationSubmissionImportService {
     return nodes.getLength() == 0 || !(nodes.item(0) instanceof Element element) ? null : element;
   }
 
-  private Element firstDescendant(Element root, String namespace, String localName) {
-    if (root == null) {
-      return null;
-    }
-    var nodes = root.getElementsByTagNameNS(namespace, localName);
-    return nodes.getLength() == 0 || !(nodes.item(0) instanceof Element element) ? null : element;
-  }
-
   private List<Element> elementDescendants(Element root) {
     if (root == null) {
       return List.of();
@@ -2741,23 +2733,6 @@ public class ApplicationSubmissionImportService {
       long parsed = Long.parseLong(value);
       if (parsed < 0L) {
         errors.add("The " + label + " must be greater than or equal to 0.");
-        return null;
-      }
-      return parsed;
-    } catch (NumberFormatException ex) {
-      errors.add("A valid " + label + " is required.");
-      return null;
-    }
-  }
-
-  private Long parseOptionalPositiveLong(String value, String label, List<String> errors) {
-    if (value == null) {
-      return null;
-    }
-    try {
-      long parsed = Long.parseLong(value);
-      if (parsed <= 0L) {
-        errors.add("A valid " + label + " is required.");
         return null;
       }
       return parsed;

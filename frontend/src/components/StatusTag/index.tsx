@@ -89,7 +89,7 @@ export const getStatusTagVariant = (status: string): StatusTagVariant => {
   return 'neutral'
 }
 
-export type StatusTagProps = Omit<HTMLAttributes<HTMLSpanElement>, 'children'> & {
+type StatusTagProps = Omit<HTMLAttributes<HTMLSpanElement>, 'children'> & {
   status: string
   variant?: StatusTagVariant
   fallbackLabel?: string

@@ -1,7 +1,7 @@
 import { InlineLoading } from '@carbon/react'
 import { createPortal } from 'react-dom'
 
-export type ContentLoadingOverlayProps = {
+type ContentLoadingOverlayProps = {
   loading: boolean
   loadingDescription: string
 }

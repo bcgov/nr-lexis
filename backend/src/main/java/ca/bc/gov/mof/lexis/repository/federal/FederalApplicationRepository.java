@@ -407,29 +407,6 @@ public class FederalApplicationRepository extends OracleRepositorySupport {
         this::mapFederalPermit);
   }
 
-  public Optional<FederalMutationContextRow> findMutationContext(Long applicationNumber) {
-    if (applicationNumber == null || applicationNumber < 1) {
-      return Optional.empty();
-    }
-    return queryCursorSingle(
-        FIND_APPLICATION_BY_NUMBER,
-        cs -> cs.setString(1, applicationNumber.toString()),
-        2,
-        rs -> {
-          if (!"F".equalsIgnoreCase(getString(rs, "EXPORT_JURISDICTION_CODE"))) {
-            return null;
-          }
-          return new FederalMutationContextRow(
-                getLong(rs, "APPLICATION_NUMBER"),
-                getLocalDate(rs, "APPLICATION_DATE"),
-                getLong(rs, "ORG_UNIT_NO"),
-                getString(rs, "OWNER_CLIENT_NUMBER"),
-                getString(rs, "OWNER_CLIENT_LOCATION_CODE"),
-                getString(rs, "EXPORT_APPLICATION_STATUS_CODE"),
-                getLocalDate(rs, "ADVERTISING_DATE"));
-        });
-  }
-
   public Optional<FederalMutationContextRow> findMutationContextRequired(Long applicationNumber) {
     if (applicationNumber == null || applicationNumber < 1) {
       return Optional.empty();

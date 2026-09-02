@@ -54,19 +54,19 @@ type UploadFileRequestBase = {
   file: File
 }
 
-export type ApplicationUploadRequest = UploadRequestBase & {
+type ApplicationUploadRequest = UploadRequestBase & {
   applicationNumber: string
 }
 
-export type ExemptionUploadRequest = UploadRequestBase & {
+type ExemptionUploadRequest = UploadRequestBase & {
   exemptionNumber: string
 }
 
-export type PermitUploadRequest = UploadRequestBase & {
+type PermitUploadRequest = UploadRequestBase & {
   permitNumber: string
 }
 
-export type InvoiceUploadRequest = UploadRequestBase & {
+type InvoiceUploadRequest = UploadRequestBase & {
   permitNumber: string
   salesInvoiceNumber: string
   invoiceExportValue: string
@@ -74,7 +74,7 @@ export type InvoiceUploadRequest = UploadRequestBase & {
   invoiceFeeInLieu: string
 }
 
-export type ApplicationSubmissionUploadRequest = UploadFileRequestBase & {
+type ApplicationSubmissionUploadRequest = UploadFileRequestBase & {
   userReference?: string
 }
 

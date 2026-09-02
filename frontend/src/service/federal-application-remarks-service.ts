@@ -7,7 +7,7 @@ export type FederalApplicationRemark = {
   date: string | null
 }
 
-export type FederalRemarkMutationResult = {
+type FederalRemarkMutationResult = {
   success: boolean
   message: string | null
   remark: FederalApplicationRemark | null

@@ -4,7 +4,7 @@ import { hasRole } from '@/context/auth/role-utils'
 const TRUE_VALUES = new Set(['1', 'true', 'yes', 'y', 'on'])
 
 const PROD_RTM_ONLY_LEGACY_REDIRECT_ROUTE = '/admin/rtm/emslogamv'
-export const PROD_RTM_ONLY_UPLOAD_ROUTE = '/admin/rtm/emslogamv/upload'
+const PROD_RTM_ONLY_UPLOAD_ROUTE = '/admin/rtm/emslogamv/upload'
 export const PROD_RTM_ONLY_ROUTE = PROD_RTM_ONLY_UPLOAD_ROUTE
 
 const PROD_RTM_ONLY_ALLOWED_PATHS = new Set([
@@ -16,7 +16,7 @@ const PROD_RTM_ONLY_ALLOWED_PATHS = new Set([
   '*',
 ])
 
-export const isEnabledConfig = (value: string | undefined): boolean => {
+const isEnabledConfig = (value: string | undefined): boolean => {
   return TRUE_VALUES.has((value ?? '').trim().toLowerCase())
 }
 

@@ -8,7 +8,7 @@ import './ConfirmationModal.css'
 
 const PendingIcon = () => <Loading small withOverlay={false} description="" />
 
-export type ConfirmationModalProps = {
+type ConfirmationModalProps = {
   open: boolean
   title: string
   description?: ReactNode
