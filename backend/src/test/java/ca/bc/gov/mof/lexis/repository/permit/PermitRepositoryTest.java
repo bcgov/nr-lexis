@@ -288,6 +288,7 @@ class PermitRepositoryTest {
     assertThat(searchSql)
         .contains("EPD.CLIENT_NUMBER LIKE")
         .contains("EPD.AGENT_NUMBER LIKE")
+        .contains("EXISTS (SELECT 1 FROM EXPORT_SCALE_DETAIL ESD_REQUIRED")
         .doesNotContain("EP_ACCESS");
     assertThat(repository.pageSelectSql())
         .contains("WITH ACCESSIBLE_PERMITS AS")

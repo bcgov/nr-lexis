@@ -235,6 +235,8 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
     ],
   },
   {
+    // INTENTIONAL_LEGACY_DIVERGENCE(ADMIN_PAGE_RETIREMENT): Agent Status and legacy WSDL
+    // administration are retired; keep only the active modern administration workflows.
     label: 'Admin',
     links: [
       {
