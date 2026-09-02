@@ -1,3 +1,4 @@
+import { createServer } from 'node:http'
 import { expect, test, type Page } from '@playwright/test'
 import {
   createUnsignedToken,
@@ -5,6 +6,7 @@ import {
   installSyntheticCognitoSession,
   type SyntheticCognitoSession,
 } from './utils'
+import { getWithAuth } from './utils/regression-auth'
 
 const SESSION_IDLE_WARNING_DELAY_MS = 25 * 60 * 1000
 const SESSION_IDLE_WARNING_DURATION_MS = 5 * 60 * 1000
@@ -92,9 +94,8 @@ const installSyntheticLogoutRedirect = async (page: Page, sessionState: Syntheti
 const installSyntheticCognitoRefresh = async (
   page: Page,
   syntheticSession: SyntheticCognitoSession,
+  refreshedAtSeconds = Math.floor(Date.parse(SESSION_START_ISO) / 1000) + 29 * 60 + 30,
 ) => {
-  const sessionStartSeconds = Math.floor(Date.parse(SESSION_START_ISO) / 1000)
-
   let refreshRequestCount = 0
   await page.route('https://cognito-idp.ca-central-1.amazonaws.com/**', async (route) => {
     const target = route.request().headers()['x-amz-target']
@@ -104,7 +105,6 @@ const installSyntheticCognitoRefresh = async (
     }
 
     refreshRequestCount += 1
-    const refreshedAtSeconds = sessionStartSeconds + 29 * 60 + 30
     await route.fulfill({
       status: 200,
       contentType: 'application/x-amz-json-1.1',
@@ -136,7 +136,119 @@ const installSyntheticCognitoRefresh = async (
   return () => refreshRequestCount
 }
 
+const startAuthorizationProbe = async () => {
+  const authorizationHeaders: Array<string | undefined> = []
+  const server = createServer((request, response) => {
+    authorizationHeaders.push(request.headers.authorization)
+    response.writeHead(200, {
+      connection: 'close',
+      'content-type': 'application/json',
+    })
+    response.end(JSON.stringify({ accepted: true }))
+  })
+
+  await new Promise<void>((resolve, reject) => {
+    const rejectOnError = (error: Error) => reject(error)
+    server.once('error', rejectOnError)
+    server.listen(0, '127.0.0.1', () => {
+      server.off('error', rejectOnError)
+      resolve()
+    })
+  })
+
+  const address = server.address()
+  if (!address || typeof address === 'string') {
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()))
+    })
+    throw new Error('Authorization probe did not bind to a TCP port.')
+  }
+
+  return {
+    authorizationHeaders,
+    close: () =>
+      new Promise<void>((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()))
+      }),
+    url: `http://127.0.0.1:${address.port}/authorization-probe`,
+  }
+}
+
 test.describe('session timeout regression', () => {
+  test('refreshes an expired token before direct regression API calls', async ({ page }) => {
+    const nowSeconds = Math.floor(Date.now() / 1000)
+    const syntheticSession = await installSyntheticCognitoSession(page, {
+      username: TEST_USERNAME,
+      orgUnitNo: '1903',
+      issuedAtSeconds: nowSeconds,
+      expiresInSeconds: 60,
+      refreshToken: 'initial-refresh-token',
+    })
+    const getRefreshRequestCount = await installSyntheticCognitoRefresh(
+      page,
+      syntheticSession,
+      nowSeconds,
+    )
+    await installSyntheticLexisApi(page)
+    await page.goto('/provincial/application', { waitUntil: 'domcontentloaded' })
+
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'Provincial application search' }),
+    ).toBeVisible()
+
+    const expiredAccessToken = createUnsignedToken({
+      sub: 'session-timeout-test-user',
+      username: TEST_USERNAME,
+      client_id: syntheticSession.clientId,
+      token_use: 'access',
+      iat: nowSeconds - 301,
+      exp: nowSeconds - 1,
+    })
+    const expiredIdToken = createUnsignedToken({
+      sub: 'session-timeout-test-user',
+      'custom:org_unit_no': '1903',
+      token_use: 'id',
+      iat: nowSeconds - 301,
+      exp: nowSeconds - 1,
+    })
+    await page.evaluate(
+      ({ prefix, username, accessToken, idToken }) => {
+        window.localStorage.setItem(`${prefix}.${username}.accessToken`, accessToken)
+        window.localStorage.setItem(`${prefix}.${username}.idToken`, idToken)
+      },
+      {
+        prefix: syntheticSession.storagePrefix,
+        username: syntheticSession.username,
+        accessToken: expiredAccessToken,
+        idToken: expiredIdToken,
+      },
+    )
+
+    const authorizationProbe = await startAuthorizationProbe()
+    try {
+      const response = await getWithAuth(page, authorizationProbe.url)
+      expect(response.status()).toBe(200)
+      await response.dispose()
+
+      expect(getRefreshRequestCount()).toBe(1)
+      const refreshedAccessToken = await page.evaluate(
+        ({ prefix, username }) => window.localStorage.getItem(`${prefix}.${username}.accessToken`),
+        {
+          prefix: syntheticSession.storagePrefix,
+          username: syntheticSession.username,
+        },
+      )
+      if (!refreshedAccessToken) {
+        throw new Error('The synthetic Cognito access token was not refreshed.')
+      }
+
+      expect(refreshedAccessToken).not.toBe(expiredAccessToken)
+      expect(authorizationProbe.authorizationHeaders).toEqual([`Bearer ${refreshedAccessToken}`])
+    } finally {
+      await authorizationProbe.close()
+    }
+  })
+
   test('opens, renders, and resets the warning without real-time waiting', async ({ page }) => {
     await page.clock.install({ time: new Date(SESSION_START_ISO) })
     const sessionStartSeconds = Math.floor(Date.parse(SESSION_START_ISO) / 1000)

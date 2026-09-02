@@ -70,6 +70,9 @@ const APP_ROOT_NAVIGATION_TIMEOUT_MS = 10_000
 const APP_ROOT_NAVIGATION_RETRY_DELAY_MS = 3_000
 const AUTHENTICATED_GET_ATTEMPTS = 4
 const AUTHENTICATED_GET_RETRY_DELAY_MS = 3_000
+const ACCESS_TOKEN_REFRESH_WINDOW_SECONDS = 5
+const ACCESS_TOKEN_ACTIVITY_REFRESH_TIMEOUT_MS = (ACCESS_TOKEN_REFRESH_WINDOW_SECONDS + 1) * 1_000
+const ACCESS_TOKEN_RELOAD_REFRESH_TIMEOUT_MS = 30_000
 const JWT_PATTERN = /^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/
 const TRANSIENT_REQUEST_ERROR =
   /\b(?:EAI_AGAIN|ECONNREFUSED|ECONNRESET|EHOSTUNREACH|ENETUNREACH|ETIMEDOUT)\b|socket hang up|network socket disconnected/i
@@ -85,6 +88,8 @@ const idirLoginConfig: LoginConfig = {
   usernameEnv: 'E2E_IDIR_USER',
   passwordEnv: 'E2E_IDIR_PASSWORD',
 }
+
+const authSessionRefreshes = new WeakMap<Page, Promise<void>>()
 
 const hasCredentials = ({ usernameEnv, passwordEnv }: LoginConfig): boolean =>
   Boolean(process.env[usernameEnv]?.trim() && process.env[passwordEnv]?.trim())
@@ -279,53 +284,10 @@ const contextAuthSnapshot = async (page: Page): Promise<AuthTokenSnapshot> => {
   }
 }
 
-const csrfHeaders = async (page: Page): Promise<Record<string, string>> => {
-  const cookies = await page.context().cookies()
-  const xsrfCookie = cookies.find((cookie) => cookie.name === 'XSRF-TOKEN')
-  return xsrfCookie ? { 'X-XSRF-TOKEN': decodeURIComponent(xsrfCookie.value) } : {}
-}
-
-const bearerHeaders = async (page: Page): Promise<Record<string, string>> => {
+const currentAccessToken = async (page: Page): Promise<string | undefined> => {
   const browserSnapshot = await browserAuthSnapshot(page)
   const contextSnapshot = browserSnapshot.accessToken ? null : await contextAuthSnapshot(page)
-  const accessToken = browserSnapshot.accessToken ?? contextSnapshot?.accessToken
-  return accessToken ? { Authorization: `Bearer ${accessToken}` } : {}
-}
-
-const authHeaders = async (page: Page): Promise<Record<string, string>> => ({
-  ...(await bearerHeaders(page)),
-  ...(await csrfHeaders(page)),
-})
-
-export const getWithAuth = async (
-  page: Page,
-  path: string,
-  options: GetWithAuthOptions = {},
-): Promise<APIResponse> => {
-  let lastError: unknown
-
-  for (let attempt = 1; attempt <= AUTHENTICATED_GET_ATTEMPTS; attempt += 1) {
-    try {
-      return await page.request.get(path, {
-        ...options,
-        failOnStatusCode: options.failOnStatusCode ?? false,
-        headers: {
-          ...options.headers,
-          ...(await authHeaders(page)),
-        },
-      })
-    } catch (error) {
-      lastError = error
-      if (!TRANSIENT_REQUEST_ERROR.test(String(error))) {
-        throw error
-      }
-      if (attempt < AUTHENTICATED_GET_ATTEMPTS) {
-        await page.waitForTimeout(AUTHENTICATED_GET_RETRY_DELAY_MS)
-      }
-    }
-  }
-
-  throw lastError
+  return browserSnapshot.accessToken ?? contextSnapshot?.accessToken
 }
 
 const base64UrlDecode = (value: string): string => {
@@ -344,7 +306,7 @@ const accessTokenDiagnostics = (accessToken?: string): AccessTokenDiagnostics | 
     const exp = typeof payload.exp === 'number' ? payload.exp : undefined
 
     return {
-      expiresInSeconds: exp ? exp - Math.floor(Date.now() / 1000) : undefined,
+      expiresInSeconds: typeof exp === 'number' ? exp - Math.floor(Date.now() / 1000) : undefined,
       tokenUse: typeof payload.token_use === 'string' ? payload.token_use : undefined,
     }
   } catch {
@@ -352,6 +314,152 @@ const accessTokenDiagnostics = (accessToken?: string): AccessTokenDiagnostics | 
   }
 }
 
+const accessTokenNeedsRefresh = (accessToken?: string): boolean => {
+  const expiresInSeconds = accessTokenDiagnostics(accessToken)?.expiresInSeconds
+  return (
+    typeof expiresInSeconds === 'number' && expiresInSeconds <= ACCESS_TOKEN_REFRESH_WINDOW_SECONDS
+  )
+}
+
+const waitForReplacementAccessToken = async (
+  page: Page,
+  previousAccessToken: string,
+  timeoutMs: number,
+): Promise<boolean> => {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    const accessToken = await currentAccessToken(page)
+    if (
+      accessToken &&
+      accessToken !== previousAccessToken &&
+      !accessTokenNeedsRefresh(accessToken)
+    ) {
+      return true
+    }
+    await page.waitForTimeout(100)
+  }
+  return false
+}
+
+const refreshExpiringRegressionAuthSession = async (page: Page): Promise<void> => {
+  const accessToken = await currentAccessToken(page)
+  if (!accessToken || !accessTokenNeedsRefresh(accessToken)) {
+    return
+  }
+
+  await page
+    .evaluate(() => window.dispatchEvent(new MouseEvent('mousemove')))
+    .catch(() => undefined)
+  if (
+    await waitForReplacementAccessToken(page, accessToken, ACCESS_TOKEN_ACTIVITY_REFRESH_TIMEOUT_MS)
+  ) {
+    return
+  }
+
+  await page.reload({ waitUntil: 'domcontentloaded', timeout: APP_ROOT_NAVIGATION_TIMEOUT_MS })
+  if (
+    await waitForReplacementAccessToken(page, accessToken, ACCESS_TOKEN_RELOAD_REFRESH_TIMEOUT_MS)
+  ) {
+    return
+  }
+
+  throw new Error('Unable to refresh the expiring Cognito access token for regression API calls.')
+}
+
+// APIRequestContext bypasses the app's Amplify request path, so rotate its browser token here.
+const ensureFreshRegressionAuthSession = async (page: Page): Promise<void> => {
+  const activeRefresh = authSessionRefreshes.get(page)
+  if (activeRefresh) {
+    return activeRefresh
+  }
+
+  const refresh = refreshExpiringRegressionAuthSession(page)
+  authSessionRefreshes.set(page, refresh)
+  try {
+    await refresh
+  } finally {
+    if (authSessionRefreshes.get(page) === refresh) {
+      authSessionRefreshes.delete(page)
+    }
+  }
+}
+
+const csrfHeaders = async (page: Page): Promise<Record<string, string>> => {
+  const cookies = await page.context().cookies()
+  const xsrfCookie = cookies.find((cookie) => cookie.name === 'XSRF-TOKEN')
+  return xsrfCookie ? { 'X-XSRF-TOKEN': decodeURIComponent(xsrfCookie.value) } : {}
+}
+
+const bearerHeaders = async (page: Page): Promise<Record<string, string>> => {
+  const accessToken = await currentAccessToken(page)
+  return accessToken ? { Authorization: `Bearer ${accessToken}` } : {}
+}
+
+const authHeaders = async (page: Page): Promise<Record<string, string>> => {
+  await ensureFreshRegressionAuthSession(page)
+  return {
+    ...(await bearerHeaders(page)),
+    ...(await csrfHeaders(page)),
+  }
+}
+
+const requestWithAuthRefresh = async (
+  page: Page,
+  request: (headers: Record<string, string>) => Promise<APIResponse>,
+): Promise<APIResponse> => {
+  const headers = await authHeaders(page)
+  const rejectedAccessToken = headers.Authorization?.replace(/^Bearer\s+/i, '')
+  const response = await request(headers)
+  if (response.status() !== 401) {
+    return response
+  }
+
+  const currentToken = await currentAccessToken(page)
+  const tokenRotated = Boolean(
+    currentToken && rejectedAccessToken && currentToken !== rejectedAccessToken,
+  )
+  if (!tokenRotated && !accessTokenNeedsRefresh(rejectedAccessToken)) {
+    return response
+  }
+
+  // Authentication rejects the request before mutation; retry once only across token rotation.
+  await ensureFreshRegressionAuthSession(page)
+  await response.dispose()
+  return request(await authHeaders(page))
+}
+
+export const getWithAuth = async (
+  page: Page,
+  path: string,
+  options: GetWithAuthOptions = {},
+): Promise<APIResponse> => {
+  let lastError: unknown
+
+  for (let attempt = 1; attempt <= AUTHENTICATED_GET_ATTEMPTS; attempt += 1) {
+    try {
+      return await requestWithAuthRefresh(page, (headers) =>
+        page.request.get(path, {
+          ...options,
+          failOnStatusCode: options.failOnStatusCode ?? false,
+          headers: {
+            ...options.headers,
+            ...headers,
+          },
+        }),
+      )
+    } catch (error) {
+      lastError = error
+      if (!TRANSIENT_REQUEST_ERROR.test(String(error))) {
+        throw error
+      }
+      if (attempt < AUTHENTICATED_GET_ATTEMPTS) {
+        await page.waitForTimeout(AUTHENTICATED_GET_RETRY_DELAY_MS)
+      }
+    }
+  }
+
+  throw lastError
+}
 export const redactedTextSnippet = (text: string, maxLength = 500): string => {
   let redacted = text
   for (const credential of [process.env.E2E_IDIR_USER, process.env.E2E_IDIR_PASSWORD]) {
@@ -701,14 +809,16 @@ export const postWithCsrf = async (
   path: string,
   options: PostWithCsrfOptions = {},
 ): Promise<APIResponse> => {
-  return page.request.post(path, {
-    ...options,
-    headers: {
-      ...options.headers,
-      ...(await authHeaders(page)),
-    },
-    failOnStatusCode: false,
-  })
+  return requestWithAuthRefresh(page, (headers) =>
+    page.request.post(path, {
+      ...options,
+      headers: {
+        ...options.headers,
+        ...headers,
+      },
+      failOnStatusCode: false,
+    }),
+  )
 }
 
 export const putWithCsrf = async (
@@ -716,14 +826,16 @@ export const putWithCsrf = async (
   path: string,
   options: PostWithCsrfOptions = {},
 ): Promise<APIResponse> => {
-  return page.request.put(path, {
-    ...options,
-    headers: {
-      ...options.headers,
-      ...(await authHeaders(page)),
-    },
-    failOnStatusCode: false,
-  })
+  return requestWithAuthRefresh(page, (headers) =>
+    page.request.put(path, {
+      ...options,
+      headers: {
+        ...options.headers,
+        ...headers,
+      },
+      failOnStatusCode: false,
+    }),
+  )
 }
 
 export const deleteWithCsrf = async (
@@ -734,14 +846,16 @@ export const deleteWithCsrf = async (
     headers?: Record<string, string>
   } = {},
 ): Promise<APIResponse> => {
-  return page.request.delete(path, {
-    ...options,
-    headers: {
-      ...options.headers,
-      ...(await authHeaders(page)),
-    },
-    failOnStatusCode: false,
-  })
+  return requestWithAuthRefresh(page, (headers) =>
+    page.request.delete(path, {
+      ...options,
+      headers: {
+        ...options.headers,
+        ...headers,
+      },
+      failOnStatusCode: false,
+    }),
+  )
 }
 
 export const expectInvalidApplicationCreateValidation = async (
