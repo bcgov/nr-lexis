@@ -15,6 +15,7 @@ import java.sql.Statement;
 import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicBoolean;
 import net.sf.jasperreports.engine.JRParameter;
 import net.sf.jasperreports.engine.JasperReportsContext;
@@ -42,6 +43,7 @@ public class LexisReportResourceManager {
   private final int virtualizerMaxPages;
   private final int queryTimeoutSeconds;
   private final int jdbcFetchSize;
+  private final Semaphore generationPermits;
   private final JasperReportsContext jasperReportsContext;
 
   public LexisReportResourceManager(LexisReportResourceProperties properties) {
@@ -50,7 +52,10 @@ public class LexisReportResourceManager {
         || properties.getQueryTimeoutSeconds() < 1
         || properties.getQueryTimeoutSeconds() > 3600
         || properties.getJdbcFetchSize() < 1
-        || properties.getJdbcFetchSize() > 10_000) {
+        || properties.getJdbcFetchSize() > 10_000
+        || properties.getMaxConcurrentGenerations() < 1
+        || properties.getMaxConcurrentGenerations()
+            > LexisReportResourceProperties.MAX_CONCURRENT_GENERATIONS) {
       throw new IllegalArgumentException("Report resource limits are invalid.");
     }
     String artifactDirectoryValue = properties.getArtifactDirectory();
@@ -66,6 +71,7 @@ public class LexisReportResourceManager {
     this.virtualizerMaxPages = properties.getVirtualizerMaxPages();
     this.queryTimeoutSeconds = properties.getQueryTimeoutSeconds();
     this.jdbcFetchSize = properties.getJdbcFetchSize();
+    this.generationPermits = new Semaphore(properties.getMaxConcurrentGenerations(), true);
     SimpleJasperReportsContext timeoutContext = new SimpleJasperReportsContext();
     timeoutContext.setProperty(
         JRJdbcQueryExecuterFactory.PROPERTY_JDBC_QUERY_TIMEOUT,
@@ -89,6 +95,13 @@ public class LexisReportResourceManager {
       throw new LexisReportGenerationException(
           "Report temporary storage could not be prepared.", exception);
     }
+  }
+
+  GenerationPermit acquireGenerationPermit() {
+    if (!generationPermits.tryAcquire()) {
+      throw new LexisReportCapacityException();
+    }
+    return new GenerationPermit(generationPermits);
   }
 
   StaleArtifactCleanupResult deleteStaleArtifacts(Instant staleBefore) {
@@ -182,6 +195,23 @@ public class LexisReportResourceManager {
     public void close() {
       if (cleaned.compareAndSet(false, true)) {
         virtualizer.cleanup();
+      }
+    }
+  }
+
+  static final class GenerationPermit implements AutoCloseable {
+
+    private final Semaphore permits;
+    private final AtomicBoolean released = new AtomicBoolean(false);
+
+    private GenerationPermit(Semaphore permits) {
+      this.permits = permits;
+    }
+
+    @Override
+    public void close() {
+      if (released.compareAndSet(false, true)) {
+        permits.release();
       }
     }
   }

@@ -76,6 +76,9 @@ parameters:
   - name: LEXIS_REPORT_JDBC_FETCH_SIZE
     description: Oracle rows fetched per report database round trip
     value: "100"
+  - name: LEXIS_REPORT_MAX_CONCURRENT_GENERATIONS
+    description: Maximum active report generations per backend pod
+    value: "6"
   - name: LEXIS_STREAMING_MAX_CONCURRENCY
     description: Maximum active asynchronous report and document transfers per backend pod
     value: "16"
@@ -276,6 +279,8 @@ objects:
                   value: ${LEXIS_REPORT_QUERY_TIMEOUT_SECONDS}
                 - name: LEXIS_REPORT_JDBC_FETCH_SIZE
                   value: ${LEXIS_REPORT_JDBC_FETCH_SIZE}
+                - name: LEXIS_REPORT_MAX_CONCURRENT_GENERATIONS
+                  value: ${LEXIS_REPORT_MAX_CONCURRENT_GENERATIONS}
                 - name: LEXIS_STREAMING_MAX_CONCURRENCY
                   value: ${LEXIS_STREAMING_MAX_CONCURRENCY}
                 - name: LEXIS_PERMIT_INVOICE_MODE

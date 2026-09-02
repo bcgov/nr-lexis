@@ -10,13 +10,13 @@ import org.junit.jupiter.api.Test;
 class TestDeploymentTopologyConfigTest {
 
   @Test
-  void testShouldUseAutoscalingProfile() throws IOException {
+  void testShouldUseQuotaBoundedReplicaProfile() throws IOException {
     String mergeWorkflow = Files.readString(resolve(".github/workflows/merge.yml"));
     String testDeploy = workflowJob(mergeWorkflow, "deploy-test", "tests");
 
     assertThat(testDeploy)
         .contains("backend_min_replicas: \"2\"")
-        .contains("backend_max_replicas: \"6\"")
+        .contains("backend_max_replicas: \"2\"")
         .contains("frontend_replicas: \"2\"")
         .contains("backend_cpu_request: \"750m\"")
         .contains("backend_memory_request: \"1536Mi\"")
@@ -31,7 +31,7 @@ class TestDeploymentTopologyConfigTest {
   }
 
   @Test
-  void productionShouldRetainAutoscalingAndExpiryConfiguration() throws IOException {
+  void productionShouldRetainQuotaBoundedReplicaAndExpiryConfiguration() throws IOException {
     String mergeWorkflow = Files.readString(resolve(".github/workflows/merge.yml"));
     String prodDeploy = workflowJob(mergeWorkflow, "deploy-prod", "monitor-prod");
     String promote = mergeWorkflow.substring(mergeWorkflow.indexOf("  promote:"));
@@ -39,7 +39,7 @@ class TestDeploymentTopologyConfigTest {
     assertThat(prodDeploy)
         .doesNotContain("if: false")
         .contains("backend_min_replicas: \"3\"")
-        .contains("backend_max_replicas: \"10\"")
+        .contains("backend_max_replicas: \"3\"")
         .contains("frontend_replicas: \"3\"")
         .contains("backend_cpu_request: \"400m\"")
         .contains("backend_memory_request: \"1Gi\"")

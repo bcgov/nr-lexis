@@ -29,9 +29,9 @@
   "dependencies": {
     "@carbon/icons-react": "^11.64.0",
     "@carbon/react": "^1.88.0",
-    "@tiptap/extension-link": "^3.28.0",
-    "@tiptap/react": "^3.28.0",
-    "@tiptap/starter-kit": "^3.28.0",
+    "@tiptap/extension-link": "3.30.4",
+    "@tiptap/react": "3.30.4",
+    "@tiptap/starter-kit": "3.30.4",
     "@types/node": "^24.0.0",
     "@vitejs/plugin-react": "^6.0.0",
     "aws-amplify": "^6.15.5",
@@ -68,6 +68,8 @@
   },
   "overrides": {
     "rollup@<4.22.4": "^4.22.4",
-    "@types/react": "^19.0.10"
+    "@types/react": "^19.0.10",
+    "@tiptap/extension-bubble-menu": "3.30.4",
+    "@tiptap/extension-floating-menu": "3.30.4"
   }
 }

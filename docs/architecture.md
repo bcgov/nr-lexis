@@ -110,6 +110,33 @@ Pull requests deploy an isolated DEV preview after their required builds and tes
 deploys and promotes the same images to PROD. The PROD GitHub Environment remains the operational
 gate; do not merge a deployment-enabling change until production readiness is approved.
 
+### Image promotion model
+
+LEXIS intentionally follows the
+[BC Gov quickstart-openshift](https://github.com/bcgov/quickstart-openshift) build-once/promote
+model. The pull-request workflow builds frontend and backend images and applies the PR number as a
+mutable image tag. After merge, `.github/workflows/merge.yml` resolves that PR number, deploys the
+same images through TEST and PROD, and then promotes them with the `prod` tag. It does not rebuild
+images from the merged `main` commit SHA.
+
+This model has an accepted provenance risk: if multiple PRs were built from the same earlier `main`
+and are then merged in sequence, a later PR image can omit changes from an earlier merge and can
+temporarily roll those changes back when deployed. A previously green PR is therefore not sufficient
+merge evidence after `main` advances.
+
+Before merging another application PR after `main` changes:
+
+1. Synchronize the PR branch with current `main`.
+2. Wait for the resulting PR workflow and required checks to complete.
+3. Confirm its PR-numbered frontend and backend images were rebuilt or deliberately recycled from
+   the current baseline; do not rely on images produced before the synchronization.
+4. Let the preceding merge workflow finish TEST, PROD, and image promotion before merging the next
+   release PR.
+
+If those checks cannot be established, stop and rebuild the candidate images. Building and promoting
+images from the immutable merged `main` SHA would remove this risk, but that is a separate,
+template-level CI change rather than part of the current LEXIS delivery model.
+
 ### PROD vanity route
 
 DEV previews and TEST use the generated Gold cluster-domain Route in `frontend/openshift.route.yml`.

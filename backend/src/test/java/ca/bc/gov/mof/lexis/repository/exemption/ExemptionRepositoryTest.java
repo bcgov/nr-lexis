@@ -451,6 +451,20 @@ class ExemptionRepositoryTest {
     assertThat(repository.bindValues()).containsExactly("00001074", "00001074");
   }
 
+  @ParameterizedTest
+  @MethodSource("whitespaceTolerantExemptionSorts")
+  void scopedSummarySearchShouldAcceptWhitespaceBeforeTheSortDirection(
+      String sortField, String expectedOrder) {
+    TestExemptionRepository repository = new TestExemptionRepository();
+
+    repository.search(scopedSummaryCriteria(sortField, null));
+
+    assertThat(repository.pageSelectSql())
+        .as("page-first query for sort field <%s>", sortField)
+        .contains("PAGE_EXEMPTIONS AS");
+    assertThat(repository.whereSql()).contains(expectedOrder);
+  }
+
   @Test
   void scopedSummarySearchShouldPreserveNonZeroPageBeforeEnrichment() {
     List<ExemptionSearchResultDto> rows =
@@ -500,6 +514,19 @@ class ExemptionRepositoryTest {
     assertThat(filteredRepository.pageSelectSql())
         .contains("INNER JOIN ACCESSIBLE_EXEMPTIONS AE_VOLUME")
         .doesNotContain("PAGE_EXEMPTIONS AS");
+  }
+
+  @Test
+  void malformedLongSortShouldUseTheSafeFallbackWithoutPageFirstOptimization() {
+    TestExemptionRepository repository = new TestExemptionRepository();
+    String malformedSort = "A" + " ".repeat(8_000) + "X";
+
+    repository.search(scopedSummaryCriteria(malformedSort, null));
+
+    assertThat(repository.pageSelectSql())
+        .doesNotContain("PAGE_EXEMPTIONS AS");
+    assertThat(repository.whereSql())
+        .contains("ORDER BY EE.EXEMPTION_NUMBER DESC");
   }
 
   @Test
@@ -849,6 +876,13 @@ class ExemptionRepositoryTest {
         Arguments.of("listingDate DESC", "ORDER BY ADVERTISING_DATE DESC"),
         Arguments.of("expiryDate", "ORDER BY EE.EXPIRY_DATE ASC"),
         Arguments.of("region DESC", "ORDER BY EO.ORG_UNIT_NAME DESC"));
+  }
+
+  private static Stream<Arguments> whitespaceTolerantExemptionSorts() {
+    return Stream.of(
+        Arguments.of("exemptionNumber    DESC", "ORDER BY EE.EXEMPTION_NUMBER DESC"),
+        Arguments.of("exemptionNumber\tASC", "ORDER BY EE.EXEMPTION_NUMBER ASC"),
+        Arguments.of("  exemptionNumber \t dEsC  ", "ORDER BY EE.EXEMPTION_NUMBER DESC"));
   }
 
   private static ExemptionSearchCriteria scopedSummaryCriteria(

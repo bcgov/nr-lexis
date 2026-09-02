@@ -155,7 +155,10 @@ public class OracleLexisReportService implements LexisReportService {
     }
 
     LexisJasperReportDefinition definition = definitionOptional.get();
-    return generateResolvedReport(definition, request);
+    try (LexisReportResourceManager.GenerationPermit ignored =
+        reportResources.acquireGenerationPermit()) {
+      return generateResolvedReport(definition, request);
+    }
   }
 
   private Optional<LexisGeneratedReport> generateResolvedReport(

@@ -238,7 +238,7 @@ public class PermitRepository extends OracleRepositorySupport {
     if (criteria.regionNumbers() != null && !criteria.regionNumbers().isEmpty()) {
       where.addInEqualsNumberOrNoResults("EPD.ORG_UNIT_NO", criteria.regionNumbers());
     }
-    if (criteria.requireScalePermit() && accessClientNumber == null) {
+    if (criteria.requireScalePermit()) {
       where.addRaw(
           " AND EXISTS (SELECT 1 FROM EXPORT_SCALE_DETAIL ESD_REQUIRED "
               + "WHERE ESD_REQUIRED.EXPORT_PERMIT_DETAIL_NUMBER = "

@@ -267,6 +267,8 @@ const buildInitialFormFromQuery = (
       query.get('exemptionTerm') ??
       query.get('termDays') ??
       INITIAL_FORM.applicationTermDays,
+    // INTENTIONAL_LEGACY_DIVERGENCE(APPLICATION_RECEIVED_DATE_ENTRY): Business testing requires
+    // staff to enter the actual received date instead of silently stamping the current date.
     receivedDate: query.get('receivedDate') ?? INITIAL_FORM.receivedDate,
     exportScheduleId: query.get('exportScheduleId') ?? query.get('legacyExportScheduleId') ?? '',
     listingDate: query.get('listingDate') ?? '',

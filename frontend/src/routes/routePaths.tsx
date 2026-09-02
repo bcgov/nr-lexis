@@ -171,7 +171,8 @@ export const PUBLIC_ROUTES: RouteDescription[] = [
 ]
 
 // INTENTIONAL_LEGACY_DIVERGENCE(ADMIN_PAGE_RETIREMENT):
-// The Users & Access landing page and IDIR lookup are deliberately absent from protected routes.
+// Users & Access, Agent Status, and the legacy WSDL administration pages are deliberately absent
+// from protected routes. Active administration remains under the explicit modern routes below.
 // INTENTIONAL_LEGACY_DIVERGENCE(INDIGENOUS_RESERVE_MODULE_RETIREMENT):
 // Legacy Indian/Indigenous Reserve search, create, and detail pages are deliberately not routed.
 export const PROTECTED_ROUTES: RouteDescription[] = [

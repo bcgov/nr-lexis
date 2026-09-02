@@ -1,6 +1,7 @@
 package ca.bc.gov.mof.lexis.service.report;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
@@ -145,6 +146,31 @@ class LexisReportResourceManagerTest {
         .isEqualTo("250");
   }
 
+  @Test
+  void shouldRejectGenerationBeyondCapacityAndReleaseThePermit() {
+    LexisReportResourceManager manager = manager(120, 100, 1);
+
+    try (LexisReportResourceManager.GenerationPermit ignored =
+        manager.acquireGenerationPermit()) {
+      assertThatThrownBy(manager::acquireGenerationPermit)
+          .isInstanceOf(LexisReportCapacityException.class)
+          .hasMessage("Report generation capacity is currently exhausted.")
+          .satisfies(exception -> assertThat(exception.getStackTrace()).isEmpty());
+    }
+
+    try (LexisReportResourceManager.GenerationPermit ignored =
+        manager.acquireGenerationPermit()) {
+      assertThat(ignored).isNotNull();
+    }
+  }
+
+  @Test
+  void shouldRejectGenerationLimitsAboveTheDatabaseReserve() {
+    assertThatThrownBy(() -> manager(120, 100, 7))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessage("Report resource limits are invalid.");
+  }
+
   private LexisReportResourceManager manager() {
     return manager(120, 100);
   }
@@ -159,12 +185,18 @@ class LexisReportResourceManagerTest {
 
   private LexisReportResourceManager manager(
       int queryTimeoutSeconds, int jdbcFetchSize) {
+    return manager(queryTimeoutSeconds, jdbcFetchSize, 6);
+  }
+
+  private LexisReportResourceManager manager(
+      int queryTimeoutSeconds, int jdbcFetchSize, int maxConcurrentGenerations) {
     LexisReportResourceProperties properties = new LexisReportResourceProperties();
     properties.setArtifactDirectory(tempDirectory.resolve("reports").toString());
     properties.setVirtualizerDirectory(tempDirectory.resolve("jasper").toString());
     properties.setVirtualizerMaxPages(2);
     properties.setQueryTimeoutSeconds(queryTimeoutSeconds);
     properties.setJdbcFetchSize(jdbcFetchSize);
+    properties.setMaxConcurrentGenerations(maxConcurrentGenerations);
     return new LexisReportResourceManager(properties);
   }
 }
