@@ -2,6 +2,7 @@ package ca.bc.gov.mof.lexis.service.report;
 
 import static ca.bc.gov.mof.lexis.test.ReportTestArtifacts.report;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -62,6 +63,40 @@ class OracleLexisReportResourceContainmentTest {
   }
 
   @Test
+  void reportGenerationBeyondCapacityShouldFailFastAndRecoverAfterRelease() throws Exception {
+    OracleLegacyCsvReportService csvService = mock(OracleLegacyCsvReportService.class);
+    OracleLegacyJasperTableReportService tableService =
+        mock(OracleLegacyJasperTableReportService.class);
+    LexisReportRequestDto request = new LexisReportRequestDto(Map.of(), "CSV");
+    CountDownLatch started = new CountDownLatch(1);
+    CountDownLatch release = new CountDownLatch(1);
+    when(csvService.generateLegacyCsvReport(
+            LexisJasperReportDefinition.OFFER_REPORT, request, LexisReportFormat.CSV))
+        .thenAnswer(
+            invocation -> {
+              started.countDown();
+              release.await();
+              return Optional.of(report("offers.csv", "text/csv", (byte) 1));
+            });
+    OracleLexisReportService service = service(csvService, tableService, resources(1));
+
+    try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+      Future<Optional<LexisGeneratedReport>> first =
+          executor.submit(() -> service.generateReport("offerReport", request));
+
+      assertThat(started.await(5, TimeUnit.SECONDS)).isTrue();
+      assertThatThrownBy(() -> service.generateReport("offerReport", request))
+          .isInstanceOf(LexisReportCapacityException.class);
+
+      release.countDown();
+      assertThat(first.get(5, TimeUnit.SECONDS)).isPresent();
+      assertThat(service.generateReport("offerReport", request)).isPresent();
+    } finally {
+      release.countDown();
+    }
+  }
+
+  @Test
   void generatedArtifactShouldPassThroughWithoutAnApplicationSizeCap() {
     OracleLegacyCsvReportService csvService = mock(OracleLegacyCsvReportService.class);
     OracleLegacyJasperTableReportService tableService =
@@ -94,10 +129,15 @@ class OracleLexisReportResourceContainmentTest {
   }
 
   private LexisReportResourceManager resources() {
+    return resources(4);
+  }
+
+  private LexisReportResourceManager resources(int maxConcurrentGenerations) {
     LexisReportResourceProperties properties = new LexisReportResourceProperties();
     properties.setArtifactDirectory(tempDirectory.resolve("reports").toString());
     properties.setVirtualizerDirectory(tempDirectory.resolve("jasper").toString());
     properties.setVirtualizerMaxPages(2);
+    properties.setMaxConcurrentGenerations(maxConcurrentGenerations);
     return new LexisReportResourceManager(properties);
   }
 }

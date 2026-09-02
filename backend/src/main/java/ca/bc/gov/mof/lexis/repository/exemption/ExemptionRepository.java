@@ -660,8 +660,13 @@ public class ExemptionRepository extends OracleRepositorySupport {
     if (requestedSort == null) {
       return true;
     }
-    String normalizedSort = requestedSort.replaceFirst("(?i)\\s+(ASC|DESC)$", "").trim();
-    return "exemptionNumber".equals(normalizedSort);
+    String upper = requestedSort.toUpperCase(java.util.Locale.ROOT);
+    if (upper.endsWith(" DESC")) {
+      requestedSort = requestedSort.substring(0, requestedSort.length() - 5).trim();
+    } else if (upper.endsWith(" ASC")) {
+      requestedSort = requestedSort.substring(0, requestedSort.length() - 4).trim();
+    }
+    return "exemptionNumber".equals(requestedSort);
   }
 
   private String buildScopedPageFirstSearchPrefix() {

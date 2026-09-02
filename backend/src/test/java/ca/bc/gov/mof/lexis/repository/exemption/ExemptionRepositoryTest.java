@@ -503,6 +503,19 @@ class ExemptionRepositoryTest {
   }
 
   @Test
+  void malformedLongSortShouldUseTheSafeFallbackWithoutPageFirstOptimization() {
+    TestExemptionRepository repository = new TestExemptionRepository();
+    String malformedSort = "A" + " ".repeat(8_000) + "X";
+
+    repository.search(scopedSummaryCriteria(malformedSort, null));
+
+    assertThat(repository.pageSelectSql())
+        .doesNotContain("PAGE_EXEMPTIONS AS");
+    assertThat(repository.whereSql())
+        .contains("ORDER BY EE.EXEMPTION_NUMBER DESC");
+  }
+
+  @Test
   void applicantFilterShouldMatchTheAgentOrAnOwnerOnlyApplication() {
     TestExemptionRepository repository = new TestExemptionRepository();
 

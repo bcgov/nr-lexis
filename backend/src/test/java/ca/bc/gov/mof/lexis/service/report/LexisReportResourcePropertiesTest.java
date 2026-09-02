@@ -24,6 +24,7 @@ class LexisReportResourcePropertiesTest {
           assertThat(properties.getVirtualizerMaxPages()).isEqualTo(50);
           assertThat(properties.getQueryTimeoutSeconds()).isEqualTo(120);
           assertThat(properties.getJdbcFetchSize()).isEqualTo(100);
+          assertThat(properties.getMaxConcurrentGenerations()).isEqualTo(4);
         });
   }
 
@@ -35,6 +36,7 @@ class LexisReportResourcePropertiesTest {
             "lexis.reports.artifact-stale-after-minutes=90",
             "lexis.reports.query-timeout-seconds=37",
             "lexis.reports.jdbc-fetch-size=250",
+            "lexis.reports.max-concurrent-generations=3",
             "lexis.reports.virtualizer-directory=/tmp/custom-jasper",
             "lexis.reports.virtualizer-max-pages=7")
         .run(
@@ -45,6 +47,7 @@ class LexisReportResourcePropertiesTest {
               assertThat(properties.getArtifactStaleAfterMinutes()).isEqualTo(90);
               assertThat(properties.getQueryTimeoutSeconds()).isEqualTo(37);
               assertThat(properties.getJdbcFetchSize()).isEqualTo(250);
+              assertThat(properties.getMaxConcurrentGenerations()).isEqualTo(3);
               assertThat(properties.getVirtualizerDirectory()).isEqualTo("/tmp/custom-jasper");
               assertThat(properties.getVirtualizerMaxPages()).isEqualTo(7);
             });

@@ -58,7 +58,8 @@ class TestDeploymentTopologyConfigTest {
             "lexis_mail_region_rsi_recipients",
             "lexis_mail_permit_request_recipients");
     assertThat(promote)
-        .contains("needs: [deploy-prod, init]")
+        .contains("needs: [deploy-prod]")
+        .contains("target: ${{ github.sha }}")
         .doesNotContain("if: false");
   }
 

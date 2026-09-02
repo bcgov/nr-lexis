@@ -124,14 +124,15 @@ class BackendRuntimeConfigTest {
     assertThat(applicationConfig)
         .contains("query-timeout-seconds: ${LEXIS_REPORT_QUERY_TIMEOUT_SECONDS:120}")
         .contains("jdbc-fetch-size: ${LEXIS_REPORT_JDBC_FETCH_SIZE:100}")
-        .doesNotContain("max-output-bytes", "LEXIS_REPORT_MAX_OUTPUT_BYTES")
-        .doesNotContain("LEXIS_REPORT_MAX_CONCURRENT");
+        .contains("max-concurrent-generations: ${LEXIS_REPORT_MAX_CONCURRENT_GENERATIONS:4}")
+        .doesNotContain("max-output-bytes", "LEXIS_REPORT_MAX_OUTPUT_BYTES");
     assertThat(deployment)
         .contains("- name: LEXIS_REPORT_QUERY_TIMEOUT_SECONDS")
         .contains("value: ${LEXIS_REPORT_QUERY_TIMEOUT_SECONDS}")
         .contains("- name: LEXIS_REPORT_JDBC_FETCH_SIZE")
         .contains("value: ${LEXIS_REPORT_JDBC_FETCH_SIZE}")
-        .doesNotContain("LEXIS_REPORT_MAX_CONCURRENT");
+        .contains("- name: LEXIS_REPORT_MAX_CONCURRENT_GENERATIONS")
+        .contains("value: ${LEXIS_REPORT_MAX_CONCURRENT_GENERATIONS}");
     assertThat(workflow)
         .contains(
             "LEXIS_REPORT_QUERY_TIMEOUT_SECONDS:"
@@ -140,9 +141,14 @@ class BackendRuntimeConfigTest {
             "LEXIS_REPORT_JDBC_FETCH_SIZE:"
                 + " ${{ vars.LEXIS_REPORT_JDBC_FETCH_SIZE || '100' }}")
         .contains(
+            "LEXIS_REPORT_MAX_CONCURRENT_GENERATIONS:"
+                + " ${{ vars.LEXIS_REPORT_MAX_CONCURRENT_GENERATIONS || '4' }}")
+        .contains(
             "-p LEXIS_REPORT_QUERY_TIMEOUT_SECONDS=\"$LEXIS_REPORT_QUERY_TIMEOUT_SECONDS\"")
         .contains("-p LEXIS_REPORT_JDBC_FETCH_SIZE=\"$LEXIS_REPORT_JDBC_FETCH_SIZE\"")
-        .doesNotContain("LEXIS_REPORT_MAX_CONCURRENT");
+        .contains(
+            "-p LEXIS_REPORT_MAX_CONCURRENT_GENERATIONS="
+                + "\"$LEXIS_REPORT_MAX_CONCURRENT_GENERATIONS\"");
   }
 
   @Test

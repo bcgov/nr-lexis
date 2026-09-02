@@ -66,6 +66,7 @@ lexis:
     artifact-cleanup-cron: "0 30 3 * * *"
     artifact-cleanup-zone: America/Vancouver
     artifact-stale-after-minutes: 60
+    max-concurrent-generations: ${LEXIS_REPORT_MAX_CONCURRENT_GENERATIONS:4}
     query-timeout-seconds: ${LEXIS_REPORT_QUERY_TIMEOUT_SECONDS:120}
     jdbc-fetch-size: ${LEXIS_REPORT_JDBC_FETCH_SIZE:100}
     virtualizer-directory: ${LEXIS_REPORT_VIRTUALIZER_DIRECTORY:/tmp/lexis-jasper}

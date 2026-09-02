@@ -13,21 +13,27 @@ concurrency:
 permissions: {}
 
 jobs:
-  init:
-    name: Initialize
+  builds:
+    name: Build Main Images
     permissions:
+      attestations: write
       contents: read
-      pull-requests: read
-    outputs:
-      pr: ${{ steps.pr.outputs.pr }}
+      id-token: write
+      packages: write
     runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        package: [backend, frontend]
+    timeout-minutes: 10
     steps:
-      - id: pr
-        uses: bcgov/action-get-pr@3931962bf13b3f4702d0013ec7c836f752ff1a3b # v0.3.0
+      - uses: bcgov/action-builder-ghcr@de3d575cf158e16f5dc2789630f6d587483b911c # v4.4.0
+        with:
+          package: ${{ matrix.package }}
+          tags: ${{ github.sha }}
 
   deploy-test:
-    name: TEST Deploys (${{ needs.init.outputs.pr }})
-    needs: [init]
+    name: TEST Deploys (${{ github.sha }})
+    needs: [builds]
     permissions:
       contents: read
     uses: ./.github/workflows/reusable-deploy.yml
@@ -51,7 +57,7 @@ jobs:
     with:
       environment: test
       target: test
-      tag: ${{ needs.init.outputs.pr }}
+      tag: ${{ github.sha }}
       backend_min_replicas: "2"
       backend_max_replicas: "6"
       frontend_replicas: "2"
@@ -75,8 +81,8 @@ jobs:
       target: test
 
   deploy-prod:
-    name: PROD Deploys (${{ needs.init.outputs.pr }})
-    needs: [tests, init]
+    name: PROD Deploys (${{ github.sha }})
+    needs: [tests]
     permissions:
       contents: read
     uses: ./.github/workflows/reusable-deploy.yml
@@ -102,7 +108,7 @@ jobs:
     with:
       environment: prod
       target: prod
-      tag: ${{ needs.init.outputs.pr }}
+      tag: ${{ github.sha }}
       backend_min_replicas: "3"
       backend_max_replicas: "10"
       frontend_replicas: "3"
@@ -132,7 +138,7 @@ jobs:
 
   promote:
     name: Promote Images
-    needs: [deploy-prod, init]
+    needs: [deploy-prod]
     runs-on: ubuntu-slim
     permissions:
       packages: write
@@ -145,5 +151,5 @@ jobs:
         with:
           registry: ghcr.io
           repository: ${{ github.repository }}/${{ matrix.package }}
-          target: ${{ needs.init.outputs.pr }}
+          target: ${{ github.sha }}
           tags: prod

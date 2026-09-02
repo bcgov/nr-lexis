@@ -8,6 +8,7 @@ import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 import ca.bc.gov.mof.lexis.dto.report.LexisReportRequestDto;
 import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
 import ca.bc.gov.mof.lexis.service.report.LexisGeneratedReport;
+import ca.bc.gov.mof.lexis.service.report.LexisReportCapacityException;
 import ca.bc.gov.mof.lexis.service.report.LexisReportGenerationException;
 import ca.bc.gov.mof.lexis.service.report.LexisReportService;
 import ca.bc.gov.mof.lexis.service.report.LexisReportValidationException;
@@ -292,6 +293,16 @@ public class LexisReportController {
         deleteArtifact(report.artifactPath());
         throw exception;
       }
+    } catch (LexisReportCapacityException ex) {
+      LOGGER.warn(
+          "event=lexis_report operation=generate outcome=capacity_rejected report={}",
+          reportLabel);
+      return completeAudit(
+          audit,
+          reportCapacityError(),
+          null,
+          "capacity_rejected",
+          0);
     } catch (LexisReportGenerationException ex) {
       LOGGER.error(
           "event=lexis_report operation=generate outcome=failed report={} failureType={}",
@@ -528,6 +539,18 @@ public class LexisReportController {
     byte[] content = message.getBytes(StandardCharsets.UTF_8);
     StreamingResponseBody responseBody = outputStream -> outputStream.write(content);
     return ResponseEntity.status(status)
+        .contentType(MediaType.TEXT_PLAIN)
+        .contentLength(content.length)
+        .body(responseBody);
+  }
+
+  private ResponseEntity<StreamingResponseBody> reportCapacityError() {
+    byte[] content =
+        "Report generation is busy. Please try again shortly."
+            .getBytes(StandardCharsets.UTF_8);
+    StreamingResponseBody responseBody = outputStream -> outputStream.write(content);
+    return ResponseEntity.status(org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE)
+        .header(HttpHeaders.RETRY_AFTER, "5")
         .contentType(MediaType.TEXT_PLAIN)
         .contentLength(content.length)
         .body(responseBody);
