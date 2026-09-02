@@ -158,7 +158,9 @@ const startAuthorizationProbe = async () => {
 
   const address = server.address()
   if (!address || typeof address === 'string') {
-    server.close()
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()))
+    })
     throw new Error('Authorization probe did not bind to a TCP port.')
   }
 
