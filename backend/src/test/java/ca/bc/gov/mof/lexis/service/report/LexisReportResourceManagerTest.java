@@ -153,7 +153,9 @@ class LexisReportResourceManagerTest {
     try (LexisReportResourceManager.GenerationPermit ignored =
         manager.acquireGenerationPermit()) {
       assertThatThrownBy(manager::acquireGenerationPermit)
-          .isInstanceOf(LexisReportCapacityException.class);
+          .isInstanceOf(LexisReportCapacityException.class)
+          .hasMessage("Report generation capacity is currently exhausted.")
+          .satisfies(exception -> assertThat(exception.getStackTrace()).isEmpty());
     }
 
     try (LexisReportResourceManager.GenerationPermit ignored =
