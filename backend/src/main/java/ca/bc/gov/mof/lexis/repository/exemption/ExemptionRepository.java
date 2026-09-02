@@ -656,22 +656,8 @@ public class ExemptionRepository extends OracleRepositorySupport {
   }
 
   private boolean supportsExemptionNumberSort(String sortField) {
-    String requestedSort = trim(sortField);
-    if (requestedSort == null) {
-      return true;
-    }
-    int directionStart = requestedSort.length();
-    while (directionStart > 0
-        && !Character.isWhitespace(requestedSort.charAt(directionStart - 1))) {
-      directionStart--;
-    }
-    if (directionStart > 0) {
-      String direction = requestedSort.substring(directionStart);
-      if ("DESC".equalsIgnoreCase(direction) || "ASC".equalsIgnoreCase(direction)) {
-        requestedSort = requestedSort.substring(0, directionStart).trim();
-      }
-    }
-    return "exemptionNumber".equals(requestedSort);
+    String requestedField = parseSearchSort(sortField).field();
+    return requestedField == null || "exemptionNumber".equals(requestedField);
   }
 
   private String buildScopedPageFirstSearchPrefix() {
@@ -747,29 +733,43 @@ public class ExemptionRepository extends OracleRepositorySupport {
   }
 
   private String buildSearchOrder(String requestedSort) {
-    String normalized = trim(requestedSort);
-    if (normalized == null) {
+    SearchSort searchSort = parseSearchSort(requestedSort);
+    if (searchSort.field() == null) {
       return " ORDER BY EE.EXEMPTION_NUMBER DESC";
     }
 
-    String direction = "ASC";
-    String upper = normalized.toUpperCase(java.util.Locale.ROOT);
-    if (upper.endsWith(" DESC")) {
-      direction = "DESC";
-      normalized = normalized.substring(0, normalized.length() - 5).trim();
-    } else if (upper.endsWith(" ASC")) {
-      normalized = normalized.substring(0, normalized.length() - 4).trim();
-    }
-
-    String column = SEARCH_SORT_COLUMNS.get(normalized);
+    String column = SEARCH_SORT_COLUMNS.get(searchSort.field());
     if (column == null || !safeIdentifier(column)) {
       return " ORDER BY EE.EXEMPTION_NUMBER DESC";
     }
 
-    String order = " ORDER BY " + column + " " + direction;
+    String order = " ORDER BY " + column + " " + searchSort.direction();
     return "EE.EXEMPTION_NUMBER".equals(column)
         ? order
         : order + ", EE.EXEMPTION_NUMBER DESC";
+  }
+
+  private SearchSort parseSearchSort(String requestedSort) {
+    String field = trim(requestedSort);
+    if (field == null) {
+      return new SearchSort(null, "DESC");
+    }
+
+    String direction = "ASC";
+    int directionStart = field.length();
+    while (directionStart > 0
+        && !Character.isWhitespace(field.charAt(directionStart - 1))) {
+      directionStart--;
+    }
+    if (directionStart > 0) {
+      String requestedDirection = field.substring(directionStart);
+      if ("DESC".equalsIgnoreCase(requestedDirection)
+          || "ASC".equalsIgnoreCase(requestedDirection)) {
+        direction = "DESC".equalsIgnoreCase(requestedDirection) ? "DESC" : "ASC";
+        field = field.substring(0, directionStart).trim();
+      }
+    }
+    return new SearchSort(field, direction);
   }
 
   private void addRegionFilter(
@@ -946,5 +946,7 @@ public class ExemptionRepository extends OracleRepositorySupport {
   private static long elapsedMillis(long startedAtNanos) {
     return Math.max(0L, (System.nanoTime() - startedAtNanos) / 1_000_000L);
   }
+
+  private record SearchSort(String field, String direction) {}
 
 }
