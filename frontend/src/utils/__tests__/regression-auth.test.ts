@@ -117,6 +117,37 @@ describe('getWithAuth', () => {
     expect(waitForTimeout).toHaveBeenCalledTimes(3)
   })
 
+  it('refreshes a token whose expiration NumericDate is zero', async () => {
+    vi.useFakeTimers()
+    try {
+      const startTime = new Date('2026-09-02T12:00:00.000Z')
+      vi.setSystemTime(startTime)
+      const expiredToken = accessTokenExpiringAt(0, 'epoch-expired-token')
+      const refreshedToken = accessTokenExpiringAt(
+        Math.floor(startTime.getTime() / 1_000) + 300,
+        'refreshed-token',
+      )
+      const get = vi.fn().mockResolvedValue(successfulResponse)
+      const { page, reload } = pageWithGet(get, {
+        accessToken: expiredToken,
+        accessTokenAfterReload: () => refreshedToken,
+        advanceTimersWhenWaiting: true,
+      })
+
+      await expect(getWithAuth(page, '/api/lexis/probe')).resolves.toBe(successfulResponse)
+
+      expect(reload).toHaveBeenCalledTimes(1)
+      expect(get).toHaveBeenCalledWith(
+        '/api/lexis/probe',
+        expect.objectContaining({
+          headers: expect.objectContaining({ Authorization: `Bearer ${refreshedToken}` }),
+        }),
+      )
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('waits through the refresh window before reloading and retrying a near-expiry 401', async () => {
     vi.useFakeTimers()
     try {

@@ -306,7 +306,7 @@ const accessTokenDiagnostics = (accessToken?: string): AccessTokenDiagnostics | 
     const exp = typeof payload.exp === 'number' ? payload.exp : undefined
 
     return {
-      expiresInSeconds: exp ? exp - Math.floor(Date.now() / 1000) : undefined,
+      expiresInSeconds: typeof exp === 'number' ? exp - Math.floor(Date.now() / 1000) : undefined,
       tokenUse: typeof payload.token_use === 'string' ? payload.token_use : undefined,
     }
   } catch {
