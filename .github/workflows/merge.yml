@@ -111,8 +111,9 @@ jobs:
       environment: test
       target: test
       tag: ${{ github.sha }}
+      # Current TEST quota cannot admit another backend at this request profile.
       backend_min_replicas: "2"
-      backend_max_replicas: "6"
+      backend_max_replicas: "2"
       frontend_replicas: "2"
       backend_cpu_request: "750m"
       backend_memory_request: "1536Mi"
@@ -162,8 +163,9 @@ jobs:
       environment: prod
       target: prod
       tag: ${{ github.sha }}
+      # Current PROD quota cannot admit another backend at this request profile.
       backend_min_replicas: "3"
-      backend_max_replicas: "10"
+      backend_max_replicas: "3"
       frontend_replicas: "3"
       backend_cpu_request: "400m"
       backend_memory_request: "1Gi"
