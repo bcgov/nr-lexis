@@ -2,6 +2,8 @@ import type { APIResponse, Page } from '@playwright/test'
 import { describe, expect, it, vi } from 'vitest'
 import { getWithAuth } from '../../../e2e/utils/regression-auth'
 
+const successfulResponse = { status: () => 200 } as APIResponse
+
 const pageWithGet = (get: ReturnType<typeof vi.fn>) => {
   const waitForTimeout = vi.fn().mockResolvedValue(undefined)
   const page = {
@@ -19,14 +21,15 @@ const pageWithGet = (get: ReturnType<typeof vi.fn>) => {
 
 describe('getWithAuth', () => {
   it('retries a transient transport failure before returning the response', async () => {
-    const response = {} as APIResponse
     const get = vi
       .fn()
       .mockRejectedValueOnce(new Error('apiRequestContext.get: connect ETIMEDOUT'))
-      .mockResolvedValue(response)
+      .mockResolvedValue(successfulResponse)
     const { page, waitForTimeout } = pageWithGet(get)
 
-    await expect(getWithAuth(page, '/api/lexis/shipping-reference-options')).resolves.toBe(response)
+    await expect(getWithAuth(page, '/api/lexis/shipping-reference-options')).resolves.toBe(
+      successfulResponse,
+    )
     expect(get).toHaveBeenCalledTimes(2)
     expect(waitForTimeout).toHaveBeenCalledTimes(1)
   })
@@ -42,16 +45,17 @@ describe('getWithAuth', () => {
   })
 
   it('recovers when the fourth authenticated request succeeds', async () => {
-    const response = {} as APIResponse
     const get = vi
       .fn()
       .mockRejectedValueOnce(new Error('apiRequestContext.get: connect ECONNREFUSED first'))
       .mockRejectedValueOnce(new Error('apiRequestContext.get: connect ECONNREFUSED second'))
       .mockRejectedValueOnce(new Error('apiRequestContext.get: connect ECONNREFUSED third'))
-      .mockResolvedValue(response)
+      .mockResolvedValue(successfulResponse)
     const { page, waitForTimeout } = pageWithGet(get)
 
-    await expect(getWithAuth(page, '/api/lexis/shipping-reference-options')).resolves.toBe(response)
+    await expect(getWithAuth(page, '/api/lexis/shipping-reference-options')).resolves.toBe(
+      successfulResponse,
+    )
     expect(get).toHaveBeenCalledTimes(4)
     expect(waitForTimeout).toHaveBeenCalledTimes(3)
   })
