@@ -53,6 +53,28 @@ class LexisReportResourcePropertiesTest {
             });
   }
 
+  @Test
+  void shouldBindTheMaximumSafeGenerationLimit() {
+    contextRunner
+        .withPropertyValues("lexis.reports.max-concurrent-generations=6")
+        .run(
+            context -> {
+              assertThat(context).hasNotFailed();
+              assertThat(
+                      context
+                          .getBean(LexisReportResourceProperties.class)
+                          .getMaxConcurrentGenerations())
+                  .isEqualTo(6);
+            });
+  }
+
+  @Test
+  void shouldRejectGenerationLimitsAboveTheDatabaseReserve() {
+    contextRunner
+        .withPropertyValues("lexis.reports.max-concurrent-generations=7")
+        .run(context -> assertThat(context).hasFailed());
+  }
+
   @Configuration(proxyBeanMethods = false)
   @EnableConfigurationProperties(LexisReportResourceProperties.class)
   static class TestConfiguration {}

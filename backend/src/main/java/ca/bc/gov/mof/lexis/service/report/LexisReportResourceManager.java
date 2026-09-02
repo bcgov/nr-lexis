@@ -54,7 +54,8 @@ public class LexisReportResourceManager {
         || properties.getJdbcFetchSize() < 1
         || properties.getJdbcFetchSize() > 10_000
         || properties.getMaxConcurrentGenerations() < 1
-        || properties.getMaxConcurrentGenerations() > 9) {
+        || properties.getMaxConcurrentGenerations()
+            > LexisReportResourceProperties.MAX_CONCURRENT_GENERATIONS) {
       throw new IllegalArgumentException("Report resource limits are invalid.");
     }
     String artifactDirectoryValue = properties.getArtifactDirectory();

@@ -162,6 +162,13 @@ class LexisReportResourceManagerTest {
     }
   }
 
+  @Test
+  void shouldRejectGenerationLimitsAboveTheDatabaseReserve() {
+    assertThatThrownBy(() -> manager(120, 100, 7))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessage("Report resource limits are invalid.");
+  }
+
   private LexisReportResourceManager manager() {
     return manager(120, 100);
   }
