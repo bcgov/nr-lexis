@@ -58,10 +58,16 @@ class PublicPullRequestWorkflowTest {
     String workflow = read(".github/workflows/merge.yml");
 
     assertThat(workflowJob(workflow, "builds", "deploy-test"))
-        .contains("uses: bcgov/action-builder-ghcr@")
-        .contains("tags: ${{ github.sha }}")
+        .contains("uses: actions/checkout@")
+        .contains("ref: ${{ github.sha }}")
+        .contains("persist-credentials: false")
+        .contains("actual_sha=\"$(git rev-parse HEAD)\"")
+        .contains("uses: docker/build-push-action@")
+        .contains("context: ./${{ matrix.package }}")
+        .contains("type=raw,value=${{ github.sha }}")
+        .contains("uses: actions/attest-build-provenance@")
         .contains("package: [backend, frontend]")
-        .doesNotContain("tag_fallback:");
+        .doesNotContain("bcgov/action-builder-ghcr@", "github.ref", "tag_fallback:");
     assertThat(workflowJob(workflow, "deploy-test", "tests"))
         .contains("needs: [builds]")
         .contains("tag: ${{ github.sha }}");
