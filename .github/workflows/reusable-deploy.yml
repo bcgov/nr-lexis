@@ -181,7 +181,7 @@ jobs:
           LEXIS_EXPIRY_LOCK_AT_LEAST_FOR: ${{ vars.LEXIS_EXPIRY_LOCK_AT_LEAST_FOR || 'PT5M' }}
           LEXIS_REPORT_QUERY_TIMEOUT_SECONDS: ${{ vars.LEXIS_REPORT_QUERY_TIMEOUT_SECONDS || '120' }}
           LEXIS_REPORT_JDBC_FETCH_SIZE: ${{ vars.LEXIS_REPORT_JDBC_FETCH_SIZE || '100' }}
-          LEXIS_REPORT_MAX_CONCURRENT_GENERATIONS: ${{ vars.LEXIS_REPORT_MAX_CONCURRENT_GENERATIONS || '4' }}
+          LEXIS_REPORT_MAX_CONCURRENT_GENERATIONS: ${{ vars.LEXIS_REPORT_MAX_CONCURRENT_GENERATIONS || '6' }}
           LEXIS_STREAMING_MAX_CONCURRENCY: ${{ vars.LEXIS_STREAMING_MAX_CONCURRENCY || '16' }}
           LEXIS_REPORT_STATISTICS_LOG_LEVEL: ${{ (inputs.environment == 'dev' || inputs.environment == 'test') && 'DEBUG' || 'INFO' }}
           LEXIS_FAILURE_DIAGNOSTICS_LOG_LEVEL: ${{ (inputs.environment == 'dev' || inputs.environment == 'test') && 'DEBUG' || 'INFO' }}

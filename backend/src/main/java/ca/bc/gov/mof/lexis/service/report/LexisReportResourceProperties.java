@@ -14,7 +14,7 @@ public class LexisReportResourceProperties {
 
   static final int DEFAULT_QUERY_TIMEOUT_SECONDS = 120;
   static final int DEFAULT_JDBC_FETCH_SIZE = 100;
-  static final int DEFAULT_MAX_CONCURRENT_GENERATIONS = 4;
+  static final int DEFAULT_MAX_CONCURRENT_GENERATIONS = 6;
 
   @NotBlank
   private String artifactDirectory = "/tmp/lexis-reports";

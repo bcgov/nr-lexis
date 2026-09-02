@@ -78,7 +78,7 @@ parameters:
     value: "100"
   - name: LEXIS_REPORT_MAX_CONCURRENT_GENERATIONS
     description: Maximum active report generations per backend pod
-    value: "4"
+    value: "6"
   - name: LEXIS_STREAMING_MAX_CONCURRENCY
     description: Maximum active asynchronous report and document transfers per backend pod
     value: "16"

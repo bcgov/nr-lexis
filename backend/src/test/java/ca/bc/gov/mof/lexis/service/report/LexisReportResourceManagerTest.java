@@ -176,7 +176,7 @@ class LexisReportResourceManagerTest {
 
   private LexisReportResourceManager manager(
       int queryTimeoutSeconds, int jdbcFetchSize) {
-    return manager(queryTimeoutSeconds, jdbcFetchSize, 4);
+    return manager(queryTimeoutSeconds, jdbcFetchSize, 6);
   }
 
   private LexisReportResourceManager manager(

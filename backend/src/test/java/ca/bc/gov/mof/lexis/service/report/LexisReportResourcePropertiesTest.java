@@ -24,7 +24,7 @@ class LexisReportResourcePropertiesTest {
           assertThat(properties.getVirtualizerMaxPages()).isEqualTo(50);
           assertThat(properties.getQueryTimeoutSeconds()).isEqualTo(120);
           assertThat(properties.getJdbcFetchSize()).isEqualTo(100);
-          assertThat(properties.getMaxConcurrentGenerations()).isEqualTo(4);
+          assertThat(properties.getMaxConcurrentGenerations()).isEqualTo(6);
         });
   }
 
