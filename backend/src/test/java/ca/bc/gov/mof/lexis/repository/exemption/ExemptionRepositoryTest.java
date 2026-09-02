@@ -452,6 +452,23 @@ class ExemptionRepositoryTest {
   }
 
   @Test
+  void scopedSummarySearchShouldAcceptWhitespaceBeforeTheSortDirection() {
+    for (String sortField :
+        List.of(
+            "exemptionNumber    DESC",
+            "exemptionNumber\tASC",
+            "  exemptionNumber \t dEsC  ")) {
+      TestExemptionRepository repository = new TestExemptionRepository();
+
+      repository.search(scopedSummaryCriteria(sortField, null));
+
+      assertThat(repository.pageSelectSql())
+          .as("page-first query for sort field <%s>", sortField)
+          .contains("PAGE_EXEMPTIONS AS");
+    }
+  }
+
+  @Test
   void scopedSummarySearchShouldPreserveNonZeroPageBeforeEnrichment() {
     List<ExemptionSearchResultDto> rows =
         java.util.stream.LongStream.rangeClosed(1L, 21L)

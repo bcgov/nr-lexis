@@ -660,11 +660,16 @@ public class ExemptionRepository extends OracleRepositorySupport {
     if (requestedSort == null) {
       return true;
     }
-    String upper = requestedSort.toUpperCase(java.util.Locale.ROOT);
-    if (upper.endsWith(" DESC")) {
-      requestedSort = requestedSort.substring(0, requestedSort.length() - 5).trim();
-    } else if (upper.endsWith(" ASC")) {
-      requestedSort = requestedSort.substring(0, requestedSort.length() - 4).trim();
+    int directionStart = requestedSort.length();
+    while (directionStart > 0
+        && !Character.isWhitespace(requestedSort.charAt(directionStart - 1))) {
+      directionStart--;
+    }
+    if (directionStart > 0) {
+      String direction = requestedSort.substring(directionStart);
+      if ("DESC".equalsIgnoreCase(direction) || "ASC".equalsIgnoreCase(direction)) {
+        requestedSort = requestedSort.substring(0, directionStart).trim();
+      }
     }
     return "exemptionNumber".equals(requestedSort);
   }
