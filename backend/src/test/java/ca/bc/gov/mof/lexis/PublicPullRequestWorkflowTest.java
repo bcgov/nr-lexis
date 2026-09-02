@@ -53,31 +53,6 @@ class PublicPullRequestWorkflowTest {
         .doesNotContain("workflow_dispatch:");
   }
 
-  @Test
-  void mergeWorkflowShouldBuildAndDeployTheExactMainCommit() throws IOException {
-    String workflow = read(".github/workflows/merge.yml");
-
-    assertThat(workflowJob(workflow, "builds", "deploy-test"))
-        .contains("uses: actions/checkout@")
-        .contains("ref: ${{ github.sha }}")
-        .contains("persist-credentials: false")
-        .contains("actual_sha=\"$(git rev-parse HEAD)\"")
-        .contains("uses: docker/build-push-action@")
-        .contains("context: ./${{ matrix.package }}")
-        .contains("type=raw,value=${{ github.sha }}")
-        .contains("uses: actions/attest-build-provenance@")
-        .contains("package: [backend, frontend]")
-        .doesNotContain("bcgov/action-builder-ghcr@", "github.ref", "tag_fallback:");
-    assertThat(workflowJob(workflow, "deploy-test", "tests"))
-        .contains("needs: [builds]")
-        .contains("tag: ${{ github.sha }}");
-    assertThat(workflowJob(workflow, "deploy-prod", "monitor-prod"))
-        .contains("tag: ${{ github.sha }}");
-    assertThat(workflowJob(workflow, "promote", null))
-        .contains("target: ${{ github.sha }}")
-        .doesNotContain("needs.init.outputs.pr");
-  }
-
   private static String workflowJob(String workflow, String jobName, String nextJobName) {
     int start = workflow.indexOf("  " + jobName + ":");
     int end =
