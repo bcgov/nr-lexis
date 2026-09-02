@@ -1,3 +1,4 @@
+import { createServer } from 'node:http'
 import { expect, test, type Page } from '@playwright/test'
 import {
   createUnsignedToken,
@@ -5,7 +6,7 @@ import {
   installSyntheticCognitoSession,
   type SyntheticCognitoSession,
 } from './utils'
-import { ensureFreshRegressionAuthSession } from './utils/regression-auth'
+import { getWithAuth } from './utils/regression-auth'
 
 const SESSION_IDLE_WARNING_DELAY_MS = 25 * 60 * 1000
 const SESSION_IDLE_WARNING_DURATION_MS = 5 * 60 * 1000
@@ -135,6 +136,42 @@ const installSyntheticCognitoRefresh = async (
   return () => refreshRequestCount
 }
 
+const startAuthorizationProbe = async () => {
+  const authorizationHeaders: Array<string | undefined> = []
+  const server = createServer((request, response) => {
+    authorizationHeaders.push(request.headers.authorization)
+    response.writeHead(200, {
+      connection: 'close',
+      'content-type': 'application/json',
+    })
+    response.end(JSON.stringify({ accepted: true }))
+  })
+
+  await new Promise<void>((resolve, reject) => {
+    const rejectOnError = (error: Error) => reject(error)
+    server.once('error', rejectOnError)
+    server.listen(0, '127.0.0.1', () => {
+      server.off('error', rejectOnError)
+      resolve()
+    })
+  })
+
+  const address = server.address()
+  if (!address || typeof address === 'string') {
+    server.close()
+    throw new Error('Authorization probe did not bind to a TCP port.')
+  }
+
+  return {
+    authorizationHeaders,
+    close: () =>
+      new Promise<void>((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()))
+      }),
+    url: `http://127.0.0.1:${address.port}/authorization-probe`,
+  }
+}
+
 test.describe('session timeout regression', () => {
   test('refreshes an expired token before direct regression API calls', async ({ page }) => {
     const nowSeconds = Math.floor(Date.now() / 1000)
@@ -185,21 +222,29 @@ test.describe('session timeout regression', () => {
       },
     )
 
-    await ensureFreshRegressionAuthSession(page)
+    const authorizationProbe = await startAuthorizationProbe()
+    try {
+      const response = await getWithAuth(page, authorizationProbe.url)
+      expect(response.status()).toBe(200)
+      await response.dispose()
 
-    expect(getRefreshRequestCount()).toBe(1)
-    await expect
-      .poll(() =>
-        page.evaluate(
-          ({ prefix, username }) =>
-            window.localStorage.getItem(`${prefix}.${username}.accessToken`),
-          {
-            prefix: syntheticSession.storagePrefix,
-            username: syntheticSession.username,
-          },
-        ),
+      expect(getRefreshRequestCount()).toBe(1)
+      const refreshedAccessToken = await page.evaluate(
+        ({ prefix, username }) => window.localStorage.getItem(`${prefix}.${username}.accessToken`),
+        {
+          prefix: syntheticSession.storagePrefix,
+          username: syntheticSession.username,
+        },
       )
-      .not.toBe(expiredAccessToken)
+      if (!refreshedAccessToken) {
+        throw new Error('The synthetic Cognito access token was not refreshed.')
+      }
+
+      expect(refreshedAccessToken).not.toBe(expiredAccessToken)
+      expect(authorizationProbe.authorizationHeaders).toEqual([`Bearer ${refreshedAccessToken}`])
+    } finally {
+      await authorizationProbe.close()
+    }
   })
 
   test('opens, renders, and resets the warning without real-time waiting', async ({ page }) => {
