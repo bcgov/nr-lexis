@@ -229,7 +229,7 @@ const applicantTypeLabel = (value: string | null | undefined): string => {
   }
 }
 
-export type ClientDataSummaryProps = {
+type ClientDataSummaryProps = {
   title: string
   showTitle?: boolean
   clientData: ApplicationClientData | null

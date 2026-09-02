@@ -11,7 +11,7 @@ import {
 } from './uploadQueueHelpers'
 import type { UploadQueueItem } from './uploadQueueTypes'
 
-export type UploadQueuePreviewProps = {
+type UploadQueuePreviewProps = {
   items: UploadQueueItem[]
   targetSummary: string
   canSubmit: boolean

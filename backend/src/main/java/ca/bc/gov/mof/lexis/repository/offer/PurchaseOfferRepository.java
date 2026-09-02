@@ -227,10 +227,6 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
                     && row.exportPurchaseOfferNumber() > 0);
   }
 
-  public boolean applicationExists(Long applicationNumber) {
-    return findApplicationReference(applicationNumber).isPresent();
-  }
-
   public Optional<ApplicationReferenceRow> findApplicationReference(Long applicationNumber) {
     if (applicationNumber == null || applicationNumber < 1) {
       return Optional.empty();

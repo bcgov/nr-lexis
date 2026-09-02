@@ -36,7 +36,7 @@ const setActiveNotificationId = (notificationId: number | null) => {
   activeNotificationListeners.forEach((listener) => listener())
 }
 
-export type AppNotificationProps = PropsWithChildren<
+type AppNotificationProps = PropsWithChildren<
   Omit<ToastNotificationProps, 'onClose' | 'onCloseButtonClick' | 'hideCloseButton' | 'timeout'> & {
     onCloseButtonClick?: () => void
     autoDismissMs?: number

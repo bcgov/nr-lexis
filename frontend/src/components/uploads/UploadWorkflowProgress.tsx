@@ -1,9 +1,9 @@
-export type UploadWorkflowStep = {
+type UploadWorkflowStep = {
   id: string
   label: string
 }
 
-export type UploadWorkflowProgressProps = {
+type UploadWorkflowProgressProps = {
   steps: UploadWorkflowStep[]
   currentStepId: string
   completedStepIds?: string[]

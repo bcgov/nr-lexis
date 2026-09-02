@@ -13,7 +13,7 @@ export const parseIsoDate = (value: string): Date | false => {
   return parsedDate
 }
 
-export type IsoDatePickerProps = {
+type IsoDatePickerProps = {
   id: string
   labelText: ReactNode
   value: string

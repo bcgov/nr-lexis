@@ -7,7 +7,7 @@ import './SessionTimeoutWarning.css'
 
 const URGENT_COUNTDOWN_SECONDS = 30
 
-export type SessionTimeoutWarningProps = {
+type SessionTimeoutWarningProps = {
   open: boolean
   expiresAt: number | null
   launcherButtonRef: RefObject<HTMLElement | null>

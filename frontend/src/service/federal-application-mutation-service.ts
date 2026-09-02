@@ -11,7 +11,7 @@ export type FederalPermitMutation = {
   otherPortOfExport: string
 }
 
-export type FederalMutationResult = {
+type FederalMutationResult = {
   success: boolean
   message: string | null
   errors: string[]

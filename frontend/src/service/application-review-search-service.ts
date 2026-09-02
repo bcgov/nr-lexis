@@ -42,13 +42,13 @@ export type ApplicationReviewStatusUpdateResult = {
   message: string
 }
 
-export type ApplicationReviewStatusUpdateRequest = {
+type ApplicationReviewStatusUpdateRequest = {
   statusCode: string
   remark: string
   clientEmailAddress: string
 }
 
-export type ApplicationReviewStatusEmailResult = {
+type ApplicationReviewStatusEmailResult = {
   success: boolean
   message: string
 }

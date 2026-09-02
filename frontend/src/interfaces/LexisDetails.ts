@@ -150,7 +150,7 @@ export type ProvincialPermitDetail = {
   region: string | null
 }
 
-export type FederalPermitDetail = {
+type FederalPermitDetail = {
   permitNumber: number | null
   permitIssueDate: string | null
   destinationCountry: string | null
@@ -161,7 +161,7 @@ export type FederalPermitDetail = {
   otherPortOfExport: string | null
 }
 
-export type FederalApplicationClientContext = {
+type FederalApplicationClientContext = {
   address: string | null
   city: string | null
   province: string | null
@@ -172,7 +172,7 @@ export type FederalApplicationClientContext = {
   email: string | null
 }
 
-export type FederalApplicationOffer = {
+type FederalApplicationOffer = {
   offerNumber: string
   companyName: string | null
   receivedDate: string | null

@@ -2,7 +2,7 @@ import { useId, type ComponentPropsWithoutRef, type ReactNode } from 'react'
 
 import './PageHeader.css'
 
-export type PageHeaderProps = Omit<ComponentPropsWithoutRef<'header'>, 'title'> & {
+type PageHeaderProps = Omit<ComponentPropsWithoutRef<'header'>, 'title'> & {
   title: ReactNode
   subtitle?: ReactNode
   status?: ReactNode

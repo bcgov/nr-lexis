@@ -1,5 +1,5 @@
-export const TERM_MONTH_DAYS = 30
-export const TERM_YEAR_DAYS = 365
+const TERM_MONTH_DAYS = 30
+const TERM_YEAR_DAYS = 365
 
 const parseWholeNumberOrZero = (value: string): number => {
   const normalized = value.trim()

@@ -1,12 +1,11 @@
-export type SearchableDropdownItem = {
+type SearchableDropdownItem = {
   label: string
   value: string
 }
 
 const SHORT_OPTION_LIST_LIMIT = 10
 
-export const shouldShowAllOptions = (optionCount: number): boolean =>
-  optionCount < SHORT_OPTION_LIST_LIMIT
+const shouldShowAllOptions = (optionCount: number): boolean => optionCount < SHORT_OPTION_LIST_LIMIT
 
 export const shouldFilterSearchableDropdownItem = <T extends SearchableDropdownItem>({
   item,

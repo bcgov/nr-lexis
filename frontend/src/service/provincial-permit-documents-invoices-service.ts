@@ -25,30 +25,30 @@ export type PermitInvoiceRow = {
   invoiceFound: boolean
 }
 
-export type PermitDocumentAndInvoiceSource = 'api'
+type PermitDocumentAndInvoiceSource = 'api'
 
-export type PermitDocumentsResult = {
+type PermitDocumentsResult = {
   rows: PermitDocumentRow[]
   source: PermitDocumentAndInvoiceSource
 }
 
-export type PermitInvoicesResult = {
+type PermitInvoicesResult = {
   rows: PermitInvoiceRow[]
   source: PermitDocumentAndInvoiceSource
 }
 
-export type OpenPermitDocumentResult = {
+type OpenPermitDocumentResult = {
   source: 'api'
   blob: Blob
   filename: string
 }
 
-export type PermitInvoiceConversionRateResult = {
+type PermitInvoiceConversionRateResult = {
   conversionRate: string
   source: PermitDocumentAndInvoiceSource
 }
 
-export type AddPermitInvoiceRequest = {
+type AddPermitInvoiceRequest = {
   permitNumber: string
   salesInvoiceNumber: string
   invoiceExportValue: string
@@ -95,7 +95,7 @@ export type PermitFeeOverrideContext = {
   lockMessage: string
 }
 
-export type AddPermitInvoiceResult = {
+type AddPermitInvoiceResult = {
   success: boolean
   message: string
   errors: string[]
@@ -110,17 +110,17 @@ export type PermitDetailMutationResult = AddPermitInvoiceResult & {
   permitNumberOfPieces?: number | null
 }
 
-export type CreatePermitFromExemptionResult = AddPermitInvoiceResult & {
+type CreatePermitFromExemptionResult = AddPermitInvoiceResult & {
   permitNumber: string
 }
 
-export type PermitEmailResult = {
+type PermitEmailResult = {
   success: boolean
   message: string
   permitRequestDate: string
 }
 
-export type RemovePermitDocumentResult = {
+type RemovePermitDocumentResult = {
   success: boolean
   source: PermitDocumentAndInvoiceSource
 }

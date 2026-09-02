@@ -740,12 +740,6 @@ public class PermitRpcRepository extends OracleRepositorySupport {
         permitNumber, FIND_PACKAGES_BY_PERMIT, true, "permit " + permitNumber);
   }
 
-  /** Reads the complete package cursor once for the Blanket OIC core-tab response. */
-  public List<PermitCorePackageRow> findCorePackageRowsByOicPermitNumber(Long permitNumber) {
-    return findCorePackageRows(
-        permitNumber, FIND_PACKAGES_BY_OIC_PERMIT, false, "Blanket OIC permit " + permitNumber);
-  }
-
   /**
    * Loads every package and its application/code context in one direct query. The result replaces
    * the package cursor plus one application and several code lookups per distinct application.

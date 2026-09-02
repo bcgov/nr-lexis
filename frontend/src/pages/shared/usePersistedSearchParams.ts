@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useLocation, useSearchParams } from 'react-router-dom'
 
-export type PersistedSearchPageId =
+type PersistedSearchPageId =
   | 'federal-applications'
   | 'provincial-applications'
   | 'provincial-exemptions'

@@ -9,7 +9,7 @@ export type DetailReturnTo = {
   state?: DetailNavigationState
 }
 
-export type DetailNavigationState = Record<string, unknown> & {
+type DetailNavigationState = Record<string, unknown> & {
   returnTo?: DetailReturnTo
 }
 

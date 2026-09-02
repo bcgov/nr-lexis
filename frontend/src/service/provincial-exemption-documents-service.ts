@@ -9,20 +9,20 @@ import { extractResponseFilename } from '@/service/http-response-utils'
 
 export type ProvincialExemptionDocumentRow = DocumentRowBase
 
-export type ProvincialExemptionDocumentSource = 'api'
+type ProvincialExemptionDocumentSource = 'api'
 
-export type ProvincialExemptionDocumentsResult = {
+type ProvincialExemptionDocumentsResult = {
   rows: ProvincialExemptionDocumentRow[]
   source: ProvincialExemptionDocumentSource
 }
 
-export type OpenProvincialExemptionDocumentResult = {
+type OpenProvincialExemptionDocumentResult = {
   source: 'api'
   blob: Blob
   filename: string
 }
 
-export type RemoveProvincialExemptionDocumentResult = {
+type RemoveProvincialExemptionDocumentResult = {
   success: boolean
   source: ProvincialExemptionDocumentSource
 }

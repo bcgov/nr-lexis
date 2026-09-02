@@ -4,13 +4,13 @@ import apiService from '@/service/api-service'
 import { extractResponseFilename, getResponseHeaderValue } from '@/service/http-response-utils'
 import { getConfiguredBasePath } from '@/service/service-config-utils'
 
-export type RunReportRequest = {
+type RunReportRequest = {
   reportId: string
   actionMapping?: string
   values: Record<string, string>
 }
 
-export type RunReportResult = {
+type RunReportResult = {
   source: 'api'
   blob?: Blob
   filename: string

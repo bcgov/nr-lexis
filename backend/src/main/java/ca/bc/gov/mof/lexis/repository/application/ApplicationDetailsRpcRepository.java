@@ -102,8 +102,6 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       LEXIS_CODES_PACKAGE + "FIND_CANDIDATE_EXCOL_VALUES(?,?,?,?,?)";
   private static final String FIND_CANDIDATE_EXCOL_COMBINATIONS =
       LEXIS_CODES_PACKAGE + "FIND_CANDIDATE_EXCOL_COMBOS(?,?,?,?)";
-  private static final String FIND_VALID_BOIC_TIMBER_MARK =
-      LEXIS_CODES_PACKAGE + "FIND_VALID_BOIC_TIMBER_MARK(?,?,?)";
   private static final String DELETE_APPLICATION_FILE_ATTACHMENT =
       LEXIS_GROUP_9_PACKAGE + "DELETE_APPL_FILE_ATTACHMENT(?)";
   private static final String FIND_REMARK_BY_NUMBER =
@@ -832,43 +830,9 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
         this::mapEndUseRow);
   }
 
-  public List<CodeRow> findAllSpeciesCodes() {
-    return queryCursorProcedure(
-            FIND_ALL_SPECIES_CODES,
-            null,
-            1,
-            rs ->
-                new CodeRow(
-                    getString(rs, "CODE"),
-                    getString(rs, "DESCRIPTION"),
-                    zeroIfNull(getLong(rs, "GROUP_BY")),
-                    zeroIfNull(getLong(rs, "ORDER_BY"))))
-        .stream()
-        .filter(row -> trim(row.code()) != null && trim(row.description()) != null)
-        .sorted(Comparator.comparingLong(CodeRow::groupBy).thenComparingLong(CodeRow::orderBy))
-        .toList();
-  }
-
   public List<CodeRow> findAllSpeciesCodesRequired() {
     return queryCursorProcedureRequired(
             FIND_ALL_SPECIES_CODES,
-            null,
-            1,
-            rs ->
-                new CodeRow(
-                    getString(rs, "CODE"),
-                    getString(rs, "DESCRIPTION"),
-                    zeroIfNull(getLong(rs, "GROUP_BY")),
-                    zeroIfNull(getLong(rs, "ORDER_BY"))))
-        .stream()
-        .filter(row -> trim(row.code()) != null && trim(row.description()) != null)
-        .sorted(Comparator.comparingLong(CodeRow::groupBy).thenComparingLong(CodeRow::orderBy))
-        .toList();
-  }
-
-  public List<CodeRow> findAllPackageStatusCodes() {
-    return queryCursorProcedure(
-            FIND_ALL_PACKAGE_STATUS_CODES,
             null,
             1,
             rs ->
@@ -1011,22 +975,6 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
         this::mapTimberMarkRow);
   }
 
-  public Optional<TimberMarkRow> findValidBoicTimberMark(String timberMark, String exemptionNumber) {
-    String normalized = trim(timberMark);
-    String normalizedExemptionNumber = trim(exemptionNumber);
-    if (normalized == null || normalizedExemptionNumber == null) {
-      return Optional.empty();
-    }
-    return queryCursorSingle(
-        FIND_VALID_BOIC_TIMBER_MARK,
-        cs -> {
-          cs.setString(1, normalized);
-          cs.setString(2, normalizedExemptionNumber);
-        },
-        3,
-        this::mapTimberMarkRow);
-  }
-
   public Optional<CodeRow> findEndUseCode(String endUseCode) {
     String normalized = trim(endUseCode);
     if (normalized == null) {
@@ -1073,26 +1021,6 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     return findCodeDescription(FIND_PRODUCT_TYPE_CODE, productTypeCode);
   }
 
-  public List<SpeciesGradeEndUseRow> findSpeciesEndUsesByRegionSpecies(
-      String orgUnitNumber, String speciesCode) {
-    String normalizedOrgUnitNumber = trim(orgUnitNumber);
-    String normalizedSpeciesCode = trim(speciesCode);
-    if (normalizedOrgUnitNumber == null || normalizedSpeciesCode == null) {
-      return List.of();
-    }
-    return queryCursorProcedure(
-            FIND_SPECIES_GRADE_BY_REGION_SPECIES,
-            cs -> {
-              cs.setString(1, normalizedOrgUnitNumber);
-              cs.setString(2, normalizedSpeciesCode);
-            },
-            3,
-            this::mapSpeciesGradeEndUseRow)
-        .stream()
-        .filter(row -> trim(row.gradeCode()) != null)
-        .toList();
-  }
-
   public List<SpeciesGradeEndUseRow> findSpeciesEndUsesByRegionSpeciesRequired(
       String orgUnitNumber, String speciesCode) {
     String normalizedOrgUnitNumber = trim(orgUnitNumber);
@@ -1113,18 +1041,6 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
         .toList();
   }
 
-  public List<SpeciesGradeEndUseRow> findSpeciesEndUsesByRegion(String orgUnitNumber) {
-    String normalizedOrgUnitNumber = trim(orgUnitNumber);
-    if (normalizedOrgUnitNumber == null) {
-      return List.of();
-    }
-    return queryCursorProcedure(
-        FIND_SPECIES_GRADE_BY_REGION,
-        cs -> cs.setString(1, normalizedOrgUnitNumber),
-        2,
-        this::mapSpeciesGradeEndUseRow);
-  }
-
   public List<SpeciesGradeEndUseRow> findSpeciesEndUsesByRegionRequired(String orgUnitNumber) {
     String normalizedOrgUnitNumber = trim(orgUnitNumber);
     if (normalizedOrgUnitNumber == null) {
@@ -1135,12 +1051,6 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
         cs -> cs.setString(1, normalizedOrgUnitNumber),
         2,
         this::mapSpeciesGradeEndUseRow);
-  }
-
-  public List<ExcolValidationRow> findCandidateEndUseCodes(
-      int speciesCount, String speciesCode, Long orgUnitNumber) {
-    return findCandidateExcolRows(
-        FIND_CANDIDATE_END_USES, excolPattern(speciesCount, false), speciesCode, orgUnitNumber);
   }
 
   public List<ExcolValidationRow> findCandidateEndUseCodesRequired(
@@ -1238,15 +1148,6 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
         .isPresent();
   }
 
-  public List<ExcolValidationRow> findCandidateExcolCombinations(
-      int speciesCount, String speciesCode, Long orgUnitNumber) {
-    return findCandidateExcolRows(
-        FIND_CANDIDATE_EXCOL_COMBINATIONS,
-        excolPattern(speciesCount, true),
-        speciesCode,
-        orgUnitNumber);
-  }
-
   public List<ExcolValidationRow> findCandidateExcolCombinationsRequired(
       int speciesCount, String speciesCode, Long orgUnitNumber) {
     return findCandidateExcolRowsRequired(
@@ -1269,26 +1170,6 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
         getString(rs, "EXPORT_END_USE_CODE"),
         getString(rs, "EXCOL_TRANSLATION_VALUE"),
         getLong(rs, "ORG_UNIT_NO"));
-  }
-
-  private List<ExcolValidationRow> findCandidateExcolRows(
-      String procedureSignature, String excolPattern, String speciesCode, Long orgUnitNumber) {
-    String normalizedSpeciesCode = trim(speciesCode);
-    if (excolPattern == null
-        || normalizedSpeciesCode == null
-        || orgUnitNumber == null
-        || orgUnitNumber < 1) {
-      return List.of();
-    }
-    return queryCursorProcedure(
-        procedureSignature,
-        cs -> {
-          cs.setString(1, excolPattern);
-          cs.setString(2, normalizedSpeciesCode);
-          cs.setLong(3, orgUnitNumber);
-        },
-        4,
-        rs -> new ExcolValidationRow(getString(rs, "EXCOL_TRANSLATION_VALUE")));
   }
 
   private List<ExcolValidationRow> findCandidateExcolRowsRequired(

@@ -1,4 +1,4 @@
-export type FederalStatusTransition = {
+type FederalStatusTransition = {
   code: 'APP' | 'REJ' | 'WDN'
   label: string
 }

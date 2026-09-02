@@ -63,7 +63,7 @@ export type IdTextOption = {
   text: string
 }
 
-export type ValueLabelOption = {
+type ValueLabelOption = {
   value: string
   label: string
 }

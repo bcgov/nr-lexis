@@ -8,7 +8,7 @@ import { isPageUnloadAuthorized } from '@/utils/page-unload'
 
 import './UnsavedChangesGuard.css'
 
-export type UnsavedChangesGuardProps = {
+type UnsavedChangesGuardProps = {
   isDirty: boolean
   isBusy?: boolean
   onSave: () => Promise<boolean>

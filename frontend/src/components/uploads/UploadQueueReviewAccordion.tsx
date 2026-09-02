@@ -9,7 +9,7 @@ import {
 } from './uploadQueueHelpers'
 import type { UploadQueueItem } from './uploadQueueTypes'
 
-export type UploadQueueReviewAccordionProps = {
+type UploadQueueReviewAccordionProps = {
   items: UploadQueueItem[]
   targetSummary: string
   idPrefix?: string

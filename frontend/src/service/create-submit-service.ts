@@ -160,7 +160,7 @@ const postLegacyForm = async (
   return response.data ?? {}
 }
 
-export type ProvincialApplicationCreateSubmission = {
+type ProvincialApplicationCreateSubmission = {
   ownerClientNumber: string
   ownerClientLocationCode: string
   ownerContactName: string
@@ -251,7 +251,7 @@ export const submitProvincialApplicationCreate = async (
   }
 }
 
-export type ProvincialExemptionCreateSubmission = {
+type ProvincialExemptionCreateSubmission = {
   applicationNumber: string
   linkedApplicationNumbers: string[]
   exemptionNumber: string
@@ -266,7 +266,7 @@ export type ProvincialExemptionCreateSubmission = {
   otherConditions: string
 }
 
-export type ProvincialExemptionCreatePreview = {
+type ProvincialExemptionCreatePreview = {
   exemptionTypeCode: string
   exemptionStatusCode: string
   approvedVolume: string
@@ -391,7 +391,7 @@ export const submitProvincialExemptionCreate = async (
   }
 }
 
-export type ProvincialOfferCreateSubmission = {
+type ProvincialOfferCreateSubmission = {
   applicationNumber: string
   packageNumber: string
   offeringClientNumber: string

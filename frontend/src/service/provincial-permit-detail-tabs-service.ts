@@ -22,7 +22,7 @@ export type ProvincialPermitItemRow = {
   includedInPermit: boolean
 }
 
-export type ProvincialPermitPackageInfoRow = {
+type ProvincialPermitPackageInfoRow = {
   packageNumber: string
   region: string
   speciesEndUseSort: string
@@ -37,7 +37,7 @@ export type ProvincialPermitPackageInfoRow = {
   comments: string
 }
 
-export type ProvincialPermitFeeRow = {
+type ProvincialPermitFeeRow = {
   id: string
   packageNumber: string
   timberMark: string
@@ -53,7 +53,7 @@ export type ProvincialPermitFeeRow = {
   amountDisplay: string
 }
 
-export type ProvincialPermitEventRow = {
+type ProvincialPermitEventRow = {
   id: string
   eventDate: string
   eventType: string
@@ -62,7 +62,7 @@ export type ProvincialPermitEventRow = {
   notes: string
 }
 
-export type ProvincialPermitGbmsInvoiceHistoryRow = {
+type ProvincialPermitGbmsInvoiceHistoryRow = {
   id: string
   gbmsInvoiceNumber: string
   cancelledByInvoice: string
@@ -89,19 +89,19 @@ export type ProvincialPermitDetailTabsRequest = {
   blanketOic?: boolean | null
 }
 
-export type ProvincialPermitFeesRequest = {
+type ProvincialPermitFeesRequest = {
   permitNumber: string
   blanketOic?: boolean | null
   packageNumbers?: string[]
 }
 
-export type UpdatePermitScaleAttachmentRequest = {
+type UpdatePermitScaleAttachmentRequest = {
   scaleId: string
   permitNumber: string
   attachInd: boolean
 }
 
-export type AddBlanketOicScaleRequest = {
+type AddBlanketOicScaleRequest = {
   permitNumber: string
   packageNumber: string
   timberMark: string
@@ -111,7 +111,7 @@ export type AddBlanketOicScaleRequest = {
   gradeCode: string
 }
 
-export type DeleteBlanketOicScaleRequest = {
+type DeleteBlanketOicScaleRequest = {
   scaleId: string
   permitNumber: string
 }
@@ -132,13 +132,13 @@ export type BlanketOicPackageMutationRequest = {
   speciesCodes: string[]
 }
 
-export type BlanketOicPackageMutationResult = UpdatePermitScaleAttachmentResult & {
+type BlanketOicPackageMutationResult = UpdatePermitScaleAttachmentResult & {
   permitNumber: string
   applicationNumber: string
   packageNumber: string
 }
 
-export type BlanketOicPackageEditContext = {
+type BlanketOicPackageEditContext = {
   packageNumber: string
   volume: string
   averageLength: string
@@ -152,17 +152,17 @@ export type BlanketOicPackageEditContext = {
   speciesCodes: string[]
 }
 
-export type AddApplicationsToPermitRequest = {
+type AddApplicationsToPermitRequest = {
   permitNumber: string
   selectedApplications: string[]
 }
 
-export type RemoveApplicationFromPermitRequest = {
+type RemoveApplicationFromPermitRequest = {
   permitNumber: string
   applicationNumber: string
 }
 
-export type UpdatePermitScaleAttachmentResult = {
+type UpdatePermitScaleAttachmentResult = {
   success: boolean
   message: string
   errors: string[]

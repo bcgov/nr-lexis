@@ -41,7 +41,7 @@ import { useTheme } from '@/context/theme/useTheme'
 import type { NavigationRoleScope, RouteActionMatch } from '@/routes/routeAccessTypes'
 import { fetchNotifications } from '@/service/notification-service'
 
-export type LayoutProps = {
+type LayoutProps = {
   children: ReactNode
 }
 

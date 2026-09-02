@@ -20,7 +20,6 @@ public class LexisAuthorizationService {
   private static final String ROLE_READ_ONLY = "LEXIS_READ_ONLY";
   private static final String ROLE_APPLICATION_APPROVER = "LEXIS_APPLICATION_APPROVER";
   private static final String ROLE_EXEMPTION_APPROVER = "LEXIS_EXEMPTION_APPROVER";
-  private static final String ROLE_PROVINCIAL_SUBMITTER = "LEXIS_PROVINCIAL_SUBMITTER";
   private static final Set<String> PROVINCIAL_STAFF_ROLES =
       Set.of(
           ROLE_ADMIN, ROLE_READ_ONLY, ROLE_APPLICATION_APPROVER, ROLE_EXEMPTION_APPROVER);

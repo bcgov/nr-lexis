@@ -6,7 +6,7 @@ export type RegionMultiSelectOption = {
   text: string
 }
 
-export type RegionMultiSelectProps = {
+type RegionMultiSelectProps = {
   id: string
   titleText?: ReactNode
   items: RegionMultiSelectOption[]

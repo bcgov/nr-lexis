@@ -2,7 +2,7 @@ import { DataTableSkeleton, InlineLoading, TableToolbar, TableToolbarContent } f
 import type { ReactNode } from 'react'
 import TableFrame from './TableFrame'
 
-export type SearchResultsTableFrameProps = {
+type SearchResultsTableFrameProps = {
   children: ReactNode
   loading: boolean
   loadingDescription: string

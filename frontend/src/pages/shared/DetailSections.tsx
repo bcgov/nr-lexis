@@ -1,12 +1,12 @@
 import { Tile } from '@carbon/react'
 import type { ReactNode } from 'react'
 
-export type DetailField = {
+type DetailField = {
   label: string
   value: ReactNode
 }
 
-export type DetailFieldTileProps = {
+type DetailFieldTileProps = {
   title: string
   fields: DetailField[]
   headerAction?: ReactNode

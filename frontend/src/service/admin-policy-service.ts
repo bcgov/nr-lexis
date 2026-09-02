@@ -36,20 +36,20 @@ export type FilPolicyRow = {
   updateTimestamp: string
 }
 
-export type UpsertFeePolicyRequest = {
+type UpsertFeePolicyRequest = {
   id?: string | null
   effectiveDate: string
   orgUnitNo: string
   policyPercentage: string
 }
 
-export type UpsertFilPolicyRequest = {
+type UpsertFilPolicyRequest = {
   id?: string | null
   effectiveDate: string
   filPercentage: string
 }
 
-export type AdminPolicyPage<TRow> = {
+type AdminPolicyPage<TRow> = {
   rows: TRow[]
   total: number
   page: number

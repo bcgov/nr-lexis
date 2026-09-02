@@ -7,7 +7,7 @@ import {
 } from '@/service/provincial-application-search-service'
 import { leadingDigits } from '@/utils/text'
 
-export type ApplicationNumberSelectProps = {
+type ApplicationNumberSelectProps = {
   id: string
   labelText: ReactNode
   value: string
