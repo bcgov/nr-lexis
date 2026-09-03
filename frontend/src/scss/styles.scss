@@ -9,6 +9,18 @@
 @use '@carbon/react/scss/type' as carbon-type;
 @use '@carbon/react';
 
+.required-label::after {
+  content: ' *';
+  color: var(--cds-text-error, #da1e28);
+  font-size: 1.1rem;
+  line-height: 1;
+  vertical-align: middle;
+}
+
+.cds--label--disabled .required-label::after {
+  color: inherit;
+}
+
 @font-face {
   font-family: 'BC Sans';
   font-display: swap;

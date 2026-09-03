@@ -32,6 +32,7 @@ import {
 } from '@/service/provincial-offer-create-service'
 import type { SearchOption } from '@/service/search-options-service'
 import { formatBusinessIsoDate } from '@/utils/date'
+import { requiredLabel } from '@/utils/required-label'
 import { displayAuditIdentity } from '@/utils/text'
 import {
   OFFER_COMPANY_NAME_MAX_LENGTH,
@@ -873,7 +874,7 @@ const ProvincialOfferCreatePage = () => {
             <div className="legacy-search-grid create-form-grid">
               <TextInput
                 id="applicationNumber"
-                labelText="Application number"
+                labelText={requiredLabel('Application number')}
                 value={form.applicationNumber}
                 invalid={!!applicationNumberError}
                 invalidText={applicationNumberError}
@@ -886,7 +887,7 @@ const ProvincialOfferCreatePage = () => {
               {packageOptions.length > 0 ? (
                 <SearchableSelect
                   id="packageNumber"
-                  labelText="Package number"
+                  labelText={requiredLabel('Package number')}
                   value={form.packageNumber}
                   options={packageOptions}
                   placeholder={
@@ -903,7 +904,7 @@ const ProvincialOfferCreatePage = () => {
               ) : (
                 <TextInput
                   id="packageNumber"
-                  labelText="Package number"
+                  labelText={requiredLabel('Package number', packageOptions.length > 0)}
                   value={hasNoPackagesForApplication ? 'No Packages' : form.packageNumber}
                   readOnly={hasNoPackagesForApplication}
                   invalid={!!packageNumberError}
@@ -944,7 +945,7 @@ const ProvincialOfferCreatePage = () => {
               {isScopedProvincialSubmitter && (
                 <TextInput
                   id="offeringClientNumber"
-                  labelText="Offering client number"
+                  labelText={requiredLabel('Offering client number')}
                   value={effectiveOfferingClientNumber}
                   invalid={!!fieldError('offeringClientNumber')}
                   invalidText={fieldError('offeringClientNumber')}
@@ -954,7 +955,7 @@ const ProvincialOfferCreatePage = () => {
               )}
               <TextInput
                 id="companyName"
-                labelText="Company"
+                labelText={requiredLabel('Company')}
                 value={effectiveCompanyName}
                 invalid={!!fieldError('companyName')}
                 invalidText={fieldError('companyName')}
@@ -975,7 +976,7 @@ const ProvincialOfferCreatePage = () => {
               />
               <TextInput
                 id="contactName"
-                labelText="Contact name"
+                labelText={requiredLabel('Contact name')}
                 value={effectiveContactName}
                 invalid={!!fieldError('contactName')}
                 invalidText={fieldError('contactName')}
@@ -1039,7 +1040,7 @@ const ProvincialOfferCreatePage = () => {
               )}
               <TextInput
                 id="purchaseOfferAmount"
-                labelText="Offer amount ($/m³)"
+                labelText={requiredLabel('Offer amount ($/m³)')}
                 value={form.purchaseOfferAmount}
                 invalid={!!fieldError('purchaseOfferAmount')}
                 invalidText={fieldError('purchaseOfferAmount')}
@@ -1081,7 +1082,7 @@ const ProvincialOfferCreatePage = () => {
               )}
               <TextArea
                 id="pickupLocation"
-                labelText="Pickup location"
+                labelText={requiredLabel('Pickup location')}
                 value={form.pickupLocation}
                 invalid={!!fieldError('pickupLocation')}
                 invalidText={fieldError('pickupLocation')}

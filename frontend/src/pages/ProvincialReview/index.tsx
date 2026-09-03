@@ -103,6 +103,7 @@ import {
   normalizeUpperText as normalizeReviewStatus,
 } from '@/utils/text'
 import { firstStringField, isRecord } from '@/utils/record'
+import { requiredLabel } from '@/utils/required-label'
 import { sanitizeNotificationText } from '@/utils/notification-messages'
 
 type ReviewActionStatus = {
@@ -1118,7 +1119,7 @@ const ProvincialReviewPage = () => {
         <div className="review-reject-modal__grid">
           <SearchableSelect
             id="reviewRejectStatus"
-            labelText="Application status"
+            labelText={requiredLabel('Application status')}
             value={rejectStatusCode}
             placeholder="Select application status"
             options={rejectStatusSelectOptions}
@@ -1136,7 +1137,7 @@ const ProvincialReviewPage = () => {
           />
           <TextArea
             id="reviewRejectRemark"
-            labelText="Remarks"
+            labelText={requiredLabel('Remarks')}
             rows={6}
             maxCount={250}
             value={rejectRemark}
@@ -1160,7 +1161,7 @@ const ProvincialReviewPage = () => {
           />
           <TextInput
             id="reviewRejectEmail"
-            labelText="Send to:"
+            labelText={requiredLabel('Send to:', rejectStatusSupportsEmail && sendRejectEmail)}
             value={rejectEmailAddress}
             disabled={!rejectStatusSupportsEmail || loadingRejectEmail || submittingReject}
             invalid={rejectValidationMessage === REJECT_EMAIL_REQUIRED_MESSAGE}

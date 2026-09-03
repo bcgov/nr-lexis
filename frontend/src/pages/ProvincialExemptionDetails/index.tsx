@@ -115,6 +115,7 @@ import {
 } from '@/service/provincial-exemption-detail-service'
 import { ReportRequestError, runReport } from '@/service/report-service'
 import { formatLocalIsoDate } from '@/utils/date'
+import { requiredLabel } from '@/utils/required-label'
 import BlanketOicPermitCreateModal from './BlanketOicPermitCreateModal'
 
 type ExemptionDetailTabKey =
@@ -1784,7 +1785,7 @@ const ProvincialExemptionDetailsPage = () => {
                             <div className="legacy-search-grid">
                               <SearchableSelect
                                 id="exemptionDetailType"
-                                labelText="Exemption type"
+                                labelText={requiredLabel('Exemption type')}
                                 value={editForm.exemptionTypeCode}
                                 options={editableTypeOptions}
                                 disabled={
@@ -1801,7 +1802,7 @@ const ProvincialExemptionDetailsPage = () => {
                               />
                               <SearchableSelect
                                 id="exemptionDetailStatus"
-                                labelText="Status"
+                                labelText={requiredLabel('Status')}
                                 value={editForm.exemptionStatusCode}
                                 options={editableStatusOptions}
                                 disabled={
@@ -1817,7 +1818,10 @@ const ProvincialExemptionDetailsPage = () => {
                               />
                               <IsoDatePicker
                                 id="exemptionDetailApprovalDate"
-                                labelText="Approval date"
+                                labelText={requiredLabel(
+                                  'Approval date',
+                                  currentTypeCode === 'O' || currentTypeCode === 'B',
+                                )}
                                 value={editForm.approvalDate}
                                 invalid={
                                   ((currentTypeCode === 'O' || currentTypeCode === 'B') &&
@@ -1838,7 +1842,7 @@ const ProvincialExemptionDetailsPage = () => {
                               />
                               <IsoDatePicker
                                 id="exemptionDetailExpiryDate"
-                                labelText="Expiry date"
+                                labelText={requiredLabel('Expiry date')}
                                 value={editForm.expiryDate}
                                 invalid={
                                   !editForm.expiryDate.trim() ||
@@ -1858,7 +1862,7 @@ const ProvincialExemptionDetailsPage = () => {
                               />
                               <TextInput
                                 id="exemptionDetailApprovedVolume"
-                                labelText="Approved volume (m³)"
+                                labelText={requiredLabel('Approved volume (m³)')}
                                 value={editForm.approvedVolume}
                                 disabled={!canEditApprovedVolume}
                                 onChange={(event) =>
@@ -1873,7 +1877,7 @@ const ProvincialExemptionDetailsPage = () => {
                             {currentTypeCode === 'B' && (
                               <RegionMultiSelect
                                 id="exemptionDetailRegions"
-                                titleText="Regions"
+                                titleText={requiredLabel('Regions')}
                                 items={regionOptions}
                                 selectedItems={selectedRegions}
                                 disabled={
@@ -2004,7 +2008,7 @@ const ProvincialExemptionDetailsPage = () => {
                             <div className="exemption-application-add-form">
                               <TextInput
                                 id="exemptionApplicationNumberToAdd"
-                                labelText="Application number"
+                                labelText={requiredLabel('Application number')}
                                 value={applicationNumberToAdd}
                                 invalid={Boolean(applicationNumberToAddError)}
                                 invalidText={applicationNumberToAddError}
@@ -2374,7 +2378,7 @@ const ProvincialExemptionDetailsPage = () => {
                               {editForm.enableRateOverride && (
                                 <TextInput
                                   id="exemptionFeeRate"
-                                  labelText="Fee rate ($/m³)"
+                                  labelText={requiredLabel('Fee rate ($/m³)')}
                                   value={editForm.feeRate}
                                   disabled={!canEditFeeOverride}
                                   onChange={(event) =>
@@ -2609,7 +2613,7 @@ const ProvincialExemptionDetailsPage = () => {
             </p>
             <Checkbox
               id="approveExemptionCertification"
-              labelText="I certify that this exemption has been approved."
+              labelText={requiredLabel('I certify that this exemption has been approved.')}
               checked={approvalCertified}
               disabled={approving}
               onChange={(_, { checked }) => setApprovalCertified(Boolean(checked))}

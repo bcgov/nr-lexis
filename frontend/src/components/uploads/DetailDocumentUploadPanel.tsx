@@ -31,6 +31,7 @@ import {
   invoiceNumberStorageFieldError,
 } from '@/pages/shared/invoice-storage-validation'
 import { submitAdminUpload, validateAdminUpload } from '@/service/admin-upload-service'
+import { requiredLabel } from '@/utils/required-label'
 
 type DetailDocumentUploadType = 'application' | 'exemption' | 'permit' | 'invoice'
 type DetailDocumentUploadStep = 'upload' | 'review'
@@ -664,7 +665,7 @@ const DetailDocumentUploadPanel = ({
                 <div className="legacy-search-grid detail-document-upload__invoice-fields">
                   <TextInput
                     id={`${inputId}SalesInvoiceNumber`}
-                    labelText="Upload invoice number"
+                    labelText={requiredLabel('Upload invoice number')}
                     value={salesInvoiceNumber}
                     invalid={showInvoiceFieldErrors && !!invoiceNumberError}
                     invalidText={showInvoiceFieldErrors ? invoiceNumberError : undefined}
@@ -673,7 +674,7 @@ const DetailDocumentUploadPanel = ({
                   />
                   <TextInput
                     id={`${inputId}InvoiceExportValue`}
-                    labelText="Upload invoice export value"
+                    labelText={requiredLabel('Upload invoice export value')}
                     value={invoiceExportValue}
                     invalid={showInvoiceFieldErrors && !!invoiceExportValueError}
                     invalidText={showInvoiceFieldErrors ? invoiceExportValueError : undefined}
@@ -682,7 +683,7 @@ const DetailDocumentUploadPanel = ({
                   />
                   <TextInput
                     id={`${inputId}InvoiceConversionRate`}
-                    labelText="Upload invoice conversion rate"
+                    labelText={requiredLabel('Upload invoice conversion rate')}
                     value={invoiceConversionRate}
                     invalid={showInvoiceFieldErrors && !!invoiceConversionRateError}
                     invalidText={showInvoiceFieldErrors ? invoiceConversionRateError : undefined}
@@ -691,7 +692,7 @@ const DetailDocumentUploadPanel = ({
                   />
                   <TextInput
                     id={`${inputId}InvoiceFeeInLieu`}
-                    labelText="Upload invoice fee in lieu"
+                    labelText={requiredLabel('Upload invoice fee in lieu')}
                     value={invoiceFeeInLieu}
                     invalid={showInvoiceFieldErrors && !!invoiceFeeInLieuError}
                     invalidText={showInvoiceFieldErrors ? invoiceFeeInLieuError : undefined}
@@ -706,6 +707,7 @@ const DetailDocumentUploadPanel = ({
                 inputId={`${inputId}File`}
                 inputKey={fileInputKey}
                 inputLabel="Document File"
+                required
                 accept={DOCUMENT_UPLOAD_ACCEPT}
                 invalidText={uploadInvalidText}
                 disabled={disabled}

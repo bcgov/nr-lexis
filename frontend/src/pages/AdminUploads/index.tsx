@@ -64,6 +64,7 @@ import {
 } from '@/service/admin-upload-service'
 import { searchProvincialExemptionNumberOptions } from '@/service/provincial-exemption-search-service'
 import { searchProvincialPermitNumberOptions } from '@/service/provincial-permit-search-service'
+import { requiredLabel } from '@/utils/required-label'
 
 type UploadWorkflowDefinition = {
   type: UploadWorkflowType
@@ -1445,7 +1446,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
         {selectedWorkflowType === 'application' && (
           <ApplicationNumberSelect
             id="applicationNumber"
-            labelText={selectedWorkflow.numberFieldLabel}
+            labelText={requiredLabel(selectedWorkflow.numberFieldLabel)}
             value={formState.applicationNumber}
             invalid={!!fieldError('applicationNumber')}
             invalidText={fieldError('applicationNumber')}
@@ -1462,7 +1463,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
         {selectedWorkflowType === 'exemption' && (
           <UploadTargetNumberSelect
             id="exemptionNumber"
-            labelText={selectedWorkflow.numberFieldLabel}
+            labelText={requiredLabel(selectedWorkflow.numberFieldLabel)}
             value={formState.exemptionNumber}
             invalid={!!fieldError('exemptionNumber')}
             invalidText={fieldError('exemptionNumber')}
@@ -1481,7 +1482,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
         {(selectedWorkflowType === 'permit' || selectedWorkflowType === 'invoice') && (
           <UploadTargetNumberSelect
             id="permitNumber"
-            labelText={selectedWorkflow.numberFieldLabel}
+            labelText={requiredLabel(selectedWorkflow.numberFieldLabel)}
             value={formState.permitNumber}
             invalid={!!fieldError('permitNumber')}
             invalidText={fieldError('permitNumber')}
@@ -1501,7 +1502,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
           <>
             <TextInput
               id="salesInvoiceNumber"
-              labelText="Invoice number"
+              labelText={requiredLabel('Invoice number')}
               value={formState.salesInvoiceNumber}
               invalid={!!fieldError('salesInvoiceNumber')}
               invalidText={fieldError('salesInvoiceNumber')}
@@ -1515,7 +1516,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
             />
             <TextInput
               id="invoiceExportValue"
-              labelText="Export value (CAD)"
+              labelText={requiredLabel('Export value (CAD)')}
               value={formState.invoiceExportValue}
               invalid={!!fieldError('invoiceExportValue')}
               invalidText={fieldError('invoiceExportValue')}
@@ -1529,7 +1530,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
             />
             <TextInput
               id="invoiceConversionRate"
-              labelText="Conversion rate"
+              labelText={requiredLabel('Conversion rate')}
               value={formState.invoiceConversionRate}
               invalid={!!fieldError('invoiceConversionRate')}
               invalidText={fieldError('invoiceConversionRate')}
@@ -1543,7 +1544,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
             />
             <TextInput
               id="invoiceFeeInLieu"
-              labelText="Fee in lieu"
+              labelText={requiredLabel('Fee in lieu')}
               value={formState.invoiceFeeInLieu}
               invalid={!!fieldError('invoiceFeeInLieu')}
               invalidText={fieldError('invoiceFeeInLieu')}
@@ -1586,6 +1587,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
         inputId="uploadFile"
         inputKey={fileInputKey}
         inputLabel={uploadInputLabel}
+        required
         accept={uploadAccept}
         invalidText={fieldError('uploadFile')}
         disabled={isUploadInputLocked}

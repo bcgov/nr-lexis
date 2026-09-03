@@ -51,6 +51,7 @@ import {
 } from '@/service/rtm-emslogamv-service'
 import { validateUploadFileSize } from '@/components/uploads/uploadQueueHelpers'
 import { formatBusinessIsoDate } from '@/utils/date'
+import { requiredLabel } from '@/utils/required-label'
 
 type PendingUploadValidation = {
   fileName: string
@@ -1399,7 +1400,7 @@ const RtmEmsLogAmvUploadPage = () => {
         <div className="admin-upload-field-header">
           <div>
             <span id={titleId} className="admin-upload-field-label">
-              Upload spreadsheet
+              {requiredLabel('Upload spreadsheet')}
             </span>
             <p className="admin-upload-field-helper">{RTM_UPLOAD_FIELD_HELPER}</p>
           </div>
@@ -1643,7 +1644,7 @@ const RtmEmsLogAmvUploadPage = () => {
                 <div className="admin-upload-field-header">
                   <div>
                     <span id="rtm-uploaded-title" className="admin-upload-field-label">
-                      Upload spreadsheet
+                      {requiredLabel('Upload spreadsheet')}
                     </span>
                     <p className="admin-upload-field-helper">{RTM_UPLOAD_FIELD_HELPER}</p>
                   </div>
