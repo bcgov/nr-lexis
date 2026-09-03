@@ -103,10 +103,7 @@ import {
 import DetailDocumentUploadPanel from '../../components/uploads/DetailDocumentUploadPanel'
 import IsoDatePicker from '../../components/IsoDatePicker'
 import SearchableSelect from '../../components/SearchableSelect'
-import {
-  calculateApplicationTermDays,
-  nonNegativeWholeNumberFieldError,
-} from '@/pages/shared/application-term-utils'
+import { nonNegativeWholeNumberFieldError } from '@/pages/shared/application-term-utils'
 import {
   CLIENT_LOOKUP_UNAVAILABLE_MESSAGE,
   averageLogVolumeFieldError,
@@ -125,6 +122,7 @@ import {
 import {
   atMostTwoDecimalFieldError,
   firstValidationError,
+  greaterThanFieldError,
   isoDateFieldError,
   maxLengthFieldError,
   maxNumericValueFieldError,
@@ -349,8 +347,6 @@ type ApplicationSummaryFormState = {
   applicationDate: string
   receivedDate: string
   termDays: string
-  termMonths: string
-  termYears: string
   applicationVolume: string
   averageLogVolume: string
   exemptionReasonCode: string
@@ -384,8 +380,6 @@ type ApplicationClientLookupFailure =
   | 'agent-contacts'
 
 const MAX_APPLICATION_TERM_DAYS = 99_999
-const MAX_APPLICATION_TERM_MONTHS = 999
-const MAX_APPLICATION_TERM_YEARS = 99
 const APPLICATION_CONTACT_NAME_MAX_LENGTH = 120
 const APPLICATION_PRODUCT_LOCATION_MAX_LENGTH = 250
 const APPLICATION_CLIENT_NUMBER_PATTERN = /^\d{1,8}$/
@@ -419,8 +413,6 @@ const toSummaryFormState = (detail: ProvincialApplicationDetail): ApplicationSum
   applicationDate: detail.applicationDate ?? '',
   receivedDate: detail.receivedDate ?? '',
   termDays: detail.termDays === null ? '' : String(detail.termDays),
-  termMonths: '',
-  termYears: '',
   applicationVolume: detail.applicationVolume === null ? '' : String(detail.applicationVolume),
   averageLogVolume: detail.averageLogVolume === null ? '' : String(detail.averageLogVolume),
   exemptionReasonCode: detail.exemptionReasonCode ?? '',
@@ -449,8 +441,6 @@ const toSummarySnapshotFormState = (
   applicationDate: snapshot.applicationDate,
   receivedDate: snapshot.receivedDate,
   termDays: snapshot.termDays,
-  termMonths: '',
-  termYears: '',
   applicationVolume: snapshot.applicationVolume,
   averageLogVolume: snapshot.averageLogVolume,
   exemptionReasonCode: snapshot.exemptionReasonCode,
@@ -1415,17 +1405,6 @@ const ProvincialApplicationDetailsPage = () => {
     [summaryForm?.speciesCodes],
   )
   const summarySpeciesKey = summarySpeciesCodes.join(',')
-  const calculatedSummaryTermDays = useMemo(() => {
-    if (!summaryForm) {
-      return ''
-    }
-
-    return calculateApplicationTermDays(
-      summaryForm.termDays,
-      summaryForm.termMonths,
-      summaryForm.termYears,
-    )
-  }, [summaryForm])
   const summaryFieldErrors = useMemo<FieldErrors<ApplicationSummaryField>>(() => {
     if (!summaryForm) {
       return {}
@@ -1520,37 +1499,14 @@ const ProvincialApplicationDetailsPage = () => {
         () => isoDateFieldError(summaryForm.applicationDate),
       ),
       termDays: firstValidationError(
-        () => requiredFieldError(calculatedSummaryTermDays, 'Exemption term'),
+        () => requiredFieldError(summaryForm.termDays, 'Exemption term days'),
         () => nonNegativeWholeNumberFieldError(summaryForm.termDays, 'Exemption term days'),
+        () => greaterThanFieldError(summaryForm.termDays, 'Exemption term days', 0),
         () =>
           maxNumericValueFieldError(
             summaryForm.termDays,
             MAX_APPLICATION_TERM_DAYS,
             'Exemption term days',
-          ),
-        () =>
-          maxNumericValueFieldError(
-            calculatedSummaryTermDays,
-            MAX_APPLICATION_TERM_DAYS,
-            'Exemption term',
-          ),
-      ),
-      termMonths: firstValidationError(
-        () => nonNegativeWholeNumberFieldError(summaryForm.termMonths, 'Exemption term months'),
-        () =>
-          maxNumericValueFieldError(
-            summaryForm.termMonths,
-            MAX_APPLICATION_TERM_MONTHS,
-            'Exemption term months',
-          ),
-      ),
-      termYears: firstValidationError(
-        () => nonNegativeWholeNumberFieldError(summaryForm.termYears, 'Exemption term years'),
-        () =>
-          maxNumericValueFieldError(
-            summaryForm.termYears,
-            MAX_APPLICATION_TERM_YEARS,
-            'Exemption term years',
           ),
       ),
       receivedDate: firstValidationError(
@@ -1597,7 +1553,6 @@ const ProvincialApplicationDetailsPage = () => {
       ),
     }
   }, [
-    calculatedSummaryTermDays,
     summaryExemptionReasonOptions,
     summaryForm,
     summaryGrowthTypeOptions,
@@ -2934,7 +2889,7 @@ const ProvincialApplicationDetailsPage = () => {
           applicationNumber: String(detail.applicationNumber),
           applicationDate: summaryRequestForm.applicationDate,
           receivedDate: summaryRequestForm.receivedDate,
-          termDays: calculatedSummaryTermDays,
+          termDays: summaryRequestForm.termDays.trim(),
           applicationVolume: summaryRequestForm.applicationVolume,
           averageLogVolume: summaryRequestForm.averageLogVolume,
           exemptionReasonCode: summaryRequestForm.exemptionReasonCode,
@@ -2995,7 +2950,6 @@ const ProvincialApplicationDetailsPage = () => {
     },
     [
       applicationNumber,
-      calculatedSummaryTermDays,
       canChangeApplicantType,
       canEditSummary,
       detail,
@@ -4452,32 +4406,6 @@ const ProvincialApplicationDetailsPage = () => {
                                 invalidText={visibleSummaryFieldError('termDays')}
                                 onChange={(event) =>
                                   onSummaryFormChange('termDays', event.target.value)
-                                }
-                              />
-                              <TextInput
-                                id="applicationSummaryTermMonths"
-                                labelText="Exemption term (months)"
-                                type="number"
-                                min={0}
-                                max={MAX_APPLICATION_TERM_MONTHS}
-                                value={summaryForm.termMonths}
-                                invalid={Boolean(visibleSummaryFieldError('termMonths'))}
-                                invalidText={visibleSummaryFieldError('termMonths')}
-                                onChange={(event) =>
-                                  onSummaryFormChange('termMonths', event.target.value)
-                                }
-                              />
-                              <TextInput
-                                id="applicationSummaryTermYears"
-                                labelText="Exemption term (years)"
-                                type="number"
-                                min={0}
-                                max={MAX_APPLICATION_TERM_YEARS}
-                                value={summaryForm.termYears}
-                                invalid={Boolean(visibleSummaryFieldError('termYears'))}
-                                invalidText={visibleSummaryFieldError('termYears')}
-                                onChange={(event) =>
-                                  onSummaryFormChange('termYears', event.target.value)
                                 }
                               />
                               <TextInput
