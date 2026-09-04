@@ -1757,10 +1757,12 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       waitUntil: 'domcontentloaded',
     })
     await expect(page.getByRole('heading', { level: 1, name: 'Create exemption' })).toBeVisible()
-    await expect(page.locator('.provincial-exemption-create-page .create-form-tile')).toHaveCSS(
-      'overflow',
-      'visible',
-    )
+    await page.getByRole('tab', { name: 'Exemption details', exact: true }).click()
+    const exemptionForm = page
+      .getByRole('tabpanel', { name: 'Exemption details', exact: true })
+      .locator('.create-form-tile')
+    await expect(exemptionForm).toBeVisible()
+    await expect(exemptionForm).toHaveCSS('overflow', 'visible')
   })
 
   test('keeps an impossible typed date visible for correction after blur', async ({ page }) => {

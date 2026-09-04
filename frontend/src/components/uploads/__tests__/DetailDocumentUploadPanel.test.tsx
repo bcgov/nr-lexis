@@ -344,6 +344,39 @@ describe('DetailDocumentUploadPanel', () => {
     expect(screen.getByText('Choose at least one file to upload.')).toBeInTheDocument()
   })
 
+  it('shows the empty queue error when file removals are batched', async () => {
+    const files = ['first.pdf', 'second.pdf'].map(
+      (name) => new File(['document upload'], name, { type: 'application/pdf' }),
+    )
+    render(
+      <DetailDocumentUploadPanel
+        workflowType="application"
+        targetNumber="321"
+        inputId="applicationDocuments"
+      />,
+    )
+
+    await openUploadModal()
+    await userEvent.upload(screen.getByLabelText('Document File'), files)
+    await waitFor(() => {
+      const buttons = screen.getAllByRole('button', { name: 'Remove' })
+      expect(buttons).toHaveLength(2)
+      buttons.forEach((button) => expect(button).toBeEnabled())
+    })
+    const removeButtons = screen.getAllByRole('button', { name: 'Remove' })
+
+    act(() => {
+      removeButtons.forEach((button) => button.click())
+    })
+
+    expect(screen.queryByRole('button', { name: 'Remove' })).not.toBeInTheDocument()
+    expect(screen.getByText('Choose at least one file to upload.')).toBeInTheDocument()
+    expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
+
+    await userEvent.upload(screen.getByLabelText('Document File'), files[0])
+    expect(screen.queryByText('Choose at least one file to upload.')).not.toBeInTheDocument()
+  })
+
   it('allows review after removing an invalid file from a mixed queue', async () => {
     const invalidFile = new File(['infected document upload'], 'eicar-application-upload.pdf', {
       type: 'application/pdf',
@@ -393,6 +426,7 @@ describe('DetailDocumentUploadPanel', () => {
     expect(
       screen.queryByText('1 file failed validation. Review the queue for details.'),
     ).not.toBeInTheDocument()
+    expect(screen.queryByText('Choose at least one file to upload.')).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
     expect(screen.getByRole('heading', { name: 'File review' })).toBeInTheDocument()
     expect(screen.getAllByText(validFile.name).length).toBeGreaterThan(0)

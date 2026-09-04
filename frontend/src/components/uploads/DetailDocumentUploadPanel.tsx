@@ -394,11 +394,11 @@ const DetailDocumentUploadPanel = ({
   }
 
   const removeQueuedFile = (id: string): void => {
-    const nextQueueLength = uploadQueue.filter((item) => item.id !== id).length
     setUploadQueue((current) => current.filter((item) => item.id !== id))
     setErrorMessage('')
     setSuccessMessage('')
-    setShowFileValidationError(nextQueueLength === 0)
+    // uploadInvalidText checks the final queue length after batched removals.
+    setShowFileValidationError(true)
   }
 
   const clearQueueItems = (): void => {
