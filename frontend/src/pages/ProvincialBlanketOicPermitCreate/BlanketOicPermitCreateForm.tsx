@@ -73,7 +73,6 @@ type ClientKind = 'owner' | 'agent'
 
 type BlanketOicPermitCreateFormProps = {
   exemptionNumber: string
-  exemptionExpiryDate: string
   regionOptions: IdTextOption[]
   defaultRegionNumbers: string[]
   onCancel: () => void
@@ -85,7 +84,6 @@ const MAX_OIC_REQUEST_PIECES = 9_999_999_999
 const MAX_OIC_REQUEST_VOLUME_LENGTH = 9
 
 const initialForm = (
-  exemptionExpiryDate: string,
   regionOptions: IdTextOption[],
   defaultRegionNumbers: string[],
 ): BlanketOicPermitForm => {
@@ -94,8 +92,8 @@ const initialForm = (
     defaultRegionNumbers.find((id) => regionOptions.some((option) => option.id === id)) ?? ''
   return {
     permitSubmitDate: today,
-    permitIssueDate: today,
-    permitExpiryDate: exemptionExpiryDate,
+    permitIssueDate: '',
+    permitExpiryDate: '',
     oicPermitTotalPieces: '',
     oicPermitTotalVolume: '',
     orgUnitNumber: defaultRegion,
@@ -118,6 +116,9 @@ const requiredDateError = (value: string, label: string): string | undefined => 
   if (!value.trim()) return `${label} is required.`
   return isValidIsoDate(value) ? undefined : `${label} must use YYYY-MM-DD.`
 }
+
+const optionalDateError = (value: string, label: string): string | undefined =>
+  value.trim() && !isValidIsoDate(value) ? `${label} must use YYYY-MM-DD.` : undefined
 
 const requiredTextError = (value: string, label: string, maxLength: number): string | undefined => {
   const normalized = value.trim()
@@ -163,8 +164,8 @@ const firstInvalidTabIndex = (errors: FormErrors): number => {
 const validateForm = (form: BlanketOicPermitForm, agentUsed: boolean): FormErrors => {
   const errors: FormErrors = {
     permitSubmitDate: requiredDateError(form.permitSubmitDate, 'Submit date'),
-    permitIssueDate: requiredDateError(form.permitIssueDate, 'Issue date'),
-    permitExpiryDate: requiredDateError(form.permitExpiryDate, 'Expiry date'),
+    permitIssueDate: optionalDateError(form.permitIssueDate, 'Issue date'),
+    permitExpiryDate: optionalDateError(form.permitExpiryDate, 'Expiry date'),
     orgUnitNumber: form.orgUnitNumber.trim() ? undefined : 'Region is required.',
     ownerClientNumber: clientNumberError(form.ownerClientNumber, 'Owner client number'),
     ownerClientLocation: form.ownerClientLocation.trim()
@@ -241,16 +242,13 @@ const validateForm = (form: BlanketOicPermitForm, agentUsed: boolean): FormError
 
 const BlanketOicPermitCreateForm = ({
   exemptionNumber,
-  exemptionExpiryDate,
   regionOptions,
   defaultRegionNumbers,
   onCancel,
   onCreated,
   onUnknownOutcome,
 }: BlanketOicPermitCreateFormProps) => {
-  const [form, setForm] = useState(() =>
-    initialForm(exemptionExpiryDate, regionOptions, defaultRegionNumbers),
-  )
+  const [form, setForm] = useState(() => initialForm(regionOptions, defaultRegionNumbers))
   const [agentUsed, setAgentUsed] = useState(false)
   const draftBaselineRef = useRef<BlanketOicPermitDraft>({ form, agentUsed: false })
   const formEditedRef = useRef(false)
@@ -641,8 +639,7 @@ const BlanketOicPermitCreateForm = ({
                   />
                   <IsoDatePicker
                     id="boic-permit-issue-date"
-                    labelText={requiredLabel('Issue date')}
-                    required
+                    labelText="Issue date"
                     value={form.permitIssueDate}
                     invalid={!!fieldError('permitIssueDate')}
                     invalidText={fieldError('permitIssueDate')}
@@ -650,8 +647,7 @@ const BlanketOicPermitCreateForm = ({
                   />
                   <IsoDatePicker
                     id="boic-permit-expiry-date"
-                    labelText={requiredLabel('Expiry date')}
-                    required
+                    labelText="Expiry date"
                     value={form.permitExpiryDate}
                     invalid={!!fieldError('permitExpiryDate')}
                     invalidText={fieldError('permitExpiryDate')}

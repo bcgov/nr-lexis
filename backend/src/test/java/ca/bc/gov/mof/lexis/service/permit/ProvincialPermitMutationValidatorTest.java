@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository;
+import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.ApplicationInfoRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitMutationRow;
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService.ClientData;
@@ -306,6 +307,32 @@ class ProvincialPermitMutationValidatorTest {
             "At least one application is required before a permit can be completed.",
             "At least one package is required before a permit can be completed.",
             "At least one scale detail is required before a permit can be completed.");
+  }
+
+  @Test
+  void shouldRequireBlanketOicDatesWhenCompleting() {
+    when(repository.findApplicationInfoByNumber(1000999L))
+        .thenReturn(
+            Optional.of(
+                new ApplicationInfoRow(
+                    1000999L, "EX-700", 1835L, "Region", "T", "S", "HE/OT")));
+
+    var result =
+        validator.validate(
+            permit()
+                .permitStatusCode("COM")
+                .issueDate(null)
+                .expiryDate(null)
+                .oicApplicationNumber(1000999L)
+                .oicRequestPieces(1L)
+                .oicRequestVolume(1.0d)
+                .build(),
+            blanketOicExemption());
+
+    assertThat(result.errors())
+        .containsExactly(
+            "A valid permit issue date is required to complete a permit.",
+            "A valid expiry date is required to complete a permit.");
   }
 
   @Test

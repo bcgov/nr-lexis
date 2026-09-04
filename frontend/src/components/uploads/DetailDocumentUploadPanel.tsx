@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, TextArea, TextInput } from '@carbon/react'
 import { Add, ArrowRight } from '@carbon/icons-react'
 import { AppNotification } from '../AppNotification'
@@ -51,6 +51,11 @@ type UploadCopy = {
   workflowLabel: string
   targetLabel: string
   defaultMessage: string
+}
+
+type ValidationRequest = {
+  id: string
+  token: number
 }
 
 const UPLOAD_COPY: Record<DetailDocumentUploadType, UploadCopy> = {
@@ -111,6 +116,8 @@ const DetailDocumentUploadPanel = ({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false)
   const [uploadStep, setUploadStep] = useState<DetailDocumentUploadStep>('upload')
+  const validationRequestsRef = useRef(new Map<string, ValidationRequest>())
+  const nextValidationTokenRef = useRef(0)
   const invoiceConversionRateBaseline = initialInvoiceConversionRate || '1.00'
   const invoiceConversionRate = invoiceConversionRateOverride ?? invoiceConversionRateBaseline
 
@@ -268,6 +275,24 @@ const DetailDocumentUploadPanel = ({
     )
   }
 
+  const invalidateValidation = (id: string): void => {
+    for (const [fileKey, request] of validationRequestsRef.current) {
+      if (request.id === id) {
+        validationRequestsRef.current.delete(fileKey)
+      }
+    }
+  }
+
+  const claimValidationResult = (fileKey: string, id: string, token: number): boolean => {
+    const request = validationRequestsRef.current.get(fileKey)
+    if (request?.id !== id || request.token !== token) {
+      return false
+    }
+
+    validationRequestsRef.current.delete(fileKey)
+    return true
+  }
+
   const validateQueuedUploadFile = async (
     file: File,
   ): Promise<{
@@ -330,11 +355,19 @@ const DetailDocumentUploadPanel = ({
     id: string,
     file: File,
     targetSummary: string,
+    fileKey: string,
+    token: number,
   ): Promise<void> => {
     try {
       const result = await validateQueuedUploadFile(file)
+      if (!claimValidationResult(fileKey, id, token)) {
+        return
+      }
       setQueueItemStatus(id, 'validated', result.message, targetSummary, result.details)
     } catch (error) {
+      if (!claimValidationResult(fileKey, id, token)) {
+        return
+      }
       const uploadError = extractUploadErrorDetails(error, GENERIC_UPLOAD_FAILURE_MESSAGE)
       setQueueItemStatus(id, 'failed', uploadError.message, targetSummary, uploadError.details)
       setErrorMessage('1 file failed validation. Review the queue for details.')
@@ -375,6 +408,14 @@ const DetailDocumentUploadPanel = ({
     })
     const nextItems = Array.from(nextItemsByFileName.values())
     const replacementFileNames = new Set(nextItems.map((item) => uploadQueueFileKey(item.file)))
+    replacementFileNames.forEach((fileKey) => validationRequestsRef.current.delete(fileKey))
+    nextItems
+      .filter((item) => item.status === 'validating')
+      .forEach((item) => {
+        const token = nextValidationTokenRef.current + 1
+        nextValidationTokenRef.current = token
+        validationRequestsRef.current.set(uploadQueueFileKey(item.file), { id: item.id, token })
+      })
 
     setUploadQueue((current) => [
       ...current.filter((item) => !replacementFileNames.has(uploadQueueFileKey(item.file))),
@@ -390,10 +431,18 @@ const DetailDocumentUploadPanel = ({
     setFileInputKey((current) => current + 1)
     nextItems
       .filter((item) => item.status === 'validating')
-      .forEach((item) => void validateQueueItem(item.id, item.file, lockedTargetSummary))
+      .forEach((item) => {
+        const fileKey = uploadQueueFileKey(item.file)
+        const token = validationRequestsRef.current.get(fileKey)?.token
+        if (token === undefined) {
+          return
+        }
+        void validateQueueItem(item.id, item.file, lockedTargetSummary, fileKey, token)
+      })
   }
 
   const removeQueuedFile = (id: string): void => {
+    invalidateValidation(id)
     setUploadQueue((current) => current.filter((item) => item.id !== id))
     setErrorMessage('')
     setSuccessMessage('')
@@ -402,6 +451,7 @@ const DetailDocumentUploadPanel = ({
   }
 
   const clearQueueItems = (): void => {
+    validationRequestsRef.current.clear()
     setUploadQueue([])
     setFileInputKey((current) => current + 1)
   }

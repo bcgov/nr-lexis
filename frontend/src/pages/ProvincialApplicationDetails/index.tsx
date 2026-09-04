@@ -1118,6 +1118,11 @@ const ProvincialApplicationDetailsPage = () => {
     )
   }, [detail?.packages, packageFilter])
 
+  const applicationTotalPieces = (detail?.packages ?? []).reduce(
+    (total, item) => total + item.pieceCount,
+    0,
+  )
+
   const filteredOffers = useMemo(() => {
     const rows = detail?.offers ?? []
     if (!offerFilter.trim()) {
@@ -4937,6 +4942,14 @@ const ProvincialApplicationDetailsPage = () => {
                                   onChange={(value) => onSummaryFormChange('endUseCode', value)}
                                 />
                               )}
+                              {applicationProductSupportsPackages && (
+                                <dl className="detail-field-item">
+                                  <dt className="detail-field-label">Application total pieces</dt>
+                                  <dd className="detail-field-value">
+                                    {applicationTotalPieces.toLocaleString()}
+                                  </dd>
+                                </dl>
+                              )}
                             </div>
                             <div className="legacy-search-actions">
                               <Button
@@ -4990,6 +5003,14 @@ const ProvincialApplicationDetailsPage = () => {
                               ['Species list', displayValue(summaryForm?.speciesCodes.join(', '))],
                               ...(summaryProductTypeHasGrowthDetails
                                 ? [['End use', displayValue(summaryEndUseDescription)]]
+                                : []),
+                              ...(applicationProductSupportsPackages
+                                ? [
+                                    [
+                                      'Application total pieces',
+                                      applicationTotalPieces.toLocaleString(),
+                                    ],
+                                  ]
                                 : []),
                             ].map(([label, value]) => (
                               <div key={label} className="detail-field-item">

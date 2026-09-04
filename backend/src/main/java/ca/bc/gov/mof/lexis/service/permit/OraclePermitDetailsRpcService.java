@@ -1590,7 +1590,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     if (permitStatus == null) {
       errors.add("A valid permit status is required.");
     }
-    if (issueDate == null && trimToNull(request.permitIssueDate()) == null) {
+    if (!blanketOic && issueDate == null && trimToNull(request.permitIssueDate()) == null) {
       errors.add("A valid permit issue date is required.");
     }
     if (submitDate == null && trimToNull(request.permitSubmitDate()) == null) {
@@ -1767,6 +1767,13 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       return failureMutationResponse(numericErrors, permitNumber);
     }
 
+    String targetPermitStatusCode =
+        normalizeCode(mergeSubmittedText(request.permitStatus(), current.permitStatusCode()));
+    boolean allowBlanketOicDraftDateClear =
+        targetBlanketOic
+            && EXPORT_PERMIT_STATUS_ACTIVE.equalsIgnoreCase(current.permitStatusCode())
+            && EXPORT_PERMIT_STATUS_ACTIVE.equals(targetPermitStatusCode);
+
     Double overrideFee = parseDouble(request.overrideFee());
     String overrideComment = trimToNull(request.overrideComment());
     String overrideIndicator = trimToNull(request.overrideInd());
@@ -1817,9 +1824,11 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
             mergeSubmittedText(request.otherPortOfExport(), current.otherPortOfExport()),
             targetSubmitDate,
             targetReceivedDate,
-            firstNonNull(parseDate(request.permitIssueDate()), current.permitIssueDate()),
+            mergeSubmittedDate(
+                request.permitIssueDate(), current.permitIssueDate(), allowBlanketOicDraftDateClear),
             mergeSubmittedText(request.permitReceiptNo(), current.receiptNumber()),
-            firstNonNull(parseDate(request.permitExpiryDate()), current.expiryDate()),
+            mergeSubmittedDate(
+                request.permitExpiryDate(), current.expiryDate(), allowBlanketOicDraftDateClear),
             authoritativePermitVolume,
             authoritativePermitPieces,
             firstNonNull(current.feeInLieuVolume(), 0L),
@@ -4839,7 +4848,16 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   }
 
   private LocalDate mergeSubmittedDate(String submitted, LocalDate current) {
-    return submitted == null ? current : parseDate(submitted);
+    return mergeSubmittedDate(submitted, current, true);
+  }
+
+  private LocalDate mergeSubmittedDate(
+      String submitted, LocalDate current, boolean clearWhenBlank) {
+    if (submitted == null) {
+      return current;
+    }
+    LocalDate parsed = parseDate(submitted);
+    return clearWhenBlank ? parsed : firstNonNull(parsed, current);
   }
 
   private List<String> validateSubmittedPermitDates(PermitMutationRequestDto request) {

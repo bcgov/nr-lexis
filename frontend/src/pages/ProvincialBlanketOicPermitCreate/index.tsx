@@ -174,7 +174,6 @@ const BlanketOicPermitCreateContent = ({
           <Column sm={4} md={8} lg={16} className="application-detail-tabs-column">
             <BlanketOicPermitCreateForm
               exemptionNumber={detail.exemptionNumber}
-              exemptionExpiryDate={detail.expiryDate ?? ''}
               regionOptions={regionOptions}
               defaultRegionNumbers={editContext.regionNumbers}
               onCancel={onCancel}

@@ -1528,7 +1528,7 @@ function ProvincialApplicationItemsPanel({
                 ['Total Scale Volume (m³)', packageForm.scaledVolume || 'Not provided'],
                 ['Total Pieces', selectedPackageTotalPieces.toLocaleString()],
                 ['Average Length (m)', packageForm.averageLength || 'Not provided'],
-                ['Average Diameter', packageForm.averageDiameter || 'Not provided'],
+                ['Average top diameter (rads)', packageForm.averageDiameter || 'Not provided'],
                 ['Status', optionTextForCode(selectedPackageStatusOptions, packageForm.status)],
                 [
                   'Product Type',
@@ -1587,7 +1587,7 @@ function ProvincialApplicationItemsPanel({
                     />
                     <TextInput
                       id="applicationItemsPackageDiameter"
-                      labelText={requiredLabel('Average Diameter')}
+                      labelText={requiredLabel('Average top diameter (rads)')}
                       aria-required="true"
                       value={packageForm.averageDiameter}
                       disabled={!canSaveSelectedPackage}
@@ -1857,7 +1857,7 @@ function ProvincialApplicationItemsPanel({
               />
               <TextInput
                 id="applicationItemsCreatePackageDiameter"
-                labelText={requiredLabel('Average Diameter')}
+                labelText={requiredLabel('Average top diameter (rads)')}
                 aria-required="true"
                 value={createPackageForm.averageDiameter}
                 disabled={!canCreatePackages}

@@ -173,6 +173,104 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     })
   })
 
+  it('keeps the application total pieces independent of package filters and selection', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      packages: [
+        { packageNumber: 'PKG-1', volume: 100, pieceCount: 5 },
+        { packageNumber: 'PKG-2', volume: 50, pieceCount: 3 },
+      ],
+    })
+    mockedFetchApplicationPackageDetails.mockImplementation(async (packageNumber) => ({
+      success: true,
+      packageNumber,
+      volume: packageNumber === 'PKG-2' ? '50.0' : '100.0',
+      scaledVolume: packageNumber === 'PKG-2' ? 10 : 20,
+      length: '12.0',
+      diameter: '24.0',
+      status: 'ACT',
+      comments: '',
+      statusDescription: 'Active',
+      reprocessed: 'N',
+      ageClass: 'O',
+      ageClassDescription: 'Old',
+      productType: 'H',
+      productTypeDescription: 'Harvested Timber',
+    }))
+    mockedFetchApplicationPackageScales.mockImplementation(async (packageNumber) => [
+      {
+        permitted: false,
+        timberMark: packageNumber === 'PKG-2' ? 'TM002' : 'TM001',
+        species: 'Fir',
+        grade: 'Sawlog',
+        pieces: packageNumber === 'PKG-2' ? 3 : 5,
+        volume: packageNumber === 'PKG-2' ? '10.0' : '20.0',
+        id: packageNumber === 'PKG-2' ? '56' : '55',
+        cascadeSplitCode: 'S',
+      },
+    ])
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321?tab=items&packageFilter=PKG-1']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const applicationItemDetailsTile = await selectApplicationItemDetailsTile(false)
+    const applicationItemDetails = within(applicationItemDetailsTile)
+    const applicationTotalPieces = () => {
+      const label = applicationItemDetails.getByText('Application total pieces')
+      return label.parentElement?.querySelector('dd')
+    }
+    expect(applicationTotalPieces()).toHaveTextContent('8')
+    expect(
+      Array.from(applicationItemDetailsTile.querySelectorAll('.detail-field-label'))
+        .map((field) => field.textContent)
+        .slice(-3),
+    ).toEqual(['Species list', 'End use', 'Application total pieces'])
+
+    const packagesSection = (await screen.findByRole('heading', { name: 'Packages' })).closest(
+      '.cds--tile',
+    )
+    expect(packagesSection).toBeTruthy()
+    expect(within(packagesSection as HTMLElement).getByText('PKG-1')).toBeInTheDocument()
+    expect(within(packagesSection as HTMLElement).queryByText('PKG-2')).not.toBeInTheDocument()
+
+    const packageDetailsSection = screen
+      .getByRole('heading', { name: 'Package Details' })
+      .closest('section')
+    expect(packageDetailsSection).toBeTruthy()
+    expect(
+      within(packageDetailsSection as HTMLElement).getByText('Average top diameter (rads)'),
+    ).toBeInTheDocument()
+    const selectedPackageTotalPieces = () => {
+      const label = within(packageDetailsSection as HTMLElement).getByText('Total Pieces')
+      return label.parentElement?.querySelector('dd')
+    }
+    await waitFor(() => expect(selectedPackageTotalPieces()).toHaveTextContent('5'))
+
+    const packageSelector = screen.getByRole('combobox', { name: 'Selected Package' })
+    await chooseComboBoxOption(packageSelector, 'PKG-2')
+    await waitFor(() => {
+      expect(packageSelector).toHaveValue('PKG-2')
+      expect(selectedPackageTotalPieces()).toHaveTextContent('3')
+    })
+    expect(applicationTotalPieces()).toHaveTextContent('8')
+
+    await userEvent.click(
+      applicationItemDetails.getByRole('button', { name: 'Edit application item details' }),
+    )
+    await waitFor(() => {
+      expect(applicationItemDetails.getAllByText('Application total pieces')).toHaveLength(1)
+      expect(applicationTotalPieces()).toHaveTextContent('8')
+    })
+  })
+
   it('keeps package mutation controls behind the Items edit mode', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
@@ -714,6 +812,9 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       within(packageDetailsSection as HTMLElement).getByText('Total Pieces'),
     ).toBeInTheDocument()
     expect(within(packageDetailsSection as HTMLElement).getByText('5')).toBeInTheDocument()
+    expect(
+      within(packageDetailsSection as HTMLElement).getByLabelText('Average top diameter (rads)'),
+    ).toBeInTheDocument()
 
     await chooseComboBoxOption(
       screen.getAllByRole('combobox', { name: 'Species' })[0],
@@ -973,7 +1074,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     fireEvent.change(createPackageControls.getByLabelText('Average Length (m)'), {
       target: { value: '100' },
     })
-    fireEvent.change(createPackageControls.getByLabelText('Average Diameter'), {
+    fireEvent.change(createPackageControls.getByLabelText('Average top diameter (rads)'), {
       target: { value: '100' },
     })
     await userEvent.click(createPackageControls.getByRole('button', { name: 'Create Package' }))
@@ -1016,7 +1117,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     fireEvent.change(createPackageControls.getByLabelText('Average Length (m)'), {
       target: { value: '12.0' },
     })
-    fireEvent.change(createPackageControls.getByLabelText('Average Diameter'), {
+    fireEvent.change(createPackageControls.getByLabelText('Average top diameter (rads)'), {
       target: { value: '24.0' },
     })
     await chooseComboBoxOption(
@@ -1076,7 +1177,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     fireEvent.change(createPackageControls.getByLabelText('Average Length (m)'), {
       target: { value: '12.0' },
     })
-    fireEvent.change(createPackageControls.getByLabelText('Average Diameter'), {
+    fireEvent.change(createPackageControls.getByLabelText('Average top diameter (rads)'), {
       target: { value: '24.0' },
     })
     await chooseComboBoxOption(

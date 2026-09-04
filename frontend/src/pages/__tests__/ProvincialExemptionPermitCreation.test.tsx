@@ -383,7 +383,8 @@ describe('permit creation from an exemption', () => {
     expect(
       screen.getByText('Enter permit details for Blanket OIC exemption TEST13E3.'),
     ).toBeInTheDocument()
-    expect(within(page).getByDisplayValue('2098-12-31')).toBeInTheDocument()
+    expect(within(page).getByLabelText('Issue date')).toHaveValue('')
+    expect(within(page).getByLabelText('Expiry date')).toHaveValue('')
 
     await act(async () => {
       resolveFirstDetail(activeBlanketOicExemption)
@@ -391,8 +392,8 @@ describe('permit creation from an exemption', () => {
       await Promise.all([firstDetail, firstEditContext])
     })
 
-    await waitFor(() => expect(within(page).getByDisplayValue('2098-12-31')).toBeInTheDocument())
-    expect(within(page).queryByDisplayValue('2099-12-31')).not.toBeInTheDocument()
+    await waitFor(() => expect(within(page).getByLabelText('Issue date')).toHaveValue(''))
+    expect(within(page).getByLabelText('Expiry date')).toHaveValue('')
   })
 
   it('matches legacy permit totals and marks active permits as pending', async () => {
@@ -534,6 +535,8 @@ describe('permit creation from an exemption', () => {
     expect(
       within(page).getByText(/permit number is assigned only after a successful save/i),
     ).toBeInTheDocument()
+    expect(within(page).getByLabelText('Issue date')).toHaveValue('')
+    expect(within(page).getByLabelText('Expiry date')).toHaveValue('')
     expect(within(page).getByRole('tab', { name: 'Permit' })).toBeInTheDocument()
     expect(within(page).getByRole('tab', { name: 'Owner' })).toBeInTheDocument()
     expect(within(page).getByRole('tab', { name: 'Shipping' })).toBeInTheDocument()
@@ -564,7 +567,8 @@ describe('permit creation from an exemption', () => {
         permitNumber: '',
         permitStatus: 'ACT',
         exemptionNumber: 'TEST13E2',
-        permitExpiryDate: '2099-12-31',
+        permitIssueDate: '',
+        permitExpiryDate: '',
         oicPermitTotalPieces: '4',
         oicPermitTotalVolume: '4',
         orgUnitNumber: '1909',
