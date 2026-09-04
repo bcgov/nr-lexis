@@ -322,6 +322,16 @@ const getApplicationSummaryTile = (): HTMLElement => {
   return summaryTile as HTMLElement
 }
 
+const getApplicationItemDetailsTile = (): HTMLElement => {
+  const itemDetailsTitle = screen.getByRole('heading', {
+    name: 'Application item details',
+    level: 2,
+  })
+  const itemDetailsTile = itemDetailsTitle.closest('.cds--tile')
+  expect(itemDetailsTile).toBeTruthy()
+  return itemDetailsTile as HTMLElement
+}
+
 const getSummaryComboBox = (
   summaryControls: ReturnType<typeof within>,
   labelText: string,
@@ -350,6 +360,20 @@ const selectApplicationSummaryTile = async (edit = true): Promise<HTMLElement> =
     }
   }
   return summaryTile
+}
+
+const selectApplicationItemDetailsTile = async (edit = true): Promise<HTMLElement> => {
+  await selectApplicationDetailTab('Items')
+  const itemDetailsTile = await waitFor(() => getApplicationItemDetailsTile())
+  if (edit) {
+    const editButton = within(itemDetailsTile).queryByRole('button', {
+      name: 'Edit application item details',
+    })
+    if (editButton) {
+      await userEvent.click(editButton)
+    }
+  }
+  return itemDetailsTile
 }
 
 const selectApplicationReviewTile = async (edit = true): Promise<HTMLElement> => {
@@ -675,6 +699,7 @@ export {
   applicationSummarySnapshot,
   chooseComboBoxOption,
   clearComboBox,
+  getApplicationItemDetailsTile,
   getApplicationSummaryTile,
   getSummaryComboBox,
   mockApplicationDetailAuth,
@@ -715,6 +740,7 @@ export {
   selectApplicationDetailTab,
   selectApplicationDocumentsForEditing,
   selectApplicationItemsForEditing,
+  selectApplicationItemDetailsTile,
   selectApplicationRemarksForEditing,
   selectApplicationReviewTile,
   selectApplicationSummaryTile,

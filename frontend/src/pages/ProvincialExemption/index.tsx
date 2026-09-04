@@ -882,6 +882,20 @@ const ProvincialExemptionPage = () => {
         <PageHeader
           title="Provincial exemption search"
           subtitle="Find, review, and manage provincial exemptions."
+          actions={
+            canCreateExemption ? (
+              <Button
+                as={Link}
+                to="/provincial/exemption/create"
+                kind="primary"
+                size="md"
+                renderIcon={Add}
+              >
+                Add exemption
+              </Button>
+            ) : undefined
+          }
+          actionsLabel="Exemption actions"
         />
       </Column>
 
@@ -1060,40 +1074,25 @@ const ProvincialExemptionPage = () => {
               results.page.number * results.page.size + results.content.length,
             )}
             actions={
-              canApproveExemption || canCreateExemption ? (
-                <>
-                  {canApproveExemption && (
-                    <DisabledButtonTooltip
-                      disabled={selectedRowsCount === 0 || approving}
-                      description={
-                        approving
-                          ? 'Wait for the approval request to finish.'
-                          : 'Select at least one exemption to approve.'
-                      }
-                    >
-                      <Button
-                        type="button"
-                        kind="tertiary"
-                        size="md"
-                        onClick={onApproveSelectedClick}
-                        disabled={selectedRowsCount === 0 || approving}
-                      >
-                        {approving ? 'Approving…' : 'Approve selected exemptions'}
-                      </Button>
-                    </DisabledButtonTooltip>
-                  )}
-                  {canCreateExemption && (
-                    <Button
-                      as={Link}
-                      to="/provincial/exemption/create"
-                      kind="primary"
-                      size="md"
-                      renderIcon={Add}
-                    >
-                      Add exemption
-                    </Button>
-                  )}
-                </>
+              canApproveExemption ? (
+                <DisabledButtonTooltip
+                  disabled={selectedRowsCount === 0 || approving}
+                  description={
+                    approving
+                      ? 'Wait for the approval request to finish.'
+                      : 'Select at least one exemption to approve.'
+                  }
+                >
+                  <Button
+                    type="button"
+                    kind="tertiary"
+                    size="md"
+                    onClick={onApproveSelectedClick}
+                    disabled={selectedRowsCount === 0 || approving}
+                  >
+                    {approving ? 'Approving…' : 'Approve selected exemptions'}
+                  </Button>
+                </DisabledButtonTooltip>
               ) : undefined
             }
           >

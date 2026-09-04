@@ -42,6 +42,7 @@ import {
   mockedUpdateApplicationPackage,
   mockedUpdateApplicationSummary,
   selectApplicationDetailTab,
+  selectApplicationItemDetailsTile,
   selectApplicationItemsForEditing,
   selectApplicationSummaryTile,
 } from './ProvincialApplicationDetailActions.support'
@@ -216,6 +217,51 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     )
     expect(screen.queryByLabelText('Package Comments')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Edit items' })).toBeInTheDocument()
+  })
+
+  it('keeps application item details and package drafts in mutually exclusive editors', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const applicationItemDetails = within(await selectApplicationItemDetailsTile(false))
+    expect(
+      applicationItemDetails.getByRole('button', { name: 'Edit application item details' }),
+    ).toBeInTheDocument()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit items' }))
+    const packageComments = await screen.findByLabelText('Package Comments')
+    fireEvent.change(packageComments, { target: { value: 'Unsaved package draft' } })
+    expect(packageComments).toHaveValue('Unsaved package draft')
+    await waitFor(() => {
+      expect(
+        applicationItemDetails.queryByRole('button', {
+          name: 'Edit application item details',
+        }),
+      ).not.toBeInTheDocument()
+    })
+
+    await userEvent.click(
+      within(
+        document.querySelector(
+          '#application-items .application-items-panel__header',
+        ) as HTMLElement,
+      ).getByRole('button', { name: 'Cancel' }),
+    )
+    const editApplicationItemDetails = await applicationItemDetails.findByRole('button', {
+      name: 'Edit application item details',
+    })
+    await userEvent.click(editApplicationItemDetails)
+
+    expect(applicationItemDetails.getByRole('button', { name: 'Save changes' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Edit items' })).not.toBeInTheDocument()
   })
 
   it('leads with package creation when a harvested-timber application has no package', async () => {
@@ -527,11 +573,46 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     )
 
     await selectApplicationDetailTab('Items')
-    expect(await screen.findByText('Package Details')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Application item details' })).toBeVisible()
+    expect(await screen.findByRole('heading', { name: 'Timber Marks' })).toBeVisible()
+    expect(screen.queryByText('Package Details')).not.toBeInTheDocument()
+    expect(screen.queryByText('Summary of Scale')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save Package' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Delete Package' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Create Package' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Add Scale' })).not.toBeInTheDocument()
+  })
+
+  it('shows package details without Summary of Scale for Timber applications', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      productTypeCode: 'T',
+    })
+    mockedFetchApplicationSummarySnapshot.mockResolvedValue({
+      ...applicationSummarySnapshot,
+      productTypeCode: 'T',
+      productLocation: '',
+      growthTypeCode: '',
+      averageLogVolume: '',
+      endUseCode: '',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationDetailTab('Items')
+    expect(await screen.findByRole('heading', { name: 'Package Details' })).toBeVisible()
+    expect(screen.queryByRole('heading', { name: 'Summary of Scale' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Timber Marks' })).not.toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Edit items' })).toBeInTheDocument()
   })
 
   it('keeps authoritative empty remaining-species results empty', async () => {
@@ -1342,6 +1423,11 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
   })
 
   it('shows legacy timber mark summaries for application scales', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      productTypeCode: 'S',
+      packages: [],
+    })
     mockedFetchApplicationUniqueScales.mockResolvedValue([{ timberMark: 'TM-SUMMARY' }])
 
     render(
@@ -1575,10 +1661,10 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationSummaryTile()
-    await screen.findByLabelText('Application volume (m³)')
+    const itemDetails = within(await selectApplicationItemDetailsTile())
+    await itemDetails.findByLabelText('Application volume (m³)')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
+    await userEvent.click(itemDetails.getByRole('button', { name: 'Save changes' }))
 
     expect(
       await screen.findByText(
@@ -1587,7 +1673,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     ).toBeInTheDocument()
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
+    await userEvent.click(itemDetails.getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() => {
       expect(mockedUpdateApplicationSummary).toHaveBeenCalledTimes(1)

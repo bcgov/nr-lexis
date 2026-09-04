@@ -75,6 +75,27 @@ describe('DetailDocumentUploadPanel', () => {
     expect(screen.getByLabelText(/Document description/)).toHaveValue('')
   })
 
+  it('keeps Review upload enabled and shows the required file error on click', async () => {
+    render(
+      <DetailDocumentUploadPanel
+        workflowType="application"
+        targetNumber="321"
+        inputId="applicationDocuments"
+      />,
+    )
+
+    await openUploadModal()
+    const reviewButton = screen.getByRole('button', { name: 'Review upload' })
+    expect(reviewButton).toBeEnabled()
+
+    await userEvent.click(reviewButton)
+
+    expect(screen.getAllByText('Choose at least one file to upload.').length).toBeGreaterThan(0)
+    expect(screen.getByRole('dialog', { name: 'Add document' })).toBeInTheDocument()
+    expect(mockedValidateAdminUpload).not.toHaveBeenCalled()
+    expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
+  })
+
   it('does not focus the close button when the upload modal opens', async () => {
     render(
       <DetailDocumentUploadPanel
@@ -282,7 +303,9 @@ describe('DetailDocumentUploadPanel', () => {
       screen.getByText('1 file failed validation. Review the queue for details.'),
     ).toBeInTheDocument()
     expect(screen.getAllByText('Failed').length).toBeGreaterThan(0)
-    expect(screen.getByRole('button', { name: 'Review upload' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Review upload' })).toBeEnabled()
+    await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
+    expect(screen.getByText('1 queued file needs attention before review.')).toBeInTheDocument()
     expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
   })
 
@@ -461,7 +484,9 @@ describe('DetailDocumentUploadPanel', () => {
     expect(
       screen.getByText('Invoice fee in lieu must round to 9999999.99 or less.'),
     ).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Review upload' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Review upload' })).toBeEnabled()
+    await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
+    expect(screen.getByRole('dialog', { name: 'Add invoice' })).toBeInTheDocument()
     expect(mockedValidateAdminUpload).not.toHaveBeenCalled()
     expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
   })

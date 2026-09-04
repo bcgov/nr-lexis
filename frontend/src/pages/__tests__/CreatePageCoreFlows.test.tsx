@@ -271,6 +271,37 @@ describe('Create Page Core Flows', () => {
     ])
   })
 
+  it('uses tab labels as accessible panel names without repeating them as headings', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/create?applicantType=A']}>
+        <Routes>
+          <Route
+            path="/provincial/application/create"
+            element={<ProvincialApplicationCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    for (const tabName of [
+      'Owner',
+      'Agent',
+      'Application',
+      'Items',
+      'Documents',
+      'Remarks',
+      'Offers',
+      'Review',
+    ]) {
+      await selectApplicationCreateTab(tabName)
+      const panelRegion = screen.getByRole('region', { name: tabName })
+      expect(panelRegion).toBeVisible()
+      expect(
+        within(panelRegion).queryByRole('heading', { level: 2, name: tabName }),
+      ).not.toBeInTheDocument()
+    }
+  })
+
   it('submits provincial application prefilled form and navigates to details', async () => {
     mockedSubmitProvincialApplicationCreate.mockResolvedValue(successfulCreate('901'))
 
@@ -2105,7 +2136,12 @@ describe('Create Page Core Flows', () => {
       await screen.findByRole('combobox', { name: 'Exemption type' }),
       'Order in Council',
     )
-    fireEvent.change(screen.getByLabelText('Exemption number'), { target: { value: 'OIC-12345' } })
+    const exemptionNumber = screen.getByLabelText('Exemption number')
+    fireEvent.change(exemptionNumber, { target: { value: 'OIC-12345' } })
+    fireEvent.blur(exemptionNumber)
+    expect(
+      screen.queryByText('Exemption number must be 8 characters or fewer.'),
+    ).not.toBeInTheDocument()
     await userEvent.type(screen.getByLabelText('Approval date (YYYY-MM-DD)'), '2026-07-01')
     await userEvent.type(screen.getByLabelText('Expiry date (YYYY-MM-DD)'), '2027-07-01')
     await userEvent.type(screen.getByLabelText('Approved volume (m³)'), '250.5')
@@ -2115,6 +2151,34 @@ describe('Create Page Core Flows', () => {
       await screen.findAllByText('Exemption number must be 8 characters or fewer.'),
     ).not.toHaveLength(0)
     expect(mockedSubmitProvincialExemptionCreate).not.toHaveBeenCalled()
+  })
+
+  it('shows application-number validation only after Add application is selected', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/create']}>
+        <Routes>
+          <Route path="/provincial/exemption/create" element={<ProvincialExemptionCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const applicationNumber = await screen.findByRole('combobox', {
+      name: 'Application number (optional)',
+    })
+    fireEvent.change(applicationNumber, { target: { value: 'not-a-number' } })
+    fireEvent.blur(applicationNumber)
+
+    expect(
+      screen.queryByText('Application number must be a positive whole number.'),
+    ).not.toBeInTheDocument()
+
+    const addApplication = screen.getByRole('button', { name: 'Add application' })
+    await waitFor(() => expect(addApplication).toBeEnabled())
+    await userEvent.click(addApplication)
+
+    expect(
+      await screen.findByText('Application number must be a positive whole number.'),
+    ).toBeInTheDocument()
   })
 
   it('keeps save disabled after unavailable option warning is dismissed', async () => {

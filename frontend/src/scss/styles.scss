@@ -1166,13 +1166,15 @@ $notification-types: 'error', 'info', 'success', 'warning';
 .landing-title {
   margin: 0;
   color: var(--csp-text-primary);
-  @include carbon-type.type-style('heading-05');
+  @include carbon-type.type-style('fluid-display-01', true);
+  font-weight: 400;
 }
 
 .landing-subtitle {
   margin: 0;
-  color: var(--csp-link-primary);
-  @include carbon-type.type-style('body-02');
+  color: var(--csp-text-primary);
+  @include carbon-type.type-style('fluid-paragraph-01', true);
+  font-weight: 400;
 }
 
 .landing-help-text {
@@ -1259,7 +1261,6 @@ $notification-types: 'error', 'info', 'success', 'warning';
 
 .login-landing .landing-subtitle {
   color: var(--csp-text-primary);
-  @include carbon-type.type-style('heading-03');
 }
 
 .landing-description {
@@ -5061,6 +5062,31 @@ $notification-types: 'error', 'info', 'success', 'warning';
 
 .detail-section-card__header .detail-tile-title {
   margin: 0;
+}
+
+.detail-section-card__header--actions-only,
+.application-items-panel__header--actions-only {
+  justify-content: flex-end;
+}
+
+.detail-section-card__header--actions-only:empty,
+.application-items-panel__header--actions-only:empty {
+  display: none;
+}
+
+.application-remark-modal__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-block-start: 1.5rem;
+}
+
+@media (max-width: 671px) {
+  .application-remark-modal__actions .cds--btn {
+    flex: 1 1 100%;
+    max-inline-size: none;
+  }
 }
 
 .detail-field-grid {

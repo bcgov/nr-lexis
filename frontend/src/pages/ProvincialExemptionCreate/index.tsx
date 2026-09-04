@@ -776,7 +776,6 @@ const ProvincialExemptionCreatePage = () => {
                         value={form.applicationNumber}
                         invalid={!!fieldError('applicationNumber')}
                         invalidText={fieldError('applicationNumber')}
-                        onBlur={() => markFieldTouched('applicationNumber')}
                         onChange={(value) => {
                           markFormEdited()
                           setForm((current) => ({ ...current, applicationNumber: value }))
@@ -825,7 +824,6 @@ const ProvincialExemptionCreatePage = () => {
                 placeholder="Select type"
                 options={availableExemptionTypes}
                 disabled={!optionsLoaded || optionsUnavailable}
-                onBlur={() => markFieldTouched('exemptionTypeCode')}
                 onChange={onExemptionTypeChange}
               />
               {oicLike && (
@@ -837,7 +835,6 @@ const ProvincialExemptionCreatePage = () => {
                   value={form.exemptionNumber}
                   invalid={!!fieldError('exemptionNumber')}
                   invalidText={fieldError('exemptionNumber')}
-                  onBlur={() => markFieldTouched('exemptionNumber')}
                   onChange={(event) => {
                     markFormEdited()
                     setForm((current) => ({
@@ -857,7 +854,6 @@ const ProvincialExemptionCreatePage = () => {
                 placeholder="Select status"
                 options={exemptionStatuses}
                 disabled={!canEditInitialExemptionStatus}
-                onBlur={() => markFieldTouched('exemptionStatusCode')}
                 onChange={(value) => {
                   markFormEdited()
                   setForm((current) => ({ ...current, exemptionStatusCode: value }))
@@ -871,7 +867,6 @@ const ProvincialExemptionCreatePage = () => {
                 disabled={normalizedTypeCode === 'M'}
                 invalid={!!fieldError('approvalDate')}
                 invalidText={fieldError('approvalDate')}
-                onBlur={() => markFieldTouched('approvalDate')}
                 onChange={(value) => {
                   markFormEdited()
                   setForm((current) => ({ ...current, approvalDate: value }))
@@ -887,7 +882,6 @@ const ProvincialExemptionCreatePage = () => {
                 value={form.expiryDate}
                 invalid={!!fieldError('expiryDate')}
                 invalidText={fieldError('expiryDate')}
-                onBlur={() => markFieldTouched('expiryDate')}
                 onChange={(value) => {
                   markFormEdited()
                   setForm((current) => ({ ...current, expiryDate: value }))
@@ -900,7 +894,6 @@ const ProvincialExemptionCreatePage = () => {
                 value={form.approvedVolume}
                 invalid={!!fieldError('approvedVolume')}
                 invalidText={fieldError('approvedVolume')}
-                onBlur={() => markFieldTouched('approvedVolume')}
                 onChange={(event) => {
                   markFormEdited()
                   setForm((current) => ({ ...current, approvedVolume: event.target.value }))
@@ -956,7 +949,6 @@ const ProvincialExemptionCreatePage = () => {
                     value={form.feeRate}
                     invalid={!!fieldError('feeRate')}
                     invalidText={fieldError('feeRate')}
-                    onBlur={() => markFieldTouched('feeRate')}
                     onChange={(event) => {
                       markFormEdited()
                       setForm((current) => ({ ...current, feeRate: event.target.value }))
@@ -975,7 +967,6 @@ const ProvincialExemptionCreatePage = () => {
                 value={form.otherConditions}
                 invalid={!!fieldError('otherConditions')}
                 invalidText={fieldError('otherConditions')}
-                onBlur={() => markFieldTouched('otherConditions')}
                 onChange={(event) => {
                   markFormEdited()
                   setForm((current) => ({ ...current, otherConditions: event.target.value }))

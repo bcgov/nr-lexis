@@ -1663,11 +1663,8 @@ const ProvincialApplicationCreatePage = () => {
               <Tile
                 className="create-form-tile application-detail-section"
                 role="region"
-                aria-labelledby="application-create-owner-heading"
+                aria-label="Owner"
               >
-                <h2 id="application-create-owner-heading" className="detail-tile-title">
-                  Owner
-                </h2>
                 <div className="legacy-search-grid create-form-grid">
                   <TextInput
                     id="ownerClientNumber"
@@ -1823,11 +1820,8 @@ const ProvincialApplicationCreatePage = () => {
                     <Tile
                       className="create-form-tile application-detail-section"
                       role="region"
-                      aria-labelledby="application-create-agent-heading"
+                      aria-label="Agent"
                     >
-                      <h2 id="application-create-agent-heading" className="detail-tile-title">
-                        Agent
-                      </h2>
                       <div className="legacy-search-grid create-form-grid">
                         <TextInput
                           id="agentClientNumber"
@@ -1947,11 +1941,8 @@ const ProvincialApplicationCreatePage = () => {
               <Tile
                 className="create-form-tile application-detail-section"
                 role="region"
-                aria-labelledby="application-create-application-heading"
+                aria-label="Application"
               >
-                <h2 id="application-create-application-heading" className="detail-tile-title">
-                  Application
-                </h2>
                 <div className="legacy-search-grid create-form-grid">
                   <SearchableSelect
                     id="region"
@@ -2095,11 +2086,8 @@ const ProvincialApplicationCreatePage = () => {
                 <Tile
                   className="create-form-tile application-detail-section"
                   role="region"
-                  aria-labelledby="application-create-items-heading"
+                  aria-label="Items"
                 >
-                  <h2 id="application-create-items-heading" className="detail-tile-title">
-                    Items
-                  </h2>
                   <div className="legacy-search-grid create-form-grid">
                     {productTypeRequiresLogDetails(form.productTypeCode) && (
                       <TextArea
@@ -2290,11 +2278,8 @@ const ProvincialApplicationCreatePage = () => {
               <Tile
                 className="create-form-tile application-detail-section"
                 role="region"
-                aria-labelledby="application-create-documents-heading"
+                aria-label="Documents"
               >
-                <h2 id="application-create-documents-heading" className="detail-tile-title">
-                  Documents
-                </h2>
                 <DetailDocumentUploadPanel
                   workflowType="application"
                   targetNumber=""
@@ -2310,11 +2295,8 @@ const ProvincialApplicationCreatePage = () => {
                     <Tile
                       className="create-form-tile application-detail-section"
                       role="region"
-                      aria-labelledby="application-create-remarks-heading"
+                      aria-label="Remarks"
                     >
-                      <h2 id="application-create-remarks-heading" className="detail-tile-title">
-                        Remarks
-                      </h2>
                       <div className="legacy-search-actions create-form-comments">
                         <TextArea
                           id="applicationComments"
@@ -2338,11 +2320,8 @@ const ProvincialApplicationCreatePage = () => {
               <Tile
                 className="create-form-tile application-detail-section"
                 role="region"
-                aria-labelledby="application-create-offers-heading"
+                aria-label="Offers"
               >
-                <h2 id="application-create-offers-heading" className="detail-tile-title">
-                  Offers
-                </h2>
                 <p className="detail-empty-message">
                   Offers are available after the application is saved.
                 </p>
@@ -2354,11 +2333,8 @@ const ProvincialApplicationCreatePage = () => {
                     <Tile
                       className="create-form-tile application-detail-section"
                       role="region"
-                      aria-labelledby="application-create-review-heading"
+                      aria-label="Review"
                     >
-                      <h2 id="application-create-review-heading" className="detail-tile-title">
-                        Review
-                      </h2>
                       <div className="legacy-search-grid create-form-grid">
                         <TextInput
                           id="applicationCreateReviewStatus"
