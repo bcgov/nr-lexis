@@ -283,6 +283,10 @@ const ProvincialExemptionCreatePage = () => {
   const normalizedTypeCode = form.exemptionTypeCode.trim().toUpperCase()
   const oicLike = OIC_TYPES.has(normalizedTypeCode)
   const blanketOic = normalizedTypeCode === 'B'
+  // M, O, and B creation uses a system-selected initial status, so it is a payload invariant,
+  // not a required user input.
+  const canEditInitialExemptionStatus =
+    optionsLoaded && !optionsUnavailable && !['M', 'O', 'B'].includes(normalizedTypeCode)
   const availableExemptionTypes = useMemo(
     () =>
       exemptionTypes.filter(
@@ -845,18 +849,14 @@ const ProvincialExemptionCreatePage = () => {
               )}
               <SearchableSelect
                 id="exemptionStatusCode"
-                labelText={requiredLabel('Exemption status')}
-                required
+                labelText={requiredLabel('Exemption status', canEditInitialExemptionStatus)}
+                required={canEditInitialExemptionStatus}
                 value={form.exemptionStatusCode}
                 invalid={!!fieldError('exemptionStatusCode')}
                 invalidText={fieldError('exemptionStatusCode')}
                 placeholder="Select status"
                 options={exemptionStatuses}
-                disabled={
-                  !optionsLoaded ||
-                  optionsUnavailable ||
-                  ['M', 'O', 'B'].includes(normalizedTypeCode)
-                }
+                disabled={!canEditInitialExemptionStatus}
                 onBlur={() => markFieldTouched('exemptionStatusCode')}
                 onChange={(value) => {
                   markFormEdited()
