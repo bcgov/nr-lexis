@@ -1911,6 +1911,90 @@ describe('Create Page Core Flows', () => {
     expect(screen.getByRole('textbox', { name: "I'm an agent" })).toHaveValue('Yes')
   })
 
+  it.each(['654', '321'])(
+    'clears owner context when the selected application changes to %s and ignores delayed results',
+    async (nextApplicationNumber) => {
+      let resolveFirstSnapshot: (snapshot: ApplicationSummarySnapshot) => void = () => undefined
+      let resolveSecondSnapshot: (snapshot: ApplicationSummarySnapshot) => void = () => undefined
+      const firstSnapshot = new Promise<ApplicationSummarySnapshot>((resolve) => {
+        resolveFirstSnapshot = resolve
+      })
+      const secondSnapshot = new Promise<ApplicationSummarySnapshot>((resolve) => {
+        resolveSecondSnapshot = resolve
+      })
+      const snapshots = [firstSnapshot, secondSnapshot]
+      mockedFetchApplicationSummarySnapshot.mockImplementation(
+        () => snapshots.shift() ?? Promise.resolve(applicationSummarySnapshot()),
+      )
+
+      render(
+        <MemoryRouter initialEntries={['/provincial/exemption/create?applications=321']}>
+          <Routes>
+            <Route
+              path="/provincial/exemption/create"
+              element={<ProvincialExemptionCreatePage />}
+            />
+          </Routes>
+        </MemoryRouter>,
+      )
+
+      await screen.findByRole('heading', { level: 1, name: 'Create exemption' })
+      await waitFor(() => expect(mockedFetchApplicationSummarySnapshot).toHaveBeenCalledWith('321'))
+      expect(screen.getByRole('textbox', { name: 'Client number' })).toHaveValue('')
+      expect(screen.getByText('Loading owner details…')).toBeInTheDocument()
+
+      await selectExemptionCreateTab('Applications')
+      const selectedApplications = screen.getByRole('list', { name: 'Selected applications' })
+      await userEvent.click(
+        within(selectedApplications).getByRole('button', {
+          name: 'Remove application 321',
+        }),
+      )
+      await selectExemptionCreateTab('Owner')
+      expect(screen.getByRole('textbox', { name: 'Client number' })).toHaveValue('')
+      expect(
+        screen.getByText(/A standalone Ministerial exemption has no linked owner details/),
+      ).toBeInTheDocument()
+
+      await selectExemptionCreateTab('Applications')
+      const applicationNumber = screen.getByRole('combobox', {
+        name: 'Application number (optional)',
+      })
+      fireEvent.change(applicationNumber, { target: { value: nextApplicationNumber } })
+      await userEvent.click(screen.getByRole('button', { name: 'Add application' }))
+      await waitFor(() => expect(mockedFetchApplicationSummarySnapshot).toHaveBeenCalledTimes(2))
+      expect(mockedFetchApplicationSummarySnapshot).toHaveBeenLastCalledWith(nextApplicationNumber)
+
+      await selectExemptionCreateTab('Owner')
+      expect(screen.getByRole('textbox', { name: 'Client number' })).toHaveValue('')
+      expect(screen.getByText('Loading owner details…')).toBeInTheDocument()
+
+      await act(async () => {
+        resolveFirstSnapshot(
+          applicationSummarySnapshot({
+            applicationNumber: '321',
+            ownerClientNumber: '00011111',
+          }),
+        )
+      })
+      expect(screen.getByRole('textbox', { name: 'Client number' })).toHaveValue('')
+      expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
+
+      await act(async () => {
+        resolveSecondSnapshot(
+          applicationSummarySnapshot({
+            applicationNumber: nextApplicationNumber,
+            ownerClientNumber: '00022222',
+          }),
+        )
+      })
+      await waitFor(() =>
+        expect(screen.getByRole('textbox', { name: 'Client number' })).toHaveValue('00022222'),
+      )
+      expect(screen.getByRole('textbox', { name: 'Client number' })).not.toHaveValue('00011111')
+    },
+  )
+
   it('returns to Exemption details when saving from another tab reveals validation errors', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/exemption/create']}>

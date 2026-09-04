@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -322,6 +322,77 @@ describe('permit creation from an exemption', () => {
     ).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save permit' })).not.toBeInTheDocument()
     expect(addPermitDetail).not.toHaveBeenCalled()
+  })
+
+  it('keeps the current Blanket OIC permit context when an earlier route load resolves late', async () => {
+    mockRole(['LEXIS_APPLICATION_APPROVER'], ['createPermit', 'savePermit'])
+    configureBlanketOicCreationDependencies()
+    let resolveFirstDetail: (detail: ProvincialExemptionDetail) => void = () => undefined
+    const firstDetail = new Promise<ProvincialExemptionDetail>((resolve) => {
+      resolveFirstDetail = resolve
+    })
+    let resolveFirstEditContext: (
+      context: Awaited<ReturnType<typeof fetchExemptionEditContext>>,
+    ) => void = () => undefined
+    const firstEditContext = new Promise<Awaited<ReturnType<typeof fetchExemptionEditContext>>>(
+      (resolve) => {
+        resolveFirstEditContext = resolve
+      },
+    )
+    const secondBlanketOicExemption = {
+      ...activeBlanketOicExemption,
+      exemptionNumber: 'TEST13E3',
+      expiryDate: '2098-12-31',
+    }
+    const unlockedEditContext = {
+      rateOverrideEnabled: false,
+      fixedFeeRate: '',
+      regionNumbers: ['1909'],
+      locked: false,
+      lockMessage: '',
+    }
+    vi.mocked(fetchProvincialExemptionDetail).mockImplementation((exemptionNumber) =>
+      exemptionNumber === activeBlanketOicExemption.exemptionNumber
+        ? firstDetail
+        : Promise.resolve(secondBlanketOicExemption),
+    )
+    vi.mocked(fetchExemptionEditContext).mockImplementation((exemptionNumber) =>
+      exemptionNumber === activeBlanketOicExemption.exemptionNumber
+        ? firstEditContext
+        : Promise.resolve(unlockedEditContext),
+    )
+    const router = createMemoryRouter(
+      [
+        {
+          path: '/provincial/exemption/:exemptionNumber/permit/new',
+          element: <ProvincialBlanketOicPermitCreatePage />,
+        },
+      ],
+      {
+        initialEntries: ['/provincial/exemption/TEST13E2/permit/new'],
+      },
+    )
+    render(<RouterProvider router={router} />)
+
+    await waitFor(() => expect(fetchProvincialExemptionDetail).toHaveBeenCalledWith('TEST13E2'))
+    await act(async () => {
+      await router.navigate('/provincial/exemption/TEST13E3/permit/new')
+    })
+
+    const page = await screen.findByRole('region', { name: 'Blanket OIC permit details' })
+    expect(
+      screen.getByText('Enter permit details for Blanket OIC exemption TEST13E3.'),
+    ).toBeInTheDocument()
+    expect(within(page).getByDisplayValue('2098-12-31')).toBeInTheDocument()
+
+    await act(async () => {
+      resolveFirstDetail(activeBlanketOicExemption)
+      resolveFirstEditContext(unlockedEditContext)
+      await Promise.all([firstDetail, firstEditContext])
+    })
+
+    await waitFor(() => expect(within(page).getByDisplayValue('2098-12-31')).toBeInTheDocument())
+    expect(within(page).queryByDisplayValue('2099-12-31')).not.toBeInTheDocument()
   })
 
   it('matches legacy permit totals and marks active permits as pending', async () => {

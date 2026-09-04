@@ -23,51 +23,41 @@ import BlanketOicPermitCreateForm from './BlanketOicPermitCreateForm'
 const isBlanketOic = (detail: ProvincialExemptionDetail): boolean =>
   (detail.exemptionTypeCode ?? '').trim().toUpperCase() === 'B'
 
-const ProvincialBlanketOicPermitCreatePage = () => {
-  const navigate = useNavigate()
-  const location = useLocation()
-  const { exemptionNumber } = useParams()
-  const { capabilities } = useAuth()
-  const normalizedExemptionNumber = exemptionNumber?.trim() ?? ''
-  const exemptionDetailPath = normalizedExemptionNumber
-    ? `/provincial/exemption/${encodeURIComponent(normalizedExemptionNumber)}`
-    : '/provincial/exemption'
-  const detailReturnTo = useMemo(
-    () =>
-      readDetailReturnTo(location.state) ?? {
-        label: 'Provincial exemption detail',
-        to: exemptionDetailPath,
-      },
-    [exemptionDetailPath, location.state],
-  )
+type BlanketOicPermitCreateContentProps = {
+  normalizedExemptionNumber: string
+  roles: string[]
+  onCancel: () => void
+  onCreated: (permitNumber: string) => void
+}
+
+const BlanketOicPermitCreateContent = ({
+  normalizedExemptionNumber,
+  roles,
+  onCancel,
+  onCreated,
+}: BlanketOicPermitCreateContentProps) => {
   const [detail, setDetail] = useState<ProvincialExemptionDetail | null>(null)
   const [editContext, setEditContext] = useState<ExemptionEditContext | null>(null)
   const [regionOptions, setRegionOptions] = useState<IdTextOption[]>([])
-  const [loading, setLoading] = useState(true)
-  const [errorMessage, setErrorMessage] = useState('')
+  const [loading, setLoading] = useState(() => Boolean(normalizedExemptionNumber))
+  const [errorMessage, setErrorMessage] = useState(() =>
+    normalizedExemptionNumber ? '' : 'An exemption number is required to create a permit.',
+  )
   const [outcomeUnknownMessage, setOutcomeUnknownMessage] = useState('')
 
   useEffect(() => {
     if (!normalizedExemptionNumber) {
-      setDetail(null)
-      setEditContext(null)
-      setRegionOptions([])
-      setErrorMessage('An exemption number is required to create a permit.')
-      setLoading(false)
-      return
+      return undefined
     }
 
     let active = true
-    setLoading(true)
-    setErrorMessage('')
-    setOutcomeUnknownMessage('')
-
-    void Promise.allSettled([
-      fetchProvincialExemptionDetail(normalizedExemptionNumber),
-      fetchExemptionEditContext(normalizedExemptionNumber),
-      fetchProvincialExemptionOptions(),
-    ])
-      .then(([detailResult, editContextResult, optionsResult]) => {
+    const loadPermitCreateContext = async (): Promise<void> => {
+      try {
+        const [detailResult, editContextResult, optionsResult] = await Promise.allSettled([
+          fetchProvincialExemptionDetail(normalizedExemptionNumber),
+          fetchExemptionEditContext(normalizedExemptionNumber),
+          fetchProvincialExemptionOptions(),
+        ])
         if (!active) return
 
         if (detailResult.status !== 'fulfilled') {
@@ -97,23 +87,23 @@ const ProvincialBlanketOicPermitCreatePage = () => {
         setDetail(detailResult.value)
         setEditContext(editContextResult.value)
         setRegionOptions(mapValueLabelOptionsToIdTextOptions(optionsResult.value.regions))
-      })
-      .catch((error) => {
+      } catch (error) {
         if (active) {
           console.error(error)
           setErrorMessage('Unable to retrieve provincial exemption detail.')
         }
-      })
-      .finally(() => {
+      } finally {
         if (active) setLoading(false)
-      })
+      }
+    }
+
+    void loadPermitCreateContext()
 
     return () => {
       active = false
     }
   }, [normalizedExemptionNumber])
 
-  const roles = capabilities?.roles ?? []
   const hasPermitCreationRole =
     hasRole(roles, 'APPLICATION_APPROVER') ||
     hasRole(roles, 'ADMIN') ||
@@ -129,39 +119,8 @@ const ProvincialBlanketOicPermitCreatePage = () => {
             'This exemption is currently locked for editing by another user.'
           : ''
 
-  const cancel = () => {
-    navigate(detailReturnTo.to, { state: detailReturnTo.state })
-  }
-
-  const created = (permitNumber: string) => {
-    navigate(`/provincial/permit/${encodeURIComponent(permitNumber)}${location.search}`, {
-      state: withDetailReturnTo(detailReturnTo.state, detailReturnTo),
-    })
-  }
-
   return (
-    <Grid
-      fullWidth
-      className="default-grid detail-page-grid provincial-blanket-oic-permit-create-page"
-    >
-      <Column sm={4} md={8} lg={16}>
-        <DetailBreadcrumb
-          label="Provincial exemption detail"
-          to={exemptionDetailPath}
-          returnTo={detailReturnTo}
-        />
-      </Column>
-      <Column sm={4} md={8} lg={16} className="detail-page-header">
-        <PageHeader
-          title="Apply for new Blanket OIC permit"
-          subtitle={
-            normalizedExemptionNumber
-              ? `Enter permit details for Blanket OIC exemption ${normalizedExemptionNumber}.`
-              : 'Enter the required permit details.'
-          }
-        />
-      </Column>
-
+    <>
       {loading && (
         <Column
           sm={4}
@@ -199,7 +158,7 @@ const ProvincialBlanketOicPermitCreatePage = () => {
             hideCloseButton
           />
           <div className="legacy-search-actions application-create-actions">
-            <Button kind="tertiary" size="sm" onClick={cancel}>
+            <Button kind="tertiary" size="sm" onClick={onCancel}>
               Return to exemption
             </Button>
           </div>
@@ -218,12 +177,74 @@ const ProvincialBlanketOicPermitCreatePage = () => {
               exemptionExpiryDate={detail.expiryDate ?? ''}
               regionOptions={regionOptions}
               defaultRegionNumbers={editContext.regionNumbers}
-              onCancel={cancel}
-              onCreated={created}
+              onCancel={onCancel}
+              onCreated={onCreated}
               onUnknownOutcome={setOutcomeUnknownMessage}
             />
           </Column>
         )}
+    </>
+  )
+}
+
+const ProvincialBlanketOicPermitCreatePage = () => {
+  const navigate = useNavigate()
+  const location = useLocation()
+  const { exemptionNumber } = useParams()
+  const { capabilities } = useAuth()
+  const normalizedExemptionNumber = exemptionNumber?.trim() ?? ''
+  const exemptionDetailPath = normalizedExemptionNumber
+    ? `/provincial/exemption/${encodeURIComponent(normalizedExemptionNumber)}`
+    : '/provincial/exemption'
+  const detailReturnTo = useMemo(
+    () =>
+      readDetailReturnTo(location.state) ?? {
+        label: 'Provincial exemption detail',
+        to: exemptionDetailPath,
+      },
+    [exemptionDetailPath, location.state],
+  )
+  const roles = capabilities?.roles ?? []
+
+  const cancel = () => {
+    navigate(detailReturnTo.to, { state: detailReturnTo.state })
+  }
+
+  const created = (permitNumber: string) => {
+    navigate(`/provincial/permit/${encodeURIComponent(permitNumber)}${location.search}`, {
+      state: withDetailReturnTo(detailReturnTo.state, detailReturnTo),
+    })
+  }
+
+  return (
+    <Grid
+      fullWidth
+      className="default-grid detail-page-grid provincial-blanket-oic-permit-create-page"
+    >
+      <Column sm={4} md={8} lg={16}>
+        <DetailBreadcrumb
+          label="Provincial exemption detail"
+          to={exemptionDetailPath}
+          returnTo={detailReturnTo}
+        />
+      </Column>
+      <Column sm={4} md={8} lg={16} className="detail-page-header">
+        <PageHeader
+          title="Apply for new Blanket OIC permit"
+          subtitle={
+            normalizedExemptionNumber
+              ? `Enter permit details for Blanket OIC exemption ${normalizedExemptionNumber}.`
+              : 'Enter the required permit details.'
+          }
+        />
+      </Column>
+      <BlanketOicPermitCreateContent
+        key={normalizedExemptionNumber}
+        normalizedExemptionNumber={normalizedExemptionNumber}
+        roles={roles}
+        onCancel={cancel}
+        onCreated={created}
+      />
     </Grid>
   )
 }

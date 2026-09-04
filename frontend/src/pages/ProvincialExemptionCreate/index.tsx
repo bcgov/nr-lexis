@@ -93,6 +93,22 @@ type ExemptionCreatePrefillState = {
 
 type ExemptionCreateTab = 'owner' | 'agent' | 'summary' | 'applications' | 'documents' | 'permits'
 
+type OwnerContextRequestKey = {
+  applicationNumber: string
+  selectedApplicationNumbers: readonly string[]
+}
+
+type OwnerContext = {
+  requestKey: OwnerContextRequestKey
+  status: 'loading' | 'ready' | 'error'
+  applicationOwnerSnapshot: ApplicationSummarySnapshot | null
+  ownerClientData: ApplicationClientData | null
+  agentClientData: ApplicationClientData | null
+  ownerClientLocations: ApplicationClientLocation[]
+  agentClientLocations: ApplicationClientLocation[]
+  error: string
+}
+
 const EXEMPTION_CREATE_TABS: readonly ExemptionCreateTab[] = [
   'owner',
   'agent',
@@ -353,16 +369,7 @@ const ProvincialExemptionCreatePage = () => {
   const [previewError, setPreviewError] = useState<string | null>(null)
   const [confirmedApplicationNumbers, setConfirmedApplicationNumbers] = useState<string[]>([])
   const [selectedExemptionTab, setSelectedExemptionTab] = useState<ExemptionCreateTab>('owner')
-  const [applicationOwnerSnapshot, setApplicationOwnerSnapshot] =
-    useState<ApplicationSummarySnapshot | null>(null)
-  const [ownerClientData, setOwnerClientData] = useState<ApplicationClientData | null>(null)
-  const [agentClientData, setAgentClientData] = useState<ApplicationClientData | null>(null)
-  const [ownerClientLocations, setOwnerClientLocations] = useState<ApplicationClientLocation[]>([])
-  const [agentClientLocations, setAgentClientLocations] = useState<ApplicationClientLocation[]>([])
-  const [ownerContextState, setOwnerContextState] = useState<
-    'idle' | 'loading' | 'ready' | 'error'
-  >('idle')
-  const [ownerContextError, setOwnerContextError] = useState('')
+  const [ownerContext, setOwnerContext] = useState<OwnerContext | null>(null)
   const [touchedFields, setTouchedFields] = useState<TouchedFields<ProvincialExemptionCreateField>>(
     {},
   )
@@ -395,6 +402,44 @@ const ProvincialExemptionCreatePage = () => {
   const blanketOic = normalizedTypeCode === 'B'
   // Legacy exemption forms omit client tabs only for OIC and Blanket OIC records.
   const showClientInfo = !oicLike
+  const ownerContextApplicationNumber =
+    hasCurrentPreview && canUseApplicationPrefill && !oicLike
+      ? (confirmedApplicationNumbers[0] ?? '')
+      : ''
+  const ownerContextRequestKey = useMemo<OwnerContextRequestKey | null>(
+    () =>
+      ownerContextApplicationNumber
+        ? {
+            applicationNumber: ownerContextApplicationNumber,
+            selectedApplicationNumbers,
+          }
+        : null,
+    [ownerContextApplicationNumber, selectedApplicationNumbers],
+  )
+  const ownerContextMatchesRequest =
+    ownerContextRequestKey !== null && ownerContext?.requestKey === ownerContextRequestKey
+  const ownerContextState: 'idle' | 'loading' | 'ready' | 'error' =
+    ownerContextRequestKey === null
+      ? 'idle'
+      : ownerContextMatchesRequest && ownerContext
+        ? ownerContext.status
+        : 'loading'
+  const applicationOwnerSnapshot = ownerContextMatchesRequest
+    ? (ownerContext?.applicationOwnerSnapshot ?? null)
+    : null
+  const ownerClientData = ownerContextMatchesRequest
+    ? (ownerContext?.ownerClientData ?? null)
+    : null
+  const agentClientData = ownerContextMatchesRequest
+    ? (ownerContext?.agentClientData ?? null)
+    : null
+  const ownerClientLocations = ownerContextMatchesRequest
+    ? (ownerContext?.ownerClientLocations ?? [])
+    : []
+  const agentClientLocations = ownerContextMatchesRequest
+    ? (ownerContext?.agentClientLocations ?? [])
+    : []
+  const ownerContextError = ownerContextMatchesRequest ? (ownerContext?.error ?? '') : ''
   const hasAgentTab =
     showClientInfo &&
     applicationOwnerSnapshot !== null &&
@@ -515,40 +560,30 @@ const ProvincialExemptionCreatePage = () => {
 
   useEffect(() => {
     let active = true
-    const applicationNumber = hasCurrentPreview ? (confirmedApplicationNumbers[0] ?? '') : ''
-
-    const clearOwnerContext = () => {
-      setApplicationOwnerSnapshot(null)
-      setOwnerClientData(null)
-      setAgentClientData(null)
-      setOwnerClientLocations([])
-      setAgentClientLocations([])
-      setOwnerContextState('idle')
-      setOwnerContextError('')
-    }
-
-    if (!applicationNumber || !canUseApplicationPrefill || oicLike) {
-      clearOwnerContext()
+    if (!ownerContextRequestKey) {
       return () => {
         active = false
       }
     }
 
-    setOwnerContextState('loading')
-    setOwnerContextError('')
-
+    const requestKey = ownerContextRequestKey
     const loadOwnerContext = async () => {
       let snapshot: ApplicationSummarySnapshot | null
       try {
-        snapshot = await fetchApplicationSummarySnapshot(applicationNumber)
+        snapshot = await fetchApplicationSummarySnapshot(requestKey.applicationNumber)
       } catch (error) {
         if (active) {
           console.error(error)
-          clearOwnerContext()
-          setOwnerContextState('error')
-          setOwnerContextError(
-            'Owner details could not be retrieved from the selected application.',
-          )
+          setOwnerContext({
+            requestKey,
+            status: 'error',
+            applicationOwnerSnapshot: null,
+            ownerClientData: null,
+            agentClientData: null,
+            ownerClientLocations: [],
+            agentClientLocations: [],
+            error: 'Owner details could not be retrieved from the selected application.',
+          })
         }
         return
       }
@@ -557,40 +592,61 @@ const ProvincialExemptionCreatePage = () => {
         return
       }
       if (!snapshot) {
-        setApplicationOwnerSnapshot(null)
-        setOwnerClientData(null)
-        setAgentClientData(null)
-        setOwnerClientLocations([])
-        setAgentClientLocations([])
-        setOwnerContextState('error')
-        setOwnerContextError('Owner details could not be retrieved from the selected application.')
+        setOwnerContext({
+          requestKey,
+          status: 'error',
+          applicationOwnerSnapshot: null,
+          ownerClientData: null,
+          agentClientData: null,
+          ownerClientLocations: [],
+          agentClientLocations: [],
+          error: 'Owner details could not be retrieved from the selected application.',
+        })
         return
       }
 
-      setApplicationOwnerSnapshot(snapshot)
       const ownerClientNumber = snapshot.ownerClientNumber.trim()
       const ownerClientLocationCode = snapshot.ownerClientLocationCode.trim()
       const agentClientNumber = snapshot.agentClientNumber.trim()
       const agentClientLocationCode = snapshot.agentClientLocationCode.trim()
       const hasAgent = isAgentApplicant(snapshot.applicantTypeCode.trim().toUpperCase())
 
+      setOwnerContext({
+        requestKey,
+        status: 'loading',
+        applicationOwnerSnapshot: snapshot,
+        ownerClientData: null,
+        agentClientData: null,
+        ownerClientLocations: [],
+        agentClientLocations: [],
+        error: '',
+      })
+
       const [ownerDataResult, ownerLocationsResult, agentDataResult, agentLocationsResult] =
         await Promise.allSettled([
           ownerClientNumber && ownerClientLocationCode
             ? fetchApplicationClientData(ownerClientNumber, ownerClientLocationCode, {
-                applicationNumber,
+                applicationNumber: requestKey.applicationNumber,
               })
             : Promise.resolve(null),
           ownerClientNumber
-            ? fetchApplicationClientLocations(ownerClientNumber, 'owner', applicationNumber)
+            ? fetchApplicationClientLocations(
+                ownerClientNumber,
+                'owner',
+                requestKey.applicationNumber,
+              )
             : Promise.resolve([]),
           hasAgent && agentClientNumber && agentClientLocationCode
             ? fetchApplicationClientData(agentClientNumber, agentClientLocationCode, {
-                applicationNumber,
+                applicationNumber: requestKey.applicationNumber,
               })
             : Promise.resolve(null),
           hasAgent && agentClientNumber
-            ? fetchApplicationClientLocations(agentClientNumber, 'agent', applicationNumber)
+            ? fetchApplicationClientLocations(
+                agentClientNumber,
+                'agent',
+                requestKey.applicationNumber,
+              )
             : Promise.resolve([]),
         ])
 
@@ -598,25 +654,27 @@ const ProvincialExemptionCreatePage = () => {
         return
       }
 
-      setOwnerClientData(settledValue(ownerDataResult, null))
-      setOwnerClientLocations(settledValue(ownerLocationsResult, []))
-      setAgentClientData(settledValue(agentDataResult, null))
-      setAgentClientLocations(settledValue(agentLocationsResult, []))
-      setOwnerContextState('ready')
-      setOwnerContextError(
-        [ownerDataResult, ownerLocationsResult, agentDataResult, agentLocationsResult].some(
+      setOwnerContext({
+        requestKey,
+        status: 'ready',
+        applicationOwnerSnapshot: snapshot,
+        ownerClientData: settledValue(ownerDataResult, null),
+        ownerClientLocations: settledValue(ownerLocationsResult, []),
+        agentClientData: settledValue(agentDataResult, null),
+        agentClientLocations: settledValue(agentLocationsResult, []),
+        error: [ownerDataResult, ownerLocationsResult, agentDataResult, agentLocationsResult].some(
           (result) => result.status === 'rejected',
         )
           ? 'Some client details could not be retrieved. The selected application remains the source of owner information.'
           : '',
-      )
+      })
     }
 
     void loadOwnerContext()
     return () => {
       active = false
     }
-  }, [canUseApplicationPrefill, confirmedApplicationNumbers, hasCurrentPreview, oicLike])
+  }, [ownerContextRequestKey])
 
   const fieldErrors = useMemo<FieldErrors<ProvincialExemptionCreateField>>(
     () => ({

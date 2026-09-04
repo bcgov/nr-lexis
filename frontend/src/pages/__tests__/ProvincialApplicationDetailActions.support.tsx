@@ -699,7 +699,6 @@ export {
   applicationSummarySnapshot,
   chooseComboBoxOption,
   clearComboBox,
-  getApplicationItemDetailsTile,
   getApplicationSummaryTile,
   getSummaryComboBox,
   mockApplicationDetailAuth,
