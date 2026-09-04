@@ -666,6 +666,7 @@ const DetailDocumentUploadPanel = ({
                   <TextInput
                     id={`${inputId}SalesInvoiceNumber`}
                     labelText={requiredLabel('Upload invoice number')}
+                    aria-required="true"
                     value={salesInvoiceNumber}
                     invalid={showInvoiceFieldErrors && !!invoiceNumberError}
                     invalidText={showInvoiceFieldErrors ? invoiceNumberError : undefined}
@@ -675,6 +676,7 @@ const DetailDocumentUploadPanel = ({
                   <TextInput
                     id={`${inputId}InvoiceExportValue`}
                     labelText={requiredLabel('Upload invoice export value')}
+                    aria-required="true"
                     value={invoiceExportValue}
                     invalid={showInvoiceFieldErrors && !!invoiceExportValueError}
                     invalidText={showInvoiceFieldErrors ? invoiceExportValueError : undefined}
@@ -684,6 +686,7 @@ const DetailDocumentUploadPanel = ({
                   <TextInput
                     id={`${inputId}InvoiceConversionRate`}
                     labelText={requiredLabel('Upload invoice conversion rate')}
+                    aria-required="true"
                     value={invoiceConversionRate}
                     invalid={showInvoiceFieldErrors && !!invoiceConversionRateError}
                     invalidText={showInvoiceFieldErrors ? invoiceConversionRateError : undefined}
@@ -693,6 +696,7 @@ const DetailDocumentUploadPanel = ({
                   <TextInput
                     id={`${inputId}InvoiceFeeInLieu`}
                     labelText={requiredLabel('Upload invoice fee in lieu')}
+                    aria-required="true"
                     value={invoiceFeeInLieu}
                     invalid={showInvoiceFieldErrors && !!invoiceFeeInLieuError}
                     invalidText={showInvoiceFieldErrors ? invoiceFeeInLieuError : undefined}

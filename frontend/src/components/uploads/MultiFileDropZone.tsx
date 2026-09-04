@@ -110,6 +110,7 @@ function MultiFileDropZone({
         className="admin-upload-native-input"
         type="file"
         aria-label={inputLabel}
+        aria-required={required || undefined}
         aria-invalid={!!invalidText}
         aria-describedby={invalidText ? `${inputId}-error` : undefined}
         accept={accept}

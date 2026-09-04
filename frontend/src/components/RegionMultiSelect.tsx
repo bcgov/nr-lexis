@@ -12,6 +12,7 @@ type RegionMultiSelectProps = {
   items: RegionMultiSelectOption[]
   selectedItems: RegionMultiSelectOption[]
   placeholder?: string
+  required?: boolean
   disabled?: boolean
   invalid?: boolean
   invalidText?: ReactNode
@@ -26,6 +27,7 @@ export default function RegionMultiSelect({
   items,
   selectedItems,
   placeholder = 'Select region(s)',
+  required = false,
   disabled = false,
   invalid = false,
   invalidText,
@@ -40,6 +42,7 @@ export default function RegionMultiSelect({
         itemToString={itemToString}
         placeholder={placeholder}
         selectedItems={selectedItems}
+        inputProps={{ 'aria-required': required || undefined }}
         disabled={disabled}
         invalid={invalid}
         invalidText={invalidText}

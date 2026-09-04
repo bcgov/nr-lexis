@@ -60,6 +60,7 @@ describe('DetailDocumentUploadPanel', () => {
     expect(screen.queryByLabelText(/Document description/)).not.toBeInTheDocument()
     await openUploadModal()
     expect(screen.getByRole('dialog', { name: 'Add document' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Document File')).toHaveAttribute('aria-required', 'true')
     expect(screen.queryByText(/US-ASCII|250 bytes/i)).not.toBeInTheDocument()
 
     await userEvent.upload(screen.getByLabelText('Document File'), file)

@@ -57,6 +57,7 @@ const ApplicationAccuracyConfirmation = ({
       <Checkbox
         id={checkboxId}
         labelText={requiredLabel(APPLICATION_ACCURACY_LABEL)}
+        aria-required="true"
         checked={confirmed}
         disabled={busy}
         onChange={(_, { checked }) => onConfirmedChange(Boolean(checked))}

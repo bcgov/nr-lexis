@@ -814,6 +814,7 @@ const ProvincialExemptionCreatePage = () => {
               <SearchableSelect
                 id="exemptionTypeCode"
                 labelText={requiredLabel('Exemption type')}
+                required
                 value={form.exemptionTypeCode}
                 invalid={!!fieldError('exemptionTypeCode')}
                 invalidText={fieldError('exemptionTypeCode')}
@@ -827,6 +828,7 @@ const ProvincialExemptionCreatePage = () => {
                 <TextInput
                   id="exemptionNumber"
                   labelText={requiredLabel('Exemption number')}
+                  aria-required="true"
                   maxLength={8}
                   value={form.exemptionNumber}
                   invalid={!!fieldError('exemptionNumber')}
@@ -844,6 +846,7 @@ const ProvincialExemptionCreatePage = () => {
               <SearchableSelect
                 id="exemptionStatusCode"
                 labelText={requiredLabel('Exemption status')}
+                required
                 value={form.exemptionStatusCode}
                 invalid={!!fieldError('exemptionStatusCode')}
                 invalidText={fieldError('exemptionStatusCode')}
@@ -863,6 +866,7 @@ const ProvincialExemptionCreatePage = () => {
               <IsoDatePicker
                 id="approvalDate"
                 labelText={requiredLabel('Approval date (YYYY-MM-DD)', oicLike)}
+                required={oicLike}
                 value={form.approvalDate}
                 disabled={normalizedTypeCode === 'M'}
                 invalid={!!fieldError('approvalDate')}
@@ -879,6 +883,7 @@ const ProvincialExemptionCreatePage = () => {
                   'Expiry date (YYYY-MM-DD)',
                   oicLike || !!form.approvalDate,
                 )}
+                required={oicLike || !!form.approvalDate}
                 value={form.expiryDate}
                 invalid={!!fieldError('expiryDate')}
                 invalidText={fieldError('expiryDate')}
@@ -891,6 +896,7 @@ const ProvincialExemptionCreatePage = () => {
               <TextInput
                 id="approvedVolume"
                 labelText={requiredLabel('Approved volume (m³)')}
+                aria-required="true"
                 value={form.approvedVolume}
                 invalid={!!fieldError('approvedVolume')}
                 invalidText={fieldError('approvedVolume')}
@@ -904,6 +910,7 @@ const ProvincialExemptionCreatePage = () => {
                 <RegionMultiSelect
                   id="exemptionRegions"
                   titleText={requiredLabel('Regions')}
+                  required
                   items={regionOptions}
                   selectedItems={selectedRegions}
                   invalid={!!fieldError('regionNumbers')}
@@ -945,6 +952,7 @@ const ProvincialExemptionCreatePage = () => {
                   <TextInput
                     id="exemptionFeeRate"
                     labelText={requiredLabel('Fee rate ($/m³)')}
+                    aria-required="true"
                     value={form.feeRate}
                     invalid={!!fieldError('feeRate')}
                     invalidText={fieldError('feeRate')}

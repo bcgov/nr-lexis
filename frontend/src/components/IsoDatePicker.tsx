@@ -19,6 +19,7 @@ type IsoDatePickerProps = {
   value: string
   invalid?: boolean
   invalidText?: ReactNode
+  required?: boolean
   disabled?: boolean
   onBlur?: () => void
   onChange: (value: string) => void
@@ -30,6 +31,7 @@ export default function IsoDatePicker({
   value,
   invalid = false,
   invalidText,
+  required = false,
   disabled = false,
   onBlur,
   onChange,
@@ -68,6 +70,7 @@ export default function IsoDatePicker({
         data-lpignore="true"
         invalid={invalid}
         invalidText={invalidText}
+        aria-required={required || undefined}
         disabled={disabled}
         onBlur={(event) => {
           const input = event.currentTarget

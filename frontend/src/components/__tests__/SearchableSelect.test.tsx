@@ -6,6 +6,24 @@ import SearchableSelect from '../SearchableSelect'
 Element.prototype.scrollIntoView = vi.fn()
 
 describe('SearchableSelect', () => {
+  it('exposes required status on the combobox', () => {
+    render(
+      <SearchableSelect
+        id="required-status"
+        labelText="Application status"
+        value=""
+        options={[]}
+        required
+        onChange={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByRole('combobox', { name: 'Application status' })).toHaveAttribute(
+      'aria-required',
+      'true',
+    )
+  })
+
   it('shows every option for lists with fewer than ten items when a value is already selected', async () => {
     const options = Array.from({ length: 9 }, (_, index) => ({
       value: `OPT-${index + 1}`,

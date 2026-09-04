@@ -3630,6 +3630,7 @@ const ProvincialApplicationDetailsPage = () => {
               <SearchableSelect
                 id="applicationDetailReviewStatus"
                 labelText={requiredLabel('Application status')}
+                required
                 value={reviewStatusCode}
                 placeholder="Select status"
                 options={reviewStatusOptions}
@@ -3666,6 +3667,9 @@ const ProvincialApplicationDetailsPage = () => {
                   'Status change remark',
                   REVIEW_STATUSES_REQUIRING_REMARK.has(normalizedReviewStatusCode),
                 )}
+                aria-required={
+                  REVIEW_STATUSES_REQUIRING_REMARK.has(normalizedReviewStatusCode) || undefined
+                }
                 helperText="Saved with the status change and included in an email notification, if one is sent."
                 maxCount={250}
                 invalid={isReviewRemarkInvalid}
@@ -3979,6 +3983,7 @@ const ProvincialApplicationDetailsPage = () => {
                               <TextInput
                                 id="applicationOwnerClientNumberEdit"
                                 labelText={requiredLabel('Client number')}
+                                aria-required="true"
                                 value={summaryForm.ownerClientNumber}
                                 invalid={Boolean(visibleSummaryFieldError('ownerClientNumber'))}
                                 invalidText={visibleSummaryFieldError('ownerClientNumber')}
@@ -3991,6 +3996,7 @@ const ProvincialApplicationDetailsPage = () => {
                                 <SearchableSelect
                                   id="applicationOwnerApplicantTypeEdit"
                                   labelText={requiredLabel('Applicant type')}
+                                  required
                                   value={summaryForm.applicantTypeCode}
                                   placeholder="Select applicant type"
                                   options={optionsWithCurrentValue(
@@ -4008,6 +4014,7 @@ const ProvincialApplicationDetailsPage = () => {
                                 <TextInput
                                   id="applicationOwnerApplicantTypeEdit"
                                   labelText={requiredLabel('Applicant type')}
+                                  aria-required="true"
                                   value={ownerApplicantTypeLabel}
                                   readOnly
                                 />
@@ -4015,6 +4022,7 @@ const ProvincialApplicationDetailsPage = () => {
                               <SearchableSelect
                                 id="applicationOwnerClientLocationEdit"
                                 labelText={requiredLabel('Client location')}
+                                required
                                 value={summaryForm.ownerClientLocationCode}
                                 invalid={Boolean(
                                   visibleSummaryFieldError('ownerClientLocationCode'),
@@ -4043,6 +4051,7 @@ const ProvincialApplicationDetailsPage = () => {
                                 <SearchableSelect
                                   id="applicationOwnerContactNameEdit"
                                   labelText={requiredLabel('Contact name')}
+                                  required
                                   value={summaryForm.ownerContactName}
                                   invalid={Boolean(visibleSummaryFieldError('ownerContactName'))}
                                   invalidText={visibleSummaryFieldError('ownerContactName')}
@@ -4067,6 +4076,7 @@ const ProvincialApplicationDetailsPage = () => {
                                 <TextInput
                                   id="applicationOwnerContactNameEdit"
                                   labelText={requiredLabel('Contact name')}
+                                  aria-required="true"
                                   value={summaryForm.ownerContactName}
                                   invalid={Boolean(visibleSummaryFieldError('ownerContactName'))}
                                   invalidText={visibleSummaryFieldError('ownerContactName')}
@@ -4162,6 +4172,7 @@ const ProvincialApplicationDetailsPage = () => {
                                 <TextInput
                                   id="applicationAgentClientNumberEdit"
                                   labelText={requiredLabel('Agent number')}
+                                  aria-required="true"
                                   value={summaryForm.agentClientNumber}
                                   invalid={Boolean(visibleSummaryFieldError('agentClientNumber'))}
                                   invalidText={visibleSummaryFieldError('agentClientNumber')}
@@ -4173,12 +4184,14 @@ const ProvincialApplicationDetailsPage = () => {
                                 <TextInput
                                   id="applicationAgentApplicantTypeEdit"
                                   labelText={requiredLabel('Applicant type')}
+                                  aria-required="true"
                                   value="Agent"
                                   readOnly
                                 />
                                 <SearchableSelect
                                   id="applicationAgentClientLocationEdit"
                                   labelText={requiredLabel('Contact location')}
+                                  required
                                   value={summaryForm.agentClientLocationCode}
                                   invalid={Boolean(
                                     visibleSummaryFieldError('agentClientLocationCode'),
@@ -4208,6 +4221,7 @@ const ProvincialApplicationDetailsPage = () => {
                                   <SearchableSelect
                                     id="applicationAgentContactNameEdit"
                                     labelText={requiredLabel('Contact name')}
+                                    required
                                     value={summaryForm.agentContactName}
                                     invalid={Boolean(visibleSummaryFieldError('agentContactName'))}
                                     invalidText={visibleSummaryFieldError('agentContactName')}
@@ -4231,6 +4245,7 @@ const ProvincialApplicationDetailsPage = () => {
                                   <TextInput
                                     id="applicationAgentContactNameEdit"
                                     labelText={requiredLabel('Contact name')}
+                                    aria-required="true"
                                     value={summaryForm.agentContactName}
                                     invalid={Boolean(visibleSummaryFieldError('agentContactName'))}
                                     invalidText={visibleSummaryFieldError('agentContactName')}
@@ -4363,6 +4378,7 @@ const ProvincialApplicationDetailsPage = () => {
                               <SearchableSelect
                                 id="applicationSummaryExemptionReason"
                                 labelText={requiredLabel('Exemption reason')}
+                                required
                                 value={summaryForm.exemptionReasonCode}
                                 invalid={Boolean(visibleSummaryFieldError('exemptionReasonCode'))}
                                 invalidText={visibleSummaryFieldError('exemptionReasonCode')}
@@ -4382,6 +4398,7 @@ const ProvincialApplicationDetailsPage = () => {
                               <IsoDatePicker
                                 id="applicationSummaryApplicationDate"
                                 labelText={requiredLabel('Application date')}
+                                required
                                 value={summaryForm.applicationDate}
                                 invalid={Boolean(visibleSummaryFieldError('applicationDate'))}
                                 invalidText={visibleSummaryFieldError('applicationDate')}
@@ -4390,6 +4407,7 @@ const ProvincialApplicationDetailsPage = () => {
                               <IsoDatePicker
                                 id="applicationSummaryReceivedDate"
                                 labelText={requiredLabel('Received date')}
+                                required
                                 value={summaryForm.receivedDate}
                                 invalid={Boolean(visibleSummaryFieldError('receivedDate'))}
                                 invalidText={visibleSummaryFieldError('receivedDate')}
@@ -4398,6 +4416,7 @@ const ProvincialApplicationDetailsPage = () => {
                               <TextInput
                                 id="applicationSummaryTermDays"
                                 labelText={requiredLabel('Exemption term (days)')}
+                                aria-required="true"
                                 type="number"
                                 min={1}
                                 max={MAX_APPLICATION_TERM_DAYS}
@@ -4411,6 +4430,7 @@ const ProvincialApplicationDetailsPage = () => {
                               <TextInput
                                 id="applicationSummaryVolume"
                                 labelText={requiredLabel('Application volume (m³)')}
+                                aria-required="true"
                                 type="number"
                                 min={0}
                                 step="0.1"
@@ -4425,6 +4445,7 @@ const ProvincialApplicationDetailsPage = () => {
                                 <TextInput
                                   id="applicationSummaryAverageLogVolume"
                                   labelText={requiredLabel('Average log volume (m³)')}
+                                  aria-required="true"
                                   type="number"
                                   min={0}
                                   max={99.9}
@@ -4440,6 +4461,7 @@ const ProvincialApplicationDetailsPage = () => {
                               <TextInput
                                 id="applicationSummaryOwnerClientNumber"
                                 labelText={requiredLabel('Owner client number')}
+                                aria-required="true"
                                 value={summaryForm.ownerClientNumber}
                                 invalid={Boolean(visibleSummaryFieldError('ownerClientNumber'))}
                                 invalidText={visibleSummaryFieldError('ownerClientNumber')}
@@ -4450,6 +4472,7 @@ const ProvincialApplicationDetailsPage = () => {
                               <SearchableSelect
                                 id="applicationSummaryOwnerClientLocationCode"
                                 labelText={requiredLabel('Owner client location')}
+                                required
                                 value={summaryForm.ownerClientLocationCode}
                                 invalid={Boolean(
                                   visibleSummaryFieldError('ownerClientLocationCode'),
@@ -4477,6 +4500,7 @@ const ProvincialApplicationDetailsPage = () => {
                                 <SearchableSelect
                                   id="applicationSummaryOwnerContactName"
                                   labelText={requiredLabel('Owner contact name')}
+                                  required
                                   value={summaryForm.ownerContactName}
                                   invalid={Boolean(visibleSummaryFieldError('ownerContactName'))}
                                   invalidText={visibleSummaryFieldError('ownerContactName')}
@@ -4500,6 +4524,7 @@ const ProvincialApplicationDetailsPage = () => {
                                 <TextInput
                                   id="applicationSummaryOwnerContactName"
                                   labelText={requiredLabel('Owner contact name')}
+                                  aria-required="true"
                                   value={summaryForm.ownerContactName}
                                   invalid={Boolean(visibleSummaryFieldError('ownerContactName'))}
                                   invalidText={visibleSummaryFieldError('ownerContactName')}
@@ -4514,6 +4539,7 @@ const ProvincialApplicationDetailsPage = () => {
                                 <SearchableSelect
                                   id="applicationSummaryApplicantTypeCode"
                                   labelText={requiredLabel('Applicant type')}
+                                  required
                                   value={summaryForm.applicantTypeCode}
                                   placeholder="Select applicant type"
                                   options={optionsWithCurrentValue(
@@ -4530,6 +4556,7 @@ const ProvincialApplicationDetailsPage = () => {
                                 <TextInput
                                   id="applicationSummaryApplicantTypeCode"
                                   labelText={requiredLabel('Applicant type')}
+                                  aria-required="true"
                                   value={ownerApplicantTypeLabel}
                                   readOnly
                                 />
@@ -4539,6 +4566,7 @@ const ProvincialApplicationDetailsPage = () => {
                                   <TextInput
                                     id="applicationSummaryAgentClientNumber"
                                     labelText={requiredLabel('Agent client number')}
+                                    aria-required="true"
                                     value={summaryForm.agentClientNumber}
                                     invalid={Boolean(visibleSummaryFieldError('agentClientNumber'))}
                                     invalidText={visibleSummaryFieldError('agentClientNumber')}
@@ -4549,6 +4577,7 @@ const ProvincialApplicationDetailsPage = () => {
                                   <SearchableSelect
                                     id="applicationSummaryAgentClientLocationCode"
                                     labelText={requiredLabel('Agent client location')}
+                                    required
                                     value={summaryForm.agentClientLocationCode}
                                     invalid={Boolean(
                                       visibleSummaryFieldError('agentClientLocationCode'),
@@ -4579,6 +4608,7 @@ const ProvincialApplicationDetailsPage = () => {
                                     <SearchableSelect
                                       id="applicationSummaryAgentContactName"
                                       labelText={requiredLabel('Agent contact name')}
+                                      required
                                       value={summaryForm.agentContactName}
                                       invalid={Boolean(
                                         visibleSummaryFieldError('agentContactName'),
@@ -4603,6 +4633,7 @@ const ProvincialApplicationDetailsPage = () => {
                                     <TextInput
                                       id="applicationSummaryAgentContactName"
                                       labelText={requiredLabel('Agent contact name')}
+                                      aria-required="true"
                                       value={summaryForm.agentContactName}
                                       invalid={Boolean(
                                         visibleSummaryFieldError('agentContactName'),
@@ -4620,6 +4651,7 @@ const ProvincialApplicationDetailsPage = () => {
                               <SearchableSelect
                                 id="applicationSummaryRegion"
                                 labelText={requiredLabel('Region')}
+                                required
                                 value={summaryForm.orgUnitNumber}
                                 invalid={Boolean(visibleSummaryFieldError('orgUnitNumber'))}
                                 invalidText={visibleSummaryFieldError('orgUnitNumber')}
@@ -4637,6 +4669,7 @@ const ProvincialApplicationDetailsPage = () => {
                               <SearchableSelect
                                 id="applicationSummaryProductType"
                                 labelText={requiredLabel('Product type')}
+                                required
                                 value={summaryForm.productTypeCode}
                                 invalid={Boolean(visibleSummaryFieldError('productTypeCode'))}
                                 invalidText={visibleSummaryFieldError('productTypeCode')}
@@ -4657,6 +4690,7 @@ const ProvincialApplicationDetailsPage = () => {
                                 <SearchableSelect
                                   id="applicationSummaryGrowthType"
                                   labelText={requiredLabel('Age class')}
+                                  required
                                   value={summaryForm.growthTypeCode}
                                   invalid={Boolean(visibleSummaryFieldError('growthTypeCode'))}
                                   invalidText={visibleSummaryFieldError('growthTypeCode')}
@@ -4705,6 +4739,7 @@ const ProvincialApplicationDetailsPage = () => {
                               <SearchableSelect
                                 id="applicationSummaryOicIndicator"
                                 labelText={requiredLabel('Order in Council indicator')}
+                                required
                                 value={summaryForm.oicIndicator}
                                 placeholder="Select Order in Council indicator"
                                 options={optionsWithCurrentValue(
@@ -4726,6 +4761,7 @@ const ProvincialApplicationDetailsPage = () => {
                                 <TextArea
                                   id="applicationSummaryProductLocation"
                                   labelText={requiredLabel('Location of logs')}
+                                  aria-required="true"
                                   enableCounter
                                   maxCount={APPLICATION_PRODUCT_LOCATION_MAX_LENGTH}
                                   maxLength={APPLICATION_PRODUCT_LOCATION_MAX_LENGTH}
@@ -4743,6 +4779,7 @@ const ProvincialApplicationDetailsPage = () => {
                                 <SearchableSelect
                                   id="applicationSummarySpeciesCandidate"
                                   labelText={requiredLabel('Species list')}
+                                  required
                                   value={applicationSpeciesCandidate}
                                   disabled={applicationSpeciesSelectOptions.length === 0}
                                   placeholder={speciesPlaceholder}
@@ -5163,6 +5200,7 @@ const ProvincialApplicationDetailsPage = () => {
                                 labelText={requiredLabel(
                                   editingRemarkId ? `Edit Remark ${editingRemarkId}` : 'New Remark',
                                 )}
+                                aria-required="true"
                                 value={remarkBody}
                                 invalid={!!remarkValidationMessage}
                                 invalidText={remarkValidationMessage}

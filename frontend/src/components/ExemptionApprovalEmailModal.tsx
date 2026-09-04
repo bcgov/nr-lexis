@@ -71,6 +71,7 @@ const ExemptionApprovalEmailModal = ({
               id={`exemption-approval-recipient-${index}`}
               type="email"
               labelText={requiredLabel(`Recipient for exemption ${exemptionNumber}`)}
+              aria-required="true"
               value={email}
               invalid={!valid}
               invalidText="Enter one valid email address."

@@ -572,6 +572,7 @@ export default function NotificationsPage() {
               legendText=""
               name="notification-level"
               valueSelected={form.notificationLevel}
+              required
               disabled={saving}
               onChange={(value) =>
                 setForm((current) => ({
@@ -599,8 +600,22 @@ export default function NotificationsPage() {
             </RadioButtonGroup>
           </fieldset>
 
-          <fieldset className="notifications-page__form-section notifications-page__audience">
+          <fieldset
+            className="notifications-page__form-section notifications-page__audience"
+            aria-describedby={
+              form.audienceMode === 'ROLES' ? 'notification-audience-required' : undefined
+            }
+          >
             <legend>{requiredLabel('Audience', form.audienceMode === 'ROLES')}</legend>
+            {form.audienceMode === 'ROLES' && (
+              // The requirement is one selected role, not every role checkbox.
+              <p
+                id="notification-audience-required"
+                className="notifications-page__visually-hidden"
+              >
+                Select at least one audience role.
+              </p>
+            )}
             <Checkbox
               id="notification-audience-all"
               labelText="All roles"

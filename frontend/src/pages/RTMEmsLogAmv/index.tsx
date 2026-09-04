@@ -650,6 +650,7 @@ const RTMEmsLogAmvPage = () => {
               id="rtm-amv-effective-date"
               type="month"
               labelText={requiredLabel('Effective month')}
+              aria-required="true"
               value={isMonthStartDate(targetDate) ? targetDate.slice(0, 7) : ''}
               onChange={(event) => {
                 const month = event.target.value

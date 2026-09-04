@@ -1540,6 +1540,7 @@ function ProvincialApplicationItemsPanel({
                   <TextInput
                     id="applicationItemsPackageNumber"
                     labelText={requiredLabel('Package Number')}
+                    aria-required="true"
                     value={packageForm.newPackageNumber}
                     disabled={!canSaveSelectedPackage || !canUpdatePackageNumber}
                     invalid={!!packageFieldError('packageNewPackageNumber')}
@@ -1550,6 +1551,7 @@ function ProvincialApplicationItemsPanel({
                   <TextInput
                     id="applicationItemsPackageVolume"
                     labelText={requiredLabel('Package Volume (m³)')}
+                    aria-required="true"
                     value={packageForm.volume}
                     disabled={!canSaveSelectedPackage}
                     invalid={!!packageFieldError('packageVolume')}
@@ -1560,6 +1562,7 @@ function ProvincialApplicationItemsPanel({
                   <TextInput
                     id="applicationItemsPackageLength"
                     labelText={requiredLabel('Average Length (m)')}
+                    aria-required="true"
                     value={packageForm.averageLength}
                     disabled={!canSaveSelectedPackage}
                     invalid={!!packageFieldError('packageAverageLength')}
@@ -1570,6 +1573,7 @@ function ProvincialApplicationItemsPanel({
                   <TextInput
                     id="applicationItemsPackageDiameter"
                     labelText={requiredLabel('Average Diameter')}
+                    aria-required="true"
                     value={packageForm.averageDiameter}
                     disabled={!canSaveSelectedPackage}
                     invalid={!!packageFieldError('packageAverageDiameter')}
@@ -1580,6 +1584,7 @@ function ProvincialApplicationItemsPanel({
                   <SearchableSelect
                     id="applicationItemsPackageStatus"
                     labelText={requiredLabel('Status Code')}
+                    required
                     value={packageForm.status}
                     disabled={!canSaveSelectedPackage}
                     invalid={!!packageFieldError('packageStatus')}
@@ -1592,6 +1597,7 @@ function ProvincialApplicationItemsPanel({
                   <SearchableSelect
                     id="applicationItemsPackageProductType"
                     labelText={requiredLabel('Product Type')}
+                    required
                     value={packageForm.productType}
                     disabled={!canSaveSelectedPackage}
                     invalid={!!packageFieldError('packageProductType')}
@@ -1614,6 +1620,7 @@ function ProvincialApplicationItemsPanel({
                       'Age Class',
                       packageRequiresAgeClass(packageForm.productType),
                     )}
+                    required={packageRequiresAgeClass(packageForm.productType)}
                     value={packageForm.ageClass}
                     disabled={
                       !canSaveSelectedPackage || !packageRequiresAgeClass(packageForm.productType)
@@ -1798,6 +1805,7 @@ function ProvincialApplicationItemsPanel({
               <TextInput
                 id="applicationItemsCreatePackageNumber"
                 labelText={requiredLabel('Package Number')}
+                aria-required="true"
                 value={createPackageForm.packageNumber}
                 disabled={!canCreatePackages}
                 invalid={!!createPackageFieldError('createPackageNumber')}
@@ -1808,6 +1816,7 @@ function ProvincialApplicationItemsPanel({
               <TextInput
                 id="applicationItemsCreatePackageVolume"
                 labelText={requiredLabel('Package Volume (m³)')}
+                aria-required="true"
                 value={createPackageForm.volume}
                 disabled={!canCreatePackages}
                 invalid={!!createPackageFieldError('createPackageVolume')}
@@ -1818,6 +1827,7 @@ function ProvincialApplicationItemsPanel({
               <TextInput
                 id="applicationItemsCreatePackageLength"
                 labelText={requiredLabel('Average Length (m)')}
+                aria-required="true"
                 value={createPackageForm.averageLength}
                 disabled={!canCreatePackages}
                 invalid={!!createPackageFieldError('createPackageAverageLength')}
@@ -1828,6 +1838,7 @@ function ProvincialApplicationItemsPanel({
               <TextInput
                 id="applicationItemsCreatePackageDiameter"
                 labelText={requiredLabel('Average Diameter')}
+                aria-required="true"
                 value={createPackageForm.averageDiameter}
                 disabled={!canCreatePackages}
                 invalid={!!createPackageFieldError('createPackageAverageDiameter')}
@@ -1838,6 +1849,7 @@ function ProvincialApplicationItemsPanel({
               <SearchableSelect
                 id="applicationItemsCreatePackageStatus"
                 labelText={requiredLabel('Status Code')}
+                required
                 value={createPackageForm.status}
                 disabled={!canCreatePackages}
                 invalid={!!createPackageFieldError('createPackageStatus')}
@@ -1850,6 +1862,7 @@ function ProvincialApplicationItemsPanel({
               <SearchableSelect
                 id="applicationItemsCreatePackageProductType"
                 labelText={requiredLabel('Product Type')}
+                required
                 value={createPackageForm.productType}
                 disabled={!canCreatePackages}
                 invalid={!!createPackageFieldError('createPackageProductType')}
@@ -1872,6 +1885,7 @@ function ProvincialApplicationItemsPanel({
                   'Age Class',
                   packageRequiresAgeClass(createPackageForm.productType),
                 )}
+                required={packageRequiresAgeClass(createPackageForm.productType)}
                 value={createPackageForm.ageClass}
                 disabled={
                   !canCreatePackages || !packageRequiresAgeClass(createPackageForm.productType)
@@ -1992,6 +2006,7 @@ function ProvincialApplicationItemsPanel({
                 <TextInput
                   id="applicationItemsScaleTimberMark"
                   labelText={requiredLabel('Timber Mark')}
+                  aria-required="true"
                   value={scaleForm.timberMark}
                   disabled={
                     !canAddScalesWithReferenceOptions ||
@@ -2006,6 +2021,7 @@ function ProvincialApplicationItemsPanel({
                 <SearchableSelect
                   id="applicationItemsScaleSpecies"
                   labelText={requiredLabel('Species')}
+                  required
                   value={scaleForm.speciesCode}
                   disabled={
                     !canAddScalesWithReferenceOptions ||
@@ -2022,6 +2038,7 @@ function ProvincialApplicationItemsPanel({
                 <SearchableSelect
                   id="applicationItemsScaleGrade"
                   labelText={requiredLabel('Grade')}
+                  required
                   value={scaleForm.gradeCode}
                   disabled={
                     !canAddScalesWithReferenceOptions ||
@@ -2038,6 +2055,7 @@ function ProvincialApplicationItemsPanel({
                 <TextInput
                   id="applicationItemsScalePieces"
                   labelText={requiredLabel('Pieces')}
+                  aria-required="true"
                   value={scaleForm.pieces}
                   disabled={
                     !canAddScalesWithReferenceOptions ||
@@ -2052,6 +2070,7 @@ function ProvincialApplicationItemsPanel({
                 <TextInput
                   id="applicationItemsScaleVolume"
                   labelText={requiredLabel('Scale Volume (m³)')}
+                  aria-required="true"
                   value={scaleForm.volume}
                   disabled={
                     !canAddScalesWithReferenceOptions ||

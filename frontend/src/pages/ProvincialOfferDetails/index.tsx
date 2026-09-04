@@ -610,6 +610,7 @@ const ProvincialOfferDetailsPage = () => {
                 <TextInput
                   id="offerCompanyName"
                   labelText={requiredLabel('Company')}
+                  aria-required="true"
                   value={form.companyName}
                   readOnly
                   maxLength={OFFER_COMPANY_NAME_MAX_LENGTH}
@@ -617,6 +618,7 @@ const ProvincialOfferDetailsPage = () => {
                 <TextInput
                   id="offerContactName"
                   labelText={requiredLabel('Contact name')}
+                  aria-required="true"
                   value={form.contactName}
                   readOnly
                   maxLength={OFFER_CONTACT_NAME_MAX_LENGTH}
@@ -662,6 +664,7 @@ const ProvincialOfferDetailsPage = () => {
                 <TextInput
                   id="offerPurchaseOfferAmount"
                   labelText={requiredLabel('Offer amount ($/m³)')}
+                  aria-required="true"
                   value={form.purchaseOfferAmount}
                   readOnly={!canEditOfferDetailFields}
                   invalid={canEditOfferDetailFields && !!fieldError('purchaseOfferAmount')}
@@ -672,6 +675,7 @@ const ProvincialOfferDetailsPage = () => {
                 <IsoDatePicker
                   id="offerPurchaseOfferDate"
                   labelText={requiredLabel('Offer received date')}
+                  required
                   value={form.purchaseOfferDate}
                   invalid={canEditOfferDetailFields && !!fieldError('purchaseOfferDate')}
                   invalidText={fieldError('purchaseOfferDate')}
@@ -682,6 +686,7 @@ const ProvincialOfferDetailsPage = () => {
                 <TextArea
                   id="offerPickupLocation"
                   labelText={requiredLabel('Pickup location')}
+                  aria-required="true"
                   value={form.pickupLocation}
                   readOnly={!canEditOfferDetailFields}
                   invalid={canEditOfferDetailFields && !!fieldError('pickupLocation')}
@@ -723,6 +728,7 @@ const ProvincialOfferDetailsPage = () => {
                     'Offer withdrawal reason',
                     form.offerWithdrawalDate.trim().length > 0,
                   )}
+                  aria-required={form.offerWithdrawalDate.trim().length > 0 ? 'true' : undefined}
                   value={form.withdrawReason}
                   readOnly={!canEditWithdrawFields}
                   invalid={canEditWithdrawFields && !!fieldError('withdrawReason')}

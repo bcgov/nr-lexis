@@ -14,6 +14,7 @@ type SearchableSelectProps = {
   options: SearchableSelectOption[]
   placeholder?: string
   allowCustomValue?: boolean
+  required?: boolean
   disabled?: boolean
   invalid?: boolean
   invalidText?: ReactNode
@@ -32,6 +33,7 @@ export default function SearchableSelect({
   options,
   placeholder = 'Search and select',
   allowCustomValue = false,
+  required = false,
   disabled = false,
   invalid = false,
   invalidText,
@@ -54,6 +56,7 @@ export default function SearchableSelect({
       }
       placeholder={placeholder}
       allowCustomValue={allowCustomValue}
+      aria-required={required || undefined}
       disabled={disabled}
       invalid={invalid}
       invalidText={invalidText}

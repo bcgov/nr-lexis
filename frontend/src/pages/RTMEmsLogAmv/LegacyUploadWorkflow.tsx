@@ -1424,6 +1424,7 @@ const RtmEmsLogAmvUploadPage = () => {
           className="admin-upload-native-input"
           type="file"
           aria-label={inputLabel}
+          aria-required="true"
           accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
           disabled={isFileSelectionDisabled}
           onChange={isReplacement ? updateReplacementFile : updateUploadFile}

@@ -91,6 +91,7 @@ const ForestClientSelectionPage = ({ onSelected }: ForestClientSelectionPageProp
                 legendText={requiredLabel('Organization')}
                 name="forest-client-selection"
                 valueSelected={selectedClientNumber}
+                required
                 orientation="vertical"
                 disabled={isSubmitting || availableClientNumbers.length === 0}
                 onChange={(value) => setSelectedClientNumber(String(value))}

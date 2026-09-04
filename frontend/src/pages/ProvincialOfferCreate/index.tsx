@@ -875,6 +875,7 @@ const ProvincialOfferCreatePage = () => {
               <TextInput
                 id="applicationNumber"
                 labelText={requiredLabel('Application number')}
+                aria-required="true"
                 value={form.applicationNumber}
                 invalid={!!applicationNumberError}
                 invalidText={applicationNumberError}
@@ -888,6 +889,7 @@ const ProvincialOfferCreatePage = () => {
                 <SearchableSelect
                   id="packageNumber"
                   labelText={requiredLabel('Package number')}
+                  required
                   value={form.packageNumber}
                   options={packageOptions}
                   placeholder={
@@ -905,6 +907,7 @@ const ProvincialOfferCreatePage = () => {
                 <TextInput
                   id="packageNumber"
                   labelText={requiredLabel('Package number', packageOptions.length > 0)}
+                  aria-required={packageOptions.length > 0 ? 'true' : undefined}
                   value={hasNoPackagesForApplication ? 'No Packages' : form.packageNumber}
                   readOnly={hasNoPackagesForApplication}
                   invalid={!!packageNumberError}
@@ -946,6 +949,7 @@ const ProvincialOfferCreatePage = () => {
                 <TextInput
                   id="offeringClientNumber"
                   labelText={requiredLabel('Offering client number')}
+                  aria-required="true"
                   value={effectiveOfferingClientNumber}
                   invalid={!!fieldError('offeringClientNumber')}
                   invalidText={fieldError('offeringClientNumber')}
@@ -956,6 +960,7 @@ const ProvincialOfferCreatePage = () => {
               <TextInput
                 id="companyName"
                 labelText={requiredLabel('Company')}
+                aria-required="true"
                 value={effectiveCompanyName}
                 invalid={!!fieldError('companyName')}
                 invalidText={fieldError('companyName')}
@@ -977,6 +982,7 @@ const ProvincialOfferCreatePage = () => {
               <TextInput
                 id="contactName"
                 labelText={requiredLabel('Contact name')}
+                aria-required="true"
                 value={effectiveContactName}
                 invalid={!!fieldError('contactName')}
                 invalidText={fieldError('contactName')}
@@ -1041,6 +1047,7 @@ const ProvincialOfferCreatePage = () => {
               <TextInput
                 id="purchaseOfferAmount"
                 labelText={requiredLabel('Offer amount ($/m³)')}
+                aria-required="true"
                 value={form.purchaseOfferAmount}
                 invalid={!!fieldError('purchaseOfferAmount')}
                 invalidText={fieldError('purchaseOfferAmount')}
@@ -1083,6 +1090,7 @@ const ProvincialOfferCreatePage = () => {
               <TextArea
                 id="pickupLocation"
                 labelText={requiredLabel('Pickup location')}
+                aria-required="true"
                 value={form.pickupLocation}
                 invalid={!!fieldError('pickupLocation')}
                 invalidText={fieldError('pickupLocation')}

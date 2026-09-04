@@ -1786,6 +1786,7 @@ const ProvincialExemptionDetailsPage = () => {
                               <SearchableSelect
                                 id="exemptionDetailType"
                                 labelText={requiredLabel('Exemption type')}
+                                required
                                 value={editForm.exemptionTypeCode}
                                 options={editableTypeOptions}
                                 disabled={
@@ -1803,6 +1804,7 @@ const ProvincialExemptionDetailsPage = () => {
                               <SearchableSelect
                                 id="exemptionDetailStatus"
                                 labelText={requiredLabel('Status')}
+                                required
                                 value={editForm.exemptionStatusCode}
                                 options={editableStatusOptions}
                                 disabled={
@@ -1822,6 +1824,7 @@ const ProvincialExemptionDetailsPage = () => {
                                   'Approval date',
                                   currentTypeCode === 'O' || currentTypeCode === 'B',
                                 )}
+                                required={currentTypeCode === 'O' || currentTypeCode === 'B'}
                                 value={editForm.approvalDate}
                                 invalid={
                                   ((currentTypeCode === 'O' || currentTypeCode === 'B') &&
@@ -1843,6 +1846,7 @@ const ProvincialExemptionDetailsPage = () => {
                               <IsoDatePicker
                                 id="exemptionDetailExpiryDate"
                                 labelText={requiredLabel('Expiry date')}
+                                required
                                 value={editForm.expiryDate}
                                 invalid={
                                   !editForm.expiryDate.trim() ||
@@ -1863,6 +1867,7 @@ const ProvincialExemptionDetailsPage = () => {
                               <TextInput
                                 id="exemptionDetailApprovedVolume"
                                 labelText={requiredLabel('Approved volume (m³)')}
+                                aria-required="true"
                                 value={editForm.approvedVolume}
                                 disabled={!canEditApprovedVolume}
                                 onChange={(event) =>
@@ -1878,6 +1883,7 @@ const ProvincialExemptionDetailsPage = () => {
                               <RegionMultiSelect
                                 id="exemptionDetailRegions"
                                 titleText={requiredLabel('Regions')}
+                                required
                                 items={regionOptions}
                                 selectedItems={selectedRegions}
                                 disabled={
@@ -2009,6 +2015,7 @@ const ProvincialExemptionDetailsPage = () => {
                               <TextInput
                                 id="exemptionApplicationNumberToAdd"
                                 labelText={requiredLabel('Application number')}
+                                aria-required="true"
                                 value={applicationNumberToAdd}
                                 invalid={Boolean(applicationNumberToAddError)}
                                 invalidText={applicationNumberToAddError}
@@ -2379,6 +2386,7 @@ const ProvincialExemptionDetailsPage = () => {
                                 <TextInput
                                   id="exemptionFeeRate"
                                   labelText={requiredLabel('Fee rate ($/m³)')}
+                                  aria-required="true"
                                   value={editForm.feeRate}
                                   disabled={!canEditFeeOverride}
                                   onChange={(event) =>
@@ -2614,6 +2622,7 @@ const ProvincialExemptionDetailsPage = () => {
             <Checkbox
               id="approveExemptionCertification"
               labelText={requiredLabel('I certify that this exemption has been approved.')}
+              aria-required="true"
               checked={approvalCertified}
               disabled={approving}
               onChange={(_, { checked }) => setApprovalCertified(Boolean(checked))}

@@ -33,11 +33,13 @@ describe('ApplicationNumberSelect', () => {
         id="applicationNumber"
         labelText="Application Number (required)"
         value=""
+        required
         onChange={onChange}
       />,
     )
 
     const input = screen.getByRole('combobox', { name: 'Application Number (required)' })
+    expect(input).toHaveAttribute('aria-required', 'true')
     await userEvent.type(input, '28077')
 
     await waitFor(() => {

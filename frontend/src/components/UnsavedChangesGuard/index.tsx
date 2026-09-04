@@ -195,6 +195,7 @@ const RouterNavigationGuard = ({
             <Checkbox
               id={acknowledgementId}
               labelText={requiredLabel(saveAcknowledgement.label)}
+              aria-required="true"
               checked={saveAcknowledged}
               disabled={navigationActionsDisabled}
               onChange={(_, { checked }) => setSaveAcknowledged(Boolean(checked))}

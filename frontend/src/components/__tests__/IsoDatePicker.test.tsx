@@ -35,6 +35,20 @@ describe('IsoDatePicker', () => {
     expect(input).toHaveAttribute('pattern', String.raw`\d{4}-\d{2}-\d{2}`)
   })
 
+  it('exposes required status on the editable date input', () => {
+    render(
+      <IsoDatePicker
+        id="requiredApplicationDate"
+        labelText="Application Date"
+        value=""
+        required
+        onChange={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByLabelText('Application Date')).toHaveAttribute('aria-required', 'true')
+  })
+
   it('renders an initial ISO date value', () => {
     render(
       <IsoDatePicker

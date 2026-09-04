@@ -1120,6 +1120,7 @@ const ProvincialReviewPage = () => {
           <SearchableSelect
             id="reviewRejectStatus"
             labelText={requiredLabel('Application status')}
+            required
             value={rejectStatusCode}
             placeholder="Select application status"
             options={rejectStatusSelectOptions}
@@ -1138,6 +1139,7 @@ const ProvincialReviewPage = () => {
           <TextArea
             id="reviewRejectRemark"
             labelText={requiredLabel('Remarks')}
+            aria-required="true"
             rows={6}
             maxCount={250}
             value={rejectRemark}
@@ -1162,6 +1164,7 @@ const ProvincialReviewPage = () => {
           <TextInput
             id="reviewRejectEmail"
             labelText={requiredLabel('Send to:', rejectStatusSupportsEmail && sendRejectEmail)}
+            aria-required={rejectStatusSupportsEmail && sendRejectEmail ? 'true' : undefined}
             value={rejectEmailAddress}
             disabled={!rejectStatusSupportsEmail || loadingRejectEmail || submittingReject}
             invalid={rejectValidationMessage === REJECT_EMAIL_REQUIRED_MESSAGE}

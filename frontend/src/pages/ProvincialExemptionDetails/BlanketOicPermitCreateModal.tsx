@@ -539,6 +539,7 @@ const BlanketOicPermitCreateModal = ({
           <IsoDatePicker
             id="boic-permit-submit-date"
             labelText={requiredLabel('Submit date')}
+            required
             value={form.permitSubmitDate}
             invalid={!!fieldError('permitSubmitDate')}
             invalidText={fieldError('permitSubmitDate')}
@@ -547,6 +548,7 @@ const BlanketOicPermitCreateModal = ({
           <IsoDatePicker
             id="boic-permit-issue-date"
             labelText={requiredLabel('Issue date')}
+            required
             value={form.permitIssueDate}
             invalid={!!fieldError('permitIssueDate')}
             invalidText={fieldError('permitIssueDate')}
@@ -555,6 +557,7 @@ const BlanketOicPermitCreateModal = ({
           <IsoDatePicker
             id="boic-permit-expiry-date"
             labelText={requiredLabel('Expiry date')}
+            required
             value={form.permitExpiryDate}
             invalid={!!fieldError('permitExpiryDate')}
             invalidText={fieldError('permitExpiryDate')}
@@ -563,6 +566,7 @@ const BlanketOicPermitCreateModal = ({
           <TextInput
             id="boic-permit-request-pieces"
             labelText={requiredLabel('Permit Request Pieces')}
+            aria-required="true"
             value={form.oicPermitTotalPieces}
             invalid={!!fieldError('oicPermitTotalPieces')}
             invalidText={fieldError('oicPermitTotalPieces')}
@@ -571,6 +575,7 @@ const BlanketOicPermitCreateModal = ({
           <TextInput
             id="boic-permit-request-volume"
             labelText={requiredLabel('Permit Request Volume (m³)')}
+            aria-required="true"
             value={form.oicPermitTotalVolume}
             invalid={!!fieldError('oicPermitTotalVolume')}
             invalidText={fieldError('oicPermitTotalVolume')}
@@ -579,6 +584,7 @@ const BlanketOicPermitCreateModal = ({
           <Select
             id="boic-permit-region"
             labelText={requiredLabel('Region')}
+            aria-required="true"
             value={form.orgUnitNumber}
             invalid={!!fieldError('orgUnitNumber')}
             invalidText={fieldError('orgUnitNumber')}
@@ -608,6 +614,7 @@ const BlanketOicPermitCreateModal = ({
           <TextInput
             id="boic-permit-owner-client"
             labelText={requiredLabel('Owner client number')}
+            aria-required="true"
             value={form.ownerClientNumber}
             invalid={
               !!fieldError('ownerClientNumber') ||
@@ -630,6 +637,7 @@ const BlanketOicPermitCreateModal = ({
           <Select
             id="boic-permit-owner-location"
             labelText={requiredLabel('Owner location')}
+            aria-required="true"
             value={form.ownerClientLocation}
             invalid={!!fieldError('ownerClientLocation')}
             invalidText={fieldError('ownerClientLocation')}
@@ -671,6 +679,7 @@ const BlanketOicPermitCreateModal = ({
               <TextInput
                 id="boic-permit-agent-client"
                 labelText={requiredLabel('Agent client number')}
+                aria-required="true"
                 value={form.agentClientNumber}
                 invalid={
                   !!fieldError('agentClientNumber') ||
@@ -694,6 +703,7 @@ const BlanketOicPermitCreateModal = ({
               <Select
                 id="boic-permit-agent-location"
                 labelText={requiredLabel('Agent location')}
+                aria-required="true"
                 value={form.agentClientLocation}
                 invalid={!!fieldError('agentClientLocation')}
                 invalidText={fieldError('agentClientLocation')}
@@ -723,6 +733,7 @@ const BlanketOicPermitCreateModal = ({
           <TextInput
             id="boic-permit-destination-company"
             labelText={requiredLabel('Purchaser')}
+            aria-required="true"
             value={form.destinationCompanyName}
             invalid={!!fieldError('destinationCompanyName')}
             invalidText={fieldError('destinationCompanyName')}
@@ -732,6 +743,7 @@ const BlanketOicPermitCreateModal = ({
           <Select
             id="boic-permit-destination-country"
             labelText={requiredLabel('Final destination country')}
+            aria-required="true"
             value={form.destinationCountry}
             invalid={!!fieldError('destinationCountry')}
             invalidText={fieldError('destinationCountry')}
@@ -750,6 +762,7 @@ const BlanketOicPermitCreateModal = ({
           <Select
             id="boic-permit-transport-type"
             labelText={requiredLabel('Transport type')}
+            aria-required="true"
             value={form.transportType}
             invalid={!!fieldError('transportType')}
             invalidText={fieldError('transportType')}
@@ -768,6 +781,7 @@ const BlanketOicPermitCreateModal = ({
           <TextInput
             id="boic-permit-transport-name"
             labelText={requiredLabel('Transport name')}
+            aria-required="true"
             value={form.transportName}
             invalid={!!fieldError('transportName')}
             invalidText={fieldError('transportName')}
@@ -777,6 +791,7 @@ const BlanketOicPermitCreateModal = ({
           <IsoDatePicker
             id="boic-permit-estimated-shipping-date"
             labelText={requiredLabel('Estimated shipping date')}
+            required
             value={form.estimatedShippingDate}
             invalid={!!fieldError('estimatedShippingDate')}
             invalidText={fieldError('estimatedShippingDate')}
@@ -785,6 +800,7 @@ const BlanketOicPermitCreateModal = ({
           <Select
             id="boic-permit-port-of-export"
             labelText={requiredLabel('Customs port of export')}
+            aria-required="true"
             value={form.portOfExport}
             invalid={!!fieldError('portOfExport')}
             invalidText={fieldError('portOfExport')}
@@ -808,6 +824,7 @@ const BlanketOicPermitCreateModal = ({
             <TextInput
               id="boic-permit-other-port"
               labelText={requiredLabel('Other port of export')}
+              aria-required="true"
               value={form.otherPortOfExport}
               invalid={!!fieldError('otherPortOfExport')}
               invalidText={fieldError('otherPortOfExport')}
