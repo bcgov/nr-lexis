@@ -41,6 +41,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -688,14 +689,22 @@ public class ApplicationDetailsRpcController {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
 
+    Optional<ApplicationDetailsRpcService.ApplicationSummarySaveSource> parsedSaveSource =
+        ApplicationDetailsRpcService.ApplicationSummarySaveSource.fromWireValue(
+            first(parameters, "saveSource"));
+    if (parsedSaveSource.isEmpty()) {
+      return invalidApplicationSummarySaveSource(parameters);
+    }
+    ApplicationDetailsRpcService.ApplicationSummarySaveSource saveSource = parsedSaveSource.get();
     String requestedApplicantType =
         trimToNull(first(parameters, "ownerApplicantType", "applicantType"));
-    if (requestedApplicantType != null
+    if (saveSource.updatesApplicantType()
+        && requestedApplicantType != null
         && !canPerform(authentication, LEGACY_ACTION_CHANGE_APPLICANT_TYPE)) {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
 
-    List<String> dateErrors = validateApplicationSummaryDateParameters(parameters);
+    List<String> dateErrors = validateApplicationSummaryDateParameters(parameters, saveSource);
     if (!dateErrors.isEmpty()) {
       return ResponseEntity.ok(
           new ApplicationPersistenceResponseDto(
@@ -707,7 +716,7 @@ public class ApplicationDetailsRpcController {
     }
 
     ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest request =
-        toApplicationSummaryUpdateRequest(parameters);
+        toApplicationSummaryUpdateRequest(parameters, saveSource);
 
     ApplicationDetailsRpcService service = serviceProvider.getIfAvailable();
     if (service == null) {
@@ -716,11 +725,18 @@ public class ApplicationDetailsRpcController {
     }
 
     String userId = userId(authentication);
-    provincialAuthorizationService.requireOrgUnit(
-        authentication, request.orgUnitNumber(), OrgUnitSurface.APPLICATION_WRITE);
     requireApplicationAccess(request.applicationNumber(), authentication);
+    Optional<ApplicationSummaryUpdateAuthorization> updateAuthorization =
+        resolveApplicationSummaryUpdateAuthorization(service, request);
+    if (updateAuthorization.isEmpty()) {
+      return applicationSummaryNotFound(request.applicationNumber());
+    }
+    provincialAuthorizationService.requireOrgUnit(
+        authentication, updateAuthorization.get().orgUnitNumber(), OrgUnitSurface.APPLICATION_WRITE);
     if (!provincialAuthorizationService.canCreateForClient(
-        authentication, request.ownerClientNumber(), request.agentClientNumber())) {
+        authentication,
+        updateAuthorization.get().ownerClientNumber(),
+        updateAuthorization.get().agentClientNumber())) {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
     applicationEditPolicyService.requireSummaryEdit(
@@ -733,13 +749,20 @@ public class ApplicationDetailsRpcController {
         request.applicationNumber(),
         () -> service.getPermitNumbersForApplicationMutation(request.applicationNumber()),
         () -> {
-          provincialAuthorizationService.requireOrgUnit(
-              authentication, request.orgUnitNumber(), OrgUnitSurface.APPLICATION_WRITE);
           requireApplicationAccess(request.applicationNumber(), authentication);
+          Optional<ApplicationSummaryUpdateAuthorization> currentUpdateAuthorization =
+              resolveApplicationSummaryUpdateAuthorization(service, request);
+          if (currentUpdateAuthorization.isEmpty()) {
+            return applicationSummaryNotFound(request.applicationNumber());
+          }
+          provincialAuthorizationService.requireOrgUnit(
+              authentication,
+              currentUpdateAuthorization.get().orgUnitNumber(),
+              OrgUnitSurface.APPLICATION_WRITE);
           if (!provincialAuthorizationService.canCreateForClient(
               authentication,
-              request.ownerClientNumber(),
-              request.agentClientNumber())) {
+              currentUpdateAuthorization.get().ownerClientNumber(),
+              currentUpdateAuthorization.get().agentClientNumber())) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
           }
           applicationEditPolicyService.requireSummaryEdit(
@@ -1887,8 +1910,70 @@ public class ApplicationDetailsRpcController {
     return normalized == null ? null : normalized.toUpperCase(Locale.ROOT);
   }
 
-  private List<String> validateApplicationSummaryDateParameters(
+  private ResponseEntity<ApplicationPersistenceResponseDto> invalidApplicationSummarySaveSource(
       MultiValueMap<String, String> parameters) {
+    return ResponseEntity.ok(
+        new ApplicationPersistenceResponseDto(
+            false,
+            null,
+            parsePositiveLong(first(parameters, "applicationNumber")),
+            List.of("A valid application save source is required."),
+            List.of()));
+  }
+
+  private ResponseEntity<ApplicationPersistenceResponseDto> applicationSummaryNotFound(
+      Long applicationNumber) {
+    return ResponseEntity.ok(
+        new ApplicationPersistenceResponseDto(
+            false,
+            applicationNumber == null ? null : "No application was found for " + applicationNumber + ".",
+            applicationNumber,
+            List.of(),
+            List.of()));
+  }
+
+  private Optional<ApplicationSummaryUpdateAuthorization>
+      resolveApplicationSummaryUpdateAuthorization(
+          ApplicationDetailsRpcService service,
+          ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest request) {
+    if (request.saveSource()
+        == ApplicationDetailsRpcService.ApplicationSummarySaveSource.FULL) {
+      return Optional.of(
+          new ApplicationSummaryUpdateAuthorization(
+              request.orgUnitNumber(), request.ownerClientNumber(), request.agentClientNumber()));
+    }
+    return service
+        .getApplicationSummarySnapshot(request.applicationNumber())
+        .map(
+            snapshot -> {
+              boolean updatesApplicantType = request.saveSource().updatesApplicantType();
+              String applicantTypeCode =
+                  updatesApplicantType && request.applicantTypeCode() != null
+                      ? request.applicantTypeCode()
+                      : snapshot.applicantTypeCode();
+              boolean agentApplicant = "A".equalsIgnoreCase(trimToNull(applicantTypeCode));
+              return new ApplicationSummaryUpdateAuthorization(
+                  request.saveSource().updatesSummaryFields() && request.orgUnitNumber() != null
+                      ? request.orgUnitNumber()
+                      : snapshot.orgUnitNumber(),
+                  request.saveSource().updatesOwnerFields() && request.ownerClientNumber() != null
+                      ? request.ownerClientNumber()
+                      : snapshot.ownerClientNumber(),
+                  agentApplicant
+                      ? request.saveSource().updatesAgentFields()
+                              && request.agentClientNumber() != null
+                          ? request.agentClientNumber()
+                          : snapshot.agentClientNumber()
+                      : null);
+            });
+  }
+
+  private List<String> validateApplicationSummaryDateParameters(
+      MultiValueMap<String, String> parameters,
+      ApplicationDetailsRpcService.ApplicationSummarySaveSource saveSource) {
+    if (!saveSource.updatesSummaryFields()) {
+      return List.of();
+    }
     List<String> errors = new ArrayList<>();
     validateApplicationSummaryDate(
         first(parameters, "applicationDate"), "Application date", errors);
@@ -1906,7 +1991,8 @@ public class ApplicationDetailsRpcController {
   }
 
   private ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest toApplicationSummaryUpdateRequest(
-      MultiValueMap<String, String> parameters) {
+      MultiValueMap<String, String> parameters,
+      ApplicationDetailsRpcService.ApplicationSummarySaveSource saveSource) {
     return new ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest(
         parsePositiveLong(first(parameters, "applicationNumber")),
         parseDate(first(parameters, "applicationDate")),
@@ -1932,7 +2018,8 @@ public class ApplicationDetailsRpcController {
         first(parameters, "oicIndicator"),
         first(parameters, "applicationEndUseCode", "endUseCode", "endUse"),
         parseSpeciesSelection(parameters),
-        true);
+        true,
+        saveSource);
   }
 
   private ApplicationDetailsRpcService.PackageMutationRequest toPackageMutationRequest(
@@ -2347,6 +2434,9 @@ public class ApplicationDetailsRpcController {
       String message) {}
 
   private record RemarkValidationFailure(String reason, String message) {}
+
+  private record ApplicationSummaryUpdateAuthorization(
+      Long orgUnitNumber, String ownerClientNumber, String agentClientNumber) {}
 
   public record CheckFormChangesResponseDto(boolean applicationChanged) {}
 

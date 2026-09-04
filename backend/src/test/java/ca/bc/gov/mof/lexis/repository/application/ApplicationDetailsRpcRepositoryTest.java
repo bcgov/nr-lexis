@@ -325,6 +325,38 @@ class ApplicationDetailsRpcRepositoryTest {
     verify(oicListCursor, never()).getLong("EXPORT_PERMIT_NUMBER");
   }
 
+  @Test
+  @SuppressWarnings({"rawtypes", "unchecked"})
+  void applicationUpdateShouldRoundTripOracleProductLocationSentinel() throws Exception {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    CallableStatement readStatement = mock(CallableStatement.class);
+    CallableStatement updateStatement = mock(CallableStatement.class);
+    ResultSet cursor = mock(ResultSet.class);
+    when(
+            jdbcTemplate.execute(
+                org.mockito.ArgumentMatchers.anyString(), any(CallableStatementCallback.class)))
+        .thenAnswer(
+            invocation -> {
+              String call = invocation.getArgument(0);
+              CallableStatement statement =
+                  call.contains("FIND_APPLICATION_BY_NUMBER") ? readStatement : updateStatement;
+              return ((CallableStatementCallback) invocation.getArgument(1))
+                  .doInCallableStatement(statement);
+            });
+    when(readStatement.getObject(2)).thenReturn(cursor);
+    when(cursor.next()).thenReturn(true, false);
+    when(cursor.getLong("APPLICATION_NUMBER")).thenReturn(1000456L);
+    when(cursor.getString("PRODUCT_LOCATION")).thenReturn(" ");
+
+    ApplicationDetailsRpcRepository repository = new ApplicationDetailsRpcRepository(jdbcTemplate);
+    ApplicationDetailsRpcRepository.ApplicationUpdateRecord record =
+        repository.findApplicationUpdateRecord(1000456L).orElseThrow();
+
+    assertThat(record.productLocation()).isEqualTo(" ");
+    assertThat(repository.updateApplication(record)).isTrue();
+    verify(updateStatement).setString(8, " ");
+  }
+
   private static ResultSet permitCursor(long permitNumber) throws SQLException {
     ResultSet cursor = mock(ResultSet.class);
     when(cursor.next()).thenReturn(true, false);

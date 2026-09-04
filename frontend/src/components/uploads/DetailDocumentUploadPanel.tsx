@@ -394,12 +394,23 @@ const DetailDocumentUploadPanel = ({
   }
 
   const removeQueuedFile = (id: string): void => {
+    const nextQueueLength = uploadQueue.filter((item) => item.id !== id).length
     setUploadQueue((current) => current.filter((item) => item.id !== id))
+    setErrorMessage('')
+    setSuccessMessage('')
+    setShowFileValidationError(nextQueueLength === 0)
+  }
+
+  const clearQueueItems = (): void => {
+    setUploadQueue([])
+    setFileInputKey((current) => current + 1)
   }
 
   const clearQueuedFiles = (): void => {
-    setUploadQueue([])
-    setFileInputKey((current) => current + 1)
+    clearQueueItems()
+    setErrorMessage('')
+    setSuccessMessage('')
+    setShowFileValidationError(false)
   }
 
   const resetUpload = (): void => {
@@ -417,7 +428,7 @@ const DetailDocumentUploadPanel = ({
   }
 
   const resetUploadAfterSuccess = (): void => {
-    clearQueuedFiles()
+    clearQueueItems()
     setFileDescription('')
     setSalesInvoiceNumber('')
     setInvoiceExportValue('')

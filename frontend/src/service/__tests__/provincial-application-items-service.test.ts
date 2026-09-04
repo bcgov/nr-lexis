@@ -368,6 +368,58 @@ describe('provincial-application-items-service', () => {
     expect(omittedApplicantTypeBody.has('applicantType')).toBe(false)
   })
 
+  it('posts an Owner save without sending unrelated item, summary, or agent fields', async () => {
+    postMock.mockResolvedValue({ data: { valid: true, applicationNumber: '321' } })
+
+    await updateApplicationSummary({
+      applicationNumber: '321',
+      saveSource: 'owner',
+      ownerClientNumber: '00011122',
+      ownerClientLocationCode: '00',
+      ownerContactName: 'Owner Contact',
+      applicantTypeCode: 'O',
+    })
+
+    const body = postMock.mock.calls[0][1] as URLSearchParams
+    expect(Object.fromEntries(body.entries())).toEqual({
+      applicationNumber: '321',
+      saveSource: 'owner',
+      ownerClientNumber: '00011122',
+      ownerClientLocationCode: '00',
+      ownerContactName: 'Owner Contact',
+      applicantType: 'O',
+    })
+  })
+
+  it('posts an Item save with its species selection and no client or summary fields', async () => {
+    postMock.mockResolvedValue({ data: { valid: true, applicationNumber: '321' } })
+
+    await updateApplicationSummary({
+      applicationNumber: '321',
+      saveSource: 'items',
+      productTypeCode: 'H',
+      applicationVolume: '100',
+      averageLogVolume: '2',
+      productLocation: 'BC',
+      growthTypeCode: 'O',
+      endUseCode: 'LU',
+      speciesCodes: ['FI', 'CE'],
+    })
+
+    const body = postMock.mock.calls[0][1] as URLSearchParams
+    expect(Object.fromEntries(body.entries())).toEqual({
+      applicationNumber: '321',
+      saveSource: 'items',
+      productTypeCode: 'H',
+      applicationVolume: '100',
+      averageLogVolume: '2',
+      productLocation: 'BC',
+      growthTypeCode: 'O',
+      applicationEndUseCode: 'LU',
+      applicationSelectedSpecies: 'FI,CE',
+    })
+  })
+
   it('loads editable application summary snapshot fields', async () => {
     getCachedResponseMock.mockResolvedValue({
       data: {

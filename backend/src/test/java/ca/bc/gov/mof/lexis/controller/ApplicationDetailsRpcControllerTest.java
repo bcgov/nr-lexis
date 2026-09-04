@@ -1540,6 +1540,240 @@ class ApplicationDetailsRpcControllerTest {
     verify(service, never()).updateApplicationSummary(any(), any());
   }
 
+  @ParameterizedTest
+  @CsvSource({
+    "modern, false",
+    "modern, true",
+    "legacy, false",
+    "legacy, true"
+  })
+  void updateApplicationSummaryShouldTreatOmittedOrBlankSaveSourceAsFull(
+      String route, boolean blankSaveSource) {
+    TestingAuthenticationToken authentication = authorized("createApplication");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.updateApplicationSummary(any(), org.mockito.ArgumentMatchers.eq("idir\\jsmith")))
+        .thenReturn(
+            new ApplicationDetailsRpcService.CreateApplicationResult(
+                true, "Saved", 1000456L, List.of(), List.of()));
+    MultiValueMap<String, String> params = matchingSummaryParameters();
+    if (blankSaveSource) {
+      params.add("saveSource", "  ");
+    }
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
+        "legacy".equals(route)
+            ? controller.updateApplicationLegacy(params, authentication)
+            : controller.updateApplicationSummary(params, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    ArgumentCaptor<ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest> requestCaptor =
+        ArgumentCaptor.forClass(ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest.class);
+    verify(service)
+        .updateApplicationSummary(
+            requestCaptor.capture(), org.mockito.ArgumentMatchers.eq("idir\\jsmith"));
+    assertThat(requestCaptor.getValue().saveSource())
+        .isEqualTo(ApplicationDetailsRpcService.ApplicationSummarySaveSource.FULL);
+    assertThat(requestCaptor.getValue().ownerClientNumber()).isEqualTo("00011111");
+    assertThat(requestCaptor.getValue().agentClientNumber()).isEqualTo("00022222");
+    assertThat(requestCaptor.getValue().orgUnitNumber()).isEqualTo(11L);
+  }
+
+  @Test
+  void updateApplicationSummaryShouldRejectUnknownSaveSource() {
+    TestingAuthenticationToken authentication = authorized("createApplication");
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("applicationNumber", "1000456");
+    params.add("saveSource", "full");
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
+        controller.updateApplicationSummary(params, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().valid()).isFalse();
+    assertThat(response.getBody().applicationNumber()).isEqualTo(1000456L);
+    assertThat(response.getBody().errors())
+        .containsExactly("A valid application save source is required.");
+    verifyNoInteractions(service);
+  }
+
+  @ParameterizedTest
+  @CsvSource({
+    "owner, OWNER",
+    "agent, AGENT",
+    "owner-agent, OWNER_AGENT",
+    "summary, SUMMARY",
+    "items, ITEMS"
+  })
+  void updateApplicationSummaryShouldParseSupportedSaveSources(
+      String wireSaveSource, String expectedSaveSource) {
+    TestingAuthenticationToken authentication = authorized("createApplication");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getApplicationSummarySnapshot(1000456L)).thenReturn(Optional.of(summarySnapshot()));
+    when(service.updateApplicationSummary(any(), org.mockito.ArgumentMatchers.eq("idir\\jsmith")))
+        .thenReturn(
+            new ApplicationDetailsRpcService.CreateApplicationResult(
+                true, "Saved", 1000456L, List.of(), List.of()));
+    MultiValueMap<String, String> params = matchingSummaryParameters();
+    params.add("saveSource", wireSaveSource);
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
+        controller.updateApplicationSummary(params, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    ArgumentCaptor<ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest> requestCaptor =
+        ArgumentCaptor.forClass(ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest.class);
+    verify(service)
+        .updateApplicationSummary(
+            requestCaptor.capture(), org.mockito.ArgumentMatchers.eq("idir\\jsmith"));
+    assertThat(requestCaptor.getValue().saveSource())
+        .isEqualTo(
+            ApplicationDetailsRpcService.ApplicationSummarySaveSource.valueOf(expectedSaveSource));
+  }
+
+  @Test
+  void updateApplicationSummaryShouldUsePersistedAuthorizationValuesForAgentSave() {
+    TestingAuthenticationToken authentication = authorized("createApplication");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getApplicationSummarySnapshot(1000456L)).thenReturn(Optional.of(summarySnapshot()));
+    when(service.updateApplicationSummary(any(), org.mockito.ArgumentMatchers.eq("idir\\jsmith")))
+        .thenReturn(
+            new ApplicationDetailsRpcService.CreateApplicationResult(
+                true, "Saved", 1000456L, List.of(), List.of()));
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("applicationNumber", "1000456");
+    params.add("saveSource", "agent");
+    params.add("agentClientNumber", "00033333");
+    params.add("agentClientLocationCode", "03");
+    params.add("agentContactName", "New Agent");
+    params.add("ownerClientNumber", "00999999");
+    params.add("region", "99");
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
+        controller.updateApplicationSummary(params, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    ArgumentCaptor<ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest> requestCaptor =
+        ArgumentCaptor.forClass(ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest.class);
+    verify(service)
+        .updateApplicationSummary(
+            requestCaptor.capture(), org.mockito.ArgumentMatchers.eq("idir\\jsmith"));
+    assertThat(requestCaptor.getValue().saveSource())
+        .isEqualTo(ApplicationDetailsRpcService.ApplicationSummarySaveSource.AGENT);
+    verify(provincialAuthorizationService, times(2))
+        .requireOrgUnit(
+            authentication,
+            11L,
+            ProvincialAuthorizationService.OrgUnitSurface.APPLICATION_WRITE);
+    verify(provincialAuthorizationService, times(2))
+        .canCreateForClient(authentication, "00011111", "00033333");
+    verify(provincialAuthorizationService, never())
+        .requireOrgUnit(
+            authentication,
+            99L,
+            ProvincialAuthorizationService.OrgUnitSurface.APPLICATION_WRITE);
+    verify(provincialAuthorizationService, never())
+        .canCreateForClient(authentication, "00999999", "00033333");
+  }
+
+  @Test
+  void updateApplicationSummaryShouldUsePersistedClientAuthorizationValuesForSummarySave() {
+    TestingAuthenticationToken authentication = authorized("createApplication");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getApplicationSummarySnapshot(1000456L)).thenReturn(Optional.of(summarySnapshot()));
+    when(service.updateApplicationSummary(any(), org.mockito.ArgumentMatchers.eq("idir\\jsmith")))
+        .thenReturn(
+            new ApplicationDetailsRpcService.CreateApplicationResult(
+                true, "Saved", 1000456L, List.of(), List.of()));
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("applicationNumber", "1000456");
+    params.add("saveSource", "summary");
+    params.add("applicationDate", "2026-03-04");
+    params.add("region", "12");
+    params.add("ownerClientNumber", "00999999");
+    params.add("agentClientNumber", "00888888");
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
+        controller.updateApplicationSummary(params, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    ArgumentCaptor<ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest> requestCaptor =
+        ArgumentCaptor.forClass(ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest.class);
+    verify(service)
+        .updateApplicationSummary(
+            requestCaptor.capture(), org.mockito.ArgumentMatchers.eq("idir\\jsmith"));
+    assertThat(requestCaptor.getValue().saveSource())
+        .isEqualTo(ApplicationDetailsRpcService.ApplicationSummarySaveSource.SUMMARY);
+    verify(provincialAuthorizationService, times(2))
+        .requireOrgUnit(
+            authentication,
+            12L,
+            ProvincialAuthorizationService.OrgUnitSurface.APPLICATION_WRITE);
+    verify(provincialAuthorizationService, times(2))
+        .canCreateForClient(authentication, "00011111", "00022222");
+    verify(provincialAuthorizationService, never())
+        .canCreateForClient(authentication, "00999999", "00888888");
+  }
+
+  @Test
+  void updateApplicationSummaryShouldDenyAgentScopedUserWhenOwnerSaveChangesApplicantToOwner() {
+    TestingAuthenticationToken authentication =
+        authenticatedWithActions(
+            "bceid\\old-agent",
+            List.of("LEXIS_PROVINCIAL_SUBMITTER_00022222"),
+            "createApplication",
+            "/changeApplicantType");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getApplicationSummarySnapshot(1000456L)).thenReturn(Optional.of(summarySnapshot()));
+    when(
+            provincialAuthorizationService.canCreateForClient(
+                org.mockito.ArgumentMatchers.eq(authentication),
+                org.mockito.ArgumentMatchers.eq("00011111"),
+                org.mockito.ArgumentMatchers.nullable(String.class)))
+        .thenAnswer(invocation -> "00022222".equals(invocation.getArgument(2)));
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("applicationNumber", "1000456");
+    params.add("saveSource", "owner");
+    params.add("ownerClientNumber", "00011111");
+    params.add("applicantType", "O");
+    params.add("agentClientNumber", "00022222");
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
+        controller.updateApplicationSummary(params, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    verify(provincialAuthorizationService)
+        .requireApplication(authentication, 1000456L);
+    verify(provincialAuthorizationService)
+        .canCreateForClient(authentication, "00011111", null);
+    verify(provincialAuthorizationService, never())
+        .canCreateForClient(authentication, "00011111", "00022222");
+    verify(service, never()).updateApplicationSummary(any(), any());
+  }
+
+  @Test
+  void updateApplicationSummaryShouldRequireDirectApplicationAccessBeforeScopedSave() {
+    TestingAuthenticationToken authentication = authorized("createApplication");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    doThrow(new AccessDeniedException("application access denied"))
+        .when(provincialAuthorizationService)
+        .requireApplication(authentication, 1000456L);
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("applicationNumber", "1000456");
+    params.add("saveSource", "agent");
+    params.add("agentClientNumber", "00033333");
+
+    assertThatThrownBy(() -> controller.updateApplicationSummary(params, authentication))
+        .isInstanceOf(AccessDeniedException.class)
+        .hasMessage("application access denied");
+
+    verify(provincialAuthorizationService)
+        .requireApplication(authentication, 1000456L);
+    verify(service, never()).getApplicationSummarySnapshot(any());
+    verify(provincialAuthorizationService, never()).canCreateForClient(any(), any(), any());
+    verify(service, never()).updateApplicationSummary(any(), any());
+  }
+
   @Test
   void getClientDataLegacyShouldReturnLegacyClientPayload() {
     when(clientLookupServiceProvider.getIfAvailable()).thenReturn(clientLookupService);

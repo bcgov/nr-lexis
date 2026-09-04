@@ -593,9 +593,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
           ownerClientLocationCode: '02',
           ownerContactName: 'Advertising Owner',
           applicantTypeCode: 'M',
-          agentClientNumber: '',
-          agentClientLocationCode: '',
-          agentContactName: '',
+          saveSource: 'owner',
         }),
       )
     })
@@ -679,6 +677,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     await waitFor(() =>
       expect(mockedUpdateApplicationSummary).toHaveBeenCalledWith(
         expect.objectContaining({
+          saveSource: 'owner-agent',
           applicantTypeCode: 'A',
           agentClientNumber: '00011122',
           agentClientLocationCode: '01',
@@ -885,7 +884,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
           agentClientNumber: '00033344',
           agentClientLocationCode: '02',
           agentContactName: 'Agent Alternate Contact',
-          applicantTypeCode: 'A',
+          saveSource: 'agent',
         }),
       )
     })
@@ -1502,33 +1501,88 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     await waitFor(() => {
       expect(mockedUpdateApplicationSummary).toHaveBeenCalledWith({
         applicationNumber: '321',
+        saveSource: 'summary',
         applicationDate: '2026-01-01',
         receivedDate: '2026-01-02',
         termDays: '430',
-        applicationVolume: '100',
-        averageLogVolume: '2',
         exemptionReasonCode: 'S',
-        productLocation: 'BC',
         exportScheduleId: '988',
-        agentClientNumber: '00033344',
-        agentClientLocationCode: '01',
-        ownerClientNumber: '00011122',
-        ownerClientLocationCode: '02',
-        applicantTypeCode: 'A',
         orgUnitNumber: '13',
-        productTypeCode: 'TIMBER',
-        growthTypeCode: 'S',
-        agentContactName: 'Agent Contact',
-        ownerContactName: 'Owner Alternate Contact',
         oicIndicator: 'Y',
-        endUseCode: 'LU',
-        speciesCodes: ['FI'],
       })
       expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(2)
     })
     expect(await screen.findByText('The application was saved successfully.')).toBeInTheDocument()
     expect(mockedCheckApplicationVolumeUsage).not.toHaveBeenCalled()
   }, 30000)
+
+  it.each(['owner', 'agent'] as const)(
+    'sends only %s fields when historical item values are invalid',
+    async (saveSource) => {
+      mockedFetchProvincialApplicationDetail.mockResolvedValue({
+        ...applicationDetail,
+        applicationVolume: 0,
+        averageLogVolume: 100,
+      })
+      mockedFetchApplicationSummarySnapshot.mockResolvedValue({
+        ...applicationSummarySnapshot,
+        applicationVolume: '0',
+        averageLogVolume: '100',
+        productLocation: '',
+      })
+
+      render(
+        <MemoryRouter initialEntries={['/provincial/application/321']}>
+          <Routes>
+            <Route
+              path="/provincial/application/:applicationNumber"
+              element={<ProvincialApplicationDetailsPage />}
+            />
+          </Routes>
+        </MemoryRouter>,
+      )
+
+      await screen.findByRole('heading', { level: 1, name: 'Application 321' })
+      await selectApplicationDetailTab(saveSource === 'owner' ? 'Owner' : 'Agent')
+      const controls = within(
+        saveSource === 'owner' ? getOwnerClientDetailsTile() : getAgentDetailsTile(),
+      )
+      await userEvent.click(
+        controls.getByRole('button', {
+          name: saveSource === 'owner' ? 'Edit owner client details' : 'Edit agent details',
+        }),
+      )
+      const contactName = controls.getByRole('combobox', { name: 'Contact name' })
+      await waitFor(() => expect(contactName).toBeEnabled())
+      await chooseComboBoxOption(
+        contactName,
+        saveSource === 'owner' ? 'Owner Alternate Contact' : 'Agent Alternate Contact',
+      )
+      await userEvent.click(controls.getByRole('button', { name: 'Save changes' }))
+
+      await waitFor(() =>
+        expect(mockedUpdateApplicationSummary).toHaveBeenCalledWith(
+          saveSource === 'owner'
+            ? {
+                applicationNumber: '321',
+                saveSource: 'owner',
+                ownerClientNumber: '00011122',
+                ownerClientLocationCode: '00',
+                ownerContactName: 'Owner Alternate Contact',
+                applicantTypeCode: 'A',
+              }
+            : {
+                applicationNumber: '321',
+                saveSource: 'agent',
+                agentClientNumber: '00033344',
+                agentClientLocationCode: '01',
+                agentContactName: 'Agent Alternate Contact',
+              },
+        ),
+      )
+      expect(mockedCheckApplicationVolumeUsage).not.toHaveBeenCalled()
+    },
+  )
 
   it('saves Application-owned fields while unrelated client lookups remain pending', async () => {
     mockedCheckApplicationVolumeUsage.mockResolvedValue({ volumeUsed: false })
@@ -1654,7 +1708,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(screen.getByText('Application agent location does not exist.')).toBeVisible()
   })
 
-  it('hides and clears stale agent fields when editing an owner application summary', async () => {
+  it('hides stale agent fields without submitting them during an owner application summary save', async () => {
     const ownerApplicationDetail: ProvincialApplicationDetail = {
       ...applicationDetail,
       agentClientNumber: null,
@@ -1730,14 +1784,14 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     await waitFor(() => {
       expect(mockedUpdateApplicationSummary).toHaveBeenCalledWith(
-        expect.objectContaining({
-          applicantTypeCode: 'O',
-          agentClientNumber: '',
-          agentClientLocationCode: '',
-          agentContactName: '',
-        }),
+        expect.objectContaining({ saveSource: 'summary' }),
       )
     })
+    const saved = mockedUpdateApplicationSummary.mock.calls[0][0]
+    expect(saved).not.toHaveProperty('applicantTypeCode')
+    expect(saved).not.toHaveProperty('agentClientNumber')
+    expect(saved).not.toHaveProperty('agentClientLocationCode')
+    expect(saved).not.toHaveProperty('agentContactName')
   })
 
   it('keeps applicant type and workflow fields read-only for scoped submitters', async () => {
@@ -1781,9 +1835,10 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     await waitFor(() => {
       expect(mockedUpdateApplicationSummary).toHaveBeenCalledWith(
-        expect.objectContaining({ applicantTypeCode: undefined }),
+        expect.objectContaining({ saveSource: 'summary' }),
       )
     })
+    expect(mockedUpdateApplicationSummary.mock.calls[0][0]).not.toHaveProperty('applicantTypeCode')
   })
 
   it('validates application item edits before saving', async () => {

@@ -3030,11 +3030,7 @@ const ProvincialApplicationDetailsPage = () => {
           return { ...current, ownerClientNumber, agentClientNumber }
         })
 
-        const applicationVolumeChanged =
-          !!summaryBaselineForm &&
-          summaryRequestForm.applicationVolume.trim() !==
-            summaryBaselineForm.applicationVolume.trim()
-        if ((source === 'items' || applicationVolumeChanged) && !summaryVolumeWarningAccepted) {
+        if (source === 'items' && !summaryVolumeWarningAccepted) {
           const volumeUsage = await checkApplicationVolumeUsage(String(detail.applicationNumber))
           if (!volumeUsage.volumeUsed) {
             setSummaryVolumeWarningAccepted(true)
@@ -3050,29 +3046,39 @@ const ProvincialApplicationDetailsPage = () => {
         // BCeID edits depend on staff-only review status or remark controls.
         const result = await updateApplicationSummary({
           applicationNumber: String(detail.applicationNumber),
-          applicationDate: summaryRequestForm.applicationDate,
-          receivedDate: summaryRequestForm.receivedDate,
-          termDays: summaryRequestForm.termDays.trim(),
-          applicationVolume: summaryRequestForm.applicationVolume,
-          averageLogVolume: summaryRequestForm.averageLogVolume,
-          exemptionReasonCode: summaryRequestForm.exemptionReasonCode,
-          productLocation: summaryRequestForm.productLocation,
-          exportScheduleId: summaryRequestForm.exportScheduleId,
-          agentClientNumber: summaryRequestForm.agentClientNumber,
-          agentClientLocationCode: summaryRequestForm.agentClientLocationCode,
-          ownerClientNumber: summaryRequestForm.ownerClientNumber,
-          ownerClientLocationCode: summaryRequestForm.ownerClientLocationCode,
-          applicantTypeCode: canChangeApplicantType
-            ? summaryRequestForm.applicantTypeCode
-            : undefined,
-          orgUnitNumber: summaryRequestForm.orgUnitNumber,
-          productTypeCode: summaryRequestForm.productTypeCode,
-          growthTypeCode: summaryRequestForm.growthTypeCode,
-          agentContactName: summaryRequestForm.agentContactName,
-          ownerContactName: summaryRequestForm.ownerContactName,
-          oicIndicator: summaryRequestForm.oicIndicator,
-          endUseCode: summaryRequestForm.endUseCode,
-          speciesCodes: summaryRequestForm.speciesCodes,
+          saveSource:
+            source === 'agent' && isTransitioningApplicantToAgent ? 'owner-agent' : source,
+          ...(confirmOwnerClientNumber && {
+            ownerClientNumber: summaryRequestForm.ownerClientNumber,
+            ownerClientLocationCode: summaryRequestForm.ownerClientLocationCode,
+            ownerContactName: summaryRequestForm.ownerContactName,
+            applicantTypeCode: canChangeApplicantType
+              ? summaryRequestForm.applicantTypeCode
+              : undefined,
+          }),
+          ...(source === 'agent' && {
+            agentClientNumber: summaryRequestForm.agentClientNumber,
+            agentClientLocationCode: summaryRequestForm.agentClientLocationCode,
+            agentContactName: summaryRequestForm.agentContactName,
+          }),
+          ...(source === 'summary' && {
+            applicationDate: summaryRequestForm.applicationDate,
+            receivedDate: summaryRequestForm.receivedDate,
+            termDays: summaryRequestForm.termDays.trim(),
+            exemptionReasonCode: summaryRequestForm.exemptionReasonCode,
+            exportScheduleId: summaryRequestForm.exportScheduleId,
+            orgUnitNumber: summaryRequestForm.orgUnitNumber,
+            oicIndicator: summaryRequestForm.oicIndicator,
+          }),
+          ...(source === 'items' && {
+            applicationVolume: summaryRequestForm.applicationVolume,
+            averageLogVolume: summaryRequestForm.averageLogVolume,
+            productLocation: summaryRequestForm.productLocation,
+            productTypeCode: summaryRequestForm.productTypeCode,
+            growthTypeCode: summaryRequestForm.growthTypeCode,
+            endUseCode: summaryRequestForm.endUseCode,
+            speciesCodes: summaryRequestForm.speciesCodes,
+          }),
         })
         if (!result.valid) {
           setActionErrorMessage(
@@ -3130,7 +3136,6 @@ const ProvincialApplicationDetailsPage = () => {
       reviewStatusRemark,
       reviewStatusBaselineCode,
       reviewStatusRemarkBaseline,
-      summaryBaselineForm,
       summaryForm,
       summaryOptionsUnavailableForSource,
       summaryValidationErrorsForSource,

@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import DetailDocumentUploadPanel from '../DetailDocumentUploadPanel'
@@ -307,6 +307,133 @@ describe('DetailDocumentUploadPanel', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
     expect(screen.getByText('1 queued file needs attention before review.')).toBeInTheDocument()
     expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
+  })
+
+  it('clears the queue attention error and shows the empty queue error after removing the last invalid file', async () => {
+    const file = new File(['infected document upload'], 'eicar-application-upload.pdf', {
+      type: 'application/pdf',
+    })
+    mockedValidateAdminUpload.mockRejectedValue({
+      response: {
+        status: 422,
+        data: {
+          message: 'The uploaded file failed virus scanning.',
+        },
+      },
+    })
+
+    render(
+      <DetailDocumentUploadPanel
+        workflowType="application"
+        targetNumber="321"
+        inputId="applicationDocuments"
+      />,
+    )
+
+    await openUploadModal()
+    await userEvent.upload(screen.getByLabelText('Document File'), file)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Review upload' })).toBeEnabled())
+    await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
+    expect(screen.getByText('1 queued file needs attention before review.')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Remove' }))
+
+    expect(
+      screen.queryByText('1 queued file needs attention before review.'),
+    ).not.toBeInTheDocument()
+    expect(screen.getByText('Choose at least one file to upload.')).toBeInTheDocument()
+  })
+
+  it('allows review after removing an invalid file from a mixed queue', async () => {
+    const invalidFile = new File(['infected document upload'], 'eicar-application-upload.pdf', {
+      type: 'application/pdf',
+    })
+    const validFile = new File(['valid document upload'], 'valid-application-upload.pdf', {
+      type: 'application/pdf',
+    })
+    mockedValidateAdminUpload
+      .mockRejectedValueOnce({
+        response: {
+          status: 422,
+          data: {
+            message: 'The uploaded file failed virus scanning.',
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        status: 'validated',
+        message: 'File passed validation and virus scanning.',
+      })
+
+    render(
+      <DetailDocumentUploadPanel
+        workflowType="application"
+        targetNumber="321"
+        inputId="applicationDocuments"
+      />,
+    )
+
+    await openUploadModal()
+    await userEvent.upload(screen.getByLabelText('Document File'), [invalidFile, validFile])
+    await waitFor(() => expect(mockedValidateAdminUpload).toHaveBeenCalledTimes(2))
+    expect(
+      screen.getByText('1 file failed validation. Review the queue for details.'),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('1 queued file needs attention and will be excluded from review.'),
+    ).toBeInTheDocument()
+
+    const invalidRow = screen.getByText(invalidFile.name).closest('tr')
+    expect(invalidRow).toBeTruthy()
+    await userEvent.click(within(invalidRow as HTMLElement).getByRole('button', { name: 'Remove' }))
+
+    expect(
+      screen.queryByText('1 queued file needs attention and will be excluded from review.'),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('1 file failed validation. Review the queue for details.'),
+    ).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
+    expect(screen.getByRole('heading', { name: 'File review' })).toBeInTheDocument()
+    expect(screen.getAllByText(validFile.name).length).toBeGreaterThan(0)
+    expect(screen.queryByText(invalidFile.name)).not.toBeInTheDocument()
+  })
+
+  it('clears queue validation messages when cancelling a queued upload', async () => {
+    const file = new File(['infected document upload'], 'eicar-application-upload.pdf', {
+      type: 'application/pdf',
+    })
+    mockedValidateAdminUpload.mockRejectedValue({
+      response: {
+        status: 422,
+        data: {
+          message: 'The uploaded file failed virus scanning.',
+        },
+      },
+    })
+
+    render(
+      <DetailDocumentUploadPanel
+        workflowType="application"
+        targetNumber="321"
+        inputId="applicationDocuments"
+      />,
+    )
+
+    await openUploadModal()
+    await userEvent.upload(screen.getByLabelText('Document File'), file)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Review upload' })).toBeEnabled())
+    await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
+    expect(screen.getByText('1 queued file needs attention before review.')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    await openUploadModal()
+
+    expect(
+      screen.queryByText('1 queued file needs attention before review.'),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText('Choose at least one file to upload.')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Remove' })).not.toBeInTheDocument()
   })
 
   it('allows review and submit when at least one selected document validates', async () => {
