@@ -1774,6 +1774,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
         selector: '.legacy-search-error',
       }),
     ).toBeVisible()
+    expect(selectedSpeciesGroup).toHaveAccessibleDescription('At least one species is required.')
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
   })
 

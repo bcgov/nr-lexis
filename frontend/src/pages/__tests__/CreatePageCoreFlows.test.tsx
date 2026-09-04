@@ -503,6 +503,12 @@ describe('Create Page Core Flows', () => {
     expect(
       screen.queryByRole('button', { name: 'Remove BA from application' }),
     ).not.toBeInTheDocument()
+    expect(
+      await screen.findByText('At least one species is required.', {
+        selector: '.legacy-search-error',
+      }),
+    ).toBeVisible()
+    expect(selectedSpeciesGroup).toHaveAccessibleDescription('At least one species is required.')
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
   }, 20_000)
 

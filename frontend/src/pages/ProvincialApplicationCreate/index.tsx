@@ -2191,9 +2191,11 @@ const ProvincialApplicationCreatePage = () => {
                       />
                       <fieldset
                         className="application-species-selection"
-                        aria-describedby={`applicationSelectedSpeciesRequirement${
-                          speciesCodesError ? ' applicationSelectedSpeciesError' : ''
-                        }`}
+                        aria-describedby={
+                          speciesCodesError
+                            ? 'applicationSelectedSpeciesError'
+                            : 'applicationSelectedSpeciesRequirement'
+                        }
                       >
                         <legend className="cds--label">{requiredLabel('Selected species')}</legend>
                         <p

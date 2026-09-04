@@ -4790,11 +4790,11 @@ const ProvincialApplicationDetailsPage = () => {
                                 />
                                 <fieldset
                                   className="application-species-selection"
-                                  aria-describedby={`applicationSummarySelectedSpeciesRequirement${
+                                  aria-describedby={
                                     summarySpeciesCodesError
-                                      ? ' applicationSummarySelectedSpeciesError'
-                                      : ''
-                                  }`}
+                                      ? 'applicationSummarySelectedSpeciesError'
+                                      : 'applicationSummarySelectedSpeciesRequirement'
+                                  }
                                 >
                                   <legend className="cds--label">
                                     {requiredLabel('Selected species')}
