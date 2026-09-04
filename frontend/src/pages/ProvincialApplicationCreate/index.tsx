@@ -1409,6 +1409,7 @@ const ProvincialApplicationCreatePage = () => {
 
   const fieldError = (field: ProvincialApplicationCreateField): string | undefined =>
     getVisibleFieldError(field, fieldErrors, touchedFields, showAllValidationErrors)
+  const speciesCodesError = fieldError('speciesCodes')
   const firstSubmitValidationError = Object.values(fieldErrors).find(
     (error): error is string => !!error,
   )
@@ -2180,51 +2181,66 @@ const ProvincialApplicationCreatePage = () => {
                     <div className="legacy-field-stack">
                       <SearchableSelect
                         id="applicationSpeciesCandidate"
-                        labelText={requiredLabel('Species list')}
-                        required
+                        labelText="Species list"
                         value={applicationSpeciesCandidate}
                         disabled={isApplicationSpeciesSelectDisabled}
-                        invalid={!!fieldError('speciesCodes')}
-                        invalidText={fieldError('speciesCodes')}
                         placeholder={speciesPlaceholder}
                         options={applicationSpeciesSelectOptions}
                         onBlur={() => markFieldTouched('speciesCodes')}
                         onChange={setApplicationSpeciesCandidate}
                       />
-                      {isApplicationSpeciesSelectDisabled && !!fieldError('speciesCodes') && (
-                        <p className="legacy-search-error" role="alert">
-                          {fieldError('speciesCodes')}
-                        </p>
-                      )}
-                      <div className="application-species-actions">
-                        <Button
-                          type="button"
-                          kind="tertiary"
-                          size="sm"
-                          disabled={
-                            !applicationSpeciesCandidate ||
-                            !availableApplicationSpeciesOptions.some(
-                              (option) => option.code === applicationSpeciesCandidate,
-                            )
-                          }
-                          onClick={onAddApplicationSpecies}
+                      <fieldset
+                        className="application-species-selection"
+                        aria-describedby={`applicationSelectedSpeciesRequirement${
+                          speciesCodesError ? ' applicationSelectedSpeciesError' : ''
+                        }`}
+                      >
+                        <legend className="cds--label">{requiredLabel('Selected species')}</legend>
+                        <p
+                          id="applicationSelectedSpeciesRequirement"
+                          className="application-species-selection__requirement"
                         >
-                          Add species
-                        </Button>
-                        <ul className="application-species-list" aria-label="Selected species">
-                          {form.speciesCodes.map((speciesCode) => (
-                            <li key={speciesCode}>
-                              <DismissibleTag
-                                type="blue"
-                                text={speciesCode}
-                                title={`Remove ${speciesCode} from application`}
-                                dismissTooltipLabel={`Remove ${speciesCode} from application`}
-                                onClose={() => onRemoveApplicationSpecies(speciesCode)}
-                              />
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
+                          At least one species is required.
+                        </p>
+                        <div className="application-species-actions">
+                          <Button
+                            type="button"
+                            kind="tertiary"
+                            size="sm"
+                            disabled={
+                              !applicationSpeciesCandidate ||
+                              !availableApplicationSpeciesOptions.some(
+                                (option) => option.code === applicationSpeciesCandidate,
+                              )
+                            }
+                            onClick={onAddApplicationSpecies}
+                          >
+                            Add species
+                          </Button>
+                          <ul className="application-species-list" aria-label="Selected species">
+                            {form.speciesCodes.map((speciesCode) => (
+                              <li key={speciesCode}>
+                                <DismissibleTag
+                                  type="blue"
+                                  text={speciesCode}
+                                  title={`Remove ${speciesCode} from application`}
+                                  dismissTooltipLabel={`Remove ${speciesCode} from application`}
+                                  onClose={() => onRemoveApplicationSpecies(speciesCode)}
+                                />
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                        {speciesCodesError && (
+                          <p
+                            id="applicationSelectedSpeciesError"
+                            className="legacy-search-error"
+                            role="alert"
+                          >
+                            {speciesCodesError}
+                          </p>
+                        )}
+                      </fieldset>
                     </div>
                     <SearchableSelect
                       id="applicationEndUse"

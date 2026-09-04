@@ -475,7 +475,13 @@ describe('Create Page Core Flows', () => {
     )
 
     await selectApplicationCreateTab('Items')
-    const selectedSpecies = await screen.findByRole('list', {
+    const speciesCandidate = await screen.findByRole('combobox', { name: 'Species list' })
+    expect(speciesCandidate).not.toHaveAttribute('aria-required', 'true')
+    const selectedSpeciesGroup = screen.getByRole('group', {
+      name: 'Selected species',
+    })
+    expect(selectedSpeciesGroup).toHaveAccessibleDescription('At least one species is required.')
+    const selectedSpecies = within(selectedSpeciesGroup).getByRole('list', {
       name: 'Selected species',
     })
     const removeHemlock = within(selectedSpecies).getByRole('button', {

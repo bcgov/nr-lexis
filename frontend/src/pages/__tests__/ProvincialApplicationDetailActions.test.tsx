@@ -1738,6 +1738,45 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     ).toBeInTheDocument()
   })
 
+  it('requires at least one selected species before saving the application summary', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const summaryTile = await selectApplicationSummaryTile()
+    const summaryControls = within(summaryTile)
+    const speciesCandidate = getSummaryComboBox(summaryControls, 'Species list')
+    expect(speciesCandidate).not.toHaveAttribute('aria-required', 'true')
+    const selectedSpeciesGroup = summaryControls.getByRole('group', {
+      name: 'Selected species',
+    })
+    expect(selectedSpeciesGroup).toHaveAccessibleDescription('At least one species is required.')
+    const selectedSpecies = within(selectedSpeciesGroup).getByRole('list', {
+      name: 'Selected species',
+    })
+
+    await userEvent.click(
+      within(selectedSpecies).getByRole('button', {
+        name: 'Remove FI from application',
+      }),
+    )
+    await userEvent.click(summaryControls.getByRole('button', { name: 'Save Summary' }))
+
+    expect(
+      await summaryControls.findByText('At least one species is required.', {
+        selector: '.legacy-search-error',
+      }),
+    ).toBeVisible()
+    expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
+  })
+
   it('uses natural resource region names in application summary edits', async () => {
     const detailWithNaturalResourceRegion: ProvincialApplicationDetail = {
       ...applicationDetail,
