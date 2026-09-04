@@ -2599,6 +2599,17 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.getByLabelText('Received date')).toBeDisabled()
     expect(screen.getByLabelText('Current permit volume (m³)')).toBeDisabled()
     expect(screen.getByLabelText('Current permit pieces')).toBeDisabled()
+    expect(screen.getByLabelText('Permit Request Pieces')).toHaveAttribute('aria-required', 'true')
+    expect(screen.getByLabelText('Permit Request Volume (m³)')).toHaveAttribute(
+      'aria-required',
+      'true',
+    )
+    expect(
+      document.querySelector('label[for="permit-oicPermitTotalPieces"] .required-label__marker'),
+    ).toBeInTheDocument()
+    expect(
+      document.querySelector('label[for="permit-oicPermitTotalVolume"] .required-label__marker'),
+    ).toBeInTheDocument()
 
     await userEvent.clear(submitDate)
     await userEvent.type(submitDate, '2026-04-09')
@@ -2991,8 +3002,18 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
       await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
 
-      expect(screen.getByLabelText('Permit Request Pieces')).toBeDisabled()
-      expect(screen.getByLabelText('Permit Request Volume (m³)')).toBeDisabled()
+      const requestPieces = screen.getByLabelText('Permit Request Pieces')
+      const requestVolume = screen.getByLabelText('Permit Request Volume (m³)')
+      expect(requestPieces).toBeDisabled()
+      expect(requestVolume).toBeDisabled()
+      expect(requestPieces).not.toHaveAttribute('aria-required')
+      expect(requestVolume).not.toHaveAttribute('aria-required')
+      expect(
+        document.querySelector('label[for="permit-oicPermitTotalPieces"] .required-label__marker'),
+      ).not.toBeInTheDocument()
+      expect(
+        document.querySelector('label[for="permit-oicPermitTotalVolume"] .required-label__marker'),
+      ).not.toBeInTheDocument()
     },
   )
 

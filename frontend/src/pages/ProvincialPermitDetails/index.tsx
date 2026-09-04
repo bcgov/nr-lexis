@@ -3460,7 +3460,7 @@ const ProvincialPermitDetailsPage = () => {
                                 'Permit Request Pieces',
                                 invoiceMaterialLocked,
                                 undefined,
-                                true,
+                                !invoiceMaterialLocked,
                               )}
                             {detail.blanketOic &&
                               renderPermitTextInput(
@@ -3468,7 +3468,7 @@ const ProvincialPermitDetailsPage = () => {
                                 'Permit Request Volume (m³)',
                                 invoiceMaterialLocked,
                                 undefined,
-                                true,
+                                !invoiceMaterialLocked,
                               )}
                             {renderPermitTextInput(
                               'permitTotalVolume',
