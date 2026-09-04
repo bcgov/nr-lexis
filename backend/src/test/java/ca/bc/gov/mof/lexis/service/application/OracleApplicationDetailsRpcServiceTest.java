@@ -3807,6 +3807,99 @@ class OracleApplicationDetailsRpcServiceTest {
     verify(repository, never()).updateApplication(any());
   }
 
+  @ParameterizedTest
+  @ValueSource(strings = {"H", "S"})
+  void updateApplicationSummaryShouldRejectTransitionToUnmanufacturedWithPersistedScales(
+      String currentProductTypeCode) {
+    when(repository.findApplicationUpdateRecord(1000456L))
+        .thenReturn(
+            Optional.of(
+                applicationUpdateRecordWithProductFields(
+                    currentProductTypeCode, "O", 100.0d, "Camp 1")));
+    when(repository.findScaleMutationsByApplicationNumber(1000456L))
+        .thenReturn(List.of(scaleMutationRow("55", null, Instant.parse("2026-03-02T18:00:00Z"))));
+
+    ApplicationDetailsRpcService.CreateApplicationResult response =
+        service.updateApplicationSummary(
+            productTypeUpdateRequest("T", null), "idir\\jsmith");
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors())
+        .contains(
+            "Product type cannot be changed to Unmanufactured Timber while Summary of Scale records exist. "
+                + "Remove the Summary of Scale records first.");
+    verify(repository, never()).updateApplication(any());
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"H", "T"})
+  void updateApplicationSummaryShouldRejectTransitionToStandingWithPersistedPackages(
+      String currentProductTypeCode) {
+    when(repository.findApplicationUpdateRecord(1000456L))
+        .thenReturn(
+            Optional.of(
+                applicationUpdateRecordWithProductFields(
+                    currentProductTypeCode,
+                    "H".equals(currentProductTypeCode) ? "O" : null,
+                    100.0d,
+                    "Camp 1")));
+    when(repository.findPackageMutationsByApplicationNumber(1000456L))
+        .thenReturn(List.of(packageMutationRow("PKG-120", Instant.parse("2026-03-02T18:00:00Z"))));
+
+    ApplicationDetailsRpcService.CreateApplicationResult response =
+        service.updateApplicationSummary(
+            productTypeUpdateRequest("S", "O"), "idir\\jsmith");
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors())
+        .contains(
+            "Product type cannot be changed to Standing Timber while packages exist. Remove the packages first.");
+    verify(repository, never()).updateApplication(any());
+  }
+
+  @Test
+  void updateApplicationSummaryShouldAllowTransitionToUnmanufacturedWithoutPersistedScales() {
+    when(repository.findScaleMutationsByApplicationNumber(1000456L)).thenReturn(List.of());
+    when(repository.updateApplication(any())).thenReturn(true);
+    stubPersistedApplicationEndUse(11L, true);
+
+    ApplicationDetailsRpcService.CreateApplicationResult response =
+        service.updateApplicationSummary(productTypeUpdateRequest("T", null), "idir\\jsmith");
+
+    assertThat(response.valid()).isTrue();
+    verify(repository).updateApplication(any());
+  }
+
+  @Test
+  void updateApplicationSummaryShouldAllowTransitionToStandingWithoutPersistedPackages() {
+    when(repository.findPackageMutationsByApplicationNumber(1000456L)).thenReturn(List.of());
+    when(repository.updateApplication(any())).thenReturn(true);
+    stubPersistedApplicationEndUse(11L, true);
+
+    ApplicationDetailsRpcService.CreateApplicationResult response =
+        service.updateApplicationSummary(productTypeUpdateRequest("S", "O"), "idir\\jsmith");
+
+    assertThat(response.valid()).isTrue();
+    verify(repository).updateApplication(any());
+  }
+
+  @Test
+  void updateApplicationSummaryShouldAllowUnrelatedEditForStandingApplicationWithPackages() {
+    when(repository.findApplicationUpdateRecord(1000456L))
+        .thenReturn(Optional.of(applicationUpdateRecordWithProductFields("S", "O", 0.0d, " ")));
+    when(repository.findPackageMutationsByApplicationNumber(1000456L))
+        .thenReturn(List.of(packageMutationRow("PKG-120", Instant.parse("2026-03-02T18:00:00Z"))));
+    when(repository.updateApplication(any())).thenReturn(true);
+    stubPersistedApplicationEndUse(11L, true);
+
+    ApplicationDetailsRpcService.CreateApplicationResult response =
+        service.updateApplicationSummary(
+            minimalApplicationSummaryUpdateRequest(1000456L), "idir\\jsmith");
+
+    assertThat(response.valid()).isTrue();
+    verify(repository).updateApplication(any());
+  }
+
   @Test
   void updateApplicationSummaryShouldRevalidatePersistedEndUseForMergedRegion() {
     when(repository.findApplicationUpdateRecord(1000456L))
@@ -4890,6 +4983,34 @@ class OracleApplicationDetailsRpcServiceTest {
         null,
         null,
         null,
+        null,
+        null,
+        null,
+        true);
+  }
+
+  private ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest productTypeUpdateRequest(
+      String productTypeCode, String growthTypeCode) {
+    return applicationSummaryUpdateRequest(
+        1000456L,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        productTypeCode,
+        null,
+        growthTypeCode,
         null,
         null,
         null,

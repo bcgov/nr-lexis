@@ -54,6 +54,11 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   private static final String EXPORT_PRODUCT_TYPE_HARVESTED = "H";
   private static final String EXPORT_PRODUCT_TYPE_STANDING = "S";
   private static final String EXPORT_PRODUCT_TYPE_UNMANUFACTURED = "T";
+  private static final String PRODUCT_TYPE_CHANGE_WITH_SCALES_MESSAGE =
+      "Product type cannot be changed to Unmanufactured Timber while Summary of Scale records exist. "
+          + "Remove the Summary of Scale records first.";
+  private static final String PRODUCT_TYPE_CHANGE_WITH_PACKAGES_MESSAGE =
+      "Product type cannot be changed to Standing Timber while packages exist. Remove the packages first.";
   private static final String UNMANUFACTURED_TIMBER_MARK = "UNMANU";
   private static final Set<String> VALID_TIMBER_MARK_STATUSES =
       Set.of("HI", "HA", "HB", "HC", "HN", "HP", "LC", "HX", "ACT");
@@ -433,7 +438,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
 
     ApplicationDetailsRpcRepository.ApplicationUpdateRecord updateRecord =
         toApplicationUpdateRecord(existing.get(), normalized, defaultMutationUser(userId));
-    List<String> errors = validateApplicationUpdate(updateRecord, normalized);
+    List<String> errors = validateApplicationUpdate(existing.get(), updateRecord, normalized);
     if (!errors.isEmpty()) {
       return new CreateApplicationResult(
           false, null, normalized.applicationNumber(), errors, List.of());
@@ -2652,6 +2657,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   }
 
   private List<String> validateApplicationUpdate(
+      ApplicationDetailsRpcRepository.ApplicationUpdateRecord existing,
       ApplicationDetailsRpcRepository.ApplicationUpdateRecord record,
       ApplicationSummaryUpdateRequest request) {
     List<String> errors = new ArrayList<>();
@@ -2746,11 +2752,38 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     }
     if (errors.isEmpty()) {
       validateApplicationReferences(record, errors);
+      validateProductTypeTransition(existing, record, errors);
       validateStoredPackageVolume(record, errors);
       validateFirstScaleRegion(record, errors);
       validateMergedApplicationSpeciesEndUse(record, request, errors);
     }
     return errors;
+  }
+
+  private void validateProductTypeTransition(
+      ApplicationDetailsRpcRepository.ApplicationUpdateRecord existing,
+      ApplicationDetailsRpcRepository.ApplicationUpdateRecord updated,
+      List<String> errors) {
+    String existingProductType = trimToNull(existing.productTypeCode());
+    String updatedProductType = trimToNull(updated.productTypeCode());
+    if (existingProductType == null
+        || updatedProductType == null
+        || existingProductType.equalsIgnoreCase(updatedProductType)) {
+      return;
+    }
+
+    if (EXPORT_PRODUCT_TYPE_UNMANUFACTURED.equalsIgnoreCase(updatedProductType)
+        && !repository
+            .findScaleMutationsByApplicationNumber(updated.applicationNumber())
+            .isEmpty()) {
+      errors.add(PRODUCT_TYPE_CHANGE_WITH_SCALES_MESSAGE);
+    }
+    if (EXPORT_PRODUCT_TYPE_STANDING.equalsIgnoreCase(updatedProductType)
+        && !repository
+            .findPackageMutationsByApplicationNumber(updated.applicationNumber())
+            .isEmpty()) {
+      errors.add(PRODUCT_TYPE_CHANGE_WITH_PACKAGES_MESSAGE);
+    }
   }
 
   private void validateApplicationReferences(

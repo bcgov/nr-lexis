@@ -909,7 +909,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(addApplicationAction).toHaveClass(/cds--btn--primary/)
     expect(
       await addApplicationAction.evaluate((action) =>
-        Boolean(action.closest('.legacy-search-table-toolbar__actions')),
+        Boolean(action.closest('.lexis-page-header__actions')),
       ),
     ).toBe(true)
     await expect(addApplicationAction).toHaveCSS('background-color', 'rgb(0, 115, 230)')

@@ -1052,7 +1052,9 @@ function ProvincialApplicationItemsPanel({
   const packageBackedItems = ['H', 'T'].includes(normalizedProductTypeCode)
   const scaleBackedItems = normalizedProductTypeCode === 'H'
   const standingTimberItems = normalizedProductTypeCode === 'S'
-  const canManageItems = !hideMutationActions && (canEditPackages || canAddPackages || canAddScales)
+  const canManageItems =
+    !hideMutationActions &&
+    (canEditPackages || canAddPackages || (scaleBackedItems && canAddScales))
   // INTENTIONAL_LEGACY_DIVERGENCE(PACKAGE_FIRST_ITEMS_WORKFLOW): Lead with the prerequisite
   // package action instead of rendering empty package and Summary of Scale sections.
   const packageFirstEmptyState = packageBackedItems && packageNumbers.length === 0

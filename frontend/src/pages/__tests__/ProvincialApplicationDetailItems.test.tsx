@@ -604,6 +604,25 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     expect(screen.queryByRole('button', { name: 'Edit items' })).not.toBeInTheDocument()
   })
 
+  it('keeps the item editor closed for Timber when only scale permission is supplied', () => {
+    render(
+      <ProvincialApplicationItemsPanel
+        detail={{ ...applicationDetail, productTypeCode: 'T' }}
+        canEditPackages={false}
+        canAddPackages={false}
+        canAddScales
+        canUpdatePackageNumber={false}
+        hideMutationActions={false}
+        authoritativeOptionsAvailability="available"
+        productTypeOptions={[]}
+        growthTypeOptions={[]}
+        onDetailChanged={vi.fn().mockResolvedValue(undefined)}
+      />,
+    )
+
+    expect(screen.queryByRole('button', { name: 'Edit items' })).not.toBeInTheDocument()
+  })
+
   it('shows package details without Summary of Scale for Timber applications', async () => {
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
       ...applicationDetail,

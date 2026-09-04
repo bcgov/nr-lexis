@@ -1507,6 +1507,12 @@ const ProvincialApplicationDetailsPage = () => {
           summaryProductTypeOptions.some((option) => option.value === summaryForm.productTypeCode)
             ? null
             : 'Select a valid product type.',
+        () =>
+          summaryForm.productTypeCode === 'S' &&
+          detail?.productTypeCode !== 'S' &&
+          (detail?.packages.length ?? 0) > 0
+            ? 'Product type cannot be changed to Standing Timber while packages exist. Remove the packages first.'
+            : null,
       ),
       growthTypeCode: productTypeRequiresGrowthType(summaryForm.productTypeCode)
         ? firstValidationError(
@@ -1604,6 +1610,7 @@ const ProvincialApplicationDetailsPage = () => {
       ),
     }
   }, [
+    detail,
     summaryExemptionReasonOptions,
     summaryForm,
     summaryGrowthTypeOptions,
@@ -4544,27 +4551,10 @@ const ProvincialApplicationDetailsPage = () => {
                               )}
                             </dd>
                           </div>
-                          {[
-                            [
-                              'Status',
-                              displayValue(
-                                detail.statusDescription ?? detail.applicationStatusCode,
-                              ),
-                            ],
-                            ['Author', displayValue(detail.author)],
-                            ['Region', displayValue(summaryRegionDescription)],
-                            ['Listing date', displayValue(detail.listingDate)],
-                            ['Jurisdiction', displayValue(summaryJurisdictionLabel)],
-                            [
-                              'Order in Council indicator',
-                              displayValue(summaryOicIndicatorDescription),
-                            ],
-                          ].map(([label, value]) => (
-                            <div key={label} className="detail-field-item">
-                              <dt className="detail-field-label">{label}</dt>
-                              <dd className="detail-field-value">{value}</dd>
-                            </div>
-                          ))}
+                          <div className="detail-field-item">
+                            <dt className="detail-field-label">Author</dt>
+                            <dd className="detail-field-value">{displayValue(detail.author)}</dd>
+                          </div>
                         </dl>
                         {isEditingSummary && canEditSummary && summaryForm ? (
                           <>
@@ -4652,16 +4642,6 @@ const ProvincialApplicationDetailsPage = () => {
                                 }
                               />
                               <TextInput
-                                id="applicationSummaryStatus"
-                                labelText="Application status"
-                                value={
-                                  resolveApplicationStatusDescription(
-                                    summaryForm.applicationStatusCode,
-                                  ) ?? summaryForm.applicationStatusCode
-                                }
-                                readOnly
-                              />
-                              <TextInput
                                 id="applicationSummaryJurisdiction"
                                 labelText="Jurisdiction"
                                 value={summaryJurisdictionLabel}
@@ -4714,6 +4694,13 @@ const ProvincialApplicationDetailsPage = () => {
                         ) : (
                           <dl className="detail-field-grid">
                             {[
+                              ['Region', displayValue(summaryRegionDescription)],
+                              ['Listing date', displayValue(detail.listingDate)],
+                              ['Jurisdiction', displayValue(summaryJurisdictionLabel)],
+                              [
+                                'Order in Council indicator',
+                                displayValue(summaryOicIndicatorDescription),
+                              ],
                               ['Exemption reason', displayValue(summaryExemptionReasonDescription)],
                               ['Application date', displayValue(detail.applicationDate)],
                               ['Received date', displayValue(detail.receivedDate)],

@@ -102,6 +102,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     const summary = within(summaryTile)
 
     expect(summary.queryByText('Application number')).not.toBeInTheDocument()
+    expect(summary.queryByText('Status', { exact: true })).not.toBeInTheDocument()
     expect(summary.getByText('Author')).toBeInTheDocument()
     expect(summary.getByText('idir\\application-author')).toBeInTheDocument()
     expect(summary.getByRole('button', { name: 'Edit application summary' })).toBeInTheDocument()
@@ -149,6 +150,32 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     expect(await screen.findByText('Action complete')).toBeInTheDocument()
     expect(screen.getByText('Created application 321.')).toBeInTheDocument()
+  })
+
+  it('shows each summary field once while editing and restores display values on cancel', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const summary = within(await selectApplicationSummaryTile())
+    const fields = ['Region', 'Listing date', 'Jurisdiction', 'Order in Council indicator']
+    for (const field of fields) {
+      expect(summary.getAllByText(field, { exact: true })).toHaveLength(1)
+    }
+
+    await userEvent.click(summary.getByRole('button', { name: 'Cancel' }))
+    for (const field of fields) {
+      expect(summary.getAllByText(field, { exact: true })).toHaveLength(1)
+    }
+    expect(summary.getByRole('button', { name: 'Edit application summary' })).toBeVisible()
+    expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
   })
 
   it('uses the legacy application detail tab order', async () => {
@@ -1414,7 +1441,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     await selectApplicationSummaryTile()
     const summaryControls = within(await waitFor(() => getApplicationSummaryTile()))
-    expect(summaryControls.getByLabelText('Application status')).toHaveAttribute('readonly')
+    expect(summaryControls.queryByLabelText('Application status')).not.toBeInTheDocument()
     expect(summaryControls.getByLabelText('Jurisdiction')).toHaveAttribute('readonly')
     expect(summaryControls.getByLabelText('Jurisdiction')).toHaveValue('F - Federal')
     expect(summaryControls.queryByLabelText('Applicant type')).not.toBeInTheDocument()
@@ -1740,7 +1767,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     await userEvent.click(ownerControls.getByRole('button', { name: 'Cancel' }))
 
     const summaryControls = within(await selectApplicationSummaryTile())
-    expect(summaryControls.getByLabelText('Application status')).toHaveAttribute('readonly')
+    expect(summaryControls.queryByLabelText('Application status')).not.toBeInTheDocument()
     expect(summaryControls.getByLabelText('Jurisdiction')).toHaveAttribute('readonly')
     expect(summaryControls.queryByLabelText('Applicant type')).not.toBeInTheDocument()
 
@@ -2123,6 +2150,80 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
         expect.objectContaining({ applicationVolume: '9999999.99' }),
       ),
     )
+  })
+
+  it.each(['H', 'T'])(
+    'blocks %s to Standing Timber when packages exist',
+    async (productTypeCode) => {
+      mockedFetchProvincialApplicationDetail.mockResolvedValue({
+        ...applicationDetail,
+        productTypeCode,
+      })
+      mockedFetchApplicationSummarySnapshot.mockResolvedValue({
+        ...applicationSummarySnapshot,
+        productTypeCode,
+      })
+
+      render(
+        <MemoryRouter initialEntries={['/provincial/application/321']}>
+          <Routes>
+            <Route
+              path="/provincial/application/:applicationNumber"
+              element={<ProvincialApplicationDetailsPage />}
+            />
+          </Routes>
+        </MemoryRouter>,
+      )
+
+      const itemDetails = within(await selectApplicationItemDetailsTile())
+      await chooseComboBoxOption(getSummaryComboBox(itemDetails, 'Product type'), 'Standing Timber')
+      const message =
+        'Product type cannot be changed to Standing Timber while packages exist. Remove the packages first.'
+      expect(screen.queryByText(message)).not.toBeInTheDocument()
+      await userEvent.click(itemDetails.getByRole('button', { name: 'Save changes' }))
+
+      expect(screen.getAllByText(message).length).toBeGreaterThan(0)
+      expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
+      expect(mockedCheckApplicationVolumeUsage).not.toHaveBeenCalled()
+      await userEvent.click(itemDetails.getByRole('button', { name: 'Cancel' }))
+      expect(screen.queryByText(message)).not.toBeInTheDocument()
+    },
+  )
+
+  it('keeps item edits open when the backend rejects a product change with persisted scales', async () => {
+    const message =
+      'Product type cannot be changed to Unmanufactured Timber while Summary of Scale records exist. Remove the Summary of Scale records first.'
+    mockedUpdateApplicationSummary.mockResolvedValue({
+      valid: false,
+      applicationNumber: '321',
+      message: '',
+      errors: [message],
+      warnings: [],
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const itemDetails = within(await selectApplicationItemDetailsTile())
+    await chooseComboBoxOption(getSummaryComboBox(itemDetails, 'Product type'), 'Timber')
+    await userEvent.click(itemDetails.getByRole('button', { name: 'Save changes' }))
+
+    expect(await screen.findByText(message)).toBeVisible()
+    expect(mockedUpdateApplicationSummary).toHaveBeenCalledWith(
+      expect.objectContaining({ productTypeCode: 'T' }),
+    )
+    expect(itemDetails.getByRole('button', { name: 'Save changes' })).toBeEnabled()
+    expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(1)
+    await userEvent.click(itemDetails.getByRole('button', { name: 'Cancel' }))
+    expect(itemDetails.getByText('Harvested Timber', { exact: true })).toBeVisible()
   })
 
   it('shows and saves required item fields when changing Timber to Harvested Timber', async () => {
