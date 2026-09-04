@@ -55,6 +55,7 @@ import {
   offerTextStorageFieldError,
   offerVolumeContextFieldError,
 } from '@/pages/shared/offer-storage-validation'
+import { requiredLabel } from '@/utils/required-label'
 
 type ProvincialOfferDetailField = keyof ProvincialOfferUpdateSubmission & string
 
@@ -608,14 +609,16 @@ const ProvincialOfferDetailsPage = () => {
                 />
                 <TextInput
                   id="offerCompanyName"
-                  labelText="Company"
+                  labelText={requiredLabel('Company')}
+                  aria-required="true"
                   value={form.companyName}
                   readOnly
                   maxLength={OFFER_COMPANY_NAME_MAX_LENGTH}
                 />
                 <TextInput
                   id="offerContactName"
-                  labelText="Contact name"
+                  labelText={requiredLabel('Contact name')}
+                  aria-required="true"
                   value={form.contactName}
                   readOnly
                   maxLength={OFFER_CONTACT_NAME_MAX_LENGTH}
@@ -660,7 +663,8 @@ const ProvincialOfferDetailsPage = () => {
                 />
                 <TextInput
                   id="offerPurchaseOfferAmount"
-                  labelText="Offer amount ($/m³)"
+                  labelText={requiredLabel('Offer amount ($/m³)')}
+                  aria-required="true"
                   value={form.purchaseOfferAmount}
                   readOnly={!canEditOfferDetailFields}
                   invalid={canEditOfferDetailFields && !!fieldError('purchaseOfferAmount')}
@@ -670,7 +674,8 @@ const ProvincialOfferDetailsPage = () => {
                 />
                 <IsoDatePicker
                   id="offerPurchaseOfferDate"
-                  labelText="Offer received date"
+                  labelText={requiredLabel('Offer received date')}
+                  required
                   value={form.purchaseOfferDate}
                   invalid={canEditOfferDetailFields && !!fieldError('purchaseOfferDate')}
                   invalidText={fieldError('purchaseOfferDate')}
@@ -680,7 +685,8 @@ const ProvincialOfferDetailsPage = () => {
                 />
                 <TextArea
                   id="offerPickupLocation"
-                  labelText="Pickup location"
+                  labelText={requiredLabel('Pickup location')}
+                  aria-required="true"
                   value={form.pickupLocation}
                   readOnly={!canEditOfferDetailFields}
                   invalid={canEditOfferDetailFields && !!fieldError('pickupLocation')}
@@ -718,7 +724,11 @@ const ProvincialOfferDetailsPage = () => {
                 />
                 <TextArea
                   id="offerWithdrawReason"
-                  labelText="Offer withdrawal reason"
+                  labelText={requiredLabel(
+                    'Offer withdrawal reason',
+                    form.offerWithdrawalDate.trim().length > 0,
+                  )}
+                  aria-required={form.offerWithdrawalDate.trim().length > 0 ? 'true' : undefined}
                   value={form.withdrawReason}
                   readOnly={!canEditWithdrawFields}
                   invalid={canEditWithdrawFields && !!fieldError('withdrawReason')}

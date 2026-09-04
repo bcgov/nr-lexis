@@ -5,6 +5,7 @@ import type { BlockerFunction } from 'react-router-dom'
 import Modal from '@/components/Modal'
 import PendingIcon from '@/components/PendingIcon'
 import { isPageUnloadAuthorized } from '@/utils/page-unload'
+import { requiredLabel } from '@/utils/required-label'
 
 import './UnsavedChangesGuard.css'
 
@@ -193,7 +194,8 @@ const RouterNavigationGuard = ({
             <p>{saveAcknowledgement.description}</p>
             <Checkbox
               id={acknowledgementId}
-              labelText={saveAcknowledgement.label}
+              labelText={requiredLabel(saveAcknowledgement.label)}
+              aria-required="true"
               checked={saveAcknowledged}
               disabled={navigationActionsDisabled}
               onChange={(_, { checked }) => setSaveAcknowledged(Boolean(checked))}

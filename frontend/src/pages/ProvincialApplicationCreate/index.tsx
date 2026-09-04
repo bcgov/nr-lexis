@@ -77,6 +77,7 @@ import { useAuth } from '@/context/auth/useAuth'
 import { hasProvincialSubmitterRole } from '@/context/auth/role-utils'
 import IsoDatePicker from '../../components/IsoDatePicker'
 import { formatBusinessIsoDate } from '@/utils/date'
+import { requiredLabel } from '@/utils/required-label'
 import { displayValue } from '@/utils/text'
 
 type ProvincialApplicationCreateForm = {
@@ -1408,6 +1409,7 @@ const ProvincialApplicationCreatePage = () => {
 
   const fieldError = (field: ProvincialApplicationCreateField): string | undefined =>
     getVisibleFieldError(field, fieldErrors, touchedFields, showAllValidationErrors)
+  const speciesCodesError = fieldError('speciesCodes')
   const firstSubmitValidationError = Object.values(fieldErrors).find(
     (error): error is string => !!error,
   )
@@ -1669,7 +1671,8 @@ const ProvincialApplicationCreatePage = () => {
                 <div className="legacy-search-grid create-form-grid">
                   <TextInput
                     id="ownerClientNumber"
-                    labelText="Client number"
+                    labelText={requiredLabel('Client number')}
+                    aria-required="true"
                     value={form.ownerClientNumber}
                     readOnly={provincialSubmitterIdentityLocked}
                     helperText={
@@ -1696,7 +1699,8 @@ const ProvincialApplicationCreatePage = () => {
                   {canChangeApplicantType ? (
                     <SearchableSelect
                       id="applicantTypeCode"
-                      labelText="Applicant type"
+                      labelText={requiredLabel('Applicant type')}
+                      required
                       value={form.applicantTypeCode}
                       placeholder="Select applicant type"
                       options={[
@@ -1727,14 +1731,16 @@ const ProvincialApplicationCreatePage = () => {
                   ) : (
                     <TextInput
                       id="applicantTypeCode"
-                      labelText="Applicant type"
+                      labelText={requiredLabel('Applicant type')}
+                      aria-required="true"
                       value="Owner"
                       readOnly
                     />
                   )}
                   <SearchableSelect
                     id="ownerClientLocationCode"
-                    labelText="Client location"
+                    labelText={requiredLabel('Client location')}
+                    required
                     value={form.ownerClientLocationCode}
                     disabled={!hasValidOwnerClientNumber || isLoadingOwnerClientLocations}
                     invalid={!!fieldError('ownerClientLocationCode')}
@@ -1762,7 +1768,8 @@ const ProvincialApplicationCreatePage = () => {
                   {hasSelectableOwnerClientContacts || isLoadingOwnerClientContacts ? (
                     <SearchableSelect
                       id="ownerContactName"
-                      labelText="Contact name"
+                      labelText={requiredLabel('Contact name')}
+                      required
                       value={form.ownerContactName}
                       disabled={
                         !form.ownerClientLocationCode.trim() || isLoadingOwnerClientContacts
@@ -1786,7 +1793,8 @@ const ProvincialApplicationCreatePage = () => {
                   ) : (
                     <TextInput
                       id="ownerContactName"
-                      labelText="Contact name"
+                      labelText={requiredLabel('Contact name')}
+                      aria-required="true"
                       value={form.ownerContactName}
                       disabled={!form.ownerClientLocationCode.trim()}
                       placeholder="Enter owner contact name"
@@ -1823,7 +1831,8 @@ const ProvincialApplicationCreatePage = () => {
                       <div className="legacy-search-grid create-form-grid">
                         <TextInput
                           id="agentClientNumber"
-                          labelText="Agent number"
+                          labelText={requiredLabel('Agent number')}
+                          aria-required="true"
                           value={form.agentClientNumber}
                           invalid={!!fieldError('agentClientNumber')}
                           invalidText={fieldError('agentClientNumber')}
@@ -1843,13 +1852,15 @@ const ProvincialApplicationCreatePage = () => {
                         />
                         <TextInput
                           id="agentApplicantType"
-                          labelText="Applicant type"
+                          labelText={requiredLabel('Applicant type')}
+                          aria-required="true"
                           value="Agent"
                           readOnly
                         />
                         <SearchableSelect
                           id="agentClientLocationCode"
-                          labelText="Contact location"
+                          labelText={requiredLabel('Contact location')}
+                          required
                           value={form.agentClientLocationCode}
                           disabled={!hasValidAgentClientNumber || isLoadingAgentClientLocations}
                           invalid={!!fieldError('agentClientLocationCode')}
@@ -1882,7 +1893,8 @@ const ProvincialApplicationCreatePage = () => {
                         {hasSelectableAgentClientContacts || isLoadingAgentClientContacts ? (
                           <SearchableSelect
                             id="agentContactName"
-                            labelText="Contact name"
+                            labelText={requiredLabel('Contact name')}
+                            required
                             value={form.agentContactName}
                             disabled={
                               !form.agentClientLocationCode.trim() || isLoadingAgentClientContacts
@@ -1905,7 +1917,8 @@ const ProvincialApplicationCreatePage = () => {
                         ) : (
                           <TextInput
                             id="agentContactName"
-                            labelText="Contact name"
+                            labelText={requiredLabel('Contact name')}
+                            aria-required="true"
                             value={form.agentContactName}
                             disabled={!form.agentClientLocationCode.trim()}
                             placeholder="Enter agent contact name"
@@ -1942,7 +1955,8 @@ const ProvincialApplicationCreatePage = () => {
                 <div className="legacy-search-grid create-form-grid">
                   <SearchableSelect
                     id="region"
-                    labelText="Region"
+                    labelText={requiredLabel('Region')}
+                    required
                     value={form.region}
                     invalid={!!fieldError('region')}
                     invalidText={fieldError('region')}
@@ -1967,7 +1981,8 @@ const ProvincialApplicationCreatePage = () => {
                   />
                   <SearchableSelect
                     id="productTypeCode"
-                    labelText="Product type"
+                    labelText={requiredLabel('Product type')}
+                    required
                     value={form.productTypeCode}
                     invalid={!!fieldError('productTypeCode')}
                     invalidText={fieldError('productTypeCode')}
@@ -1993,7 +2008,8 @@ const ProvincialApplicationCreatePage = () => {
                   />
                   <SearchableSelect
                     id="exemptionType"
-                    labelText="Exemption reason"
+                    labelText={requiredLabel('Exemption reason')}
+                    required
                     value={form.exemptionType}
                     invalid={!!fieldError('exemptionType')}
                     invalidText={fieldError('exemptionType')}
@@ -2008,7 +2024,8 @@ const ProvincialApplicationCreatePage = () => {
                   />
                   <IsoDatePicker
                     id="applicationDate"
-                    labelText="Application date (YYYY-MM-DD)"
+                    labelText={requiredLabel('Application date (YYYY-MM-DD)')}
+                    required
                     value={form.applicationDate}
                     invalid={!!fieldError('applicationDate')}
                     invalidText={fieldError('applicationDate')}
@@ -2020,7 +2037,8 @@ const ProvincialApplicationCreatePage = () => {
                   />
                   <IsoDatePicker
                     id="receivedDate"
-                    labelText="Date received (YYYY-MM-DD)"
+                    labelText={requiredLabel('Date received (YYYY-MM-DD)')}
+                    required
                     value={form.receivedDate}
                     invalid={!!fieldError('receivedDate')}
                     invalidText={fieldError('receivedDate')}
@@ -2051,7 +2069,8 @@ const ProvincialApplicationCreatePage = () => {
                   />
                   <TextInput
                     id="applicationTermDays"
-                    labelText="Exemption term (days)"
+                    labelText={requiredLabel('Exemption term (days)')}
+                    aria-required="true"
                     type="number"
                     min={1}
                     max={99999}
@@ -2085,7 +2104,8 @@ const ProvincialApplicationCreatePage = () => {
                     {productTypeRequiresLogDetails(form.productTypeCode) && (
                       <TextArea
                         id="productLocation"
-                        labelText="Location of logs"
+                        labelText={requiredLabel('Location of logs')}
+                        aria-required="true"
                         enableCounter
                         maxCount={250}
                         maxLength={250}
@@ -2105,7 +2125,8 @@ const ProvincialApplicationCreatePage = () => {
                     {productTypeRequiresGrowthType(form.productTypeCode) && (
                       <SearchableSelect
                         id="ageClass"
-                        labelText="Age class"
+                        labelText={requiredLabel('Age class')}
+                        required
                         value={form.ageClass}
                         disabled={!optionsLoaded || optionsUnavailable}
                         invalid={!!fieldError('ageClass')}
@@ -2122,7 +2143,8 @@ const ProvincialApplicationCreatePage = () => {
                     {productTypeRequiresLogDetails(form.productTypeCode) && (
                       <TextInput
                         id="averageLogVolume"
-                        labelText="Average log volume (m³)"
+                        labelText={requiredLabel('Average log volume (m³)')}
+                        aria-required="true"
                         type="number"
                         min={0}
                         max={99.9}
@@ -2142,7 +2164,8 @@ const ProvincialApplicationCreatePage = () => {
                     )}
                     <TextInput
                       id="applicationVolume"
-                      labelText="Application volume (m³)"
+                      labelText={requiredLabel('Application volume (m³)')}
+                      aria-required="true"
                       value={form.applicationVolume}
                       invalid={!!fieldError('applicationVolume')}
                       invalidText={fieldError('applicationVolume')}
@@ -2161,47 +2184,65 @@ const ProvincialApplicationCreatePage = () => {
                         labelText="Species list"
                         value={applicationSpeciesCandidate}
                         disabled={isApplicationSpeciesSelectDisabled}
-                        invalid={!!fieldError('speciesCodes')}
-                        invalidText={fieldError('speciesCodes')}
                         placeholder={speciesPlaceholder}
                         options={applicationSpeciesSelectOptions}
                         onBlur={() => markFieldTouched('speciesCodes')}
                         onChange={setApplicationSpeciesCandidate}
                       />
-                      {isApplicationSpeciesSelectDisabled && !!fieldError('speciesCodes') && (
-                        <p className="legacy-search-error" role="alert">
-                          {fieldError('speciesCodes')}
-                        </p>
-                      )}
-                      <div className="application-species-actions">
-                        <Button
-                          type="button"
-                          kind="tertiary"
-                          size="sm"
-                          disabled={
-                            !applicationSpeciesCandidate ||
-                            !availableApplicationSpeciesOptions.some(
-                              (option) => option.code === applicationSpeciesCandidate,
-                            )
-                          }
-                          onClick={onAddApplicationSpecies}
+                      <fieldset
+                        className="application-species-selection"
+                        aria-describedby={
+                          speciesCodesError
+                            ? 'applicationSelectedSpeciesError'
+                            : 'applicationSelectedSpeciesRequirement'
+                        }
+                      >
+                        <legend className="cds--label">{requiredLabel('Selected species')}</legend>
+                        <p
+                          id="applicationSelectedSpeciesRequirement"
+                          className="application-species-selection__requirement"
                         >
-                          Add species
-                        </Button>
-                        <ul className="application-species-list" aria-label="Selected species">
-                          {form.speciesCodes.map((speciesCode) => (
-                            <li key={speciesCode}>
-                              <DismissibleTag
-                                type="blue"
-                                text={speciesCode}
-                                title={`Remove ${speciesCode} from application`}
-                                dismissTooltipLabel={`Remove ${speciesCode} from application`}
-                                onClose={() => onRemoveApplicationSpecies(speciesCode)}
-                              />
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
+                          At least one species is required.
+                        </p>
+                        <div className="application-species-actions">
+                          <Button
+                            type="button"
+                            kind="tertiary"
+                            size="sm"
+                            disabled={
+                              !applicationSpeciesCandidate ||
+                              !availableApplicationSpeciesOptions.some(
+                                (option) => option.code === applicationSpeciesCandidate,
+                              )
+                            }
+                            onClick={onAddApplicationSpecies}
+                          >
+                            Add species
+                          </Button>
+                          <ul className="application-species-list" aria-label="Selected species">
+                            {form.speciesCodes.map((speciesCode) => (
+                              <li key={speciesCode}>
+                                <DismissibleTag
+                                  type="blue"
+                                  text={speciesCode}
+                                  title={`Remove ${speciesCode} from application`}
+                                  dismissTooltipLabel={`Remove ${speciesCode} from application`}
+                                  onClose={() => onRemoveApplicationSpecies(speciesCode)}
+                                />
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                        {speciesCodesError && (
+                          <p
+                            id="applicationSelectedSpeciesError"
+                            className="legacy-search-error"
+                            role="alert"
+                          >
+                            {speciesCodesError}
+                          </p>
+                        )}
+                      </fieldset>
                     </div>
                     <SearchableSelect
                       id="applicationEndUse"

@@ -7,6 +7,7 @@ type MultiFileDropZoneProps = {
   inputId: string
   inputKey: number
   inputLabel: string
+  required?: boolean
   accept?: string
   invalidText?: string
   disabled?: boolean
@@ -28,6 +29,7 @@ function MultiFileDropZone({
   inputId,
   inputKey,
   inputLabel,
+  required = false,
   accept,
   invalidText,
   disabled = false,
@@ -107,6 +109,7 @@ function MultiFileDropZone({
         className="admin-upload-native-input"
         type="file"
         aria-label={inputLabel}
+        aria-required={required || undefined}
         aria-invalid={!!invalidText}
         aria-describedby={invalidText ? `${inputId}-error` : undefined}
         accept={accept}

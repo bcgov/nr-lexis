@@ -77,6 +77,7 @@ import {
 } from '@/service/provincial-application-items-service'
 import { formatBusinessDateTime, formatBusinessIsoDate } from '@/utils/date'
 import { displayAuditIdentity } from '@/utils/text'
+import { requiredLabel } from '@/utils/required-label'
 import {
   firstValidationError,
   isoDateFieldError,
@@ -1188,7 +1189,8 @@ const FederalApplicationDetailsPage = () => {
                             <div className="legacy-search-grid">
                               <Select
                                 id="federalApplicationStatus"
-                                labelText="Status"
+                                labelText={requiredLabel('Status')}
+                                aria-required="true"
                                 value={statusCode}
                                 onChange={(event) => setStatusCode(event.target.value)}
                               >
@@ -1202,7 +1204,13 @@ const FederalApplicationDetailsPage = () => {
                               </Select>
                               <TextArea
                                 id="federalApplicationStatusRemark"
-                                labelText="Remark"
+                                labelText={requiredLabel(
+                                  'Remark',
+                                  statusCode === 'REJ' || statusCode === 'WDN',
+                                )}
+                                aria-required={
+                                  statusCode === 'REJ' || statusCode === 'WDN' ? 'true' : undefined
+                                }
                                 value={statusRemark}
                                 onChange={(event) => setStatusRemark(event.target.value)}
                               />
@@ -1440,9 +1448,10 @@ const FederalApplicationDetailsPage = () => {
                             <div className="legacy-search-actions">
                               <TextArea
                                 id="federalApplicationRemark"
-                                labelText={
-                                  editingRemarkId ? `Edit Remark ${editingRemarkId}` : 'New Remark'
-                                }
+                                labelText={requiredLabel(
+                                  editingRemarkId ? `Edit Remark ${editingRemarkId}` : 'New Remark',
+                                )}
+                                aria-required="true"
                                 maxCount={250}
                                 value={remarkDraft}
                                 invalid={!!remarkValidationMessage}
@@ -1682,7 +1691,8 @@ const FederalApplicationDetailsPage = () => {
                               )}
                               <IsoDatePicker
                                 id="federalPermitIssueDate"
-                                labelText="Permit issue date"
+                                labelText={requiredLabel('Permit issue date')}
+                                required
                                 value={permitForm.permitIssueDate}
                                 invalid={!!permitFieldErrors.permitIssueDate}
                                 invalidText={permitFieldErrors.permitIssueDate}
@@ -1695,7 +1705,8 @@ const FederalApplicationDetailsPage = () => {
                               />
                               <Select
                                 id="federalPermitDestinationCountry"
-                                labelText="Final destination country"
+                                labelText={requiredLabel('Final destination country')}
+                                aria-required="true"
                                 value={permitForm.destinationCountry}
                                 invalid={!!permitFieldErrors.destinationCountry}
                                 invalidText={permitFieldErrors.destinationCountry}
@@ -1717,7 +1728,8 @@ const FederalApplicationDetailsPage = () => {
                               </Select>
                               <Select
                                 id="federalPermitTransportType"
-                                labelText="Transport type"
+                                labelText={requiredLabel('Transport type')}
+                                aria-required="true"
                                 value={permitForm.transportType}
                                 invalid={!!permitFieldErrors.transportType}
                                 invalidText={permitFieldErrors.transportType}
@@ -1739,7 +1751,8 @@ const FederalApplicationDetailsPage = () => {
                               </Select>
                               <TextInput
                                 id="federalPermitTransportName"
-                                labelText="Transport name"
+                                labelText={requiredLabel('Transport name')}
+                                aria-required="true"
                                 value={permitForm.transportName}
                                 invalid={!!permitFieldErrors.transportName}
                                 invalidText={permitFieldErrors.transportName}
@@ -1753,7 +1766,8 @@ const FederalApplicationDetailsPage = () => {
                               />
                               <IsoDatePicker
                                 id="federalPermitShippingDate"
-                                labelText="Estimated shipping date"
+                                labelText={requiredLabel('Estimated shipping date')}
+                                required
                                 value={permitForm.shippingDate}
                                 invalid={!!permitFieldErrors.shippingDate}
                                 invalidText={permitFieldErrors.shippingDate}
@@ -1766,7 +1780,8 @@ const FederalApplicationDetailsPage = () => {
                               />
                               <Select
                                 id="federalPermitPortOfExport"
-                                labelText="Customs port of export"
+                                labelText={requiredLabel('Customs port of export')}
+                                aria-required="true"
                                 value={permitForm.portOfExport}
                                 invalid={!!permitFieldErrors.portOfExport}
                                 invalidText={permitFieldErrors.portOfExport}
@@ -1794,7 +1809,8 @@ const FederalApplicationDetailsPage = () => {
                               {permitForm.portOfExport.trim().toUpperCase() === 'OT' && (
                                 <TextInput
                                   id="federalPermitOtherPort"
-                                  labelText="Other port of export"
+                                  labelText={requiredLabel('Other port of export')}
+                                  aria-required="true"
                                   value={permitForm.otherPortOfExport}
                                   invalid={!!permitFieldErrors.otherPortOfExport}
                                   invalidText={permitFieldErrors.otherPortOfExport}

@@ -27,6 +27,7 @@ import {
   type RtmEmsLogAmvSaveRequest,
 } from '@/service/rtm-emslogamv-service'
 import { formatBusinessIsoDate } from '@/utils/date'
+import { requiredLabel } from '@/utils/required-label'
 
 type RtmGrowthIndicator = 'O' | 'S'
 type RtmAmvChangeKind = 'added' | 'changed' | 'removed' | null
@@ -648,7 +649,8 @@ const RTMEmsLogAmvPage = () => {
             <TextInput
               id="rtm-amv-effective-date"
               type="month"
-              labelText="Effective month"
+              labelText={requiredLabel('Effective month')}
+              aria-required="true"
               value={isMonthStartDate(targetDate) ? targetDate.slice(0, 7) : ''}
               onChange={(event) => {
                 const month = event.target.value

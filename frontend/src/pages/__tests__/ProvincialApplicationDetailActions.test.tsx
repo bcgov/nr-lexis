@@ -1313,13 +1313,9 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(summaryControls.getByLabelText('Jurisdiction')).toHaveValue('F - Federal')
     expect(getSummaryComboBox(summaryControls, 'Applicant type')).toBeInTheDocument()
     const termInput = await screen.findByLabelText('Exemption term (days)')
-    fireEvent.change(termInput, { target: { value: '5' } })
-    fireEvent.change(screen.getByLabelText('Exemption term (months)'), {
-      target: { value: '2' },
-    })
-    fireEvent.change(screen.getByLabelText('Exemption term (years)'), {
-      target: { value: '1' },
-    })
+    fireEvent.change(termInput, { target: { value: '430' } })
+    expect(screen.queryByLabelText('Exemption term (months)')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Exemption term (years)')).not.toBeInTheDocument()
 
     const volumeInput = screen.getByLabelText('Application volume (m³)')
     fireEvent.change(volumeInput, { target: { value: '125.5' } })
@@ -1392,7 +1388,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(await screen.findByText('The application was saved successfully.')).toBeInTheDocument()
   }, 30000)
 
-  it('enforces the legacy application term input boundaries before saving', async () => {
+  it('enforces the single exemption term day input boundaries before saving', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
         <Routes>
@@ -1406,12 +1402,10 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     await selectApplicationSummaryTile()
     const termDays = screen.getByLabelText('Exemption term (days)')
-    const termMonths = screen.getByLabelText('Exemption term (months)')
-    const termYears = screen.getByLabelText('Exemption term (years)')
 
     expect(termDays).toHaveAttribute('max', '99999')
-    expect(termMonths).toHaveAttribute('max', '999')
-    expect(termYears).toHaveAttribute('max', '99')
+    expect(screen.queryByLabelText('Exemption term (months)')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Exemption term (years)')).not.toBeInTheDocument()
 
     fireEvent.change(termDays, { target: { value: '100000' } })
     await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
@@ -1420,11 +1414,12 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(mockedCheckApplicationVolumeUsage).not.toHaveBeenCalled()
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
 
-    fireEvent.change(termDays, { target: { value: '99999' } })
-    fireEvent.change(termMonths, { target: { value: '1' } })
+    fireEvent.change(termDays, { target: { value: '0' } })
     await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
 
-    expect(await screen.findAllByText('Exemption term must be 99999 or less.')).toHaveLength(2)
+    expect(await screen.findAllByText('Exemption term days must be greater than 0.')).toHaveLength(
+      2,
+    )
     expect(mockedCheckApplicationVolumeUsage).not.toHaveBeenCalled()
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
   })
@@ -1741,6 +1736,46 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
         name: 'Remove CE from application',
       }),
     ).toBeInTheDocument()
+  })
+
+  it('requires at least one selected species before saving the application summary', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const summaryTile = await selectApplicationSummaryTile()
+    const summaryControls = within(summaryTile)
+    const speciesCandidate = getSummaryComboBox(summaryControls, 'Species list')
+    expect(speciesCandidate).not.toHaveAttribute('aria-required', 'true')
+    const selectedSpeciesGroup = summaryControls.getByRole('group', {
+      name: 'Selected species',
+    })
+    expect(selectedSpeciesGroup).toHaveAccessibleDescription('At least one species is required.')
+    const selectedSpecies = within(selectedSpeciesGroup).getByRole('list', {
+      name: 'Selected species',
+    })
+
+    await userEvent.click(
+      within(selectedSpecies).getByRole('button', {
+        name: 'Remove FI from application',
+      }),
+    )
+    await userEvent.click(summaryControls.getByRole('button', { name: 'Save Summary' }))
+
+    expect(
+      await summaryControls.findByText('At least one species is required.', {
+        selector: '.legacy-search-error',
+      }),
+    ).toBeVisible()
+    expect(selectedSpeciesGroup).toHaveAccessibleDescription('At least one species is required.')
+    expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
   })
 
   it('uses natural resource region names in application summary edits', async () => {

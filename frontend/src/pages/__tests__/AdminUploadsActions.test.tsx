@@ -113,6 +113,8 @@ describe('Admin upload workflow smoke', () => {
 
     expect(screen.getByRole('combobox', { name: 'Permit number' })).toHaveValue('5001')
     expect(screen.getByRole('button', { name: 'Choose files for Upload documents' })).toBeVisible()
+    expect(document.querySelector('.required-label__marker')).toBeNull()
+    expect(screen.getByLabelText('Document File')).toHaveAttribute('aria-required', 'true')
     expect(
       screen.getByText(
         'Accepted file types: BMP, CSV, DOC, DOCX, JPG, PDF, PNG, RTF, TXT, XLS, XLSX, XML, and ZIP. Maximum file size: 20 MB. Multiple files can be queued and saved together.',

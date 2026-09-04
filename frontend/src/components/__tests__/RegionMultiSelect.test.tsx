@@ -15,9 +15,11 @@ const regions: RegionMultiSelectOption[] = [
 function RegionHarness({
   initialSelected = [],
   disabled = false,
+  required = false,
 }: {
   initialSelected?: RegionMultiSelectOption[]
   disabled?: boolean
+  required?: boolean
 }) {
   const [selectedItems, setSelectedItems] = useState(initialSelected)
 
@@ -28,6 +30,7 @@ function RegionHarness({
         titleText="Region"
         items={regions}
         selectedItems={selectedItems}
+        required={required}
         disabled={disabled}
         onChange={setSelectedItems}
       />
@@ -39,6 +42,15 @@ function RegionHarness({
 }
 
 describe('RegionMultiSelect', () => {
+  it('exposes required status on the combobox', () => {
+    render(<RegionHarness required />)
+
+    expect(screen.getByRole('combobox', { name: /^Region/ })).toHaveAttribute(
+      'aria-required',
+      'true',
+    )
+  })
+
   it('uses the default Carbon selection summary without external pills', () => {
     render(<RegionHarness initialSelected={regions.slice(0, 2)} />)
 

@@ -9,6 +9,25 @@
 @use '@carbon/react/scss/type' as carbon-type;
 @use '@carbon/react';
 
+.required-label__marker {
+  color: var(--cds-text-error, #da1e28);
+  display: inline-block;
+  height: 1em;
+  margin-inline-start: 0.125rem;
+  vertical-align: -0.125em;
+  width: 1em;
+}
+
+.required-label__marker svg {
+  display: block;
+  height: 100%;
+  width: 100%;
+}
+
+.cds--label--disabled .required-label__marker {
+  color: inherit;
+}
+
 @font-face {
   font-family: 'BC Sans';
   font-display: swap;
@@ -2001,6 +2020,29 @@ $notification-types: 'error', 'info', 'success', 'warning';
   flex-wrap: wrap;
   gap: 0.5rem;
   margin-block-start: 0.5rem;
+}
+
+.application-species-selection {
+  min-inline-size: 0;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.application-species-selection > legend {
+  padding: 0;
+}
+
+.application-species-selection__requirement {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .application-species-list {

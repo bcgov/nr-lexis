@@ -65,6 +65,7 @@ import IsoDatePicker from '../../components/IsoDatePicker'
 import { toCarbonSortDirection } from '@/pages/shared/search-query-utils'
 import { formatBusinessIsoDate } from '@/utils/date'
 import { getResponseMessage, getResponseStatus } from '@/utils/http-error'
+import { requiredLabel } from '@/utils/required-label'
 
 type PolicyField =
   | 'feeEffectiveDate'
@@ -960,7 +961,8 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
           <div className="admin-policy-modal__fields admin-policy-modal__fields--fee">
             <IsoDatePicker
               id="feeEffectiveDate"
-              labelText="Policy effective date"
+              labelText={requiredLabel('Policy effective date')}
+              required
               value={feeEffectiveDate}
               invalid={!!feeFieldError('feeEffectiveDate')}
               invalidText={feeFieldError('feeEffectiveDate')}
@@ -970,7 +972,8 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
             />
             <Select
               id="feeOrgUnitNo"
-              labelText="Region"
+              labelText={requiredLabel('Region')}
+              aria-required="true"
               value={feeOrgUnitNo}
               invalid={!!feeFieldError('feeOrgUnitNo')}
               invalidText={feeFieldError('feeOrgUnitNo')}
@@ -1000,7 +1003,8 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
             </Select>
             <TextInput
               id="feePolicyPercentage"
-              labelText="Fee increase percentage"
+              labelText={requiredLabel('Fee increase percentage')}
+              aria-required="true"
               helperText="Whole numbers from 0 to 100"
               inputMode="numeric"
               value={feePolicyPercentage}
@@ -1068,7 +1072,8 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
           <div className="admin-policy-modal__fields">
             <IsoDatePicker
               id="filEffectiveDate"
-              labelText="Policy effective date"
+              labelText={requiredLabel('Policy effective date')}
+              required
               value={filEffectiveDate}
               invalid={!!filFieldError('filEffectiveDate')}
               invalidText={filFieldError('filEffectiveDate')}
@@ -1078,7 +1083,8 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
             />
             <TextInput
               id="filPolicyPercentage"
-              labelText="Fee in lieu percentage"
+              labelText={requiredLabel('Fee in lieu percentage')}
+              aria-required="true"
               helperText="Whole numbers from 1 to 99"
               inputMode="numeric"
               value={filPolicyPercentage}
@@ -1394,7 +1400,8 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
               <div className="legacy-search-grid create-form-grid">
                 <IsoDatePicker
                   id="scheduleAdvertisingDate"
-                  labelText="Advertising date"
+                  labelText={requiredLabel('Advertising date')}
+                  required
                   value={scheduleAdvertisingDate}
                   invalid={!!scheduleFieldError('scheduleAdvertisingDate')}
                   invalidText={scheduleFieldError('scheduleAdvertisingDate')}
@@ -1403,7 +1410,8 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                 />
                 <IsoDatePicker
                   id="scheduleApplicationReceiptDate"
-                  labelText="Application receipt date"
+                  labelText={requiredLabel('Application receipt date')}
+                  required
                   value={scheduleApplicationReceiptDate}
                   invalid={!!scheduleFieldError('scheduleApplicationReceiptDate')}
                   invalidText={scheduleFieldError('scheduleApplicationReceiptDate')}
@@ -1412,7 +1420,8 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                 />
                 <IsoDatePicker
                   id="scheduleOfferReceiptDate"
-                  labelText="Offer receipt date"
+                  labelText={requiredLabel('Offer receipt date')}
+                  required
                   value={scheduleOfferReceiptDate}
                   invalid={!!scheduleFieldError('scheduleOfferReceiptDate')}
                   invalidText={scheduleFieldError('scheduleOfferReceiptDate')}
@@ -1421,7 +1430,8 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                 />
                 <IsoDatePicker
                   id="scheduleOfferEndDate"
-                  labelText="Offer end date"
+                  labelText={requiredLabel('Offer end date')}
+                  required
                   value={scheduleOfferEndDate}
                   invalid={!!scheduleFieldError('scheduleOfferEndDate')}
                   invalidText={scheduleFieldError('scheduleOfferEndDate')}
@@ -1430,7 +1440,8 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                 />
                 <IsoDatePicker
                   id="scheduleOfferWithdrawalDate"
-                  labelText="Offer withdrawal date"
+                  labelText={requiredLabel('Offer withdrawal date')}
+                  required
                   value={scheduleOfferWithdrawalDate}
                   invalid={!!scheduleFieldError('scheduleOfferWithdrawalDate')}
                   invalidText={scheduleFieldError('scheduleOfferWithdrawalDate')}
@@ -1439,7 +1450,8 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                 />
                 <IsoDatePicker
                   id="scheduleTeacMeetingDate"
-                  labelText="TEAC meeting date"
+                  labelText={requiredLabel('TEAC meeting date')}
+                  required
                   value={scheduleTeacMeetingDate}
                   invalid={!!scheduleFieldError('scheduleTeacMeetingDate')}
                   invalidText={scheduleFieldError('scheduleTeacMeetingDate')}

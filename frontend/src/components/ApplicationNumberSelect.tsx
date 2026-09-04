@@ -13,6 +13,7 @@ type ApplicationNumberSelectProps = {
   value: string
   invalid?: boolean
   invalidText?: ReactNode
+  required?: boolean
   disabled?: boolean
   onBlur?: () => void
   onChange: (value: string) => void
@@ -42,6 +43,7 @@ export default function ApplicationNumberSelect({
   value,
   invalid = false,
   invalidText,
+  required = false,
   disabled = false,
   onBlur,
   onChange,
@@ -103,6 +105,7 @@ export default function ApplicationNumberSelect({
       }
       placeholder={isLoading ? 'Loading applications…' : 'Search application number'}
       allowCustomValue
+      aria-required={required || undefined}
       disabled={disabled}
       invalid={invalid}
       invalidText={invalidText}

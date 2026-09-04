@@ -77,6 +77,7 @@ import {
 } from '@/pages/shared/create-form-utils'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { useReloadPreservedTab } from '@/pages/shared/useReloadPreservedTab'
+import { requiredLabel } from '@/utils/required-label'
 import {
   fetchProvincialPermitDetail,
   fetchProvincialPermitExemptionContext,
@@ -3014,10 +3015,12 @@ const ProvincialPermitDetailsPage = () => {
     labelText: string,
     isDisabled: boolean,
     maxLength?: number,
+    required = false,
   ) => (
     <TextInput
       id={`permit-${field}`}
-      labelText={labelText}
+      labelText={requiredLabel(labelText, required)}
+      aria-required={required || undefined}
       value={permitForm?.[field] ?? ''}
       invalid={!!permitFieldError(field)}
       invalidText={permitFieldError(field)}
@@ -3265,7 +3268,13 @@ const ProvincialPermitDetailsPage = () => {
                         <Tile>
                           <h2 className="detail-tile-title">Permit summary</h2>
                           <div className="legacy-search-grid">
-                            {renderPermitTextInput('permitNumber', 'Permit number', true)}
+                            {renderPermitTextInput(
+                              'permitNumber',
+                              'Permit number',
+                              true,
+                              undefined,
+                              true,
+                            )}
                             <TextInput
                               id="permit-applicationNumber"
                               labelText="Application number(s)"
@@ -3281,7 +3290,8 @@ const ProvincialPermitDetailsPage = () => {
                             {renderPermitTextInput('exemptionNumber', 'Exemption number', true)}
                             <Select
                               id="permit-permitStatus"
-                              labelText="Permit status"
+                              labelText={requiredLabel('Permit status')}
+                              aria-required="true"
                               value={permitForm.permitStatus}
                               invalid={!!permitFieldError('permitStatus')}
                               invalidText={permitFieldError('permitStatus')}
@@ -3323,7 +3333,8 @@ const ProvincialPermitDetailsPage = () => {
                             {detail.blanketOic ? (
                               <Select
                                 id="permit-orgUnitNumber"
-                                labelText="Region"
+                                labelText={requiredLabel('Region')}
+                                aria-required="true"
                                 value={permitForm.orgUnitNumber}
                                 invalid={!!permitFieldError('orgUnitNumber')}
                                 invalidText={permitFieldError('orgUnitNumber')}
@@ -3448,12 +3459,16 @@ const ProvincialPermitDetailsPage = () => {
                                 'oicPermitTotalPieces',
                                 'Permit Request Pieces',
                                 invoiceMaterialLocked,
+                                undefined,
+                                !invoiceMaterialLocked,
                               )}
                             {detail.blanketOic &&
                               renderPermitTextInput(
                                 'oicPermitTotalVolume',
                                 'Permit Request Volume (m³)',
                                 invoiceMaterialLocked,
+                                undefined,
+                                !invoiceMaterialLocked,
                               )}
                             {renderPermitTextInput(
                               'permitTotalVolume',
@@ -3651,7 +3666,8 @@ const ProvincialPermitDetailsPage = () => {
                               <div className="legacy-search-grid">
                                 <SearchableSelect
                                   id="permitApplicationToAdd"
-                                  labelText="Available application"
+                                  labelText={requiredLabel('Available application')}
+                                  required
                                   value={selectedPermitApplicationToAdd}
                                   options={availablePermitApplicationOptions}
                                   placeholder={
@@ -3790,10 +3806,12 @@ const ProvincialPermitDetailsPage = () => {
                               'Purchaser',
                               false,
                               52,
+                              true,
                             )}
                             <Select
                               id="permit-destinationCountry"
-                              labelText="Final destination country"
+                              labelText={requiredLabel('Final destination country')}
+                              aria-required="true"
                               value={permitForm.destinationCountry}
                               invalid={!!permitFieldError('destinationCountry')}
                               invalidText={permitFieldError('destinationCountry')}
@@ -3818,7 +3836,8 @@ const ProvincialPermitDetailsPage = () => {
                             </Select>
                             <Select
                               id="permit-transportType"
-                              labelText="Transport type"
+                              labelText={requiredLabel('Transport type')}
+                              aria-required="true"
                               value={permitForm.transportType}
                               invalid={!!permitFieldError('transportType')}
                               invalidText={permitFieldError('transportType')}
@@ -3837,10 +3856,17 @@ const ProvincialPermitDetailsPage = () => {
                                 />
                               ))}
                             </Select>
-                            {renderPermitTextInput('transportName', 'Transport name', false, 26)}
+                            {renderPermitTextInput(
+                              'transportName',
+                              'Transport name',
+                              false,
+                              26,
+                              true,
+                            )}
                             <Select
                               id="permit-portOfExport"
-                              labelText="Customs port of export"
+                              labelText={requiredLabel('Customs port of export')}
+                              aria-required="true"
                               value={permitForm.portOfExport}
                               invalid={!!permitFieldError('portOfExport')}
                               invalidText={permitFieldError('portOfExport')}
@@ -3877,10 +3903,12 @@ const ProvincialPermitDetailsPage = () => {
                                 'Other port of export',
                                 false,
                                 34,
+                                true,
                               )}
                             <IsoDatePicker
                               id="permit-estimatedShippingDate"
-                              labelText="Estimated shipping date"
+                              labelText={requiredLabel('Estimated shipping date')}
+                              required
                               value={permitForm.estimatedShippingDate}
                               invalid={!!permitFieldError('estimatedShippingDate')}
                               invalidText={permitFieldError('estimatedShippingDate')}
@@ -4143,7 +4171,8 @@ const ProvincialPermitDetailsPage = () => {
                               <div className="legacy-search-grid">
                                 <TextInput
                                   id="boicPackageNumber"
-                                  labelText="Package number"
+                                  labelText={requiredLabel('Package number')}
+                                  aria-required="true"
                                   maxLength={20}
                                   value={boicPackageForm.packageNumber}
                                   disabled={isLoadingBoicPackage || isSavingBoicPackage}
@@ -4156,7 +4185,8 @@ const ProvincialPermitDetailsPage = () => {
                                 />
                                 <TextInput
                                   id="boicPackageSpeciesCodes"
-                                  labelText="Species codes (comma separated)"
+                                  labelText={requiredLabel('Species codes (comma separated)')}
+                                  aria-required="true"
                                   value={boicPackageForm.speciesCodes}
                                   disabled={isLoadingBoicPackage || isSavingBoicPackage}
                                   onChange={(event) =>
@@ -4168,7 +4198,8 @@ const ProvincialPermitDetailsPage = () => {
                                 />
                                 <TextInput
                                   id="boicPackageEndUseCode"
-                                  labelText="End use code"
+                                  labelText={requiredLabel('End use code')}
+                                  aria-required="true"
                                   value={boicPackageForm.endUseCode}
                                   disabled={isLoadingBoicPackage || isSavingBoicPackage}
                                   onChange={(event) =>
@@ -4180,7 +4211,8 @@ const ProvincialPermitDetailsPage = () => {
                                 />
                                 <TextInput
                                   id="boicPackageAgeClass"
-                                  labelText="Age class code"
+                                  labelText={requiredLabel('Age class code')}
+                                  aria-required="true"
                                   value={boicPackageForm.ageClass}
                                   disabled={isLoadingBoicPackage || isSavingBoicPackage}
                                   onChange={(event) =>
@@ -4192,7 +4224,8 @@ const ProvincialPermitDetailsPage = () => {
                                 />
                                 <TextInput
                                   id="boicPackageProductType"
-                                  labelText="Product type code"
+                                  labelText={requiredLabel('Product type code')}
+                                  aria-required="true"
                                   value={boicPackageForm.productType}
                                   disabled={isLoadingBoicPackage || isSavingBoicPackage}
                                   onChange={(event) =>
@@ -4204,7 +4237,8 @@ const ProvincialPermitDetailsPage = () => {
                                 />
                                 <TextInput
                                   id="boicPackageVolume"
-                                  labelText="Package volume (m³)"
+                                  labelText={requiredLabel('Package volume (m³)')}
+                                  aria-required="true"
                                   value={boicPackageForm.volume}
                                   disabled={isLoadingBoicPackage || isSavingBoicPackage}
                                   onChange={(event) =>
@@ -4213,7 +4247,8 @@ const ProvincialPermitDetailsPage = () => {
                                 />
                                 <TextInput
                                   id="boicPackageAverageLength"
-                                  labelText="Average length"
+                                  labelText={requiredLabel('Average length')}
+                                  aria-required="true"
                                   value={boicPackageForm.averageLength}
                                   disabled={isLoadingBoicPackage || isSavingBoicPackage}
                                   onChange={(event) =>
@@ -4225,7 +4260,8 @@ const ProvincialPermitDetailsPage = () => {
                                 />
                                 <TextInput
                                   id="boicPackageAverageDiameter"
-                                  labelText="Average top diameter"
+                                  labelText={requiredLabel('Average top diameter')}
+                                  aria-required="true"
                                   value={boicPackageForm.averageDiameter}
                                   disabled={isLoadingBoicPackage || isSavingBoicPackage}
                                   onChange={(event) =>
@@ -4237,7 +4273,8 @@ const ProvincialPermitDetailsPage = () => {
                                 />
                                 <TextInput
                                   id="boicPackageStatus"
-                                  labelText="Status code"
+                                  labelText={requiredLabel('Status code')}
+                                  aria-required="true"
                                   value={boicPackageForm.status}
                                   disabled={isLoadingBoicPackage || isSavingBoicPackage}
                                   onChange={(event) =>
@@ -4308,7 +4345,8 @@ const ProvincialPermitDetailsPage = () => {
                               <div className="legacy-search-grid">
                                 <SearchableSelect
                                   id="boicScalePackageNumber"
-                                  labelText="Package number"
+                                  labelText={requiredLabel('Package number')}
+                                  required
                                   value={selectedBlanketOicPackageNumber}
                                   options={blanketOicPackageOptions}
                                   placeholder="Select package"
@@ -4321,7 +4359,8 @@ const ProvincialPermitDetailsPage = () => {
                                 />
                                 <TextInput
                                   id="boicScaleTimberMark"
-                                  labelText="Timber mark"
+                                  labelText={requiredLabel('Timber mark')}
+                                  aria-required="true"
                                   value={boicScaleForm.timberMark}
                                   onChange={(event) =>
                                     setBlanketOicScaleFormField('timberMark', event.target.value)
@@ -4330,7 +4369,8 @@ const ProvincialPermitDetailsPage = () => {
                                 />
                                 <TextInput
                                   id="boicScaleSpeciesCode"
-                                  labelText="Species code"
+                                  labelText={requiredLabel('Species code')}
+                                  aria-required="true"
                                   value={boicScaleForm.speciesCode}
                                   onChange={(event) =>
                                     setBlanketOicScaleFormField('speciesCode', event.target.value)
@@ -4339,7 +4379,8 @@ const ProvincialPermitDetailsPage = () => {
                                 />
                                 <TextInput
                                   id="boicScaleGradeCode"
-                                  labelText="Grade code"
+                                  labelText={requiredLabel('Grade code')}
+                                  aria-required="true"
                                   value={boicScaleForm.gradeCode}
                                   onChange={(event) =>
                                     setBlanketOicScaleFormField('gradeCode', event.target.value)
@@ -4348,7 +4389,8 @@ const ProvincialPermitDetailsPage = () => {
                                 />
                                 <TextInput
                                   id="boicScalePieces"
-                                  labelText="Pieces"
+                                  labelText={requiredLabel('Pieces')}
+                                  aria-required="true"
                                   value={boicScaleForm.scalePieces}
                                   onChange={(event) =>
                                     setBlanketOicScaleFormField('scalePieces', event.target.value)
@@ -4357,7 +4399,8 @@ const ProvincialPermitDetailsPage = () => {
                                 />
                                 <TextInput
                                   id="boicScaleVolume"
-                                  labelText="Volume (m³)"
+                                  labelText={requiredLabel('Volume (m³)')}
+                                  aria-required="true"
                                   value={boicScaleForm.scaleVolume}
                                   onChange={(event) =>
                                     setBlanketOicScaleFormField('scaleVolume', event.target.value)
@@ -4549,7 +4592,8 @@ const ProvincialPermitDetailsPage = () => {
                                 <div className="legacy-search-grid">
                                   <TextInput
                                     id="permitOverrideFee"
-                                    labelText="Override fee (CAD)"
+                                    labelText={requiredLabel('Override fee (CAD)')}
+                                    aria-required="true"
                                     value={feeOverrideForm.overrideFee}
                                     disabled={isSavingFeeOverride}
                                     onChange={(event) =>
@@ -5037,7 +5081,8 @@ const ProvincialPermitDetailsPage = () => {
           <TextInput
             id="permit-approval-email-address"
             type="email"
-            labelText="Applicant email address"
+            labelText={requiredLabel('Applicant email address')}
+            aria-required="true"
             value={permitApprovalEmailAddress}
             invalid={!isValidEmail(permitApprovalEmailAddress)}
             invalidText="Enter one valid email address."

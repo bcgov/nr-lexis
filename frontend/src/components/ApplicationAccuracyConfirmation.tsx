@@ -2,6 +2,7 @@ import { Checkbox } from '@carbon/react'
 import { useId } from 'react'
 
 import ConfirmationModal from '@/components/ConfirmationModal'
+import { requiredLabel } from '@/utils/required-label'
 
 const APPLICATION_ACCURACY_DESCRIPTION =
   'Checking "I Agree" confirms that I have submitted accurate application details'
@@ -55,7 +56,8 @@ const ApplicationAccuracyConfirmation = ({
     >
       <Checkbox
         id={checkboxId}
-        labelText={APPLICATION_ACCURACY_LABEL}
+        labelText={requiredLabel(APPLICATION_ACCURACY_LABEL)}
+        aria-required="true"
         checked={confirmed}
         disabled={busy}
         onChange={(_, { checked }) => onConfirmedChange(Boolean(checked))}

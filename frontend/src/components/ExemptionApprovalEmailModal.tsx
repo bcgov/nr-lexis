@@ -2,6 +2,7 @@ import { Button, Loading, TextInput } from '@carbon/react'
 import { useId } from 'react'
 import Modal from '@/components/Modal'
 import { isValidEmail, normalizeTrimmedText } from '@/utils/text'
+import { requiredLabel } from '@/utils/required-label'
 
 import './ConfirmationModal/ConfirmationModal.css'
 
@@ -69,7 +70,8 @@ const ExemptionApprovalEmailModal = ({
               key={exemptionNumber}
               id={`exemption-approval-recipient-${index}`}
               type="email"
-              labelText={`Recipient for exemption ${exemptionNumber}`}
+              labelText={requiredLabel(`Recipient for exemption ${exemptionNumber}`)}
+              aria-required="true"
               value={email}
               invalid={!valid}
               invalidText="Enter one valid email address."

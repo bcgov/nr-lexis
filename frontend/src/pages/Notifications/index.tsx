@@ -40,6 +40,7 @@ import {
   fetchNotifications,
   updateNotification,
 } from '@/service/notification-service'
+import { requiredLabel } from '@/utils/required-label'
 import './Notifications.scss'
 
 const DEFAULT_DISPLAY_DURATION_DAYS = 7
@@ -247,12 +248,6 @@ function NotificationContent({ notificationId, contentHtml }: NotificationConten
     </>
   )
 }
-
-const RequiredMarker = () => (
-  <span className="notifications-page__required-marker" aria-hidden="true">
-    *
-  </span>
-)
 
 export default function NotificationsPage() {
   const { capabilities } = useAuth()
@@ -545,11 +540,7 @@ export default function NotificationsPage() {
             <h3>Message</h3>
             <TextInput
               id="notification-title"
-              labelText={
-                <>
-                  Title <RequiredMarker />
-                </>
-              }
+              labelText={requiredLabel('Title')}
               value={form.title}
               maxLength={MAX_NOTIFICATION_TITLE_LENGTH}
               required
@@ -559,9 +550,7 @@ export default function NotificationsPage() {
               }
             />
             <div className="notifications-page__form-field">
-              <p className="cds--label">
-                Message <RequiredMarker />
-              </p>
+              <p className="cds--label">{requiredLabel('Message')}</p>
               <p className="notifications-page__field-help">
                 Explain what is happening and what, if anything, the reader should do.
               </p>
@@ -578,11 +567,12 @@ export default function NotificationsPage() {
           </div>
 
           <fieldset className="notifications-page__form-section notifications-page__level">
-            <legend>Type</legend>
+            <legend>{requiredLabel('Type')}</legend>
             <RadioButtonGroup
               legendText=""
               name="notification-level"
               valueSelected={form.notificationLevel}
+              required
               disabled={saving}
               onChange={(value) =>
                 setForm((current) => ({
@@ -610,8 +600,22 @@ export default function NotificationsPage() {
             </RadioButtonGroup>
           </fieldset>
 
-          <fieldset className="notifications-page__form-section notifications-page__audience">
-            <legend>Audience</legend>
+          <fieldset
+            className="notifications-page__form-section notifications-page__audience"
+            aria-describedby={
+              form.audienceMode === 'ROLES' ? 'notification-audience-required' : undefined
+            }
+          >
+            <legend>{requiredLabel('Audience', form.audienceMode === 'ROLES')}</legend>
+            {form.audienceMode === 'ROLES' && (
+              // The requirement is one selected role, not every role checkbox.
+              <p
+                id="notification-audience-required"
+                className="notifications-page__visually-hidden"
+              >
+                Select at least one audience role.
+              </p>
+            )}
             <Checkbox
               id="notification-audience-all"
               labelText="All roles"
@@ -648,11 +652,7 @@ export default function NotificationsPage() {
               <TextInput
                 id="notification-display-start-date"
                 type="date"
-                labelText={
-                  <>
-                    Start date <RequiredMarker />
-                  </>
-                }
+                labelText={requiredLabel('Start date')}
                 value={form.displayStartDate}
                 required
                 disabled={saving}
@@ -668,11 +668,7 @@ export default function NotificationsPage() {
               <TextInput
                 id="notification-display-end-date"
                 type="date"
-                labelText={
-                  <>
-                    End date <RequiredMarker />
-                  </>
-                }
+                labelText={requiredLabel('End date')}
                 value={form.displayEndDate}
                 min={form.displayStartDate}
                 required

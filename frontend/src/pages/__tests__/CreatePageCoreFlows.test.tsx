@@ -475,7 +475,13 @@ describe('Create Page Core Flows', () => {
     )
 
     await selectApplicationCreateTab('Items')
-    const selectedSpecies = await screen.findByRole('list', {
+    const speciesCandidate = await screen.findByRole('combobox', { name: 'Species list' })
+    expect(speciesCandidate).not.toHaveAttribute('aria-required', 'true')
+    const selectedSpeciesGroup = screen.getByRole('group', {
+      name: 'Selected species',
+    })
+    expect(selectedSpeciesGroup).toHaveAccessibleDescription('At least one species is required.')
+    const selectedSpecies = within(selectedSpeciesGroup).getByRole('list', {
       name: 'Selected species',
     })
     const removeHemlock = within(selectedSpecies).getByRole('button', {
@@ -497,6 +503,12 @@ describe('Create Page Core Flows', () => {
     expect(
       screen.queryByRole('button', { name: 'Remove BA from application' }),
     ).not.toBeInTheDocument()
+    expect(
+      await screen.findByText('At least one species is required.', {
+        selector: '.legacy-search-error',
+      }),
+    ).toBeVisible()
+    expect(selectedSpeciesGroup).toHaveAccessibleDescription('At least one species is required.')
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
   }, 20_000)
 
@@ -1002,6 +1014,7 @@ describe('Create Page Core Flows', () => {
     },
   )
 
+  // Initializing the owner and agent lookup state is interaction-heavy under coverage.
   it('clears stale agent location and contact when the agent number changes', async () => {
     render(
       <MemoryRouter
@@ -1047,7 +1060,7 @@ describe('Create Page Core Flows', () => {
       await screen.findAllByText('Agent client number must be 1 to 8 digits.'),
     ).not.toHaveLength(0)
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
-  })
+  }, 20_000)
 
   it('validates application text storage limits and accepts their exact boundaries', async () => {
     mockedSubmitProvincialApplicationCreate.mockResolvedValue(successfulCreate('907'))
@@ -1729,10 +1742,20 @@ describe('Create Page Core Flows', () => {
     await waitFor(() =>
       expect(screen.getByRole('combobox', { name: 'Exemption status' })).toHaveValue('New'),
     )
+    expect(screen.getByText('Exemption status')).not.toHaveClass('required-label')
+    expect(screen.getByRole('combobox', { name: 'Exemption status' })).not.toHaveAttribute(
+      'aria-required',
+      'true',
+    )
     expect(screen.getByLabelText('Expiry date (YYYY-MM-DD)')).toHaveValue('2026-06-30')
     await chooseComboBoxOption(
       screen.getByRole('combobox', { name: 'Exemption type' }),
       'Section 1',
+    )
+    expect(screen.getByText('Exemption status')).toHaveClass('required-label')
+    expect(screen.getByRole('combobox', { name: 'Exemption status' })).toHaveAttribute(
+      'aria-required',
+      'true',
     )
     await chooseComboBoxOption(screen.getByRole('combobox', { name: 'Exemption status' }), 'New')
     await userEvent.type(screen.getByLabelText('Approval date (YYYY-MM-DD)'), '2026-02-01')
@@ -1910,6 +1933,8 @@ describe('Create Page Core Flows', () => {
     const statusSelect = screen.getByRole('combobox', { name: 'Exemption status' })
     expect(statusSelect).toHaveValue('New')
     expect(statusSelect).toBeDisabled()
+    expect(statusSelect).not.toHaveAttribute('aria-required', 'true')
+    expect(screen.getByText('Exemption status')).not.toHaveClass('required-label')
     expect(screen.getByLabelText('Approval date (YYYY-MM-DD)')).toBeDisabled()
     await userEvent.type(screen.getByLabelText('Approved volume (m³)'), '250.5')
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
