@@ -669,7 +669,7 @@ const DetailDocumentUploadPanel = ({
       )}
       <div className="detail-document-upload__trigger">
         <Button
-          kind="tertiary"
+          kind="primary"
           size="sm"
           renderIcon={Add}
           disabled={disabled}

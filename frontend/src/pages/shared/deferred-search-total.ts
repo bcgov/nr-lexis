@@ -91,7 +91,7 @@ export const formatDeferredSearchTotalLabel = (
     )
   }
   const formattedTotal = new Intl.NumberFormat('en-CA').format(knownMinimum)
-  return `At least ${formattedTotal} results found — exact count unavailable`
+  return `At least ${formattedTotal} ${knownMinimum === 1 ? 'result' : 'results'} found — exact count unavailable`
 }
 
 const inferExactTotalFromShortPage = <TResponse extends PagedSearchResponse>(

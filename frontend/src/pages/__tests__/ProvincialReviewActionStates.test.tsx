@@ -327,6 +327,17 @@ describe('Provincial Review Action State Smoke', () => {
     expect(screen.getByText('3000000')).toBeInTheDocument()
   })
 
+  it('uses the singular result label for one matching application', async () => {
+    mockedSearchApplicationReviews.mockResolvedValueOnce({
+      content: [reviewResponse.content[0]],
+      page: { ...reviewResponse.page, totalElements: 1 },
+    })
+
+    renderPage()
+
+    expect(await screen.findByText('1 result found')).toBeInTheDocument()
+  })
+
   it('uses the legacy provincial application review page title', async () => {
     renderPage()
 

@@ -4707,6 +4707,14 @@ $notification-types: 'error', 'info', 'success', 'warning';
   justify-content: flex-end;
 }
 
+.application-detail-documents .detail-section-card__header .detail-document-upload {
+  margin: 0;
+}
+
+.provincial-blanket-oic-permit-create-page .legacy-search-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+}
+
 .detail-document-upload-modal .cds--modal-content {
   padding-block-end: 1rem;
 }

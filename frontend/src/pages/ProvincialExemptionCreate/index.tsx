@@ -7,6 +7,11 @@ import {
   DismissibleTag,
   Grid,
   InlineNotification,
+  Tab,
+  TabList,
+  TabPanel,
+  TabPanels,
+  Tabs,
   TextArea,
   TextInput,
   Tile,
@@ -14,6 +19,7 @@ import {
 import ApplicationNumberSelect from '../../components/ApplicationNumberSelect'
 import IsoDatePicker from '../../components/IsoDatePicker'
 import { AppNotification } from '../../components/AppNotification'
+import DetailDocumentUploadPanel from '../../components/uploads/DetailDocumentUploadPanel'
 import SearchableSelect from '../../components/SearchableSelect'
 import RegionMultiSelect from '@/components/RegionMultiSelect'
 import PageHeader from '@/components/PageHeader'
@@ -48,7 +54,19 @@ import {
   fetchProvincialExemptionCreatePreview,
   submitProvincialExemptionCreate,
 } from '@/service/create-submit-service'
+import {
+  fetchApplicationClientData,
+  fetchApplicationClientLocations,
+  type ApplicationClientData,
+  type ApplicationClientLocation,
+} from '@/service/application-client-lookup-service'
+import {
+  fetchApplicationSummarySnapshot,
+  type ApplicationSummarySnapshot,
+} from '@/service/provincial-application-items-service'
+import { clientLocationLabel, isAgentApplicant } from '@/pages/shared/application-form-utils'
 import { requiredLabel } from '@/utils/required-label'
+import { displayAuditIdentity, displayValue } from '@/utils/text'
 
 type ProvincialExemptionCreateForm = {
   applicationNumber: string
@@ -71,6 +89,26 @@ type ExemptionApplicationSource = 'federal' | 'provincial'
 type ExemptionCreatePrefillState = {
   selectedApplicationNumbers: string[]
   applicationSource?: ExemptionApplicationSource
+}
+
+type ExemptionCreateTab = 'owner' | 'agent' | 'summary' | 'applications' | 'documents' | 'permits'
+
+const EXEMPTION_CREATE_TABS: readonly ExemptionCreateTab[] = [
+  'owner',
+  'agent',
+  'summary',
+  'applications',
+  'documents',
+  'permits',
+]
+
+const EXEMPTION_CREATE_TAB_LABELS: Record<ExemptionCreateTab, string> = {
+  owner: 'Owner',
+  agent: 'Agent',
+  summary: 'Exemption details',
+  applications: 'Applications',
+  documents: 'Documents',
+  permits: 'Permits',
 }
 
 const INITIAL_FORM: ProvincialExemptionCreateForm = {
@@ -207,6 +245,67 @@ type PageStatus = {
   placement?: 'inline'
 }
 
+type ExemptionCreateClientSummaryProps = {
+  title: string
+  clientData: ApplicationClientData | null
+}
+
+const ExemptionCreateClientSummary = ({ title, clientData }: ExemptionCreateClientSummaryProps) => {
+  if (!clientData) {
+    return null
+  }
+
+  return (
+    <section className="application-create-client-summary" aria-label={title}>
+      <h3 className="application-client-summary__title">{title}</h3>
+      <dl className="detail-field-grid">
+        {[
+          ['Company name', displayValue(clientData.companyName)],
+          ['Address', displayValue(clientData.address)],
+          ['City', displayValue(clientData.city)],
+          ['Province', displayValue(clientData.province)],
+          ['Postal code', displayValue(clientData.postalCode)],
+          ['Country', displayValue(clientData.country)],
+          ['Phone', displayValue(clientData.phone)],
+          ['Fax', displayValue(clientData.fax)],
+          ['Email', displayValue(clientData.email)],
+        ].map(([label, value]) => (
+          <div key={label} className="detail-field-item">
+            <dt className="detail-field-label">{label}</dt>
+            <dd className="detail-field-value">{value}</dd>
+          </div>
+        ))}
+      </dl>
+      {clientData.notfound && (
+        <InlineNotification
+          className="detail-context-notification"
+          kind="warning"
+          title="Client lookup"
+          subtitle={clientData.notfound}
+          lowContrast
+          hideCloseButton
+        />
+      )}
+    </section>
+  )
+}
+
+const settledValue = <T,>(result: PromiseSettledResult<T>, fallback: T): T =>
+  result.status === 'fulfilled' ? result.value : fallback
+
+const applicantTypeDescription = (value: string): string => {
+  switch (value.trim().toUpperCase()) {
+    case 'A':
+      return 'Agent'
+    case 'M':
+      return 'Ministerial'
+    case 'O':
+      return 'Owner'
+    default:
+      return value
+  }
+}
+
 const ProvincialExemptionCreatePage = () => {
   const { capabilities, canPerform } = useAuth()
   const navigate = useNavigate()
@@ -253,6 +352,17 @@ const ProvincialExemptionCreatePage = () => {
   )
   const [previewError, setPreviewError] = useState<string | null>(null)
   const [confirmedApplicationNumbers, setConfirmedApplicationNumbers] = useState<string[]>([])
+  const [selectedExemptionTab, setSelectedExemptionTab] = useState<ExemptionCreateTab>('owner')
+  const [applicationOwnerSnapshot, setApplicationOwnerSnapshot] =
+    useState<ApplicationSummarySnapshot | null>(null)
+  const [ownerClientData, setOwnerClientData] = useState<ApplicationClientData | null>(null)
+  const [agentClientData, setAgentClientData] = useState<ApplicationClientData | null>(null)
+  const [ownerClientLocations, setOwnerClientLocations] = useState<ApplicationClientLocation[]>([])
+  const [agentClientLocations, setAgentClientLocations] = useState<ApplicationClientLocation[]>([])
+  const [ownerContextState, setOwnerContextState] = useState<
+    'idle' | 'loading' | 'ready' | 'error'
+  >('idle')
+  const [ownerContextError, setOwnerContextError] = useState('')
   const [touchedFields, setTouchedFields] = useState<TouchedFields<ProvincialExemptionCreateField>>(
     {},
   )
@@ -283,6 +393,28 @@ const ProvincialExemptionCreatePage = () => {
   const normalizedTypeCode = form.exemptionTypeCode.trim().toUpperCase()
   const oicLike = OIC_TYPES.has(normalizedTypeCode)
   const blanketOic = normalizedTypeCode === 'B'
+  // Legacy exemption forms omit client tabs only for OIC and Blanket OIC records.
+  const showClientInfo = !oicLike
+  const hasAgentTab =
+    showClientInfo &&
+    applicationOwnerSnapshot !== null &&
+    isAgentApplicant(applicationOwnerSnapshot.applicantTypeCode.trim().toUpperCase())
+  const visibleExemptionTabs = useMemo(
+    () =>
+      EXEMPTION_CREATE_TABS.filter((tab) =>
+        tab !== 'owner' && tab !== 'agent'
+          ? true
+          : showClientInfo && (tab !== 'agent' || hasAgentTab),
+      ),
+    [hasAgentTab, showClientInfo],
+  )
+  const activeExemptionTab = visibleExemptionTabs.includes(selectedExemptionTab)
+    ? selectedExemptionTab
+    : showClientInfo
+      ? 'owner'
+      : 'summary'
+  const selectedExemptionTabIndex = Math.max(0, visibleExemptionTabs.indexOf(activeExemptionTab))
+  const author = displayAuditIdentity(capabilities?.principal)
   // M, O, and B creation uses a system-selected initial status, so it is a payload invariant,
   // not a required user input.
   const canEditInitialExemptionStatus =
@@ -380,6 +512,111 @@ const ProvincialExemptionCreatePage = () => {
       active = false
     }
   }, [canUseApplicationPrefill, selectedApplicationNumbers])
+
+  useEffect(() => {
+    let active = true
+    const applicationNumber = hasCurrentPreview ? (confirmedApplicationNumbers[0] ?? '') : ''
+
+    const clearOwnerContext = () => {
+      setApplicationOwnerSnapshot(null)
+      setOwnerClientData(null)
+      setAgentClientData(null)
+      setOwnerClientLocations([])
+      setAgentClientLocations([])
+      setOwnerContextState('idle')
+      setOwnerContextError('')
+    }
+
+    if (!applicationNumber || !canUseApplicationPrefill || oicLike) {
+      clearOwnerContext()
+      return () => {
+        active = false
+      }
+    }
+
+    setOwnerContextState('loading')
+    setOwnerContextError('')
+
+    const loadOwnerContext = async () => {
+      let snapshot: ApplicationSummarySnapshot | null
+      try {
+        snapshot = await fetchApplicationSummarySnapshot(applicationNumber)
+      } catch (error) {
+        if (active) {
+          console.error(error)
+          clearOwnerContext()
+          setOwnerContextState('error')
+          setOwnerContextError(
+            'Owner details could not be retrieved from the selected application.',
+          )
+        }
+        return
+      }
+
+      if (!active) {
+        return
+      }
+      if (!snapshot) {
+        setApplicationOwnerSnapshot(null)
+        setOwnerClientData(null)
+        setAgentClientData(null)
+        setOwnerClientLocations([])
+        setAgentClientLocations([])
+        setOwnerContextState('error')
+        setOwnerContextError('Owner details could not be retrieved from the selected application.')
+        return
+      }
+
+      setApplicationOwnerSnapshot(snapshot)
+      const ownerClientNumber = snapshot.ownerClientNumber.trim()
+      const ownerClientLocationCode = snapshot.ownerClientLocationCode.trim()
+      const agentClientNumber = snapshot.agentClientNumber.trim()
+      const agentClientLocationCode = snapshot.agentClientLocationCode.trim()
+      const hasAgent = isAgentApplicant(snapshot.applicantTypeCode.trim().toUpperCase())
+
+      const [ownerDataResult, ownerLocationsResult, agentDataResult, agentLocationsResult] =
+        await Promise.allSettled([
+          ownerClientNumber && ownerClientLocationCode
+            ? fetchApplicationClientData(ownerClientNumber, ownerClientLocationCode, {
+                applicationNumber,
+              })
+            : Promise.resolve(null),
+          ownerClientNumber
+            ? fetchApplicationClientLocations(ownerClientNumber, 'owner', applicationNumber)
+            : Promise.resolve([]),
+          hasAgent && agentClientNumber && agentClientLocationCode
+            ? fetchApplicationClientData(agentClientNumber, agentClientLocationCode, {
+                applicationNumber,
+              })
+            : Promise.resolve(null),
+          hasAgent && agentClientNumber
+            ? fetchApplicationClientLocations(agentClientNumber, 'agent', applicationNumber)
+            : Promise.resolve([]),
+        ])
+
+      if (!active) {
+        return
+      }
+
+      setOwnerClientData(settledValue(ownerDataResult, null))
+      setOwnerClientLocations(settledValue(ownerLocationsResult, []))
+      setAgentClientData(settledValue(agentDataResult, null))
+      setAgentClientLocations(settledValue(agentLocationsResult, []))
+      setOwnerContextState('ready')
+      setOwnerContextError(
+        [ownerDataResult, ownerLocationsResult, agentDataResult, agentLocationsResult].some(
+          (result) => result.status === 'rejected',
+        )
+          ? 'Some client details could not be retrieved. The selected application remains the source of owner information.'
+          : '',
+      )
+    }
+
+    void loadOwnerContext()
+    return () => {
+      active = false
+    }
+  }, [canUseApplicationPrefill, confirmedApplicationNumbers, hasCurrentPreview, oicLike])
 
   const fieldErrors = useMemo<FieldErrors<ProvincialExemptionCreateField>>(
     () => ({
@@ -529,6 +766,7 @@ const ProvincialExemptionCreatePage = () => {
             : current.approvedVolume
       return {
         ...current,
+        applicationNumber: typeCode === 'B' ? '' : current.applicationNumber,
         exemptionNumber: OIC_TYPES.has(typeCode) ? current.exemptionNumber : '',
         exemptionTypeCode: value,
         exemptionStatusCode: nextStatus || current.exemptionStatusCode,
@@ -576,6 +814,7 @@ const ProvincialExemptionCreatePage = () => {
       return false
     }
     if (form.applicationNumber.trim()) {
+      setSelectedExemptionTab('applications')
       markFieldTouched('applicationNumber')
       setStatus({
         kind: 'error',
@@ -586,6 +825,7 @@ const ProvincialExemptionCreatePage = () => {
       return false
     }
     if (selectedApplicationNumbers.length > 0 && !hasCurrentPreview) {
+      setSelectedExemptionTab('applications')
       setStatus({
         kind: 'error',
         title: 'Exemption Preview Required',
@@ -596,6 +836,7 @@ const ProvincialExemptionCreatePage = () => {
       return false
     }
     if (hasValidationError) {
+      setSelectedExemptionTab('summary')
       setShowAllValidationErrors(true)
       setStatus({
         kind: 'error',
@@ -671,6 +912,28 @@ const ProvincialExemptionCreatePage = () => {
     (!formValuesEqual(form, draftBaselineRef.current) ||
       !formValuesEqual(selectedApplicationNumbers, selectedApplicationNumbersBaselineRef.current))
 
+  const ownerClientNumber = applicationOwnerSnapshot?.ownerClientNumber.trim() ?? ''
+  const ownerClientLocationCode = applicationOwnerSnapshot?.ownerClientLocationCode.trim() ?? ''
+  const ownerClientLocationName = ownerClientLocations.find(
+    (location) => location.locationCode === ownerClientLocationCode,
+  )?.locationName
+  const ownerClientLocationDisplay = clientLocationLabel(
+    ownerClientLocationCode,
+    ownerClientLocationName ?? '',
+  )
+  const ownerApplicantType = applicationOwnerSnapshot?.applicantTypeCode.trim() ?? ''
+  const ownerContactName = applicationOwnerSnapshot?.ownerContactName.trim() ?? ''
+  const agentClientNumber = applicationOwnerSnapshot?.agentClientNumber.trim() ?? ''
+  const agentClientLocationCode = applicationOwnerSnapshot?.agentClientLocationCode.trim() ?? ''
+  const agentClientLocationName = agentClientLocations.find(
+    (location) => location.locationCode === agentClientLocationCode,
+  )?.locationName
+  const agentClientLocationDisplay = clientLocationLabel(
+    agentClientLocationCode,
+    agentClientLocationName ?? '',
+  )
+  const agentContactName = applicationOwnerSnapshot?.agentContactName.trim() ?? ''
+
   return (
     <Grid fullWidth className="default-grid create-page-grid provincial-exemption-create-page">
       <Column sm={4} md={8} lg={16}>
@@ -739,241 +1002,442 @@ const ProvincialExemptionCreatePage = () => {
         </Column>
       )}
 
-      <Column sm={4} md={8} lg={16}>
-        {/* INTENTIONAL_LEGACY_DIVERGENCE(EXEMPTION_CREATE_SAVE_FIRST): Owner data is
-            derived from linked applications, while documents, permits, and fees require
-            the persisted exemption created by this form. */}
-        <Tile className="create-form-tile">
-          {status?.placement === 'inline' && (
-            <InlineNotification
-              className="create-form-validation-notification"
-              kind="error"
-              title={status.title}
-              subtitle={status.message}
-              lowContrast
-              onCloseButtonClick={() => setStatus(null)}
-            />
-          )}
-          <fieldset className="legacy-form-fieldset create-form-section">
-            <legend>Exemption details</legend>
-            <div className="legacy-search-grid create-form-grid">
-              {!blanketOic &&
-                (isFederalApplicationPrefill ? (
-                  <TextArea
-                    className="selected-application-numbers"
-                    id="selectedApplicationNumbers"
-                    labelText="Selected application numbers"
-                    value={selectedApplicationNumbers.join('\n')}
-                    rows={Math.min(Math.max(selectedApplicationNumbers.length, 2), 6)}
-                    readOnly
-                  />
-                ) : (
-                  <div className="exemption-create-application-field">
-                    <div className="exemption-create-application-picker">
-                      <ApplicationNumberSelect
-                        id="applicationNumber"
-                        labelText="Application number (optional)"
-                        value={form.applicationNumber}
-                        invalid={!!fieldError('applicationNumber')}
-                        invalidText={fieldError('applicationNumber')}
+      <Column sm={4} md={8} lg={16} className="application-detail-tabs-column">
+        {status?.placement === 'inline' && (
+          <InlineNotification
+            className="create-form-validation-notification"
+            kind="error"
+            title={status.title}
+            subtitle={status.message}
+            lowContrast
+            onCloseButtonClick={() => setStatus(null)}
+          />
+        )}
+        <Tabs
+          selectedIndex={selectedExemptionTabIndex}
+          onChange={({ selectedIndex }) => {
+            const nextTab = visibleExemptionTabs[selectedIndex]
+            if (nextTab) {
+              setSelectedExemptionTab(nextTab)
+            }
+          }}
+        >
+          <TabList
+            aria-label="Exemption create sections"
+            contained
+            className="application-tabs__list application-detail-tab-list"
+          >
+            {visibleExemptionTabs.map((tab) => (
+              <Tab key={tab}>{EXEMPTION_CREATE_TAB_LABELS[tab]}</Tab>
+            ))}
+          </TabList>
+          <TabPanels>
+            {[
+              showClientInfo && (
+                <TabPanel key="owner" className="application-detail-tab-panel">
+                  <Tile
+                    className="create-form-tile application-detail-section"
+                    role="region"
+                    aria-label="Owner"
+                  >
+                    <div className="legacy-search-grid create-form-grid">
+                      <TextInput
+                        id="ownerClientNumber"
+                        labelText="Client number"
+                        value={ownerClientNumber}
+                        readOnly
+                        helperText={
+                          ownerContextState === 'loading'
+                            ? 'Loading from the selected application…'
+                            : 'Derived from the selected application.'
+                        }
+                      />
+                      <TextInput
+                        id="ownerApplicantType"
+                        labelText="Applicant type"
+                        value={
+                          applicationOwnerSnapshot
+                            ? applicantTypeDescription(ownerApplicantType)
+                            : ''
+                        }
+                        readOnly
+                      />
+                      <TextInput
+                        id="ownerClientLocation"
+                        labelText="Client location"
+                        value={ownerClientLocationDisplay}
+                        readOnly
+                      />
+                      <TextInput
+                        id="ownerContactName"
+                        labelText="Contact name"
+                        value={ownerContactName}
+                        readOnly
+                      />
+                      <TextInput
+                        id="ownerAgentIndicator"
+                        labelText="I'm an agent"
+                        value={applicationOwnerSnapshot ? (hasAgentTab ? 'Yes' : 'No') : ''}
+                        readOnly
+                      />
+                    </div>
+                    {!applicationOwnerSnapshot && ownerContextState === 'idle' && (
+                      <p className="detail-empty-message">
+                        Owner details are derived from the first selected application. A standalone
+                        Ministerial exemption has no linked owner details.
+                      </p>
+                    )}
+                    {ownerContextState === 'loading' && (
+                      <p className="detail-empty-message">Loading owner details…</p>
+                    )}
+                    {!!ownerContextError && (
+                      <InlineNotification
+                        className="detail-context-notification"
+                        kind="warning"
+                        title="Owner details unavailable"
+                        subtitle={ownerContextError}
+                        lowContrast
+                        hideCloseButton
+                      />
+                    )}
+                    <ExemptionCreateClientSummary
+                      title="Owner client details"
+                      clientData={ownerClientData}
+                    />
+                  </Tile>
+                </TabPanel>
+              ),
+              hasAgentTab && (
+                <TabPanel key="agent" className="application-detail-tab-panel">
+                  <Tile
+                    className="create-form-tile application-detail-section"
+                    role="region"
+                    aria-label="Agent"
+                  >
+                    <div className="legacy-search-grid create-form-grid">
+                      <TextInput
+                        id="agentClientNumber"
+                        labelText="Agent number"
+                        value={agentClientNumber}
+                        readOnly
+                      />
+                      <TextInput
+                        id="agentApplicantType"
+                        labelText="Applicant type"
+                        value="Agent"
+                        readOnly
+                      />
+                      <TextInput
+                        id="agentClientLocation"
+                        labelText="Contact location"
+                        value={agentClientLocationDisplay}
+                        readOnly
+                      />
+                      <TextInput
+                        id="agentContactName"
+                        labelText="Contact name"
+                        value={agentContactName}
+                        readOnly
+                      />
+                    </div>
+                    <ExemptionCreateClientSummary
+                      title="Agent client details"
+                      clientData={agentClientData}
+                    />
+                  </Tile>
+                </TabPanel>
+              ),
+              <TabPanel key="summary" className="application-detail-tab-panel">
+                <Tile
+                  className="create-form-tile application-detail-section"
+                  role="region"
+                  aria-label="Exemption details"
+                >
+                  <fieldset className="legacy-form-fieldset create-form-section">
+                    <legend>Exemption details</legend>
+                    <div className="legacy-search-grid create-form-grid">
+                      <SearchableSelect
+                        id="exemptionTypeCode"
+                        labelText={requiredLabel('Exemption type')}
+                        required
+                        value={form.exemptionTypeCode}
+                        invalid={!!fieldError('exemptionTypeCode')}
+                        invalidText={fieldError('exemptionTypeCode')}
+                        placeholder="Select type"
+                        options={availableExemptionTypes}
+                        disabled={!optionsLoaded || optionsUnavailable}
+                        onChange={onExemptionTypeChange}
+                      />
+                      {oicLike && (
+                        <TextInput
+                          id="exemptionNumber"
+                          labelText={requiredLabel('Exemption number')}
+                          aria-required="true"
+                          maxLength={8}
+                          value={form.exemptionNumber}
+                          invalid={!!fieldError('exemptionNumber')}
+                          invalidText={fieldError('exemptionNumber')}
+                          onChange={(event) => {
+                            markFormEdited()
+                            setForm((current) => ({
+                              ...current,
+                              exemptionNumber: event.target.value,
+                            }))
+                          }}
+                        />
+                      )}
+                      <SearchableSelect
+                        id="exemptionStatusCode"
+                        labelText={requiredLabel('Exemption status', canEditInitialExemptionStatus)}
+                        required={canEditInitialExemptionStatus}
+                        value={form.exemptionStatusCode}
+                        invalid={!!fieldError('exemptionStatusCode')}
+                        invalidText={fieldError('exemptionStatusCode')}
+                        placeholder="Select status"
+                        options={exemptionStatuses}
+                        disabled={!canEditInitialExemptionStatus}
                         onChange={(value) => {
                           markFormEdited()
-                          setForm((current) => ({ ...current, applicationNumber: value }))
+                          setForm((current) => ({ ...current, exemptionStatusCode: value }))
                         }}
                       />
-                      <Button
-                        type="button"
-                        kind="tertiary"
-                        size="sm"
-                        disabled={!form.applicationNumber.trim()}
-                        onClick={onAddApplication}
-                      >
-                        Add application
-                      </Button>
+                      <IsoDatePicker
+                        id="approvalDate"
+                        labelText={requiredLabel('Approval date (YYYY-MM-DD)', oicLike)}
+                        required={oicLike}
+                        value={form.approvalDate}
+                        disabled={normalizedTypeCode === 'M'}
+                        invalid={!!fieldError('approvalDate')}
+                        invalidText={fieldError('approvalDate')}
+                        onChange={(value) => {
+                          markFormEdited()
+                          setForm((current) => ({ ...current, approvalDate: value }))
+                        }}
+                      />
+                      <IsoDatePicker
+                        id="expiryDate"
+                        labelText={requiredLabel(
+                          'Expiry date (YYYY-MM-DD)',
+                          oicLike || !!form.approvalDate,
+                        )}
+                        required={oicLike || !!form.approvalDate}
+                        value={form.expiryDate}
+                        invalid={!!fieldError('expiryDate')}
+                        invalidText={fieldError('expiryDate')}
+                        onChange={(value) => {
+                          markFormEdited()
+                          setForm((current) => ({ ...current, expiryDate: value }))
+                        }}
+                      />
+                      <TextInput
+                        id="approvedVolume"
+                        labelText={requiredLabel('Approved volume (m³)')}
+                        aria-required="true"
+                        value={form.approvedVolume}
+                        invalid={!!fieldError('approvedVolume')}
+                        invalidText={fieldError('approvedVolume')}
+                        onChange={(event) => {
+                          markFormEdited()
+                          setForm((current) => ({ ...current, approvedVolume: event.target.value }))
+                        }}
+                      />
+                      {blanketOic && (
+                        <RegionMultiSelect
+                          id="exemptionRegions"
+                          titleText={requiredLabel('Regions')}
+                          required
+                          items={regionOptions}
+                          selectedItems={selectedRegions}
+                          invalid={!!fieldError('regionNumbers')}
+                          invalidText={fieldError('regionNumbers')}
+                          disabled={!optionsLoaded || optionsUnavailable}
+                          onChange={(selectedItems) => {
+                            const regionNumbers = selectedItems.map((item) => item.id)
+                            if (formValuesEqual(regionNumbers, form.regionNumbers)) {
+                              return
+                            }
+                            markFormEdited()
+                            setForm((current) => ({
+                              ...current,
+                              regionNumbers,
+                            }))
+                          }}
+                        />
+                      )}
                     </div>
-                    {selectedApplicationNumbers.length > 0 && (
-                      <div className="exemption-create-application-selection">
-                        <p>Selected applications</p>
-                        <ul
-                          className="exemption-create-application-list"
-                          aria-label="Selected applications"
-                        >
-                          {selectedApplicationNumbers.map((applicationNumber) => (
-                            <li key={applicationNumber}>
-                              <DismissibleTag
-                                type="blue"
-                                text={applicationNumber}
-                                title={`Remove application ${applicationNumber}`}
-                                dismissTooltipLabel={`Remove application ${applicationNumber}`}
-                                onClose={() => onRemoveApplication(applicationNumber)}
-                              />
-                            </li>
-                          ))}
-                        </ul>
+                    {oicLike && (
+                      <div className="legacy-search-actions create-form-option-row">
+                        <Checkbox
+                          id="enableExemptionRateOverride"
+                          labelText="Enable fee rate override"
+                          checked={form.enableRateOverride}
+                          onChange={(_, { checked }) => {
+                            if (Boolean(checked) === form.enableRateOverride) {
+                              return
+                            }
+                            markFormEdited()
+                            setForm((current) => ({
+                              ...current,
+                              enableRateOverride: Boolean(checked),
+                              feeRate: checked ? current.feeRate : '',
+                            }))
+                          }}
+                        />
+                        {form.enableRateOverride && (
+                          <TextInput
+                            id="exemptionFeeRate"
+                            labelText={requiredLabel('Fee rate ($/m³)')}
+                            aria-required="true"
+                            value={form.feeRate}
+                            invalid={!!fieldError('feeRate')}
+                            invalidText={fieldError('feeRate')}
+                            onChange={(event) => {
+                              markFormEdited()
+                              setForm((current) => ({ ...current, feeRate: event.target.value }))
+                            }}
+                          />
+                        )}
                       </div>
                     )}
-                  </div>
-                ))}
-              <SearchableSelect
-                id="exemptionTypeCode"
-                labelText={requiredLabel('Exemption type')}
-                required
-                value={form.exemptionTypeCode}
-                invalid={!!fieldError('exemptionTypeCode')}
-                invalidText={fieldError('exemptionTypeCode')}
-                placeholder="Select type"
-                options={availableExemptionTypes}
-                disabled={!optionsLoaded || optionsUnavailable}
-                onChange={onExemptionTypeChange}
-              />
-              {oicLike && (
-                <TextInput
-                  id="exemptionNumber"
-                  labelText={requiredLabel('Exemption number')}
-                  aria-required="true"
-                  maxLength={8}
-                  value={form.exemptionNumber}
-                  invalid={!!fieldError('exemptionNumber')}
-                  invalidText={fieldError('exemptionNumber')}
-                  onChange={(event) => {
-                    markFormEdited()
-                    setForm((current) => ({
-                      ...current,
-                      exemptionNumber: event.target.value,
-                    }))
-                  }}
-                />
-              )}
-              <SearchableSelect
-                id="exemptionStatusCode"
-                labelText={requiredLabel('Exemption status', canEditInitialExemptionStatus)}
-                required={canEditInitialExemptionStatus}
-                value={form.exemptionStatusCode}
-                invalid={!!fieldError('exemptionStatusCode')}
-                invalidText={fieldError('exemptionStatusCode')}
-                placeholder="Select status"
-                options={exemptionStatuses}
-                disabled={!canEditInitialExemptionStatus}
-                onChange={(value) => {
-                  markFormEdited()
-                  setForm((current) => ({ ...current, exemptionStatusCode: value }))
-                }}
-              />
-              <IsoDatePicker
-                id="approvalDate"
-                labelText={requiredLabel('Approval date (YYYY-MM-DD)', oicLike)}
-                required={oicLike}
-                value={form.approvalDate}
-                disabled={normalizedTypeCode === 'M'}
-                invalid={!!fieldError('approvalDate')}
-                invalidText={fieldError('approvalDate')}
-                onChange={(value) => {
-                  markFormEdited()
-                  setForm((current) => ({ ...current, approvalDate: value }))
-                }}
-              />
-              <IsoDatePicker
-                id="expiryDate"
-                labelText={requiredLabel(
-                  'Expiry date (YYYY-MM-DD)',
-                  oicLike || !!form.approvalDate,
-                )}
-                required={oicLike || !!form.approvalDate}
-                value={form.expiryDate}
-                invalid={!!fieldError('expiryDate')}
-                invalidText={fieldError('expiryDate')}
-                onChange={(value) => {
-                  markFormEdited()
-                  setForm((current) => ({ ...current, expiryDate: value }))
-                }}
-              />
-              <TextInput
-                id="approvedVolume"
-                labelText={requiredLabel('Approved volume (m³)')}
-                aria-required="true"
-                value={form.approvedVolume}
-                invalid={!!fieldError('approvedVolume')}
-                invalidText={fieldError('approvedVolume')}
-                onChange={(event) => {
-                  markFormEdited()
-                  setForm((current) => ({ ...current, approvedVolume: event.target.value }))
-                }}
-              />
-              {blanketOic && (
-                <RegionMultiSelect
-                  id="exemptionRegions"
-                  titleText={requiredLabel('Regions')}
-                  required
-                  items={regionOptions}
-                  selectedItems={selectedRegions}
-                  invalid={!!fieldError('regionNumbers')}
-                  invalidText={fieldError('regionNumbers')}
-                  disabled={!optionsLoaded || optionsUnavailable}
-                  onChange={(selectedItems) => {
-                    const regionNumbers = selectedItems.map((item) => item.id)
-                    if (formValuesEqual(regionNumbers, form.regionNumbers)) {
-                      return
-                    }
-                    markFormEdited()
-                    setForm((current) => ({
-                      ...current,
-                      regionNumbers,
-                    }))
-                  }}
-                />
-              )}
-            </div>
-            {oicLike && (
-              <div className="legacy-search-actions create-form-option-row">
-                <Checkbox
-                  id="enableExemptionRateOverride"
-                  labelText="Enable fee rate override"
-                  checked={form.enableRateOverride}
-                  onChange={(_, { checked }) => {
-                    if (Boolean(checked) === form.enableRateOverride) {
-                      return
-                    }
-                    markFormEdited()
-                    setForm((current) => ({
-                      ...current,
-                      enableRateOverride: Boolean(checked),
-                      feeRate: checked ? current.feeRate : '',
-                    }))
-                  }}
-                />
-                {form.enableRateOverride && (
-                  <TextInput
-                    id="exemptionFeeRate"
-                    labelText={requiredLabel('Fee rate ($/m³)')}
-                    aria-required="true"
-                    value={form.feeRate}
-                    invalid={!!fieldError('feeRate')}
-                    invalidText={fieldError('feeRate')}
-                    onChange={(event) => {
-                      markFormEdited()
-                      setForm((current) => ({ ...current, feeRate: event.target.value }))
-                    }}
+                    <div className="legacy-search-actions create-form-comments">
+                      <TextArea
+                        id="otherConditions"
+                        labelText="Conditions"
+                        enableCounter
+                        maxCount={250}
+                        maxLength={250}
+                        value={form.otherConditions}
+                        invalid={!!fieldError('otherConditions')}
+                        invalidText={fieldError('otherConditions')}
+                        onChange={(event) => {
+                          markFormEdited()
+                          setForm((current) => ({
+                            ...current,
+                            otherConditions: event.target.value,
+                          }))
+                        }}
+                      />
+                    </div>
+                  </fieldset>
+                </Tile>
+              </TabPanel>,
+              <TabPanel key="applications" className="application-detail-tab-panel">
+                <Tile
+                  className="create-form-tile application-detail-section"
+                  role="region"
+                  aria-label="Applications"
+                >
+                  {blanketOic ? (
+                    <p className="detail-empty-message">
+                      Blanket OIC exemptions do not use linked applications.
+                    </p>
+                  ) : isFederalApplicationPrefill ? (
+                    <TextArea
+                      className="selected-application-numbers"
+                      id="selectedApplicationNumbers"
+                      labelText="Selected application numbers"
+                      value={selectedApplicationNumbers.join('\n')}
+                      rows={Math.min(Math.max(selectedApplicationNumbers.length, 2), 6)}
+                      readOnly
+                    />
+                  ) : (
+                    <div className="exemption-create-application-field">
+                      <div className="exemption-create-application-picker">
+                        <ApplicationNumberSelect
+                          id="applicationNumber"
+                          labelText="Application number (optional)"
+                          value={form.applicationNumber}
+                          invalid={!!fieldError('applicationNumber')}
+                          invalidText={fieldError('applicationNumber')}
+                          onChange={(value) => {
+                            markFormEdited()
+                            setForm((current) => ({ ...current, applicationNumber: value }))
+                          }}
+                        />
+                        <Button
+                          type="button"
+                          kind="tertiary"
+                          size="sm"
+                          disabled={!form.applicationNumber.trim()}
+                          onClick={onAddApplication}
+                        >
+                          Add application
+                        </Button>
+                      </div>
+                      {selectedApplicationNumbers.length > 0 && (
+                        <div className="exemption-create-application-selection">
+                          <p>Selected applications</p>
+                          <ul
+                            className="exemption-create-application-list"
+                            aria-label="Selected applications"
+                          >
+                            {selectedApplicationNumbers.map((applicationNumber) => (
+                              <li key={applicationNumber}>
+                                <DismissibleTag
+                                  type="blue"
+                                  text={applicationNumber}
+                                  title={`Remove application ${applicationNumber}`}
+                                  dismissTooltipLabel={`Remove application ${applicationNumber}`}
+                                  onClose={() => onRemoveApplication(applicationNumber)}
+                                />
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </Tile>
+              </TabPanel>,
+              <TabPanel key="documents" className="application-detail-tab-panel">
+                <Tile
+                  className="create-form-tile application-detail-section"
+                  role="region"
+                  aria-label="Documents"
+                >
+                  <DetailDocumentUploadPanel
+                    workflowType="exemption"
+                    targetNumber=""
+                    inputId="exemptionCreateDocumentUpload"
+                    disabled
+                    disabledReason="Save the exemption before uploading documents."
                   />
-                )}
-              </div>
-            )}
-            <div className="legacy-search-actions create-form-comments">
-              <TextArea
-                id="otherConditions"
-                labelText="Conditions"
-                enableCounter
-                maxCount={250}
-                maxLength={250}
-                value={form.otherConditions}
-                invalid={!!fieldError('otherConditions')}
-                invalidText={fieldError('otherConditions')}
-                onChange={(event) => {
-                  markFormEdited()
-                  setForm((current) => ({ ...current, otherConditions: event.target.value }))
-                }}
-              />
+                </Tile>
+              </TabPanel>,
+              <TabPanel key="permits" className="application-detail-tab-panel">
+                <Tile
+                  className="create-form-tile application-detail-section"
+                  role="region"
+                  aria-label="Permits"
+                >
+                  <p className="detail-empty-message">
+                    Save the exemption before adding or viewing permits.
+                  </p>
+                </Tile>
+              </TabPanel>,
+            ].filter(Boolean)}
+          </TabPanels>
+        </Tabs>
+        <div className="legacy-form-footer">
+          <dl className="detail-field-grid">
+            <div className="detail-field-item">
+              <dt className="detail-field-label">Exemption number</dt>
+              <dd className="detail-field-value">{displayValue(form.exemptionNumber)}</dd>
             </div>
-          </fieldset>
+            <div className="detail-field-item">
+              <dt className="detail-field-label">Status</dt>
+              <dd className="detail-field-value">
+                {displayValue(
+                  exemptionStatuses.find((option) => option.value === form.exemptionStatusCode)
+                    ?.label ?? form.exemptionStatusCode,
+                )}
+              </dd>
+            </div>
+            <div className="detail-field-item">
+              <dt className="detail-field-label">Author</dt>
+              <dd className="detail-field-value">{author}</dd>
+            </div>
+          </dl>
           <div
             className="legacy-search-actions create-form-actions"
             role="group"
@@ -1007,7 +1471,7 @@ const ProvincialExemptionCreatePage = () => {
               {isSubmitting ? 'Saving…' : 'Save'}
             </Button>
           </div>
-        </Tile>
+        </div>
       </Column>
       <UnsavedChangesGuard
         isDirty={isCreateDraftDirty}

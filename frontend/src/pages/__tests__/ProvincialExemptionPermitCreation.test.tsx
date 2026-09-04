@@ -1,10 +1,12 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
 import type { ProvincialExemptionDetail } from '@/interfaces/LexisDetails'
+import ProvincialBlanketOicPermitCreatePage from '@/pages/ProvincialBlanketOicPermitCreate'
 import ProvincialExemptionDetailsPage from '@/pages/ProvincialExemptionDetails'
+import { readDetailReturnTo, readDetailReturnTrail } from '@/pages/shared/detail-navigation'
 import { fetchProvincialExemptionDetail } from '@/service/lexis-detail-service'
 import {
   fetchExemptionClientData,
@@ -143,10 +145,19 @@ const mockRole = (roles: string[], allowedActions = ['createPermit']) => {
   )
 }
 
-const renderPage = (detail: ProvincialExemptionDetail, initialSearch = '') => {
+const renderPage = (
+  detail: ProvincialExemptionDetail,
+  initialSearch = '',
+  initialState?: Record<string, unknown>,
+) => {
   vi.mocked(fetchProvincialExemptionDetail).mockResolvedValue(detail)
+  const detailPath = `/provincial/exemption/${detail.exemptionNumber}${initialSearch}`
   const router = createMemoryRouter(
     [
+      {
+        path: '/provincial/exemption/:exemptionNumber/permit/new',
+        element: <ProvincialBlanketOicPermitCreatePage />,
+      },
       {
         path: '/provincial/exemption/:exemptionNumber',
         element: <ProvincialExemptionDetailsPage />,
@@ -156,7 +167,17 @@ const renderPage = (detail: ProvincialExemptionDetail, initialSearch = '') => {
         element: <p>New permit destination</p>,
       },
     ],
-    { initialEntries: [`/provincial/exemption/${detail.exemptionNumber}${initialSearch}`] },
+    {
+      initialEntries: [
+        initialState
+          ? {
+              pathname: `/provincial/exemption/${detail.exemptionNumber}`,
+              search: initialSearch,
+              state: initialState,
+            }
+          : detailPath,
+      ],
+    },
   )
   render(<RouterProvider router={router} />)
   return router
@@ -164,6 +185,11 @@ const renderPage = (detail: ProvincialExemptionDetail, initialSearch = '') => {
 
 const openPermitsTab = async () => {
   await userEvent.click(await screen.findByRole('tab', { name: 'Permits' }))
+}
+
+const openBlanketOicCreatePage = async () => {
+  await userEvent.click(screen.getByRole('button', { name: 'Apply for new permit' }))
+  return screen.findByRole('region', { name: 'Blanket OIC permit details' })
 }
 
 const configureBlanketOicCreationDependencies = () => {
@@ -206,16 +232,19 @@ const configureBlanketOicCreationDependencies = () => {
   })
 }
 
-const fillRequiredBlanketOicFields = async (dialog: HTMLElement) => {
-  await userEvent.type(within(dialog).getByLabelText('Permit Request Pieces'), '4')
-  await userEvent.type(within(dialog).getByLabelText('Permit Request Volume (m³)'), '4')
-  await userEvent.type(within(dialog).getByLabelText('Owner client number'), '1074')
-  await userEvent.type(within(dialog).getByLabelText('Purchaser'), 'test destination')
-  await waitFor(() => expect(within(dialog).getByLabelText('Owner location')).toHaveValue('00'))
-  expect(within(dialog).getByLabelText('Owner client number')).toHaveValue('00001074')
-  await userEvent.type(within(dialog).getByLabelText('Transport name'), 'test barge')
-  await userEvent.type(within(dialog).getByLabelText('Estimated shipping date'), '2099-01-01')
-  await userEvent.type(within(dialog).getByLabelText('Remarks'), 'test blanket permit')
+const fillRequiredBlanketOicFields = async () => {
+  await userEvent.type(screen.getByLabelText('Permit Request Pieces'), '4')
+  await userEvent.type(screen.getByLabelText('Permit Request Volume (m³)'), '4')
+  await userEvent.type(screen.getByLabelText('Remarks'), 'test blanket permit')
+  await userEvent.click(screen.getByRole('tab', { name: 'Owner' }))
+  await userEvent.type(screen.getByLabelText('Owner client number'), '1074')
+  await userEvent.tab()
+  await waitFor(() => expect(screen.getByLabelText('Owner location')).toHaveValue('00'))
+  expect(screen.getByLabelText('Owner client number')).toHaveValue('00001074')
+  await userEvent.click(screen.getByRole('tab', { name: 'Shipping' }))
+  await userEvent.type(screen.getByLabelText('Purchaser'), 'test destination')
+  await userEvent.type(screen.getByLabelText('Transport name'), 'test barge')
+  await userEvent.type(screen.getByLabelText('Estimated shipping date'), '2099-01-01')
 }
 
 describe('permit creation from an exemption', () => {
@@ -278,6 +307,22 @@ describe('permit creation from an exemption', () => {
       expect(addPermitDetail).not.toHaveBeenCalled()
     },
   )
+
+  it('blocks a direct create route for an ineligible Blanket OIC exemption', async () => {
+    mockRole(['LEXIS_APPLICATION_APPROVER'], ['createPermit', 'savePermit'])
+    configureBlanketOicCreationDependencies()
+    const router = renderPage({ ...activeBlanketOicExemption, exemptionStatusCode: 'NEW' })
+
+    await router.navigate('/provincial/exemption/TEST13E2/permit/new')
+
+    expect(
+      await screen.findByText(
+        'A new permit can only be created for an active Blanket OIC exemption.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save permit' })).not.toBeInTheDocument()
+    expect(addPermitDetail).not.toHaveBeenCalled()
+  })
 
   it('matches legacy permit totals and marks active permits as pending', async () => {
     vi.mocked(fetchExemptionApplications).mockResolvedValue({
@@ -408,17 +453,39 @@ describe('permit creation from an exemption', () => {
       source: 'api',
       permitNumber: '9020948',
     })
-    const router = renderPage(activeBlanketOicExemption)
+    const router = renderPage(activeBlanketOicExemption, '?permitFilter=902')
 
     await openPermitsTab()
-    await userEvent.click(screen.getByRole('button', { name: 'Apply for new permit' }))
-
-    const dialog = screen.getByRole('dialog', { name: 'Apply for new Blanket OIC permit' })
+    const page = await openBlanketOicCreatePage()
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe('/provincial/exemption/TEST13E2/permit/new'),
+    )
     expect(
-      within(dialog).getByText(/permit number is assigned only after a successful save/i),
+      within(page).getByText(/permit number is assigned only after a successful save/i),
     ).toBeInTheDocument()
-    await fillRequiredBlanketOicFields(dialog)
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Create permit' }))
+    expect(within(page).getByRole('tab', { name: 'Permit' })).toBeInTheDocument()
+    expect(within(page).getByRole('tab', { name: 'Owner' })).toBeInTheDocument()
+    expect(within(page).getByRole('tab', { name: 'Shipping' })).toBeInTheDocument()
+    expect(within(page).getByRole('tab', { name: 'Items' })).toBeInTheDocument()
+    expect(within(page).getByRole('tab', { name: 'Documents' })).toBeInTheDocument()
+    expect(within(page).getByRole('tab', { name: 'Fees' })).toBeInTheDocument()
+    await userEvent.click(within(page).getByRole('tab', { name: 'Items' }))
+    expect(
+      within(page).getByText(
+        'Package and Summary of Scale details are available after the permit is saved.',
+      ),
+    ).toBeInTheDocument()
+    await userEvent.click(within(page).getByRole('tab', { name: 'Documents' }))
+    expect(
+      within(page).getByText('Documents can be added after the permit is saved.'),
+    ).toBeInTheDocument()
+    await userEvent.click(within(page).getByRole('tab', { name: 'Fees' }))
+    expect(
+      within(page).getByText('Fee details are available after the permit is saved.'),
+    ).toBeInTheDocument()
+    await userEvent.click(within(page).getByRole('tab', { name: 'Permit' }))
+    await fillRequiredBlanketOicFields()
+    await userEvent.click(within(page).getByRole('button', { name: 'Save permit' }))
 
     await waitFor(() => expect(addPermitDetail).toHaveBeenCalledOnce())
     expect(addPermitDetail).toHaveBeenCalledWith(
@@ -441,6 +508,162 @@ describe('permit creation from an exemption', () => {
       }),
     )
     await waitFor(() => expect(router.state.location.pathname).toBe('/provincial/permit/9020948'))
+    expect(router.state.location.search).toBe('?permitFilter=902')
+  })
+
+  it('preserves the nested exemption return trail after creating a Blanket OIC permit', async () => {
+    mockRole(['LEXIS_APPLICATION_APPROVER'], ['createPermit', 'savePermit'])
+    configureBlanketOicCreationDependencies()
+    vi.mocked(addPermitDetail).mockResolvedValue({
+      success: true,
+      message: 'The permit was saved successfully.',
+      errors: [],
+      warnings: [],
+      source: 'api',
+      permitNumber: '9020949',
+    })
+    const originatingSearch = {
+      label: 'Provincial exemption search',
+      to: '/provincial/exemption?status=ACT&page=2',
+    }
+    const router = renderPage(activeBlanketOicExemption, '?permitFilter=902', {
+      returnTo: originatingSearch,
+    })
+
+    await openPermitsTab()
+    const page = await openBlanketOicCreatePage()
+    await fillRequiredBlanketOicFields()
+    await userEvent.click(within(page).getByRole('button', { name: 'Save permit' }))
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/provincial/permit/9020949'))
+    const permitReturnTo = readDetailReturnTo(router.state.location.state)
+    expect(permitReturnTo).toBeDefined()
+    expect(readDetailReturnTrail(permitReturnTo!).map(({ label, to }) => ({ label, to }))).toEqual([
+      originatingSearch,
+      {
+        label: 'Provincial exemption detail',
+        to: '/provincial/exemption/TEST13E2?permitFilter=902',
+      },
+    ])
+  })
+
+  it('reserves Blanket OIC creation before client lookup so rapid saves submit once', async () => {
+    mockRole(['LEXIS_APPLICATION_APPROVER'], ['createPermit', 'savePermit'])
+    configureBlanketOicCreationDependencies()
+    let resolveOwnerLocations: (
+      locations: Awaited<ReturnType<typeof fetchExemptionClientLocations>>,
+    ) => void = () => undefined
+    const pendingOwnerLocations = new Promise<
+      Awaited<ReturnType<typeof fetchExemptionClientLocations>>
+    >((resolve) => {
+      resolveOwnerLocations = resolve
+    })
+    vi.mocked(fetchExemptionClientLocations).mockReturnValue(pendingOwnerLocations)
+    vi.mocked(addPermitDetail).mockResolvedValue({
+      success: true,
+      message: 'The permit was saved successfully.',
+      errors: [],
+      warnings: [],
+      source: 'api',
+      permitNumber: '9020950',
+    })
+    const router = renderPage(activeBlanketOicExemption)
+
+    await openPermitsTab()
+    const page = await openBlanketOicCreatePage()
+    await userEvent.type(within(page).getByLabelText('Permit Request Pieces'), '4')
+    await userEvent.type(within(page).getByLabelText('Permit Request Volume (m³)'), '4')
+    await userEvent.type(within(page).getByLabelText('Remarks'), 'test blanket permit')
+    await userEvent.click(within(page).getByRole('tab', { name: 'Shipping' }))
+    await userEvent.type(within(page).getByLabelText('Purchaser'), 'test destination')
+    await userEvent.type(within(page).getByLabelText('Transport name'), 'test barge')
+    await userEvent.type(within(page).getByLabelText('Estimated shipping date'), '2099-01-01')
+    await userEvent.click(within(page).getByRole('tab', { name: 'Owner' }))
+    fireEvent.change(within(page).getByLabelText('Owner client number'), {
+      target: { value: '00001074' },
+    })
+
+    const saveButton = within(page).getByRole('button', { name: 'Save permit' })
+    await userEvent.click(saveButton)
+    await userEvent.click(saveButton)
+
+    await waitFor(() => expect(fetchExemptionClientLocations).toHaveBeenCalledOnce())
+    expect(saveButton).toBeDisabled()
+    resolveOwnerLocations([
+      {
+        locationCode: '00',
+        locationName: 'WOODLANDS SERVICES',
+        selected: true,
+      },
+    ])
+
+    await waitFor(() => expect(addPermitDetail).toHaveBeenCalledOnce())
+    await waitFor(() => expect(router.state.location.pathname).toBe('/provincial/permit/9020950'))
+  })
+
+  it('returns to the exemption without persisting a Blanket OIC draft', async () => {
+    mockRole(['LEXIS_APPLICATION_APPROVER'], ['createPermit', 'savePermit'])
+    configureBlanketOicCreationDependencies()
+    const router = renderPage(activeBlanketOicExemption, '?permitFilter=902')
+
+    await openPermitsTab()
+    const page = await openBlanketOicCreatePage()
+    await userEvent.click(within(page).getByRole('button', { name: 'Cancel' }))
+
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe('/provincial/exemption/TEST13E2'),
+    )
+    expect(router.state.location.search).toBe('?permitFilter=902')
+    expect(addPermitDetail).not.toHaveBeenCalled()
+  })
+
+  it('asks before discarding a dirty Blanket OIC draft', async () => {
+    mockRole(['LEXIS_APPLICATION_APPROVER'], ['createPermit', 'savePermit'])
+    configureBlanketOicCreationDependencies()
+    const router = renderPage(activeBlanketOicExemption)
+
+    await openPermitsTab()
+    const page = await openBlanketOicCreatePage()
+    await userEvent.type(within(page).getByLabelText('Permit Request Pieces'), '4')
+    await userEvent.click(within(page).getByRole('button', { name: 'Cancel' }))
+
+    const dialog = await screen.findByRole('dialog', { name: 'Unsaved changes' })
+    expect(
+      within(dialog).getByText(/You have unsaved changes to this new Blanket OIC permit/i),
+    ).toBeInTheDocument()
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Stay' }))
+    expect(router.state.location.pathname).toBe('/provincial/exemption/TEST13E2/permit/new')
+
+    await userEvent.click(within(page).getByRole('button', { name: 'Cancel' }))
+    await userEvent.click(
+      within(await screen.findByRole('dialog', { name: 'Unsaved changes' })).getByRole('button', {
+        name: 'Discard and leave',
+      }),
+    )
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe('/provincial/exemption/TEST13E2'),
+    )
+    expect(addPermitDetail).not.toHaveBeenCalled()
+  })
+
+  it('blocks navigation while a Blanket OIC permit save is in progress', async () => {
+    mockRole(['LEXIS_APPLICATION_APPROVER'], ['createPermit', 'savePermit'])
+    configureBlanketOicCreationDependencies()
+    const pendingCreate = new Promise<Awaited<ReturnType<typeof addPermitDetail>>>(() => undefined)
+    vi.mocked(addPermitDetail).mockReturnValue(pendingCreate)
+    const router = renderPage(activeBlanketOicExemption)
+
+    await openPermitsTab()
+    const page = await openBlanketOicCreatePage()
+    await fillRequiredBlanketOicFields()
+    await userEvent.click(within(page).getByRole('button', { name: 'Save permit' }))
+    await waitFor(() => expect(addPermitDetail).toHaveBeenCalledOnce())
+
+    await userEvent.click(screen.getByRole('link', { name: 'Provincial exemption detail' }))
+
+    const dialog = await screen.findByRole('dialog', { name: 'Unsaved changes' })
+    expect(within(dialog).getByRole('button', { name: 'Discard and leave' })).toBeDisabled()
+    expect(router.state.location.pathname).toBe('/provincial/exemption/TEST13E2/permit/new')
   })
 
   it('preserves a verified Blanket OIC client selection when a refresh fails', async () => {
@@ -450,12 +673,12 @@ describe('permit creation from an exemption', () => {
     renderPage(activeBlanketOicExemption)
 
     await openPermitsTab()
-    await userEvent.click(screen.getByRole('button', { name: 'Apply for new permit' }))
-    const dialog = screen.getByRole('dialog', { name: 'Apply for new Blanket OIC permit' })
-    const ownerClientNumber = within(dialog).getByLabelText('Owner client number')
+    const page = await openBlanketOicCreatePage()
+    await userEvent.click(within(page).getByRole('tab', { name: 'Owner' }))
+    const ownerClientNumber = within(page).getByLabelText('Owner client number')
     await userEvent.type(ownerClientNumber, '1074')
     await userEvent.tab()
-    await waitFor(() => expect(within(dialog).getByLabelText('Owner location')).toHaveValue('00'))
+    await waitFor(() => expect(within(page).getByLabelText('Owner location')).toHaveValue('00'))
 
     vi.mocked(fetchExemptionClientLocations).mockRejectedValueOnce(
       new Error('client endpoint unavailable'),
@@ -464,12 +687,12 @@ describe('permit creation from an exemption', () => {
     await userEvent.tab()
 
     expect(
-      await within(dialog).findByText(
+      await within(page).findByText(
         'Client details could not be retrieved. Existing selections were preserved. Please try again.',
       ),
     ).toBeInTheDocument()
-    expect(within(dialog).getByLabelText('Owner client number')).toHaveValue('00001074')
-    expect(within(dialog).getByLabelText('Owner location')).toHaveValue('00')
+    expect(within(page).getByLabelText('Owner client number')).toHaveValue('00001074')
+    expect(within(page).getByLabelText('Owner location')).toHaveValue('00')
 
     consoleError.mockRestore()
   })
@@ -495,30 +718,30 @@ describe('permit creation from an exemption', () => {
     renderPage(activeBlanketOicExemption)
 
     await openPermitsTab()
-    await userEvent.click(screen.getByRole('button', { name: 'Apply for new permit' }))
-    const dialog = screen.getByRole('dialog', { name: 'Apply for new Blanket OIC permit' })
-    const ownerClientNumber = within(dialog).getByLabelText('Owner client number')
+    const page = await openBlanketOicCreatePage()
+    await userEvent.click(within(page).getByRole('tab', { name: 'Owner' }))
+    const ownerClientNumber = within(page).getByLabelText('Owner client number')
     await userEvent.type(ownerClientNumber, '11111111')
     await userEvent.tab()
-    expect(await within(dialog).findByText('Client details unavailable')).toBeInTheDocument()
+    expect(await within(page).findByText('Client details unavailable')).toBeInTheDocument()
 
     await userEvent.click(
-      within(dialog).getByRole('checkbox', { name: 'An agent is acting for the owner' }),
+      within(page).getByRole('checkbox', { name: 'An agent is acting for the owner' }),
     )
-    const agentClientNumber = within(dialog).getByLabelText('Agent client number')
+    const agentClientNumber = within(page).getByLabelText('Agent client number')
     await userEvent.type(agentClientNumber, '22222222')
     await userEvent.tab()
     await waitFor(() => expect(lookupAttempts.get('22222222')).toBe(1))
 
     await userEvent.click(ownerClientNumber)
     await userEvent.tab()
-    await waitFor(() => expect(within(dialog).getByLabelText('Owner location')).toHaveValue('00'))
-    expect(within(dialog).getByText('Client details unavailable')).toBeInTheDocument()
+    await waitFor(() => expect(within(page).getByLabelText('Owner location')).toHaveValue('00'))
+    expect(within(page).getByText('Client details unavailable')).toBeInTheDocument()
 
     await userEvent.click(agentClientNumber)
     await userEvent.tab()
-    await waitFor(() => expect(within(dialog).getByLabelText('Agent location')).toHaveValue('00'))
-    expect(within(dialog).queryByText('Client details unavailable')).not.toBeInTheDocument()
+    await waitFor(() => expect(within(page).getByLabelText('Agent location')).toHaveValue('00'))
+    expect(within(page).queryByText('Client details unavailable')).not.toBeInTheDocument()
 
     consoleError.mockRestore()
   })
@@ -548,10 +771,10 @@ describe('permit creation from an exemption', () => {
     renderPage(activeBlanketOicExemption)
 
     await openPermitsTab()
-    await userEvent.click(screen.getByRole('button', { name: 'Apply for new permit' }))
-    const dialog = screen.getByRole('dialog', { name: 'Apply for new Blanket OIC permit' })
-    const ownerClientNumber = within(dialog).getByLabelText('Owner client number')
-    const ownerLocation = within(dialog).getByLabelText('Owner location')
+    const page = await openBlanketOicCreatePage()
+    await userEvent.click(within(page).getByRole('tab', { name: 'Owner' }))
+    const ownerClientNumber = within(page).getByLabelText('Owner client number')
+    const ownerLocation = within(page).getByLabelText('Owner location')
 
     await userEvent.type(ownerClientNumber, '11111111')
     await userEvent.tab()
@@ -586,13 +809,16 @@ describe('permit creation from an exemption', () => {
     renderPage(activeBlanketOicExemption)
 
     await openPermitsTab()
-    await userEvent.click(screen.getByRole('button', { name: 'Apply for new permit' }))
-
-    const dialog = screen.getByRole('dialog', { name: 'Apply for new Blanket OIC permit' })
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Create permit' }))
+    const page = await openBlanketOicCreatePage()
+    await userEvent.click(within(page).getByRole('button', { name: 'Save permit' }))
+    expect(within(page).getByRole('tab', { name: 'Permit' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+    await userEvent.click(within(page).getByRole('tab', { name: 'Owner' }))
 
     expect(
-      await within(dialog).findAllByText('Owner client number must be exactly 8 digits.'),
+      await within(page).findAllByText('Owner client number must be exactly 8 digits.'),
     ).not.toHaveLength(0)
     expect(addPermitDetail).not.toHaveBeenCalled()
   })
@@ -611,15 +837,14 @@ describe('permit creation from an exemption', () => {
     const router = renderPage(activeBlanketOicExemption)
 
     await openPermitsTab()
-    await userEvent.click(screen.getByRole('button', { name: 'Apply for new permit' }))
-    const dialog = screen.getByRole('dialog', { name: 'Apply for new Blanket OIC permit' })
-    await fillRequiredBlanketOicFields(dialog)
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Create permit' }))
+    const page = await openBlanketOicCreatePage()
+    await fillRequiredBlanketOicFields()
+    await userEvent.click(within(page).getByRole('button', { name: 'Save permit' }))
 
     expect(
-      await within(dialog).findByText('The exemption is no longer eligible.'),
+      await within(page).findByText('The exemption is no longer eligible.'),
     ).toBeInTheDocument()
-    expect(router.state.location.pathname).toBe('/provincial/exemption/TEST13E2')
+    expect(router.state.location.pathname).toBe('/provincial/exemption/TEST13E2/permit/new')
   })
 
   it('requires a reload after an unknown Blanket OIC creation outcome', async () => {
@@ -630,18 +855,18 @@ describe('permit creation from an exemption', () => {
     const router = renderPage(activeBlanketOicExemption)
 
     await openPermitsTab()
-    await userEvent.click(screen.getByRole('button', { name: 'Apply for new permit' }))
-    const dialog = screen.getByRole('dialog', { name: 'Apply for new Blanket OIC permit' })
-    await fillRequiredBlanketOicFields(dialog)
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Create permit' }))
+    const page = await openBlanketOicCreatePage()
+    await fillRequiredBlanketOicFields()
+    await userEvent.click(within(page).getByRole('button', { name: 'Save permit' }))
 
     expect(
       await screen.findByText(
         'The permit request outcome could not be confirmed. Reload this exemption and check Related permits before trying again.',
       ),
     ).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Apply for new permit' })).not.toBeInTheDocument()
-    expect(router.state.location.pathname).toBe('/provincial/exemption/TEST13E2')
+    expect(screen.queryByRole('button', { name: 'Save permit' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Return to exemption' })).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/provincial/exemption/TEST13E2/permit/new')
     consoleError.mockRestore()
   })
 

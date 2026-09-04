@@ -116,7 +116,6 @@ import {
 import { ReportRequestError, runReport } from '@/service/report-service'
 import { formatLocalIsoDate } from '@/utils/date'
 import { requiredLabel } from '@/utils/required-label'
-import BlanketOicPermitCreateModal from './BlanketOicPermitCreateModal'
 
 type ExemptionDetailTabKey =
   | 'owner'
@@ -2174,7 +2173,27 @@ const ProvincialExemptionDetailsPage = () => {
                               kind="tertiary"
                               size="sm"
                               disabled={creatingPermit}
-                              onClick={() => setPermitCreationConfirmationOpen(true)}
+                              onClick={() => {
+                                if (canCreateBlanketOicPermit && currentDetail) {
+                                  navigate(
+                                    withCurrentSearch(
+                                      `/provincial/exemption/${encodeURIComponent(currentDetail.exemptionNumber)}/permit/new`,
+                                    ),
+                                    {
+                                      state: withDetailReturnTo(
+                                        location.state,
+                                        {
+                                          label: 'Provincial exemption detail',
+                                          to: locationPath(location),
+                                        },
+                                        detailReturnTo,
+                                      ),
+                                    },
+                                  )
+                                  return
+                                }
+                                setPermitCreationConfirmationOpen(true)
+                              }}
                             >
                               {creatingPermit ? 'Creating permit…' : 'Apply for new permit'}
                             </Button>
@@ -2671,26 +2690,6 @@ const ProvincialExemptionDetailsPage = () => {
             </Button>
           </div>
         </Modal>
-      )}
-      {permitCreationConfirmationOpen && canCreateBlanketOicPermit && currentDetail && (
-        <BlanketOicPermitCreateModal
-          open
-          exemptionNumber={currentDetail.exemptionNumber}
-          exemptionExpiryDate={currentDetail.expiryDate ?? ''}
-          regionOptions={regionOptions}
-          defaultRegionNumbers={editContext.regionNumbers}
-          onClose={closePermitCreationConfirmation}
-          onBusyChange={setCreatingPermit}
-          onCreated={(permitNumber) => {
-            setPermitCreationConfirmationOpen(false)
-            setPermitCreationDestination(`/provincial/permit/${encodeURIComponent(permitNumber)}`)
-          }}
-          onUnknownOutcome={(message) => {
-            setPermitCreationRequiresReload(true)
-            setPermitCreationConfirmationOpen(false)
-            setActionErrorMessage(message)
-          }}
-        />
       )}
       <UnsavedChangesGuard
         isDirty={isExemptionDirty}

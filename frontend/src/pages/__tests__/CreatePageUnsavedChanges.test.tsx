@@ -56,6 +56,7 @@ vi.mock('@/service/application-client-lookup-service', () => ({
 vi.mock('@/service/provincial-application-items-service', () => ({
   fetchApplicationEndUsesForSpeciesRegion: vi.fn(),
   fetchApplicationRemainingSpecies: vi.fn(),
+  fetchApplicationSummarySnapshot: vi.fn(),
 }))
 
 vi.mock('@/service/provincial-offer-create-service', () => ({
@@ -134,6 +135,10 @@ const getDraftField = async (testCase: (typeof createCases)[number]) => {
   if (testCase.name === 'application') {
     await userEvent.click(screen.getByRole('tab', { name: 'Items' }))
     return screen.getByRole('textbox', { name: 'Location of logs' })
+  }
+
+  if (testCase.name === 'exemption') {
+    await userEvent.click(screen.getByRole('tab', { name: 'Exemption details' }))
   }
 
   return screen.getByLabelText(testCase.fieldLabel)
@@ -299,6 +304,7 @@ describe('create page unsaved changes', () => {
     const testCase = createCases[1]
     const router = renderCreatePage(testCase.createPath, testCase.targetPath, testCase.element)
     await screen.findByRole('heading', { level: 1, name: testCase.heading })
+    await userEvent.click(screen.getByRole('tab', { name: 'Exemption details' }))
     await userEvent.type(screen.getByLabelText('Conditions'), 'Draft value')
 
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
@@ -315,6 +321,7 @@ describe('create page unsaved changes', () => {
     const testCase = createCases[1]
     const router = renderCreatePage(testCase.createPath, testCase.targetPath, testCase.element)
     await screen.findByRole('heading', { level: 1, name: testCase.heading })
+    await userEvent.click(screen.getByRole('tab', { name: 'Exemption details' }))
     const exemptionType = screen.getByRole('combobox', { name: 'Exemption type' })
     await userEvent.click(exemptionType)
     const options = await screen.findAllByRole('option', { name: 'Order in Council' })
@@ -330,6 +337,7 @@ describe('create page unsaved changes', () => {
     const testCase = createCases[1]
     const router = renderCreatePage(testCase.createPath, testCase.targetPath, testCase.element)
     await screen.findByRole('heading', { level: 1, name: testCase.heading })
+    await userEvent.click(screen.getByRole('tab', { name: 'Exemption details' }))
     await userEvent.click(screen.getByLabelText('Expiry date (YYYY-MM-DD)'))
     const calendarDay = await waitFor(() => {
       const day = document.querySelector<HTMLElement>(
@@ -357,6 +365,7 @@ describe('create page unsaved changes', () => {
     const testCase = createCases[1]
     const router = renderCreatePage(testCase.createPath, testCase.targetPath, testCase.element)
     await screen.findByRole('heading', { level: 1, name: testCase.heading })
+    await userEvent.click(screen.getByRole('tab', { name: 'Exemption details' }))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled())
     await userEvent.type(screen.getByLabelText('Approved volume (m³)'), '10')
 
@@ -377,6 +386,7 @@ describe('create page unsaved changes', () => {
     const testCase = createCases[1]
     const router = renderCreatePage(testCase.createPath, testCase.targetPath, testCase.element)
     await screen.findByRole('heading', { level: 1, name: testCase.heading })
+    await userEvent.click(screen.getByRole('tab', { name: 'Exemption details' }))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled())
     await userEvent.type(screen.getByLabelText('Approved volume (m³)'), '10')
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))

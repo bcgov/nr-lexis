@@ -1278,12 +1278,11 @@ const ProvincialReviewPage = () => {
             totalItemsLabel={
               errorMessage
                 ? 'Results unavailable'
-                : (formatDeferredSearchTotalLabel(
+                : formatDeferredSearchTotalLabel(
                     results.page.totalElements,
                     totalStatus,
                     results.page.number * results.page.size + results.content.length,
-                  ) ??
-                  `${new Intl.NumberFormat('en-CA').format(results.page.totalElements)} results found`)
+                  )
             }
             actions={
               <DisabledButtonTooltip

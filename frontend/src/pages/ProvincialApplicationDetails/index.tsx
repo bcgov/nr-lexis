@@ -25,6 +25,7 @@ import {
   Tile,
 } from '@carbon/react'
 import { Add, Edit, Launch, TrashCan } from '@carbon/icons-react'
+import { AddDocument, Contract, Handshake } from '@carbon/pictograms-react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import EmptyState from '@/components/EmptyState'
 import DetailBreadcrumb from '@/components/DetailBreadcrumb'
@@ -3717,6 +3718,7 @@ const ProvincialApplicationDetailsPage = () => {
         <EmptyState
           title="No permits found"
           description="No permits are linked to this provincial application."
+          icon={<Contract width={48} height={48} />}
           headingLevel={3}
         />
       )}
@@ -3798,6 +3800,7 @@ const ProvincialApplicationDetailsPage = () => {
         <EmptyState
           title="No offers found"
           description="No purchase offers are linked to this provincial application."
+          icon={<Handshake width={48} height={48} />}
           headingLevel={3}
         />
       )}
@@ -4008,7 +4011,11 @@ const ProvincialApplicationDetailsPage = () => {
           title={`Application ${
             detailMatchesRoute ? (detail?.applicationNumber ?? '') : (applicationNumber ?? '')
           }`.trim()}
-          subtitle="Check and manage this provincial application"
+          subtitle={
+            detail && detailMatchesRoute
+              ? `Author: ${displayValue(detail.author)}`
+              : 'Check and manage this provincial application'
+          }
           status={
             detail && detailMatchesRoute ? (
               <StatusTag status={detail.statusDescription ?? detail.applicationStatusCode ?? ''} />
@@ -4159,8 +4166,8 @@ const ProvincialApplicationDetailsPage = () => {
                         id="application-owner-details"
                         className="application-detail-section application-detail-clients"
                       >
-                        <div className="detail-section-card__header">
-                          <h2 className="detail-tile-title">Owner client details</h2>
+                        <div className="detail-section-card__header detail-section-card__header--actions-only">
+                          <h2 className="cds--visually-hidden">Owner client details</h2>
                           {canEditSummary &&
                             summaryForm &&
                             !isEditingSummary &&
@@ -4177,7 +4184,7 @@ const ProvincialApplicationDetailsPage = () => {
                                   setIsEditingOwnerDetails(true)
                                 }}
                               >
-                                Edit owner client details
+                                Edit owner details
                               </Button>
                             )}
                         </div>
@@ -4348,8 +4355,8 @@ const ProvincialApplicationDetailsPage = () => {
                           id="application-agent-details"
                           className="application-detail-section application-detail-clients"
                         >
-                          <div className="detail-section-card__header">
-                            <h2 className="detail-tile-title">Agent details</h2>
+                          <div className="detail-section-card__header detail-section-card__header--actions-only">
+                            <h2 className="cds--visually-hidden">Agent details</h2>
                             {canEditSummary &&
                               summaryForm &&
                               !isEditingSummary &&
@@ -4555,10 +4562,6 @@ const ProvincialApplicationDetailsPage = () => {
                                 displayValue(detail.exemptionNumber)
                               )}
                             </dd>
-                          </div>
-                          <div className="detail-field-item">
-                            <dt className="detail-field-label">Author</dt>
-                            <dd className="detail-field-value">{displayValue(detail.author)}</dd>
                           </div>
                         </dl>
                         {isEditingSummary && canEditSummary && summaryForm ? (
@@ -5091,7 +5094,7 @@ const ProvincialApplicationDetailsPage = () => {
                           {canEditApplicationDocuments &&
                             (isEditingDocuments ? (
                               <Button
-                                kind="tertiary"
+                                kind="ghost"
                                 size="sm"
                                 disabled={documentUploadBusy || isRemovingDocumentId !== null}
                                 onClick={onCancelDocumentEditing}
@@ -5108,19 +5111,19 @@ const ProvincialApplicationDetailsPage = () => {
                                 Edit documents
                               </Button>
                             ))}
+                          {isEditingDocuments && canAddApplicationDocuments && (
+                            <DetailDocumentUploadPanel
+                              key={`application-document-upload-${applicationNumber}-${documentUploadResetKey}`}
+                              workflowType="application"
+                              targetNumber={String(detail.applicationNumber ?? '')}
+                              inputId="applicationDocumentUpload"
+                              disabled={!detail.applicationNumber}
+                              onDirtyChange={setDocumentUploadDirty}
+                              onBusyChange={setDocumentUploadBusy}
+                              onUploadComplete={refreshApplicationDocuments}
+                            />
+                          )}
                         </div>
-                        {isEditingDocuments && canAddApplicationDocuments && (
-                          <DetailDocumentUploadPanel
-                            key={`application-document-upload-${applicationNumber}-${documentUploadResetKey}`}
-                            workflowType="application"
-                            targetNumber={String(detail.applicationNumber ?? '')}
-                            inputId="applicationDocumentUpload"
-                            disabled={!detail.applicationNumber}
-                            onDirtyChange={setDocumentUploadDirty}
-                            onBusyChange={setDocumentUploadBusy}
-                            onUploadComplete={refreshApplicationDocuments}
-                          />
-                        )}
                         {selectedApplicationTab === 'documents' &&
                           !!showDocumentUploadUnavailableMessage &&
                           canUploadApplicationDocuments && (
@@ -5155,6 +5158,7 @@ const ProvincialApplicationDetailsPage = () => {
                           <EmptyState
                             title="No documents found"
                             description="No documents are on file for this application yet."
+                            icon={<AddDocument width={48} height={48} />}
                             headingLevel={3}
                           />
                         )}
