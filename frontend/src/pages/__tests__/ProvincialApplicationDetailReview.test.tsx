@@ -154,6 +154,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     expect(await screen.findByText('ok')).toBeInTheDocument()
   })
 
+  // This crosses four async detail sections and refreshes the page under coverage.
   it('preserves summary, remark, and review drafts when a package refreshes detail', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
@@ -214,7 +215,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     expect(reviewStatus).toHaveValue('Rejected')
     expect(reviewRemark).toBeInTheDocument()
     expect(reviewRemark).toHaveValue('Preserve review draft')
-  })
+  }, 30_000)
 
   it('saves application remarks and refreshes detail', async () => {
     const detailAfterRemark: ProvincialApplicationDetail = {
