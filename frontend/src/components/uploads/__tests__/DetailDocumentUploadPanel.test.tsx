@@ -59,7 +59,9 @@ describe('DetailDocumentUploadPanel', () => {
 
     expect(screen.queryByLabelText(/Document description/)).not.toBeInTheDocument()
     await openUploadModal()
-    expect(screen.getByRole('dialog', { name: 'Add document' })).toBeInTheDocument()
+    const dialog = screen.getByRole('dialog', { name: 'Add document' })
+    expect(dialog).toBeInTheDocument()
+    expect(dialog.querySelector('.required-label__marker')).toBeNull()
     expect(screen.getByLabelText('Document File')).toHaveAttribute('aria-required', 'true')
     expect(screen.queryByText(/US-ASCII|250 bytes/i)).not.toBeInTheDocument()
 
@@ -412,6 +414,9 @@ describe('DetailDocumentUploadPanel', () => {
     )
 
     await openUploadModal('Add invoice')
+    expect(
+      screen.getByRole('dialog', { name: 'Add invoice' }).querySelector('.required-label__marker'),
+    ).toBeNull()
     const conversionRate = screen.getByLabelText('Upload invoice conversion rate')
     expect(conversionRate).toHaveValue('1.25')
     expect(onDirtyChange).toHaveBeenLastCalledWith(false)

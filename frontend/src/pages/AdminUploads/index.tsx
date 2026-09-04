@@ -64,7 +64,6 @@ import {
 } from '@/service/admin-upload-service'
 import { searchProvincialExemptionNumberOptions } from '@/service/provincial-exemption-search-service'
 import { searchProvincialPermitNumberOptions } from '@/service/provincial-permit-search-service'
-import { requiredLabel } from '@/utils/required-label'
 
 type UploadWorkflowDefinition = {
   type: UploadWorkflowType
@@ -1449,7 +1448,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
         {selectedWorkflowType === 'application' && (
           <ApplicationNumberSelect
             id="applicationNumber"
-            labelText={requiredLabel(selectedWorkflow.numberFieldLabel)}
+            labelText={selectedWorkflow.numberFieldLabel}
             required
             value={formState.applicationNumber}
             invalid={!!fieldError('applicationNumber')}
@@ -1467,7 +1466,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
         {selectedWorkflowType === 'exemption' && (
           <UploadTargetNumberSelect
             id="exemptionNumber"
-            labelText={requiredLabel(selectedWorkflow.numberFieldLabel)}
+            labelText={selectedWorkflow.numberFieldLabel}
             required
             value={formState.exemptionNumber}
             invalid={!!fieldError('exemptionNumber')}
@@ -1487,7 +1486,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
         {(selectedWorkflowType === 'permit' || selectedWorkflowType === 'invoice') && (
           <UploadTargetNumberSelect
             id="permitNumber"
-            labelText={requiredLabel(selectedWorkflow.numberFieldLabel)}
+            labelText={selectedWorkflow.numberFieldLabel}
             required
             value={formState.permitNumber}
             invalid={!!fieldError('permitNumber')}
@@ -1508,7 +1507,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
           <>
             <TextInput
               id="salesInvoiceNumber"
-              labelText={requiredLabel('Invoice number')}
+              labelText="Invoice number"
               aria-required="true"
               value={formState.salesInvoiceNumber}
               invalid={!!fieldError('salesInvoiceNumber')}
@@ -1523,7 +1522,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
             />
             <TextInput
               id="invoiceExportValue"
-              labelText={requiredLabel('Export value (CAD)')}
+              labelText="Export value (CAD)"
               aria-required="true"
               value={formState.invoiceExportValue}
               invalid={!!fieldError('invoiceExportValue')}
@@ -1538,7 +1537,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
             />
             <TextInput
               id="invoiceConversionRate"
-              labelText={requiredLabel('Conversion rate')}
+              labelText="Conversion rate"
               aria-required="true"
               value={formState.invoiceConversionRate}
               invalid={!!fieldError('invoiceConversionRate')}
@@ -1553,7 +1552,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
             />
             <TextInput
               id="invoiceFeeInLieu"
-              labelText={requiredLabel('Fee in lieu')}
+              labelText="Fee in lieu"
               aria-required="true"
               value={formState.invoiceFeeInLieu}
               invalid={!!fieldError('invoiceFeeInLieu')}

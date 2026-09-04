@@ -31,7 +31,6 @@ import {
   invoiceNumberStorageFieldError,
 } from '@/pages/shared/invoice-storage-validation'
 import { submitAdminUpload, validateAdminUpload } from '@/service/admin-upload-service'
-import { requiredLabel } from '@/utils/required-label'
 
 type DetailDocumentUploadType = 'application' | 'exemption' | 'permit' | 'invoice'
 type DetailDocumentUploadStep = 'upload' | 'review'
@@ -665,7 +664,7 @@ const DetailDocumentUploadPanel = ({
                 <div className="legacy-search-grid detail-document-upload__invoice-fields">
                   <TextInput
                     id={`${inputId}SalesInvoiceNumber`}
-                    labelText={requiredLabel('Upload invoice number')}
+                    labelText="Upload invoice number"
                     aria-required="true"
                     value={salesInvoiceNumber}
                     invalid={showInvoiceFieldErrors && !!invoiceNumberError}
@@ -675,7 +674,7 @@ const DetailDocumentUploadPanel = ({
                   />
                   <TextInput
                     id={`${inputId}InvoiceExportValue`}
-                    labelText={requiredLabel('Upload invoice export value')}
+                    labelText="Upload invoice export value"
                     aria-required="true"
                     value={invoiceExportValue}
                     invalid={showInvoiceFieldErrors && !!invoiceExportValueError}
@@ -685,7 +684,7 @@ const DetailDocumentUploadPanel = ({
                   />
                   <TextInput
                     id={`${inputId}InvoiceConversionRate`}
-                    labelText={requiredLabel('Upload invoice conversion rate')}
+                    labelText="Upload invoice conversion rate"
                     aria-required="true"
                     value={invoiceConversionRate}
                     invalid={showInvoiceFieldErrors && !!invoiceConversionRateError}
@@ -695,7 +694,7 @@ const DetailDocumentUploadPanel = ({
                   />
                   <TextInput
                     id={`${inputId}InvoiceFeeInLieu`}
-                    labelText={requiredLabel('Upload invoice fee in lieu')}
+                    labelText="Upload invoice fee in lieu"
                     aria-required="true"
                     value={invoiceFeeInLieu}
                     invalid={showInvoiceFieldErrors && !!invoiceFeeInLieuError}

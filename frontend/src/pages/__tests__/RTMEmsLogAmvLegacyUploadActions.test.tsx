@@ -89,6 +89,11 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
 
     expect(screen.getByRole('heading', { name: 'Average market values' })).toBeVisible()
     expect(screen.getByText('Upload spreadsheet')).toBeVisible()
+    expect(document.querySelector('#rtm-upload-title .required-label__marker')).toBeNull()
+    expect(screen.getByLabelText('Average monthly values upload spreadsheet')).toHaveAttribute(
+      'aria-required',
+      'true',
+    )
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })
 

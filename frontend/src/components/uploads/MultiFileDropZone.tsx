@@ -1,6 +1,5 @@
 import { useRef, useState, type DragEvent, type KeyboardEvent } from 'react'
 import { ErrorFilled, Upload } from '@carbon/icons-react'
-import { requiredLabel } from '@/utils/required-label'
 
 type MultiFileDropZoneProps = {
   title: string
@@ -86,7 +85,7 @@ function MultiFileDropZone({
       {renderAsPanel ? (
         <div className="admin-upload-panel__header">
           <div>
-            <h2 id={`${inputId}-panel-title`}>{requiredLabel(title, required)}</h2>
+            <h2 id={`${inputId}-panel-title`}>{title}</h2>
             <p>{helperDescription}</p>
           </div>
         </div>
@@ -94,7 +93,7 @@ function MultiFileDropZone({
         <div className="admin-upload-field-header">
           <div>
             <span className="admin-upload-field-label" id={`${inputId}-panel-title`}>
-              {requiredLabel(title, required)}
+              {title}
             </span>
             <p className="admin-upload-field-helper">
               {disabled && variant === 'fspts' ? disabledDescription : helperDescription}
