@@ -1014,6 +1014,7 @@ describe('Create Page Core Flows', () => {
     },
   )
 
+  // Initializing the owner and agent lookup state is interaction-heavy under coverage.
   it('clears stale agent location and contact when the agent number changes', async () => {
     render(
       <MemoryRouter
@@ -1059,7 +1060,7 @@ describe('Create Page Core Flows', () => {
       await screen.findAllByText('Agent client number must be 1 to 8 digits.'),
     ).not.toHaveLength(0)
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
-  })
+  }, 20_000)
 
   it('validates application text storage limits and accepts their exact boundaries', async () => {
     mockedSubmitProvincialApplicationCreate.mockResolvedValue(successfulCreate('907'))
