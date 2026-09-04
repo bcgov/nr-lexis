@@ -232,9 +232,15 @@ const configureBlanketOicCreationDependencies = () => {
   })
 }
 
-const fillRequiredBlanketOicFields = async () => {
-  await userEvent.type(screen.getByLabelText('Permit Request Pieces'), '4')
-  await userEvent.type(screen.getByLabelText('Permit Request Volume (m³)'), '4')
+const fillRequiredBlanketOicFields = async (
+  requestTotals: { pieces: string; volume: string } = { pieces: '4', volume: '4' },
+) => {
+  if (requestTotals.pieces) {
+    await userEvent.type(screen.getByLabelText('Permit Request Pieces'), requestTotals.pieces)
+  }
+  if (requestTotals.volume) {
+    await userEvent.type(screen.getByLabelText('Permit Request Volume (m³)'), requestTotals.volume)
+  }
   await userEvent.type(screen.getByLabelText('Remarks'), 'test blanket permit')
   await userEvent.click(screen.getByRole('tab', { name: 'Owner' }))
   await userEvent.type(screen.getByLabelText('Owner client number'), '1074')
@@ -586,6 +592,68 @@ describe('permit creation from an exemption', () => {
     expect(router.state.location.search).toBe('?permitFilter=902')
   })
 
+  it.each([
+    ['blank', { pieces: '', volume: '' }],
+    ['zero', { pieces: '0', volume: '0' }],
+  ])('allows %s request totals on an active Blanket OIC permit', async (_description, totals) => {
+    mockRole(['LEXIS_APPLICATION_APPROVER'], ['createPermit', 'savePermit'])
+    configureBlanketOicCreationDependencies()
+    vi.mocked(addPermitDetail).mockResolvedValue({
+      success: true,
+      message: 'The permit was saved successfully.',
+      errors: [],
+      warnings: [],
+      source: 'api',
+      permitNumber: '9020949',
+    })
+    const router = renderPage(activeBlanketOicExemption)
+
+    await openPermitsTab()
+    const page = await openBlanketOicCreatePage()
+    expect(within(page).getByLabelText('Permit Request Pieces')).not.toHaveAttribute(
+      'aria-required',
+    )
+    expect(within(page).getByLabelText('Permit Request Volume (m³)')).not.toHaveAttribute(
+      'aria-required',
+    )
+    await fillRequiredBlanketOicFields(totals)
+    await userEvent.click(within(page).getByRole('button', { name: 'Save permit' }))
+
+    await waitFor(() => expect(addPermitDetail).toHaveBeenCalledOnce())
+    expect(addPermitDetail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        permitStatus: 'ACT',
+        oicPermitTotalPieces: totals.pieces,
+        oicPermitTotalVolume: totals.volume,
+      }),
+    )
+    await waitFor(() => expect(router.state.location.pathname).toBe('/provincial/permit/9020949'))
+  })
+
+  it('keeps invalid negative and out-of-range Blanket OIC request totals from being saved', async () => {
+    mockRole(['LEXIS_APPLICATION_APPROVER'], ['createPermit', 'savePermit'])
+    configureBlanketOicCreationDependencies()
+    const router = renderPage(activeBlanketOicExemption)
+
+    await openPermitsTab()
+    const page = await openBlanketOicCreatePage()
+    await fillRequiredBlanketOicFields({ pieces: '-1', volume: '1234567.89' })
+    await userEvent.click(within(page).getByRole('button', { name: 'Save permit' }))
+
+    expect(
+      await within(page).findAllByText(
+        'Permit Request Pieces must be a whole number no greater than 9999999999.',
+      ),
+    ).not.toHaveLength(0)
+    expect(
+      within(page).getAllByText(
+        'Permit Request Volume must be non-negative, 9 characters or fewer, with at most 2 decimal places.',
+      ),
+    ).not.toHaveLength(0)
+    expect(addPermitDetail).not.toHaveBeenCalled()
+    expect(router.state.location.pathname).toBe('/provincial/exemption/TEST13E2/permit/new')
+  })
+
   it('preserves the nested exemption return trail after creating a Blanket OIC permit', async () => {
     mockRole(['LEXIS_APPLICATION_APPROVER'], ['createPermit', 'savePermit'])
     configureBlanketOicCreationDependencies()
@@ -886,7 +954,7 @@ describe('permit creation from an exemption', () => {
     await openPermitsTab()
     const page = await openBlanketOicCreatePage()
     await userEvent.click(within(page).getByRole('button', { name: 'Save permit' }))
-    expect(within(page).getByRole('tab', { name: 'Permit' })).toHaveAttribute(
+    expect(within(page).getByRole('tab', { name: 'Owner' })).toHaveAttribute(
       'aria-selected',
       'true',
     )

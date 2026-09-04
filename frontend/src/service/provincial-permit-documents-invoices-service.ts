@@ -307,14 +307,28 @@ export const fetchPermitInvoiceConversionRate =
     }
   }
 
-const postFormData = async (path: string, payload: Record<string, string>): Promise<unknown> => {
-  const response = await apiService
-    .getAxiosInstance()
-    .post<unknown>(path, toUrlEncodedParams(payload), {
-      headers: {
-        'Content-Type': LEGACY_FORM_CONTENT_TYPE,
-      },
-    })
+type FormPostOptions = {
+  preserveEmptyKeys?: readonly string[]
+}
+
+const postFormData = async (
+  path: string,
+  payload: Record<string, string>,
+  options: FormPostOptions = {},
+): Promise<unknown> => {
+  const params = toUrlEncodedParams(payload)
+  for (const key of options.preserveEmptyKeys ?? []) {
+    const value = payload[key]
+    if (value !== undefined && value.trim().length === 0 && !params.has(key)) {
+      params.append(key, '')
+    }
+  }
+
+  const response = await apiService.getAxiosInstance().post<unknown>(path, params, {
+    headers: {
+      'Content-Type': LEGACY_FORM_CONTENT_TYPE,
+    },
+  })
 
   return response.data
 }
@@ -472,6 +486,10 @@ export const updatePermitDetail = async (
   const payload = await postFormData(
     '/lexis/rpc/permit-details/update-permit',
     normalizePermitDetailMutationPayload(request),
+    {
+      // An explicit blank clears an active Blanket OIC draft date; omitted fields retain it.
+      preserveEmptyKeys: ['permitIssueDate', 'permitExpiryDate'],
+    },
   )
   return parsePermitDetailMutationResponse(payload, 'api')
 }

@@ -1665,6 +1665,8 @@ const ProvincialPermitDetailsPage = () => {
     isLoadingAvailableApplications,
     reloadAvailablePermitApplications,
   ])
+  const requiresPositiveOicRequestLimits =
+    !!detail?.blanketOic && permitForm?.permitStatus.trim().toUpperCase() === 'COM'
   const permitFieldErrors = useMemo<FieldErrors<PermitDetailFormField>>(() => {
     if (!permitForm) {
       return {}
@@ -1736,9 +1738,18 @@ const ProvincialPermitDetailsPage = () => {
       oicPermitTotalPieces:
         detail?.blanketOic && !invoiceMaterialLocked
           ? firstValidationError(
-              () => requiredFieldError(permitForm.oicPermitTotalPieces, 'Permit Request Pieces'),
-              () => integerFieldError(permitForm.oicPermitTotalPieces, 'Permit Request Pieces'),
-              () => positiveNumericFieldError(permitForm.oicPermitTotalPieces),
+              () =>
+                requiresPositiveOicRequestLimits
+                  ? requiredFieldError(permitForm.oicPermitTotalPieces, 'Permit Request Pieces')
+                  : null,
+              () =>
+                permitForm.oicPermitTotalPieces.trim()
+                  ? integerFieldError(permitForm.oicPermitTotalPieces, 'Permit Request Pieces')
+                  : null,
+              () =>
+                requiresPositiveOicRequestLimits
+                  ? positiveNumericFieldError(permitForm.oicPermitTotalPieces)
+                  : null,
               () =>
                 maxNumericValueFieldError(
                   permitForm.oicPermitTotalPieces,
@@ -1750,9 +1761,15 @@ const ProvincialPermitDetailsPage = () => {
       oicPermitTotalVolume:
         detail?.blanketOic && !invoiceMaterialLocked
           ? firstValidationError(
-              () => requiredFieldError(permitForm.oicPermitTotalVolume, 'Permit Request Volume'),
+              () =>
+                requiresPositiveOicRequestLimits
+                  ? requiredFieldError(permitForm.oicPermitTotalVolume, 'Permit Request Volume')
+                  : null,
               () => numericFieldError(permitForm.oicPermitTotalVolume, 'Permit Request Volume'),
-              () => positiveNumericFieldError(permitForm.oicPermitTotalVolume),
+              () =>
+                requiresPositiveOicRequestLimits
+                  ? positiveNumericFieldError(permitForm.oicPermitTotalVolume)
+                  : null,
               () => oicRequestVolumePrecisionError(permitForm.oicPermitTotalVolume),
               () =>
                 maxLengthFieldError(
@@ -1763,7 +1780,7 @@ const ProvincialPermitDetailsPage = () => {
             )
           : undefined,
     }
-  }, [detail?.blanketOic, invoiceMaterialLocked, permitForm])
+  }, [detail?.blanketOic, invoiceMaterialLocked, permitForm, requiresPositiveOicRequestLimits])
   const hasPermitValidationError = Object.entries(permitFieldErrors).some(
     ([field, error]) => !!error && !SHIPPING_PERMIT_FIELDS.has(field as PermitDetailFormField),
   )
@@ -1878,6 +1895,19 @@ const ProvincialPermitDetailsPage = () => {
             ? current
             : { ...current, ownerClientNumber, agentClientNumber }
         })
+        if (detail.blanketOic && !invoiceMaterialLocked && !requiresPositiveOicRequestLimits) {
+          confirmedRequest = {
+            ...confirmedRequest,
+            oicPermitTotalPieces:
+              !confirmedRequest.oicPermitTotalPieces.trim() && detail.oicRequestPieces != null
+                ? '0'
+                : confirmedRequest.oicPermitTotalPieces,
+            oicPermitTotalVolume:
+              !confirmedRequest.oicPermitTotalVolume.trim() && detail.oicRequestVolume != null
+                ? '0'
+                : confirmedRequest.oicPermitTotalVolume,
+          }
+        }
 
         if (hasPermitValidationError || (includeShipping && hasShippingValidationError)) {
           setShowPermitValidationErrors(true)
@@ -1970,6 +2000,7 @@ const ProvincialPermitDetailsPage = () => {
       editablePermitStatusOptions,
       hasPermitValidationError,
       hasShippingValidationError,
+      invoiceMaterialLocked,
       isSavingPermit,
       isPermitOptionsLoading,
       permitOptionsUnavailable,
@@ -1977,6 +2008,7 @@ const ProvincialPermitDetailsPage = () => {
       permitFieldErrors,
       permitForm,
       permitNumber,
+      requiresPositiveOicRequestLimits,
       tryBeginPermitMutation,
     ],
   )
@@ -3460,7 +3492,7 @@ const ProvincialPermitDetailsPage = () => {
                                 'Permit Request Pieces',
                                 invoiceMaterialLocked,
                                 undefined,
-                                !invoiceMaterialLocked,
+                                requiresPositiveOicRequestLimits && !invoiceMaterialLocked,
                               )}
                             {detail.blanketOic &&
                               renderPermitTextInput(
@@ -3468,7 +3500,7 @@ const ProvincialPermitDetailsPage = () => {
                                 'Permit Request Volume (m³)',
                                 invoiceMaterialLocked,
                                 undefined,
-                                !invoiceMaterialLocked,
+                                requiresPositiveOicRequestLimits && !invoiceMaterialLocked,
                               )}
                             {renderPermitTextInput(
                               'permitTotalVolume',

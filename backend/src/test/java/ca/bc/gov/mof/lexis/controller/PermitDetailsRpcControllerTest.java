@@ -1454,6 +1454,8 @@ class PermitDetailsRpcControllerTest {
             org.mockito.ArgumentMatchers.eq("idir\\jsmith"));
     assertThat(requestCaptor.getValue().permitNumber()).isEqualTo("7000123");
     assertThat(requestCaptor.getValue().permitStatus()).isEqualTo("PPD");
+    assertThat(requestCaptor.getValue().permitIssueDate()).isNull();
+    assertThat(requestCaptor.getValue().permitExpiryDate()).isNull();
     assertThat(requestCaptor.getValue().permitReceiptNo()).isEmpty();
     assertThat(requestCaptor.getValue().permitRemarks()).isEmpty();
     assertThat(requestCaptor.getValue().otherPortOfExport()).isEmpty();
@@ -1462,6 +1464,34 @@ class PermitDetailsRpcControllerTest {
         .requireApplication(authentication, 1000456L);
     verify(editLockService).acquire(1000456L, "idir\\jsmith", "idir\\jsmith", false);
     verify(editLockService).release(1000456L, "idir\\jsmith");
+  }
+
+  @Test
+  void updatePermitShouldPreserveExplicitBlankIssueAndExpiryDates() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameterMap())
+        .thenReturn(
+            Map.of(
+                "permitNumber", new String[] {"7000123"},
+                "permitIssueDate", new String[] {""},
+                "permitExpiryDate", new String[] {" "}));
+    when(service.updatePermit(any(PermitMutationRequestDto.class), eq("idir\\jsmith")))
+        .thenReturn(
+            new PermitMutationRpcResponseDto(
+                true, "saved", List.of(), List.of(), 7000123L, "ACT", null,
+                false, false, null));
+    allowApplicationMutationLocks();
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+
+    ResponseEntity<PermitMutationRpcResponseDto> response =
+        controller.updatePermit(request, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    org.mockito.ArgumentCaptor<PermitMutationRequestDto> requestCaptor =
+        org.mockito.ArgumentCaptor.forClass(PermitMutationRequestDto.class);
+    verify(service).updatePermit(requestCaptor.capture(), eq("idir\\jsmith"));
+    assertThat(requestCaptor.getValue().permitIssueDate()).isEmpty();
+    assertThat(requestCaptor.getValue().permitExpiryDate()).isEmpty();
   }
 
   @Test

@@ -189,19 +189,20 @@ const validateForm = (form: BlanketOicPermitForm, agentUsed: boolean): FormError
   }
 
   const pieces = form.oicPermitTotalPieces.trim()
-  if (!/^[1-9]\d*$/.test(pieces) || Number(pieces) > MAX_OIC_REQUEST_PIECES) {
+  if (pieces && (!/^\d+$/.test(pieces) || Number(pieces) > MAX_OIC_REQUEST_PIECES)) {
     errors.oicPermitTotalPieces =
-      'Permit Request Pieces must be a positive whole number no greater than 9999999999.'
+      'Permit Request Pieces must be a whole number no greater than 9999999999.'
   }
 
   const volume = form.oicPermitTotalVolume.trim()
   if (
-    !/^\d+(?:\.\d{1,2})?$/.test(volume) ||
-    Number(volume) <= 0 ||
-    volume.length > MAX_OIC_REQUEST_VOLUME_LENGTH
+    volume &&
+    (!/^\d+(?:\.\d{1,2})?$/.test(volume) ||
+      Number(volume) < 0 ||
+      volume.length > MAX_OIC_REQUEST_VOLUME_LENGTH)
   ) {
     errors.oicPermitTotalVolume =
-      'Permit Request Volume must be positive, 9 characters or fewer, with at most 2 decimal places.'
+      'Permit Request Volume must be non-negative, 9 characters or fewer, with at most 2 decimal places.'
   }
 
   if (form.permitRemarks.trim().length > 254) {
@@ -655,8 +656,7 @@ const BlanketOicPermitCreateForm = ({
                   />
                   <TextInput
                     id="boic-permit-request-pieces"
-                    labelText={requiredLabel('Permit Request Pieces')}
-                    aria-required="true"
+                    labelText="Permit Request Pieces"
                     value={form.oicPermitTotalPieces}
                     invalid={!!fieldError('oicPermitTotalPieces')}
                     invalidText={fieldError('oicPermitTotalPieces')}
@@ -664,8 +664,7 @@ const BlanketOicPermitCreateForm = ({
                   />
                   <TextInput
                     id="boic-permit-request-volume"
-                    labelText={requiredLabel('Permit Request Volume (m³)')}
-                    aria-required="true"
+                    labelText="Permit Request Volume (m³)"
                     value={form.oicPermitTotalVolume}
                     invalid={!!fieldError('oicPermitTotalVolume')}
                     invalidText={fieldError('oicPermitTotalVolume')}
