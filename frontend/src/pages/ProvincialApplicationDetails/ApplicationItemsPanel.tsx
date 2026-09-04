@@ -1057,6 +1057,7 @@ function ProvincialApplicationItemsPanel({
   // package action instead of rendering empty package and Summary of Scale sections.
   const packageFirstEmptyState = packageBackedItems && packageNumbers.length === 0
   const canOpenItemsEditor =
+    !standingTimberItems &&
     !editingBlocked &&
     (packageFirstEmptyState ? !hideMutationActions && canAddPackages : canManageItems)
   const showMutationActions = canManageItems && isEditingItems

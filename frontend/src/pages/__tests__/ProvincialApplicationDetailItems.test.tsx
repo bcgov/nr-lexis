@@ -47,6 +47,7 @@ import {
   selectApplicationSummaryTile,
 } from './ProvincialApplicationDetailActions.support'
 import ProvincialApplicationDetailsPage from '@/pages/ProvincialApplicationDetails'
+import ProvincialApplicationItemsPanel from '@/pages/ProvincialApplicationDetails/ApplicationItemsPanel'
 
 Element.prototype.scrollIntoView = vi.fn()
 
@@ -577,10 +578,30 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     expect(await screen.findByRole('heading', { name: 'Timber Marks' })).toBeVisible()
     expect(screen.queryByText('Package Details')).not.toBeInTheDocument()
     expect(screen.queryByText('Summary of Scale')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Edit items' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save Package' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Delete Package' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Create Package' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Add Scale' })).not.toBeInTheDocument()
+  })
+
+  it('keeps the item editor closed for standing timber when mutation permissions are supplied', () => {
+    render(
+      <ProvincialApplicationItemsPanel
+        detail={{ ...applicationDetail, productTypeCode: 'S', packages: [] }}
+        canEditPackages
+        canAddPackages
+        canAddScales
+        canUpdatePackageNumber
+        hideMutationActions={false}
+        authoritativeOptionsAvailability="available"
+        productTypeOptions={[]}
+        growthTypeOptions={[]}
+        onDetailChanged={vi.fn().mockResolvedValue(undefined)}
+      />,
+    )
+
+    expect(screen.queryByRole('button', { name: 'Edit items' })).not.toBeInTheDocument()
   })
 
   it('shows package details without Summary of Scale for Timber applications', async () => {
