@@ -24,6 +24,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
@@ -3486,7 +3487,7 @@ class OracleApplicationDetailsRpcServiceTest {
   }
 
   @Test
-  void updateApplicationSummaryShouldOverlayEditableFieldsAndPersistApplicantType() {
+  void updateApplicationSummaryShouldOverlayEditableFieldsAndNormalizeHarvestedOnlyFieldsForStanding() {
     when(repository.findApplicationUpdateRecord(1000456L)).thenReturn(Optional.of(applicationUpdateRecord()));
     when(repository.findEndUsesByApplicationNumberRequired(1000456L))
         .thenReturn(List.of(new ApplicationDetailsRpcRepository.EndUseRow("HE", "PL")));
@@ -3534,14 +3535,14 @@ class OracleApplicationDetailsRpcServiceTest {
     assertThat(record.termDays()).isEqualTo(45L);
     assertThat(record.receivedDate()).isEqualTo(LocalDate.of(2026, 4, 2));
     assertThat(record.applicationVolume()).isEqualTo(125.5d);
-    assertThat(record.averageLogVolume()).isEqualTo(2.1d);
+    assertThat(record.averageLogVolume()).isZero();
     assertThat(record.exemptionReasonCode()).isEqualTo("U");
     assertThat(record.applicationStatusCode()).isEqualTo("NEW");
     assertThat(record.ownerClientNumber()).isEqualTo("00022222");
     assertThat(record.ownerClientLocationCode()).isEqualTo("02");
     assertThat(record.agentClientNumber()).isEqualTo("00033333");
     assertThat(record.agentClientLocationCode()).isEqualTo("01");
-    assertThat(record.productLocation()).isEqualTo("Camp 2");
+    assertThat(record.productLocation()).isEqualTo(" ");
     assertThat(record.exportScheduleId()).isEqualTo(12L);
     assertThat(record.applicantTypeCode()).isEqualTo("A");
     assertThat(record.orgUnitNumber()).isEqualTo(12L);
@@ -3857,30 +3858,50 @@ class OracleApplicationDetailsRpcServiceTest {
     verify(repository, never()).updateApplication(any());
   }
 
-  @Test
-  void updateApplicationSummaryShouldAllowTransitionToUnmanufacturedWithoutPersistedScales() {
+  @ParameterizedTest
+  @EnumSource(
+      value = ApplicationDetailsRpcService.ApplicationSummarySaveSource.class,
+      names = {"FULL", "ITEMS"})
+  void updateApplicationSummaryShouldAllowTransitionToUnmanufacturedWithoutPersistedScales(
+      ApplicationDetailsRpcService.ApplicationSummarySaveSource saveSource) {
     when(repository.findScaleMutationsByApplicationNumber(1000456L)).thenReturn(List.of());
     when(repository.updateApplication(any())).thenReturn(true);
     stubPersistedApplicationEndUse(11L, true);
 
     ApplicationDetailsRpcService.CreateApplicationResult response =
-        service.updateApplicationSummary(productTypeUpdateRequest("T", null), "idir\\jsmith");
+        service.updateApplicationSummary(
+            withSaveSource(productTypeUpdateRequest("T", null), saveSource), "idir\\jsmith");
 
     assertThat(response.valid()).isTrue();
-    verify(repository).updateApplication(any());
+    ArgumentCaptor<ApplicationDetailsRpcRepository.ApplicationUpdateRecord> recordCaptor =
+        ArgumentCaptor.forClass(ApplicationDetailsRpcRepository.ApplicationUpdateRecord.class);
+    verify(repository).updateApplication(recordCaptor.capture());
+    assertThat(recordCaptor.getValue().productTypeCode()).isEqualTo("T");
+    assertThat(recordCaptor.getValue().averageLogVolume()).isZero();
+    assertThat(recordCaptor.getValue().productLocation()).isEqualTo(" ");
   }
 
-  @Test
-  void updateApplicationSummaryShouldAllowTransitionToStandingWithoutPersistedPackages() {
+  @ParameterizedTest
+  @EnumSource(
+      value = ApplicationDetailsRpcService.ApplicationSummarySaveSource.class,
+      names = {"FULL", "ITEMS"})
+  void updateApplicationSummaryShouldAllowTransitionToStandingWithoutPersistedPackages(
+      ApplicationDetailsRpcService.ApplicationSummarySaveSource saveSource) {
     when(repository.findPackageMutationsByApplicationNumber(1000456L)).thenReturn(List.of());
     when(repository.updateApplication(any())).thenReturn(true);
     stubPersistedApplicationEndUse(11L, true);
 
     ApplicationDetailsRpcService.CreateApplicationResult response =
-        service.updateApplicationSummary(productTypeUpdateRequest("S", "O"), "idir\\jsmith");
+        service.updateApplicationSummary(
+            withSaveSource(productTypeUpdateRequest("S", "O"), saveSource), "idir\\jsmith");
 
     assertThat(response.valid()).isTrue();
-    verify(repository).updateApplication(any());
+    ArgumentCaptor<ApplicationDetailsRpcRepository.ApplicationUpdateRecord> recordCaptor =
+        ArgumentCaptor.forClass(ApplicationDetailsRpcRepository.ApplicationUpdateRecord.class);
+    verify(repository).updateApplication(recordCaptor.capture());
+    assertThat(recordCaptor.getValue().productTypeCode()).isEqualTo("S");
+    assertThat(recordCaptor.getValue().averageLogVolume()).isZero();
+    assertThat(recordCaptor.getValue().productLocation()).isEqualTo(" ");
   }
 
   @Test

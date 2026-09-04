@@ -3567,29 +3567,11 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   }
 
   private Double averageLogVolumeForStorage(String productTypeCode, Double value) {
-    if (isHarvestedProductType(productTypeCode)) {
-      return value;
-    }
-    if (value == null
-        || !Double.isFinite(value)
-        || value < 0.0d
-        || value > MAX_AVERAGE_LOG_VOLUME
-        || !hasAtMostOneDecimal(value)) {
-      return 0.0d;
-    }
-    return value;
+    return isHarvestedProductType(productTypeCode) ? value : 0.0d;
   }
 
   private String productLocationForStorage(String productTypeCode, String value) {
-    if (isHarvestedProductType(productTypeCode)) {
-      return value;
-    }
-    if (value != null
-        && !value.isEmpty()
-        && isStorableOracleText(value, PRODUCT_LOCATION_MAX_BYTES)) {
-      return value;
-    }
-    return ORACLE_IGNORED_PRODUCT_LOCATION;
+    return isHarvestedProductType(productTypeCode) ? value : ORACLE_IGNORED_PRODUCT_LOCATION;
   }
 
   private String defaultMutationUser(String userId) {
