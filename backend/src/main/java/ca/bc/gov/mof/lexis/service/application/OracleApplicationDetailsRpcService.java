@@ -54,6 +54,8 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   private static final String EXPORT_PRODUCT_TYPE_HARVESTED = "H";
   private static final String EXPORT_PRODUCT_TYPE_STANDING = "S";
   private static final String EXPORT_PRODUCT_TYPE_UNMANUFACTURED = "T";
+  private static final String SCALE_REQUIRES_HARVESTED_APPLICATION_MESSAGE =
+      "Summary of Scale entries can only be added to Harvested applications.";
   private static final String PRODUCT_TYPE_CHANGE_WITH_SCALES_MESSAGE =
       "Product type cannot be changed to Unmanufactured Timber while Summary of Scale records exist. "
           + "Remove the Summary of Scale records first.";
@@ -1934,6 +1936,11 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       errors.add("Application " + request.applicationNumber() + " could not be verified.");
     } else if (isSystemOwnedOicApplication(application.get())) {
       errors.add(SYSTEM_OIC_APPLICATION_MESSAGE);
+    } else if (JURISDICTION_PROVINCIAL.equalsIgnoreCase(
+            trimToNull(application.get().jurisdictionCode()))
+        && !EXPORT_PRODUCT_TYPE_HARVESTED.equalsIgnoreCase(
+            trimToNull(application.get().productTypeCode()))) {
+      errors.add(SCALE_REQUIRES_HARVESTED_APPLICATION_MESSAGE);
     }
 
     if (packageNumber == null) {

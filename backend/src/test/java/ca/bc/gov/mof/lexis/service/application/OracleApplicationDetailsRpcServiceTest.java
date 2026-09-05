@@ -2588,8 +2588,44 @@ class OracleApplicationDetailsRpcServiceTest {
     assertThat(recordCaptor.getValue().speciesGradeVolume()).isEqualTo(12.5d);
   }
 
+  @ParameterizedTest
+  @ValueSource(strings = {"T", "S"})
+  void addScaleToPackageShouldRejectNonHarvestedProvincialApplicationsBeforeInsert(
+      String productTypeCode) {
+    when(repository.packageExists("PKG-903")).thenReturn(true);
+    when(repository.findScaleDetailsByPackageNumber("PKG-903")).thenReturn(List.of());
+    when(repository.findTimberMark("TM001")).thenReturn(Optional.of(validTimberMarkRow()));
+    when(repository.findTimberMarkByOrgUnit("TM001", 11L))
+        .thenReturn(Optional.of(validTimberMarkRow()));
+    when(repository.findApplicationUpdateRecord(1000456L))
+        .thenReturn(
+            Optional.of(
+                applicationUpdateRecordWithProductFields(
+                    productTypeCode,
+                    "S".equals(productTypeCode) ? "O" : null,
+                    1.5d,
+                    "Camp 1")));
+    when(repository.findPackageDetailsByPackageNumberRequired("PKG-903"))
+        .thenReturn(Optional.of(packageDetailsRow("PKG-903", 100.0d)));
+    when(repository.findGradeCodeRequired("1"))
+        .thenReturn(
+            Optional.of(
+                new ApplicationDetailsRpcRepository.CodeRow("1", "Sawlog", 1L, 1L)));
+
+    ApplicationDetailsRpcService.ScalePersistenceResult response =
+        service.addScaleToPackage(
+            new ApplicationDetailsRpcService.ScaleMutationRequest(
+                "TM001", "PKG-903", "1", "FI", 1000456L, 10L, 12.5d),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors())
+        .containsExactly("Summary of Scale entries can only be added to Harvested applications.");
+    verify(repository, never()).insertScaleDetail(any());
+  }
+
   @Test
-  void addScaleToPackageShouldApplyLegacyFederalScaleRules() {
+  void addScaleToPackageShouldApplyLegacyFederalScaleRulesForUnmanufacturedTimber() {
     ApplicationDetailsRpcRepository.TimberMarkRow federalTimberMark =
         new ApplicationDetailsRpcRepository.TimberMarkRow("TM001", "ACT", "FF-1", "B08");
     when(repository.packageExists("PKG-903")).thenReturn(true);
@@ -2598,7 +2634,10 @@ class OracleApplicationDetailsRpcServiceTest {
     when(repository.findTimberMarkByOrgUnit("TM001", 11L))
         .thenReturn(Optional.of(federalTimberMark));
     when(repository.findApplicationUpdateRecord(1000456L))
-        .thenReturn(Optional.of(federalApplicationUpdateRecord()));
+        .thenReturn(
+            Optional.of(
+                applicationUpdateRecordWithProductFields(
+                    federalApplicationUpdateRecord(), "T", null, 1.5d, "Camp 1")));
     when(repository.findPackageDetailsByPackageNumberRequired("PKG-903"))
         .thenReturn(Optional.of(packageDetailsRow("PKG-903", 100.0d)));
     when(repository.findGradeCodeRequired("1"))

@@ -48,6 +48,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -2491,6 +2492,54 @@ class ApplicationDetailsRpcControllerTest {
     assertThat(request.applicationNumber()).isEqualTo(1000456L);
     assertThat(request.pieces()).isEqualTo(10L);
     assertThat(request.volume()).isEqualTo(12.5d);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"T", "S"})
+  void directAddScaleShouldRejectNonHarvestedProvincialApplicationsBeforeMutation(
+      String productTypeCode) {
+    TestingAuthenticationToken authentication = authorized("createApplication");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getApplicationEditContext(1000456L))
+        .thenReturn(
+            Optional.of(
+                new ApplicationDetailsRpcService.ApplicationEditContext(
+                    1000456L,
+                    "NEW",
+                    "P",
+                    productTypeCode,
+                    12L,
+                    LocalDate.of(2026, 7, 10),
+                    false,
+                    false,
+                    false,
+                    null,
+                    false)));
+    ApplicationDetailsRpcController policyEnforcingController =
+        new ApplicationDetailsRpcController(
+            serviceProvider,
+            clientLookupServiceProvider,
+            applicationReviewServiceProvider,
+            sessionService,
+            authorizationService,
+            editLockService,
+            provincialAuthorizationService,
+            new ApplicationEditPolicyService(sessionService, authorizationService),
+            federalApplicationEditPolicyService,
+            operationCoordinator);
+    MultiValueMap<String, String> parameters = new LinkedMultiValueMap<>();
+    parameters.add("timberMark", "TM001");
+    parameters.add("scaleVolume", "12.5");
+    parameters.add("scalePieces", "10");
+    parameters.add("gradeCode", "1");
+    parameters.add("speciesCode", "FI");
+    parameters.add("applicationNumber", "1000456");
+    parameters.add("packageNumber", "PKG-903");
+
+    assertThatThrownBy(() -> policyEnforcingController.addScaleToPackage(parameters, authentication))
+        .isInstanceOf(AccessDeniedException.class);
+
+    verify(service, never()).addScaleToPackage(any(), any());
   }
 
   @Test
