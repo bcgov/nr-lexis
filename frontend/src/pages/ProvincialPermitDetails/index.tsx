@@ -502,6 +502,12 @@ const withUpdatedPermitDetail = (
   const selectedRegionLabel = regionOptions.find(
     (option) => option.value === form.orgUnitNumber.trim(),
   )?.label
+  const allowBlanketOicDraftDateClear =
+    currentDetail.blanketOic &&
+    detailValue(currentDetail.permitStatusCode).trim().toUpperCase() === 'ACT' &&
+    permitStatusCode.toUpperCase() === 'ACT'
+  const updatedPermitDate = (submittedValue: string, currentValue: string | null): string | null =>
+    submittedValue.trim() || (allowBlanketOicDraftDateClear ? null : currentValue)
 
   return {
     ...currentDetail,
@@ -513,8 +519,8 @@ const withUpdatedPermitDetail = (
         : selectedStatusLabel || permitStatusCode || null,
     applicationDate: form.permitSubmitDate.trim() || null,
     exemptionNumber: form.exemptionNumber.trim() || null,
-    issueDate: form.permitIssueDate.trim() || null,
-    expiryDate: form.permitExpiryDate.trim() || null,
+    issueDate: updatedPermitDate(form.permitIssueDate, currentDetail.issueDate),
+    expiryDate: updatedPermitDate(form.permitExpiryDate, currentDetail.expiryDate),
     receivedDate: currentDetail.blanketOic
       ? currentDetail.receivedDate
       : form.permitSubmitDate.trim() || null,

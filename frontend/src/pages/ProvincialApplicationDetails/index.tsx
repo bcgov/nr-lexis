@@ -3036,7 +3036,11 @@ const ProvincialApplicationDetailsPage = () => {
           return { ...current, ownerClientNumber, agentClientNumber }
         })
 
-        if (source === 'items' && !summaryVolumeWarningAccepted) {
+        if (
+          source === 'items' &&
+          ['H', 'T'].includes(summaryRequestForm.productTypeCode.trim().toUpperCase()) &&
+          !summaryVolumeWarningAccepted
+        ) {
           const volumeUsage = await checkApplicationVolumeUsage(String(detail.applicationNumber))
           if (!volumeUsage.volumeUsed) {
             setSummaryVolumeWarningAccepted(true)

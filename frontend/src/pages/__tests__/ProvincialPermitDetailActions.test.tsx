@@ -2494,6 +2494,86 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.getAllByText('Active').length).toBeGreaterThan(0)
   })
 
+  it('preserves existing normal permit dates when submitted dates are blank', async () => {
+    configureActivePermit()
+    renderPermitDetails()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    await userEvent.clear(screen.getByLabelText('Issue date'))
+    await userEvent.clear(screen.getByLabelText('Expiry date'))
+    await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
+
+    await waitFor(() => {
+      expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          permitStatus: 'ACT',
+          permitIssueDate: '',
+          permitExpiryDate: '',
+        }),
+      )
+    })
+    await userEvent.click(screen.getByRole('button', { name: 'Edit permit' }))
+    expect(screen.getByLabelText('Issue date')).toHaveValue(permitDetail.issueDate ?? '')
+    expect(screen.getByLabelText('Expiry date')).toHaveValue(permitDetail.expiryDate ?? '')
+  })
+
+  it('preserves existing Blanket OIC dates when submitted dates are blank during an active-to-cancelled transition', async () => {
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      permitStatusCode: 'ACT',
+      permitStatusDescription: 'Active',
+      blanketOic: true,
+    })
+    renderPermitDetails()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    await userEvent.selectOptions(screen.getByLabelText('Permit status'), 'CAN')
+    await userEvent.clear(screen.getByLabelText('Issue date'))
+    await userEvent.clear(screen.getByLabelText('Expiry date'))
+    await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
+
+    await waitFor(() => {
+      expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          permitStatus: 'CAN',
+          permitIssueDate: '',
+          permitExpiryDate: '',
+        }),
+      )
+    })
+    await userEvent.click(screen.getByRole('button', { name: 'Edit permit' }))
+    expect(screen.getByLabelText('Issue date')).toHaveValue(permitDetail.issueDate ?? '')
+    expect(screen.getByLabelText('Expiry date')).toHaveValue(permitDetail.expiryDate ?? '')
+  })
+
+  it('clears blank dates when an active Blanket OIC permit remains active', async () => {
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      permitStatusCode: 'ACT',
+      permitStatusDescription: 'Active',
+      blanketOic: true,
+    })
+    renderPermitDetails()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    await userEvent.clear(screen.getByLabelText('Issue date'))
+    await userEvent.clear(screen.getByLabelText('Expiry date'))
+    await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
+
+    await waitFor(() => {
+      expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          permitStatus: 'ACT',
+          permitIssueDate: '',
+          permitExpiryDate: '',
+        }),
+      )
+    })
+    await userEvent.click(screen.getByRole('button', { name: 'Edit permit' }))
+    expect(screen.getByLabelText('Issue date')).toHaveValue('')
+    expect(screen.getByLabelText('Expiry date')).toHaveValue('')
+  })
+
   it('submits the confirmed full owner client number when editing a permit', async () => {
     configureActivePermit()
     mockedFetchApplicationClientData.mockImplementation(

@@ -2336,6 +2336,58 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     })
   })
 
+  it('saves Timber-to-Standing-Timber changes on the first action without a package-volume warning', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      productTypeCode: 'T',
+      packages: [],
+    })
+    mockedFetchApplicationSummarySnapshot.mockResolvedValue({
+      ...applicationSummarySnapshot,
+      productTypeCode: 'T',
+      productLocation: '',
+      averageLogVolume: '',
+      growthTypeCode: '',
+      endUseCode: '',
+    })
+    mockedCheckApplicationVolumeUsage.mockResolvedValue({ volumeUsed: false })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const itemDetails = within(await selectApplicationItemDetailsTile())
+    await chooseComboBoxOption(getSummaryComboBox(itemDetails, 'Product type'), 'Standing Timber')
+    await chooseComboBoxOption(getSummaryComboBox(itemDetails, 'Age class'), 'Old Growth')
+    await waitFor(() => expect(getSummaryComboBox(itemDetails, 'End use')).toBeEnabled())
+    await chooseComboBoxOption(getSummaryComboBox(itemDetails, 'End use'), 'LU - Lumber')
+    await userEvent.click(itemDetails.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() => {
+      expect(mockedUpdateApplicationSummary).toHaveBeenCalledWith(
+        expect.objectContaining({
+          saveSource: 'items',
+          productTypeCode: 'S',
+          growthTypeCode: 'O',
+          endUseCode: 'LU',
+        }),
+      )
+    })
+    expect(mockedCheckApplicationVolumeUsage).not.toHaveBeenCalled()
+    expect(
+      screen.queryByText(
+        'The sum of package volumes is less than the total application volume. Review package volumes or save again to continue.',
+      ),
+    ).not.toBeInTheDocument()
+  })
+
   it('requires submitter accuracy confirmation while preserving the volume warning', async () => {
     mockApplicationDetailAuth(() => true, ['PROVINCIAL_SUBMITTER_00011122'])
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
