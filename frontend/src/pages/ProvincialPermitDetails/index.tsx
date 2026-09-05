@@ -506,6 +506,7 @@ const withUpdatedPermitDetail = (
     currentDetail.blanketOic &&
     detailValue(currentDetail.permitStatusCode).trim().toUpperCase() === 'ACT' &&
     permitStatusCode.toUpperCase() === 'ACT'
+  const updatedSubmitDate = form.permitSubmitDate.trim() || currentDetail.applicationDate
   const updatedPermitDate = (submittedValue: string, currentValue: string | null): string | null =>
     submittedValue.trim() || (allowBlanketOicDraftDateClear ? null : currentValue)
 
@@ -517,13 +518,11 @@ const withUpdatedPermitDetail = (
       permitStatusCode === detailValue(currentDetail.permitStatusCode)
         ? currentDetail.permitStatusDescription
         : selectedStatusLabel || permitStatusCode || null,
-    applicationDate: form.permitSubmitDate.trim() || null,
+    applicationDate: updatedSubmitDate,
     exemptionNumber: form.exemptionNumber.trim() || null,
     issueDate: updatedPermitDate(form.permitIssueDate, currentDetail.issueDate),
     expiryDate: updatedPermitDate(form.permitExpiryDate, currentDetail.expiryDate),
-    receivedDate: currentDetail.blanketOic
-      ? currentDetail.receivedDate
-      : form.permitSubmitDate.trim() || null,
+    receivedDate: currentDetail.blanketOic ? currentDetail.receivedDate : updatedSubmitDate,
     permitVolume: optionalNumberValue(form.permitTotalVolume),
     numberOfPieces: optionalIntegerValue(form.permitNumberOfPieces),
     oicRequestPieces: optionalIntegerValue(form.oicPermitTotalPieces),
@@ -1673,6 +1672,9 @@ const ProvincialPermitDetailsPage = () => {
   ])
   const requiresPositiveOicRequestLimits =
     !!detail?.blanketOic && permitForm?.permitStatus.trim().toUpperCase() === 'COM'
+  const requiresPermitCompletionDates = permitForm?.permitStatus.trim().toUpperCase() === 'COM'
+  const requiresCompletionSubmitDate =
+    requiresPermitCompletionDates && ['ACT', 'CAN'].includes(permitStatusCode ?? '')
   const permitFieldErrors = useMemo<FieldErrors<PermitDetailFormField>>(() => {
     if (!permitForm) {
       return {}
@@ -1688,9 +1690,30 @@ const ProvincialPermitDetailsPage = () => {
             () => positiveNumericFieldError(permitForm.orgUnitNumber),
           )
         : undefined,
-      permitIssueDate: isoDateFieldError(permitForm.permitIssueDate) ?? undefined,
-      permitExpiryDate: isoDateFieldError(permitForm.permitExpiryDate) ?? undefined,
-      permitSubmitDate: isoDateFieldError(permitForm.permitSubmitDate) ?? undefined,
+      permitIssueDate:
+        firstValidationError(
+          () =>
+            requiresPermitCompletionDates
+              ? requiredFieldError(permitForm.permitIssueDate, 'Issue date')
+              : null,
+          () => isoDateFieldError(permitForm.permitIssueDate),
+        ) ?? undefined,
+      permitExpiryDate:
+        firstValidationError(
+          () =>
+            requiresPermitCompletionDates
+              ? requiredFieldError(permitForm.permitExpiryDate, 'Expiry date')
+              : null,
+          () => isoDateFieldError(permitForm.permitExpiryDate),
+        ) ?? undefined,
+      permitSubmitDate:
+        firstValidationError(
+          () =>
+            requiresCompletionSubmitDate
+              ? requiredFieldError(permitForm.permitSubmitDate, 'Submit date')
+              : null,
+          () => isoDateFieldError(permitForm.permitSubmitDate),
+        ) ?? undefined,
       permitRequestDate: undefined,
       permitReceiptNo:
         firstValidationError(
@@ -1786,7 +1809,14 @@ const ProvincialPermitDetailsPage = () => {
             )
           : undefined,
     }
-  }, [detail?.blanketOic, invoiceMaterialLocked, permitForm, requiresPositiveOicRequestLimits])
+  }, [
+    detail?.blanketOic,
+    invoiceMaterialLocked,
+    permitForm,
+    requiresCompletionSubmitDate,
+    requiresPermitCompletionDates,
+    requiresPositiveOicRequestLimits,
+  ])
   const hasPermitValidationError = Object.entries(permitFieldErrors).some(
     ([field, error]) => !!error && !SHIPPING_PERMIT_FIELDS.has(field as PermitDetailFormField),
   )
@@ -3356,16 +3386,24 @@ const ProvincialPermitDetailsPage = () => {
                               'permitSubmitDate',
                               'Submit date',
                               !canCorrectPermitSubmitDate,
+                              undefined,
+                              requiresCompletionSubmitDate && canCorrectPermitSubmitDate,
                             )}
                             {renderPermitTextInput(
                               'permitIssueDate',
                               'Issue date',
                               !canReviewPermits || invoiceMaterialLocked,
+                              undefined,
+                              requiresPermitCompletionDates &&
+                                canReviewPermits &&
+                                !invoiceMaterialLocked,
                             )}
                             {renderPermitTextInput(
                               'permitExpiryDate',
                               'Expiry date',
                               !canReviewPermits,
+                              undefined,
+                              requiresPermitCompletionDates && canReviewPermits,
                             )}
                             {renderPermitTextInput('permitRequestDate', 'Received date', true)}
                             {detail.blanketOic ? (

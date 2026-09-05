@@ -2455,8 +2455,25 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
 
     await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
-    expect(screen.getByLabelText('Submit date')).toHaveValue('2026-04-10')
-    expect(screen.getByLabelText('Submit date')).toBeDisabled()
+    const submitDate = screen.getByLabelText('Submit date')
+    const issueDate = screen.getByLabelText('Issue date')
+    const expiryDate = screen.getByLabelText('Expiry date')
+    expect(submitDate).toHaveValue('2026-04-10')
+    expect(submitDate).toBeDisabled()
+    expect(submitDate).not.toHaveAttribute('aria-required')
+    expect(
+      document.querySelector('label[for="permit-permitSubmitDate"] .required-label__marker'),
+    ).not.toBeInTheDocument()
+    expect(issueDate).toBeDisabled()
+    expect(issueDate).not.toHaveAttribute('aria-required')
+    expect(
+      document.querySelector('label[for="permit-permitIssueDate"] .required-label__marker'),
+    ).not.toBeInTheDocument()
+    expect(expiryDate).toBeEnabled()
+    expect(expiryDate).toHaveAttribute('aria-required', 'true')
+    expect(
+      document.querySelector('label[for="permit-permitExpiryDate"] .required-label__marker'),
+    ).toBeInTheDocument()
     const permitStatusSelect = screen.getByLabelText('Permit status')
     expect(permitStatusSelect).toHaveValue('COM')
     expect(within(permitStatusSelect).getByRole('option', { name: /Active/ })).toBeInTheDocument()
@@ -2494,11 +2511,38 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.getAllByText('Active').length).toBeGreaterThan(0)
   })
 
+  it('allows a completed permit with a missing legacy submit date to be saved', async () => {
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      applicationDate: null,
+    })
+    renderPermitDetails()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    expect(screen.getByLabelText('Submit date')).toHaveValue('')
+    expect(screen.getByLabelText('Submit date')).toBeDisabled()
+    expect(screen.getByLabelText('Submit date')).not.toHaveAttribute('aria-required')
+    await userEvent.clear(screen.getByLabelText('Remarks'))
+    await userEvent.type(screen.getByLabelText('Remarks'), 'updated legacy remarks')
+    await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
+
+    await waitFor(() => {
+      expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          permitStatus: 'COM',
+          permitSubmitDate: '',
+          permitRemarks: 'updated legacy remarks',
+        }),
+      )
+    })
+  })
+
   it('preserves existing normal permit dates when submitted dates are blank', async () => {
     configureActivePermit()
     renderPermitDetails()
 
     await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    await userEvent.clear(screen.getByLabelText('Submit date'))
     await userEvent.clear(screen.getByLabelText('Issue date'))
     await userEvent.clear(screen.getByLabelText('Expiry date'))
     await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
@@ -2507,12 +2551,14 @@ describe('Provincial Permit Detail Action Smoke', () => {
       expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
         expect.objectContaining({
           permitStatus: 'ACT',
+          permitSubmitDate: '',
           permitIssueDate: '',
           permitExpiryDate: '',
         }),
       )
     })
     await userEvent.click(screen.getByRole('button', { name: 'Edit permit' }))
+    expect(screen.getByLabelText('Submit date')).toHaveValue(permitDetail.applicationDate ?? '')
     expect(screen.getByLabelText('Issue date')).toHaveValue(permitDetail.issueDate ?? '')
     expect(screen.getByLabelText('Expiry date')).toHaveValue(permitDetail.expiryDate ?? '')
   })
@@ -2556,6 +2602,19 @@ describe('Provincial Permit Detail Action Smoke', () => {
     renderPermitDetails()
 
     await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    expect(screen.getByLabelText('Submit date')).not.toHaveAttribute('aria-required')
+    expect(screen.getByLabelText('Issue date')).not.toHaveAttribute('aria-required')
+    expect(screen.getByLabelText('Expiry date')).not.toHaveAttribute('aria-required')
+    expect(
+      document.querySelector('label[for="permit-permitSubmitDate"] .required-label__marker'),
+    ).not.toBeInTheDocument()
+    expect(
+      document.querySelector('label[for="permit-permitIssueDate"] .required-label__marker'),
+    ).not.toBeInTheDocument()
+    expect(
+      document.querySelector('label[for="permit-permitExpiryDate"] .required-label__marker'),
+    ).not.toBeInTheDocument()
+    await userEvent.clear(screen.getByLabelText('Submit date'))
     await userEvent.clear(screen.getByLabelText('Issue date'))
     await userEvent.clear(screen.getByLabelText('Expiry date'))
     await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
@@ -2564,12 +2623,14 @@ describe('Provincial Permit Detail Action Smoke', () => {
       expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
         expect.objectContaining({
           permitStatus: 'ACT',
+          permitSubmitDate: '',
           permitIssueDate: '',
           permitExpiryDate: '',
         }),
       )
     })
     await userEvent.click(screen.getByRole('button', { name: 'Edit permit' }))
+    expect(screen.getByLabelText('Submit date')).toHaveValue(permitDetail.applicationDate ?? '')
     expect(screen.getByLabelText('Issue date')).toHaveValue('')
     expect(screen.getByLabelText('Expiry date')).toHaveValue('')
   })
@@ -3205,6 +3266,97 @@ describe('Provincial Permit Detail Action Smoke', () => {
     ).toBeGreaterThanOrEqual(2)
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
   })
+
+  it.each([
+    ['normal', false],
+    ['Blanket OIC', true],
+  ])(
+    'requires submit, issue, and expiry dates before completing a %s permit',
+    async (_description, blanketOic) => {
+      mockedFetchProvincialPermitDetail.mockResolvedValue({
+        ...permitDetail,
+        permitStatusCode: 'ACT',
+        permitStatusDescription: 'Active',
+        exemptionTypeDescription: blanketOic ? 'Blanket OIC' : 'Standard exemption',
+        blanketOic,
+        applicationDate: blanketOic ? permitDetail.applicationDate : null,
+        issueDate: blanketOic ? null : permitDetail.issueDate,
+        expiryDate: blanketOic ? null : permitDetail.expiryDate,
+        oicApplicationNumber: blanketOic ? 1000999 : null,
+        oicRequestPieces: blanketOic ? 200 : null,
+        oicRequestVolume: blanketOic ? 120.5 : null,
+      })
+      mockedFetchProvincialPermitExemptionContext.mockResolvedValue({
+        approvedExemptionVolume: permitDetail.approvedExemptionVolume,
+        exemptionVolumeRemaining: permitDetail.exemptionVolumeRemaining,
+        exemptionTypeDescription: blanketOic ? 'Blanket OIC' : 'Standard exemption',
+        blanketOic,
+      })
+      renderPermitDetails()
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+      await userEvent.selectOptions(screen.getByLabelText('Permit status'), 'COM')
+
+      const submitDate = screen.getByLabelText('Submit date')
+      const issueDate = screen.getByLabelText('Issue date')
+      const expiryDate = screen.getByLabelText('Expiry date')
+      expect(submitDate).toHaveValue(blanketOic ? (permitDetail.applicationDate ?? '') : '')
+      expect(issueDate).toHaveValue(blanketOic ? '' : (permitDetail.issueDate ?? ''))
+      expect(expiryDate).toHaveValue(blanketOic ? '' : (permitDetail.expiryDate ?? ''))
+      expect(submitDate).toHaveAttribute('aria-required', 'true')
+      expect(issueDate).toHaveAttribute('aria-required', 'true')
+      expect(expiryDate).toHaveAttribute('aria-required', 'true')
+      expect(
+        document.querySelector('label[for="permit-permitSubmitDate"] .required-label__marker'),
+      ).toBeInTheDocument()
+      expect(
+        document.querySelector('label[for="permit-permitIssueDate"] .required-label__marker'),
+      ).toBeInTheDocument()
+      expect(
+        document.querySelector('label[for="permit-permitExpiryDate"] .required-label__marker'),
+      ).toBeInTheDocument()
+
+      await userEvent.clear(submitDate)
+      await userEvent.clear(issueDate)
+      await userEvent.tab()
+      expect(await screen.findByText('Issue date is required.')).toBeInTheDocument()
+      await userEvent.clear(expiryDate)
+      await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
+
+      expect(await screen.findByText('Submit date is required.')).toBeInTheDocument()
+      expect(await screen.findByText('Expiry date is required.')).toBeInTheDocument()
+      expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+
+      await userEvent.selectOptions(screen.getByLabelText('Permit status'), 'ACT')
+      expect(submitDate).not.toHaveAttribute('aria-required')
+      expect(issueDate).not.toHaveAttribute('aria-required')
+      expect(expiryDate).not.toHaveAttribute('aria-required')
+      expect(
+        document.querySelector('label[for="permit-permitSubmitDate"] .required-label__marker'),
+      ).not.toBeInTheDocument()
+      expect(
+        document.querySelector('label[for="permit-permitIssueDate"] .required-label__marker'),
+      ).not.toBeInTheDocument()
+      expect(
+        document.querySelector('label[for="permit-permitExpiryDate"] .required-label__marker'),
+      ).not.toBeInTheDocument()
+      expect(submitDate).not.toHaveAttribute('aria-invalid', 'true')
+      expect(issueDate).not.toHaveAttribute('aria-invalid', 'true')
+      expect(expiryDate).not.toHaveAttribute('aria-invalid', 'true')
+
+      await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
+      await waitFor(() => {
+        expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
+          expect.objectContaining({
+            permitStatus: 'ACT',
+            permitSubmitDate: '',
+            permitIssueDate: '',
+            permitExpiryDate: '',
+          }),
+        )
+      })
+    },
+  )
 
   it.each([
     ['COM', 'Completed'],
