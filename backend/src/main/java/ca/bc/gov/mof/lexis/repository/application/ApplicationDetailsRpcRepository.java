@@ -1244,7 +1244,7 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     setDateOrNull(cs, index++, record.receivedDate());
     setDoubleOrNull(cs, index++, record.applicationVolume());
     setDoubleOrNull(cs, index++, record.averageLogVolume());
-    setStringOrNull(cs, index++, record.productLocation());
+    setProductLocation(cs, index++, record.productLocation());
     cs.setString(index++, auditUserOrDefault(record.entryUserId()));
     cs.setTimestamp(index++, Timestamp.from(Instant.now()));
     cs.setNull(index++, Types.VARCHAR);
@@ -1277,7 +1277,7 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     setDateOrNull(cs, index++, record.receivedDate());
     setDoubleOrNull(cs, index++, record.applicationVolume());
     setDoubleOrNull(cs, index++, record.averageLogVolume());
-    setProductLocationForUpdate(cs, index++, record.productLocation());
+    setProductLocation(cs, index++, record.productLocation());
     cs.setString(index++, auditUserOrDefault(record.entryUserId()));
     setTimestampOrNull(cs, index++, record.entryTimestamp());
     cs.setString(index++, auditUserOrDefault(record.updateUserId()));
@@ -1830,8 +1830,7 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     }
   }
 
-  private void setProductLocationForUpdate(CallableStatement cs, int index, String value)
-      throws SQLException {
+  private void setProductLocation(CallableStatement cs, int index, String value) throws SQLException {
     // Preserve Oracle's single-space PRODUCT_LOCATION sentinel instead of trimming it to SQL NULL.
     if (value == null) {
       cs.setNull(index, Types.VARCHAR);

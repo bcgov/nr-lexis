@@ -1594,6 +1594,21 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
   })
 
   it('adds and deletes package scales', async () => {
+    const initialDetail = {
+      ...applicationDetail,
+      packages: [{ packageNumber: 'PKG-1', volume: 100, pieceCount: 0 }],
+    }
+    const detailAfterScaleAdd = {
+      ...initialDetail,
+      packages: [{ packageNumber: 'PKG-1', volume: 100, pieceCount: 2 }],
+    }
+    const detailAfterScaleDelete = initialDetail
+    mockedFetchProvincialApplicationDetail
+      .mockReset()
+      .mockResolvedValueOnce(initialDetail)
+      .mockResolvedValueOnce(detailAfterScaleAdd)
+      .mockResolvedValue(detailAfterScaleDelete)
+
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
         <Routes>
@@ -1607,6 +1622,12 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
 
     await selectApplicationItemsForEditing()
     expect(await screen.findByText('TM001')).toBeInTheDocument()
+    const applicationItemDetails = within(await selectApplicationItemDetailsTile(false))
+    const applicationTotalPieces = () => {
+      const label = applicationItemDetails.getByText('Application total pieces')
+      return label.parentElement?.querySelector('dd')
+    }
+    expect(applicationTotalPieces()).toHaveTextContent('0')
     const detailFetchCountAfterInitialLoad =
       mockedFetchProvincialApplicationDetail.mock.calls.length
     fireEvent.change(screen.getByLabelText('Timber Mark'), {
@@ -1640,9 +1661,12 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
         }),
       )
     })
-    expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(
-      detailFetchCountAfterInitialLoad,
-    )
+    await waitFor(() => {
+      expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(
+        detailFetchCountAfterInitialLoad + 1,
+      )
+      expect(applicationTotalPieces()).toHaveTextContent('2')
+    })
     expect(await screen.findByText('Scale 56 added.')).toBeInTheDocument()
     expect(screen.queryByText('Timber mark is required.')).not.toBeInTheDocument()
 
@@ -1659,6 +1683,79 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     await waitFor(() => {
       expect(mockedDeleteApplicationScale).toHaveBeenCalledWith('55', '321')
     })
+    await waitFor(() => {
+      expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(
+        detailFetchCountAfterInitialLoad + 2,
+      )
+      expect(applicationTotalPieces()).toHaveTextContent('0')
+    })
+  })
+
+  it('keeps scale mutation success visible when detail refresh fails', async () => {
+    const onDetailChanged = vi.fn().mockRejectedValue(new Error('refresh failed'))
+    render(
+      <ProvincialApplicationItemsPanel
+        detail={{
+          ...applicationDetail,
+          packages: [{ packageNumber: 'PKG-1', volume: 100, pieceCount: 0 }],
+        }}
+        canEditPackages
+        canAddPackages
+        canAddScales
+        canUpdatePackageNumber
+        hideMutationActions={false}
+        authoritativeOptionsAvailability="available"
+        productTypeOptions={[]}
+        growthTypeOptions={[]}
+        onDetailChanged={onDetailChanged}
+      />,
+    )
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit items' }))
+    expect(await screen.findByText('TM001')).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Timber Mark'), {
+      target: { value: 'TM002' },
+    })
+    fireEvent.blur(screen.getByLabelText('Timber Mark'))
+    await chooseComboBoxOption(
+      screen.getAllByRole('combobox', { name: 'Species' })[1],
+      'FI - Douglas-fir',
+    )
+    await waitFor(() => {
+      expect(mockedFetchApplicationGradeCodes).toHaveBeenCalledWith('12', 'FI')
+    })
+    await chooseComboBoxOption(screen.getByRole('combobox', { name: 'Grade' }), '1 - Sawlog')
+    fireEvent.change(screen.getByLabelText('Pieces'), {
+      target: { value: '2' },
+    })
+    fireEvent.change(screen.getByLabelText('Scale Volume (m³)'), {
+      target: { value: '8.0' },
+    })
+    await userEvent.click(screen.getByRole('button', { name: 'Add Scale' }))
+
+    await waitFor(() => {
+      expect(mockedAddApplicationScaleToPackage).toHaveBeenCalledTimes(1)
+      expect(onDetailChanged).toHaveBeenCalledTimes(1)
+    })
+    expect(
+      await screen.findByText('Scale 56 added. Reload before adding another scale row.'),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('Unable to add scale.')).not.toBeInTheDocument()
+
+    const scaleRow = screen.getByText('TM001').closest('tr')
+    expect(scaleRow).toBeTruthy()
+    await userEvent.click(within(scaleRow as HTMLElement).getByRole('button', { name: 'Delete' }))
+    const confirmation = await screen.findByRole('dialog', { name: 'Delete scale' })
+    await userEvent.click(within(confirmation).getByRole('button', { name: 'Delete' }))
+
+    await waitFor(() => {
+      expect(mockedDeleteApplicationScale).toHaveBeenCalledWith('55', '321')
+      expect(onDetailChanged).toHaveBeenCalledTimes(2)
+    })
+    expect(
+      await screen.findByText('Scale 55 deleted. Reload before changing scale rows again.'),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('Unable to delete scale.')).not.toBeInTheDocument()
   })
 
   it('looks up package scales by timber mark and scale id', async () => {

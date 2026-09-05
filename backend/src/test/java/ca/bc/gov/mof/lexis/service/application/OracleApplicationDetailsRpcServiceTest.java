@@ -93,6 +93,13 @@ class OracleApplicationDetailsRpcServiceTest {
                             + "/"
                             + invocation.<String>getArgument(2))));
     org.mockito.Mockito.lenient()
+        .when(
+            repository.findCandidateEndUseCodesRequired(
+                org.mockito.ArgumentMatchers.anyInt(),
+                org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyLong()))
+        .thenReturn(List.of(new ApplicationDetailsRpcRepository.ExcolValidationRow("OT")));
+    org.mockito.Mockito.lenient()
         .when(repository.isExemptionReasonCodeValidRequired(org.mockito.ArgumentMatchers.anyString()))
         .thenReturn(true);
     org.mockito.Mockito.lenient()
@@ -1018,12 +1025,12 @@ class OracleApplicationDetailsRpcServiceTest {
   @Test
   void addApplicationShouldPersistCreateCommentsAsRemark() {
     Instant now = Instant.parse("2026-05-27T17:30:00Z");
-    when(repository.findCandidateExcolCodesRequired(1, "HE", "SA", 11L))
-        .thenReturn(List.of(new ApplicationDetailsRpcRepository.ExcolValidationRow("HE/SA")));
     when(repository.insertApplication(any(ApplicationDetailsRpcRepository.ApplicationInsertRecord.class)))
         .thenReturn(Optional.of(new ApplicationDetailsRpcRepository.ApplicationInsertRow(1000456L)));
-    when(repository.replaceApplicationEndUses(
-            org.mockito.ArgumentMatchers.eq(1000456L), org.mockito.ArgumentMatchers.anyList()))
+    when(
+            repository.replaceApplicationEndUses(
+                1000456L,
+                List.of(new ApplicationDetailsRpcRepository.EndUseMutationRecord("HE", "OT"))))
         .thenReturn(true);
     when(repository.insertRemark(
             org.mockito.ArgumentMatchers.eq(1000456L),
@@ -1068,8 +1075,10 @@ class OracleApplicationDetailsRpcServiceTest {
 
     assertThat(response.valid()).isTrue();
     assertThat(response.applicationNumber()).isEqualTo(1000456L);
-    verify(repository).replaceApplicationEndUses(
-        org.mockito.ArgumentMatchers.eq(1000456L), org.mockito.ArgumentMatchers.anyList());
+    verify(repository)
+        .replaceApplicationEndUses(
+            1000456L,
+            List.of(new ApplicationDetailsRpcRepository.EndUseMutationRecord("HE", "OT")));
     verify(repository).insertRemark(
         org.mockito.ArgumentMatchers.eq(1000456L),
         org.mockito.ArgumentMatchers.eq("Ready for review"),
@@ -3866,11 +3875,25 @@ class OracleApplicationDetailsRpcServiceTest {
       ApplicationDetailsRpcService.ApplicationSummarySaveSource saveSource) {
     when(repository.findScaleMutationsByApplicationNumber(1000456L)).thenReturn(List.of());
     when(repository.updateApplication(any())).thenReturn(true);
-    stubPersistedApplicationEndUse(11L, true);
+    org.mockito.Mockito.lenient()
+        .when(repository.findCandidateExcolCodesRequired(1, "HE", "OT", 11L))
+        .thenReturn(List.of());
+    when(repository.findCandidateEndUseCodesRequired(1, "HE", 11L))
+        .thenReturn(List.of(new ApplicationDetailsRpcRepository.ExcolValidationRow("PL")));
+    when(repository.findCandidateExcolCodesRequired(1, "HE", "PL", 11L))
+        .thenReturn(List.of(new ApplicationDetailsRpcRepository.ExcolValidationRow("HE/PL")));
+    when(
+            repository.replaceApplicationEndUses(
+                1000456L,
+                List.of(new ApplicationDetailsRpcRepository.EndUseMutationRecord("HE", "OT"))))
+        .thenReturn(true);
 
     ApplicationDetailsRpcService.CreateApplicationResult response =
         service.updateApplicationSummary(
-            withSaveSource(productTypeUpdateRequest("T", null), saveSource), "idir\\jsmith");
+            withSaveSource(
+                withEndUseSpecies(productTypeUpdateRequest("T", null), "", List.of("HE")),
+                saveSource),
+            "idir\\jsmith");
 
     assertThat(response.valid()).isTrue();
     ArgumentCaptor<ApplicationDetailsRpcRepository.ApplicationUpdateRecord> recordCaptor =
@@ -3879,6 +3902,66 @@ class OracleApplicationDetailsRpcServiceTest {
     assertThat(recordCaptor.getValue().productTypeCode()).isEqualTo("T");
     assertThat(recordCaptor.getValue().averageLogVolume()).isZero();
     assertThat(recordCaptor.getValue().productLocation()).isEqualTo(" ");
+    verify(repository).findCandidateEndUseCodesRequired(1, "HE", 11L);
+    verify(repository).findCandidateExcolCodesRequired(1, "HE", "PL", 11L);
+    verify(repository, never()).findCandidateExcolCodesRequired(1, "HE", "OT", 11L);
+    verify(repository)
+        .replaceApplicationEndUses(
+            1000456L,
+            List.of(new ApplicationDetailsRpcRepository.EndUseMutationRecord("HE", "OT")));
+  }
+
+  @Test
+  void itemsSaveShouldKeepUnmanufacturedSpeciesCombinationValidation() {
+    when(repository.findCandidateEndUseCodesRequired(2, "HE", 11L))
+        .thenReturn(List.of(new ApplicationDetailsRpcRepository.ExcolValidationRow("PL")));
+    when(repository.findCandidateExcolCodesRequired(2, "HE", "PL", 11L))
+        .thenReturn(List.of(new ApplicationDetailsRpcRepository.ExcolValidationRow("HE/BA/PL")));
+
+    ApplicationDetailsRpcService.CreateApplicationResult response =
+        service.updateApplicationSummary(
+            withSaveSource(
+                withEndUseSpecies(productTypeUpdateRequest("T", null), "", List.of("HE", "FI")),
+                ApplicationDetailsRpcService.ApplicationSummarySaveSource.ITEMS),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors())
+        .contains("The application species/enduse sort is not valid for the selected region.");
+    verify(repository, never()).updateApplication(any());
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"OT", "PL"})
+  void itemsSaveShouldNormalizeSubmittedUnmanufacturedEndUse(String submittedEndUseCode) {
+    when(repository.updateApplication(any())).thenReturn(true);
+    org.mockito.Mockito.lenient()
+        .when(repository.findCandidateExcolCodesRequired(1, "HE", "OT", 11L))
+        .thenReturn(List.of());
+    when(repository.findCandidateEndUseCodesRequired(1, "HE", 11L))
+        .thenReturn(List.of(new ApplicationDetailsRpcRepository.ExcolValidationRow("PL")));
+    when(repository.findCandidateExcolCodesRequired(1, "HE", "PL", 11L))
+        .thenReturn(List.of(new ApplicationDetailsRpcRepository.ExcolValidationRow("HE/PL")));
+    when(
+            repository.replaceApplicationEndUses(
+                1000456L,
+                List.of(new ApplicationDetailsRpcRepository.EndUseMutationRecord("HE", "OT"))))
+        .thenReturn(true);
+
+    ApplicationDetailsRpcService.CreateApplicationResult response =
+        service.updateApplicationSummary(
+            withSaveSource(
+                withEndUseSpecies(
+                    productTypeUpdateRequest("T", null), submittedEndUseCode, List.of("HE")),
+                ApplicationDetailsRpcService.ApplicationSummarySaveSource.ITEMS),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isTrue();
+    verify(repository).findCandidateEndUseCodesRequired(1, "HE", 11L);
+    verify(repository)
+        .replaceApplicationEndUses(
+            1000456L,
+            List.of(new ApplicationDetailsRpcRepository.EndUseMutationRecord("HE", "OT")));
   }
 
   @ParameterizedTest
@@ -5535,7 +5618,8 @@ class OracleApplicationDetailsRpcServiceTest {
   private void stubPersistedApplicationEndUse(Long orgUnitNumber, boolean valid) {
     when(repository.findEndUsesByApplicationNumberRequired(1000456L))
         .thenReturn(List.of(new ApplicationDetailsRpcRepository.EndUseRow("HE", "PL")));
-    when(repository.findCandidateExcolCodesRequired(1, "HE", "PL", orgUnitNumber))
+    org.mockito.Mockito.lenient()
+        .when(repository.findCandidateExcolCodesRequired(1, "HE", "PL", orgUnitNumber))
         .thenReturn(
             valid
                 ? List.of(new ApplicationDetailsRpcRepository.ExcolValidationRow("HE/PL"))

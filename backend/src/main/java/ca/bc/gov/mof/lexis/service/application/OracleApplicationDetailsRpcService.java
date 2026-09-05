@@ -365,7 +365,9 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
 
     if (normalized.speciesCodes() != null
         && !repository.replaceApplicationEndUses(
-            applicationNumber, toEndUses(normalized.speciesCodes(), normalized.endUseCode()))) {
+            applicationNumber,
+            toApplicationEndUses(
+                normalized.speciesCodes(), normalized.endUseCode(), normalized.productTypeCode()))) {
       markRollbackOnly();
       return new CreateApplicationResult(
           false,
@@ -456,7 +458,9 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
 
     if (scoped.speciesCodes() != null
         && !repository.replaceApplicationEndUses(
-            scoped.applicationNumber(), toEndUses(scoped.speciesCodes(), scoped.endUseCode()))) {
+            scoped.applicationNumber(),
+            toApplicationEndUses(
+                scoped.speciesCodes(), scoped.endUseCode(), updateRecord.productTypeCode()))) {
       markRollbackOnly();
       return new CreateApplicationResult(
           false,
@@ -1822,6 +1826,13 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     return normalizedSpeciesCodes.stream()
         .map(code -> new ApplicationDetailsRpcRepository.EndUseMutationRecord(code, normalizedEndUseCode))
         .toList();
+  }
+
+  private List<ApplicationDetailsRpcRepository.EndUseMutationRecord> toApplicationEndUses(
+      List<String> speciesCodes, String endUseCode, String productTypeCode) {
+    return toEndUses(
+        speciesCodes,
+        EXPORT_PRODUCT_TYPE_UNMANUFACTURED.equals(trimToNull(productTypeCode)) ? null : endUseCode);
   }
 
   private boolean renamePackage(
@@ -3270,13 +3281,40 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
 
     String normalizedEndUseCode = firstNonBlank(endUseCode, EXPORT_SPECIES_ENDUSE_OTHER);
     String normalizedProductTypeCode = trimToNull(productTypeCode);
+    List<ApplicationDetailsRpcRepository.ExcolValidationRow> candidateRows = new ArrayList<>();
+    boolean unmanufacturedTimber =
+        EXPORT_PRODUCT_TYPE_UNMANUFACTURED.equals(normalizedProductTypeCode);
+    if (unmanufacturedTimber) {
+      // Unmanufactured timber has no editable end use. Validate its selected species against every
+      // exact regional combination rather than the hidden OT sentinel or a stale submitted value.
+      Set<String> candidateEndUseCodes = new LinkedHashSet<>();
+      for (ApplicationDetailsRpcRepository.ExcolValidationRow row :
+          repository.findCandidateEndUseCodesRequired(
+              normalizedSpeciesCodes.size(), normalizedSpeciesCodes.get(0), orgUnitNumber)) {
+        String candidateEndUseCode = trimToNull(row.excolCode());
+        if (candidateEndUseCode != null) {
+          candidateEndUseCodes.add(candidateEndUseCode);
+        }
+      }
+      for (String candidateEndUseCode : candidateEndUseCodes) {
+        candidateRows.addAll(
+            repository.findCandidateExcolCodesRequired(
+                normalizedSpeciesCodes.size(),
+                normalizedSpeciesCodes.get(0),
+                candidateEndUseCode,
+                orgUnitNumber));
+      }
+    } else {
+      candidateRows =
+          repository.findCandidateExcolCodesRequired(
+              normalizedSpeciesCodes.size(),
+              normalizedSpeciesCodes.get(0),
+              normalizedEndUseCode,
+              orgUnitNumber);
+    }
+
     boolean matchesCandidate = false;
-    for (ApplicationDetailsRpcRepository.ExcolValidationRow row :
-        repository.findCandidateExcolCodesRequired(
-            normalizedSpeciesCodes.size(),
-            normalizedSpeciesCodes.get(0),
-            normalizedEndUseCode,
-            orgUnitNumber)) {
+    for (ApplicationDetailsRpcRepository.ExcolValidationRow row : candidateRows) {
       String excolCode = trimToNull(row.excolCode());
       if (excolCode == null || !containsAllLegacy(excolCode, normalizedSpeciesCodes)) {
         continue;

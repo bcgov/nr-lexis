@@ -14,6 +14,7 @@ import java.sql.CallableStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -355,6 +356,58 @@ class ApplicationDetailsRpcRepositoryTest {
     assertThat(record.productLocation()).isEqualTo(" ");
     assertThat(repository.updateApplication(record)).isTrue();
     verify(updateStatement).setString(8, " ");
+  }
+
+  @Test
+  @SuppressWarnings({"rawtypes", "unchecked"})
+  void applicationInsertShouldPreserveOracleProductLocationSentinel() throws Exception {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    CallableStatement insertStatement = mock(CallableStatement.class);
+    ResultSet cursor = mock(ResultSet.class);
+    when(
+            jdbcTemplate.execute(
+                org.mockito.ArgumentMatchers.anyString(), any(CallableStatementCallback.class)))
+        .thenAnswer(
+            invocation ->
+                ((CallableStatementCallback) invocation.getArgument(1))
+                    .doInCallableStatement(insertStatement));
+    when(insertStatement.getObject(28)).thenReturn(cursor);
+    when(cursor.next()).thenReturn(true, false);
+    when(cursor.getLong("APPLICATION_NUMBER")).thenReturn(1000456L);
+    when(cursor.wasNull()).thenReturn(false);
+
+    ApplicationDetailsRpcRepository repository = new ApplicationDetailsRpcRepository(jdbcTemplate);
+
+    assertThat(
+            repository.insertApplication(
+                new ApplicationDetailsRpcRepository.ApplicationInsertRecord(
+                    LocalDate.of(2026, 9, 4),
+                    null,
+                    180L,
+                    LocalDate.of(2026, 9, 4),
+                    1.0d,
+                    0.0d,
+                    " ",
+                    "idir\\jsmith",
+                    null,
+                    null,
+                    null,
+                    "00001074",
+                    "00",
+                    null,
+                    "U",
+                    "NEW",
+                    "O",
+                    1909L,
+                    "S",
+                    "P",
+                    "S",
+                    null,
+                    "KARIM",
+                    "N")))
+        .contains(new ApplicationDetailsRpcRepository.ApplicationInsertRow(1000456L));
+    verify(insertStatement).setString(7, " ");
+    verify(insertStatement, never()).setNull(7, java.sql.Types.VARCHAR);
   }
 
   private static ResultSet permitCursor(long permitNumber) throws SQLException {

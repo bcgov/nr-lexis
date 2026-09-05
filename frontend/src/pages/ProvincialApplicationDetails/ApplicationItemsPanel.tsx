@@ -1317,8 +1317,19 @@ function ProvincialApplicationItemsPanel({
       resetScaleDraft()
       setItemsInfoMessage(`Scale ${result.result.id} added.`)
       setScaleLookupResult('')
-      await loadApplicationScaleSummary()
-      await loadPackageItems(selectedPackageNumber)
+      try {
+        await onDetailChanged()
+        await loadApplicationScaleSummary()
+        await loadPackageItems(selectedPackageNumber)
+      } catch (refreshError) {
+        console.error(refreshError)
+        setItemsErrorMessage(
+          `Scale ${result.result.id} was added, but application items could not be refreshed. Reload the page.`,
+        )
+        setItemsInfoMessage(
+          `Scale ${result.result.id} added. Reload before adding another scale row.`,
+        )
+      }
     } catch {
       setItemsErrorMessage('Unable to add scale.')
       setScaleActionErrorMessage('Unable to add scale.')
@@ -1343,8 +1354,17 @@ function ProvincialApplicationItemsPanel({
       setScales((current) => current.filter((item) => item.id !== row.id))
       setItemsInfoMessage(`Scale ${row.id} deleted.`)
       setScaleLookupResult('')
-      await loadApplicationScaleSummary()
-      await loadPackageItems(selectedPackageNumber)
+      try {
+        await onDetailChanged()
+        await loadApplicationScaleSummary()
+        await loadPackageItems(selectedPackageNumber)
+      } catch (refreshError) {
+        console.error(refreshError)
+        setItemsErrorMessage(
+          `Scale ${row.id} was deleted, but application items could not be refreshed. Reload the page.`,
+        )
+        setItemsInfoMessage(`Scale ${row.id} deleted. Reload before changing scale rows again.`)
+      }
     } catch (error) {
       console.error(error)
       throw error instanceof Error ? error : new Error('Unable to delete scale.')
