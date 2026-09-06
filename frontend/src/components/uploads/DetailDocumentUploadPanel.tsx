@@ -892,10 +892,7 @@ const DetailDocumentUploadPanel = ({
             )}
             <Button
               kind="primary"
-              disabled={
-                isSubmitting ||
-                (uploadStep === 'review' ? !canSubmit : disabled || pendingValidationCount > 0)
-              }
+              disabled={isSubmitting || (uploadStep === 'review' ? !canSubmit : disabled)}
               renderIcon={ArrowRight}
               onClick={() => {
                 if (uploadStep === 'review') {

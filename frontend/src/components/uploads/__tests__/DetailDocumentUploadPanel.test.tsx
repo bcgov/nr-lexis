@@ -96,6 +96,98 @@ describe('DetailDocumentUploadPanel', () => {
     expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
   })
 
+  it('explains pending validation before allowing a mixed queue to reach review', async () => {
+    let resolveValidation!: (result: Awaited<ReturnType<typeof validateAdminUpload>>) => void
+    mockedValidateAdminUpload
+      .mockResolvedValueOnce({ status: 'validated', message: 'File passed validation.' })
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveValidation = resolve
+          }),
+      )
+    render(
+      <DetailDocumentUploadPanel
+        workflowType="application"
+        targetNumber="321"
+        inputId="applicationDocuments"
+      />,
+    )
+
+    await openUploadModal()
+    await userEvent.upload(screen.getByLabelText('Document File'), [
+      new File(['validated document'], 'ready.pdf', { type: 'application/pdf' }),
+      new File(['pending document'], 'pending.pdf', { type: 'application/pdf' }),
+    ])
+    await waitFor(() => expect(mockedValidateAdminUpload).toHaveBeenCalledTimes(2))
+    expect(screen.getAllByText('Validated').length).toBeGreaterThan(0)
+    expect(screen.getByRole('button', { name: 'Review upload' })).toBeEnabled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
+
+    expect(
+      screen.getByText('Wait for file validation to finish before reviewing the upload.'),
+    ).toBeVisible()
+    expect(screen.queryByRole('heading', { name: 'File review' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Submit upload' })).not.toBeInTheDocument()
+    expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
+
+    await act(async () => {
+      resolveValidation({ status: 'validated', message: 'File passed validation.' })
+    })
+    await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
+
+    expect(screen.getByRole('heading', { name: 'File review' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Submit upload' })).toBeEnabled()
+    expect(
+      screen.queryByText('Wait for file validation to finish before reviewing the upload.'),
+    ).not.toBeInTheDocument()
+    expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
+  })
+
+  it('keeps submission blocked while an additional file is validating on the review step', async () => {
+    let resolveValidation!: (result: Awaited<ReturnType<typeof validateAdminUpload>>) => void
+    mockedValidateAdminUpload
+      .mockResolvedValueOnce({ status: 'validated', message: 'File passed validation.' })
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveValidation = resolve
+          }),
+      )
+    render(
+      <DetailDocumentUploadPanel
+        workflowType="application"
+        targetNumber="321"
+        inputId="applicationDocuments"
+      />,
+    )
+
+    await openUploadModal()
+    await userEvent.upload(
+      screen.getByLabelText('Document File'),
+      new File(['validated document'], 'ready.pdf', { type: 'application/pdf' }),
+    )
+    await waitFor(() => expect(screen.getAllByText('Validated').length).toBeGreaterThan(0))
+    await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
+    expect(screen.getByRole('button', { name: 'Submit upload' })).toBeEnabled()
+
+    await userEvent.upload(
+      screen.getByLabelText('Document File'),
+      new File(['pending document'], 'pending.pdf', { type: 'application/pdf' }),
+    )
+
+    expect(screen.getByRole('button', { name: 'Submit upload' })).toBeDisabled()
+    await userEvent.click(screen.getByRole('button', { name: 'Submit upload' }))
+    expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
+
+    await act(async () => {
+      resolveValidation({ status: 'validated', message: 'File passed validation.' })
+    })
+    expect(screen.getByRole('button', { name: 'Submit upload' })).toBeEnabled()
+    expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
+  })
+
   it('does not focus the close button when the upload modal opens', async () => {
     render(
       <DetailDocumentUploadPanel

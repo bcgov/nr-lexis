@@ -2641,6 +2641,21 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @ParameterizedTest
+  @ValueSource(strings = {"", " "})
+  void updatePermitShouldRejectExplicitBlankStatusBeforeWriting(String permitStatus) {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow()));
+    stubTargetMinisterialExemption("EX-700");
+
+    PermitMutationRpcResponseDto response =
+        service.updatePermit(invoiceMaterialChangeRequest(permitStatus, "US"), "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors()).containsExactly("A valid permit status code is required.");
+    verify(repository, never()).updatePermitDetail(any(), any(), any());
+  }
+
+  @ParameterizedTest
   @CsvSource({
     "permitSubmitDate,Permit submit date",
     "permitIssueDate,Permit issue date",

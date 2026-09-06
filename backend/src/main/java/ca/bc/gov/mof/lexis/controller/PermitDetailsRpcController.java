@@ -1535,7 +1535,7 @@ public class PermitDetailsRpcController {
   }
 
   private boolean targetsActivePermitStatus(String submitted, String current) {
-    String targetStatus = submitted == null ? current : submitted.trim();
+    String targetStatus = submitted == null || submitted.isBlank() ? current : submitted.trim();
     return PERMIT_STATUS_ACTIVE.equalsIgnoreCase(targetStatus);
   }
 

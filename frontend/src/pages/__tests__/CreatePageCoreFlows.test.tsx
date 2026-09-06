@@ -2329,7 +2329,7 @@ describe('Create Page Core Flows', () => {
       name: 'Application number (optional)',
     })
     fireEvent.change(applicationNumber, { target: { value: '321' } })
-    expect(applicationNumber).toHaveValue('321')
+    expect(applicationNumber).toHaveDisplayValue(/^321(?:$| - )/)
 
     await selectExemptionCreateTab('Exemption details')
     await chooseComboBoxOption(
