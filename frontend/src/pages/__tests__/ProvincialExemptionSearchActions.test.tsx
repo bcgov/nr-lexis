@@ -256,7 +256,7 @@ describe('Provincial Exemption Search Actions', () => {
     const addExemptionAction = screen.getByRole('link', { name: 'Add exemption' })
     expect(addExemptionAction).toHaveAttribute('href', '/provincial/exemption/create')
     expect(addExemptionAction).toHaveClass('cds--btn--primary')
-    expect(addExemptionAction.closest('.legacy-search-table-toolbar__actions')).not.toBeNull()
+    expect(addExemptionAction.closest('.lexis-page-header__actions')).not.toBeNull()
   }, 20_000)
 
   it('preserves selected exemptions while paging through approval results', async () => {
@@ -814,6 +814,9 @@ describe('Provincial Exemption Search Actions', () => {
     })
 
     expect(mockedSearchProvincialExemptions).not.toHaveBeenCalled()
+    const addExemptionAction = screen.getByRole('link', { name: 'Add exemption' })
+    expect(addExemptionAction).toHaveAttribute('href', '/provincial/exemption/create')
+    expect(addExemptionAction.closest('.lexis-page-header__actions')).not.toBeNull()
     const resultsTable = screen.getByRole('region', { name: 'Search results table', hidden: true })
     expect(resultsTable.closest('[hidden]')).toHaveStyle({ display: 'none' })
     expect(resultsTable).not.toBeVisible()

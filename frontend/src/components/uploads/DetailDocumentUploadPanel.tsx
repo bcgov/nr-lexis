@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, TextArea, TextInput } from '@carbon/react'
 import { Add, ArrowRight } from '@carbon/icons-react'
 import { AppNotification } from '../AppNotification'
@@ -51,6 +51,11 @@ type UploadCopy = {
   workflowLabel: string
   targetLabel: string
   defaultMessage: string
+}
+
+type ValidationRequest = {
+  id: string
+  token: number
 }
 
 const UPLOAD_COPY: Record<DetailDocumentUploadType, UploadCopy> = {
@@ -106,10 +111,13 @@ const DetailDocumentUploadPanel = ({
   const [fileInputKey, setFileInputKey] = useState(0)
   const [errorMessage, setErrorMessage] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
+  const [showFileValidationError, setShowFileValidationError] = useState(false)
   const [showInvoiceValidationErrors, setShowInvoiceValidationErrors] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false)
   const [uploadStep, setUploadStep] = useState<DetailDocumentUploadStep>('upload')
+  const validationRequestsRef = useRef(new Map<string, ValidationRequest>())
+  const nextValidationTokenRef = useRef(0)
   const invoiceConversionRateBaseline = initialInvoiceConversionRate || '1.00'
   const invoiceConversionRate = invoiceConversionRateOverride ?? invoiceConversionRateBaseline
 
@@ -201,7 +209,9 @@ const DetailDocumentUploadPanel = ({
   const uploadInvalidText =
     invalidUploadCount > 0
       ? `${invalidUploadCount} queued file${invalidUploadCount === 1 ? ' needs' : 's need'} attention and will be excluded from review.`
-      : undefined
+      : showFileValidationError && uploadQueue.length === 0
+        ? 'Choose at least one file to upload.'
+        : undefined
   const canReviewUpload =
     !disabled &&
     !!targetNumber.trim() &&
@@ -263,6 +273,24 @@ const DetailDocumentUploadPanel = ({
           : item,
       ),
     )
+  }
+
+  const invalidateValidation = (id: string): void => {
+    for (const [fileKey, request] of validationRequestsRef.current) {
+      if (request.id === id) {
+        validationRequestsRef.current.delete(fileKey)
+      }
+    }
+  }
+
+  const claimValidationResult = (fileKey: string, id: string, token: number): boolean => {
+    const request = validationRequestsRef.current.get(fileKey)
+    if (request?.id !== id || request.token !== token) {
+      return false
+    }
+
+    validationRequestsRef.current.delete(fileKey)
+    return true
   }
 
   const validateQueuedUploadFile = async (
@@ -327,11 +355,19 @@ const DetailDocumentUploadPanel = ({
     id: string,
     file: File,
     targetSummary: string,
+    fileKey: string,
+    token: number,
   ): Promise<void> => {
     try {
       const result = await validateQueuedUploadFile(file)
+      if (!claimValidationResult(fileKey, id, token)) {
+        return
+      }
       setQueueItemStatus(id, 'validated', result.message, targetSummary, result.details)
     } catch (error) {
+      if (!claimValidationResult(fileKey, id, token)) {
+        return
+      }
       const uploadError = extractUploadErrorDetails(error, GENERIC_UPLOAD_FAILURE_MESSAGE)
       setQueueItemStatus(id, 'failed', uploadError.message, targetSummary, uploadError.details)
       setErrorMessage('1 file failed validation. Review the queue for details.')
@@ -372,11 +408,20 @@ const DetailDocumentUploadPanel = ({
     })
     const nextItems = Array.from(nextItemsByFileName.values())
     const replacementFileNames = new Set(nextItems.map((item) => uploadQueueFileKey(item.file)))
+    replacementFileNames.forEach((fileKey) => validationRequestsRef.current.delete(fileKey))
+    nextItems
+      .filter((item) => item.status === 'validating')
+      .forEach((item) => {
+        const token = nextValidationTokenRef.current + 1
+        nextValidationTokenRef.current = token
+        validationRequestsRef.current.set(uploadQueueFileKey(item.file), { id: item.id, token })
+      })
 
     setUploadQueue((current) => [
       ...current.filter((item) => !replacementFileNames.has(uploadQueueFileKey(item.file))),
       ...nextItems,
     ])
+    setShowFileValidationError(false)
     setErrorMessage('')
     setSuccessMessage('')
     setUploadStep((current) => (current === 'review' ? 'review' : 'upload'))
@@ -386,16 +431,36 @@ const DetailDocumentUploadPanel = ({
     setFileInputKey((current) => current + 1)
     nextItems
       .filter((item) => item.status === 'validating')
-      .forEach((item) => void validateQueueItem(item.id, item.file, lockedTargetSummary))
+      .forEach((item) => {
+        const fileKey = uploadQueueFileKey(item.file)
+        const token = validationRequestsRef.current.get(fileKey)?.token
+        if (token === undefined) {
+          return
+        }
+        void validateQueueItem(item.id, item.file, lockedTargetSummary, fileKey, token)
+      })
   }
 
   const removeQueuedFile = (id: string): void => {
+    invalidateValidation(id)
     setUploadQueue((current) => current.filter((item) => item.id !== id))
+    setErrorMessage('')
+    setSuccessMessage('')
+    // uploadInvalidText checks the final queue length after batched removals.
+    setShowFileValidationError(true)
+  }
+
+  const clearQueueItems = (): void => {
+    validationRequestsRef.current.clear()
+    setUploadQueue([])
+    setFileInputKey((current) => current + 1)
   }
 
   const clearQueuedFiles = (): void => {
-    setUploadQueue([])
-    setFileInputKey((current) => current + 1)
+    clearQueueItems()
+    setErrorMessage('')
+    setSuccessMessage('')
+    setShowFileValidationError(false)
   }
 
   const resetUpload = (): void => {
@@ -407,17 +472,19 @@ const DetailDocumentUploadPanel = ({
     setInvoiceFeeInLieu('1.00')
     setErrorMessage('')
     setSuccessMessage('')
+    setShowFileValidationError(false)
     setShowInvoiceValidationErrors(false)
     setUploadStep('upload')
   }
 
   const resetUploadAfterSuccess = (): void => {
-    clearQueuedFiles()
+    clearQueueItems()
     setFileDescription('')
     setSalesInvoiceNumber('')
     setInvoiceExportValue('')
     setInvoiceConversionRateOverride(null)
     setInvoiceFeeInLieu('1.00')
+    setShowFileValidationError(false)
     setShowInvoiceValidationErrors(false)
     setUploadStep('upload')
   }
@@ -563,6 +630,49 @@ const DetailDocumentUploadPanel = ({
     setIsSubmitting(false)
   }
 
+  const onReviewUpload = (): void => {
+    setErrorMessage('')
+    setSuccessMessage('')
+    setShowFileValidationError(uploadQueue.length === 0)
+
+    if (disabled) {
+      setErrorMessage(disabledReason)
+      return
+    }
+
+    if (!targetNumber.trim()) {
+      setErrorMessage(`${copy.targetLabel} number is required before uploading documents.`)
+      return
+    }
+
+    if (descriptionError) {
+      setErrorMessage(descriptionError)
+      return
+    }
+
+    if (invoiceValidationErrors.length > 0) {
+      setShowInvoiceValidationErrors(true)
+      setErrorMessage(invoiceValidationErrors.join(' '))
+      return
+    }
+
+    if (pendingValidationCount > 0) {
+      setErrorMessage('Wait for file validation to finish before reviewing the upload.')
+      return
+    }
+
+    if (validatedUploadCount === 0) {
+      setErrorMessage(
+        invalidUploadCount > 0
+          ? `${invalidUploadCount} queued file${invalidUploadCount === 1 ? ' needs' : 's need'} attention before review.`
+          : 'Choose at least one file to upload.',
+      )
+      return
+    }
+
+    setUploadStep('review')
+  }
+
   const openUploadModal = (): void => {
     if (disabled) {
       return
@@ -609,7 +719,7 @@ const DetailDocumentUploadPanel = ({
       )}
       <div className="detail-document-upload__trigger">
         <Button
-          kind="tertiary"
+          kind="primary"
           size="sm"
           renderIcon={Add}
           disabled={disabled}
@@ -782,7 +892,7 @@ const DetailDocumentUploadPanel = ({
             )}
             <Button
               kind="primary"
-              disabled={isSubmitting || (uploadStep === 'review' ? !canSubmit : !canReviewUpload)}
+              disabled={isSubmitting || (uploadStep === 'review' ? !canSubmit : disabled)}
               renderIcon={ArrowRight}
               onClick={() => {
                 if (uploadStep === 'review') {
@@ -790,7 +900,7 @@ const DetailDocumentUploadPanel = ({
                   return
                 }
 
-                setUploadStep('review')
+                onReviewUpload()
               }}
             >
               {isSubmitting

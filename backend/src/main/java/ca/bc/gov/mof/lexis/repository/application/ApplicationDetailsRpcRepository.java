@@ -1244,7 +1244,7 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     setDateOrNull(cs, index++, record.receivedDate());
     setDoubleOrNull(cs, index++, record.applicationVolume());
     setDoubleOrNull(cs, index++, record.averageLogVolume());
-    setStringOrNull(cs, index++, record.productLocation());
+    setProductLocation(cs, index++, record.productLocation());
     cs.setString(index++, auditUserOrDefault(record.entryUserId()));
     cs.setTimestamp(index++, Timestamp.from(Instant.now()));
     cs.setNull(index++, Types.VARCHAR);
@@ -1277,7 +1277,7 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     setDateOrNull(cs, index++, record.receivedDate());
     setDoubleOrNull(cs, index++, record.applicationVolume());
     setDoubleOrNull(cs, index++, record.averageLogVolume());
-    setStringOrNull(cs, index++, record.productLocation());
+    setProductLocation(cs, index++, record.productLocation());
     cs.setString(index++, auditUserOrDefault(record.entryUserId()));
     setTimestampOrNull(cs, index++, record.entryTimestamp());
     cs.setString(index++, auditUserOrDefault(record.updateUserId()));
@@ -1483,7 +1483,8 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
         getLocalDate(rs, "RECEIVED_DATE"),
         getDouble(rs, "EXEMPTION_APPLICATION_VOLUME"),
         getDouble(rs, "AVERAGE_LOG_VOLUME"),
-        getString(rs, "PRODUCT_LOCATION"),
+        // Oracle stores a single space here for T/S applications because PRODUCT_LOCATION is NOT NULL.
+        getRawString(rs, "PRODUCT_LOCATION"),
         getString(rs, "ENTRY_USERID"),
         getInstant(rs, "ENTRY_TIMESTAMP"),
         getString(rs, "UPDATE_USERID"),
@@ -1826,6 +1827,15 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       cs.setNull(index, Types.VARCHAR);
     } else {
       cs.setString(index, normalized);
+    }
+  }
+
+  private void setProductLocation(CallableStatement cs, int index, String value) throws SQLException {
+    // Preserve Oracle's single-space PRODUCT_LOCATION sentinel instead of trimming it to SQL NULL.
+    if (value == null) {
+      cs.setNull(index, Types.VARCHAR);
+    } else {
+      cs.setString(index, value);
     }
   }
 

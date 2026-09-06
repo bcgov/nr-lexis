@@ -35,6 +35,11 @@ const EXPECTED_CORE_PAGES: RouteExpectation[] = [
     requiredActionsMatch: 'all',
   },
   {
+    path: '/provincial/exemption/:exemptionNumber/permit/new',
+    requiredActions: ['createPermit', 'savePermit'],
+    requiredActionsMatch: 'all',
+  },
+  {
     path: '/provincial/offers',
     requiredActions: ['/offersSearch'],
   },

@@ -17,6 +17,7 @@ import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.application.ApplicationEditLockDto;
 import ca.bc.gov.mof.lexis.dto.application.ApplicationAccessContextDto;
+import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitDetailDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAllScaleFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCountryItemRpcResponseDto;
@@ -49,6 +50,7 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScalesForPackageRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitSummaryRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitTotalFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
+import ca.bc.gov.mof.lexis.service.exemption.ExemptionService;
 import ca.bc.gov.mof.lexis.service.permit.PermitDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.permit.PermitOperationMutex;
 import ca.bc.gov.mof.lexis.service.permit.PermitService;
@@ -99,6 +101,7 @@ class PermitDetailsRpcControllerTest {
   @Mock private ApplicationEditLockService editLockService;
   @Mock private LexisPrincipalService principalService;
   @Mock private PermitService permitService;
+  @Mock private ExemptionService exemptionService;
   @Mock private HttpServletRequest request;
   @Mock private HttpSession session;
 
@@ -120,6 +123,7 @@ class PermitDetailsRpcControllerTest {
                 operationMutex));
     controller.setProvincialAuthorizationService(provincialAuthorizationService);
     controller.setPermitService(permitService);
+    controller.setExemptionService(exemptionService);
     lenient()
         .when(permitService.findByPermitNumber(org.mockito.ArgumentMatchers.any()))
         .thenReturn(Optional.of(permitDetail("ACT")));
@@ -1454,6 +1458,8 @@ class PermitDetailsRpcControllerTest {
             org.mockito.ArgumentMatchers.eq("idir\\jsmith"));
     assertThat(requestCaptor.getValue().permitNumber()).isEqualTo("7000123");
     assertThat(requestCaptor.getValue().permitStatus()).isEqualTo("PPD");
+    assertThat(requestCaptor.getValue().permitIssueDate()).isNull();
+    assertThat(requestCaptor.getValue().permitExpiryDate()).isNull();
     assertThat(requestCaptor.getValue().permitReceiptNo()).isEmpty();
     assertThat(requestCaptor.getValue().permitRemarks()).isEmpty();
     assertThat(requestCaptor.getValue().otherPortOfExport()).isEmpty();
@@ -1462,6 +1468,342 @@ class PermitDetailsRpcControllerTest {
         .requireApplication(authentication, 1000456L);
     verify(editLockService).acquire(1000456L, "idir\\jsmith", "idir\\jsmith", false);
     verify(editLockService).release(1000456L, "idir\\jsmith");
+  }
+
+  @ParameterizedTest
+  @MethodSource("activeOrExplicitBlankPermitStatuses")
+  void updatePermitShouldAllowPermitReviewerToClearBlanketOicDraftDates(
+      String submittedPermitStatus) {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameterMap())
+        .thenReturn(
+            Map.of(
+                "permitNumber", new String[] {"7000123"},
+                "permitStatus", new String[] {submittedPermitStatus},
+                "permitIssueDate", new String[] {""},
+                "permitExpiryDate", new String[] {" "}));
+    when(permitService.findByPermitNumber(7000123L))
+        .thenReturn(
+            Optional.of(
+                permitDetail(
+                    "ACT",
+                    "EX-BOIC",
+                    java.time.LocalDate.of(2026, 5, 20),
+                    java.time.LocalDate.of(2027, 5, 20))));
+    when(exemptionService.findByExemptionNumber("EX-BOIC"))
+        .thenReturn(Optional.of(exemptionDetail("EX-BOIC", true)));
+    when(service.updatePermit(any(PermitMutationRequestDto.class), eq("idir\\jsmith")))
+        .thenReturn(
+            new PermitMutationRpcResponseDto(
+                true, "saved", List.of(), List.of(), 7000123L, "ACT", null,
+                false, false, null));
+    allowApplicationMutationLocks();
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+
+    ResponseEntity<PermitMutationRpcResponseDto> response =
+        controller.updatePermit(request, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    org.mockito.ArgumentCaptor<PermitMutationRequestDto> requestCaptor =
+        org.mockito.ArgumentCaptor.forClass(PermitMutationRequestDto.class);
+    verify(service).updatePermit(requestCaptor.capture(), eq("idir\\jsmith"));
+    assertThat(requestCaptor.getValue().permitStatus()).isEqualTo(submittedPermitStatus.trim());
+    assertThat(requestCaptor.getValue().permitIssueDate()).isEmpty();
+    assertThat(requestCaptor.getValue().permitExpiryDate()).isEmpty();
+  }
+
+  private static Stream<Arguments> activeOrExplicitBlankPermitStatuses() {
+    return Stream.of(Arguments.of("ACT"), Arguments.of(""), Arguments.of(" "));
+  }
+
+  @ParameterizedTest
+  @MethodSource("blanketOicDraftDateClearFields")
+  void updatePermitShouldRejectEachBlanketOicDraftDateClearWithoutPermitReviewAuthority(
+      String submittedPermitStatus, String fieldName, String fieldValue) {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameterMap())
+        .thenReturn(
+            Map.of(
+                "permitNumber", new String[] {"7000123"},
+                "permitStatus", new String[] {submittedPermitStatus},
+                fieldName, new String[] {fieldValue}));
+    when(permitService.findByPermitNumber(7000123L))
+        .thenReturn(
+            Optional.of(
+                permitDetail(
+                    "ACT",
+                    "EX-BOIC",
+                    java.time.LocalDate.of(2026, 5, 20),
+                    java.time.LocalDate.of(2027, 5, 20))));
+    when(exemptionService.findByExemptionNumber("EX-BOIC"))
+        .thenReturn(Optional.of(exemptionDetail("EX-BOIC", true)));
+    lenient()
+        .when(service.updatePermit(any(PermitMutationRequestDto.class), eq("bceid\\submitter")))
+        .thenReturn(successfulPermitUpdate());
+    allowApplicationMutationLocksForUser("bceid\\submitter");
+    TestingAuthenticationToken authentication = scopedSubmitterWithSavePermit();
+
+    ResponseEntity<PermitMutationRpcResponseDto> response =
+        controller.updatePermit(request, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    verify(service, never()).updatePermit(any(), any());
+  }
+
+  private static Stream<Arguments> blanketOicDraftDateClearFields() {
+    return Stream.of("ACT", "", " ")
+        .flatMap(
+            submittedPermitStatus ->
+                Stream.of(
+                    Arguments.of(submittedPermitStatus, "permitIssueDate", ""),
+                    Arguments.of(submittedPermitStatus, "permitExpiryDate", " ")));
+  }
+
+  @ParameterizedTest
+  @MethodSource("explicitBlankPermitStatuses")
+  void waitingPermitUpdateShouldRecheckBlankStatusDateClearAgainstCanonicalStatus(
+      String submittedPermitStatus) throws Exception {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameterMap())
+        .thenReturn(
+            Map.of(
+                "permitNumber", new String[] {"7000123"},
+                "permitStatus", new String[] {submittedPermitStatus},
+                "permitIssueDate", new String[] {""}));
+    java.util.concurrent.atomic.AtomicReference<PermitDetailDto> canonicalPermit =
+        new java.util.concurrent.atomic.AtomicReference<>(
+            permitDetail(
+                "PPD", "EX-BOIC", java.time.LocalDate.of(2026, 5, 20), null));
+    CountDownLatch outerCanonicalStatusRead = new CountDownLatch(1);
+    java.util.concurrent.atomic.AtomicInteger permitLookups =
+        new java.util.concurrent.atomic.AtomicInteger();
+    when(permitService.findByPermitNumber(7000123L))
+        .thenAnswer(
+            ignored -> {
+              PermitDetailDto snapshot = canonicalPermit.get();
+              if (permitLookups.incrementAndGet() == 2) {
+                outerCanonicalStatusRead.countDown();
+              }
+              return Optional.of(snapshot);
+            });
+    when(exemptionService.findByExemptionNumber("EX-BOIC"))
+        .thenReturn(Optional.of(exemptionDetail("EX-BOIC", true)));
+    when(service.getExemptionNumberForPermitMutation(7000123L)).thenReturn("EX-BOIC");
+    when(service.getApplicationNumbersForPermitMutation(7000123L)).thenReturn(List.of());
+    lenient()
+        .when(service.updatePermit(any(PermitMutationRequestDto.class), eq("bceid\\submitter")))
+        .thenReturn(successfulPermitUpdate());
+    allowApplicationMutationLocksForUser("bceid\\submitter");
+    TestingAuthenticationToken authentication = scopedSubmitterWithSavePermit();
+    CountDownLatch holderEntered = new CountDownLatch(1);
+    CountDownLatch releaseHolder = new CountDownLatch(1);
+    ExecutorService executor = Executors.newFixedThreadPool(2);
+
+    try {
+      Future<String> holder =
+          executor.submit(
+              () ->
+                  operationMutex.execute(
+                      7000123L,
+                      () -> {
+                        holderEntered.countDown();
+                        try {
+                          if (!releaseHolder.await(2, SECONDS)) {
+                            throw new IllegalStateException(
+                                "Timed out waiting to release permit lock.");
+                          }
+                        } catch (InterruptedException exception) {
+                          Thread.currentThread().interrupt();
+                          throw new IllegalStateException(exception);
+                        }
+                        return "released";
+                      }));
+      assertThat(holderEntered.await(2, SECONDS)).isTrue();
+
+      Future<ResponseEntity<PermitMutationRpcResponseDto>> waitingMutation =
+          executor.submit(() -> controller.updatePermit(request, authentication));
+      assertThat(outerCanonicalStatusRead.await(2, SECONDS)).isTrue();
+      canonicalPermit.set(
+          permitDetail(
+              "ACT",
+              "EX-BOIC",
+              java.time.LocalDate.of(2026, 5, 20),
+              null));
+
+      releaseHolder.countDown();
+      assertThat(holder.get(2, SECONDS)).isEqualTo("released");
+      assertThatThrownBy(() -> waitingMutation.get(2, SECONDS))
+          .hasCauseInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+      verify(service, never()).updatePermit(any(), any());
+    } finally {
+      releaseHolder.countDown();
+      executor.shutdownNow();
+    }
+  }
+
+  private static Stream<Arguments> explicitBlankPermitStatuses() {
+    return Stream.of(Arguments.of(""), Arguments.of(" "));
+  }
+
+  @Test
+  void updatePermitShouldRejectExplicitBlankDatesWhenCanonicalPermitIsUnavailable() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameterMap())
+        .thenReturn(
+            Map.of(
+                "permitNumber", new String[] {"7000123"},
+                "permitIssueDate", new String[] {""},
+                "permitExpiryDate", new String[] {" "}));
+    controller.setPermitService(null);
+    TestingAuthenticationToken authentication = scopedSubmitterWithSavePermit();
+
+    ResponseEntity<PermitMutationRpcResponseDto> response =
+        controller.updatePermit(request, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    verify(service, never()).updatePermit(any(), any());
+  }
+
+  @Test
+  void updatePermitShouldUseTheAuthoritativeExemptionForBlanketOicDraftDateClear() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameterMap())
+        .thenReturn(
+            Map.of(
+                "permitNumber", new String[] {"7000123"},
+                "permitStatus", new String[] {"ACT"},
+                "exemptionNumber", new String[] {"EX-ORDINARY"},
+                "permitIssueDate", new String[] {""}));
+    when(permitService.findByPermitNumber(7000123L))
+        .thenReturn(
+            Optional.of(
+                permitDetail(
+                    "ACT", "EX-BOIC", java.time.LocalDate.of(2026, 5, 20), null)));
+    when(exemptionService.findByExemptionNumber("EX-BOIC"))
+        .thenReturn(Optional.of(exemptionDetail("EX-BOIC", true)));
+    TestingAuthenticationToken authentication = scopedSubmitterWithSavePermit();
+
+    ResponseEntity<PermitMutationRpcResponseDto> response =
+        controller.updatePermit(request, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    verify(exemptionService).findByExemptionNumber("EX-BOIC");
+    verify(exemptionService, never()).findByExemptionNumber("EX-ORDINARY");
+    verify(service, never()).updatePermit(any(), any());
+  }
+
+  @Test
+  void updatePermitShouldPreserveOmittedBlanketOicDraftDatesForScopedSubmitter() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameterMap()).thenReturn(Map.of("permitNumber", new String[] {"7000123"}));
+    when(permitService.findByPermitNumber(7000123L))
+        .thenReturn(
+            Optional.of(
+                permitDetail(
+                    "ACT",
+                    "EX-BOIC",
+                    java.time.LocalDate.of(2026, 5, 20),
+                    java.time.LocalDate.of(2027, 5, 20))));
+    when(service.updatePermit(any(PermitMutationRequestDto.class), eq("bceid\\submitter")))
+        .thenReturn(successfulPermitUpdate());
+    allowApplicationMutationLocksForUser("bceid\\submitter");
+    TestingAuthenticationToken authentication = scopedSubmitterWithSavePermit();
+
+    ResponseEntity<PermitMutationRpcResponseDto> response =
+        controller.updatePermit(request, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    org.mockito.ArgumentCaptor<PermitMutationRequestDto> requestCaptor =
+        org.mockito.ArgumentCaptor.forClass(PermitMutationRequestDto.class);
+    verify(service).updatePermit(requestCaptor.capture(), eq("bceid\\submitter"));
+    assertThat(requestCaptor.getValue().permitIssueDate()).isNull();
+    assertThat(requestCaptor.getValue().permitExpiryDate()).isNull();
+  }
+
+  @Test
+  void updatePermitShouldAllowUnchangedBlanketOicDraftDateForScopedSubmitter() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameterMap())
+        .thenReturn(
+            Map.of(
+                "permitNumber", new String[] {"7000123"},
+                "permitIssueDate", new String[] {"2026-05-20"}));
+    when(permitService.findByPermitNumber(7000123L))
+        .thenReturn(
+            Optional.of(
+                permitDetail(
+                    "ACT", "EX-BOIC", java.time.LocalDate.of(2026, 5, 20), null)));
+    when(service.updatePermit(any(PermitMutationRequestDto.class), eq("bceid\\submitter")))
+        .thenReturn(successfulPermitUpdate());
+    allowApplicationMutationLocksForUser("bceid\\submitter");
+    TestingAuthenticationToken authentication = scopedSubmitterWithSavePermit();
+
+    ResponseEntity<PermitMutationRpcResponseDto> response =
+        controller.updatePermit(request, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    verify(service).updatePermit(any(PermitMutationRequestDto.class), eq("bceid\\submitter"));
+  }
+
+  @Test
+  void updatePermitShouldAllowNonclearableBlankDateForScopedSubmitter() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameterMap())
+        .thenReturn(
+            Map.of(
+                "permitNumber", new String[] {"7000123"},
+                "permitIssueDate", new String[] {""},
+                "permitExpiryDate", new String[] {" "}));
+    when(permitService.findByPermitNumber(7000123L))
+        .thenReturn(
+            Optional.of(
+                permitDetail(
+                    "PPD",
+                    "EX-BOIC",
+                    java.time.LocalDate.of(2026, 5, 20),
+                    java.time.LocalDate.of(2027, 5, 20))));
+    when(service.updatePermit(any(PermitMutationRequestDto.class), eq("bceid\\submitter")))
+        .thenReturn(successfulPermitUpdate());
+    allowApplicationMutationLocksForUser("bceid\\submitter");
+    TestingAuthenticationToken authentication = scopedSubmitterWithSavePermit();
+
+    ResponseEntity<PermitMutationRpcResponseDto> response =
+        controller.updatePermit(request, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    verify(service).updatePermit(any(PermitMutationRequestDto.class), eq("bceid\\submitter"));
+  }
+
+  @Test
+  void updatePermitShouldAllowActiveOrdinaryPermitBlankDatesForScopedSubmitter() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameterMap())
+        .thenReturn(
+            Map.of(
+                "permitNumber", new String[] {"7000123"},
+                "permitIssueDate", new String[] {""},
+                "permitExpiryDate", new String[] {" "}));
+    when(permitService.findByPermitNumber(7000123L))
+        .thenReturn(
+            Optional.of(
+                permitDetail(
+                    "ACT",
+                    "EX-ORDINARY",
+                    java.time.LocalDate.of(2026, 5, 20),
+                    java.time.LocalDate.of(2027, 5, 20))));
+    when(exemptionService.findByExemptionNumber("EX-ORDINARY"))
+        .thenReturn(Optional.of(exemptionDetail("EX-ORDINARY", false)));
+    when(service.updatePermit(any(PermitMutationRequestDto.class), eq("bceid\\submitter")))
+        .thenReturn(successfulPermitUpdate());
+    allowApplicationMutationLocksForUser("bceid\\submitter");
+    TestingAuthenticationToken authentication = scopedSubmitterWithSavePermit();
+
+    ResponseEntity<PermitMutationRpcResponseDto> response =
+        controller.updatePermit(request, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    verify(exemptionService, times(2)).findByExemptionNumber("EX-ORDINARY");
+    verify(service).updatePermit(any(PermitMutationRequestDto.class), eq("bceid\\submitter"));
   }
 
   @Test
@@ -2467,16 +2809,21 @@ class PermitDetailsRpcControllerTest {
   }
 
   private void allowApplicationMutationLocks(Long... applicationNumbers) {
+    allowApplicationMutationLocksForUser("idir\\jsmith", applicationNumbers);
+  }
+
+  private void allowApplicationMutationLocksForUser(
+      String userId, Long... applicationNumbers) {
     controller.setApplicationEditLockService(editLockService);
     lenient()
         .when(editLockService.acquirePermit(
-            7000123L, "idir\\jsmith", "idir\\jsmith", false))
+            7000123L, userId, userId, false))
         .thenReturn(new ApplicationEditLockDto(false, true, null, null, null));
     for (Long applicationNumber : applicationNumbers) {
-      when(editLockService.snapshot(applicationNumber, "idir\\jsmith", false))
+      when(editLockService.snapshot(applicationNumber, userId, false))
           .thenReturn(new ApplicationEditLockDto(false, false, null, null, null));
       when(editLockService.acquire(
-              applicationNumber, "idir\\jsmith", "idir\\jsmith", false))
+              applicationNumber, userId, userId, false))
           .thenReturn(new ApplicationEditLockDto(false, true, null, null, null));
     }
   }
@@ -2520,6 +2867,21 @@ class PermitDetailsRpcControllerTest {
     return authentication;
   }
 
+  private TestingAuthenticationToken scopedSubmitterWithSavePermit() {
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken(
+            "bceid\\submitter",
+            "n/a",
+            List.of(new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER_00077881")));
+    List<String> roles = List.of("LEXIS_PROVINCIAL_SUBMITTER");
+    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(roles);
+    lenient().when(authorizationService.canPerformAction(roles, "savePermit")).thenReturn(true);
+    lenient()
+        .when(authorizationService.canPerformAction(roles, "/permitsReview"))
+        .thenReturn(false);
+    return authentication;
+  }
+
   private TestingAuthenticationToken unauthorizedSavePermit() {
     TestingAuthenticationToken authentication =
         new TestingAuthenticationToken(
@@ -2543,11 +2905,19 @@ class PermitDetailsRpcControllerTest {
   }
 
   private PermitDetailDto permitDetail(String status) {
+    return permitDetail(status, "EX-205", null, null);
+  }
+
+  private PermitDetailDto permitDetail(
+      String status,
+      String exemptionNumber,
+      java.time.LocalDate issueDate,
+      java.time.LocalDate expiryDate) {
     return new PermitDetailDto(
         7000123L,
         1000456L,
         "PKG-1",
-        "EX-205",
+        exemptionNumber,
         status,
         status,
         "00077881",
@@ -2561,8 +2931,8 @@ class PermitDetailsRpcControllerTest {
         "VAN",
         null,
         java.time.LocalDate.of(2026, 4, 10),
-        null,
-        null,
+        issueDate,
+        expiryDate,
         null,
         null,
         100d,
@@ -2577,5 +2947,32 @@ class PermitDetailsRpcControllerTest {
         null,
         null,
         null);
+  }
+
+  private ExemptionDetailDto exemptionDetail(String exemptionNumber, boolean blanketOic) {
+    return new ExemptionDetailDto(
+        exemptionNumber,
+        blanketOic ? "B" : "M",
+        null,
+        "ACT",
+        "Active",
+        "00077881",
+        null,
+        null,
+        null,
+        null,
+        null,
+        0d,
+        0d,
+        0d,
+        null,
+        blanketOic,
+        List.of(),
+        List.of());
+  }
+
+  private PermitMutationRpcResponseDto successfulPermitUpdate() {
+    return new PermitMutationRpcResponseDto(
+        true, "saved", List.of(), List.of(), 7000123L, "ACT", null, false, false, null);
   }
 }

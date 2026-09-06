@@ -116,7 +116,7 @@ test.describe('frontend smoke coverage', () => {
     expect(layout.imageWidth).toBe(720)
     expect(layout.contentPaddingLeft).toBe('32px')
     expect(layout.wrapperGap).toBe('96px')
-    expect(layout.titleSubtitleGap).toBe(6)
+    expect(layout.titleSubtitleGap).toBe(96)
     expect(layout.subtitleDescriptionGap).toBe(6)
     expect(layout.descriptionActionGap).toBe(64)
     expect(layout.subtitleColor).toBe(layout.titleColor)

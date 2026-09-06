@@ -128,6 +128,9 @@ describe('loadSearchWithDeferredTotal', () => {
     expect(formatDeferredSearchTotalLabel(11, 'unavailable', 10)).toBe(
       'At least 10 results found — exact count unavailable',
     )
+    expect(formatDeferredSearchTotalLabel(11, 'unavailable', 1)).toBe(
+      'At least 1 result found — exact count unavailable',
+    )
     expect(formatDeferredSearchTotalLabel(11, 'exact', 10)).toBeUndefined()
   })
 

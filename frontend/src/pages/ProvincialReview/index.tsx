@@ -106,8 +106,11 @@ import { firstStringField, isRecord } from '@/utils/record'
 import { requiredLabel } from '@/utils/required-label'
 import { sanitizeNotificationText } from '@/utils/notification-messages'
 
+import './ProvincialReview.scss'
+
 type ReviewActionStatus = {
   kind: 'success' | 'warning' | 'error'
+  title?: string
   message: string
 }
 
@@ -162,6 +165,12 @@ const REJECT_EMAIL_REQUIRED_MESSAGE =
 const EMAIL_NOT_CONFIGURED_MESSAGE =
   'Application status email is not configured yet. No email was sent.'
 const APPROVAL_REQUEST_FAILED_MESSAGE = 'The approval request could not be completed.'
+
+const applicationCountLabel = (count: number): string =>
+  `${count} ${count === 1 ? 'application' : 'applications'}`
+
+const approvalConfirmationTitle = (count: number): string =>
+  count === 1 ? 'Approve application' : 'Approve applications'
 
 const normalizeApprovalFailureMessage = (message: string | null | undefined): string =>
   sanitizeNotificationText(
@@ -689,8 +698,46 @@ const ProvincialReviewPage = () => {
     setLoadingRejectEmail(false)
   }, [])
 
+  const loadRejectEmail = useCallback(async (applicationNumber: string) => {
+    const requestId = ++rejectEmailRequestRef.current
+    setLoadingRejectEmail(true)
+
+    try {
+      const summary = await fetchApplicationSummarySnapshot(applicationNumber)
+      if (rejectEmailRequestRef.current !== requestId) {
+        return
+      }
+      if (!summary) {
+        setRejectValidationMessage('Unable to load client email for this application.')
+        return
+      }
+
+      const [ownerClientData, agentClientData] = await Promise.all([
+        fetchApplicationClientData(summary.ownerClientNumber, summary.ownerClientLocationCode),
+        isAgentApplicant(summary.applicantTypeCode)
+          ? fetchApplicationClientData(summary.agentClientNumber, summary.agentClientLocationCode)
+          : Promise.resolve(null),
+      ])
+      if (rejectEmailRequestRef.current !== requestId) {
+        return
+      }
+
+      const candidateEmail = reviewEmailCandidate(summary, ownerClientData, agentClientData)
+      setRejectEmailAddress(candidateEmail)
+    } catch (error) {
+      if (rejectEmailRequestRef.current === requestId) {
+        console.error(error)
+        setRejectValidationMessage('Unable to load client email for this application.')
+      }
+    } finally {
+      if (rejectEmailRequestRef.current === requestId) {
+        setLoadingRejectEmail(false)
+      }
+    }
+  }, [])
+
   const onOpenRejectPanel = useCallback(
-    async (applicationNumber: string) => {
+    (applicationNumber: string) => {
       if (!canApproveApplications) {
         setReviewActionStatus({
           kind: 'error',
@@ -706,48 +753,15 @@ const ProvincialReviewPage = () => {
         return
       }
 
+      rejectEmailRequestRef.current += 1
       setReviewActionStatus(null)
-      const requestId = ++rejectEmailRequestRef.current
       setRejectApplicationNumber(applicationNumber)
       setRejectStatusCode(REJECT_STATUS_CODE)
       setRejectEmailAddress('')
       setRejectRemark('')
       setSendRejectEmail(false)
       setRejectValidationMessage('')
-      setLoadingRejectEmail(true)
-
-      try {
-        const summary = await fetchApplicationSummarySnapshot(applicationNumber)
-        if (rejectEmailRequestRef.current !== requestId) {
-          return
-        }
-        if (!summary) {
-          setRejectValidationMessage('Unable to load client email for this application.')
-          return
-        }
-
-        const [ownerClientData, agentClientData] = await Promise.all([
-          fetchApplicationClientData(summary.ownerClientNumber, summary.ownerClientLocationCode),
-          isAgentApplicant(summary.applicantTypeCode)
-            ? fetchApplicationClientData(summary.agentClientNumber, summary.agentClientLocationCode)
-            : Promise.resolve(null),
-        ])
-        if (rejectEmailRequestRef.current !== requestId) {
-          return
-        }
-
-        const candidateEmail = reviewEmailCandidate(summary, ownerClientData, agentClientData)
-        setRejectEmailAddress(candidateEmail)
-      } catch (error) {
-        if (rejectEmailRequestRef.current === requestId) {
-          console.error(error)
-          setRejectValidationMessage('Unable to load client email for this application.')
-        }
-      } finally {
-        if (rejectEmailRequestRef.current === requestId) {
-          setLoadingRejectEmail(false)
-        }
-      }
+      setLoadingRejectEmail(false)
     },
     [canApproveApplications, optionsUnavailable, rejectStatusAvailable],
   )
@@ -882,19 +896,27 @@ const ProvincialReviewPage = () => {
       if (failureCount === 0) {
         setReviewActionStatus({
           kind: 'success',
-          message: `Approved ${successCount} application(s).`,
+          title: successCount === 1 ? 'Application approved' : 'Applications approved',
+          message: `Approved ${applicationCountLabel(successCount)}.`,
         })
       } else {
         const failureDetails = failedResults
           .map((result) => `${result.applicationNumber} — ${result.message}`)
           .join('; ')
+        const failedApplicationLabel = applicationCountLabel(failureCount)
+        const failedApplicationsTitle =
+          failureCount === 1 ? 'Failed application' : 'Failed applications'
         setReviewActionStatus({
           kind: successCount > 0 ? 'warning' : 'error',
+          title:
+            successCount > 0
+              ? 'Application approval partially completed'
+              : 'Application approval failed',
           message: `${
             successCount > 0
-              ? `Approved ${successCount} application(s); ${failureCount} failed.`
-              : `No selected applications were approved; ${failureCount} failed.`
-          } Failed applications: ${failureDetails}`,
+              ? `Approved ${applicationCountLabel(successCount)}; ${failedApplicationLabel} failed.`
+              : `No selected ${failureCount === 1 ? 'application was' : 'applications were'} approved; ${failedApplicationLabel} failed.`
+          } ${failedApplicationsTitle}: ${failureDetails}`,
         })
       }
 
@@ -983,11 +1005,12 @@ const ProvincialReviewPage = () => {
         <AppNotification
           kind={reviewActionStatus.kind}
           title={
-            reviewActionStatus.kind === 'success'
+            reviewActionStatus.title ??
+            (reviewActionStatus.kind === 'success'
               ? 'Action complete'
               : reviewActionStatus.kind === 'warning'
                 ? 'Approval partially completed'
-                : 'Action failed'
+                : 'Action failed')
           }
           subtitle={reviewActionStatus.message}
           autoDismissMs={reviewActionStatus.kind === 'success' ? 6000 : undefined}
@@ -1085,16 +1108,26 @@ const ProvincialReviewPage = () => {
 
       <ConfirmationModal
         open={approvalConfirmationNumbers.length > 0}
-        title="Approve applications"
-        description="You are about to approve the following applications:"
+        title={approvalConfirmationTitle(approvalConfirmationNumbers.length)}
+        description={`You are about to approve the selected ${
+          approvalConfirmationNumbers.length === 1 ? 'application' : 'applications'
+        }.`}
         confirmLabel="Approve"
         pendingLabel="Approving…"
         confirmDisabled={submittingApproval}
+        className="provincial-review-approval-modal"
         onClose={() => setApprovalConfirmationNumbers([])}
         onConfirm={onConfirmApproveSelected}
         onError={() => undefined}
       >
-        <ul aria-label="Applications to approve">
+        <p className="provincial-review-approval-modal__count">
+          {applicationCountLabel(approvalConfirmationNumbers.length)} selected
+        </p>
+        <ul
+          className="provincial-review-approval-modal__application-list"
+          aria-label="Applications to approve"
+          tabIndex={0}
+        >
           {approvalConfirmationNumbers.map((applicationNumber) => (
             <li key={applicationNumber}>{applicationNumber}</li>
           ))}
@@ -1131,7 +1164,9 @@ const ProvincialReviewPage = () => {
               const statusCode = value.toUpperCase()
               setRejectStatusCode(statusCode)
               if (!EMAIL_STATUS_CODES.has(statusCode)) {
+                rejectEmailRequestRef.current += 1
                 setSendRejectEmail(false)
+                setLoadingRejectEmail(false)
               }
               setRejectValidationMessage('')
             }}
@@ -1155,28 +1190,40 @@ const ProvincialReviewPage = () => {
             id="reviewRejectSendEmail"
             labelText="Send status email"
             checked={sendRejectEmail}
-            disabled={!rejectStatusSupportsEmail || loadingRejectEmail || submittingReject}
+            disabled={!rejectStatusSupportsEmail || submittingReject}
             onChange={(_, payload) => {
-              setSendRejectEmail(Boolean(payload.checked))
+              const checked = Boolean(payload.checked)
+              setSendRejectEmail(checked)
               setRejectValidationMessage('')
+              if (!checked) {
+                rejectEmailRequestRef.current += 1
+                setLoadingRejectEmail(false)
+                return
+              }
+              if (!rejectEmailAddress && rejectApplicationNumber) {
+                void loadRejectEmail(rejectApplicationNumber)
+              }
             }}
           />
-          <TextInput
-            id="reviewRejectEmail"
-            labelText={requiredLabel('Send to:', rejectStatusSupportsEmail && sendRejectEmail)}
-            aria-required={rejectStatusSupportsEmail && sendRejectEmail ? 'true' : undefined}
-            value={rejectEmailAddress}
-            disabled={!rejectStatusSupportsEmail || loadingRejectEmail || submittingReject}
-            invalid={rejectValidationMessage === REJECT_EMAIL_REQUIRED_MESSAGE}
-            invalidText={rejectValidationMessage}
-            onChange={(event) => {
-              setRejectEmailAddress(event.target.value)
-              setRejectValidationMessage('')
-            }}
-          />
+          {rejectStatusSupportsEmail && sendRejectEmail && (
+            <TextInput
+              id="reviewRejectEmail"
+              labelText={requiredLabel('Send to')}
+              aria-required="true"
+              value={rejectEmailAddress}
+              disabled={loadingRejectEmail || submittingReject}
+              invalid={rejectValidationMessage === REJECT_EMAIL_REQUIRED_MESSAGE}
+              invalidText={rejectValidationMessage}
+              onChange={(event) => {
+                setRejectEmailAddress(event.target.value)
+                setRejectValidationMessage('')
+              }}
+            />
+          )}
           {!!rejectValidationMessage &&
             rejectValidationMessage !== REJECT_STATUS_REQUIRED_MESSAGE &&
-            rejectValidationMessage !== REJECT_REMARK_REQUIRED_MESSAGE && (
+            rejectValidationMessage !== REJECT_REMARK_REQUIRED_MESSAGE &&
+            rejectValidationMessage !== REJECT_EMAIL_REQUIRED_MESSAGE && (
               <InlineNotification
                 kind="error"
                 title="Review validation"
@@ -1193,7 +1240,10 @@ const ProvincialReviewPage = () => {
           <Button
             kind="primary"
             disabled={
-              optionsUnavailable || !rejectStatusAvailable || loadingRejectEmail || submittingReject
+              optionsUnavailable ||
+              !rejectStatusAvailable ||
+              (sendRejectEmail && loadingRejectEmail) ||
+              submittingReject
             }
             renderIcon={submittingReject ? PendingIcon : undefined}
             onClick={() => void onRejectApplicationClick()}
@@ -1228,12 +1278,11 @@ const ProvincialReviewPage = () => {
             totalItemsLabel={
               errorMessage
                 ? 'Results unavailable'
-                : (formatDeferredSearchTotalLabel(
+                : formatDeferredSearchTotalLabel(
                     results.page.totalElements,
                     totalStatus,
                     results.page.number * results.page.size + results.content.length,
-                  ) ??
-                  `${new Intl.NumberFormat('en-CA').format(results.page.totalElements)} results found`)
+                  )
             }
             actions={
               <DisabledButtonTooltip

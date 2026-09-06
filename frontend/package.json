@@ -28,6 +28,7 @@
   },
   "dependencies": {
     "@carbon/icons-react": "^11.64.0",
+    "@carbon/pictograms-react": "^11.109.0",
     "@carbon/react": "^1.88.0",
     "@tiptap/extension-link": "3.30.4",
     "@tiptap/react": "3.30.4",

@@ -542,6 +542,19 @@ public abstract class OracleRepositorySupport {
     }
   }
 
+  /**
+   * Reads a text column without converting the Oracle single-space sentinel to {@code null}.
+   * PRODUCT_LOCATION uses that sentinel to satisfy its Oracle NOT NULL constraint.
+   */
+  protected String getRawString(ResultSet rs, String column) {
+    try {
+      return rs.getString(column);
+    } catch (SQLException ex) {
+      throwIfRequiredCursorColumn(column, ex);
+      return null;
+    }
+  }
+
   protected LocalDate getLocalDate(ResultSet rs, String column) {
     SQLException timestampFailure = null;
     try {

@@ -5,9 +5,54 @@ import java.io.OutputStream;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 
 public interface ApplicationDetailsRpcService {
+
+  /** Identifies the application-details section a modern client is saving. */
+  enum ApplicationSummarySaveSource {
+    FULL,
+    SUMMARY,
+    OWNER,
+    AGENT,
+    OWNER_AGENT,
+    ITEMS;
+
+    public static Optional<ApplicationSummarySaveSource> fromWireValue(String value) {
+      if (value == null || value.trim().isEmpty()) {
+        return Optional.of(FULL);
+      }
+      return switch (value.trim().toLowerCase(Locale.ROOT)) {
+        case "summary" -> Optional.of(SUMMARY);
+        case "owner" -> Optional.of(OWNER);
+        case "agent" -> Optional.of(AGENT);
+        case "owner-agent" -> Optional.of(OWNER_AGENT);
+        case "items" -> Optional.of(ITEMS);
+        default -> Optional.empty();
+      };
+    }
+
+    public boolean updatesSummaryFields() {
+      return this == FULL || this == SUMMARY;
+    }
+
+    public boolean updatesOwnerFields() {
+      return this == FULL || this == OWNER || this == OWNER_AGENT;
+    }
+
+    public boolean updatesAgentFields() {
+      return this == FULL || this == AGENT || this == OWNER_AGENT;
+    }
+
+    public boolean updatesApplicantType() {
+      return this == FULL || this == OWNER || this == OWNER_AGENT;
+    }
+
+    public boolean updatesItemFields() {
+      return this == FULL || this == ITEMS;
+    }
+  }
 
   List<DocumentItem> getDocumentDetails(Long applicationNumber);
 
@@ -592,7 +637,63 @@ public interface ApplicationDetailsRpcService {
       String oicIndicator,
       String endUseCode,
       List<String> speciesCodes,
-      boolean validationEnabled) {
+      boolean validationEnabled,
+      ApplicationSummarySaveSource saveSource) {
+    public ApplicationSummaryUpdateRequest(
+        Long applicationNumber,
+        LocalDate applicationDate,
+        Long termDays,
+        LocalDate receivedDate,
+        Double applicationVolume,
+        Double averageLogVolume,
+        String exemptionReasonCode,
+        String productLocation,
+        Long exportScheduleId,
+        String agentClientNumber,
+        String agentClientLocationCode,
+        String ownerClientNumber,
+        String ownerClientLocationCode,
+        String applicationStatusCode,
+        String applicantTypeCode,
+        Long orgUnitNumber,
+        String productTypeCode,
+        String jurisdictionCode,
+        String growthTypeCode,
+        String agentContactName,
+        String ownerContactName,
+        String oicIndicator,
+        String endUseCode,
+        List<String> speciesCodes,
+        boolean validationEnabled) {
+      this(
+          applicationNumber,
+          applicationDate,
+          termDays,
+          receivedDate,
+          applicationVolume,
+          averageLogVolume,
+          exemptionReasonCode,
+          productLocation,
+          exportScheduleId,
+          agentClientNumber,
+          agentClientLocationCode,
+          ownerClientNumber,
+          ownerClientLocationCode,
+          applicationStatusCode,
+          applicantTypeCode,
+          orgUnitNumber,
+          productTypeCode,
+          jurisdictionCode,
+          growthTypeCode,
+          agentContactName,
+          ownerContactName,
+          oicIndicator,
+          endUseCode,
+          speciesCodes,
+          validationEnabled,
+          ApplicationSummarySaveSource.FULL);
+    }
+
     public ApplicationSummaryUpdateRequest(
         Long applicationNumber,
         LocalDate applicationDate,
@@ -642,7 +743,8 @@ public interface ApplicationDetailsRpcService {
           oicIndicator,
           null,
           null,
-          validationEnabled);
+          validationEnabled,
+          ApplicationSummarySaveSource.FULL);
     }
   }
 

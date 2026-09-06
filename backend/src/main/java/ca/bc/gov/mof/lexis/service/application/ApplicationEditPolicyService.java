@@ -27,6 +27,7 @@ public class ApplicationEditPolicyService {
   private static final String ROLE_PROVINCIAL_SUBMITTER = "LEXIS_PROVINCIAL_SUBMITTER";
   private static final Set<String> LEGACY_APPROVED_STATUSES = Set.of("APP", "EXE", "PMT", "EXP");
   private static final Set<String> PACKAGE_APPLICATION_PRODUCT_TYPES = Set.of("H", "T");
+  private static final String SCALE_APPLICATION_PRODUCT_TYPE = "H";
 
   private final LexisSessionService sessionService;
   private final LexisAuthorizationService authorizationService;
@@ -112,12 +113,14 @@ public class ApplicationEditPolicyService {
     boolean approved = LEGACY_APPROVED_STATUSES.contains(status);
     boolean packageMutationsSupported =
         PACKAGE_APPLICATION_PRODUCT_TYPES.contains(normalizeCode(context.productTypeCode()));
+    boolean scaleMutationsSupported =
+        SCALE_APPLICATION_PRODUCT_TYPE.equals(normalizeCode(context.productTypeCode()));
 
     if (packageMutationsSupported && !readOnly && !exemptionApprover) {
       // The branch order is intentional: legacy treated a dual-role industry user as industry.
       if (industryUser) {
         if (!(context.hasCompletePermit() || (approved && context.hasScaleBeforeApproval()))) {
-          canAddScales = true;
+          canAddScales = scaleMutationsSupported;
           if (!(approved && context.hasPackageBeforeApproval())) {
             canEditPackages = true;
             canAddPackages = true;
@@ -126,7 +129,7 @@ public class ApplicationEditPolicyService {
       } else if (applicationApprover && !context.hasCompletePermit()) {
         canEditPackages = true;
         canAddPackages = true;
-        canAddScales = true;
+        canAddScales = scaleMutationsSupported;
       }
     }
 
@@ -137,7 +140,7 @@ public class ApplicationEditPolicyService {
         && context.interiorMinisterialItemOverrideEligible()) {
       canEditPackages = true;
       canAddPackages = true;
-      canAddScales = true;
+      canAddScales = scaleMutationsSupported;
     }
 
     boolean canUpdatePackageNumber =

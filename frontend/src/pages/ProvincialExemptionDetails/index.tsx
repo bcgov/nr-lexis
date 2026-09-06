@@ -104,7 +104,6 @@ import {
   fetchExemptionBlanketOicTotals,
   fetchExemptionEditContext,
   fetchExemptionPermits,
-  releaseExemptionEditLock,
   removeApplicationFromExemption,
   sendExemptionApprovalEmails,
   updateExemption,
@@ -116,7 +115,6 @@ import {
 import { ReportRequestError, runReport } from '@/service/report-service'
 import { formatLocalIsoDate } from '@/utils/date'
 import { requiredLabel } from '@/utils/required-label'
-import BlanketOicPermitCreateModal from './BlanketOicPermitCreateModal'
 
 type ExemptionDetailTabKey =
   | 'owner'
@@ -695,14 +693,6 @@ const ProvincialExemptionDetailsPage = () => {
   }, [exemptionNumber, beginDetailRequest])
 
   useEffect(() => {
-    return () => {
-      if (exemptionNumber) {
-        void releaseExemptionEditLock(exemptionNumber)
-      }
-    }
-  }, [exemptionNumber])
-
-  useEffect(() => {
     const loadOptions = async () => {
       try {
         const options = await fetchProvincialExemptionOptions()
@@ -848,10 +838,11 @@ const ProvincialExemptionDetailsPage = () => {
       : persistedStatusCode === 'NEW')
   const canEditApprovedVolume = canEditSummaryFields && persistedStatusCode !== 'ACT'
   const showApplications = currentTypeCode !== 'B'
-  const showOwner =
-    showApplications && Boolean(linkedApplicationNumber && exemptionOwnerClientNumber)
+  // Legacy exemption details omit client tabs for OIC and Blanket OIC records.
+  const showClientTabs = currentTypeCode !== 'O' && currentTypeCode !== 'B'
+  const showOwner = showClientTabs && Boolean(linkedApplicationNumber && exemptionOwnerClientNumber)
   const showAgent =
-    showApplications &&
+    showClientTabs &&
     clientContextHasAgent &&
     Boolean(linkedApplicationNumber && exemptionAgentClientNumber)
   const feeManagementAvailable =
@@ -2174,7 +2165,27 @@ const ProvincialExemptionDetailsPage = () => {
                               kind="tertiary"
                               size="sm"
                               disabled={creatingPermit}
-                              onClick={() => setPermitCreationConfirmationOpen(true)}
+                              onClick={() => {
+                                if (canCreateBlanketOicPermit && currentDetail) {
+                                  navigate(
+                                    withCurrentSearch(
+                                      `/provincial/exemption/${encodeURIComponent(currentDetail.exemptionNumber)}/permit/new`,
+                                    ),
+                                    {
+                                      state: withDetailReturnTo(
+                                        location.state,
+                                        {
+                                          label: 'Provincial exemption detail',
+                                          to: locationPath(location),
+                                        },
+                                        detailReturnTo,
+                                      ),
+                                    },
+                                  )
+                                  return
+                                }
+                                setPermitCreationConfirmationOpen(true)
+                              }}
                             >
                               {creatingPermit ? 'Creating permit…' : 'Apply for new permit'}
                             </Button>
@@ -2671,26 +2682,6 @@ const ProvincialExemptionDetailsPage = () => {
             </Button>
           </div>
         </Modal>
-      )}
-      {permitCreationConfirmationOpen && canCreateBlanketOicPermit && currentDetail && (
-        <BlanketOicPermitCreateModal
-          open
-          exemptionNumber={currentDetail.exemptionNumber}
-          exemptionExpiryDate={currentDetail.expiryDate ?? ''}
-          regionOptions={regionOptions}
-          defaultRegionNumbers={editContext.regionNumbers}
-          onClose={closePermitCreationConfirmation}
-          onBusyChange={setCreatingPermit}
-          onCreated={(permitNumber) => {
-            setPermitCreationConfirmationOpen(false)
-            setPermitCreationDestination(`/provincial/permit/${encodeURIComponent(permitNumber)}`)
-          }}
-          onUnknownOutcome={(message) => {
-            setPermitCreationRequiresReload(true)
-            setPermitCreationConfirmationOpen(false)
-            setActionErrorMessage(message)
-          }}
-        />
       )}
       <UnsavedChangesGuard
         isDirty={isExemptionDirty}

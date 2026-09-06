@@ -148,10 +148,15 @@ const SORT_FIELD_OPTIONS = RESULT_COLUMNS.flatMap((column) =>
   column.sortField ? [column.sortField] : [],
 )
 
-const disabledExemptionSelectionDescription = (row: ProvincialApplicationSearchItem): string =>
-  row.exemptionNumber
-    ? 'This application already has an exemption.'
-    : 'This application is not eligible to create an exemption.'
+const disabledExemptionSelectionDescription = (row: ProvincialApplicationSearchItem): string => {
+  if (row.exemptionNumber) {
+    return 'This application already has an exemption.'
+  }
+  if (row.locked) {
+    return 'This application is currently locked and cannot be selected.'
+  }
+  return 'Eligible applications must be approved, have no existing exemption or active valid offer, and not have a future listing date unless they are standing timber.'
+}
 
 const buildSearchParams = (
   filters: ProvincialApplicationSearchFilters,
@@ -655,6 +660,20 @@ const ProvincialApplicationPage = () => {
         <PageHeader
           title="Provincial application search"
           subtitle="Find provincial applications and manage eligible application workflows."
+          actions={
+            canCreateApplication ? (
+              <Button
+                as={Link}
+                to="/provincial/application/create"
+                kind="primary"
+                size="md"
+                renderIcon={Add}
+              >
+                Add application
+              </Button>
+            ) : undefined
+          }
+          actionsLabel="Application actions"
         />
       </Column>
 
@@ -844,36 +863,21 @@ const ProvincialApplicationPage = () => {
               results.page.number * results.page.size + results.content.length,
             )}
             actions={
-              canCreateExemption || canCreateApplication ? (
-                <>
-                  {canCreateExemption && (
-                    <DisabledButtonTooltip
-                      disabled={selectedRowsCount === 0}
-                      description="Select at least one eligible application."
-                    >
-                      <Button
-                        type="button"
-                        kind="tertiary"
-                        size="md"
-                        onClick={onCreateExemptionClick}
-                        disabled={selectedRowsCount === 0}
-                      >
-                        Create exemption for selected applications
-                      </Button>
-                    </DisabledButtonTooltip>
-                  )}
-                  {canCreateApplication && (
-                    <Button
-                      as={Link}
-                      to="/provincial/application/create"
-                      kind="primary"
-                      size="md"
-                      renderIcon={Add}
-                    >
-                      Add application
-                    </Button>
-                  )}
-                </>
+              canCreateExemption ? (
+                <DisabledButtonTooltip
+                  disabled={selectedRowsCount === 0}
+                  description="Select at least one eligible application."
+                >
+                  <Button
+                    type="button"
+                    kind="tertiary"
+                    size="md"
+                    onClick={onCreateExemptionClick}
+                    disabled={selectedRowsCount === 0}
+                  >
+                    Create exemption for selected applications
+                  </Button>
+                </DisabledButtonTooltip>
               ) : undefined
             }
           >
