@@ -43,7 +43,6 @@ vi.mock('@/service/provincial-exemption-detail-service', () => ({
   fetchExemptionBlanketOicTotals: vi.fn(),
   fetchExemptionEditContext: vi.fn(),
   fetchExemptionPermits: vi.fn(),
-  releaseExemptionEditLock: vi.fn().mockResolvedValue(undefined),
   removeApplicationFromExemption: vi.fn(),
   sendExemptionApprovalEmails: vi.fn(),
   updateExemption: vi.fn(),
@@ -302,7 +301,7 @@ describe('Provincial exemption client parity', () => {
     expect(fetchExemptionClientLocations).not.toHaveBeenCalledWith('00002176')
   })
 
-  it('shows the linked application owner in an OIC exemption summary', async () => {
+  it('keeps OIC client tabs hidden while showing the linked application owner in the summary', async () => {
     vi.mocked(fetchProvincialExemptionDetail).mockResolvedValue({
       ...exemptionDetail,
       exemptionTypeCode: 'O',
@@ -321,11 +320,12 @@ describe('Provincial exemption client parity', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByRole('tab', { name: 'Owner' })).toHaveAttribute(
+    expect(await screen.findByRole('tab', { name: 'Exemption details' })).toHaveAttribute(
       'aria-selected',
       'true',
     )
-    await userEvent.click(screen.getByRole('tab', { name: 'Exemption details' }))
+    expect(screen.queryByRole('tab', { name: 'Owner' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
     const summaryTile = (
       await screen.findByRole('heading', { name: 'Exemption summary', level: 2 })
     ).closest('.cds--tile')
@@ -336,5 +336,35 @@ describe('Provincial exemption client parity', () => {
         '00001074',
       ),
     ).toBeInTheDocument()
+  })
+
+  it('keeps client tabs hidden for Blanket OIC even with linked application context', async () => {
+    vi.mocked(fetchProvincialExemptionDetail).mockResolvedValue({
+      ...exemptionDetail,
+      exemptionNumber: 'BOIC-205',
+      exemptionTypeCode: 'B',
+      exemptionTypeDescription: 'Blanket OIC',
+      ownerClientNumber: null,
+      agentClientNumber: null,
+      blanketOic: true,
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/BOIC-205']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByRole('tab', { name: 'Exemption details' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+    expect(screen.queryByRole('tab', { name: 'Owner' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
   })
 })

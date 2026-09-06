@@ -65,7 +65,6 @@ vi.mock('@/service/provincial-exemption-detail-service', () => ({
   fetchExemptionBlanketOicTotals: vi.fn(),
   fetchExemptionEditContext: vi.fn(),
   fetchExemptionPermits: vi.fn(),
-  releaseExemptionEditLock: vi.fn().mockResolvedValue(undefined),
   removeApplicationFromExemption: vi.fn(),
   sendExemptionApprovalEmails: vi.fn(),
   updateExemption: vi.fn(),

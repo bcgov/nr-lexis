@@ -104,7 +104,6 @@ import {
   fetchExemptionBlanketOicTotals,
   fetchExemptionEditContext,
   fetchExemptionPermits,
-  releaseExemptionEditLock,
   removeApplicationFromExemption,
   sendExemptionApprovalEmails,
   updateExemption,
@@ -694,14 +693,6 @@ const ProvincialExemptionDetailsPage = () => {
   }, [exemptionNumber, beginDetailRequest])
 
   useEffect(() => {
-    return () => {
-      if (exemptionNumber) {
-        void releaseExemptionEditLock(exemptionNumber)
-      }
-    }
-  }, [exemptionNumber])
-
-  useEffect(() => {
     const loadOptions = async () => {
       try {
         const options = await fetchProvincialExemptionOptions()
@@ -847,10 +838,11 @@ const ProvincialExemptionDetailsPage = () => {
       : persistedStatusCode === 'NEW')
   const canEditApprovedVolume = canEditSummaryFields && persistedStatusCode !== 'ACT'
   const showApplications = currentTypeCode !== 'B'
-  const showOwner =
-    showApplications && Boolean(linkedApplicationNumber && exemptionOwnerClientNumber)
+  // Legacy exemption details omit client tabs for OIC and Blanket OIC records.
+  const showClientTabs = currentTypeCode !== 'O' && currentTypeCode !== 'B'
+  const showOwner = showClientTabs && Boolean(linkedApplicationNumber && exemptionOwnerClientNumber)
   const showAgent =
-    showApplications &&
+    showClientTabs &&
     clientContextHasAgent &&
     Boolean(linkedApplicationNumber && exemptionAgentClientNumber)
   const feeManagementAvailable =
