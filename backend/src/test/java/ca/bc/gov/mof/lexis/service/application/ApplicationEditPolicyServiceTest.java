@@ -203,6 +203,49 @@ class ApplicationEditPolicyServiceTest {
                 policyService.requirePackageAddOrDelete(
                     authentication, applicationService, APPLICATION_NUMBER))
         .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+    assertThatThrownBy(
+            () ->
+                policyService.requireScaleAddOrDelete(
+                    authentication, applicationService, APPLICATION_NUMBER))
+        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+  }
+
+  @Test
+  void unmanufacturedTimberAllowsPackageMutationsButDeniesScaleMutations() {
+    allowRoles("LEXIS_APPLICATION_APPROVER");
+    context("NEW", TODAY.plusDays(1), false, false, false, false, "T");
+
+    ApplicationEditPolicy policy =
+        policyService.resolve(authentication, applicationService, APPLICATION_NUMBER);
+
+    assertThat(policy.canEditPackages()).isTrue();
+    assertThat(policy.canAddPackages()).isTrue();
+    assertThat(policy.canAddScales()).isFalse();
+    assertThat(policy.canUpdatePackageNumber()).isTrue();
+    assertThatThrownBy(
+            () ->
+                policyService.requireScaleAddOrDelete(
+                    authentication, applicationService, APPLICATION_NUMBER))
+        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        "LEXIS_ADMIN",
+        "LEXIS_APPLICATION_APPROVER",
+        "LEXIS_PROVINCIAL_SUBMITTER_00012345"
+      })
+  void interiorMinisterialOverrideKeepsUnmanufacturedTimberScaleMutationsDenied(String role) {
+    allowRoles(role);
+    context("PMT", TODAY.minusDays(30), true, true, true, true, "T");
+
+    ApplicationEditPolicy policy =
+        policyService.resolve(authentication, applicationService, APPLICATION_NUMBER);
+
+    assertThat(policy.canEditPackages()).isTrue();
+    assertThat(policy.canAddPackages()).isTrue();
+    assertThat(policy.canAddScales()).isFalse();
   }
 
   @Test

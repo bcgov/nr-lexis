@@ -6,7 +6,6 @@ import {
   fetchExemptionBlanketOicTotals,
   fetchExemptionEditContext,
   fetchExemptionPermits,
-  releaseExemptionEditLock,
   removeApplicationFromExemption,
   sendExemptionApprovalEmails,
   updateExemption,
@@ -359,14 +358,5 @@ describe('provincial exemption detail service', () => {
     const [path, body] = postMock.mock.calls[0]
     expect(path).toBe('/lexis/rpc/exemption-details/approval-emails')
     expect(body.get('sendGrid')).toBe('EX-777:owner@example.com,EX-778:other@example.com')
-  })
-
-  it('treats edit-lock release as best-effort cleanup', async () => {
-    postMock.mockRejectedValue(new Error('connection lost'))
-
-    await expect(releaseExemptionEditLock(' EX-777 ')).resolves.toBeUndefined()
-    expect(postMock).toHaveBeenCalledWith('/lexis/rpc/exemption-details/release-lock', null, {
-      params: { exemptionNumber: 'EX-777' },
-    })
   })
 })

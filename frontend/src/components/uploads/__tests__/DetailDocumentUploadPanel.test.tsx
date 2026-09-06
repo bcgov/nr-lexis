@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import DetailDocumentUploadPanel from '../DetailDocumentUploadPanel'
@@ -73,6 +73,119 @@ describe('DetailDocumentUploadPanel', () => {
     await openUploadModal()
     expect(screen.queryByRole('button', { name: 'Remove' })).not.toBeInTheDocument()
     expect(screen.getByLabelText(/Document description/)).toHaveValue('')
+  })
+
+  it('keeps Review upload enabled and shows the required file error on click', async () => {
+    render(
+      <DetailDocumentUploadPanel
+        workflowType="application"
+        targetNumber="321"
+        inputId="applicationDocuments"
+      />,
+    )
+
+    await openUploadModal()
+    const reviewButton = screen.getByRole('button', { name: 'Review upload' })
+    expect(reviewButton).toBeEnabled()
+
+    await userEvent.click(reviewButton)
+
+    expect(screen.getAllByText('Choose at least one file to upload.').length).toBeGreaterThan(0)
+    expect(screen.getByRole('dialog', { name: 'Add document' })).toBeInTheDocument()
+    expect(mockedValidateAdminUpload).not.toHaveBeenCalled()
+    expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
+  })
+
+  it('explains pending validation before allowing a mixed queue to reach review', async () => {
+    let resolveValidation!: (result: Awaited<ReturnType<typeof validateAdminUpload>>) => void
+    mockedValidateAdminUpload
+      .mockResolvedValueOnce({ status: 'validated', message: 'File passed validation.' })
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveValidation = resolve
+          }),
+      )
+    render(
+      <DetailDocumentUploadPanel
+        workflowType="application"
+        targetNumber="321"
+        inputId="applicationDocuments"
+      />,
+    )
+
+    await openUploadModal()
+    await userEvent.upload(screen.getByLabelText('Document File'), [
+      new File(['validated document'], 'ready.pdf', { type: 'application/pdf' }),
+      new File(['pending document'], 'pending.pdf', { type: 'application/pdf' }),
+    ])
+    await waitFor(() => expect(mockedValidateAdminUpload).toHaveBeenCalledTimes(2))
+    expect(screen.getAllByText('Validated').length).toBeGreaterThan(0)
+    expect(screen.getByRole('button', { name: 'Review upload' })).toBeEnabled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
+
+    expect(
+      screen.getByText('Wait for file validation to finish before reviewing the upload.'),
+    ).toBeVisible()
+    expect(screen.queryByRole('heading', { name: 'File review' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Submit upload' })).not.toBeInTheDocument()
+    expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
+
+    await act(async () => {
+      resolveValidation({ status: 'validated', message: 'File passed validation.' })
+    })
+    await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
+
+    expect(screen.getByRole('heading', { name: 'File review' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Submit upload' })).toBeEnabled()
+    expect(
+      screen.queryByText('Wait for file validation to finish before reviewing the upload.'),
+    ).not.toBeInTheDocument()
+    expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
+  })
+
+  it('keeps submission blocked while an additional file is validating on the review step', async () => {
+    let resolveValidation!: (result: Awaited<ReturnType<typeof validateAdminUpload>>) => void
+    mockedValidateAdminUpload
+      .mockResolvedValueOnce({ status: 'validated', message: 'File passed validation.' })
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveValidation = resolve
+          }),
+      )
+    render(
+      <DetailDocumentUploadPanel
+        workflowType="application"
+        targetNumber="321"
+        inputId="applicationDocuments"
+      />,
+    )
+
+    await openUploadModal()
+    await userEvent.upload(
+      screen.getByLabelText('Document File'),
+      new File(['validated document'], 'ready.pdf', { type: 'application/pdf' }),
+    )
+    await waitFor(() => expect(screen.getAllByText('Validated').length).toBeGreaterThan(0))
+    await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
+    expect(screen.getByRole('button', { name: 'Submit upload' })).toBeEnabled()
+
+    await userEvent.upload(
+      screen.getByLabelText('Document File'),
+      new File(['pending document'], 'pending.pdf', { type: 'application/pdf' }),
+    )
+
+    expect(screen.getByRole('button', { name: 'Submit upload' })).toBeDisabled()
+    await userEvent.click(screen.getByRole('button', { name: 'Submit upload' }))
+    expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
+
+    await act(async () => {
+      resolveValidation({ status: 'validated', message: 'File passed validation.' })
+    })
+    expect(screen.getByRole('button', { name: 'Submit upload' })).toBeEnabled()
+    expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
   })
 
   it('does not focus the close button when the upload modal opens', async () => {
@@ -282,8 +395,308 @@ describe('DetailDocumentUploadPanel', () => {
       screen.getByText('1 file failed validation. Review the queue for details.'),
     ).toBeInTheDocument()
     expect(screen.getAllByText('Failed').length).toBeGreaterThan(0)
-    expect(screen.getByRole('button', { name: 'Review upload' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Review upload' })).toBeEnabled()
+    await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
+    expect(screen.getByText('1 queued file needs attention before review.')).toBeInTheDocument()
     expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
+  })
+
+  it('clears the queue attention error and shows the empty queue error after removing the last invalid file', async () => {
+    const file = new File(['infected document upload'], 'eicar-application-upload.pdf', {
+      type: 'application/pdf',
+    })
+    mockedValidateAdminUpload.mockRejectedValue({
+      response: {
+        status: 422,
+        data: {
+          message: 'The uploaded file failed virus scanning.',
+        },
+      },
+    })
+
+    render(
+      <DetailDocumentUploadPanel
+        workflowType="application"
+        targetNumber="321"
+        inputId="applicationDocuments"
+      />,
+    )
+
+    await openUploadModal()
+    await userEvent.upload(screen.getByLabelText('Document File'), file)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Review upload' })).toBeEnabled())
+    await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
+    expect(screen.getByText('1 queued file needs attention before review.')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Remove' }))
+
+    expect(
+      screen.queryByText('1 queued file needs attention before review.'),
+    ).not.toBeInTheDocument()
+    expect(screen.getByText('Choose at least one file to upload.')).toBeInTheDocument()
+  })
+
+  it('shows the empty queue error when file removals are batched', async () => {
+    const files = ['first.pdf', 'second.pdf'].map(
+      (name) => new File(['document upload'], name, { type: 'application/pdf' }),
+    )
+    render(
+      <DetailDocumentUploadPanel
+        workflowType="application"
+        targetNumber="321"
+        inputId="applicationDocuments"
+      />,
+    )
+
+    await openUploadModal()
+    await userEvent.upload(screen.getByLabelText('Document File'), files)
+    await waitFor(() => {
+      const buttons = screen.getAllByRole('button', { name: 'Remove' })
+      expect(buttons).toHaveLength(2)
+      buttons.forEach((button) => expect(button).toBeEnabled())
+    })
+    const removeButtons = screen.getAllByRole('button', { name: 'Remove' })
+
+    act(() => {
+      removeButtons.forEach((button) => button.click())
+    })
+
+    expect(screen.queryByRole('button', { name: 'Remove' })).not.toBeInTheDocument()
+    expect(screen.getByText('Choose at least one file to upload.')).toBeInTheDocument()
+    expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
+
+    await userEvent.upload(screen.getByLabelText('Document File'), files[0])
+    expect(screen.queryByText('Choose at least one file to upload.')).not.toBeInTheDocument()
+  })
+
+  it('allows review after removing an invalid file from a mixed queue', async () => {
+    const invalidFile = new File(['infected document upload'], 'eicar-application-upload.pdf', {
+      type: 'application/pdf',
+    })
+    const validFile = new File(['valid document upload'], 'valid-application-upload.pdf', {
+      type: 'application/pdf',
+    })
+    mockedValidateAdminUpload
+      .mockRejectedValueOnce({
+        response: {
+          status: 422,
+          data: {
+            message: 'The uploaded file failed virus scanning.',
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        status: 'validated',
+        message: 'File passed validation and virus scanning.',
+      })
+
+    render(
+      <DetailDocumentUploadPanel
+        workflowType="application"
+        targetNumber="321"
+        inputId="applicationDocuments"
+      />,
+    )
+
+    await openUploadModal()
+    await userEvent.upload(screen.getByLabelText('Document File'), [invalidFile, validFile])
+    await waitFor(() => expect(mockedValidateAdminUpload).toHaveBeenCalledTimes(2))
+    expect(
+      screen.getByText('1 file failed validation. Review the queue for details.'),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('1 queued file needs attention and will be excluded from review.'),
+    ).toBeInTheDocument()
+
+    const invalidRow = screen.getByText(invalidFile.name).closest('tr')
+    expect(invalidRow).toBeTruthy()
+    await userEvent.click(within(invalidRow as HTMLElement).getByRole('button', { name: 'Remove' }))
+
+    expect(
+      screen.queryByText('1 queued file needs attention and will be excluded from review.'),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('1 file failed validation. Review the queue for details.'),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText('Choose at least one file to upload.')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
+    expect(screen.getByRole('heading', { name: 'File review' })).toBeInTheDocument()
+    expect(screen.getAllByText(validFile.name).length).toBeGreaterThan(0)
+    expect(screen.queryByText(invalidFile.name)).not.toBeInTheDocument()
+  })
+
+  it('clears queue validation messages when cancelling a queued upload', async () => {
+    const file = new File(['infected document upload'], 'eicar-application-upload.pdf', {
+      type: 'application/pdf',
+    })
+    mockedValidateAdminUpload.mockRejectedValue({
+      response: {
+        status: 422,
+        data: {
+          message: 'The uploaded file failed virus scanning.',
+        },
+      },
+    })
+
+    render(
+      <DetailDocumentUploadPanel
+        workflowType="application"
+        targetNumber="321"
+        inputId="applicationDocuments"
+      />,
+    )
+
+    await openUploadModal()
+    await userEvent.upload(screen.getByLabelText('Document File'), file)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Review upload' })).toBeEnabled())
+    await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
+    expect(screen.getByText('1 queued file needs attention before review.')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    await openUploadModal()
+
+    expect(
+      screen.queryByText('1 queued file needs attention before review.'),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText('Choose at least one file to upload.')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Remove' })).not.toBeInTheDocument()
+  })
+
+  it.each(['Remove', 'Cancel'] as const)(
+    'ignores a late validation failure after %s discards the queued file',
+    async (action) => {
+      let rejectValidation!: (reason: unknown) => void
+      mockedValidateAdminUpload.mockImplementationOnce(
+        () =>
+          new Promise((_, reject) => {
+            rejectValidation = reject
+          }),
+      )
+      const file = new File(['pending validation'], 'pending-document.pdf', {
+        type: 'application/pdf',
+      })
+
+      render(
+        <DetailDocumentUploadPanel
+          workflowType="application"
+          targetNumber="321"
+          inputId="applicationDocuments"
+        />,
+      )
+
+      await openUploadModal()
+      await userEvent.upload(screen.getByLabelText('Document File'), file)
+      await waitFor(() => expect(mockedValidateAdminUpload).toHaveBeenCalledTimes(1))
+
+      if (action === 'Remove') {
+        await userEvent.click(screen.getByRole('button', { name: 'Remove' }))
+      } else {
+        await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+      }
+
+      await act(async () => {
+        rejectValidation(new Error('late validation failure'))
+      })
+
+      expect(
+        screen.queryByText('1 file failed validation. Review the queue for details.'),
+      ).not.toBeInTheDocument()
+    },
+  )
+
+  it('ignores a late validation failure from a replaced file', async () => {
+    let rejectOriginalValidation!: (reason: unknown) => void
+    mockedValidateAdminUpload
+      .mockImplementationOnce(
+        () =>
+          new Promise((_, reject) => {
+            rejectOriginalValidation = reject
+          }),
+      )
+      .mockResolvedValueOnce({
+        status: 'validated',
+        message: 'File passed validation and virus scanning.',
+      })
+    const originalFile = new File(['original'], 'replacement-document.pdf', {
+      type: 'application/pdf',
+    })
+    const replacementFile = new File(['replacement'], 'replacement-document.pdf', {
+      type: 'application/pdf',
+    })
+
+    render(
+      <DetailDocumentUploadPanel
+        workflowType="application"
+        targetNumber="321"
+        inputId="applicationDocuments"
+      />,
+    )
+
+    await openUploadModal()
+    await userEvent.upload(screen.getByLabelText('Document File'), originalFile)
+    await waitFor(() => expect(mockedValidateAdminUpload).toHaveBeenCalledTimes(1))
+    await userEvent.upload(screen.getByLabelText('Document File'), replacementFile)
+    await waitFor(() => expect(mockedValidateAdminUpload).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(screen.getByText('Validated')).toBeInTheDocument())
+
+    await act(async () => {
+      rejectOriginalValidation(new Error('late validation failure'))
+    })
+
+    expect(screen.getByText('Validated')).toBeInTheDocument()
+    expect(
+      screen.queryByText('1 file failed validation. Review the queue for details.'),
+    ).not.toBeInTheDocument()
+  })
+
+  it('keeps a current validation failure visible after removing another pending file', async () => {
+    let rejectPendingValidation!: (reason: unknown) => void
+    let rejectCurrentValidation!: (reason: unknown) => void
+    mockedValidateAdminUpload
+      .mockImplementationOnce(
+        () =>
+          new Promise((_, reject) => {
+            rejectPendingValidation = reject
+          }),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise((_, reject) => {
+            rejectCurrentValidation = reject
+          }),
+      )
+    const pendingFile = new File(['pending validation'], 'pending-document.pdf', {
+      type: 'application/pdf',
+    })
+    const currentFile = new File(['current validation'], 'current-document.pdf', {
+      type: 'application/pdf',
+    })
+
+    render(
+      <DetailDocumentUploadPanel
+        workflowType="application"
+        targetNumber="321"
+        inputId="applicationDocuments"
+      />,
+    )
+
+    await openUploadModal()
+    await userEvent.upload(screen.getByLabelText('Document File'), [pendingFile, currentFile])
+    await waitFor(() => expect(mockedValidateAdminUpload).toHaveBeenCalledTimes(2))
+
+    const pendingRow = screen.getByText(pendingFile.name).closest('tr')
+    expect(pendingRow).toBeTruthy()
+    await userEvent.click(within(pendingRow as HTMLElement).getByRole('button', { name: 'Remove' }))
+
+    await act(async () => {
+      rejectPendingValidation(new Error('late pending validation failure'))
+      rejectCurrentValidation(new Error('current validation failure'))
+    })
+
+    expect(
+      screen.getByText('1 file failed validation. Review the queue for details.'),
+    ).toBeInTheDocument()
+    expect(screen.getByText(currentFile.name)).toBeInTheDocument()
   })
 
   it('allows review and submit when at least one selected document validates', async () => {
@@ -461,7 +874,9 @@ describe('DetailDocumentUploadPanel', () => {
     expect(
       screen.getByText('Invoice fee in lieu must round to 9999999.99 or less.'),
     ).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Review upload' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Review upload' })).toBeEnabled()
+    await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
+    expect(screen.getByRole('dialog', { name: 'Add invoice' })).toBeInTheDocument()
     expect(mockedValidateAdminUpload).not.toHaveBeenCalled()
     expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
   })

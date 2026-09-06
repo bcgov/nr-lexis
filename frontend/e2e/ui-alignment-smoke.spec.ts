@@ -909,7 +909,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(addApplicationAction).toHaveClass(/cds--btn--primary/)
     expect(
       await addApplicationAction.evaluate((action) =>
-        Boolean(action.closest('.legacy-search-table-toolbar__actions')),
+        Boolean(action.closest('.lexis-page-header__actions')),
       ),
     ).toBe(true)
     await expect(addApplicationAction).toHaveCSS('background-color', 'rgb(0, 115, 230)')
@@ -1757,10 +1757,12 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       waitUntil: 'domcontentloaded',
     })
     await expect(page.getByRole('heading', { level: 1, name: 'Create exemption' })).toBeVisible()
-    await expect(page.locator('.provincial-exemption-create-page .create-form-tile')).toHaveCSS(
-      'overflow',
-      'visible',
-    )
+    await page.getByRole('tab', { name: 'Exemption details', exact: true }).click()
+    const exemptionForm = page
+      .getByRole('tabpanel', { name: 'Exemption details', exact: true })
+      .locator('.create-form-tile')
+    await expect(exemptionForm).toBeVisible()
+    await expect(exemptionForm).toHaveCSS('overflow', 'visible')
   })
 
   test('keeps an impossible typed date visible for correction after blur', async ({ page }) => {

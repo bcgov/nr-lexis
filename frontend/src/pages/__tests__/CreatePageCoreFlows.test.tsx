@@ -24,6 +24,8 @@ import {
 import {
   fetchApplicationEndUsesForSpeciesRegion,
   fetchApplicationRemainingSpecies,
+  fetchApplicationSummarySnapshot,
+  type ApplicationSummarySnapshot,
 } from '@/service/provincial-application-items-service'
 import {
   fetchOfferApplicationDetails,
@@ -69,6 +71,7 @@ vi.mock('@/service/application-client-lookup-service', () => ({
 vi.mock('@/service/provincial-application-items-service', () => ({
   fetchApplicationEndUsesForSpeciesRegion: vi.fn(),
   fetchApplicationRemainingSpecies: vi.fn(),
+  fetchApplicationSummarySnapshot: vi.fn(),
 }))
 
 vi.mock('@/service/provincial-offer-create-service', () => ({
@@ -103,6 +106,7 @@ const mockedFetchApplicationRemainingSpecies = vi.mocked(fetchApplicationRemaini
 const mockedFetchApplicationEndUsesForSpeciesRegion = vi.mocked(
   fetchApplicationEndUsesForSpeciesRegion,
 )
+const mockedFetchApplicationSummarySnapshot = vi.mocked(fetchApplicationSummarySnapshot)
 const mockedFetchOfferApplicationDetails = vi.mocked(fetchOfferApplicationDetails)
 const mockedFetchOfferApplicationVolume = vi.mocked(fetchOfferApplicationVolume)
 const mockedFetchOfferClientData = vi.mocked(fetchOfferClientData)
@@ -120,6 +124,38 @@ const successfulCreate = (createdId: string): CreateSubmissionResult => ({
   createdId,
   errors: [],
   warnings: [],
+})
+
+const applicationSummarySnapshot = (
+  overrides: Partial<ApplicationSummarySnapshot> = {},
+): ApplicationSummarySnapshot => ({
+  applicationNumber: '321',
+  federalApplicationNumber: '',
+  applicationDate: '2026-01-01',
+  termDays: '180',
+  receivedDate: '2026-01-01',
+  applicationVolume: '250.5',
+  averageLogVolume: '1.2',
+  productLocation: 'Camp',
+  exportScheduleId: '',
+  agentClientNumber: '',
+  agentClientLocationCode: '',
+  ownerClientNumber: '00011111',
+  ownerClientLocationCode: '00',
+  exemptionNumber: '',
+  exemptionReasonCode: 'U',
+  applicationStatusCode: 'APP',
+  applicantTypeCode: 'O',
+  orgUnitNumber: '1903',
+  productTypeCode: 'H',
+  jurisdictionCode: 'P',
+  growthTypeCode: 'O',
+  agentContactName: '',
+  ownerContactName: 'Owner Contact',
+  oicIndicator: 'N',
+  endUseCode: 'SA',
+  speciesCodes: ['HE'],
+  ...overrides,
 })
 
 const chooseComboBoxOption = async (combobox: HTMLElement, optionName: string) => {
@@ -141,6 +177,10 @@ const clearComboBox = async (combobox: HTMLElement) => {
 }
 
 const selectApplicationCreateTab = async (name: string) => {
+  await userEvent.click(await screen.findByRole('tab', { name }))
+}
+
+const selectExemptionCreateTab = async (name: string) => {
   await userEvent.click(await screen.findByRole('tab', { name }))
 }
 
@@ -190,6 +230,9 @@ describe('Create Page Core Flows', () => {
       expiryDate: '2026-06-30',
       applicationNumbers,
     }))
+    mockedFetchApplicationSummarySnapshot.mockImplementation(async (applicationNumber) =>
+      applicationSummarySnapshot({ applicationNumber }),
+    )
     mockedFetchApplicationClientLocations.mockResolvedValue([
       { locationCode: '00', locationName: '00', selected: false },
       { locationCode: '01', locationName: '01 - MAIN LOCATION', selected: false },
@@ -269,6 +312,37 @@ describe('Create Page Core Flows', () => {
         exemptionNumber: '',
       },
     ])
+  })
+
+  it('uses tab labels as accessible panel names without repeating them as headings', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/create?applicantType=A']}>
+        <Routes>
+          <Route
+            path="/provincial/application/create"
+            element={<ProvincialApplicationCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    for (const tabName of [
+      'Owner',
+      'Agent',
+      'Application',
+      'Items',
+      'Documents',
+      'Remarks',
+      'Offers',
+      'Review',
+    ]) {
+      await selectApplicationCreateTab(tabName)
+      const panelRegion = screen.getByRole('region', { name: tabName })
+      expect(panelRegion).toBeVisible()
+      expect(
+        within(panelRegion).queryByRole('heading', { level: 2, name: tabName }),
+      ).not.toBeInTheDocument()
+    }
   })
 
   it('submits provincial application prefilled form and navigates to details', async () => {
@@ -1709,6 +1783,19 @@ describe('Create Page Core Flows', () => {
 
     await screen.findByRole('heading', { level: 1, name: 'Create exemption' })
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+    expect(screen.getByRole('tab', { name: 'Owner' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Exemption details' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Applications' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Documents' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Permits' })).toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
+    await selectExemptionCreateTab('Owner')
+    await waitFor(() =>
+      expect(screen.getByRole('textbox', { name: 'Client number' })).toHaveValue('00011111'),
+    )
+    expect(screen.getByRole('textbox', { name: 'Applicant type' })).toHaveValue('Owner')
+    expect(screen.getByRole('textbox', { name: "I'm an agent" })).toHaveValue('No')
+    await selectExemptionCreateTab('Exemption details')
     const exemptionDetails = screen.getByRole('group', { name: 'Exemption details' })
     expect(exemptionDetails).toHaveClass('create-form-section')
     expect(exemptionDetails.querySelector('.legacy-search-grid')).toHaveClass('create-form-grid')
@@ -1730,10 +1817,7 @@ describe('Create Page Core Flows', () => {
     )
     expect(screen.queryByRole('group', { name: 'New exemption state' })).not.toBeInTheDocument()
     expect(screen.queryByRole('textbox', { name: /exemption number/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('textbox', { name: 'Client number' })).not.toBeInTheDocument()
-    expect(
-      screen.queryByRole('textbox', { name: 'Applicant client number' }),
-    ).not.toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Owner' })).toBeInTheDocument()
     await waitFor(() => expect(screen.getByLabelText('Approved volume (m³)')).toHaveValue('250.5'))
     expect(mockedFetchProvincialExemptionCreatePreview).toHaveBeenCalledWith(['321', '654'])
     await waitFor(() =>
@@ -1789,6 +1873,151 @@ describe('Create Page Core Flows', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/provincial/exemption/EX-777')
   }, 20_000)
 
+  it('shows the legacy Agent tab only when the selected application is agent-backed', async () => {
+    mockedFetchApplicationSummarySnapshot.mockResolvedValueOnce(
+      applicationSummarySnapshot({
+        applicantTypeCode: 'A',
+        agentClientNumber: '00002176',
+        agentClientLocationCode: '01',
+        agentContactName: 'Agent Contact',
+      }),
+    )
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/create?applications=321']}>
+        <Routes>
+          <Route path="/provincial/exemption/create" element={<ProvincialExemptionCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { level: 1, name: 'Create exemption' })
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Agent' })).toBeInTheDocument())
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
+      'Owner',
+      'Agent',
+      'Exemption details',
+      'Applications',
+      'Documents',
+      'Permits',
+    ])
+
+    await selectExemptionCreateTab('Agent')
+    await waitFor(() =>
+      expect(screen.getByRole('textbox', { name: 'Agent number' })).toHaveValue('00002176'),
+    )
+    expect(screen.getByRole('textbox', { name: 'Contact name' })).toHaveValue('Agent Contact')
+    await selectExemptionCreateTab('Owner')
+    expect(screen.getByRole('textbox', { name: "I'm an agent" })).toHaveValue('Yes')
+  })
+
+  it.each(['654', '321'])(
+    'clears owner context when the selected application changes to %s and ignores delayed results',
+    async (nextApplicationNumber) => {
+      let resolveFirstSnapshot: (snapshot: ApplicationSummarySnapshot) => void = () => undefined
+      let resolveSecondSnapshot: (snapshot: ApplicationSummarySnapshot) => void = () => undefined
+      const firstSnapshot = new Promise<ApplicationSummarySnapshot>((resolve) => {
+        resolveFirstSnapshot = resolve
+      })
+      const secondSnapshot = new Promise<ApplicationSummarySnapshot>((resolve) => {
+        resolveSecondSnapshot = resolve
+      })
+      const snapshots = [firstSnapshot, secondSnapshot]
+      mockedFetchApplicationSummarySnapshot.mockImplementation(
+        () => snapshots.shift() ?? Promise.resolve(applicationSummarySnapshot()),
+      )
+
+      render(
+        <MemoryRouter initialEntries={['/provincial/exemption/create?applications=321']}>
+          <Routes>
+            <Route
+              path="/provincial/exemption/create"
+              element={<ProvincialExemptionCreatePage />}
+            />
+          </Routes>
+        </MemoryRouter>,
+      )
+
+      await screen.findByRole('heading', { level: 1, name: 'Create exemption' })
+      await waitFor(() => expect(mockedFetchApplicationSummarySnapshot).toHaveBeenCalledWith('321'))
+      expect(screen.getByRole('textbox', { name: 'Client number' })).toHaveValue('')
+      expect(screen.getByText('Loading owner details…')).toBeInTheDocument()
+
+      await selectExemptionCreateTab('Applications')
+      const selectedApplications = screen.getByRole('list', { name: 'Selected applications' })
+      await userEvent.click(
+        within(selectedApplications).getByRole('button', {
+          name: 'Remove application 321',
+        }),
+      )
+      await selectExemptionCreateTab('Owner')
+      expect(screen.getByRole('textbox', { name: 'Client number' })).toHaveValue('')
+      expect(
+        screen.getByText(/A standalone Ministerial exemption has no linked owner details/),
+      ).toBeInTheDocument()
+
+      await selectExemptionCreateTab('Applications')
+      const applicationNumber = screen.getByRole('combobox', {
+        name: 'Application number (optional)',
+      })
+      fireEvent.change(applicationNumber, { target: { value: nextApplicationNumber } })
+      await userEvent.click(screen.getByRole('button', { name: 'Add application' }))
+      await waitFor(() => expect(mockedFetchApplicationSummarySnapshot).toHaveBeenCalledTimes(2))
+      expect(mockedFetchApplicationSummarySnapshot).toHaveBeenLastCalledWith(nextApplicationNumber)
+
+      await selectExemptionCreateTab('Owner')
+      expect(screen.getByRole('textbox', { name: 'Client number' })).toHaveValue('')
+      expect(screen.getByText('Loading owner details…')).toBeInTheDocument()
+
+      await act(async () => {
+        resolveFirstSnapshot(
+          applicationSummarySnapshot({
+            applicationNumber: '321',
+            ownerClientNumber: '00011111',
+          }),
+        )
+      })
+      expect(screen.getByRole('textbox', { name: 'Client number' })).toHaveValue('')
+      expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
+
+      await act(async () => {
+        resolveSecondSnapshot(
+          applicationSummarySnapshot({
+            applicationNumber: nextApplicationNumber,
+            ownerClientNumber: '00022222',
+          }),
+        )
+      })
+      await waitFor(() =>
+        expect(screen.getByRole('textbox', { name: 'Client number' })).toHaveValue('00022222'),
+      )
+      expect(screen.getByRole('textbox', { name: 'Client number' })).not.toHaveValue('00011111')
+    },
+  )
+
+  it('returns to Exemption details when saving from another tab reveals validation errors', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/create']}>
+        <Routes>
+          <Route path="/provincial/exemption/create" element={<ProvincialExemptionCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { level: 1, name: 'Create exemption' })
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled())
+    await selectExemptionCreateTab('Permits')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() =>
+      expect(screen.getByRole('tab', { name: 'Exemption details' })).toHaveAttribute(
+        'aria-selected',
+        'true',
+      ),
+    )
+    expect(screen.getAllByText('Approved volume is required.').length).toBeGreaterThan(0)
+  })
+
   it('displays every application selected from provincial search', async () => {
     render(
       <MemoryRouter
@@ -1810,6 +2039,7 @@ describe('Create Page Core Flows', () => {
     )
 
     await screen.findByRole('heading', { level: 1, name: 'Create exemption' })
+    await selectExemptionCreateTab('Applications')
 
     const selectedApplications = screen.getByRole('list', { name: 'Selected applications' })
     expect(within(selectedApplications).getByText('321')).toBeInTheDocument()
@@ -1831,6 +2061,7 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
+    await selectExemptionCreateTab('Applications')
     const applicationNumber = await screen.findByRole('combobox', {
       name: 'Application number (optional)',
     })
@@ -1901,6 +2132,7 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
+    await selectExemptionCreateTab('Applications')
     const applicationNumber = await screen.findByRole('combobox', {
       name: 'Application number (optional)',
     })
@@ -1924,9 +2156,11 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
+    await selectExemptionCreateTab('Applications')
     expect(
       await screen.findByRole('combobox', { name: 'Application number (optional)' }),
     ).toBeInTheDocument()
+    await selectExemptionCreateTab('Exemption details')
     await waitFor(() =>
       expect(screen.getByRole('combobox', { name: 'Exemption type' })).toHaveValue('Ministerial'),
     )
@@ -1965,6 +2199,7 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
+    await selectExemptionCreateTab('Exemption details')
     await chooseComboBoxOption(
       await screen.findByRole('combobox', { name: 'Exemption type' }),
       'Order in Council',
@@ -1974,9 +2209,19 @@ describe('Create Page Core Flows', () => {
     expect(screen.getByRole('combobox', { name: 'Exemption status' })).toBeDisabled()
     expect(screen.getByLabelText('Approval date (YYYY-MM-DD)')).toBeEnabled()
     expect(screen.getByLabelText('Exemption number')).toHaveAttribute('maxlength', '8')
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
+      'Exemption details',
+      'Applications',
+      'Documents',
+      'Permits',
+    ])
+    expect(screen.queryByRole('tab', { name: 'Owner' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
+    await selectExemptionCreateTab('Applications')
     expect(
       screen.getByRole('combobox', { name: 'Application number (optional)' }),
     ).toBeInTheDocument()
+    await selectExemptionCreateTab('Exemption details')
     expect(screen.getByLabelText('Enable fee rate override')).toBeInTheDocument()
   })
 
@@ -1989,6 +2234,7 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
+    await selectExemptionCreateTab('Exemption details')
     await chooseComboBoxOption(
       await screen.findByRole('combobox', { name: 'Exemption type' }),
       'Order in Council',
@@ -2028,6 +2274,7 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
+    await selectExemptionCreateTab('Exemption details')
     await chooseComboBoxOption(
       await screen.findByRole('combobox', { name: 'Exemption type' }),
       'Blanket OIC',
@@ -2068,6 +2315,39 @@ describe('Create Page Core Flows', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/provincial/exemption/BOIC-1')
   })
 
+  it('clears a pending application number when switching to Blanket OIC', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/create']}>
+        <Routes>
+          <Route path="/provincial/exemption/create" element={<ProvincialExemptionCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectExemptionCreateTab('Applications')
+    const applicationNumber = await screen.findByRole('combobox', {
+      name: 'Application number (optional)',
+    })
+    fireEvent.change(applicationNumber, { target: { value: '321' } })
+    expect(applicationNumber).toHaveDisplayValue(/^321(?:$| - )/)
+
+    await selectExemptionCreateTab('Exemption details')
+    await chooseComboBoxOption(
+      await screen.findByRole('combobox', { name: 'Exemption type' }),
+      'Blanket OIC',
+    )
+
+    expect(
+      screen.queryByRole('combobox', { name: 'Application number (optional)' }),
+    ).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(
+      screen.queryByText('Add or clear the pending application number before saving.'),
+    ).not.toBeInTheDocument()
+    expect(screen.getByText('Validation error')).toBeInTheDocument()
+    expect(mockedSubmitProvincialExemptionCreate).not.toHaveBeenCalled()
+  })
+
   it('preserves operator volume and clears only the Blanket OIC sentinel', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/exemption/create']}>
@@ -2077,6 +2357,7 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
+    await selectExemptionCreateTab('Exemption details')
     const typeSelect = await screen.findByRole('combobox', { name: 'Exemption type' })
     const volumeInput = screen.getByLabelText('Approved volume (m³)')
     await userEvent.type(volumeInput, '125.5')
@@ -2101,11 +2382,17 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
+    await selectExemptionCreateTab('Exemption details')
     await chooseComboBoxOption(
       await screen.findByRole('combobox', { name: 'Exemption type' }),
       'Order in Council',
     )
-    fireEvent.change(screen.getByLabelText('Exemption number'), { target: { value: 'OIC-12345' } })
+    const exemptionNumber = screen.getByLabelText('Exemption number')
+    fireEvent.change(exemptionNumber, { target: { value: 'OIC-12345' } })
+    fireEvent.blur(exemptionNumber)
+    expect(
+      screen.queryByText('Exemption number must be 8 characters or fewer.'),
+    ).not.toBeInTheDocument()
     await userEvent.type(screen.getByLabelText('Approval date (YYYY-MM-DD)'), '2026-07-01')
     await userEvent.type(screen.getByLabelText('Expiry date (YYYY-MM-DD)'), '2027-07-01')
     await userEvent.type(screen.getByLabelText('Approved volume (m³)'), '250.5')
@@ -2115,6 +2402,35 @@ describe('Create Page Core Flows', () => {
       await screen.findAllByText('Exemption number must be 8 characters or fewer.'),
     ).not.toHaveLength(0)
     expect(mockedSubmitProvincialExemptionCreate).not.toHaveBeenCalled()
+  })
+
+  it('shows application-number validation only after Add application is selected', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/create']}>
+        <Routes>
+          <Route path="/provincial/exemption/create" element={<ProvincialExemptionCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectExemptionCreateTab('Applications')
+    const applicationNumber = await screen.findByRole('combobox', {
+      name: 'Application number (optional)',
+    })
+    fireEvent.change(applicationNumber, { target: { value: 'not-a-number' } })
+    fireEvent.blur(applicationNumber)
+
+    expect(
+      screen.queryByText('Application number must be a positive whole number.'),
+    ).not.toBeInTheDocument()
+
+    const addApplication = screen.getByRole('button', { name: 'Add application' })
+    await waitFor(() => expect(addApplication).toBeEnabled())
+    await userEvent.click(addApplication)
+
+    expect(
+      await screen.findByText('Application number must be a positive whole number.'),
+    ).toBeInTheDocument()
   })
 
   it('keeps save disabled after unavailable option warning is dismissed', async () => {
@@ -2179,12 +2495,14 @@ describe('Create Page Core Flows', () => {
     )
 
     await screen.findByRole('heading', { level: 1, name: 'Create exemption' })
+    await selectExemptionCreateTab('Applications')
     expect(
       screen.getByText('Enter exemption details for the selected federal applications.'),
     ).toBeInTheDocument()
     expect(screen.getByLabelText('Selected application numbers')).toHaveValue('301\n302')
     expect(screen.queryByLabelText('Application number')).not.toBeInTheDocument()
 
+    await selectExemptionCreateTab('Exemption details')
     await waitFor(() => expect(screen.getByLabelText('Approved volume (m³)')).toHaveValue('250.5'))
 
     await chooseComboBoxOption(
@@ -2293,6 +2611,7 @@ describe('Create Page Core Flows', () => {
         </MemoryRouter>,
       )
 
+      await selectExemptionCreateTab('Exemption details')
       const typeSelect = await screen.findByRole('combobox', { name: 'Exemption type' })
       await userEvent.click(typeSelect)
 
@@ -2319,6 +2638,7 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
+    await selectExemptionCreateTab('Exemption details')
     const typeSelect = await screen.findByRole('combobox', { name: 'Exemption type' })
     await userEvent.click(typeSelect)
 
@@ -2339,6 +2659,7 @@ describe('Create Page Core Flows', () => {
     )
 
     await screen.findByRole('heading', { level: 1, name: 'Create exemption' })
+    await selectExemptionCreateTab('Exemption details')
     await chooseComboBoxOption(
       screen.getByRole('combobox', { name: 'Exemption type' }),
       'Section 1',
@@ -2366,6 +2687,7 @@ describe('Create Page Core Flows', () => {
     )
 
     await screen.findByRole('heading', { level: 1, name: 'Create exemption' })
+    await selectExemptionCreateTab('Exemption details')
     await chooseComboBoxOption(
       screen.getByRole('combobox', { name: 'Exemption type' }),
       'Section 1',
@@ -2392,6 +2714,7 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
+    await selectExemptionCreateTab('Exemption details')
     await chooseComboBoxOption(
       await screen.findByRole('combobox', { name: 'Exemption type' }),
       'Section 1',
@@ -2436,6 +2759,7 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
+    await selectExemptionCreateTab('Exemption details')
     await chooseComboBoxOption(
       await screen.findByRole('combobox', { name: 'Exemption type' }),
       'Section 1',
@@ -2460,6 +2784,7 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
+    await selectExemptionCreateTab('Exemption details')
     await userEvent.type(await screen.findByLabelText('Approved volume (m³)'), '9999999.99')
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 

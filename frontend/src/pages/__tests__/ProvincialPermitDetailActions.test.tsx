@@ -2455,8 +2455,25 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
 
     await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
-    expect(screen.getByLabelText('Submit date')).toHaveValue('2026-04-10')
-    expect(screen.getByLabelText('Submit date')).toBeDisabled()
+    const submitDate = screen.getByLabelText('Submit date')
+    const issueDate = screen.getByLabelText('Issue date')
+    const expiryDate = screen.getByLabelText('Expiry date')
+    expect(submitDate).toHaveValue('2026-04-10')
+    expect(submitDate).toBeDisabled()
+    expect(submitDate).not.toHaveAttribute('aria-required')
+    expect(
+      document.querySelector('label[for="permit-permitSubmitDate"] .required-label__marker'),
+    ).not.toBeInTheDocument()
+    expect(issueDate).toBeDisabled()
+    expect(issueDate).not.toHaveAttribute('aria-required')
+    expect(
+      document.querySelector('label[for="permit-permitIssueDate"] .required-label__marker'),
+    ).not.toBeInTheDocument()
+    expect(expiryDate).toBeEnabled()
+    expect(expiryDate).toHaveAttribute('aria-required', 'true')
+    expect(
+      document.querySelector('label[for="permit-permitExpiryDate"] .required-label__marker'),
+    ).toBeInTheDocument()
     const permitStatusSelect = screen.getByLabelText('Permit status')
     expect(permitStatusSelect).toHaveValue('COM')
     expect(within(permitStatusSelect).getByRole('option', { name: /Active/ })).toBeInTheDocument()
@@ -2492,6 +2509,130 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
     expect(await screen.findByText('The permit was updated successfully.')).toBeInTheDocument()
     expect(screen.getAllByText('Active').length).toBeGreaterThan(0)
+  })
+
+  it('allows a completed permit with a missing legacy submit date to be saved', async () => {
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      applicationDate: null,
+    })
+    renderPermitDetails()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    expect(screen.getByLabelText('Submit date')).toHaveValue('')
+    expect(screen.getByLabelText('Submit date')).toBeDisabled()
+    expect(screen.getByLabelText('Submit date')).not.toHaveAttribute('aria-required')
+    await userEvent.clear(screen.getByLabelText('Remarks'))
+    await userEvent.type(screen.getByLabelText('Remarks'), 'updated legacy remarks')
+    await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
+
+    await waitFor(() => {
+      expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          permitStatus: 'COM',
+          permitSubmitDate: '',
+          permitRemarks: 'updated legacy remarks',
+        }),
+      )
+    })
+  })
+
+  it('preserves existing normal permit dates when submitted dates are blank', async () => {
+    configureActivePermit()
+    renderPermitDetails()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    await userEvent.clear(screen.getByLabelText('Submit date'))
+    await userEvent.clear(screen.getByLabelText('Issue date'))
+    await userEvent.clear(screen.getByLabelText('Expiry date'))
+    await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
+
+    await waitFor(() => {
+      expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          permitStatus: 'ACT',
+          permitSubmitDate: '',
+          permitIssueDate: '',
+          permitExpiryDate: '',
+        }),
+      )
+    })
+    await userEvent.click(screen.getByRole('button', { name: 'Edit permit' }))
+    expect(screen.getByLabelText('Submit date')).toHaveValue(permitDetail.applicationDate ?? '')
+    expect(screen.getByLabelText('Issue date')).toHaveValue(permitDetail.issueDate ?? '')
+    expect(screen.getByLabelText('Expiry date')).toHaveValue(permitDetail.expiryDate ?? '')
+  })
+
+  it('preserves existing Blanket OIC dates when submitted dates are blank during an active-to-cancelled transition', async () => {
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      permitStatusCode: 'ACT',
+      permitStatusDescription: 'Active',
+      blanketOic: true,
+    })
+    renderPermitDetails()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    await userEvent.selectOptions(screen.getByLabelText('Permit status'), 'CAN')
+    await userEvent.clear(screen.getByLabelText('Issue date'))
+    await userEvent.clear(screen.getByLabelText('Expiry date'))
+    await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
+
+    await waitFor(() => {
+      expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          permitStatus: 'CAN',
+          permitIssueDate: '',
+          permitExpiryDate: '',
+        }),
+      )
+    })
+    await userEvent.click(screen.getByRole('button', { name: 'Edit permit' }))
+    expect(screen.getByLabelText('Issue date')).toHaveValue(permitDetail.issueDate ?? '')
+    expect(screen.getByLabelText('Expiry date')).toHaveValue(permitDetail.expiryDate ?? '')
+  })
+
+  it('clears blank dates when an active Blanket OIC permit remains active', async () => {
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      permitStatusCode: 'ACT',
+      permitStatusDescription: 'Active',
+      blanketOic: true,
+    })
+    renderPermitDetails()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    expect(screen.getByLabelText('Submit date')).not.toHaveAttribute('aria-required')
+    expect(screen.getByLabelText('Issue date')).not.toHaveAttribute('aria-required')
+    expect(screen.getByLabelText('Expiry date')).not.toHaveAttribute('aria-required')
+    expect(
+      document.querySelector('label[for="permit-permitSubmitDate"] .required-label__marker'),
+    ).not.toBeInTheDocument()
+    expect(
+      document.querySelector('label[for="permit-permitIssueDate"] .required-label__marker'),
+    ).not.toBeInTheDocument()
+    expect(
+      document.querySelector('label[for="permit-permitExpiryDate"] .required-label__marker'),
+    ).not.toBeInTheDocument()
+    await userEvent.clear(screen.getByLabelText('Submit date'))
+    await userEvent.clear(screen.getByLabelText('Issue date'))
+    await userEvent.clear(screen.getByLabelText('Expiry date'))
+    await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
+
+    await waitFor(() => {
+      expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          permitStatus: 'ACT',
+          permitSubmitDate: '',
+          permitIssueDate: '',
+          permitExpiryDate: '',
+        }),
+      )
+    })
+    await userEvent.click(screen.getByRole('button', { name: 'Edit permit' }))
+    expect(screen.getByLabelText('Submit date')).toHaveValue(permitDetail.applicationDate ?? '')
+    expect(screen.getByLabelText('Issue date')).toHaveValue('')
+    expect(screen.getByLabelText('Expiry date')).toHaveValue('')
   })
 
   it('submits the confirmed full owner client number when editing a permit', async () => {
@@ -2891,7 +3032,60 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(within(financialTile as HTMLElement).getByText('125.75')).toBeInTheDocument()
   })
 
-  it('saves Blanket OIC request ceilings with the legacy mutation field names', async () => {
+  it.each([
+    ['populated', '250', '999999999'],
+    ['zero', '0', '0'],
+  ])(
+    'saves %s active Blanket OIC request ceilings with the legacy mutation field names',
+    async (_description, pieces, volume) => {
+      mockedFetchProvincialPermitDetail.mockResolvedValue({
+        ...permitDetail,
+        permitStatusCode: 'ACT',
+        permitStatusDescription: 'Active',
+        blanketOic: true,
+        oicRequestPieces: 200,
+        oicRequestVolume: 120.5,
+      })
+      renderPermitDetails()
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+      expect(screen.getByLabelText('Exemption number')).toBeDisabled()
+      expect(screen.getByLabelText('Submit date')).toBeEnabled()
+      expect(screen.getByLabelText('Received date')).toBeDisabled()
+      expect(screen.getByLabelText('Current permit volume (m³)')).toBeDisabled()
+      expect(screen.getByLabelText('Current permit pieces')).toBeDisabled()
+      expect(screen.getByLabelText('Permit Request Pieces')).not.toHaveAttribute('aria-required')
+      expect(screen.getByLabelText('Permit Request Volume (m³)')).not.toHaveAttribute(
+        'aria-required',
+      )
+      expect(
+        document.querySelector('label[for="permit-oicPermitTotalPieces"] .required-label__marker'),
+      ).not.toBeInTheDocument()
+      expect(
+        document.querySelector('label[for="permit-oicPermitTotalVolume"] .required-label__marker'),
+      ).not.toBeInTheDocument()
+      await userEvent.clear(screen.getByLabelText('Permit Request Pieces'))
+      if (pieces) {
+        await userEvent.type(screen.getByLabelText('Permit Request Pieces'), pieces)
+      }
+      await userEvent.clear(screen.getByLabelText('Permit Request Volume (m³)'))
+      if (volume) {
+        await userEvent.type(screen.getByLabelText('Permit Request Volume (m³)'), volume)
+      }
+      await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
+
+      await waitFor(() => {
+        expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
+          expect.objectContaining({
+            oicPermitTotalPieces: pieces,
+            oicPermitTotalVolume: volume,
+          }),
+        )
+      })
+    },
+  )
+
+  it('normalizes cleared active Blanket OIC request ceilings to zero', async () => {
     mockedFetchProvincialPermitDetail.mockResolvedValue({
       ...permitDetail,
       permitStatusCode: 'ACT',
@@ -2903,33 +3097,85 @@ describe('Provincial Permit Detail Action Smoke', () => {
     renderPermitDetails()
 
     await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
-    expect(screen.getByLabelText('Exemption number')).toBeDisabled()
-    expect(screen.getByLabelText('Submit date')).toBeEnabled()
-    expect(screen.getByLabelText('Received date')).toBeDisabled()
-    expect(screen.getByLabelText('Current permit volume (m³)')).toBeDisabled()
-    expect(screen.getByLabelText('Current permit pieces')).toBeDisabled()
-    expect(screen.getByLabelText('Permit Request Pieces')).toHaveAttribute('aria-required', 'true')
-    expect(screen.getByLabelText('Permit Request Volume (m³)')).toHaveAttribute(
-      'aria-required',
-      'true',
-    )
-    expect(
-      document.querySelector('label[for="permit-oicPermitTotalPieces"] .required-label__marker'),
-    ).toBeInTheDocument()
-    expect(
-      document.querySelector('label[for="permit-oicPermitTotalVolume"] .required-label__marker'),
-    ).toBeInTheDocument()
     await userEvent.clear(screen.getByLabelText('Permit Request Pieces'))
-    await userEvent.type(screen.getByLabelText('Permit Request Pieces'), '250')
     await userEvent.clear(screen.getByLabelText('Permit Request Volume (m³)'))
-    await userEvent.type(screen.getByLabelText('Permit Request Volume (m³)'), '999999999')
     await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
 
     await waitFor(() => {
       expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
         expect.objectContaining({
-          oicPermitTotalPieces: '250',
-          oicPermitTotalVolume: '999999999',
+          oicPermitTotalPieces: '0',
+          oicPermitTotalVolume: '0',
+        }),
+      )
+    })
+    const financialTile = (
+      await screen.findByRole('heading', { name: 'Financial and volume' })
+    ).closest('.cds--tile')
+    expect(financialTile).toBeTruthy()
+    const requestPiecesLabel = within(financialTile as HTMLElement).getByText(
+      'Permit Request Pieces',
+    )
+    expect(
+      within(requestPiecesLabel.closest('.detail-field-item') as HTMLElement).getByText('0'),
+    ).toBeInTheDocument()
+    const requestVolumeLabel = within(financialTile as HTMLElement).getByText(
+      'Permit Request Volume (m³)',
+    )
+    expect(
+      within(requestVolumeLabel.closest('.detail-field-item') as HTMLElement).getByText('0'),
+    ).toBeInTheDocument()
+  })
+
+  it('normalizes cleared Blanket OIC request ceilings when cancelling an active permit', async () => {
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      permitStatusCode: 'ACT',
+      permitStatusDescription: 'Active',
+      blanketOic: true,
+      oicRequestPieces: 200,
+      oicRequestVolume: 120.5,
+    })
+    renderPermitDetails()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    await userEvent.selectOptions(screen.getByLabelText('Permit status'), 'CAN')
+    expect(screen.getByLabelText('Permit Request Pieces')).not.toHaveAttribute('aria-required')
+    expect(screen.getByLabelText('Permit Request Volume (m³)')).not.toHaveAttribute('aria-required')
+    await userEvent.clear(screen.getByLabelText('Permit Request Pieces'))
+    await userEvent.clear(screen.getByLabelText('Permit Request Volume (m³)'))
+    await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
+
+    await waitFor(() => {
+      expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          permitStatus: 'CAN',
+          oicPermitTotalPieces: '0',
+          oicPermitTotalVolume: '0',
+        }),
+      )
+    })
+  })
+
+  it('preserves blank request ceilings on an active Blanket OIC draft', async () => {
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      permitStatusCode: 'ACT',
+      permitStatusDescription: 'Active',
+      blanketOic: true,
+      oicRequestPieces: null,
+      oicRequestVolume: null,
+    })
+    renderPermitDetails()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
+
+    await waitFor(() => {
+      expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          oicPermitTotalPieces: '',
+          oicPermitTotalVolume: '',
         }),
       )
     })
@@ -2948,14 +3194,15 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
     await userEvent.clear(screen.getByLabelText('Permit Request Pieces'))
-    await userEvent.type(screen.getByLabelText('Permit Request Pieces'), '0')
+    await userEvent.type(screen.getByLabelText('Permit Request Pieces'), '-1')
     await userEvent.clear(screen.getByLabelText('Permit Request Volume (m³)'))
-    await userEvent.type(screen.getByLabelText('Permit Request Volume (m³)'), '0')
+    await userEvent.type(screen.getByLabelText('Permit Request Volume (m³)'), '-1')
     await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
 
     expect(
-      (await screen.findAllByText('Use a positive numeric value.')).length,
+      (await screen.findAllByText('Permit Request Pieces must be a whole number.')).length,
     ).toBeGreaterThanOrEqual(2)
+    expect(await screen.findByText('Permit Request Volume must be numeric.')).toBeInTheDocument()
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
 
     await userEvent.clear(screen.getByLabelText('Permit Request Pieces'))
@@ -2983,6 +3230,133 @@ describe('Provincial Permit Detail Action Smoke', () => {
     ).toBeGreaterThanOrEqual(1)
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
   })
+
+  it('requires positive Blanket OIC request ceilings when completing a permit', async () => {
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      permitStatusCode: 'ACT',
+      permitStatusDescription: 'Active',
+      blanketOic: true,
+      oicRequestPieces: 200,
+      oicRequestVolume: 120.5,
+    })
+    renderPermitDetails()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    await userEvent.selectOptions(screen.getByLabelText('Permit status'), 'COM')
+    expect(screen.getByLabelText('Permit Request Pieces')).toHaveAttribute('aria-required', 'true')
+    expect(screen.getByLabelText('Permit Request Volume (m³)')).toHaveAttribute(
+      'aria-required',
+      'true',
+    )
+    expect(
+      document.querySelector('label[for="permit-oicPermitTotalPieces"] .required-label__marker'),
+    ).toBeInTheDocument()
+    expect(
+      document.querySelector('label[for="permit-oicPermitTotalVolume"] .required-label__marker'),
+    ).toBeInTheDocument()
+    await userEvent.clear(screen.getByLabelText('Permit Request Pieces'))
+    await userEvent.type(screen.getByLabelText('Permit Request Pieces'), '0')
+    await userEvent.clear(screen.getByLabelText('Permit Request Volume (m³)'))
+    await userEvent.type(screen.getByLabelText('Permit Request Volume (m³)'), '0')
+    await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
+
+    expect(
+      (await screen.findAllByText('Use a positive numeric value.')).length,
+    ).toBeGreaterThanOrEqual(2)
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['normal', false],
+    ['Blanket OIC', true],
+  ])(
+    'requires submit, issue, and expiry dates before completing a %s permit',
+    async (_description, blanketOic) => {
+      mockedFetchProvincialPermitDetail.mockResolvedValue({
+        ...permitDetail,
+        permitStatusCode: 'ACT',
+        permitStatusDescription: 'Active',
+        exemptionTypeDescription: blanketOic ? 'Blanket OIC' : 'Standard exemption',
+        blanketOic,
+        applicationDate: blanketOic ? permitDetail.applicationDate : null,
+        issueDate: blanketOic ? null : permitDetail.issueDate,
+        expiryDate: blanketOic ? null : permitDetail.expiryDate,
+        oicApplicationNumber: blanketOic ? 1000999 : null,
+        oicRequestPieces: blanketOic ? 200 : null,
+        oicRequestVolume: blanketOic ? 120.5 : null,
+      })
+      mockedFetchProvincialPermitExemptionContext.mockResolvedValue({
+        approvedExemptionVolume: permitDetail.approvedExemptionVolume,
+        exemptionVolumeRemaining: permitDetail.exemptionVolumeRemaining,
+        exemptionTypeDescription: blanketOic ? 'Blanket OIC' : 'Standard exemption',
+        blanketOic,
+      })
+      renderPermitDetails()
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+      await userEvent.selectOptions(screen.getByLabelText('Permit status'), 'COM')
+
+      const submitDate = screen.getByLabelText('Submit date')
+      const issueDate = screen.getByLabelText('Issue date')
+      const expiryDate = screen.getByLabelText('Expiry date')
+      expect(submitDate).toHaveValue(blanketOic ? (permitDetail.applicationDate ?? '') : '')
+      expect(issueDate).toHaveValue(blanketOic ? '' : (permitDetail.issueDate ?? ''))
+      expect(expiryDate).toHaveValue(blanketOic ? '' : (permitDetail.expiryDate ?? ''))
+      expect(submitDate).toHaveAttribute('aria-required', 'true')
+      expect(issueDate).toHaveAttribute('aria-required', 'true')
+      expect(expiryDate).toHaveAttribute('aria-required', 'true')
+      expect(
+        document.querySelector('label[for="permit-permitSubmitDate"] .required-label__marker'),
+      ).toBeInTheDocument()
+      expect(
+        document.querySelector('label[for="permit-permitIssueDate"] .required-label__marker'),
+      ).toBeInTheDocument()
+      expect(
+        document.querySelector('label[for="permit-permitExpiryDate"] .required-label__marker'),
+      ).toBeInTheDocument()
+
+      await userEvent.clear(submitDate)
+      await userEvent.clear(issueDate)
+      await userEvent.tab()
+      expect(await screen.findByText('Issue date is required.')).toBeInTheDocument()
+      await userEvent.clear(expiryDate)
+      await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
+
+      expect(await screen.findByText('Submit date is required.')).toBeInTheDocument()
+      expect(await screen.findByText('Expiry date is required.')).toBeInTheDocument()
+      expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+
+      await userEvent.selectOptions(screen.getByLabelText('Permit status'), 'ACT')
+      expect(submitDate).not.toHaveAttribute('aria-required')
+      expect(issueDate).not.toHaveAttribute('aria-required')
+      expect(expiryDate).not.toHaveAttribute('aria-required')
+      expect(
+        document.querySelector('label[for="permit-permitSubmitDate"] .required-label__marker'),
+      ).not.toBeInTheDocument()
+      expect(
+        document.querySelector('label[for="permit-permitIssueDate"] .required-label__marker'),
+      ).not.toBeInTheDocument()
+      expect(
+        document.querySelector('label[for="permit-permitExpiryDate"] .required-label__marker'),
+      ).not.toBeInTheDocument()
+      expect(submitDate).not.toHaveAttribute('aria-invalid', 'true')
+      expect(issueDate).not.toHaveAttribute('aria-invalid', 'true')
+      expect(expiryDate).not.toHaveAttribute('aria-invalid', 'true')
+
+      await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
+      await waitFor(() => {
+        expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
+          expect.objectContaining({
+            permitStatus: 'ACT',
+            permitSubmitDate: '',
+            permitIssueDate: '',
+            permitExpiryDate: '',
+          }),
+        )
+      })
+    },
+  )
 
   it.each([
     ['COM', 'Completed'],

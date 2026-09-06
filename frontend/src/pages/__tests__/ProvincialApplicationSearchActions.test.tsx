@@ -70,6 +70,7 @@ const searchRowsWithMixedEligibility = [
     packageNumber: 'PKG-1',
     exemptionType: 'FEE',
     productTypeCode: 'LOG',
+    locked: false,
     allowCreateExemption: true,
   },
   {
@@ -84,6 +85,7 @@ const searchRowsWithMixedEligibility = [
     packageNumber: 'PKG-2',
     exemptionType: 'APP',
     productTypeCode: 'LUM',
+    locked: true,
     allowCreateExemption: false,
   },
 ]
@@ -164,7 +166,7 @@ describe('Provincial Application Search Actions', () => {
     const addApplicationAction = screen.getByRole('link', { name: 'Add application' })
     expect(addApplicationAction).toHaveAttribute('href', '/provincial/application/create')
     expect(addApplicationAction).toHaveClass('cds--btn--primary')
-    expect(addApplicationAction.closest('.legacy-search-table-toolbar__actions')).not.toBeNull()
+    expect(addApplicationAction.closest('.lexis-page-header__actions')).not.toBeNull()
 
     const ineligibleCheckbox = screen.getByRole('checkbox', { name: 'Select 654' })
     const ineligibleCheckboxTooltipTrigger = ineligibleCheckbox.closest(
@@ -194,6 +196,52 @@ describe('Provincial Application Search Actions', () => {
         ownerClientNumber: '22222222',
       },
     })
+  })
+
+  it.each([
+    {
+      applicationNumber: '777',
+      locked: true,
+      expected: 'This application is currently locked and cannot be selected.',
+    },
+    {
+      applicationNumber: '888',
+      locked: false,
+      expected:
+        'Eligible applications must be approved, have no existing exemption or active valid offer, and not have a future listing date unless they are standing timber.',
+    },
+  ])('explains why application $applicationNumber cannot be selected', async (rowState) => {
+    mockedSearchProvincialApplications.mockResolvedValue({
+      content: [
+        {
+          ...searchRowsWithMixedEligibility[0],
+          applicationNumber: rowState.applicationNumber,
+          exemptionNumber: '',
+          locked: rowState.locked,
+          allowCreateExemption: false,
+        },
+      ],
+      page: {
+        number: 0,
+        size: 10,
+        totalElements: 1,
+        totalPages: 1,
+      },
+    })
+
+    renderPage()
+    await screen.findByText(rowState.applicationNumber)
+
+    const checkbox = screen.getByRole('checkbox', {
+      name: `Select ${rowState.applicationNumber}`,
+    })
+    expect(checkbox).toBeDisabled()
+    const tooltipTrigger = checkbox.closest('.disabled-button-tooltip') as HTMLElement
+    expect(tooltipTrigger).toBeTruthy()
+
+    await userEvent.hover(tooltipTrigger)
+
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(rowState.expected)
   })
 
   it('paints application rows before the exact result count is available', async () => {
@@ -566,6 +614,9 @@ describe('Provincial Application Search Actions', () => {
       await screen.findByRole('combobox', { name: /^Region\s*Total items selected:\s*0/ }),
     ).toBeVisible()
     expect(mockedSearchProvincialApplications).not.toHaveBeenCalled()
+    const addApplicationAction = screen.getByRole('link', { name: 'Add application' })
+    expect(addApplicationAction).toHaveAttribute('href', '/provincial/application/create')
+    expect(addApplicationAction.closest('.lexis-page-header__actions')).not.toBeNull()
     const resultsTable = screen.getByRole('region', { name: 'Search results table', hidden: true })
     expect(resultsTable.closest('[hidden]')).toHaveStyle({ display: 'none' })
     expect(resultsTable).not.toBeVisible()

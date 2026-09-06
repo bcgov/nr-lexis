@@ -54,6 +54,12 @@ const EXPECTED_PROTECTED_ROUTE_ACCESS: RouteAccessExpectation[] = [
     requiredActionsMatch: 'all',
   },
   {
+    path: '/provincial/exemption/:exemptionNumber/permit/new',
+    requiredActions: ['createPermit', 'savePermit'],
+    requiredActionsMatch: 'all',
+    roleScope: 'provincial',
+  },
+  {
     path: '/provincial/offers/create',
     requiredActions: ['/offersSearch', 'createOffer'],
     requiredActionsMatch: 'all',

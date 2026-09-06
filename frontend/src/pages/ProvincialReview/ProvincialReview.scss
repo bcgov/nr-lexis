@@ -1,0 +1,18 @@
+.provincial-review-approval-modal__count {
+  margin: 0;
+  color: var(--cds-text-primary, #161616);
+  font-weight: 600;
+}
+
+.provincial-review-approval-modal__application-list {
+  max-block-size: 10rem;
+  margin: 0;
+  padding: 0.75rem 1rem 0.75rem 2rem;
+  overflow-y: auto;
+  border: 1px solid var(--cds-border-subtle, #c6c6c6);
+  background: var(--cds-layer, #fff);
+}
+
+.provincial-review-approval-modal__application-list li + li {
+  margin-block-start: 0.5rem;
+}

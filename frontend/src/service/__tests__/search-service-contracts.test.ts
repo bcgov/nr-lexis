@@ -202,6 +202,18 @@ describe('search-service contracts', () => {
             showCheckbox: true,
             locked: false,
           },
+          {
+            application: 102,
+            status: 'Approved',
+            client: '00012346',
+            ownerClientNumber: '00054322',
+            exemptionNumber: '',
+            listingDate: '2026-01-03',
+            region: '22',
+            applicationVolume: 41,
+            showCheckbox: true,
+            locked: true,
+          },
         ],
         total: 12,
         page: 1,
@@ -229,7 +241,15 @@ describe('search-service contracts', () => {
       expect.objectContaining({
         applicationNumber: '101',
         applicantClientNumber: '00012345',
+        locked: false,
         allowCreateExemption: true,
+      }),
+    )
+    expect(result.content[1]).toEqual(
+      expect.objectContaining({
+        applicationNumber: '102',
+        locked: true,
+        allowCreateExemption: false,
       }),
     )
   })

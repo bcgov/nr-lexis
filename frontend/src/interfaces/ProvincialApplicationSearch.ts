@@ -35,6 +35,7 @@ export type ProvincialApplicationSearchItem = {
   packageNumber: string
   exemptionType: string
   productTypeCode: string
+  locked: boolean
   allowCreateExemption: boolean
 }
 

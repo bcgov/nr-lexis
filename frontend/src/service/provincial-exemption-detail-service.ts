@@ -216,16 +216,6 @@ export const fetchExemptionEditContext = async (
   }
 }
 
-export const releaseExemptionEditLock = async (exemptionNumber: string): Promise<void> => {
-  try {
-    await apiService.getAxiosInstance().post('/lexis/rpc/exemption-details/release-lock', null, {
-      params: { exemptionNumber: exemptionNumber.trim() },
-    })
-  } catch {
-    // Compatibility cleanup only; record versions enforce save conflicts.
-  }
-}
-
 const parseLinkResult = (payload: unknown): ExemptionMutationResult => {
   const value = recordOrEmpty(payload)
   const success = asBoolean(value.success)

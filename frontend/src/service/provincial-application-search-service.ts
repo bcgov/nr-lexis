@@ -99,6 +99,7 @@ const parseBackendResponse = (payload: unknown): ProvincialApplicationSearchResp
     packageNumber: '',
     exemptionType: '',
     productTypeCode: '',
+    locked: Boolean(row.locked),
     allowCreateExemption: Boolean(row.showCheckbox) && !Boolean(row.locked),
   }))
 }

@@ -1887,6 +1887,145 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
+  void addPermitShouldAllowBlankDatesOnAnActiveBlanketOicDraft() {
+    stubPermitCreationExemption("BOIC-1", "B", "ACT", null, null);
+    when(repository.insertPermitDetail(any(PermitMutationRow.class), eq("idir\\jsmith")))
+        .thenAnswer(
+            invocation -> Optional.of(withPermitNumber(invocation.getArgument(0), 7000123L)));
+
+    PermitMutationRpcResponseDto response =
+        service.addPermit(
+            permitMutationRequest(
+                "BOIC-1", "00070001", "00070002", null, "ACT", "2026-05-27", "", ""),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<PermitMutationRow> permitCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository).insertPermitDetail(permitCaptor.capture(), eq("idir\\jsmith"));
+    assertThat(permitCaptor.getValue().applicationDate()).isEqualTo(LocalDate.of(2026, 5, 27));
+    assertThat(permitCaptor.getValue().permitIssueDate()).isNull();
+    assertThat(permitCaptor.getValue().expiryDate()).isNull();
+  }
+
+  @Test
+  void addPermitShouldDefaultBlanketOicGrowthTypeToOld() {
+    stubPermitCreationExemption("BOIC-1", "B", "ACT", null, null);
+    when(repository.insertPermitDetail(any(PermitMutationRow.class), eq("idir\\jsmith")))
+        .thenAnswer(
+            invocation -> Optional.of(withPermitNumber(invocation.getArgument(0), 7000123L)));
+
+    PermitMutationRpcResponseDto response =
+        service.addPermit(
+            permitMutationRequest(
+                "BOIC-1",
+                "00070001",
+                "00070002",
+                null,
+                "ACT",
+                "2026-05-27",
+                "",
+                "",
+                null,
+                null),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<PermitMutationRow> permitCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository).insertPermitDetail(permitCaptor.capture(), eq("idir\\jsmith"));
+    assertThat(permitCaptor.getValue().growthTypeCode()).isEqualTo("O");
+  }
+
+  @Test
+  void addPermitShouldAllowZeroBlanketOicRequestLimitsOnAnActiveDraft() {
+    stubPermitCreationExemption("BOIC-1", "B", "ACT", null, null);
+    when(repository.insertPermitDetail(any(PermitMutationRow.class), eq("idir\\jsmith")))
+        .thenAnswer(
+            invocation -> Optional.of(withPermitNumber(invocation.getArgument(0), 7000123L)));
+
+    PermitMutationRpcResponseDto response =
+        service.addPermit(
+            permitMutationRequest(
+                "BOIC-1",
+                "00070001",
+                "00070002",
+                null,
+                "ACT",
+                "2026-05-27",
+                "",
+                "",
+                null,
+                null,
+                "0",
+                "0"),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<PermitMutationRow> permitCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository).insertPermitDetail(permitCaptor.capture(), eq("idir\\jsmith"));
+    assertThat(permitCaptor.getValue().oicRequestPieces()).isZero();
+    assertThat(permitCaptor.getValue().oicRequestVolume()).isZero();
+  }
+
+  @Test
+  void addPermitShouldPersistProvidedBlanketOicDates() {
+    stubPermitCreationExemption("BOIC-1", "B", "ACT", null, null);
+    when(repository.insertPermitDetail(any(PermitMutationRow.class), eq("idir\\jsmith")))
+        .thenAnswer(
+            invocation -> Optional.of(withPermitNumber(invocation.getArgument(0), 7000123L)));
+
+    PermitMutationRpcResponseDto response =
+        service.addPermit(
+            permitMutationRequest(
+                "BOIC-1",
+                "00070001",
+                "00070002",
+                null,
+                "ACT",
+                "2026-05-27",
+                "2026-05-28",
+                "2026-06-27"),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<PermitMutationRow> permitCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository).insertPermitDetail(permitCaptor.capture(), eq("idir\\jsmith"));
+    assertThat(permitCaptor.getValue().permitIssueDate()).isEqualTo(LocalDate.of(2026, 5, 28));
+    assertThat(permitCaptor.getValue().expiryDate()).isEqualTo(LocalDate.of(2026, 6, 27));
+  }
+
+  @ParameterizedTest
+  @CsvSource({
+    "permitIssueDate,Permit issue date",
+    "permitExpiryDate,Permit expiry date"
+  })
+  void addPermitShouldRejectMalformedBlanketOicDates(String fieldName, String fieldLabel) {
+    stubPermitCreationExemption("BOIC-1", "B", "ACT", null, null);
+    String issueDate = "permitIssueDate".equals(fieldName) ? "02/30/2024" : "";
+    String expiryDate = "permitExpiryDate".equals(fieldName) ? "02/30/2024" : "";
+
+    PermitMutationRpcResponseDto response =
+        service.addPermit(
+            permitMutationRequest(
+                "BOIC-1",
+                "00070001",
+                "00070002",
+                null,
+                "ACT",
+                "2026-05-27",
+                issueDate,
+                expiryDate),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors()).containsExactly(fieldLabel + " must be a valid date.");
+    verify(repository, never()).insertPermitDetail(any(), any());
+  }
+
+  @Test
   void createPermitFromExemptionShouldFailClosedWhenApplicationContextIsMismatched() {
     stubValidMinisterialPermitCreationContext();
     when(repository.findApplicationInfoByNumber(1000456L))
@@ -2502,6 +2641,21 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @ParameterizedTest
+  @ValueSource(strings = {"", " "})
+  void updatePermitShouldRejectExplicitBlankStatusBeforeWriting(String permitStatus) {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow()));
+    stubTargetMinisterialExemption("EX-700");
+
+    PermitMutationRpcResponseDto response =
+        service.updatePermit(invoiceMaterialChangeRequest(permitStatus, "US"), "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors()).containsExactly("A valid permit status code is required.");
+    verify(repository, never()).updatePermitDetail(any(), any(), any());
+  }
+
+  @ParameterizedTest
   @CsvSource({
     "permitSubmitDate,Permit submit date",
     "permitIssueDate,Permit issue date",
@@ -2644,6 +2798,35 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
+  void updatePermitShouldClearBlankDatesOnAnActiveBlanketOicDraft() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(blanketOicPermitMutationRow()));
+    when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("B"));
+    when(exemptionService.findByExemptionNumber("EX-700"))
+        .thenReturn(
+            Optional.of(
+                exemptionDetailWithClients(
+                    "EX-700", "B", "00077881", "00077880")));
+    stubOicApplicationBinding("EX-700");
+    when(repository.updatePermitDetail(
+            any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
+        .thenReturn(true);
+
+    PermitMutationRpcResponseDto response =
+        service.updatePermit(
+            updatePermitRequest(null, null, null, null, null, "", ""), "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<PermitMutationRow> permitCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository)
+        .updatePermitDetail(
+            permitCaptor.capture(), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE));
+    assertThat(permitCaptor.getValue().permitIssueDate()).isNull();
+    assertThat(permitCaptor.getValue().expiryDate()).isNull();
+  }
+
+  @Test
   void updatePermitShouldIgnoreTheSubmittedTotalButRejectANonFiniteBlanketOicRequestVolume() {
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(blanketOicPermitMutationRow()));
@@ -2729,8 +2912,61 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(response.success()).isFalse();
     assertThat(response.errors())
         .containsExactlyInAnyOrder(
-            "Permit Request Pieces must be a positive whole number no greater than 9999999999.",
-            "Permit Request Volume must be a positive number of 9 characters or fewer with no more than 2 decimal places.");
+            "Permit Request Pieces must be a nonnegative whole number no greater than 9999999999.",
+            "Permit Request Volume must be a nonnegative number of 9 characters or fewer with no more than 2 decimal places.");
+    verify(repository, never()).updatePermitDetail(any(), any(), any());
+  }
+
+  @Test
+  void updatePermitShouldAllowZeroBlanketOicRequestLimitsWhileActive() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(blanketOicPermitMutationRow()));
+    when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("B"));
+    when(exemptionService.findByExemptionNumber("EX-700"))
+        .thenReturn(
+            Optional.of(
+                exemptionDetailWithClients(
+                    "EX-700", "B", "00077881", "00077880")));
+    stubOicApplicationBinding("EX-700");
+    when(repository.updatePermitDetail(
+            any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
+        .thenReturn(true);
+
+    PermitMutationRpcResponseDto response =
+        service.updatePermit(
+            oicRequestLimitsRequest("ACT", "0", "0"), "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<PermitMutationRow> permitCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository)
+        .updatePermitDetail(
+            permitCaptor.capture(), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE));
+    assertThat(permitCaptor.getValue().oicRequestPieces()).isZero();
+    assertThat(permitCaptor.getValue().oicRequestVolume()).isZero();
+  }
+
+  @Test
+  void updatePermitShouldRejectZeroBlanketOicRequestLimitsWhenCompleting() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(blanketOicPermitMutationRow()));
+    when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("B"));
+    when(exemptionService.findByExemptionNumber("EX-700"))
+        .thenReturn(
+            Optional.of(
+                exemptionDetailWithClients(
+                    "EX-700", "B", "00077881", "00077880")));
+    stubOicApplicationBinding("EX-700");
+
+    PermitMutationRpcResponseDto response =
+        service.updatePermit(
+            oicRequestLimitsRequest("COM", "0", "0"), "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactlyInAnyOrder(
+            "Permit Request Pieces must be greater than 0 to complete a permit.",
+            "Permit Request Volume must be greater than 0 to complete a permit.");
     verify(repository, never()).updatePermitDetail(any(), any(), any());
   }
 
@@ -7435,12 +7671,84 @@ class OraclePermitDetailsRpcServiceTest {
       String agentClientNumber,
       String oicApplicationNumber,
       String permitStatus) {
-    return new PermitMutationRequestDto(
-        "7000123",
+    return permitMutationRequest(
+        exemptionNumber,
+        ownerClientNumber,
+        agentClientNumber,
+        oicApplicationNumber,
         permitStatus,
         "2026-05-27",
         "2026-05-27",
-        "2026-06-27",
+        "2026-06-27");
+  }
+
+  private PermitMutationRequestDto permitMutationRequest(
+      String exemptionNumber,
+      String ownerClientNumber,
+      String agentClientNumber,
+      String oicApplicationNumber,
+      String permitStatus,
+      String permitSubmitDate,
+      String permitIssueDate,
+      String permitExpiryDate) {
+    return permitMutationRequest(
+        exemptionNumber,
+        ownerClientNumber,
+        agentClientNumber,
+        oicApplicationNumber,
+        permitStatus,
+        permitSubmitDate,
+        permitIssueDate,
+        permitExpiryDate,
+        "S",
+        "S");
+  }
+
+  private PermitMutationRequestDto permitMutationRequest(
+      String exemptionNumber,
+      String ownerClientNumber,
+      String agentClientNumber,
+      String oicApplicationNumber,
+      String permitStatus,
+      String permitSubmitDate,
+      String permitIssueDate,
+      String permitExpiryDate,
+      String permitGrowthType,
+      String packageAgeClass) {
+    return permitMutationRequest(
+        exemptionNumber,
+        ownerClientNumber,
+        agentClientNumber,
+        oicApplicationNumber,
+        permitStatus,
+        permitSubmitDate,
+        permitIssueDate,
+        permitExpiryDate,
+        permitGrowthType,
+        packageAgeClass,
+        null,
+        null);
+  }
+
+  private PermitMutationRequestDto permitMutationRequest(
+      String exemptionNumber,
+      String ownerClientNumber,
+      String agentClientNumber,
+      String oicApplicationNumber,
+      String permitStatus,
+      String permitSubmitDate,
+      String permitIssueDate,
+      String permitExpiryDate,
+      String permitGrowthType,
+      String packageAgeClass,
+      String oicRequestPieces,
+      String oicRequestVolume) {
+    return new PermitMutationRequestDto(
+        "7000123",
+        permitStatus,
+        permitSubmitDate,
+        permitIssueDate,
+        permitExpiryDate,
         null,
         exemptionNumber,
         "Acme Lumber",
@@ -7452,7 +7760,7 @@ class OraclePermitDetailsRpcServiceTest {
         null,
         null,
         null,
-        "S",
+        permitGrowthType,
         "100.0",
         "25",
         "1835",
@@ -7462,9 +7770,9 @@ class OraclePermitDetailsRpcServiceTest {
         "02",
         oicApplicationNumber,
         null,
-        null,
-        null,
-        "S",
+        oicRequestPieces,
+        oicRequestVolume,
+        packageAgeClass,
         "T",
         null,
         null,
@@ -7573,12 +7881,30 @@ class OraclePermitDetailsRpcServiceTest {
       String ownerClientNumber,
       String agentClientNumber,
       String oicApplicationNumber) {
+    return updatePermitRequest(
+        exemptionNumber,
+        ownerClientNumber,
+        agentClientNumber,
+        oicApplicationNumber,
+        null,
+        null,
+        null);
+  }
+
+  private PermitMutationRequestDto updatePermitRequest(
+      String exemptionNumber,
+      String ownerClientNumber,
+      String agentClientNumber,
+      String oicApplicationNumber,
+      String permitSubmitDate,
+      String permitIssueDate,
+      String permitExpiryDate) {
     return new PermitMutationRequestDto(
         "7000123",
         null,
-        null,
-        null,
-        null,
+        permitSubmitDate,
+        permitIssueDate,
+        permitExpiryDate,
         null,
         exemptionNumber,
         null,

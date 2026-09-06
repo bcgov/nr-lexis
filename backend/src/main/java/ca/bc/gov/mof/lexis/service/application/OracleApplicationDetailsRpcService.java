@@ -54,6 +54,13 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   private static final String EXPORT_PRODUCT_TYPE_HARVESTED = "H";
   private static final String EXPORT_PRODUCT_TYPE_STANDING = "S";
   private static final String EXPORT_PRODUCT_TYPE_UNMANUFACTURED = "T";
+  private static final String SCALE_REQUIRES_HARVESTED_APPLICATION_MESSAGE =
+      "Summary of Scale entries can only be added to Harvested applications.";
+  private static final String PRODUCT_TYPE_CHANGE_WITH_SCALES_MESSAGE =
+      "Product type cannot be changed to Unmanufactured Timber while Summary of Scale records exist. "
+          + "Remove the Summary of Scale records first.";
+  private static final String PRODUCT_TYPE_CHANGE_WITH_PACKAGES_MESSAGE =
+      "Product type cannot be changed to Standing Timber while packages exist. Remove the packages first.";
   private static final String UNMANUFACTURED_TIMBER_MARK = "UNMANU";
   private static final Set<String> VALID_TIMBER_MARK_STATUSES =
       Set.of("HI", "HA", "HB", "HC", "HN", "HP", "LC", "HX", "ACT");
@@ -360,7 +367,9 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
 
     if (normalized.speciesCodes() != null
         && !repository.replaceApplicationEndUses(
-            applicationNumber, toEndUses(normalized.speciesCodes(), normalized.endUseCode()))) {
+            applicationNumber,
+            toApplicationEndUses(
+                normalized.speciesCodes(), normalized.endUseCode(), normalized.productTypeCode()))) {
       markRollbackOnly();
       return new CreateApplicationResult(
           false,
@@ -399,18 +408,19 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   public CreateApplicationResult updateApplicationSummary(
       ApplicationSummaryUpdateRequest request, String userId) {
     ApplicationSummaryUpdateRequest normalized = normalizeApplicationSummaryUpdateRequest(request);
-    if (normalized.applicationNumber() == null || normalized.applicationNumber() < 1) {
+    ApplicationSummaryUpdateRequest scoped = restrictToSaveSource(normalized);
+    if (scoped.applicationNumber() == null || scoped.applicationNumber() < 1) {
       return new CreateApplicationResult(
           false, null, null, List.of(required("application number")), List.of());
     }
 
     Optional<ApplicationDetailsRpcRepository.ApplicationUpdateRecord> existing =
-        repository.findApplicationUpdateRecord(normalized.applicationNumber());
+        repository.findApplicationUpdateRecord(scoped.applicationNumber());
     if (existing.isEmpty()) {
       return new CreateApplicationResult(
           false,
-          "No application was found for " + normalized.applicationNumber() + ".",
-          normalized.applicationNumber(),
+          "No application was found for " + scoped.applicationNumber() + ".",
+          scoped.applicationNumber(),
           List.of(),
           List.of());
     }
@@ -418,7 +428,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       return new CreateApplicationResult(
           false,
           null,
-          normalized.applicationNumber(),
+          scoped.applicationNumber(),
           List.of(SYSTEM_OIC_APPLICATION_MESSAGE),
           List.of());
     }
@@ -426,42 +436,44 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       return new CreateApplicationResult(
           false,
           null,
-          normalized.applicationNumber(),
+          scoped.applicationNumber(),
           List.of(APPLICATION_DETAILS_LOCKED_MESSAGE),
           List.of());
     }
 
     ApplicationDetailsRpcRepository.ApplicationUpdateRecord updateRecord =
-        toApplicationUpdateRecord(existing.get(), normalized, defaultMutationUser(userId));
-    List<String> errors = validateApplicationUpdate(updateRecord, normalized);
+        toApplicationUpdateRecord(existing.get(), scoped, defaultMutationUser(userId));
+    List<String> errors = validateApplicationUpdate(existing.get(), updateRecord, scoped);
     if (!errors.isEmpty()) {
       return new CreateApplicationResult(
-          false, null, normalized.applicationNumber(), errors, List.of());
+          false, null, scoped.applicationNumber(), errors, List.of());
     }
 
     if (!repository.updateApplication(updateRecord)) {
       return new CreateApplicationResult(
           false,
           "We were unable to save this application. Please try again.",
-          normalized.applicationNumber(),
+          scoped.applicationNumber(),
           List.of(),
           List.of());
     }
 
-    if (normalized.speciesCodes() != null
+    if (scoped.speciesCodes() != null
         && !repository.replaceApplicationEndUses(
-            normalized.applicationNumber(), toEndUses(normalized.speciesCodes(), normalized.endUseCode()))) {
+            scoped.applicationNumber(),
+            toApplicationEndUses(
+                scoped.speciesCodes(), scoped.endUseCode(), updateRecord.productTypeCode()))) {
       markRollbackOnly();
       return new CreateApplicationResult(
           false,
           "We were unable to save this application. Please try again.",
-          normalized.applicationNumber(),
+          scoped.applicationNumber(),
           List.of(),
           List.of());
     }
 
     return new CreateApplicationResult(
-        true, SAVE_SUCCESS_MESSAGE, normalized.applicationNumber(), List.of(), List.of());
+        true, SAVE_SUCCESS_MESSAGE, scoped.applicationNumber(), List.of(), List.of());
   }
 
   @Override
@@ -1818,6 +1830,13 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         .toList();
   }
 
+  private List<ApplicationDetailsRpcRepository.EndUseMutationRecord> toApplicationEndUses(
+      List<String> speciesCodes, String endUseCode, String productTypeCode) {
+    return toEndUses(
+        speciesCodes,
+        EXPORT_PRODUCT_TYPE_UNMANUFACTURED.equals(trimToNull(productTypeCode)) ? null : endUseCode);
+  }
+
   private boolean renamePackage(
       String currentPackageNumber,
       ApplicationDetailsRpcRepository.PackageMutationRecord record,
@@ -1917,6 +1936,11 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       errors.add("Application " + request.applicationNumber() + " could not be verified.");
     } else if (isSystemOwnedOicApplication(application.get())) {
       errors.add(SYSTEM_OIC_APPLICATION_MESSAGE);
+    } else if (JURISDICTION_PROVINCIAL.equalsIgnoreCase(
+            trimToNull(application.get().jurisdictionCode()))
+        && !EXPORT_PRODUCT_TYPE_HARVESTED.equalsIgnoreCase(
+            trimToNull(application.get().productTypeCode()))) {
+      errors.add(SCALE_REQUIRES_HARVESTED_APPLICATION_MESSAGE);
     }
 
     if (packageNumber == null) {
@@ -2522,7 +2546,8 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     if (input == null) {
       return new ApplicationSummaryUpdateRequest(
           null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-          null, null, null, null, null, null, null, null, null, null, true);
+          null, null, null, null, null, null, null, null, null, null, true,
+          ApplicationSummarySaveSource.FULL);
     }
     return new ApplicationSummaryUpdateRequest(
         input.applicationNumber(),
@@ -2549,7 +2574,43 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         trimToNull(input.oicIndicator()),
         trimToNull(input.endUseCode()),
         input.speciesCodes() == null ? null : normalizeCodes(input.speciesCodes()),
-        input.validationEnabled());
+        input.validationEnabled(),
+        input.saveSource() == null ? ApplicationSummarySaveSource.FULL : input.saveSource());
+  }
+
+  private ApplicationSummaryUpdateRequest restrictToSaveSource(
+      ApplicationSummaryUpdateRequest request) {
+    if (request.saveSource() == ApplicationSummarySaveSource.FULL) {
+      return request;
+    }
+    ApplicationSummarySaveSource source = request.saveSource();
+    return new ApplicationSummaryUpdateRequest(
+        request.applicationNumber(),
+        source.updatesSummaryFields() ? request.applicationDate() : null,
+        source.updatesSummaryFields() ? request.termDays() : null,
+        source.updatesSummaryFields() ? request.receivedDate() : null,
+        source.updatesItemFields() ? request.applicationVolume() : null,
+        source.updatesItemFields() ? request.averageLogVolume() : null,
+        source.updatesSummaryFields() ? request.exemptionReasonCode() : null,
+        source.updatesItemFields() ? request.productLocation() : null,
+        source.updatesSummaryFields() ? request.exportScheduleId() : null,
+        source.updatesAgentFields() ? request.agentClientNumber() : null,
+        source.updatesAgentFields() ? request.agentClientLocationCode() : null,
+        source.updatesOwnerFields() ? request.ownerClientNumber() : null,
+        source.updatesOwnerFields() ? request.ownerClientLocationCode() : null,
+        null,
+        source.updatesApplicantType() ? request.applicantTypeCode() : null,
+        source.updatesSummaryFields() ? request.orgUnitNumber() : null,
+        source.updatesItemFields() ? request.productTypeCode() : null,
+        null,
+        source.updatesItemFields() ? request.growthTypeCode() : null,
+        source.updatesAgentFields() ? request.agentContactName() : null,
+        source.updatesOwnerFields() ? request.ownerContactName() : null,
+        source.updatesSummaryFields() ? request.oicIndicator() : null,
+        source.updatesItemFields() ? request.endUseCode() : null,
+        source.updatesItemFields() ? request.speciesCodes() : null,
+        request.validationEnabled(),
+        request.saveSource());
   }
 
   private List<String> validateCreateApplication(CreateApplicationRequest request) {
@@ -2652,6 +2713,21 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   }
 
   private List<String> validateApplicationUpdate(
+      ApplicationDetailsRpcRepository.ApplicationUpdateRecord existing,
+      ApplicationDetailsRpcRepository.ApplicationUpdateRecord record,
+      ApplicationSummaryUpdateRequest request) {
+    return switch (request.saveSource()) {
+      case FULL -> validateFullApplicationUpdate(existing, record, request);
+      case SUMMARY -> validateSummaryApplicationUpdate(existing, record, request);
+      case OWNER -> validateOwnerApplicationUpdate(existing, record, request);
+      case AGENT -> validateAgentApplicationUpdate(record);
+      case OWNER_AGENT -> validateOwnerAgentApplicationUpdate(record);
+      case ITEMS -> validateItemsApplicationUpdate(existing, record, request);
+    };
+  }
+
+  private List<String> validateFullApplicationUpdate(
+      ApplicationDetailsRpcRepository.ApplicationUpdateRecord existing,
       ApplicationDetailsRpcRepository.ApplicationUpdateRecord record,
       ApplicationSummaryUpdateRequest request) {
     List<String> errors = new ArrayList<>();
@@ -2746,11 +2822,276 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     }
     if (errors.isEmpty()) {
       validateApplicationReferences(record, errors);
+      validateProductTypeTransition(existing, record, errors);
       validateStoredPackageVolume(record, errors);
       validateFirstScaleRegion(record, errors);
       validateMergedApplicationSpeciesEndUse(record, request, errors);
     }
     return errors;
+  }
+
+  private List<String> validateSummaryApplicationUpdate(
+      ApplicationDetailsRpcRepository.ApplicationUpdateRecord existing,
+      ApplicationDetailsRpcRepository.ApplicationUpdateRecord record,
+      ApplicationSummaryUpdateRequest request) {
+    List<String> errors = validateScopedApplicationFixedFields(record);
+    if (!errors.isEmpty()) {
+      return errors;
+    }
+    validateSummaryFields(record, errors);
+    if (!errors.isEmpty()) {
+      return errors;
+    }
+    validateSummaryReferences(record, errors);
+    if (!errors.isEmpty()) {
+      return errors;
+    }
+    if (!java.util.Objects.equals(existing.orgUnitNumber(), record.orgUnitNumber())) {
+      validateFirstScaleRegion(record, errors);
+      validateMergedApplicationSpeciesEndUse(record, request, errors);
+    }
+    return errors;
+  }
+
+  private List<String> validateOwnerApplicationUpdate(
+      ApplicationDetailsRpcRepository.ApplicationUpdateRecord existing,
+      ApplicationDetailsRpcRepository.ApplicationUpdateRecord record,
+      ApplicationSummaryUpdateRequest request) {
+    List<String> errors = validateScopedApplicationFixedFields(record);
+    if (!errors.isEmpty()) {
+      return errors;
+    }
+    validateOwnerFields(record, errors);
+    if (request.applicantTypeCode() != null) {
+      validateApplicantType(record.applicantTypeCode(), errors);
+      if (APPLICANT_TYPE_AGENT.equals(record.applicantTypeCode())
+          && !APPLICANT_TYPE_AGENT.equalsIgnoreCase(existing.applicantTypeCode())) {
+        errors.add("Changing the applicant type to Agent requires owner and agent details.");
+      }
+    }
+    if (errors.isEmpty()) {
+      validateApplicationClientLocation(
+          "owner", record.ownerClientNumber(), record.ownerClientLocationCode(), errors);
+      if (request.applicantTypeCode() != null
+          && !repository.isApplicantTypeCodeValidRequired(record.applicantTypeCode())) {
+        errors.add("Application applicant type code does not exist.");
+      }
+    }
+    return errors;
+  }
+
+  private List<String> validateAgentApplicationUpdate(
+      ApplicationDetailsRpcRepository.ApplicationUpdateRecord record) {
+    List<String> errors = validateScopedApplicationFixedFields(record);
+    if (!errors.isEmpty()) {
+      return errors;
+    }
+    if (!APPLICANT_TYPE_AGENT.equalsIgnoreCase(trimToNull(record.applicantTypeCode()))) {
+      errors.add("Application agent details can only be changed for an agent applicant.");
+      return errors;
+    }
+    validateAgentFields(record, errors);
+    if (errors.isEmpty()) {
+      validateApplicationClientLocation(
+          "agent", record.agentClientNumber(), record.agentClientLocationCode(), errors);
+    }
+    return errors;
+  }
+
+  private List<String> validateOwnerAgentApplicationUpdate(
+      ApplicationDetailsRpcRepository.ApplicationUpdateRecord record) {
+    List<String> errors = validateScopedApplicationFixedFields(record);
+    if (!errors.isEmpty()) {
+      return errors;
+    }
+    if (!APPLICANT_TYPE_AGENT.equalsIgnoreCase(trimToNull(record.applicantTypeCode()))) {
+      errors.add("Combined owner and agent details can only be saved for an agent applicant.");
+      return errors;
+    }
+    validateOwnerFields(record, errors);
+    validateApplicantType(record.applicantTypeCode(), errors);
+    validateAgentFields(record, errors);
+    if (errors.isEmpty()) {
+      validateApplicationClientLocation(
+          "owner", record.ownerClientNumber(), record.ownerClientLocationCode(), errors);
+      if (!repository.isApplicantTypeCodeValidRequired(record.applicantTypeCode())) {
+        errors.add("Application applicant type code does not exist.");
+      }
+      validateApplicationClientLocation(
+          "agent", record.agentClientNumber(), record.agentClientLocationCode(), errors);
+    }
+    return errors;
+  }
+
+  private List<String> validateItemsApplicationUpdate(
+      ApplicationDetailsRpcRepository.ApplicationUpdateRecord existing,
+      ApplicationDetailsRpcRepository.ApplicationUpdateRecord record,
+      ApplicationSummaryUpdateRequest request) {
+    List<String> errors = validateScopedApplicationFixedFields(record);
+    if (!errors.isEmpty()) {
+      return errors;
+    }
+    validateItemFields(record, errors);
+    if (errors.isEmpty()) {
+      validateItemReferences(record, errors);
+      validateProductTypeTransition(existing, record, errors);
+      validateStoredPackageVolume(record, errors);
+      validateFirstScaleRegion(record, errors);
+      validateMergedApplicationSpeciesEndUse(record, request, errors);
+    }
+    return errors;
+  }
+
+  private List<String> validateScopedApplicationFixedFields(
+      ApplicationDetailsRpcRepository.ApplicationUpdateRecord record) {
+    List<String> errors = new ArrayList<>();
+    if (!isEditableApplicationDetailStatus(record.applicationStatusCode())) {
+      errors.add(APPLICATION_DETAILS_LOCKED_MESSAGE);
+    }
+    if (!JURISDICTION_PROVINCIAL.equalsIgnoreCase(trimToNull(record.jurisdictionCode()))) {
+      errors.add("Application jurisdiction cannot be changed and must remain P.");
+    }
+    return errors;
+  }
+
+  private void validateSummaryFields(
+      ApplicationDetailsRpcRepository.ApplicationUpdateRecord record, List<String> errors) {
+    if (record.applicationDate() == null) {
+      errors.add(required("application date"));
+    }
+    if (record.termDays() == null || record.termDays() <= 0) {
+      errors.add("The application term days must be greater than 0.");
+    } else if (record.termDays() > MAX_APPLICATION_TERM_DAYS) {
+      errors.add("The application term days must be no more than 99999.");
+    }
+    if (record.receivedDate() == null) {
+      errors.add(required("application received date"));
+    }
+    String exemptionReasonCode = trimToNull(record.exemptionReasonCode());
+    if (exemptionReasonCode == null) {
+      errors.add(required("application exemption reason code"));
+    } else if (exemptionReasonCode.length() > 1) {
+      errors.add(maxLength("application exemption reason code", 1));
+    }
+    if (record.orgUnitNumber() == null || record.orgUnitNumber() <= 0) {
+      errors.add(required("application region"));
+    }
+  }
+
+  private void validateSummaryReferences(
+      ApplicationDetailsRpcRepository.ApplicationUpdateRecord record, List<String> errors) {
+    if (!repository.isExemptionReasonCodeValidRequired(record.exemptionReasonCode())) {
+      errors.add("Application exemption reason code does not exist.");
+    }
+    if (!repository.isOrgUnitValidRequired(record.orgUnitNumber())) {
+      errors.add("Application region does not exist.");
+    }
+  }
+
+  private void validateOwnerFields(
+      ApplicationDetailsRpcRepository.ApplicationUpdateRecord record, List<String> errors) {
+    if (trimToNull(record.ownerClientNumber()) == null) {
+      errors.add(required("application owner number"));
+    }
+    String ownerClientLocationCode = trimToNull(record.ownerClientLocationCode());
+    if (ownerClientLocationCode == null) {
+      errors.add(required("application owner location"));
+    } else if (ownerClientLocationCode.length() > 2) {
+      errors.add(maxLength("application owner location code", 2));
+    }
+    if (trimToNull(record.ownerContactName()) == null) {
+      errors.add(required("application owner name"));
+    }
+    validateOracleText(record.ownerContactName(), "Owner contact name", CONTACT_NAME_MAX_BYTES, errors);
+  }
+
+  private void validateAgentFields(
+      ApplicationDetailsRpcRepository.ApplicationUpdateRecord record, List<String> errors) {
+    if (trimToNull(record.agentClientNumber()) == null) {
+      errors.add(required("application agent number"));
+    }
+    String agentClientLocationCode = trimToNull(record.agentClientLocationCode());
+    if (agentClientLocationCode == null) {
+      errors.add(required("application agent location"));
+    } else if (agentClientLocationCode.length() > 2) {
+      errors.add(maxLength("application agent location code", 2));
+    }
+    if (trimToNull(record.agentContactName()) == null) {
+      errors.add(required("application agent name"));
+    }
+    validateOracleText(record.agentContactName(), "Agent contact name", CONTACT_NAME_MAX_BYTES, errors);
+  }
+
+  private void validateApplicantType(String applicantTypeCode, List<String> errors) {
+    String applicantType = trimToNull(applicantTypeCode);
+    if (applicantType == null) {
+      errors.add(required("applicant type code"));
+    } else if (!APPLICANT_TYPE_OWNER.equals(applicantType)
+        && !APPLICANT_TYPE_MINISTERIAL.equals(applicantType)
+        && !APPLICANT_TYPE_AGENT.equals(applicantType)) {
+      errors.add("The applicant type code must be O, M, or A.");
+    }
+  }
+
+  private void validateItemFields(
+      ApplicationDetailsRpcRepository.ApplicationUpdateRecord record, List<String> errors) {
+    if (record.applicationVolume() == null || record.applicationVolume() <= 0.0d) {
+      errors.add("The application volume must be greater than 0.");
+    } else {
+      validateApplicationVolumeRange(record.applicationVolume(), errors);
+    }
+    if (trimToNull(record.productTypeCode()) == null) {
+      errors.add(required("product type code"));
+    }
+    if (isHarvestedProductType(record.productTypeCode())) {
+      validateOptionalVolumeRange(
+          record.averageLogVolume(), "average log volume", MAX_AVERAGE_LOG_VOLUME, errors);
+      if (trimToNull(record.productLocation()) == null) {
+        errors.add(required("location of logs"));
+      }
+      validateOracleText(record.productLocation(), "Location of logs", PRODUCT_LOCATION_MAX_BYTES, errors);
+    }
+    if (requiresGrowthType(record.productTypeCode())
+        && trimToNull(record.growthTypeCode()) == null) {
+      errors.add(required("growth type code"));
+    }
+  }
+
+  private void validateItemReferences(
+      ApplicationDetailsRpcRepository.ApplicationUpdateRecord record, List<String> errors) {
+    if (!repository.isProductTypeCodeValidRequired(record.productTypeCode())) {
+      errors.add("Application product type code does not exist.");
+    }
+    if (requiresGrowthType(record.productTypeCode())
+        && !repository.isGrowthTypeCodeValidRequired(record.growthTypeCode())) {
+      errors.add("Application growth type code does not exist.");
+    }
+  }
+
+  private void validateProductTypeTransition(
+      ApplicationDetailsRpcRepository.ApplicationUpdateRecord existing,
+      ApplicationDetailsRpcRepository.ApplicationUpdateRecord updated,
+      List<String> errors) {
+    String existingProductType = trimToNull(existing.productTypeCode());
+    String updatedProductType = trimToNull(updated.productTypeCode());
+    if (existingProductType == null
+        || updatedProductType == null
+        || existingProductType.equalsIgnoreCase(updatedProductType)) {
+      return;
+    }
+
+    if (EXPORT_PRODUCT_TYPE_UNMANUFACTURED.equalsIgnoreCase(updatedProductType)
+        && !repository
+            .findScaleMutationsByApplicationNumber(updated.applicationNumber())
+            .isEmpty()) {
+      errors.add(PRODUCT_TYPE_CHANGE_WITH_SCALES_MESSAGE);
+    }
+    if (EXPORT_PRODUCT_TYPE_STANDING.equalsIgnoreCase(updatedProductType)
+        && !repository
+            .findPackageMutationsByApplicationNumber(updated.applicationNumber())
+            .isEmpty()) {
+      errors.add(PRODUCT_TYPE_CHANGE_WITH_PACKAGES_MESSAGE);
+    }
   }
 
   private void validateApplicationReferences(
@@ -2947,13 +3288,40 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
 
     String normalizedEndUseCode = firstNonBlank(endUseCode, EXPORT_SPECIES_ENDUSE_OTHER);
     String normalizedProductTypeCode = trimToNull(productTypeCode);
+    List<ApplicationDetailsRpcRepository.ExcolValidationRow> candidateRows = new ArrayList<>();
+    boolean unmanufacturedTimber =
+        EXPORT_PRODUCT_TYPE_UNMANUFACTURED.equals(normalizedProductTypeCode);
+    if (unmanufacturedTimber) {
+      // Unmanufactured timber has no editable end use. Validate its selected species against every
+      // exact regional combination rather than the hidden OT sentinel or a stale submitted value.
+      Set<String> candidateEndUseCodes = new LinkedHashSet<>();
+      for (ApplicationDetailsRpcRepository.ExcolValidationRow row :
+          repository.findCandidateEndUseCodesRequired(
+              normalizedSpeciesCodes.size(), normalizedSpeciesCodes.get(0), orgUnitNumber)) {
+        String candidateEndUseCode = trimToNull(row.excolCode());
+        if (candidateEndUseCode != null) {
+          candidateEndUseCodes.add(candidateEndUseCode);
+        }
+      }
+      for (String candidateEndUseCode : candidateEndUseCodes) {
+        candidateRows.addAll(
+            repository.findCandidateExcolCodesRequired(
+                normalizedSpeciesCodes.size(),
+                normalizedSpeciesCodes.get(0),
+                candidateEndUseCode,
+                orgUnitNumber));
+      }
+    } else {
+      candidateRows =
+          repository.findCandidateExcolCodesRequired(
+              normalizedSpeciesCodes.size(),
+              normalizedSpeciesCodes.get(0),
+              normalizedEndUseCode,
+              orgUnitNumber);
+    }
+
     boolean matchesCandidate = false;
-    for (ApplicationDetailsRpcRepository.ExcolValidationRow row :
-        repository.findCandidateExcolCodesRequired(
-            normalizedSpeciesCodes.size(),
-            normalizedSpeciesCodes.get(0),
-            normalizedEndUseCode,
-            orgUnitNumber)) {
+    for (ApplicationDetailsRpcRepository.ExcolValidationRow row : candidateRows) {
       String excolCode = trimToNull(row.excolCode());
       if (excolCode == null || !containsAllLegacy(excolCode, normalizedSpeciesCodes)) {
         continue;
@@ -3039,69 +3407,107 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       ApplicationDetailsRpcRepository.ApplicationUpdateRecord existing,
       ApplicationSummaryUpdateRequest request,
       String updateUserId) {
+    ApplicationSummarySaveSource saveSource = request.saveSource();
+    boolean updatesSummaryFields = saveSource.updatesSummaryFields();
+    boolean updatesOwnerFields = saveSource.updatesOwnerFields();
+    boolean updatesAgentFields = saveSource.updatesAgentFields();
+    boolean updatesApplicantType = saveSource.updatesApplicantType();
+    boolean updatesItemFields = saveSource.updatesItemFields();
     String applicantTypeCode =
-        request.applicantTypeCode() == null
+        !updatesApplicantType || request.applicantTypeCode() == null
             ? existing.applicantTypeCode()
             : request.applicantTypeCode();
     boolean agentApplicant =
         APPLICANT_TYPE_AGENT.equalsIgnoreCase(trimToNull(applicantTypeCode));
+    boolean clearAgentFields =
+        saveSource == ApplicationSummarySaveSource.FULL
+            ? !agentApplicant
+            : updatesApplicantType
+                && request.applicantTypeCode() != null
+                && !agentApplicant
+                && (existing.applicantTypeCode() == null
+                    || !applicantTypeCode.equalsIgnoreCase(existing.applicantTypeCode()));
     String productTypeCode =
-        request.productTypeCode() == null
+        !updatesItemFields || request.productTypeCode() == null
             ? existing.productTypeCode()
             : request.productTypeCode();
     Double averageLogVolume =
-        request.averageLogVolume() == null
+        !updatesItemFields || request.averageLogVolume() == null
             ? existing.averageLogVolume()
             : request.averageLogVolume();
     String productLocation =
-        request.productLocation() == null
+        !updatesItemFields || request.productLocation() == null
             ? existing.productLocation()
             : request.productLocation();
     return new ApplicationDetailsRpcRepository.ApplicationUpdateRecord(
         existing.applicationNumber(),
         existing.federalApplicationNumber(),
-        request.applicationDate() == null ? existing.applicationDate() : request.applicationDate(),
-        request.termDays() == null ? existing.termDays() : request.termDays(),
-        request.receivedDate() == null ? existing.receivedDate() : request.receivedDate(),
-        request.applicationVolume() == null ? existing.applicationVolume() : request.applicationVolume(),
-        averageLogVolumeForStorage(productTypeCode, averageLogVolume),
-        productLocationForStorage(productTypeCode, productLocation),
+        !updatesSummaryFields || request.applicationDate() == null
+            ? existing.applicationDate()
+            : request.applicationDate(),
+        !updatesSummaryFields || request.termDays() == null ? existing.termDays() : request.termDays(),
+        !updatesSummaryFields || request.receivedDate() == null
+            ? existing.receivedDate()
+            : request.receivedDate(),
+        !updatesItemFields || request.applicationVolume() == null
+            ? existing.applicationVolume()
+            : request.applicationVolume(),
+        updatesItemFields
+            ? averageLogVolumeForStorage(productTypeCode, averageLogVolume)
+            : existing.averageLogVolume(),
+        updatesItemFields
+            ? productLocationForStorage(productTypeCode, productLocation)
+            : existing.productLocation(),
         existing.entryUserId(),
         existing.entryTimestamp(),
         updateUserId,
         Instant.now(),
-        request.exportScheduleId() == null ? existing.exportScheduleId() : request.exportScheduleId(),
-        agentApplicant
-            ? request.agentClientNumber() == null
-                ? existing.agentClientNumber()
-                : request.agentClientNumber()
-            : null,
-        agentApplicant
-            ? request.agentClientLocationCode() == null
-                ? existing.agentClientLocationCode()
-                : request.agentClientLocationCode()
-            : null,
-        request.ownerClientNumber() == null ? existing.ownerClientNumber() : request.ownerClientNumber(),
-        request.ownerClientLocationCode() == null
+        saveSource == ApplicationSummarySaveSource.SUMMARY
+            ? request.exportScheduleId()
+            : !updatesSummaryFields || request.exportScheduleId() == null
+                ? existing.exportScheduleId()
+                : request.exportScheduleId(),
+        clearAgentFields
+            ? null
+            : updatesAgentFields && request.agentClientNumber() != null
+                ? request.agentClientNumber()
+                : existing.agentClientNumber(),
+        clearAgentFields
+            ? null
+            : updatesAgentFields && request.agentClientLocationCode() != null
+                ? request.agentClientLocationCode()
+                : existing.agentClientLocationCode(),
+        !updatesOwnerFields || request.ownerClientNumber() == null
+            ? existing.ownerClientNumber()
+            : request.ownerClientNumber(),
+        !updatesOwnerFields || request.ownerClientLocationCode() == null
             ? existing.ownerClientLocationCode()
             : request.ownerClientLocationCode(),
         existing.exemptionNumber(),
-        request.exemptionReasonCode() == null
+        !updatesSummaryFields || request.exemptionReasonCode() == null
             ? existing.exemptionReasonCode()
             : request.exemptionReasonCode(),
         existing.applicationStatusCode(),
         applicantTypeCode,
-        request.orgUnitNumber() == null ? existing.orgUnitNumber() : request.orgUnitNumber(),
+        !updatesSummaryFields || request.orgUnitNumber() == null
+            ? existing.orgUnitNumber()
+            : request.orgUnitNumber(),
         productTypeCode,
         existing.jurisdictionCode(),
-        request.growthTypeCode() == null ? existing.growthTypeCode() : request.growthTypeCode(),
-        agentApplicant
-            ? request.agentContactName() == null
-                ? existing.agentContactName()
-                : request.agentContactName()
-            : null,
-        request.ownerContactName() == null ? existing.ownerContactName() : request.ownerContactName(),
-        request.oicIndicator() == null ? existing.oicIndicator() : request.oicIndicator());
+        !updatesItemFields || request.growthTypeCode() == null
+            ? existing.growthTypeCode()
+            : request.growthTypeCode(),
+        clearAgentFields
+            ? null
+            : updatesAgentFields && request.agentContactName() != null
+                ? request.agentContactName()
+                : existing.agentContactName(),
+        !updatesOwnerFields || request.ownerContactName() == null
+            ? existing.ownerContactName()
+            : request.ownerContactName(),
+        !updatesSummaryFields || request.oicIndicator() == null
+            ? existing.oicIndicator()
+            : request.oicIndicator());
   }
 
   private ApplicationDetailsRpcRepository.ApplicationUpdateRecord copyApplicationWithOwner(
@@ -3206,29 +3612,11 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   }
 
   private Double averageLogVolumeForStorage(String productTypeCode, Double value) {
-    if (isHarvestedProductType(productTypeCode)) {
-      return value;
-    }
-    if (value == null
-        || !Double.isFinite(value)
-        || value < 0.0d
-        || value > MAX_AVERAGE_LOG_VOLUME
-        || !hasAtMostOneDecimal(value)) {
-      return 0.0d;
-    }
-    return value;
+    return isHarvestedProductType(productTypeCode) ? value : 0.0d;
   }
 
   private String productLocationForStorage(String productTypeCode, String value) {
-    if (isHarvestedProductType(productTypeCode)) {
-      return value;
-    }
-    if (value != null
-        && !value.isEmpty()
-        && isStorableOracleText(value, PRODUCT_LOCATION_MAX_BYTES)) {
-      return value;
-    }
-    return ORACLE_IGNORED_PRODUCT_LOCATION;
+    return isHarvestedProductType(productTypeCode) ? value : ORACLE_IGNORED_PRODUCT_LOCATION;
   }
 
   private String defaultMutationUser(String userId) {

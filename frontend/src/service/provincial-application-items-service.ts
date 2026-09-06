@@ -123,7 +123,7 @@ type ApplicationRemarkMutation = {
   remarkId?: string
 }
 
-type ApplicationSummaryMutation = {
+type ApplicationSummaryFields = {
   applicationNumber: string
   applicationDate: string
   receivedDate: string
@@ -148,6 +148,11 @@ type ApplicationSummaryMutation = {
   speciesCodes: string[]
 }
 
+type ApplicationSummaryMutation = Pick<ApplicationSummaryFields, 'applicationNumber'> &
+  Partial<Omit<ApplicationSummaryFields, 'applicationNumber'>> & {
+    saveSource?: 'owner' | 'agent' | 'owner-agent' | 'summary' | 'items'
+  }
+
 type ApplicationRemarkMutationResult = {
   success: boolean
   remarkId: string
@@ -170,7 +175,7 @@ type ApplicationVolumeUsageResult = {
   volumeUsed: boolean
 }
 
-export type ApplicationSummarySnapshot = Omit<ApplicationSummaryMutation, 'applicantTypeCode'> & {
+export type ApplicationSummarySnapshot = Omit<ApplicationSummaryFields, 'applicantTypeCode'> & {
   federalApplicationNumber: string
   exemptionNumber: string
   applicationStatusCode: string
@@ -725,6 +730,7 @@ export const updateApplicationSummary = async (
       '/lexis/rpc/application-details/application-summary',
       {
         applicationNumber: request.applicationNumber,
+        saveSource: request.saveSource,
         applicationDate: request.applicationDate,
         receivedDate: request.receivedDate,
         termDays: request.termDays,
@@ -745,7 +751,7 @@ export const updateApplicationSummary = async (
         ownerContactName: request.ownerContactName,
         oicIndicator: request.oicIndicator,
         applicationEndUseCode: request.endUseCode,
-        applicationSelectedSpecies: request.speciesCodes.join(','),
+        applicationSelectedSpecies: request.speciesCodes?.join(','),
       },
     )
     return normalizeApplicationSummaryMutationResult(payload)

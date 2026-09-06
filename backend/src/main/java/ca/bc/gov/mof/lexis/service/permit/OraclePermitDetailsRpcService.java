@@ -13,6 +13,7 @@ import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.fingerprint;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 import static ca.bc.gov.mof.lexis.util.ValueUtils.firstNonNull;
 import static ca.bc.gov.mof.lexis.util.ValueUtils.parseDouble;
+import static ca.bc.gov.mof.lexis.util.ValueUtils.parseNonNegativeLong;
 import static ca.bc.gov.mof.lexis.util.ValueUtils.parsePositiveLong;
 
 import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
@@ -133,6 +134,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   private static final String EXEMPTION_TYPE_MINISTERIAL = "M";
   private static final String EXEMPTION_TYPE_ORDER_IN_COUNCIL = "O";
   private static final String EXEMPTION_TYPE_BLANKET_OIC = "B";
+  private static final String EXPORT_GROWTH_TYPE_OLD = "O";
   private static final String EXPORT_PRODUCT_TYPE_UNMANUFACTURED = "T";
   private static final String EXPORT_SCALE_METHOD_WEIGHT = "W";
   private static final String EXPORT_PERMIT_STATUS_ACTIVE = "ACT";
@@ -1540,7 +1542,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     Double submittedPermitVolume = parseDouble(request.permitTotalVolume());
     Double permitVolume = firstNonNull(submittedPermitVolume, 0.0d);
     Long numberOfPieces = firstNonNull(parsePositiveLong(request.permitNumberOfPieces()), 0L);
-    Long oicRequestPieces = parsePositiveLong(request.oicPermitTotalPieces());
+    Long oicRequestPieces = parseNonNegativeLong(request.oicPermitTotalPieces());
     Double oicRequestVolume = parseDouble(request.oicPermitTotalVolume());
     String submittedOicApplicationNumber = trimToNull(request.oicApplicationNumber());
     Long oicApplicationNumber = null;
@@ -1557,8 +1559,12 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     }
     validateSubmittedOicRequestLimits(request, blanketOic, errors);
 
-    String growthTypeCode =
+    String submittedGrowthTypeCode =
         firstNonNull(trimToNull(request.packageAgeClass()), trimToNull(request.permitGrowthType()));
+    String growthTypeCode =
+        blanketOic
+            ? firstNonNull(submittedGrowthTypeCode, EXPORT_GROWTH_TYPE_OLD)
+            : submittedGrowthTypeCode;
     String productTypeCode = trimToNull(request.packageProductType());
 
     String clientNumber = trimToNull(request.ownerClientNumber());
@@ -1590,7 +1596,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     if (permitStatus == null) {
       errors.add("A valid permit status is required.");
     }
-    if (issueDate == null && trimToNull(request.permitIssueDate()) == null) {
+    if (!blanketOic && issueDate == null && trimToNull(request.permitIssueDate()) == null) {
       errors.add("A valid permit issue date is required.");
     }
     if (submitDate == null && trimToNull(request.permitSubmitDate()) == null) {
@@ -1767,6 +1773,13 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       return failureMutationResponse(numericErrors, permitNumber);
     }
 
+    String targetPermitStatusCode =
+        normalizeCode(mergeSubmittedText(request.permitStatus(), current.permitStatusCode()));
+    boolean allowBlanketOicDraftDateClear =
+        targetBlanketOic
+            && EXPORT_PERMIT_STATUS_ACTIVE.equalsIgnoreCase(current.permitStatusCode())
+            && EXPORT_PERMIT_STATUS_ACTIVE.equals(targetPermitStatusCode);
+
     Double overrideFee = parseDouble(request.overrideFee());
     String overrideComment = trimToNull(request.overrideComment());
     String overrideIndicator = trimToNull(request.overrideInd());
@@ -1817,9 +1830,11 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
             mergeSubmittedText(request.otherPortOfExport(), current.otherPortOfExport()),
             targetSubmitDate,
             targetReceivedDate,
-            firstNonNull(parseDate(request.permitIssueDate()), current.permitIssueDate()),
+            mergeSubmittedDate(
+                request.permitIssueDate(), current.permitIssueDate(), allowBlanketOicDraftDateClear),
             mergeSubmittedText(request.permitReceiptNo(), current.receiptNumber()),
-            firstNonNull(parseDate(request.permitExpiryDate()), current.expiryDate()),
+            mergeSubmittedDate(
+                request.permitExpiryDate(), current.expiryDate(), allowBlanketOicDraftDateClear),
             authoritativePermitVolume,
             authoritativePermitPieces,
             firstNonNull(current.feeInLieuVolume(), 0L),
@@ -1845,7 +1860,8 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
             overrideFee,
             overrideComment,
             current.oicApplicationNumber(),
-            firstNonNull(parsePositiveLong(request.oicPermitTotalPieces()), current.oicRequestPieces()),
+            firstNonNull(
+                parseNonNegativeLong(request.oicPermitTotalPieces()), current.oicRequestPieces()),
             firstNonNull(submittedOicRequestVolume, current.oicRequestVolume()),
             mergeSubmittedText(request.packageProductType(), current.productTypeCode()));
 
@@ -4839,7 +4855,16 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   }
 
   private LocalDate mergeSubmittedDate(String submitted, LocalDate current) {
-    return submitted == null ? current : parseDate(submitted);
+    return mergeSubmittedDate(submitted, current, true);
+  }
+
+  private LocalDate mergeSubmittedDate(
+      String submitted, LocalDate current, boolean clearWhenBlank) {
+    if (submitted == null) {
+      return current;
+    }
+    LocalDate parsed = parseDate(submitted);
+    return clearWhenBlank ? parsed : firstNonNull(parsed, current);
   }
 
   private List<String> validateSubmittedPermitDates(PermitMutationRequestDto request) {
@@ -4882,10 +4907,10 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     }
 
     if (submittedPieces != null) {
-      Long pieces = parsePositiveLong(submittedPieces);
+      Long pieces = parseNonNegativeLong(submittedPieces);
       if (pieces == null || pieces > MAX_OIC_REQUEST_PIECES) {
         errors.add(
-            "Permit Request Pieces must be a positive whole number no greater than 9999999999.");
+            "Permit Request Pieces must be a nonnegative whole number no greater than 9999999999.");
       }
     }
 
@@ -4893,11 +4918,11 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     if (submittedVolume == null || volume == null) {
       return;
     }
-    if (volume <= 0.0d
+    if (volume < 0.0d
         || submittedVolume.length() > MAX_OIC_REQUEST_VOLUME_LENGTH
         || !OIC_REQUEST_VOLUME_PATTERN.matcher(submittedVolume).matches()) {
       errors.add(
-          "Permit Request Volume must be a positive number of 9 characters or fewer with no more than 2 decimal places.");
+          "Permit Request Volume must be a nonnegative number of 9 characters or fewer with no more than 2 decimal places.");
     }
   }
 

@@ -38,7 +38,6 @@ import {
   fetchExemptionBlanketOicTotals,
   fetchExemptionEditContext,
   fetchExemptionPermits,
-  releaseExemptionEditLock,
   updateExemption,
 } from '@/service/provincial-exemption-detail-service'
 import { fetchProvincialExemptionOptions } from '@/service/search-options-service'
@@ -88,7 +87,6 @@ vi.mock('@/service/provincial-exemption-detail-service', () => ({
   fetchExemptionBlanketOicTotals: vi.fn(),
   fetchExemptionEditContext: vi.fn(),
   fetchExemptionPermits: vi.fn(),
-  releaseExemptionEditLock: vi.fn(),
   removeApplicationFromExemption: vi.fn(),
   sendExemptionApprovalEmails: vi.fn(),
   updateExemption: vi.fn(),
@@ -152,7 +150,6 @@ const mockedFetchExemptionApplications = vi.mocked(fetchExemptionApplications)
 const mockedFetchExemptionBlanketOicTotals = vi.mocked(fetchExemptionBlanketOicTotals)
 const mockedFetchExemptionEditContext = vi.mocked(fetchExemptionEditContext)
 const mockedFetchExemptionPermits = vi.mocked(fetchExemptionPermits)
-const mockedReleaseExemptionEditLock = vi.mocked(releaseExemptionEditLock)
 const mockedUpdateExemption = vi.mocked(updateExemption)
 const mockedFetchProvincialExemptionOptions = vi.mocked(fetchProvincialExemptionOptions)
 
@@ -328,7 +325,6 @@ describe('Exemption and Federal Detail Document Actions', () => {
       locked: false,
       lockMessage: '',
     })
-    mockedReleaseExemptionEditLock.mockResolvedValue(undefined)
     mockedFetchProvincialExemptionOptions.mockResolvedValue({
       exemptionTypes: [{ value: 'TYPE1', label: 'Type 1' }],
       exemptionStatuses: [{ value: 'ACTIVE', label: 'Active' }],

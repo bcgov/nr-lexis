@@ -984,6 +984,45 @@ describe('provincial permit detail services', () => {
     })
   })
 
+  it('sends explicit blank issue and expiry dates when updating a permit', async () => {
+    postMock.mockResolvedValue(response({ success: true }))
+
+    await updatePermitDetail({
+      permitNumber: '777',
+      permitStatus: 'ACT',
+      permitSubmitDate: '2026-05-19',
+      permitIssueDate: '',
+      permitExpiryDate: ' ',
+      permitRequestDate: '2026-05-19',
+      exemptionNumber: 'EX-9',
+      permitReceiptNo: '',
+      permitRemarks: '',
+      permitTotalVolume: '',
+      permitNumberOfPieces: '',
+      oicPermitTotalPieces: '',
+      oicPermitTotalVolume: '',
+      orgUnitNumber: '',
+      ownerClientNumber: '',
+      ownerClientLocation: '',
+      agentClientNumber: '',
+      agentClientLocation: '',
+      destinationCompanyName: '',
+      destinationCountry: '',
+      transportType: '',
+      transportName: '',
+      estimatedShippingDate: '',
+      portOfExport: '',
+      otherPortOfExport: '',
+    })
+
+    const [, body] = postMock.mock.calls[0]
+    expect(body).toBeInstanceOf(URLSearchParams)
+    expect(body.get('permitIssueDate')).toBe('')
+    expect(body.get('permitExpiryDate')).toBe('')
+    expect(body.get('permitReceiptNo')).toBeNull()
+    expect(body.get('permitRemarks')).toBeNull()
+  })
+
   it('creates a permit from only the normalized exemption number', async () => {
     postMock.mockResolvedValue(
       response({

@@ -502,6 +502,13 @@ const withUpdatedPermitDetail = (
   const selectedRegionLabel = regionOptions.find(
     (option) => option.value === form.orgUnitNumber.trim(),
   )?.label
+  const allowBlanketOicDraftDateClear =
+    currentDetail.blanketOic &&
+    detailValue(currentDetail.permitStatusCode).trim().toUpperCase() === 'ACT' &&
+    permitStatusCode.toUpperCase() === 'ACT'
+  const updatedSubmitDate = form.permitSubmitDate.trim() || currentDetail.applicationDate
+  const updatedPermitDate = (submittedValue: string, currentValue: string | null): string | null =>
+    submittedValue.trim() || (allowBlanketOicDraftDateClear ? null : currentValue)
 
   return {
     ...currentDetail,
@@ -511,13 +518,11 @@ const withUpdatedPermitDetail = (
       permitStatusCode === detailValue(currentDetail.permitStatusCode)
         ? currentDetail.permitStatusDescription
         : selectedStatusLabel || permitStatusCode || null,
-    applicationDate: form.permitSubmitDate.trim() || null,
+    applicationDate: updatedSubmitDate,
     exemptionNumber: form.exemptionNumber.trim() || null,
-    issueDate: form.permitIssueDate.trim() || null,
-    expiryDate: form.permitExpiryDate.trim() || null,
-    receivedDate: currentDetail.blanketOic
-      ? currentDetail.receivedDate
-      : form.permitSubmitDate.trim() || null,
+    issueDate: updatedPermitDate(form.permitIssueDate, currentDetail.issueDate),
+    expiryDate: updatedPermitDate(form.permitExpiryDate, currentDetail.expiryDate),
+    receivedDate: currentDetail.blanketOic ? currentDetail.receivedDate : updatedSubmitDate,
     permitVolume: optionalNumberValue(form.permitTotalVolume),
     numberOfPieces: optionalIntegerValue(form.permitNumberOfPieces),
     oicRequestPieces: optionalIntegerValue(form.oicPermitTotalPieces),
@@ -1665,6 +1670,11 @@ const ProvincialPermitDetailsPage = () => {
     isLoadingAvailableApplications,
     reloadAvailablePermitApplications,
   ])
+  const requiresPositiveOicRequestLimits =
+    !!detail?.blanketOic && permitForm?.permitStatus.trim().toUpperCase() === 'COM'
+  const requiresPermitCompletionDates = permitForm?.permitStatus.trim().toUpperCase() === 'COM'
+  const requiresCompletionSubmitDate =
+    requiresPermitCompletionDates && ['ACT', 'CAN'].includes(permitStatusCode ?? '')
   const permitFieldErrors = useMemo<FieldErrors<PermitDetailFormField>>(() => {
     if (!permitForm) {
       return {}
@@ -1680,9 +1690,30 @@ const ProvincialPermitDetailsPage = () => {
             () => positiveNumericFieldError(permitForm.orgUnitNumber),
           )
         : undefined,
-      permitIssueDate: isoDateFieldError(permitForm.permitIssueDate) ?? undefined,
-      permitExpiryDate: isoDateFieldError(permitForm.permitExpiryDate) ?? undefined,
-      permitSubmitDate: isoDateFieldError(permitForm.permitSubmitDate) ?? undefined,
+      permitIssueDate:
+        firstValidationError(
+          () =>
+            requiresPermitCompletionDates
+              ? requiredFieldError(permitForm.permitIssueDate, 'Issue date')
+              : null,
+          () => isoDateFieldError(permitForm.permitIssueDate),
+        ) ?? undefined,
+      permitExpiryDate:
+        firstValidationError(
+          () =>
+            requiresPermitCompletionDates
+              ? requiredFieldError(permitForm.permitExpiryDate, 'Expiry date')
+              : null,
+          () => isoDateFieldError(permitForm.permitExpiryDate),
+        ) ?? undefined,
+      permitSubmitDate:
+        firstValidationError(
+          () =>
+            requiresCompletionSubmitDate
+              ? requiredFieldError(permitForm.permitSubmitDate, 'Submit date')
+              : null,
+          () => isoDateFieldError(permitForm.permitSubmitDate),
+        ) ?? undefined,
       permitRequestDate: undefined,
       permitReceiptNo:
         firstValidationError(
@@ -1736,9 +1767,18 @@ const ProvincialPermitDetailsPage = () => {
       oicPermitTotalPieces:
         detail?.blanketOic && !invoiceMaterialLocked
           ? firstValidationError(
-              () => requiredFieldError(permitForm.oicPermitTotalPieces, 'Permit Request Pieces'),
-              () => integerFieldError(permitForm.oicPermitTotalPieces, 'Permit Request Pieces'),
-              () => positiveNumericFieldError(permitForm.oicPermitTotalPieces),
+              () =>
+                requiresPositiveOicRequestLimits
+                  ? requiredFieldError(permitForm.oicPermitTotalPieces, 'Permit Request Pieces')
+                  : null,
+              () =>
+                permitForm.oicPermitTotalPieces.trim()
+                  ? integerFieldError(permitForm.oicPermitTotalPieces, 'Permit Request Pieces')
+                  : null,
+              () =>
+                requiresPositiveOicRequestLimits
+                  ? positiveNumericFieldError(permitForm.oicPermitTotalPieces)
+                  : null,
               () =>
                 maxNumericValueFieldError(
                   permitForm.oicPermitTotalPieces,
@@ -1750,9 +1790,15 @@ const ProvincialPermitDetailsPage = () => {
       oicPermitTotalVolume:
         detail?.blanketOic && !invoiceMaterialLocked
           ? firstValidationError(
-              () => requiredFieldError(permitForm.oicPermitTotalVolume, 'Permit Request Volume'),
+              () =>
+                requiresPositiveOicRequestLimits
+                  ? requiredFieldError(permitForm.oicPermitTotalVolume, 'Permit Request Volume')
+                  : null,
               () => numericFieldError(permitForm.oicPermitTotalVolume, 'Permit Request Volume'),
-              () => positiveNumericFieldError(permitForm.oicPermitTotalVolume),
+              () =>
+                requiresPositiveOicRequestLimits
+                  ? positiveNumericFieldError(permitForm.oicPermitTotalVolume)
+                  : null,
               () => oicRequestVolumePrecisionError(permitForm.oicPermitTotalVolume),
               () =>
                 maxLengthFieldError(
@@ -1763,7 +1809,14 @@ const ProvincialPermitDetailsPage = () => {
             )
           : undefined,
     }
-  }, [detail?.blanketOic, invoiceMaterialLocked, permitForm])
+  }, [
+    detail?.blanketOic,
+    invoiceMaterialLocked,
+    permitForm,
+    requiresCompletionSubmitDate,
+    requiresPermitCompletionDates,
+    requiresPositiveOicRequestLimits,
+  ])
   const hasPermitValidationError = Object.entries(permitFieldErrors).some(
     ([field, error]) => !!error && !SHIPPING_PERMIT_FIELDS.has(field as PermitDetailFormField),
   )
@@ -1878,6 +1931,19 @@ const ProvincialPermitDetailsPage = () => {
             ? current
             : { ...current, ownerClientNumber, agentClientNumber }
         })
+        if (detail.blanketOic && !invoiceMaterialLocked && !requiresPositiveOicRequestLimits) {
+          confirmedRequest = {
+            ...confirmedRequest,
+            oicPermitTotalPieces:
+              !confirmedRequest.oicPermitTotalPieces.trim() && detail.oicRequestPieces != null
+                ? '0'
+                : confirmedRequest.oicPermitTotalPieces,
+            oicPermitTotalVolume:
+              !confirmedRequest.oicPermitTotalVolume.trim() && detail.oicRequestVolume != null
+                ? '0'
+                : confirmedRequest.oicPermitTotalVolume,
+          }
+        }
 
         if (hasPermitValidationError || (includeShipping && hasShippingValidationError)) {
           setShowPermitValidationErrors(true)
@@ -1970,6 +2036,7 @@ const ProvincialPermitDetailsPage = () => {
       editablePermitStatusOptions,
       hasPermitValidationError,
       hasShippingValidationError,
+      invoiceMaterialLocked,
       isSavingPermit,
       isPermitOptionsLoading,
       permitOptionsUnavailable,
@@ -1977,6 +2044,7 @@ const ProvincialPermitDetailsPage = () => {
       permitFieldErrors,
       permitForm,
       permitNumber,
+      requiresPositiveOicRequestLimits,
       tryBeginPermitMutation,
     ],
   )
@@ -3318,16 +3386,24 @@ const ProvincialPermitDetailsPage = () => {
                               'permitSubmitDate',
                               'Submit date',
                               !canCorrectPermitSubmitDate,
+                              undefined,
+                              requiresCompletionSubmitDate && canCorrectPermitSubmitDate,
                             )}
                             {renderPermitTextInput(
                               'permitIssueDate',
                               'Issue date',
                               !canReviewPermits || invoiceMaterialLocked,
+                              undefined,
+                              requiresPermitCompletionDates &&
+                                canReviewPermits &&
+                                !invoiceMaterialLocked,
                             )}
                             {renderPermitTextInput(
                               'permitExpiryDate',
                               'Expiry date',
                               !canReviewPermits,
+                              undefined,
+                              requiresPermitCompletionDates && canReviewPermits,
                             )}
                             {renderPermitTextInput('permitRequestDate', 'Received date', true)}
                             {detail.blanketOic ? (
@@ -3460,7 +3536,7 @@ const ProvincialPermitDetailsPage = () => {
                                 'Permit Request Pieces',
                                 invoiceMaterialLocked,
                                 undefined,
-                                !invoiceMaterialLocked,
+                                requiresPositiveOicRequestLimits && !invoiceMaterialLocked,
                               )}
                             {detail.blanketOic &&
                               renderPermitTextInput(
@@ -3468,7 +3544,7 @@ const ProvincialPermitDetailsPage = () => {
                                 'Permit Request Volume (m³)',
                                 invoiceMaterialLocked,
                                 undefined,
-                                !invoiceMaterialLocked,
+                                requiresPositiveOicRequestLimits && !invoiceMaterialLocked,
                               )}
                             {renderPermitTextInput(
                               'permitTotalVolume',

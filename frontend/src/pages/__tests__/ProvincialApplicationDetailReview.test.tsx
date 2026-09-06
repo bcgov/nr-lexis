@@ -87,7 +87,8 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     expect(screen.queryByLabelText('New Remark')).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Add remark' }))
-    expect(await screen.findByLabelText('New Remark')).toBeInTheDocument()
+    const addRemarkDialog = await screen.findByRole('dialog', { name: 'Add remark' })
+    expect(within(addRemarkDialog).getByLabelText('New Remark')).toHaveAttribute('maxlength', '250')
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(screen.queryByLabelText('New Remark')).not.toBeInTheDocument()
 
@@ -168,9 +169,9 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     )
 
     await selectApplicationSummaryTile()
-    const locationOfLogs = await screen.findByLabelText('Location of logs')
-    fireEvent.change(locationOfLogs, {
-      target: { value: 'AB' },
+    const exemptionTerm = await screen.findByLabelText('Exemption term (days)')
+    fireEvent.change(exemptionTerm, {
+      target: { value: '181' },
     })
     await selectApplicationRemarksForEditing()
     const newRemark = await screen.findByLabelText('New Remark')
@@ -207,8 +208,8 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     })
     expect(await screen.findByText('Package PKG-1 saved.')).toBeInTheDocument()
 
-    expect(locationOfLogs).toBeInTheDocument()
-    expect(locationOfLogs).toHaveValue('AB')
+    expect(exemptionTerm).toBeInTheDocument()
+    expect(exemptionTerm).toHaveValue(181)
     expect(newRemark).toBeInTheDocument()
     expect(newRemark).toHaveValue('Preserve remark draft')
     expect(reviewStatus).toBeInTheDocument()
@@ -467,10 +468,18 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     await selectApplicationDetailTab('Remarks')
     const remarkRow = (await screen.findByText('ok')).closest('tr')
     expect(remarkRow).toBeTruthy()
+    const remarksTable = within(
+      screen.getByRole('region', { name: 'Application remarks' }),
+    ).getByRole('table')
+    expect(
+      within(remarksTable).queryByRole('columnheader', { name: 'Title' }),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('textbox', { name: 'Filter remarks' })).not.toBeInTheDocument()
     expect(within(remarkRow as HTMLElement).getByText('2026-01-04')).toBeInTheDocument()
     expect(within(remarkRow as HTMLElement).getByText('idir\\reviewer')).toBeInTheDocument()
     await userEvent.click(within(remarkRow as HTMLElement).getByRole('button', { name: 'Edit' }))
-    const remarkInput = screen.getByLabelText('Edit Remark 88')
+    const editRemarkDialog = await screen.findByRole('dialog', { name: 'Edit remark' })
+    const remarkInput = within(editRemarkDialog).getByLabelText('Edit Remark 88')
     fireEvent.change(remarkInput, {
       target: { value: 'Updated application note' },
     })
@@ -505,8 +514,8 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
       target: { value: 'Keep this unsaved remark' },
     })
     await selectApplicationSummaryTile()
-    fireEvent.change(await screen.findByLabelText('Location of logs'), {
-      target: { value: 'AB' },
+    fireEvent.change(await screen.findByLabelText('Exemption term (days)'), {
+      target: { value: '181' },
     })
     await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
     await waitFor(() => expect(mockedUpdateApplicationSummary).toHaveBeenCalledTimes(1))

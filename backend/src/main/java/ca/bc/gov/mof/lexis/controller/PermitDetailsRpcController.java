@@ -9,6 +9,7 @@ import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.firstPresent;
 
 import ca.bc.gov.mof.lexis.dto.application.ApplicationEditLockDto;
 import ca.bc.gov.mof.lexis.dto.application.ApplicationAccessContextDto;
+import ca.bc.gov.mof.lexis.dto.permit.PermitDetailDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAllScaleFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCountryListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitConversionRateRpcResponseDto;
@@ -40,6 +41,7 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitTotalFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationEditLockService;
 import ca.bc.gov.mof.lexis.service.application.EditLockConflictException;
+import ca.bc.gov.mof.lexis.service.exemption.ExemptionService;
 import ca.bc.gov.mof.lexis.service.permit.ApplicationPermitOperationCoordinator;
 import ca.bc.gov.mof.lexis.service.permit.PermitDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.permit.PermitOperationMutex;
@@ -107,6 +109,7 @@ public class PermitDetailsRpcController {
   private LexisPrincipalService principalService;
   private ApplicationEditLockService editLockService;
   private PermitService permitService;
+  private ExemptionService exemptionService;
 
   public PermitDetailsRpcController(
       ObjectProvider<PermitDetailsRpcService> serviceProvider,
@@ -141,6 +144,11 @@ public class PermitDetailsRpcController {
   @Autowired(required = false)
   void setPermitService(PermitService permitService) {
     this.permitService = permitService;
+  }
+
+  @Autowired(required = false)
+  void setExemptionService(ExemptionService exemptionService) {
+    this.exemptionService = exemptionService;
   }
 
   @GetMapping("/permit-summary")
@@ -1344,8 +1352,8 @@ public class PermitDetailsRpcController {
         first(parameters, "permitNumber"),
         firstPresent(parameters, "permitStatus"),
         first(parameters, "permitSubmitDate"),
-        first(parameters, "permitIssueDate"),
-        first(parameters, "permitExpiryDate"),
+        firstPresent(parameters, "permitIssueDate"),
+        firstPresent(parameters, "permitExpiryDate"),
         first(parameters, "permitRequestDate"),
         firstPresent(parameters, "exemptionNumber"),
         firstPresent(parameters, "destinationCompanyName"),
@@ -1491,8 +1499,8 @@ public class PermitDetailsRpcController {
     if (permitService == null) {
       return hasText(request.permitStatus())
           || hasText(request.permitSubmitDate())
-          || hasText(request.permitIssueDate())
-          || hasText(request.permitExpiryDate());
+          || request.permitIssueDate() != null
+          || request.permitExpiryDate() != null;
     }
     return permitService
         .findByPermitNumber(permitNumber)
@@ -1502,8 +1510,37 @@ public class PermitDetailsRpcController {
                     || submittedDateChanged(
                         request.permitSubmitDate(), detail.applicationDate())
                     || submittedDateChanged(request.permitIssueDate(), detail.issueDate())
-                    || submittedDateChanged(request.permitExpiryDate(), detail.expiryDate()))
+                    || submittedDateChanged(request.permitExpiryDate(), detail.expiryDate())
+                    || clearsBlanketOicDraftDate(request, detail))
         .orElse(true);
+  }
+
+  private boolean clearsBlanketOicDraftDate(
+      PermitMutationRequestDto request, PermitDetailDto detail) {
+    if (!PERMIT_STATUS_ACTIVE.equalsIgnoreCase(detail.permitStatusCode())
+        || !targetsActivePermitStatus(request.permitStatus(), detail.permitStatusCode())
+        || (!clearsSubmittedDate(request.permitIssueDate(), detail.issueDate())
+            && !clearsSubmittedDate(request.permitExpiryDate(), detail.expiryDate()))) {
+      return false;
+    }
+
+    String exemptionNumber = normalizeExemptionNumber(detail.exemptionNumber());
+    if (exemptionService == null || exemptionNumber == null) {
+      return true;
+    }
+    return exemptionService
+        .findByExemptionNumber(exemptionNumber)
+        .map(exemption -> exemption.blanketOic())
+        .orElse(true);
+  }
+
+  private boolean targetsActivePermitStatus(String submitted, String current) {
+    String targetStatus = submitted == null || submitted.isBlank() ? current : submitted.trim();
+    return PERMIT_STATUS_ACTIVE.equalsIgnoreCase(targetStatus);
+  }
+
+  private boolean clearsSubmittedDate(String submitted, java.time.LocalDate current) {
+    return submitted != null && submitted.isBlank() && current != null;
   }
 
   private boolean submittedCodeChanged(String submitted, String current) {

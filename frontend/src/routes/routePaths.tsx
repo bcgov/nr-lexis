@@ -23,6 +23,9 @@ const ProvincialApplicationDetailsPage = lazy(() => import('@/pages/ProvincialAp
 const ProvincialExemptionPage = lazy(() => import('@/pages/ProvincialExemption'))
 const ProvincialExemptionCreatePage = lazy(() => import('@/pages/ProvincialExemptionCreate'))
 const ProvincialExemptionDetailsPage = lazy(() => import('@/pages/ProvincialExemptionDetails'))
+const ProvincialBlanketOicPermitCreatePage = lazy(
+  () => import('@/pages/ProvincialBlanketOicPermitCreate'),
+)
 const ProvincialOfferCreatePage = lazy(() => import('@/pages/ProvincialOfferCreate'))
 const ProvincialOfferDetailsPage = lazy(() => import('@/pages/ProvincialOfferDetails'))
 const ProvincialOffersPage = lazy(() => import('@/pages/ProvincialOffers'))
@@ -292,6 +295,19 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
     element: (
       <Layout>
         <ProvincialExemptionCreatePage />
+      </Layout>
+    ),
+    isNavigation: false,
+  },
+  {
+    path: '/provincial/exemption/:exemptionNumber/permit/new',
+    id: 'Create Blanket OIC Permit',
+    roleScope: 'provincial',
+    requiredActions: ['createPermit', 'savePermit'],
+    requiredActionsMatch: 'all',
+    element: (
+      <Layout>
+        <ProvincialBlanketOicPermitCreatePage />
       </Layout>
     ),
     isNavigation: false,

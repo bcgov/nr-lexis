@@ -56,8 +56,9 @@ const LandingPage = () => {
               <img src={logoSource} alt="Government of British Columbia" className="landing-logo" />
             </div>
 
+            <h1 className="landing-title">LEXIS</h1>
+
             <div className="landing-title-group">
-              <h1 className="landing-title">LEXIS</h1>
               <h2 className="landing-subtitle">Log Exemption Information System</h2>
               <p className="landing-description">
                 LEXIS helps you create and manage applications and view offers and permits.
