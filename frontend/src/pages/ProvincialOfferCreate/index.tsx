@@ -665,7 +665,14 @@ const ProvincialOfferCreatePage = () => {
           true,
         ) ?? undefined,
       offerVolume: firstValidationError(
-        () => offerDecimalStorageFieldError(form.offerVolume, OFFER_VOLUME_MAX, 'Offer volume'),
+        () =>
+          offerDecimalStorageFieldError(
+            form.offerVolume,
+            OFFER_VOLUME_MAX,
+            'Offer volume',
+            false,
+            true,
+          ),
         () => offerVolumeContextFieldError(form.offerVolume, contextVolume),
       ),
       purchaseOfferAmount:

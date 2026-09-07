@@ -270,6 +270,44 @@ describe('Provincial Offer Detail Actions', () => {
     })
   })
 
+  it.each(['0', '0.04'])(
+    'saves offer volume %s as zero after legacy blur rounding',
+    async (volume) => {
+      renderPage()
+
+      await screen.findByRole('heading', { name: 'Offer 81001' })
+      await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+      const volumeInput = screen.getByLabelText('Offer volume (m³)')
+      await userEvent.clear(volumeInput)
+      await userEvent.type(volumeInput, volume)
+      await userEvent.tab()
+      expect(volumeInput).toHaveValue('0.0')
+      await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+      await waitFor(() => {
+        expect(mockedSubmitProvincialOfferUpdate).toHaveBeenCalledWith(
+          expect.objectContaining({ offerVolume: '0.0' }),
+        )
+      })
+    },
+  )
+
+  it('allows an unrelated edit to an offer with a stored zero volume', async () => {
+    mockedFetchProvincialOfferDetail.mockResolvedValue({ ...offerDetail, offerVolume: 0 })
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'Offer 81001' })
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    await userEvent.clear(screen.getByLabelText('Offer conditions / remarks'))
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => {
+      expect(mockedSubmitProvincialOfferUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({ offerVolume: '0', offerCondition: '' }),
+      )
+    })
+  })
+
   it('rejects a changed offer volume above the application or package volume', async () => {
     renderPage()
 

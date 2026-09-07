@@ -1471,9 +1471,9 @@ class PermitDetailsRpcControllerTest {
   }
 
   @ParameterizedTest
-  @MethodSource("activeOrExplicitBlankPermitStatuses")
-  void updatePermitShouldAllowPermitReviewerToClearBlanketOicDraftDates(
-      String submittedPermitStatus) {
+  @MethodSource("activeDraftPermitStatuses")
+  void updatePermitShouldAllowPermitReviewerToClearActiveDraftDates(
+      String exemptionNumber, String submittedPermitStatus) {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(request.getParameterMap())
         .thenReturn(
@@ -1487,11 +1487,9 @@ class PermitDetailsRpcControllerTest {
             Optional.of(
                 permitDetail(
                     "ACT",
-                    "EX-BOIC",
+                    exemptionNumber,
                     java.time.LocalDate.of(2026, 5, 20),
                     java.time.LocalDate.of(2027, 5, 20))));
-    when(exemptionService.findByExemptionNumber("EX-BOIC"))
-        .thenReturn(Optional.of(exemptionDetail("EX-BOIC", true)));
     when(service.updatePermit(any(PermitMutationRequestDto.class), eq("idir\\jsmith")))
         .thenReturn(
             new PermitMutationRpcResponseDto(
@@ -1512,14 +1510,17 @@ class PermitDetailsRpcControllerTest {
     assertThat(requestCaptor.getValue().permitExpiryDate()).isEmpty();
   }
 
-  private static Stream<Arguments> activeOrExplicitBlankPermitStatuses() {
-    return Stream.of(Arguments.of("ACT"), Arguments.of(""), Arguments.of(" "));
+  private static Stream<Arguments> activeDraftPermitStatuses() {
+    return Stream.of("EX-BOIC", "EX-ORDINARY")
+        .flatMap(
+            exemptionNumber -> Stream.of("ACT", "", " ")
+                .map(status -> Arguments.of(exemptionNumber, status)));
   }
 
   @ParameterizedTest
-  @MethodSource("blanketOicDraftDateClearFields")
-  void updatePermitShouldRejectEachBlanketOicDraftDateClearWithoutPermitReviewAuthority(
-      String submittedPermitStatus, String fieldName, String fieldValue) {
+  @MethodSource("activeDraftDateClearFields")
+  void updatePermitShouldRejectEachActiveDraftDateClearWithoutPermitReviewAuthority(
+      String exemptionNumber, String submittedPermitStatus, String fieldName, String fieldValue) {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(request.getParameterMap())
         .thenReturn(
@@ -1532,11 +1533,9 @@ class PermitDetailsRpcControllerTest {
             Optional.of(
                 permitDetail(
                     "ACT",
-                    "EX-BOIC",
+                    exemptionNumber,
                     java.time.LocalDate.of(2026, 5, 20),
                     java.time.LocalDate.of(2027, 5, 20))));
-    when(exemptionService.findByExemptionNumber("EX-BOIC"))
-        .thenReturn(Optional.of(exemptionDetail("EX-BOIC", true)));
     lenient()
         .when(service.updatePermit(any(PermitMutationRequestDto.class), eq("bceid\\submitter")))
         .thenReturn(successfulPermitUpdate());
@@ -1550,13 +1549,15 @@ class PermitDetailsRpcControllerTest {
     verify(service, never()).updatePermit(any(), any());
   }
 
-  private static Stream<Arguments> blanketOicDraftDateClearFields() {
-    return Stream.of("ACT", "", " ")
+  private static Stream<Arguments> activeDraftDateClearFields() {
+    return Stream.of("EX-BOIC", "EX-ORDINARY")
         .flatMap(
-            submittedPermitStatus ->
-                Stream.of(
-                    Arguments.of(submittedPermitStatus, "permitIssueDate", ""),
-                    Arguments.of(submittedPermitStatus, "permitExpiryDate", " ")));
+            exemptionNumber -> Stream.of("ACT", "", " ")
+                .flatMap(
+                    submittedPermitStatus ->
+                        Stream.of(
+                            Arguments.of(exemptionNumber, submittedPermitStatus, "permitIssueDate", ""),
+                            Arguments.of(exemptionNumber, submittedPermitStatus, "permitExpiryDate", " "))));
   }
 
   @ParameterizedTest
@@ -1586,8 +1587,6 @@ class PermitDetailsRpcControllerTest {
               }
               return Optional.of(snapshot);
             });
-    when(exemptionService.findByExemptionNumber("EX-BOIC"))
-        .thenReturn(Optional.of(exemptionDetail("EX-BOIC", true)));
     when(service.getExemptionNumberForPermitMutation(7000123L)).thenReturn("EX-BOIC");
     when(service.getApplicationNumbersForPermitMutation(7000123L)).thenReturn(List.of());
     lenient()
@@ -1665,7 +1664,7 @@ class PermitDetailsRpcControllerTest {
   }
 
   @Test
-  void updatePermitShouldUseTheAuthoritativeExemptionForBlanketOicDraftDateClear() {
+  void updatePermitShouldRejectActiveDraftDateClearDespiteForgedExemption() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(request.getParameterMap())
         .thenReturn(
@@ -1679,16 +1678,13 @@ class PermitDetailsRpcControllerTest {
             Optional.of(
                 permitDetail(
                     "ACT", "EX-BOIC", java.time.LocalDate.of(2026, 5, 20), null)));
-    when(exemptionService.findByExemptionNumber("EX-BOIC"))
-        .thenReturn(Optional.of(exemptionDetail("EX-BOIC", true)));
     TestingAuthenticationToken authentication = scopedSubmitterWithSavePermit();
 
     ResponseEntity<PermitMutationRpcResponseDto> response =
         controller.updatePermit(request, authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
-    verify(exemptionService).findByExemptionNumber("EX-BOIC");
-    verify(exemptionService, never()).findByExemptionNumber("EX-ORDINARY");
+    verifyNoInteractions(exemptionService);
     verify(service, never()).updatePermit(any(), any());
   }
 
@@ -1775,7 +1771,7 @@ class PermitDetailsRpcControllerTest {
   }
 
   @Test
-  void updatePermitShouldAllowActiveOrdinaryPermitBlankDatesForScopedSubmitter() {
+  void updatePermitShouldRejectActiveOrdinaryPermitDateClearWhenStatusIsOmittedForScopedSubmitter() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(request.getParameterMap())
         .thenReturn(
@@ -1791,19 +1787,13 @@ class PermitDetailsRpcControllerTest {
                     "EX-ORDINARY",
                     java.time.LocalDate.of(2026, 5, 20),
                     java.time.LocalDate.of(2027, 5, 20))));
-    when(exemptionService.findByExemptionNumber("EX-ORDINARY"))
-        .thenReturn(Optional.of(exemptionDetail("EX-ORDINARY", false)));
-    when(service.updatePermit(any(PermitMutationRequestDto.class), eq("bceid\\submitter")))
-        .thenReturn(successfulPermitUpdate());
-    allowApplicationMutationLocksForUser("bceid\\submitter");
     TestingAuthenticationToken authentication = scopedSubmitterWithSavePermit();
 
     ResponseEntity<PermitMutationRpcResponseDto> response =
         controller.updatePermit(request, authentication);
 
-    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-    verify(exemptionService, times(2)).findByExemptionNumber("EX-ORDINARY");
-    verify(service).updatePermit(any(PermitMutationRequestDto.class), eq("bceid\\submitter"));
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    verify(service, never()).updatePermit(any(), any());
   }
 
   @Test

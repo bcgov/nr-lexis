@@ -268,7 +268,13 @@ const ProvincialOfferDetailsPage = () => {
         ) ?? undefined,
       offerVolume: firstValidationError(
         () =>
-          offerDecimalStorageFieldError(form?.offerVolume ?? '', OFFER_VOLUME_MAX, 'Offer volume'),
+          offerDecimalStorageFieldError(
+            form?.offerVolume ?? '',
+            OFFER_VOLUME_MAX,
+            'Offer volume',
+            false,
+            true,
+          ),
         () => {
           const currentVolume = form?.offerVolume ?? ''
           const originalVolume = detail?.offerVolume == null ? '' : String(detail.offerVolume)

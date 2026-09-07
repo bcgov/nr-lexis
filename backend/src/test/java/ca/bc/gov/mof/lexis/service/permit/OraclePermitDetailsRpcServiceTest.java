@@ -2865,6 +2865,104 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(permitCaptor.getValue().expiryDate()).isNull();
   }
 
+  @ParameterizedTest
+  @CsvSource({
+    "M,true,true", "M,true,false", "M,false,true", "M,false,false",
+    "O,true,true", "O,true,false", "O,false,true", "O,false,false"
+  })
+  void updatePermitShouldClearOnlySubmittedOrdinaryActiveDates(
+      String exemptionType, boolean clearIssueDate, boolean clearExpiryDate) {
+    PermitMutationRow current = permitMutationRow();
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(current));
+    stubPermitCreationExemption("EX-700", exemptionType, "ACT", "00077881", "00077880");
+    when(repository.updatePermitDetail(
+            any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
+        .thenReturn(true);
+
+    PermitMutationRpcResponseDto response =
+        service.updatePermit(
+            updatePermitRequest(
+                null, null, null, null, "", clearIssueDate ? "" : null,
+                clearExpiryDate ? " " : null),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<PermitMutationRow> permitCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository)
+        .updatePermitDetail(
+            permitCaptor.capture(), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE));
+    PermitMutationRow updated = permitCaptor.getValue();
+    assertThat(updated.permitIssueDate())
+        .isEqualTo(clearIssueDate ? null : current.permitIssueDate());
+    assertThat(updated.expiryDate())
+        .isEqualTo(clearExpiryDate ? null : current.expiryDate());
+    assertThat(updated.applicationDate()).isEqualTo(current.applicationDate());
+    assertThat(updated.receivedDate()).isEqualTo(current.applicationDate());
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"COM", "PPD", "CAN"})
+  void updatePermitShouldPreserveBlankSubmittedDatesOutsideActiveDrafts(String status) {
+    PermitMutationRow current = permitMutationRow(status);
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(current));
+    stubTargetMinisterialExemption("EX-700");
+    when(repository.updatePermitDetail(
+            any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
+        .thenReturn(true);
+
+    PermitMutationRpcResponseDto response =
+        service.updatePermit(
+            updatePermitRequest(null, null, null, null, null, "", " "), "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<PermitMutationRow> permitCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository)
+        .updatePermitDetail(
+            permitCaptor.capture(), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE));
+    assertThat(permitCaptor.getValue().permitIssueDate()).isEqualTo(current.permitIssueDate());
+    assertThat(permitCaptor.getValue().expiryDate()).isEqualTo(current.expiryDate());
+  }
+
+  @Test
+  void updatePermitShouldRequireClearedOrdinaryDatesBeforeCompletion() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow()));
+    stubTargetMinisterialExemption("EX-700");
+    when(repository.updatePermitDetail(
+            any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
+        .thenReturn(true);
+
+    PermitMutationRpcResponseDto cleared =
+        service.updatePermit(
+            updatePermitRequest(null, null, null, null, null, "", ""), "idir\\jsmith");
+    assertThat(cleared.success()).isTrue();
+    ArgumentCaptor<PermitMutationRow> permitCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository)
+        .updatePermitDetail(
+            permitCaptor.capture(), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE));
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitCaptor.getValue()));
+
+    PermitMutationRpcResponseDto completion =
+        service.updatePermit(
+            permitMutationRequest(
+                "EX-700", "00077881", "00077880", null, "COM", null, null, null),
+            "idir\\jsmith");
+
+    assertThat(completion.success()).isFalse();
+    assertThat(completion.errors())
+        .contains(
+            "A valid permit issue date is required to complete a permit.",
+            "A valid expiry date is required to complete a permit.");
+    verify(repository, times(1)).updatePermitDetail(any(), any(), any());
+    verify(permitInvoiceOrchestrationServiceProvider, never()).getIfAvailable();
+  }
+
   @Test
   void updatePermitShouldIgnoreTheSubmittedTotalButRejectANonFiniteBlanketOicRequestVolume() {
     when(repository.findPermitMutationByPermitNumber(7000123L))

@@ -1691,6 +1691,74 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     })
   })
 
+  it.each([
+    { volume: '1.04', packageVolume: 1, roundedVolume: '1.0', exceedsPackage: false },
+    { volume: '1.06', packageVolume: 1, roundedVolume: '1.1', exceedsPackage: true },
+    { volume: '1.04', packageVolume: 2, roundedVolume: '1.0', exceedsPackage: false },
+    { volume: '1.06', packageVolume: 2, roundedVolume: '1.1', exceedsPackage: false },
+  ])(
+    'rounds manual scale volume $volume to $roundedVolume before validating a $packageVolume m³ package',
+    async ({ volume, packageVolume, roundedVolume, exceedsPackage }) => {
+      mockedFetchApplicationPackageDetails.mockResolvedValue({
+        success: true,
+        packageNumber: 'PKG-1',
+        volume: packageVolume.toFixed(1),
+        scaledVolume: 0,
+        length: '12.0',
+        diameter: '24.0',
+        status: 'ACT',
+        comments: 'Ready',
+        statusDescription: 'Active',
+        reprocessed: 'N',
+        ageClass: 'O',
+        ageClassDescription: 'Old',
+        productType: 'LOG',
+        productTypeDescription: 'Logs',
+      })
+      mockedFetchApplicationPackageScales.mockResolvedValue([])
+      render(
+        <ProvincialApplicationItemsPanel
+          detail={{
+            ...applicationDetail,
+            packages: [{ packageNumber: 'PKG-1', volume: packageVolume, pieceCount: 0 }],
+          }}
+          canEditPackages
+          canAddPackages
+          canAddScales
+          canUpdatePackageNumber
+          hideMutationActions={false}
+          authoritativeOptionsAvailability="available"
+          productTypeOptions={[]}
+          growthTypeOptions={[]}
+          onDetailChanged={vi.fn().mockResolvedValue(undefined)}
+        />,
+      )
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Edit items' }))
+      fireEvent.change(screen.getByLabelText('Timber Mark'), { target: { value: 'TM002' } })
+      await chooseComboBoxOption(
+        screen.getAllByRole('combobox', { name: 'Species' })[1],
+        'FI - Douglas-fir',
+      )
+      await chooseComboBoxOption(screen.getByRole('combobox', { name: 'Grade' }), '1 - Sawlog')
+      fireEvent.change(screen.getByLabelText('Pieces'), { target: { value: '2' } })
+      fireEvent.change(screen.getByLabelText('Scale Volume (m³)'), { target: { value: volume } })
+      await userEvent.click(screen.getByRole('button', { name: 'Add Scale' }))
+
+      if (exceedsPackage) {
+        expect(screen.getAllByText('Scale volume must be 1.0 or less.').length).toBeGreaterThan(0)
+        expect(screen.getByLabelText('Scale Volume (m³)')).toHaveValue(roundedVolume)
+        expect(mockedAddApplicationScaleToPackage).not.toHaveBeenCalled()
+      } else {
+        await waitFor(() => {
+          expect(mockedAddApplicationScaleToPackage).toHaveBeenCalledWith(
+            expect.objectContaining({ volume: roundedVolume }),
+          )
+        })
+      }
+    },
+  )
+
   it('keeps scale mutation success visible when detail refresh fails', async () => {
     const onDetailChanged = vi.fn().mockRejectedValue(new Error('refresh failed'))
     render(

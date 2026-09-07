@@ -552,8 +552,9 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
       errors.add(fieldName + " must be a finite number");
       return;
     }
-    if (value <= 0.0d) {
-      errors.add(fieldName + " must be greater than 0");
+    // Legacy permits zero for the optional offer volume; purchase price positivity is checked above.
+    if (value < 0.0d) {
+      errors.add(fieldName + " must be 0 or greater");
       return;
     }
     if (value > maximum) {

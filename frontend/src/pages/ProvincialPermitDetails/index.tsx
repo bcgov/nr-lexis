@@ -502,13 +502,12 @@ const withUpdatedPermitDetail = (
   const selectedRegionLabel = regionOptions.find(
     (option) => option.value === form.orgUnitNumber.trim(),
   )?.label
-  const allowBlanketOicDraftDateClear =
-    currentDetail.blanketOic &&
+  const allowActiveDraftDateClear =
     detailValue(currentDetail.permitStatusCode).trim().toUpperCase() === 'ACT' &&
     permitStatusCode.toUpperCase() === 'ACT'
   const updatedSubmitDate = form.permitSubmitDate.trim() || currentDetail.applicationDate
   const updatedPermitDate = (submittedValue: string, currentValue: string | null): string | null =>
-    submittedValue.trim() || (allowBlanketOicDraftDateClear ? null : currentValue)
+    submittedValue.trim() || (allowActiveDraftDateClear ? null : currentValue)
 
   return {
     ...currentDetail,
@@ -1215,6 +1214,22 @@ const ProvincialPermitDetailsPage = () => {
     ],
   )
 
+  const refreshLoadedPermitFees = useCallback(() => {
+    if (
+      !loadedDeferredPermitTabsRef.current.has('fees') &&
+      !deferredPermitTabLoadsRef.current.has('fees') &&
+      activePermitTabId !== 'fees'
+    ) {
+      return
+    }
+
+    loadedDeferredPermitTabsRef.current.delete('fees')
+    deferredPermitTabLoadsRef.current.delete('fees')
+    setDeferredPermitTabLoaded((current) => ({ ...current, fees: false }))
+    setPermitFeesErrorMessage('')
+    void loadDeferredPermitTab('fees', { force: true })
+  }, [activePermitTabId, loadDeferredPermitTab])
+
   useEffect(() => {
     if (
       activePermitTabId === 'fees' ||
@@ -1557,6 +1572,9 @@ const ProvincialPermitDetailsPage = () => {
       return
     }
 
+    const reloadFees =
+      loadedDeferredPermitTabsRef.current.has('fees') ||
+      deferredPermitTabLoadsRef.current.has('fees')
     beginPermitGbmsRequest()
     setIsPermitTablesLoading(true)
     try {
@@ -1572,7 +1590,12 @@ const ProvincialPermitDetailsPage = () => {
         receiptNumber: detail.receiptNumber,
         blanketOic: detail.blanketOic,
       })
-      if (loadedDeferredPermitTabsRef.current.has('fees')) {
+      if (
+        reloadFees ||
+        loadedDeferredPermitTabsRef.current.has('fees') ||
+        deferredPermitTabLoadsRef.current.has('fees')
+      ) {
+        deferredPermitTabLoadsRef.current.delete('fees')
         await loadDeferredPermitTab('fees', {
           force: true,
           packageNumbers: tabsResult.packages.map((row) => row.packageNumber),
@@ -2104,6 +2127,7 @@ const ProvincialPermitDetailsPage = () => {
       setTouchedPermitFields({})
       setShowPermitValidationErrors(false)
       setActionInfoMessage(permitMutationMessage(result, 'Shipping saved successfully.'))
+      refreshLoadedPermitFees()
       return true
     } catch (error) {
       if (isLatestRequest()) {
@@ -2123,6 +2147,7 @@ const ProvincialPermitDetailsPage = () => {
     isSavingShipping,
     permitFieldErrors,
     permitForm,
+    refreshLoadedPermitFees,
     shippingReferences,
     tryBeginPermitMutation,
   ])
@@ -2239,6 +2264,7 @@ const ProvincialPermitDetailsPage = () => {
       setFeeOverrideForm(savedContext)
       setIsEditingFeeOverride(false)
       setActionInfoMessage(result.message || 'Permit fee override saved successfully.')
+      refreshLoadedPermitFees()
       return true
     } catch (error) {
       if (isLatestRequest()) {
@@ -2256,6 +2282,7 @@ const ProvincialPermitDetailsPage = () => {
     endPermitMutation,
     feeOverrideForm,
     isSavingFeeOverride,
+    refreshLoadedPermitFees,
     tryBeginPermitMutation,
   ])
 

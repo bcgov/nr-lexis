@@ -1778,9 +1778,8 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
 
     String targetPermitStatusCode =
         normalizeCode(mergeSubmittedText(request.permitStatus(), current.permitStatusCode()));
-    boolean allowBlanketOicDraftDateClear =
-        targetBlanketOic
-            && EXPORT_PERMIT_STATUS_ACTIVE.equalsIgnoreCase(current.permitStatusCode())
+    boolean allowActiveDraftDateClear =
+        EXPORT_PERMIT_STATUS_ACTIVE.equalsIgnoreCase(current.permitStatusCode())
             && EXPORT_PERMIT_STATUS_ACTIVE.equals(targetPermitStatusCode);
 
     Double overrideFee = parseDouble(request.overrideFee());
@@ -1834,10 +1833,10 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
             targetSubmitDate,
             targetReceivedDate,
             mergeSubmittedDate(
-                request.permitIssueDate(), current.permitIssueDate(), allowBlanketOicDraftDateClear),
+                request.permitIssueDate(), current.permitIssueDate(), allowActiveDraftDateClear),
             mergeSubmittedText(request.permitReceiptNo(), current.receiptNumber()),
             mergeSubmittedDate(
-                request.permitExpiryDate(), current.expiryDate(), allowBlanketOicDraftDateClear),
+                request.permitExpiryDate(), current.expiryDate(), allowActiveDraftDateClear),
             authoritativePermitVolume,
             authoritativePermitPieces,
             firstNonNull(current.feeInLieuVolume(), 0L),

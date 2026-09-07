@@ -1511,27 +1511,16 @@ public class PermitDetailsRpcController {
                         request.permitSubmitDate(), detail.applicationDate())
                     || submittedDateChanged(request.permitIssueDate(), detail.issueDate())
                     || submittedDateChanged(request.permitExpiryDate(), detail.expiryDate())
-                    || clearsBlanketOicDraftDate(request, detail))
+                    || clearsActiveDraftDate(request, detail))
         .orElse(true);
   }
 
-  private boolean clearsBlanketOicDraftDate(
+  private boolean clearsActiveDraftDate(
       PermitMutationRequestDto request, PermitDetailDto detail) {
-    if (!PERMIT_STATUS_ACTIVE.equalsIgnoreCase(detail.permitStatusCode())
-        || !targetsActivePermitStatus(request.permitStatus(), detail.permitStatusCode())
-        || (!clearsSubmittedDate(request.permitIssueDate(), detail.issueDate())
-            && !clearsSubmittedDate(request.permitExpiryDate(), detail.expiryDate()))) {
-      return false;
-    }
-
-    String exemptionNumber = normalizeExemptionNumber(detail.exemptionNumber());
-    if (exemptionService == null || exemptionNumber == null) {
-      return true;
-    }
-    return exemptionService
-        .findByExemptionNumber(exemptionNumber)
-        .map(exemption -> exemption.blanketOic())
-        .orElse(true);
+    return PERMIT_STATUS_ACTIVE.equalsIgnoreCase(detail.permitStatusCode())
+        && targetsActivePermitStatus(request.permitStatus(), detail.permitStatusCode())
+        && (clearsSubmittedDate(request.permitIssueDate(), detail.issueDate())
+            || clearsSubmittedDate(request.permitExpiryDate(), detail.expiryDate()));
   }
 
   private boolean targetsActivePermitStatus(String submitted, String current) {

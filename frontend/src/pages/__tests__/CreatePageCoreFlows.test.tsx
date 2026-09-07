@@ -2941,6 +2941,29 @@ describe('Create Page Core Flows', () => {
     })
   }, 15000)
 
+  it('creates an offer with an explicit zero volume', async () => {
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/offers/create?applicationNumber=2001&packageNumber=PKG-9&companyName=Example%20Lumber&contactName=Sample%20Contact&pickupLocation=Yard%20A&purchaseOfferAmount=25000&offerVolume=0',
+        ]}
+      >
+        <Routes>
+          <Route path="/provincial/offers/create" element={<ProvincialOfferCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByDisplayValue('95.0')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Save new offer' }))
+
+    await waitFor(() => {
+      expect(mockedSubmitProvincialOfferCreate).toHaveBeenCalledWith(
+        expect.objectContaining({ offerVolume: '0' }),
+      )
+    })
+  })
+
   it('rejects an offer volume above the selected package volume', async () => {
     render(
       <MemoryRouter
