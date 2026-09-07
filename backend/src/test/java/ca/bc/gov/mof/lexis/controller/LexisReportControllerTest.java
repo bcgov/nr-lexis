@@ -243,7 +243,14 @@ class LexisReportControllerTest {
 
   @Test
   void speciesGradeReportShouldDelegateToReportService() {
-    assertDelegatesTo("speciesGradeReport", controller -> controller.speciesGradeReport(sampleRequest()));
+    assertDelegatesTo(
+        "speciesGradeReport",
+        controller -> controller.speciesGradeReport(
+            new LexisReportRequestDto(Map.of("permitStatus", "  "), "PDF")));
+    ArgumentCaptor<LexisReportRequestDto> requestCaptor =
+        ArgumentCaptor.forClass(LexisReportRequestDto.class);
+    verify(reportService).generateReport(eq("speciesGradeReport"), requestCaptor.capture());
+    assertThat(requestCaptor.getValue().parameters()).containsEntry("permitStatus", "");
   }
 
   @Test

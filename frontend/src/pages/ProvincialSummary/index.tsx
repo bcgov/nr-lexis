@@ -671,17 +671,7 @@ const ProvincialSummaryPage = () => {
                               {row.offerNumber}
                             </Link>
                           </TableCell>
-                          <TableCell>
-                            <Link
-                              className="cds--link"
-                              to={`/provincial/application/${row.application}`}
-                              state={{
-                                returnTo: { label: 'Offers Placed', to: '/provincial/summary' },
-                              }}
-                            >
-                              {row.application}
-                            </Link>
-                          </TableCell>
+                          <TableCell>{row.application}</TableCell>
                           <TableCell>{displayValue(row.packageNumber)}</TableCell>
                           <TableCell>{displayValue(row.listingDate)}</TableCell>
                         </TableRow>

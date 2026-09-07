@@ -34,6 +34,8 @@ import net.sf.jasperreports.engine.JasperReport;
 import net.sf.jasperreports.engine.base.JRBasePrintPage;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.Mockito;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.dao.DataAccessResourceFailureException;
@@ -176,6 +178,43 @@ class OracleLexisReportServiceFormatSupportTest {
             LexisJasperReportDefinition.SPECIES_GRADE_REPORT,
             effectiveRequest,
             LexisReportFormat.PDF);
+    verifyNoInteractions(dataSource);
+  }
+
+  @ParameterizedTest
+  @EnumSource(value = LexisReportFormat.class, names = {"PDF", "CSV"})
+  void shouldPreserveExplicitAllStatusThroughSpeciesGradeGeneration(LexisReportFormat format) {
+    DataSource dataSource = Mockito.mock(DataSource.class);
+    OracleLegacyCsvReportService legacyCsvReportService =
+        Mockito.mock(OracleLegacyCsvReportService.class);
+    OracleLegacyJasperTableReportService legacyJasperTableReportService =
+        Mockito.mock(OracleLegacyJasperTableReportService.class);
+    LexisGeneratedReport legacyReport =
+        report("species-grade-report", format.mediaType(), (byte) 1);
+    LexisReportRequestDto request =
+        new LexisReportRequestDto(Map.of("permitStatus", ""), format.name());
+    if (format == LexisReportFormat.CSV) {
+      Mockito.when(
+              legacyCsvReportService.generateLegacyCsvReport(
+                  LexisJasperReportDefinition.SPECIES_GRADE_REPORT, request, format))
+          .thenReturn(Optional.of(legacyReport));
+    } else {
+      Mockito.when(
+              legacyJasperTableReportService.generateLegacyPdfReport(
+                  LexisJasperReportDefinition.SPECIES_GRADE_REPORT, request, format))
+          .thenReturn(Optional.of(legacyReport));
+    }
+    OracleLexisReportService service =
+        createService(dataSource, legacyCsvReportService, legacyJasperTableReportService);
+
+    assertThat(service.generateReport("speciesGradeReport", request)).containsSame(legacyReport);
+
+    verify(legacyCsvReportService)
+        .generateLegacyCsvReport(LexisJasperReportDefinition.SPECIES_GRADE_REPORT, request, format);
+    if (format == LexisReportFormat.PDF) {
+      verify(legacyJasperTableReportService)
+          .generateLegacyPdfReport(LexisJasperReportDefinition.SPECIES_GRADE_REPORT, request, format);
+    }
     verifyNoInteractions(dataSource);
   }
 

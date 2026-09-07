@@ -655,6 +655,45 @@ describe('Reports Page Actions', () => {
     })
   })
 
+  it('submits all regions after explicitly clearing the configured default region', async () => {
+    mockReportPermissions()
+    mockedFetchReportOptions.mockResolvedValueOnce({
+      ...emptyReportOptions(),
+      defaultRegion: '1903',
+      regions: [
+        { value: '1903', label: 'Cariboo Natural Resource Region' },
+        { value: '1904', label: 'Kootenay-Boundary Natural Resource Region' },
+      ],
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/reports?report=speciesGradeReport']}>
+        <Routes>
+          <Route path="/reports" element={<ReportsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { name: 'Species and Grade Report' })
+    await userEvent.click(await screen.findByRole('button', { name: 'Clear all selected items' }))
+    expect(
+      screen.queryByRole('button', { name: 'Clear all selected items' }),
+    ).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Generate report' }))
+
+    await waitFor(() => {
+      expect(mockedRunReport).toHaveBeenCalledWith({
+        reportId: 'speciesGradeReport',
+        actionMapping: 'generate',
+        values: {
+          region: '1903,1904',
+          regionLabel: 'Cariboo Natural Resource Region, Kootenay-Boundary Natural Resource Region',
+          permitStatus: 'COM',
+        },
+      })
+    })
+  })
+
   it('shows selected report regions in the default Carbon multi-select', async () => {
     mockReportPermissions()
     mockedFetchReportOptions.mockResolvedValueOnce({
@@ -717,6 +756,38 @@ describe('Reports Page Actions', () => {
           permitStatus: 'COM',
           permitStatusLabel: 'Complete',
         },
+      })
+    })
+  })
+
+  it('preserves an explicit All permit status when generating the species and grade report', async () => {
+    mockReportPermissions()
+    mockedFetchReportOptions.mockResolvedValueOnce({
+      ...emptyReportOptions(),
+      permitStatuses: [
+        { value: '', label: 'All' },
+        { value: 'COM', label: 'Complete' },
+      ],
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/reports?report=speciesGradeReport']}>
+        <Routes>
+          <Route path="/reports" element={<ReportsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { name: 'Species and Grade Report' })
+    await chooseComboBoxOption('Permit status', 'All')
+    expect(getComboBox('Permit status')).toHaveValue('All')
+    await userEvent.click(screen.getByRole('button', { name: 'Generate report' }))
+
+    await waitFor(() => {
+      expect(mockedRunReport).toHaveBeenCalledWith({
+        reportId: 'speciesGradeReport',
+        actionMapping: 'generate',
+        values: { permitStatus: '' },
       })
     })
   })

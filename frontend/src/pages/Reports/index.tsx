@@ -807,9 +807,12 @@ const buildEffectiveReportValues = (
   defaultRegion = '',
 ): Record<string, string> => {
   const effectiveValues = { ...values }
+  const hasExplicitPermitStatus =
+    report.id === 'speciesGradeReport' && hasOwnValue(values, 'permitStatus')
   report.fields.forEach((field) => {
     if (
       field.defaultValue !== undefined &&
+      !(field.key === 'permitStatus' && hasExplicitPermitStatus) &&
       (effectiveValues[field.key] === undefined || effectiveValues[field.key] === '')
     ) {
       effectiveValues[field.key] = field.defaultValue
@@ -821,7 +824,7 @@ const buildEffectiveReportValues = (
       !effectiveValues[field.key] &&
       (field.key === 'region' || field.key === 'orgUnitNumber')
     ) {
-      if (defaultRegion) {
+      if (defaultRegion && !hasOwnValue(values, field.key)) {
         effectiveValues[field.key] = defaultRegion
       } else {
         const options = optionsByKey[field.optionKey ?? field.key] ?? []
@@ -865,7 +868,11 @@ const buildEffectiveReportValues = (
       hasOwnValue(values, key) &&
       isExplicitBlankBiweeklyDateValue(values[key]) &&
       !value.trim()
-    if (value.trim() || shouldPreserveExplicitBlankBiweeklyDate) {
+    if (
+      value.trim() ||
+      shouldPreserveExplicitBlankBiweeklyDate ||
+      (key === 'permitStatus' && hasExplicitPermitStatus)
+    ) {
       acc[key] = value
     }
     return acc

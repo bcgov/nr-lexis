@@ -283,6 +283,25 @@ describe('report-service', () => {
     )
   })
 
+  it('preserves an explicit All species and grade status in the API request', async () => {
+    postMock.mockResolvedValue({
+      data: new Blob(['report']),
+      headers: {},
+    })
+
+    await runReport({
+      reportId: 'speciesGradeReport',
+      actionMapping: 'generate',
+      values: { permitStatus: '' },
+    })
+
+    expect(postMock.mock.calls[0][1]).toEqual(
+      expect.objectContaining({
+        parameters: { legacyActionMapping: 'generate', permitStatus: '' },
+      }),
+    )
+  })
+
   it('uppercases report fields that legacy JavaScript uppercased', async () => {
     postMock.mockResolvedValue({
       data: new Blob(['report']),

@@ -26,6 +26,8 @@ import net.sf.jasperreports.engine.JRPrintText;
 import net.sf.jasperreports.engine.JasperPrint;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -631,8 +633,9 @@ class OracleLegacyJasperTableReportServiceTest {
                 + "Kootenay-Boundary Natural Resource Region, Skeena Natural Resource Region");
   }
 
-  @Test
-  void shouldIncludeAllLegacySpeciesGradeFiltersInFallbackSubtitle() {
+  @ParameterizedTest
+  @ValueSource(strings = {"COM", ""})
+  void shouldIncludeAllLegacySpeciesGradeFiltersInFallbackSubtitle(String permitStatus) {
     OracleLegacyJasperTableReportService service =
         new OracleLegacyJasperTableReportService(legacyCsvReportService);
 
@@ -645,8 +648,8 @@ class OracleLegacyJasperTableReportServiceTest {
                     Map.entry("toDate", "2026-01-31"),
                     Map.entry("region", "1904"),
                     Map.entry("regionLabel", "Kootenay-Boundary Natural Resource Region"),
-                    Map.entry("permitStatus", "COM"),
-                    Map.entry("permitStatusLabel", "Complete"),
+                    Map.entry("permitStatus", permitStatus),
+                    Map.entry("permitStatusLabel", permitStatus.isEmpty() ? "" : "Complete"),
                     Map.entry("exemptionNumber", "EX-123"),
                     Map.entry("exemptionType", "OIC"),
                     Map.entry("exemptionReason", "SEC128"),
@@ -660,7 +663,8 @@ class OracleLegacyJasperTableReportServiceTest {
         .containsEntry(
             "REPORT_SUBTITLE",
             "From: 2026-01-01 | To: 2026-01-31 | Region: "
-                + "Kootenay-Boundary Natural Resource Region | Permit Status: Complete"
+                + "Kootenay-Boundary Natural Resource Region | Permit Status: "
+                + (permitStatus.isEmpty() ? "All" : "Complete")
                 + " | Exemption: EX-123 | Type: OIC | Reason: SEC128 | Growth: OLD"
                 + " | Timber Mark: TM123 | Forest File: A12345");
   }

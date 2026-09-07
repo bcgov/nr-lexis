@@ -458,7 +458,7 @@ public class OracleLexisReportService implements LexisReportService {
   private LexisReportRequestDto applyLegacySpeciesGradeDefaults(LexisReportRequestDto request) {
     HashMap<String, String> parameters =
         new HashMap<>(request == null || request.parameters() == null ? Map.of() : request.parameters());
-    if (isBlank(parameters.get("permitStatus"))) {
+    if (!parameters.containsKey("permitStatus")) {
       parameters.put("permitStatus", "COM");
     }
     return new LexisReportRequestDto(parameters, request == null ? null : request.format());

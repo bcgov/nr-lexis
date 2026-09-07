@@ -206,6 +206,13 @@ public class LegacyReportRouteController {
           normalized.put(key, String.join(",", normalizedValues));
         });
 
+    // Species/Grade uses an explicit blank status for All; omission keeps the initial COM default.
+    if ("speciesGradeReport".equals(reportAction)
+        && (requestParams.containsKey("permitStatus")
+            || multiValueRequestParams.containsKey("permitStatus"))) {
+      normalized.putIfAbsent("permitStatus", "");
+    }
+
     return normalized;
   }
 

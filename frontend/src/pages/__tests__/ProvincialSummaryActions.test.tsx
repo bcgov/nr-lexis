@@ -219,6 +219,38 @@ describe('Provincial Summary', () => {
     expect(screen.getByRole('button', { name: 'Refresh fees' })).toBeInTheDocument()
   })
 
+  it('keeps offers placed on another client application accessible without linking that application', async () => {
+    mockedFetchSummaryOffersPlaced.mockResolvedValue({
+      results: [
+        {
+          offerNumber: 379,
+          application: 40348,
+          packageNumber: 'PKG-OTHER-CLIENT',
+          listingDate: '2026-08-20',
+        },
+      ],
+      total: 1,
+      page: 0,
+      size: 10,
+    })
+
+    renderPage()
+
+    const offersPlacedTable = await screen.findByRole('region', { name: 'Offers placed table' })
+    expect(within(offersPlacedTable).getByRole('cell', { name: '40348' })).toBeVisible()
+    expect(within(offersPlacedTable).queryByRole('link', { name: '40348' })).not.toBeInTheDocument()
+    expect(within(offersPlacedTable).getByRole('link', { name: '379' })).toHaveAttribute(
+      'href',
+      '/provincial/offers/379',
+    )
+
+    const myOffersTable = screen.getByRole('region', { name: 'My offers table' })
+    expect(within(myOffersTable).getByRole('link', { name: '43278' })).toHaveAttribute(
+      'href',
+      '/provincial/application/43278',
+    )
+  })
+
   it('pages one summary section independently', async () => {
     mockedFetchSummaryApplications
       .mockResolvedValueOnce({

@@ -180,8 +180,9 @@ const buildReportPayload = (
 
   Object.entries(values).forEach(([key, rawValue]) => {
     const value = rawValue.trim()
+    const isExplicitSpeciesGradeStatus = reportId === 'speciesGradeReport' && key === 'permitStatus'
     if (
-      !value ||
+      (!value && !isExplicitSpeciesGradeStatus) ||
       key === 'outputFormat' ||
       key === 'tenureTypes' ||
       key === 'timberMarks' ||

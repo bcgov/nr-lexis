@@ -16,6 +16,8 @@ import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -340,6 +342,28 @@ class LegacyReportRouteControllerTest {
         .containsEntry("timberMark", "TM123")
         .containsEntry("forestFileId", "A12345");
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"", "  "})
+  void shouldPreserveExplicitAllSpeciesGradeStatus(String permitStatus) {
+    LegacyReportRouteController controller = new LegacyReportRouteController(reportController);
+    MockHttpServletRequest request =
+        new MockHttpServletRequest("POST", "/api/lexis/speciesGradeReport.do");
+    when(reportController.speciesGradeReport(any())).thenReturn(streamingResponse(5, 1));
+    MultiValueMap<String, String> multi = new LinkedMultiValueMap<>();
+    multi.add("permitStatus", permitStatus);
+
+    controller.legacyReport(
+        Map.of("actionMapping", "generate", "outputFormat", "PDF", "permitStatus", permitStatus),
+        multi,
+        request,
+        authentication);
+
+    ArgumentCaptor<LexisReportRequestDto> requestCaptor =
+        ArgumentCaptor.forClass(LexisReportRequestDto.class);
+    verify(reportController).speciesGradeReport(requestCaptor.capture());
+    assertThat(requestCaptor.getValue().parameters()).containsEntry("permitStatus", "");
   }
 
   @Test
