@@ -24,6 +24,8 @@ import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
@@ -38,6 +40,41 @@ class ExemptionOracleServiceTest {
   @Mock private ExemptionRepository repository;
 
   @InjectMocks private ExemptionOracleService service;
+
+  @ParameterizedTest
+  @CsvSource({"' pkg-903 ',PKG-903", "' pKg_% ',PKG_%", "'  ',", ","})
+  void searchAndCountShouldNormalizePackageNumberLikeLegacy(String packageNumber, String expected) {
+    ExemptionSearchCriteria criteria =
+        new ExemptionSearchCriteria(
+            null,
+            packageNumber,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            List.of(),
+            false,
+            0,
+            25);
+    when(repository.search(any(ExemptionSearchCriteria.class))).thenReturn(page(List.of(), 0));
+
+    service.search(criteria);
+    service.count(criteria);
+
+    ArgumentCaptor<ExemptionSearchCriteria> searchCaptor =
+        ArgumentCaptor.forClass(ExemptionSearchCriteria.class);
+    ArgumentCaptor<ExemptionSearchCriteria> countCaptor =
+        ArgumentCaptor.forClass(ExemptionSearchCriteria.class);
+    verify(repository).search(searchCaptor.capture());
+    verify(repository).count(countCaptor.capture());
+    assertThat(searchCaptor.getValue().packageNumber()).isEqualTo(expected);
+    assertThat(countCaptor.getValue().packageNumber()).isEqualTo(expected);
+  }
 
   @Test
   void searchOptionsShouldReturnRepositoryValues() {

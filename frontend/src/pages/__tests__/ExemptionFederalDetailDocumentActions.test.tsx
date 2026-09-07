@@ -1657,6 +1657,130 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(screen.getAllByText('Approved').length).toBeGreaterThan(0)
   })
 
+  it('preserves an unsaved federal status draft when shipping details are saved', async () => {
+    mockedFetchFederalApplicationDetail.mockResolvedValue({
+      ...federalDetail,
+      statusCode: 'APP',
+      statusDescription: 'Approved',
+      listingDate: '2999-12-31',
+    })
+    renderFederalDataRouter()
+    await selectDetailTab('Application')
+    await enterFederalStatusEditMode()
+    await userEvent.selectOptions(screen.getByLabelText('Status'), 'WDN')
+    await userEvent.type(screen.getByLabelText('Remark'), 'Awaiting withdrawal confirmation')
+
+    await selectDetailTab('Shipping details')
+    await userEvent.click(screen.getByRole('button', { name: 'Edit shipping details' }))
+    await userEvent.clear(screen.getByLabelText('Transport name'))
+    await userEvent.type(screen.getByLabelText('Transport name'), 'Updated ship')
+    await userEvent.click(screen.getByRole('button', { name: 'Save federal permit' }))
+    await screen.findByText('Federal permit updated.')
+
+    await selectDetailTab('Application')
+    expect(screen.getByLabelText('Status')).toHaveValue('WDN')
+    expect(screen.getByLabelText('Remark')).toHaveValue('Awaiting withdrawal confirmation')
+    expect(mockedUpdateFederalApplicationStatus).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('link', { name: 'Leave federal application' }))
+    expect(await screen.findByRole('dialog', { name: 'Unsaved changes' })).toBeInTheDocument()
+  })
+
+  it.each([
+    { dirty: true, readOnly: false, expectedEditing: true },
+    { dirty: true, readOnly: true, expectedEditing: false },
+    { dirty: false, readOnly: false, expectedEditing: false },
+  ])(
+    'refreshes federal status without losing an editable shipping draft (dirty=$dirty, readOnly=$readOnly)',
+    async ({ dirty, readOnly, expectedEditing }) => {
+      mockedFetchFederalApplicationDetail.mockResolvedValueOnce({
+        ...federalDetail,
+        statusCode: 'APP',
+        statusDescription: 'Approved',
+        listingDate: '2999-12-31',
+      })
+      mockedFetchFederalApplicationDetail.mockResolvedValue({
+        ...federalDetail,
+        statusCode: 'WDN',
+        statusDescription: 'Withdrawn',
+        listingDate: '2999-12-31',
+        readOnly,
+        federalPermit: { ...federalDetail.federalPermit!, transportName: 'Persisted ship' },
+      })
+      renderFederalDataRouter()
+      await selectDetailTab('Shipping details')
+      await userEvent.click(screen.getByRole('button', { name: 'Edit shipping details' }))
+      if (dirty) {
+        await userEvent.clear(screen.getByLabelText('Transport name'))
+        await userEvent.type(screen.getByLabelText('Transport name'), 'Unsaved ship')
+      }
+
+      await selectDetailTab('Application')
+      await enterFederalStatusEditMode()
+      await userEvent.selectOptions(screen.getByLabelText('Status'), 'WDN')
+      await userEvent.type(screen.getByLabelText('Remark'), 'Withdraw this application')
+      await userEvent.click(screen.getByRole('button', { name: 'Update status' }))
+      await screen.findByText('Federal application status updated.')
+      expect(screen.getAllByText('Withdrawn').length).toBeGreaterThan(0)
+      expect(mockedSaveFederalPermit).not.toHaveBeenCalled()
+
+      await selectDetailTab('Shipping details')
+      if (expectedEditing) {
+        expect(screen.getByLabelText('Transport name')).toHaveValue('Unsaved ship')
+        expect(screen.getByRole('button', { name: 'Save federal permit' })).toBeEnabled()
+        await userEvent.click(screen.getByRole('link', { name: 'Leave federal application' }))
+        expect(await screen.findByRole('dialog', { name: 'Unsaved changes' })).toBeInTheDocument()
+      } else {
+        expect(screen.queryByLabelText('Transport name')).not.toBeInTheDocument()
+        expect(screen.getByText('Persisted ship')).toBeInTheDocument()
+        if (readOnly) {
+          expect(
+            screen.queryByRole('button', { name: 'Edit shipping details' }),
+          ).not.toBeInTheDocument()
+        }
+        await userEvent.click(screen.getByRole('link', { name: 'Leave federal application' }))
+        expect(await screen.findByRole('heading', { name: 'Elsewhere' })).toBeInTheDocument()
+      }
+    },
+  )
+
+  it('preserves shipping edits made while the federal status refresh is pending', async () => {
+    const refresh = Promise.withResolvers<FederalApplicationDetail>()
+    mockedFetchFederalApplicationDetail
+      .mockResolvedValueOnce({
+        ...federalDetail,
+        statusCode: 'APP',
+        statusDescription: 'Approved',
+        listingDate: '2999-12-31',
+      })
+      .mockImplementationOnce(() => refresh.promise)
+    renderFederalDataRouter()
+    await selectDetailTab('Shipping details')
+    await userEvent.click(screen.getByRole('button', { name: 'Edit shipping details' }))
+
+    await selectDetailTab('Application')
+    await enterFederalStatusEditMode()
+    await userEvent.selectOptions(screen.getByLabelText('Status'), 'WDN')
+    await userEvent.type(screen.getByLabelText('Remark'), 'Withdraw this application')
+    await userEvent.click(screen.getByRole('button', { name: 'Update status' }))
+    await waitFor(() => expect(mockedFetchFederalApplicationDetail).toHaveBeenCalledTimes(2))
+
+    await selectDetailTab('Shipping details')
+    await userEvent.clear(screen.getByLabelText('Transport name'))
+    await userEvent.type(screen.getByLabelText('Transport name'), 'Draft during refresh')
+    refresh.resolve({
+      ...federalDetail,
+      statusCode: 'WDN',
+      statusDescription: 'Withdrawn',
+      listingDate: '2999-12-31',
+    })
+
+    await screen.findByText('Federal application status updated.')
+    expect(screen.getByLabelText('Transport name')).toHaveValue('Draft during refresh')
+    expect(mockedSaveFederalPermit).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('link', { name: 'Leave federal application' }))
+    expect(await screen.findByRole('dialog', { name: 'Unsaved changes' })).toBeInTheDocument()
+  })
+
   it('offers only listing-day outcomes from an approved federal application', async () => {
     mockedFetchFederalApplicationDetail.mockResolvedValue({
       ...federalDetail,

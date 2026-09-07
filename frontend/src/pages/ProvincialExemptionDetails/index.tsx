@@ -824,6 +824,9 @@ const ProvincialExemptionDetailsPage = () => {
       : 'Enter an application number to add it.'
   const cancelledBlanketOic = persistedTypeCode === 'B' && persistedStatusCode === 'CAN'
   const cancelledExemption = persistedStatusCode === 'CAN'
+  const approvalDateRequired =
+    !cancelledExemption && (currentTypeCode === 'O' || currentTypeCode === 'B')
+  const expiryDateRequired = !cancelledExemption
   const canEditSummaryFields =
     editing && canSaveExemption && !cancelledBlanketOic && !cancelledExemption
   const canEditStatus = editing && canSaveExemption
@@ -909,11 +912,11 @@ const ProvincialExemptionDetailsPage = () => {
     if (!exemptionStatusOptions.some((option) => option.value === editForm.exemptionStatusCode)) {
       return 'Select a valid exemption status.'
     }
-    if (
-      persistedStatusCode === 'CAN' &&
-      editForm.exemptionStatusCode.trim().toUpperCase() !== 'NEW'
-    ) {
-      return 'Select New to reopen this cancelled exemption.'
+    if (persistedStatusCode === 'CAN') {
+      // Legacy reopening changes only status; the backend preserves the locked summary fields.
+      return editForm.exemptionStatusCode.trim().toUpperCase() === 'NEW'
+        ? ''
+        : 'Select New to reopen this cancelled exemption.'
     }
     if ((currentTypeCode === 'O' || currentTypeCode === 'B') && !editForm.approvalDate.trim()) {
       return 'Approval date is required.'
@@ -1811,15 +1814,11 @@ const ProvincialExemptionDetailsPage = () => {
                               />
                               <IsoDatePicker
                                 id="exemptionDetailApprovalDate"
-                                labelText={requiredLabel(
-                                  'Approval date',
-                                  currentTypeCode === 'O' || currentTypeCode === 'B',
-                                )}
-                                required={currentTypeCode === 'O' || currentTypeCode === 'B'}
+                                labelText={requiredLabel('Approval date', approvalDateRequired)}
+                                required={approvalDateRequired}
                                 value={editForm.approvalDate}
                                 invalid={
-                                  ((currentTypeCode === 'O' || currentTypeCode === 'B') &&
-                                    !editForm.approvalDate.trim()) ||
+                                  (approvalDateRequired && !editForm.approvalDate.trim()) ||
                                   !!isoDateFieldError(editForm.approvalDate)
                                 }
                                 invalidText={
@@ -1836,11 +1835,11 @@ const ProvincialExemptionDetailsPage = () => {
                               />
                               <IsoDatePicker
                                 id="exemptionDetailExpiryDate"
-                                labelText={requiredLabel('Expiry date')}
-                                required
+                                labelText={requiredLabel('Expiry date', expiryDateRequired)}
+                                required={expiryDateRequired}
                                 value={editForm.expiryDate}
                                 invalid={
-                                  !editForm.expiryDate.trim() ||
+                                  (expiryDateRequired && !editForm.expiryDate.trim()) ||
                                   !!isoDateFieldError(editForm.expiryDate)
                                 }
                                 invalidText={

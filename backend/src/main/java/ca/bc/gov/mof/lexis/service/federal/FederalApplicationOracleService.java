@@ -841,7 +841,7 @@ public class FederalApplicationOracleService implements FederalApplicationServic
 
     return new FederalApplicationSearchCriteria(
         trimToNull(input.federalApplicationNumber()),
-        trimToNull(input.packageNumber()),
+        normalizedCode(input.packageNumber()),
         trimToNull(input.exemptionNumber()),
         trimToNull(input.applicationStatus()),
         input.receivedFromDate(),

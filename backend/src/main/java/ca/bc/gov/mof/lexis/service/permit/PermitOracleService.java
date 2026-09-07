@@ -14,6 +14,7 @@ import ca.bc.gov.mof.lexis.dto.permit.PermitSummaryEnrichmentDto;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRepository;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import org.springframework.context.annotation.Profile;
@@ -110,9 +111,10 @@ public class PermitOracleService implements PermitService {
           null, null, null, null, null, null, null, null, null, null, false, List.of(), null, 0, 25);
     }
 
+    String packageNumber = trimToNull(input.packageNumber());
     return new PermitSearchCriteria(
         trimToNull(input.applicationNumber()),
-        trimToNull(input.packageNumber()),
+        packageNumber == null ? null : packageNumber.toUpperCase(Locale.ROOT),
         trimToNull(input.permitNumber()),
         input.issuedFromDate(),
         input.issuedToDate(),

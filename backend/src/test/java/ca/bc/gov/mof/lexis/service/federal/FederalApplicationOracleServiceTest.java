@@ -37,6 +37,8 @@ import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
@@ -71,6 +73,39 @@ class FederalApplicationOracleServiceTest {
   @BeforeEach
   void setUpLockSnapshot() {
     lenient().when(editLockService.lockedApplicationNumbers(any())).thenReturn(Set.of());
+  }
+
+  @ParameterizedTest
+  @CsvSource({"' pkg-903 ',PKG-903", "' pKg_% ',PKG_%", "'  ',", ","})
+  void searchAndCountShouldNormalizePackageNumberLikeLegacy(String packageNumber, String expected) {
+    FederalApplicationSearchCriteria criteria =
+        new FederalApplicationSearchCriteria(
+            null,
+            packageNumber,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            List.of(),
+            0,
+            25);
+    when(repository.search(any(FederalApplicationSearchCriteria.class))).thenReturn(page(List.of(), 0));
+
+    service.search(criteria);
+    service.count(criteria);
+
+    ArgumentCaptor<FederalApplicationSearchCriteria> searchCaptor =
+        ArgumentCaptor.forClass(FederalApplicationSearchCriteria.class);
+    ArgumentCaptor<FederalApplicationSearchCriteria> countCaptor =
+        ArgumentCaptor.forClass(FederalApplicationSearchCriteria.class);
+    verify(repository).search(searchCaptor.capture());
+    verify(repository).count(countCaptor.capture());
+    assertThat(searchCaptor.getValue().packageNumber()).isEqualTo(expected);
+    assertThat(countCaptor.getValue().packageNumber()).isEqualTo(expected);
   }
 
   @Test

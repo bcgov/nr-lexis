@@ -245,6 +245,19 @@ const FederalApplicationDetailsPage = () => {
     currentDetail?.listingDate,
     businessToday,
   )
+  const statusDraftDirty =
+    canMutateFederalApplication &&
+    isEditingFederalStatus &&
+    (statusCode !== (statusTransitions[0]?.code ?? '') || statusRemark.length > 0)
+  const permitDraftDirty =
+    isEditingFederalPermit &&
+    canMutateFederalApplication &&
+    !!detail &&
+    !formValuesEqual(permitForm, permitFormFromDetail(detail))
+  const independentDraftsRef = useRef({ statusDraftDirty, permitDraftDirty, statusCode })
+  useEffect(() => {
+    independentDraftsRef.current = { statusDraftDirty, permitDraftDirty, statusCode }
+  }, [statusDraftDirty, permitDraftDirty, statusCode])
   const canDeleteApplicationDocuments =
     canMaintainApplicationDocuments && applicationStatusCode.length > 0 && applicationDocumentEditor
   const canEditApplicationDocuments = canUploadApplicationDocuments || canDeleteApplicationDocuments
@@ -500,32 +513,47 @@ const FederalApplicationDetailsPage = () => {
     }
   }, [applicationNumber])
 
-  const refreshDetail = useCallback(async () => {
-    if (!applicationNumber) return
-    const refreshed = await fetchFederalApplicationDetail(applicationNumber)
-    setDetail(refreshed)
-    setStatusCode(
-      allowedFederalStatusTransitions(
+  const refreshDetail = useCallback(
+    async (savedSection: 'status' | 'permit') => {
+      if (!applicationNumber) return
+      const refreshed = await fetchFederalApplicationDetail(applicationNumber)
+      setDetail(refreshed)
+      const refreshedTransitions = allowedFederalStatusTransitions(
         refreshed?.statusCode,
         refreshed?.listingDate,
         formatBusinessIsoDate(),
-      )[0]?.code ?? '',
-    )
-    setStatusRemark('')
-    setPermitForm(refreshed ? permitFormFromDetail(refreshed) : emptyPermitForm())
-    setIsEditingFederalStatus(false)
-    setIsEditingFederalPermit(false)
-    if (canViewFederalApplication) {
-      try {
-        setRemarkRows(await fetchFederalApplicationRemarks(applicationNumber))
-        setRemarksErrorMessage('')
-      } catch (error) {
-        console.error(error)
-        setRemarkRows([])
-        setRemarksErrorMessage('Unable to refresh federal application remarks.')
+      )
+      const canContinueEditing =
+        canManageFederalApplication && !!refreshed && !refreshed.readOnly && !refreshed.locked
+      const drafts = independentDraftsRef.current
+      // Saving one tab must not discard an independent draft still allowed by the refreshed record.
+      if (
+        savedSection === 'status' ||
+        !canContinueEditing ||
+        !drafts.statusDraftDirty ||
+        !refreshedTransitions.some((transition) => transition.code === drafts.statusCode)
+      ) {
+        setStatusCode(refreshedTransitions[0]?.code ?? '')
+        setStatusRemark('')
+        setIsEditingFederalStatus(false)
       }
-    }
-  }, [applicationNumber, canViewFederalApplication])
+      if (savedSection === 'permit' || !canContinueEditing || !drafts.permitDraftDirty) {
+        setPermitForm(refreshed ? permitFormFromDetail(refreshed) : emptyPermitForm())
+        setIsEditingFederalPermit(false)
+      }
+      if (canViewFederalApplication) {
+        try {
+          setRemarkRows(await fetchFederalApplicationRemarks(applicationNumber))
+          setRemarksErrorMessage('')
+        } catch (error) {
+          console.error(error)
+          setRemarkRows([])
+          setRemarksErrorMessage('Unable to refresh federal application remarks.')
+        }
+      }
+    },
+    [applicationNumber, canManageFederalApplication, canViewFederalApplication],
+  )
 
   const onSaveStatus = useCallback(async (): Promise<boolean> => {
     if (
@@ -547,7 +575,7 @@ const FederalApplicationDetailsPage = () => {
         setActionErrorMessage(result.errors[0] || 'Unable to update federal application status.')
         return false
       }
-      await refreshDetail()
+      await refreshDetail('status')
       setActionInfoMessage(result.message || 'Federal application status updated.')
       setIsEditingFederalStatus(false)
       return true
@@ -591,7 +619,7 @@ const FederalApplicationDetailsPage = () => {
         setActionErrorMessage(result.errors[0] || 'Unable to save federal permit.')
         return false
       }
-      await refreshDetail()
+      await refreshDetail('permit')
       setActionInfoMessage(result.message || 'Federal permit saved.')
       return true
     } catch (error) {
@@ -784,21 +812,12 @@ const FederalApplicationDetailsPage = () => {
     ],
   )
 
-  const statusDraftDirty =
-    canMutateFederalApplication &&
-    isEditingFederalStatus &&
-    (statusCode !== (statusTransitions[0]?.code ?? '') || statusRemark.length > 0)
   const remarkBaseline =
     editingRemarkId === null
       ? ''
       : (remarkRows.find((remark) => remark.remarkId === editingRemarkId)?.remark ?? '')
   const remarkDraftDirty =
     canMutateFederalApplication && isEditingFederalRemarks && remarkDraft !== remarkBaseline
-  const permitDraftDirty =
-    isEditingFederalPermit &&
-    canMutateFederalApplication &&
-    !!detail &&
-    !formValuesEqual(permitForm, permitFormFromDetail(detail))
   const independentDraftCount = [statusDraftDirty, remarkDraftDirty, permitDraftDirty].filter(
     Boolean,
   ).length

@@ -81,6 +81,41 @@ class PurchaseOfferOracleServiceTest {
                     invocation.getArgument(0, RegionalMailRoute.class), List.of()));
   }
 
+  @ParameterizedTest
+  @CsvSource({"' pkg-903 ',PKG-903", "' pKg_% ',PKG_%", "'  ',", ","})
+  void searchAndCountShouldNormalizePackageNumberLikeLegacy(String packageNumber, String expected) {
+    PurchaseOfferSearchCriteria criteria =
+        new PurchaseOfferSearchCriteria(
+            null,
+            packageNumber,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            false,
+            false,
+            List.of(),
+            null,
+            0,
+            25);
+    when(repository.search(any(PurchaseOfferSearchCriteria.class))).thenReturn(page(List.of(), 0));
+
+    service.search(criteria);
+    service.count(criteria);
+
+    ArgumentCaptor<PurchaseOfferSearchCriteria> searchCaptor =
+        ArgumentCaptor.forClass(PurchaseOfferSearchCriteria.class);
+    ArgumentCaptor<PurchaseOfferSearchCriteria> countCaptor =
+        ArgumentCaptor.forClass(PurchaseOfferSearchCriteria.class);
+    verify(repository).search(searchCaptor.capture());
+    verify(repository).count(countCaptor.capture());
+    assertThat(searchCaptor.getValue().packageNumber()).isEqualTo(expected);
+    assertThat(countCaptor.getValue().packageNumber()).isEqualTo(expected);
+  }
+
   @Test
   void searchOptionsShouldReturnRepositoryValues() {
     when(repository.loadRegionOptions()).thenReturn(List.of(new CodeNameDto("12", "Coast")));
@@ -175,7 +210,7 @@ class PurchaseOfferOracleServiceTest {
 
     PurchaseOfferSearchCriteria normalized = criteriaCaptor.getValue();
     assertThat(normalized.applicationNumber()).isEqualTo("1000456");
-    assertThat(normalized.packageNumber()).isEqualTo("pkg-903");
+    assertThat(normalized.packageNumber()).isEqualTo("PKG-903");
     assertThat(normalized.clientNumber()).isEqualTo("00077881");
     assertThat(normalized.offeringClientNumber()).isEqualTo("00088999");
     assertThat(normalized.accessClientNumber()).isEqualTo("00055667");
