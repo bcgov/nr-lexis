@@ -821,6 +821,11 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
     if (!files || files.length === 0) {
       return
     }
+    if (selectedWorkflowType === 'invoice' && files.length > 1) {
+      setErrorMessage('Choose one file per invoice.')
+      setFileInputKey((current) => current + 1)
+      return
+    }
     if (selectedWorkflowType === 'applicationSubmission') {
       setApplicationSubmissionStep('upload')
     } else {
@@ -855,10 +860,14 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
     const nextItems = Array.from(nextItemsByFileName.values())
     const replacementFileNames = new Set(nextItems.map((item) => uploadQueueFileKey(item.file)))
 
-    setUploadQueue((current) => [
-      ...current.filter((item) => !replacementFileNames.has(uploadQueueFileKey(item.file))),
-      ...nextItems,
-    ])
+    setUploadQueue((current) =>
+      selectedWorkflowType === 'invoice'
+        ? nextItems
+        : [
+            ...current.filter((item) => !replacementFileNames.has(uploadQueueFileKey(item.file))),
+            ...nextItems,
+          ],
+    )
     if (selectedWorkflowType === 'applicationSubmission') {
       nextItems
         .filter((item) => item.status === 'queued')
@@ -1593,6 +1602,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
           selectedWorkflowType === 'applicationSubmission' ? 'Submission file' : 'Upload documents'
         }
         description={uploadFormatText}
+        multiple={selectedWorkflowType !== 'invoice'}
         inputId="uploadFile"
         inputKey={fileInputKey}
         inputLabel={uploadInputLabel}

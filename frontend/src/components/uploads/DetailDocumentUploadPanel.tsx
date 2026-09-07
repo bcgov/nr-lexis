@@ -378,6 +378,11 @@ const DetailDocumentUploadPanel = ({
     if (!files || files.length === 0) {
       return
     }
+    if (workflowType === 'invoice' && files.length > 1) {
+      setErrorMessage('Choose one file per invoice.')
+      setFileInputKey((current) => current + 1)
+      return
+    }
 
     const queuedAt = Date.now()
     const lockedTargetSummary = currentTargetSummary
@@ -408,6 +413,9 @@ const DetailDocumentUploadPanel = ({
     })
     const nextItems = Array.from(nextItemsByFileName.values())
     const replacementFileNames = new Set(nextItems.map((item) => uploadQueueFileKey(item.file)))
+    if (workflowType === 'invoice') {
+      validationRequestsRef.current.clear()
+    }
     replacementFileNames.forEach((fileKey) => validationRequestsRef.current.delete(fileKey))
     nextItems
       .filter((item) => item.status === 'validating')
@@ -417,10 +425,14 @@ const DetailDocumentUploadPanel = ({
         validationRequestsRef.current.set(uploadQueueFileKey(item.file), { id: item.id, token })
       })
 
-    setUploadQueue((current) => [
-      ...current.filter((item) => !replacementFileNames.has(uploadQueueFileKey(item.file))),
-      ...nextItems,
-    ])
+    setUploadQueue((current) =>
+      workflowType === 'invoice'
+        ? nextItems
+        : [
+            ...current.filter((item) => !replacementFileNames.has(uploadQueueFileKey(item.file))),
+            ...nextItems,
+          ],
+    )
     setShowFileValidationError(false)
     setErrorMessage('')
     setSuccessMessage('')
@@ -817,6 +829,7 @@ const DetailDocumentUploadPanel = ({
               <MultiFileDropZone
                 title="File"
                 description={DOCUMENT_UPLOAD_GUIDANCE}
+                multiple={workflowType !== 'invoice'}
                 inputId={`${inputId}File`}
                 inputKey={fileInputKey}
                 inputLabel="Document File"
@@ -863,20 +876,22 @@ const DetailDocumentUploadPanel = ({
               onClear={clearQueuedFiles}
               onRemove={removeQueuedFile}
               reviewSupplementalContent={
-                <MultiFileDropZone
-                  title="Add more documents"
-                  description={DOCUMENT_UPLOAD_GUIDANCE}
-                  inputId={`${inputId}ReviewFile`}
-                  inputKey={fileInputKey}
-                  inputLabel="Document File"
-                  accept={DOCUMENT_UPLOAD_ACCEPT}
-                  invalidText={uploadInvalidText}
-                  disabled={disabled || isSubmitting}
-                  disabledDescription={isSubmitting ? 'Upload is submitting.' : disabledReason}
-                  renderAsPanel={false}
-                  variant="fspts"
-                  onFilesSelected={addFilesToQueue}
-                />
+                workflowType !== 'invoice' && (
+                  <MultiFileDropZone
+                    title="Add more documents"
+                    description={DOCUMENT_UPLOAD_GUIDANCE}
+                    inputId={`${inputId}ReviewFile`}
+                    inputKey={fileInputKey}
+                    inputLabel="Document File"
+                    accept={DOCUMENT_UPLOAD_ACCEPT}
+                    invalidText={uploadInvalidText}
+                    disabled={disabled || isSubmitting}
+                    disabledDescription={isSubmitting ? 'Upload is submitting.' : disabledReason}
+                    renderAsPanel={false}
+                    variant="fspts"
+                    onFilesSelected={addFilesToQueue}
+                  />
+                )
               }
             />
           )}

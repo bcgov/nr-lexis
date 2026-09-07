@@ -83,6 +83,7 @@ vi.mock('@/service/provincial-permit-detail-tabs-service', () => ({
     packages: [],
     items: [],
     fees: [],
+    totalFeeVolume: null,
     gbmsEvents: [],
     oicItems: [],
     boicItems: [],
@@ -244,6 +245,7 @@ const tabsResult: ProvincialPermitDetailTabsData = {
   packages: [],
   items: [],
   fees: [],
+  totalFeeVolume: null,
   gbmsEvents: [],
   oicItems: [],
   boicItems: [],
@@ -379,7 +381,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
     mockedFetchProvincialPermitDetailTabs.mockResolvedValue(tabsResult)
     mockedFetchProvincialPermitGbmsEvents.mockResolvedValue([])
-    mockedFetchProvincialPermitFees.mockResolvedValue([])
+    mockedFetchProvincialPermitFees.mockResolvedValue({ fees: [], totalFeeVolume: 0 })
     mockedFetchProvincialPermitOptions.mockResolvedValue({
       permitStatuses: [
         { value: 'ACT', label: 'Active' },
@@ -824,6 +826,34 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(mockedFetchPermitDocuments).toHaveBeenCalledWith('777')
   })
 
+  it('uses the authoritative volume total instead of summing rounded fee rows', async () => {
+    mockedFetchProvincialPermitFees.mockResolvedValue({
+      totalFeeVolume: 2.1,
+      fees: ['SCALE-1', 'SCALE-2'].map((id) => ({
+        id,
+        packageNumber: 'BOIC-1',
+        timberMark: id,
+        species: 'Fir',
+        grade: 'A',
+        amv: '$1.00',
+        volume: 1,
+        ministryUser: false,
+        ewb: '',
+        filPercent: '',
+        mfPercent: '',
+        amount: 1.04,
+        amountDisplay: '$1.04',
+      })),
+    })
+    renderPermitDetails()
+
+    await selectPermitDetailTab('Fees')
+
+    expect(screen.getByLabelText('Total volume (m³)')).toHaveValue('2.1')
+    expect(screen.getByLabelText('Calculated fee (CAD)')).toHaveValue('$2.08')
+    expect(screen.getByLabelText('Effective fee (CAD)')).toHaveValue('$2.08')
+  })
+
   it('defers fee, document, and invoice data until their tabs are opened', async () => {
     let resolveFees:
       | ((value: Awaited<ReturnType<typeof fetchProvincialPermitFees>>) => void)
@@ -852,7 +882,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.getByLabelText('Calculated fee (CAD)')).toHaveValue('Loading…')
     expect(screen.getByLabelText('Effective fee (CAD)')).toHaveValue('Loading…')
     await act(async () => {
-      resolveFees?.([])
+      resolveFees?.({ fees: [], totalFeeVolume: 0 })
     })
     expect(
       await screen.findByRole('heading', { name: 'No fee details available', level: 3 }),
@@ -4455,9 +4485,9 @@ describe('Provincial Permit Detail Action Smoke', () => {
     const deleteButton = await screen.findByRole('button', { name: 'Delete' })
     expect(deleteButton).toBeEnabled()
     await userEvent.click(deleteButton)
-    const confirmation = await screen.findByRole('dialog', { name: 'Delete document' })
+    const confirmation = await screen.findByRole('dialog', { name: 'Delete invoice and document' })
     expect(confirmation).toHaveTextContent(
-      'Permanently delete permit-doc.pdf? This cannot be undone.',
+      'Permanently delete permit-doc.pdf? This also deletes the associated invoice record, including its value, conversion rate, and fee. This cannot be undone.',
     )
     expect(mockedRemovePermitInvoiceDocument).not.toHaveBeenCalled()
     await userEvent.click(within(confirmation).getByRole('button', { name: 'Delete' }))
@@ -4669,6 +4699,15 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await enterPermitDocumentEditMode()
     await screen.findByText('submitter-permit-doc.pdf')
     expect(screen.getByRole('button', { name: 'Delete' })).toBeEnabled()
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    const confirmation = await screen.findByRole('dialog', { name: 'Delete document' })
+    expect(confirmation).toHaveTextContent(
+      'Permanently delete submitter-permit-doc.pdf? This cannot be undone.',
+    )
+    expect(confirmation).not.toHaveTextContent('invoice record')
+    await userEvent.click(within(confirmation).getByRole('button', { name: 'Cancel' }))
+    expect(mockedRemovePermitDocument).not.toHaveBeenCalled()
+    expect(mockedRemovePermitInvoiceDocument).not.toHaveBeenCalled()
   })
 
   it('keeps documents with unknown authoritative source read-only', async () => {

@@ -78,6 +78,7 @@ export type ProvincialPermitDetailTabsData = {
   packages: ProvincialPermitPackageInfoRow[]
   items: ProvincialPermitItemRow[]
   fees: ProvincialPermitFeeRow[]
+  totalFeeVolume: number | null
   gbmsEvents: ProvincialPermitGbmsInvoiceHistoryRow[]
   oicItems: ProvincialPermitEventRow[]
   boicItems: ProvincialPermitEventRow[]
@@ -177,6 +178,7 @@ export const EMPTY_PROVINCIAL_PERMIT_DETAIL_TABS: ProvincialPermitDetailTabsData
   packages: [],
   items: [],
   fees: [],
+  totalFeeVolume: null,
   gbmsEvents: [],
   oicItems: [],
   boicItems: [],
@@ -440,7 +442,12 @@ const fetchCoreTabs = async (
   }
 }
 
-const fetchAllScaleFeeRows = async (permitNumber: string): Promise<unknown[]> => {
+type ProvincialPermitFees = {
+  fees: ProvincialPermitFeeRow[]
+  totalFeeVolume: number
+}
+
+const fetchAllScaleFees = async (permitNumber: string): Promise<ProvincialPermitFees> => {
   const path = '/lexis/rpc/permit-details/all-scale-fees'
   try {
     const response = await apiService.getCachedResponse<unknown>(
@@ -460,8 +467,13 @@ const fetchAllScaleFeeRows = async (permitNumber: string): Promise<unknown[]> =>
     if (!Array.isArray(payload.packageList)) {
       throw new Error(`Invalid package fee list response from ${path}`)
     }
+    const volume = asString(payload.totalVolume).trim().replace(/,/g, '')
+    const totalFeeVolume = Number(volume)
+    if (!volume || !Number.isFinite(totalFeeVolume) || totalFeeVolume < 0) {
+      throw new Error(`Invalid total fee volume response from ${path}`)
+    }
 
-    return payload.packageList.flatMap((packageValue, packageIndex) => {
+    const feeRows = payload.packageList.flatMap((packageValue, packageIndex) => {
       const packageFee = recordOrEmpty(packageValue)
       const packageNumber = asString(packageFee.packageNumber)
       if (!packageNumber || !Array.isArray(packageFee.scaleList)) {
@@ -472,6 +484,7 @@ const fetchAllScaleFeeRows = async (permitNumber: string): Promise<unknown[]> =>
         packageNumber,
       }))
     })
+    return { fees: feeRows.map(normalizeScaleFeeRow), totalFeeVolume }
   } catch (error) {
     throw toSearchServiceError(`Unable to load permit scale fees from ${path}.`, error)
   }
@@ -525,13 +538,14 @@ const fetchProvincialPermitDetailTabsData = async (
   // GBMS history is optional, but retain concurrent loading for callers that request the full set.
   const gbmsEventsPromise = includeGbms ? fetchGbmsRows(permitNumber, receiptNumber) : null
   const coreTabs = await fetchCoreTabs(permitNumber, blanketOic)
-  const feeRows = includeFees ? await fetchAllScaleFeeRows(permitNumber) : []
+  const feeData = includeFees ? await fetchAllScaleFees(permitNumber) : null
 
   return {
     applications: coreTabs.applications,
     packages: coreTabs.packages,
     items: coreTabs.items,
-    fees: feeRows.map(normalizeScaleFeeRow),
+    fees: feeData?.fees ?? [],
+    totalFeeVolume: feeData?.totalFeeVolume ?? null,
     gbmsEvents: gbmsEventsPromise ? await gbmsEventsPromise : [],
     oicItems: [],
     boicItems: [],
@@ -553,17 +567,16 @@ export const fetchProvincialPermitGbmsEvents = async (
 export const fetchProvincialPermitFees = async ({
   permitNumber,
   packageNumbers,
-}: ProvincialPermitFeesRequest): Promise<ProvincialPermitFeeRow[]> => {
+}: ProvincialPermitFeesRequest): Promise<ProvincialPermitFees> => {
   const packageFilter = packageNumbers?.filter(Boolean)
   if (packageFilter && packageFilter.length === 0) {
-    return []
+    return { fees: [], totalFeeVolume: 0 }
   }
-  const feeRows = await fetchAllScaleFeeRows(permitNumber)
-  return feeRows
-    .filter(
-      (row) => !packageFilter || packageFilter.includes(asString(recordOrEmpty(row).packageNumber)),
-    )
-    .map(normalizeScaleFeeRow)
+  const feeData = await fetchAllScaleFees(permitNumber)
+  return {
+    ...feeData,
+    fees: feeData.fees.filter((row) => !packageFilter || packageFilter.includes(row.packageNumber)),
+  }
 }
 
 export const fetchProvincialPermitDetailTabs = async (

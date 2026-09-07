@@ -116,6 +116,7 @@ describe('provincial permit detail services', () => {
         case '/lexis/rpc/permit-details/all-scale-fees':
           return Promise.resolve(
             response({
+              totalVolume: '34.5',
               packageList: [
                 {
                   packageNumber: 'PKG-100',
@@ -231,6 +232,7 @@ describe('provincial permit detail services', () => {
           includedInPermit: false,
         },
       ],
+      totalFeeVolume: 34.5,
       fees: [
         {
           id: 'SCALE-1',
@@ -288,7 +290,7 @@ describe('provincial permit detail services', () => {
       }
       switch (path) {
         case '/lexis/rpc/permit-details/all-scale-fees':
-          return Promise.resolve(response({ packageList: [] }))
+          return Promise.resolve(response({ packageList: [], totalVolume: '0.0' }))
         case '/lexis/rpc/permit-details/gbms-invoice-history':
           return Promise.resolve(response([]))
         default:
@@ -341,6 +343,7 @@ describe('provincial permit detail services', () => {
         case '/lexis/rpc/permit-details/all-scale-fees':
           return Promise.resolve(
             response({
+              totalVolume: '34.5',
               packageList: [
                 {
                   packageNumber: 'PKG-100',
@@ -409,13 +412,14 @@ describe('provincial permit detail services', () => {
       packageNumbers: core.packages.map((row) => row.packageNumber),
     })
 
-    expect(fees).toEqual([
+    expect(fees.fees).toEqual([
       expect.objectContaining({
         id: 'SCALE-1',
         packageNumber: 'PKG-100',
         amount: 123.45,
       }),
     ])
+    expect(fees.totalFeeVolume).toBe(34.5)
     expect(getCachedResponseMock).toHaveBeenLastCalledWith(
       '/lexis/rpc/permit-details/all-scale-fees',
       {
@@ -427,13 +431,47 @@ describe('provincial permit detail services', () => {
     )
   })
 
+  it('retains the authoritative fee volume total separately from rounded rows', async () => {
+    getCachedResponseMock.mockResolvedValue(
+      response({
+        totalVolume: '2.1',
+        packageList: [
+          {
+            packageNumber: 'BOIC-1',
+            scaleList: [
+              { id: 'SCALE-1', volume: '1.0', fee: '$1.04' },
+              { id: 'SCALE-2', volume: '1.0', fee: '$1.04' },
+            ],
+          },
+        ],
+      }),
+    )
+
+    const result = await fetchProvincialPermitFees({ permitNumber: '777' })
+
+    expect(result.totalFeeVolume).toBe(2.1)
+    expect(result.fees.map((row) => row.volume)).toEqual([1, 1])
+    expect(result.fees.map((row) => row.amount)).toEqual([1.04, 1.04])
+  })
+
+  it.each([undefined, '', 'invalid', 'Infinity', '-1.0'])(
+    'rejects an unavailable or invalid authoritative volume: %s',
+    async (totalVolume) => {
+      getCachedResponseMock.mockResolvedValue(response({ packageList: [], totalVolume }))
+
+      await expect(fetchProvincialPermitFees({ permitNumber: '777' })).rejects.toThrow(
+        'Invalid total fee volume response',
+      )
+    },
+  )
+
   it('skips the bulk fee request for an explicitly empty package selection', async () => {
     await expect(
       fetchProvincialPermitFees({
         permitNumber: 'P-777',
         packageNumbers: [],
       }),
-    ).resolves.toEqual([])
+    ).resolves.toEqual({ fees: [], totalFeeVolume: 0 })
 
     expect(getCachedResponseMock).not.toHaveBeenCalled()
   })
@@ -483,6 +521,7 @@ describe('provincial permit detail services', () => {
         case '/lexis/rpc/permit-details/all-scale-fees':
           return Promise.resolve(
             response({
+              totalVolume: '12.5',
               packageList: [
                 {
                   packageNumber: 'BOIC-100',
@@ -600,7 +639,7 @@ describe('provincial permit detail services', () => {
           ],
         })
       case '/lexis/rpc/permit-details/all-scale-fees':
-        return response({ packageList: [] })
+        return response({ packageList: [], totalVolume: '0.0' })
       case '/lexis/rpc/permit-details/gbms-invoice-history':
         return response([])
       default:

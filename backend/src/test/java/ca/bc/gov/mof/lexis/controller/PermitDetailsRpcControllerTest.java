@@ -402,7 +402,7 @@ class PermitDetailsRpcControllerTest {
   @Test
   void allScaleFeesShouldAuthorizePermitAndForwardRequestOnce() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
-    PermitAllScaleFeesRpcResponseDto dto = new PermitAllScaleFeesRpcResponseDto(List.of());
+    PermitAllScaleFeesRpcResponseDto dto = new PermitAllScaleFeesRpcResponseDto(List.of(), "0.0");
     when(service.getAllScaleFees(7000123L, true)).thenReturn(dto);
     TestingAuthenticationToken authentication = authorizedSavePermit();
 

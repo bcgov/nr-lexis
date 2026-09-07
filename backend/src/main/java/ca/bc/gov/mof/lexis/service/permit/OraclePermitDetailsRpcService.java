@@ -558,12 +558,12 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   public PermitAllScaleFeesRpcResponseDto getAllScaleFees(
       Long permitNumber, boolean ministryUser) {
     if (permitNumber == null || permitNumber < 1) {
-      return new PermitAllScaleFeesRpcResponseDto(List.of());
+      return new PermitAllScaleFeesRpcResponseDto(List.of(), "0.0");
     }
 
     List<PermitFeeScaleRow> feeRows = repository.findPermitFeeScaleRows(permitNumber);
     if (feeRows.isEmpty()) {
-      return new PermitAllScaleFeesRpcResponseDto(List.of());
+      return new PermitAllScaleFeesRpcResponseDto(List.of(), "0.0");
     }
 
     FeeCalculationContext feeContext = buildFeeContext(permitNumber, null, null);
@@ -595,6 +595,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     Map<String, List<PermitRpcScaleItemDto>> scalesByPackage = new LinkedHashMap<>();
     Map<String, BigDecimal> totalsByPackage = new LinkedHashMap<>();
     Map<String, String> growthTypeByPackage = new LinkedHashMap<>();
+    BigDecimal totalVolume = BigDecimal.ZERO;
 
     for (PermitFeeScaleRow feeRow : feeRows) {
       PermitScaleDetailRow scale = feeRow.scaleRow();
@@ -603,6 +604,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         continue;
       }
 
+      totalVolume = totalVolume.add(BigDecimal.valueOf(scale.speciesGradeVolume()));
       BigDecimal fee = calculateRoundedFeeForScale(scale, feeContext);
       BigDecimal amv = getScaleDisplayAmv(scale, feeContext);
       String ewb = countryCanada ? "" : formatCurrencyNoScale(trimToNull(scale.ewb()));
@@ -647,7 +649,8 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
               List.copyOf(entry.getValue()),
               nonNull(growthTypeByPackage.get(packageNumber))));
     }
-    return new PermitAllScaleFeesRpcResponseDto(List.copyOf(packages));
+    return new PermitAllScaleFeesRpcResponseDto(
+        List.copyOf(packages), totalVolume.setScale(1, RoundingMode.HALF_UP).toPlainString());
   }
 
   @Override

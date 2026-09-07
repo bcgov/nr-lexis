@@ -740,6 +740,7 @@ class OraclePermitDetailsRpcServiceTest {
 
     PermitAllScaleFeesRpcResponseDto response = service.getAllScaleFees(7000123L, true);
 
+    assertThat(response.totalVolume()).isEqualTo("11.0");
     assertThat(response.packageList())
         .extracting("packageNumber", "totalFeeForPackage", "growthType")
         .containsExactly(
@@ -754,6 +755,44 @@ class OraclePermitDetailsRpcServiceTest {
     verify(repository, never()).findSpeciesDescription(any());
     verify(repository, never()).findGradeDescription(any());
     verifyNoInteractions(applicationService);
+  }
+
+  @ParameterizedTest
+  @ValueSource(booleans = {false, true})
+  void allScaleFeesShouldSumStoredVolumesBeforeRounding(boolean separatePackages) {
+    PermitScaleDetailRow firstScale =
+        scale("101", "TM1", "HEM", "J", 1.04d, 1L, "7000123", "PKG-903");
+    PermitScaleDetailRow secondScale =
+        scale("102", "TM2", "FIR", "K", 1.04d, 1L, "7000123",
+            separatePackages ? "PKG-999" : "PKG-903");
+    when(repository.findPermitFeeScaleRows(7000123L))
+        .thenReturn(
+            List.of(
+                new PermitFeeScaleRow(
+                    firstScale, "T", "Hemlock", "Grade J", "S", "Second Growth", BigDecimal.ONE),
+                new PermitFeeScaleRow(
+                    secondScale, "T", "Fir", "Grade K", "S", "Second Growth", BigDecimal.ONE)));
+
+    PermitAllScaleFeesRpcResponseDto response = service.getAllScaleFees(7000123L, true);
+
+    assertThat(response.totalVolume()).isEqualTo("2.1");
+    assertThat(response.packageList()).hasSize(separatePackages ? 2 : 1);
+    assertThat(response.packageList().stream().flatMap(row -> row.scaleList().stream()))
+        .extracting("volume", "fee")
+        .containsExactly(tuple("1.0", "$1.04"), tuple("1.0", "$1.04"));
+    if (separatePackages) {
+      assertThat(response.packageList())
+          .extracting("totalFeeForPackage")
+          .containsExactly("$1.04", "$1.04");
+    } else {
+      assertThat(response.packageList().get(0).totalFeeForPackage()).isEqualTo("$2.08");
+    }
+  }
+
+  @Test
+  void allScaleFeesShouldReturnZeroVolumeWhenNoScalesAreAvailable() {
+    assertThat(service.getAllScaleFees(null, true).totalVolume()).isEqualTo("0.0");
+    assertThat(service.getAllScaleFees(7000123L, true).totalVolume()).isEqualTo("0.0");
   }
 
   @Test

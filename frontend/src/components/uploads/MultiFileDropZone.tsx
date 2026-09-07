@@ -15,13 +15,14 @@ type MultiFileDropZoneProps = {
   renderAsPanel?: boolean
   variant?: 'default' | 'fspts'
   showMultipleFileGuidance?: boolean
+  multiple?: boolean
   onFilesSelected: (files: FileList | null) => void
 }
 
 /**
  * INTENTIONAL_LEGACY_DIVERGENCE(MULTI_FILE_UPLOAD_QUEUE):
  * Legacy upload dialogs accepted one form file. Modern upload workflows queue and review
- * multiple selected files before submitting them.
+ * multiple selected files before submitting them. Invoices retain one file per invoice.
  */
 function MultiFileDropZone({
   title,
@@ -37,6 +38,7 @@ function MultiFileDropZone({
   renderAsPanel = true,
   variant = 'default',
   showMultipleFileGuidance = true,
+  multiple = true,
   onFilesSelected,
 }: MultiFileDropZoneProps) {
   const inputRef = useRef<HTMLInputElement>(null)
@@ -76,9 +78,10 @@ function MultiFileDropZone({
   ]
     .filter(Boolean)
     .join(' ')
-  const helperDescription = showMultipleFileGuidance
-    ? `${description.replace(/\.+$/, '')}. Multiple files can be queued and saved together.`
-    : description
+  const helperDescription =
+    multiple && showMultipleFileGuidance
+      ? `${description.replace(/\.+$/, '')}. Multiple files can be queued and saved together.`
+      : description
 
   const fieldContent = (
     <>
@@ -113,7 +116,7 @@ function MultiFileDropZone({
         aria-invalid={!!invalidText}
         aria-describedby={invalidText ? `${inputId}-error` : undefined}
         accept={accept}
-        multiple
+        multiple={multiple}
         disabled={disabled}
         onChange={(event) => {
           const target = event.target as HTMLInputElement
@@ -129,7 +132,7 @@ function MultiFileDropZone({
         role="button"
         tabIndex={disabled ? -1 : 0}
         aria-disabled={disabled}
-        aria-label={`Choose files for ${title}`}
+        aria-label={`Choose ${multiple ? 'files' : 'file'} for ${title}`}
         onClick={openFileDialog}
         onKeyDown={onDropZoneKeyDown}
         onDragEnter={(event) => {
@@ -157,9 +160,11 @@ function MultiFileDropZone({
         <div>
           <div className="admin-upload-drop-zone__copy">
             <p>
-              {variant === 'fspts'
-                ? 'Drag and drop files here or click to upload'
-                : 'Drag and drop files here, or browse for files.'}
+              {multiple
+                ? variant === 'fspts'
+                  ? 'Drag and drop files here or click to upload'
+                  : 'Drag and drop files here, or browse for files.'
+                : 'Drag and drop a file here or click to upload'}
             </p>
             {variant !== 'fspts' && <p>{disabled ? disabledDescription : description}</p>}
           </div>
@@ -169,7 +174,7 @@ function MultiFileDropZone({
             className={`cds--btn cds--btn--primary admin-upload-browse-button${disabled ? ' cds--btn--disabled' : ''}`}
             aria-disabled={disabled}
           >
-            Browse files
+            {multiple ? 'Browse files' : 'Browse file'}
           </span>
         )}
       </div>

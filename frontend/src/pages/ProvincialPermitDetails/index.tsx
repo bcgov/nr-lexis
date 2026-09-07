@@ -1156,14 +1156,14 @@ const ProvincialPermitDetailsPage = () => {
 
       try {
         if (tab === 'fees') {
-          const fees = await fetchProvincialPermitFees({
+          const feesResult = await fetchProvincialPermitFees({
             permitNumber: resolvedPermitNumber,
             blanketOic: detail?.blanketOic,
             packageNumbers:
               options.packageNumbers ?? tabsData?.packages.map((row) => row.packageNumber),
           })
           if (!isLatestRequest()) return
-          setTabsData((current) => (current ? { ...current, fees } : current))
+          setTabsData((current) => (current ? { ...current, ...feesResult } : current))
           setPermitFeesErrorMessage('')
         } else if (tab === 'documents') {
           const documentsResult = await fetchPermitDocuments(resolvedPermitNumber)
@@ -1538,7 +1538,7 @@ const ProvincialPermitDetailsPage = () => {
     (detail?.blanketOic ? !!detail.oicApplicationNumber : tabsData.applications.length > 0) &&
     tabsData.packages.length > 0 &&
     tabsData.items.length > 0
-  const totalFeeVolume = (tabsData?.fees ?? []).reduce((total, row) => total + row.volume, 0)
+  const totalFeeVolume = tabsData?.totalFeeVolume
   const calculatedPermitFee = (tabsData?.fees ?? []).reduce((total, row) => total + row.amount, 0)
   const permitFeesMasked = (tabsData?.fees ?? []).some((row) => row.amountDisplay.trim() === '$')
   const feeSummaryStatus =
@@ -4614,7 +4614,14 @@ const ProvincialPermitDetailsPage = () => {
                             <TextInput
                               id="permitFeeTotalVolume"
                               labelText="Total volume (m³)"
-                              value={feeSummaryStatus ?? totalFeeVolume.toLocaleString()}
+                              value={
+                                feeSummaryStatus ??
+                                totalFeeVolume?.toLocaleString(undefined, {
+                                  minimumFractionDigits: 1,
+                                  maximumFractionDigits: 1,
+                                }) ??
+                                'Unavailable'
+                              }
                               disabled
                             />
                             <TextInput
@@ -5186,16 +5193,26 @@ const ProvincialPermitDetailsPage = () => {
         <ConfirmationModal
           open
           danger
-          title="Delete document"
+          title={
+            isInvoiceDocumentRow(documentPendingDeletion)
+              ? 'Delete invoice and document'
+              : 'Delete document'
+          }
           description={
             <>
               Permanently delete <strong>{documentPendingDeletion.name || 'this document'}</strong>?
+              {isInvoiceDocumentRow(documentPendingDeletion) &&
+                ' This also deletes the associated invoice record, including its value, conversion rate, and fee.'}{' '}
               This cannot be undone.
             </>
           }
           confirmLabel="Delete"
           pendingLabel="Deleting…"
-          errorTitle="Failed to delete document"
+          errorTitle={
+            isInvoiceDocumentRow(documentPendingDeletion)
+              ? 'Failed to delete invoice and document'
+              : 'Failed to delete document'
+          }
           onClose={() => setDocumentPendingDeletion(null)}
           onConfirm={() => onRemoveDocument(documentPendingDeletion)}
         />
