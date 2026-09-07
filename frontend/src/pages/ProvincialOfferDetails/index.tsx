@@ -15,6 +15,7 @@ import ContentLoadingOverlay from '@/components/ContentLoadingOverlay'
 import DetailBreadcrumb from '@/components/DetailBreadcrumb'
 import DetailLoadError from '@/components/DetailLoadError'
 import IsoDatePicker from '../../components/IsoDatePicker'
+import OfferScaleDetailAction from '@/components/OfferScaleDetailAction'
 import PageHeader from '@/components/PageHeader'
 import PendingIcon from '@/components/PendingIcon'
 import SearchableSelect from '../../components/SearchableSelect'
@@ -348,33 +349,6 @@ const ProvincialOfferDetailsPage = () => {
     setIsEditing(false)
   }
 
-  const onViewScaleDetail = (): void => {
-    const applicationNumber = form?.applicationNumber.trim()
-    const packageNumber = form?.packageNumber.trim()
-    if (!applicationNumber || !packageNumber) {
-      return
-    }
-    const isFederal = detail?.exportJurisdictionCode?.trim().toUpperCase() === 'F'
-    const params = new URLSearchParams(
-      isFederal
-        ? { packageFilter: packageNumber }
-        : { tab: 'items', packageNumber, section: 'scales' },
-    )
-    const applicationPath = isFederal
-      ? `/federal/application/${applicationNumber}`
-      : `/provincial/application/${applicationNumber}`
-    navigate(`${applicationPath}?${params}`, {
-      state: withDetailReturnTo(
-        navigationState,
-        {
-          label: 'Provincial offer detail',
-          to: locationPath(location),
-        },
-        detailReturnTo,
-      ),
-    })
-  }
-
   const onSave = async (): Promise<boolean> => {
     if (!form || !detail || isSubmitting) {
       return false
@@ -587,14 +561,10 @@ const ProvincialOfferDetailsPage = () => {
                 />
               </div>
               <div className="legacy-search-actions">
-                <Button
-                  kind="ghost"
-                  size="sm"
-                  disabled={!form.applicationNumber.trim() || !form.packageNumber.trim()}
-                  onClick={onViewScaleDetail}
-                >
-                  See Scale Detail
-                </Button>
+                <OfferScaleDetailAction
+                  target={{ offerNumber: String(currentDetail.offerNumber) }}
+                  disabled={!currentDetail.packageNumber?.trim()}
+                />
               </div>
             </fieldset>
 

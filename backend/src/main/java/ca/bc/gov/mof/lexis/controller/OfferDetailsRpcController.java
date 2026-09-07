@@ -232,6 +232,65 @@ public class OfferDetailsRpcController {
             pkg.map(LexisPackageLookupDto::packageVolume).map(this::formatVolume).orElse("0.0")));
   }
 
+  @GetMapping("/package-scales")
+  public ResponseEntity<List<OfferPackageScaleResponseDto>> getPackageScales(
+      @RequestParam(name = "offerNumber", required = false) Long offerNumber,
+      @RequestParam(name = "packageNumber", required = false) String packageNumber,
+      Authentication authentication) {
+    if (offerNumber != null && offerNumber < 1) {
+      return ResponseEntity.badRequest().build();
+    }
+    ApplicationDetailsRpcService service = applicationDetailsServiceProvider.getIfAvailable();
+    if (service == null || provincialAuthorizationService == null) {
+      return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
+    }
+
+    String normalizedPackageNumber;
+    if (offerNumber != null) {
+      PurchaseOfferService offerService = purchaseOfferServiceProvider.getIfAvailable();
+      if (offerService == null) {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
+      }
+      PurchaseOfferDetailDto offer = offerService.findByOfferNumber(offerNumber).orElse(null);
+      if (offer == null) {
+        return ResponseEntity.notFound().build();
+      }
+      if (!provincialAuthorizationService.canAccessOffer(authentication, offer)) {
+        throw new AccessDeniedException("The offer is outside the authenticated access scope.");
+      }
+      // Existing offers retain their read-only scale view after the offer window closes.
+      // Resolve the package from the saved offer, never from a caller-supplied replacement.
+      normalizedPackageNumber = trimToNull(offer.packageNumber());
+      if (normalizedPackageNumber == null
+          || offer.applicationNumber() == null
+          || !service
+              .findApplicationNumberForPackage(normalizedPackageNumber)
+              .filter(offer.applicationNumber()::equals)
+              .isPresent()) {
+        return ResponseEntity.notFound().build();
+      }
+    } else {
+      normalizedPackageNumber = trimToNull(packageNumber);
+      if (normalizedPackageNumber == null) {
+        return ResponseEntity.badRequest().build();
+      }
+      requirePackageAccess(normalizedPackageNumber, authentication);
+    }
+
+    return ResponseEntity.ok(
+        service.getScalesForPackage(normalizedPackageNumber).stream()
+            .map(
+                scale ->
+                    new OfferPackageScaleResponseDto(
+                        scale.timberMark(),
+                        scale.pieces(),
+                        scale.species(),
+                        scale.grade(),
+                        scale.volume(),
+                        scale.cascadeSplitCode()))
+            .toList());
+  }
+
   @GetMapping("/application-volume")
   public ResponseEntity<OfferVolumeResponseDto> getApplicationVolume(
       @RequestParam(name = "applicationNumber", required = false) String applicationNumber) {
@@ -1120,6 +1179,14 @@ public class OfferDetailsRpcController {
   public record OfferPackageListResponseDto(List<String> packageList) {}
 
   public record OfferVolumeResponseDto(String volume) {}
+
+  public record OfferPackageScaleResponseDto(
+      String timberMark,
+      long pieces,
+      String species,
+      String grade,
+      String volume,
+      String cascadeSplitCode) {}
 
   public record OfferClientDataResponseDto(
       String clientNumber,

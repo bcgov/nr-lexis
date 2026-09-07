@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Button, Column, Grid, InlineNotification, TextArea, TextInput } from '@carbon/react'
 import { AppNotification } from '../../components/AppNotification'
 import IsoDatePicker from '../../components/IsoDatePicker'
+import OfferScaleDetailAction from '@/components/OfferScaleDetailAction'
 import SearchableSelect from '../../components/SearchableSelect'
 import PageHeader from '@/components/PageHeader'
 import PendingIcon from '@/components/PendingIcon'
@@ -921,24 +922,10 @@ const ProvincialOfferCreatePage = () => {
               )}
             </div>
             <div className="legacy-search-actions">
-              <Button
-                type="button"
-                kind="ghost"
-                size="sm"
+              <OfferScaleDetailAction
+                target={{ packageNumber: form.packageNumber.trim() }}
                 disabled={!form.applicationNumber.trim() || !form.packageNumber.trim()}
-                onClick={() => {
-                  const params = new URLSearchParams({
-                    tab: 'items',
-                    packageNumber: form.packageNumber.trim(),
-                    section: 'scales',
-                  })
-                  navigate(
-                    `/provincial/application/${normalizeProvincialApplicationNumber(form.applicationNumber)}?${params}`,
-                  )
-                }}
-              >
-                See Scale Detail
-              </Button>
+              />
             </div>
           </fieldset>
 

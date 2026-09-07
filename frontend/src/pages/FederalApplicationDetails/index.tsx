@@ -228,12 +228,17 @@ const FederalApplicationDetailsPage = () => {
     !!currentDetail &&
     !currentDetail.readOnly &&
     !federalApplicationLocked
-  const canUploadApplicationDocuments =
-    canPerform('/fileApplicationUpload') &&
-    !!currentDetail &&
-    !currentDetail.readOnly &&
-    !federalApplicationLocked
   const applicationStatusCode = currentDetail?.statusCode?.trim().toUpperCase() ?? ''
+  const applicationDocumentEditor =
+    hasRole(capabilities.roles, 'APPLICATION_APPROVER') || hasRole(capabilities.roles, 'ADMIN')
+  // INTENTIONAL_LEGACY_DIVERGENCE(EXPIRED_DOCUMENT_MAINTENANCE): Expiry may lock the
+  // federal application form while authorized staff can still maintain its documents.
+  const canMaintainApplicationDocuments =
+    !!currentDetail &&
+    !federalApplicationLocked &&
+    (!currentDetail.readOnly || (applicationStatusCode === 'EXP' && applicationDocumentEditor))
+  const canUploadApplicationDocuments =
+    canPerform('/fileApplicationUpload') && canMaintainApplicationDocuments
   const businessToday = formatBusinessIsoDate()
   const statusTransitions = allowedFederalStatusTransitions(
     applicationStatusCode,
@@ -241,11 +246,7 @@ const FederalApplicationDetailsPage = () => {
     businessToday,
   )
   const canDeleteApplicationDocuments =
-    !currentDetail?.readOnly &&
-    !federalApplicationLocked &&
-    applicationStatusCode.length > 0 &&
-    applicationStatusCode !== 'EXP' &&
-    (hasRole(capabilities.roles, 'APPLICATION_APPROVER') || hasRole(capabilities.roles, 'ADMIN'))
+    canMaintainApplicationDocuments && applicationStatusCode.length > 0 && applicationDocumentEditor
   const canEditApplicationDocuments = canUploadApplicationDocuments || canDeleteApplicationDocuments
   const hasAgent = currentDetail?.ownerApplicantType?.trim().toUpperCase() === 'A'
   const federalApplicationDetailTabs: FederalApplicationDetailTabKey[] = [

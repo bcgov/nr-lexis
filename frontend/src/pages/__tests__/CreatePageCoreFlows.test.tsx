@@ -38,6 +38,7 @@ import {
 import { searchProvincialApplicationNumberOptions } from '@/service/provincial-application-search-service'
 import { formatBusinessIsoDate } from '@/utils/date'
 import { useAuth } from '@/context/auth/useAuth'
+import { fetchOfferScaleDetails } from '@/service/offer-scale-detail-service'
 import { createTestAuthContext, createTestCapabilities } from '@/test-utils/auth'
 
 const mockNavigate = vi.fn()
@@ -91,6 +92,10 @@ vi.mock('@/context/auth/useAuth', () => ({
   useAuth: vi.fn(),
 }))
 
+vi.mock('@/service/offer-scale-detail-service', () => ({
+  fetchOfferScaleDetails: vi.fn(),
+}))
+
 Element.prototype.scrollIntoView = vi.fn()
 
 const mockedFetchProvincialApplicationOptions = vi.mocked(fetchProvincialApplicationOptions)
@@ -117,6 +122,7 @@ const mockedSearchProvincialApplicationNumberOptions = vi.mocked(
   searchProvincialApplicationNumberOptions,
 )
 const mockedUseAuth = vi.mocked(useAuth)
+const mockedFetchOfferScaleDetails = vi.mocked(fetchOfferScaleDetails)
 
 const successfulCreate = (createdId: string): CreateSubmissionResult => ({
   success: true,
@@ -187,6 +193,16 @@ const selectExemptionCreateTab = async (name: string) => {
 describe('Create Page Core Flows', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockedFetchOfferScaleDetails.mockResolvedValue([
+      {
+        timberMark: 'TM-9',
+        pieces: 8,
+        species: 'HE',
+        grade: 'J',
+        volume: '95.0',
+        cascadeSplitCode: 'E',
+      },
+    ])
     window.localStorage.clear()
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
@@ -2859,9 +2875,15 @@ describe('Create Page Core Flows', () => {
     expect(screen.getByRole('button', { name: 'See Scale Detail' })).toBeEnabled()
     expect(await screen.findByDisplayValue('PKG-9')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'See Scale Detail' }))
-    expect(mockNavigate).toHaveBeenCalledWith(
-      '/provincial/application/2001?tab=items&packageNumber=PKG-9&section=scales',
+    const scaleDialog = await screen.findByRole('dialog', { name: 'Scale Detail' })
+    expect(await within(scaleDialog).findByText('TM-9')).toBeInTheDocument()
+    expect(within(scaleDialog).getByRole('cell', { name: 'I' })).toBeInTheDocument()
+    expect(mockedFetchOfferScaleDetails).toHaveBeenCalledWith(
+      { packageNumber: 'PKG-9' },
+      expect.any(AbortSignal),
     )
+    expect(mockNavigate).not.toHaveBeenCalled()
+    await userEvent.click(within(scaleDialog).getByRole('button', { name: 'Close' }))
     expect(await screen.findByDisplayValue('95.0')).toBeInTheDocument()
     expect(screen.getByDisplayValue('H/SA')).toBeInTheDocument()
     expect(screen.getByDisplayValue('03/01/2026')).toBeInTheDocument()

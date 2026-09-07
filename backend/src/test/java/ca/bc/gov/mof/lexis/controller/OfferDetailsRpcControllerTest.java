@@ -226,6 +226,57 @@ class OfferDetailsRpcControllerTest {
   }
 
   @Test
+  void packageScalesShouldFailClosedWhenScaleServiceIsUnavailable() {
+    controller.setProvincialAuthorizationService(provincialAuthorizationService);
+
+    assertThat(controller.getPackageScales(81001L, null, authentication).getStatusCode())
+        .isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+    verifyNoInteractions(purchaseOfferService, applicationDetailsService);
+  }
+
+  @Test
+  void packageScalesShouldRejectAnEmptyCreateTargetBeforeReadingScales() {
+    controller.setProvincialAuthorizationService(provincialAuthorizationService);
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+
+    assertThat(controller.getPackageScales(null, "  ", authentication).getStatusCode())
+        .isEqualTo(HttpStatus.BAD_REQUEST);
+    verifyNoInteractions(applicationDetailsService);
+  }
+
+  @Test
+  void packageScalesShouldReturnNotFoundForAnUnknownOffer() {
+    controller.setProvincialAuthorizationService(provincialAuthorizationService);
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(purchaseOfferServiceProvider.getIfAvailable()).thenReturn(purchaseOfferService);
+    when(purchaseOfferService.findByOfferNumber(81001L)).thenReturn(Optional.empty());
+
+    assertThat(controller.getPackageScales(81001L, null, authentication).getStatusCode())
+        .isEqualTo(HttpStatus.NOT_FOUND);
+    verifyNoInteractions(applicationDetailsService, provincialAuthorizationService);
+  }
+
+  @Test
+  void packageScalesShouldKeepAnAuthorizedEmptyPackageDistinctFromAnAccessFailure() {
+    controller.setProvincialAuthorizationService(provincialAuthorizationService);
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(purchaseOfferServiceProvider.getIfAvailable()).thenReturn(purchaseOfferService);
+    PurchaseOfferDetailDto offer = offerDetailForRestrictedUpdate();
+    when(purchaseOfferService.findByOfferNumber(81001L)).thenReturn(Optional.of(offer));
+    when(provincialAuthorizationService.canAccessOffer(authentication, offer)).thenReturn(true);
+    when(applicationDetailsService.findApplicationNumberForPackage("PKG-903"))
+        .thenReturn(Optional.of(1000456L));
+    when(applicationDetailsService.getScalesForPackage("PKG-903")).thenReturn(List.of());
+
+    ResponseEntity<List<OfferDetailsRpcController.OfferPackageScaleResponseDto>> response =
+        controller.getPackageScales(81001L, null, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isEmpty();
+    verifyNoInteractions(editLockService);
+  }
+
+  @Test
   void applicationVolumeShouldReturnZeroWhenApplicationMissing() {
     when(applicationServiceProvider.getIfAvailable()).thenReturn(applicationService);
     when(applicationService.findByApplicationNumber(1000456L)).thenReturn(Optional.empty());
