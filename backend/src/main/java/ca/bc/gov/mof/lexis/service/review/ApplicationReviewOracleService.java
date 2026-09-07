@@ -20,6 +20,7 @@ import ca.bc.gov.mof.lexis.service.federal.FederalApplicationService;
 import ca.bc.gov.mof.lexis.service.federal.FederalApplicationService.FederalMutationResult;
 import ca.bc.gov.mof.lexis.service.federal.FederalApplicationService.FederalStatusMutationRequest;
 import ca.bc.gov.mof.lexis.service.mail.MailRecipientValidator;
+import ca.bc.gov.mof.lexis.util.LegacyApplicationRemarkCodec;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -264,6 +265,17 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
           null,
           null,
           "Remark is required when rejecting, withdrawing, or expiring an application.");
+    }
+    if (!LegacyApplicationRemarkCodec.fitsStorage(
+        remark, LegacyApplicationRemarkCodec.MAX_STORAGE_LENGTH)) {
+      return statusUpdateResult(
+          false,
+          false,
+          statusCode,
+          request == null ? null : trimToNull(request.clientEmailAddress()),
+          remark,
+          null,
+          "Remark is too long to save. Shorten it and try again.");
     }
 
     String clientEmail = request == null ? null : trimToNull(request.clientEmailAddress());

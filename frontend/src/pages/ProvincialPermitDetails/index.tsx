@@ -1474,11 +1474,9 @@ const ProvincialPermitDetailsPage = () => {
     !scaleAttachmentLockedStatuses.has(permitStatusCode ?? '')
   const canEditBlanketOicPackages =
     permitTablesAvailable &&
-    editContextLoaded &&
-    !permitEditLocked &&
+    canSavePermit &&
     !!detail?.blanketOic &&
-    !scaleAttachmentLockedStatuses.has(permitStatusCode ?? '') &&
-    (hasRole(capabilities.roles, 'ADMIN') || hasRole(capabilities.roles, 'APPLICATION_APPROVER'))
+    !scaleAttachmentLockedStatuses.has(permitStatusCode ?? '')
   // INTENTIONAL_LEGACY_DIVERGENCE(PACKAGE_FIRST_ITEMS_WORKFLOW): Blanket OIC Summary of Scale
   // entry remains hidden until its prerequisite package exists.
   const blanketOicPackageCreationRequired =

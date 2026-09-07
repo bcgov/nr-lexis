@@ -22,6 +22,7 @@ import ca.bc.gov.mof.lexis.service.application.ApplicationEditLockService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
 import ca.bc.gov.mof.lexis.service.review.ApplicationApprovalEligibilityService;
+import ca.bc.gov.mof.lexis.util.LegacyApplicationRemarkCodec;
 import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import ca.bc.gov.mof.lexis.util.TextUtils;
 import java.time.Clock;
@@ -375,6 +376,10 @@ public class FederalApplicationOracleService implements FederalApplicationServic
         && remark == null) {
       return failure(List.of("A remark is required when rejecting or withdrawing a federal application."));
     }
+    if (!LegacyApplicationRemarkCodec.fitsStorage(
+        remark, LegacyApplicationRemarkCodec.MAX_STORAGE_LENGTH)) {
+      return failure(List.of("Remark is too long to save. Shorten it and try again."));
+    }
 
     FederalApplicationRepository.FederalMutationContextRow context =
         repository.findMutationContextRequired(applicationNumber).orElse(null);
@@ -541,6 +546,8 @@ public class FederalApplicationOracleService implements FederalApplicationServic
       errors.add("Remark is required.");
     } else if (remark.length() > 250) {
       errors.add("Remark must not exceed 250 characters.");
+    } else if (!LegacyApplicationRemarkCodec.fitsStorage(remark, 250)) {
+      errors.add("Remark is too long to save. Shorten it and try again.");
     }
     return errors;
   }

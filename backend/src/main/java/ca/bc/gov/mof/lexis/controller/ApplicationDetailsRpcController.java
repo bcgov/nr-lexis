@@ -28,6 +28,7 @@ import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService.OrgUnitSurface;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
+import ca.bc.gov.mof.lexis.util.LegacyApplicationRemarkCodec;
 import ca.bc.gov.mof.lexis.util.TextUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -1568,6 +1569,10 @@ public class ApplicationDetailsRpcController {
     }
     if (remarkBody.length() > APPLICATION_REMARK_MAX_BYTES) {
       return new RemarkValidationFailure("too_long", APPLICATION_REMARK_TOO_LONG_MESSAGE);
+    }
+    if (!LegacyApplicationRemarkCodec.fitsStorage(remarkBody, APPLICATION_REMARK_MAX_BYTES)) {
+      return new RemarkValidationFailure(
+          "too_long", "Remark is too long to save. Shorten it and try again.");
     }
     return null;
   }

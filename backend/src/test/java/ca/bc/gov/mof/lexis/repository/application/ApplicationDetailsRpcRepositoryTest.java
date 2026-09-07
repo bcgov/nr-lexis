@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -18,6 +19,8 @@ import java.time.LocalDate;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.DuplicateKeyException;
@@ -26,6 +29,29 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 @DisplayName("Unit Test | ApplicationDetailsRpcRepository")
 class ApplicationDetailsRpcRepositoryTest {
+
+  @ParameterizedTest
+  @CsvSource({
+    "A & B; volume < 10; owner > agent,A &amp; B; volume &lt; 10; owner &gt; agent",
+    "Literal &amp; &lt; &gt;,Literal &amp;amp; &amp;lt; &amp;gt;",
+    "<b>A & B</b>,&lt;b&gt;A &amp; B&lt;/b&gt;",
+    "Plain modern note,Plain modern note"
+  })
+  void remarksShouldRoundTripThroughLegacyOracleStorage(String text, String storedText) {
+    RemarkRoundTripRepository repository = new RemarkRoundTripRepository();
+
+    assertThat(repository.insertRemark(1000456L, text, "idir\\jsmith", Instant.EPOCH))
+        .get().extracting(ApplicationDetailsRpcRepository.RemarkRow::remark).isEqualTo(text);
+    assertThat(repository.storedRemark).isEqualTo(storedText);
+    assertThat(repository.findRemarksByApplicationNumber(1000456L))
+        .extracting(ApplicationDetailsRpcRepository.RemarkRow::remark).containsExactly(text);
+
+    assertThat(repository.updateRemark(44L, 1000456L, text + " updated", "idir\\jsmith", Instant.EPOCH))
+        .isTrue();
+    assertThat(repository.storedRemark).isEqualTo(storedText + " updated");
+    assertThat(repository.findRemarkByNumberRequired(44L))
+        .get().extracting(ApplicationDetailsRpcRepository.RemarkRow::remark).isEqualTo(text + " updated");
+  }
 
   @Test
   void directMutationsShouldPropagateOracleFailure() {
@@ -457,6 +483,52 @@ class ApplicationDetailsRpcRepositoryTest {
     protected void executeProcedureRequired(
         String procedureSignature, SqlConsumer<CallableStatement> binder) {
       throw new DataAccessResourceFailureException("Oracle unavailable");
+    }
+  }
+
+  private static final class RemarkRoundTripRepository extends ApplicationDetailsRpcRepository {
+    private String storedRemark;
+
+    RemarkRoundTripRepository() {
+      super(null);
+    }
+
+    @Override
+    protected <T> List<T> queryCursorProcedureRequired(
+        String procedureSignature,
+        SqlConsumer<CallableStatement> binder,
+        int cursorOutIndex,
+        SqlRowMapper<T> rowMapper) {
+      try {
+        CallableStatement statement = mock(CallableStatement.class);
+        if (procedureSignature.contains("INSERT_EXEMPTION_APP_REMARK")) {
+          doAnswer(invocation -> { storedRemark = invocation.getArgument(1); return null; })
+              .when(statement).setString(eq(2), any());
+        }
+        binder.accept(statement);
+        ResultSet rs = mock(ResultSet.class);
+        when(rs.getLong("EXPORT_EXMPTN_APPL_REMARK_NMBR")).thenReturn(44L);
+        when(rs.getLong("APPLICATION_NUMBER")).thenReturn(1000456L);
+        when(rs.getString("REMARK")).thenReturn(storedRemark);
+        when(rs.getString("ENTRY_USERID")).thenReturn("idir\\jsmith");
+        return List.of(rowMapper.map(rs));
+      } catch (SQLException ex) {
+        throw new AssertionError(ex);
+      }
+    }
+
+    @Override
+    protected void executeProcedureRequired(
+        String procedureSignature, SqlConsumer<CallableStatement> binder) {
+      try {
+        assertThat(procedureSignature).contains("UPDATE_EXEMPTION_APP_REMARK");
+        CallableStatement statement = mock(CallableStatement.class);
+        doAnswer(invocation -> { storedRemark = invocation.getArgument(1); return null; })
+            .when(statement).setString(eq(3), any());
+        binder.accept(statement);
+      } catch (SQLException ex) {
+        throw new AssertionError(ex);
+      }
     }
   }
 

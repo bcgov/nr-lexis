@@ -3,6 +3,7 @@ package ca.bc.gov.mof.lexis.repository.application;
 import static ca.bc.gov.mof.lexis.util.ValueUtils.positiveOrNull;
 
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
+import ca.bc.gov.mof.lexis.util.LegacyApplicationRemarkCodec;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -619,7 +620,7 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
             INSERT_REMARK,
             cs -> {
               cs.setTimestamp(1, timestamp);
-              cs.setString(2, remark);
+              cs.setString(2, LegacyApplicationRemarkCodec.encode(remark));
               cs.setString(3, auditUserOrDefault(entryUserId));
               cs.setTimestamp(4, Timestamp.from(Instant.now()));
               cs.setLong(5, applicationNumber);
@@ -667,7 +668,7 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
         cs -> {
           cs.setLong(1, remarkId);
           cs.setTimestamp(2, timestamp);
-          cs.setString(3, remark);
+          cs.setString(3, LegacyApplicationRemarkCodec.encode(remark));
           cs.setString(4, auditUserOrDefault(updateUserId));
           cs.setTimestamp(5, Timestamp.from(Instant.now()));
           cs.setLong(6, applicationNumber);
@@ -1447,7 +1448,7 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
 
   private RemarkRow mapRemarkRow(ResultSet rs) {
     Long remarkId = getLong(rs, "EXPORT_EXMPTN_APPL_REMARK_NMBR");
-    String remark = getString(rs, "REMARK");
+    String remark = LegacyApplicationRemarkCodec.decode(getString(rs, "REMARK"));
     String user = getString(rs, "ENTRY_USERID");
     Instant date = getInstant(rs, "ENTRY_TIMESTAMP");
     return new RemarkRow(

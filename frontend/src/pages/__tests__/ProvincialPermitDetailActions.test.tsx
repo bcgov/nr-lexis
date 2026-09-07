@@ -321,6 +321,19 @@ const configureEditableBlanketOicPackage = () => {
   })
 }
 
+const configureBlanketOicSubmitter = (clientNumber: string) => {
+  mockedUseAuth.mockReturnValue(
+    createTestAuthContext({
+      capabilities: createTestCapabilities({
+        principal: 'bceid\\scoped-submitter',
+        roles: [`LEXIS_PROVINCIAL_SUBMITTER_${clientNumber}`],
+        forestClientNumber: clientNumber,
+      }),
+      canPerform: (action: string) => action === 'savePermit' || action === '/permitDetails',
+    }),
+  )
+}
+
 const renderPermitDetails = () =>
   render(
     <MemoryRouter initialEntries={['/provincial/permit/777']}>
@@ -1893,23 +1906,27 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(mockedFetchProvincialPermitDetailTabs).toHaveBeenCalledTimes(1)
   })
 
-  it('confirms Blanket OIC package deletion once and refreshes the permit tabs', async () => {
-    configureEditableBlanketOicPackage()
-    renderPermitDetails()
+  it.each([null, '00067890', '00012345'])(
+    'confirms Blanket OIC package deletion for staff or submitter %s and refreshes the permit tabs',
+    async (clientNumber) => {
+      configureEditableBlanketOicPackage()
+      if (clientNumber) configureBlanketOicSubmitter(clientNumber)
+      renderPermitDetails()
 
-    const dialog = await openBlanketOicPackageDeleteConfirmation()
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Delete package' }))
+      const dialog = await openBlanketOicPackageDeleteConfirmation()
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Delete package' }))
 
-    await waitFor(() => {
-      expect(mockedDeleteBlanketOicPackage).toHaveBeenCalledTimes(1)
-      expect(mockedDeleteBlanketOicPackage).toHaveBeenCalledWith('777', 'BOIC-9')
-      expect(mockedFetchProvincialPermitDetailTabs).toHaveBeenCalledTimes(2)
-    })
-    expect(await screen.findByText('Blanket OIC package was deleted.')).toBeInTheDocument()
-    expect(
-      screen.queryByRole('dialog', { name: 'Delete Blanket OIC package BOIC-9?' }),
-    ).not.toBeInTheDocument()
-  })
+      await waitFor(() => {
+        expect(mockedDeleteBlanketOicPackage).toHaveBeenCalledTimes(1)
+        expect(mockedDeleteBlanketOicPackage).toHaveBeenCalledWith('777', 'BOIC-9')
+        expect(mockedFetchProvincialPermitDetailTabs).toHaveBeenCalledTimes(2)
+      })
+      expect(await screen.findByText('Blanket OIC package was deleted.')).toBeInTheDocument()
+      expect(
+        screen.queryByRole('dialog', { name: 'Delete Blanket OIC package BOIC-9?' }),
+      ).not.toBeInTheDocument()
+    },
+  )
 
   it('locks Blanket OIC package deletion while the async mutation is pending', async () => {
     configureEditableBlanketOicPackage()
@@ -2165,68 +2182,154 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
   })
 
-  it('lets an administrator create the first Blanket OIC package and hidden application', async () => {
-    mockedFetchProvincialPermitDetail.mockResolvedValue({
-      ...permitDetail,
-      permitStatusCode: 'ACT',
-      permitStatusDescription: 'Active',
-      exemptionTypeDescription: 'Blanket OIC',
-      blanketOic: true,
-      oicApplicationNumber: null,
-    })
+  it.each([null, '00067890', '00012345'])(
+    'lets staff or submitter %s create the first Blanket OIC package and hidden application',
+    async (clientNumber) => {
+      if (clientNumber) configureBlanketOicSubmitter(clientNumber)
+      mockedFetchProvincialPermitDetail.mockResolvedValue({
+        ...permitDetail,
+        permitStatusCode: 'ACT',
+        permitStatusDescription: 'Active',
+        exemptionTypeDescription: 'Blanket OIC',
+        blanketOic: true,
+        oicApplicationNumber: null,
+      })
 
-    render(
-      <MemoryRouter initialEntries={['/provincial/permit/777']}>
-        <Routes>
-          <Route
-            path="/provincial/permit/:permitNumber"
-            element={<ProvincialPermitDetailsPage />}
-          />
-        </Routes>
-      </MemoryRouter>,
+      render(
+        <MemoryRouter initialEntries={['/provincial/permit/777']}>
+          <Routes>
+            <Route
+              path="/provincial/permit/:permitNumber"
+              element={<ProvincialPermitDetailsPage />}
+            />
+          </Routes>
+        </MemoryRouter>,
+      )
+
+      await selectPermitDetailTab('Items')
+      expect(
+        await screen.findByText('Create a package before adding Summary of Scale entries.'),
+      ).toBeInTheDocument()
+      expect(screen.queryByRole('heading', { name: 'No package details' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('group', { name: 'Summary of Scale' })).not.toBeInTheDocument()
+      const heading = await screen.findByRole('heading', { name: 'Create Blanket OIC package' })
+      const packageEditor = heading.closest('.application-detail-edit-section') as HTMLElement
+      expect(packageEditor).toBeTruthy()
+
+      await userEvent.type(within(packageEditor).getByLabelText('Package number'), 'boic-new')
+      await userEvent.type(
+        within(packageEditor).getByLabelText('Species codes (comma separated)'),
+        'fi, he',
+      )
+      await userEvent.type(within(packageEditor).getByLabelText('End use code'), 'lu')
+      await userEvent.clear(within(packageEditor).getByLabelText('Package volume (m³)'))
+      await userEvent.type(within(packageEditor).getByLabelText('Package volume (m³)'), '100.0')
+      await userEvent.type(within(packageEditor).getByLabelText('Average length'), '10.0')
+      await userEvent.type(within(packageEditor).getByLabelText('Average top diameter'), '20.0')
+      await userEvent.click(within(packageEditor).getByRole('button', { name: 'Create package' }))
+
+      await waitFor(() => {
+        expect(mockedAddBlanketOicPackage).toHaveBeenCalledWith({
+          permitNumber: '777',
+          packageNumber: 'BOIC-NEW',
+          newPackageNumber: undefined,
+          volume: '100.0',
+          averageLength: '10.0',
+          averageDiameter: '20.0',
+          status: 'ACT',
+          comments: '',
+          reprocessed: 'N',
+          ageClass: 'O',
+          productType: 'H',
+          endUseCode: 'LU',
+          speciesCodes: ['FI', 'HE'],
+        })
+        expect(mockedFetchProvincialPermitDetailTabs).toHaveBeenCalledTimes(2)
+        expect(screen.getByText('Blanket OIC package was created.')).toBeInTheDocument()
+      })
+    },
+  )
+
+  it.each(['00067890', '00012345'])(
+    'lets authorized BOIC submitter %s edit an existing package',
+    async (clientNumber) => {
+      configureEditableBlanketOicPackage()
+      configureBlanketOicSubmitter(clientNumber)
+      renderPermitDetails()
+
+      await selectPermitDetailTab('Items')
+      const packageRow = (await screen.findByRole('cell', { name: 'BOIC-9' })).closest('tr')!
+      await userEvent.click(within(packageRow).getByRole('button', { name: 'Edit' }))
+      const packageEditor = (await screen.findByRole('heading', { name: 'Edit BOIC-9' })).closest(
+        '.application-detail-edit-section',
+      ) as HTMLElement
+      await userEvent.type(within(packageEditor).getByLabelText('Comments'), ' updated')
+      await userEvent.click(within(packageEditor).getByRole('button', { name: 'Save package' }))
+
+      await waitFor(() => {
+        expect(mockedUpdateBlanketOicPackage).toHaveBeenCalledWith(
+          expect.objectContaining({
+            permitNumber: '777',
+            packageNumber: 'BOIC-9',
+            comments: 'Current OIC package updated',
+          }),
+        )
+      })
+    },
+  )
+
+  it.each(['COM', 'PPD', 'EXP', 'CAN'])(
+    'keeps BOIC package mutations unavailable to submitters when the permit status is %s',
+    async (permitStatusCode) => {
+      configureEditableBlanketOicPackage()
+      configureBlanketOicSubmitter('00067890')
+      mockedFetchProvincialPermitDetail.mockResolvedValue({
+        ...permitDetail,
+        permitStatusCode,
+        blanketOic: true,
+        oicApplicationNumber: 1000999,
+      })
+      renderPermitDetails()
+
+      await selectPermitDetailTab('Items')
+      const packageRow = (await screen.findByRole('cell', { name: 'BOIC-9' })).closest('tr')!
+      expect(within(packageRow).queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
+      expect(within(packageRow).queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Create package' })).not.toBeInTheDocument()
+    },
+  )
+
+  it('keeps BOIC package mutations unavailable without savePermit capability', async () => {
+    configureEditableBlanketOicPackage()
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({ canPerform: (action: string) => action === '/permitDetails' }),
     )
+    renderPermitDetails()
 
     await selectPermitDetailTab('Items')
-    expect(
-      await screen.findByText('Create a package before adding Summary of Scale entries.'),
-    ).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: 'No package details' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('group', { name: 'Summary of Scale' })).not.toBeInTheDocument()
-    const heading = await screen.findByRole('heading', { name: 'Create Blanket OIC package' })
-    const packageEditor = heading.closest('.application-detail-edit-section') as HTMLElement
-    expect(packageEditor).toBeTruthy()
+    const packageRow = (await screen.findByRole('cell', { name: 'BOIC-9' })).closest('tr')!
+    expect(within(packageRow).queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
+    expect(within(packageRow).queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Create package' })).not.toBeInTheDocument()
+  })
 
-    await userEvent.type(within(packageEditor).getByLabelText('Package number'), 'boic-new')
-    await userEvent.type(
-      within(packageEditor).getByLabelText('Species codes (comma separated)'),
-      'fi, he',
-    )
-    await userEvent.type(within(packageEditor).getByLabelText('End use code'), 'lu')
-    await userEvent.clear(within(packageEditor).getByLabelText('Package volume (m³)'))
-    await userEvent.type(within(packageEditor).getByLabelText('Package volume (m³)'), '100.0')
-    await userEvent.type(within(packageEditor).getByLabelText('Average length'), '10.0')
-    await userEvent.type(within(packageEditor).getByLabelText('Average top diameter'), '20.0')
-    await userEvent.click(within(packageEditor).getByRole('button', { name: 'Create package' }))
-
-    await waitFor(() => {
-      expect(mockedAddBlanketOicPackage).toHaveBeenCalledWith({
-        permitNumber: '777',
-        packageNumber: 'BOIC-NEW',
-        newPackageNumber: undefined,
-        volume: '100.0',
-        averageLength: '10.0',
-        averageDiameter: '20.0',
-        status: 'ACT',
-        comments: '',
-        reprocessed: 'N',
-        ageClass: 'O',
-        productType: 'H',
-        endUseCode: 'LU',
-        speciesCodes: ['FI', 'HE'],
-      })
-      expect(mockedFetchProvincialPermitDetailTabs).toHaveBeenCalledTimes(2)
-      expect(screen.getByText('Blanket OIC package was created.')).toBeInTheDocument()
+  it('keeps BOIC package mutations unavailable when another user holds the permit lock', async () => {
+    configureEditableBlanketOicPackage()
+    configureBlanketOicSubmitter('00067890')
+    mockedFetchPermitFeeOverrideContext.mockResolvedValue({
+      overrideEnabled: false,
+      overrideFee: '',
+      overrideComment: '',
+      locked: true,
+      lockMessage: 'Another user is editing this permit.',
     })
+    renderPermitDetails()
+
+    await selectPermitDetailTab('Items')
+    const packageRow = (await screen.findByRole('cell', { name: 'BOIC-9' })).closest('tr')!
+    expect(within(packageRow).queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
+    expect(within(packageRow).queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Create package' })).not.toBeInTheDocument()
   })
 
   it('clears a committed Blanket OIC package draft when table refresh fails', async () => {

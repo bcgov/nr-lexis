@@ -1570,6 +1570,45 @@ class FederalApplicationOracleServiceTest {
   }
 
   @Test
+  void remarkMutationsShouldRejectEncodedOverflowBeforeOracleMutation() {
+    FederalApplicationService.FederalRemarkMutationRequest request =
+        new FederalApplicationService.FederalRemarkMutationRequest("&".repeat(51));
+
+    assertThat(service.addRemark(1000456L, request, "idir\\approver").success()).isFalse();
+    assertThat(service.updateRemark(1000456L, 44L, request, "idir\\approver").success()).isFalse();
+    assertThat(service.addRemark(
+        1000456L,
+        new FederalApplicationService.FederalRemarkMutationRequest("<".repeat(63)),
+        "idir\\approver").errors())
+        .containsExactly("Remark is too long to save. Shorten it and try again.");
+    assertThat(service.updateStatus(
+        1000456L,
+        new FederalApplicationService.FederalStatusMutationRequest("REJ", request.remark()),
+        "idir\\approver").errors())
+        .containsExactly("Remark is too long to save. Shorten it and try again.");
+    verifyNoInteractions(repository, permitRepository, applicationDetailsRepository, applicationReviewRepository);
+  }
+
+  @Test
+  void addRemarkShouldAcceptExactly250EncodedCharacters() {
+    String text = "<".repeat(62) + "ab";
+    when(repository.findMutationContextRequired(1000456L))
+        .thenReturn(Optional.of(federalContext("NEW", LocalDate.of(2026, 3, 1))));
+    when(applicationDetailsRepository.insertRemark(
+        eq(1000456L), eq(text), eq("idir\\approver"), any(Instant.class)))
+        .thenReturn(Optional.of(new ApplicationDetailsRpcRepository.RemarkRow(
+            44L, 1000456L, text, "idir\\approver", Instant.EPOCH)));
+
+    FederalApplicationService.FederalRemarkMutationResult result = service.addRemark(
+        1000456L, new FederalApplicationService.FederalRemarkMutationRequest(text), "idir\\approver");
+
+    assertThat(result.success()).isTrue();
+    assertThat(result.remark().remark()).isEqualTo(text);
+    verify(applicationDetailsRepository).insertRemark(
+        eq(1000456L), eq(text), eq("idir\\approver"), any(Instant.class));
+  }
+
+  @Test
   void updateRemarkShouldRejectRemarkFromAnotherApplication() {
     when(repository.findMutationContextRequired(1000456L))
         .thenReturn(

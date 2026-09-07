@@ -10,6 +10,7 @@ import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewSearchResultDto;
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
+import ca.bc.gov.mof.lexis.util.LegacyApplicationRemarkCodec;
 import java.sql.CallableStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -920,7 +921,7 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
         INSERT_EXEMPTION_APP_REMARK,
         cs -> {
           cs.setTimestamp(1, new Timestamp(System.currentTimeMillis()));
-          cs.setString(2, remark);
+          cs.setString(2, LegacyApplicationRemarkCodec.encode(remark));
           cs.setString(3, auditUserOrDefault(updateUserId));
           cs.setTimestamp(4, new Timestamp(System.currentTimeMillis()));
           cs.setString(5, applicationNumber.toString());
@@ -931,7 +932,7 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
 
   private ReviewRemarkRow mapReviewRemarkRow(ResultSet rs) {
     Long remarkId = getLong(rs, "EXPORT_EXMPTN_APPL_REMARK_NMBR");
-    String remark = getString(rs, "REMARK");
+    String remark = LegacyApplicationRemarkCodec.decode(getString(rs, "REMARK"));
     String user = getString(rs, "ENTRY_USERID");
     Timestamp entryTimestamp = safeTimestamp(rs, "ENTRY_TIMESTAMP");
     java.time.Instant date = entryTimestamp == null ? null : entryTimestamp.toInstant();

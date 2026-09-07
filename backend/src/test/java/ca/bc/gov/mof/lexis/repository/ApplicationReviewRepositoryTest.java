@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -451,6 +453,22 @@ class ApplicationReviewRepositoryTest {
   }
 
   @Test
+  void statusRemarkShouldUseLegacyStorageAndReturnPlainTextForAuthoritativeEmail() {
+    RemarkRoundTripReviewRepository repository = new RemarkRoundTripReviewRepository();
+    String text = "A & B; <b>text</b>; literal &lt;";
+
+    ApplicationReviewRepository.ApplicationStatusUpdateRow result =
+        repository.updateStatusWithRemark(900101L, "REJ", text, "idir\\jsmith");
+
+    assertThat(result.updated()).isTrue();
+    assertThat(repository.statusWrites).isOne();
+    assertThat(repository.storedRemark)
+        .isEqualTo("A &amp; B; &lt;b&gt;text&lt;/b&gt;; literal &amp;lt;");
+    assertThat(repository.findLatestAuthoritativeRemark(900101L))
+        .get().extracting(ApplicationReviewRepository.ReviewRemarkRow::remark).isEqualTo(text);
+  }
+
+  @Test
   void authoritativeJurisdictionShouldComeFromTheRequiredApplicationCursor() {
     ApplicationReviewRepository repository =
         new ApplicantApplicationReviewRepository(
@@ -720,6 +738,64 @@ class ApplicationReviewRepositoryTest {
       assertThat(procedureSignature).isEqualTo("LEXIS_GROUP_5.FIND_REMARKS_BY_APP(?,?)");
       assertThat(cursorOutIndex).isEqualTo(2);
       return (List<T>) remarks;
+    }
+  }
+
+  static class RemarkRoundTripReviewRepository extends ApplicationReviewRepository {
+    private String storedRemark;
+    private int statusWrites;
+
+    RemarkRoundTripReviewRepository() {
+      super(null);
+    }
+
+    @Override
+    protected <T> Optional<T> queryCursorSingleRequired(
+        String procedureSignature,
+        SqlConsumer<CallableStatement> binder,
+        int cursorOutIndex,
+        SqlRowMapper<T> rowMapper) {
+      if (procedureSignature.contains("INSERT_EXEMPTION_APP_REMARK")) {
+        return super.queryCursorSingleRequired(procedureSignature, binder, cursorOutIndex, rowMapper);
+      }
+      try {
+        ResultSet rs = mock(ResultSet.class);
+        when(rs.getLong("APPLICATION_NUMBER")).thenReturn(900101L);
+        when(rs.getString("ENTRY_USERID")).thenReturn("idir\\jsmith");
+        return Optional.of(rowMapper.map(rs));
+      } catch (SQLException ex) {
+        throw new AssertionError(ex);
+      }
+    }
+
+    @Override
+    protected <T> List<T> queryCursorProcedureRequired(
+        String procedureSignature,
+        SqlConsumer<CallableStatement> binder,
+        int cursorOutIndex,
+        SqlRowMapper<T> rowMapper) {
+      try {
+        CallableStatement statement = mock(CallableStatement.class);
+        if (procedureSignature.contains("INSERT_EXEMPTION_APP_REMARK")) {
+          doAnswer(invocation -> { storedRemark = invocation.getArgument(1); return null; })
+              .when(statement).setString(eq(2), any());
+        }
+        binder.accept(statement);
+        ResultSet rs = mock(ResultSet.class);
+        when(rs.getLong("EXPORT_EXMPTN_APPL_REMARK_NMBR")).thenReturn(44L);
+        when(rs.getLong("APPLICATION_NUMBER")).thenReturn(900101L);
+        when(rs.getString("REMARK")).thenReturn(storedRemark);
+        when(rs.getString("ENTRY_USERID")).thenReturn("idir\\jsmith");
+        return List.of(rowMapper.map(rs));
+      } catch (SQLException ex) {
+        throw new AssertionError(ex);
+      }
+    }
+
+    @Override
+    protected void executeProcedureRequired(
+        String procedureSignature, SqlConsumer<CallableStatement> binder) {
+      statusWrites++;
     }
   }
 

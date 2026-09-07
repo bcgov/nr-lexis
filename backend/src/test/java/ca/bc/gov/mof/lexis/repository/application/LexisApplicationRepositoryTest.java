@@ -479,6 +479,18 @@ class LexisApplicationRepositoryTest {
   }
 
   @Test
+  void detailRemarkShouldDecodeLegacyStorageOnceForBothDisplayAndEdit() throws Exception {
+    TestLexisApplicationRepository repository = new TestLexisApplicationRepository();
+    ResultSet rs = org.mockito.Mockito.mock(ResultSet.class);
+    when(rs.getString("REMARK")).thenReturn("A &amp; B; &lt;b&gt;text&lt;/b&gt;; literal &amp;lt;");
+
+    LexisApplicationDetailDto.LexisRemarkDto remark = repository.mapRemarkRow(rs);
+
+    assertThat(remark.remark()).isEqualTo("A & B; <b>text</b>; literal &lt;");
+    assertThat(remark.title()).isEqualTo(remark.remark());
+  }
+
+  @Test
   void detailShouldKeepAnEmptyApplicationCursorAsNotFound() {
     DetailReadLexisApplicationRepository repository =
         new DetailReadLexisApplicationRepository(null, false);

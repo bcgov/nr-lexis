@@ -340,6 +340,20 @@ class ApplicationReviewOracleServiceTest {
   }
 
   @Test
+  void updateStatusShouldRejectEncodedRemarkOverflowBeforeMutation() {
+    ApplicationReviewStatusUpdateResultDto response = service.updateStatus(
+        1000456L,
+        new ApplicationReviewStatusUpdateRequestDto("REJ", "&".repeat(51), null),
+        "idir\\reviewer");
+
+    assertThat(response.updated()).isFalse();
+    assertThat(response.valid()).isFalse();
+    assertThat(response.message())
+        .isEqualTo("Remark is too long to save. Shorten it and try again.");
+    verifyNoInteractions(repository, emailSender, federalApplicationService);
+  }
+
+  @Test
   void updateStatusShouldNormalizeValuesBeforeRepositoryCall() {
     ApplicationReviewStatusUpdateRequestDto request =
         new ApplicationReviewStatusUpdateRequestDto(" REJ ", " Missing docs ", " client@gov.bc.ca ");
