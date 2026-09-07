@@ -1764,28 +1764,6 @@ public class PermitRpcRepository extends OracleRepositorySupport {
                 getString(rs, "EXPORT_PRODUCT_TYPE_CODE")));
   }
 
-  public Optional<PackageDetailsRow> findPackageDetailsByPackageNumber(String packageNumber) {
-    String normalized = trim(packageNumber);
-    if (normalized == null) {
-      return Optional.empty();
-    }
-
-    return queryCursorSingle(
-        FIND_PACKAGE_BY_NUMBER,
-        cs -> cs.setString(1, normalized),
-        2,
-        rs ->
-            new PackageDetailsRow(
-                getString(rs, "PACKAGE_NUMBER"),
-                coalesce(getDouble(rs, "PACKAGE_VOLUME"), 0.0d),
-                coalesce(getDouble(rs, "AVERAGE_LENGTH"), 0.0d),
-                coalesce(getDouble(rs, "AVERAGE_DIAMETER"), 0.0d),
-                getString(rs, "EXPORT_PACKAGE_STATUS_CODE"),
-                getString(rs, "COMMENTS"),
-                getString(rs, "PACKAGE_REPROCESSED_INDICATOR"),
-                getString(rs, "EXPORT_GROWTH_TYPE_CODE")));
-  }
-
   public Optional<PackageDetailsRow> findPackageDetailsByPackageNumberRequired(
       String packageNumber) {
     String normalized = trim(packageNumber);

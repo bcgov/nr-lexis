@@ -36,16 +36,11 @@ KSV-0013
 # report parity.
 CVE-2025-10492
 
-# CVE-2026-3260: Undertow Denial of Service via premature multipart/form-data
-# parsing on GET requests.
+# CVE-2026-3260: OSV currently reports this against Undertow.
 #
-# Severity: MEDIUM. Backend intentionally uses Undertow to align with nr-rept.
-# The only fixed Undertow release currently available is 2.4.0.Beta1.
+# Status verified 2026-09-06: Red Hat states that the assigning CNA marked this
+# CVE Rejected. Source: https://access.redhat.com/security/cve/cve-2026-3260
 #
-# Current mitigations:
-#   - Request body limits are enforced upstream.
-#   - /api surface is Cognito/JWT protected.
-#   - Pod memory limits bound blast radius to pod restart.
-#
-# Re-evaluate when a stable Undertow fix lands in a non-beta release.
+# Retain this suppression unless a distinct, confirmed Undertow issue needs
+# review.
 CVE-2026-3260

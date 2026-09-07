@@ -5412,16 +5412,6 @@ class OracleApplicationDetailsRpcServiceTest {
         true);
   }
 
-  private void stubSuccessfulApplicationInsert() {
-    when(repository.findCandidateExcolCodesRequired(1, "HE", "PL", 11L))
-        .thenReturn(List.of(new ApplicationDetailsRpcRepository.ExcolValidationRow("HE/PL")));
-    when(repository.insertApplication(any(ApplicationDetailsRpcRepository.ApplicationInsertRecord.class)))
-        .thenReturn(Optional.of(new ApplicationDetailsRpcRepository.ApplicationInsertRow(1000456L)));
-    when(repository.replaceApplicationEndUses(
-            org.mockito.ArgumentMatchers.eq(1000456L), org.mockito.ArgumentMatchers.anyList()))
-        .thenReturn(true);
-  }
-
   private ApplicationDetailsRpcService.CreateApplicationRequest withRemark(
       ApplicationDetailsRpcService.CreateApplicationRequest request, String remark) {
     return new ApplicationDetailsRpcService.CreateApplicationRequest(

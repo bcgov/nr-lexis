@@ -2,8 +2,10 @@ package ca.bc.gov.mof.lexis.service.federal;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assertions.assertTimeout;
 
 import ca.bc.gov.mof.lexis.dto.federal.FederalSubmissionPrevalidationDto;
+import java.time.Duration;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
@@ -173,6 +175,88 @@ class FederalSubmissionPrevalidationXmlCodecTest {
         .contains("xsi:type=\"ns2:LogExportApplication\"")
         .contains("soapenc:arrayType=\"xsd:string[2]\"")
         .contains("<errors soapenc:arrayType=\"xsd:string[0]\"");
+  }
+
+  @Test
+  void shouldParseLargeAxisArrayReferenceRequestWithinBoundedTime() {
+    int referenceCount = 30_000;
+    String items = "<item href=\"#timber-mark\"/>".repeat(referenceCount);
+    String xml =
+        """
+        <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
+            xmlns:soapenc="http://schemas.xmlsoap.org/soap/encoding/"
+            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+            xmlns:ns1="http://webservices.validation.lexis.ws.mof.gov.bc.ca"
+            xmlns:ns2="http://beans.validation.lexis.ws.mof.gov.bc.ca">
+          <soapenv:Body>
+            <ns1:isValidApplication>
+              <logExportApplication href="#application"/>
+            </ns1:isValidApplication>
+            <multiRef id="application" xsi:type="ns2:LogExportApplication">
+              <boomNumber>BOOM-1</boomNumber>
+              <clientNumber>00123456</clientNumber>
+              <locationCode>01</locationCode>
+              <timberMark href="#timber-marks"/>
+            </multiRef>
+            <multiRef id="timber-marks" xsi:type="soapenc:Array"
+                soapenc:arrayType="xsd:string[30000]">%s</multiRef>
+            <multiRef id="timber-mark" xsi:type="xsd:string">TM001</multiRef>
+          </soapenv:Body>
+        </soapenv:Envelope>
+        """
+            .formatted(items);
+
+    var request =
+        assertTimeout(
+            Duration.ofSeconds(10), () -> FederalSubmissionPrevalidationXmlCodec.parse(xml));
+
+    assertThat(request.submission().timberMark())
+        .hasSize(referenceCount)
+        .allMatch("TM001"::equals);
+  }
+
+  @Test
+  void shouldPreserveFirstMatchingAxisReferenceBehavior() {
+    String xml =
+        """
+        <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
+            xmlns:soapenc="http://schemas.xmlsoap.org/soap/encoding/"
+            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+            xmlns:ns1="http://webservices.validation.lexis.ws.mof.gov.bc.ca"
+            xmlns:ns2="http://beans.validation.lexis.ws.mof.gov.bc.ca">
+          <soapenv:Body>
+            <ns1:isValidApplication>
+              <logExportApplication href="#application"/>
+            </ns1:isValidApplication>
+            <multiRef id="application" xsi:type="ns2:LogExportApplication">
+              <boomNumber>BOOM-1</boomNumber>
+              <clientNumber>00123456</clientNumber>
+              <locationCode>01</locationCode>
+              <timberMark href="#timber-marks"/>
+            </multiRef>
+            <multiRef id="timber-marks" xsi:type="soapenc:Array"
+                soapenc:arrayType="xsd:string[4]">
+              <item href="#duplicate"/>
+              <item href="#chain-first"/>
+              <item href="#missing"/>
+              <item href="#cycle-first"/>
+            </multiRef>
+            <multiRef id="duplicate" xsi:type="xsd:string">TM-FIRST</multiRef>
+            <multiRef id="duplicate" xsi:type="xsd:string">TM-SECOND</multiRef>
+            <multiRef id="chain-first" href="#chain-second"/>
+            <multiRef id="chain-second" xsi:type="xsd:string">TM-CHAIN</multiRef>
+            <multiRef id="cycle-first" href="#cycle-second"/>
+            <multiRef id="cycle-second" href="#cycle-first"/>
+          </soapenv:Body>
+        </soapenv:Envelope>
+        """;
+
+    var request = FederalSubmissionPrevalidationXmlCodec.parse(xml);
+
+    assertThat(request.submission().timberMark())
+        .containsExactly("TM-FIRST", "TM-CHAIN", "", "");
   }
 
   @Test

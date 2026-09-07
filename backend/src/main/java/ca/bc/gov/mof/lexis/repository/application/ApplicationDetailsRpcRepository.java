@@ -295,18 +295,6 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
         .isPresent();
   }
 
-  public Optional<PackageDetailsRow> findPackageDetailsByPackageNumber(String packageNumber) {
-    String normalized = trim(packageNumber);
-    if (normalized == null) {
-      return Optional.empty();
-    }
-    return queryCursorSingle(
-        FIND_PACKAGE_BY_NUMBER,
-        cs -> cs.setString(1, normalized),
-        2,
-        this::mapPackageDetailsRow);
-  }
-
   public Optional<PackageDetailsRow> findPackageDetailsByPackageNumberRequired(
       String packageNumber) {
     String normalized = trim(packageNumber);
