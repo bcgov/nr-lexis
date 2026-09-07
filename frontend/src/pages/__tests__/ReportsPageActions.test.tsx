@@ -1016,6 +1016,71 @@ describe('Reports Page Actions', () => {
     })
   })
 
+  it.each([
+    ['Permit details report', 'generatePermitReport'],
+    ['Tenure types report', 'generateTenureReport'],
+    ['Timber marks report', 'generateMarkReport'],
+  ])(
+    'preserves a cleared end date for the %s tenure variant',
+    async (variantLabel, actionMapping) => {
+      mockReportPermissions()
+      render(
+        <MemoryRouter initialEntries={['/reports?report=tenureReport']}>
+          <Routes>
+            <Route path="/reports" element={<ReportsPage />} />
+          </Routes>
+        </MemoryRouter>,
+      )
+
+      await screen.findByRole('heading', { name: 'Tenure Analysis Report' })
+      if (variantLabel !== 'Permit details report') {
+        await chooseComboBoxOption('Report variant', variantLabel)
+      }
+      await userEvent.clear(screen.getByLabelText('Issued from date'))
+      await userEvent.type(screen.getByLabelText('Issued from date'), '2026-09-01')
+      await userEvent.clear(screen.getByLabelText('Issued to date'))
+      await userEvent.click(screen.getByRole('button', { name: 'Generate report' }))
+
+      await waitFor(() => {
+        expect(mockedRunReport).toHaveBeenCalledWith({
+          reportId: 'tenureReport',
+          actionMapping,
+          values: {
+            fromDate: '2026-09-01',
+            toDate: '',
+            ...(actionMapping === 'generatePermitReport'
+              ? { clientType: 'P', clientTypeLabel: 'Permit holder' }
+              : {}),
+          },
+        })
+      })
+      expect(screen.getByLabelText('Issued to date')).toHaveValue('')
+    },
+  )
+
+  it('restores explicitly blank tenure dates from the report URL', async () => {
+    mockReportPermissions()
+    const values = encodeURIComponent(JSON.stringify({ fromDate: '', toDate: '' }))
+    render(
+      <MemoryRouter initialEntries={['/reports?report=tenureReport&values=' + values]}>
+        <Routes>
+          <Route path="/reports" element={<ReportsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { name: 'Tenure Analysis Report' })
+    expect(screen.getByLabelText('Issued from date')).toHaveValue('')
+    expect(screen.getByLabelText('Issued to date')).toHaveValue('')
+    await userEvent.click(screen.getByRole('button', { name: 'Generate report' }))
+
+    await waitFor(() => {
+      expect(mockedRunReport).toHaveBeenCalledWith(
+        expect.objectContaining({ values: expect.objectContaining({ fromDate: '', toDate: '' }) }),
+      )
+    })
+  })
+
   it('uses separate tenure type and timber mark fields like the legacy report form', async () => {
     mockReportPermissions()
     const defaultDates = legacyTenureDefaultDates()
@@ -1029,14 +1094,19 @@ describe('Reports Page Actions', () => {
     )
 
     await screen.findByRole('heading', { name: 'Tenure Analysis Report' })
+    expect(screen.queryByLabelText('Tenure type 1')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Timber mark 1')).not.toBeInTheDocument()
+    await chooseComboBoxOption('Report variant', 'Tenure types report')
     expect(screen.getByLabelText('Tenure type 1')).toBeInTheDocument()
     expect(screen.getByLabelText('Tenure type 6')).toBeInTheDocument()
-    expect(screen.getByLabelText('Timber mark 1')).toBeInTheDocument()
-    expect(screen.getByLabelText('Timber mark 6')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Timber mark 1')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Tenure types')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Timber marks')).not.toBeInTheDocument()
 
     await chooseComboBoxOption('Report variant', 'Timber marks report')
+    expect(screen.queryByLabelText('Tenure type 1')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Timber mark 1')).toBeInTheDocument()
+    expect(screen.getByLabelText('Timber mark 6')).toBeInTheDocument()
     await userEvent.type(screen.getByLabelText('Timber mark 1'), 'tm-a')
     await userEvent.type(screen.getByLabelText('Timber mark 2'), 'tm-b')
     await userEvent.click(screen.getByRole('button', { name: 'Generate report' }))
@@ -1047,13 +1117,102 @@ describe('Reports Page Actions', () => {
         actionMapping: 'generateMarkReport',
         values: {
           ...defaultDates,
-          clientType: 'P',
-          clientTypeLabel: 'Permit holder',
           timberMark1: 'tm-a',
           timberMark2: 'tm-b',
         },
       })
     })
+  })
+
+  it('does not let inactive permit option failures block a timber marks report', async () => {
+    mockReportPermissions()
+    mockedFetchReportOptions.mockRejectedValueOnce(new Error('Report options unavailable'))
+    render(
+      <MemoryRouter initialEntries={['/reports?report=tenureReport']}>
+        <Routes>
+          <Route path="/reports" element={<ReportsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByText('Report options unavailable')
+    expect(screen.getByRole('button', { name: 'Generate report' })).toBeDisabled()
+    await chooseComboBoxOption('Report variant', 'Timber marks report')
+    expect(screen.queryByText('Report options unavailable')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Generate report' })).toBeEnabled()
+    await userEvent.type(screen.getByLabelText('Timber mark 1'), 'TM123')
+    await userEvent.click(screen.getByRole('button', { name: 'Generate report' }))
+    await waitFor(() => expect(mockedRunReport).toHaveBeenCalledOnce())
+
+    await chooseComboBoxOption('Report variant', 'Permit details report')
+    expect(screen.getByRole('button', { name: 'Generate report' })).toBeDisabled()
+    expect(screen.getByText('Report options unavailable')).toBeInTheDocument()
+  })
+
+  it('uses only the selected tenure variant filters while preserving the other draft selections', async () => {
+    mockReportPermissions()
+    const values = encodeURIComponent(
+      JSON.stringify({
+        fromDate: '2026-09-01',
+        toDate: '2026-09-07',
+        exemptionNumber: '26-8812',
+        tenureType1: 'A01',
+        timberMark1: 'TM123',
+      }),
+    )
+    render(
+      <MemoryRouter initialEntries={['/reports?report=tenureReport&values=' + values]}>
+        <Routes>
+          <Route path="/reports" element={<ReportsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { name: 'Tenure Analysis Report' })
+    await chooseComboBoxOption('Report variant', 'Tenure types report')
+    expect(screen.queryByLabelText('Exemption number')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Client number')).not.toBeInTheDocument()
+    expect(screen.queryByRole('combobox', { name: /^Region/ })).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Tenure type 1')).toHaveValue('A01')
+    await userEvent.click(screen.getByRole('button', { name: 'Generate report' }))
+    await waitFor(() =>
+      expect(mockedRunReport).toHaveBeenLastCalledWith({
+        reportId: 'tenureReport',
+        actionMapping: 'generateTenureReport',
+        values: { fromDate: '2026-09-01', toDate: '2026-09-07', tenureType1: 'A01' },
+      }),
+    )
+
+    await chooseComboBoxOption('Report variant', 'Timber marks report')
+    expect(screen.queryByLabelText('Tenure type 1')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Timber mark 1')).toHaveValue('TM123')
+    await userEvent.click(screen.getByRole('button', { name: 'Generate report' }))
+    await waitFor(() =>
+      expect(mockedRunReport).toHaveBeenLastCalledWith({
+        reportId: 'tenureReport',
+        actionMapping: 'generateMarkReport',
+        values: { fromDate: '2026-09-01', toDate: '2026-09-07', timberMark1: 'TM123' },
+      }),
+    )
+
+    await chooseComboBoxOption('Report variant', 'Permit details report')
+    expect(screen.getByLabelText('Exemption number')).toHaveValue('26-8812')
+    expect(screen.queryByLabelText('Tenure type 1')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Timber mark 1')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Generate report' }))
+    await waitFor(() =>
+      expect(mockedRunReport).toHaveBeenLastCalledWith({
+        reportId: 'tenureReport',
+        actionMapping: 'generatePermitReport',
+        values: {
+          fromDate: '2026-09-01',
+          toDate: '2026-09-07',
+          exemptionNumber: '26-8812',
+          clientType: 'P',
+          clientTypeLabel: 'Permit holder',
+        },
+      }),
+    )
   })
 
   it.each([
@@ -1222,7 +1381,7 @@ describe('Reports Page Actions', () => {
     })
   })
 
-  it('allows explicit blank advertising list dates to use legacy schedule defaults', async () => {
+  it('preserves explicitly cleared advertising dates even when a current schedule exists', async () => {
     mockReportPermissions()
     mockedFetchReportOptions.mockResolvedValueOnce({
       ...emptyReportOptions(),
@@ -1429,27 +1588,41 @@ describe('Reports Page Actions', () => {
     expect(screen.getByRole('button', { name: 'Generate report' })).toBeEnabled()
   })
 
-  it('validates advertising list date range before generating the filtered report', async () => {
-    mockReportPermissions()
+  it.each([
+    ['no dates', '', '', {}],
+    ['only a start date', '2026-09-01', '', { fromDate: '2026-09-01' }],
+    ['only an end date', '', '2026-09-07', { toDate: '2026-09-07' }],
+  ])(
+    'allows the filtered Advertising List with %s',
+    async (_description, fromDate, toDate, values) => {
+      mockReportPermissions()
 
-    render(
-      <MemoryRouter initialEntries={['/reports?report=biweeklyListing']}>
-        <Routes>
-          <Route path="/reports" element={<ReportsPage />} />
-        </Routes>
-      </MemoryRouter>,
-    )
+      render(
+        <MemoryRouter initialEntries={['/reports?report=biweeklyListing']}>
+          <Routes>
+            <Route path="/reports" element={<ReportsPage />} />
+          </Routes>
+        </MemoryRouter>,
+      )
 
-    await screen.findByRole('heading', { name: 'Advertising List' })
-    await userEvent.click(screen.getByRole('button', { name: 'Generate report' }))
+      await screen.findByRole('heading', { name: 'Advertising List' })
+      if (fromDate) {
+        await userEvent.type(screen.getByLabelText('Listing from date'), fromDate)
+      }
+      if (toDate) {
+        await userEvent.type(screen.getByLabelText('Listing to date'), toDate)
+      }
+      await userEvent.click(screen.getByRole('button', { name: 'Generate report' }))
 
-    expect(mockedRunReport).not.toHaveBeenCalled()
-    expect(
-      await screen.findByText(
-        'Choose a Listing from date and Listing to date before generating the Advertising List.',
-      ),
-    ).toBeInTheDocument()
-  })
+      await waitFor(() => {
+        expect(mockedRunReport).toHaveBeenCalledWith({
+          reportId: 'biweeklyListing',
+          actionMapping: 'generate',
+          values,
+        })
+      })
+    },
+  )
 
   it('keeps exemption approval date fields hidden like the legacy report form', async () => {
     mockReportPermissions()

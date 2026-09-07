@@ -760,9 +760,6 @@ const sanitizeReportValues = (
 const hasOwnValue = (values: Record<string, string>, key: string): boolean =>
   Object.prototype.hasOwnProperty.call(values, key)
 
-const isExplicitBlankBiweeklyDateValue = (value: string | undefined): boolean =>
-  value === BLANK_SCHEDULE_DATE_VALUE || value === ''
-
 const appendSelectedOptionLabels = (
   report: ReportDefinition,
   values: Record<string, string>,
@@ -810,11 +807,7 @@ const buildEffectiveReportValues = (
   const hasExplicitPermitStatus =
     report.id === 'speciesGradeReport' && hasOwnValue(values, 'permitStatus')
   report.fields.forEach((field) => {
-    if (
-      field.defaultValue !== undefined &&
-      !(field.key === 'permitStatus' && hasExplicitPermitStatus) &&
-      (effectiveValues[field.key] === undefined || effectiveValues[field.key] === '')
-    ) {
+    if (field.defaultValue !== undefined && !hasOwnValue(values, field.key)) {
       effectiveValues[field.key] = field.defaultValue
       return
     }
@@ -862,15 +855,14 @@ const buildEffectiveReportValues = (
   return Object.entries(appendSelectedOptionLabels(report, effectiveValues, optionsByKey)).reduce<
     Record<string, string>
   >((acc, [key, value]) => {
-    const shouldPreserveExplicitBlankBiweeklyDate =
-      report.id === 'biweeklyListing' &&
+    const shouldPreserveExplicitBlankDate =
+      (report.id === 'biweeklyListing' || report.id === 'tenureReport') &&
       (key === 'fromDate' || key === 'toDate') &&
       hasOwnValue(values, key) &&
-      isExplicitBlankBiweeklyDateValue(values[key]) &&
       !value.trim()
     if (
       value.trim() ||
-      shouldPreserveExplicitBlankBiweeklyDate ||
+      shouldPreserveExplicitBlankDate ||
       (key === 'permitStatus' && hasExplicitPermitStatus)
     ) {
       acc[key] = value
@@ -913,8 +905,6 @@ const buildReportSearchParams = (payload: {
 
 const APPLICATION_REPORT_LIMITER_MESSAGE =
   'Choose at least one Application Report filter before generating: region, jurisdiction, exemption reason, client number, growth type, or received date.'
-const BIWEEKLY_DATE_RANGE_MESSAGE =
-  'Choose a Listing from date and Listing to date before generating the Advertising List.'
 
 const hasApplicationReportLimiter = (values: Record<string, string>): boolean => {
   const limiterKeys = [
@@ -951,23 +941,6 @@ const validateReportLaunch = (
 ): string | null => {
   if (report.id === 'applicationReport' && !hasApplicationReportLimiter(values)) {
     return APPLICATION_REPORT_LIMITER_MESSAGE
-  }
-
-  const hasExplicitBlankBiweeklyDateRange =
-    report.id === 'biweeklyListing' &&
-    hasOwnValue(values, 'fromDate') &&
-    hasOwnValue(values, 'toDate') &&
-    isExplicitBlankBiweeklyDateValue(values.fromDate) &&
-    isExplicitBlankBiweeklyDateValue(values.toDate) &&
-    !values.fromDate.trim() &&
-    !values.toDate.trim()
-
-  if (
-    report.id === 'biweeklyListing' &&
-    !hasExplicitBlankBiweeklyDateRange &&
-    (!values.fromDate?.trim() || !values.toDate?.trim())
-  ) {
-    return BIWEEKLY_DATE_RANGE_MESSAGE
   }
 
   return null
@@ -1033,9 +1006,29 @@ export const ReportsPageContent = () => {
     selectedReport,
     selectedActionById[selectedReport.id] ?? null,
   )
+  const selectedReportVariant = useMemo(() => {
+    if (selectedReport.id !== 'tenureReport') {
+      return selectedReport
+    }
+    return {
+      ...selectedReport,
+      fields: selectedReport.fields.filter((field) => {
+        if (['fromDate', 'toDate', 'outputFormat'].includes(field.key)) {
+          return true
+        }
+        if (selectedActionMapping === 'generateTenureReport') {
+          return /^tenureType[1-6]$/.test(field.key)
+        }
+        if (selectedActionMapping === 'generateMarkReport') {
+          return /^timberMark[1-6]$/.test(field.key)
+        }
+        return !/^(tenureType|timberMark)[1-6]$/.test(field.key)
+      }),
+    }
+  }, [selectedReport, selectedActionMapping])
   const requiredReportOptionSources = useMemo(
-    () => (hasSelectedReportAccess ? getRequiredReportOptionSources(selectedReport) : []),
-    [hasSelectedReportAccess, selectedReport],
+    () => (hasSelectedReportAccess ? getRequiredReportOptionSources(selectedReportVariant) : []),
+    [hasSelectedReportAccess, selectedReportVariant],
   )
   const reportFieldOptionsByKey = useMemo<Record<string, SearchOption[]>>(() => {
     const reportOptions = reportOptionSourcesByKey.report
@@ -1136,7 +1129,7 @@ export const ReportsPageContent = () => {
   const reportGenerationDisabled = requiredReportOptionsLoading || requiredReportOptionsFailed
 
   const defaultReportRegion = reportOptionSourcesByKey.report?.defaultRegion ?? ''
-  const hasInvalidReportDate = selectedReport.fields.some(
+  const hasInvalidReportDate = selectedReportVariant.fields.some(
     (field) =>
       field.type === 'date' &&
       !isValidIsoDate(
@@ -1323,8 +1316,8 @@ export const ReportsPageContent = () => {
 
     try {
       const effectiveReportValues = buildEffectiveReportValues(
-        selectedReport,
-        selectedReportValues,
+        selectedReportVariant,
+        sanitizeReportValues(selectedReportVariant, selectedReportValues),
         reportFieldOptionsByKey,
         defaultReportRegion,
       )
@@ -1403,7 +1396,7 @@ export const ReportsPageContent = () => {
                     }
                   />
                 )}
-                {selectedReport.fields.map((field) => {
+                {selectedReportVariant.fields.map((field) => {
                   const defaultMultiselectValue =
                     (field.key === 'region' || field.key === 'orgUnitNumber') && defaultReportRegion
                       ? defaultReportRegion

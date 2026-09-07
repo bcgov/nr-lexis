@@ -283,6 +283,30 @@ class LegacyReportRouteControllerTest {
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
   }
 
+  @ParameterizedTest
+  @ValueSource(strings = {"generatePermitReport", "generateTenureReport", "generateMarkReport"})
+  void shouldPreserveClearedTenureDateBounds(String actionMapping) {
+    LegacyReportRouteController controller = new LegacyReportRouteController(reportController);
+    MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/lexis/tenureReport.do");
+    when(reportController.tenureReport(any())).thenReturn(streamingResponse(7, 8));
+    MultiValueMap<String, String> multi = new LinkedMultiValueMap<>();
+    multi.add("fromDate", "2026-09-01");
+    multi.add("toDate", "  ");
+
+    controller.legacyReport(
+        Map.of("actionMapping", actionMapping, "fromDate", "2026-09-01", "toDate", "  "),
+        multi,
+        request,
+        authentication);
+
+    ArgumentCaptor<LexisReportRequestDto> requestCaptor =
+        ArgumentCaptor.forClass(LexisReportRequestDto.class);
+    verify(reportController).tenureReport(requestCaptor.capture());
+    assertThat(requestCaptor.getValue().parameters())
+        .containsEntry("fromDate", "2026-09-01")
+        .containsEntry("toDate", "");
+  }
+
   @Test
   void shouldRejectUnsupportedLegacyOutputFormat() {
     LegacyReportRouteController controller = new LegacyReportRouteController(reportController);

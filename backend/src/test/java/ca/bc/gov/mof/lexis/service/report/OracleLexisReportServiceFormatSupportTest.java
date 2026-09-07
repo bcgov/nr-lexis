@@ -10,9 +10,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 
 import ca.bc.gov.mof.lexis.dto.report.LexisReportRequestDto;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository;
-import ca.bc.gov.mof.lexis.repository.report.LexisReportScheduleRepository;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
-import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -21,11 +19,12 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.sql.Connection;
 import java.sql.SQLException;
-import java.time.LocalDate;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Stream;
 import javax.sql.DataSource;
 import net.sf.jasperreports.engine.JRRuntimeException;
 import net.sf.jasperreports.engine.JasperCompileManager;
@@ -36,6 +35,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.Mockito;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.dao.DataAccessResourceFailureException;
@@ -291,7 +291,6 @@ class OracleLexisReportServiceFormatSupportTest {
             legacyCsvReportService,
             legacyJasperTableReportService,
             Mockito.mock(PermitRpcRepository.class),
-            Mockito.mock(LexisReportScheduleRepository.class),
             new LexisSessionService("LEXIS_PROVINCIAL_SUBMITTER")) {
           @Override
           JasperReport compileTemplate(LexisJasperReportDefinition definition) {
@@ -346,7 +345,6 @@ class OracleLexisReportServiceFormatSupportTest {
             legacyCsvReportService,
             legacyJasperTableReportService,
             Mockito.mock(PermitRpcRepository.class),
-            Mockito.mock(LexisReportScheduleRepository.class),
             new LexisSessionService("LEXIS_PROVINCIAL_SUBMITTER")) {
           @Override
           JasperReport compileTemplate(LexisJasperReportDefinition definition) {
@@ -397,7 +395,6 @@ class OracleLexisReportServiceFormatSupportTest {
             legacyCsvReportService,
             legacyJasperTableReportService,
             Mockito.mock(PermitRpcRepository.class),
-            Mockito.mock(LexisReportScheduleRepository.class),
             new LexisSessionService("LEXIS_PROVINCIAL_SUBMITTER")) {
           @Override
           JasperReport compileTemplate(LexisJasperReportDefinition definition) {
@@ -491,126 +488,70 @@ class OracleLexisReportServiceFormatSupportTest {
             });
   }
 
-  @Test
-  void shouldNotApplyRetiredBiweeklyIndustryScheduleDefaults() {
-    LexisReportScheduleRepository scheduleRepository = Mockito.mock(LexisReportScheduleRepository.class);
-    OracleLexisReportService service = createService(scheduleRepository);
-    LexisReportRequestDto request =
-        new LexisReportRequestDto(
-            Map.of(
-                "legacyActionMapping", "generateIndustryCSV",
-                "fromDate", "2025-01-01",
-                "toDate", "2025-01-31",
-                "region", "12",
-                "orgUnitNumber", "14",
-                "exportJurisdictionCode", "F"),
-            "CSV");
-
-    LexisReportRequestDto result =
-        service.applyLegacyReportDefaults(LexisJasperReportDefinition.BIWEEKLY_LISTING, request);
-
-    assertThat(result).isSameAs(request);
-    assertThat(result.parameters())
-        .containsEntry("legacyActionMapping", "generateIndustryCSV")
-        .containsEntry("fromDate", "2025-01-01")
-        .containsEntry("toDate", "2025-01-31")
-        .containsEntry("region", "12")
-        .containsEntry("orgUnitNumber", "14")
-        .containsEntry("exportJurisdictionCode", "F")
-        .doesNotContainEntry("jurisdiction", "P");
-    Mockito.verifyNoInteractions(scheduleRepository);
-  }
-
-  @Test
-  void shouldApplyLegacyBiweeklyScheduleDefaultsForBlankMofrGenerateRequest() {
-    LexisReportScheduleRepository scheduleRepository = Mockito.mock(LexisReportScheduleRepository.class);
-    Mockito.when(scheduleRepository.findCurrentSchedulesRequired())
-        .thenReturn(
-            List.of(
-                new LexisReportScheduleRepository.CurrentScheduleRow(
-                    1001L, LocalDate.of(2026, 6, 15)),
-                new LexisReportScheduleRepository.CurrentScheduleRow(
-                    1002L, LocalDate.of(2026, 6, 29))));
-    OracleLexisReportService service = createService(scheduleRepository);
-    LexisReportRequestDto request =
-        new LexisReportRequestDto(
-            Map.of("legacyActionMapping", "generate", "exportJurisdictionCode", "F"),
-            "PDF");
-
-    LexisReportRequestDto result =
-        service.applyLegacyReportDefaults(LexisJasperReportDefinition.BIWEEKLY_LISTING, request);
-
-    assertThat(result.parameters())
-        .containsEntry("legacyActionMapping", "generate")
-        .containsEntry("fromDate", "2026-06-15")
-        .containsEntry("toDate", "2026-06-28")
-        .containsEntry("exportJurisdictionCode", "F")
-        .doesNotContainEntry("jurisdiction", "P");
-  }
-
-  @Test
-  void shouldKeepExplicitBiweeklyGenerateDatesUnchanged() {
-    LexisReportScheduleRepository scheduleRepository = Mockito.mock(LexisReportScheduleRepository.class);
-    OracleLexisReportService service = createService(scheduleRepository);
-    LexisReportRequestDto request =
-        new LexisReportRequestDto(
-            Map.of(
-                "legacyActionMapping", "generate",
-                "fromDate", "2026-05-01",
-                "toDate", "2026-05-31",
-                "exportJurisdictionCode", "F"),
-            "PDF");
-
-    LexisReportRequestDto result =
-        service.applyLegacyReportDefaults(LexisJasperReportDefinition.BIWEEKLY_LISTING, request);
-
-    assertThat(result).isSameAs(request);
-    Mockito.verifyNoInteractions(scheduleRepository);
-  }
-
-  @Test
-  void shouldNotGenerateUnboundedBiweeklyReportWhenScheduleDefaultsAreUnavailable() throws Exception {
+  @ParameterizedTest
+  @EnumSource(value = LexisReportFormat.class, names = {"PDF", "CSV"})
+  void shouldGenerateFilteredAdvertisingReportWithOpenDateBounds(LexisReportFormat format) {
     DataSource dataSource = Mockito.mock(DataSource.class);
-    OracleLegacyCsvReportService legacyCsvReportService = Mockito.mock(OracleLegacyCsvReportService.class);
+    OracleLegacyCsvReportService legacyCsvReportService =
+        Mockito.mock(OracleLegacyCsvReportService.class);
     OracleLegacyJasperTableReportService legacyJasperTableReportService =
         Mockito.mock(OracleLegacyJasperTableReportService.class);
-    LexisReportScheduleRepository scheduleRepository = Mockito.mock(LexisReportScheduleRepository.class);
-    Mockito.when(scheduleRepository.findCurrentSchedulesRequired()).thenReturn(List.of());
-    OracleLexisReportService service =
-        createService(
-            dataSource,
-            legacyCsvReportService,
-            legacyJasperTableReportService,
-            scheduleRepository,
-            Mockito.mock(PermitRpcRepository.class));
     LexisReportRequestDto request =
-        new LexisReportRequestDto(Map.of("legacyActionMapping", "generate"), "PDF");
+        new LexisReportRequestDto(
+            Map.of("legacyActionMapping", "generate", "fromDate", "2026-09-01", "toDate", ""),
+            format.name());
+    LexisGeneratedReport generatedReport = report("advertising-list", format.mediaType(), (byte) 1);
+    if (format == LexisReportFormat.CSV) {
+      Mockito.when(
+              legacyCsvReportService.generateLegacyCsvReport(
+                  LexisJasperReportDefinition.BIWEEKLY_LISTING, request, format))
+          .thenReturn(Optional.of(generatedReport));
+    } else {
+      Mockito.when(
+              legacyJasperTableReportService.generateLegacyPdfReport(
+                  LexisJasperReportDefinition.BIWEEKLY_LISTING, request, format))
+          .thenReturn(Optional.of(generatedReport));
+    }
+    OracleLexisReportService service =
+        createService(dataSource, legacyCsvReportService, legacyJasperTableReportService);
 
-    assertThatThrownBy(() -> service.generateReport("biweeklyListing", request))
-        .isInstanceOf(LexisReportValidationException.class)
-        .hasMessage(
-            "The current advertising period is unavailable because two advertising schedule "
-                + "dates are not configured.");
-
-    Mockito.verify(scheduleRepository).findCurrentSchedulesRequired();
-    verifyNoInteractions(dataSource, legacyCsvReportService, legacyJasperTableReportService);
+    assertThat(service.generateReport("biweeklyListing", request)).containsSame(generatedReport);
+    verify(legacyCsvReportService)
+        .generateLegacyCsvReport(LexisJasperReportDefinition.BIWEEKLY_LISTING, request, format);
+    verifyNoInteractions(dataSource);
   }
 
-  @Test
-  void shouldPropagateCurrentScheduleLookupFailureForBlankBiweeklyRequest() {
-    LexisReportScheduleRepository scheduleRepository = Mockito.mock(LexisReportScheduleRepository.class);
-    Mockito.when(scheduleRepository.findCurrentSchedulesRequired())
-        .thenThrow(new DataAccessResourceFailureException("Oracle unavailable"));
-    OracleLexisReportService service = createService(scheduleRepository);
-    LexisReportRequestDto request =
-        new LexisReportRequestDto(Map.of("legacyActionMapping", "generate"), "PDF");
+  @ParameterizedTest
+  @MethodSource("reportDateSelections")
+  void shouldPreserveAdvertisingDateSelections(Map<String, String> dates) {
+    OracleLexisReportService service = createService();
+    LexisReportRequestDto request = new LexisReportRequestDto(dates, "PDF");
 
-    assertThatThrownBy(
-            () ->
-                service.applyLegacyReportDefaults(
-                    LexisJasperReportDefinition.BIWEEKLY_LISTING, request))
-        .isInstanceOf(DataAccessResourceFailureException.class)
-        .hasMessage("Oracle unavailable");
+    LexisReportRequestDto effectiveRequest =
+        service.applyLegacyReportDefaults(LexisJasperReportDefinition.BIWEEKLY_LISTING, request);
+    Map<String, Object> parameters =
+        new LexisJasperReportParameterProvider()
+            .buildParameters(LexisJasperReportDefinition.BIWEEKLY_LISTING, effectiveRequest);
+
+    assertThat(effectiveRequest).isSameAs(request);
+    assertThat(parameters)
+        .containsEntry(
+            "P_FROM_DATE",
+            dates.getOrDefault("fromDate", "").isBlank() ? "0001-01-01" : dates.get("fromDate"))
+        .containsEntry(
+            "P_TO_DATE",
+            dates.getOrDefault("toDate", "").isBlank() ? "9999-12-31" : dates.get("toDate"));
+  }
+
+  private static Stream<Map<String, String>> reportDateSelections() {
+    return Stream.of(
+        Map.of(),
+        Map.of("fromDate", "", "toDate", ""),
+        Map.of("fromDate", "2026-09-01", "toDate", ""),
+        Map.of("fromDate", "", "toDate", "2026-08-31"),
+        Map.of("fromDate", "2026-09-01"),
+        Map.of("toDate", "2026-08-31"),
+        Map.of("fromDate", "2026-09-01", "toDate", "2026-09-30"));
   }
 
   @Test
@@ -639,38 +580,27 @@ class OracleLexisReportServiceFormatSupportTest {
     assertThat(result.parameters()).containsEntry("permitStatus", "ACT");
   }
 
-  @Test
-  void shouldApplyLegacyTenureDateDefaults() {
+  @ParameterizedTest
+  @MethodSource("reportDateSelections")
+  void shouldPreserveTenureDateSelectionsForEveryReportVariant(Map<String, String> dates) {
     OracleLexisReportService service = createService();
-    LexisReportRequestDto request =
-        new LexisReportRequestDto(Map.of("legacyActionMapping", "generatePermitReport"), "PDF");
-    LocalDate today = LexisBusinessTime.today();
-    LocalDate previousMonth = today.minusMonths(1);
+    for (String variant :
+        List.of("generatePermitReport", "generateTenureReport", "generateMarkReport")) {
+      Map<String, String> requestParameters = new HashMap<>(dates);
+      requestParameters.put("legacyActionMapping", variant);
+      LexisReportRequestDto request = new LexisReportRequestDto(requestParameters, "PDF");
 
-    LexisReportRequestDto result =
-        service.applyLegacyReportDefaults(LexisJasperReportDefinition.TENURE_REPORT, request);
+      LexisReportRequestDto effectiveRequest =
+          service.applyLegacyReportDefaults(LexisJasperReportDefinition.TENURE_REPORT, request);
+      Map<String, Object> parameters =
+          new LexisJasperReportParameterProvider()
+              .buildParameters(LexisJasperReportDefinition.TENURE_REPORT, effectiveRequest);
 
-    assertThat(result.parameters())
-        .containsEntry("legacyActionMapping", "generatePermitReport")
-        .containsEntry("fromDate", LocalDate.of(today.getYear() - 1, today.getMonth(), 1).toString())
-        .containsEntry(
-            "toDate", previousMonth.withDayOfMonth(previousMonth.lengthOfMonth()).toString());
-  }
-
-  @Test
-  void shouldKeepExplicitTenureDates() {
-    OracleLexisReportService service = createService();
-    LexisReportRequestDto request =
-        new LexisReportRequestDto(
-            Map.of("fromDate", "2026-01-01", "toDate", "2026-01-31"),
-            "PDF");
-
-    LexisReportRequestDto result =
-        service.applyLegacyReportDefaults(LexisJasperReportDefinition.TENURE_REPORT, request);
-
-    assertThat(result.parameters())
-        .containsEntry("fromDate", "2026-01-01")
-        .containsEntry("toDate", "2026-01-31");
+      assertThat(effectiveRequest).isSameAs(request);
+      assertThat(parameters)
+          .containsEntry("P_FROM_DATE", dates.get("fromDate"))
+          .containsEntry("P_TO_DATE", dates.get("toDate"));
+    }
   }
 
   @Test
@@ -682,7 +612,7 @@ class OracleLexisReportServiceFormatSupportTest {
                 new PermitRpcRepository.GbmsInvoiceHistoryRow(
                     "INV-GBMS", null, null, 900100L, 0.0d, null, null, null)));
     OracleLexisReportService service =
-        createService(Mockito.mock(LexisReportScheduleRepository.class), permitRpcRepository);
+        createService(permitRpcRepository);
     LexisReportRequestDto request =
         new LexisReportRequestDto(Map.of("permitNumber", "900100"), "PDF");
 
@@ -705,7 +635,7 @@ class OracleLexisReportServiceFormatSupportTest {
                 new PermitRpcRepository.GbmsInvoiceHistoryRow(
                     "INV-READONLY", null, null, 900100L, 0.0d, null, null, null)));
     OracleLexisReportService service =
-        createService(Mockito.mock(LexisReportScheduleRepository.class), permitRpcRepository);
+        createService(permitRpcRepository);
     LexisReportRequestDto request =
         new LexisReportRequestDto(Map.of("permitNumber", "900100"), "PDF");
 
@@ -725,7 +655,7 @@ class OracleLexisReportServiceFormatSupportTest {
                 new PermitRpcRepository.GbmsInvoiceHistoryRow(
                     "INV-GBMS", null, null, 900100L, 0.0d, null, null, null)));
     OracleLexisReportService service =
-        createService(Mockito.mock(LexisReportScheduleRepository.class), permitRpcRepository);
+        createService(permitRpcRepository);
     LexisReportRequestDto request =
         new LexisReportRequestDto(
             Map.of("permitNumber", "900100", "invoiceNumber", "INV-REQUEST"),
@@ -744,7 +674,7 @@ class OracleLexisReportServiceFormatSupportTest {
     Mockito.when(permitRpcRepository.findGbmsInvoiceHistoryRequired("", 900100L, false))
         .thenReturn(List.of());
     OracleLexisReportService service =
-        createService(Mockito.mock(LexisReportScheduleRepository.class), permitRpcRepository);
+        createService(permitRpcRepository);
     LexisReportRequestDto request =
         new LexisReportRequestDto(
             Map.of("permitNumber", "900100", "invoiceNumber", "INV-REQUEST"),
@@ -765,7 +695,7 @@ class OracleLexisReportServiceFormatSupportTest {
     Mockito.when(permitRpcRepository.findGbmsInvoiceHistoryRequired("", 900100L, false))
         .thenThrow(outage);
     OracleLexisReportService service =
-        createService(Mockito.mock(LexisReportScheduleRepository.class), permitRpcRepository);
+        createService(permitRpcRepository);
     LexisReportRequestDto request =
         new LexisReportRequestDto(Map.of("permitNumber", "900100"), "PDF");
 
@@ -802,7 +732,6 @@ class OracleLexisReportServiceFormatSupportTest {
             dataSource,
             legacyCsvReportService,
             legacyJasperTableReportService,
-            Mockito.mock(LexisReportScheduleRepository.class),
             permitRpcRepository);
 
     Optional<LexisGeneratedReport> result =
@@ -831,7 +760,7 @@ class OracleLexisReportServiceFormatSupportTest {
             new TestingAuthenticationToken(
                 "user", "n/a", "LEXIS_PROVINCIAL_SUBMITTER_00000999"));
     OracleLexisReportService service =
-        createService(Mockito.mock(LexisReportScheduleRepository.class), permitRpcRepository);
+        createService(permitRpcRepository);
     LexisReportRequestDto request =
         new LexisReportRequestDto(Map.of("permitNumber", "900100"), "PDF");
 
@@ -855,7 +784,7 @@ class OracleLexisReportServiceFormatSupportTest {
             new TestingAuthenticationToken(
                 "user", "n/a", "LEXIS_PROVINCIAL_SUBMITTER_00000999"));
     OracleLexisReportService service =
-        createService(Mockito.mock(LexisReportScheduleRepository.class), permitRpcRepository);
+        createService(permitRpcRepository);
     LexisReportRequestDto request =
         new LexisReportRequestDto(Map.of("permitNumber", "900100"), "PDF");
 
@@ -878,7 +807,7 @@ class OracleLexisReportServiceFormatSupportTest {
             new TestingAuthenticationToken(
                 "user", "n/a", "LEXIS_PROVINCIAL_SUBMITTER_00000999"));
     OracleLexisReportService service =
-        createService(Mockito.mock(LexisReportScheduleRepository.class), permitRpcRepository);
+        createService(permitRpcRepository);
     LexisReportRequestDto request =
         new LexisReportRequestDto(Map.of("permitNumber", "900100"), "PDF");
 
@@ -907,7 +836,7 @@ class OracleLexisReportServiceFormatSupportTest {
             new TestingAuthenticationToken(
                 "user", "n/a", "LEXIS_PROVINCIAL_SUBMITTER_00000999"));
     OracleLexisReportService service =
-        createService(Mockito.mock(LexisReportScheduleRepository.class), permitRpcRepository);
+        createService(permitRpcRepository);
     LexisReportRequestDto request =
         new LexisReportRequestDto(Map.of("permitNumber", "900100"), "PDF");
 
@@ -932,7 +861,7 @@ class OracleLexisReportServiceFormatSupportTest {
             new TestingAuthenticationToken(
                 "user", "n/a", "LEXIS_READ_ONLY", "LEXIS_APPLICATION_APPROVER"));
     OracleLexisReportService service =
-        createService(Mockito.mock(LexisReportScheduleRepository.class), permitRpcRepository);
+        createService(permitRpcRepository);
     LexisReportRequestDto request =
         new LexisReportRequestDto(Map.of("permitNumber", "900100"), "PDF");
 
@@ -961,20 +890,14 @@ class OracleLexisReportServiceFormatSupportTest {
   }
 
   private OracleLexisReportService createService() {
-    return createService(Mockito.mock(LexisReportScheduleRepository.class));
+    return createService(Mockito.mock(PermitRpcRepository.class));
   }
 
-  private OracleLexisReportService createService(LexisReportScheduleRepository scheduleRepository) {
-    return createService(scheduleRepository, Mockito.mock(PermitRpcRepository.class));
-  }
-
-  private OracleLexisReportService createService(
-      LexisReportScheduleRepository scheduleRepository, PermitRpcRepository permitRpcRepository) {
+  private OracleLexisReportService createService(PermitRpcRepository permitRpcRepository) {
     return createService(
         Mockito.mock(javax.sql.DataSource.class),
         Mockito.mock(OracleLegacyCsvReportService.class),
         Mockito.mock(OracleLegacyJasperTableReportService.class),
-        scheduleRepository,
         permitRpcRepository);
   }
 
@@ -986,7 +909,6 @@ class OracleLexisReportServiceFormatSupportTest {
         dataSource,
         legacyCsvReportService,
         legacyJasperTableReportService,
-        Mockito.mock(LexisReportScheduleRepository.class),
         Mockito.mock(PermitRpcRepository.class));
   }
 
@@ -994,7 +916,6 @@ class OracleLexisReportServiceFormatSupportTest {
       DataSource dataSource,
       OracleLegacyCsvReportService legacyCsvReportService,
       OracleLegacyJasperTableReportService legacyJasperTableReportService,
-      LexisReportScheduleRepository scheduleRepository,
       PermitRpcRepository permitRpcRepository) {
     return new OracleLexisReportService(
         dataSource,
@@ -1002,7 +923,6 @@ class OracleLexisReportServiceFormatSupportTest {
         legacyCsvReportService,
         legacyJasperTableReportService,
         permitRpcRepository,
-        scheduleRepository,
         new LexisSessionService("LEXIS_PROVINCIAL_SUBMITTER"));
   }
 

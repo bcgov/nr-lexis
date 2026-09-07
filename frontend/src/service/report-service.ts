@@ -181,8 +181,11 @@ const buildReportPayload = (
   Object.entries(values).forEach(([key, rawValue]) => {
     const value = rawValue.trim()
     const isExplicitSpeciesGradeStatus = reportId === 'speciesGradeReport' && key === 'permitStatus'
+    const isExplicitReportDate =
+      (reportId === 'biweeklyListing' || reportId === 'tenureReport') &&
+      (key === 'fromDate' || key === 'toDate')
     if (
-      (!value && !isExplicitSpeciesGradeStatus) ||
+      (!value && !isExplicitSpeciesGradeStatus && !isExplicitReportDate) ||
       key === 'outputFormat' ||
       key === 'tenureTypes' ||
       key === 'timberMarks' ||

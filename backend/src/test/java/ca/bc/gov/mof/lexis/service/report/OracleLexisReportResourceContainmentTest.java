@@ -8,7 +8,6 @@ import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.report.LexisReportRequestDto;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository;
-import ca.bc.gov.mof.lexis.repository.report.LexisReportScheduleRepository;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import java.nio.file.Path;
 import java.util.Map;
@@ -123,7 +122,6 @@ class OracleLexisReportResourceContainmentTest {
         csvService,
         tableService,
         mock(PermitRpcRepository.class),
-        mock(LexisReportScheduleRepository.class),
         new LexisSessionService("LEXIS_PROVINCIAL_SUBMITTER"),
         resources);
   }

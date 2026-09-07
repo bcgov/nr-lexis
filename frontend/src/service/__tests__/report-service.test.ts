@@ -412,28 +412,33 @@ describe('report-service', () => {
     },
   )
 
-  it('omits explicit blank biweekly listing dates so backend legacy schedule defaults apply', async () => {
-    postMock.mockResolvedValue({
-      data: new Blob(['report']),
-      headers: {},
-    })
+  it.each(['biweeklyListing', 'tenureReport'])(
+    'preserves explicit open date bounds for %s',
+    async (reportId) => {
+      postMock.mockResolvedValue({
+        data: new Blob(['report']),
+        headers: {},
+      })
 
-    await runReport({
-      reportId: 'biweeklyListing',
-      actionMapping: 'generate',
-      values: {
-        fromDate: '',
-        toDate: '',
-      },
-    })
+      await runReport({
+        reportId,
+        actionMapping: 'generate',
+        values: {
+          fromDate: '',
+          toDate: '',
+        },
+      })
 
-    expect(postMock.mock.calls[0][1]).toEqual({
-      parameters: {
-        legacyActionMapping: 'generate',
-      },
-      format: 'PDF',
-    })
-  })
+      expect(postMock.mock.calls[0][1]).toEqual({
+        parameters: {
+          legacyActionMapping: 'generate',
+          fromDate: '',
+          toDate: '',
+        },
+        format: 'PDF',
+      })
+    },
+  )
 
   it('surfaces plain text report validation errors from blob responses', async () => {
     postMock.mockRejectedValue({

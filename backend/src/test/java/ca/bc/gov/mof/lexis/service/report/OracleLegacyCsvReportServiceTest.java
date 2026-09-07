@@ -25,6 +25,7 @@ import oracle.jdbc.OracleConnection;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
@@ -649,8 +650,15 @@ class OracleLegacyCsvReportServiceTest {
     verify(callableStatement).registerOutParameter(12, Types.REF_CURSOR);
   }
 
-  @Test
-  void shouldGenerateBiweeklyCsvFromLegacyDynamicProcedure() throws Exception {
+  @ParameterizedTest
+  @CsvSource({
+      "2026-08-12,2026-08-12,2026-08-12,2026-08-12",
+      "2026-09-01,'',2026-09-01,9999-12-31",
+      "'',2026-08-31,0001-01-01,2026-08-31",
+      "'','',0001-01-01,9999-12-31"
+  })
+  void shouldGenerateBiweeklyCsvFromLegacyDynamicProcedure(
+      String fromDate, String toDate, String expectedFromDate, String expectedToDate) throws Exception {
     when(dataSource.getConnection()).thenReturn(connection);
     when(connection.prepareCall("{ call LEXIS_REPORTING.BIWEEKLY_REPORT_CSV(?,?,?,?) }"))
         .thenReturn(callableStatement);
@@ -681,8 +689,8 @@ class OracleLegacyCsvReportServiceTest {
     LexisReportRequestDto request =
         new LexisReportRequestDto(
             Map.of(
-                "fromDate", "2026-08-12",
-                "toDate", "2026-08-12",
+                "fromDate", fromDate,
+                "toDate", toDate,
                 "region", "1903,1904,1905,1906,1907,1908,1909,1910",
                 "exportJurisdictionCode", "P"),
             "CSV");
@@ -709,8 +717,8 @@ class OracleLegacyCsvReportServiceTest {
         .contains("EEA.EXPORT_APPLICATION_STATUS_CODE = :12")
         .contains("EEA.EXPORT_PRODUCT_TYPE_CODE <> :13");
     assertBindArrayValues(
-        "2026-08-12",
-        "2026-08-12",
+        expectedFromDate,
+        expectedToDate,
         "1903",
         "1904",
         "1905",

@@ -212,6 +212,13 @@ public class LegacyReportRouteController {
             || multiValueRequestParams.containsKey("permitStatus"))) {
       normalized.putIfAbsent("permitStatus", "");
     }
+    if ("tenureReport".equals(reportAction)) {
+      for (String dateKey : List.of("fromDate", "toDate")) {
+        if (requestParams.containsKey(dateKey) || multiValueRequestParams.containsKey(dateKey)) {
+          normalized.putIfAbsent(dateKey, "");
+        }
+      }
+    }
 
     return normalized;
   }
