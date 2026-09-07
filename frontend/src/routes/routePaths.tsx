@@ -1,10 +1,11 @@
 import { Loading } from '@carbon/react'
-import { lazy, Suspense, type ReactNode } from 'react'
-import { Navigate, useNavigate, type RouteObject } from 'react-router-dom'
+import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
+import { matchRoutes, Navigate, useLocation, useNavigate, type RouteObject } from 'react-router-dom'
 import AppLayout from '../components/Layout'
 import { hasProvincialSubmitterRole, hasRole } from '@/context/auth/role-utils'
 import { isProdRtmOnlyPathAllowed } from '@/config/features'
 import { useAuth } from '@/context/auth/useAuth'
+import { clearLoginDestination, getLoginDestination } from '@/context/auth/login-destination'
 import LandingPage from '@/pages/Landing'
 import NotFoundPage from '@/pages/NotFound'
 import ForbiddenPage from '@/pages/Forbidden'
@@ -53,9 +54,9 @@ type RouteDescription = {
   roleScope?: RouteRoleScope
 } & RouteObject
 
-function ProtectedRootRedirect() {
-  const { defaultRoute } = useAuth()
-  return <Navigate to={defaultRoute} replace />
+function ProtectedLoginEntry() {
+  const { pathname, search, hash } = useLocation()
+  return <LandingPage loginDestination={`${pathname}${search}${hash}`} />
 }
 
 function ForestClientSelectionRoute() {
@@ -116,6 +117,9 @@ function RouteActionGuard({
   roleScope,
 }: RouteGuardProps) {
   const { capabilities, canPerform } = useAuth()
+  // AppRoutes mounts protected routes only after authentication and organization selection.
+  // Consume pending login navigation even when the target is denied by the checks below.
+  useEffect(clearLoginDestination, [])
 
   if (!isProdRtmOnlyPathAllowed(path, capabilities.roles)) {
     return <Navigate to="/unauthorized" replace />
@@ -574,7 +578,27 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
   },
 ]
 
-export const getPublicRoutes = (): RouteDescription[] => PUBLIC_ROUTES
+const isLoginDestinationRoute = (route: { path?: string }): boolean =>
+  !!route.path &&
+  !['/', '/dashboard', '/unauthorized', '/logout', '/select-organization', '*'].includes(route.path)
+
+function ProtectedRootRedirect() {
+  const { defaultRoute } = useAuth()
+  const [destination] = useState(() => {
+    const pendingDestination = getLoginDestination()
+    const match = pendingDestination && matchRoutes(PROTECTED_ROUTES, pendingDestination)?.[0]
+    return match && isLoginDestinationRoute(match.route) ? pendingDestination : defaultRoute
+  })
+  return <Navigate to={destination ?? defaultRoute} replace />
+}
+
+export const getPublicRoutes = (): RouteDescription[] => [
+  ...PUBLIC_ROUTES,
+  ...PROTECTED_ROUTES.filter(isLoginDestinationRoute).map((route) => ({
+    ...route,
+    element: <ProtectedLoginEntry />,
+  })),
+]
 
 export const getNoRoleRoutes = (): RouteDescription[] => {
   return [

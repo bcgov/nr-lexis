@@ -1,13 +1,19 @@
 import { Loading } from '@carbon/react'
-import { Suspense, useMemo } from 'react'
+import { Suspense, useEffect, useMemo } from 'react'
 import { RouterProvider, createBrowserRouter } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
+import { clearLoginDestination } from '@/context/auth/login-destination'
 import ForestClientSelectionPage from '@/pages/ForestClientSelection'
 import { getNoRoleRoutes, getProtectedRoutes, getPublicRoutes } from '@/routes/routePaths'
 import RouteErrorPage from '@/routes/RouteErrorPage'
 
 const AppRoutes = () => {
   const { capabilities, hasAnyRole, isLoading, isLoggedIn } = useAuth()
+  useEffect(() => {
+    if (!isLoading && isLoggedIn && !hasAnyRole) {
+      clearLoginDestination()
+    }
+  }, [hasAnyRole, isLoading, isLoggedIn])
   const routesToUse = useMemo(() => {
     if (!isLoggedIn) {
       return getPublicRoutes()
