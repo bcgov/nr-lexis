@@ -10,47 +10,59 @@ import org.junit.jupiter.api.Test;
 class DeployedSmokeWorkflowTest {
 
   @Test
-  void deployedSmokeShouldRetryEnvironmentDependentFailuresOnAFreshRunner() throws IOException {
+  void deployedSmokeShouldFailTheFirstAttemptAndKeepFailureDiagnostics() throws IOException {
     String workflow = read(".github/workflows/reusable-tests.yml");
-    int initialJob = workflow.indexOf("  e2e-tests:");
-    int retryJob = workflow.indexOf("  e2e-retry:");
 
-    assertThat(initialJob).isNotNegative();
-    assertThat(retryJob).isGreaterThan(initialJob);
-
-    String initialAttempt = workflow.substring(initialJob, retryJob);
-    String retryAttempt = workflow.substring(retryJob);
-
-    assertThat(initialAttempt)
-        .contains("route_probe_outcome: ${{ steps.route_probe.outcome }}")
-        .contains("proxy_probe_outcome: ${{ steps.proxy_probe.outcome }}")
-        .contains("playwright_outcome: ${{ steps.playwright.outcome }}")
-        .contains("id: route_probe\n        continue-on-error: true")
-        .contains("id: proxy_probe\n        continue-on-error: true")
-        .contains("id: playwright\n        continue-on-error: true")
+    assertThat(workflow.lines().filter(line -> line.equals("  e2e-tests:")).count()).isEqualTo(1);
+    assertThat(workflow.lines().filter(line -> line.contains("name: Basic E2E")).count())
+        .isEqualTo(1);
+    assertThat(workflow)
         .contains(
-            "- name: Verify frontend proxy to backend\n"
-                + "        id: proxy_probe\n"
-                + "        continue-on-error: true\n"
-                + "        if: steps.route_probe.outcome == 'success'",
-            "- name: Run basic Playwright smoke suite\n"
-                + "        id: playwright\n"
-                + "        continue-on-error: true\n"
-                + "        if: >-",
-            "steps.proxy_probe.outcome == 'success'",
-            "if: (! cancelled()) && steps.playwright.outcome != 'skipped'");
-    assertThat(retryAttempt)
-        .contains("name: Basic E2E retry (chromium)")
-        .contains("needs: [e2e-tests]")
-        .contains(
-            "needs.e2e-tests.outputs.route_probe_outcome == 'failure'",
-            "needs.e2e-tests.outputs.proxy_probe_outcome == 'failure'",
-            "needs.e2e-tests.outputs.playwright_outcome == 'failure'")
-        .contains("runs-on: ubuntu-24.04")
-        .contains("-retry")
-        .doesNotContain("-route-retry")
-        .doesNotContain("name: Basic E2E fresh-runner retry")
-        .doesNotContain("continue-on-error: true");
+            "name: Basic E2E (${{ matrix.project }})",
+            "- name: Run basic Playwright smoke suite\n        id: playwright",
+            "steps.playwright.outcome == 'success'",
+            "steps.playwright.outcome == 'failure'",
+            "!cancelled()",
+            "name: playwright-report-${{ matrix.project }}-${{ inputs.target }}",
+            "path: frontend/playwright-report")
+        .doesNotContain(
+            "e2e-retry:",
+            "continue-on-error:",
+            "route_probe_outcome:",
+            "proxy_probe_outcome:",
+            "playwright_outcome:",
+            "needs.e2e-tests.outputs",
+            "steps.route_probe.outcome",
+            "steps.proxy_probe.outcome");
+  }
+
+  @Test
+  void playwrightShouldNotRetryFailedTestsAndShouldRetainSmokeFailureTraces() throws IOException {
+    String smokeConfig = read("frontend/playwright.config.ts");
+    String regressionConfig = read("frontend/e2e/playwright-config.ts");
+
+    assertThat(smokeConfig)
+        .contains("retries: 0", "trace: 'retain-on-failure'")
+        .doesNotContain("on-first-retry", "retries: process.env.CI");
+    assertThat(regressionConfig)
+        .contains("retries: 0")
+        .doesNotContain("retries: process.env.CI");
+  }
+
+  @Test
+  void smokeFailureShouldBlockPrResultsAndProductionDeployment() throws IOException {
+    String pullRequestWorkflow = read(".github/workflows/pr-open.yml");
+    String mergeWorkflow = read(".github/workflows/merge.yml");
+    String pullRequestResults =
+        pullRequestWorkflow.substring(pullRequestWorkflow.indexOf("  results:"));
+    String productionDeployment = mergeWorkflow.substring(mergeWorkflow.indexOf("  deploy-prod:"));
+
+    assertThat(pullRequestWorkflow).contains("uses: ./.github/workflows/reusable-tests.yml");
+    assertThat(pullRequestResults)
+        .contains("name: PR Results", "tests,", "if: always()")
+        .contains("contains(needs.*.result, 'failure')", "exit 1");
+    assertThat(mergeWorkflow).contains("uses: ./.github/workflows/reusable-tests.yml");
+    assertThat(productionDeployment).contains("needs: [tests, init]");
   }
 
   @Test
