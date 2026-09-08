@@ -355,7 +355,7 @@ class TestDeploymentTopologyConfigTest {
             "LEXIS_MAIL_REGION_RNI_ADDRESS",
             "LEXIS_MAIL_REGION_RSI_ADDRESS");
     assertThat(checkoutStep)
-        .contains("actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803")
+        .contains("actions/checkout@v6")
         .contains("persist-credentials: false")
         .doesNotContain("env:");
     assertThat(keycloakStep)
