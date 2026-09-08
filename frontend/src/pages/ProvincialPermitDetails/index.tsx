@@ -3774,12 +3774,6 @@ const ProvincialPermitDetailsPage = () => {
                               true,
                             )}
                             <TextInput
-                              id="permit-invoiceNumber"
-                              labelText="Invoice number"
-                              value={displayValue(detail.invoiceNumber)}
-                              disabled
-                            />
-                            <TextInput
                               id="permit-federalPermitNumber"
                               labelText="Federal permit number"
                               value={displayValue(detail.federalPermitNumber)}
@@ -3831,10 +3825,6 @@ const ProvincialPermitDetailsPage = () => {
                             {
                               label: 'Current permit pieces',
                               value: displayValue(detail.numberOfPieces),
-                            },
-                            {
-                              label: 'Invoice number',
-                              value: displayValue(detail.invoiceNumber),
                             },
                             {
                               label: 'Federal permit number',
