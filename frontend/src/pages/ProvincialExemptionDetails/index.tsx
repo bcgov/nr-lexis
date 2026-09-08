@@ -349,6 +349,7 @@ const ProvincialExemptionDetailsPage = () => {
   const [permitCreationUnsavedChangesOpen, setPermitCreationUnsavedChangesOpen] = useState(false)
   const [savingPermitCreationChanges, setSavingPermitCreationChanges] = useState(false)
   const [permitCreationSaveFailed, setPermitCreationSaveFailed] = useState(false)
+  const [permitCreationSavedRequiresReload, setPermitCreationSavedRequiresReload] = useState(false)
   const [creatingPermit, setCreatingPermit] = useState(false)
   const [permitCreationDestination, setPermitCreationDestination] = useState<string | null>(null)
   const [permitCreationRequiresReload, setPermitCreationRequiresReload] = useState(false)
@@ -527,6 +528,7 @@ const ProvincialExemptionDetailsPage = () => {
         setPermitCreationUnsavedChangesOpen(false)
         setSavingPermitCreationChanges(false)
         setPermitCreationSaveFailed(false)
+        setPermitCreationSavedRequiresReload(false)
         setCreatingPermit(false)
         setPermitCreationDestination(null)
         setPermitCreationRequiresReload(false)
@@ -1357,6 +1359,7 @@ const ProvincialExemptionDetailsPage = () => {
     if (savingPermitCreationChanges) return
     setPermitCreationUnsavedChangesOpen(false)
     setPermitCreationSaveFailed(false)
+    setPermitCreationSavedRequiresReload(false)
   }, [savingPermitCreationChanges])
 
   const onRequestPermitCreation = useCallback(() => {
@@ -1367,6 +1370,7 @@ const ProvincialExemptionDetailsPage = () => {
       return
     }
     setPermitCreationSaveFailed(false)
+    setPermitCreationSavedRequiresReload(false)
     if (isExemptionDirty) {
       setPermitCreationUnsavedChangesOpen(true)
       return
@@ -1386,6 +1390,7 @@ const ProvincialExemptionDetailsPage = () => {
     onDiscardExemptionChanges()
     setPermitCreationUnsavedChangesOpen(false)
     setPermitCreationSaveFailed(false)
+    setPermitCreationSavedRequiresReload(false)
     continuePermitCreation()
   }, [
     continuePermitCreation,
@@ -1400,6 +1405,7 @@ const ProvincialExemptionDetailsPage = () => {
     let savedDetail: ProvincialExemptionDetail | null = null
     setSavingPermitCreationChanges(true)
     setPermitCreationSaveFailed(false)
+    setPermitCreationSavedRequiresReload(false)
     try {
       const saved = await onSaveUnsavedExemptionChanges(true, (nextDetail) => {
         savedDetail = nextDetail
@@ -1408,10 +1414,16 @@ const ProvincialExemptionDetailsPage = () => {
         setPermitCreationSaveFailed(true)
         return
       }
-      setPermitCreationUnsavedChangesOpen(false)
-      if (!renamedExemption && savedDetail) {
-        continuePermitCreation(savedDetail)
+      if (renamedExemption) {
+        setPermitCreationUnsavedChangesOpen(false)
+        return
       }
+      if (!savedDetail) {
+        setPermitCreationSavedRequiresReload(true)
+        return
+      }
+      setPermitCreationUnsavedChangesOpen(false)
+      continuePermitCreation(savedDetail)
     } catch {
       setPermitCreationSaveFailed(true)
     } finally {
@@ -2784,8 +2796,8 @@ const ProvincialExemptionDetailsPage = () => {
           open
           passiveModal
           size="sm"
-          modalHeading="Unsaved changes"
-          aria-label="Unsaved changes"
+          modalHeading={permitCreationSavedRequiresReload ? 'Reload required' : 'Unsaved changes'}
+          aria-label={permitCreationSavedRequiresReload ? 'Reload required' : 'Unsaved changes'}
           aria-describedby="permit-creation-unsaved-changes-description"
           className="lexis-unsaved-changes-modal"
           preventCloseOnClickOutside
@@ -2796,9 +2808,11 @@ const ProvincialExemptionDetailsPage = () => {
               id="permit-creation-unsaved-changes-description"
               className="lexis-unsaved-changes-modal__description"
             >
-              {unsavedExemptionSaveUnavailableReason
-                ? `You have unsaved changes to this exemption. ${unsavedExemptionSaveUnavailableReason}`
-                : 'You have unsaved changes to this exemption. Save them before creating a permit, discard them and continue, or cancel.'}
+              {permitCreationSavedRequiresReload
+                ? 'The exemption was saved, but its current data could not be refreshed. Reload the page before creating a permit.'
+                : unsavedExemptionSaveUnavailableReason
+                  ? `You have unsaved changes to this exemption. ${unsavedExemptionSaveUnavailableReason}`
+                  : 'You have unsaved changes to this exemption. Save them before creating a permit, discard them and continue, or cancel.'}
             </p>
             {permitCreationSaveFailed && (
               <InlineNotification
@@ -2816,16 +2830,18 @@ const ProvincialExemptionDetailsPage = () => {
               disabled={savingPermitCreationChanges}
               onClick={closePermitCreationUnsavedChanges}
             >
-              Cancel
+              {permitCreationSavedRequiresReload ? 'Close' : 'Cancel'}
             </Button>
-            <Button
-              kind="danger--tertiary"
-              disabled={permitCreationActionBusy}
-              onClick={onDiscardChangesBeforePermitCreation}
-            >
-              Discard changes
-            </Button>
-            {!unsavedExemptionSaveUnavailableReason && (
+            {!permitCreationSavedRequiresReload && (
+              <Button
+                kind="danger--tertiary"
+                disabled={permitCreationActionBusy}
+                onClick={onDiscardChangesBeforePermitCreation}
+              >
+                Discard changes
+              </Button>
+            )}
+            {!permitCreationSavedRequiresReload && !unsavedExemptionSaveUnavailableReason && (
               <Button
                 kind="primary"
                 disabled={permitCreationActionBusy}

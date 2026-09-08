@@ -1225,6 +1225,66 @@ describe('permit creation from an exemption', () => {
     expect(createPermitFromExemption).not.toHaveBeenCalled()
   })
 
+  it('requires a reload after a successful save when editable data refresh fails', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    mockRole(['LEXIS_APPLICATION_APPROVER'], ['createPermit', 'saveExemption'])
+    vi.mocked(updateExemption).mockResolvedValue({
+      success: true,
+      message: 'The exemption was saved successfully.',
+      exemptionNumber: 'EX-205',
+      errors: [],
+      warnings: [],
+    })
+    vi.mocked(fetchExemptionEditContext)
+      .mockResolvedValueOnce({
+        rateOverrideEnabled: false,
+        fixedFeeRate: '',
+        regionNumbers: [],
+        locked: false,
+        lockMessage: '',
+      })
+      .mockRejectedValueOnce(new Error('editable data refresh unavailable'))
+    renderPage(activeMinisterialExemption)
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit exemption' }))
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Save exemption' })).toBeEnabled(),
+    )
+    await userEvent.type(screen.getByLabelText('Conditions'), ' updated')
+    await openPermitsTab()
+    await userEvent.click(screen.getByRole('button', { name: 'Apply for new permit' }))
+    await userEvent.click(
+      within(await screen.findByRole('dialog', { name: 'Unsaved changes' })).getByRole('button', {
+        name: 'Save changes',
+      }),
+    )
+
+    await waitFor(() => expect(updateExemption).toHaveBeenCalledOnce())
+    expect(
+      await screen.findByText(
+        /Current data could not be refreshed; reload before making another change\./i,
+      ),
+    ).toBeInTheDocument()
+    const dialog = await screen.findByRole('dialog', { name: 'Reload required' })
+    expect(
+      within(dialog).getByText(
+        'The exemption was saved, but its current data could not be refreshed. Reload the page before creating a permit.',
+      ),
+    ).toBeInTheDocument()
+    expect(within(dialog).queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument()
+    expect(
+      within(dialog).queryByRole('button', { name: 'Discard changes' }),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'Apply for new permit' })).not.toBeInTheDocument()
+    expect(updateExemption).toHaveBeenCalledOnce()
+    expect(createPermitFromExemption).not.toHaveBeenCalled()
+
+    await userEvent.click(within(dialog).getByText('Close', { selector: 'button' }))
+    expect(screen.queryByRole('dialog', { name: 'Reload required' })).not.toBeInTheDocument()
+
+    consoleError.mockRestore()
+  })
+
   it('does not create a permit when saving the exemption edit fails', async () => {
     mockRole(['LEXIS_APPLICATION_APPROVER'], ['createPermit', 'saveExemption'])
     vi.mocked(updateExemption).mockResolvedValue({

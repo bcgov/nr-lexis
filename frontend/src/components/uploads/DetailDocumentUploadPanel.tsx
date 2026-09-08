@@ -123,7 +123,9 @@ const DetailDocumentUploadPanel = ({
 
   const invalidUploadCount = useMemo(
     () =>
-      uploadQueue.filter((item) => item.status === 'invalid' || item.status === 'failed').length,
+      uploadQueue.filter(
+        (item) => item.status === 'invalid' || (item.status === 'failed' && !item.submitted),
+      ).length,
     [uploadQueue],
   )
   const pendingValidationCount = useMemo(
@@ -131,8 +133,11 @@ const DetailDocumentUploadPanel = ({
       uploadQueue.filter((item) => item.status === 'queued' || item.status === 'validating').length,
     [uploadQueue],
   )
-  const validatedUploadCount = useMemo(
-    () => uploadQueue.filter((item) => item.status === 'validated').length,
+  const readyUploadItems = useMemo(
+    () =>
+      uploadQueue.filter(
+        (item) => item.status === 'validated' || (item.status === 'failed' && item.submitted),
+      ),
     [uploadQueue],
   )
   const reviewUploadItems = useMemo(
@@ -218,7 +223,7 @@ const DetailDocumentUploadPanel = ({
   const canReviewUpload =
     !disabled &&
     !!targetNumber.trim() &&
-    validatedUploadCount > 0 &&
+    readyUploadItems.length > 0 &&
     pendingValidationCount === 0 &&
     !hasDescriptionError &&
     invoiceValidationErrors.length === 0
@@ -468,7 +473,7 @@ const DetailDocumentUploadPanel = ({
     if (disabled || isSubmitting) return
     setUploadQueue((current) =>
       current.map((item) =>
-        item.id === id && !item.submitted ? { ...item, fileDescription } : item,
+        item.id === id && item.status !== 'complete' ? { ...item, fileDescription } : item,
       ),
     )
   }
@@ -590,7 +595,7 @@ const DetailDocumentUploadPanel = ({
       return
     }
 
-    if (validatedUploadCount === 0) {
+    if (readyUploadItems.length === 0) {
       setErrorMessage(
         invalidUploadCount > 0
           ? `${invalidUploadCount} queued file${invalidUploadCount === 1 ? ' needs' : 's need'} attention before review.`
@@ -605,11 +610,7 @@ const DetailDocumentUploadPanel = ({
     let failureCount = 0
     let lastSuccessMessage = ''
 
-    for (const item of uploadQueue) {
-      if (item.status !== 'validated') {
-        continue
-      }
-
+    for (const item of readyUploadItems) {
       setQueueItemStatus(item.id, 'uploading', '', lockedTargetSummary, undefined, true)
 
       try {
@@ -687,7 +688,7 @@ const DetailDocumentUploadPanel = ({
       return
     }
 
-    if (validatedUploadCount === 0) {
+    if (readyUploadItems.length === 0) {
       setErrorMessage(
         invalidUploadCount > 0
           ? `${invalidUploadCount} queued file${invalidUploadCount === 1 ? ' needs' : 's need'} attention before review.`
@@ -857,7 +858,7 @@ const DetailDocumentUploadPanel = ({
                 enableCounter
                 maxCount={250}
                 rows={2}
-                disabled={disabled || isSubmitting || !!item.submitted}
+                disabled={disabled || isSubmitting || item.status === 'complete'}
               />
             )
           }}

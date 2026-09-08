@@ -131,6 +131,69 @@ describe('DetailDocumentUploadPanel', () => {
     },
   )
 
+  it.each(['application', 'exemption', 'permit'] as const)(
+    'retains descriptions and retries only failed %s submissions',
+    async (workflowType) => {
+      mockedSubmitAdminUpload
+        .mockReset()
+        .mockResolvedValueOnce({ message: 'First document uploaded.' })
+        .mockRejectedValueOnce(new Error('The second upload failed.'))
+        .mockResolvedValueOnce({ message: 'Second document uploaded.' })
+      const onUploadComplete = vi.fn()
+      const first = new File(['first'], 'first.pdf', { type: 'application/pdf' })
+      const second = new File(['second'], 'second.pdf', { type: 'application/pdf' })
+      render(
+        <DetailDocumentUploadPanel
+          workflowType={workflowType}
+          targetNumber="321"
+          inputId="documents"
+          onUploadComplete={onUploadComplete}
+        />,
+      )
+      await openUploadForm()
+      await userEvent.upload(screen.getByLabelText('Document File'), [first, second])
+      await userEvent.type(
+        screen.getByLabelText(/Document description for first.pdf/),
+        'First description',
+      )
+      await userEvent.type(
+        screen.getByLabelText(/Document description for second.pdf/),
+        'Second description',
+      )
+      await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
+      await userEvent.click(screen.getByRole('button', { name: 'Submit upload' }))
+
+      await screen.findByText('1 file failed. Review the queue for details.')
+      expect(mockedSubmitAdminUpload).toHaveBeenCalledTimes(2)
+      const completedDescription = screen.getByLabelText(/Document description for first.pdf/)
+      const failedDescription = screen.getByLabelText(/Document description for second.pdf/)
+      expect(completedDescription).toHaveValue('First description')
+      expect(completedDescription).toBeDisabled()
+      expect(failedDescription).toHaveValue('Second description')
+      expect(failedDescription).toBeEnabled()
+
+      fireEvent.change(failedDescription, { target: { value: 'x'.repeat(251) } })
+      expect(screen.getByRole('button', { name: 'Submit upload' })).toBeDisabled()
+      fireEvent.change(failedDescription, { target: { value: ' Corrected second description ' } })
+      expect(screen.getByRole('button', { name: 'Submit upload' })).toBeEnabled()
+      await userEvent.click(screen.getByRole('button', { name: 'Submit upload' }))
+
+      await waitFor(() => {
+        expect(mockedSubmitAdminUpload).toHaveBeenCalledTimes(3)
+        expect(onUploadComplete).toHaveBeenCalledTimes(2)
+        expect(screen.queryByRole('dialog', { name: 'Add document' })).not.toBeInTheDocument()
+      })
+      expect(mockedSubmitAdminUpload).toHaveBeenNthCalledWith(
+        3,
+        workflowType,
+        expect.objectContaining({ file: second, fileDescription: 'Corrected second description' }),
+      )
+      expect(
+        mockedSubmitAdminUpload.mock.calls.filter(([, request]) => request.file === first),
+      ).toHaveLength(1)
+    },
+  )
+
   it('blocks review and submission until an invalid per-file description is corrected', async () => {
     mockedSubmitAdminUpload.mockResolvedValue({ message: 'Document uploaded.' })
     render(
