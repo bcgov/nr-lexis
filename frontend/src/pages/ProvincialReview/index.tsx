@@ -15,7 +15,9 @@ import {
   TableRow,
   TextArea,
   TextInput,
+  Tooltip,
 } from '@carbon/react'
+import { Information } from '@carbon/icons-react'
 import SearchResultsTableFrame from '../../components/SearchResultsTableFrame'
 import { AppNotification } from '../../components/AppNotification'
 import ConfirmationModal from '@/components/ConfirmationModal'
@@ -133,7 +135,7 @@ const INITIAL_FILTERS: ApplicationReviewSearchFilters = {
 // INTENTIONAL_LEGACY_DIVERGENCE(APPLICATION_REVIEW_PAGE_SIZE): only IDIR Application Review
 // defaults to 100 rows; ordinary searches retain the legacy default of 10.
 const APPLICATION_REVIEW_DEFAULT_PAGE_SIZE = 100
-const APPLICATION_REVIEW_PAGE_SIZE_OPTIONS = [10, 25, 50, 100, 200] as const
+const APPLICATION_REVIEW_PAGE_SIZE_OPTIONS = [10, 25, 50, 100, 150, 200] as const
 
 const EMPTY_RESULTS = createEmptyPagedSearchResponse<ApplicationReviewSearchResponse>(
   APPLICATION_REVIEW_DEFAULT_PAGE_SIZE,
@@ -1414,6 +1416,20 @@ const ProvincialReviewPage = () => {
                           </Link>
                         ) : (
                           row.applicationNumber
+                        )}
+                        {row.showInfoIcon && (
+                          <Tooltip
+                            autoAlign
+                            description="Application contains timber mark(s) from MU44"
+                          >
+                            <button
+                              type="button"
+                              className="provincial-review-mu44-info"
+                              aria-label="Application contains timber mark(s) from MU44"
+                            >
+                              <Information size={16} aria-hidden="true" />
+                            </button>
+                          </Tooltip>
                         )}
                       </TableCell>
                       <TableCell>

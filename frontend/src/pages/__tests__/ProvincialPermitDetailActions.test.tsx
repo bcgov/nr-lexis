@@ -887,6 +887,90 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.getByLabelText('Effective fee (CAD)')).toHaveValue('$2.08')
   })
 
+  it('refreshes loaded fees after saving the permit submit date and preserves the current tab and fee filter', async () => {
+    configureActivePermit()
+    let resolveRefreshedFees:
+      | ((value: Awaited<ReturnType<typeof fetchProvincialPermitFees>>) => void)
+      | undefined
+    mockedFetchProvincialPermitFees
+      .mockReset()
+      .mockResolvedValueOnce(calculatedPermitFees)
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveRefreshedFees = resolve
+          }),
+      )
+    renderPermitDetails()
+
+    await selectPermitDetailTab('Fees')
+    expect(screen.getByLabelText('Calculated fee (CAD)')).toHaveValue('$37.50')
+    await userEvent.type(screen.getByLabelText('Filter fee rows'), 'TEST-FEE')
+    await selectPermitDetailTab('Permit')
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    await userEvent.clear(screen.getByLabelText('Submit date'))
+    await userEvent.type(screen.getByLabelText('Submit date'), '2026-04-11')
+    await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
+
+    expect(await screen.findByText('The permit was updated successfully.')).toBeInTheDocument()
+    expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
+      expect.objectContaining({ permitSubmitDate: '2026-04-11', permitStatus: 'ACT' }),
+    )
+    expect(mockedFetchProvincialPermitFees).toHaveBeenCalledTimes(2)
+    expect(screen.getByRole('tab', { name: 'Permit' })).toHaveAttribute('aria-selected', 'true')
+    await selectPermitDetailTab('Fees')
+    expect(screen.getByLabelText('Calculated fee (CAD)')).toHaveValue('Loading…')
+    expect(screen.getByLabelText('Filter fee rows')).toHaveValue('TEST-FEE')
+    expect(screen.queryByRole('row', { name: /TEST-FEE/ })).not.toBeInTheDocument()
+
+    await act(async () =>
+      resolveRefreshedFees?.({
+        ...calculatedPermitFees,
+        fees: calculatedPermitFees.fees.map((row) => ({
+          ...row,
+          amount: 75,
+          amountDisplay: '$75.00',
+        })),
+      }),
+    )
+    expect(screen.getByLabelText('Calculated fee (CAD)')).toHaveValue('$75.00')
+    expect(screen.getByLabelText('Effective fee (CAD)')).toHaveValue('$75.00')
+    expect(screen.getByLabelText('Filter fee rows')).toHaveValue('TEST-FEE')
+    expect(screen.getByRole('tab', { name: 'Fees' })).toHaveAttribute('aria-selected', 'true')
+    expect(within(screen.getByRole('row', { name: /TEST-FEE/ })).getByText('$75.00')).toBeVisible()
+  })
+
+  it('retains loaded fees when saving the permit submit date fails', async () => {
+    configureActivePermit()
+    mockedFetchProvincialPermitFees.mockReset().mockResolvedValue(calculatedPermitFees)
+    mockedUpdatePermitDetail.mockResolvedValue({
+      success: false,
+      message: 'The permit was not updated.',
+      errors: ['The permit submit date could not be saved.'],
+      warnings: [],
+      source: 'api',
+    })
+    renderPermitDetails()
+
+    await selectPermitDetailTab('Fees')
+    expect(screen.getByLabelText('Calculated fee (CAD)')).toHaveValue('$37.50')
+    await selectPermitDetailTab('Permit')
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    await userEvent.clear(screen.getByLabelText('Submit date'))
+    await userEvent.type(screen.getByLabelText('Submit date'), '2026-04-11')
+    await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
+
+    expect(
+      await screen.findByText('The permit submit date could not be saved.'),
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText('Submit date')).toHaveValue('2026-04-11')
+    await selectPermitDetailTab('Fees')
+    expect(mockedFetchProvincialPermitFees).toHaveBeenCalledTimes(1)
+    expect(screen.getByLabelText('Calculated fee (CAD)')).toHaveValue('$37.50')
+    expect(screen.getByLabelText('Effective fee (CAD)')).toHaveValue('$37.50')
+    expect(within(screen.getByRole('row', { name: /TEST-FEE/ })).getByText('$37.50')).toBeVisible()
+  })
+
   it('refreshes loaded fees after shipping changes without displaying the previous calculation', async () => {
     mockedFetchProvincialPermitDetail.mockResolvedValue({
       ...permitDetail,

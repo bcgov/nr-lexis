@@ -2037,6 +2037,7 @@ const ProvincialPermitDetailsPage = () => {
                 : 'Permit saved successfully.',
           ),
         )
+        refreshLoadedPermitFees()
         return true
       } catch (error) {
         if (isLatestRequest()) {
@@ -2065,6 +2066,7 @@ const ProvincialPermitDetailsPage = () => {
       permitFieldErrors,
       permitForm,
       permitNumber,
+      refreshLoadedPermitFees,
       requiresPositiveOicRequestLimits,
       tryBeginPermitMutation,
     ],

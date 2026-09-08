@@ -9,9 +9,9 @@ Only observable differences in supported inputs, user workflow, authorization, p
 integration behaviour belong in this register. Refactors, duplicated service-boundary enforcement,
 and early validation of existing legacy or database constraints are parity work, not divergences.
 
-The business-approved 100-row default applies only to IDIR Application Review. All other search
-pages retain the legacy 10-row default; the general Search Results wording in Confluence does not
-expand the 100-row default to those pages.
+The business-approved 100-row default applies only to IDIR Application Review, which also offers
+150/200-row options. All other search pages retain the legacy 10-row default; the general Search
+Results wording in Confluence does not expand the 100-row default to those pages.
 
 | ID                                      | Modern behaviour                                                                                                                                                                                                             | Reason                                                                                                                        |
 | --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
