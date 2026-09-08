@@ -796,6 +796,72 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
+  void allScaleFeesShouldRetainEmptyBlanketOicPackagesAlongsidePopulatedPackages() {
+    when(repository.findPermitPolicyContextByPermitNumber(7000123L))
+        .thenReturn(Optional.of(new PermitPolicyContextRow(
+            7000123L, 1835L, FEE_MASK_EFFECTIVE_DATE, "EX-700", "US", 0.0d)));
+    when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("B"));
+    when(repository.findCorePackageContexts(7000123L, true))
+        .thenReturn(List.of(
+            coreContext("PKG-900", 1000456L, false),
+            coreContext("PKG-903", 1000456L, true)));
+    when(repository.findPermitFeeScaleRows(7000123L))
+        .thenReturn(List.of(new PermitFeeScaleRow(
+            scale("101", "TM1", "HEM", "J", 1.04d, 1L, "7000123", "PKG-903"),
+            "T", "Hemlock", "Grade J", "S", "Second Growth", BigDecimal.ONE)));
+
+    PermitAllScaleFeesRpcResponseDto response = service.getAllScaleFees(7000123L, true);
+
+    assertThat(response.packageList())
+        .extracting("packageNumber", "totalFeeForPackage", "growthType")
+        .containsExactly(
+            tuple("PKG-900", "$0.00", "Second Growth"),
+            tuple("PKG-903", "$1.04", "Second Growth"));
+    assertThat(response.packageList().get(0).scaleList()).isEmpty();
+    assertThat(response.packageList().get(1).scaleList())
+        .extracting("volume", "fee")
+        .containsExactly(tuple("1.0", "$1.04"));
+    assertThat(response.totalVolume()).isEqualTo("1.0");
+    verify(repository).findCorePackageContexts(7000123L, true);
+    verify(repository, never()).findScaleDetailsByPackageNumber(any());
+    verify(repository, never()).findGrowthTypeDescription(any());
+    verifyNoInteractions(applicationService);
+  }
+
+  @ParameterizedTest
+  @CsvSource({
+      "2024-06-27, US, 0.0, $0.00",
+      "2024-06-26, US, 0.0, $",
+      "2024-06-27, CA, 0.0, $",
+      "2024-06-27, US, 25.0, $"
+  })
+  void allScaleFeesShouldRetainAllEmptyPackagesWithExistingTotalMasking(
+      LocalDate applicationDate, String countryCode, double overrideFee, String expectedTotal) {
+    when(repository.findPermitPolicyContextByPermitNumber(7000123L))
+        .thenReturn(Optional.of(new PermitPolicyContextRow(
+            7000123L, 1835L, applicationDate, "EX-700", countryCode, overrideFee)));
+    when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("B"));
+    when(repository.findCorePackageContexts(7000123L, true))
+        .thenReturn(List.of(
+            coreContext("PKG-900", 1000456L, false),
+            coreContext("PKG-901", 1000456L, false)));
+
+    PermitAllScaleFeesRpcResponseDto response = service.getAllScaleFees(7000123L, false);
+
+    assertThat(response.packageList())
+        .extracting("packageNumber", "totalFeeForPackage", "growthType")
+        .containsExactly(
+            tuple("PKG-900", expectedTotal, "Second Growth"),
+            tuple("PKG-901", expectedTotal, "Second Growth"));
+    assertThat(response.packageList()).allSatisfy(row -> assertThat(row.scaleList()).isEmpty());
+    assertThat(response.totalVolume()).isEqualTo("0.0");
+    verify(repository).findCorePackageContexts(7000123L, true);
+    verify(repository, never()).findScaleDetailsByPackageNumber(any());
+    verify(repository, never()).findGrowthTypeDescription(any());
+    verifyNoInteractions(applicationService);
+  }
+
+  @Test
   void scalesForPackageShouldMapScaleDetailsDescriptionsAndRegion() {
     when(repository.findScaleDetailsByPackageNumber("PKG-903"))
         .thenReturn(List.of(scale("101", "TM1", "HEM", "J", 7.60d, 11L, "7000123", "PKG-903")));

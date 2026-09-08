@@ -461,6 +461,7 @@ public class ExemptionRepository extends OracleRepositorySupport {
           Map.entry("approvedVolume", "EE.APPROVED_VOLUME"),
           Map.entry("balanceRemaining", "VOLUME_REMAINING"),
           Map.entry("listingDate", "ADVERTISING_DATE"),
+          Map.entry("exemptionApprovalDate", "EE.APPROVAL_DATE"),
           Map.entry("expiryDate", "EE.EXPIRY_DATE"),
           Map.entry("exemptionExpiryDate", "EE.EXPIRY_DATE"),
           Map.entry("region", "EO.ORG_UNIT_NAME"));

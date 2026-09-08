@@ -58,16 +58,16 @@ describe('Provincial Summary', () => {
           principal: 'bceid\\submitter',
           roles: ['PROVINCIAL_SUBMITTER'],
           grantedActions: ['/summary'],
-          forestClientNumber: '00001074',
-          availableForestClientNumbers: ['00001074'],
+          forestClientNumber: '11111111',
+          availableForestClientNumbers: ['11111111'],
         }),
         defaultRoute: '/provincial/summary',
         canPerform: (action: string) => action === '/summary',
       }),
     )
     mockedFetchApplicationClientData.mockResolvedValue({
-      clientNumber: '00001074',
-      companyName: 'NORSKE SKOG CANADA LIMITED',
+      clientNumber: '11111111',
+      companyName: 'SYNTHETIC FOREST CLIENT',
       address: '',
       city: '',
       province: '',
@@ -81,7 +81,7 @@ describe('Provincial Summary', () => {
     mockedFetchSummaryApplications.mockResolvedValue({
       results: [
         {
-          application: 43278,
+          application: 12345,
           status: 'New',
           reason: 'Surplus',
           exemptionType: 'Ministerial',
@@ -98,8 +98,8 @@ describe('Provincial Summary', () => {
     mockedFetchSummaryOffers.mockResolvedValue({
       results: [
         {
-          offerNumber: 81009,
-          application: 43278,
+          offerNumber: 54321,
+          application: 12345,
           packageNumber: 'PKG-1',
           listingDate: '2026-08-20',
         },
@@ -113,7 +113,7 @@ describe('Provincial Summary', () => {
         {
           exemption: 'EX-205',
           exemptionType: 'Ministerial',
-          ownerClientNumber: '00001074',
+          ownerClientNumber: '11111111',
           agentClientNumber: null,
           status: 'Approved',
           approvedVolume: 95,
@@ -131,7 +131,7 @@ describe('Provincial Summary', () => {
         {
           permit: 7000123,
           status: 'Issued',
-          ownerClientNumber: '00001074',
+          ownerClientNumber: '11111111',
           agentClientNumber: null,
           exemption: 'EX-205',
           totalPieces: 28,
@@ -169,13 +169,13 @@ describe('Provincial Summary', () => {
   it('renders the client-scoped legacy sections with modern detail links', async () => {
     renderPage()
 
-    expect(await screen.findByText('NORSKE SKOG CANADA LIMITED')).toBeInTheDocument()
-    expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00001074', '00')
-    expect(mockedFetchSummaryApplications).toHaveBeenCalledWith(0, 10)
-    expect(mockedFetchSummaryOffers).toHaveBeenCalledWith(0, 10)
-    expect(mockedFetchSummaryExemptions).toHaveBeenCalledWith(0, 10)
-    expect(mockedFetchSummaryPermits).toHaveBeenCalledWith(0, 10)
-    expect(mockedFetchSummaryOffersPlaced).toHaveBeenCalledWith(0, 10)
+    expect(await screen.findByText('SYNTHETIC FOREST CLIENT')).toBeInTheDocument()
+    expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('11111111', '00')
+    expect(mockedFetchSummaryApplications).toHaveBeenCalledWith(0, 10, 'applicationNumber DESC')
+    expect(mockedFetchSummaryOffers).toHaveBeenCalledWith(0, 10, 'offerNumber DESC')
+    expect(mockedFetchSummaryExemptions).toHaveBeenCalledWith(0, 10, 'exemptionNumber DESC')
+    expect(mockedFetchSummaryPermits).toHaveBeenCalledWith(0, 10, 'permitNumber DESC')
+    expect(mockedFetchSummaryOffersPlaced).toHaveBeenCalledWith(0, 10, 'offerNumber DESC')
     expect(mockedFetchSummaryFees).not.toHaveBeenCalled()
 
     expect(screen.getByRole('heading', { name: 'My Applications' })).toBeInTheDocument()
@@ -185,13 +185,13 @@ describe('Provincial Summary', () => {
     expect(screen.getByRole('heading', { name: 'My Fees' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Offers Placed' })).toBeInTheDocument()
 
-    expect(screen.getAllByRole('link', { name: '43278' })[0]).toHaveAttribute(
+    expect(screen.getAllByRole('link', { name: '12345' })[0]).toHaveAttribute(
       'href',
-      '/provincial/application/43278',
+      '/provincial/application/12345',
     )
-    expect(screen.getByRole('link', { name: '81009' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: '54321' })).toHaveAttribute(
       'href',
-      '/provincial/offers/81009',
+      '/provincial/offers/54321',
     )
     expect(screen.getAllByRole('link', { name: 'EX-205' })[0]).toHaveAttribute(
       'href',
@@ -208,23 +208,31 @@ describe('Provincial Summary', () => {
   it('loads fees only when Display fees is selected', async () => {
     renderPage()
 
-    await screen.findByText('NORSKE SKOG CANADA LIMITED')
+    await screen.findByText('SYNTHETIC FOREST CLIENT')
     expect(screen.getByText(/Select Display fees/)).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Display fees' }))
 
-    await waitFor(() => expect(mockedFetchSummaryFees).toHaveBeenCalledWith(0, 10))
+    await waitFor(() =>
+      expect(mockedFetchSummaryFees).toHaveBeenCalledWith(0, 10, 'permitNumber DESC'),
+    )
     const feesTable = screen.getByRole('region', { name: 'My fees table' })
     expect(within(feesTable).getByText('$182.50')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Refresh fees' })).toBeInTheDocument()
+    await userEvent.click(within(feesTable).getByRole('button', { name: 'Permit number' }))
+    await waitFor(() =>
+      expect(mockedFetchSummaryFees).toHaveBeenLastCalledWith(0, 10, 'permitNumber ASC'),
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Refresh fees' }))
+    expect(mockedFetchSummaryFees).toHaveBeenLastCalledWith(0, 10, 'permitNumber ASC')
   })
 
   it('keeps offers placed on another client application accessible without linking that application', async () => {
     mockedFetchSummaryOffersPlaced.mockResolvedValue({
       results: [
         {
-          offerNumber: 379,
-          application: 40348,
+          offerNumber: 123,
+          application: 45678,
           packageNumber: 'PKG-OTHER-CLIENT',
           listingDate: '2026-08-20',
         },
@@ -237,17 +245,17 @@ describe('Provincial Summary', () => {
     renderPage()
 
     const offersPlacedTable = await screen.findByRole('region', { name: 'Offers placed table' })
-    expect(within(offersPlacedTable).getByRole('cell', { name: '40348' })).toBeVisible()
-    expect(within(offersPlacedTable).queryByRole('link', { name: '40348' })).not.toBeInTheDocument()
-    expect(within(offersPlacedTable).getByRole('link', { name: '379' })).toHaveAttribute(
+    expect(within(offersPlacedTable).getByRole('cell', { name: '45678' })).toBeVisible()
+    expect(within(offersPlacedTable).queryByRole('link', { name: '45678' })).not.toBeInTheDocument()
+    expect(within(offersPlacedTable).getByRole('link', { name: '123' })).toHaveAttribute(
       'href',
-      '/provincial/offers/379',
+      '/provincial/offers/123',
     )
 
     const myOffersTable = screen.getByRole('region', { name: 'My offers table' })
-    expect(within(myOffersTable).getByRole('link', { name: '43278' })).toHaveAttribute(
+    expect(within(myOffersTable).getByRole('link', { name: '12345' })).toHaveAttribute(
       'href',
-      '/provincial/application/43278',
+      '/provincial/application/12345',
     )
   })
 
@@ -256,7 +264,7 @@ describe('Provincial Summary', () => {
       .mockResolvedValueOnce({
         results: [
           {
-            application: 43278,
+            application: 12345,
             status: 'New',
             reason: 'Surplus',
             exemptionType: 'Ministerial',
@@ -273,7 +281,7 @@ describe('Provincial Summary', () => {
       .mockResolvedValueOnce({
         results: [
           {
-            application: 43267,
+            application: 12344,
             status: 'New',
             reason: null,
             exemptionType: null,
@@ -293,16 +301,170 @@ describe('Provincial Summary', () => {
     const applicationTable = await screen.findByRole('region', {
       name: 'My applications table',
     })
-    expect(within(applicationTable).getByRole('link', { name: '43278' })).toBeInTheDocument()
+    expect(within(applicationTable).getByRole('link', { name: '12345' })).toBeInTheDocument()
     await userEvent.click(screen.getByLabelText('Next page'))
 
-    await waitFor(() => expect(mockedFetchSummaryApplications).toHaveBeenLastCalledWith(1, 10))
+    await waitFor(() =>
+      expect(mockedFetchSummaryApplications).toHaveBeenLastCalledWith(
+        1,
+        10,
+        'applicationNumber DESC',
+      ),
+    )
     expect(
       within(await screen.findByRole('region', { name: 'My applications table' })).getByRole(
         'link',
-        { name: '43267' },
+        { name: '12344' },
       ),
     ).toBeInTheDocument()
+  })
+
+  it.each([
+    [
+      'My Applications',
+      mockedFetchSummaryApplications,
+      [
+        ['Application', 'applicationNumber'],
+        ['Package number', 'packageNumber'],
+        ['Received date', 'receivedDate'],
+        ['Listing date', 'listingDate'],
+      ],
+    ],
+    [
+      'My Offers',
+      mockedFetchSummaryOffers,
+      [
+        ['Application', 'applicationNumber'],
+        ['Package', 'packageNumber'],
+        ['Listing date', 'listingDate'],
+      ],
+    ],
+    [
+      'My Exemptions',
+      mockedFetchSummaryExemptions,
+      [
+        ['Exemption', 'exemptionNumber'],
+        ['Approval date', 'exemptionApprovalDate'],
+      ],
+    ],
+    [
+      'My Permits',
+      mockedFetchSummaryPermits,
+      [
+        ['Permit', 'permitNumber'],
+        ['Exemption', 'exemptionNumber'],
+      ],
+    ],
+    ['My Fees', mockedFetchSummaryFees, [['Permit number', 'permitNumber']]],
+    [
+      'Offers Placed',
+      mockedFetchSummaryOffersPlaced,
+      [
+        ['Application', 'applicationNumber'],
+        ['Package', 'packageNumber'],
+        ['Listing date', 'listingDate'],
+      ],
+    ],
+  ] as const)('maps only the legacy sortable columns in %s', async (title, loader, fields) => {
+    mockedFetchSummaryOffersPlaced.mockResolvedValue({
+      results: [
+        {
+          offerNumber: 123,
+          application: 12345,
+          packageNumber: 'SYNTH-1',
+          listingDate: '2026-08-20',
+        },
+      ],
+      total: 1,
+      page: 0,
+      size: 10,
+    })
+    renderPage()
+    const section = screen.getByRole('region', { name: title })
+    if (title === 'My Fees')
+      await userEvent.click(within(section).getByRole('button', { name: 'Display fees' }))
+    await within(section).findByRole('table')
+    expect(within(within(section).getByRole('table')).getAllByRole('button')).toHaveLength(
+      fields.length,
+    )
+
+    for (const [label, field] of fields) {
+      await userEvent.click(within(section).getByRole('button', { name: label }))
+      await waitFor(() => expect(loader).toHaveBeenLastCalledWith(0, 10, `${field} ASC`))
+      expect(
+        within(section).getByRole('columnheader', { name: new RegExp(`${label}$`) }),
+      ).toHaveAttribute('aria-sort', 'ascending')
+      await userEvent.click(within(section).getByRole('button', { name: label }))
+      await waitFor(() => expect(loader).toHaveBeenLastCalledWith(0, 10, `${field} DESC`))
+      expect(
+        within(section).getByRole('columnheader', { name: new RegExp(`${label}$`) }),
+      ).toHaveAttribute('aria-sort', 'descending')
+    }
+  })
+
+  it('resets only the sorted section page and retains its sort during paging and retry', async () => {
+    const applicationRow = {
+      application: 12345,
+      status: 'New',
+      reason: null,
+      exemptionType: null,
+      exemptionNumber: null,
+      receivedDate: '2026-08-01',
+      listingDate: null,
+      packageNumberAry: ['SYNTH-1'],
+    }
+    const permitRow = {
+      permit: 7000123,
+      status: 'Active',
+      ownerClientNumber: '11111111',
+      agentClientNumber: null,
+      exemption: 'EX-205',
+      totalPieces: 10,
+      totalVolume: 10,
+      receipt: null,
+      issueDate: null,
+    }
+    mockedFetchSummaryApplications.mockImplementation(async (page = 0) => ({
+      results: [applicationRow],
+      total: 21,
+      page,
+      size: 10,
+    }))
+    mockedFetchSummaryPermits.mockImplementation(async (page = 0) => ({
+      results: [permitRow],
+      total: 21,
+      page,
+      size: 10,
+    }))
+    renderPage()
+    const applications = screen.getByRole('region', { name: 'My Applications' })
+    const permits = screen.getByRole('region', { name: 'My Permits' })
+    await within(applications).findByRole('table')
+    await within(permits).findByRole('table')
+    await userEvent.click(within(applications).getByRole('button', { name: 'Next page' }))
+    await userEvent.click(within(permits).getByRole('button', { name: 'Next page' }))
+    expect(mockedFetchSummaryApplications).toHaveBeenLastCalledWith(1, 10, 'applicationNumber DESC')
+    expect(mockedFetchSummaryPermits).toHaveBeenLastCalledWith(1, 10, 'permitNumber DESC')
+    const permitCalls = mockedFetchSummaryPermits.mock.calls.length
+
+    mockedFetchSummaryApplications.mockRejectedValueOnce(new Error('offline'))
+    await userEvent.click(within(applications).getByRole('button', { name: 'Received date' }))
+    await within(applications).findByRole('heading', { name: 'My Applications unavailable' })
+    await userEvent.click(within(applications).getByRole('button', { name: 'Try again' }))
+    await within(applications).findByRole('table')
+    expect(mockedFetchSummaryApplications).toHaveBeenLastCalledWith(0, 10, 'receivedDate ASC')
+    expect(
+      within(applications).getByRole('columnheader', { name: /Received date$/ }),
+    ).toHaveAttribute('aria-sort', 'ascending')
+    await userEvent.click(within(applications).getByRole('button', { name: 'Next page' }))
+    expect(mockedFetchSummaryApplications).toHaveBeenLastCalledWith(1, 10, 'receivedDate ASC')
+    expect(mockedFetchSummaryPermits).toHaveBeenCalledTimes(permitCalls)
+    expect(mockedFetchSummaryPermits).toHaveBeenLastCalledWith(1, 10, 'permitNumber DESC')
+    expect(within(permits).getByRole('columnheader', { name: /Permit$/ })).toHaveAttribute(
+      'aria-sort',
+      'descending',
+    )
+    expect(mockedFetchSummaryFees).not.toHaveBeenCalled()
   })
 
   it('allows a failed section to be retried without hiding the others', async () => {
@@ -344,7 +506,7 @@ describe('Provincial Summary', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
 
-    expect(await screen.findByText('NORSKE SKOG CANADA LIMITED')).toBeInTheDocument()
+    expect(await screen.findByText('SYNTHETIC FOREST CLIENT')).toBeInTheDocument()
     expect(mockedFetchApplicationClientData).toHaveBeenCalledTimes(2)
     expect(
       screen.queryByRole('heading', { name: 'Client details unavailable' }),

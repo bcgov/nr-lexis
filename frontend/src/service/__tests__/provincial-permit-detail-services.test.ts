@@ -120,6 +120,8 @@ describe('provincial permit detail services', () => {
               packageList: [
                 {
                   packageNumber: 'PKG-100',
+                  growthType: 'Second growth',
+                  totalFeeForPackage: '$123.45',
                   scaleList: [
                     {
                       id: 'SCALE-1',
@@ -233,6 +235,9 @@ describe('provincial permit detail services', () => {
         },
       ],
       totalFeeVolume: 34.5,
+      packageFeeSummaries: [
+        { packageNumber: 'PKG-100', growthType: 'Second growth', totalFeeForPackage: '$123.45' },
+      ],
       fees: [
         {
           id: 'SCALE-1',
@@ -347,6 +352,8 @@ describe('provincial permit detail services', () => {
               packageList: [
                 {
                   packageNumber: 'PKG-100',
+                  growthType: 'Second growth',
+                  totalFeeForPackage: '$123.45',
                   scaleList: [
                     {
                       id: 'SCALE-1',
@@ -438,6 +445,8 @@ describe('provincial permit detail services', () => {
         packageList: [
           {
             packageNumber: 'BOIC-1',
+            growthType: 'Old growth',
+            totalFeeForPackage: '$2.08',
             scaleList: [
               { id: 'SCALE-1', volume: '1.0', fee: '$1.04' },
               { id: 'SCALE-2', volume: '1.0', fee: '$1.04' },
@@ -453,6 +462,89 @@ describe('provincial permit detail services', () => {
     expect(result.fees.map((row) => row.volume)).toEqual([1, 1])
     expect(result.fees.map((row) => row.amount)).toEqual([1.04, 1.04])
   })
+
+  it('retains authoritative package fee summaries including empty packages within the permit scope', async () => {
+    getCachedResponseMock.mockResolvedValue(
+      response({
+        totalVolume: '5.1',
+        packageList: [
+          {
+            packageNumber: 'PKG-A',
+            growthType: 'Second growth',
+            totalFeeForPackage: '$2.08',
+            scaleList: [
+              { id: 'SCALE-1', volume: '1.0', fee: '$1.04' },
+              { id: 'SCALE-2', volume: '1.0', fee: '$1.04' },
+            ],
+          },
+          {
+            packageNumber: 'PKG-EMPTY',
+            growthType: 'Old growth',
+            totalFeeForPackage: '$0.00',
+            scaleList: [],
+          },
+          {
+            packageNumber: 'PKG-B',
+            growthType: 'Old growth',
+            totalFeeForPackage: '$6.04',
+            scaleList: [{ id: 'SCALE-3', volume: '3.0', fee: '$6.04' }],
+          },
+        ],
+      }),
+    )
+
+    const result = await fetchProvincialPermitFees({
+      permitNumber: '777',
+      packageNumbers: ['PKG-A', 'PKG-EMPTY'],
+    })
+
+    expect(result.packageFeeSummaries).toEqual([
+      { packageNumber: 'PKG-A', growthType: 'Second growth', totalFeeForPackage: '$2.08' },
+      { packageNumber: 'PKG-EMPTY', growthType: 'Old growth', totalFeeForPackage: '$0.00' },
+    ])
+    expect(result.fees.map((row) => row.id)).toEqual(['SCALE-1', 'SCALE-2'])
+    expect(result.totalFeeVolume).toBe(5.1)
+    expect(getCachedResponseMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('preserves a masked package subtotal when individual fee rows are numeric', async () => {
+    getCachedResponseMock.mockResolvedValue(
+      response({
+        totalVolume: '10.0',
+        packageList: [
+          {
+            packageNumber: 'PKG-A',
+            growthType: 'Old growth',
+            totalFeeForPackage: '$',
+            scaleList: [{ id: 'SCALE-1', volume: '10.0', fee: '$45.00' }],
+          },
+        ],
+      }),
+    )
+
+    const result = await fetchProvincialPermitFees({ permitNumber: '777' })
+
+    expect(result.packageFeeSummaries).toEqual([
+      { packageNumber: 'PKG-A', growthType: 'Old growth', totalFeeForPackage: '$' },
+    ])
+    expect(result.fees[0]?.amount).toBe(45)
+  })
+
+  it.each([undefined, '', ' '])(
+    'rejects a missing authoritative package subtotal: %s',
+    async (totalFeeForPackage) => {
+      getCachedResponseMock.mockResolvedValue(
+        response({
+          totalVolume: '0.0',
+          packageList: [{ packageNumber: 'PKG-EMPTY', totalFeeForPackage, scaleList: [] }],
+        }),
+      )
+
+      await expect(fetchProvincialPermitFees({ permitNumber: '777' })).rejects.toThrow(
+        'Invalid package fee data',
+      )
+    },
+  )
 
   it.each([undefined, '', 'invalid', 'Infinity', '-1.0'])(
     'rejects an unavailable or invalid authoritative volume: %s',
@@ -471,7 +563,7 @@ describe('provincial permit detail services', () => {
         permitNumber: 'P-777',
         packageNumbers: [],
       }),
-    ).resolves.toEqual({ fees: [], totalFeeVolume: 0 })
+    ).resolves.toEqual({ fees: [], packageFeeSummaries: [], totalFeeVolume: 0 })
 
     expect(getCachedResponseMock).not.toHaveBeenCalled()
   })
@@ -525,6 +617,8 @@ describe('provincial permit detail services', () => {
               packageList: [
                 {
                   packageNumber: 'BOIC-100',
+                  growthType: 'Old growth',
+                  totalFeeForPackage: '$10.50',
                   scaleList: [
                     {
                       id: 'OIC-FEE-1',

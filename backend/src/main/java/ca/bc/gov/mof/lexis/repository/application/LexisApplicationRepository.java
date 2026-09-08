@@ -135,6 +135,13 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
           Map.entry("ownerClientNumber", "v.OWNER_CLIENT_NUMBER"),
           Map.entry("exemptionNumber", "v.EXEMPTION_NUMBER"),
           Map.entry("listingDate", "v.ADVERTISING_DATE"),
+          Map.entry("receivedDate", "v.RECEIVED_DATE"),
+          Map.entry(
+              "packageNumber",
+              "(SELECT LISTAGG(EP_SORT.PACKAGE_NUMBER, ',') "
+                  + "WITHIN GROUP (ORDER BY EP_SORT.PACKAGE_NUMBER) "
+                  + "FROM EXPORT_PACKAGE EP_SORT "
+                  + "WHERE EP_SORT.APPLICATION_NUMBER = v.APPLICATION_NUMBER)"),
           Map.entry("regionCode", "v.REGION_CODE"),
           Map.entry("region", "v.REGION_CODE"));
   private static final String FIND_APPLICATION_BY_NUMBER =
@@ -817,10 +824,7 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
 
     String column =
         key == null ? fallbackColumn : SEARCH_SORT_COLUMNS.getOrDefault(key, fallbackColumn);
-    if (!safeIdentifier(column)) {
-      column = fallbackColumn;
-    }
-
+    // Expressions come only from the whitelist, including the legacy Summary package list.
     if ("v.APPLICATION_NUMBER".equals(column)) {
       return " ORDER BY v.APPLICATION_NUMBER " + direction;
     }

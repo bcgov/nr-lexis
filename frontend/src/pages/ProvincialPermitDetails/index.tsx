@@ -1422,15 +1422,18 @@ const ProvincialPermitDetailsPage = () => {
     editContextLoaded &&
     !permitEditLocked &&
     permitStatusCode === 'ACT'
-  const canSavePermit =
+  const canMutatePermit =
     permitExemptionContextReady &&
     canPerform('savePermit') &&
     editContextLoaded &&
     !permitEditLocked &&
     !permitExpired
+  const canSavePermit =
+    canMutatePermit &&
+    !(permitStatusCode === 'COM' && hasProvincialSubmitterRole(capabilities.roles))
   const canReviewPermits = canPerform('/permitsReview')
   const canCorrectPermitSubmitDate = canSavePermit && canReviewPermits && permitStatusCode === 'ACT'
-  const canEditShipping = canSavePermit && permitStatusCode !== 'CAN'
+  const canEditShipping = canMutatePermit && permitStatusCode !== 'CAN'
   const invoiceMaterialLocked = permitStatusCode === 'COM' || permitStatusCode === 'PPD'
   const canEnterPaymentReceipt = permitStatusCode === 'PPD' && !detail?.receiptNumber?.trim()
   const canSendPermitApproval =
@@ -4789,6 +4792,51 @@ const ProvincialPermitDetailsPage = () => {
                             </>
                           )}
                         </fieldset>
+                        {feeSummaryStatus === null && !!tabsData?.packageFeeSummaries.length && (
+                          <>
+                            <h3 className="detail-tile-title">Package fee summary</h3>
+                            <TableFrame ariaLabel="Permit package fee summaries">
+                              <Table size="md" useZebraStyles>
+                                <TableHead>
+                                  <TableRow>
+                                    <TableHeader>Package</TableHeader>
+                                    <TableHeader>Age class</TableHeader>
+                                    <TableHeader>Exemption number</TableHeader>
+                                    <TableHeader>Package fee (CAD)</TableHeader>
+                                  </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                  {tabsData.packageFeeSummaries.map((summary) => (
+                                    <TableRow key={summary.packageNumber}>
+                                      <TableCell>{summary.packageNumber}</TableCell>
+                                      <TableCell>{summary.growthType || '-'}</TableCell>
+                                      <TableCell>
+                                        {detail.exemptionNumber ? (
+                                          <Link
+                                            to={`/provincial/exemption/${encodeURIComponent(detail.exemptionNumber)}`}
+                                            state={withDetailReturnTo(
+                                              location.state,
+                                              {
+                                                label: 'Provincial permit detail',
+                                                to: locationPath(location),
+                                              },
+                                              detailReturnTo,
+                                            )}
+                                          >
+                                            {detail.exemptionNumber}
+                                          </Link>
+                                        ) : (
+                                          '-'
+                                        )}
+                                      </TableCell>
+                                      <TableCell>{summary.totalFeeForPackage}</TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </TableFrame>
+                          </>
+                        )}
                         <TextInput
                           id="permitFeesFilter"
                           labelText="Filter fee rows"

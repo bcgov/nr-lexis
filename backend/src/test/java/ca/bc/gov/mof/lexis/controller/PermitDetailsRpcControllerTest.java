@@ -78,6 +78,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -2028,6 +2029,92 @@ class PermitDetailsRpcControllerTest {
 
     verifyNoInteractions(editLockService);
     verify(service, never()).getApplicationNumbersForPermitMutation(any());
+    verify(service, never()).updatePermit(any(), any());
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"", "COM"})
+  void updatePermitShouldRejectCompletedPermitRemarksForScopedSubmitter(String submittedStatus) {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameterMap())
+        .thenReturn(Map.of(
+            "permitNumber", new String[] {"7000123"},
+            "permitStatus", new String[] {submittedStatus},
+            "permitRemarks", new String[] {"Updated remarks"}));
+    when(permitService.findByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitDetail("COM")));
+    TestingAuthenticationToken authentication = scopedSubmitterWithSavePermit();
+
+    assertThatThrownBy(() -> controller.updatePermit(request, authentication))
+        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class)
+        .hasMessageContaining("Completed permit details are read-only");
+
+    verifyNoInteractions(editLockService);
+    verify(service, never()).updatePermit(any(), any());
+  }
+
+  @Test
+  void updatePermitShouldRecheckCompletedStatusInsideSerializedMutation() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameterMap())
+        .thenReturn(Map.of(
+            "permitNumber", new String[] {"7000123"},
+            "permitRemarks", new String[] {"Updated remarks"}));
+    when(permitService.findByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitDetail("ACT")));
+    TestingAuthenticationToken authentication = scopedSubmitterWithSavePermit();
+    java.util.concurrent.atomic.AtomicInteger authorizationChecks =
+        new java.util.concurrent.atomic.AtomicInteger();
+    doAnswer(ignored -> {
+      if (authorizationChecks.incrementAndGet() == 2) {
+        when(permitService.findByPermitNumber(7000123L))
+            .thenReturn(Optional.of(permitDetail("COM")));
+      }
+      return null;
+    }).when(provincialAuthorizationService).requirePermit(authentication, 7000123L);
+
+    assertThatThrownBy(() -> controller.updatePermit(request, authentication))
+        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class)
+        .hasMessageContaining("Completed permit details are read-only");
+    assertThat(authorizationChecks.get()).isEqualTo(2);
+    verifyNoInteractions(editLockService);
+    verify(service, never()).updatePermit(any(), any());
+  }
+
+  @Test
+  void updatePermitShouldKeepCompletedPermitDetailsEditableForAuthorizedStaff() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameterMap())
+        .thenReturn(Map.of(
+            "permitNumber", new String[] {"7000123"},
+            "permitRemarks", new String[] {"Staff correction"}));
+    when(permitService.findByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitDetail("COM")));
+    when(service.updatePermit(any(), eq("idir\\jsmith")))
+        .thenReturn(successfulPermitUpdate());
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+
+    assertThat(controller.updatePermit(request, authentication).getStatusCode())
+        .isEqualTo(HttpStatus.OK);
+    verify(service).updatePermit(any(), eq("idir\\jsmith"));
+  }
+
+  @Test
+  void updateShippingShouldKeepCompletedPermitShippingEditableForScopedSubmitter() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameterMap())
+        .thenReturn(Map.of(
+            "permitNumber", new String[] {"7000123"},
+            "destinationCompanyName", new String[] {"Updated purchaser"}));
+    when(permitService.findByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitDetail("COM")));
+    when(service.updateShipping(any(), eq("bceid\\submitter")))
+        .thenReturn(successfulPermitUpdate());
+    TestingAuthenticationToken authentication = scopedSubmitterWithSavePermit();
+
+    assertThat(controller.updateShipping(request, authentication).getStatusCode())
+        .isEqualTo(HttpStatus.OK);
+    verify(service).updateShipping(any(), eq("bceid\\submitter"));
     verify(service, never()).updatePermit(any(), any());
   }
 

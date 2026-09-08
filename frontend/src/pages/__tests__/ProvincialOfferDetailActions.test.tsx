@@ -153,11 +153,14 @@ describe('Provincial Offer Detail Actions', () => {
     }
   })
 
-  it('updates editable legacy offer fields from the detail page', async () => {
+  it('shows the TEAC review date for authorized staff and updates editable offer fields', async () => {
     renderPage()
 
     await screen.findByRole('heading', { name: 'Offer 81001' })
+    expect(screen.getByLabelText('TEAC review date')).toHaveValue('2026-03-05')
+    expect(screen.getByLabelText('TEAC review date')).toBeDisabled()
     await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    expect(screen.getByLabelText('TEAC review date')).not.toBeDisabled()
 
     const companyInput = screen.getByLabelText('Company')
     expect(companyInput).toHaveAttribute('readonly')
@@ -177,6 +180,7 @@ describe('Provincial Offer Detail Actions', () => {
           companyName: 'Original Buyer',
           purchaseOfferAmount: '13000',
           pickupLocation: 'Port Moody',
+          teacReviewDate: '2026-03-05',
         }),
       )
     })
@@ -666,7 +670,7 @@ describe('Provincial Offer Detail Actions', () => {
     expect(mockedSubmitProvincialOfferUpdate).not.toHaveBeenCalled()
   })
 
-  it('only enables legacy offer detail fields for offering-client edits', async () => {
+  it('hides the TEAC review date for offering clients and preserves it when saving other fields', async () => {
     mockedFetchProvincialOfferDetail.mockResolvedValue({
       ...offerDetail,
       canEditScheduleDates: false,
@@ -678,7 +682,9 @@ describe('Provincial Offer Detail Actions', () => {
     renderPage()
 
     await screen.findByRole('heading', { name: 'Offer 81001' })
+    expect(screen.queryByLabelText('TEAC review date')).not.toBeInTheDocument()
     await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    expect(screen.queryByLabelText('TEAC review date')).not.toBeInTheDocument()
 
     expect(screen.getByLabelText('Offer amount ($/m³)')).not.toHaveAttribute('readonly')
     expect(screen.getByLabelText('Pickup location')).not.toHaveAttribute('readonly')
@@ -686,6 +692,20 @@ describe('Provincial Offer Detail Actions', () => {
     expect(screen.getByLabelText('Offer withdrawal reason')).toHaveAttribute('readonly')
     expect(screen.queryByLabelText('Offer remarks')).not.toBeInTheDocument()
     expect(screen.getByRole('combobox', { name: 'Fair market value' })).toBeDisabled()
+
+    const conditionsInput = screen.getByLabelText('Offer conditions / remarks')
+    await userEvent.clear(conditionsInput)
+    await userEvent.type(conditionsInput, 'Updated loading conditions')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => {
+      expect(mockedSubmitProvincialOfferUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          offerCondition: 'Updated loading conditions',
+          teacReviewDate: '2026-03-05',
+        }),
+      )
+    })
   })
 
   it('allows withdrawal-only submitters to edit offer comments without broadening other fields', async () => {

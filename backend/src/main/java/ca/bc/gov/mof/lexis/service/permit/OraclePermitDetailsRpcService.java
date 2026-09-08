@@ -562,10 +562,6 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     }
 
     List<PermitFeeScaleRow> feeRows = repository.findPermitFeeScaleRows(permitNumber);
-    if (feeRows.isEmpty()) {
-      return new PermitAllScaleFeesRpcResponseDto(List.of(), "0.0");
-    }
-
     FeeCalculationContext feeContext = buildFeeContext(permitNumber, null, null);
     Map<String, String> speciesDescriptionByCode = new HashMap<>();
     Map<String, String> gradeDescriptionByCode = new HashMap<>();
@@ -596,6 +592,20 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     Map<String, BigDecimal> totalsByPackage = new LinkedHashMap<>();
     Map<String, String> growthTypeByPackage = new LinkedHashMap<>();
     BigDecimal totalVolume = BigDecimal.ZERO;
+
+    // BOIC packages belong to the permit before any scale rows are attached.
+    for (PermitCorePackageContextRow packageContext :
+        repository.findCorePackageContexts(
+            permitNumber, EXEMPTION_TYPE_BLANKET_OIC.equalsIgnoreCase(feeContext.exemptionTypeCode()))) {
+      PermitCorePackageRow packageRow = packageContext.packageRow();
+      String packageNumber = packageRow.packageNumber();
+      scalesByPackage.put(packageNumber, new ArrayList<>());
+      growthTypeByPackage.put(
+          packageNumber,
+          firstNonNull(
+              trimToNull(packageContext.packageGrowthTypeDescription()),
+              nonNull(trimToNull(packageRow.growthTypeCode()))));
+    }
 
     for (PermitFeeScaleRow feeRow : feeRows) {
       PermitScaleDetailRow scale = feeRow.scaleRow();

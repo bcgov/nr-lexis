@@ -719,16 +719,18 @@ const ProvincialOfferDetailsPage = () => {
             <fieldset className="legacy-form-fieldset offer-form-section">
               <legend>Approval</legend>
               <div className="legacy-search-grid">
-                <IsoDatePicker
-                  id="offerTeacReviewDate"
-                  labelText="TEAC review date"
-                  value={form.teacReviewDate}
-                  invalid={canEditScheduleFields && !!fieldError('teacReviewDate')}
-                  invalidText={fieldError('teacReviewDate')}
-                  onBlur={() => markFieldTouched('teacReviewDate')}
-                  onChange={(value) => updateFormField('teacReviewDate', value)}
-                  disabled={!canEditScheduleFields}
-                />
+                {detail.canEditScheduleDates && (
+                  <IsoDatePicker
+                    id="offerTeacReviewDate"
+                    labelText="TEAC review date"
+                    value={form.teacReviewDate}
+                    invalid={canEditScheduleFields && !!fieldError('teacReviewDate')}
+                    invalidText={fieldError('teacReviewDate')}
+                    onBlur={() => markFieldTouched('teacReviewDate')}
+                    onChange={(value) => updateFormField('teacReviewDate', value)}
+                    disabled={!canEditScheduleFields}
+                  />
+                )}
                 <SearchableSelect
                   id="offerFairOfferIndicator"
                   labelText="Fair market value"

@@ -83,6 +83,7 @@ vi.mock('@/service/provincial-permit-detail-tabs-service', () => ({
     packages: [],
     items: [],
     fees: [],
+    packageFeeSummaries: [],
     totalFeeVolume: null,
     gbmsEvents: [],
     oicItems: [],
@@ -245,6 +246,7 @@ const tabsResult: ProvincialPermitDetailTabsData = {
   packages: [],
   items: [],
   fees: [],
+  packageFeeSummaries: [],
   totalFeeVolume: null,
   gbmsEvents: [],
   oicItems: [],
@@ -253,6 +255,9 @@ const tabsResult: ProvincialPermitDetailTabsData = {
 
 const calculatedPermitFees = {
   totalFeeVolume: 10,
+  packageFeeSummaries: [
+    { packageNumber: 'PKG-9', growthType: 'Second growth', totalFeeForPackage: '$37.50' },
+  ],
   fees: [
     {
       id: 'FEE-1',
@@ -274,6 +279,10 @@ const calculatedPermitFees = {
 
 const maskedPermitFees = {
   ...calculatedPermitFees,
+  packageFeeSummaries: calculatedPermitFees.packageFeeSummaries.map((summary) => ({
+    ...summary,
+    totalFeeForPackage: '$',
+  })),
   fees: calculatedPermitFees.fees.map((row) => ({
     ...row,
     ewb: '',
@@ -414,7 +423,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
     mockedFetchProvincialPermitDetailTabs.mockResolvedValue(tabsResult)
     mockedFetchProvincialPermitGbmsEvents.mockResolvedValue([])
-    mockedFetchProvincialPermitFees.mockResolvedValue({ fees: [], totalFeeVolume: 0 })
+    mockedFetchProvincialPermitFees.mockResolvedValue({
+      fees: [],
+      packageFeeSummaries: [],
+      totalFeeVolume: 0,
+    })
     mockedFetchProvincialPermitOptions.mockResolvedValue({
       permitStatuses: [
         { value: 'ACT', label: 'Active' },
@@ -862,6 +875,9 @@ describe('Provincial Permit Detail Action Smoke', () => {
   it('uses the authoritative volume total instead of summing rounded fee rows', async () => {
     mockedFetchProvincialPermitFees.mockResolvedValue({
       totalFeeVolume: 2.1,
+      packageFeeSummaries: [
+        { packageNumber: 'BOIC-1', growthType: 'Old growth', totalFeeForPackage: '$2.08' },
+      ],
       fees: ['SCALE-1', 'SCALE-2'].map((id) => ({
         id,
         packageNumber: 'BOIC-1',
@@ -885,6 +901,77 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.getByLabelText('Total volume (m³)')).toHaveValue('2.1')
     expect(screen.getByLabelText('Calculated fee (CAD)')).toHaveValue('$2.08')
     expect(screen.getByLabelText('Effective fee (CAD)')).toHaveValue('$2.08')
+  })
+
+  it('shows package fee summaries and exemption links even when the row filter matches an empty package', async () => {
+    mockedFetchProvincialPermitFees.mockResolvedValue({
+      totalFeeVolume: 5.1,
+      packageFeeSummaries: [
+        { packageNumber: 'PKG-A', growthType: 'Second growth', totalFeeForPackage: '$2.08' },
+        { packageNumber: 'PKG-B', growthType: 'Old growth', totalFeeForPackage: '$6.04' },
+        { packageNumber: 'PKG-EMPTY', growthType: 'Old growth', totalFeeForPackage: '$0.00' },
+      ],
+      fees: [
+        ...['SCALE-1', 'SCALE-2'].map((id) => ({
+          ...calculatedPermitFees.fees[0],
+          id,
+          packageNumber: 'PKG-A',
+          volume: 1,
+          amount: 1.04,
+          amountDisplay: '$1.04',
+        })),
+        {
+          ...calculatedPermitFees.fees[0],
+          id: 'SCALE-3',
+          packageNumber: 'PKG-B',
+          volume: 3,
+          amount: 6.04,
+          amountDisplay: '$6.04',
+        },
+      ],
+    })
+    renderPermitDetails()
+
+    await selectPermitDetailTab('Fees')
+
+    const summaries = screen.getByRole('region', { name: 'Permit package fee summaries' })
+    expect(
+      within(summaries).getByRole('row', { name: /PKG-A Second growth.*\$2\.08/ }),
+    ).toBeVisible()
+    expect(within(summaries).getByRole('row', { name: /PKG-B Old growth.*\$6\.04/ })).toBeVisible()
+    const emptyPackage = within(summaries).getByRole('row', {
+      name: /PKG-EMPTY Old growth.*\$0\.00/,
+    })
+    expect(emptyPackage).toBeVisible()
+    expect(within(emptyPackage).getByRole('link', { name: 'EX-9' })).toHaveAttribute(
+      'href',
+      '/provincial/exemption/EX-9',
+    )
+    expect(screen.getByLabelText('Total volume (m³)')).toHaveValue('5.1')
+    expect(screen.getByLabelText('Calculated fee (CAD)')).toHaveValue('$8.12')
+
+    await userEvent.type(screen.getByLabelText('Filter fee rows'), 'PKG-EMPTY')
+
+    expect(screen.getByRole('heading', { name: 'No matching fee details' })).toBeVisible()
+    expect(emptyPackage).toBeVisible()
+    expect(screen.getByLabelText('Total volume (m³)')).toHaveValue('5.1')
+    expect(screen.getByLabelText('Calculated fee (CAD)')).toHaveValue('$8.12')
+  })
+
+  it('displays an authoritative masked package subtotal without masking numeric permit fees', async () => {
+    mockedFetchProvincialPermitFees.mockResolvedValue({
+      ...calculatedPermitFees,
+      packageFeeSummaries: [
+        { packageNumber: 'PKG-9', growthType: 'Old growth', totalFeeForPackage: '$' },
+      ],
+    })
+    renderPermitDetails()
+
+    await selectPermitDetailTab('Fees')
+
+    const summaries = screen.getByRole('region', { name: 'Permit package fee summaries' })
+    expect(within(summaries).getByRole('cell', { name: '$' })).toBeVisible()
+    expect(screen.getByLabelText('Calculated fee (CAD)')).toHaveValue('$37.50')
   })
 
   it('refreshes loaded fees after saving the permit submit date and preserves the current tab and fee filter', async () => {
@@ -922,10 +1009,16 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.getByLabelText('Calculated fee (CAD)')).toHaveValue('Loading…')
     expect(screen.getByLabelText('Filter fee rows')).toHaveValue('TEST-FEE')
     expect(screen.queryByRole('row', { name: /TEST-FEE/ })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('region', { name: 'Permit package fee summaries' }),
+    ).not.toBeInTheDocument()
 
     await act(async () =>
       resolveRefreshedFees?.({
         ...calculatedPermitFees,
+        packageFeeSummaries: [
+          { packageNumber: 'PKG-9', growthType: 'Second growth', totalFeeForPackage: '$75.00' },
+        ],
         fees: calculatedPermitFees.fees.map((row) => ({
           ...row,
           amount: 75,
@@ -938,6 +1031,12 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.getByLabelText('Filter fee rows')).toHaveValue('TEST-FEE')
     expect(screen.getByRole('tab', { name: 'Fees' })).toHaveAttribute('aria-selected', 'true')
     expect(within(screen.getByRole('row', { name: /TEST-FEE/ })).getByText('$75.00')).toBeVisible()
+    expect(
+      within(screen.getByRole('region', { name: 'Permit package fee summaries' })).getByRole(
+        'cell',
+        { name: '$75.00' },
+      ),
+    ).toBeVisible()
   })
 
   it('retains loaded fees when saving the permit submit date fails', async () => {
@@ -1120,6 +1219,9 @@ describe('Provincial Permit Detail Action Smoke', () => {
         )
         .mockResolvedValueOnce({
           totalFeeVolume: 20,
+          packageFeeSummaries: [
+            { packageNumber: 'PKG-10', growthType: 'Second growth', totalFeeForPackage: '$' },
+          ],
           fees: maskedPermitFees.fees.map((row) => ({
             ...row,
             packageNumber: 'PKG-10',
@@ -1219,7 +1321,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.getByLabelText('Calculated fee (CAD)')).toHaveValue('Loading…')
     expect(screen.getByLabelText('Effective fee (CAD)')).toHaveValue('Loading…')
     await act(async () => {
-      resolveFees?.({ fees: [], totalFeeVolume: 0 })
+      resolveFees?.({ fees: [], packageFeeSummaries: [], totalFeeVolume: 0 })
     })
     expect(
       await screen.findByRole('heading', { name: 'No fee details available', level: 3 }),
@@ -4179,6 +4281,38 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
     expect(mockedUpdatePermitShipping).not.toHaveBeenCalled()
+  })
+
+  it('locks completed permit details for a scoped submitter while retaining shipping updates', async () => {
+    configureBlanketOicSubmitter('00067890')
+    renderPermitDetails()
+
+    expect(await screen.findByRole('heading', { name: 'Permit summary' })).toBeInTheDocument()
+    await waitFor(() => expect(mockedFetchPermitFeeOverrideContext).toHaveBeenCalled())
+    expect(screen.queryByRole('button', { name: 'Edit permit' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('textbox', { name: 'Remarks' })).not.toBeInTheDocument()
+
+    await selectPermitDetailTab('Shipping')
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit shipping' }))
+    await userEvent.clear(screen.getByLabelText('Purchaser'))
+    await userEvent.type(screen.getByLabelText('Purchaser'), 'Updated purchaser')
+    await userEvent.click(screen.getByRole('button', { name: 'Save shipping' }))
+
+    await waitFor(() =>
+      expect(mockedUpdatePermitShipping).toHaveBeenCalledWith(
+        expect.objectContaining({
+          permitNumber: '777',
+          destinationCompanyName: 'Updated purchaser',
+        }),
+      ),
+    )
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+  })
+
+  it('keeps completed permit details editable for authorized staff', async () => {
+    renderPermitDetails()
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    expect(screen.getByRole('textbox', { name: 'Remarks' })).toBeEnabled()
   })
 
   it('hides permit approval email from provincial submitters without permit review authority', async () => {
