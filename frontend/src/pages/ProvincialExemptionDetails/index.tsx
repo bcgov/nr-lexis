@@ -54,8 +54,8 @@ import DetailDocumentUploadPanel from '../../components/uploads/DetailDocumentUp
 import type { ProvincialExemptionDetail } from '@/interfaces/LexisDetails'
 import { formatDocumentSource } from '@/service/document-service-utils'
 import { DetailFieldTile } from '../shared/DetailSections'
-import { displayValue, matchesFilter } from '@/pages/shared/detail-page-utils'
-import { appendSearchParamsToPath, searchParamsWithValue } from '@/pages/shared/search-query-utils'
+import { displayValue } from '@/pages/shared/detail-page-utils'
+import { appendSearchParamsToPath } from '@/pages/shared/search-query-utils'
 import {
   locationPath,
   readDetailReturnTo,
@@ -296,7 +296,7 @@ const ProvincialExemptionDetailsPage = () => {
   const location = useLocation()
   const { capabilities, canPerform, defaultRoute } = useAuth()
   const { exemptionNumber } = useParams()
-  const [searchParams, setSearchParams] = useSearchParams()
+  const [searchParams] = useSearchParams()
   const detailReturnTo = useMemo(() => {
     const contextualReturnTo = readDetailReturnTo(location.state)
     if (contextualReturnTo) {
@@ -385,21 +385,9 @@ const ProvincialExemptionDetailsPage = () => {
   const ownerClientLocationCode = clientContextApplication?.ownerClientLocationCode.trim() ?? ''
   const agentClientLocationCode = clientContextApplication?.agentClientLocationCode.trim() ?? ''
   const isRefreshingDetail = loading && !!currentDetail
-  const permitFilter = searchParams.get('permitFilter') ?? ''
-  const documentsFilter = searchParams.get('documentsFilter') ?? ''
   const withCurrentSearch = useCallback(
     (path: string): string => appendSearchParamsToPath(path, searchParams),
     [searchParams],
-  )
-  const updateFilterParam = useCallback(
-    (key: 'permitFilter' | 'documentsFilter', value: string) => {
-      const nextSearchParams = searchParamsWithValue(searchParams, key, value)
-
-      if (nextSearchParams.toString() !== searchParams.toString()) {
-        setSearchParams(nextSearchParams, { replace: true })
-      }
-    },
-    [searchParams, setSearchParams],
   )
 
   useEffect(() => {
@@ -735,25 +723,6 @@ const ProvincialExemptionDetailsPage = () => {
     [permitRows],
   )
 
-  const filteredPermitRows = useMemo(() => {
-    const rows = visiblePermitRows
-    if (!permitFilter.trim()) {
-      return rows
-    }
-
-    return rows.filter((row) =>
-      matchesFilter(
-        [row.permitNumber, row.permitVolume, row.permitStatus, row.permitIssueDate],
-        permitFilter,
-      ),
-    )
-  }, [permitFilter, visiblePermitRows])
-
-  const filteredDocumentRows = useMemo(() => {
-    return documentRows.filter((row) =>
-      matchesFilter([row.name, row.description, row.type, row.source, row.id], documentsFilter),
-    )
-  }, [documentRows, documentsFilter])
   const requestedApplicationVolume = useMemo(
     () =>
       applications.reduce((total, application) => {
@@ -2448,17 +2417,6 @@ const ProvincialExemptionDetailsPage = () => {
                             </div>
                           </dl>
                         )}
-                        {!permitsErrorMessage && visiblePermitRows.length > 0 && (
-                          <TextInput
-                            id="exemptionDetailPermitFilter"
-                            labelText="Filter permits"
-                            value={permitFilter}
-                            onChange={(event) =>
-                              updateFilterParam('permitFilter', event.target.value)
-                            }
-                            placeholder="Filter by permit number, volume, status, or issue date"
-                          />
-                        )}
                         {permitsErrorMessage ? (
                           <EmptyState
                             title="Permits unavailable"
@@ -2466,7 +2424,7 @@ const ProvincialExemptionDetailsPage = () => {
                             headingLevel={3}
                             role="alert"
                           />
-                        ) : filteredPermitRows.length > 0 ? (
+                        ) : visiblePermitRows.length > 0 ? (
                           <TableFrame ariaLabel="Related exemption permits">
                             <Table size="md" useZebraStyles>
                               <TableHead>
@@ -2479,7 +2437,7 @@ const ProvincialExemptionDetailsPage = () => {
                                 </TableRow>
                               </TableHead>
                               <TableBody>
-                                {filteredPermitRows.map((row) => (
+                                {visiblePermitRows.map((row) => (
                                   <TableRow key={row.permitNumber}>
                                     <TableCell>
                                       {row.permitStatus.trim().toUpperCase() === 'ACTIVE'
@@ -2539,18 +2497,12 @@ const ProvincialExemptionDetailsPage = () => {
                         ) : (
                           <EmptyState
                             title={
-                              visiblePermitRows.length === 0
-                                ? permitRows.length > 0
-                                  ? 'No permits available'
-                                  : 'No permits found'
-                                : 'No permits match this filter'
+                              permitRows.length > 0 ? 'No permits available' : 'No permits found'
                             }
                             description={
-                              visiblePermitRows.length === 0
-                                ? permitRows.length > 0
-                                  ? 'No associated permits are available to your account.'
-                                  : 'No permits are associated with this exemption.'
-                                : 'Try a different permit number.'
+                              permitRows.length > 0
+                                ? 'No associated permits are available to your account.'
+                                : 'No permits are associated with this exemption.'
                             }
                             headingLevel={3}
                           />
@@ -2666,17 +2618,6 @@ const ProvincialExemptionDetailsPage = () => {
                             onUploadComplete={refreshExemptionDocuments}
                           />
                         )}
-                        {documentRows.length > 0 && (
-                          <TextInput
-                            id="exemptionDetailDocumentsFilter"
-                            labelText="Filter document rows"
-                            value={documentsFilter}
-                            onChange={(event) =>
-                              updateFilterParam('documentsFilter', event.target.value)
-                            }
-                            placeholder="Filter by file name, description, type, source, or id"
-                          />
-                        )}
                         {documentsErrorMessage ? (
                           <EmptyState
                             title="Documents unavailable"
@@ -2684,7 +2625,7 @@ const ProvincialExemptionDetailsPage = () => {
                             headingLevel={3}
                             role="alert"
                           />
-                        ) : filteredDocumentRows.length > 0 ? (
+                        ) : documentRows.length > 0 ? (
                           <TableFrame ariaLabel="Exemption document rows">
                             <Table size="md" useZebraStyles>
                               <TableHead>
@@ -2697,7 +2638,7 @@ const ProvincialExemptionDetailsPage = () => {
                                 </TableRow>
                               </TableHead>
                               <TableBody>
-                                {filteredDocumentRows.map((row) => (
+                                {documentRows.map((row) => (
                                   <TableRow key={row.id}>
                                     <TableCell>{row.name || '-'}</TableCell>
                                     <TableCell>{row.description || '-'}</TableCell>
@@ -2743,16 +2684,8 @@ const ProvincialExemptionDetailsPage = () => {
                           </TableFrame>
                         ) : (
                           <EmptyState
-                            title={
-                              documentRows.length === 0
-                                ? 'No documents found'
-                                : 'No documents match this filter'
-                            }
-                            description={
-                              documentRows.length === 0
-                                ? 'No documents have been uploaded for this exemption.'
-                                : 'Try a different file name, description, type, or identifier.'
-                            }
+                            title="No documents found"
+                            description="No documents have been uploaded for this exemption."
                             headingLevel={3}
                           />
                         )}

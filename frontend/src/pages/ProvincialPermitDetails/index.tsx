@@ -30,15 +30,12 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-  TableToolbar,
-  TableToolbarContent,
-  TableToolbarSearch,
   Tabs,
   TextArea,
   TextInput,
   Tile,
 } from '@carbon/react'
-import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useParams } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
 import { hasProvincialSubmitterRole, hasRole } from '@/context/auth/role-utils'
 import ConfirmationModal from '@/components/ConfirmationModal'
@@ -57,8 +54,7 @@ import DetailDocumentUploadPanel from '../../components/uploads/DetailDocumentUp
 import SearchableSelect from '../../components/SearchableSelect'
 import type { ProvincialPermitDetail } from '@/interfaces/LexisDetails'
 import { DetailFieldTile } from '../shared/DetailSections'
-import { displayValue, matchesFilter } from '@/pages/shared/detail-page-utils'
-import { searchParamsWithValue } from '@/pages/shared/search-query-utils'
+import { displayValue } from '@/pages/shared/detail-page-utils'
 import {
   locationPath,
   readDetailReturnTo,
@@ -659,7 +655,6 @@ const ProvincialPermitDetailsPage = () => {
   const { capabilities, canPerform, defaultRoute } = useAuth()
   const location = useLocation()
   const { permitNumber } = useParams()
-  const [searchParams, setSearchParams] = useSearchParams()
   const detailReturnTo = readDetailReturnTo(location.state) ?? {
     label: canPerform('/permitSearch') ? 'Provincial permit search' : 'Your landing page',
     to: canPerform('/permitSearch') ? '/provincial/permit' : defaultRoute,
@@ -803,20 +798,6 @@ const ProvincialPermitDetailsPage = () => {
   const endPermitMutation = useCallback(() => {
     permitMutationInFlightRef.current = false
   }, [])
-  const itemsFilter = searchParams.get('itemsFilter') ?? ''
-  const feesFilter = searchParams.get('feesFilter') ?? ''
-  const documentsFilter = searchParams.get('documentsFilter') ?? ''
-  const invoicesFilter = searchParams.get('invoicesFilter') ?? ''
-  const updateFilterParam = useCallback(
-    (key: 'itemsFilter' | 'feesFilter' | 'documentsFilter' | 'invoicesFilter', value: string) => {
-      const nextSearchParams = searchParamsWithValue(searchParams, key, value)
-
-      if (nextSearchParams.toString() !== searchParams.toString()) {
-        setSearchParams(nextSearchParams, { replace: true })
-      }
-    },
-    [searchParams, setSearchParams],
-  )
 
   const resetPermitRouteDrafts = useCallback(() => {
     beginPermitFeesRequest()
@@ -1358,17 +1339,6 @@ const ProvincialPermitDetailsPage = () => {
     return tabsData.items.filter((row) => row.packageNumber === selectedBlanketOicPackageNumber)
   }, [detail?.blanketOic, selectedBlanketOicPackageNumber, tabsData])
 
-  const filteredItems = useMemo(
-    () =>
-      packageScopedItems.filter((row) =>
-        matchesFilter(
-          [row.id, row.timberMark, row.species, row.grade, row.pieces, row.volume],
-          itemsFilter,
-        ),
-      ),
-    [itemsFilter, packageScopedItems],
-  )
-
   const visibleBlanketOicPackages = useMemo(
     () =>
       detail?.blanketOic
@@ -1411,57 +1381,12 @@ const ProvincialPermitDetailsPage = () => {
       ? associatedPermitPackageNumbers.join(', ')
       : detail?.packageNumber
 
-  const filteredFees = useMemo(() => {
-    if (!tabsData) {
-      return []
-    }
-
-    return tabsData.fees.filter((row) =>
-      matchesFilter(
-        [
-          row.id,
-          row.packageNumber,
-          row.timberMark,
-          row.species,
-          row.grade,
-          row.amv,
-          row.volume,
-          row.ewb,
-          row.filPercent,
-          row.mfPercent,
-          row.amount,
-          row.amountDisplay,
-        ],
-        feesFilter,
-      ),
-    )
-  }, [feesFilter, tabsData])
-  const showMinistryFeeColumn = filteredFees.some((row) => row.ministryUser)
+  const permitFeeRows = tabsData?.fees ?? []
+  const showMinistryFeeColumn = permitFeeRows.some((row) => row.ministryUser)
 
   const gbmsHistory = tabsData?.gbmsEvents ?? []
 
   const selectedPermitTabIndex = permitDetailTabs.findIndex(({ id }) => id === activePermitTabId)
-
-  const filteredDocumentRows = useMemo(() => {
-    return documentRows.filter((row) =>
-      matchesFilter([row.id, row.name, row.description, row.type, row.typeCode], documentsFilter),
-    )
-  }, [documentRows, documentsFilter])
-
-  const filteredInvoiceRows = useMemo(() => {
-    return invoiceRows.filter((row) =>
-      matchesFilter(
-        [
-          row.invoiceNumber,
-          row.exportValueCad,
-          row.conversionRate,
-          row.feeInLieu,
-          row.invoiceFound ? 'found' : 'missing',
-        ],
-        invoicesFilter,
-      ),
-    )
-  }, [invoiceRows, invoicesFilter])
 
   const hasPermitMutationPermission =
     canPerform('/filePermitUpload') ||
@@ -4830,25 +4755,8 @@ const ProvincialPermitDetailsPage = () => {
                               </div>
                             </>
                           )}
-                          <div className="legacy-search-table-toolbar legacy-search-table-toolbar--with-actions">
-                            <TableToolbar aria-label="Permit items toolbar">
-                              <TableToolbarContent>
-                                <TableToolbarSearch
-                                  persistent
-                                  size="sm"
-                                  id="permitItemsFilter"
-                                  labelText="Filter item rows"
-                                  value={itemsFilter}
-                                  onChange={(_, value) =>
-                                    updateFilterParam('itemsFilter', value ?? '')
-                                  }
-                                  placeholder="Filter by mark, species, grade, pieces, or volume"
-                                />
-                              </TableToolbarContent>
-                            </TableToolbar>
-                          </div>
                           {!permitTablesErrorMessage &&
-                            (filteredItems.length > 0 ? (
+                            (packageScopedItems.length > 0 ? (
                               <TableFrame ariaLabel="Permit item rows">
                                 <Table size="md" useZebraStyles>
                                   <TableHead>
@@ -4869,7 +4777,7 @@ const ProvincialPermitDetailsPage = () => {
                                     </TableRow>
                                   </TableHead>
                                   <TableBody>
-                                    {filteredItems.map((row) => (
+                                    {packageScopedItems.map((row) => (
                                       <TableRow key={row.id}>
                                         {canDisplayNormalPermitScaleMembership && (
                                           <TableCell>
@@ -4924,17 +4832,11 @@ const ProvincialPermitDetailsPage = () => {
                               </TableFrame>
                             ) : (
                               <EmptyState
-                                title={
-                                  packageScopedItems.length === 0
-                                    ? 'No permit items available'
-                                    : 'No matching permit items'
-                                }
+                                title="No permit items available"
                                 description={
-                                  packageScopedItems.length === 0
-                                    ? detail.blanketOic
-                                      ? 'No scale entries are available for the selected package.'
-                                      : 'No permit item rows are available for this permit.'
-                                    : 'No permit item rows matched the current filter.'
+                                  detail.blanketOic
+                                    ? 'No scale entries are available for the selected package.'
+                                    : 'No permit item rows are available for this permit.'
                                 }
                                 headingLevel={3}
                               />
@@ -5257,23 +5159,6 @@ const ProvincialPermitDetailsPage = () => {
                             </TableFrame>
                           </>
                         )}
-                        <div className="legacy-search-table-toolbar legacy-search-table-toolbar--with-actions">
-                          <TableToolbar aria-label="Permit fees toolbar">
-                            <TableToolbarContent>
-                              <TableToolbarSearch
-                                persistent
-                                size="sm"
-                                id="permitFeesFilter"
-                                labelText="Filter fee rows"
-                                value={feesFilter}
-                                onChange={(_, value) =>
-                                  updateFilterParam('feesFilter', value ?? '')
-                                }
-                                placeholder="Filter by package, timber mark, species, grade, or amount"
-                              />
-                            </TableToolbarContent>
-                          </TableToolbar>
-                        </div>
                         {permitFeesErrorMessage ? (
                           <EmptyState
                             title="Fee details unavailable"
@@ -5290,7 +5175,7 @@ const ProvincialPermitDetailsPage = () => {
                             headingLevel={3}
                             role="alert"
                           />
-                        ) : filteredFees.length > 0 ? (
+                        ) : permitFeeRows.length > 0 ? (
                           <TableFrame ariaLabel="Permit fee rows">
                             <Table size="md" useZebraStyles>
                               <TableHead>
@@ -5308,7 +5193,7 @@ const ProvincialPermitDetailsPage = () => {
                                 </TableRow>
                               </TableHead>
                               <TableBody>
-                                {filteredFees.map((row) => (
+                                {permitFeeRows.map((row) => (
                                   <TableRow key={row.id}>
                                     <TableCell>{row.packageNumber || '-'}</TableCell>
                                     <TableCell>{row.timberMark || '-'}</TableCell>
@@ -5333,16 +5218,8 @@ const ProvincialPermitDetailsPage = () => {
                           </TableFrame>
                         ) : (
                           <EmptyState
-                            title={
-                              (tabsData?.fees ?? []).length === 0
-                                ? 'No fee details available'
-                                : 'No matching fee details'
-                            }
-                            description={
-                              (tabsData?.fees ?? []).length === 0
-                                ? 'No fee rows are available for this permit.'
-                                : 'No fee rows matched the current filter.'
-                            }
+                            title="No fee details available"
+                            description="No fee rows are available for this permit."
                             headingLevel={3}
                           />
                         )}
@@ -5437,23 +5314,6 @@ const ProvincialPermitDetailsPage = () => {
                             onUploadComplete={refreshPermitDocuments}
                           />
                         )}
-                        <div className="legacy-search-table-toolbar legacy-search-table-toolbar--with-actions">
-                          <TableToolbar aria-label="Permit documents toolbar">
-                            <TableToolbarContent>
-                              <TableToolbarSearch
-                                persistent
-                                size="sm"
-                                id="permitDocumentsFilter"
-                                labelText="Filter document rows"
-                                value={documentsFilter}
-                                onChange={(_, value) =>
-                                  updateFilterParam('documentsFilter', value ?? '')
-                                }
-                                placeholder="Filter by file name, description, type, or id"
-                              />
-                            </TableToolbarContent>
-                          </TableToolbar>
-                        </div>
                         {deferredPermitTabLoading.documents ? (
                           <InlineLoading description="Loading permit documents…" />
                         ) : documentsErrorMessage ? (
@@ -5463,7 +5323,7 @@ const ProvincialPermitDetailsPage = () => {
                             headingLevel={3}
                             role="alert"
                           />
-                        ) : filteredDocumentRows.length > 0 ? (
+                        ) : documentRows.length > 0 ? (
                           <TableFrame ariaLabel="Permit document rows">
                             <Table size="md" useZebraStyles>
                               <TableHead>
@@ -5475,7 +5335,7 @@ const ProvincialPermitDetailsPage = () => {
                                 </TableRow>
                               </TableHead>
                               <TableBody>
-                                {filteredDocumentRows.map((row) => {
+                                {documentRows.map((row) => {
                                   const invoiceDocument = isInvoiceDocumentRow(row)
                                   const canDeleteRow =
                                     canDeletePermitDocuments &&
@@ -5527,16 +5387,8 @@ const ProvincialPermitDetailsPage = () => {
                           </TableFrame>
                         ) : (
                           <EmptyState
-                            title={
-                              documentRows.length === 0
-                                ? 'No permit documents available'
-                                : 'No matching permit documents'
-                            }
-                            description={
-                              documentRows.length === 0
-                                ? 'No documents are available for this permit.'
-                                : 'No document rows matched the current filter.'
-                            }
+                            title="No permit documents available"
+                            description="No documents are available for this permit."
                             headingLevel={3}
                           />
                         )}
@@ -5583,15 +5435,6 @@ const ProvincialPermitDetailsPage = () => {
                             onUploadComplete={refreshPermitDocuments}
                           />
                         )}
-                        <TextInput
-                          id="permitInvoicesFilter"
-                          labelText="Filter invoice rows"
-                          value={invoicesFilter}
-                          onChange={(event) =>
-                            updateFilterParam('invoicesFilter', event.target.value)
-                          }
-                          placeholder="Filter by invoice number, value, rate, or fee-in-lieu"
-                        />
                         {deferredPermitTabLoading.invoices ? (
                           <InlineLoading description="Loading permit invoices…" />
                         ) : invoicesErrorMessage ? (
@@ -5601,7 +5444,7 @@ const ProvincialPermitDetailsPage = () => {
                             headingLevel={3}
                             role="alert"
                           />
-                        ) : filteredInvoiceRows.length > 0 ? (
+                        ) : invoiceRows.length > 0 ? (
                           <TableFrame ariaLabel="Permit invoice rows">
                             <Table size="md" useZebraStyles>
                               <TableHead>
@@ -5614,7 +5457,7 @@ const ProvincialPermitDetailsPage = () => {
                                 </TableRow>
                               </TableHead>
                               <TableBody>
-                                {filteredInvoiceRows.map((row) => (
+                                {invoiceRows.map((row) => (
                                   <TableRow key={row.id}>
                                     <TableCell>{row.invoiceNumber || '-'}</TableCell>
                                     <TableCell>{row.exportValueCad || '-'}</TableCell>
@@ -5633,16 +5476,8 @@ const ProvincialPermitDetailsPage = () => {
                           </TableFrame>
                         ) : (
                           <EmptyState
-                            title={
-                              invoiceRows.length === 0
-                                ? 'No invoices available'
-                                : 'No matching invoices'
-                            }
-                            description={
-                              invoiceRows.length === 0
-                                ? 'No invoices are available for this permit.'
-                                : 'No invoice rows matched the current filter.'
-                            }
+                            title="No invoices available"
+                            description="No invoices are available for this permit."
                             headingLevel={3}
                           />
                         )}

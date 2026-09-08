@@ -368,9 +368,9 @@ const configureBlanketOicSubmitter = (clientNumber: string) => {
   )
 }
 
-const renderPermitDetails = () =>
+const renderPermitDetails = (initialEntry = '/provincial/permit/777') =>
   render(
-    <MemoryRouter initialEntries={['/provincial/permit/777']}>
+    <MemoryRouter initialEntries={[initialEntry]}>
       <Routes>
         <Route path="/provincial/permit/:permitNumber" element={<ProvincialPermitDetailsPage />} />
       </Routes>
@@ -677,6 +677,10 @@ describe('Provincial Permit Detail Action Smoke', () => {
       'GBMS',
     ])
     expect(screen.queryByRole('tab', { name: 'Invoices' })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Filter item rows')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Filter fee rows')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Filter document rows')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Filter invoice rows')).not.toBeInTheDocument()
     const pageHeading = screen.getByRole('heading', {
       name: 'Permit 777 (Pending)',
       level: 1,
@@ -899,7 +903,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.getByLabelText('Effective fee (CAD)')).toHaveValue('$2.08')
   })
 
-  it('shows package fee summaries and exemption links even when the row filter matches an empty package', async () => {
+  it('shows package fee summaries, exemption links, and all fee rows', async () => {
     mockedFetchProvincialPermitFees.mockResolvedValue({
       totalFeeVolume: 5.1,
       packageFeeSummaries: [
@@ -926,7 +930,9 @@ describe('Provincial Permit Detail Action Smoke', () => {
         },
       ],
     })
-    renderPermitDetails()
+    renderPermitDetails(
+      '/provincial/permit/777?itemsFilter=none&feesFilter=PKG-EMPTY&documentsFilter=none&invoicesFilter=none',
+    )
 
     await selectPermitDetailTab('Fees')
 
@@ -945,10 +951,12 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
     expect(screen.getByLabelText('Total volume (m³)')).toHaveValue('5.1')
     expect(screen.getByLabelText('Calculated fee (CAD)')).toHaveValue('$8.12')
-
-    await userEvent.type(screen.getByLabelText('Filter fee rows'), 'PKG-EMPTY')
-
-    expect(screen.getByRole('heading', { name: 'No matching fee details' })).toBeVisible()
+    const feeRows = screen.getByRole('region', { name: 'Permit fee rows' })
+    expect(within(feeRows).getAllByRole('row')).toHaveLength(4)
+    expect(within(feeRows).getAllByRole('cell', { name: 'PKG-A' })).toHaveLength(2)
+    expect(within(feeRows).getByRole('cell', { name: 'PKG-B' })).toBeVisible()
+    expect(within(feeRows).getByRole('cell', { name: '$6.04' })).toBeVisible()
+    expect(screen.queryByLabelText('Filter fee rows')).not.toBeInTheDocument()
     expect(emptyPackage).toBeVisible()
     expect(screen.getByLabelText('Total volume (m³)')).toHaveValue('5.1')
     expect(screen.getByLabelText('Calculated fee (CAD)')).toHaveValue('$8.12')
@@ -970,7 +978,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.getByLabelText('Calculated fee (CAD)')).toHaveValue('$37.50')
   })
 
-  it('refreshes loaded fees after saving the permit submit date and preserves the current tab and fee filter', async () => {
+  it('refreshes loaded fees after saving the permit submit date and preserves the current tab', async () => {
     configureActivePermit()
     let resolveRefreshedFees:
       | ((value: Awaited<ReturnType<typeof fetchProvincialPermitFees>>) => void)
@@ -988,7 +996,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     await selectPermitDetailTab('Fees')
     expect(screen.getByLabelText('Calculated fee (CAD)')).toHaveValue('$37.50')
-    await userEvent.type(screen.getByLabelText('Filter fee rows'), 'TEST-FEE')
+    expect(screen.queryByLabelText('Filter fee rows')).not.toBeInTheDocument()
     await selectPermitDetailTab('Permit')
     await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
     await userEvent.clear(screen.getByLabelText('Submit date'))
@@ -1003,7 +1011,6 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.getByRole('tab', { name: 'Permit' })).toHaveAttribute('aria-selected', 'true')
     await selectPermitDetailTab('Fees')
     expect(screen.getByLabelText('Calculated fee (CAD)')).toHaveValue('Loading…')
-    expect(screen.getByLabelText('Filter fee rows')).toHaveValue('TEST-FEE')
     expect(screen.queryByRole('row', { name: /TEST-FEE/ })).not.toBeInTheDocument()
     expect(
       screen.queryByRole('region', { name: 'Permit package fee summaries' }),
@@ -1024,7 +1031,6 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
     expect(screen.getByLabelText('Calculated fee (CAD)')).toHaveValue('$75.00')
     expect(screen.getByLabelText('Effective fee (CAD)')).toHaveValue('$75.00')
-    expect(screen.getByLabelText('Filter fee rows')).toHaveValue('TEST-FEE')
     expect(screen.getByRole('tab', { name: 'Fees' })).toHaveAttribute('aria-selected', 'true')
     expect(within(screen.getByRole('row', { name: /TEST-FEE/ })).getByText('$75.00')).toBeVisible()
     expect(
@@ -5316,7 +5322,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(openSpy).not.toHaveBeenCalled()
   })
 
-  it('filters permit documents by visible fields without exposing source metadata', async () => {
+  it('renders permit documents without source metadata or an inline filter', async () => {
     mockedFetchPermitDocuments.mockResolvedValue({
       rows: [
         {
@@ -5343,15 +5349,9 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await selectPermitDetailTab('Documents')
 
     expect(await screen.findByText('visible-document.pdf')).toBeInTheDocument()
+    expect(screen.getByText('other-document.pdf')).toBeInTheDocument()
     expect(screen.queryByRole('columnheader', { name: 'Source' })).not.toBeInTheDocument()
-    const filter = screen.getByLabelText('Filter document rows')
-    await userEvent.type(filter, 'legacy-source-only')
-
-    await waitFor(() => {
-      expect(screen.queryByText('visible-document.pdf')).not.toBeInTheDocument()
-      expect(screen.queryByText('other-document.pdf')).not.toBeInTheDocument()
-    })
-    expect(screen.getByText('No document rows matched the current filter.')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Filter document rows')).not.toBeInTheDocument()
   })
 
   it('removes invoice document rows and refreshes tables', async () => {
@@ -5750,9 +5750,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
     expect(screen.getByText('Permit items unavailable')).toBeInTheDocument()
     expect(screen.getAllByText('Unable to retrieve permit table details.')).toHaveLength(3)
-    expect(
-      screen.queryByText('No permit item rows matched the current filter.'),
-    ).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Filter item rows')).not.toBeInTheDocument()
 
     await selectPermitDetailTab('Permit')
     expect(screen.queryByRole('button', { name: 'Add application' })).not.toBeInTheDocument()

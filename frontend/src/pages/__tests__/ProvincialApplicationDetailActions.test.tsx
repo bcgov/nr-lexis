@@ -1061,7 +1061,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(within(remarksTable).queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
   })
 
-  it('shows offer company and received date from application detail', async () => {
+  it('shows offer rows despite retired filter query parameters', async () => {
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
       ...applicationDetail,
       offers: [
@@ -1076,7 +1076,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     })
 
     render(
-      <MemoryRouter initialEntries={['/provincial/application/321']}>
+      <MemoryRouter initialEntries={['/provincial/application/321?offerFilter=not-a-match']}>
         <Routes>
           <Route
             path="/provincial/application/:applicationNumber"
@@ -1093,12 +1093,11 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(screen.getByText('2026-04-05')).toBeInTheDocument()
     expect(screen.getByText('OFF-77')).toBeInTheDocument()
 
-    const offerToolbar = screen.getByRole('group', { name: 'Application offers toolbar' })
-    const offerFilter = within(offerToolbar).getByLabelText('Filter offers')
-    await userEvent.type(offerFilter, 'not-a-match')
-
-    expect(screen.getByText('No offer rows matched the current filter.')).toBeInTheDocument()
-    expect(screen.queryByText('Example Lumber')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Filter offers')).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('group', { name: 'Application offers toolbar' }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Open' })).toBeEnabled()
   })
 
   it('preserves the originating application context when opening an offer', async () => {
