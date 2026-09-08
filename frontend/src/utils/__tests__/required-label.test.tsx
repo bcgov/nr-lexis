@@ -15,6 +15,7 @@ describe('requiredLabel', () => {
     const marker = document.querySelector('.required-label__marker')
     expect(marker).toHaveAttribute('aria-hidden', 'true')
     expect(marker?.querySelector('svg')).toBeInTheDocument()
+    expect(screen.getByText('Required field').firstElementChild).toBe(marker)
   })
 
   it('leaves an optional label unchanged', () => {

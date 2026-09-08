@@ -23,6 +23,7 @@ export type UploadQueueReviewDetails = {
 export type UploadQueueItem = {
   id: string
   file: File
+  fileDescription?: string
   workflowLabel: string
   queuedAt: number
   status: UploadQueueStatus

@@ -1953,7 +1953,7 @@ test.describe('TEST IDIR admin regression', () => {
       await expect(page.getByRole('heading', { name: workflowHeading, exact: true })).toBeVisible()
       await expect(page.getByRole('combobox', { name: 'Upload type' })).toHaveValue(workflowHeading)
       await expect(page.getByRole('combobox', { name: targetLabel })).toBeVisible()
-      await expect(page.getByRole('textbox', { name: 'Document description' })).toBeVisible()
+      await expect(page.getByRole('textbox', { name: /Document description/ })).toHaveCount(0)
       await expect(
         page.getByRole('button', {
           name:

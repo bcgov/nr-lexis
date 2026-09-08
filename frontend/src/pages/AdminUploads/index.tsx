@@ -141,7 +141,7 @@ type UploadFormState = {
   fileDescription: string
 }
 
-type UploadField = keyof UploadFormState | 'uploadFile'
+type UploadField = Exclude<keyof UploadFormState, 'fileDescription'> | 'uploadFile'
 type UploadWizardStep = 'upload' | 'review'
 
 type QueuedUploadResult = {
@@ -666,6 +666,15 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
     () => uploadQueue.filter((item) => item.status === 'invalid').length,
     [uploadQueue],
   )
+  const invalidDescriptionCount = useMemo(
+    () =>
+      uploadQueue.filter(
+        (item) =>
+          item.status !== 'complete' &&
+          !!validateDocumentUploadDescription(item.fileDescription ?? ''),
+      ).length,
+    [uploadQueue],
+  )
   const uploadInputLabel =
     selectedWorkflowType === 'applicationSubmission'
       ? 'Application submission file'
@@ -727,11 +736,13 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
       uploadFile:
         invalidUploadCount > 0
           ? `${invalidUploadCount} queued file${invalidUploadCount === 1 ? ' needs' : 's need'} attention before upload.`
-          : uploadQueue.length > 0
-            ? undefined
-            : selectedWorkflowType === 'applicationSubmission'
-              ? 'Please upload a file before continuing.'
-              : 'Choose at least one file to upload.',
+          : invalidDescriptionCount > 0
+            ? `${invalidDescriptionCount} queued file${invalidDescriptionCount === 1 ? ' has' : 's have'} an invalid document description.`
+            : uploadQueue.length > 0
+              ? undefined
+              : selectedWorkflowType === 'applicationSubmission'
+                ? 'Please upload a file before continuing.'
+                : 'Choose at least one file to upload.',
       applicationNumber:
         selectedWorkflowType === 'application'
           ? (provincialApplicationNumberFieldError(
@@ -780,12 +791,14 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
               INVOICE_AMOUNT_DECIMAL_PLACES,
             )
           : undefined,
-      fileDescription:
-        selectedWorkflowType === 'applicationSubmission'
-          ? undefined
-          : validateDocumentUploadDescription(formState.fileDescription) || undefined,
     }),
-    [formState, invalidUploadCount, uploadQueue.length, selectedWorkflowType],
+    [
+      formState,
+      invalidDescriptionCount,
+      invalidUploadCount,
+      uploadQueue.length,
+      selectedWorkflowType,
+    ],
   )
 
   const validationErrors = useMemo(
@@ -842,6 +855,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
       nextItemsByFileName.set(uploadQueueFileKey(file), {
         id: `${queuedAt}-${index}-${file.name}-${file.size}`,
         file,
+        fileDescription: isApplicationSubmission ? undefined : formState.fileDescription,
         workflowLabel: selectedWorkflow.label,
         queuedAt,
         status: validationMessage
@@ -917,6 +931,19 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
     clearUploadFeedback()
   }
 
+  const updateFileDescription = (id: string, fileDescription: string): void => {
+    if (!hasUploadAccess || isSubmitting) {
+      return
+    }
+    setUploadQueue((current) =>
+      current.map((item) =>
+        item.id === id && !item.submitted && item.status !== 'complete'
+          ? { ...item, fileDescription }
+          : item,
+      ),
+    )
+  }
+
   const clearQueuedFiles = (): void => {
     setUploadQueue([])
     setFileInputKey((current) => current + 1)
@@ -985,7 +1012,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
       const result = await submitAdminUpload('application', {
         applicationNumber: normalizeProvincialApplicationNumber(formState.applicationNumber),
         file,
-        fileDescription: formState.fileDescription.trim(),
+        fileDescription: (item.fileDescription ?? '').trim(),
       })
       const message = buildUploadResultMessage(
         'application',
@@ -1002,7 +1029,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
       const result = await submitAdminUpload('exemption', {
         exemptionNumber: formState.exemptionNumber.trim(),
         file,
-        fileDescription: formState.fileDescription.trim(),
+        fileDescription: (item.fileDescription ?? '').trim(),
       })
       const message = buildUploadResultMessage(
         'exemption',
@@ -1019,7 +1046,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
       const result = await submitAdminUpload('permit', {
         permitNumber: formState.permitNumber.trim(),
         file,
-        fileDescription: formState.fileDescription.trim(),
+        fileDescription: (item.fileDescription ?? '').trim(),
       })
       const message = buildUploadResultMessage(
         'permit',
@@ -1039,7 +1066,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
       invoiceConversionRate: formState.invoiceConversionRate.trim(),
       invoiceFeeInLieu: formState.invoiceFeeInLieu.trim(),
       file,
-      fileDescription: formState.fileDescription.trim(),
+      fileDescription: (item.fileDescription ?? '').trim(),
     })
     const message = buildUploadResultMessage('invoice', 'Invoice upload submitted.', result)
     return {
@@ -1415,6 +1442,28 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
     selectedWorkflowType === 'applicationSubmission'
       ? 'The submission type will be detected automatically from your file.'
       : 'Select documents to prepare before reviewing and submitting the upload.'
+  const canSubmitDocumentUpload = hasUploadAccess && invalidDescriptionCount === 0
+  const renderQueuedFileDescription = (item: UploadQueueItem): ReactNode => {
+    const description = item.fileDescription ?? ''
+    const error = validateDocumentUploadDescription(description)
+
+    return (
+      <TextArea
+        id={`adminUploadDescription-${encodeURIComponent(item.id)}`}
+        labelText={`Document description for ${item.file.name} (optional)`}
+        value={description}
+        onChange={(event) => updateFileDescription(item.id, event.target.value)}
+        invalid={!!error}
+        invalidText={error}
+        enableCounter
+        maxCount={250}
+        rows={2}
+        disabled={
+          !hasUploadAccess || isSubmitting || !!item.submitted || item.status === 'complete'
+        }
+      />
+    )
+  }
   const uploadSettingsPanel = (
     <section
       className={`admin-upload-panel${
@@ -1576,25 +1625,6 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
             />
           </>
         )}
-
-        {selectedWorkflowType !== 'applicationSubmission' && (
-          <TextArea
-            id="fileDescription"
-            labelText="Document description"
-            value={formState.fileDescription}
-            invalid={!!fieldError('fileDescription')}
-            invalidText={fieldError('fileDescription')}
-            maxCount={250}
-            onBlur={() => markFieldTouched('fileDescription')}
-            onChange={(event) =>
-              setFormState((current) => ({
-                ...current,
-                fileDescription: event.target.value,
-              }))
-            }
-            rows={4}
-          />
-        )}
       </div>
 
       <MultiFileDropZone
@@ -1692,7 +1722,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
                 <UploadQueuePreview
                   items={uploadQueue}
                   targetSummary={currentUploadTargetSummary}
-                  canSubmit={hasUploadAccess}
+                  canSubmit={canSubmitDocumentUpload}
                   isSubmitting={isSubmitting}
                   currentStepId={documentUploadStep}
                   actionsPlacement="footer"
@@ -1702,6 +1732,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
                   onReset={onReset}
                   onClear={clearQueuedFiles}
                   onRemove={removeQueuedFile}
+                  renderFileDescription={renderQueuedFileDescription}
                   showWorkflowProgress={false}
                 />
               ) : (
@@ -1734,7 +1765,9 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
                 targetSummary={currentUploadTargetSummary}
                 canSubmit={
                   hasUploadAccess &&
-                  (selectedWorkflowType !== 'applicationSubmission' || hasValidatedLexisSubmissions)
+                  (selectedWorkflowType === 'applicationSubmission'
+                    ? hasValidatedLexisSubmissions
+                    : invalidDescriptionCount === 0)
                 }
                 isSubmitting={isSubmitting}
                 currentStepId="review"
@@ -1786,6 +1819,11 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
                 onReset={onReset}
                 onClear={clearQueuedFiles}
                 onRemove={removeQueuedFile}
+                renderFileDescription={
+                  selectedWorkflowType === 'applicationSubmission'
+                    ? undefined
+                    : renderQueuedFileDescription
+                }
                 renderCompleteAction={(item) =>
                   item.status === 'complete' && item.resultApplicationNumber ? (
                     <Link to={`/provincial/application/${item.resultApplicationNumber}`}>

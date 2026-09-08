@@ -66,13 +66,124 @@ describe('DetailDocumentUploadPanel', () => {
     expect(screen.queryByText(/US-ASCII|250 bytes/i)).not.toBeInTheDocument()
 
     await userEvent.upload(screen.getByLabelText('Document File'), file)
+    await userEvent.type(screen.getByLabelText(/Document description/), 'Discard this draft')
     await waitFor(() => expect(screen.getByRole('button', { name: 'Remove' })).toBeEnabled())
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
 
     expect(screen.queryByRole('dialog', { name: 'Add document' })).not.toBeInTheDocument()
     await openUploadForm()
     expect(screen.queryByRole('button', { name: 'Remove' })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/Document description/)).not.toBeInTheDocument()
+    await userEvent.upload(screen.getByLabelText('Document File'), file)
     expect(screen.getByLabelText(/Document description/)).toHaveValue('')
+  })
+
+  it.each(['application', 'exemption', 'permit'] as const)(
+    'keeps a separate description for each %s file through review and submission',
+    async (workflowType) => {
+      mockedSubmitAdminUpload.mockResolvedValue({ message: 'Document uploaded.' })
+      const first = new File(['first'], 'first.pdf', { type: 'application/pdf' })
+      const second = new File(['second'], 'second.pdf', { type: 'application/pdf' })
+      render(
+        <DetailDocumentUploadPanel
+          workflowType={workflowType}
+          targetNumber="321"
+          inputId="documents"
+        />,
+      )
+      await openUploadForm()
+      await userEvent.upload(screen.getByLabelText('Document File'), [first, second])
+      await userEvent.type(
+        screen.getByLabelText(/Document description for first.pdf/),
+        ' First description ',
+      )
+      await userEvent.type(
+        screen.getByLabelText(/Document description for second.pdf/),
+        'Second description',
+      )
+      await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
+      expect(screen.getByLabelText(/Document description for first.pdf/)).toHaveValue(
+        ' First description ',
+      )
+      expect(screen.getByLabelText(/Document description for second.pdf/)).toHaveValue(
+        'Second description',
+      )
+      await userEvent.click(screen.getByRole('button', { name: 'Back' }))
+      await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
+      await userEvent.click(screen.getByRole('button', { name: 'Submit upload' }))
+      await waitFor(() => expect(mockedSubmitAdminUpload).toHaveBeenCalledTimes(2))
+      expect(mockedSubmitAdminUpload).toHaveBeenNthCalledWith(
+        1,
+        workflowType,
+        expect.objectContaining({
+          file: first,
+          fileDescription: 'First description',
+        }),
+      )
+      expect(mockedSubmitAdminUpload).toHaveBeenNthCalledWith(
+        2,
+        workflowType,
+        expect.objectContaining({
+          file: second,
+          fileDescription: 'Second description',
+        }),
+      )
+    },
+  )
+
+  it('blocks review and submission until an invalid per-file description is corrected', async () => {
+    mockedSubmitAdminUpload.mockResolvedValue({ message: 'Document uploaded.' })
+    render(
+      <DetailDocumentUploadPanel workflowType="permit" targetNumber="321" inputId="documents" />,
+    )
+    await openUploadForm()
+    await userEvent.upload(
+      screen.getByLabelText('Document File'),
+      new File(['test'], 'test.pdf', { type: 'application/pdf' }),
+    )
+    fireEvent.change(screen.getByLabelText(/Document description/), {
+      target: { value: 'x'.repeat(251) },
+    })
+    await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
+    expect(screen.getByText('Document description must be 250 characters or fewer.')).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Submit upload' })).not.toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText(/Document description/), {
+      target: { value: 'Valid description' },
+    })
+    await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
+    fireEvent.change(screen.getByLabelText(/Document description/), {
+      target: { value: 'Unsupported \u2603' },
+    })
+    expect(screen.getByRole('button', { name: 'Submit upload' })).toBeDisabled()
+    expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
+    fireEvent.change(screen.getByLabelText(/Document description/), { target: { value: '' } })
+    await userEvent.click(screen.getByRole('button', { name: 'Submit upload' }))
+    await waitFor(() =>
+      expect(mockedSubmitAdminUpload).toHaveBeenCalledWith(
+        'permit',
+        expect.objectContaining({ fileDescription: '' }),
+      ),
+    )
+  })
+
+  it('keeps descriptions with their files when files are removed or replaced', async () => {
+    render(
+      <DetailDocumentUploadPanel workflowType="permit" targetNumber="321" inputId="documents" />,
+    )
+    await openUploadForm()
+    const first = new File(['first'], 'first.pdf', { type: 'application/pdf' })
+    const second = new File(['second'], 'second.pdf', { type: 'application/pdf' })
+    await userEvent.upload(screen.getByLabelText('Document File'), [first, second])
+    await userEvent.type(screen.getByLabelText(/Document description for first.pdf/), 'First')
+    await userEvent.type(screen.getByLabelText(/Document description for second.pdf/), 'Second')
+    await userEvent.click(screen.getAllByRole('button', { name: 'Remove' })[0])
+    expect(screen.queryByLabelText(/Document description for first.pdf/)).not.toBeInTheDocument()
+    expect(screen.getByLabelText(/Document description for second.pdf/)).toHaveValue('Second')
+    await userEvent.upload(screen.getByLabelText('Document File'), first)
+    expect(screen.getByLabelText(/Document description for first.pdf/)).toHaveValue('')
+    expect(screen.getByLabelText(/Document description for second.pdf/)).toHaveValue('Second')
+    await userEvent.upload(screen.getByLabelText('Document File'), second)
+    expect(screen.getByLabelText(/Document description for second.pdf/)).toHaveValue('')
   })
 
   it('keeps Review upload enabled and shows the required file error on click', async () => {

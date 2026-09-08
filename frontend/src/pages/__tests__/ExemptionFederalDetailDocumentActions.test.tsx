@@ -537,7 +537,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     await selectDetailTab('Documents')
 
     await openDocumentUploadModal()
-    expect(screen.getByLabelText(/Document description/)).toBeInTheDocument()
+    expect(screen.getByLabelText('Document File')).toBeInTheDocument()
   })
 
   it('renders semantic empty states for empty exemption detail collections', async () => {

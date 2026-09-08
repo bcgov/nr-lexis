@@ -239,6 +239,7 @@ type ClientDataSummaryProps = {
   clientData: ApplicationClientData | null
   isLoading: boolean
   detailFields?: Array<[string, string]>
+  trailingDetailFields?: Array<[string, string]>
 }
 
 function ClientDataSummary({
@@ -247,6 +248,7 @@ function ClientDataSummary({
   clientData,
   isLoading,
   detailFields,
+  trailingDetailFields,
 }: ClientDataSummaryProps) {
   const clientLookupMessage = clientData?.notfound ?? ''
   const clientLookupMessageKey = `${clientData?.clientNumber ?? ''}:${clientLookupMessage}`
@@ -254,8 +256,13 @@ function ClientDataSummary({
     string | null
   >(null)
   const persistedDetailFields = detailFields ?? []
+  const persistedTrailingDetailFields = trailingDetailFields ?? []
 
-  if (!clientData && persistedDetailFields.length === 0) {
+  if (
+    !clientData &&
+    persistedDetailFields.length === 0 &&
+    persistedTrailingDetailFields.length === 0
+  ) {
     return isLoading ? <InlineLoading description={`Loading ${title.toLowerCase()}...`} /> : null
   }
 
@@ -287,6 +294,7 @@ function ClientDataSummary({
                 ['Email', displayValue(clientData.email)],
               ]
             : []),
+          ...persistedTrailingDetailFields,
         ].map(([label, value]) => (
           <div key={label} className="detail-field-item">
             <dt className="detail-field-label">{label}</dt>
@@ -3638,6 +3646,8 @@ const ProvincialApplicationDetailsPage = () => {
     ['Applicant type', ownerApplicantTypeLabel],
     ['Client location', ownerClientLocationDisplay],
     ['Contact name', summaryForm?.ownerContactName ?? ''],
+  ]
+  const ownerClientTrailingDetailFields: Array<[string, string]> = [
     ['I am an agent', summaryForm?.applicantTypeCode === 'A' ? 'Yes' : 'No'],
   ]
   const ownerClientSummaryContent = (
@@ -3647,6 +3657,7 @@ const ProvincialApplicationDetailsPage = () => {
       clientData={ownerClientData}
       isLoading={isLoadingOwnerClientData}
       detailFields={ownerClientDetailFields}
+      trailingDetailFields={ownerClientTrailingDetailFields}
     />
   )
   const agentClientDetailFields: Array<[string, string]> = [
@@ -4320,21 +4331,21 @@ const ProvincialApplicationDetailsPage = () => {
                                   }
                                 />
                               )}
-                              <Checkbox
-                                id="applicationOwnerAgentUsedEdit"
-                                labelText="I am an agent"
-                                checked={summaryForm.applicantTypeCode === 'A'}
-                                disabled={isSavingSummary || !canChangeApplicantType}
-                                onChange={(_, { checked }) =>
-                                  onOwnerApplicantTypeChange(checked ? 'A' : 'O')
-                                }
-                              />
                             </div>
                             <ClientDataSummary
                               title="Owner client details"
                               showTitle={false}
                               clientData={ownerClientData}
                               isLoading={isLoadingOwnerClientData}
+                            />
+                            <Checkbox
+                              id="applicationOwnerAgentUsedEdit"
+                              labelText="I am an agent"
+                              checked={summaryForm.applicantTypeCode === 'A'}
+                              disabled={isSavingSummary || !canChangeApplicantType}
+                              onChange={(_, { checked }) =>
+                                onOwnerApplicantTypeChange(checked ? 'A' : 'O')
+                              }
                             />
                             <div className="legacy-search-actions">
                               <Button

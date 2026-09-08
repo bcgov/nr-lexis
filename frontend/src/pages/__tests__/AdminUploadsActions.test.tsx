@@ -127,7 +127,10 @@ describe('Admin upload workflow smoke', () => {
     expect(screen.getByRole('columnheader', { name: 'Target' })).toBeInTheDocument()
     expect(screen.getAllByText('Permit 5001').length).toBeGreaterThan(0)
     expect(screen.getByText(/PDF \| 13 B \| Added/)).toBeInTheDocument()
-    await userEvent.type(screen.getByLabelText('Document description'), 'Permit evidence')
+    await userEvent.type(
+      screen.getByLabelText(/Document description for permit\.pdf/),
+      ' Permit evidence ',
+    )
     await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
     await userEvent.click(screen.getByRole('button', { name: 'Submit upload' }))
 
@@ -556,6 +559,14 @@ describe('Admin upload workflow smoke', () => {
     const permitDocument = new File(['permit upload'], 'permit.pdf', { type: 'application/pdf' })
     const scaleDocument = new File(['scale upload'], 'scale.csv', { type: 'text/csv' })
     await userEvent.upload(screen.getByLabelText('Document File'), [permitDocument, scaleDocument])
+    await userEvent.type(
+      screen.getByLabelText(/Document description for permit\.pdf/),
+      ' Permit evidence ',
+    )
+    await userEvent.type(
+      screen.getByLabelText(/Document description for scale\.csv/),
+      'Scale evidence',
+    )
 
     expect(screen.getAllByText('permit.pdf').length).toBeGreaterThan(0)
     expect(screen.getAllByText('scale.csv').length).toBeGreaterThan(0)
@@ -589,6 +600,78 @@ describe('Admin upload workflow smoke', () => {
     await userEvent.clear(screen.getByLabelText('Filter queued files'))
     await userEvent.click(screen.getByRole('button', { name: 'Submit upload' }))
     await waitFor(() => expect(mockedSubmitAdminUpload).toHaveBeenCalledTimes(2))
+    expect(mockedSubmitAdminUpload).toHaveBeenNthCalledWith(
+      1,
+      'permit',
+      expect.objectContaining({ file: permitDocument, fileDescription: 'Permit evidence' }),
+    )
+    expect(mockedSubmitAdminUpload).toHaveBeenNthCalledWith(
+      2,
+      'permit',
+      expect.objectContaining({ file: scaleDocument, fileDescription: 'Scale evidence' }),
+    )
+  })
+
+  it('validates each document description and retains a corrected value through review', async () => {
+    mockUploadAccess('/filePermitUpload')
+
+    renderPage('/admin/uploads?type=permit&permitNumber=5001')
+
+    const file = new File(['permit upload'], 'permit.pdf', { type: 'application/pdf' })
+    await userEvent.upload(screen.getByLabelText('Document File'), file)
+
+    const descriptionInput = screen.getByLabelText(/Document description for permit\.pdf/)
+    fireEvent.change(descriptionInput, { target: { value: 'x'.repeat(251) } })
+    expect(screen.getByText('Document description must be 250 characters or fewer.')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Review upload' })).toBeDisabled()
+
+    await userEvent.clear(descriptionInput)
+    await userEvent.type(descriptionInput, ' Corrected description ')
+    expect(screen.getByRole('button', { name: 'Review upload' })).toBeEnabled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
+    expect(screen.getByLabelText(/Document description for permit\.pdf/)).toHaveValue(
+      ' Corrected description ',
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Submit upload' }))
+
+    await waitFor(() => {
+      expect(mockedSubmitAdminUpload).toHaveBeenCalledWith(
+        'permit',
+        expect.objectContaining({ file, fileDescription: 'Corrected description' }),
+      )
+    })
+  })
+
+  it('locks completed file descriptions while allowing a failed file to be corrected and retried', async () => {
+    mockUploadAccess('/filePermitUpload')
+    mockedSubmitAdminUpload
+      .mockResolvedValueOnce({})
+      .mockRejectedValueOnce(new Error('Upload failed'))
+    renderPage('/admin/uploads?type=permit&permitNumber=5001')
+    const first = new File(['first'], 'first.pdf', { type: 'application/pdf' })
+    const second = new File(['second'], 'second.pdf', { type: 'application/pdf' })
+    await userEvent.upload(screen.getByLabelText('Document File'), [first, second])
+    await userEvent.type(screen.getByLabelText(/Document description for first.pdf/), 'First')
+    await userEvent.type(screen.getByLabelText(/Document description for second.pdf/), 'Second')
+    await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Submit upload' }))
+    await waitFor(() =>
+      expect(screen.getByLabelText(/Document description for second.pdf/)).toBeEnabled(),
+    )
+    expect(screen.getByLabelText(/Document description for first.pdf/)).toBeDisabled()
+    expect(screen.getByLabelText(/Document description for first.pdf/)).toHaveValue('First')
+    await userEvent.clear(screen.getByLabelText(/Document description for second.pdf/))
+    await userEvent.type(
+      screen.getByLabelText(/Document description for second.pdf/),
+      'Corrected second',
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Submit upload' }))
+    await waitFor(() => expect(mockedSubmitAdminUpload).toHaveBeenCalledTimes(3))
+    expect(mockedSubmitAdminUpload).toHaveBeenLastCalledWith(
+      'permit',
+      expect.objectContaining({ file: second, fileDescription: 'Corrected second' }),
+    )
   })
 
   it('replaces queued document uploads with the same file name', async () => {
@@ -616,7 +699,10 @@ describe('Admin upload workflow smoke', () => {
     ).toHaveAttribute('aria-current', 'step')
     expect(screen.getByText(/PDF \| 25 B \| Added/)).toBeInTheDocument()
 
-    await userEvent.type(screen.getByLabelText('Document description'), 'Permit evidence')
+    await userEvent.type(
+      screen.getByLabelText(/Document description for permit\.pdf/),
+      'Permit evidence',
+    )
     await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
     expect(screen.getByText('Showing 1 of 1 file')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Submit upload' }))

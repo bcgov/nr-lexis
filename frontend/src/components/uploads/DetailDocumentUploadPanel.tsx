@@ -101,7 +101,6 @@ const DetailDocumentUploadPanel = ({
   const copy = UPLOAD_COPY[workflowType]
   const disabledReason =
     disabledReasonProp ?? 'Your session does not include the required upload permission.'
-  const [fileDescription, setFileDescription] = useState('')
   const [salesInvoiceNumber, setSalesInvoiceNumber] = useState('')
   const [invoiceExportValue, setInvoiceExportValue] = useState('')
   const [invoiceConversionRateOverride, setInvoiceConversionRateOverride] = useState<string | null>(
@@ -206,7 +205,10 @@ const DetailDocumentUploadPanel = ({
     INVOICE_AMOUNT_DECIMAL_PLACES,
   )
   const showInvoiceFieldErrors = workflowType === 'invoice' && showInvoiceValidationErrors
-  const descriptionError = validateDocumentUploadDescription(fileDescription)
+  const hasDescriptionError = uploadQueue.some(
+    (item) =>
+      item.status !== 'complete' && !!validateDocumentUploadDescription(item.fileDescription ?? ''),
+  )
   const uploadInvalidText =
     invalidUploadCount > 0
       ? `${invalidUploadCount} queued file${invalidUploadCount === 1 ? ' needs' : 's need'} attention and will be excluded from review.`
@@ -218,12 +220,11 @@ const DetailDocumentUploadPanel = ({
     !!targetNumber.trim() &&
     validatedUploadCount > 0 &&
     pendingValidationCount === 0 &&
-    !descriptionError &&
+    !hasDescriptionError &&
     invoiceValidationErrors.length === 0
   const canSubmit = canReviewUpload
   const isDirty =
     uploadQueue.some((item) => item.status !== 'complete') ||
-    fileDescription.trim().length > 0 ||
     (workflowType === 'invoice' &&
       (salesInvoiceNumber.trim().length > 0 ||
         invoiceExportValue.trim().length > 0 ||
@@ -302,7 +303,7 @@ const DetailDocumentUploadPanel = ({
   }> => {
     const baseRequest = {
       file,
-      fileDescription: fileDescription.trim(),
+      fileDescription: '',
     }
 
     if (workflowType === 'application') {
@@ -391,7 +392,6 @@ const DetailDocumentUploadPanel = ({
     Array.from(files).forEach((file, index) => {
       const validationMessages = [
         validateDocumentUploadFile(file),
-        descriptionError,
         !targetNumber.trim()
           ? `${copy.targetLabel} number is required before validating documents.`
           : '',
@@ -402,6 +402,7 @@ const DetailDocumentUploadPanel = ({
       nextItemsByFileName.set(uploadQueueFileKey(file), {
         id: `${queuedAt}-${index}-${file.name}-${file.size}`,
         file,
+        fileDescription: '',
         workflowLabel: copy.workflowLabel,
         queuedAt,
         status: validationMessage ? ('invalid' as const) : ('validating' as const),
@@ -463,6 +464,15 @@ const DetailDocumentUploadPanel = ({
     setShowFileValidationError(true)
   }
 
+  const updateFileDescription = (id: string, fileDescription: string): void => {
+    if (disabled || isSubmitting) return
+    setUploadQueue((current) =>
+      current.map((item) =>
+        item.id === id && !item.submitted ? { ...item, fileDescription } : item,
+      ),
+    )
+  }
+
   const clearQueueItems = (): void => {
     validationRequestsRef.current.clear()
     setUploadQueue([])
@@ -478,7 +488,6 @@ const DetailDocumentUploadPanel = ({
 
   const resetUpload = (): void => {
     clearQueuedFiles()
-    setFileDescription('')
     setSalesInvoiceNumber('')
     setInvoiceExportValue('')
     setInvoiceConversionRateOverride(null)
@@ -492,7 +501,6 @@ const DetailDocumentUploadPanel = ({
 
   const resetUploadAfterSuccess = (): void => {
     clearQueueItems()
-    setFileDescription('')
     setSalesInvoiceNumber('')
     setInvoiceExportValue('')
     setInvoiceConversionRateOverride(null)
@@ -503,14 +511,14 @@ const DetailDocumentUploadPanel = ({
   }
 
   const submitQueuedFile = async (
-    file: File,
+    item: UploadQueueItem,
   ): Promise<{
     message: string
     details: UploadQueueReviewDetails
   }> => {
     const baseRequest = {
-      file,
-      fileDescription: fileDescription.trim(),
+      file: item.file,
+      fileDescription: (item.fileDescription ?? '').trim(),
     }
 
     if (workflowType === 'application') {
@@ -566,6 +574,11 @@ const DetailDocumentUploadPanel = ({
       return
     }
 
+    if (hasDescriptionError) {
+      setErrorMessage('Correct the document descriptions before submitting the upload.')
+      return
+    }
+
     if (invoiceValidationErrors.length > 0) {
       setShowInvoiceValidationErrors(true)
       setErrorMessage(invoiceValidationErrors.join(' '))
@@ -600,7 +613,7 @@ const DetailDocumentUploadPanel = ({
       setQueueItemStatus(item.id, 'uploading', '', lockedTargetSummary, undefined, true)
 
       try {
-        const result = await submitQueuedFile(item.file)
+        const result = await submitQueuedFile(item)
         successCount += 1
         lastSuccessMessage = result.message
         setQueueItemStatus(item.id, 'complete', result.message, lockedTargetSummary, result.details)
@@ -658,8 +671,8 @@ const DetailDocumentUploadPanel = ({
       return
     }
 
-    if (descriptionError) {
-      setErrorMessage(descriptionError)
+    if (hasDescriptionError) {
+      setErrorMessage('Correct the document descriptions before reviewing the upload.')
       return
     }
 
@@ -812,17 +825,6 @@ const DetailDocumentUploadPanel = ({
             variant="fspts"
             onFilesSelected={addFilesToQueue}
           />
-          <TextArea
-            id={`${inputId}Description`}
-            labelText="Document description (optional)"
-            value={fileDescription}
-            onChange={(event) => setFileDescription(event.target.value)}
-            invalid={!!descriptionError}
-            invalidText={descriptionError}
-            maxCount={250}
-            rows={3}
-            disabled={disabled}
-          />
         </div>
       )}
 
@@ -841,6 +843,24 @@ const DetailDocumentUploadPanel = ({
           showReviewQueueTable={false}
           showReviewAccordionHeader={false}
           hideActions
+          renderFileDescription={(item) => {
+            const description = item.fileDescription ?? ''
+            const error = validateDocumentUploadDescription(description)
+            return (
+              <TextArea
+                id={`${inputId}Description-${encodeURIComponent(item.id)}`}
+                labelText={`Document description for ${item.file.name} (optional)`}
+                value={description}
+                onChange={(event) => updateFileDescription(item.id, event.target.value)}
+                invalid={!!error}
+                invalidText={error}
+                enableCounter
+                maxCount={250}
+                rows={2}
+                disabled={disabled || isSubmitting || !!item.submitted}
+              />
+            )
+          }}
           onSubmit={() => void onSubmitUpload()}
           onReset={resetUpload}
           onClear={clearQueuedFiles}

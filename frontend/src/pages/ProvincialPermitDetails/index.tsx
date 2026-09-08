@@ -582,12 +582,31 @@ const withUpdatedPermitDetail = (
     remarks: form.permitRemarks.trim() || null,
     orgUnitNumber,
     region: regionChanged ? selectedRegionLabel || currentDetail.region : currentDetail.region,
-    ownerClientNumber: form.ownerClientNumber.trim() || null,
-    ownerClientLocationCode: form.ownerClientLocation.trim() || null,
-    applicantClientNumber: form.agentClientNumber.trim() || null,
-    agentClientLocationCode: form.agentClientLocation.trim() || null,
+    ownerClientNumber: currentDetail.blanketOic
+      ? form.ownerClientNumber.trim() || null
+      : currentDetail.ownerClientNumber,
+    ownerClientLocationCode: currentDetail.blanketOic
+      ? form.ownerClientLocation.trim() || null
+      : currentDetail.ownerClientLocationCode,
+    applicantClientNumber: currentDetail.blanketOic
+      ? form.agentClientNumber.trim() || null
+      : currentDetail.applicantClientNumber,
+    agentClientLocationCode: currentDetail.blanketOic
+      ? form.agentClientLocation.trim() || null
+      : currentDetail.agentClientLocationCode,
   }
 }
+
+const withPersistedPermitClientValues = (
+  currentDetail: ProvincialPermitDetail,
+  persistedDetail: ProvincialPermitDetail,
+): ProvincialPermitDetail => ({
+  ...currentDetail,
+  ownerClientNumber: persistedDetail.ownerClientNumber,
+  ownerClientLocationCode: persistedDetail.ownerClientLocationCode,
+  applicantClientNumber: persistedDetail.applicantClientNumber,
+  agentClientLocationCode: persistedDetail.agentClientLocationCode,
+})
 
 const withUpdatedPermitShipping = (
   currentDetail: ProvincialPermitDetail,
@@ -653,6 +672,7 @@ const ProvincialPermitDetailsPage = () => {
   const [tabsData, setTabsData] = useState<ProvincialPermitDetailTabsData | null>(null)
   const [ownerClientData, setOwnerClientData] = useState<ApplicationClientData | null>(null)
   const [agentClientData, setAgentClientData] = useState<ApplicationClientData | null>(null)
+  const [agentUsed, setAgentUsed] = useState(false)
   const [isClientDataLoading, setIsClientDataLoading] = useState(false)
   const [clientDataErrorMessage, setClientDataErrorMessage] = useState('')
   const [clientDataRequested, setClientDataRequested] = useState(false)
@@ -839,6 +859,7 @@ const ProvincialPermitDetailsPage = () => {
     setInvoiceRows([])
     setClientDataRequested(false)
     setClientDataErrorMessage('')
+    setAgentUsed(false)
     setAvailablePermitApplications([])
     setPermitApplicationToAdd('')
     setHasLoadedAvailablePermitApplications(false)
@@ -984,6 +1005,7 @@ const ProvincialPermitDetailsPage = () => {
         }
         setDetail(response)
         setPermitForm(response ? buildPermitDetailForm(response) : null)
+        setAgentUsed(Boolean(response?.applicantClientNumber?.trim()))
         setIsEditingPermit(false)
         setIsEditingShipping(false)
 
@@ -1129,10 +1151,12 @@ const ProvincialPermitDetailsPage = () => {
     }
   }, [permitNumber])
 
-  const hasPermitAgent = Boolean(detail?.applicantClientNumber?.trim())
+  const hasPermitAgent = agentUsed
   const hasGbmsHistory = (tabsData?.gbmsEvents.length ?? 0) > 0 || Boolean(gbmsErrorMessage)
+  // Legacy retains the invoice upload workflow but hides Invoices from permit navigation.
   const permitDetailTabs = PERMIT_DETAIL_TABS.filter(
-    ({ id }) => (id !== 'agent' || hasPermitAgent) && (id !== 'gbms' || hasGbmsHistory),
+    ({ id }) =>
+      id !== 'invoices' && (id !== 'agent' || hasPermitAgent) && (id !== 'gbms' || hasGbmsHistory),
   )
   const activePermitTabId = permitDetailTabs.some(({ id }) => id === selectedPermitTabId)
     ? selectedPermitTabId
@@ -1524,8 +1548,9 @@ const ProvincialPermitDetailsPage = () => {
   const canCorrectPermitSubmitDate = canSavePermit && canReviewPermits && permitStatusCode === 'ACT'
   const canEditShipping = canMutatePermit && permitStatusCode !== 'CAN'
   const invoiceMaterialLocked = permitStatusCode === 'COM' || permitStatusCode === 'PPD'
-  const ownerEditMode = isEditingPermit && !invoiceMaterialLocked
-  const canEditOwnerFields = canSavePermit && !invoiceMaterialLocked
+  const canEditPermitClients =
+    canSavePermit && !invoiceMaterialLocked && detail?.blanketOic === true
+  const ownerEditMode = isEditingPermit && canEditPermitClients
   const canEnterPaymentReceipt =
     canReviewPermits && permitStatusCode === 'PPD' && !detail?.receiptNumber?.trim()
   const canSendPermitApproval =
@@ -1600,11 +1625,15 @@ const ProvincialPermitDetailsPage = () => {
     () => (detail ? buildPermitDetailForm(detail) : null),
     [detail],
   )
+  const permitAgentToggleDirty =
+    isEditingPermit &&
+    !!permitBaselineForm &&
+    agentUsed !== Boolean(permitBaselineForm.agentClientNumber.trim())
   const permitDetailDirty =
     isEditingPermit &&
     !!permitForm &&
     !!permitBaselineForm &&
-    permitFormSectionChanged(permitForm, permitBaselineForm, false)
+    (permitFormSectionChanged(permitForm, permitBaselineForm, false) || permitAgentToggleDirty)
   const permitShippingDirty =
     isEditingShipping &&
     !!permitForm &&
@@ -1983,6 +2012,15 @@ const ProvincialPermitDetailsPage = () => {
     })
   }
 
+  const setPermitAgentUsed = (checked: boolean): void => {
+    setAgentUsed(checked)
+    if (!checked) {
+      setPermitForm((current) =>
+        current ? { ...current, agentClientNumber: '', agentClientLocation: '' } : current,
+      )
+    }
+  }
+
   const resetPermitFormSection = (shippingFields: boolean): void => {
     if (detail) {
       setPermitForm((current) =>
@@ -2108,6 +2146,18 @@ const ProvincialPermitDetailsPage = () => {
           return false
         }
 
+        let persistedDetail: ProvincialPermitDetail | null = null
+        if (resolvedPermitNumber) {
+          try {
+            persistedDetail = await fetchProvincialPermitDetail(resolvedPermitNumber)
+          } catch (error) {
+            console.warn('Unable to refresh persisted permit client details.', error)
+          }
+          if (!isLatestRequest()) {
+            return false
+          }
+        }
+
         const detailWithPermitChanges = withUpdatedPermitDetail(
           detail,
           confirmedRequest,
@@ -2120,6 +2170,11 @@ const ProvincialPermitDetailsPage = () => {
             : detailWithPermitChanges,
           result,
         )
+        const persistedUpdatedDetail =
+          persistedDetail == null
+            ? updatedDetail
+            : withPersistedPermitClientValues(updatedDetail, persistedDetail)
+        setAgentUsed(Boolean(persistedUpdatedDetail.applicantClientNumber?.trim()))
         setDetail((current) => {
           if (!current) return current
           const currentWithPermitChanges = withUpdatedPermitDetail(
@@ -2128,17 +2183,20 @@ const ProvincialPermitDetailsPage = () => {
             editablePermitStatusOptions,
             editablePermitRegionOptions,
           )
-          return withPermitMutationResult(
+          const currentUpdatedDetail = withPermitMutationResult(
             includeShipping
               ? withUpdatedPermitShipping(currentWithPermitChanges, confirmedRequest)
               : currentWithPermitChanges,
             result,
           )
+          return persistedDetail == null
+            ? currentUpdatedDetail
+            : withPersistedPermitClientValues(currentUpdatedDetail, persistedDetail)
         })
         setPermitForm((current) => {
           const savedForm = includeShipping
-            ? buildPermitDetailForm(updatedDetail)
-            : mergePermitFormSection(current, buildPermitDetailForm(updatedDetail), false)
+            ? buildPermitDetailForm(persistedUpdatedDetail)
+            : mergePermitFormSection(current, buildPermitDetailForm(persistedUpdatedDetail), false)
           return deferStatusTransition
             ? { ...savedForm, permitStatus: targetPermitStatus }
             : savedForm
@@ -3221,6 +3279,7 @@ const ProvincialPermitDetailsPage = () => {
   const onDiscardPermitChanges = useCallback(() => {
     if (detail) {
       setPermitForm(buildPermitDetailForm(detail))
+      setAgentUsed(Boolean(detail.applicantClientNumber?.trim()))
     }
     setIsEditingPermit(false)
     setIsEditingShipping(false)
@@ -3773,22 +3832,6 @@ const ProvincialPermitDetailsPage = () => {
                               'Current permit pieces',
                               true,
                             )}
-                            <TextInput
-                              id="permit-federalPermitNumber"
-                              labelText="Federal permit number"
-                              value={displayValue(detail.federalPermitNumber)}
-                              disabled
-                            />
-                            {renderPermitTextInput(
-                              'agentClientNumber',
-                              'Agent client number',
-                              invoiceMaterialLocked,
-                            )}
-                            {renderPermitTextInput(
-                              'agentClientLocation',
-                              'Agent location',
-                              invoiceMaterialLocked,
-                            )}
                           </div>
                           <div className="legacy-search-grid">
                             {renderPermitTextArea('permitRemarks', 'Remarks', false, 254)}
@@ -3825,18 +3868,6 @@ const ProvincialPermitDetailsPage = () => {
                             {
                               label: 'Current permit pieces',
                               value: displayValue(detail.numberOfPieces),
-                            },
-                            {
-                              label: 'Federal permit number',
-                              value: displayValue(detail.federalPermitNumber),
-                            },
-                            {
-                              label: 'Agent client number',
-                              value: displayValue(detail.applicantClientNumber),
-                            },
-                            {
-                              label: 'Agent location',
-                              value: displayValue(detail.agentClientLocationCode),
                             },
                             { label: 'Remarks', value: displayValue(detail.remarks) },
                           ]}
@@ -3987,6 +4018,7 @@ const ProvincialPermitDetailsPage = () => {
                                 disabled={isSavingPermit}
                                 onClick={() => {
                                   resetPermitFormSection(false)
+                                  setAgentUsed(Boolean(detail.applicantClientNumber?.trim()))
                                   setIsEditingPermit(false)
                                 }}
                               >
@@ -4011,6 +4043,12 @@ const ProvincialPermitDetailsPage = () => {
                           isLoading={isClientDataLoading}
                           errorMessage={activePermitTabId === 'owner' ? clientDataErrorMessage : ''}
                         />
+                        <Checkbox
+                          id="permit-agent-used"
+                          labelText="I'm an agent"
+                          checked={agentUsed}
+                          disabled
+                        />
                       </Column>
                     )}
                     {ownerEditMode && permitForm && (
@@ -4029,10 +4067,17 @@ const ProvincialPermitDetailsPage = () => {
                               invoiceMaterialLocked,
                             )}
                           </div>
+                          <Checkbox
+                            id="permit-agent-used"
+                            labelText="I'm an agent"
+                            checked={agentUsed}
+                            disabled={invoiceMaterialLocked}
+                            onChange={(_, { checked }) => setPermitAgentUsed(Boolean(checked))}
+                          />
                         </Tile>
                       </Column>
                     )}
-                    {canEditOwnerFields && (
+                    {canEditPermitClients && (
                       <Column sm={4} md={8} lg={16}>
                         <div className="legacy-search-actions">
                           {isEditingPermit ? (
@@ -4058,6 +4103,7 @@ const ProvincialPermitDetailsPage = () => {
                                 disabled={isSavingPermit}
                                 onClick={() => {
                                   resetPermitFormSection(false)
+                                  setAgentUsed(Boolean(detail.applicantClientNumber?.trim()))
                                   setIsEditingPermit(false)
                                 }}
                               >
@@ -4070,6 +4116,7 @@ const ProvincialPermitDetailsPage = () => {
                               size="sm"
                               onClick={() => {
                                 resetPermitFormSection(false)
+                                setAgentUsed(Boolean(detail.applicantClientNumber?.trim()))
                                 setIsEditingPermit(true)
                               }}
                             >
@@ -4084,16 +4131,87 @@ const ProvincialPermitDetailsPage = () => {
                 {hasPermitAgent && (
                   <TabPanel key="agent" className="application-detail-tab-panel">
                     <Grid fullWidth className="application-detail-tab-grid">
-                      <Column sm={4} md={8} lg={16}>
-                        <PermitClientTile
-                          title="Agent"
-                          clientNumber={detail.applicantClientNumber}
-                          locationCode={detail.agentClientLocationCode}
-                          clientData={agentClientData}
-                          isLoading={isClientDataLoading}
-                          errorMessage={activePermitTabId === 'agent' ? clientDataErrorMessage : ''}
-                        />
-                      </Column>
+                      {ownerEditMode && permitForm ? (
+                        <Column sm={4} md={8} lg={16}>
+                          <Tile>
+                            <h2 className="detail-tile-title">Edit agent</h2>
+                            <div className="legacy-search-grid">
+                              {renderPermitTextInput(
+                                'agentClientNumber',
+                                'Agent client number',
+                                invoiceMaterialLocked,
+                              )}
+                              {renderPermitTextInput(
+                                'agentClientLocation',
+                                'Agent location',
+                                invoiceMaterialLocked,
+                              )}
+                            </div>
+                          </Tile>
+                        </Column>
+                      ) : (
+                        <Column sm={4} md={8} lg={16}>
+                          <PermitClientTile
+                            title="Agent"
+                            clientNumber={detail.applicantClientNumber}
+                            locationCode={detail.agentClientLocationCode}
+                            clientData={agentClientData}
+                            isLoading={isClientDataLoading}
+                            errorMessage={
+                              activePermitTabId === 'agent' ? clientDataErrorMessage : ''
+                            }
+                          />
+                        </Column>
+                      )}
+                      {canEditPermitClients && (
+                        <Column sm={4} md={8} lg={16}>
+                          <div className="legacy-search-actions">
+                            {isEditingPermit ? (
+                              <>
+                                <Button
+                                  kind="primary"
+                                  size="sm"
+                                  disabled={
+                                    isSavingPermit ||
+                                    isPermitOptionsLoading ||
+                                    permitOptionsUnavailable ||
+                                    requiredPermitOptionsMissing ||
+                                    paymentPendingReceiptRequiresCompletion
+                                  }
+                                  renderIcon={isSavingPermit ? PendingIcon : undefined}
+                                  onClick={() => void onSavePermit()}
+                                >
+                                  {isSavingPermit ? 'Saving…' : 'Save permit'}
+                                </Button>
+                                <Button
+                                  kind="tertiary"
+                                  size="sm"
+                                  disabled={isSavingPermit}
+                                  onClick={() => {
+                                    resetPermitFormSection(false)
+                                    setAgentUsed(Boolean(detail.applicantClientNumber?.trim()))
+                                    setIsEditingPermit(false)
+                                  }}
+                                >
+                                  Cancel
+                                </Button>
+                              </>
+                            ) : (
+                              <Button
+                                kind="tertiary"
+                                size="sm"
+                                onClick={() => {
+                                  resetPermitFormSection(false)
+                                  setAgentUsed(true)
+                                  setIsEditingPermit(true)
+                                }}
+                              >
+                                Edit agent
+                              </Button>
+                            )}
+                          </div>
+                        </Column>
+                      )}
                     </Grid>
                   </TabPanel>
                 )}

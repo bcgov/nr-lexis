@@ -32,6 +32,7 @@ type UploadQueuePreviewProps = {
   pendingMessage?: string
   canRemoveItem?: (item: UploadQueueItem) => boolean
   renderCompleteAction?: (item: UploadQueueItem) => ReactNode
+  renderFileDescription?: (item: UploadQueueItem) => ReactNode
   showWorkflowProgress?: boolean
   currentStepId?: 'upload' | 'review'
   validationTitle?: string
@@ -83,6 +84,7 @@ function UploadQueuePreview({
   pendingMessage = 'Not submitted yet.',
   canRemoveItem = () => true,
   renderCompleteAction,
+  renderFileDescription,
   showWorkflowProgress = true,
   currentStepId,
   validationTitle = 'Validation status',
@@ -328,6 +330,7 @@ function UploadQueuePreview({
                               {formatFileType(item.file)} | {formatUploadFileSize(item.file.size)} |
                               Added {formatUploadQueuedAt(item.queuedAt)}
                             </span>
+                            {!isReviewStep && renderFileDescription?.(item)}
                           </div>
                         </td>
                         <td>{item.targetSummary ?? targetSummary}</td>
@@ -377,6 +380,7 @@ function UploadQueuePreview({
                 idPrefix={`${idPrefix}Review`}
                 itemNoun={itemNoun}
                 showHeader={showReviewAccordionHeader}
+                renderFileDescription={renderFileDescription}
               />
             </>
           )}

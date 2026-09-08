@@ -890,6 +890,12 @@ describe('Create Page Core Flows', () => {
     expect(within(ownerDetails).getByText('Owner Forestry Ltd.')).toBeInTheDocument()
     expect(within(ownerDetails).getByText('123 Timber Road')).toBeInTheDocument()
     expect(within(ownerDetails).getByText('owner@example.test')).toBeInTheDocument()
+    expect(
+      within(ownerDetails).queryByRole('heading', {
+        name: 'Owner client details',
+        level: 3,
+      }),
+    ).not.toBeInTheDocument()
     expect(within(ownerDetails).queryByRole('textbox')).not.toBeInTheDocument()
 
     await selectApplicationCreateTab('Agent')
@@ -897,6 +903,12 @@ describe('Create Page Core Flows', () => {
     expect(within(agentDetails).getByText('Agent Export Services')).toBeInTheDocument()
     expect(within(agentDetails).getByText('456 Export Road')).toBeInTheDocument()
     expect(within(agentDetails).getByText('agent@example.test')).toBeInTheDocument()
+    expect(
+      within(agentDetails).queryByRole('heading', {
+        name: 'Agent client details',
+        level: 3,
+      }),
+    ).not.toBeInTheDocument()
     expect(within(agentDetails).queryByRole('textbox')).not.toBeInTheDocument()
 
     expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00011111', '00')

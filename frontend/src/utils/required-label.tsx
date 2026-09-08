@@ -3,7 +3,6 @@ import type { ReactNode } from 'react'
 export const requiredLabel = (label: ReactNode, required = true): NonNullable<ReactNode> =>
   required ? (
     <span className="required-label">
-      {label}
       <span className="required-label__marker" aria-hidden="true">
         <svg viewBox="0 0 16 16" focusable="false">
           <path
@@ -15,6 +14,7 @@ export const requiredLabel = (label: ReactNode, required = true): NonNullable<Re
           />
         </svg>
       </span>
+      {label}
     </span>
   ) : (
     (label ?? '')
