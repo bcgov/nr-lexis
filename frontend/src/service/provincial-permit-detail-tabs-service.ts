@@ -53,6 +53,12 @@ type ProvincialPermitFeeRow = {
   amountDisplay: string
 }
 
+type ProvincialPermitPackageFeeSummary = {
+  packageNumber: string
+  growthType: string
+  totalFeeForPackage: string
+}
+
 type ProvincialPermitEventRow = {
   id: string
   eventDate: string
@@ -78,6 +84,8 @@ export type ProvincialPermitDetailTabsData = {
   packages: ProvincialPermitPackageInfoRow[]
   items: ProvincialPermitItemRow[]
   fees: ProvincialPermitFeeRow[]
+  packageFeeSummaries: ProvincialPermitPackageFeeSummary[]
+  totalFeeVolume: number | null
   gbmsEvents: ProvincialPermitGbmsInvoiceHistoryRow[]
   oicItems: ProvincialPermitEventRow[]
   boicItems: ProvincialPermitEventRow[]
@@ -177,6 +185,8 @@ export const EMPTY_PROVINCIAL_PERMIT_DETAIL_TABS: ProvincialPermitDetailTabsData
   packages: [],
   items: [],
   fees: [],
+  packageFeeSummaries: [],
+  totalFeeVolume: null,
   gbmsEvents: [],
   oicItems: [],
   boicItems: [],
@@ -440,7 +450,13 @@ const fetchCoreTabs = async (
   }
 }
 
-const fetchAllScaleFeeRows = async (permitNumber: string): Promise<unknown[]> => {
+type ProvincialPermitFees = {
+  fees: ProvincialPermitFeeRow[]
+  packageFeeSummaries: ProvincialPermitPackageFeeSummary[]
+  totalFeeVolume: number
+}
+
+const fetchAllScaleFees = async (permitNumber: string): Promise<ProvincialPermitFees> => {
   const path = '/lexis/rpc/permit-details/all-scale-fees'
   try {
     const response = await apiService.getCachedResponse<unknown>(
@@ -460,18 +476,29 @@ const fetchAllScaleFeeRows = async (permitNumber: string): Promise<unknown[]> =>
     if (!Array.isArray(payload.packageList)) {
       throw new Error(`Invalid package fee list response from ${path}`)
     }
+    const volume = asString(payload.totalVolume).trim().replace(/,/g, '')
+    const totalFeeVolume = Number(volume)
+    if (!volume || !Number.isFinite(totalFeeVolume) || totalFeeVolume < 0) {
+      throw new Error(`Invalid total fee volume response from ${path}`)
+    }
 
-    return payload.packageList.flatMap((packageValue, packageIndex) => {
+    const packageFees = payload.packageList.map((packageValue, packageIndex) => {
       const packageFee = recordOrEmpty(packageValue)
       const packageNumber = asString(packageFee.packageNumber)
-      if (!packageNumber || !Array.isArray(packageFee.scaleList)) {
+      const totalFeeForPackage = asString(packageFee.totalFeeForPackage).trim()
+      if (!packageNumber || !totalFeeForPackage || !Array.isArray(packageFee.scaleList)) {
         throw new Error(`Invalid package fee data at index ${packageIndex} from ${path}`)
       }
-      return packageFee.scaleList.map((row) => ({
-        ...recordOrEmpty(row),
-        packageNumber,
-      }))
+      return {
+        summary: { packageNumber, growthType: asString(packageFee.growthType), totalFeeForPackage },
+        rows: packageFee.scaleList.map((row) => ({ ...recordOrEmpty(row), packageNumber })),
+      }
     })
+    return {
+      fees: packageFees.flatMap((entry) => entry.rows).map(normalizeScaleFeeRow),
+      packageFeeSummaries: packageFees.map((entry) => entry.summary),
+      totalFeeVolume,
+    }
   } catch (error) {
     throw toSearchServiceError(`Unable to load permit scale fees from ${path}.`, error)
   }
@@ -525,13 +552,15 @@ const fetchProvincialPermitDetailTabsData = async (
   // GBMS history is optional, but retain concurrent loading for callers that request the full set.
   const gbmsEventsPromise = includeGbms ? fetchGbmsRows(permitNumber, receiptNumber) : null
   const coreTabs = await fetchCoreTabs(permitNumber, blanketOic)
-  const feeRows = includeFees ? await fetchAllScaleFeeRows(permitNumber) : []
+  const feeData = includeFees ? await fetchAllScaleFees(permitNumber) : null
 
   return {
     applications: coreTabs.applications,
     packages: coreTabs.packages,
     items: coreTabs.items,
-    fees: feeRows.map(normalizeScaleFeeRow),
+    fees: feeData?.fees ?? [],
+    packageFeeSummaries: feeData?.packageFeeSummaries ?? [],
+    totalFeeVolume: feeData?.totalFeeVolume ?? null,
     gbmsEvents: gbmsEventsPromise ? await gbmsEventsPromise : [],
     oicItems: [],
     boicItems: [],
@@ -553,17 +582,19 @@ export const fetchProvincialPermitGbmsEvents = async (
 export const fetchProvincialPermitFees = async ({
   permitNumber,
   packageNumbers,
-}: ProvincialPermitFeesRequest): Promise<ProvincialPermitFeeRow[]> => {
+}: ProvincialPermitFeesRequest): Promise<ProvincialPermitFees> => {
   const packageFilter = packageNumbers?.filter(Boolean)
   if (packageFilter && packageFilter.length === 0) {
-    return []
+    return { fees: [], packageFeeSummaries: [], totalFeeVolume: 0 }
   }
-  const feeRows = await fetchAllScaleFeeRows(permitNumber)
-  return feeRows
-    .filter(
-      (row) => !packageFilter || packageFilter.includes(asString(recordOrEmpty(row).packageNumber)),
-    )
-    .map(normalizeScaleFeeRow)
+  const feeData = await fetchAllScaleFees(permitNumber)
+  return {
+    ...feeData,
+    fees: feeData.fees.filter((row) => !packageFilter || packageFilter.includes(row.packageNumber)),
+    packageFeeSummaries: feeData.packageFeeSummaries.filter(
+      (summary) => !packageFilter || packageFilter.includes(summary.packageNumber),
+    ),
+  }
 }
 
 export const fetchProvincialPermitDetailTabs = async (

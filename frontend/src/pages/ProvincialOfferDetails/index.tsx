@@ -15,6 +15,7 @@ import ContentLoadingOverlay from '@/components/ContentLoadingOverlay'
 import DetailBreadcrumb from '@/components/DetailBreadcrumb'
 import DetailLoadError from '@/components/DetailLoadError'
 import IsoDatePicker from '../../components/IsoDatePicker'
+import OfferScaleDetailAction from '@/components/OfferScaleDetailAction'
 import PageHeader from '@/components/PageHeader'
 import PendingIcon from '@/components/PendingIcon'
 import SearchableSelect from '../../components/SearchableSelect'
@@ -267,7 +268,13 @@ const ProvincialOfferDetailsPage = () => {
         ) ?? undefined,
       offerVolume: firstValidationError(
         () =>
-          offerDecimalStorageFieldError(form?.offerVolume ?? '', OFFER_VOLUME_MAX, 'Offer volume'),
+          offerDecimalStorageFieldError(
+            form?.offerVolume ?? '',
+            OFFER_VOLUME_MAX,
+            'Offer volume',
+            false,
+            true,
+          ),
         () => {
           const currentVolume = form?.offerVolume ?? ''
           const originalVolume = detail?.offerVolume == null ? '' : String(detail.offerVolume)
@@ -346,33 +353,6 @@ const ProvincialOfferDetailsPage = () => {
     setShowAllValidationErrors(false)
     setStatus(null)
     setIsEditing(false)
-  }
-
-  const onViewScaleDetail = (): void => {
-    const applicationNumber = form?.applicationNumber.trim()
-    const packageNumber = form?.packageNumber.trim()
-    if (!applicationNumber || !packageNumber) {
-      return
-    }
-    const isFederal = detail?.exportJurisdictionCode?.trim().toUpperCase() === 'F'
-    const params = new URLSearchParams(
-      isFederal
-        ? { packageFilter: packageNumber }
-        : { tab: 'items', packageNumber, section: 'scales' },
-    )
-    const applicationPath = isFederal
-      ? `/federal/application/${applicationNumber}`
-      : `/provincial/application/${applicationNumber}`
-    navigate(`${applicationPath}?${params}`, {
-      state: withDetailReturnTo(
-        navigationState,
-        {
-          label: 'Provincial offer detail',
-          to: locationPath(location),
-        },
-        detailReturnTo,
-      ),
-    })
   }
 
   const onSave = async (): Promise<boolean> => {
@@ -587,14 +567,10 @@ const ProvincialOfferDetailsPage = () => {
                 />
               </div>
               <div className="legacy-search-actions">
-                <Button
-                  kind="ghost"
-                  size="sm"
-                  disabled={!form.applicationNumber.trim() || !form.packageNumber.trim()}
-                  onClick={onViewScaleDetail}
-                >
-                  See Scale Detail
-                </Button>
+                <OfferScaleDetailAction
+                  target={{ offerNumber: String(currentDetail.offerNumber) }}
+                  disabled={!currentDetail.packageNumber?.trim()}
+                />
               </div>
             </fieldset>
 
@@ -743,16 +719,18 @@ const ProvincialOfferDetailsPage = () => {
             <fieldset className="legacy-form-fieldset offer-form-section">
               <legend>Approval</legend>
               <div className="legacy-search-grid">
-                <IsoDatePicker
-                  id="offerTeacReviewDate"
-                  labelText="TEAC review date"
-                  value={form.teacReviewDate}
-                  invalid={canEditScheduleFields && !!fieldError('teacReviewDate')}
-                  invalidText={fieldError('teacReviewDate')}
-                  onBlur={() => markFieldTouched('teacReviewDate')}
-                  onChange={(value) => updateFormField('teacReviewDate', value)}
-                  disabled={!canEditScheduleFields}
-                />
+                {detail.canEditScheduleDates && (
+                  <IsoDatePicker
+                    id="offerTeacReviewDate"
+                    labelText="TEAC review date"
+                    value={form.teacReviewDate}
+                    invalid={canEditScheduleFields && !!fieldError('teacReviewDate')}
+                    invalidText={fieldError('teacReviewDate')}
+                    onBlur={() => markFieldTouched('teacReviewDate')}
+                    onChange={(value) => updateFormField('teacReviewDate', value)}
+                    disabled={!canEditScheduleFields}
+                  />
+                )}
                 <SearchableSelect
                   id="offerFairOfferIndicator"
                   labelText="Fair market value"

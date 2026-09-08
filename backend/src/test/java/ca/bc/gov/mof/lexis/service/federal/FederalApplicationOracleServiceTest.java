@@ -37,6 +37,8 @@ import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
@@ -71,6 +73,39 @@ class FederalApplicationOracleServiceTest {
   @BeforeEach
   void setUpLockSnapshot() {
     lenient().when(editLockService.lockedApplicationNumbers(any())).thenReturn(Set.of());
+  }
+
+  @ParameterizedTest
+  @CsvSource({"' pkg-903 ',PKG-903", "' pKg_% ',PKG_%", "'  ',", ","})
+  void searchAndCountShouldNormalizePackageNumberLikeLegacy(String packageNumber, String expected) {
+    FederalApplicationSearchCriteria criteria =
+        new FederalApplicationSearchCriteria(
+            null,
+            packageNumber,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            List.of(),
+            0,
+            25);
+    when(repository.search(any(FederalApplicationSearchCriteria.class))).thenReturn(page(List.of(), 0));
+
+    service.search(criteria);
+    service.count(criteria);
+
+    ArgumentCaptor<FederalApplicationSearchCriteria> searchCaptor =
+        ArgumentCaptor.forClass(FederalApplicationSearchCriteria.class);
+    ArgumentCaptor<FederalApplicationSearchCriteria> countCaptor =
+        ArgumentCaptor.forClass(FederalApplicationSearchCriteria.class);
+    verify(repository).search(searchCaptor.capture());
+    verify(repository).count(countCaptor.capture());
+    assertThat(searchCaptor.getValue().packageNumber()).isEqualTo(expected);
+    assertThat(countCaptor.getValue().packageNumber()).isEqualTo(expected);
   }
 
   @Test
@@ -1567,6 +1602,45 @@ class FederalApplicationOracleServiceTest {
     assertThat(result.success()).isFalse();
     assertThat(result.errors()).containsExactly("Remark must not exceed 250 characters.");
     verifyNoInteractions(repository, permitRepository, applicationDetailsRepository, applicationReviewRepository);
+  }
+
+  @Test
+  void remarkMutationsShouldRejectStorageOverflowBeforeOracleMutation() {
+    FederalApplicationService.FederalRemarkMutationRequest request =
+        new FederalApplicationService.FederalRemarkMutationRequest("&".repeat(255));
+
+    assertThat(service.addRemark(1000456L, request, "idir\\approver").success()).isFalse();
+    assertThat(service.updateRemark(1000456L, 44L, request, "idir\\approver").success()).isFalse();
+    assertThat(service.addRemark(
+        1000456L,
+        new FederalApplicationService.FederalRemarkMutationRequest("<".repeat(251)),
+        "idir\\approver").errors())
+        .containsExactly("Remark must not exceed 250 characters.");
+    assertThat(service.updateStatus(
+        1000456L,
+        new FederalApplicationService.FederalStatusMutationRequest("REJ", request.remark()),
+        "idir\\approver").errors())
+        .containsExactly("Remark is too long to save. Shorten it and try again.");
+    verifyNoInteractions(repository, permitRepository, applicationDetailsRepository, applicationReviewRepository);
+  }
+
+  @Test
+  void addRemarkShouldAcceptExactly250CharactersWithoutConvertingLiteralEntities() {
+    String text = "&amp;".repeat(50);
+    when(repository.findMutationContextRequired(1000456L))
+        .thenReturn(Optional.of(federalContext("NEW", LocalDate.of(2026, 3, 1))));
+    when(applicationDetailsRepository.insertRemark(
+        eq(1000456L), eq(text), eq("idir\\approver"), any(Instant.class)))
+        .thenReturn(Optional.of(new ApplicationDetailsRpcRepository.RemarkRow(
+            44L, 1000456L, text, "idir\\approver", Instant.EPOCH)));
+
+    FederalApplicationService.FederalRemarkMutationResult result = service.addRemark(
+        1000456L, new FederalApplicationService.FederalRemarkMutationRequest(text), "idir\\approver");
+
+    assertThat(result.success()).isTrue();
+    assertThat(result.remark().remark()).isEqualTo(text);
+    verify(applicationDetailsRepository).insertRemark(
+        eq(1000456L), eq(text), eq("idir\\approver"), any(Instant.class));
   }
 
   @Test

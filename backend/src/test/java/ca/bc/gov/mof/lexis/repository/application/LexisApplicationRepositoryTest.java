@@ -374,6 +374,8 @@ class LexisApplicationRepositoryTest {
           ownerClientNumber ASC|ORDER BY v.OWNER_CLIENT_NUMBER ASC, v.APPLICATION_NUMBER ASC
           exemptionNumber DESC|ORDER BY v.EXEMPTION_NUMBER DESC, v.APPLICATION_NUMBER ASC
           listingDate ASC|ORDER BY v.ADVERTISING_DATE ASC, v.APPLICATION_NUMBER ASC
+          receivedDate ASC|ORDER BY v.RECEIVED_DATE ASC, v.APPLICATION_NUMBER ASC
+          receivedDate DESC|ORDER BY v.RECEIVED_DATE DESC, v.APPLICATION_NUMBER ASC
           regionCode DESC|ORDER BY v.REGION_CODE DESC, v.APPLICATION_NUMBER ASC
           region ASC|ORDER BY v.REGION_CODE ASC, v.APPLICATION_NUMBER ASC
           """)
@@ -395,6 +397,22 @@ class LexisApplicationRepositoryTest {
         .endsWith("ORDER BY v.APPLICATION_NUMBER ASC")
         .doesNotContain("DELETE")
         .doesNotContain("NULLS FIRST");
+  }
+
+  @ParameterizedTest
+  @CsvSource({"ASC", "DESC"})
+  void summaryPackageSortShouldUseTheLegacyOrderedPackageListWithoutDuplicatingApplications(
+      String direction) {
+    TestLexisApplicationRepository repository = new TestLexisApplicationRepository();
+
+    repository.search(emptyCriteria("packageNumber " + direction, 1, 10));
+
+    assertThat(repository.whereSql())
+        .contains("ORDER BY (SELECT LISTAGG(EP_SORT.PACKAGE_NUMBER, ',')")
+        .contains("WITHIN GROUP (ORDER BY EP_SORT.PACKAGE_NUMBER)")
+        .contains("FROM EXPORT_PACKAGE EP_SORT")
+        .endsWith("WHERE EP_SORT.APPLICATION_NUMBER = v.APPLICATION_NUMBER) "
+            + direction + ", v.APPLICATION_NUMBER ASC");
   }
 
   @Test
@@ -476,6 +494,23 @@ class LexisApplicationRepositoryTest {
     assertThat(remark.user()).isEqualTo("idir\\admin");
     assertThat(remark.date()).isEqualTo(LocalDate.of(2026, 6, 17));
     verify(rs).getLong("EXPORT_EXMPTN_APPL_REMARK_NMBR");
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {
+    "Use &amp; in the document",
+    "A &amp; B; &lt;b&gt;text&lt;/b&gt;; literal &amp;lt;",
+    "Raw <b>text</b> & more; &copy; &#39;"
+  })
+  void detailRemarkShouldPreserveStoredTextForBothDisplayAndEdit(String storedText) throws Exception {
+    TestLexisApplicationRepository repository = new TestLexisApplicationRepository();
+    ResultSet rs = org.mockito.Mockito.mock(ResultSet.class);
+    when(rs.getString("REMARK")).thenReturn(storedText);
+
+    LexisApplicationDetailDto.LexisRemarkDto remark = repository.mapRemarkRow(rs);
+
+    assertThat(remark.remark()).isEqualTo(storedText);
+    assertThat(remark.title()).isEqualTo(remark.remark());
   }
 
   @Test

@@ -66,6 +66,7 @@ export const offerDecimalStorageFieldError = (
   maximumValue: number,
   label: string,
   required = false,
+  allowZero = false,
 ): string | null => {
   const normalized = value.trim()
   if (!normalized) {
@@ -76,7 +77,7 @@ export const offerDecimalStorageFieldError = (
   }
 
   const parsed = Number(normalized)
-  if (!Number.isFinite(parsed) || parsed <= 0) {
+  if (!Number.isFinite(parsed) || parsed < 0 || (!allowZero && parsed === 0)) {
     return 'Use a positive numeric value.'
   }
   return parsed <= maximumValue ? null : `${label} must be ${maximumValue} or less.`

@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -351,6 +351,67 @@ describe('Admin upload workflow smoke', () => {
     })
   })
 
+  it('rejects multiple invoice files dropped together before submission', () => {
+    mockUploadAccess('/fileInvoiceUpload')
+    renderPage(
+      '/admin/uploads?type=invoice&permitNumber=5001&salesInvoiceNumber=INV001&invoiceExportValue=100',
+    )
+    expect(screen.getByLabelText('Document File')).not.toHaveAttribute('multiple')
+    expect(screen.queryByText(/Multiple files can be queued/)).not.toBeInTheDocument()
+
+    fireEvent.drop(screen.getByRole('button', { name: 'Choose file for Upload documents' }), {
+      dataTransfer: {
+        files: [
+          new File(['first'], 'first.pdf', { type: 'application/pdf' }),
+          new File(['second'], 'second.pdf', { type: 'application/pdf' }),
+        ],
+      },
+    })
+
+    expect(screen.getByText('Choose one file per invoice.')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Review upload' })).toBeDisabled()
+    expect(screen.queryByText('first.pdf')).not.toBeInTheDocument()
+    expect(screen.queryByText('second.pdf')).not.toBeInTheDocument()
+    expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
+  })
+
+  it.each(['selection', 'drop'])(
+    'replaces the invoice file on a later %s and submits only the replacement',
+    async (selectionMethod) => {
+      mockUploadAccess('/fileInvoiceUpload')
+      renderPage(
+        '/admin/uploads?type=invoice&permitNumber=5001&salesInvoiceNumber=INV001&invoiceExportValue=100',
+      )
+      const firstFile = new File(['first'], 'first.pdf', { type: 'application/pdf' })
+      const replacementFile = new File(['replacement'], 'replacement.pdf', {
+        type: 'application/pdf',
+      })
+      await userEvent.upload(screen.getByLabelText('Document File'), firstFile)
+      if (selectionMethod === 'drop') {
+        fireEvent.drop(screen.getByRole('button', { name: 'Choose file for Upload documents' }), {
+          dataTransfer: { files: [replacementFile] },
+        })
+      } else {
+        await userEvent.upload(screen.getByLabelText('Document File'), replacementFile)
+      }
+      expect(screen.queryByText('first.pdf')).not.toBeInTheDocument()
+      expect(screen.getAllByText('replacement.pdf').length).toBeGreaterThan(0)
+      await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
+      await userEvent.click(screen.getByRole('button', { name: 'Submit upload' }))
+
+      await waitFor(() => expect(screen.getByText('Upload submitted')).toBeVisible())
+      expect(mockedSubmitAdminUpload).toHaveBeenCalledTimes(1)
+      expect(mockedSubmitAdminUpload).toHaveBeenCalledWith(
+        'invoice',
+        expect.objectContaining({
+          permitNumber: '5001',
+          salesInvoiceNumber: 'INV001',
+          file: replacementFile,
+        }),
+      )
+    },
+  )
+
   it('searches permit numbers for invoice uploads', async () => {
     mockUploadAccess('/fileInvoiceUpload')
     mockedSearchProvincialPermitNumberOptions.mockResolvedValue([
@@ -487,7 +548,7 @@ describe('Admin upload workflow smoke', () => {
     expect(screen.queryByLabelText('Application submission file')).not.toBeInTheDocument()
   })
 
-  it('filters queued files in the data preview table', async () => {
+  it('filters queued files in the data preview table and submits multiple documents', async () => {
     mockUploadAccess('/filePermitUpload')
 
     renderPage('/admin/uploads?type=permit&permitNumber=5001')
@@ -525,6 +586,9 @@ describe('Admin upload workflow smoke', () => {
 
     expect(screen.getByText('No queued files match the current filter.')).toBeInTheDocument()
     expect(screen.getByText('Showing 0 of 2 files')).toBeInTheDocument()
+    await userEvent.clear(screen.getByLabelText('Filter queued files'))
+    await userEvent.click(screen.getByRole('button', { name: 'Submit upload' }))
+    await waitFor(() => expect(mockedSubmitAdminUpload).toHaveBeenCalledTimes(2))
   })
 
   it('replaces queued document uploads with the same file name', async () => {

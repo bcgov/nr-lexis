@@ -34,6 +34,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -76,6 +79,41 @@ class PurchaseOfferOracleServiceTest {
             invocation ->
                 new RegionalMailRecipientResolver.RecipientGroup(
                     invocation.getArgument(0, RegionalMailRoute.class), List.of()));
+  }
+
+  @ParameterizedTest
+  @CsvSource({"' pkg-903 ',PKG-903", "' pKg_% ',PKG_%", "'  ',", ","})
+  void searchAndCountShouldNormalizePackageNumberLikeLegacy(String packageNumber, String expected) {
+    PurchaseOfferSearchCriteria criteria =
+        new PurchaseOfferSearchCriteria(
+            null,
+            packageNumber,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            false,
+            false,
+            List.of(),
+            null,
+            0,
+            25);
+    when(repository.search(any(PurchaseOfferSearchCriteria.class))).thenReturn(page(List.of(), 0));
+
+    service.search(criteria);
+    service.count(criteria);
+
+    ArgumentCaptor<PurchaseOfferSearchCriteria> searchCaptor =
+        ArgumentCaptor.forClass(PurchaseOfferSearchCriteria.class);
+    ArgumentCaptor<PurchaseOfferSearchCriteria> countCaptor =
+        ArgumentCaptor.forClass(PurchaseOfferSearchCriteria.class);
+    verify(repository).search(searchCaptor.capture());
+    verify(repository).count(countCaptor.capture());
+    assertThat(searchCaptor.getValue().packageNumber()).isEqualTo(expected);
+    assertThat(countCaptor.getValue().packageNumber()).isEqualTo(expected);
   }
 
   @Test
@@ -172,7 +210,7 @@ class PurchaseOfferOracleServiceTest {
 
     PurchaseOfferSearchCriteria normalized = criteriaCaptor.getValue();
     assertThat(normalized.applicationNumber()).isEqualTo("1000456");
-    assertThat(normalized.packageNumber()).isEqualTo("pkg-903");
+    assertThat(normalized.packageNumber()).isEqualTo("PKG-903");
     assertThat(normalized.clientNumber()).isEqualTo("00077881");
     assertThat(normalized.offeringClientNumber()).isEqualTo("00088999");
     assertThat(normalized.accessClientNumber()).isEqualTo("00055667");
@@ -807,6 +845,33 @@ class PurchaseOfferOracleServiceTest {
     verify(repository, never()).insertOffer(any());
   }
 
+  @ParameterizedTest
+  @ValueSource(doubles = {0.0d, 0.04d})
+  void addOfferShouldPersistZeroVolumeAfterLegacyRounding(double volume) {
+    stubProvincialApplication(1000456L, 100.0d);
+    when(repository.insertOffer(any(PurchaseOfferRepository.PurchaseOfferInsertRecord.class)))
+        .thenReturn(Optional.of(new PurchaseOfferRepository.PurchaseOfferInsertRow(81001L)));
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.addOffer(validCreateRequest(1000456L, null, volume), "test-user");
+
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<PurchaseOfferRepository.PurchaseOfferInsertRecord> captor =
+        ArgumentCaptor.forClass(PurchaseOfferRepository.PurchaseOfferInsertRecord.class);
+    verify(repository).insertOffer(captor.capture());
+    assertThat(captor.getValue().offerVolume()).isZero();
+  }
+
+  @Test
+  void addOfferShouldRejectNegativeVolumeBeforeInsert() {
+    PurchaseOfferService.CreateOfferResult response =
+        service.addOffer(validCreateRequest(1000456L, null, -0.01d), "test-user");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors()).containsExactly("Offer volume must be 0 or greater");
+    verify(repository, never()).insertOffer(any());
+  }
+
   @Test
   void addOfferShouldAcceptVolumeAtDisplayedRoundedApplicationLimit() {
     stubProvincialApplication(1000456L, 95.55d);
@@ -1187,6 +1252,29 @@ class PurchaseOfferOracleServiceTest {
     assertThat(response.errors())
         .containsExactly("Package PKG-904 does not belong to application 1000456.");
     verify(repository, never()).updateOffer(any());
+  }
+
+  @ParameterizedTest
+  @CsvSource({"100.0, 0.0", "100.0, 0.04", "0.0, 0.0"})
+  void updateOfferShouldPersistZeroVolumeAfterLegacyRounding(double previousVolume, double volume) {
+    when(repository.findUpdateSourceByOfferNumber(81001L))
+        .thenReturn(Optional.of(updateSource(1000456L, "PKG-903", "P", previousVolume)));
+    stubProvincialApplicationWithPackage(1000456L, "PKG-903", 500.0d, 95.5d);
+    when(repository.updateOffer(any(PurchaseOfferRepository.PurchaseOfferUpdateRecord.class)))
+        .thenReturn(true);
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.updateOffer(
+            new PurchaseOfferService.CreateOfferRequest(
+                1000456L, 81001L, null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, volume),
+            "test-user");
+
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<PurchaseOfferRepository.PurchaseOfferUpdateRecord> captor =
+        ArgumentCaptor.forClass(PurchaseOfferRepository.PurchaseOfferUpdateRecord.class);
+    verify(repository).updateOffer(captor.capture());
+    assertThat(captor.getValue().offerVolume()).isZero();
   }
 
   @Test

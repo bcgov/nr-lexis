@@ -36,6 +36,7 @@ import org.springframework.transaction.interceptor.TransactionAspectSupport;
 public class ApplicationReviewOracleService implements ApplicationReviewService {
 
   private static final List<String> EMAIL_SUPPORTED_STATUS_CODES = List.of("REJ", "WDN");
+  private static final int REMARK_MAX_LENGTH = 254;
   private static final List<String> STATUSES_REQUIRING_REMARK = List.of("REJ", "WDN", "EXP");
   private static final List<String> REVIEW_STATUS_UPDATE_CODES = List.of("REJ", "WDN", "EXP");
   private static final List<String> APPROVAL_SOURCE_CODES = List.of("NEW", "PND");
@@ -264,6 +265,16 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
           null,
           null,
           "Remark is required when rejecting, withdrawing, or expiring an application.");
+    }
+    if (remark != null && remark.length() > REMARK_MAX_LENGTH) {
+      return statusUpdateResult(
+          false,
+          false,
+          statusCode,
+          request == null ? null : trimToNull(request.clientEmailAddress()),
+          remark,
+          null,
+          "Remark is too long to save. Shorten it and try again.");
     }
 
     String clientEmail = request == null ? null : trimToNull(request.clientEmailAddress());

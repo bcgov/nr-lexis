@@ -874,6 +874,8 @@ class ExemptionRepositoryTest {
         Arguments.of("approvedVolume DESC", "ORDER BY EE.APPROVED_VOLUME DESC"),
         Arguments.of("balanceRemaining", "ORDER BY VOLUME_REMAINING ASC"),
         Arguments.of("listingDate DESC", "ORDER BY ADVERTISING_DATE DESC"),
+        Arguments.of("exemptionApprovalDate ASC", "ORDER BY EE.APPROVAL_DATE ASC, EE.EXEMPTION_NUMBER DESC"),
+        Arguments.of("exemptionApprovalDate DESC", "ORDER BY EE.APPROVAL_DATE DESC, EE.EXEMPTION_NUMBER DESC"),
         Arguments.of("expiryDate", "ORDER BY EE.EXPIRY_DATE ASC"),
         Arguments.of("region DESC", "ORDER BY EO.ORG_UNIT_NAME DESC"));
   }

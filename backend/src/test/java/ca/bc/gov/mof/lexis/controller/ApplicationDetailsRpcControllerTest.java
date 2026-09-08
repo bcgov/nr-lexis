@@ -560,6 +560,22 @@ class ApplicationDetailsRpcControllerTest {
   }
 
   @Test
+  void persistRemarkShouldRejectStorageOverflowBeforeCallingService() {
+    TestingAuthenticationToken authentication = authorized("/applicationRemarks");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+
+    ResponseEntity<ApplicationDetailsRpcController.PersistRemarkResponseDto> response =
+        controller.persistRemark("new", "1000456", "&".repeat(255), authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().status()).isEqualTo("validation_error");
+    assertThat(response.getBody().message())
+        .isEqualTo("Application remarks must not exceed 254 characters.");
+    verify(service, never()).persistRemark(any(), any(), any(), any());
+  }
+
+  @Test
   void persistRemarkShouldApplyFederalCompletedApplicationPolicyBeforeLocking() {
     TestingAuthenticationToken authentication = authorized("/applicationRemarks");
     LocalDate listingDate = LocalDate.of(2026, 2, 26);

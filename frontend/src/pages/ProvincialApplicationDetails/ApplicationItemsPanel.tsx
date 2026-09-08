@@ -463,6 +463,9 @@ function ProvincialApplicationItemsPanel({
     selectedPackageVolume === null
       ? null
       : Math.max(0, roundOneDecimal(selectedPackageVolume - selectedPackageScaleVolume))
+  // Legacy rounds manually entered scale volume before validation and submission.
+  const scaleVolumeForSubmission =
+    parseNonNegativeDecimalFieldValue(scaleForm.volume)?.toFixed(1) ?? scaleForm.volume
 
   const itemFieldErrors = useMemo<FieldErrors<ApplicationItemField>>(
     () => ({
@@ -533,9 +536,12 @@ function ProvincialApplicationItemsPanel({
         () => requiredFieldError(scaleForm.volume, 'Scale volume'),
         () => numericFieldError(scaleForm.volume, 'Scale volume'),
         () => greaterThanOrEqualFieldError(scaleForm.volume, 'Scale volume', 0),
-        () => lessThanOrEqualFieldError(scaleForm.volume, 'Scale volume', 99999.9),
+        () => lessThanOrEqualFieldError(scaleVolumeForSubmission, 'Scale volume', 99999.9),
         () =>
-          scaleVolumeWithinPackageFieldError(scaleForm.volume, selectedPackageRemainingScaleVolume),
+          scaleVolumeWithinPackageFieldError(
+            scaleVolumeForSubmission,
+            selectedPackageRemainingScaleVolume,
+          ),
       ),
     }),
     [
@@ -543,6 +549,7 @@ function ProvincialApplicationItemsPanel({
       packageForm,
       packageNumbers,
       scaleForm,
+      scaleVolumeForSubmission,
       selectedPackageRemainingScaleVolume,
       selectedPackageNumber,
     ],
@@ -1278,6 +1285,7 @@ function ProvincialApplicationItemsPanel({
     }
 
     setScaleActionErrorMessage('')
+    setScaleForm((current) => ({ ...current, volume: scaleVolumeForSubmission }))
     if (hasScaleValidationError) {
       const message =
         firstItemError(
@@ -1304,7 +1312,7 @@ function ProvincialApplicationItemsPanel({
         speciesCode: scaleForm.speciesCode,
         applicationNumber,
         pieces: scaleForm.pieces,
-        volume: scaleForm.volume,
+        volume: scaleVolumeForSubmission,
       })
       if (!result.valid || !result.result) {
         const message = result.errors.join(' ') || 'Scale creation failed.'

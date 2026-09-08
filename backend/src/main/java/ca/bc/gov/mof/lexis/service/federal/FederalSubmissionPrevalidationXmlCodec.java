@@ -4,7 +4,9 @@ import ca.bc.gov.mof.lexis.dto.federal.FederalSubmissionPrevalidationDto;
 import java.io.StringReader;
 import java.io.StringWriter;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import javax.xml.XMLConstants;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.transform.OutputKeys;
@@ -58,6 +60,7 @@ public final class FederalSubmissionPrevalidationXmlCodec {
     }
 
     Document document = parseDocument(xml);
+    Map<String, Element> elementsById = indexElementsById(document);
     Element root = document.getDocumentElement();
     if (root == null) {
       throw new IllegalArgumentException("The prevalidation XML body is required.");
@@ -70,14 +73,14 @@ public final class FederalSubmissionPrevalidationXmlCodec {
     Element bean;
 
     if (format == Format.XML) {
-      bean = resolveBeanElement(document, root, root);
+      bean = resolveBeanElement(document, elementsById, root, root);
     } else {
       Element body = directChild(root, "Body", rootNamespace);
       if (body == null) {
         throw new IllegalArgumentException("The SOAP envelope must include a Body element.");
       }
       operation = soapOperation(body);
-      bean = resolveBeanElement(document, operation, body);
+      bean = resolveBeanElement(document, elementsById, operation, body);
     }
 
     if (bean == null || !hasRequestField(bean)) {
@@ -87,15 +90,15 @@ public final class FederalSubmissionPrevalidationXmlCodec {
 
     boolean pascalCaseFields = format == Format.XML && usesPascalCaseFields(bean);
     String arrayItemName =
-        format == Format.XML ? arrayItemName(document, bean, pascalCaseFields) : "item";
+        format == Format.XML ? arrayItemName(elementsById, bean, pascalCaseFields) : "item";
 
     FederalSubmissionPrevalidationDto submission =
         new FederalSubmissionPrevalidationDto(
-            stringField(document, bean, "boomNumber"),
-            stringField(document, bean, "clientNumber"),
+            stringField(elementsById, bean, "boomNumber"),
+            stringField(elementsById, bean, "clientNumber"),
             null,
-            stringField(document, bean, "locationCode"),
-            stringArrayField(document, bean, "timberMark"));
+            stringField(elementsById, bean, "locationCode"),
+            stringArrayField(elementsById, bean, "timberMark"));
 
     return new ParsedRequest(
         submission,
@@ -203,14 +206,17 @@ public final class FederalSubmissionPrevalidationXmlCodec {
   }
 
   private static Element resolveBeanElement(
-      Document document, Element preferredRoot, Element searchRoot) {
+      Document document,
+      Map<String, Element> elementsById,
+      Element preferredRoot,
+      Element searchRoot) {
     if (preferredRoot != null) {
-      Element resolved = resolveReference(document, preferredRoot);
+      Element resolved = resolveReference(elementsById, preferredRoot);
       if (isBeanElement(resolved)) {
         return resolved;
       }
       for (Element child : directChildren(preferredRoot)) {
-        resolved = resolveReference(document, child);
+        resolved = resolveReference(elementsById, child);
         if (isBeanElement(resolved)) {
           return resolved;
         }
@@ -224,7 +230,7 @@ public final class FederalSubmissionPrevalidationXmlCodec {
     var candidates = root.getElementsByTagName("*");
     for (int index = 0; index < candidates.getLength(); index++) {
       if (candidates.item(index) instanceof Element candidate) {
-        Element resolved = resolveReference(document, candidate);
+        Element resolved = resolveReference(elementsById, candidate);
         if (isBeanElement(resolved)) {
           return resolved;
         }
@@ -271,12 +277,12 @@ public final class FederalSubmissionPrevalidationXmlCodec {
   }
 
   private static String arrayItemName(
-      Document document, Element bean, boolean pascalCaseFields) {
+      Map<String, Element> elementsById, Element bean, boolean pascalCaseFields) {
     List<Element> fields = directChildren(bean, "timberMark");
     if (fields.isEmpty()) {
       return pascalCaseFields ? "string" : "item";
     }
-    Element container = resolveReference(document, fields.get(0));
+    Element container = resolveReference(elementsById, fields.get(0));
     for (Element item : directChildren(container)) {
       if ("string".equals(localName(item))) {
         return "string";
@@ -288,17 +294,18 @@ public final class FederalSubmissionPrevalidationXmlCodec {
     return pascalCaseFields ? "string" : "item";
   }
 
-  private static String stringField(Document document, Element bean, String fieldName) {
+  private static String stringField(
+      Map<String, Element> elementsById, Element bean, String fieldName) {
     List<Element> fields = directChildren(bean, fieldName);
     if (fields.isEmpty()) {
       return null;
     }
-    Element value = resolveReference(document, fields.get(0));
+    Element value = resolveReference(elementsById, fields.get(0));
     return scalarValue(value);
   }
 
   private static List<String> stringArrayField(
-      Document document, Element bean, String fieldName) {
+      Map<String, Element> elementsById, Element bean, String fieldName) {
     List<Element> fields = directChildren(bean, fieldName);
     if (fields.isEmpty()) {
       return null;
@@ -307,19 +314,19 @@ public final class FederalSubmissionPrevalidationXmlCodec {
     List<String> values = new ArrayList<>();
     if (fields.size() > 1) {
       for (Element field : fields) {
-        values.add(scalarValue(resolveReference(document, field)));
+        values.add(scalarValue(resolveReference(elementsById, field)));
       }
       return values;
     }
 
-    Element container = resolveReference(document, fields.get(0));
+    Element container = resolveReference(elementsById, fields.get(0));
     if (isNil(container)) {
       return null;
     }
     List<Element> items = directChildren(container);
     if (!items.isEmpty()) {
       for (Element item : items) {
-        values.add(scalarValue(resolveReference(document, item)));
+        values.add(scalarValue(resolveReference(elementsById, item)));
       }
       return values;
     }
@@ -342,7 +349,7 @@ public final class FederalSubmissionPrevalidationXmlCodec {
     return "true".equalsIgnoreCase(nil) || "1".equals(nil);
   }
 
-  private static Element resolveReference(Document document, Element element) {
+  private static Element resolveReference(Map<String, Element> elementsById, Element element) {
     Element current = element;
     for (int depth = 0; current != null && depth < 8; depth++) {
       String href = attributeByLocalName(current, "href");
@@ -350,7 +357,7 @@ public final class FederalSubmissionPrevalidationXmlCodec {
         return current;
       }
       String id = href.startsWith("#") ? href.substring(1) : href;
-      Element referenced = elementById(document, id);
+      Element referenced = elementsById.get(id);
       if (referenced == null || referenced == current) {
         return current;
       }
@@ -359,15 +366,19 @@ public final class FederalSubmissionPrevalidationXmlCodec {
     return current;
   }
 
-  private static Element elementById(Document document, String id) {
+  private static Map<String, Element> indexElementsById(Document document) {
+    Map<String, Element> elementsById = new HashMap<>();
     var elements = document.getElementsByTagName("*");
     for (int index = 0; index < elements.getLength(); index++) {
-      if (elements.item(index) instanceof Element element
-          && id.equals(attributeByLocalName(element, "id"))) {
-        return element;
+      if (elements.item(index) instanceof Element element) {
+        String id = attributeByLocalName(element, "id");
+        if (id != null) {
+          // The prior document scan returned the first matching ID in document order.
+          elementsById.putIfAbsent(id, element);
+        }
       }
     }
-    return null;
+    return elementsById;
   }
 
   private static Element directChild(Element parent, String name, String namespace) {

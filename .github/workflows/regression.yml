@@ -46,6 +46,8 @@ jobs:
       E2E_REGRESSION_TIMBER_MARK: ${{ vars.E2E_REGRESSION_TIMBER_MARK }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-node@v6
         with:

@@ -8,10 +8,9 @@ import ca.bc.gov.mof.lexis.service.permit.ApplicationPermitOperationCoordinator;
 import ca.bc.gov.mof.lexis.service.permit.BlanketOicPackageService;
 import ca.bc.gov.mof.lexis.service.permit.BlanketOicPackageService.MutationResult;
 import ca.bc.gov.mof.lexis.service.permit.BlanketOicPackageService.PackageMutationRequest;
+import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService;
-import java.util.List;
-import java.util.Set;
 import java.util.function.Supplier;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,11 +27,9 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/lexis/rpc/permit-details")
 public class BlanketOicPackageController {
 
-  private static final Set<String> PACKAGE_ADMIN_ROLES =
-      Set.of("LEXIS_ADMIN", "LEXIS_APPLICATION_APPROVER");
-
   private final ObjectProvider<BlanketOicPackageService> serviceProvider;
   private final LexisSessionService sessionService;
+  private final LexisAuthorizationService authorizationService;
   private final LexisPrincipalService principalService;
   private final ApplicationPermitOperationCoordinator operationCoordinator;
   private ProvincialAuthorizationService provincialAuthorizationService;
@@ -41,10 +38,12 @@ public class BlanketOicPackageController {
   public BlanketOicPackageController(
       ObjectProvider<BlanketOicPackageService> serviceProvider,
       LexisSessionService sessionService,
+      LexisAuthorizationService authorizationService,
       LexisPrincipalService principalService,
       ApplicationPermitOperationCoordinator operationCoordinator) {
     this.serviceProvider = serviceProvider;
     this.sessionService = sessionService;
+    this.authorizationService = authorizationService;
     this.principalService = principalService;
     this.operationCoordinator = operationCoordinator;
   }
@@ -63,7 +62,7 @@ public class BlanketOicPackageController {
   @PostMapping("/boic-package")
   public ResponseEntity<MutationResult> addPackage(
       @RequestBody PackageMutationRequest request, Authentication authentication) {
-    requirePackageAdmin(authentication);
+    requireSavePermit(authentication);
     requirePermitAccess(request.permitNumber(), authentication);
     BlanketOicPackageService service = serviceProvider.getIfAvailable();
     if (service == null) {
@@ -86,7 +85,7 @@ public class BlanketOicPackageController {
   @PostMapping("/boic-package/update")
   public ResponseEntity<MutationResult> updatePackage(
       @RequestBody PackageMutationRequest request, Authentication authentication) {
-    requirePackageAdmin(authentication);
+    requireSavePermit(authentication);
     requirePermitAccess(request.permitNumber(), authentication);
     BlanketOicPackageService service = serviceProvider.getIfAvailable();
     if (service == null) {
@@ -111,7 +110,7 @@ public class BlanketOicPackageController {
   @PostMapping("/boic-package/delete")
   public ResponseEntity<MutationResult> deletePackage(
       @RequestBody DeletePackageRequest request, Authentication authentication) {
-    requirePackageAdmin(authentication);
+    requireSavePermit(authentication);
     requirePermitAccess(request.permitNumber(), authentication);
     BlanketOicPackageService service = serviceProvider.getIfAvailable();
     if (service == null) {
@@ -136,11 +135,11 @@ public class BlanketOicPackageController {
         });
   }
 
-  private void requirePackageAdmin(Authentication authentication) {
-    List<String> roles = sessionService.parseRolesFromPrincipal(authentication);
-    if (roles.stream().noneMatch(PACKAGE_ADMIN_ROLES::contains)) {
+  private void requireSavePermit(Authentication authentication) {
+    if (!authorizationService.canPerformAction(
+        sessionService.parseRolesFromPrincipal(authentication), "savePermit")) {
       throw new AccessDeniedException(
-          "Blanket OIC packages can only be changed by an Administrator or Application Approver.");
+          "You do not have permission to change Blanket OIC permit packages.");
     }
   }
 

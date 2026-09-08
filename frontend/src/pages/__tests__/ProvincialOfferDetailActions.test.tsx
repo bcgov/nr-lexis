@@ -7,6 +7,7 @@ import type { ProvincialOfferDetail } from '@/interfaces/LexisDetails'
 import ProvincialOfferDetailsPage from '@/pages/ProvincialOfferDetails'
 import { fetchProvincialOfferDetail, releaseOfferEditLock } from '@/service/lexis-detail-service'
 import { submitProvincialOfferUpdate } from '@/service/create-submit-service'
+import { fetchOfferScaleDetails } from '@/service/offer-scale-detail-service'
 import { createTestAuthContext } from '@/test-utils/auth'
 
 vi.mock('@/context/auth/useAuth', () => ({
@@ -22,10 +23,15 @@ vi.mock('@/service/create-submit-service', () => ({
   submitProvincialOfferUpdate: vi.fn(),
 }))
 
+vi.mock('@/service/offer-scale-detail-service', () => ({
+  fetchOfferScaleDetails: vi.fn(),
+}))
+
 const mockedUseAuth = vi.mocked(useAuth)
 const mockedFetchProvincialOfferDetail = vi.mocked(fetchProvincialOfferDetail)
 const mockedReleaseOfferEditLock = vi.mocked(releaseOfferEditLock)
 const mockedSubmitProvincialOfferUpdate = vi.mocked(submitProvincialOfferUpdate)
+const mockedFetchOfferScaleDetails = vi.mocked(fetchOfferScaleDetails)
 
 const offerDetail: ProvincialOfferDetail = {
   offerNumber: 81001,
@@ -85,6 +91,16 @@ describe('Provincial Offer Detail Actions', () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
     mockedFetchProvincialOfferDetail.mockResolvedValue(offerDetail)
     mockedReleaseOfferEditLock.mockResolvedValue(undefined)
+    mockedFetchOfferScaleDetails.mockResolvedValue([
+      {
+        timberMark: 'TM-903',
+        pieces: 12,
+        species: 'FI',
+        grade: 'J',
+        volume: '45.50',
+        cascadeSplitCode: 'W',
+      },
+    ])
     mockedSubmitProvincialOfferUpdate.mockResolvedValue({
       success: true,
       message: 'The purchase offer was updated successfully.',
@@ -137,11 +153,14 @@ describe('Provincial Offer Detail Actions', () => {
     }
   })
 
-  it('updates editable legacy offer fields from the detail page', async () => {
+  it('shows the TEAC review date for authorized staff and updates editable offer fields', async () => {
     renderPage()
 
     await screen.findByRole('heading', { name: 'Offer 81001' })
+    expect(screen.getByLabelText('TEAC review date')).toHaveValue('2026-03-05')
+    expect(screen.getByLabelText('TEAC review date')).toBeDisabled()
     await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    expect(screen.getByLabelText('TEAC review date')).not.toBeDisabled()
 
     const companyInput = screen.getByLabelText('Company')
     expect(companyInput).toHaveAttribute('readonly')
@@ -161,6 +180,7 @@ describe('Provincial Offer Detail Actions', () => {
           companyName: 'Original Buyer',
           purchaseOfferAmount: '13000',
           pickupLocation: 'Port Moody',
+          teacReviewDate: '2026-03-05',
         }),
       )
     })
@@ -250,6 +270,44 @@ describe('Provincial Offer Detail Actions', () => {
           offerNumber: '81001',
           offerVolume: '',
         }),
+      )
+    })
+  })
+
+  it.each(['0', '0.04'])(
+    'saves offer volume %s as zero after legacy blur rounding',
+    async (volume) => {
+      renderPage()
+
+      await screen.findByRole('heading', { name: 'Offer 81001' })
+      await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+      const volumeInput = screen.getByLabelText('Offer volume (m³)')
+      await userEvent.clear(volumeInput)
+      await userEvent.type(volumeInput, volume)
+      await userEvent.tab()
+      expect(volumeInput).toHaveValue('0.0')
+      await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+      await waitFor(() => {
+        expect(mockedSubmitProvincialOfferUpdate).toHaveBeenCalledWith(
+          expect.objectContaining({ offerVolume: '0.0' }),
+        )
+      })
+    },
+  )
+
+  it('allows an unrelated edit to an offer with a stored zero volume', async () => {
+    mockedFetchProvincialOfferDetail.mockResolvedValue({ ...offerDetail, offerVolume: 0 })
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'Offer 81001' })
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    await userEvent.clear(screen.getByLabelText('Offer conditions / remarks'))
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => {
+      expect(mockedSubmitProvincialOfferUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({ offerVolume: '0', offerCondition: '' }),
       )
     })
   })
@@ -510,7 +568,14 @@ describe('Provincial Offer Detail Actions', () => {
     expect(screen.getByLabelText('Species/grade')).toHaveDisplayValue('FI/HE/LUM')
   })
 
-  it('opens the parent application Items tab at the offer package scales', async () => {
+  it('shows read-only offer scale details without opening the parent application', async () => {
+    mockedFetchProvincialOfferDetail.mockResolvedValue({
+      ...offerDetail,
+      canEditScheduleDates: false,
+      canEditOfferRemarks: false,
+      canEditOfferDetails: false,
+      canEditWithdrawFields: false,
+    })
     renderPage()
 
     await screen.findByRole('heading', { name: 'Offer 81001' })
@@ -519,13 +584,21 @@ describe('Provincial Offer Detail Actions', () => {
       '/provincial/application/1000456',
     )
     await userEvent.click(screen.getByRole('button', { name: 'See Scale Detail' }))
-
-    expect(screen.getByTestId('location')).toHaveTextContent(
-      '/provincial/application/1000456?tab=items&packageNumber=PKG-903&section=scales',
+    const dialog = await screen.findByRole('dialog', { name: 'Scale Detail' })
+    expect(await within(dialog).findByText('TM-903')).toBeInTheDocument()
+    expect(mockedFetchOfferScaleDetails).toHaveBeenCalledWith(
+      { offerNumber: '81001' },
+      expect.any(AbortSignal),
     )
+    expect(screen.queryByTestId('location')).not.toBeInTheDocument()
+    expect(within(dialog).queryByRole('textbox')).not.toBeInTheDocument()
+    expect(within(dialog).getByRole('cell', { name: 'C' })).toBeInTheDocument()
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Close' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Offer 81001' })).toBeInTheDocument()
   })
 
-  it('opens a federal parent application in the federal detail journey', async () => {
+  it('shows scales inline for an offer on a federal application', async () => {
     mockedFetchProvincialOfferDetail.mockResolvedValue({
       ...offerDetail,
       exportJurisdictionCode: 'f',
@@ -539,9 +612,12 @@ describe('Provincial Offer Detail Actions', () => {
     )
     await userEvent.click(screen.getByRole('button', { name: 'See Scale Detail' }))
 
-    expect(screen.getByTestId('location')).toHaveTextContent(
-      '/federal/application/1000456?packageFilter=PKG-903',
+    expect(await screen.findByText('TM-903')).toBeInTheDocument()
+    expect(mockedFetchOfferScaleDetails).toHaveBeenCalledWith(
+      { offerNumber: '81001' },
+      expect.any(AbortSignal),
     )
+    expect(screen.queryByTestId('location')).not.toBeInTheDocument()
   })
 
   it('blocks offer amounts outside the Oracle NUMBER(7,2) limit', async () => {
@@ -594,7 +670,7 @@ describe('Provincial Offer Detail Actions', () => {
     expect(mockedSubmitProvincialOfferUpdate).not.toHaveBeenCalled()
   })
 
-  it('only enables legacy offer detail fields for offering-client edits', async () => {
+  it('hides the TEAC review date for offering clients and preserves it when saving other fields', async () => {
     mockedFetchProvincialOfferDetail.mockResolvedValue({
       ...offerDetail,
       canEditScheduleDates: false,
@@ -606,7 +682,9 @@ describe('Provincial Offer Detail Actions', () => {
     renderPage()
 
     await screen.findByRole('heading', { name: 'Offer 81001' })
+    expect(screen.queryByLabelText('TEAC review date')).not.toBeInTheDocument()
     await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    expect(screen.queryByLabelText('TEAC review date')).not.toBeInTheDocument()
 
     expect(screen.getByLabelText('Offer amount ($/m³)')).not.toHaveAttribute('readonly')
     expect(screen.getByLabelText('Pickup location')).not.toHaveAttribute('readonly')
@@ -614,6 +692,20 @@ describe('Provincial Offer Detail Actions', () => {
     expect(screen.getByLabelText('Offer withdrawal reason')).toHaveAttribute('readonly')
     expect(screen.queryByLabelText('Offer remarks')).not.toBeInTheDocument()
     expect(screen.getByRole('combobox', { name: 'Fair market value' })).toBeDisabled()
+
+    const conditionsInput = screen.getByLabelText('Offer conditions / remarks')
+    await userEvent.clear(conditionsInput)
+    await userEvent.type(conditionsInput, 'Updated loading conditions')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => {
+      expect(mockedSubmitProvincialOfferUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          offerCondition: 'Updated loading conditions',
+          teacReviewDate: '2026-03-05',
+        }),
+      )
+    })
   })
 
   it('allows withdrawal-only submitters to edit offer comments without broadening other fields', async () => {

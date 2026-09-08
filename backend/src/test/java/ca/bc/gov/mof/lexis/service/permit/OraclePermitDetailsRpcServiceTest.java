@@ -740,6 +740,7 @@ class OraclePermitDetailsRpcServiceTest {
 
     PermitAllScaleFeesRpcResponseDto response = service.getAllScaleFees(7000123L, true);
 
+    assertThat(response.totalVolume()).isEqualTo("11.0");
     assertThat(response.packageList())
         .extracting("packageNumber", "totalFeeForPackage", "growthType")
         .containsExactly(
@@ -753,6 +754,110 @@ class OraclePermitDetailsRpcServiceTest {
     verify(repository, never()).isApplicationUnmanufactured(anyLong());
     verify(repository, never()).findSpeciesDescription(any());
     verify(repository, never()).findGradeDescription(any());
+    verifyNoInteractions(applicationService);
+  }
+
+  @ParameterizedTest
+  @ValueSource(booleans = {false, true})
+  void allScaleFeesShouldSumStoredVolumesBeforeRounding(boolean separatePackages) {
+    PermitScaleDetailRow firstScale =
+        scale("101", "TM1", "HEM", "J", 1.04d, 1L, "7000123", "PKG-903");
+    PermitScaleDetailRow secondScale =
+        scale("102", "TM2", "FIR", "K", 1.04d, 1L, "7000123",
+            separatePackages ? "PKG-999" : "PKG-903");
+    when(repository.findPermitFeeScaleRows(7000123L))
+        .thenReturn(
+            List.of(
+                new PermitFeeScaleRow(
+                    firstScale, "T", "Hemlock", "Grade J", "S", "Second Growth", BigDecimal.ONE),
+                new PermitFeeScaleRow(
+                    secondScale, "T", "Fir", "Grade K", "S", "Second Growth", BigDecimal.ONE)));
+
+    PermitAllScaleFeesRpcResponseDto response = service.getAllScaleFees(7000123L, true);
+
+    assertThat(response.totalVolume()).isEqualTo("2.1");
+    assertThat(response.packageList()).hasSize(separatePackages ? 2 : 1);
+    assertThat(response.packageList().stream().flatMap(row -> row.scaleList().stream()))
+        .extracting("volume", "fee")
+        .containsExactly(tuple("1.0", "$1.04"), tuple("1.0", "$1.04"));
+    if (separatePackages) {
+      assertThat(response.packageList())
+          .extracting("totalFeeForPackage")
+          .containsExactly("$1.04", "$1.04");
+    } else {
+      assertThat(response.packageList().get(0).totalFeeForPackage()).isEqualTo("$2.08");
+    }
+  }
+
+  @Test
+  void allScaleFeesShouldReturnZeroVolumeWhenNoScalesAreAvailable() {
+    assertThat(service.getAllScaleFees(null, true).totalVolume()).isEqualTo("0.0");
+    assertThat(service.getAllScaleFees(7000123L, true).totalVolume()).isEqualTo("0.0");
+  }
+
+  @Test
+  void allScaleFeesShouldRetainEmptyBlanketOicPackagesAlongsidePopulatedPackages() {
+    when(repository.findPermitPolicyContextByPermitNumber(7000123L))
+        .thenReturn(Optional.of(new PermitPolicyContextRow(
+            7000123L, 1835L, FEE_MASK_EFFECTIVE_DATE, "EX-700", "US", 0.0d)));
+    when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("B"));
+    when(repository.findCorePackageContexts(7000123L, true))
+        .thenReturn(List.of(
+            coreContext("PKG-900", 1000456L, false),
+            coreContext("PKG-903", 1000456L, true)));
+    when(repository.findPermitFeeScaleRows(7000123L))
+        .thenReturn(List.of(new PermitFeeScaleRow(
+            scale("101", "TM1", "HEM", "J", 1.04d, 1L, "7000123", "PKG-903"),
+            "T", "Hemlock", "Grade J", "S", "Second Growth", BigDecimal.ONE)));
+
+    PermitAllScaleFeesRpcResponseDto response = service.getAllScaleFees(7000123L, true);
+
+    assertThat(response.packageList())
+        .extracting("packageNumber", "totalFeeForPackage", "growthType")
+        .containsExactly(
+            tuple("PKG-900", "$0.00", "Second Growth"),
+            tuple("PKG-903", "$1.04", "Second Growth"));
+    assertThat(response.packageList().get(0).scaleList()).isEmpty();
+    assertThat(response.packageList().get(1).scaleList())
+        .extracting("volume", "fee")
+        .containsExactly(tuple("1.0", "$1.04"));
+    assertThat(response.totalVolume()).isEqualTo("1.0");
+    verify(repository).findCorePackageContexts(7000123L, true);
+    verify(repository, never()).findScaleDetailsByPackageNumber(any());
+    verify(repository, never()).findGrowthTypeDescription(any());
+    verifyNoInteractions(applicationService);
+  }
+
+  @ParameterizedTest
+  @CsvSource({
+      "2024-06-27, US, 0.0, $0.00",
+      "2024-06-26, US, 0.0, $",
+      "2024-06-27, CA, 0.0, $",
+      "2024-06-27, US, 25.0, $"
+  })
+  void allScaleFeesShouldRetainAllEmptyPackagesWithExistingTotalMasking(
+      LocalDate applicationDate, String countryCode, double overrideFee, String expectedTotal) {
+    when(repository.findPermitPolicyContextByPermitNumber(7000123L))
+        .thenReturn(Optional.of(new PermitPolicyContextRow(
+            7000123L, 1835L, applicationDate, "EX-700", countryCode, overrideFee)));
+    when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("B"));
+    when(repository.findCorePackageContexts(7000123L, true))
+        .thenReturn(List.of(
+            coreContext("PKG-900", 1000456L, false),
+            coreContext("PKG-901", 1000456L, false)));
+
+    PermitAllScaleFeesRpcResponseDto response = service.getAllScaleFees(7000123L, false);
+
+    assertThat(response.packageList())
+        .extracting("packageNumber", "totalFeeForPackage", "growthType")
+        .containsExactly(
+            tuple("PKG-900", expectedTotal, "Second Growth"),
+            tuple("PKG-901", expectedTotal, "Second Growth"));
+    assertThat(response.packageList()).allSatisfy(row -> assertThat(row.scaleList()).isEmpty());
+    assertThat(response.totalVolume()).isEqualTo("0.0");
+    verify(repository).findCorePackageContexts(7000123L, true);
+    verify(repository, never()).findScaleDetailsByPackageNumber(any());
+    verify(repository, never()).findGrowthTypeDescription(any());
     verifyNoInteractions(applicationService);
   }
 
@@ -2824,6 +2929,104 @@ class OraclePermitDetailsRpcServiceTest {
             permitCaptor.capture(), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE));
     assertThat(permitCaptor.getValue().permitIssueDate()).isNull();
     assertThat(permitCaptor.getValue().expiryDate()).isNull();
+  }
+
+  @ParameterizedTest
+  @CsvSource({
+    "M,true,true", "M,true,false", "M,false,true", "M,false,false",
+    "O,true,true", "O,true,false", "O,false,true", "O,false,false"
+  })
+  void updatePermitShouldClearOnlySubmittedOrdinaryActiveDates(
+      String exemptionType, boolean clearIssueDate, boolean clearExpiryDate) {
+    PermitMutationRow current = permitMutationRow();
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(current));
+    stubPermitCreationExemption("EX-700", exemptionType, "ACT", "00077881", "00077880");
+    when(repository.updatePermitDetail(
+            any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
+        .thenReturn(true);
+
+    PermitMutationRpcResponseDto response =
+        service.updatePermit(
+            updatePermitRequest(
+                null, null, null, null, "", clearIssueDate ? "" : null,
+                clearExpiryDate ? " " : null),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<PermitMutationRow> permitCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository)
+        .updatePermitDetail(
+            permitCaptor.capture(), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE));
+    PermitMutationRow updated = permitCaptor.getValue();
+    assertThat(updated.permitIssueDate())
+        .isEqualTo(clearIssueDate ? null : current.permitIssueDate());
+    assertThat(updated.expiryDate())
+        .isEqualTo(clearExpiryDate ? null : current.expiryDate());
+    assertThat(updated.applicationDate()).isEqualTo(current.applicationDate());
+    assertThat(updated.receivedDate()).isEqualTo(current.applicationDate());
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"COM", "PPD", "CAN"})
+  void updatePermitShouldPreserveBlankSubmittedDatesOutsideActiveDrafts(String status) {
+    PermitMutationRow current = permitMutationRow(status);
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(current));
+    stubTargetMinisterialExemption("EX-700");
+    when(repository.updatePermitDetail(
+            any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
+        .thenReturn(true);
+
+    PermitMutationRpcResponseDto response =
+        service.updatePermit(
+            updatePermitRequest(null, null, null, null, null, "", " "), "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<PermitMutationRow> permitCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository)
+        .updatePermitDetail(
+            permitCaptor.capture(), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE));
+    assertThat(permitCaptor.getValue().permitIssueDate()).isEqualTo(current.permitIssueDate());
+    assertThat(permitCaptor.getValue().expiryDate()).isEqualTo(current.expiryDate());
+  }
+
+  @Test
+  void updatePermitShouldRequireClearedOrdinaryDatesBeforeCompletion() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow()));
+    stubTargetMinisterialExemption("EX-700");
+    when(repository.updatePermitDetail(
+            any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
+        .thenReturn(true);
+
+    PermitMutationRpcResponseDto cleared =
+        service.updatePermit(
+            updatePermitRequest(null, null, null, null, null, "", ""), "idir\\jsmith");
+    assertThat(cleared.success()).isTrue();
+    ArgumentCaptor<PermitMutationRow> permitCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository)
+        .updatePermitDetail(
+            permitCaptor.capture(), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE));
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitCaptor.getValue()));
+
+    PermitMutationRpcResponseDto completion =
+        service.updatePermit(
+            permitMutationRequest(
+                "EX-700", "00077881", "00077880", null, "COM", null, null, null),
+            "idir\\jsmith");
+
+    assertThat(completion.success()).isFalse();
+    assertThat(completion.errors())
+        .contains(
+            "A valid permit issue date is required to complete a permit.",
+            "A valid expiry date is required to complete a permit.");
+    verify(repository, times(1)).updatePermitDetail(any(), any(), any());
+    verify(permitInvoiceOrchestrationServiceProvider, never()).getIfAvailable();
   }
 
   @Test

@@ -1440,14 +1440,11 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       if (hasMutationLockedScale(scaleRows)) {
         errors.add(PACKAGE_PERMITTED_SCALE_MESSAGE);
       }
-      double scaledVolume =
-          scaleRows.stream()
-              .mapToDouble(ApplicationDetailsRpcRepository.ApplicationScaleDetailRow::speciesGradeVolume)
-              .sum();
-      if (BigDecimal.valueOf(request.volume()).compareTo(BigDecimal.valueOf(scaledVolume)) < 0) {
+      BigDecimal scaledVolume = totalScaleVolume(scaleRows);
+      if (roundOneDecimal(request.volume()).compareTo(scaledVolume) < 0) {
         errors.add(
             "The package volume must be more than the total scale volume ("
-                + formatOneDecimal(scaledVolume)
+                + scaledVolume.toPlainString()
                 + ").");
       }
     }
@@ -1979,21 +1976,19 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       }
 
       if (request.volume() != null) {
-        double packageVolume =
+        BigDecimal packageVolume =
             repository
                 .findPackageDetailsByPackageNumberRequired(packageNumber)
                 .map(ApplicationDetailsRpcRepository.PackageDetailsRow::packageVolume)
-                .orElse(0.0d);
-        double scaleTotal =
-            scaleRows.stream()
-                .mapToDouble(ApplicationDetailsRpcRepository.ApplicationScaleDetailRow::speciesGradeVolume)
-                .sum();
-        if (BigDecimal.valueOf(scaleTotal + request.volume()).compareTo(BigDecimal.valueOf(packageVolume)) > 0) {
-          double allowedVolume = packageVolume - scaleTotal;
+                .map(this::roundOneDecimal)
+                .orElse(BigDecimal.ZERO);
+        BigDecimal scaleTotal = totalScaleVolume(scaleRows);
+        if (scaleTotal.add(roundOneDecimal(request.volume())).compareTo(packageVolume) > 0) {
+          BigDecimal allowedVolume = packageVolume.subtract(scaleTotal);
           errors.add(
-              allowedVolume <= 0.0d
+              allowedVolume.signum() <= 0
                   ? "The package volume has already been met."
-                  : "The scale volume must be less than " + formatOneDecimal(allowedVolume) + ".");
+                  : "The scale volume must be less than " + allowedVolume.toPlainString() + ".");
         }
       }
     }
@@ -2397,6 +2392,14 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
 
   private BigDecimal roundOneDecimal(Double value) {
     return BigDecimal.valueOf(value == null ? 0.0d : value).setScale(1, RoundingMode.HALF_UP);
+  }
+
+  private BigDecimal totalScaleVolume(
+      List<ApplicationDetailsRpcRepository.ApplicationScaleDetailRow> scales) {
+    // Legacy compares one-decimal scale amounts; round each value before summing.
+    return scales.stream()
+        .map(row -> roundOneDecimal(row.speciesGradeVolume()))
+        .reduce(BigDecimal.ZERO, BigDecimal::add);
   }
 
   private String nonNull(String value) {
@@ -3565,7 +3568,8 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         request.ownerContactName(), "Owner contact name", CONTACT_NAME_MAX_BYTES, errors);
     validateOracleText(
         request.agentContactName(), "Agent contact name", CONTACT_NAME_MAX_BYTES, errors);
-    validateOracleText(request.remarkBody(), "Application remark", REMARK_MAX_BYTES, errors);
+    String remark = request.remarkBody();
+    validateOracleText(remark, "Application remark", REMARK_MAX_BYTES, errors);
   }
 
   private void validateApplicationStorageText(

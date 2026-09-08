@@ -291,6 +291,27 @@ describe('provincial exemption detail service', () => {
     expect(body.has('enableRateOverride')).toBe(false)
   })
 
+  it('sends the previous identifier separately when correcting an OIC number', async () => {
+    postMock.mockResolvedValue({ data: { success: true, exemptionNumber: 'EX-206' } })
+    await updateExemption({
+      exemptionNumber: ' EX-206 ',
+      previousExemptionNumber: ' EX-205 ',
+      approvedVolume: '500',
+      approvalDate: '2026-02-01',
+      expiryDate: '2026-12-31',
+      otherConditions: '',
+      exemptionTypeCode: 'O',
+      exemptionStatusCode: 'ACT',
+      manageFeeRate: false,
+      enableRateOverride: false,
+      feeRate: '',
+      regionNumbers: [],
+    })
+    const [, body] = postMock.mock.calls[0]
+    expect(body.get('exemptionNumber')).toBe('EX-206')
+    expect(body.get('legacyExemptionNumber')).toBe('EX-205')
+  })
+
   it('normalizes approval requests and filters malformed email rows', async () => {
     postMock.mockResolvedValue({
       data: {

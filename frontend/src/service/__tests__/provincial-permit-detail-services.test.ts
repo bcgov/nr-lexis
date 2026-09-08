@@ -116,9 +116,12 @@ describe('provincial permit detail services', () => {
         case '/lexis/rpc/permit-details/all-scale-fees':
           return Promise.resolve(
             response({
+              totalVolume: '34.5',
               packageList: [
                 {
                   packageNumber: 'PKG-100',
+                  growthType: 'Second growth',
+                  totalFeeForPackage: '$123.45',
                   scaleList: [
                     {
                       id: 'SCALE-1',
@@ -231,6 +234,10 @@ describe('provincial permit detail services', () => {
           includedInPermit: false,
         },
       ],
+      totalFeeVolume: 34.5,
+      packageFeeSummaries: [
+        { packageNumber: 'PKG-100', growthType: 'Second growth', totalFeeForPackage: '$123.45' },
+      ],
       fees: [
         {
           id: 'SCALE-1',
@@ -288,7 +295,7 @@ describe('provincial permit detail services', () => {
       }
       switch (path) {
         case '/lexis/rpc/permit-details/all-scale-fees':
-          return Promise.resolve(response({ packageList: [] }))
+          return Promise.resolve(response({ packageList: [], totalVolume: '0.0' }))
         case '/lexis/rpc/permit-details/gbms-invoice-history':
           return Promise.resolve(response([]))
         default:
@@ -341,9 +348,12 @@ describe('provincial permit detail services', () => {
         case '/lexis/rpc/permit-details/all-scale-fees':
           return Promise.resolve(
             response({
+              totalVolume: '34.5',
               packageList: [
                 {
                   packageNumber: 'PKG-100',
+                  growthType: 'Second growth',
+                  totalFeeForPackage: '$123.45',
                   scaleList: [
                     {
                       id: 'SCALE-1',
@@ -409,13 +419,14 @@ describe('provincial permit detail services', () => {
       packageNumbers: core.packages.map((row) => row.packageNumber),
     })
 
-    expect(fees).toEqual([
+    expect(fees.fees).toEqual([
       expect.objectContaining({
         id: 'SCALE-1',
         packageNumber: 'PKG-100',
         amount: 123.45,
       }),
     ])
+    expect(fees.totalFeeVolume).toBe(34.5)
     expect(getCachedResponseMock).toHaveBeenLastCalledWith(
       '/lexis/rpc/permit-details/all-scale-fees',
       {
@@ -427,13 +438,132 @@ describe('provincial permit detail services', () => {
     )
   })
 
+  it('retains the authoritative fee volume total separately from rounded rows', async () => {
+    getCachedResponseMock.mockResolvedValue(
+      response({
+        totalVolume: '2.1',
+        packageList: [
+          {
+            packageNumber: 'BOIC-1',
+            growthType: 'Old growth',
+            totalFeeForPackage: '$2.08',
+            scaleList: [
+              { id: 'SCALE-1', volume: '1.0', fee: '$1.04' },
+              { id: 'SCALE-2', volume: '1.0', fee: '$1.04' },
+            ],
+          },
+        ],
+      }),
+    )
+
+    const result = await fetchProvincialPermitFees({ permitNumber: '777' })
+
+    expect(result.totalFeeVolume).toBe(2.1)
+    expect(result.fees.map((row) => row.volume)).toEqual([1, 1])
+    expect(result.fees.map((row) => row.amount)).toEqual([1.04, 1.04])
+  })
+
+  it('retains authoritative package fee summaries including empty packages within the permit scope', async () => {
+    getCachedResponseMock.mockResolvedValue(
+      response({
+        totalVolume: '5.1',
+        packageList: [
+          {
+            packageNumber: 'PKG-A',
+            growthType: 'Second growth',
+            totalFeeForPackage: '$2.08',
+            scaleList: [
+              { id: 'SCALE-1', volume: '1.0', fee: '$1.04' },
+              { id: 'SCALE-2', volume: '1.0', fee: '$1.04' },
+            ],
+          },
+          {
+            packageNumber: 'PKG-EMPTY',
+            growthType: 'Old growth',
+            totalFeeForPackage: '$0.00',
+            scaleList: [],
+          },
+          {
+            packageNumber: 'PKG-B',
+            growthType: 'Old growth',
+            totalFeeForPackage: '$6.04',
+            scaleList: [{ id: 'SCALE-3', volume: '3.0', fee: '$6.04' }],
+          },
+        ],
+      }),
+    )
+
+    const result = await fetchProvincialPermitFees({
+      permitNumber: '777',
+      packageNumbers: ['PKG-A', 'PKG-EMPTY'],
+    })
+
+    expect(result.packageFeeSummaries).toEqual([
+      { packageNumber: 'PKG-A', growthType: 'Second growth', totalFeeForPackage: '$2.08' },
+      { packageNumber: 'PKG-EMPTY', growthType: 'Old growth', totalFeeForPackage: '$0.00' },
+    ])
+    expect(result.fees.map((row) => row.id)).toEqual(['SCALE-1', 'SCALE-2'])
+    expect(result.totalFeeVolume).toBe(5.1)
+    expect(getCachedResponseMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('preserves a masked package subtotal when individual fee rows are numeric', async () => {
+    getCachedResponseMock.mockResolvedValue(
+      response({
+        totalVolume: '10.0',
+        packageList: [
+          {
+            packageNumber: 'PKG-A',
+            growthType: 'Old growth',
+            totalFeeForPackage: '$',
+            scaleList: [{ id: 'SCALE-1', volume: '10.0', fee: '$45.00' }],
+          },
+        ],
+      }),
+    )
+
+    const result = await fetchProvincialPermitFees({ permitNumber: '777' })
+
+    expect(result.packageFeeSummaries).toEqual([
+      { packageNumber: 'PKG-A', growthType: 'Old growth', totalFeeForPackage: '$' },
+    ])
+    expect(result.fees[0]?.amount).toBe(45)
+  })
+
+  it.each([undefined, '', ' '])(
+    'rejects a missing authoritative package subtotal: %s',
+    async (totalFeeForPackage) => {
+      getCachedResponseMock.mockResolvedValue(
+        response({
+          totalVolume: '0.0',
+          packageList: [{ packageNumber: 'PKG-EMPTY', totalFeeForPackage, scaleList: [] }],
+        }),
+      )
+
+      await expect(fetchProvincialPermitFees({ permitNumber: '777' })).rejects.toThrow(
+        'Invalid package fee data',
+      )
+    },
+  )
+
+  it.each([undefined, '', 'invalid', 'Infinity', '-1.0'])(
+    'rejects an unavailable or invalid authoritative volume: %s',
+    async (totalVolume) => {
+      getCachedResponseMock.mockResolvedValue(response({ packageList: [], totalVolume }))
+
+      await expect(fetchProvincialPermitFees({ permitNumber: '777' })).rejects.toThrow(
+        'Invalid total fee volume response',
+      )
+    },
+  )
+
   it('skips the bulk fee request for an explicitly empty package selection', async () => {
     await expect(
       fetchProvincialPermitFees({
         permitNumber: 'P-777',
         packageNumbers: [],
       }),
-    ).resolves.toEqual([])
+    ).resolves.toEqual({ fees: [], packageFeeSummaries: [], totalFeeVolume: 0 })
 
     expect(getCachedResponseMock).not.toHaveBeenCalled()
   })
@@ -483,9 +613,12 @@ describe('provincial permit detail services', () => {
         case '/lexis/rpc/permit-details/all-scale-fees':
           return Promise.resolve(
             response({
+              totalVolume: '12.5',
               packageList: [
                 {
                   packageNumber: 'BOIC-100',
+                  growthType: 'Old growth',
+                  totalFeeForPackage: '$10.50',
                   scaleList: [
                     {
                       id: 'OIC-FEE-1',
@@ -600,7 +733,7 @@ describe('provincial permit detail services', () => {
           ],
         })
       case '/lexis/rpc/permit-details/all-scale-fees':
-        return response({ packageList: [] })
+        return response({ packageList: [], totalVolume: '0.0' })
       case '/lexis/rpc/permit-details/gbms-invoice-history':
         return response([])
       default:

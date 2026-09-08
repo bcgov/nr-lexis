@@ -10,15 +10,11 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
-  reporter: [
-    ['line'],
-    ['list', { printSteps: true }],
-    ['html', { open: 'never' }],
-  ],
+  retries: process.env.CI ? 1 : 0,
+  reporter: [['line'], ['list', { printSteps: true }], ['html', { open: 'never' }]],
   use: {
     baseURL: E2E_BASE_URL,
-    trace: 'on-first-retry',
+    trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },
   webServer: isRemoteE2E

@@ -32,6 +32,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -231,6 +233,23 @@ class LexisReportControllerTest {
                 "CSV"));
   }
 
+  @ParameterizedTest
+  @ValueSource(strings = {"biweeklyListing", "tenureReport"})
+  void reportShouldPreserveExplicitOpenDateBounds(String reportAction) {
+    LexisReportRequestDto request =
+        new LexisReportRequestDto(Map.of("fromDate", "2026-09-01", "toDate", "  "), "PDF");
+    assertDelegatesTo(reportAction,
+        controller -> "biweeklyListing".equals(reportAction)
+            ? controller.biweeklyListing(request) : controller.tenureReport(request));
+
+    ArgumentCaptor<LexisReportRequestDto> requestCaptor =
+        ArgumentCaptor.forClass(LexisReportRequestDto.class);
+    verify(reportService).generateReport(eq(reportAction), requestCaptor.capture());
+    assertThat(requestCaptor.getValue().parameters())
+        .containsEntry("fromDate", "2026-09-01")
+        .containsEntry("toDate", "");
+  }
+
   @Test
   void biweeklyListingShouldDelegateToReportService() {
     assertDelegatesTo("biweeklyListing", controller -> controller.biweeklyListing(sampleRequest()));
@@ -243,7 +262,14 @@ class LexisReportControllerTest {
 
   @Test
   void speciesGradeReportShouldDelegateToReportService() {
-    assertDelegatesTo("speciesGradeReport", controller -> controller.speciesGradeReport(sampleRequest()));
+    assertDelegatesTo(
+        "speciesGradeReport",
+        controller -> controller.speciesGradeReport(
+            new LexisReportRequestDto(Map.of("permitStatus", "  "), "PDF")));
+    ArgumentCaptor<LexisReportRequestDto> requestCaptor =
+        ArgumentCaptor.forClass(LexisReportRequestDto.class);
+    verify(reportService).generateReport(eq("speciesGradeReport"), requestCaptor.capture());
+    assertThat(requestCaptor.getValue().parameters()).containsEntry("permitStatus", "");
   }
 
   @Test

@@ -49,6 +49,8 @@ import org.springframework.transaction.interceptor.TransactionAspectSupport;
 @Profile("oracle")
 public class FederalApplicationOracleService implements FederalApplicationService {
 
+  private static final int REMARK_MAX_LENGTH = 254;
+
   private final FederalApplicationRepository repository;
   private final FederalPermitDetailRepository permitRepository;
   private final ApplicationDetailsRpcRepository applicationDetailsRepository;
@@ -374,6 +376,9 @@ public class FederalApplicationOracleService implements FederalApplicationServic
     if (("REJ".equals(normalizedStatus) || "WDN".equals(normalizedStatus))
         && remark == null) {
       return failure(List.of("A remark is required when rejecting or withdrawing a federal application."));
+    }
+    if (remark != null && remark.length() > REMARK_MAX_LENGTH) {
+      return failure(List.of("Remark is too long to save. Shorten it and try again."));
     }
 
     FederalApplicationRepository.FederalMutationContextRow context =
@@ -834,7 +839,7 @@ public class FederalApplicationOracleService implements FederalApplicationServic
 
     return new FederalApplicationSearchCriteria(
         trimToNull(input.federalApplicationNumber()),
-        trimToNull(input.packageNumber()),
+        normalizedCode(input.packageNumber()),
         trimToNull(input.exemptionNumber()),
         trimToNull(input.applicationStatus()),
         input.receivedFromDate(),

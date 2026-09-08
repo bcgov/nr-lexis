@@ -1,3 +1,19 @@
+.provincial-review-mu44-info {
+  display: inline-flex;
+  margin-inline-start: 0.25rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--cds-text-secondary, #525252);
+  vertical-align: middle;
+  cursor: help;
+
+  &:focus-visible {
+    outline: 2px solid var(--cds-focus, #0f62fe);
+    outline-offset: 2px;
+  }
+}
+
 .provincial-review-approval-modal__count {
   margin: 0;
   color: var(--cds-text-primary, #161616);

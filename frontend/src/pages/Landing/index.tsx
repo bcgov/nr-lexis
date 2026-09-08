@@ -9,12 +9,13 @@ import {
   hasSessionExpiredLoginNotice,
 } from '@/context/auth/session-expiry'
 import { useAuth } from '@/context/auth/useAuth'
+import { clearLoginDestination, setLoginDestination } from '@/context/auth/login-destination'
 import { useTheme } from '@/context/theme/useTheme'
 import logo from '@/assets/BCID_H_rgb_pos.png'
 import reverseLogo from '@/assets/gov-bc-logo-horiz.png'
 import landingImage from '@/assets/landing.jpg'
 
-const LandingPage = () => {
+const LandingPage = ({ loginDestination }: { loginDestination?: string }) => {
   const navigate = useNavigate()
   const { defaultRoute, isLoading, isLoggedIn, login, usesExternalLogin } = useAuth()
   const { theme } = useTheme()
@@ -33,15 +34,17 @@ const LandingPage = () => {
 
   useEffect(() => {
     if (!isLoading && isLoggedIn) {
-      navigate(defaultRoute, { replace: true })
+      navigate(loginDestination ?? defaultRoute, { replace: true })
     }
-  }, [defaultRoute, isLoading, isLoggedIn, navigate])
+  }, [defaultRoute, isLoading, isLoggedIn, loginDestination, navigate])
 
   const onLogin = async (provider: LoginProvider) => {
     setErrorMessage('')
+    setLoginDestination(loginDestination)
     try {
       await login(provider)
     } catch (error) {
+      clearLoginDestination()
       console.error(error)
       setErrorMessage('Unable to start the login flow.')
     }

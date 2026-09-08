@@ -93,6 +93,7 @@ public class PermitDetailsRpcController {
   private static final String ROLE_APPLICATION_APPROVER = "LEXIS_APPLICATION_APPROVER";
   private static final String ROLE_PROVINCIAL_SUBMITTER = "LEXIS_PROVINCIAL_SUBMITTER";
   private static final String PERMIT_STATUS_ACTIVE = "ACT";
+  private static final String PERMIT_STATUS_COMPLETE = "COM";
   private static final String PERMIT_STATUS_EXPIRED = "EXP";
   private static final String LEGACY_ACTION_SAVE_PERMIT = "savePermit";
   private static final String LEGACY_ACTION_REVIEW_PERMITS = "/permitsReview";
@@ -700,7 +701,7 @@ public class PermitDetailsRpcController {
             mutationRequest.agentClientNumber())) {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
-    requireCanonicalPermitMutable(permitNumber);
+    requirePermitDetailsMutable(permitNumber, authentication);
 
     PermitMutationRpcResponseDto response =
         operationCoordinator.executePermitMutation(
@@ -736,7 +737,7 @@ public class PermitDetailsRpcController {
       throw new AccessDeniedException(
           "Permit client scope changed while the mutation was waiting.");
     }
-    requireCanonicalPermitMutable(permitNumber);
+    requirePermitDetailsMutable(permitNumber, authentication);
     List<MutationExemptionLock> exemptionLocks =
         acquireMutationExemptionLocks(exemptionNumbers, authentication);
     List<Long> applicationLocksToRelease = List.of();
@@ -1511,27 +1512,16 @@ public class PermitDetailsRpcController {
                         request.permitSubmitDate(), detail.applicationDate())
                     || submittedDateChanged(request.permitIssueDate(), detail.issueDate())
                     || submittedDateChanged(request.permitExpiryDate(), detail.expiryDate())
-                    || clearsBlanketOicDraftDate(request, detail))
+                    || clearsActiveDraftDate(request, detail))
         .orElse(true);
   }
 
-  private boolean clearsBlanketOicDraftDate(
+  private boolean clearsActiveDraftDate(
       PermitMutationRequestDto request, PermitDetailDto detail) {
-    if (!PERMIT_STATUS_ACTIVE.equalsIgnoreCase(detail.permitStatusCode())
-        || !targetsActivePermitStatus(request.permitStatus(), detail.permitStatusCode())
-        || (!clearsSubmittedDate(request.permitIssueDate(), detail.issueDate())
-            && !clearsSubmittedDate(request.permitExpiryDate(), detail.expiryDate()))) {
-      return false;
-    }
-
-    String exemptionNumber = normalizeExemptionNumber(detail.exemptionNumber());
-    if (exemptionService == null || exemptionNumber == null) {
-      return true;
-    }
-    return exemptionService
-        .findByExemptionNumber(exemptionNumber)
-        .map(exemption -> exemption.blanketOic())
-        .orElse(true);
+    return PERMIT_STATUS_ACTIVE.equalsIgnoreCase(detail.permitStatusCode())
+        && targetsActivePermitStatus(request.permitStatus(), detail.permitStatusCode())
+        && (clearsSubmittedDate(request.permitIssueDate(), detail.issueDate())
+            || clearsSubmittedDate(request.permitExpiryDate(), detail.expiryDate()));
   }
 
   private boolean targetsActivePermitStatus(String submitted, String current) {
@@ -1779,11 +1769,20 @@ public class PermitDetailsRpcController {
     }
   }
 
-  private void requireCanonicalPermitMutable(Long permitNumber) {
+  private void requirePermitDetailsMutable(Long permitNumber, Authentication authentication) {
+    String permitStatus = requireCanonicalPermitMutable(permitNumber);
+    if (PERMIT_STATUS_COMPLETE.equals(permitStatus) && !isMinistryUser(authentication)) {
+      throw new AccessDeniedException(
+          "Completed permit details are read-only for Provincial Submitters. Shipping can still be updated.");
+    }
+  }
+
+  private String requireCanonicalPermitMutable(Long permitNumber) {
     String permitStatus = canonicalPermitStatus(permitNumber);
     if (PERMIT_STATUS_EXPIRED.equals(permitStatus)) {
       throw new AccessDeniedException("Expired permits are read-only.");
     }
+    return permitStatus;
   }
 
   private String canonicalPermitStatus(Long permitNumber) {

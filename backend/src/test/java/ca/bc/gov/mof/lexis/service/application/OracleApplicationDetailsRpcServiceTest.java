@@ -24,6 +24,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
@@ -319,8 +320,49 @@ class OracleApplicationDetailsRpcServiceTest {
     assertThat(service.persistRemark("new", 1000456L, "café", "idir\\jsmith")).isEmpty();
     assertThat(service.persistRemark("new", 1000456L, "r".repeat(255), "idir\\jsmith"))
         .isEmpty();
+    assertThat(service.persistRemark("new", 1000456L, "&".repeat(255), "idir\\jsmith"))
+        .isEmpty();
+    assertThat(service.persistRemark("44", 1000456L, "&".repeat(255), "idir\\jsmith"))
+        .isEmpty();
 
     verifyNoInteractions(repository);
+  }
+
+  @Test
+  void persistRemarkShouldAcceptStorageLimitWithoutConvertingLiteralEntities() {
+    String remark = "&amp;".repeat(50) + "1234";
+    when(repository.insertRemark(
+            org.mockito.ArgumentMatchers.eq(1000456L),
+            org.mockito.ArgumentMatchers.eq(remark),
+            org.mockito.ArgumentMatchers.eq("idir\\jsmith"),
+            any(Instant.class)))
+        .thenReturn(
+            Optional.of(
+                new ApplicationDetailsRpcRepository.RemarkRow(
+                    12L, 1000456L, remark, "idir\\jsmith", Instant.now())));
+
+    Optional<ApplicationDetailsRpcService.PersistedRemark> response =
+        service.persistRemark("new", 1000456L, remark, "idir\\jsmith");
+
+    assertThat(response).isPresent();
+    assertThat(response.get().remark()).isEqualTo(remark);
+    verify(repository).insertRemark(
+        org.mockito.ArgumentMatchers.eq(1000456L),
+        org.mockito.ArgumentMatchers.eq(remark),
+        org.mockito.ArgumentMatchers.eq("idir\\jsmith"),
+        any(Instant.class));
+  }
+
+  @Test
+  void addApplicationShouldRejectRemarkThatExceedsStorageLimit() {
+    ApplicationDetailsRpcService.CreateApplicationResult response =
+        service.addApplication(
+            withRemark(validCreateApplicationRequest(180L), "&".repeat(255)), "idir\\jsmith");
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors()).containsExactly("Application remark must not exceed 254 bytes.");
+    verify(repository, never()).insertApplication(any());
+    verify(repository, never()).insertRemark(any(), any(), any(), any());
   }
 
   @Test
@@ -2238,6 +2280,77 @@ class OracleApplicationDetailsRpcServiceTest {
     verify(repository).updatePackage(any());
   }
 
+  @ParameterizedTest
+  @CsvSource({
+    "false,0.1,0.2,0.3,true,0.3",
+    "false,10.1,16.1,26.2,true,26.2",
+    "false,10.1,16.1,26.1,false,26.2",
+    "false,10.1,16.1,26.3,true,26.2",
+    "false,1.04,1.04,2.0,true,2.0",
+    "false,1.04,1.04,2.1,true,2.0",
+    "false,1.06,1.06,2.1,false,2.2",
+    "false,1.06,1.06,2.2,true,2.2",
+    "true,0.1,0.2,0.3,true,0.3",
+    "true,10.1,16.1,26.2,true,26.2",
+    "true,10.1,16.1,26.1,false,26.2",
+    "true,10.1,16.1,26.3,true,26.2",
+    "true,1.04,1.04,2.0,true,2.0",
+    "true,1.04,1.04,2.1,true,2.0",
+    "true,1.06,1.06,2.1,false,2.2",
+    "true,1.06,1.06,2.2,true,2.2"
+  })
+  void updatePackageShouldCompareScaleTotalsAtLegacyDecimalPrecision(
+      boolean blanketOic,
+      double firstScaleVolume,
+      double secondScaleVolume,
+      double packageVolume,
+      boolean expectedValid,
+      String expectedScaleVolume) {
+    when(repository.findPackageMutationByPackageNumber("PKG-903"))
+        .thenReturn(
+            Optional.of(
+                packageMutationRow(
+                    "PKG-903", packageVolume, Instant.parse("2026-05-01T12:00:00Z"))));
+    when(repository.findApplicationUpdateRecord(1000456L))
+        .thenReturn(Optional.of(applicationUpdateRecordWithOicIndicator(blanketOic ? "Y" : "N")));
+    when(repository.findScaleDetailsByPackageNumber("PKG-903"))
+        .thenReturn(
+            List.of(
+                new ApplicationDetailsRpcRepository.ApplicationScaleDetailRow(
+                    "54", "TM001", "FI", "1", firstScaleVolume, 1L, 1000456L, null, "PKG-903", ""),
+                new ApplicationDetailsRpcRepository.ApplicationScaleDetailRow(
+                    "55", "TM002", "FI", "1", secondScaleVolume, 1L, 1000456L, null, "PKG-903", "")));
+    if (expectedValid) {
+      when(repository.updatePackage(any())).thenReturn(true);
+    }
+    ApplicationDetailsRpcService.PackageMutationRequest request =
+        new ApplicationDetailsRpcService.PackageMutationRequest(
+            "PKG-903", null, 1000456L, packageVolume, 5.0d, 3.0d, "ACT",
+            "Updated comments", "N", "S", "H", null, List.of());
+
+    ApplicationDetailsRpcService.PackagePersistenceResult response =
+        blanketOic
+            ? service.updateHiddenBlanketOicPackage(request, "idir\\jsmith")
+            : service.updatePackage(request, "idir\\jsmith");
+
+    assertThat(response.valid()).isEqualTo(expectedValid);
+    if (expectedValid) {
+      assertThat(response.errors()).isEmpty();
+      ArgumentCaptor<ApplicationDetailsRpcRepository.PackageMutationRecord> record =
+          ArgumentCaptor.forClass(ApplicationDetailsRpcRepository.PackageMutationRecord.class);
+      verify(repository).updatePackage(record.capture());
+      assertThat(record.getValue().packageVolume()).isEqualTo(packageVolume);
+      assertThat(record.getValue().comments()).isEqualTo("Updated comments");
+    } else {
+      assertThat(response.errors())
+          .containsExactly(
+              "The package volume must be more than the total scale volume ("
+                  + expectedScaleVolume
+                  + ").");
+      verify(repository, never()).updatePackage(any());
+    }
+  }
+
   @Test
   void hiddenBlanketOicPackageUpdateShouldRejectCommentsOracleCannotStore() {
     Instant entryTimestamp = Instant.parse("2026-05-01T12:00:00Z");
@@ -2586,6 +2699,56 @@ class OracleApplicationDetailsRpcServiceTest {
     verify(repository).insertScaleDetail(recordCaptor.capture());
     assertThat(recordCaptor.getValue().entryUserId()).isEqualTo("idir\\jsmith");
     assertThat(recordCaptor.getValue().speciesGradeVolume()).isEqualTo(12.5d);
+  }
+
+  @ParameterizedTest
+  @CsvSource({
+    "0.1,0.2,0.3,true",
+    "10.1,16.1,26.2,true",
+    "10.1,16.0,26.2,true",
+    "10.1,16.2,26.2,false",
+    "1.0,2.0,3.0,true"
+  })
+  void addScaleToPackageShouldCompareVolumesAtLegacyDecimalPrecision(
+      double existingVolume, double newVolume, double packageVolume, boolean expectedValid) {
+    when(repository.packageExists("PKG-903")).thenReturn(true);
+    when(repository.findTimberMark("TM001")).thenReturn(Optional.of(validTimberMarkRow()));
+    when(repository.findTimberMarkByOrgUnit("TM001", 11L))
+        .thenReturn(Optional.of(validTimberMarkRow()));
+    when(repository.findGradeCodeRequired("1"))
+        .thenReturn(Optional.of(new ApplicationDetailsRpcRepository.CodeRow("1", "Sawlog", 1L, 1L)));
+    when(repository.findScaleDetailsByPackageNumber("PKG-903"))
+        .thenReturn(
+            List.of(
+                new ApplicationDetailsRpcRepository.ApplicationScaleDetailRow(
+                    "54", "TM002", "FI", "1", existingVolume, 1L, 1000456L, null, "PKG-903", "")));
+    when(repository.findPackageDetailsByPackageNumberRequired("PKG-903"))
+        .thenReturn(
+            Optional.of(
+                new ApplicationDetailsRpcRepository.PackageDetailsRow(
+                    "PKG-903", packageVolume, 10.0d, 20.0d, "A", "", "N", "O", "H")));
+    if (expectedValid) {
+      when(repository.insertScaleDetail(any()))
+          .thenReturn(
+              Optional.of(
+                  new ApplicationDetailsRpcRepository.ApplicationScaleDetailRow(
+                      "55", "TM001", "FI", "1", newVolume, 1L, 1000456L, null, "PKG-903", "")));
+    }
+
+    ApplicationDetailsRpcService.ScalePersistenceResult response =
+        service.addScaleToPackage(
+            new ApplicationDetailsRpcService.ScaleMutationRequest(
+                "TM001", "PKG-903", "1", "FI", 1000456L, 1L, newVolume),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isEqualTo(expectedValid);
+    if (expectedValid) {
+      assertThat(response.errors()).isEmpty();
+      verify(repository).insertScaleDetail(any());
+    } else {
+      assertThat(response.errors()).containsExactly("The scale volume must be less than 16.1.");
+      verify(repository, never()).insertScaleDetail(any());
+    }
   }
 
   @ParameterizedTest
@@ -5410,16 +5573,6 @@ class OracleApplicationDetailsRpcServiceTest {
         "PL",
         List.of("HE"),
         true);
-  }
-
-  private void stubSuccessfulApplicationInsert() {
-    when(repository.findCandidateExcolCodesRequired(1, "HE", "PL", 11L))
-        .thenReturn(List.of(new ApplicationDetailsRpcRepository.ExcolValidationRow("HE/PL")));
-    when(repository.insertApplication(any(ApplicationDetailsRpcRepository.ApplicationInsertRecord.class)))
-        .thenReturn(Optional.of(new ApplicationDetailsRpcRepository.ApplicationInsertRow(1000456L)));
-    when(repository.replaceApplicationEndUses(
-            org.mockito.ArgumentMatchers.eq(1000456L), org.mockito.ArgumentMatchers.anyList()))
-        .thenReturn(true);
   }
 
   private ApplicationDetailsRpcService.CreateApplicationRequest withRemark(

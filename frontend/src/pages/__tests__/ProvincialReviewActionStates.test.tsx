@@ -1029,6 +1029,40 @@ describe('Provincial Review Action State Smoke', () => {
     })
   })
 
+  it.each([true, false])(
+    'identifies MU44 timber marks with detail access %s',
+    async (canOpenDetails) => {
+      mockedUseAuth.mockReturnValue(
+        createTestAuthContext({
+          canPerform: (action) => action !== '/applicationDetails' || canOpenDetails,
+        }),
+      )
+      mockedSearchApplicationReviews.mockResolvedValue({
+        ...reviewResponse,
+        content: reviewResponse.content.map((row, index) => ({
+          ...row,
+          showInfoIcon: index === 0,
+        })),
+      })
+      renderPage()
+      await screen.findByText('1000123')
+
+      const note = 'Application contains timber mark(s) from MU44'
+      const flaggedRow = screen.getByText('1000123').closest('tr')!
+      const unflaggedRow = screen.getByText('1000456').closest('tr')!
+      expect(within(flaggedRow).getByRole('button', { name: note })).toBeVisible()
+      expect(within(unflaggedRow).queryByRole('button', { name: note })).not.toBeInTheDocument()
+      if (canOpenDetails) {
+        expect(within(flaggedRow).getByRole('link', { name: '1000123' })).toHaveAttribute(
+          'href',
+          expect.stringContaining('/provincial/application/1000123'),
+        )
+      } else {
+        expect(within(flaggedRow).queryByRole('link')).not.toBeInTheDocument()
+      }
+    },
+  )
+
   it('keeps review pagination at 100 by default with expanded page size options', async () => {
     renderPage()
     await screen.findByText('1000123')
@@ -1045,21 +1079,24 @@ describe('Provincial Review Action State Smoke', () => {
     expect(rowsPerPage).toHaveValue('100')
     expect(
       Array.from(rowsPerPage.querySelectorAll('option')).map((option) => option.value),
-    ).toEqual(['10', '25', '50', '100', '200'])
+    ).toEqual(['10', '25', '50', '100', '150', '200'])
   })
 
-  it('accepts supported review page sizes from the URL', async () => {
-    renderPage('/provincial/review?pageSize=200')
-    await screen.findByText('1000123')
+  it.each([150, 200])(
+    'accepts the supported review page size %i from the URL',
+    async (pageSize) => {
+      renderPage(`/provincial/review?pageSize=${pageSize}`)
+      await screen.findByText('1000123')
 
-    expect(mockedSearchApplicationReviews).toHaveBeenCalledWith(
-      expect.objectContaining({
-        page: 0,
-        pageSize: 200,
-      }),
-      expect.objectContaining({ knownTotal: expect.any(Number) }),
-    )
-  })
+      expect(mockedSearchApplicationReviews).toHaveBeenCalledWith(
+        expect.objectContaining({
+          page: 0,
+          pageSize,
+        }),
+        expect.objectContaining({ knownTotal: expect.any(Number) }),
+      )
+    },
+  )
 
   it('approves selected applications sequentially', async () => {
     mockedSearchApplicationReviews.mockResolvedValue(twoNewReviewResponse)

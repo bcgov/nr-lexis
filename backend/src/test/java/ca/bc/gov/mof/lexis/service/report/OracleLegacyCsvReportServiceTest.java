@@ -24,6 +24,9 @@ import javax.sql.DataSource;
 import oracle.jdbc.OracleConnection;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
@@ -317,8 +320,10 @@ class OracleLegacyCsvReportServiceTest {
     verify(callableStatement).registerOutParameter(3, Types.REF_CURSOR);
   }
 
-  @Test
-  void shouldGenerateSpeciesGradeCsvUsingOracleProcedureParameterOrder() throws Exception {
+  @ParameterizedTest
+  @ValueSource(strings = {"COM", ""})
+  void shouldGenerateSpeciesGradeCsvUsingOracleProcedureParameterOrder(String permitStatus)
+      throws Exception {
     when(dataSource.getConnection()).thenReturn(connection);
     when(connection.prepareCall("{ call LEXIS_REPORTING.SPECIES_GRADE_REPORT_CSV(?,?,?,?,?,?,?,?,?,?,?) }"))
         .thenReturn(callableStatement);
@@ -337,7 +342,7 @@ class OracleLegacyCsvReportServiceTest {
                 entry("fromDate", "2026-01-01"),
                 entry("toDate", "2026-01-31"),
                 entry("region", "1904,1905"),
-                entry("permitStatus", "COM"),
+                entry("permitStatus", permitStatus),
                 entry("exemptionNumber", "EX-123"),
                 entry("exemptionType", "O"),
                 entry("exemptionReason", "S"),
@@ -358,7 +363,11 @@ class OracleLegacyCsvReportServiceTest {
     verify(callableStatement).setDate(1, java.sql.Date.valueOf("2026-01-01"));
     verify(callableStatement).setDate(2, java.sql.Date.valueOf("2026-01-31"));
     verify(callableStatement).setString(3, "1904,1905");
-    verify(callableStatement).setString(4, "COM");
+    if (permitStatus.isEmpty()) {
+      verify(callableStatement).setNull(4, Types.VARCHAR);
+    } else {
+      verify(callableStatement).setString(4, permitStatus);
+    }
     verify(callableStatement).setString(5, "EX-123");
     verify(callableStatement).setString(6, "O");
     verify(callableStatement).setString(7, "S");
@@ -641,8 +650,15 @@ class OracleLegacyCsvReportServiceTest {
     verify(callableStatement).registerOutParameter(12, Types.REF_CURSOR);
   }
 
-  @Test
-  void shouldGenerateBiweeklyCsvFromLegacyDynamicProcedure() throws Exception {
+  @ParameterizedTest
+  @CsvSource({
+      "2026-08-12,2026-08-12,2026-08-12,2026-08-12",
+      "2026-09-01,'',2026-09-01,9999-12-31",
+      "'',2026-08-31,0001-01-01,2026-08-31",
+      "'','',0001-01-01,9999-12-31"
+  })
+  void shouldGenerateBiweeklyCsvFromLegacyDynamicProcedure(
+      String fromDate, String toDate, String expectedFromDate, String expectedToDate) throws Exception {
     when(dataSource.getConnection()).thenReturn(connection);
     when(connection.prepareCall("{ call LEXIS_REPORTING.BIWEEKLY_REPORT_CSV(?,?,?,?) }"))
         .thenReturn(callableStatement);
@@ -673,8 +689,8 @@ class OracleLegacyCsvReportServiceTest {
     LexisReportRequestDto request =
         new LexisReportRequestDto(
             Map.of(
-                "fromDate", "2026-08-12",
-                "toDate", "2026-08-12",
+                "fromDate", fromDate,
+                "toDate", toDate,
                 "region", "1903,1904,1905,1906,1907,1908,1909,1910",
                 "exportJurisdictionCode", "P"),
             "CSV");
@@ -701,8 +717,8 @@ class OracleLegacyCsvReportServiceTest {
         .contains("EEA.EXPORT_APPLICATION_STATUS_CODE = :12")
         .contains("EEA.EXPORT_PRODUCT_TYPE_CODE <> :13");
     assertBindArrayValues(
-        "2026-08-12",
-        "2026-08-12",
+        expectedFromDate,
+        expectedToDate,
         "1903",
         "1904",
         "1905",

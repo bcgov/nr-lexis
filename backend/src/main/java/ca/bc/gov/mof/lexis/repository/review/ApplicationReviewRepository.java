@@ -931,6 +931,7 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
 
   private ReviewRemarkRow mapReviewRemarkRow(ResultSet rs) {
     Long remarkId = getLong(rs, "EXPORT_EXMPTN_APPL_REMARK_NMBR");
+    // Historical raw remarks can contain literal entities; do not infer an encoding for email.
     String remark = getString(rs, "REMARK");
     String user = getString(rs, "ENTRY_USERID");
     Timestamp entryTimestamp = safeTimestamp(rs, "ENTRY_TIMESTAMP");

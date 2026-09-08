@@ -46,6 +46,7 @@ import {
   updateFederalApplicationStatus,
 } from '@/service/federal-application-mutation-service'
 import { fetchShippingReferenceOptions } from '@/service/shipping-reference-service'
+import { submitAdminUpload, validateAdminUpload } from '@/service/admin-upload-service'
 import { createTestAuthContext, createTestCapabilities } from '@/test-utils/auth'
 
 const openDocumentUploadModal = async (): Promise<void> => {
@@ -102,6 +103,11 @@ vi.mock('@/service/federal-application-documents-service', () => ({
   removeFederalApplicationDocument: vi.fn(),
 }))
 
+vi.mock('@/service/admin-upload-service', () => ({
+  submitAdminUpload: vi.fn(),
+  validateAdminUpload: vi.fn(),
+}))
+
 vi.mock('@/service/provincial-application-items-service', () => ({
   fetchApplicationPackageScales: vi.fn(),
 }))
@@ -137,6 +143,8 @@ const mockedReleaseApplicationEditLock = vi.mocked(releaseApplicationEditLock)
 const mockedFetchFederalApplicationDocuments = vi.mocked(fetchFederalApplicationDocuments)
 const mockedOpenFederalApplicationDocument = vi.mocked(openFederalApplicationDocument)
 const mockedRemoveFederalApplicationDocument = vi.mocked(removeFederalApplicationDocument)
+const mockedSubmitAdminUpload = vi.mocked(submitAdminUpload)
+const mockedValidateAdminUpload = vi.mocked(validateAdminUpload)
 const mockedFetchApplicationPackageScales = vi.mocked(fetchApplicationPackageScales)
 const mockedFetchFederalApplicationRemarks = vi.mocked(fetchFederalApplicationRemarks)
 const mockedSaveFederalApplicationRemark = vi.mocked(saveFederalApplicationRemark)
@@ -1649,6 +1657,130 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(screen.getAllByText('Approved').length).toBeGreaterThan(0)
   })
 
+  it('preserves an unsaved federal status draft when shipping details are saved', async () => {
+    mockedFetchFederalApplicationDetail.mockResolvedValue({
+      ...federalDetail,
+      statusCode: 'APP',
+      statusDescription: 'Approved',
+      listingDate: '2999-12-31',
+    })
+    renderFederalDataRouter()
+    await selectDetailTab('Application')
+    await enterFederalStatusEditMode()
+    await userEvent.selectOptions(screen.getByLabelText('Status'), 'WDN')
+    await userEvent.type(screen.getByLabelText('Remark'), 'Awaiting withdrawal confirmation')
+
+    await selectDetailTab('Shipping details')
+    await userEvent.click(screen.getByRole('button', { name: 'Edit shipping details' }))
+    await userEvent.clear(screen.getByLabelText('Transport name'))
+    await userEvent.type(screen.getByLabelText('Transport name'), 'Updated ship')
+    await userEvent.click(screen.getByRole('button', { name: 'Save federal permit' }))
+    await screen.findByText('Federal permit updated.')
+
+    await selectDetailTab('Application')
+    expect(screen.getByLabelText('Status')).toHaveValue('WDN')
+    expect(screen.getByLabelText('Remark')).toHaveValue('Awaiting withdrawal confirmation')
+    expect(mockedUpdateFederalApplicationStatus).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('link', { name: 'Leave federal application' }))
+    expect(await screen.findByRole('dialog', { name: 'Unsaved changes' })).toBeInTheDocument()
+  })
+
+  it.each([
+    { dirty: true, readOnly: false, expectedEditing: true },
+    { dirty: true, readOnly: true, expectedEditing: false },
+    { dirty: false, readOnly: false, expectedEditing: false },
+  ])(
+    'refreshes federal status without losing an editable shipping draft (dirty=$dirty, readOnly=$readOnly)',
+    async ({ dirty, readOnly, expectedEditing }) => {
+      mockedFetchFederalApplicationDetail.mockResolvedValueOnce({
+        ...federalDetail,
+        statusCode: 'APP',
+        statusDescription: 'Approved',
+        listingDate: '2999-12-31',
+      })
+      mockedFetchFederalApplicationDetail.mockResolvedValue({
+        ...federalDetail,
+        statusCode: 'WDN',
+        statusDescription: 'Withdrawn',
+        listingDate: '2999-12-31',
+        readOnly,
+        federalPermit: { ...federalDetail.federalPermit!, transportName: 'Persisted ship' },
+      })
+      renderFederalDataRouter()
+      await selectDetailTab('Shipping details')
+      await userEvent.click(screen.getByRole('button', { name: 'Edit shipping details' }))
+      if (dirty) {
+        await userEvent.clear(screen.getByLabelText('Transport name'))
+        await userEvent.type(screen.getByLabelText('Transport name'), 'Unsaved ship')
+      }
+
+      await selectDetailTab('Application')
+      await enterFederalStatusEditMode()
+      await userEvent.selectOptions(screen.getByLabelText('Status'), 'WDN')
+      await userEvent.type(screen.getByLabelText('Remark'), 'Withdraw this application')
+      await userEvent.click(screen.getByRole('button', { name: 'Update status' }))
+      await screen.findByText('Federal application status updated.')
+      expect(screen.getAllByText('Withdrawn').length).toBeGreaterThan(0)
+      expect(mockedSaveFederalPermit).not.toHaveBeenCalled()
+
+      await selectDetailTab('Shipping details')
+      if (expectedEditing) {
+        expect(screen.getByLabelText('Transport name')).toHaveValue('Unsaved ship')
+        expect(screen.getByRole('button', { name: 'Save federal permit' })).toBeEnabled()
+        await userEvent.click(screen.getByRole('link', { name: 'Leave federal application' }))
+        expect(await screen.findByRole('dialog', { name: 'Unsaved changes' })).toBeInTheDocument()
+      } else {
+        expect(screen.queryByLabelText('Transport name')).not.toBeInTheDocument()
+        expect(screen.getByText('Persisted ship')).toBeInTheDocument()
+        if (readOnly) {
+          expect(
+            screen.queryByRole('button', { name: 'Edit shipping details' }),
+          ).not.toBeInTheDocument()
+        }
+        await userEvent.click(screen.getByRole('link', { name: 'Leave federal application' }))
+        expect(await screen.findByRole('heading', { name: 'Elsewhere' })).toBeInTheDocument()
+      }
+    },
+  )
+
+  it('preserves shipping edits made while the federal status refresh is pending', async () => {
+    const refresh = Promise.withResolvers<FederalApplicationDetail>()
+    mockedFetchFederalApplicationDetail
+      .mockResolvedValueOnce({
+        ...federalDetail,
+        statusCode: 'APP',
+        statusDescription: 'Approved',
+        listingDate: '2999-12-31',
+      })
+      .mockImplementationOnce(() => refresh.promise)
+    renderFederalDataRouter()
+    await selectDetailTab('Shipping details')
+    await userEvent.click(screen.getByRole('button', { name: 'Edit shipping details' }))
+
+    await selectDetailTab('Application')
+    await enterFederalStatusEditMode()
+    await userEvent.selectOptions(screen.getByLabelText('Status'), 'WDN')
+    await userEvent.type(screen.getByLabelText('Remark'), 'Withdraw this application')
+    await userEvent.click(screen.getByRole('button', { name: 'Update status' }))
+    await waitFor(() => expect(mockedFetchFederalApplicationDetail).toHaveBeenCalledTimes(2))
+
+    await selectDetailTab('Shipping details')
+    await userEvent.clear(screen.getByLabelText('Transport name'))
+    await userEvent.type(screen.getByLabelText('Transport name'), 'Draft during refresh')
+    refresh.resolve({
+      ...federalDetail,
+      statusCode: 'WDN',
+      statusDescription: 'Withdrawn',
+      listingDate: '2999-12-31',
+    })
+
+    await screen.findByText('Federal application status updated.')
+    expect(screen.getByLabelText('Transport name')).toHaveValue('Draft during refresh')
+    expect(mockedSaveFederalPermit).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('link', { name: 'Leave federal application' }))
+    expect(await screen.findByRole('dialog', { name: 'Unsaved changes' })).toBeInTheDocument()
+  })
+
   it('offers only listing-day outcomes from an approved federal application', async () => {
     mockedFetchFederalApplicationDetail.mockResolvedValue({
       ...federalDetail,
@@ -2038,6 +2170,118 @@ describe('Exemption and Federal Detail Document Actions', () => {
     })
   })
 
+  it.each(['ADMIN', 'LEXIS_APPLICATION_APPROVER'])(
+    'allows %s to add and delete expired federal documents while other edits stay read-only',
+    async (role) => {
+      mockedUseAuth.mockReturnValue(
+        createTestAuthContext({
+          capabilities: createTestCapabilities({ roles: [role] }),
+          canPerform: () => true,
+        }),
+      )
+      mockedFetchFederalApplicationDetail.mockResolvedValue({
+        ...federalDetail,
+        statusCode: 'EXP',
+        statusDescription: 'Expired',
+        readOnly: true,
+      })
+      const document = {
+        id: '804',
+        name: 'reconciliation.pdf',
+        description: 'Received after expiry',
+        type: 'Attachment',
+        source: 'application' as const,
+        deletable: true,
+      }
+      mockedFetchFederalApplicationDocuments
+        .mockResolvedValueOnce({ rows: [], source: 'api' })
+        .mockResolvedValueOnce({ rows: [document], source: 'api' })
+        .mockResolvedValueOnce({ rows: [], source: 'api' })
+      mockedValidateAdminUpload.mockResolvedValue({ status: 'validated' })
+      mockedSubmitAdminUpload.mockResolvedValue({ status: 'success' })
+
+      renderFederalDataRouter()
+      await selectDetailTab('Documents')
+      await openDocumentUploadModal()
+      const file = new File(['reconciliation'], 'reconciliation.pdf', {
+        type: 'application/pdf',
+      })
+      await userEvent.upload(screen.getByLabelText('Document File'), file)
+      await userEvent.type(screen.getByLabelText(/Document description/), 'Received after expiry')
+      await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
+      await userEvent.click(await screen.findByRole('button', { name: 'Submit upload' }))
+
+      await waitFor(() => {
+        expect(mockedSubmitAdminUpload).toHaveBeenCalledWith('application', {
+          applicationNumber: '888',
+          file,
+          fileDescription: 'Received after expiry',
+        })
+        expect(mockedFetchFederalApplicationDocuments).toHaveBeenCalledTimes(2)
+        expect(screen.queryByRole('dialog', { name: 'Add document' })).not.toBeInTheDocument()
+      })
+      const documentRow = (await screen.findByText('reconciliation.pdf')).closest('tr')
+      expect(documentRow).toBeTruthy()
+      await userEvent.click(
+        within(documentRow as HTMLElement).getByRole('button', { name: 'Delete' }),
+      )
+      const confirmation = await screen.findByRole('dialog', { name: 'Delete document' })
+      await userEvent.click(within(confirmation).getByRole('button', { name: 'Delete' }))
+      await waitFor(() => {
+        expect(mockedRemoveFederalApplicationDocument).toHaveBeenCalledWith('804', '888')
+        expect(mockedFetchFederalApplicationDocuments).toHaveBeenCalledTimes(3)
+        expect(screen.queryByText('reconciliation.pdf')).not.toBeInTheDocument()
+      })
+
+      await selectDetailTab('Application')
+      expect(screen.queryByRole('button', { name: 'Edit federal status' })).not.toBeInTheDocument()
+      await selectDetailTab('Remarks')
+      expect(screen.queryByRole('button', { name: 'Add remark' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
+      await selectDetailTab('Shipping details')
+      expect(
+        screen.queryByRole('button', { name: 'Edit shipping details' }),
+      ).not.toBeInTheDocument()
+      expect(mockedUpdateFederalApplicationStatus).not.toHaveBeenCalled()
+      expect(mockedSaveFederalApplicationRemark).not.toHaveBeenCalled()
+      expect(mockedSaveFederalPermit).not.toHaveBeenCalled()
+    },
+  )
+
+  it.each([
+    { reason: 'read-only role', role: 'LEXIS_READ_ONLY', statusCode: 'EXP', locked: false },
+    { reason: 'another editor lock', role: 'ADMIN', statusCode: 'EXP', locked: true },
+    { reason: 'non-expiry read-only policy', role: 'ADMIN', statusCode: 'APP', locked: false },
+  ])('keeps federal document changes blocked for $reason', async ({ role, statusCode, locked }) => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({ roles: [role] }),
+        canPerform: () => true,
+      }),
+    )
+    mockedFetchFederalApplicationDetail.mockResolvedValue({
+      ...federalDetail,
+      statusCode,
+      readOnly: true,
+      locked,
+      lockHeldByCurrentUser: !locked,
+    })
+    mockedFetchFederalApplicationDocuments.mockResolvedValue({
+      rows: [{ id: '805', name: 'protected.pdf', description: '', type: 'Attachment' }],
+      source: 'api',
+    })
+
+    renderFederalDataRouter()
+    await selectDetailTab('Documents')
+
+    expect(await screen.findByText('protected.pdf')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Edit documents' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add document' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+    expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
+    expect(mockedRemoveFederalApplicationDocument).not.toHaveBeenCalled()
+  })
+
   it('distinguishes the internal LEXIS key from the external federal application number', async () => {
     render(
       <MemoryRouter initialEntries={['/federal/888']}>
@@ -2055,75 +2299,93 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(screen.getByText('FED-888')).toBeInTheDocument()
   })
 
-  it('does not offer delete for inherited read-only federal documents', async () => {
-    mockedFetchFederalApplicationDocuments.mockResolvedValue({
-      rows: [
-        {
-          id: '803',
-          name: 'inherited-permit-doc.pdf',
-          description: 'permit context',
-          type: 'Permit',
-          source: 'permit',
-          deletable: false,
-        },
-      ],
-      source: 'api',
-    })
+  it.each([false, true])(
+    'does not offer delete for inherited federal documents when expired=%s',
+    async (expired) => {
+      mockedFetchFederalApplicationDetail.mockResolvedValue({
+        ...federalDetail,
+        statusCode: expired ? 'EXP' : federalDetail.statusCode,
+        readOnly: expired,
+      })
+      mockedFetchFederalApplicationDocuments.mockResolvedValue({
+        rows: [
+          {
+            id: '803',
+            name: 'inherited-permit-doc.pdf',
+            description: 'permit context',
+            type: 'Permit',
+            source: 'permit',
+            deletable: false,
+          },
+        ],
+        source: 'api',
+      })
 
-    render(
-      <MemoryRouter initialEntries={['/federal/888']}>
-        <Routes>
-          <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
-        </Routes>
-      </MemoryRouter>,
-    )
+      render(
+        <MemoryRouter initialEntries={['/federal/888']}>
+          <Routes>
+            <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
+          </Routes>
+        </MemoryRouter>,
+      )
 
-    await selectDetailTab('Documents')
-    const documentRow = (await screen.findByText('inherited-permit-doc.pdf')).closest('tr')
-    expect(documentRow).toBeTruthy()
-    expect(
-      within(documentRow as HTMLElement).queryByRole('button', { name: 'Delete' }),
-    ).not.toBeInTheDocument()
-  })
+      await selectDetailTab('Documents')
+      await enterDocumentEditMode()
+      const documentRow = (await screen.findByText('inherited-permit-doc.pdf')).closest('tr')
+      expect(documentRow).toBeTruthy()
+      expect(
+        within(documentRow as HTMLElement).queryByRole('button', { name: 'Delete' }),
+      ).not.toBeInTheDocument()
+    },
+  )
 
-  it('keeps federal delete available to admins without file upload permission', async () => {
-    mockedUseAuth.mockReturnValue(
-      createTestAuthContext({
-        canPerform: (action: string) => action !== '/fileApplicationUpload',
-      }),
-    )
-    mockedFetchFederalApplicationDocuments.mockResolvedValue({
-      rows: [
-        {
-          id: '801',
-          name: 'locked-federal-doc.pdf',
-          description: 'locked',
-          type: 'Attachment',
-        },
-      ],
-      source: 'api',
-    })
+  it.each([false, true])(
+    'keeps federal delete available to admins without upload permission when expired=%s',
+    async (expired) => {
+      mockedUseAuth.mockReturnValue(
+        createTestAuthContext({
+          canPerform: (action: string) => action !== '/fileApplicationUpload',
+        }),
+      )
+      mockedFetchFederalApplicationDetail.mockResolvedValue({
+        ...federalDetail,
+        statusCode: expired ? 'EXP' : federalDetail.statusCode,
+        readOnly: expired,
+      })
+      mockedFetchFederalApplicationDocuments.mockResolvedValue({
+        rows: [
+          {
+            id: '801',
+            name: 'locked-federal-doc.pdf',
+            description: 'locked',
+            type: 'Attachment',
+          },
+        ],
+        source: 'api',
+      })
 
-    render(
-      <MemoryRouter initialEntries={['/federal/888']}>
-        <Routes>
-          <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
-        </Routes>
-      </MemoryRouter>,
-    )
+      render(
+        <MemoryRouter initialEntries={['/federal/888']}>
+          <Routes>
+            <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
+          </Routes>
+        </MemoryRouter>,
+      )
 
-    await selectDetailTab('Documents')
-    expect(screen.queryByRole('button', { name: 'Add document' })).not.toBeInTheDocument()
-    await enterDocumentEditMode()
-    const documentName = await screen.findByText('locked-federal-doc.pdf')
-    const documentRow = documentName.closest('tr')
-    expect(documentRow).toBeTruthy()
-    const deleteButton = within(documentRow as HTMLElement).getByRole('button', {
-      name: 'Delete',
-    })
-    expect(deleteButton).toBeEnabled()
-    expect(mockedRemoveFederalApplicationDocument).not.toHaveBeenCalled()
-  })
+      await selectDetailTab('Documents')
+      expect(screen.queryByRole('button', { name: 'Add document' })).not.toBeInTheDocument()
+      await enterDocumentEditMode()
+      expect(screen.queryByRole('button', { name: 'Add document' })).not.toBeInTheDocument()
+      const documentName = await screen.findByText('locked-federal-doc.pdf')
+      const documentRow = documentName.closest('tr')
+      expect(documentRow).toBeTruthy()
+      const deleteButton = within(documentRow as HTMLElement).getByRole('button', {
+        name: 'Delete',
+      })
+      expect(deleteButton).toBeEnabled()
+      expect(mockedRemoveFederalApplicationDocument).not.toHaveBeenCalled()
+    },
+  )
 
   it('denies federal application document delete to read-only users', async () => {
     mockedUseAuth.mockReturnValue(

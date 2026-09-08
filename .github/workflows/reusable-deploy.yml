@@ -154,6 +154,8 @@ jobs:
       triggered: ${{ steps.deploy.outputs.triggered }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       # DEV deployments are ephemeral PR previews; gateway client provisioning is TEST/PROD-only.
       - name: Ensure Keycloak scopes and NEXCOL client

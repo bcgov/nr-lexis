@@ -27,6 +27,9 @@
     <ojdbc.version>21.3.0.0</ojdbc.version>
     <owasp.html.sanitizer.version>20260102.1</owasp.html.sanitizer.version>
     <shedlock.version>7.7.0</shedlock.version>
+    <!-- Remove once the Spring Boot BOM includes these security fixes. -->
+    <jackson-bom.version>2.21.5</jackson-bom.version>
+    <log4j2.version>2.25.5</log4j2.version>
     <!--
       Pinned to JR 6.21.5 (last stable 6.x). JR 7.x removed the legacy
       SAX/Digester JRXmlLoader and the replacement (JacksonReportLoader)

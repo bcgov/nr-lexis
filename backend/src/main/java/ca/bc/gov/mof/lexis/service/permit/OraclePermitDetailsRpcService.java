@@ -558,14 +558,10 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   public PermitAllScaleFeesRpcResponseDto getAllScaleFees(
       Long permitNumber, boolean ministryUser) {
     if (permitNumber == null || permitNumber < 1) {
-      return new PermitAllScaleFeesRpcResponseDto(List.of());
+      return new PermitAllScaleFeesRpcResponseDto(List.of(), "0.0");
     }
 
     List<PermitFeeScaleRow> feeRows = repository.findPermitFeeScaleRows(permitNumber);
-    if (feeRows.isEmpty()) {
-      return new PermitAllScaleFeesRpcResponseDto(List.of());
-    }
-
     FeeCalculationContext feeContext = buildFeeContext(permitNumber, null, null);
     Map<String, String> speciesDescriptionByCode = new HashMap<>();
     Map<String, String> gradeDescriptionByCode = new HashMap<>();
@@ -595,6 +591,21 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     Map<String, List<PermitRpcScaleItemDto>> scalesByPackage = new LinkedHashMap<>();
     Map<String, BigDecimal> totalsByPackage = new LinkedHashMap<>();
     Map<String, String> growthTypeByPackage = new LinkedHashMap<>();
+    BigDecimal totalVolume = BigDecimal.ZERO;
+
+    // BOIC packages belong to the permit before any scale rows are attached.
+    for (PermitCorePackageContextRow packageContext :
+        repository.findCorePackageContexts(
+            permitNumber, EXEMPTION_TYPE_BLANKET_OIC.equalsIgnoreCase(feeContext.exemptionTypeCode()))) {
+      PermitCorePackageRow packageRow = packageContext.packageRow();
+      String packageNumber = packageRow.packageNumber();
+      scalesByPackage.put(packageNumber, new ArrayList<>());
+      growthTypeByPackage.put(
+          packageNumber,
+          firstNonNull(
+              trimToNull(packageContext.packageGrowthTypeDescription()),
+              nonNull(trimToNull(packageRow.growthTypeCode()))));
+    }
 
     for (PermitFeeScaleRow feeRow : feeRows) {
       PermitScaleDetailRow scale = feeRow.scaleRow();
@@ -603,6 +614,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         continue;
       }
 
+      totalVolume = totalVolume.add(BigDecimal.valueOf(scale.speciesGradeVolume()));
       BigDecimal fee = calculateRoundedFeeForScale(scale, feeContext);
       BigDecimal amv = getScaleDisplayAmv(scale, feeContext);
       String ewb = countryCanada ? "" : formatCurrencyNoScale(trimToNull(scale.ewb()));
@@ -647,7 +659,8 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
               List.copyOf(entry.getValue()),
               nonNull(growthTypeByPackage.get(packageNumber))));
     }
-    return new PermitAllScaleFeesRpcResponseDto(List.copyOf(packages));
+    return new PermitAllScaleFeesRpcResponseDto(
+        List.copyOf(packages), totalVolume.setScale(1, RoundingMode.HALF_UP).toPlainString());
   }
 
   @Override
@@ -1775,9 +1788,8 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
 
     String targetPermitStatusCode =
         normalizeCode(mergeSubmittedText(request.permitStatus(), current.permitStatusCode()));
-    boolean allowBlanketOicDraftDateClear =
-        targetBlanketOic
-            && EXPORT_PERMIT_STATUS_ACTIVE.equalsIgnoreCase(current.permitStatusCode())
+    boolean allowActiveDraftDateClear =
+        EXPORT_PERMIT_STATUS_ACTIVE.equalsIgnoreCase(current.permitStatusCode())
             && EXPORT_PERMIT_STATUS_ACTIVE.equals(targetPermitStatusCode);
 
     Double overrideFee = parseDouble(request.overrideFee());
@@ -1831,10 +1843,10 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
             targetSubmitDate,
             targetReceivedDate,
             mergeSubmittedDate(
-                request.permitIssueDate(), current.permitIssueDate(), allowBlanketOicDraftDateClear),
+                request.permitIssueDate(), current.permitIssueDate(), allowActiveDraftDateClear),
             mergeSubmittedText(request.permitReceiptNo(), current.receiptNumber()),
             mergeSubmittedDate(
-                request.permitExpiryDate(), current.expiryDate(), allowBlanketOicDraftDateClear),
+                request.permitExpiryDate(), current.expiryDate(), allowActiveDraftDateClear),
             authoritativePermitVolume,
             authoritativePermitPieces,
             firstNonNull(current.feeInLieuVolume(), 0L),

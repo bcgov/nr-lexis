@@ -78,6 +78,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -402,7 +403,7 @@ class PermitDetailsRpcControllerTest {
   @Test
   void allScaleFeesShouldAuthorizePermitAndForwardRequestOnce() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
-    PermitAllScaleFeesRpcResponseDto dto = new PermitAllScaleFeesRpcResponseDto(List.of());
+    PermitAllScaleFeesRpcResponseDto dto = new PermitAllScaleFeesRpcResponseDto(List.of(), "0.0");
     when(service.getAllScaleFees(7000123L, true)).thenReturn(dto);
     TestingAuthenticationToken authentication = authorizedSavePermit();
 
@@ -1471,9 +1472,9 @@ class PermitDetailsRpcControllerTest {
   }
 
   @ParameterizedTest
-  @MethodSource("activeOrExplicitBlankPermitStatuses")
-  void updatePermitShouldAllowPermitReviewerToClearBlanketOicDraftDates(
-      String submittedPermitStatus) {
+  @MethodSource("activeDraftPermitStatuses")
+  void updatePermitShouldAllowPermitReviewerToClearActiveDraftDates(
+      String exemptionNumber, String submittedPermitStatus) {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(request.getParameterMap())
         .thenReturn(
@@ -1487,11 +1488,9 @@ class PermitDetailsRpcControllerTest {
             Optional.of(
                 permitDetail(
                     "ACT",
-                    "EX-BOIC",
+                    exemptionNumber,
                     java.time.LocalDate.of(2026, 5, 20),
                     java.time.LocalDate.of(2027, 5, 20))));
-    when(exemptionService.findByExemptionNumber("EX-BOIC"))
-        .thenReturn(Optional.of(exemptionDetail("EX-BOIC", true)));
     when(service.updatePermit(any(PermitMutationRequestDto.class), eq("idir\\jsmith")))
         .thenReturn(
             new PermitMutationRpcResponseDto(
@@ -1512,14 +1511,17 @@ class PermitDetailsRpcControllerTest {
     assertThat(requestCaptor.getValue().permitExpiryDate()).isEmpty();
   }
 
-  private static Stream<Arguments> activeOrExplicitBlankPermitStatuses() {
-    return Stream.of(Arguments.of("ACT"), Arguments.of(""), Arguments.of(" "));
+  private static Stream<Arguments> activeDraftPermitStatuses() {
+    return Stream.of("EX-BOIC", "EX-ORDINARY")
+        .flatMap(
+            exemptionNumber -> Stream.of("ACT", "", " ")
+                .map(status -> Arguments.of(exemptionNumber, status)));
   }
 
   @ParameterizedTest
-  @MethodSource("blanketOicDraftDateClearFields")
-  void updatePermitShouldRejectEachBlanketOicDraftDateClearWithoutPermitReviewAuthority(
-      String submittedPermitStatus, String fieldName, String fieldValue) {
+  @MethodSource("activeDraftDateClearFields")
+  void updatePermitShouldRejectEachActiveDraftDateClearWithoutPermitReviewAuthority(
+      String exemptionNumber, String submittedPermitStatus, String fieldName, String fieldValue) {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(request.getParameterMap())
         .thenReturn(
@@ -1532,11 +1534,9 @@ class PermitDetailsRpcControllerTest {
             Optional.of(
                 permitDetail(
                     "ACT",
-                    "EX-BOIC",
+                    exemptionNumber,
                     java.time.LocalDate.of(2026, 5, 20),
                     java.time.LocalDate.of(2027, 5, 20))));
-    when(exemptionService.findByExemptionNumber("EX-BOIC"))
-        .thenReturn(Optional.of(exemptionDetail("EX-BOIC", true)));
     lenient()
         .when(service.updatePermit(any(PermitMutationRequestDto.class), eq("bceid\\submitter")))
         .thenReturn(successfulPermitUpdate());
@@ -1550,13 +1550,15 @@ class PermitDetailsRpcControllerTest {
     verify(service, never()).updatePermit(any(), any());
   }
 
-  private static Stream<Arguments> blanketOicDraftDateClearFields() {
-    return Stream.of("ACT", "", " ")
+  private static Stream<Arguments> activeDraftDateClearFields() {
+    return Stream.of("EX-BOIC", "EX-ORDINARY")
         .flatMap(
-            submittedPermitStatus ->
-                Stream.of(
-                    Arguments.of(submittedPermitStatus, "permitIssueDate", ""),
-                    Arguments.of(submittedPermitStatus, "permitExpiryDate", " ")));
+            exemptionNumber -> Stream.of("ACT", "", " ")
+                .flatMap(
+                    submittedPermitStatus ->
+                        Stream.of(
+                            Arguments.of(exemptionNumber, submittedPermitStatus, "permitIssueDate", ""),
+                            Arguments.of(exemptionNumber, submittedPermitStatus, "permitExpiryDate", " "))));
   }
 
   @ParameterizedTest
@@ -1586,8 +1588,6 @@ class PermitDetailsRpcControllerTest {
               }
               return Optional.of(snapshot);
             });
-    when(exemptionService.findByExemptionNumber("EX-BOIC"))
-        .thenReturn(Optional.of(exemptionDetail("EX-BOIC", true)));
     when(service.getExemptionNumberForPermitMutation(7000123L)).thenReturn("EX-BOIC");
     when(service.getApplicationNumbersForPermitMutation(7000123L)).thenReturn(List.of());
     lenient()
@@ -1665,7 +1665,7 @@ class PermitDetailsRpcControllerTest {
   }
 
   @Test
-  void updatePermitShouldUseTheAuthoritativeExemptionForBlanketOicDraftDateClear() {
+  void updatePermitShouldRejectActiveDraftDateClearDespiteForgedExemption() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(request.getParameterMap())
         .thenReturn(
@@ -1679,16 +1679,13 @@ class PermitDetailsRpcControllerTest {
             Optional.of(
                 permitDetail(
                     "ACT", "EX-BOIC", java.time.LocalDate.of(2026, 5, 20), null)));
-    when(exemptionService.findByExemptionNumber("EX-BOIC"))
-        .thenReturn(Optional.of(exemptionDetail("EX-BOIC", true)));
     TestingAuthenticationToken authentication = scopedSubmitterWithSavePermit();
 
     ResponseEntity<PermitMutationRpcResponseDto> response =
         controller.updatePermit(request, authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
-    verify(exemptionService).findByExemptionNumber("EX-BOIC");
-    verify(exemptionService, never()).findByExemptionNumber("EX-ORDINARY");
+    verifyNoInteractions(exemptionService);
     verify(service, never()).updatePermit(any(), any());
   }
 
@@ -1775,7 +1772,7 @@ class PermitDetailsRpcControllerTest {
   }
 
   @Test
-  void updatePermitShouldAllowActiveOrdinaryPermitBlankDatesForScopedSubmitter() {
+  void updatePermitShouldRejectActiveOrdinaryPermitDateClearWhenStatusIsOmittedForScopedSubmitter() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(request.getParameterMap())
         .thenReturn(
@@ -1791,19 +1788,13 @@ class PermitDetailsRpcControllerTest {
                     "EX-ORDINARY",
                     java.time.LocalDate.of(2026, 5, 20),
                     java.time.LocalDate.of(2027, 5, 20))));
-    when(exemptionService.findByExemptionNumber("EX-ORDINARY"))
-        .thenReturn(Optional.of(exemptionDetail("EX-ORDINARY", false)));
-    when(service.updatePermit(any(PermitMutationRequestDto.class), eq("bceid\\submitter")))
-        .thenReturn(successfulPermitUpdate());
-    allowApplicationMutationLocksForUser("bceid\\submitter");
     TestingAuthenticationToken authentication = scopedSubmitterWithSavePermit();
 
     ResponseEntity<PermitMutationRpcResponseDto> response =
         controller.updatePermit(request, authentication);
 
-    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-    verify(exemptionService, times(2)).findByExemptionNumber("EX-ORDINARY");
-    verify(service).updatePermit(any(PermitMutationRequestDto.class), eq("bceid\\submitter"));
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    verify(service, never()).updatePermit(any(), any());
   }
 
   @Test
@@ -2038,6 +2029,92 @@ class PermitDetailsRpcControllerTest {
 
     verifyNoInteractions(editLockService);
     verify(service, never()).getApplicationNumbersForPermitMutation(any());
+    verify(service, never()).updatePermit(any(), any());
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"", "COM"})
+  void updatePermitShouldRejectCompletedPermitRemarksForScopedSubmitter(String submittedStatus) {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameterMap())
+        .thenReturn(Map.of(
+            "permitNumber", new String[] {"7000123"},
+            "permitStatus", new String[] {submittedStatus},
+            "permitRemarks", new String[] {"Updated remarks"}));
+    when(permitService.findByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitDetail("COM")));
+    TestingAuthenticationToken authentication = scopedSubmitterWithSavePermit();
+
+    assertThatThrownBy(() -> controller.updatePermit(request, authentication))
+        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class)
+        .hasMessageContaining("Completed permit details are read-only");
+
+    verifyNoInteractions(editLockService);
+    verify(service, never()).updatePermit(any(), any());
+  }
+
+  @Test
+  void updatePermitShouldRecheckCompletedStatusInsideSerializedMutation() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameterMap())
+        .thenReturn(Map.of(
+            "permitNumber", new String[] {"7000123"},
+            "permitRemarks", new String[] {"Updated remarks"}));
+    when(permitService.findByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitDetail("ACT")));
+    TestingAuthenticationToken authentication = scopedSubmitterWithSavePermit();
+    java.util.concurrent.atomic.AtomicInteger authorizationChecks =
+        new java.util.concurrent.atomic.AtomicInteger();
+    doAnswer(ignored -> {
+      if (authorizationChecks.incrementAndGet() == 2) {
+        when(permitService.findByPermitNumber(7000123L))
+            .thenReturn(Optional.of(permitDetail("COM")));
+      }
+      return null;
+    }).when(provincialAuthorizationService).requirePermit(authentication, 7000123L);
+
+    assertThatThrownBy(() -> controller.updatePermit(request, authentication))
+        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class)
+        .hasMessageContaining("Completed permit details are read-only");
+    assertThat(authorizationChecks.get()).isEqualTo(2);
+    verifyNoInteractions(editLockService);
+    verify(service, never()).updatePermit(any(), any());
+  }
+
+  @Test
+  void updatePermitShouldKeepCompletedPermitDetailsEditableForAuthorizedStaff() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameterMap())
+        .thenReturn(Map.of(
+            "permitNumber", new String[] {"7000123"},
+            "permitRemarks", new String[] {"Staff correction"}));
+    when(permitService.findByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitDetail("COM")));
+    when(service.updatePermit(any(), eq("idir\\jsmith")))
+        .thenReturn(successfulPermitUpdate());
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+
+    assertThat(controller.updatePermit(request, authentication).getStatusCode())
+        .isEqualTo(HttpStatus.OK);
+    verify(service).updatePermit(any(), eq("idir\\jsmith"));
+  }
+
+  @Test
+  void updateShippingShouldKeepCompletedPermitShippingEditableForScopedSubmitter() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameterMap())
+        .thenReturn(Map.of(
+            "permitNumber", new String[] {"7000123"},
+            "destinationCompanyName", new String[] {"Updated purchaser"}));
+    when(permitService.findByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitDetail("COM")));
+    when(service.updateShipping(any(), eq("bceid\\submitter")))
+        .thenReturn(successfulPermitUpdate());
+    TestingAuthenticationToken authentication = scopedSubmitterWithSavePermit();
+
+    assertThat(controller.updateShipping(request, authentication).getStatusCode())
+        .isEqualTo(HttpStatus.OK);
+    verify(service).updateShipping(any(), eq("bceid\\submitter"));
     verify(service, never()).updatePermit(any(), any());
   }
 

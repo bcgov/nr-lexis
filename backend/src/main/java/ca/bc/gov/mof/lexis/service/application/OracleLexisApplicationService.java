@@ -18,6 +18,7 @@ import ca.bc.gov.mof.lexis.repository.report.LexisReportScheduleRepository;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -142,9 +143,10 @@ public class OracleLexisApplicationService implements LexisApplicationService {
           null, null, null, null, null, null, null, null, null, null, null, null, List.of(), false, null, 0, 25);
     }
 
+    String packageNumber = trimToNull(input.packageNumber());
     return new LexisApplicationSearchCriteria(
         trimToNull(input.applicationNumber()),
-        trimToNull(input.packageNumber()),
+        packageNumber == null ? null : packageNumber.toUpperCase(Locale.ROOT),
         trimToNull(input.exemptionNumber()),
         trimToNull(input.exemptionType()),
         trimToNull(input.applicationStatus()),

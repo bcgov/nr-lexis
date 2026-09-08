@@ -159,10 +159,19 @@ test.describe('frontend smoke coverage', () => {
     await expect(notice).toBeHidden()
   })
 
-  test('protected routes are not directly accessible without authenticated session', async ({
-    page,
-  }) => {
-    await gotoSyntheticRoute(page, '/provincial/application', {
+  test('known protected links show login while retaining the destination', async ({ page }) => {
+    await gotoSyntheticRoute(page, '/provincial/application?packageNumber=TEST#results', {
+      waitUntil: 'domcontentloaded',
+    })
+    await expect(page).toHaveURL(/\/provincial\/application\?packageNumber=TEST#results$/)
+    await expect(page.getByRole('heading', { level: 1, name: 'LEXIS' })).toBeVisible()
+    await expect(page.getByRole('button', { name: /log in with idir/i })).toBeVisible()
+    await expect(page.getByRole('heading', { name: '404' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Search', exact: true })).toHaveCount(0)
+  })
+
+  test('unknown routes still show not found', async ({ page }) => {
+    await gotoSyntheticRoute(page, '/unknown-parity-route', {
       waitUntil: 'domcontentloaded',
     })
     await expect(page.getByRole('heading', { name: '404' })).toBeVisible()

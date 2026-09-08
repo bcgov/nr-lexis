@@ -13,7 +13,6 @@ import { useTheme } from '@/context/theme/useTheme'
 import logo from '@/assets/BCID_H_rgb_pos.png'
 import landingImage from '@/assets/landing.jpg'
 import reverseLogo from '@/assets/gov-bc-logo-horiz.png'
-import { requiredLabel } from '@/utils/required-label'
 
 type ForestClientSelectionPageProps = {
   onSelected?: () => void
@@ -88,7 +87,7 @@ const ForestClientSelectionPage = ({ onSelected }: ForestClientSelectionPageProp
               onSubmit={(event) => void handleSubmit(event)}
             >
               <RadioButtonGroup
-                legendText={requiredLabel('Organization')}
+                legendText="Organization"
                 name="forest-client-selection"
                 valueSelected={selectedClientNumber}
                 required

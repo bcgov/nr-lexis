@@ -295,18 +295,6 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
         .isPresent();
   }
 
-  public Optional<PackageDetailsRow> findPackageDetailsByPackageNumber(String packageNumber) {
-    String normalized = trim(packageNumber);
-    if (normalized == null) {
-      return Optional.empty();
-    }
-    return queryCursorSingle(
-        FIND_PACKAGE_BY_NUMBER,
-        cs -> cs.setString(1, normalized),
-        2,
-        this::mapPackageDetailsRow);
-  }
-
   public Optional<PackageDetailsRow> findPackageDetailsByPackageNumberRequired(
       String packageNumber) {
     String normalized = trim(packageNumber);
@@ -1459,6 +1447,8 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
 
   private RemarkRow mapRemarkRow(ResultSet rs) {
     Long remarkId = getLong(rs, "EXPORT_EXMPTN_APPL_REMARK_NMBR");
+    // Legacy writers used both escaped and raw text; modern also stored raw text without a marker.
+    // Preserve the stored value: guessing its encoding would alter literal entities on edit.
     String remark = getString(rs, "REMARK");
     String user = getString(rs, "ENTRY_USERID");
     Instant date = getInstant(rs, "ENTRY_TIMESTAMP");

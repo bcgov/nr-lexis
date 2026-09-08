@@ -13,6 +13,7 @@ import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchResultDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSummaryLookupDto;
 import ca.bc.gov.mof.lexis.repository.exemption.ExemptionRepository;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import org.springframework.context.annotation.Profile;
@@ -182,7 +183,7 @@ public class ExemptionOracleService implements ExemptionService {
 
     return new ExemptionSearchCriteria(
         applicationNumber,
-        packageNumber,
+        packageNumber == null ? null : packageNumber.toUpperCase(Locale.ROOT),
         exemptionNumber,
         exemptionType,
         exemptionStatus,

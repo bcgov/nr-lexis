@@ -29,6 +29,7 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
@@ -422,9 +423,10 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
           null, null, null, null, null, null, null, null, null, false, false, List.of(), null, 0, 25);
     }
 
+    String packageNumber = trimToNull(input.packageNumber());
     return new PurchaseOfferSearchCriteria(
         trimToNull(input.applicationNumber()),
-        trimToNull(input.packageNumber()),
+        packageNumber == null ? null : packageNumber.toUpperCase(Locale.ROOT),
         input.listingFromDate(),
         input.listingToDate(),
         input.withdrawalFromDate(),
@@ -552,8 +554,9 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
       errors.add(fieldName + " must be a finite number");
       return;
     }
-    if (value <= 0.0d) {
-      errors.add(fieldName + " must be greater than 0");
+    // Legacy permits zero for the optional offer volume; purchase price positivity is checked above.
+    if (value < 0.0d) {
+      errors.add(fieldName + " must be 0 or greater");
       return;
     }
     if (value > maximum) {

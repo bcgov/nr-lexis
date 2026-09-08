@@ -5,9 +5,7 @@ import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.exceptionType;
 
 import ca.bc.gov.mof.lexis.dto.report.LexisReportRequestDto;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository;
-import ca.bc.gov.mof.lexis.repository.report.LexisReportScheduleRepository;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
-import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -20,9 +18,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.sql.Connection;
 import java.sql.SQLException;
-import java.time.LocalDate;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
@@ -60,11 +56,6 @@ import org.springframework.stereotype.Service;
 public class OracleLexisReportService implements LexisReportService {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(OracleLexisReportService.class);
-  private static final String BIWEEKLY_DATE_RANGE_MESSAGE =
-      "Choose a Listing from date and Listing to date before generating the Advertising List.";
-  private static final String BIWEEKLY_CURRENT_PERIOD_MESSAGE =
-      "The current advertising period is unavailable because two advertising schedule dates "
-          + "are not configured.";
   private static final String TEMPLATE_CLASSPATH_DIRECTORY = "reports/lexis";
   private static final String ROLE_ADMIN = "LEXIS_ADMIN";
   private static final String ROLE_READ_ONLY = "LEXIS_READ_ONLY";
@@ -94,7 +85,6 @@ public class OracleLexisReportService implements LexisReportService {
   private final OracleLegacyCsvReportService legacyCsvReportService;
   private final OracleLegacyJasperTableReportService legacyJasperTableReportService;
   private final PermitRpcRepository permitRpcRepository;
-  private final LexisReportScheduleRepository reportScheduleRepository;
   private final LexisSessionService sessionService;
   private final LexisReportResourceManager reportResources;
   private final ConcurrentHashMap<String, JasperReport> compiledTemplateCache = new ConcurrentHashMap<>();
@@ -107,7 +97,6 @@ public class OracleLexisReportService implements LexisReportService {
       OracleLegacyCsvReportService legacyCsvReportService,
       OracleLegacyJasperTableReportService legacyJasperTableReportService,
       PermitRpcRepository permitRpcRepository,
-      LexisReportScheduleRepository reportScheduleRepository,
       LexisSessionService sessionService) {
     this(
         dataSource,
@@ -115,7 +104,6 @@ public class OracleLexisReportService implements LexisReportService {
         legacyCsvReportService,
         legacyJasperTableReportService,
         permitRpcRepository,
-        reportScheduleRepository,
         sessionService,
         LexisReportResourceManager.defaults());
   }
@@ -127,7 +115,6 @@ public class OracleLexisReportService implements LexisReportService {
       OracleLegacyCsvReportService legacyCsvReportService,
       OracleLegacyJasperTableReportService legacyJasperTableReportService,
       PermitRpcRepository permitRpcRepository,
-      LexisReportScheduleRepository reportScheduleRepository,
       LexisSessionService sessionService,
       LexisReportResourceManager reportResources) {
     this.dataSource = dataSource;
@@ -135,7 +122,6 @@ public class OracleLexisReportService implements LexisReportService {
     this.legacyCsvReportService = legacyCsvReportService;
     this.legacyJasperTableReportService = legacyJasperTableReportService;
     this.permitRpcRepository = permitRpcRepository;
-    this.reportScheduleRepository = reportScheduleRepository;
     this.sessionService = sessionService;
     this.reportResources = reportResources;
     this.runtimeTemplateDirectory = initRuntimeTemplateDirectory();
@@ -173,10 +159,6 @@ public class OracleLexisReportService implements LexisReportService {
       return Optional.empty();
     }
     LexisReportRequestDto effectiveRequest = applyLegacyReportDefaults(definition, request);
-    if (isUnboundedBiweeklyReport(definition, effectiveRequest)) {
-      LOGGER.warn("Biweekly listing requested without a bounded date range");
-      throw new LexisReportValidationException(BIWEEKLY_DATE_RANGE_MESSAGE);
-    }
 
     Optional<LexisGeneratedReport> legacyCsvReport =
         legacyCsvReportService.generateLegacyCsvReport(definition, effectiveRequest, effectiveFormat);
@@ -302,55 +284,16 @@ public class OracleLexisReportService implements LexisReportService {
   LexisReportRequestDto applyLegacyReportDefaults(
       LexisJasperReportDefinition definition,
       LexisReportRequestDto request) {
-    if (definition == LexisJasperReportDefinition.BIWEEKLY_LISTING) {
-      return applyLegacyBiweeklyDefaults(request);
-    }
+    // Advertising and Tenure generation retain open date bounds; their initial UI defaults
+    // must not replace cleared filters. Existing report bindings supply the legacy open bounds.
     if (definition == LexisJasperReportDefinition.SPECIES_GRADE_REPORT) {
       return applyLegacySpeciesGradeDefaults(request);
-    }
-    if (definition == LexisJasperReportDefinition.TENURE_REPORT) {
-      return applyLegacyTenureDefaults(request);
     }
     if (definition == LexisJasperReportDefinition.PERMIT_REPORT) {
       return applyLegacyPermitReportDefaults(request);
     }
 
     return request;
-  }
-
-  private boolean isUnboundedBiweeklyReport(
-      LexisJasperReportDefinition definition, LexisReportRequestDto request) {
-    if (definition != LexisJasperReportDefinition.BIWEEKLY_LISTING) {
-      return false;
-    }
-    Map<String, String> parameters =
-        request == null || request.parameters() == null ? Map.of() : request.parameters();
-    return isBlank(parameters.get("fromDate")) || isBlank(parameters.get("toDate"));
-  }
-
-  private LexisReportRequestDto applyLegacyBiweeklyDefaults(LexisReportRequestDto request) {
-    HashMap<String, String> parameters =
-        new HashMap<>(request == null || request.parameters() == null ? Map.of() : request.parameters());
-    boolean blankDateRange = isBlank(parameters.get("fromDate")) && isBlank(parameters.get("toDate"));
-    if (!blankDateRange) {
-      return request;
-    }
-
-    List<LexisReportScheduleRepository.CurrentScheduleRow> schedules =
-        Optional.ofNullable(reportScheduleRepository.findCurrentSchedulesRequired()).orElse(List.of());
-    if (schedules.size() < 2
-        || schedules.get(0).advertisingDate() == null
-        || schedules.get(1).advertisingDate() == null) {
-      LOGGER.warn("Unable to apply legacy biweekly schedule defaults");
-      throw new LexisReportValidationException(BIWEEKLY_CURRENT_PERIOD_MESSAGE);
-    }
-
-    LocalDate fromDate = schedules.get(0).advertisingDate();
-    LocalDate toDate = schedules.get(1).advertisingDate().minusDays(1);
-
-    parameters.put("fromDate", fromDate.toString());
-    parameters.put("toDate", toDate.toString());
-    return new LexisReportRequestDto(parameters, request == null ? null : request.format());
   }
 
   private LexisReportRequestDto applyLegacyPermitReportDefaults(LexisReportRequestDto request) {
@@ -458,22 +401,8 @@ public class OracleLexisReportService implements LexisReportService {
   private LexisReportRequestDto applyLegacySpeciesGradeDefaults(LexisReportRequestDto request) {
     HashMap<String, String> parameters =
         new HashMap<>(request == null || request.parameters() == null ? Map.of() : request.parameters());
-    if (isBlank(parameters.get("permitStatus"))) {
+    if (!parameters.containsKey("permitStatus")) {
       parameters.put("permitStatus", "COM");
-    }
-    return new LexisReportRequestDto(parameters, request == null ? null : request.format());
-  }
-
-  private LexisReportRequestDto applyLegacyTenureDefaults(LexisReportRequestDto request) {
-    HashMap<String, String> parameters =
-        new HashMap<>(request == null || request.parameters() == null ? Map.of() : request.parameters());
-    LocalDate today = LexisBusinessTime.today();
-    if (isBlank(parameters.get("fromDate"))) {
-      parameters.put("fromDate", LocalDate.of(today.getYear() - 1, today.getMonth(), 1).toString());
-    }
-    if (isBlank(parameters.get("toDate"))) {
-      LocalDate previousMonth = today.minusMonths(1);
-      parameters.put("toDate", previousMonth.withDayOfMonth(previousMonth.lengthOfMonth()).toString());
     }
     return new LexisReportRequestDto(parameters, request == null ? null : request.format());
   }

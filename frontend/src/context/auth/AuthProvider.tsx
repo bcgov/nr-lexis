@@ -9,6 +9,7 @@ import { isProdRtmOnlyMode, PROD_RTM_ONLY_ROUTE } from '@/config/features'
 import { AppNotification } from '@/components/AppNotification'
 import SessionTimeoutWarning from '@/components/SessionTimeoutWarning'
 import { AuthContext } from '@/context/auth/AuthContext'
+import { clearLoginDestination } from '@/context/auth/login-destination'
 import { startFederatedLogout } from '@/context/auth/logout-chain'
 import { hasRole } from '@/context/auth/role-utils'
 import {
@@ -336,6 +337,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         apiService.clearRecordVersions()
         clearAllPageDataCache()
         clearPersistedSearchState()
+        clearLoginDestination()
         authenticatedSessionRef.current = false
         if (reason === 'idle-timeout') {
           markSessionExpiredLoginNotice()
@@ -375,6 +377,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
       try {
         let orgUnitNo: string | null = null
         if (isCognitoConfigured) {
+          const isLoginCallback =
+            hasOauthCallbackParams() || new URLSearchParams(window.location.search).has('error')
           let tokenReady = false
           const retryCount = hasOauthCallbackParams() ? 6 : 1
           for (let attempt = 0; attempt < retryCount; attempt += 1) {
@@ -398,6 +402,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
             // The deployed capabilities endpoint is protected. Calling it after logout would
             // raise a second expiry event and consume the inactivity notice before it renders.
             if (sessionGenerationRef.current === refreshGeneration) {
+              if (isLoginCallback) {
+                clearLoginDestination()
+              }
               sessionExpiryInFlightRef.current = false
               authenticatedSessionRef.current = false
               clearPersistedSearchState()
@@ -430,6 +437,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
           }
           if (!nextCapabilities.authenticated) {
             clearPersistedSearchState()
+            clearLoginDestination()
           }
           authenticatedSessionRef.current = nextCapabilities.authenticated
           setCapabilities(nextCapabilities)
@@ -439,6 +447,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
           console.warn('Unable to load session capabilities.', error)
           authenticatedSessionRef.current = false
           clearPersistedSearchState()
+          clearLoginDestination()
           setCapabilities(DEFAULT_CAPABILITIES)
         }
       } finally {
@@ -612,6 +621,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       apiService.clearRecordVersions()
       clearAllPageDataCache()
       clearPersistedSearchState()
+      clearLoginDestination()
       authenticatedSessionRef.current = false
 
       if (isCognitoConfigured && startFederatedLogout()) {

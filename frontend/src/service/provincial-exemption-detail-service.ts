@@ -76,6 +76,7 @@ type ExemptionEmailResult = {
 
 type UpdateExemptionRequest = {
   exemptionNumber: string
+  previousExemptionNumber?: string
   approvedVolume: string
   approvalDate: string
   expiryDate: string
@@ -260,7 +261,10 @@ export const updateExemption = async (
 ): Promise<ExemptionMutationResult> => {
   const params = new URLSearchParams()
   params.append('exemptionNumber', request.exemptionNumber.trim())
-  params.append('legacyExemptionNumber', request.exemptionNumber.trim())
+  params.append(
+    'legacyExemptionNumber',
+    request.previousExemptionNumber?.trim() || request.exemptionNumber.trim(),
+  )
   params.append('approvedVolume', request.approvedVolume.trim())
   params.append('approvalDate', request.approvalDate.trim())
   params.append('exemptionExpiryDate', request.expiryDate.trim())

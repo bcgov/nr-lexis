@@ -38,13 +38,18 @@ import {
 
 const SUMMARY_PAGE_SIZE = 10
 
-type SummaryPageLoader<T> = (page: number, size: number) => Promise<SummaryPage<T>>
+type SummaryPageLoader<T> = (
+  page: number,
+  size: number,
+  sortField: string,
+) => Promise<SummaryPage<T>>
 
 type SummarySectionState<T> = {
   data: SummaryPage<T>
   loading: boolean
   error: string
   requested: boolean
+  sortField: string
 }
 
 type SummarySectionProps<T> = SummarySectionState<T> & {
@@ -70,27 +75,38 @@ const emptySummaryPage = <T,>(): SummaryPage<T> => ({
 const useSummarySection = <T,>(
   loader: SummaryPageLoader<T>,
   errorMessage: string,
+  defaultSortField: string,
   autoLoad = true,
   scopeKey = '',
 ) => {
   const requestSequenceRef = useRef(0)
+  const sortFieldRef = useRef(defaultSortField)
   const [state, setState] = useState<SummarySectionState<T>>(() => ({
     data: emptySummaryPage<T>(),
     loading: false,
     error: '',
     requested: false,
+    sortField: defaultSortField,
   }))
 
   const load = useCallback(
-    async (page = 0) => {
+    async (page = 0, sortField = sortFieldRef.current) => {
       const sequence = requestSequenceRef.current + 1
       requestSequenceRef.current = sequence
-      setState((current) => ({ ...current, loading: true, error: '', requested: true }))
+      sortFieldRef.current = sortField
+      setState((current) => ({
+        ...current,
+        data: { ...current.data, page },
+        loading: true,
+        error: '',
+        requested: true,
+        sortField,
+      }))
 
       try {
-        const data = await loader(page, SUMMARY_PAGE_SIZE)
+        const data = await loader(page, SUMMARY_PAGE_SIZE, sortField)
         if (requestSequenceRef.current === sequence) {
-          setState({ data, loading: false, error: '', requested: true })
+          setState({ data, loading: false, error: '', requested: true, sortField })
         }
       } catch {
         if (requestSequenceRef.current === sequence) {
@@ -110,7 +126,30 @@ const useSummarySection = <T,>(
     }
   }, [autoLoad, load, scopeKey])
 
-  return { ...state, load }
+  const sort = (field: string) => {
+    const direction = sortFieldRef.current === `${field} ASC` ? 'DESC' : 'ASC'
+    void load(0, `${field} ${direction}`)
+  }
+
+  return { ...state, load, sort }
+}
+
+const renderSortHeader = (
+  section: { sortField: string; sort: (field: string) => void },
+  field: string,
+  label: string,
+) => {
+  const active = section.sortField.startsWith(`${field} `)
+  return (
+    <TableHeader
+      isSortable
+      isSortHeader={active}
+      sortDirection={active ? (section.sortField.endsWith(' DESC') ? 'DESC' : 'ASC') : 'NONE'}
+      onClick={() => section.sort(field)}
+    >
+      {label}
+    </TableHeader>
+  )
 }
 
 const displayValue = (value: string | null | undefined): string => {
@@ -227,31 +266,42 @@ const ProvincialSummaryPage = () => {
   const applications = useSummarySection(
     fetchSummaryApplications,
     'Unable to load your applications.',
+    'applicationNumber DESC',
     true,
     clientNumber,
   )
   const offers = useSummarySection(
     fetchSummaryOffers,
     'Unable to load your offers.',
+    'offerNumber DESC',
     true,
     clientNumber,
   )
   const exemptions = useSummarySection(
     fetchSummaryExemptions,
     'Unable to load your exemptions.',
+    'exemptionNumber DESC',
     true,
     clientNumber,
   )
   const permits = useSummarySection(
     fetchSummaryPermits,
     'Unable to load your permits.',
+    'permitNumber DESC',
     true,
     clientNumber,
   )
-  const fees = useSummarySection(fetchSummaryFees, 'Unable to load your fees.', false, clientNumber)
+  const fees = useSummarySection(
+    fetchSummaryFees,
+    'Unable to load your fees.',
+    'permitNumber DESC',
+    false,
+    clientNumber,
+  )
   const offersPlaced = useSummarySection(
     fetchSummaryOffersPlaced,
     'Unable to load offers placed by your client.',
+    'offerNumber DESC',
     true,
     clientNumber,
   )
@@ -348,14 +398,14 @@ const ProvincialSummaryPage = () => {
                   <Table useZebraStyles size="sm">
                     <TableHead>
                       <TableRow>
-                        <TableHeader>Application</TableHeader>
+                        {renderSortHeader(applications, 'applicationNumber', 'Application')}
                         <TableHeader>Status</TableHeader>
                         <TableHeader>Exemption reason</TableHeader>
                         <TableHeader>Exemption type</TableHeader>
                         <TableHeader>Exemption number</TableHeader>
-                        <TableHeader>Package number</TableHeader>
-                        <TableHeader>Received date</TableHeader>
-                        <TableHeader>Listing date</TableHeader>
+                        {renderSortHeader(applications, 'packageNumber', 'Package number')}
+                        {renderSortHeader(applications, 'receivedDate', 'Received date')}
+                        {renderSortHeader(applications, 'listingDate', 'Listing date')}
                       </TableRow>
                     </TableHead>
                     <TableBody>
@@ -422,9 +472,9 @@ const ProvincialSummaryPage = () => {
                     <TableHead>
                       <TableRow>
                         <TableHeader>Offer</TableHeader>
-                        <TableHeader>Application</TableHeader>
-                        <TableHeader>Package</TableHeader>
-                        <TableHeader>Listing date</TableHeader>
+                        {renderSortHeader(offers, 'applicationNumber', 'Application')}
+                        {renderSortHeader(offers, 'packageNumber', 'Package')}
+                        {renderSortHeader(offers, 'listingDate', 'Listing date')}
                       </TableRow>
                     </TableHead>
                     <TableBody>
@@ -476,14 +526,14 @@ const ProvincialSummaryPage = () => {
                   <Table useZebraStyles size="sm">
                     <TableHead>
                       <TableRow>
-                        <TableHeader>Exemption</TableHeader>
+                        {renderSortHeader(exemptions, 'exemptionNumber', 'Exemption')}
                         <TableHeader>Type</TableHeader>
                         <TableHeader>Owner client number</TableHeader>
                         <TableHeader>Agent client number</TableHeader>
                         <TableHeader>Status</TableHeader>
                         <TableHeader>Approved volume (m³)</TableHeader>
                         <TableHeader>Balance remaining (m³)</TableHeader>
-                        <TableHeader>Approval date</TableHeader>
+                        {renderSortHeader(exemptions, 'exemptionApprovalDate', 'Approval date')}
                         <TableHeader>Expiry date</TableHeader>
                       </TableRow>
                     </TableHead>
@@ -533,11 +583,11 @@ const ProvincialSummaryPage = () => {
                   <Table useZebraStyles size="sm">
                     <TableHead>
                       <TableRow>
-                        <TableHeader>Permit</TableHeader>
+                        {renderSortHeader(permits, 'permitNumber', 'Permit')}
                         <TableHeader>Owner client number</TableHeader>
                         <TableHeader>Agent client number</TableHeader>
                         <TableHeader>Status</TableHeader>
-                        <TableHeader>Exemption</TableHeader>
+                        {renderSortHeader(permits, 'exemptionNumber', 'Exemption')}
                         <TableHeader>Total pieces</TableHeader>
                         <TableHeader>Total volume (m³)</TableHeader>
                         <TableHeader>Issue date</TableHeader>
@@ -608,7 +658,7 @@ const ProvincialSummaryPage = () => {
                   <Table useZebraStyles size="sm">
                     <TableHead>
                       <TableRow>
-                        <TableHeader>Permit number</TableHeader>
+                        {renderSortHeader(fees, 'permitNumber', 'Permit number')}
                         <TableHeader>Total volume (m³)</TableHeader>
                         <TableHeader>Total fees (CAD)</TableHeader>
                         <TableHeader>Receipt number</TableHeader>
@@ -652,9 +702,9 @@ const ProvincialSummaryPage = () => {
                     <TableHead>
                       <TableRow>
                         <TableHeader>Offer</TableHeader>
-                        <TableHeader>Application</TableHeader>
-                        <TableHeader>Package</TableHeader>
-                        <TableHeader>Listing date</TableHeader>
+                        {renderSortHeader(offersPlaced, 'applicationNumber', 'Application')}
+                        {renderSortHeader(offersPlaced, 'packageNumber', 'Package')}
+                        {renderSortHeader(offersPlaced, 'listingDate', 'Listing date')}
                       </TableRow>
                     </TableHead>
                     <TableBody>
@@ -671,17 +721,7 @@ const ProvincialSummaryPage = () => {
                               {row.offerNumber}
                             </Link>
                           </TableCell>
-                          <TableCell>
-                            <Link
-                              className="cds--link"
-                              to={`/provincial/application/${row.application}`}
-                              state={{
-                                returnTo: { label: 'Offers Placed', to: '/provincial/summary' },
-                              }}
-                            >
-                              {row.application}
-                            </Link>
-                          </TableCell>
+                          <TableCell>{row.application}</TableCell>
                           <TableCell>{displayValue(row.packageNumber)}</TableCell>
                           <TableCell>{displayValue(row.listingDate)}</TableCell>
                         </TableRow>

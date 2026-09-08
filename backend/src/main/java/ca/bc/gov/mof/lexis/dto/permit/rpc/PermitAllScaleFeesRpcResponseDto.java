@@ -4,4 +4,5 @@ import java.util.List;
 
 /** All permit fee rows grouped by package under one permit authorization check. */
 public record PermitAllScaleFeesRpcResponseDto(
-    List<PermitPackageScaleFeesRpcResponseDto> packageList) {}
+    List<PermitPackageScaleFeesRpcResponseDto> packageList,
+    String totalVolume) {}

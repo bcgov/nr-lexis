@@ -12,7 +12,6 @@ import java.sql.Timestamp;
 import java.sql.Types;
 import java.time.LocalDate;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -632,24 +631,6 @@ public abstract class OracleRepositorySupport {
     return orderBy + ", " + uniqueColumn + " " + direction;
   }
 
-  protected static final class SqlWhere {
-    private final String sql;
-    private final List<String> bindValues;
-
-    SqlWhere(String sql, List<String> bindValues) {
-      this.sql = sql;
-      this.bindValues = bindValues;
-    }
-
-    public String sql() {
-      return sql;
-    }
-
-    public List<String> bindValues() {
-      return bindValues;
-    }
-  }
-
   protected static final class DirectSql {
     private final String sql;
     private final List<Object> bindValues;
@@ -775,170 +756,7 @@ public abstract class OracleRepositorySupport {
     }
   }
 
-  protected final class SqlWhereBuilder {
-    private final StringBuilder sql = new StringBuilder(" WHERE 1=1");
-    private final List<String> bindValues = new ArrayList<>();
-
-    public SqlWhereBuilder addLike(String column, String value) {
-      String normalized = trim(value);
-      if (normalized == null) {
-        return this;
-      }
-      addBind(" AND " + column + " LIKE '%' || :" + (bindValues.size() + 1) + " || '%'", normalized);
-      return this;
-    }
-
-    public SqlWhereBuilder addEquals(String column, String value) {
-      String normalized = trim(value);
-      if (normalized == null) {
-        return this;
-      }
-      addBind(" AND " + column + " = :" + (bindValues.size() + 1), normalized);
-      return this;
-    }
-
-    public SqlWhereBuilder addEqualsNumber(String column, Long value) {
-      if (value == null) {
-        return this;
-      }
-      addBind(" AND " + column + " = TO_NUMBER(:" + (bindValues.size() + 1) + ")", value.toString());
-      return this;
-    }
-
-    public SqlWhereBuilder addInEqualsNumberOrNoResults(String column, List<Long> values) {
-      if (values == null || values.isEmpty()) {
-        sql.append(" AND ").append(column).append(" = TO_NUMBER(0)");
-        return this;
-      }
-
-      Set<Long> distinct = new LinkedHashSet<>();
-      for (Long value : values) {
-        if (value != null && value > 0) {
-          distinct.add(value);
-        }
-      }
-
-      if (distinct.isEmpty()) {
-        sql.append(" AND ").append(column).append(" = TO_NUMBER(0)");
-        return this;
-      }
-
-      sql.append(" AND (");
-      int index = 0;
-      for (Long value : distinct) {
-        if (index++ > 0) {
-          sql.append(" OR ");
-        }
-        sql.append(column).append(" = TO_NUMBER(:").append(bindValues.size() + 1).append(")");
-        bindValues.add(value.toString());
-      }
-      sql.append(")");
-      return this;
-    }
-
-    public SqlWhereBuilder addInLikeOrNoResults(String column, List<Long> values) {
-      if (values == null || values.isEmpty()) {
-        sql.append(" AND ").append(column).append(" = TO_NUMBER(0)");
-        return this;
-      }
-
-      Set<Long> distinct = new LinkedHashSet<>();
-      for (Long value : values) {
-        if (value != null && value > 0) {
-          distinct.add(value);
-        }
-      }
-
-      if (distinct.isEmpty()) {
-        sql.append(" AND ").append(column).append(" = TO_NUMBER(0)");
-        return this;
-      }
-
-      sql.append(" AND (");
-      int index = 0;
-      for (Long value : distinct) {
-        if (index++ > 0) {
-          sql.append(" OR ");
-        }
-        sql.append(column).append(" LIKE '%' || :").append(bindValues.size() + 1).append(" || '%'");
-        bindValues.add(value.toString());
-      }
-      sql.append(")");
-      return this;
-    }
-
-    public SqlWhereBuilder addDateGte(String column, LocalDate value) {
-      if (value == null) {
-        return this;
-      }
-      addBind(
-          " AND " + column + " >= TO_DATE(:" + (bindValues.size() + 1) + ", 'YYYY-MM-DD')",
-          value.toString());
-      return this;
-    }
-
-    public SqlWhereBuilder addDateLte(String column, LocalDate value) {
-      if (value == null) {
-        return this;
-      }
-      addBind(
-          " AND " + column + " <= TO_DATE(:" + (bindValues.size() + 1) + ", 'YYYY-MM-DD')",
-          value.toString());
-      return this;
-    }
-
-    public SqlWhereBuilder addRaw(String rawSqlFragment) {
-      if (rawSqlFragment != null && !rawSqlFragment.isBlank()) {
-        sql.append(rawSqlFragment);
-      }
-      return this;
-    }
-
-    public SqlWhereBuilder addRawWithBinds(String rawSqlFragment, String... values) {
-      if (rawSqlFragment == null || rawSqlFragment.isBlank()) {
-        return this;
-      }
-      sql.append(rawSqlFragment);
-      if (values != null) {
-        for (String value : values) {
-          bindValues.add(value);
-        }
-      }
-      return this;
-    }
-
-    public int nextBindIndex() {
-      return bindValues.size() + 1;
-    }
-
-    public SqlWhere build(String orderByClause) {
-      String orderBy = orderByClause == null ? "" : orderByClause;
-      return new SqlWhere(sql + orderBy, List.copyOf(bindValues));
-    }
-
-    private void addBind(String clause, String value) {
-      sql.append(clause);
-      bindValues.add(value);
-    }
-  }
-
   protected DirectSqlBuilder newDirectSqlBuilder() {
     return new DirectSqlBuilder();
-  }
-
-  protected Map<String, String> mapOf(String... keyValuePairs) {
-    Map<String, String> values = new LinkedHashMap<>();
-    if (keyValuePairs == null) {
-      return values;
-    }
-
-    for (int i = 0; i + 1 < keyValuePairs.length; i += 2) {
-      values.put(keyValuePairs[i], keyValuePairs[i + 1]);
-    }
-    return values;
-  }
-
-  protected SqlWhereBuilder newWhereBuilder() {
-    return new SqlWhereBuilder();
   }
 }

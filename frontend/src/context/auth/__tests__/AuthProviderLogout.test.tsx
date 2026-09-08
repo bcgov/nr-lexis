@@ -104,6 +104,7 @@ describe('AuthProvider logout', () => {
     window.history.replaceState({}, document.title, '/')
     clearSessionExpiredLoginNotice()
     clearActiveForestClientNumber()
+    window.sessionStorage.removeItem('lexis.login-destination')
   })
 
   it('signs out of Cognito', async () => {
@@ -114,6 +115,7 @@ describe('AuthProvider logout', () => {
       'applicationNumber=43278',
     )
     window.sessionStorage.setItem('unrelated', 'keep')
+    window.sessionStorage.setItem('lexis.login-destination', '/provincial/offers/123')
     renderProbe()
 
     await waitFor(() => {
@@ -132,6 +134,7 @@ describe('AuthProvider logout', () => {
     expect(getActiveForestClientNumber()).toBeNull()
     expect(window.sessionStorage.getItem('lexis.search-state.v1.provincial-review')).toBeNull()
     expect(window.sessionStorage.getItem('unrelated')).toBe('keep')
+    expect(window.sessionStorage.getItem('lexis.login-destination')).toBeNull()
   })
 
   it('uses the FSPTS-style federated logout chain when it is configured', async () => {
@@ -233,6 +236,7 @@ describe('AuthProvider logout', () => {
 
   it('starts the configured login flow when no Cognito session exists', async () => {
     authMocks.fetchAuthSession.mockResolvedValue({ tokens: undefined })
+    window.sessionStorage.setItem('lexis.login-destination', '/provincial/offers/123')
 
     renderProbe()
 
@@ -245,6 +249,35 @@ describe('AuthProvider logout', () => {
       provider: { custom: 'DEV-IDIR' },
     })
     expect(mockedFetchSessionCapabilities).not.toHaveBeenCalled()
+    expect(window.sessionStorage.getItem('lexis.login-destination')).toBe('/provincial/offers/123')
+  })
+
+  it.each(['?code=expired&state=oauth-state', '?error=access_denied'])(
+    'discards the return destination after an unsuccessful OAuth callback %s',
+    async (callbackSearch) => {
+      window.history.replaceState({}, document.title, `/${callbackSearch}`)
+      window.sessionStorage.setItem('lexis.login-destination', '/provincial/offers/123')
+      authMocks.fetchAuthSession.mockResolvedValue({ tokens: undefined })
+      renderProbe()
+
+      await waitFor(
+        () => {
+          expect(screen.getByTestId('loading')).toHaveTextContent('false')
+        },
+        { timeout: 3000 },
+      )
+      expect(window.sessionStorage.getItem('lexis.login-destination')).toBeNull()
+      expect(screen.getByTestId('is-logged-in')).toHaveTextContent('false')
+    },
+  )
+
+  it('discards the return destination if session capabilities fail to load', async () => {
+    window.sessionStorage.setItem('lexis.login-destination', '/provincial/offers/123')
+    mockedFetchSessionCapabilities.mockRejectedValueOnce(new Error('session unavailable'))
+    renderProbe()
+
+    await waitFor(() => expect(screen.getByTestId('loading')).toHaveTextContent('false'))
+    expect(window.sessionStorage.getItem('lexis.login-destination')).toBeNull()
   })
 
   it('clears local auth state after Cognito signout fails', async () => {
@@ -437,6 +470,7 @@ describe('AuthProvider logout', () => {
     ['the auth token cannot be resolved', 'token-unavailable'],
   ] as const)('returns authenticated users to the login shell when %s', async (_label, reason) => {
     window.history.replaceState({}, document.title, '/provincial/review')
+    window.sessionStorage.setItem('lexis.login-destination', '/provincial/offers/123')
     let pathnameWhenSignOutStarted = ''
     authMocks.signOut.mockImplementation(async () => {
       pathnameWhenSignOutStarted = window.location.pathname
@@ -461,5 +495,6 @@ describe('AuthProvider logout', () => {
     expect(screen.getByTestId('is-logged-in')).toHaveTextContent('false')
     expect(window.location.pathname).toBe('/')
     expect(hasSessionExpiredLoginNotice()).toBe(false)
+    expect(window.sessionStorage.getItem('lexis.login-destination')).toBeNull()
   })
 })

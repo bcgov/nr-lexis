@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import DetailDocumentUploadPanel from '../DetailDocumentUploadPanel'
@@ -97,6 +97,7 @@ describe('DetailDocumentUploadPanel', () => {
   })
 
   it('explains pending validation before allowing a mixed queue to reach review', async () => {
+    mockedSubmitAdminUpload.mockResolvedValue({ message: 'Document uploaded.' })
     let resolveValidation!: (result: Awaited<ReturnType<typeof validateAdminUpload>>) => void
     mockedValidateAdminUpload
       .mockResolvedValueOnce({ status: 'validated', message: 'File passed validation.' })
@@ -143,6 +144,8 @@ describe('DetailDocumentUploadPanel', () => {
       screen.queryByText('Wait for file validation to finish before reviewing the upload.'),
     ).not.toBeInTheDocument()
     expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('button', { name: 'Submit upload' }))
+    await waitFor(() => expect(mockedSubmitAdminUpload).toHaveBeenCalledTimes(2))
   })
 
   it('keeps submission blocked while an additional file is validating on the review step', async () => {
@@ -813,6 +816,98 @@ describe('DetailDocumentUploadPanel', () => {
     await waitFor(() => expect(onBusyChange).toHaveBeenLastCalledWith(false))
     await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(false))
   })
+
+  it('rejects multiple invoice files dropped together before validation', async () => {
+    render(
+      <DetailDocumentUploadPanel
+        workflowType="invoice"
+        targetNumber="5001"
+        inputId="invoiceDocuments"
+      />,
+    )
+    await openUploadModal('Add invoice')
+    await userEvent.type(screen.getByLabelText('Upload invoice number'), 'INV001')
+    await userEvent.type(screen.getByLabelText('Upload invoice export value'), '100')
+    expect(screen.getByLabelText('Document File')).not.toHaveAttribute('multiple')
+    expect(screen.queryByText(/Multiple files can be queued/)).not.toBeInTheDocument()
+
+    fireEvent.drop(screen.getByRole('button', { name: 'Choose file for File' }), {
+      dataTransfer: {
+        files: [
+          new File(['first'], 'first.pdf', { type: 'application/pdf' }),
+          new File(['second'], 'second.pdf', { type: 'application/pdf' }),
+        ],
+      },
+    })
+
+    expect(screen.getByText('Choose one file per invoice.')).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Remove' })).not.toBeInTheDocument()
+    expect(mockedValidateAdminUpload).not.toHaveBeenCalled()
+    expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
+  })
+
+  it.each(['selection', 'drop'])(
+    'replaces the invoice file on a later %s and submits only the replacement',
+    async (selectionMethod) => {
+      let rejectFirstValidation!: (error: Error) => void
+      mockedValidateAdminUpload.mockImplementationOnce(
+        () =>
+          new Promise((_, reject) => {
+            rejectFirstValidation = reject
+          }),
+      )
+      mockedSubmitAdminUpload.mockResolvedValue({ message: 'Invoice upload submitted.' })
+      const onUploadComplete = vi.fn()
+      const firstFile = new File(['first'], 'first.pdf', { type: 'application/pdf' })
+      const replacementFile = new File(['replacement'], 'replacement.pdf', {
+        type: 'application/pdf',
+      })
+      render(
+        <DetailDocumentUploadPanel
+          workflowType="invoice"
+          targetNumber="5001"
+          inputId="invoiceDocuments"
+          onUploadComplete={onUploadComplete}
+        />,
+      )
+      await openUploadModal('Add invoice')
+      await userEvent.type(screen.getByLabelText('Upload invoice number'), 'INV001')
+      await userEvent.type(screen.getByLabelText('Upload invoice export value'), '100')
+      await userEvent.upload(screen.getByLabelText('Document File'), firstFile)
+      if (selectionMethod === 'drop') {
+        fireEvent.drop(screen.getByRole('button', { name: 'Choose file for File' }), {
+          dataTransfer: { files: [replacementFile] },
+        })
+      } else {
+        await userEvent.upload(screen.getByLabelText('Document File'), replacementFile)
+      }
+      await act(async () => {
+        rejectFirstValidation(new Error('Discarded invoice validation'))
+      })
+
+      expect(screen.queryByText('first.pdf')).not.toBeInTheDocument()
+      expect(screen.queryByText('Discarded invoice validation')).not.toBeInTheDocument()
+      expect(screen.getAllByText('replacement.pdf').length).toBeGreaterThan(0)
+      expect(screen.getAllByRole('button', { name: 'Remove' })).toHaveLength(1)
+      await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
+      expect(
+        screen.queryByRole('button', { name: /Choose files for Add more/ }),
+      ).not.toBeInTheDocument()
+      await userEvent.click(screen.getByRole('button', { name: 'Submit upload' }))
+
+      await waitFor(() => expect(onUploadComplete).toHaveBeenCalledTimes(1))
+      expect(mockedSubmitAdminUpload).toHaveBeenCalledTimes(1)
+      expect(mockedSubmitAdminUpload).toHaveBeenCalledWith(
+        'invoice',
+        expect.objectContaining({
+          permitNumber: '5001',
+          salesInvoiceNumber: 'INV001',
+          file: replacementFile,
+        }),
+      )
+      expect(screen.queryByRole('dialog', { name: 'Add invoice' })).not.toBeInTheDocument()
+    },
+  )
 
   it('returns invoice conversion-rate dirty state to its displayed baseline', async () => {
     const onDirtyChange = vi.fn()

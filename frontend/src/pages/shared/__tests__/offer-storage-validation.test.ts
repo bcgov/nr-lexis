@@ -10,6 +10,20 @@ import {
 } from '@/pages/shared/offer-storage-validation'
 
 describe('offer storage validation', () => {
+  it('allows optional zero volume while requiring a positive offer amount', () => {
+    for (const volume of ['', '0', '0.0', formatLegacyOfferVolume('0.04')]) {
+      expect(
+        offerDecimalStorageFieldError(volume, OFFER_VOLUME_MAX, 'Offer volume', false, true),
+      ).toBeNull()
+    }
+    expect(
+      offerDecimalStorageFieldError('-0.01', OFFER_VOLUME_MAX, 'Offer volume', false, true),
+    ).toBe('Offer volume must be a number with up to two decimal places.')
+    expect(
+      offerDecimalStorageFieldError('0', PURCHASE_OFFER_AMOUNT_MAX, 'Offer amount', true),
+    ).toBe('Use a positive numeric value.')
+  })
+
   it('accepts the exact Oracle numeric boundaries', () => {
     expect(
       offerDecimalStorageFieldError('99999.99', PURCHASE_OFFER_AMOUNT_MAX, 'Offer amount', true),

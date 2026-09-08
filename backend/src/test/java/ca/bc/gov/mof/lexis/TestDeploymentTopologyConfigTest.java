@@ -354,7 +354,10 @@ class TestDeploymentTopologyConfigTest {
             "LEXIS_MAIL_REGION_RCO_ADDRESS",
             "LEXIS_MAIL_REGION_RNI_ADDRESS",
             "LEXIS_MAIL_REGION_RSI_ADDRESS");
-    assertThat(checkoutStep).contains("actions/checkout@v6").doesNotContain("env:");
+    assertThat(checkoutStep)
+        .contains("actions/checkout@v6")
+        .contains("persist-credentials: false")
+        .doesNotContain("env:");
     assertThat(keycloakStep)
         .contains("if: ${{ inputs.environment != 'dev' }}")
         .doesNotContain("env.KC_SA_CLIENT_ID != ''")

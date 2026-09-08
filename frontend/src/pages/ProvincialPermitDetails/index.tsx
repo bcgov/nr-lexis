@@ -502,13 +502,12 @@ const withUpdatedPermitDetail = (
   const selectedRegionLabel = regionOptions.find(
     (option) => option.value === form.orgUnitNumber.trim(),
   )?.label
-  const allowBlanketOicDraftDateClear =
-    currentDetail.blanketOic &&
+  const allowActiveDraftDateClear =
     detailValue(currentDetail.permitStatusCode).trim().toUpperCase() === 'ACT' &&
     permitStatusCode.toUpperCase() === 'ACT'
   const updatedSubmitDate = form.permitSubmitDate.trim() || currentDetail.applicationDate
   const updatedPermitDate = (submittedValue: string, currentValue: string | null): string | null =>
-    submittedValue.trim() || (allowBlanketOicDraftDateClear ? null : currentValue)
+    submittedValue.trim() || (allowActiveDraftDateClear ? null : currentValue)
 
   return {
     ...currentDetail,
@@ -1156,14 +1155,14 @@ const ProvincialPermitDetailsPage = () => {
 
       try {
         if (tab === 'fees') {
-          const fees = await fetchProvincialPermitFees({
+          const feesResult = await fetchProvincialPermitFees({
             permitNumber: resolvedPermitNumber,
             blanketOic: detail?.blanketOic,
             packageNumbers:
               options.packageNumbers ?? tabsData?.packages.map((row) => row.packageNumber),
           })
           if (!isLatestRequest()) return
-          setTabsData((current) => (current ? { ...current, fees } : current))
+          setTabsData((current) => (current ? { ...current, ...feesResult } : current))
           setPermitFeesErrorMessage('')
         } else if (tab === 'documents') {
           const documentsResult = await fetchPermitDocuments(resolvedPermitNumber)
@@ -1214,6 +1213,22 @@ const ProvincialPermitDetailsPage = () => {
       tabsData,
     ],
   )
+
+  const refreshLoadedPermitFees = useCallback(() => {
+    if (
+      !loadedDeferredPermitTabsRef.current.has('fees') &&
+      !deferredPermitTabLoadsRef.current.has('fees') &&
+      activePermitTabId !== 'fees'
+    ) {
+      return
+    }
+
+    loadedDeferredPermitTabsRef.current.delete('fees')
+    deferredPermitTabLoadsRef.current.delete('fees')
+    setDeferredPermitTabLoaded((current) => ({ ...current, fees: false }))
+    setPermitFeesErrorMessage('')
+    void loadDeferredPermitTab('fees', { force: true })
+  }, [activePermitTabId, loadDeferredPermitTab])
 
   useEffect(() => {
     if (
@@ -1407,15 +1422,18 @@ const ProvincialPermitDetailsPage = () => {
     editContextLoaded &&
     !permitEditLocked &&
     permitStatusCode === 'ACT'
-  const canSavePermit =
+  const canMutatePermit =
     permitExemptionContextReady &&
     canPerform('savePermit') &&
     editContextLoaded &&
     !permitEditLocked &&
     !permitExpired
+  const canSavePermit =
+    canMutatePermit &&
+    !(permitStatusCode === 'COM' && hasProvincialSubmitterRole(capabilities.roles))
   const canReviewPermits = canPerform('/permitsReview')
   const canCorrectPermitSubmitDate = canSavePermit && canReviewPermits && permitStatusCode === 'ACT'
-  const canEditShipping = canSavePermit && permitStatusCode !== 'CAN'
+  const canEditShipping = canMutatePermit && permitStatusCode !== 'CAN'
   const invoiceMaterialLocked = permitStatusCode === 'COM' || permitStatusCode === 'PPD'
   const canEnterPaymentReceipt = permitStatusCode === 'PPD' && !detail?.receiptNumber?.trim()
   const canSendPermitApproval =
@@ -1474,11 +1492,9 @@ const ProvincialPermitDetailsPage = () => {
     !scaleAttachmentLockedStatuses.has(permitStatusCode ?? '')
   const canEditBlanketOicPackages =
     permitTablesAvailable &&
-    editContextLoaded &&
-    !permitEditLocked &&
+    canSavePermit &&
     !!detail?.blanketOic &&
-    !scaleAttachmentLockedStatuses.has(permitStatusCode ?? '') &&
-    (hasRole(capabilities.roles, 'ADMIN') || hasRole(capabilities.roles, 'APPLICATION_APPROVER'))
+    !scaleAttachmentLockedStatuses.has(permitStatusCode ?? '')
   // INTENTIONAL_LEGACY_DIVERGENCE(PACKAGE_FIRST_ITEMS_WORKFLOW): Blanket OIC Summary of Scale
   // entry remains hidden until its prerequisite package exists.
   const blanketOicPackageCreationRequired =
@@ -1540,7 +1556,7 @@ const ProvincialPermitDetailsPage = () => {
     (detail?.blanketOic ? !!detail.oicApplicationNumber : tabsData.applications.length > 0) &&
     tabsData.packages.length > 0 &&
     tabsData.items.length > 0
-  const totalFeeVolume = (tabsData?.fees ?? []).reduce((total, row) => total + row.volume, 0)
+  const totalFeeVolume = tabsData?.totalFeeVolume
   const calculatedPermitFee = (tabsData?.fees ?? []).reduce((total, row) => total + row.amount, 0)
   const permitFeesMasked = (tabsData?.fees ?? []).some((row) => row.amountDisplay.trim() === '$')
   const feeSummaryStatus =
@@ -1559,6 +1575,9 @@ const ProvincialPermitDetailsPage = () => {
       return
     }
 
+    const reloadFees =
+      loadedDeferredPermitTabsRef.current.has('fees') ||
+      deferredPermitTabLoadsRef.current.has('fees')
     beginPermitGbmsRequest()
     setIsPermitTablesLoading(true)
     try {
@@ -1574,7 +1593,12 @@ const ProvincialPermitDetailsPage = () => {
         receiptNumber: detail.receiptNumber,
         blanketOic: detail.blanketOic,
       })
-      if (loadedDeferredPermitTabsRef.current.has('fees')) {
+      if (
+        reloadFees ||
+        loadedDeferredPermitTabsRef.current.has('fees') ||
+        deferredPermitTabLoadsRef.current.has('fees')
+      ) {
+        deferredPermitTabLoadsRef.current.delete('fees')
         await loadDeferredPermitTab('fees', {
           force: true,
           packageNumbers: tabsResult.packages.map((row) => row.packageNumber),
@@ -2016,6 +2040,7 @@ const ProvincialPermitDetailsPage = () => {
                 : 'Permit saved successfully.',
           ),
         )
+        refreshLoadedPermitFees()
         return true
       } catch (error) {
         if (isLatestRequest()) {
@@ -2044,6 +2069,7 @@ const ProvincialPermitDetailsPage = () => {
       permitFieldErrors,
       permitForm,
       permitNumber,
+      refreshLoadedPermitFees,
       requiresPositiveOicRequestLimits,
       tryBeginPermitMutation,
     ],
@@ -2106,6 +2132,7 @@ const ProvincialPermitDetailsPage = () => {
       setTouchedPermitFields({})
       setShowPermitValidationErrors(false)
       setActionInfoMessage(permitMutationMessage(result, 'Shipping saved successfully.'))
+      refreshLoadedPermitFees()
       return true
     } catch (error) {
       if (isLatestRequest()) {
@@ -2125,6 +2152,7 @@ const ProvincialPermitDetailsPage = () => {
     isSavingShipping,
     permitFieldErrors,
     permitForm,
+    refreshLoadedPermitFees,
     shippingReferences,
     tryBeginPermitMutation,
   ])
@@ -2241,6 +2269,7 @@ const ProvincialPermitDetailsPage = () => {
       setFeeOverrideForm(savedContext)
       setIsEditingFeeOverride(false)
       setActionInfoMessage(result.message || 'Permit fee override saved successfully.')
+      refreshLoadedPermitFees()
       return true
     } catch (error) {
       if (isLatestRequest()) {
@@ -2258,6 +2287,7 @@ const ProvincialPermitDetailsPage = () => {
     endPermitMutation,
     feeOverrideForm,
     isSavingFeeOverride,
+    refreshLoadedPermitFees,
     tryBeginPermitMutation,
   ])
 
@@ -4616,7 +4646,14 @@ const ProvincialPermitDetailsPage = () => {
                             <TextInput
                               id="permitFeeTotalVolume"
                               labelText="Total volume (m³)"
-                              value={feeSummaryStatus ?? totalFeeVolume.toLocaleString()}
+                              value={
+                                feeSummaryStatus ??
+                                totalFeeVolume?.toLocaleString(undefined, {
+                                  minimumFractionDigits: 1,
+                                  maximumFractionDigits: 1,
+                                }) ??
+                                'Unavailable'
+                              }
                               disabled
                             />
                             <TextInput
@@ -4755,6 +4792,51 @@ const ProvincialPermitDetailsPage = () => {
                             </>
                           )}
                         </fieldset>
+                        {feeSummaryStatus === null && !!tabsData?.packageFeeSummaries.length && (
+                          <>
+                            <h3 className="detail-tile-title">Package fee summary</h3>
+                            <TableFrame ariaLabel="Permit package fee summaries">
+                              <Table size="md" useZebraStyles>
+                                <TableHead>
+                                  <TableRow>
+                                    <TableHeader>Package</TableHeader>
+                                    <TableHeader>Age class</TableHeader>
+                                    <TableHeader>Exemption number</TableHeader>
+                                    <TableHeader>Package fee (CAD)</TableHeader>
+                                  </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                  {tabsData.packageFeeSummaries.map((summary) => (
+                                    <TableRow key={summary.packageNumber}>
+                                      <TableCell>{summary.packageNumber}</TableCell>
+                                      <TableCell>{summary.growthType || '-'}</TableCell>
+                                      <TableCell>
+                                        {detail.exemptionNumber ? (
+                                          <Link
+                                            to={`/provincial/exemption/${encodeURIComponent(detail.exemptionNumber)}`}
+                                            state={withDetailReturnTo(
+                                              location.state,
+                                              {
+                                                label: 'Provincial permit detail',
+                                                to: locationPath(location),
+                                              },
+                                              detailReturnTo,
+                                            )}
+                                          >
+                                            {detail.exemptionNumber}
+                                          </Link>
+                                        ) : (
+                                          '-'
+                                        )}
+                                      </TableCell>
+                                      <TableCell>{summary.totalFeeForPackage}</TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </TableFrame>
+                          </>
+                        )}
                         <TextInput
                           id="permitFeesFilter"
                           labelText="Filter fee rows"
@@ -5188,16 +5270,26 @@ const ProvincialPermitDetailsPage = () => {
         <ConfirmationModal
           open
           danger
-          title="Delete document"
+          title={
+            isInvoiceDocumentRow(documentPendingDeletion)
+              ? 'Delete invoice and document'
+              : 'Delete document'
+          }
           description={
             <>
               Permanently delete <strong>{documentPendingDeletion.name || 'this document'}</strong>?
+              {isInvoiceDocumentRow(documentPendingDeletion) &&
+                ' This also deletes the associated invoice record, including its value, conversion rate, and fee.'}{' '}
               This cannot be undone.
             </>
           }
           confirmLabel="Delete"
           pendingLabel="Deleting…"
-          errorTitle="Failed to delete document"
+          errorTitle={
+            isInvoiceDocumentRow(documentPendingDeletion)
+              ? 'Failed to delete invoice and document'
+              : 'Failed to delete document'
+          }
           onClose={() => setDocumentPendingDeletion(null)}
           onConfirm={() => onRemoveDocument(documentPendingDeletion)}
         />

@@ -2427,6 +2427,84 @@ class OracleExemptionDetailsRpcServiceTest {
     assertThat(updateCaptor.getValue().previousExemptionNumber()).isEqualTo("EX-205");
   }
 
+  @ParameterizedTest
+  @ValueSource(strings = {"EX-205", "EX-999"})
+  void updateOicNumberShouldValidateLinksUsingThePersistedNumber(String permitExemptionNumber) {
+    ExemptionDetailsRpcRepository.ExemptionRecord existing =
+        exemption(
+            "ACT", "O", LexisBusinessTime.today().minusDays(1),
+            LexisBusinessTime.today().plusDays(90));
+    when(repository.findExemptionRecord("EX-205")).thenReturn(Optional.of(existing));
+    when(repository.isExemptionTypeCodeValidRequired("O")).thenReturn(true);
+    when(repository.isExemptionStatusCodeValidRequired("ACT")).thenReturn(true);
+    when(repository.findApplicationSummariesByExemptionNumber("EX-205"))
+        .thenReturn(List.of(applicationSummary(1000456L, "11111111")));
+    when(repository.findApplicationLinkRecord(1000456L))
+        .thenReturn(Optional.of(
+            applicationWithIdentity(
+                1000456L, "11111111", "00", null, null, "EXE", "EX-205")));
+    when(repository.findPermitsByApplicationNumberRequired(1000456L))
+        .thenReturn(List.of(
+            new ExemptionDetailsRpcRepository.ApplicationPermitRow(
+                7000123L, permitExemptionNumber)));
+    boolean validLinks = "EX-205".equals(permitExemptionNumber);
+    if (validLinks) {
+      when(repository.updateExemption(any())).thenReturn(true);
+    }
+    OracleExemptionDetailsRpcService serviceWithRealValidator =
+        new OracleExemptionDetailsRpcService(
+            repository, notificationRecipientResolver, notificationService,
+            new ExemptionActivationEligibilityValidator(repository));
+
+    ExemptionDetailsRpcService.CreateExemptionResult response =
+        serviceWithRealValidator.updateExemption(
+            new ExemptionDetailsRpcService.UpdateExemptionRequest(
+                "EX-206", "EX-205", null, null, null, "Conditions", "O", "ACT",
+                null, null, null),
+            "idir\\jsmith",
+            false);
+
+    verify(repository).findApplicationSummariesByExemptionNumber("EX-205");
+    verify(repository, never()).findApplicationSummariesByExemptionNumber("EX-206");
+    assertThat(response.success()).isEqualTo(validLinks);
+    if (validLinks) {
+      assertThat(response.errors()).isEmpty();
+      assertThat(response.exemptionNumber()).isEqualTo("EX-206");
+      ArgumentCaptor<ExemptionDetailsRpcRepository.ExemptionUpdateRecord> updateCaptor =
+          ArgumentCaptor.forClass(ExemptionDetailsRpcRepository.ExemptionUpdateRecord.class);
+      verify(repository).updateExemption(updateCaptor.capture());
+      assertThat(updateCaptor.getValue().exemptionNumber()).isEqualTo("EX-206");
+      assertThat(updateCaptor.getValue().previousExemptionNumber()).isEqualTo("EX-205");
+    } else {
+      assertThat(response.errors())
+          .containsExactly("Application 1000456 is associated with permit 7000123 outside this exemption.");
+      verify(repository, never()).updateExemption(any());
+    }
+  }
+
+  @Test
+  void updateOicNumberShouldRejectAnAlreadyAssignedNumberBeforeMutation() {
+    when(repository.findExemptionRecord("EX-205"))
+        .thenReturn(Optional.of(exemption("ACT", "O")));
+    when(repository.existsByExemptionNumber("EX-206")).thenReturn(true);
+
+    ExemptionDetailsRpcService.CreateExemptionResult response =
+        service.updateExemption(
+            new ExemptionDetailsRpcService.UpdateExemptionRequest(
+                "EX-206", "EX-205", null, null, null, "Conditions", "O", "ACT",
+                null, null, null),
+            "idir\\jsmith",
+            false);
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactly("* - this exemption number has already been assigned");
+    verify(repository, never()).updateExemption(any());
+    verify(repository, never()).insertExemptionRate(any());
+    verify(repository, never()).updateExemptionRate(any());
+    verify(repository, never()).deleteExemptionRate(any());
+  }
+
   @Test
   void updateExemptionShouldFailWhenCancellationCannotRestoreApplication() {
     ExemptionDetailsRpcRepository.ExemptionRecord existing = exemption("ACT");
