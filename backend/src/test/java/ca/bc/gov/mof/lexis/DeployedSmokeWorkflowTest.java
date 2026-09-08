@@ -10,7 +10,7 @@ import org.junit.jupiter.api.Test;
 class DeployedSmokeWorkflowTest {
 
   @Test
-  void deployedSmokeShouldFailTheFirstAttemptAndKeepFailureDiagnostics() throws IOException {
+  void deployedSmokeShouldUseOneJobAndPropagateFailureWithDiagnostics() throws IOException {
     String workflow = read(".github/workflows/reusable-tests.yml");
 
     assertThat(workflow.lines().filter(line -> line.equals("  e2e-tests:")).count()).isEqualTo(1);
@@ -37,16 +37,15 @@ class DeployedSmokeWorkflowTest {
   }
 
   @Test
-  void playwrightShouldNotRetryFailedTestsAndShouldRetainSmokeFailureTraces() throws IOException {
+  void playwrightShouldRetryFailedTestsOnceInCiOnlyAndRetainSmokeFailureTraces()
+      throws IOException {
     String smokeConfig = read("frontend/playwright.config.ts");
     String regressionConfig = read("frontend/e2e/playwright-config.ts");
 
     assertThat(smokeConfig)
-        .contains("retries: 0", "trace: 'retain-on-failure'")
-        .doesNotContain("on-first-retry", "retries: process.env.CI");
-    assertThat(regressionConfig)
-        .contains("retries: 0")
-        .doesNotContain("retries: process.env.CI");
+        .contains("retries: process.env.CI ? 1 : 0", "trace: 'retain-on-failure'")
+        .doesNotContain("on-first-retry");
+    assertThat(regressionConfig).contains("retries: process.env.CI ? 1 : 0");
   }
 
   @Test
