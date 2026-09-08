@@ -160,6 +160,7 @@ const ContiguousTabPanels = ({
 }
 
 type ExemptionEditForm = {
+  exemptionNumber: string
   exemptionTypeCode: string
   exemptionStatusCode: string
   approvalDate: string
@@ -185,6 +186,7 @@ const toEditForm = (
   detail: ProvincialExemptionDetail,
   context: ExemptionEditContext,
 ): ExemptionEditForm => ({
+  exemptionNumber: detail.exemptionNumber,
   exemptionTypeCode: detail.exemptionTypeCode ?? '',
   exemptionStatusCode: detail.exemptionStatusCode ?? '',
   approvalDate: detail.approvalDate ?? '',
@@ -333,6 +335,7 @@ const ProvincialExemptionDetailsPage = () => {
   >('loading')
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [renamedExemptionNumber, setRenamedExemptionNumber] = useState<string | null>(null)
   const [approving, setApproving] = useState(false)
   const [approvalConfirmationOpen, setApprovalConfirmationOpen] = useState(false)
   const [approvalConfirmationTarget, setApprovalConfirmationTarget] = useState<string | null>(null)
@@ -424,6 +427,18 @@ const ProvincialExemptionDetailsPage = () => {
   }, [detail])
 
   useEffect(() => {
+    if (saving || !renamedExemptionNumber || renamedExemptionNumber === exemptionNumber) return
+
+    navigate(
+      withCurrentSearch(`/provincial/exemption/${encodeURIComponent(renamedExemptionNumber)}`),
+      {
+        replace: true,
+        state: location.state,
+      },
+    )
+  }, [exemptionNumber, location.state, navigate, renamedExemptionNumber, saving, withCurrentSearch])
+
+  useEffect(() => {
     let isActive = true
 
     const clearClientContext = () => {
@@ -507,6 +522,7 @@ const ProvincialExemptionDetailsPage = () => {
   useEffect(() => {
     const load = async () => {
       const isLatestRequest = beginDetailRequest()
+      setRenamedExemptionNumber(null)
       const isRefreshingCurrentExemption =
         detailRef.current !== null && String(detailRef.current.exemptionNumber) === exemptionNumber
       if (!isRefreshingCurrentExemption) {
@@ -829,6 +845,10 @@ const ProvincialExemptionDetailsPage = () => {
   const expiryDateRequired = !cancelledExemption
   const canEditSummaryFields =
     editing && canSaveExemption && !cancelledBlanketOic && !cancelledExemption
+  const isExemptionNumberChanged =
+    canEditSummaryFields &&
+    currentTypeCode === 'O' &&
+    editForm?.exemptionNumber.trim() !== currentDetail?.exemptionNumber
   const canEditStatus = editing && canSaveExemption
   const canEditApprovalDate =
     canEditSummaryFields &&
@@ -918,6 +938,30 @@ const ProvincialExemptionDetailsPage = () => {
         ? ''
         : 'Select New to reopen this cancelled exemption.'
     }
+    if (currentTypeCode === 'O') {
+      if (!editForm.exemptionNumber.trim()) return 'Exemption number is required.'
+      if (editForm.exemptionNumber.trim().length > 8) {
+        return 'Exemption number must be 8 characters or fewer.'
+      }
+      if (!ASCII_PATTERN.test(editForm.exemptionNumber.trim())) {
+        return 'Exemption number contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.'
+      }
+      if (isExemptionNumberChanged) {
+        if (documentUploadDirty) {
+          return 'Submit or reset queued document uploads before changing the exemption number.'
+        }
+        if (applicationRelationshipDraftDirty) {
+          return 'Add or clear the typed application number before changing the exemption number.'
+        }
+        if (
+          documentUploadBusy ||
+          applicationMutationNumber !== null ||
+          isRemovingDocumentId !== null
+        ) {
+          return 'Wait for the current document or application change to finish before changing the exemption number.'
+        }
+      }
+    }
     if ((currentTypeCode === 'O' || currentTypeCode === 'B') && !editForm.approvalDate.trim()) {
       return 'Approval date is required.'
     }
@@ -976,6 +1020,12 @@ const ProvincialExemptionDetailsPage = () => {
     exemptionTypeOptions,
     persistedStatusCode,
     regionOptions,
+    isExemptionNumberChanged,
+    documentUploadDirty,
+    applicationRelationshipDraftDirty,
+    documentUploadBusy,
+    applicationMutationNumber,
+    isRemovingDocumentId,
   ])
 
   const canUploadExemptionDocuments = canPerform('/fileExemptionUpload') && !exemptionEditLocked
@@ -1058,90 +1108,107 @@ const ProvincialExemptionDetailsPage = () => {
     [exemptionNumber, refreshPermitData],
   )
 
-  const onSaveExemption = useCallback(async (): Promise<boolean> => {
-    if (
-      !detail ||
-      !editContextLoaded ||
-      !editForm ||
-      formValidationMessage ||
-      saving ||
-      requiredExemptionOptionsMissing ||
-      optionsAvailability !== 'available'
-    )
-      return false
-    setSaving(true)
-    setActionErrorMessage('')
-    setActionInfoMessage('')
-    try {
-      const result = await updateExemption({
-        exemptionNumber: detail.exemptionNumber,
-        approvedVolume: editForm.approvedVolume,
-        approvalDate: editForm.approvalDate,
-        expiryDate: editForm.expiryDate,
-        otherConditions: editForm.otherConditions,
-        exemptionTypeCode: editForm.exemptionTypeCode,
-        exemptionStatusCode: editForm.exemptionStatusCode,
-        manageFeeRate: canManageFeeRate,
-        enableRateOverride: editForm.enableRateOverride,
-        feeRate: editForm.feeRate,
-        regionNumbers: editForm.regionNumbers,
-      })
-      if (!result.success) {
-        setActionErrorMessage(result.errors.join(' ') || result.message)
+  const onSaveExemption = useCallback(
+    async (followRenamedRecord = true): Promise<boolean> => {
+      if (
+        !detail ||
+        !editContextLoaded ||
+        !editForm ||
+        formValidationMessage ||
+        saving ||
+        requiredExemptionOptionsMissing ||
+        optionsAvailability !== 'available'
+      )
         return false
-      }
-      const committedDetail: ProvincialExemptionDetail = {
-        ...detail,
-        exemptionTypeCode: editForm.exemptionTypeCode,
-        exemptionStatusCode: editForm.exemptionStatusCode,
-        approvalDate: editForm.approvalDate || null,
-        expiryDate: editForm.expiryDate || null,
-        approvedVolume: Number(editForm.approvedVolume),
-        otherConditions: editForm.otherConditions || null,
-        blanketOic: editForm.exemptionTypeCode.trim().toUpperCase() === 'B',
-      }
-      const committedContext: ExemptionEditContext = {
-        ...editContext,
-        rateOverrideEnabled: editForm.enableRateOverride,
-        fixedFeeRate: editForm.enableRateOverride ? editForm.feeRate : '',
-        regionNumbers: editForm.regionNumbers,
-      }
-      setDetail(committedDetail)
-      setEditContext(committedContext)
-      setEditForm(toEditForm(committedDetail, committedContext))
-      setEditing(false)
+      setSaving(true)
+      setActionErrorMessage('')
+      setActionInfoMessage('')
       try {
-        await refreshEditableData()
-        setActionInfoMessage(result.message)
-      } catch (refreshError) {
-        console.error(refreshError)
-        setApplicationsErrorMessage(
-          'Application links changed, but the current links could not be refreshed. Reload the page.',
-        )
-        setActionInfoMessage(
-          `${result.message || 'The exemption was saved.'} Current data could not be refreshed; reload before making another change.`,
-        )
+        const nextExemptionNumber =
+          currentTypeCode === 'O' && canEditSummaryFields
+            ? editForm.exemptionNumber.trim()
+            : detail.exemptionNumber
+        const result = await updateExemption({
+          exemptionNumber: nextExemptionNumber,
+          previousExemptionNumber: detail.exemptionNumber,
+          approvedVolume: editForm.approvedVolume,
+          approvalDate: editForm.approvalDate,
+          expiryDate: editForm.expiryDate,
+          otherConditions: editForm.otherConditions,
+          exemptionTypeCode: editForm.exemptionTypeCode,
+          exemptionStatusCode: editForm.exemptionStatusCode,
+          manageFeeRate: canManageFeeRate,
+          enableRateOverride: editForm.enableRateOverride,
+          feeRate: editForm.feeRate,
+          regionNumbers: editForm.regionNumbers,
+        })
+        if (!result.success) {
+          setActionErrorMessage(result.errors.join(' ') || result.message)
+          return false
+        }
+        const committedDetail: ProvincialExemptionDetail = {
+          ...detail,
+          exemptionNumber: result.exemptionNumber.trim() || nextExemptionNumber,
+          exemptionTypeCode: editForm.exemptionTypeCode,
+          exemptionStatusCode: editForm.exemptionStatusCode,
+          approvalDate: editForm.approvalDate || null,
+          expiryDate: editForm.expiryDate || null,
+          approvedVolume: Number(editForm.approvedVolume),
+          otherConditions: editForm.otherConditions || null,
+          blanketOic: editForm.exemptionTypeCode.trim().toUpperCase() === 'B',
+        }
+        const committedContext: ExemptionEditContext = {
+          ...editContext,
+          rateOverrideEnabled: editForm.enableRateOverride,
+          fixedFeeRate: editForm.enableRateOverride ? editForm.feeRate : '',
+          regionNumbers: editForm.regionNumbers,
+        }
+        setEditing(false)
+        if (committedDetail.exemptionNumber !== detail.exemptionNumber) {
+          // The old identifier no longer exists. Let the new route reload all linked data.
+          if (followRenamedRecord) setRenamedExemptionNumber(committedDetail.exemptionNumber)
+          setActionInfoMessage(result.message)
+          return true
+        }
+        setDetail(committedDetail)
+        setEditContext(committedContext)
+        setEditForm(toEditForm(committedDetail, committedContext))
+        try {
+          await refreshEditableData()
+          setActionInfoMessage(result.message)
+        } catch (refreshError) {
+          console.error(refreshError)
+          setApplicationsErrorMessage(
+            'Application links changed, but the current links could not be refreshed. Reload the page.',
+          )
+          setActionInfoMessage(
+            `${result.message || 'The exemption was saved.'} Current data could not be refreshed; reload before making another change.`,
+          )
+        }
+        return true
+      } catch (error) {
+        console.error(error)
+        setActionErrorMessage('Unable to save the exemption.')
+        return false
+      } finally {
+        setSaving(false)
       }
-      return true
-    } catch (error) {
-      console.error(error)
-      setActionErrorMessage('Unable to save the exemption.')
-      return false
-    } finally {
-      setSaving(false)
-    }
-  }, [
-    detail,
-    editContextLoaded,
-    editForm,
-    formValidationMessage,
-    refreshEditableData,
-    saving,
-    canManageFeeRate,
-    editContext,
-    optionsAvailability,
-    requiredExemptionOptionsMissing,
-  ])
+    },
+    [
+      detail,
+      editContextLoaded,
+      editForm,
+      formValidationMessage,
+      refreshEditableData,
+      saving,
+      canManageFeeRate,
+      editContext,
+      optionsAvailability,
+      requiredExemptionOptionsMissing,
+      canEditSummaryFields,
+      currentTypeCode,
+    ],
+  )
 
   const onDiscardExemptionChanges = useCallback(() => {
     if (detail) {
@@ -1168,7 +1235,7 @@ const ProvincialExemptionDetailsPage = () => {
       setActionErrorMessage('Add the typed application number or clear it before leaving.')
       return false
     }
-    return isExemptionFormDirty ? onSaveExemption() : true
+    return isExemptionFormDirty ? onSaveExemption(false) : true
   }, [
     applicationRelationshipDraftDirty,
     documentUploadDirty,
@@ -1689,8 +1756,8 @@ const ProvincialExemptionDetailsPage = () => {
             className={`application-detail-tabs-column content-loading-region${
               isRefreshingDetail ? ' is-loading' : ''
             }`}
-            inert={isRefreshingDetail ? true : undefined}
-            aria-busy={isRefreshingDetail}
+            inert={isRefreshingDetail || (saving && isExemptionNumberChanged) ? true : undefined}
+            aria-busy={isRefreshingDetail || (saving && isExemptionNumberChanged)}
           >
             <ContentLoadingOverlay
               loading={isRefreshingDetail}
@@ -1777,6 +1844,26 @@ const ProvincialExemptionDetailsPage = () => {
                           <Tile>
                             <h2 className="detail-tile-title">Edit exemption</h2>
                             <div className="legacy-search-grid">
+                              {currentTypeCode === 'O' && (
+                                <TextInput
+                                  id="exemptionDetailNumber"
+                                  labelText={requiredLabel('Exemption number')}
+                                  required
+                                  maxLength={8}
+                                  value={editForm.exemptionNumber}
+                                  disabled={!canEditSummaryFields}
+                                  onChange={(event) =>
+                                    setEditForm((current) =>
+                                      current
+                                        ? {
+                                            ...current,
+                                            exemptionNumber: event.target.value.toUpperCase(),
+                                          }
+                                        : current,
+                                    )
+                                  }
+                                />
+                              )}
                               <SearchableSelect
                                 id="exemptionDetailType"
                                 labelText={requiredLabel('Exemption type')}

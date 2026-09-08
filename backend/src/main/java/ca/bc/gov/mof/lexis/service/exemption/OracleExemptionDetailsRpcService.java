@@ -475,6 +475,10 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
     List<String> errors = new ArrayList<>();
     validateExemptionStorage(
         updateRecord.exemptionNumber(), updateRecord.otherConditions(), errors);
+    if (!Objects.equals(updateRecord.exemptionNumber(), updateRecord.previousExemptionNumber())
+        && repository.existsByExemptionNumber(updateRecord.exemptionNumber())) {
+      errors.add(EXEMPTION_NUMBER_ASSIGNED_MESSAGE);
+    }
     if (!reopeningCancelled) {
       errors.addAll(validateUpdateExemption(updateRecord, current));
     }
@@ -1465,7 +1469,8 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
       boolean canApproveExemption,
       boolean activationTransition) {
     return new ExemptionActivationEligibilityValidator.ActivationCandidate(
-        record.exemptionNumber(),
+        // Linked records still reference the persisted number until the database rename commits.
+        record.previousExemptionNumber(),
         record.approvedVolume(),
         record.approvalDate(),
         record.expiryDate(),
