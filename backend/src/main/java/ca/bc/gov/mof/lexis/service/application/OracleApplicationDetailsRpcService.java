@@ -11,7 +11,6 @@ import ca.bc.gov.mof.lexis.repository.client.ClientLookupRepository;
 import ca.bc.gov.mof.lexis.service.ScaleDomainValidator;
 import ca.bc.gov.mof.lexis.service.ScaleDomainValidator.ScaleValues;
 import ca.bc.gov.mof.lexis.service.exemption.ExemptionService;
-import ca.bc.gov.mof.lexis.util.LegacyApplicationRemarkCodec;
 import ca.bc.gov.mof.lexis.util.TextUtils;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -222,7 +221,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     String normalizedRemarkId = trimToNull(remarkId);
     String normalizedUserId = defaultMutationUser(userId);
     String remark = remarkBody == null ? "" : remarkBody;
-    if (!isStorableOracleText(LegacyApplicationRemarkCodec.encode(remark), REMARK_MAX_BYTES)) {
+    if (!isStorableOracleText(remark, REMARK_MAX_BYTES)) {
       return Optional.empty();
     }
 
@@ -3571,11 +3570,6 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         request.agentContactName(), "Agent contact name", CONTACT_NAME_MAX_BYTES, errors);
     String remark = request.remarkBody();
     validateOracleText(remark, "Application remark", REMARK_MAX_BYTES, errors);
-    if (remark != null
-        && isStorableOracleText(remark, REMARK_MAX_BYTES)
-        && !LegacyApplicationRemarkCodec.fitsStorage(remark, REMARK_MAX_BYTES)) {
-      errors.add("Remark is too long to save. Shorten it and try again.");
-    }
   }
 
   private void validateApplicationStorageText(

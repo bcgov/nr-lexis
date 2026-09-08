@@ -11,7 +11,6 @@ import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResultDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSummaryEnrichmentDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
-import ca.bc.gov.mof.lexis.util.LegacyApplicationRemarkCodec;
 import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import java.sql.ResultSet;
 import java.time.LocalDate;
@@ -691,7 +690,8 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
   }
 
   LexisApplicationDetailDto.LexisRemarkDto mapRemarkRow(ResultSet rs) {
-    String remark = LegacyApplicationRemarkCodec.decode(getString(rs, "REMARK"));
+    // No encoding provenance is stored; keep display and edit text identical to the stored value.
+    String remark = getString(rs, "REMARK");
     return new LexisApplicationDetailDto.LexisRemarkDto(
         getLong(rs, EXPORT_EXEMPTION_APPL_REMARK_NUMBER),
         remark,

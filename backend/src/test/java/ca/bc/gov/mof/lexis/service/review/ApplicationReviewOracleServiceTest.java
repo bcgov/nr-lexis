@@ -340,10 +340,10 @@ class ApplicationReviewOracleServiceTest {
   }
 
   @Test
-  void updateStatusShouldRejectEncodedRemarkOverflowBeforeMutation() {
+  void updateStatusShouldRejectRemarkStorageOverflowBeforeMutation() {
     ApplicationReviewStatusUpdateResultDto response = service.updateStatus(
         1000456L,
-        new ApplicationReviewStatusUpdateRequestDto("REJ", "&".repeat(51), null),
+        new ApplicationReviewStatusUpdateRequestDto("REJ", "&".repeat(255), null),
         "idir\\reviewer");
 
     assertThat(response.updated()).isFalse();

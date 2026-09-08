@@ -560,18 +560,18 @@ class ApplicationDetailsRpcControllerTest {
   }
 
   @Test
-  void persistRemarkShouldRejectEncodedOverflowBeforeCallingService() {
+  void persistRemarkShouldRejectStorageOverflowBeforeCallingService() {
     TestingAuthenticationToken authentication = authorized("/applicationRemarks");
     when(serviceProvider.getIfAvailable()).thenReturn(service);
 
     ResponseEntity<ApplicationDetailsRpcController.PersistRemarkResponseDto> response =
-        controller.persistRemark("new", "1000456", "&".repeat(51), authentication);
+        controller.persistRemark("new", "1000456", "&".repeat(255), authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isNotNull();
     assertThat(response.getBody().status()).isEqualTo("validation_error");
     assertThat(response.getBody().message())
-        .isEqualTo("Remark is too long to save. Shorten it and try again.");
+        .isEqualTo("Application remarks must not exceed 254 characters.");
     verify(service, never()).persistRemark(any(), any(), any(), any());
   }
 

@@ -320,17 +320,17 @@ class OracleApplicationDetailsRpcServiceTest {
     assertThat(service.persistRemark("new", 1000456L, "café", "idir\\jsmith")).isEmpty();
     assertThat(service.persistRemark("new", 1000456L, "r".repeat(255), "idir\\jsmith"))
         .isEmpty();
-    assertThat(service.persistRemark("new", 1000456L, "&".repeat(51), "idir\\jsmith"))
+    assertThat(service.persistRemark("new", 1000456L, "&".repeat(255), "idir\\jsmith"))
         .isEmpty();
-    assertThat(service.persistRemark("44", 1000456L, "&".repeat(51), "idir\\jsmith"))
+    assertThat(service.persistRemark("44", 1000456L, "&".repeat(255), "idir\\jsmith"))
         .isEmpty();
 
     verifyNoInteractions(repository);
   }
 
   @Test
-  void persistRemarkShouldValidateEncodedLengthWithoutEncodingRepositoryInput() {
-    String remark = "&".repeat(50) + "1234";
+  void persistRemarkShouldAcceptStorageLimitWithoutConvertingLiteralEntities() {
+    String remark = "&amp;".repeat(50) + "1234";
     when(repository.insertRemark(
             org.mockito.ArgumentMatchers.eq(1000456L),
             org.mockito.ArgumentMatchers.eq(remark),
@@ -354,13 +354,13 @@ class OracleApplicationDetailsRpcServiceTest {
   }
 
   @Test
-  void addApplicationShouldRejectRemarkThatExceedsEncodedStorageLimit() {
+  void addApplicationShouldRejectRemarkThatExceedsStorageLimit() {
     ApplicationDetailsRpcService.CreateApplicationResult response =
         service.addApplication(
-            withRemark(validCreateApplicationRequest(180L), "&".repeat(51)), "idir\\jsmith");
+            withRemark(validCreateApplicationRequest(180L), "&".repeat(255)), "idir\\jsmith");
 
     assertThat(response.valid()).isFalse();
-    assertThat(response.errors()).containsExactly("Remark is too long to save. Shorten it and try again.");
+    assertThat(response.errors()).containsExactly("Application remark must not exceed 254 bytes.");
     verify(repository, never()).insertApplication(any());
     verify(repository, never()).insertRemark(any(), any(), any(), any());
   }

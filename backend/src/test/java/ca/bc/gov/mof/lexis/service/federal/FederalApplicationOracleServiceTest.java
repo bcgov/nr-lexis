@@ -1605,17 +1605,17 @@ class FederalApplicationOracleServiceTest {
   }
 
   @Test
-  void remarkMutationsShouldRejectEncodedOverflowBeforeOracleMutation() {
+  void remarkMutationsShouldRejectStorageOverflowBeforeOracleMutation() {
     FederalApplicationService.FederalRemarkMutationRequest request =
-        new FederalApplicationService.FederalRemarkMutationRequest("&".repeat(51));
+        new FederalApplicationService.FederalRemarkMutationRequest("&".repeat(255));
 
     assertThat(service.addRemark(1000456L, request, "idir\\approver").success()).isFalse();
     assertThat(service.updateRemark(1000456L, 44L, request, "idir\\approver").success()).isFalse();
     assertThat(service.addRemark(
         1000456L,
-        new FederalApplicationService.FederalRemarkMutationRequest("<".repeat(63)),
+        new FederalApplicationService.FederalRemarkMutationRequest("<".repeat(251)),
         "idir\\approver").errors())
-        .containsExactly("Remark is too long to save. Shorten it and try again.");
+        .containsExactly("Remark must not exceed 250 characters.");
     assertThat(service.updateStatus(
         1000456L,
         new FederalApplicationService.FederalStatusMutationRequest("REJ", request.remark()),
@@ -1625,8 +1625,8 @@ class FederalApplicationOracleServiceTest {
   }
 
   @Test
-  void addRemarkShouldAcceptExactly250EncodedCharacters() {
-    String text = "<".repeat(62) + "ab";
+  void addRemarkShouldAcceptExactly250CharactersWithoutConvertingLiteralEntities() {
+    String text = "&amp;".repeat(50);
     when(repository.findMutationContextRequired(1000456L))
         .thenReturn(Optional.of(federalContext("NEW", LocalDate.of(2026, 3, 1))));
     when(applicationDetailsRepository.insertRemark(

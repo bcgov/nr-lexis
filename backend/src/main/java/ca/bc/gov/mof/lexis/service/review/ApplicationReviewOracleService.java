@@ -20,7 +20,6 @@ import ca.bc.gov.mof.lexis.service.federal.FederalApplicationService;
 import ca.bc.gov.mof.lexis.service.federal.FederalApplicationService.FederalMutationResult;
 import ca.bc.gov.mof.lexis.service.federal.FederalApplicationService.FederalStatusMutationRequest;
 import ca.bc.gov.mof.lexis.service.mail.MailRecipientValidator;
-import ca.bc.gov.mof.lexis.util.LegacyApplicationRemarkCodec;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -37,6 +36,7 @@ import org.springframework.transaction.interceptor.TransactionAspectSupport;
 public class ApplicationReviewOracleService implements ApplicationReviewService {
 
   private static final List<String> EMAIL_SUPPORTED_STATUS_CODES = List.of("REJ", "WDN");
+  private static final int REMARK_MAX_LENGTH = 254;
   private static final List<String> STATUSES_REQUIRING_REMARK = List.of("REJ", "WDN", "EXP");
   private static final List<String> REVIEW_STATUS_UPDATE_CODES = List.of("REJ", "WDN", "EXP");
   private static final List<String> APPROVAL_SOURCE_CODES = List.of("NEW", "PND");
@@ -266,8 +266,7 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
           null,
           "Remark is required when rejecting, withdrawing, or expiring an application.");
     }
-    if (!LegacyApplicationRemarkCodec.fitsStorage(
-        remark, LegacyApplicationRemarkCodec.MAX_STORAGE_LENGTH)) {
+    if (remark != null && remark.length() > REMARK_MAX_LENGTH) {
       return statusUpdateResult(
           false,
           false,

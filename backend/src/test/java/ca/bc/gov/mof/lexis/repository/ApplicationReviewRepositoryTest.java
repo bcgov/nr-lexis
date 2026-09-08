@@ -453,7 +453,7 @@ class ApplicationReviewRepositoryTest {
   }
 
   @Test
-  void statusRemarkShouldUseLegacyStorageAndReturnPlainTextForAuthoritativeEmail() {
+  void statusRemarkShouldPreserveEnteredTextForStorageAndAuthoritativeEmail() {
     RemarkRoundTripReviewRepository repository = new RemarkRoundTripReviewRepository();
     String text = "A & B; <b>text</b>; literal &lt;";
 
@@ -462,10 +462,25 @@ class ApplicationReviewRepositoryTest {
 
     assertThat(result.updated()).isTrue();
     assertThat(repository.statusWrites).isOne();
-    assertThat(repository.storedRemark)
-        .isEqualTo("A &amp; B; &lt;b&gt;text&lt;/b&gt;; literal &amp;lt;");
+    assertThat(repository.storedRemark).isEqualTo(text);
     assertThat(repository.findLatestAuthoritativeRemark(900101L))
         .get().extracting(ApplicationReviewRepository.ReviewRemarkRow::remark).isEqualTo(text);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {
+    "Use &amp; in the document",
+    "Literal &lt; &gt; &amp;amp; &copy; &#39;",
+    "Raw <b>text</b> & more"
+  })
+  void historicalStatusRemarkShouldKeepLiteralEntitiesInAuthoritativeEmail(String storedText) {
+    RemarkRoundTripReviewRepository repository = new RemarkRoundTripReviewRepository();
+    repository.storedRemark = storedText;
+
+    assertThat(repository.findLatestAuthoritativeRemark(900101L))
+        .get().extracting(ApplicationReviewRepository.ReviewRemarkRow::remark).isEqualTo(storedText);
+    assertThat(repository.statusWrites).isZero();
+    assertThat(repository.storedRemark).isEqualTo(storedText);
   }
 
   @Test

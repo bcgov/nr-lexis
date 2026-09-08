@@ -20,7 +20,7 @@ import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.DuplicateKeyException;
@@ -31,26 +31,54 @@ import org.springframework.jdbc.core.JdbcTemplate;
 class ApplicationDetailsRpcRepositoryTest {
 
   @ParameterizedTest
-  @CsvSource({
-    "A & B; volume < 10; owner > agent,A &amp; B; volume &lt; 10; owner &gt; agent",
-    "Literal &amp; &lt; &gt;,Literal &amp;amp; &amp;lt; &amp;gt;",
-    "<b>A & B</b>,&lt;b&gt;A &amp; B&lt;/b&gt;",
-    "Plain modern note,Plain modern note"
+  @ValueSource(strings = {
+    "A & B; volume < 10; owner > agent",
+    "Use &amp; in the document; literal &lt; &gt; &amp;amp;",
+    "<b>A & B</b>",
+    "Plain modern note"
   })
-  void remarksShouldRoundTripThroughLegacyOracleStorage(String text, String storedText) {
+  void newRemarksShouldPreserveEnteredTextThroughOracleStorage(String text) {
     RemarkRoundTripRepository repository = new RemarkRoundTripRepository();
 
     assertThat(repository.insertRemark(1000456L, text, "idir\\jsmith", Instant.EPOCH))
         .get().extracting(ApplicationDetailsRpcRepository.RemarkRow::remark).isEqualTo(text);
-    assertThat(repository.storedRemark).isEqualTo(storedText);
+    assertThat(repository.storedRemark).isEqualTo(text);
     assertThat(repository.findRemarksByApplicationNumber(1000456L))
         .extracting(ApplicationDetailsRpcRepository.RemarkRow::remark).containsExactly(text);
 
     assertThat(repository.updateRemark(44L, 1000456L, text + " updated", "idir\\jsmith", Instant.EPOCH))
         .isTrue();
-    assertThat(repository.storedRemark).isEqualTo(storedText + " updated");
+    assertThat(repository.storedRemark).isEqualTo(text + " updated");
     assertThat(repository.findRemarkByNumberRequired(44L))
         .get().extracting(ApplicationDetailsRpcRepository.RemarkRow::remark).isEqualTo(text + " updated");
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {
+    "Use &amp; in the document",
+    "Literal &lt; &gt; &amp;amp; &copy; &#39;",
+    "A &amp; B; raw <b>text</b> & more"
+  })
+  void existingRemarksShouldSurviveReadsAndRepeatedEditsWithoutEntityConversion(String storedText) {
+    RemarkRoundTripRepository repository = new RemarkRoundTripRepository();
+    // Seed a pre-existing row; a new insert alone cannot exercise mixed historical storage.
+    repository.storedRemark = storedText;
+
+    assertThat(repository.findRemarksByApplicationNumber(1000456L))
+        .extracting(ApplicationDetailsRpcRepository.RemarkRow::remark).containsExactly(storedText);
+    for (int save = 0; save < 3; save++) {
+      String displayedText = repository.findRemarkByNumberRequired(44L).orElseThrow().remark();
+      assertThat(displayedText).isEqualTo(storedText);
+      assertThat(repository.updateRemark(44L, 1000456L, displayedText, "idir\\jsmith", Instant.EPOCH))
+          .isTrue();
+      assertThat(repository.storedRemark).isEqualTo(storedText);
+    }
+
+    assertThat(repository.updateRemark(44L, 1000456L, storedText + " updated", "idir\\jsmith", Instant.EPOCH))
+        .isTrue();
+    assertThat(repository.findRemarkByNumberRequired(44L).orElseThrow().remark())
+        .isEqualTo(storedText + " updated");
+    assertThat(repository.storedRemark).isEqualTo(storedText + " updated");
   }
 
   @Test
