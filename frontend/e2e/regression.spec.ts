@@ -1221,7 +1221,7 @@ const exemptionUpdateForm = (
   previousExemptionNumber: requiredString(detail.exemptionNumber, 'Previous exemption number'),
   approvedVolume: requiredString(detail.approvedVolume, 'Exemption approved volume'),
   approvalDate: String(detail.approvalDate ?? ''),
-  expiryDate: requiredString(detail.expiryDate, 'Exemption expiry date'),
+  expiryDate: String(detail.expiryDate ?? '').trim(),
   otherConditions: String(detail.otherConditions ?? ''),
   exemptionTypeCode: requiredString(detail.exemptionTypeCode, 'Exemption type'),
   exemptionStatusCode: requiredString(detail.exemptionStatusCode, 'Exemption status'),
@@ -1619,6 +1619,79 @@ const cleanupRegressionPackage = async (
   expect(deletePackage.success, `Expected package ${packageNumber} cleanup to succeed`).toBe(true)
 }
 
+const expectLowercasePackageSearch = async (
+  page: Page,
+  packageNumber: string,
+  contract: {
+    pagePath: string
+    heading: RegExp
+    searchPath: string
+    numberField: string
+    recordNumber: string
+  },
+): Promise<void> => {
+  const criteria = { region: naturalResourceRegionCodes.join(',') }
+  const uppercaseCount = await readJsonResponse<SearchCountResponse>(
+    await getWithAuth(page, `${contract.searchPath}/count`, {
+      params: { ...criteria, packageNumber },
+    }),
+  )
+  expect(
+    uppercaseCount.total,
+    'The synthetic package must have a positive control',
+  ).toBeGreaterThan(0)
+
+  for (const [query, shouldMatch] of [
+    [packageNumber, true],
+    [`${packageNumber}-X`, false],
+    [packageNumber.toLowerCase(), true],
+  ] as const) {
+    const params = { ...criteria, packageNumber: query }
+    const count = await readJsonResponse<SearchCountResponse>(
+      await getWithAuth(page, `${contract.searchPath}/count`, { params }),
+    )
+    expect(count.total).toBe(shouldMatch ? uppercaseCount.total : 0)
+
+    const [response] = await Promise.all([
+      page.waitForResponse((response) => {
+        const url = new URL(response.url())
+        return (
+          url.pathname === contract.searchPath && url.searchParams.get('packageNumber') === query
+        )
+      }),
+      (async () => {
+        if (query === packageNumber) {
+          await expectAccessiblePage(
+            page,
+            `${contract.pagePath}?${new URLSearchParams(params)}`,
+            contract.heading,
+          )
+        } else {
+          await page.getByRole('textbox', { name: 'Package number', exact: true }).fill(query)
+          await page.getByRole('button', { name: 'Search', exact: true }).click()
+        }
+      })(),
+    ])
+    expect(response.status()).toBe(200)
+    const payload = (await response.json()) as GenericSearchResponse
+    const recordNumbers = asRecordArray(payload.results).map((row) =>
+      String(row[contract.numberField]),
+    )
+    if (shouldMatch) {
+      expect(recordNumbers).toContain(contract.recordNumber)
+    } else {
+      expect(recordNumbers).toEqual([])
+    }
+    const detailPath = `${contract.pagePath}/${encodeURIComponent(contract.recordNumber)}`
+    const resultLink = page.locator(`a[href="${detailPath}"], a[href^="${detailPath}?"]`)
+    if (shouldMatch) {
+      await expect(resultLink).toBeVisible()
+    } else {
+      await expect(resultLink).toHaveCount(0)
+    }
+  }
+}
+
 test.describe('TEST IDIR admin regression', () => {
   test.describe.configure({ retries: 0 })
   test.skip(!hasIdirCredentials(), 'IDIR e2e credentials are not configured.')
@@ -1882,8 +1955,18 @@ test.describe('TEST IDIR admin regression', () => {
       await expect(page.getByRole('combobox', { name: targetLabel })).toBeVisible()
       await expect(page.getByRole('textbox', { name: 'Document description' })).toBeVisible()
       await expect(
-        page.getByRole('button', { name: 'Choose files for Upload documents' }),
+        page.getByRole('button', {
+          name:
+            workflowType === 'invoice'
+              ? 'Choose file for Upload documents'
+              : 'Choose files for Upload documents',
+        }),
       ).toBeEnabled()
+      if (workflowType === 'invoice') {
+        await expect(page.locator('input[type="file"]')).not.toHaveAttribute('multiple')
+      } else {
+        await expect(page.locator('input[type="file"]')).toHaveAttribute('multiple')
+      }
       await expect(page.getByRole('button', { name: 'Review upload' })).toBeDisabled()
 
       if (workflowType === 'invoice') {
@@ -2036,8 +2119,6 @@ test.describe('TEST IDIR admin regression', () => {
           'Forest file ID',
           'Exemption reason',
           'Client type',
-          ...Array.from({ length: 6 }, (_, index) => `Tenure type ${index + 1}`),
-          ...Array.from({ length: 6 }, (_, index) => `Timber mark ${index + 1}`),
           'Output format',
         ],
         defaults: [
@@ -2075,6 +2156,50 @@ test.describe('TEST IDIR admin regression', () => {
     }
 
     expect(apiServerErrors).toEqual([])
+  })
+
+  test('shows only the filters supported by each tenure report variant', async () => {
+    const page = await authenticatedIdirPage()
+    await expectAccessiblePage(page, '/reports/tenureReport', /tenure analysis report/i)
+    const variant = page.getByRole('combobox', { name: 'Report variant', exact: true })
+    const permitLabels = [
+      'Region',
+      'Exemption number',
+      'Exemption type',
+      'Client number',
+      'Forest file ID',
+      'Exemption reason',
+      'Client type',
+    ]
+    const tenureLabels = Array.from({ length: 6 }, (_, index) => `Tenure type ${index + 1}`)
+    const markLabels = Array.from({ length: 6 }, (_, index) => `Timber mark ${index + 1}`)
+    const field = (label: string): Locator =>
+      label === 'Region'
+        ? page.getByRole('combobox', { name: /^Region\b/ })
+        : page.getByLabel(label, { exact: true }).and(page.locator(':visible')).first()
+
+    for (const [name, visibleLabels, hiddenLabels] of [
+      ['Permit details report', permitLabels, [...tenureLabels, ...markLabels]],
+      ['Tenure types report', tenureLabels, [...permitLabels, ...markLabels]],
+      ['Timber marks report', markLabels, [...permitLabels, ...tenureLabels]],
+      ['Permit details report', permitLabels, [...tenureLabels, ...markLabels]],
+    ] as const) {
+      await variant.click()
+      await page.getByRole('option', { name, exact: true }).click()
+      await expect(variant).toHaveValue(name)
+      await expect(page.getByRole('button', { name: 'Generate report' })).toBeEnabled()
+      for (const label of [
+        'Issued from date',
+        'Issued to date',
+        'Output format',
+        ...visibleLabels,
+      ]) {
+        await expect(field(label), `${name} should expose ${label}`).toBeVisible()
+      }
+      for (const label of hiddenLabels) {
+        await expect(field(label), `${name} should not expose ${label}`).toHaveCount(0)
+      }
+    }
   })
 
   test('enforces legacy report input edge cases before generation', async () => {
@@ -3687,6 +3812,12 @@ test.describe('TEST IDIR admin regression', () => {
 
     try {
       validateRegressionFixtureConfig()
+      const capabilities = await fetchSessionCapabilities(page)
+      expect(capabilities.authenticated).toBe(true)
+      expect(
+        hasAdminRole(asStringArray(capabilities.roles)),
+        'Synthetic CRUD requires an IDIR administrator',
+      ).toBe(true)
       const schedule = await test.step('load authoritative TEST prerequisites', async () => ({
         offer: await currentOfferSchedule(page),
         shipping: await shippingFixture(page),
@@ -3719,6 +3850,15 @@ test.describe('TEST IDIR admin regression', () => {
       const lifecycleRejectCleanup = cleanup.defer('reject lifecycle application', () =>
         rejectRegressionApplication(page, lifecycleApplicationNumber, `${marker} cleanup`),
       )
+
+      await test.step('find the imported application by uppercase and lowercase package number', () =>
+        expectLowercasePackageSearch(page, packageNumber, {
+          pagePath: '/provincial/application',
+          heading: /provincial application search/i,
+          searchPath: '/api/lexis/applications/search',
+          numberField: 'applicationNumber',
+          recordNumber: String(lifecycleApplicationNumber),
+        }))
 
       await test.step('reject an EICAR application document named as PDF', async () => {
         expectApplicationDocumentVirusScanRejection(
@@ -3962,7 +4102,8 @@ test.describe('TEST IDIR admin regression', () => {
             exemptionTypeCode: 'M',
             exemptionStatusCode: 'NEW',
             approvalDate: '',
-            expiryDate: requiredString(preview.expiryDate, 'Exemption expiry date'),
+            // A NEW ministerial exemption can be saved without dates. Reopening it must also work.
+            expiryDate: '',
             approvedVolume: requiredString(preview.approvedVolume, 'Exemption approved volume'),
             region: orgUnitNumber,
             otherConditions: lifecycleMarker,
@@ -3979,6 +4120,79 @@ test.describe('TEST IDIR admin regression', () => {
         cancelRegressionExemption(page, exemptionNumber, orgUnitNumber),
       )
 
+      await test.step('reopen a cancelled exemption without inventing missing dates', async () => {
+        await cancelRegressionExemption(page, exemptionNumber, orgUnitNumber)
+        const cancelled = await readVersionedJson<Record<string, unknown>>(
+          page,
+          `/api/lexis/exemptions/${encodeURIComponent(exemptionNumber)}`,
+        )
+        expect(cancelled.payload.exemptionStatusCode).toBe('CAN')
+        expect(String(cancelled.payload.approvalDate ?? '')).toBe('')
+        expect(String(cancelled.payload.expiryDate ?? '')).toBe('')
+
+        await expectAccessiblePage(
+          page,
+          `/provincial/exemption/${encodeURIComponent(exemptionNumber)}`,
+          new RegExp(`exemption ${exemptionNumber}`, 'i'),
+        )
+        await page.getByRole('button', { name: 'Edit exemption', exact: true }).click()
+        await page.getByRole('tab', { name: 'Exemption details', exact: true }).click()
+        for (const label of [
+          'Approval date',
+          'Expiry date',
+          'Approved volume (m³)',
+          'Conditions',
+        ]) {
+          await expect(page.getByLabel(label, { exact: true })).toBeDisabled()
+        }
+        await expect(page.getByLabel('Expiry date', { exact: true })).toHaveValue('')
+        const status = page.getByRole('combobox', { name: 'Status', exact: true })
+        await status.click()
+        await page.getByRole('option', { name: 'New', exact: true }).click()
+        const [response] = await Promise.all([
+          page.waitForResponse(
+            (response) =>
+              new URL(response.url()).pathname ===
+                '/api/lexis/rpc/exemption-details/exemption/update' &&
+              response.request().method() === 'POST',
+          ),
+          page.getByRole('button', { name: 'Save exemption', exact: true }).click(),
+        ])
+        expect(response.status()).toBe(200)
+        const result = (await response.json()) as ExemptionPersistenceResponse
+        expect(result.success).toBe(true)
+        expect(asStringArray(result.errors)).toEqual([])
+        await expect(
+          page.getByRole('button', { name: 'Edit exemption', exact: true }),
+        ).toBeVisible()
+
+        const reopened = await readVersionedJson<Record<string, unknown>>(
+          page,
+          `/api/lexis/exemptions/${encodeURIComponent(exemptionNumber)}`,
+        )
+        expect(reopened.payload.exemptionStatusCode).toBe('NEW')
+        for (const key of [
+          'approvalDate',
+          'expiryDate',
+          'approvedVolume',
+          'otherConditions',
+          'exemptionTypeCode',
+        ]) {
+          expect(reopened.payload[key], `Reopening must preserve ${key}`).toEqual(
+            cancelled.payload[key],
+          )
+        }
+      })
+
+      await test.step('find the linked exemption by uppercase and lowercase package number', () =>
+        expectLowercasePackageSearch(page, packageNumber, {
+          pagePath: '/provincial/exemption',
+          heading: /provincial exemption search/i,
+          searchPath: '/api/lexis/exemptions/search',
+          numberField: 'exemptionNumber',
+          recordNumber: exemptionNumber,
+        }))
+
       await expectAccessiblePage(
         page,
         `/provincial/exemption/${encodeURIComponent(exemptionNumber)}`,
@@ -3990,6 +4204,7 @@ test.describe('TEST IDIR admin regression', () => {
       )
       const exemptionUpdate = exemptionUpdateForm(currentExemption.payload, orgUnitNumber, {
         otherConditions: `${lifecycleMarker} edited`,
+        expiryDate: requiredString(preview.expiryDate, 'Exemption expiry date'),
       })
       const editedExemption = await readJsonResponse<ExemptionPersistenceResponse>(
         await postWithCsrf(page, '/api/lexis/rpc/exemption-details/exemption/update', {
@@ -4076,6 +4291,15 @@ test.describe('TEST IDIR admin regression', () => {
         await reactivateRegressionPermit(page, permitNumber, lifecycleMarker, schedule.shipping)
         await detachRegressionPermitApplication(page, permitNumber, lifecycleApplicationNumber)
       })
+
+      await test.step('find the linked permit by uppercase and lowercase package number', () =>
+        expectLowercasePackageSearch(page, packageNumber, {
+          pagePath: '/provincial/permit',
+          heading: /provincial permit search/i,
+          searchPath: '/api/lexis/permits/search',
+          numberField: 'permitNumber',
+          recordNumber: String(permitNumber),
+        }))
 
       await expectAccessiblePage(
         page,
