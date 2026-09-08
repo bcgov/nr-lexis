@@ -346,6 +346,9 @@ const ProvincialExemptionDetailsPage = () => {
   >([])
   const [sendingApprovalEmail, setSendingApprovalEmail] = useState(false)
   const [permitCreationConfirmationOpen, setPermitCreationConfirmationOpen] = useState(false)
+  const [permitCreationUnsavedChangesOpen, setPermitCreationUnsavedChangesOpen] = useState(false)
+  const [savingPermitCreationChanges, setSavingPermitCreationChanges] = useState(false)
+  const [permitCreationSaveFailed, setPermitCreationSaveFailed] = useState(false)
   const [creatingPermit, setCreatingPermit] = useState(false)
   const [permitCreationDestination, setPermitCreationDestination] = useState<string | null>(null)
   const [permitCreationRequiresReload, setPermitCreationRequiresReload] = useState(false)
@@ -533,6 +536,9 @@ const ProvincialExemptionDetailsPage = () => {
         setApprovalEmailRecipients([])
         setSendingApprovalEmail(false)
         setPermitCreationConfirmationOpen(false)
+        setPermitCreationUnsavedChangesOpen(false)
+        setSavingPermitCreationChanges(false)
+        setPermitCreationSaveFailed(false)
         setCreatingPermit(false)
         setPermitCreationDestination(null)
         setPermitCreationRequiresReload(false)
@@ -797,17 +803,17 @@ const ProvincialExemptionDetailsPage = () => {
     persistedStatusCode === 'NEW' &&
     !editing &&
     !exemptionEditLocked
-  const canCreateApplicationBackedPermit =
+  const canStartApplicationBackedPermitCreation =
     canPerform('createPermit') &&
     (isApplicationApprover || isProvincialSubmitter) &&
     (persistedTypeCode === 'M' || persistedTypeCode === 'O') &&
     persistedStatusCode === 'ACT' &&
     editContextLoaded &&
     !exemptionEditLocked &&
-    !permitCreationRequiresReload &&
-    !editing &&
-    !isExemptionDirty
-  const canCreateBlanketOicPermit =
+    !permitCreationRequiresReload
+  const canCreateApplicationBackedPermit =
+    canStartApplicationBackedPermitCreation && !editing && !isExemptionDirty
+  const canStartBlanketOicPermitCreation =
     canPerform('createPermit') &&
     canPerform('savePermit') &&
     (isApplicationApprover || isProvincialSubmitter) &&
@@ -815,9 +821,14 @@ const ProvincialExemptionDetailsPage = () => {
     persistedStatusCode === 'ACT' &&
     editContextLoaded &&
     !exemptionEditLocked &&
-    !permitCreationRequiresReload &&
-    !editing &&
-    !isExemptionDirty
+    !permitCreationRequiresReload
+  const permitCreationActionBusy =
+    creatingPermit ||
+    saving ||
+    savingPermitCreationChanges ||
+    applicationMutationNumber !== null ||
+    isRemovingDocumentId !== null ||
+    documentUploadBusy
   const canLinkApplications =
     isApplicationApprover &&
     canSaveExemption &&
@@ -1028,6 +1039,15 @@ const ProvincialExemptionDetailsPage = () => {
     isRemovingDocumentId,
   ])
 
+  const unsavedExemptionSaveUnavailableReason =
+    (optionsAvailability !== 'available' || requiredExemptionOptionsMissing) && isExemptionFormDirty
+      ? 'Authoritative exemption options must load before these changes can be saved.'
+      : documentUploadDirty
+        ? 'Finish or reset the queued document uploads before leaving, or discard all changes.'
+        : applicationRelationshipDraftDirty
+          ? 'Add or clear the typed application number before leaving, or discard all changes.'
+          : undefined
+
   const canUploadExemptionDocuments = canPerform('/fileExemptionUpload') && !exemptionEditLocked
   const canDeleteExemptionDocuments =
     isApplicationApprover &&
@@ -1109,7 +1129,10 @@ const ProvincialExemptionDetailsPage = () => {
   )
 
   const onSaveExemption = useCallback(
-    async (followRenamedRecord = true): Promise<boolean> => {
+    async (
+      followRenamedRecord = true,
+      onSaved?: (savedDetail: ProvincialExemptionDetail) => void,
+    ): Promise<boolean> => {
       if (
         !detail ||
         !editContextLoaded ||
@@ -1184,7 +1207,9 @@ const ProvincialExemptionDetailsPage = () => {
           setActionInfoMessage(
             `${result.message || 'The exemption was saved.'} Current data could not be refreshed; reload before making another change.`,
           )
+          return true
         }
+        onSaved?.(committedDetail)
         return true
       } catch (error) {
         console.error(error)
@@ -1223,26 +1248,32 @@ const ProvincialExemptionDetailsPage = () => {
     setApplicationNumberToAdd('')
   }, [detail, editContext])
 
-  const onSaveUnsavedExemptionChanges = useCallback(async (): Promise<boolean> => {
-    if (documentUploadDirty) {
-      setActionErrorMessage(
-        'Queued document uploads must be submitted or reset before leaving this exemption.',
-      )
-      return false
-    }
-    if (applicationRelationshipDraftDirty) {
-      selectExemptionTab('applications')
-      setActionErrorMessage('Add the typed application number or clear it before leaving.')
-      return false
-    }
-    return isExemptionFormDirty ? onSaveExemption(false) : true
-  }, [
-    applicationRelationshipDraftDirty,
-    documentUploadDirty,
-    isExemptionFormDirty,
-    onSaveExemption,
-    selectExemptionTab,
-  ])
+  const onSaveUnsavedExemptionChanges = useCallback(
+    async (
+      followRenamedRecord = false,
+      onSaved?: (savedDetail: ProvincialExemptionDetail) => void,
+    ): Promise<boolean> => {
+      if (documentUploadDirty) {
+        setActionErrorMessage(
+          'Queued document uploads must be submitted or reset before leaving this exemption.',
+        )
+        return false
+      }
+      if (applicationRelationshipDraftDirty) {
+        selectExemptionTab('applications')
+        setActionErrorMessage('Add the typed application number or clear it before leaving.')
+        return false
+      }
+      return isExemptionFormDirty ? onSaveExemption(followRenamedRecord, onSaved) : true
+    },
+    [
+      applicationRelationshipDraftDirty,
+      documentUploadDirty,
+      isExemptionFormDirty,
+      onSaveExemption,
+      selectExemptionTab,
+    ],
+  )
 
   const closeApprovalConfirmation = useCallback(() => {
     if (approving) return
@@ -1325,6 +1356,105 @@ const ProvincialExemptionDetailsPage = () => {
     if (creatingPermit) return
     setPermitCreationConfirmationOpen(false)
   }, [creatingPermit])
+
+  const continuePermitCreation = useCallback(
+    (permitDetail: ProvincialExemptionDetail | null = currentDetail) => {
+      if (!permitDetail) return
+      const permitTypeCode = (permitDetail.exemptionTypeCode ?? '').trim().toUpperCase()
+      const permitStatusCode = (permitDetail.exemptionStatusCode ?? '').trim().toUpperCase()
+
+      if (
+        canStartBlanketOicPermitCreation &&
+        permitTypeCode === 'B' &&
+        permitStatusCode === 'ACT'
+      ) {
+        setPermitCreationDestination(
+          `/provincial/exemption/${encodeURIComponent(permitDetail.exemptionNumber)}/permit/new`,
+        )
+        return
+      }
+      if (
+        canStartApplicationBackedPermitCreation &&
+        (permitTypeCode === 'M' || permitTypeCode === 'O') &&
+        permitStatusCode === 'ACT'
+      ) {
+        setPermitCreationConfirmationOpen(true)
+      }
+    },
+    [canStartApplicationBackedPermitCreation, canStartBlanketOicPermitCreation, currentDetail],
+  )
+
+  const closePermitCreationUnsavedChanges = useCallback(() => {
+    if (savingPermitCreationChanges) return
+    setPermitCreationUnsavedChangesOpen(false)
+    setPermitCreationSaveFailed(false)
+  }, [savingPermitCreationChanges])
+
+  const onRequestPermitCreation = useCallback(() => {
+    if (
+      permitCreationActionBusy ||
+      (!canStartApplicationBackedPermitCreation && !canStartBlanketOicPermitCreation)
+    ) {
+      return
+    }
+    setPermitCreationSaveFailed(false)
+    if (isExemptionDirty) {
+      setPermitCreationUnsavedChangesOpen(true)
+      return
+    }
+    setEditing(false)
+    continuePermitCreation()
+  }, [
+    canStartApplicationBackedPermitCreation,
+    canStartBlanketOicPermitCreation,
+    continuePermitCreation,
+    isExemptionDirty,
+    permitCreationActionBusy,
+  ])
+
+  const onDiscardChangesBeforePermitCreation = useCallback(() => {
+    if (savingPermitCreationChanges || permitCreationActionBusy) return
+    onDiscardExemptionChanges()
+    setPermitCreationUnsavedChangesOpen(false)
+    setPermitCreationSaveFailed(false)
+    continuePermitCreation()
+  }, [
+    continuePermitCreation,
+    onDiscardExemptionChanges,
+    permitCreationActionBusy,
+    savingPermitCreationChanges,
+  ])
+
+  const onSaveChangesBeforePermitCreation = useCallback(async () => {
+    if (savingPermitCreationChanges || permitCreationActionBusy) return
+    const renamedExemption = isExemptionNumberChanged
+    let savedDetail: ProvincialExemptionDetail | null = null
+    setSavingPermitCreationChanges(true)
+    setPermitCreationSaveFailed(false)
+    try {
+      const saved = await onSaveUnsavedExemptionChanges(true, (nextDetail) => {
+        savedDetail = nextDetail
+      })
+      if (!saved) {
+        setPermitCreationSaveFailed(true)
+        return
+      }
+      setPermitCreationUnsavedChangesOpen(false)
+      if (!renamedExemption && savedDetail) {
+        continuePermitCreation(savedDetail)
+      }
+    } catch {
+      setPermitCreationSaveFailed(true)
+    } finally {
+      setSavingPermitCreationChanges(false)
+    }
+  }, [
+    continuePermitCreation,
+    isExemptionNumberChanged,
+    onSaveUnsavedExemptionChanges,
+    permitCreationActionBusy,
+    savingPermitCreationChanges,
+  ])
 
   const onCreatePermitFromExemption = useCallback(async () => {
     if (!detail || !canCreateApplicationBackedPermit || creatingPermit) return
@@ -2245,33 +2375,14 @@ const ProvincialExemptionDetailsPage = () => {
                             edit exemption values.
                           </p>
                         )}
-                        {(canCreateApplicationBackedPermit || canCreateBlanketOicPermit) && (
+                        {(canStartApplicationBackedPermitCreation ||
+                          canStartBlanketOicPermitCreation) && (
                           <div className="legacy-search-actions">
                             <Button
                               kind="tertiary"
                               size="sm"
-                              disabled={creatingPermit}
-                              onClick={() => {
-                                if (canCreateBlanketOicPermit && currentDetail) {
-                                  navigate(
-                                    withCurrentSearch(
-                                      `/provincial/exemption/${encodeURIComponent(currentDetail.exemptionNumber)}/permit/new`,
-                                    ),
-                                    {
-                                      state: withDetailReturnTo(
-                                        location.state,
-                                        {
-                                          label: 'Provincial exemption detail',
-                                          to: locationPath(location),
-                                        },
-                                        detailReturnTo,
-                                      ),
-                                    },
-                                  )
-                                  return
-                                }
-                                setPermitCreationConfirmationOpen(true)
-                              }}
+                              disabled={permitCreationActionBusy}
+                              onClick={onRequestPermitCreation}
                             >
                               {creatingPermit ? 'Creating permit…' : 'Apply for new permit'}
                             </Button>
@@ -2735,6 +2846,65 @@ const ProvincialExemptionDetailsPage = () => {
           onSkip={closeApprovalEmail}
         />
       )}
+      {permitCreationUnsavedChangesOpen && (
+        <Modal
+          open
+          passiveModal
+          size="sm"
+          modalHeading="Unsaved changes"
+          aria-label="Unsaved changes"
+          aria-describedby="permit-creation-unsaved-changes-description"
+          className="lexis-unsaved-changes-modal"
+          preventCloseOnClickOutside
+          onRequestClose={closePermitCreationUnsavedChanges}
+        >
+          <div className="lexis-unsaved-changes-modal__body">
+            <p
+              id="permit-creation-unsaved-changes-description"
+              className="lexis-unsaved-changes-modal__description"
+            >
+              {unsavedExemptionSaveUnavailableReason
+                ? `You have unsaved changes to this exemption. ${unsavedExemptionSaveUnavailableReason}`
+                : 'You have unsaved changes to this exemption. Save them before creating a permit, discard them and continue, or cancel.'}
+            </p>
+            {permitCreationSaveFailed && (
+              <InlineNotification
+                kind="error"
+                lowContrast
+                hideCloseButton
+                title="Could not finish saving changes"
+                subtitle="Review the page messages, then correct any remaining problem and try again or cancel."
+              />
+            )}
+          </div>
+          <div className="lexis-unsaved-changes-modal__actions">
+            <Button
+              kind="tertiary"
+              disabled={savingPermitCreationChanges}
+              onClick={closePermitCreationUnsavedChanges}
+            >
+              Cancel
+            </Button>
+            <Button
+              kind="danger--tertiary"
+              disabled={permitCreationActionBusy}
+              onClick={onDiscardChangesBeforePermitCreation}
+            >
+              Discard changes
+            </Button>
+            {!unsavedExemptionSaveUnavailableReason && (
+              <Button
+                kind="primary"
+                disabled={permitCreationActionBusy}
+                renderIcon={savingPermitCreationChanges ? PendingIcon : undefined}
+                onClick={() => void onSaveChangesBeforePermitCreation()}
+              >
+                {savingPermitCreationChanges ? 'Saving…' : 'Save changes'}
+              </Button>
+            )}
+          </div>
+        </Modal>
+      )}
       {permitCreationConfirmationOpen && canCreateApplicationBackedPermit && currentDetail && (
         <Modal
           open
@@ -2749,6 +2919,7 @@ const ProvincialExemptionDetailsPage = () => {
             This creates a new active permit for {currentDetail.exemptionTypeDescription} exemption{' '}
             {currentDetail.exemptionNumber}.
           </p>
+          <p>Once created, this permit cannot be removed.</p>
           <p>Eligible application scales from this exemption will be added automatically.</p>
           <div className="permit-creation-confirmation-modal__actions">
             <Button
@@ -2783,16 +2954,7 @@ const ProvincialExemptionDetailsPage = () => {
         onSave={onSaveUnsavedExemptionChanges}
         onDiscard={onDiscardExemptionChanges}
         subject="this exemption"
-        saveUnavailableReason={
-          (optionsAvailability !== 'available' || requiredExemptionOptionsMissing) &&
-          isExemptionFormDirty
-            ? 'Authoritative exemption options must load before these changes can be saved.'
-            : documentUploadDirty
-              ? 'Finish or reset the queued document uploads before leaving, or discard all changes.'
-              : applicationRelationshipDraftDirty
-                ? 'Add or clear the typed application number before leaving, or discard all changes.'
-                : undefined
-        }
+        saveUnavailableReason={unsavedExemptionSaveUnavailableReason}
       />
     </Grid>
   )

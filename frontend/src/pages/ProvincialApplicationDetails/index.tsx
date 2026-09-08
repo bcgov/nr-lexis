@@ -20,6 +20,9 @@ import {
   TableHeader,
   TableRow,
   TableSelectRow,
+  TableToolbar,
+  TableToolbarContent,
+  TableToolbarSearch,
   TextArea,
   TextInput,
   Tile,
@@ -3745,13 +3748,21 @@ const ProvincialApplicationDetailsPage = () => {
       </div>
       {detail.offers.length > 0 ? (
         <>
-          <TextInput
-            id="applicationDetailOfferFilter"
-            labelText="Filter offers"
-            value={offerFilter}
-            onChange={(event) => updateFilterParam('offerFilter', event.target.value)}
-            placeholder="Filter by company, offer number, received date, validity, or withdrawal date"
-          />
+          <div className="legacy-search-table-toolbar">
+            <TableToolbar aria-label="Application offers toolbar">
+              <TableToolbarContent>
+                <TableToolbarSearch
+                  persistent
+                  size="sm"
+                  id="applicationDetailOfferFilter"
+                  labelText="Filter offers"
+                  value={offerFilter}
+                  onChange={(_, value) => updateFilterParam('offerFilter', value ?? '')}
+                  placeholder="Filter by company, offer number, received date, validity, or withdrawal date"
+                />
+              </TableToolbarContent>
+            </TableToolbar>
+          </div>
           <TableFrame ariaLabel="Application offers">
             <Table size="md" useZebraStyles>
               <TableHead>
@@ -5033,15 +5044,23 @@ const ProvincialApplicationDetailsPage = () => {
                           className="application-detail-section application-detail-packages"
                         >
                           <h2 className="detail-tile-title">Packages</h2>
-                          <TextInput
-                            id="applicationDetailPackageFilter"
-                            labelText="Filter packages"
-                            value={packageFilter}
-                            onChange={(event) =>
-                              updateFilterParam('packageFilter', event.target.value)
-                            }
-                            placeholder="Filter by package, pieces, or volume"
-                          />
+                          <div className="legacy-search-table-toolbar">
+                            <TableToolbar aria-label="Application packages toolbar">
+                              <TableToolbarContent>
+                                <TableToolbarSearch
+                                  persistent
+                                  size="sm"
+                                  id="applicationDetailPackageFilter"
+                                  labelText="Filter packages"
+                                  value={packageFilter}
+                                  onChange={(_, value) =>
+                                    updateFilterParam('packageFilter', value ?? '')
+                                  }
+                                  placeholder="Filter by package, pieces, or volume"
+                                />
+                              </TableToolbarContent>
+                            </TableToolbar>
+                          </div>
                           <TableFrame ariaLabel="Application packages">
                             <Table size="md" useZebraStyles>
                               <TableHead>
@@ -5192,15 +5211,23 @@ const ProvincialApplicationDetailsPage = () => {
                             className="application-documents-list"
                             aria-label="Application documents"
                           >
-                            <TextInput
-                              id="applicationDetailDocumentsFilter"
-                              labelText="Filter document rows"
-                              value={documentsFilter}
-                              onChange={(event) =>
-                                updateFilterParam('documentsFilter', event.target.value)
-                              }
-                              placeholder="Filter by file name, description, type, source, or id"
-                            />
+                            <div className="legacy-search-table-toolbar">
+                              <TableToolbar aria-label="Application documents toolbar">
+                                <TableToolbarContent>
+                                  <TableToolbarSearch
+                                    persistent
+                                    size="sm"
+                                    id="applicationDetailDocumentsFilter"
+                                    labelText="Filter document rows"
+                                    value={documentsFilter}
+                                    onChange={(_, value) =>
+                                      updateFilterParam('documentsFilter', value ?? '')
+                                    }
+                                    placeholder="Filter by file name, description, type, source, or id"
+                                  />
+                                </TableToolbarContent>
+                              </TableToolbar>
+                            </div>
                             <TableFrame ariaLabel="Application document rows">
                               <Table size="md" useZebraStyles>
                                 <TableHead>

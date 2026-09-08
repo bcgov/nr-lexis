@@ -4734,34 +4734,35 @@ $notification-types: 'error', 'info', 'success', 'warning';
   color: var(--cds-text-secondary);
 }
 
-.detail-document-upload-modal .detail-document-upload__invoice-fields {
+:is(.detail-document-upload-modal, .detail-document-upload-inline)
+  .detail-document-upload__invoice-fields {
   margin: 0;
 }
 
-.detail-document-upload-modal .admin-upload-drop-zone-field {
+:is(.detail-document-upload-modal, .detail-document-upload-inline) .admin-upload-drop-zone-field {
   margin-block-start: 0;
 }
 
-.detail-document-upload-modal .admin-upload-drop-zone--fspts {
+:is(.detail-document-upload-modal, .detail-document-upload-inline) .admin-upload-drop-zone--fspts {
   inline-size: 100%;
   max-inline-size: 100%;
 }
 
-.detail-document-upload-modal .cds--text-area__wrapper,
-.detail-document-upload-modal .cds--text-area {
+:is(.detail-document-upload-modal, .detail-document-upload-inline) .cds--text-area__wrapper,
+:is(.detail-document-upload-modal, .detail-document-upload-inline) .cds--text-area {
   inline-size: 100%;
   max-inline-size: 100%;
 }
 
-.detail-document-upload-modal .cds--text-area__wrapper {
+:is(.detail-document-upload-modal, .detail-document-upload-inline) .cds--text-area__wrapper {
   margin: 0;
 }
 
-.detail-document-upload-modal .admin-upload-panel {
+:is(.detail-document-upload-modal, .detail-document-upload-inline) .admin-upload-panel {
   padding: 1rem;
 }
 
-.detail-document-upload-modal .admin-upload-panel__header h2 {
+:is(.detail-document-upload-modal, .detail-document-upload-inline) .admin-upload-panel__header h2 {
   font-size: 1.25rem;
   line-height: 1.75rem;
 }

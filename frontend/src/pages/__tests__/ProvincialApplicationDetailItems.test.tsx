@@ -238,6 +238,8 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       '.cds--tile',
     )
     expect(packagesSection).toBeTruthy()
+    const packageToolbar = screen.getByRole('group', { name: 'Application packages toolbar' })
+    expect(within(packageToolbar).getByLabelText('Filter packages')).toHaveValue('PKG-1')
     expect(within(packagesSection as HTMLElement).getByText('PKG-1')).toBeInTheDocument()
     expect(within(packagesSection as HTMLElement).queryByText('PKG-2')).not.toBeInTheDocument()
 

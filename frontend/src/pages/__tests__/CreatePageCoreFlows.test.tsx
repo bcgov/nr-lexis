@@ -2576,10 +2576,10 @@ describe('Create Page Core Flows', () => {
     expect(mockedSubmitProvincialExemptionCreate).not.toHaveBeenCalled()
   })
 
-  it('fails closed when the selected applications cannot be previewed', async () => {
-    mockedFetchProvincialExemptionCreatePreview.mockRejectedValueOnce(
-      new Error('Application 321 must have a status of approved.'),
-    )
+  it('dismisses a failed preview notice while keeping the exemption blocked', async () => {
+    mockedFetchProvincialExemptionCreatePreview
+      .mockRejectedValueOnce(new Error('Application 321 must have a status of approved.'))
+      .mockRejectedValueOnce(new Error('Application 654 must have a status of approved.'))
 
     render(
       <MemoryRouter initialEntries={['/provincial/exemption/create?applications=321']}>
@@ -2589,8 +2589,37 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
+    const firstError = await screen.findByText('Application 321 must have a status of approved.')
+    const notice = firstError.closest('[role="status"]')
+    expect(notice).toBeTruthy()
+    await userEvent.click(
+      within(notice as HTMLElement).getByRole('button', { name: 'close notification' }),
+    )
+
+    await waitFor(() =>
+      expect(
+        screen.queryByText('Application 321 must have a status of approved.'),
+      ).not.toBeInTheDocument(),
+    )
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
+    expect(mockedSubmitProvincialExemptionCreate).not.toHaveBeenCalled()
+
+    await selectExemptionCreateTab('Applications')
+    const selectedApplications = screen.getByRole('list', { name: 'Selected applications' })
+    await userEvent.click(
+      within(selectedApplications).getByRole('button', { name: 'Remove application 321' }),
+    )
+
+    const applicationNumber = screen.getByRole('combobox', {
+      name: 'Application number (optional)',
+    })
+    fireEvent.change(applicationNumber, { target: { value: '654' } })
+    const addApplication = screen.getByRole('button', { name: 'Add application' })
+    await waitFor(() => expect(addApplication).toBeEnabled())
+    await userEvent.click(addApplication)
+
     expect(
-      await screen.findByText('Application 321 must have a status of approved.'),
+      await screen.findByText('Application 654 must have a status of approved.'),
     ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
     expect(mockedSubmitProvincialExemptionCreate).not.toHaveBeenCalled()

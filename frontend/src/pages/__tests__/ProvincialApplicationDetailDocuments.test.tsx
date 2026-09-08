@@ -218,10 +218,14 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
     const uploadTrigger = screen.getByRole('button', { name: 'Add document' })
 
     expect(screen.getByRole('region', { name: 'Application document rows' })).toBeInTheDocument()
-    expect(screen.getByLabelText('Filter document rows')).toBeInTheDocument()
+    const documentToolbar = screen.getByRole('group', { name: 'Application documents toolbar' })
+    const documentFilter = within(documentToolbar).getByLabelText('Filter document rows')
     expect(
       uploadTrigger.compareDocumentPosition(documentName) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy()
+    await userEvent.type(documentFilter, 'not-a-match')
+    expect(screen.getByText('No document rows matched the current filter.')).toBeInTheDocument()
+    expect(screen.queryByText('existing-doc.pdf')).not.toBeInTheDocument()
 
     await userEvent.click(uploadTrigger)
     expect(screen.getByLabelText(/Document description/)).toBeVisible()

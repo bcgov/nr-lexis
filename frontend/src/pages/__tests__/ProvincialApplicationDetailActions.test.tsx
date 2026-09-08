@@ -1047,6 +1047,13 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(await screen.findByText('Example Lumber')).toBeInTheDocument()
     expect(screen.getByText('2026-04-05')).toBeInTheDocument()
     expect(screen.getByText('OFF-77')).toBeInTheDocument()
+
+    const offerToolbar = screen.getByRole('group', { name: 'Application offers toolbar' })
+    const offerFilter = within(offerToolbar).getByLabelText('Filter offers')
+    await userEvent.type(offerFilter, 'not-a-match')
+
+    expect(screen.getByText('No offer rows matched the current filter.')).toBeInTheDocument()
+    expect(screen.queryByText('Example Lumber')).not.toBeInTheDocument()
   })
 
   it('preserves the originating application context when opening an offer', async () => {

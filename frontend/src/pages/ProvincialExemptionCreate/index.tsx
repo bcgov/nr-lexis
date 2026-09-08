@@ -362,6 +362,7 @@ const ProvincialExemptionCreatePage = () => {
   const [status, setStatus] = useState<PageStatus | null>(null)
   const [showMissingRequiredOptions, setShowMissingRequiredOptions] = useState(true)
   const [showPrefillNotice, setShowPrefillNotice] = useState(true)
+  const [showPreviewErrorNotice, setShowPreviewErrorNotice] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [previewState, setPreviewState] = useState<'idle' | 'loading' | 'ready' | 'error'>(
     prefillState ? 'loading' : 'idle',
@@ -544,6 +545,7 @@ const ProvincialExemptionCreatePage = () => {
         }
         setConfirmedApplicationNumbers([])
         setPreviewState('error')
+        setShowPreviewErrorNotice(true)
         setPreviewError(
           error instanceof Error
             ? error.message
@@ -1023,13 +1025,14 @@ const ProvincialExemptionCreatePage = () => {
         </Column>
       )}
 
-      {!!previewError && (
+      {!!previewError && showPreviewErrorNotice && (
         <Column sm={4} md={8} lg={16}>
           <AppNotification
             kind="error"
             title="Selected applications could not be prepared"
             subtitle={previewError}
             lowContrast
+            onCloseButtonClick={() => setShowPreviewErrorNotice(false)}
           />
         </Column>
       )}
