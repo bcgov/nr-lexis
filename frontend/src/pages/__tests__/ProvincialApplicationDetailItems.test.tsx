@@ -173,7 +173,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     })
   })
 
-  it('keeps the application total pieces independent of package filters and selection', async () => {
+  it('keeps all package rows and totals despite retired filters and package selection', async () => {
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
       ...applicationDetail,
       packages: [
@@ -238,8 +238,12 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       '.cds--tile',
     )
     expect(packagesSection).toBeTruthy()
+    expect(screen.queryByLabelText('Filter packages')).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('group', { name: 'Application packages toolbar' }),
+    ).not.toBeInTheDocument()
     expect(within(packagesSection as HTMLElement).getByText('PKG-1')).toBeInTheDocument()
-    expect(within(packagesSection as HTMLElement).queryByText('PKG-2')).not.toBeInTheDocument()
+    expect(within(packagesSection as HTMLElement).getByText('PKG-2')).toBeInTheDocument()
 
     const packageDetailsSection = screen
       .getByRole('heading', { name: 'Package Details' })

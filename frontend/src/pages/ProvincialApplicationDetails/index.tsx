@@ -47,12 +47,8 @@ import { hasProvincialSubmitterRole } from '@/context/auth/role-utils'
 import type { ProvincialApplicationDetail } from '@/interfaces/LexisDetails'
 import { formatDocumentSource } from '@/service/document-service-utils'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
-import {
-  displayValue,
-  matchesFilter,
-  normalizeFilterText as normalizeText,
-} from '@/pages/shared/detail-page-utils'
-import { appendSearchParamsToPath, searchParamsWithValue } from '@/pages/shared/search-query-utils'
+import { displayValue } from '@/pages/shared/detail-page-utils'
+import { appendSearchParamsToPath } from '@/pages/shared/search-query-utils'
 import {
   locationPath,
   readDetailReturnTo,
@@ -236,6 +232,7 @@ type ClientDataSummaryProps = {
   clientData: ApplicationClientData | null
   isLoading: boolean
   detailFields?: Array<[string, string]>
+  trailingDetailFields?: Array<[string, string]>
 }
 
 function ClientDataSummary({
@@ -244,6 +241,7 @@ function ClientDataSummary({
   clientData,
   isLoading,
   detailFields,
+  trailingDetailFields,
 }: ClientDataSummaryProps) {
   const clientLookupMessage = clientData?.notfound ?? ''
   const clientLookupMessageKey = `${clientData?.clientNumber ?? ''}:${clientLookupMessage}`
@@ -251,8 +249,13 @@ function ClientDataSummary({
     string | null
   >(null)
   const persistedDetailFields = detailFields ?? []
+  const persistedTrailingDetailFields = trailingDetailFields ?? []
 
-  if (!clientData && persistedDetailFields.length === 0) {
+  if (
+    !clientData &&
+    persistedDetailFields.length === 0 &&
+    persistedTrailingDetailFields.length === 0
+  ) {
     return isLoading ? <InlineLoading description={`Loading ${title.toLowerCase()}...`} /> : null
   }
 
@@ -284,6 +287,7 @@ function ClientDataSummary({
                 ['Email', displayValue(clientData.email)],
               ]
             : []),
+          ...persistedTrailingDetailFields,
         ].map(([label, value]) => (
           <div key={label} className="detail-field-item">
             <dt className="detail-field-label">{label}</dt>
@@ -644,7 +648,7 @@ const ProvincialApplicationDetailsPage = () => {
   const location = useLocation()
   const { canPerform, capabilities, defaultRoute } = useAuth()
   const { applicationNumber } = useParams()
-  const [searchParams, setSearchParams] = useSearchParams()
+  const [searchParams] = useSearchParams()
   const navigationState = location.state as ApplicationCreationNavigationState | null
   const fallbackReturnTo = canPerform('/applicationSearch')
     ? { label: 'Provincial application search', to: '/provincial/application' }
@@ -812,24 +816,11 @@ const ProvincialApplicationDetailsPage = () => {
   currentDetailRef.current = detail
   const currentSummaryFormRef = useRef<ApplicationSummaryFormState | null>(null)
   currentSummaryFormRef.current = summaryForm
-  const packageFilter = searchParams.get('packageFilter') ?? ''
-  const offerFilter = searchParams.get('offerFilter') ?? ''
-  const documentsFilter = searchParams.get('documentsFilter') ?? ''
   const withCurrentSearch = useCallback(
     (path: string): string => appendSearchParamsToPath(path, searchParams),
     [searchParams],
   )
   const canAccessExemptionRoutes = canPerform('/exemptionSearch') && canPerform('/exemptionDetails')
-  const updateFilterParam = useCallback(
-    (key: 'packageFilter' | 'offerFilter' | 'documentsFilter', value: string) => {
-      const nextSearchParams = searchParamsWithValue(searchParams, key, value)
-
-      if (nextSearchParams.toString() !== searchParams.toString()) {
-        setSearchParams(nextSearchParams, { replace: true })
-      }
-    },
-    [searchParams, setSearchParams],
-  )
   const focusPackageInItems = useCallback(
     (packageNumber: string) => {
       selectApplicationTab('items')
@@ -1104,46 +1095,10 @@ const ProvincialApplicationDetailsPage = () => {
     }
   }, [applicationNumber])
 
-  const filteredPackages = useMemo(() => {
-    const rows = detail?.packages ?? []
-    if (!packageFilter.trim()) {
-      return rows
-    }
-
-    const normalizedFilter = normalizeText(packageFilter)
-    return rows.filter((item) =>
-      normalizeText(
-        `${item.packageNumber} ${item.volume.toLocaleString()} ${item.pieceCount.toLocaleString()}`,
-      ).includes(normalizedFilter),
-    )
-  }, [detail?.packages, packageFilter])
-
   const applicationTotalPieces = (detail?.packages ?? []).reduce(
     (total, item) => total + item.pieceCount,
     0,
   )
-
-  const filteredOffers = useMemo(() => {
-    const rows = detail?.offers ?? []
-    if (!offerFilter.trim()) {
-      return rows
-    }
-
-    const normalizedFilter = normalizeText(offerFilter)
-    return rows.filter((item) =>
-      normalizeText(
-        `${item.offerNumber} ${item.companyName ?? ''} ${item.receivedDate ?? ''} ${
-          item.validOffer ? 'valid' : 'invalid'
-        } ${item.withdrawalDate ?? ''}`,
-      ).includes(normalizedFilter),
-    )
-  }, [detail?.offers, offerFilter])
-
-  const filteredDocumentRows = useMemo(() => {
-    return documentRows.filter((row) =>
-      matchesFilter([row.name, row.description, row.type, row.source, row.id], documentsFilter),
-    )
-  }, [documentRows, documentsFilter])
 
   const canUploadApplicationDocuments = canPerform('/fileApplicationUpload')
   const canDeleteDocuments = canDeleteApplicationDocuments(detail, capabilities?.roles ?? [])
@@ -3635,6 +3590,8 @@ const ProvincialApplicationDetailsPage = () => {
     ['Applicant type', ownerApplicantTypeLabel],
     ['Client location', ownerClientLocationDisplay],
     ['Contact name', summaryForm?.ownerContactName ?? ''],
+  ]
+  const ownerClientTrailingDetailFields: Array<[string, string]> = [
     ['I am an agent', summaryForm?.applicantTypeCode === 'A' ? 'Yes' : 'No'],
   ]
   const ownerClientSummaryContent = (
@@ -3644,6 +3601,7 @@ const ProvincialApplicationDetailsPage = () => {
       clientData={ownerClientData}
       isLoading={isLoadingOwnerClientData}
       detailFields={ownerClientDetailFields}
+      trailingDetailFields={ownerClientTrailingDetailFields}
     />
   )
   const agentClientDetailFields: Array<[string, string]> = [
@@ -3744,67 +3702,53 @@ const ProvincialApplicationDetailsPage = () => {
         )}
       </div>
       {detail.offers.length > 0 ? (
-        <>
-          <TextInput
-            id="applicationDetailOfferFilter"
-            labelText="Filter offers"
-            value={offerFilter}
-            onChange={(event) => updateFilterParam('offerFilter', event.target.value)}
-            placeholder="Filter by company, offer number, received date, validity, or withdrawal date"
-          />
-          <TableFrame ariaLabel="Application offers">
-            <Table size="md" useZebraStyles>
-              <TableHead>
-                <TableRow>
-                  <TableHeader>Offer</TableHeader>
-                  <TableHeader>Company</TableHeader>
-                  <TableHeader>Date received</TableHeader>
-                  <TableHeader>Valid</TableHeader>
-                  <TableHeader>Withdrawal date</TableHeader>
-                  <TableHeader>Actions</TableHeader>
+        <TableFrame ariaLabel="Application offers">
+          <Table size="md" useZebraStyles>
+            <TableHead>
+              <TableRow>
+                <TableHeader>Offer</TableHeader>
+                <TableHeader>Company</TableHeader>
+                <TableHeader>Date received</TableHeader>
+                <TableHeader>Valid</TableHeader>
+                <TableHeader>Withdrawal date</TableHeader>
+                <TableHeader>Actions</TableHeader>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {detail.offers.map((item) => (
+                <TableRow key={item.offerNumber}>
+                  <TableCell>{item.offerNumber}</TableCell>
+                  <TableCell>{item.companyName ?? '-'}</TableCell>
+                  <TableCell>{item.receivedDate ?? '-'}</TableCell>
+                  <TableCell>{item.validOffer ? 'Yes' : 'No'}</TableCell>
+                  <TableCell>{item.withdrawalDate ?? '-'}</TableCell>
+                  <TableCell>
+                    <Button
+                      kind="ghost"
+                      size="sm"
+                      renderIcon={Launch}
+                      disabled={!canPerform('/offersSearch') || !canPerform('/offerDetails')}
+                      onClick={() =>
+                        navigate(withCurrentSearch(`/provincial/offers/${item.offerNumber}`), {
+                          state: withDetailReturnTo(
+                            navigationState,
+                            {
+                              label: 'Provincial application detail',
+                              to: locationPath(location),
+                            },
+                            detailReturnTo,
+                          ),
+                        })
+                      }
+                    >
+                      Open
+                    </Button>
+                  </TableCell>
                 </TableRow>
-              </TableHead>
-              <TableBody>
-                {filteredOffers.map((item) => (
-                  <TableRow key={item.offerNumber}>
-                    <TableCell>{item.offerNumber}</TableCell>
-                    <TableCell>{item.companyName ?? '-'}</TableCell>
-                    <TableCell>{item.receivedDate ?? '-'}</TableCell>
-                    <TableCell>{item.validOffer ? 'Yes' : 'No'}</TableCell>
-                    <TableCell>{item.withdrawalDate ?? '-'}</TableCell>
-                    <TableCell>
-                      <Button
-                        kind="ghost"
-                        size="sm"
-                        renderIcon={Launch}
-                        disabled={!canPerform('/offersSearch') || !canPerform('/offerDetails')}
-                        onClick={() =>
-                          navigate(withCurrentSearch(`/provincial/offers/${item.offerNumber}`), {
-                            state: withDetailReturnTo(
-                              navigationState,
-                              {
-                                label: 'Provincial application detail',
-                                to: locationPath(location),
-                              },
-                              detailReturnTo,
-                            ),
-                          })
-                        }
-                      >
-                        Open
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {filteredOffers.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={6}>No offer rows matched the current filter.</TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </TableFrame>
-        </>
+              ))}
+            </TableBody>
+          </Table>
+        </TableFrame>
       ) : (
         <EmptyState
           title="No offers found"
@@ -4309,21 +4253,21 @@ const ProvincialApplicationDetailsPage = () => {
                                   }
                                 />
                               )}
-                              <Checkbox
-                                id="applicationOwnerAgentUsedEdit"
-                                labelText="I am an agent"
-                                checked={summaryForm.applicantTypeCode === 'A'}
-                                disabled={isSavingSummary || !canChangeApplicantType}
-                                onChange={(_, { checked }) =>
-                                  onOwnerApplicantTypeChange(checked ? 'A' : 'O')
-                                }
-                              />
                             </div>
                             <ClientDataSummary
                               title="Owner client details"
                               showTitle={false}
                               clientData={ownerClientData}
                               isLoading={isLoadingOwnerClientData}
+                            />
+                            <Checkbox
+                              id="applicationOwnerAgentUsedEdit"
+                              labelText="I am an agent"
+                              checked={summaryForm.applicantTypeCode === 'A'}
+                              disabled={isSavingSummary || !canChangeApplicantType}
+                              onChange={(_, { checked }) =>
+                                onOwnerApplicantTypeChange(checked ? 'A' : 'O')
+                              }
                             />
                             <div className="legacy-search-actions">
                               <Button
@@ -5033,15 +4977,6 @@ const ProvincialApplicationDetailsPage = () => {
                           className="application-detail-section application-detail-packages"
                         >
                           <h2 className="detail-tile-title">Packages</h2>
-                          <TextInput
-                            id="applicationDetailPackageFilter"
-                            labelText="Filter packages"
-                            value={packageFilter}
-                            onChange={(event) =>
-                              updateFilterParam('packageFilter', event.target.value)
-                            }
-                            placeholder="Filter by package, pieces, or volume"
-                          />
                           <TableFrame ariaLabel="Application packages">
                             <Table size="md" useZebraStyles>
                               <TableHead>
@@ -5053,7 +4988,7 @@ const ProvincialApplicationDetailsPage = () => {
                                 </TableRow>
                               </TableHead>
                               <TableBody>
-                                {filteredPackages.map((item) => (
+                                {detail.packages.map((item) => (
                                   <TableRow key={item.packageNumber}>
                                     <TableSelectRow
                                       radio
@@ -5068,13 +5003,6 @@ const ProvincialApplicationDetailsPage = () => {
                                     <TableCell>{item.pieceCount.toLocaleString()}</TableCell>
                                   </TableRow>
                                 ))}
-                                {filteredPackages.length === 0 && (
-                                  <TableRow>
-                                    <TableCell colSpan={4}>
-                                      No package rows matched the current filter.
-                                    </TableCell>
-                                  </TableRow>
-                                )}
                               </TableBody>
                             </Table>
                           </TableFrame>
@@ -5192,15 +5120,6 @@ const ProvincialApplicationDetailsPage = () => {
                             className="application-documents-list"
                             aria-label="Application documents"
                           >
-                            <TextInput
-                              id="applicationDetailDocumentsFilter"
-                              labelText="Filter document rows"
-                              value={documentsFilter}
-                              onChange={(event) =>
-                                updateFilterParam('documentsFilter', event.target.value)
-                              }
-                              placeholder="Filter by file name, description, type, source, or id"
-                            />
                             <TableFrame ariaLabel="Application document rows">
                               <Table size="md" useZebraStyles>
                                 <TableHead>
@@ -5213,7 +5132,7 @@ const ProvincialApplicationDetailsPage = () => {
                                   </TableRow>
                                 </TableHead>
                                 <TableBody>
-                                  {filteredDocumentRows.map((row) => (
+                                  {documentRows.map((row) => (
                                     <TableRow key={row.id}>
                                       <TableCell>{row.name || '-'}</TableCell>
                                       <TableCell>{row.description || '-'}</TableCell>
@@ -5255,13 +5174,6 @@ const ProvincialApplicationDetailsPage = () => {
                                       </TableCell>
                                     </TableRow>
                                   ))}
-                                  {filteredDocumentRows.length === 0 && (
-                                    <TableRow>
-                                      <TableCell colSpan={5}>
-                                        No document rows matched the current filter.
-                                      </TableCell>
-                                    </TableRow>
-                                  )}
                                 </TableBody>
                               </Table>
                             </TableFrame>

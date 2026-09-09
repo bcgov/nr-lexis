@@ -3,6 +3,7 @@ import { Button, TextArea, TextInput } from '@carbon/react'
 import { Add, ArrowRight } from '@carbon/icons-react'
 import { AppNotification } from '../AppNotification'
 import Modal from '@/components/Modal'
+import { requiredLabel } from '@/utils/required-label'
 import {
   buildUploadResultMessage,
   buildUploadReviewDetails,
@@ -100,7 +101,6 @@ const DetailDocumentUploadPanel = ({
   const copy = UPLOAD_COPY[workflowType]
   const disabledReason =
     disabledReasonProp ?? 'Your session does not include the required upload permission.'
-  const [fileDescription, setFileDescription] = useState('')
   const [salesInvoiceNumber, setSalesInvoiceNumber] = useState('')
   const [invoiceExportValue, setInvoiceExportValue] = useState('')
   const [invoiceConversionRateOverride, setInvoiceConversionRateOverride] = useState<string | null>(
@@ -123,7 +123,9 @@ const DetailDocumentUploadPanel = ({
 
   const invalidUploadCount = useMemo(
     () =>
-      uploadQueue.filter((item) => item.status === 'invalid' || item.status === 'failed').length,
+      uploadQueue.filter(
+        (item) => item.status === 'invalid' || (item.status === 'failed' && !item.submitted),
+      ).length,
     [uploadQueue],
   )
   const pendingValidationCount = useMemo(
@@ -131,8 +133,11 @@ const DetailDocumentUploadPanel = ({
       uploadQueue.filter((item) => item.status === 'queued' || item.status === 'validating').length,
     [uploadQueue],
   )
-  const validatedUploadCount = useMemo(
-    () => uploadQueue.filter((item) => item.status === 'validated').length,
+  const readyUploadItems = useMemo(
+    () =>
+      uploadQueue.filter(
+        (item) => item.status === 'validated' || (item.status === 'failed' && item.submitted),
+      ),
     [uploadQueue],
   )
   const reviewUploadItems = useMemo(
@@ -156,19 +161,19 @@ const DetailDocumentUploadPanel = ({
       invoiceNumberStorageFieldError(salesInvoiceNumber),
       invoiceDecimalStorageFieldError(
         invoiceExportValue,
-        'Invoice export value',
+        'Export value',
         INVOICE_AMOUNT_MAX,
         INVOICE_AMOUNT_DECIMAL_PLACES,
       ),
       invoiceDecimalStorageFieldError(
         invoiceConversionRate,
-        'Invoice conversion rate',
+        'Conversion rate',
         INVOICE_CONVERSION_RATE_MAX,
         INVOICE_CONVERSION_RATE_DECIMAL_PLACES,
       ),
       invoiceDecimalStorageFieldError(
         invoiceFeeInLieu,
-        'Invoice fee in lieu',
+        'Fee in lieu',
         INVOICE_AMOUNT_MAX,
         INVOICE_AMOUNT_DECIMAL_PLACES,
       ),
@@ -188,24 +193,27 @@ const DetailDocumentUploadPanel = ({
   const invoiceNumberError = invoiceNumberStorageFieldError(salesInvoiceNumber)
   const invoiceExportValueError = invoiceDecimalStorageFieldError(
     invoiceExportValue,
-    'Invoice export value',
+    'Export value',
     INVOICE_AMOUNT_MAX,
     INVOICE_AMOUNT_DECIMAL_PLACES,
   )
   const invoiceConversionRateError = invoiceDecimalStorageFieldError(
     invoiceConversionRate,
-    'Invoice conversion rate',
+    'Conversion rate',
     INVOICE_CONVERSION_RATE_MAX,
     INVOICE_CONVERSION_RATE_DECIMAL_PLACES,
   )
   const invoiceFeeInLieuError = invoiceDecimalStorageFieldError(
     invoiceFeeInLieu,
-    'Invoice fee in lieu',
+    'Fee in lieu',
     INVOICE_AMOUNT_MAX,
     INVOICE_AMOUNT_DECIMAL_PLACES,
   )
   const showInvoiceFieldErrors = workflowType === 'invoice' && showInvoiceValidationErrors
-  const descriptionError = validateDocumentUploadDescription(fileDescription)
+  const hasDescriptionError = uploadQueue.some(
+    (item) =>
+      item.status !== 'complete' && !!validateDocumentUploadDescription(item.fileDescription ?? ''),
+  )
   const uploadInvalidText =
     invalidUploadCount > 0
       ? `${invalidUploadCount} queued file${invalidUploadCount === 1 ? ' needs' : 's need'} attention and will be excluded from review.`
@@ -215,14 +223,13 @@ const DetailDocumentUploadPanel = ({
   const canReviewUpload =
     !disabled &&
     !!targetNumber.trim() &&
-    validatedUploadCount > 0 &&
+    readyUploadItems.length > 0 &&
     pendingValidationCount === 0 &&
-    !descriptionError &&
+    !hasDescriptionError &&
     invoiceValidationErrors.length === 0
   const canSubmit = canReviewUpload
   const isDirty =
     uploadQueue.some((item) => item.status !== 'complete') ||
-    fileDescription.trim().length > 0 ||
     (workflowType === 'invoice' &&
       (salesInvoiceNumber.trim().length > 0 ||
         invoiceExportValue.trim().length > 0 ||
@@ -301,7 +308,7 @@ const DetailDocumentUploadPanel = ({
   }> => {
     const baseRequest = {
       file,
-      fileDescription: fileDescription.trim(),
+      fileDescription: '',
     }
 
     if (workflowType === 'application') {
@@ -390,7 +397,6 @@ const DetailDocumentUploadPanel = ({
     Array.from(files).forEach((file, index) => {
       const validationMessages = [
         validateDocumentUploadFile(file),
-        descriptionError,
         !targetNumber.trim()
           ? `${copy.targetLabel} number is required before validating documents.`
           : '',
@@ -401,6 +407,7 @@ const DetailDocumentUploadPanel = ({
       nextItemsByFileName.set(uploadQueueFileKey(file), {
         id: `${queuedAt}-${index}-${file.name}-${file.size}`,
         file,
+        fileDescription: '',
         workflowLabel: copy.workflowLabel,
         queuedAt,
         status: validationMessage ? ('invalid' as const) : ('validating' as const),
@@ -462,6 +469,15 @@ const DetailDocumentUploadPanel = ({
     setShowFileValidationError(true)
   }
 
+  const updateFileDescription = (id: string, fileDescription: string): void => {
+    if (disabled || isSubmitting) return
+    setUploadQueue((current) =>
+      current.map((item) =>
+        item.id === id && item.status !== 'complete' ? { ...item, fileDescription } : item,
+      ),
+    )
+  }
+
   const clearQueueItems = (): void => {
     validationRequestsRef.current.clear()
     setUploadQueue([])
@@ -477,7 +493,6 @@ const DetailDocumentUploadPanel = ({
 
   const resetUpload = (): void => {
     clearQueuedFiles()
-    setFileDescription('')
     setSalesInvoiceNumber('')
     setInvoiceExportValue('')
     setInvoiceConversionRateOverride(null)
@@ -491,7 +506,6 @@ const DetailDocumentUploadPanel = ({
 
   const resetUploadAfterSuccess = (): void => {
     clearQueueItems()
-    setFileDescription('')
     setSalesInvoiceNumber('')
     setInvoiceExportValue('')
     setInvoiceConversionRateOverride(null)
@@ -502,14 +516,14 @@ const DetailDocumentUploadPanel = ({
   }
 
   const submitQueuedFile = async (
-    file: File,
+    item: UploadQueueItem,
   ): Promise<{
     message: string
     details: UploadQueueReviewDetails
   }> => {
     const baseRequest = {
-      file,
-      fileDescription: fileDescription.trim(),
+      file: item.file,
+      fileDescription: (item.fileDescription ?? '').trim(),
     }
 
     if (workflowType === 'application') {
@@ -565,6 +579,11 @@ const DetailDocumentUploadPanel = ({
       return
     }
 
+    if (hasDescriptionError) {
+      setErrorMessage('Correct the document descriptions before submitting the upload.')
+      return
+    }
+
     if (invoiceValidationErrors.length > 0) {
       setShowInvoiceValidationErrors(true)
       setErrorMessage(invoiceValidationErrors.join(' '))
@@ -576,7 +595,7 @@ const DetailDocumentUploadPanel = ({
       return
     }
 
-    if (validatedUploadCount === 0) {
+    if (readyUploadItems.length === 0) {
       setErrorMessage(
         invalidUploadCount > 0
           ? `${invalidUploadCount} queued file${invalidUploadCount === 1 ? ' needs' : 's need'} attention before review.`
@@ -591,15 +610,11 @@ const DetailDocumentUploadPanel = ({
     let failureCount = 0
     let lastSuccessMessage = ''
 
-    for (const item of uploadQueue) {
-      if (item.status !== 'validated') {
-        continue
-      }
-
+    for (const item of readyUploadItems) {
       setQueueItemStatus(item.id, 'uploading', '', lockedTargetSummary, undefined, true)
 
       try {
-        const result = await submitQueuedFile(item.file)
+        const result = await submitQueuedFile(item)
         successCount += 1
         lastSuccessMessage = result.message
         setQueueItemStatus(item.id, 'complete', result.message, lockedTargetSummary, result.details)
@@ -657,8 +672,8 @@ const DetailDocumentUploadPanel = ({
       return
     }
 
-    if (descriptionError) {
-      setErrorMessage(descriptionError)
+    if (hasDescriptionError) {
+      setErrorMessage('Correct the document descriptions before reviewing the upload.')
       return
     }
 
@@ -673,7 +688,7 @@ const DetailDocumentUploadPanel = ({
       return
     }
 
-    if (validatedUploadCount === 0) {
+    if (readyUploadItems.length === 0) {
       setErrorMessage(
         invalidUploadCount > 0
           ? `${invalidUploadCount} queued file${invalidUploadCount === 1 ? ' needs' : 's need'} attention before review.`
@@ -708,6 +723,202 @@ const DetailDocumentUploadPanel = ({
   const modalHeading = `Add ${documentNoun}`
   const modalInitialFocusId = `${inputId}UploadModalContent`
 
+  const inlineInvoiceFormRef = useRef<HTMLElement>(null)
+  const uploadTriggerRef = useRef<HTMLButtonElement>(null)
+  const wasInlineInvoiceOpenRef = useRef(false)
+  useEffect(() => {
+    if (workflowType !== 'invoice') return
+    if (isUploadModalOpen) {
+      inlineInvoiceFormRef.current?.focus()
+    } else if (wasInlineInvoiceOpenRef.current) {
+      uploadTriggerRef.current?.focus()
+    }
+    wasInlineInvoiceOpenRef.current = isUploadModalOpen
+  }, [isUploadModalOpen, workflowType])
+
+  const uploadContent = (
+    <>
+      {successMessage && (
+        <AppNotification
+          kind="success"
+          title="Upload submitted"
+          subtitle={successMessage}
+          lowContrast
+          autoDismissMs={6000}
+          onCloseButtonClick={() => setSuccessMessage('')}
+        />
+      )}
+      {errorMessage && (
+        <AppNotification
+          kind="error"
+          title="Upload error"
+          subtitle={errorMessage}
+          lowContrast
+          onCloseButtonClick={() => setErrorMessage('')}
+        />
+      )}
+
+      {uploadStep === 'upload' && (
+        <div id={modalInitialFocusId} tabIndex={-1} className="detail-document-upload-modal__form">
+          <p className="detail-document-upload-modal__subtitle">
+            {workflowType === 'invoice'
+              ? 'Fields marked with an asterisk (*) are required.'
+              : 'All fields are required unless marked optional.'}
+          </p>
+          {workflowType === 'invoice' && (
+            <div className="legacy-search-grid detail-document-upload__invoice-fields">
+              <TextInput
+                id={`${inputId}SalesInvoiceNumber`}
+                labelText={requiredLabel('Invoice number')}
+                aria-required="true"
+                value={salesInvoiceNumber}
+                invalid={showInvoiceFieldErrors && !!invoiceNumberError}
+                invalidText={showInvoiceFieldErrors ? invoiceNumberError : undefined}
+                onChange={(event) => setSalesInvoiceNumber(event.target.value)}
+                disabled={disabled}
+              />
+              <TextInput
+                id={`${inputId}InvoiceExportValue`}
+                labelText={requiredLabel('Export value')}
+                aria-required="true"
+                value={invoiceExportValue}
+                invalid={showInvoiceFieldErrors && !!invoiceExportValueError}
+                invalidText={showInvoiceFieldErrors ? invoiceExportValueError : undefined}
+                onChange={(event) => setInvoiceExportValue(event.target.value)}
+                disabled={disabled}
+              />
+              <TextInput
+                id={`${inputId}InvoiceConversionRate`}
+                labelText={requiredLabel('Conversion rate')}
+                aria-required="true"
+                value={invoiceConversionRate}
+                invalid={showInvoiceFieldErrors && !!invoiceConversionRateError}
+                invalidText={showInvoiceFieldErrors ? invoiceConversionRateError : undefined}
+                onChange={(event) => setInvoiceConversionRateOverride(event.target.value)}
+                disabled={disabled}
+              />
+              <TextInput
+                id={`${inputId}InvoiceFeeInLieu`}
+                labelText={requiredLabel('Fee in lieu')}
+                aria-required="true"
+                value={invoiceFeeInLieu}
+                invalid={showInvoiceFieldErrors && !!invoiceFeeInLieuError}
+                invalidText={showInvoiceFieldErrors ? invoiceFeeInLieuError : undefined}
+                onChange={(event) => setInvoiceFeeInLieu(event.target.value)}
+                disabled={disabled}
+              />
+            </div>
+          )}
+          <MultiFileDropZone
+            title="File"
+            description={DOCUMENT_UPLOAD_GUIDANCE}
+            multiple={workflowType !== 'invoice'}
+            inputId={`${inputId}File`}
+            inputKey={fileInputKey}
+            inputLabel="Document File"
+            required
+            showRequiredIndicator={workflowType === 'invoice'}
+            accept={DOCUMENT_UPLOAD_ACCEPT}
+            invalidText={uploadInvalidText}
+            disabled={disabled}
+            disabledDescription={disabledReason}
+            renderAsPanel={false}
+            variant="fspts"
+            onFilesSelected={addFilesToQueue}
+          />
+        </div>
+      )}
+
+      {uploadQueue.length > 0 && (
+        <UploadQueuePreview
+          items={uploadQueue}
+          targetSummary={currentTargetSummary}
+          canSubmit={canSubmit}
+          canReview={canReviewUpload}
+          isSubmitting={isSubmitting}
+          idPrefix={`${inputId}Queue`}
+          currentStepId={uploadStep}
+          previewTitle={uploadStep === 'review' ? 'File review' : 'Selected files'}
+          reviewItems={reviewUploadItems}
+          showWorkflowProgress={false}
+          showReviewQueueTable={false}
+          showReviewAccordionHeader={false}
+          hideActions
+          renderFileDescription={(item) => {
+            const description = item.fileDescription ?? ''
+            const error = validateDocumentUploadDescription(description)
+            return (
+              <TextArea
+                id={`${inputId}Description-${encodeURIComponent(item.id)}`}
+                labelText={`Document description for ${item.file.name} (optional)`}
+                value={description}
+                onChange={(event) => updateFileDescription(item.id, event.target.value)}
+                invalid={!!error}
+                invalidText={error}
+                enableCounter
+                maxCount={250}
+                rows={2}
+                disabled={disabled || isSubmitting || item.status === 'complete'}
+              />
+            )
+          }}
+          onSubmit={() => void onSubmitUpload()}
+          onReset={resetUpload}
+          onClear={clearQueuedFiles}
+          onRemove={removeQueuedFile}
+          reviewSupplementalContent={
+            workflowType !== 'invoice' && (
+              <MultiFileDropZone
+                title="Add more documents"
+                description={DOCUMENT_UPLOAD_GUIDANCE}
+                inputId={`${inputId}ReviewFile`}
+                inputKey={fileInputKey}
+                inputLabel="Document File"
+                accept={DOCUMENT_UPLOAD_ACCEPT}
+                invalidText={uploadInvalidText}
+                disabled={disabled || isSubmitting}
+                disabledDescription={isSubmitting ? 'Upload is submitting.' : disabledReason}
+                renderAsPanel={false}
+                variant="fspts"
+                onFilesSelected={addFilesToQueue}
+              />
+            )
+          }
+        />
+      )}
+
+      <div className="detail-document-upload-modal__actions">
+        <Button kind="tertiary" disabled={isSubmitting} onClick={closeUploadModal}>
+          Cancel
+        </Button>
+        {uploadStep === 'review' && (
+          <Button kind="ghost" disabled={isSubmitting} onClick={() => setUploadStep('upload')}>
+            Back
+          </Button>
+        )}
+        <Button
+          kind="primary"
+          disabled={isSubmitting || (uploadStep === 'review' ? !canSubmit : disabled)}
+          renderIcon={ArrowRight}
+          onClick={() => {
+            if (uploadStep === 'review') {
+              void onSubmitUpload()
+              return
+            }
+
+            onReviewUpload()
+          }}
+        >
+          {isSubmitting
+            ? 'Submitting upload…'
+            : uploadStep === 'review'
+              ? 'Submit upload'
+              : 'Review upload'}
+        </Button>
+      </div>
+    </>
+  )
+
   return (
     <div className="detail-document-upload" id={inputId}>
       {!isUploadModalOpen && successMessage && (
@@ -729,19 +940,35 @@ const DetailDocumentUploadPanel = ({
           onCloseButtonClick={() => setErrorMessage('')}
         />
       )}
-      <div className="detail-document-upload__trigger">
-        <Button
-          kind="primary"
-          size="sm"
-          renderIcon={Add}
-          disabled={disabled}
-          title={disabled ? disabledReason : undefined}
-          onClick={openUploadModal}
+      {(!isUploadModalOpen || workflowType !== 'invoice') && (
+        <div className="detail-document-upload__trigger">
+          <Button
+            kind="primary"
+            size="sm"
+            renderIcon={Add}
+            disabled={disabled}
+            title={disabled ? disabledReason : undefined}
+            ref={uploadTriggerRef}
+            onClick={openUploadModal}
+          >
+            {modalHeading}
+          </Button>
+        </div>
+      )}
+      {isUploadModalOpen && workflowType === 'invoice' && (
+        <section
+          ref={inlineInvoiceFormRef}
+          aria-labelledby={`${inputId}Heading`}
+          tabIndex={-1}
+          className="detail-document-upload-inline"
         >
-          {modalHeading}
-        </Button>
-      </div>
-      {isUploadModalOpen && (
+          <h3 id={`${inputId}Heading`} className="detail-tile-title">
+            Add invoice
+          </h3>
+          {uploadContent}
+        </section>
+      )}
+      {isUploadModalOpen && workflowType !== 'invoice' && (
         <Modal
           open
           passiveModal
@@ -753,178 +980,7 @@ const DetailDocumentUploadPanel = ({
           onRequestClose={closeUploadModal}
           preventCloseOnClickOutside
         >
-          {successMessage && (
-            <AppNotification
-              kind="success"
-              title="Upload submitted"
-              subtitle={successMessage}
-              lowContrast
-              autoDismissMs={6000}
-              onCloseButtonClick={() => setSuccessMessage('')}
-            />
-          )}
-          {errorMessage && (
-            <AppNotification
-              kind="error"
-              title="Upload error"
-              subtitle={errorMessage}
-              lowContrast
-              onCloseButtonClick={() => setErrorMessage('')}
-            />
-          )}
-
-          {uploadStep === 'upload' && (
-            <div
-              id={modalInitialFocusId}
-              tabIndex={-1}
-              className="detail-document-upload-modal__form"
-            >
-              <p className="detail-document-upload-modal__subtitle">
-                All fields are required unless marked optional.
-              </p>
-              {workflowType === 'invoice' && (
-                <div className="legacy-search-grid detail-document-upload__invoice-fields">
-                  <TextInput
-                    id={`${inputId}SalesInvoiceNumber`}
-                    labelText="Upload invoice number"
-                    aria-required="true"
-                    value={salesInvoiceNumber}
-                    invalid={showInvoiceFieldErrors && !!invoiceNumberError}
-                    invalidText={showInvoiceFieldErrors ? invoiceNumberError : undefined}
-                    onChange={(event) => setSalesInvoiceNumber(event.target.value)}
-                    disabled={disabled}
-                  />
-                  <TextInput
-                    id={`${inputId}InvoiceExportValue`}
-                    labelText="Upload invoice export value"
-                    aria-required="true"
-                    value={invoiceExportValue}
-                    invalid={showInvoiceFieldErrors && !!invoiceExportValueError}
-                    invalidText={showInvoiceFieldErrors ? invoiceExportValueError : undefined}
-                    onChange={(event) => setInvoiceExportValue(event.target.value)}
-                    disabled={disabled}
-                  />
-                  <TextInput
-                    id={`${inputId}InvoiceConversionRate`}
-                    labelText="Upload invoice conversion rate"
-                    aria-required="true"
-                    value={invoiceConversionRate}
-                    invalid={showInvoiceFieldErrors && !!invoiceConversionRateError}
-                    invalidText={showInvoiceFieldErrors ? invoiceConversionRateError : undefined}
-                    onChange={(event) => setInvoiceConversionRateOverride(event.target.value)}
-                    disabled={disabled}
-                  />
-                  <TextInput
-                    id={`${inputId}InvoiceFeeInLieu`}
-                    labelText="Upload invoice fee in lieu"
-                    aria-required="true"
-                    value={invoiceFeeInLieu}
-                    invalid={showInvoiceFieldErrors && !!invoiceFeeInLieuError}
-                    invalidText={showInvoiceFieldErrors ? invoiceFeeInLieuError : undefined}
-                    onChange={(event) => setInvoiceFeeInLieu(event.target.value)}
-                    disabled={disabled}
-                  />
-                </div>
-              )}
-              <MultiFileDropZone
-                title="File"
-                description={DOCUMENT_UPLOAD_GUIDANCE}
-                multiple={workflowType !== 'invoice'}
-                inputId={`${inputId}File`}
-                inputKey={fileInputKey}
-                inputLabel="Document File"
-                required
-                accept={DOCUMENT_UPLOAD_ACCEPT}
-                invalidText={uploadInvalidText}
-                disabled={disabled}
-                disabledDescription={disabledReason}
-                renderAsPanel={false}
-                variant="fspts"
-                onFilesSelected={addFilesToQueue}
-              />
-              <TextArea
-                id={`${inputId}Description`}
-                labelText="Document description (optional)"
-                value={fileDescription}
-                onChange={(event) => setFileDescription(event.target.value)}
-                invalid={!!descriptionError}
-                invalidText={descriptionError}
-                maxCount={250}
-                rows={3}
-                disabled={disabled}
-              />
-            </div>
-          )}
-
-          {uploadQueue.length > 0 && (
-            <UploadQueuePreview
-              items={uploadQueue}
-              targetSummary={currentTargetSummary}
-              canSubmit={canSubmit}
-              canReview={canReviewUpload}
-              isSubmitting={isSubmitting}
-              idPrefix={`${inputId}Queue`}
-              currentStepId={uploadStep}
-              previewTitle={uploadStep === 'review' ? 'File review' : 'Selected files'}
-              reviewItems={reviewUploadItems}
-              showWorkflowProgress={false}
-              showReviewQueueTable={false}
-              showReviewAccordionHeader={false}
-              hideActions
-              onSubmit={() => void onSubmitUpload()}
-              onReset={resetUpload}
-              onClear={clearQueuedFiles}
-              onRemove={removeQueuedFile}
-              reviewSupplementalContent={
-                workflowType !== 'invoice' && (
-                  <MultiFileDropZone
-                    title="Add more documents"
-                    description={DOCUMENT_UPLOAD_GUIDANCE}
-                    inputId={`${inputId}ReviewFile`}
-                    inputKey={fileInputKey}
-                    inputLabel="Document File"
-                    accept={DOCUMENT_UPLOAD_ACCEPT}
-                    invalidText={uploadInvalidText}
-                    disabled={disabled || isSubmitting}
-                    disabledDescription={isSubmitting ? 'Upload is submitting.' : disabledReason}
-                    renderAsPanel={false}
-                    variant="fspts"
-                    onFilesSelected={addFilesToQueue}
-                  />
-                )
-              }
-            />
-          )}
-
-          <div className="detail-document-upload-modal__actions">
-            <Button kind="tertiary" disabled={isSubmitting} onClick={closeUploadModal}>
-              Cancel
-            </Button>
-            {uploadStep === 'review' && (
-              <Button kind="ghost" disabled={isSubmitting} onClick={() => setUploadStep('upload')}>
-                Back
-              </Button>
-            )}
-            <Button
-              kind="primary"
-              disabled={isSubmitting || (uploadStep === 'review' ? !canSubmit : disabled)}
-              renderIcon={ArrowRight}
-              onClick={() => {
-                if (uploadStep === 'review') {
-                  void onSubmitUpload()
-                  return
-                }
-
-                onReviewUpload()
-              }}
-            >
-              {isSubmitting
-                ? 'Submitting upload…'
-                : uploadStep === 'review'
-                  ? 'Submit upload'
-                  : 'Review upload'}
-            </Button>
-          </div>
+          {uploadContent}
         </Modal>
       )}
     </div>

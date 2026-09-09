@@ -15,6 +15,7 @@ type UploadQueueReviewAccordionProps = {
   idPrefix?: string
   itemNoun?: string
   showHeader?: boolean
+  renderFileDescription?: (item: UploadQueueItem) => ReactNode
 }
 
 const asList = (value: string[] | undefined): string[] => value?.filter(Boolean) ?? []
@@ -357,6 +358,7 @@ function UploadQueueReviewAccordion({
   idPrefix = 'adminUploadReview',
   itemNoun = 'file',
   showHeader = true,
+  renderFileDescription,
 }: UploadQueueReviewAccordionProps) {
   if (items.length === 0) {
     return null
@@ -464,6 +466,7 @@ function UploadQueueReviewAccordion({
               </summary>
 
               <div className="admin-upload-review__content">
+                {renderFileDescription?.(item)}
                 <dl className="admin-upload-review__meta">
                   <div>
                     <dt>{typeLabel}</dt>

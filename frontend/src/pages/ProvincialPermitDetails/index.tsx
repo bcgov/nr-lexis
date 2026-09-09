@@ -16,6 +16,8 @@ import {
   InlineLoading,
   InlineNotification,
   Loading,
+  RadioButton,
+  RadioButtonGroup,
   Select,
   SelectItem,
   Tab,
@@ -33,7 +35,7 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
-import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useParams } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
 import { hasProvincialSubmitterRole, hasRole } from '@/context/auth/role-utils'
 import ConfirmationModal from '@/components/ConfirmationModal'
@@ -51,30 +53,34 @@ import { AppNotification } from '../../components/AppNotification'
 import DetailDocumentUploadPanel from '../../components/uploads/DetailDocumentUploadPanel'
 import SearchableSelect from '../../components/SearchableSelect'
 import type { ProvincialPermitDetail } from '@/interfaces/LexisDetails'
-import { formatDocumentSource } from '@/service/document-service-utils'
 import { DetailFieldTile } from '../shared/DetailSections'
-import { displayValue, matchesFilter } from '@/pages/shared/detail-page-utils'
-import { searchParamsWithValue } from '@/pages/shared/search-query-utils'
+import { displayValue } from '@/pages/shared/detail-page-utils'
 import {
   locationPath,
   readDetailReturnTo,
   withDetailReturnTo,
 } from '@/pages/shared/detail-navigation'
 import {
+  atMostOneDecimalFieldError,
   firstValidationError,
   formatRoundedNumericFieldValue,
   getVisibleFieldError,
+  greaterThanFieldError,
+  greaterThanOrEqualFieldError,
   integerFieldError,
   isoDateFieldError,
+  lessThanOrEqualFieldError,
   maxLengthFieldError,
   maxNumericValueFieldError,
   numericFieldError,
   positiveNumericFieldError,
   requiredFieldError,
   requiredMaxLengthFieldError,
+  requiredNumericFieldError,
   type FieldErrors,
   type TouchedFields,
 } from '@/pages/shared/create-form-utils'
+import BlanketOicPackageCodeFields from './BlanketOicPackageCodeFields'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { useReloadPreservedTab } from '@/pages/shared/useReloadPreservedTab'
 import { requiredLabel } from '@/utils/required-label'
@@ -191,7 +197,12 @@ type BlanketOicPackageForm = {
   speciesCodes: string
 }
 
+type BlanketOicPackageField = keyof BlanketOicPackageForm
+type BlanketOicPackageFieldErrors = Partial<Record<BlanketOicPackageField, string>>
+
 type PermitFeeOverrideForm = PermitFeeOverrideContext
+type PermitFeeOverrideField = 'overrideFee' | 'overrideComment'
+type PermitFeeOverrideFieldErrors = Partial<Record<PermitFeeOverrideField, string>>
 
 const MAX_OIC_REQUEST_PIECES = 9_999_999_999
 const MAX_OIC_REQUEST_VOLUME_LENGTH = 9
@@ -269,6 +280,44 @@ const EMPTY_BLANKET_OIC_PACKAGE_FORM: BlanketOicPackageForm = {
   productType: 'H',
   endUseCode: '',
   speciesCodes: '',
+}
+
+const parseBlanketOicSpeciesCodes = (value: string): string[] =>
+  Array.from(
+    new Set(
+      value
+        .split(/[,\s]+/)
+        .map((code) => code.trim().toUpperCase())
+        .filter(Boolean),
+    ),
+  )
+
+const validateBlanketOicPackage = (form: BlanketOicPackageForm): BlanketOicPackageFieldErrors => {
+  const speciesCodes = parseBlanketOicSpeciesCodes(form.speciesCodes)
+
+  return {
+    packageNumber: requiredFieldError(form.packageNumber, 'Package number') ?? undefined,
+    volume: firstValidationError(
+      () => requiredNumericFieldError(form.volume, 'Package volume'),
+      () => greaterThanOrEqualFieldError(form.volume, 'Package volume', 0),
+      () => atMostOneDecimalFieldError(form.volume, 'Package volume'),
+    ),
+    averageLength: firstValidationError(
+      () => requiredNumericFieldError(form.averageLength, 'Average length'),
+      () => greaterThanFieldError(form.averageLength, 'Average length', 0),
+      () => lessThanOrEqualFieldError(form.averageLength, 'Average length', 99),
+    ),
+    averageDiameter: firstValidationError(
+      () => requiredNumericFieldError(form.averageDiameter, 'Average diameter'),
+      () => greaterThanFieldError(form.averageDiameter, 'Average diameter', 0),
+      () => lessThanOrEqualFieldError(form.averageDiameter, 'Average diameter', 99.99),
+    ),
+    status: requiredFieldError(form.status, 'Package status') ?? undefined,
+    ageClass: requiredFieldError(form.ageClass, 'Age class') ?? undefined,
+    productType: requiredFieldError(form.productType, 'Product type') ?? undefined,
+    endUseCode: requiredFieldError(form.endUseCode, 'End use') ?? undefined,
+    speciesCodes: speciesCodes.length > 0 ? undefined : 'Species is required.',
+  }
 }
 
 const fetchPermitClientData = (
@@ -429,6 +478,51 @@ const optionalNumberValue = (value: string): number | null => {
   return Number.isFinite(parsedValue) ? parsedValue : null
 }
 
+const validatePermitFeeOverride = (
+  form: PermitFeeOverrideForm,
+): { fieldErrors: PermitFeeOverrideFieldErrors; roundedFee: string | null } => {
+  const normalizedFee = form.overrideFee.trim()
+  const normalizedComment = form.overrideComment.trim()
+  const roundedFee = form.overrideEnabled ? formatRoundedNumericFieldValue(normalizedFee, 2) : null
+  const roundedFeeError = (): string | null => {
+    if (!form.overrideEnabled || roundedFee === null) return null
+
+    const storedFeeValue = Number(roundedFee)
+    if (storedFeeValue <= 0) return 'Override fee must round to at least 0.01.'
+    return storedFeeValue <= MAX_PERMIT_OVERRIDE_FEE
+      ? null
+      : `Override fee must round to ${MAX_PERMIT_OVERRIDE_FEE} or less.`
+  }
+  const overrideFeeError = firstValidationError(
+    () => (form.overrideEnabled ? requiredFieldError(normalizedFee, 'Override fee') : null),
+    () => (form.overrideEnabled ? numericFieldError(normalizedFee, 'Override fee') : null),
+    () => (form.overrideEnabled ? positiveNumericFieldError(normalizedFee) : null),
+    roundedFeeError,
+  )
+  const overrideCommentError = firstValidationError(
+    () =>
+      form.overrideEnabled && !ASCII_PATTERN.test(normalizedComment)
+        ? 'Override comment contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.'
+        : null,
+    () =>
+      form.overrideEnabled
+        ? maxLengthFieldError(
+            normalizedComment,
+            MAX_PERMIT_OVERRIDE_COMMENT_LENGTH,
+            'Override comment',
+          )
+        : null,
+  )
+
+  return {
+    fieldErrors: {
+      ...(overrideFeeError ? { overrideFee: overrideFeeError } : {}),
+      ...(overrideCommentError ? { overrideComment: overrideCommentError } : {}),
+    },
+    roundedFee,
+  }
+}
+
 const optionalIntegerValue = (value: string): number | null => {
   const normalizedValue = value.trim()
   if (!normalizedValue) {
@@ -530,12 +624,41 @@ const withUpdatedPermitDetail = (
     remarks: form.permitRemarks.trim() || null,
     orgUnitNumber,
     region: regionChanged ? selectedRegionLabel || currentDetail.region : currentDetail.region,
-    ownerClientNumber: form.ownerClientNumber.trim() || null,
-    ownerClientLocationCode: form.ownerClientLocation.trim() || null,
-    applicantClientNumber: form.agentClientNumber.trim() || null,
-    agentClientLocationCode: form.agentClientLocation.trim() || null,
+    ownerClientNumber: currentDetail.blanketOic
+      ? form.ownerClientNumber.trim() || null
+      : currentDetail.ownerClientNumber,
+    ownerClientLocationCode: currentDetail.blanketOic
+      ? form.ownerClientLocation.trim() || null
+      : currentDetail.ownerClientLocationCode,
+    applicantClientNumber: currentDetail.blanketOic
+      ? form.agentClientNumber.trim() || null
+      : currentDetail.applicantClientNumber,
+    agentClientLocationCode: currentDetail.blanketOic
+      ? form.agentClientLocation.trim() || null
+      : currentDetail.agentClientLocationCode,
   }
 }
+
+const withPersistedPermitClientValues = (
+  currentDetail: ProvincialPermitDetail,
+  persistedDetail: ProvincialPermitDetail,
+): ProvincialPermitDetail => ({
+  ...currentDetail,
+  ownerClientNumber: persistedDetail.ownerClientNumber,
+  ownerClientLocationCode: persistedDetail.ownerClientLocationCode,
+  applicantClientNumber: persistedDetail.applicantClientNumber,
+  agentClientLocationCode: persistedDetail.agentClientLocationCode,
+})
+
+const withoutPermitClientValues = (
+  currentDetail: ProvincialPermitDetail,
+): ProvincialPermitDetail => ({
+  ...currentDetail,
+  ownerClientNumber: null,
+  ownerClientLocationCode: null,
+  applicantClientNumber: null,
+  agentClientLocationCode: null,
+})
 
 const withUpdatedPermitShipping = (
   currentDetail: ProvincialPermitDetail,
@@ -588,7 +711,6 @@ const ProvincialPermitDetailsPage = () => {
   const { capabilities, canPerform, defaultRoute } = useAuth()
   const location = useLocation()
   const { permitNumber } = useParams()
-  const [searchParams, setSearchParams] = useSearchParams()
   const detailReturnTo = readDetailReturnTo(location.state) ?? {
     label: canPerform('/permitSearch') ? 'Provincial permit search' : 'Your landing page',
     to: canPerform('/permitSearch') ? '/provincial/permit' : defaultRoute,
@@ -601,6 +723,7 @@ const ProvincialPermitDetailsPage = () => {
   const [tabsData, setTabsData] = useState<ProvincialPermitDetailTabsData | null>(null)
   const [ownerClientData, setOwnerClientData] = useState<ApplicationClientData | null>(null)
   const [agentClientData, setAgentClientData] = useState<ApplicationClientData | null>(null)
+  const [agentUsed, setAgentUsed] = useState(false)
   const [isClientDataLoading, setIsClientDataLoading] = useState(false)
   const [clientDataErrorMessage, setClientDataErrorMessage] = useState('')
   const [clientDataRequested, setClientDataRequested] = useState(false)
@@ -612,7 +735,10 @@ const ProvincialPermitDetailsPage = () => {
   )
   const [editContextLoaded, setEditContextLoaded] = useState(false)
   const [editContextLoadFailed, setEditContextLoadFailed] = useState(false)
+  const [permitDetailRefreshRequired, setPermitDetailRefreshRequired] = useState(false)
   const [feeOverrideForm, setFeeOverrideForm] = useState<PermitFeeOverrideForm | null>(null)
+  const [feeOverrideFieldErrors, setFeeOverrideFieldErrors] =
+    useState<PermitFeeOverrideFieldErrors>({})
   const [isEditingPermit, setIsEditingPermit] = useState(false)
   const [isEditingShipping, setIsEditingShipping] = useState(false)
   const [isEditingFeeOverride, setIsEditingFeeOverride] = useState(false)
@@ -642,6 +768,7 @@ const ProvincialPermitDetailsPage = () => {
   )
   const [actionErrorMessage, setActionErrorMessage] = useState('')
   const [actionInfoMessage, setActionInfoMessage] = useState('')
+  const [documentSuccessMessage, setDocumentSuccessMessage] = useState('')
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
   const [documentPendingDeletion, setDocumentPendingDeletion] = useState<PermitDocumentRow | null>(
     null,
@@ -657,7 +784,11 @@ const ProvincialPermitDetailsPage = () => {
   const [boicPackageBaselineForm, setBoicPackageBaselineForm] = useState<BlanketOicPackageForm>(
     EMPTY_BLANKET_OIC_PACKAGE_FORM,
   )
+  const [boicPackageFieldErrors, setBoicPackageFieldErrors] =
+    useState<BlanketOicPackageFieldErrors>({})
   const [editingBoicPackageNumber, setEditingBoicPackageNumber] = useState<string | null>(null)
+  const [isCreatingBoicPackage, setIsCreatingBoicPackage] = useState(false)
+  const [boicCodeOptionsReady, setBoicCodeOptionsReady] = useState(false)
   const [isLoadingBoicPackage, setIsLoadingBoicPackage] = useState(false)
   const [isSavingBoicPackage, setIsSavingBoicPackage] = useState(false)
   const [isDeletingBoicPackageNumber, setIsDeletingBoicPackageNumber] = useState<string | null>(
@@ -684,6 +815,8 @@ const ProvincialPermitDetailsPage = () => {
   const [boicScaleBaselineForm, setBoicScaleBaselineForm] = useState<BlanketOicScaleForm>(
     EMPTY_BLANKET_OIC_SCALE_FORM,
   )
+  const [selectedBlanketOicPackageNumberState, setSelectedBlanketOicPackageNumberState] =
+    useState('')
   const [permitDocumentUploadDirty, setPermitDocumentUploadDirty] = useState(false)
   const [permitDocumentUploadBusy, setPermitDocumentUploadBusy] = useState(false)
   const [invoiceDocumentUploadDirty, setInvoiceDocumentUploadDirty] = useState(false)
@@ -724,20 +857,6 @@ const ProvincialPermitDetailsPage = () => {
   const endPermitMutation = useCallback(() => {
     permitMutationInFlightRef.current = false
   }, [])
-  const itemsFilter = searchParams.get('itemsFilter') ?? ''
-  const feesFilter = searchParams.get('feesFilter') ?? ''
-  const documentsFilter = searchParams.get('documentsFilter') ?? ''
-  const invoicesFilter = searchParams.get('invoicesFilter') ?? ''
-  const updateFilterParam = useCallback(
-    (key: 'itemsFilter' | 'feesFilter' | 'documentsFilter' | 'invoicesFilter', value: string) => {
-      const nextSearchParams = searchParamsWithValue(searchParams, key, value)
-
-      if (nextSearchParams.toString() !== searchParams.toString()) {
-        setSearchParams(nextSearchParams, { replace: true })
-      }
-    },
-    [searchParams, setSearchParams],
-  )
 
   const resetPermitRouteDrafts = useCallback(() => {
     beginPermitFeesRequest()
@@ -751,9 +870,14 @@ const ProvincialPermitDetailsPage = () => {
     setIsPermitTablesLoading(false)
     setGbmsErrorMessage('')
     void beginBoicPackageEditRequest()
+    setIsCreatingBoicPackage(false)
+    setBoicCodeOptionsReady(false)
+    setSelectedBlanketOicPackageNumberState('')
+    setDocumentSuccessMessage('')
     void beginAvailablePermitApplicationsRequest()
     setBoicPackageForm(EMPTY_BLANKET_OIC_PACKAGE_FORM)
     setBoicPackageBaselineForm(EMPTY_BLANKET_OIC_PACKAGE_FORM)
+    setBoicPackageFieldErrors({})
     setEditingBoicPackageNumber(null)
     setIsLoadingBoicPackage(false)
     setIsSavingBoicPackage(false)
@@ -763,6 +887,7 @@ const ProvincialPermitDetailsPage = () => {
     setBoicScaleBaselineForm(EMPTY_BLANKET_OIC_SCALE_FORM)
     setIsSavingBoicScale(false)
     setIsDeletingBoicScaleId(null)
+    setFeeOverrideFieldErrors({})
     setPermitDocumentUploadDirty(false)
     setPermitDocumentUploadBusy(false)
     setInvoiceDocumentUploadDirty(false)
@@ -775,6 +900,8 @@ const ProvincialPermitDetailsPage = () => {
     setInvoiceRows([])
     setClientDataRequested(false)
     setClientDataErrorMessage('')
+    setAgentUsed(false)
+    setPermitDetailRefreshRequired(false)
     setAvailablePermitApplications([])
     setPermitApplicationToAdd('')
     setHasLoadedAvailablePermitApplications(false)
@@ -880,6 +1007,7 @@ const ProvincialPermitDetailsPage = () => {
         setPermitForm(null)
         setFeeOverrideContext(null)
         setFeeOverrideForm(null)
+        setFeeOverrideFieldErrors({})
         setEditContextLoaded(false)
         setEditContextLoadFailed(false)
         setPermitExemptionContextReady(false)
@@ -907,6 +1035,7 @@ const ProvincialPermitDetailsPage = () => {
       setTabsData(null)
       setFeeOverrideContext(null)
       setFeeOverrideForm(null)
+      setFeeOverrideFieldErrors({})
       setEditContextLoaded(false)
       setEditContextLoadFailed(false)
       setIsEditingFeeOverride(false)
@@ -918,6 +1047,7 @@ const ProvincialPermitDetailsPage = () => {
         }
         setDetail(response)
         setPermitForm(response ? buildPermitDetailForm(response) : null)
+        setAgentUsed(Boolean(response?.applicantClientNumber?.trim()))
         setIsEditingPermit(false)
         setIsEditingShipping(false)
 
@@ -926,6 +1056,7 @@ const ProvincialPermitDetailsPage = () => {
           setPermitForm(null)
           setFeeOverrideContext(null)
           setFeeOverrideForm(null)
+          setFeeOverrideFieldErrors({})
           setEditContextLoaded(false)
           setEditContextLoadFailed(false)
           setTabsData(null)
@@ -942,6 +1073,7 @@ const ProvincialPermitDetailsPage = () => {
             }
             setFeeOverrideContext(feeContext)
             setFeeOverrideForm(feeContext)
+            setFeeOverrideFieldErrors({})
             setEditContextLoaded(true)
             setEditContextLoadFailed(false)
           })
@@ -952,6 +1084,7 @@ const ProvincialPermitDetailsPage = () => {
             console.error(error)
             setFeeOverrideContext(null)
             setFeeOverrideForm(null)
+            setFeeOverrideFieldErrors({})
             setEditContextLoaded(false)
             setEditContextLoadFailed(true)
             setIsEditingFeeOverride(false)
@@ -1028,6 +1161,7 @@ const ProvincialPermitDetailsPage = () => {
           setPermitForm(null)
           setFeeOverrideContext(null)
           setFeeOverrideForm(null)
+          setFeeOverrideFieldErrors({})
           setEditContextLoaded(false)
           setEditContextLoadFailed(false)
           setIsPermitTablesLoading(false)
@@ -1059,10 +1193,12 @@ const ProvincialPermitDetailsPage = () => {
     }
   }, [permitNumber])
 
-  const hasPermitAgent = Boolean(detail?.applicantClientNumber?.trim())
+  const hasPermitAgent = agentUsed
   const hasGbmsHistory = (tabsData?.gbmsEvents.length ?? 0) > 0 || Boolean(gbmsErrorMessage)
+  // Legacy retains the invoice upload workflow but hides Invoices from permit navigation.
   const permitDetailTabs = PERMIT_DETAIL_TABS.filter(
-    ({ id }) => (id !== 'agent' || hasPermitAgent) && (id !== 'gbms' || hasGbmsHistory),
+    ({ id }) =>
+      id !== 'invoices' && (id !== 'agent' || hasPermitAgent) && (id !== 'gbms' || hasGbmsHistory),
   )
   const activePermitTabId = permitDetailTabs.some(({ id }) => id === selectedPermitTabId)
     ? selectedPermitTabId
@@ -1240,19 +1376,6 @@ const ProvincialPermitDetailsPage = () => {
     }
   }, [activePermitTabId, loadDeferredPermitTab])
 
-  const filteredItems = useMemo(() => {
-    if (!tabsData) {
-      return []
-    }
-
-    return tabsData.items.filter((row) =>
-      matchesFilter(
-        [row.id, row.timberMark, row.species, row.grade, row.pieces, row.volume],
-        itemsFilter,
-      ),
-    )
-  }, [itemsFilter, tabsData])
-
   const blanketOicPackageOptions = useMemo(
     () =>
       (tabsData?.packages ?? [])
@@ -1261,15 +1384,39 @@ const ProvincialPermitDetailsPage = () => {
         .map((packageNumber) => ({ value: packageNumber, label: packageNumber })),
     [tabsData],
   )
-  const selectedBlanketOicPackageNumber =
-    boicScaleForm.packageNumber || blanketOicPackageOptions[0]?.value || ''
+  const selectedBlanketOicPackageNumber = blanketOicPackageOptions.some(
+    (option) => option.value === selectedBlanketOicPackageNumberState,
+  )
+    ? selectedBlanketOicPackageNumberState
+    : (blanketOicPackageOptions[0]?.value ?? '')
+
+  const packageScopedItems = useMemo(() => {
+    if (!tabsData) {
+      return []
+    }
+    if (!detail?.blanketOic) {
+      return tabsData.items
+    }
+    return tabsData.items.filter((row) => row.packageNumber === selectedBlanketOicPackageNumber)
+  }, [detail?.blanketOic, selectedBlanketOicPackageNumber, tabsData])
+
+  const visibleBlanketOicPackages = useMemo(
+    () =>
+      detail?.blanketOic
+        ? (tabsData?.packages ?? []).filter(
+            (row) => row.packageNumber === selectedBlanketOicPackageNumber,
+          )
+        : (tabsData?.packages ?? []),
+    [detail?.blanketOic, selectedBlanketOicPackageNumber, tabsData],
+  )
+
   const resolvedBlanketOicScaleForm = {
     ...boicScaleForm,
     packageNumber: selectedBlanketOicPackageNumber,
   }
   const resolvedBlanketOicScaleBaselineForm = {
     ...boicScaleBaselineForm,
-    packageNumber: boicScaleBaselineForm.packageNumber || blanketOicPackageOptions[0]?.value || '',
+    packageNumber: selectedBlanketOicPackageNumber,
   }
   const availablePermitApplicationOptions = useMemo(
     () =>
@@ -1295,60 +1442,12 @@ const ProvincialPermitDetailsPage = () => {
       ? associatedPermitPackageNumbers.join(', ')
       : detail?.packageNumber
 
-  const filteredFees = useMemo(() => {
-    if (!tabsData) {
-      return []
-    }
-
-    return tabsData.fees.filter((row) =>
-      matchesFilter(
-        [
-          row.id,
-          row.packageNumber,
-          row.timberMark,
-          row.species,
-          row.grade,
-          row.amv,
-          row.volume,
-          row.ewb,
-          row.filPercent,
-          row.mfPercent,
-          row.amount,
-          row.amountDisplay,
-        ],
-        feesFilter,
-      ),
-    )
-  }, [feesFilter, tabsData])
-  const showMinistryFeeColumn = filteredFees.some((row) => row.ministryUser)
+  const permitFeeRows = tabsData?.fees ?? []
+  const showMinistryFeeColumn = permitFeeRows.some((row) => row.ministryUser)
 
   const gbmsHistory = tabsData?.gbmsEvents ?? []
 
   const selectedPermitTabIndex = permitDetailTabs.findIndex(({ id }) => id === activePermitTabId)
-
-  const filteredDocumentRows = useMemo(() => {
-    return documentRows.filter((row) =>
-      matchesFilter(
-        [row.id, row.name, row.description, row.type, row.typeCode, row.source],
-        documentsFilter,
-      ),
-    )
-  }, [documentRows, documentsFilter])
-
-  const filteredInvoiceRows = useMemo(() => {
-    return invoiceRows.filter((row) =>
-      matchesFilter(
-        [
-          row.invoiceNumber,
-          row.exportValueCad,
-          row.conversionRate,
-          row.feeInLieu,
-          row.invoiceFound ? 'found' : 'missing',
-        ],
-        invoicesFilter,
-      ),
-    )
-  }, [invoiceRows, invoicesFilter])
 
   const hasPermitMutationPermission =
     canPerform('/filePermitUpload') ||
@@ -1363,8 +1462,10 @@ const ProvincialPermitDetailsPage = () => {
       'This permit is currently locked for editing by another user.'
     : ''
   const permitEditContextUnavailableMessage =
-    hasPermitMutationPermission && editContextLoadFailed
-      ? 'Permit edit settings could not be loaded. Editing is unavailable until the data can be retrieved.'
+    hasPermitMutationPermission && (editContextLoadFailed || permitDetailRefreshRequired)
+      ? permitDetailRefreshRequired
+        ? 'The permit was saved, but its current details could not be refreshed. Reload before making another change.'
+        : 'Permit edit settings could not be loaded. Editing is unavailable until the data can be retrieved.'
       : ''
   const permitStatusCode = detail?.permitStatusCode?.trim().toUpperCase()
   const requiredPermitOptionsMissing =
@@ -1435,7 +1536,11 @@ const ProvincialPermitDetailsPage = () => {
   const canCorrectPermitSubmitDate = canSavePermit && canReviewPermits && permitStatusCode === 'ACT'
   const canEditShipping = canMutatePermit && permitStatusCode !== 'CAN'
   const invoiceMaterialLocked = permitStatusCode === 'COM' || permitStatusCode === 'PPD'
-  const canEnterPaymentReceipt = permitStatusCode === 'PPD' && !detail?.receiptNumber?.trim()
+  const canEditPermitClients =
+    canSavePermit && !invoiceMaterialLocked && detail?.blanketOic === true
+  const ownerEditMode = isEditingPermit && canEditPermitClients
+  const canEnterPaymentReceipt =
+    canReviewPermits && permitStatusCode === 'PPD' && !detail?.receiptNumber?.trim()
   const canSendPermitApproval =
     canSavePermit && canReviewPermits && (permitStatusCode === 'COM' || permitStatusCode === 'PPD')
   const canRequestPermitReview =
@@ -1508,11 +1613,15 @@ const ProvincialPermitDetailsPage = () => {
     () => (detail ? buildPermitDetailForm(detail) : null),
     [detail],
   )
+  const permitAgentToggleDirty =
+    isEditingPermit &&
+    !!permitBaselineForm &&
+    agentUsed !== Boolean(permitBaselineForm.agentClientNumber.trim())
   const permitDetailDirty =
     isEditingPermit &&
     !!permitForm &&
     !!permitBaselineForm &&
-    permitFormSectionChanged(permitForm, permitBaselineForm, false)
+    (permitFormSectionChanged(permitForm, permitBaselineForm, false) || permitAgentToggleDirty)
   const permitShippingDirty =
     isEditingShipping &&
     !!permitForm &&
@@ -1523,6 +1632,19 @@ const ProvincialPermitDetailsPage = () => {
     !!permitBaselineForm &&
     !['COM', 'PPD'].includes(permitBaselineForm.permitStatus.trim().toUpperCase()) &&
     ['COM', 'PPD'].includes(permitForm.permitStatus.trim().toUpperCase())
+  const permitFormStatus = permitForm?.permitStatus.trim().toUpperCase() ?? ''
+  const paymentPendingReceiptRequiresCompletion =
+    permitStatusCode === SERVER_ASSIGNED_PAYMENT_PENDING_STATUS &&
+    !detail?.receiptNumber?.trim() &&
+    !!permitForm?.permitReceiptNo.trim() &&
+    permitFormStatus === SERVER_ASSIGNED_PAYMENT_PENDING_STATUS
+  const showPaymentPendingReceiptGuidance =
+    isEditingPermit &&
+    canSavePermit &&
+    canReviewPermits &&
+    permitStatusCode === SERVER_ASSIGNED_PAYMENT_PENDING_STATUS &&
+    !detail?.receiptNumber?.trim() &&
+    permitFormStatus !== 'COM'
   const permitInvoicePolicyDirty =
     isEditingPermit &&
     !!permitForm &&
@@ -1548,6 +1670,20 @@ const ProvincialPermitDetailsPage = () => {
   const blanketOicScaleDirty =
     canEditBlanketOicScaleRows &&
     !formValuesEqual(resolvedBlanketOicScaleForm, resolvedBlanketOicScaleBaselineForm)
+  const blanketOicPackageEditorOpen = isCreatingBoicPackage || editingBoicPackageNumber !== null
+  const blanketOicPackageActionsDisabled =
+    blanketOicScaleDirty ||
+    isSavingBoicScale ||
+    isDeletingBoicScaleId !== null ||
+    blanketOicPackageEditorOpen ||
+    isSavingBoicPackage ||
+    isDeletingBoicPackageNumber !== null
+  const blanketOicScaleActionsDisabled =
+    isSavingBoicScale ||
+    isSavingBoicPackage ||
+    isDeletingBoicScaleId !== null ||
+    blanketOicPackageEditorOpen ||
+    isDeletingBoicPackageNumber !== null
   const permitReviewReady =
     canRequestPermitReview &&
     permitStatusCode === 'ACT' &&
@@ -1718,7 +1854,7 @@ const ProvincialPermitDetailsPage = () => {
         firstValidationError(
           () =>
             requiresPermitCompletionDates
-              ? requiredFieldError(permitForm.permitIssueDate, 'Issue date')
+              ? requiredFieldError(permitForm.permitIssueDate, 'Issued date')
               : null,
           () => isoDateFieldError(permitForm.permitIssueDate),
         ) ?? undefined,
@@ -1864,6 +2000,15 @@ const ProvincialPermitDetailsPage = () => {
     })
   }
 
+  const setPermitAgentUsed = (checked: boolean): void => {
+    setAgentUsed(checked)
+    if (!checked) {
+      setPermitForm((current) =>
+        current ? { ...current, agentClientNumber: '', agentClientLocation: '' } : current,
+      )
+    }
+  }
+
   const resetPermitFormSection = (shippingFields: boolean): void => {
     if (detail) {
       setPermitForm((current) =>
@@ -1905,6 +2050,7 @@ const ProvincialPermitDetailsPage = () => {
         setActionErrorMessage('Wait for the current permit change to finish before saving again.')
         return false
       }
+      setPermitDetailRefreshRequired(false)
       setActionErrorMessage('')
       setActionInfoMessage('')
       setIsSavingPermit(true)
@@ -1989,6 +2135,19 @@ const ProvincialPermitDetailsPage = () => {
           return false
         }
 
+        let persistedDetail: ProvincialPermitDetail | null = null
+        if (resolvedPermitNumber) {
+          try {
+            persistedDetail = await fetchProvincialPermitDetail(resolvedPermitNumber)
+          } catch (error) {
+            console.warn('Unable to refresh persisted permit client details.', error)
+          }
+          if (!isLatestRequest()) {
+            return false
+          }
+        }
+        const permitDetailRefreshFailed = persistedDetail == null
+
         const detailWithPermitChanges = withUpdatedPermitDetail(
           detail,
           confirmedRequest,
@@ -2001,6 +2160,11 @@ const ProvincialPermitDetailsPage = () => {
             : detailWithPermitChanges,
           result,
         )
+        const persistedUpdatedDetail =
+          persistedDetail == null
+            ? withoutPermitClientValues(updatedDetail)
+            : withPersistedPermitClientValues(updatedDetail, persistedDetail)
+        setAgentUsed(Boolean(persistedUpdatedDetail.applicantClientNumber?.trim()))
         setDetail((current) => {
           if (!current) return current
           const currentWithPermitChanges = withUpdatedPermitDetail(
@@ -2009,39 +2173,58 @@ const ProvincialPermitDetailsPage = () => {
             editablePermitStatusOptions,
             editablePermitRegionOptions,
           )
-          return withPermitMutationResult(
+          const currentUpdatedDetail = withPermitMutationResult(
             includeShipping
               ? withUpdatedPermitShipping(currentWithPermitChanges, confirmedRequest)
               : currentWithPermitChanges,
             result,
           )
+          return persistedDetail == null
+            ? withoutPermitClientValues(currentUpdatedDetail)
+            : withPersistedPermitClientValues(currentUpdatedDetail, persistedDetail)
         })
         setPermitForm((current) => {
           const savedForm = includeShipping
-            ? buildPermitDetailForm(updatedDetail)
-            : mergePermitFormSection(current, buildPermitDetailForm(updatedDetail), false)
+            ? buildPermitDetailForm(persistedUpdatedDetail)
+            : mergePermitFormSection(current, buildPermitDetailForm(persistedUpdatedDetail), false)
           return deferStatusTransition
             ? { ...savedForm, permitStatus: targetPermitStatus }
             : savedForm
         })
-        setIsEditingPermit(deferStatusTransition)
+        if (permitDetailRefreshFailed) {
+          setOwnerClientData(null)
+          setAgentClientData(null)
+          setIsClientDataLoading(false)
+          setClientDataErrorMessage('')
+          setPermitDetailRefreshRequired(true)
+          setEditContextLoaded(false)
+          setIsEditingPermit(false)
+          setIsEditingShipping(false)
+          setIsEditingFeeOverride(false)
+        } else {
+          setIsEditingPermit(deferStatusTransition)
+        }
         if (includeShipping && !deferStatusTransition) {
           setIsEditingShipping(false)
         }
         setTouchedPermitFields({})
         setShowPermitValidationErrors(false)
+        const mutationMessage = permitMutationMessage(
+          result,
+          deferStatusTransition
+            ? 'Permit fields were saved before the status transition.'
+            : includeShipping
+              ? 'Permit and shipping saved successfully.'
+              : 'Permit saved successfully.',
+        )
         setActionInfoMessage(
-          permitMutationMessage(
-            result,
-            deferStatusTransition
-              ? 'Permit fields were saved before the status transition.'
-              : includeShipping
-                ? 'Permit and shipping saved successfully.'
-                : 'Permit saved successfully.',
-          ),
+          permitDetailRefreshFailed
+            ? `${mutationMessage} Current permit details could not be refreshed; reload before making another change.`
+            : mutationMessage,
         )
         refreshLoadedPermitFees()
-        return true
+        // The mutation committed, but callers must stop until canonical permit details reload.
+        return !permitDetailRefreshFailed
       } catch (error) {
         if (isLatestRequest()) {
           console.error(error)
@@ -2158,6 +2341,12 @@ const ProvincialPermitDetailsPage = () => {
   ])
 
   const onSavePermit = useCallback(async (): Promise<boolean> => {
+    if (paymentPendingReceiptRequiresCompletion) {
+      setActionErrorMessage(
+        'Select Completed on the Permit tab before saving a payment-pending receipt.',
+      )
+      return false
+    }
     if (isPermitOptionsLoading || permitOptionsUnavailable || requiredPermitOptionsMissing) {
       setActionErrorMessage(
         permitOptionsUnavailable
@@ -2178,6 +2367,7 @@ const ProvincialPermitDetailsPage = () => {
     onSaveShipping,
     isPermitOptionsLoading,
     permitOptionsUnavailable,
+    paymentPendingReceiptRequiresCompletion,
     requiredPermitOptionsMissing,
     permitInvoicePolicyDirty,
     permitShippingDirty,
@@ -2192,41 +2382,10 @@ const ProvincialPermitDetailsPage = () => {
 
     const normalizedFee = feeOverrideForm.overrideFee.trim()
     const normalizedComment = feeOverrideForm.overrideComment.trim()
-    let roundedFee: string | null = null
-    const roundedFeeFieldError = (): string | null => {
-      if (!feeOverrideForm.overrideEnabled) return null
-
-      roundedFee = formatRoundedNumericFieldValue(normalizedFee, 2)
-      if (roundedFee === null) return null
-
-      const storedFeeValue = Number(roundedFee)
-      if (storedFeeValue <= 0) return 'Override fee must round to at least 0.01.'
-      return storedFeeValue <= MAX_PERMIT_OVERRIDE_FEE
-        ? null
-        : `Override fee must round to ${MAX_PERMIT_OVERRIDE_FEE} or less.`
-    }
-    const validationError = firstValidationError(
-      () =>
-        feeOverrideForm.overrideEnabled ? requiredFieldError(normalizedFee, 'Override fee') : null,
-      () =>
-        feeOverrideForm.overrideEnabled ? numericFieldError(normalizedFee, 'Override fee') : null,
-      () => (feeOverrideForm.overrideEnabled ? positiveNumericFieldError(normalizedFee) : null),
-      roundedFeeFieldError,
-      () =>
-        feeOverrideForm.overrideEnabled && !ASCII_PATTERN.test(normalizedComment)
-          ? 'Override comment contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.'
-          : null,
-      () =>
-        feeOverrideForm.overrideEnabled
-          ? maxLengthFieldError(
-              normalizedComment,
-              MAX_PERMIT_OVERRIDE_COMMENT_LENGTH,
-              'Override comment',
-            )
-          : null,
-    )
-    if (validationError) {
-      setActionErrorMessage(validationError)
+    const { fieldErrors, roundedFee } = validatePermitFeeOverride(feeOverrideForm)
+    if (fieldErrors.overrideFee || fieldErrors.overrideComment) {
+      setFeeOverrideFieldErrors(fieldErrors)
+      setActionErrorMessage('')
       return false
     }
 
@@ -2267,6 +2426,7 @@ const ProvincialPermitDetailsPage = () => {
       }
       setFeeOverrideContext(savedContext)
       setFeeOverrideForm(savedContext)
+      setFeeOverrideFieldErrors({})
       setIsEditingFeeOverride(false)
       setActionInfoMessage(result.message || 'Permit fee override saved successfully.')
       refreshLoadedPermitFees()
@@ -2444,26 +2604,42 @@ const ProvincialPermitDetailsPage = () => {
     value: string,
   ): void => {
     setBoicPackageForm((current) => ({ ...current, [field]: value }))
+    setBoicPackageFieldErrors((current) => ({ ...current, [field]: undefined }))
   }
 
   const resetBlanketOicPackageForm = useCallback(() => {
+    beginBoicPackageEditRequest()
+    setActionErrorMessage('')
+    setIsLoadingBoicPackage(false)
+    setBoicCodeOptionsReady(false)
+    setIsCreatingBoicPackage(false)
     setEditingBoicPackageNumber(null)
     setBoicPackageForm(EMPTY_BLANKET_OIC_PACKAGE_FORM)
     setBoicPackageBaselineForm(EMPTY_BLANKET_OIC_PACKAGE_FORM)
-  }, [])
+    setBoicPackageFieldErrors({})
+  }, [beginBoicPackageEditRequest])
+
+  const startBlanketOicPackageCreate = useCallback(() => {
+    if (blanketOicPackageActionsDisabled) return
+    setActionErrorMessage('')
+    resetBlanketOicPackageForm()
+    setIsCreatingBoicPackage(true)
+  }, [blanketOicPackageActionsDisabled, resetBlanketOicPackageForm])
 
   const onEditBlanketOicPackage = useCallback(
     async (packageNumberToEdit: string) => {
-      if (!canEditBlanketOicPackages || !packageNumberToEdit) {
+      if (!canEditBlanketOicPackages || !packageNumberToEdit || blanketOicPackageActionsDisabled) {
         return
       }
       setActionErrorMessage('')
       resetBlanketOicPackageForm()
+      setEditingBoicPackageNumber(packageNumberToEdit)
       const isLatestRequest = beginBoicPackageEditRequest()
       setIsLoadingBoicPackage(true)
       try {
         const context = await fetchBlanketOicPackageEditContext(packageNumberToEdit)
         if (!isLatestRequest()) return
+        setIsCreatingBoicPackage(false)
         setEditingBoicPackageNumber(packageNumberToEdit)
         const loadedPackageForm: BlanketOicPackageForm = {
           packageNumber: context.packageNumber,
@@ -2491,34 +2667,36 @@ const ProvincialPermitDetailsPage = () => {
         }
       }
     },
-    [beginBoicPackageEditRequest, canEditBlanketOicPackages, resetBlanketOicPackageForm],
+    [
+      beginBoicPackageEditRequest,
+      blanketOicPackageActionsDisabled,
+      canEditBlanketOicPackages,
+      resetBlanketOicPackageForm,
+    ],
   )
 
   const onSaveBlanketOicPackage = useCallback(async (): Promise<boolean> => {
     const resolvedPermitNumber = String(detail?.permitNumber ?? permitNumber ?? '').trim()
-    if (!canEditBlanketOicPackages || !resolvedPermitNumber || isSavingBoicPackage) {
+    if (
+      !canEditBlanketOicPackages ||
+      !resolvedPermitNumber ||
+      isSavingBoicPackage ||
+      isLoadingBoicPackage ||
+      !boicCodeOptionsReady ||
+      blanketOicScaleDirty
+    ) {
       return false
     }
-    const speciesCodes = boicPackageForm.speciesCodes
-      .split(/[,\s]+/)
-      .map((code) => code.trim().toUpperCase())
-      .filter(Boolean)
-    if (
-      !boicPackageForm.packageNumber.trim() ||
-      !boicPackageForm.volume.trim() ||
-      !boicPackageForm.averageLength.trim() ||
-      !boicPackageForm.averageDiameter.trim() ||
-      !boicPackageForm.status.trim() ||
-      !boicPackageForm.ageClass.trim() ||
-      !boicPackageForm.productType.trim() ||
-      !boicPackageForm.endUseCode.trim() ||
-      speciesCodes.length === 0
-    ) {
+    const fieldErrors = validateBlanketOicPackage(boicPackageForm)
+    if (Object.values(fieldErrors).some(Boolean)) {
+      setBoicPackageFieldErrors(fieldErrors)
       setActionErrorMessage(
-        'Enter package number, species, end use, age class, product type, volume, length, diameter, and status.',
+        Object.values(fieldErrors).find((error): error is string => !!error) ??
+          'Please fix validation errors before saving the Blanket OIC package.',
       )
       return false
     }
+    const speciesCodes = parseBlanketOicSpeciesCodes(boicPackageForm.speciesCodes)
 
     const request: BlanketOicPackageMutationRequest = {
       permitNumber: resolvedPermitNumber,
@@ -2558,6 +2736,14 @@ const ProvincialPermitDetailsPage = () => {
             : current,
         )
       }
+      const savedPackageNumber = (
+        result.packageNumber ||
+        request.newPackageNumber ||
+        request.packageNumber
+      ).trim()
+      if (savedPackageNumber) {
+        setSelectedBlanketOicPackageNumberState(savedPackageNumber)
+      }
       resetBlanketOicPackageForm()
       try {
         await reloadPermitTabs()
@@ -2581,6 +2767,9 @@ const ProvincialPermitDetailsPage = () => {
     }
   }, [
     boicPackageForm,
+    boicCodeOptionsReady,
+    blanketOicScaleDirty,
+    isLoadingBoicPackage,
     canEditBlanketOicPackages,
     detail?.permitNumber,
     editingBoicPackageNumber,
@@ -2597,7 +2786,7 @@ const ProvincialPermitDetailsPage = () => {
         !canEditBlanketOicPackages ||
         !resolvedPermitNumber ||
         !packageNumberToDelete ||
-        isDeletingBoicPackageNumber !== null
+        blanketOicPackageActionsDisabled
       ) {
         return
       }
@@ -2629,9 +2818,9 @@ const ProvincialPermitDetailsPage = () => {
     },
     [
       canEditBlanketOicPackages,
+      blanketOicPackageActionsDisabled,
       detail?.permitNumber,
       editingBoicPackageNumber,
-      isDeletingBoicPackageNumber,
       permitNumber,
       reloadPermitTabs,
       resetBlanketOicPackageForm,
@@ -2644,7 +2833,7 @@ const ProvincialPermitDetailsPage = () => {
 
   const onAddBlanketOicScale = useCallback(async (): Promise<boolean> => {
     const resolvedPermitNumber = String(detail?.permitNumber ?? permitNumber ?? '').trim()
-    if (!canEditBlanketOicScaleRows || !resolvedPermitNumber || isSavingBoicScale) {
+    if (!canEditBlanketOicScaleRows || !resolvedPermitNumber || blanketOicScaleActionsDisabled) {
       return false
     }
 
@@ -2717,7 +2906,7 @@ const ProvincialPermitDetailsPage = () => {
     canEditBlanketOicScaleRows,
     detail?.oicApplicationNumber,
     detail?.permitNumber,
-    isSavingBoicScale,
+    blanketOicScaleActionsDisabled,
     permitNumber,
     reloadPermitScaleState,
     selectedBlanketOicPackageNumber,
@@ -2961,6 +3150,7 @@ const ProvincialPermitDetailsPage = () => {
       const isLatestRequest = beginDocumentRefreshRequest()
       setActionErrorMessage('')
       setActionInfoMessage('')
+      setDocumentSuccessMessage('')
       setIsRemovingDocumentId(row.id)
       try {
         const removeResult = invoiceDocument
@@ -3002,7 +3192,7 @@ const ProvincialPermitDetailsPage = () => {
             }))
             setDocumentsErrorMessage('')
             setInvoicesErrorMessage('')
-            setActionInfoMessage(`${row.name || 'Document'} was deleted.`)
+            setDocumentSuccessMessage(`${row.name || 'Document'} was deleted.`)
           }
         } catch (refreshError) {
           if (isLatestRequest()) {
@@ -3088,12 +3278,14 @@ const ProvincialPermitDetailsPage = () => {
   const onDiscardPermitChanges = useCallback(() => {
     if (detail) {
       setPermitForm(buildPermitDetailForm(detail))
+      setAgentUsed(Boolean(detail.applicantClientNumber?.trim()))
     }
     setIsEditingPermit(false)
     setIsEditingShipping(false)
     setTouchedPermitFields({})
     setShowPermitValidationErrors(false)
     setFeeOverrideForm(feeOverrideContext)
+    setFeeOverrideFieldErrors({})
     setIsEditingFeeOverride(false)
     resetBlanketOicPackageForm()
     setBoicScaleForm(boicScaleBaselineForm)
@@ -3180,7 +3372,17 @@ const ProvincialPermitDetailsPage = () => {
       <Column sm={4} md={8} lg={16} className="detail-page-header">
         <PageHeader
           title={`Permit ${permitDisplayNumber}`.trim()}
-          subtitle="Check and manage this provincial permit"
+          subtitle={
+            <>
+              <span>Check and manage this provincial permit</span>
+              {detailMatchesRoute && (
+                <span className="permit-detail-header__author">
+                  {' · Author: '}
+                  {displayValue(detail.author)}
+                </span>
+              )}
+            </>
+          }
           status={
             detail && detailMatchesRoute ? (
               <StatusTag
@@ -3317,6 +3519,19 @@ const ProvincialPermitDetailsPage = () => {
             </Column>
           )}
 
+          {!!documentSuccessMessage && (
+            <Column sm={4} md={8} lg={16} className="detail-page-error">
+              <AppNotification
+                kind="success"
+                title="Document deleted"
+                subtitle={documentSuccessMessage}
+                lowContrast
+                autoDismissMs={6000}
+                onCloseButtonClick={() => setDocumentSuccessMessage('')}
+              />
+            </Column>
+          )}
+
           {!!actionErrorMessage && (
             <Column sm={4} md={8} lg={16} className="detail-page-error">
               <AppNotification
@@ -3361,6 +3576,23 @@ const ProvincialPermitDetailsPage = () => {
               <ContiguousTabPanels order={permitDetailTabs.map(({ id }) => id)}>
                 <TabPanel key="permit" className="application-detail-tab-panel">
                   <Grid fullWidth className="application-detail-tab-grid">
+                    {!detail.blanketOic && (
+                      <Column sm={4} md={8} lg={16}>
+                        <Tile className="detail-federal-permit-notice">
+                          <p>
+                            If this provincial permit requires a federal permit, apply through the{' '}
+                            <a
+                              href="https://www.nexcol-nceel.canada.ca/en/Home-Accueil"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              New Export Controls Online System (New EXCOL)
+                            </a>
+                            .
+                          </p>
+                        </Tile>
+                      </Column>
+                    )}
                     <Column sm={4} md={8} lg={16}>
                       {isEditingPermit && permitForm ? (
                         <Tile>
@@ -3421,7 +3653,7 @@ const ProvincialPermitDetailsPage = () => {
                             )}
                             {renderPermitTextInput(
                               'permitIssueDate',
-                              'Issue date',
+                              'Issued date',
                               !canReviewPermits || invoiceMaterialLocked,
                               undefined,
                               requiresPermitCompletionDates &&
@@ -3476,6 +3708,20 @@ const ProvincialPermitDetailsPage = () => {
                       ) : (
                         <DetailFieldTile
                           title="Permit summary"
+                          headerAction={
+                            canSavePermit ? (
+                              <Button
+                                kind="tertiary"
+                                size="sm"
+                                onClick={() => {
+                                  resetPermitFormSection(false)
+                                  setIsEditingPermit(true)
+                                }}
+                              >
+                                Edit permit
+                              </Button>
+                            ) : undefined
+                          }
                           fields={[
                             {
                               label: 'Permit number',
@@ -3527,9 +3773,8 @@ const ProvincialPermitDetailsPage = () => {
                                 />
                               ),
                             },
-                            { label: 'Author', value: displayValue(detail.author) },
                             { label: 'Submit date', value: displayValue(detail.applicationDate) },
-                            { label: 'Issue date', value: displayValue(detail.issueDate) },
+                            { label: 'Issued date', value: displayValue(detail.issueDate) },
                             { label: 'Expiry date', value: displayValue(detail.expiryDate) },
                             {
                               label: 'Received date',
@@ -3586,44 +3831,6 @@ const ProvincialPermitDetailsPage = () => {
                               'Current permit pieces',
                               true,
                             )}
-                            {renderPermitTextInput(
-                              'permitReceiptNo',
-                              'Receipt number',
-                              invoiceMaterialLocked && !canEnterPaymentReceipt,
-                              50,
-                            )}
-                            <TextInput
-                              id="permit-invoiceNumber"
-                              labelText="Invoice number"
-                              value={displayValue(detail.invoiceNumber)}
-                              disabled
-                            />
-                            <TextInput
-                              id="permit-federalPermitNumber"
-                              labelText="Federal permit number"
-                              value={displayValue(detail.federalPermitNumber)}
-                              disabled
-                            />
-                            {renderPermitTextInput(
-                              'agentClientNumber',
-                              'Agent client number',
-                              invoiceMaterialLocked,
-                            )}
-                            {renderPermitTextInput(
-                              'agentClientLocation',
-                              'Agent location',
-                              invoiceMaterialLocked,
-                            )}
-                            {renderPermitTextInput(
-                              'ownerClientNumber',
-                              'Owner client number',
-                              invoiceMaterialLocked,
-                            )}
-                            {renderPermitTextInput(
-                              'ownerClientLocation',
-                              'Owner location',
-                              invoiceMaterialLocked,
-                            )}
                           </div>
                           <div className="legacy-search-grid">
                             {renderPermitTextArea('permitRemarks', 'Remarks', false, 254)}
@@ -3660,34 +3867,6 @@ const ProvincialPermitDetailsPage = () => {
                             {
                               label: 'Current permit pieces',
                               value: displayValue(detail.numberOfPieces),
-                            },
-                            {
-                              label: 'Receipt number',
-                              value: displayValue(detail.receiptNumber),
-                            },
-                            {
-                              label: 'Invoice number',
-                              value: displayValue(detail.invoiceNumber),
-                            },
-                            {
-                              label: 'Federal permit number',
-                              value: displayValue(detail.federalPermitNumber),
-                            },
-                            {
-                              label: 'Agent client number',
-                              value: displayValue(detail.applicantClientNumber),
-                            },
-                            {
-                              label: 'Agent location',
-                              value: displayValue(detail.agentClientLocationCode),
-                            },
-                            {
-                              label: 'Owner client number',
-                              value: displayValue(detail.ownerClientNumber),
-                            },
-                            {
-                              label: 'Owner location',
-                              value: displayValue(detail.ownerClientLocationCode),
                             },
                             { label: 'Remarks', value: displayValue(detail.remarks) },
                           ]}
@@ -3812,7 +3991,7 @@ const ProvincialPermitDetailsPage = () => {
                         </Tile>
                       </Column>
                     )}
-                    {canSavePermit && (
+                    {canSavePermit && isEditingPermit && (
                       <Column sm={4} md={8} lg={16}>
                         <div className="legacy-search-actions">
                           {isEditingPermit ? (
@@ -3824,7 +4003,8 @@ const ProvincialPermitDetailsPage = () => {
                                   isSavingPermit ||
                                   isPermitOptionsLoading ||
                                   permitOptionsUnavailable ||
-                                  requiredPermitOptionsMissing
+                                  requiredPermitOptionsMissing ||
+                                  paymentPendingReceiptRequiresCompletion
                                 }
                                 renderIcon={isSavingPermit ? PendingIcon : undefined}
                                 onClick={() => void onSavePermit()}
@@ -3837,6 +4017,92 @@ const ProvincialPermitDetailsPage = () => {
                                 disabled={isSavingPermit}
                                 onClick={() => {
                                   resetPermitFormSection(false)
+                                  setAgentUsed(Boolean(detail.applicantClientNumber?.trim()))
+                                  setIsEditingPermit(false)
+                                }}
+                              >
+                                Cancel
+                              </Button>
+                            </>
+                          ) : null}
+                        </div>
+                      </Column>
+                    )}
+                  </Grid>
+                </TabPanel>
+                <TabPanel key="owner" className="application-detail-tab-panel">
+                  <Grid fullWidth className="application-detail-tab-grid">
+                    {!ownerEditMode && (
+                      <Column sm={4} md={8} lg={16}>
+                        <PermitClientTile
+                          title="Owner"
+                          clientNumber={detail.ownerClientNumber}
+                          locationCode={detail.ownerClientLocationCode}
+                          clientData={ownerClientData}
+                          isLoading={isClientDataLoading}
+                          errorMessage={activePermitTabId === 'owner' ? clientDataErrorMessage : ''}
+                        />
+                        <Checkbox
+                          id="permit-agent-used"
+                          labelText="I'm an agent"
+                          checked={agentUsed}
+                          disabled
+                        />
+                      </Column>
+                    )}
+                    {ownerEditMode && permitForm && (
+                      <Column sm={4} md={8} lg={16}>
+                        <Tile>
+                          <h2 className="detail-tile-title">Edit owner</h2>
+                          <div className="legacy-search-grid">
+                            {renderPermitTextInput(
+                              'ownerClientNumber',
+                              'Owner client number',
+                              invoiceMaterialLocked,
+                            )}
+                            {renderPermitTextInput(
+                              'ownerClientLocation',
+                              'Owner location',
+                              invoiceMaterialLocked,
+                            )}
+                          </div>
+                          <Checkbox
+                            id="permit-agent-used"
+                            labelText="I'm an agent"
+                            checked={agentUsed}
+                            disabled={invoiceMaterialLocked}
+                            onChange={(_, { checked }) => setPermitAgentUsed(Boolean(checked))}
+                          />
+                        </Tile>
+                      </Column>
+                    )}
+                    {canEditPermitClients && (
+                      <Column sm={4} md={8} lg={16}>
+                        <div className="legacy-search-actions">
+                          {isEditingPermit ? (
+                            <>
+                              <Button
+                                kind="primary"
+                                size="sm"
+                                disabled={
+                                  isSavingPermit ||
+                                  isPermitOptionsLoading ||
+                                  permitOptionsUnavailable ||
+                                  requiredPermitOptionsMissing ||
+                                  paymentPendingReceiptRequiresCompletion
+                                }
+                                renderIcon={isSavingPermit ? PendingIcon : undefined}
+                                onClick={() => void onSavePermit()}
+                              >
+                                {isSavingPermit ? 'Saving…' : 'Save permit'}
+                              </Button>
+                              <Button
+                                kind="tertiary"
+                                size="sm"
+                                disabled={isSavingPermit}
+                                onClick={() => {
+                                  resetPermitFormSection(false)
+                                  setAgentUsed(Boolean(detail.applicantClientNumber?.trim()))
                                   setIsEditingPermit(false)
                                 }}
                               >
@@ -3849,10 +4115,11 @@ const ProvincialPermitDetailsPage = () => {
                               size="sm"
                               onClick={() => {
                                 resetPermitFormSection(false)
+                                setAgentUsed(Boolean(detail.applicantClientNumber?.trim()))
                                 setIsEditingPermit(true)
                               }}
                             >
-                              Edit permit
+                              Edit owner
                             </Button>
                           )}
                         </div>
@@ -3860,33 +4127,90 @@ const ProvincialPermitDetailsPage = () => {
                     )}
                   </Grid>
                 </TabPanel>
-                <TabPanel key="owner" className="application-detail-tab-panel">
-                  <Grid fullWidth className="application-detail-tab-grid">
-                    <Column sm={4} md={8} lg={16}>
-                      <PermitClientTile
-                        title="Owner"
-                        clientNumber={detail.ownerClientNumber}
-                        locationCode={detail.ownerClientLocationCode}
-                        clientData={ownerClientData}
-                        isLoading={isClientDataLoading}
-                        errorMessage={activePermitTabId === 'owner' ? clientDataErrorMessage : ''}
-                      />
-                    </Column>
-                  </Grid>
-                </TabPanel>
                 {hasPermitAgent && (
                   <TabPanel key="agent" className="application-detail-tab-panel">
                     <Grid fullWidth className="application-detail-tab-grid">
-                      <Column sm={4} md={8} lg={16}>
-                        <PermitClientTile
-                          title="Agent"
-                          clientNumber={detail.applicantClientNumber}
-                          locationCode={detail.agentClientLocationCode}
-                          clientData={agentClientData}
-                          isLoading={isClientDataLoading}
-                          errorMessage={activePermitTabId === 'agent' ? clientDataErrorMessage : ''}
-                        />
-                      </Column>
+                      {ownerEditMode && permitForm ? (
+                        <Column sm={4} md={8} lg={16}>
+                          <Tile>
+                            <h2 className="detail-tile-title">Edit agent</h2>
+                            <div className="legacy-search-grid">
+                              {renderPermitTextInput(
+                                'agentClientNumber',
+                                'Agent client number',
+                                invoiceMaterialLocked,
+                              )}
+                              {renderPermitTextInput(
+                                'agentClientLocation',
+                                'Agent location',
+                                invoiceMaterialLocked,
+                              )}
+                            </div>
+                          </Tile>
+                        </Column>
+                      ) : (
+                        <Column sm={4} md={8} lg={16}>
+                          <PermitClientTile
+                            title="Agent"
+                            clientNumber={detail.applicantClientNumber}
+                            locationCode={detail.agentClientLocationCode}
+                            clientData={agentClientData}
+                            isLoading={isClientDataLoading}
+                            errorMessage={
+                              activePermitTabId === 'agent' ? clientDataErrorMessage : ''
+                            }
+                          />
+                        </Column>
+                      )}
+                      {canEditPermitClients && (
+                        <Column sm={4} md={8} lg={16}>
+                          <div className="legacy-search-actions">
+                            {isEditingPermit ? (
+                              <>
+                                <Button
+                                  kind="primary"
+                                  size="sm"
+                                  disabled={
+                                    isSavingPermit ||
+                                    isPermitOptionsLoading ||
+                                    permitOptionsUnavailable ||
+                                    requiredPermitOptionsMissing ||
+                                    paymentPendingReceiptRequiresCompletion
+                                  }
+                                  renderIcon={isSavingPermit ? PendingIcon : undefined}
+                                  onClick={() => void onSavePermit()}
+                                >
+                                  {isSavingPermit ? 'Saving…' : 'Save permit'}
+                                </Button>
+                                <Button
+                                  kind="tertiary"
+                                  size="sm"
+                                  disabled={isSavingPermit}
+                                  onClick={() => {
+                                    resetPermitFormSection(false)
+                                    setAgentUsed(Boolean(detail.applicantClientNumber?.trim()))
+                                    setIsEditingPermit(false)
+                                  }}
+                                >
+                                  Cancel
+                                </Button>
+                              </>
+                            ) : (
+                              <Button
+                                kind="tertiary"
+                                size="sm"
+                                onClick={() => {
+                                  resetPermitFormSection(false)
+                                  setAgentUsed(true)
+                                  setIsEditingPermit(true)
+                                }}
+                              >
+                                Edit agent
+                              </Button>
+                            )}
+                          </div>
+                        </Column>
+                      )}
                     </Grid>
                   </TabPanel>
                 )}
@@ -4039,6 +4363,21 @@ const ProvincialPermitDetailsPage = () => {
                           )}
                           <DetailFieldTile
                             title="Shipping"
+                            headerAction={
+                              canEditShipping ? (
+                                <Button
+                                  kind="tertiary"
+                                  size="sm"
+                                  disabled={isShippingReferencesLoading || !shippingReferences}
+                                  onClick={() => {
+                                    resetPermitFormSection(true)
+                                    setIsEditingShipping(true)
+                                  }}
+                                >
+                                  Edit shipping
+                                </Button>
+                              ) : undefined
+                            }
                             fields={[
                               {
                                 label: 'Purchaser',
@@ -4092,7 +4431,7 @@ const ProvincialPermitDetailsPage = () => {
                         </>
                       )}
                     </Column>
-                    {canEditShipping && (
+                    {canEditShipping && isEditingShipping && (
                       <Column sm={4} md={8} lg={16}>
                         <div className="legacy-search-actions">
                           {isEditingShipping ? (
@@ -4123,19 +4462,7 @@ const ProvincialPermitDetailsPage = () => {
                                 Cancel
                               </Button>
                             </>
-                          ) : (
-                            <Button
-                              kind="tertiary"
-                              size="sm"
-                              disabled={isShippingReferencesLoading || !shippingReferences}
-                              onClick={() => {
-                                resetPermitFormSection(true)
-                                setIsEditingShipping(true)
-                              }}
-                            >
-                              Edit shipping
-                            </Button>
-                          )}
+                          ) : null}
                         </div>
                       </Column>
                     )}
@@ -4150,6 +4477,19 @@ const ProvincialPermitDetailsPage = () => {
                           <legend>
                             {detail.blanketOic ? 'Blanket OIC package details' : 'Package details'}
                           </legend>
+                          {detail.blanketOic && blanketOicPackageOptions.length > 0 && (
+                            <div className="legacy-search-grid">
+                              <SearchableSelect
+                                id="boicScalePackageNumber"
+                                labelText="Package number"
+                                value={selectedBlanketOicPackageNumber}
+                                options={blanketOicPackageOptions}
+                                placeholder="Select package"
+                                disabled={blanketOicPackageActionsDisabled}
+                                onChange={setSelectedBlanketOicPackageNumberState}
+                              />
+                            </div>
+                          )}
                           {isPermitTablesLoading ? (
                             <InlineLoading description="Loading permit items…" />
                           ) : permitTablesErrorMessage ? (
@@ -4159,7 +4499,7 @@ const ProvincialPermitDetailsPage = () => {
                               headingLevel={3}
                               role="alert"
                             />
-                          ) : (tabsData?.packages ?? []).length > 0 ? (
+                          ) : visibleBlanketOicPackages.length > 0 ? (
                             <TableFrame ariaLabel="Permit packages">
                               <Table size="md" useZebraStyles>
                                 <TableHead>
@@ -4186,7 +4526,7 @@ const ProvincialPermitDetailsPage = () => {
                                   </TableRow>
                                 </TableHead>
                                 <TableBody>
-                                  {(tabsData?.packages ?? []).map((row) => (
+                                  {visibleBlanketOicPackages.map((row) => (
                                     <TableRow key={row.packageNumber}>
                                       <TableCell>{row.packageNumber || '-'}</TableCell>
                                       <TableCell>{row.region || '-'}</TableCell>
@@ -4210,15 +4550,19 @@ const ProvincialPermitDetailsPage = () => {
                                       )}
                                       {canEditBlanketOicPackages && (
                                         <TableCell>
+                                          {(tabsData?.items ?? []).some(
+                                            (item) => item.packageNumber === row.packageNumber,
+                                          ) && (
+                                            <p id={`boic-package-delete-help-${row.packageNumber}`}>
+                                              Delete unavailable while this package has scale
+                                              details.
+                                            </p>
+                                          )}
                                           <Button
                                             type="button"
                                             kind="ghost"
                                             size="sm"
-                                            disabled={
-                                              isLoadingBoicPackage ||
-                                              isSavingBoicPackage ||
-                                              isDeletingBoicPackageNumber !== null
-                                            }
+                                            disabled={blanketOicPackageActionsDisabled}
                                             onClick={() =>
                                               void onEditBlanketOicPackage(row.packageNumber)
                                             }
@@ -4229,9 +4573,15 @@ const ProvincialPermitDetailsPage = () => {
                                             type="button"
                                             kind="danger--ghost"
                                             size="sm"
+                                            aria-describedby={
+                                              (tabsData?.items ?? []).some(
+                                                (item) => item.packageNumber === row.packageNumber,
+                                              )
+                                                ? `boic-package-delete-help-${row.packageNumber}`
+                                                : undefined
+                                            }
                                             disabled={
-                                              isSavingBoicPackage ||
-                                              isDeletingBoicPackageNumber !== null ||
+                                              blanketOicPackageActionsDisabled ||
                                               (tabsData?.items ?? []).some(
                                                 (item) => item.packageNumber === row.packageNumber,
                                               )
@@ -4264,182 +4614,143 @@ const ProvincialPermitDetailsPage = () => {
                               headingLevel={3}
                             />
                           )}
-                          {canEditBlanketOicPackages && (
-                            <div className="application-detail-edit-section">
-                              <h3>
-                                {editingBoicPackageNumber
-                                  ? `Edit ${editingBoicPackageNumber}`
-                                  : 'Create Blanket OIC package'}
-                              </h3>
-                              {isLoadingBoicPackage && (
-                                <InlineLoading description="Loading package…" />
-                              )}
-                              <div className="legacy-search-grid">
-                                <TextInput
-                                  id="boicPackageNumber"
-                                  labelText={requiredLabel('Package number')}
-                                  aria-required="true"
-                                  maxLength={20}
-                                  value={boicPackageForm.packageNumber}
-                                  disabled={isLoadingBoicPackage || isSavingBoicPackage}
-                                  onChange={(event) =>
-                                    setBlanketOicPackageFormField(
-                                      'packageNumber',
-                                      event.target.value.toUpperCase(),
-                                    )
-                                  }
-                                />
-                                <TextInput
-                                  id="boicPackageSpeciesCodes"
-                                  labelText={requiredLabel('Species codes (comma separated)')}
-                                  aria-required="true"
-                                  value={boicPackageForm.speciesCodes}
-                                  disabled={isLoadingBoicPackage || isSavingBoicPackage}
-                                  onChange={(event) =>
-                                    setBlanketOicPackageFormField(
-                                      'speciesCodes',
-                                      event.target.value.toUpperCase(),
-                                    )
-                                  }
-                                />
-                                <TextInput
-                                  id="boicPackageEndUseCode"
-                                  labelText={requiredLabel('End use code')}
-                                  aria-required="true"
-                                  value={boicPackageForm.endUseCode}
-                                  disabled={isLoadingBoicPackage || isSavingBoicPackage}
-                                  onChange={(event) =>
-                                    setBlanketOicPackageFormField(
-                                      'endUseCode',
-                                      event.target.value.toUpperCase(),
-                                    )
-                                  }
-                                />
-                                <TextInput
-                                  id="boicPackageAgeClass"
-                                  labelText={requiredLabel('Age class code')}
-                                  aria-required="true"
-                                  value={boicPackageForm.ageClass}
-                                  disabled={isLoadingBoicPackage || isSavingBoicPackage}
-                                  onChange={(event) =>
-                                    setBlanketOicPackageFormField(
-                                      'ageClass',
-                                      event.target.value.toUpperCase(),
-                                    )
-                                  }
-                                />
-                                <TextInput
-                                  id="boicPackageProductType"
-                                  labelText={requiredLabel('Product type code')}
-                                  aria-required="true"
-                                  value={boicPackageForm.productType}
-                                  disabled={isLoadingBoicPackage || isSavingBoicPackage}
-                                  onChange={(event) =>
-                                    setBlanketOicPackageFormField(
-                                      'productType',
-                                      event.target.value.toUpperCase(),
-                                    )
-                                  }
-                                />
-                                <TextInput
-                                  id="boicPackageVolume"
-                                  labelText={requiredLabel('Package volume (m³)')}
-                                  aria-required="true"
-                                  value={boicPackageForm.volume}
-                                  disabled={isLoadingBoicPackage || isSavingBoicPackage}
-                                  onChange={(event) =>
-                                    setBlanketOicPackageFormField('volume', event.target.value)
-                                  }
-                                />
-                                <TextInput
-                                  id="boicPackageAverageLength"
-                                  labelText={requiredLabel('Average length')}
-                                  aria-required="true"
-                                  value={boicPackageForm.averageLength}
-                                  disabled={isLoadingBoicPackage || isSavingBoicPackage}
-                                  onChange={(event) =>
-                                    setBlanketOicPackageFormField(
-                                      'averageLength',
-                                      event.target.value,
-                                    )
-                                  }
-                                />
-                                <TextInput
-                                  id="boicPackageAverageDiameter"
-                                  labelText={requiredLabel('Average top diameter')}
-                                  aria-required="true"
-                                  value={boicPackageForm.averageDiameter}
-                                  disabled={isLoadingBoicPackage || isSavingBoicPackage}
-                                  onChange={(event) =>
-                                    setBlanketOicPackageFormField(
-                                      'averageDiameter',
-                                      event.target.value,
-                                    )
-                                  }
-                                />
-                                <TextInput
-                                  id="boicPackageStatus"
-                                  labelText={requiredLabel('Status code')}
-                                  aria-required="true"
-                                  value={boicPackageForm.status}
-                                  disabled={isLoadingBoicPackage || isSavingBoicPackage}
-                                  onChange={(event) =>
-                                    setBlanketOicPackageFormField(
-                                      'status',
-                                      event.target.value.toUpperCase(),
-                                    )
-                                  }
-                                />
-                                <TextInput
-                                  id="boicPackageReprocessed"
-                                  labelText="Reprocessed indicator"
-                                  value={boicPackageForm.reprocessed}
-                                  disabled={isLoadingBoicPackage || isSavingBoicPackage}
-                                  onChange={(event) =>
-                                    setBlanketOicPackageFormField(
-                                      'reprocessed',
-                                      event.target.value.toUpperCase(),
-                                    )
-                                  }
-                                />
-                              </div>
-                              <TextArea
-                                id="boicPackageComments"
-                                labelText="Comments"
-                                value={boicPackageForm.comments}
-                                disabled={isLoadingBoicPackage || isSavingBoicPackage}
-                                onChange={(event) =>
-                                  setBlanketOicPackageFormField('comments', event.target.value)
-                                }
-                              />
-                              <div className="application-detail-actions">
+                          {canEditBlanketOicPackages &&
+                            !isCreatingBoicPackage &&
+                            !editingBoicPackageNumber && (
+                              <div className="application-detail-edit-section">
                                 <Button
                                   type="button"
+                                  kind="primary"
                                   size="sm"
-                                  disabled={isLoadingBoicPackage || isSavingBoicPackage}
-                                  renderIcon={isSavingBoicPackage ? PendingIcon : undefined}
-                                  onClick={() => void onSaveBlanketOicPackage()}
+                                  disabled={blanketOicPackageActionsDisabled}
+                                  onClick={startBlanketOicPackageCreate}
                                 >
-                                  {isSavingBoicPackage
-                                    ? 'Saving…'
-                                    : editingBoicPackageNumber
-                                      ? 'Save package'
-                                      : 'Create package'}
+                                  Create package
                                 </Button>
-                                {editingBoicPackageNumber && (
+                              </div>
+                            )}
+                          {canEditBlanketOicPackages &&
+                            (isCreatingBoicPackage || !!editingBoicPackageNumber) && (
+                              <div className="application-detail-edit-section">
+                                <h3>
+                                  {editingBoicPackageNumber
+                                    ? `Edit ${editingBoicPackageNumber}`
+                                    : 'Create Blanket OIC package'}
+                                </h3>
+                                {isLoadingBoicPackage && (
+                                  <InlineLoading description="Loading package…" />
+                                )}
+                                <div className="legacy-search-grid">
+                                  <TextInput
+                                    id="boicPackageNumber"
+                                    labelText={requiredLabel('Package number')}
+                                    aria-required="true"
+                                    maxLength={20}
+                                    value={boicPackageForm.packageNumber}
+                                    invalid={!!boicPackageFieldErrors.packageNumber}
+                                    invalidText={boicPackageFieldErrors.packageNumber}
+                                    disabled={isLoadingBoicPackage || isSavingBoicPackage}
+                                    onChange={(event) =>
+                                      setBlanketOicPackageFormField(
+                                        'packageNumber',
+                                        event.target.value.toUpperCase(),
+                                      )
+                                    }
+                                  />
+                                  <TextInput
+                                    id="boicPackageVolume"
+                                    labelText={requiredLabel('Package volume (m³)')}
+                                    aria-required="true"
+                                    value={boicPackageForm.volume}
+                                    invalid={!!boicPackageFieldErrors.volume}
+                                    invalidText={boicPackageFieldErrors.volume}
+                                    disabled={isLoadingBoicPackage || isSavingBoicPackage}
+                                    onChange={(event) =>
+                                      setBlanketOicPackageFormField('volume', event.target.value)
+                                    }
+                                  />
+                                  <TextInput
+                                    id="boicPackageAverageLength"
+                                    helperText="Enter greater than 0 and no more than 99."
+                                    labelText={requiredLabel('Average length')}
+                                    aria-required="true"
+                                    value={boicPackageForm.averageLength}
+                                    invalid={!!boicPackageFieldErrors.averageLength}
+                                    invalidText={boicPackageFieldErrors.averageLength}
+                                    disabled={isLoadingBoicPackage || isSavingBoicPackage}
+                                    onChange={(event) =>
+                                      setBlanketOicPackageFormField(
+                                        'averageLength',
+                                        event.target.value,
+                                      )
+                                    }
+                                  />
+                                  <TextInput
+                                    id="boicPackageAverageDiameter"
+                                    helperText="Enter greater than 0 and no more than 99.99."
+                                    labelText={requiredLabel('Average top diameter')}
+                                    aria-required="true"
+                                    value={boicPackageForm.averageDiameter}
+                                    invalid={!!boicPackageFieldErrors.averageDiameter}
+                                    invalidText={boicPackageFieldErrors.averageDiameter}
+                                    disabled={isLoadingBoicPackage || isSavingBoicPackage}
+                                    onChange={(event) =>
+                                      setBlanketOicPackageFormField(
+                                        'averageDiameter',
+                                        event.target.value,
+                                      )
+                                    }
+                                  />
+                                </div>
+                                <BlanketOicPackageCodeFields
+                                  region={String(detail.orgUnitNumber ?? '')}
+                                  value={boicPackageForm}
+                                  onChange={setBlanketOicPackageFormField}
+                                  disabled={isLoadingBoicPackage || isSavingBoicPackage}
+                                  onAvailabilityChange={setBoicCodeOptionsReady}
+                                  fieldErrors={boicPackageFieldErrors}
+                                />
+                                <TextArea
+                                  id="boicPackageComments"
+                                  labelText="Comments"
+                                  value={boicPackageForm.comments}
+                                  disabled={isLoadingBoicPackage || isSavingBoicPackage}
+                                  onChange={(event) =>
+                                    setBlanketOicPackageFormField('comments', event.target.value)
+                                  }
+                                />
+                                <div className="application-detail-actions">
                                   <Button
                                     type="button"
-                                    kind="ghost"
                                     size="sm"
-                                    disabled={isSavingBoicPackage}
-                                    onClick={resetBlanketOicPackageForm}
+                                    disabled={
+                                      isLoadingBoicPackage ||
+                                      isSavingBoicPackage ||
+                                      !boicCodeOptionsReady
+                                    }
+                                    renderIcon={isSavingBoicPackage ? PendingIcon : undefined}
+                                    onClick={() => void onSaveBlanketOicPackage()}
                                   >
-                                    Cancel edit
+                                    {isSavingBoicPackage
+                                      ? 'Saving…'
+                                      : editingBoicPackageNumber
+                                        ? 'Save package'
+                                        : 'Create package'}
                                   </Button>
-                                )}
+                                  {(editingBoicPackageNumber || isCreatingBoicPackage) && (
+                                    <Button
+                                      type="button"
+                                      kind="ghost"
+                                      size="sm"
+                                      disabled={isSavingBoicPackage}
+                                      onClick={resetBlanketOicPackageForm}
+                                    >
+                                      {editingBoicPackageNumber ? 'Cancel edit' : 'Cancel'}
+                                    </Button>
+                                  )}
+                                </div>
                               </div>
-                            </div>
-                          )}
+                            )}
                         </fieldset>
                         <fieldset
                           className="legacy-form-fieldset"
@@ -4449,20 +4760,6 @@ const ProvincialPermitDetailsPage = () => {
                           {canEditBlanketOicScaleRows && (
                             <>
                               <div className="legacy-search-grid">
-                                <SearchableSelect
-                                  id="boicScalePackageNumber"
-                                  labelText={requiredLabel('Package number')}
-                                  required
-                                  value={selectedBlanketOicPackageNumber}
-                                  options={blanketOicPackageOptions}
-                                  placeholder="Select package"
-                                  disabled={
-                                    isSavingBoicScale || blanketOicPackageOptions.length === 0
-                                  }
-                                  onChange={(value) =>
-                                    setBlanketOicScaleFormField('packageNumber', value)
-                                  }
-                                />
                                 <TextInput
                                   id="boicScaleTimberMark"
                                   labelText={requiredLabel('Timber mark')}
@@ -4471,7 +4768,7 @@ const ProvincialPermitDetailsPage = () => {
                                   onChange={(event) =>
                                     setBlanketOicScaleFormField('timberMark', event.target.value)
                                   }
-                                  disabled={isSavingBoicScale}
+                                  disabled={blanketOicScaleActionsDisabled}
                                 />
                                 <TextInput
                                   id="boicScaleSpeciesCode"
@@ -4481,7 +4778,7 @@ const ProvincialPermitDetailsPage = () => {
                                   onChange={(event) =>
                                     setBlanketOicScaleFormField('speciesCode', event.target.value)
                                   }
-                                  disabled={isSavingBoicScale}
+                                  disabled={blanketOicScaleActionsDisabled}
                                 />
                                 <TextInput
                                   id="boicScaleGradeCode"
@@ -4491,7 +4788,7 @@ const ProvincialPermitDetailsPage = () => {
                                   onChange={(event) =>
                                     setBlanketOicScaleFormField('gradeCode', event.target.value)
                                   }
-                                  disabled={isSavingBoicScale}
+                                  disabled={blanketOicScaleActionsDisabled}
                                 />
                                 <TextInput
                                   id="boicScalePieces"
@@ -4501,7 +4798,7 @@ const ProvincialPermitDetailsPage = () => {
                                   onChange={(event) =>
                                     setBlanketOicScaleFormField('scalePieces', event.target.value)
                                   }
-                                  disabled={isSavingBoicScale}
+                                  disabled={blanketOicScaleActionsDisabled}
                                 />
                                 <TextInput
                                   id="boicScaleVolume"
@@ -4511,7 +4808,7 @@ const ProvincialPermitDetailsPage = () => {
                                   onChange={(event) =>
                                     setBlanketOicScaleFormField('scaleVolume', event.target.value)
                                   }
-                                  disabled={isSavingBoicScale}
+                                  disabled={blanketOicScaleActionsDisabled}
                                 />
                               </div>
                               <div className="legacy-search-actions">
@@ -4519,7 +4816,7 @@ const ProvincialPermitDetailsPage = () => {
                                   kind="primary"
                                   size="sm"
                                   disabled={
-                                    isSavingBoicScale ||
+                                    blanketOicScaleActionsDisabled ||
                                     !detail.oicApplicationNumber ||
                                     blanketOicPackageOptions.length === 0
                                   }
@@ -4528,20 +4825,21 @@ const ProvincialPermitDetailsPage = () => {
                                 >
                                   {isSavingBoicScale ? 'Adding scale…' : 'Add scale'}
                                 </Button>
+                                {blanketOicScaleDirty && (
+                                  <Button
+                                    kind="tertiary"
+                                    size="sm"
+                                    disabled={isSavingBoicScale}
+                                    onClick={() => setBoicScaleForm(boicScaleBaselineForm)}
+                                  >
+                                    Cancel scale
+                                  </Button>
+                                )}
                               </div>
                             </>
                           )}
-                          <TextInput
-                            id="permitItemsFilter"
-                            labelText="Filter item rows"
-                            value={itemsFilter}
-                            onChange={(event) =>
-                              updateFilterParam('itemsFilter', event.target.value)
-                            }
-                            placeholder="Filter by mark, species, grade, pieces, or volume"
-                          />
                           {!permitTablesErrorMessage &&
-                            (filteredItems.length > 0 ? (
+                            (packageScopedItems.length > 0 ? (
                               <TableFrame ariaLabel="Permit item rows">
                                 <Table size="md" useZebraStyles>
                                   <TableHead>
@@ -4562,7 +4860,7 @@ const ProvincialPermitDetailsPage = () => {
                                     </TableRow>
                                   </TableHead>
                                   <TableBody>
-                                    {filteredItems.map((row) => (
+                                    {packageScopedItems.map((row) => (
                                       <TableRow key={row.id}>
                                         {canDisplayNormalPermitScaleMembership && (
                                           <TableCell>
@@ -4597,7 +4895,7 @@ const ProvincialPermitDetailsPage = () => {
                                               <Button
                                                 kind="danger--ghost"
                                                 size="sm"
-                                                disabled={isDeletingBoicScaleId === row.id}
+                                                disabled={blanketOicScaleActionsDisabled}
                                                 renderIcon={TrashCan}
                                                 onClick={() => setBoicScalePendingRemoval(row)}
                                               >
@@ -4617,15 +4915,11 @@ const ProvincialPermitDetailsPage = () => {
                               </TableFrame>
                             ) : (
                               <EmptyState
-                                title={
-                                  (tabsData?.items ?? []).length === 0
-                                    ? 'No permit items available'
-                                    : 'No matching permit items'
-                                }
+                                title="No permit items available"
                                 description={
-                                  (tabsData?.items ?? []).length === 0
-                                    ? 'No permit item rows are available for this permit.'
-                                    : 'No permit item rows matched the current filter.'
+                                  detail.blanketOic
+                                    ? 'No scale entries are available for the selected package.'
+                                    : 'No permit item rows are available for this permit.'
                                 }
                                 headingLevel={3}
                               />
@@ -4643,6 +4937,21 @@ const ProvincialPermitDetailsPage = () => {
                         <fieldset className="legacy-form-fieldset">
                           <legend>Permit fee summary</legend>
                           <div className="legacy-search-grid">
+                            {isEditingPermit && permitForm ? (
+                              renderPermitTextInput(
+                                'permitReceiptNo',
+                                'Receipt number',
+                                invoiceMaterialLocked && !canEnterPaymentReceipt,
+                                50,
+                              )
+                            ) : (
+                              <TextInput
+                                id="permitFeeReceiptNumber"
+                                labelText="Receipt number"
+                                value={displayValue(detail.receiptNumber)}
+                                disabled
+                              />
+                            )}
                             <TextInput
                               id="permitFeeTotalVolume"
                               labelText="Total volume (m³)"
@@ -4679,6 +4988,57 @@ const ProvincialPermitDetailsPage = () => {
                               disabled
                             />
                           </div>
+                          {showPaymentPendingReceiptGuidance && (
+                            <p id="permit-fee-receipt-help">
+                              Enter a receipt number here, then select Completed on the Permit tab
+                              before saving.
+                            </p>
+                          )}
+                          {canSavePermit && (
+                            <div className="legacy-search-actions">
+                              {isEditingPermit ? (
+                                <>
+                                  <Button
+                                    kind="primary"
+                                    size="sm"
+                                    disabled={
+                                      isSavingPermit ||
+                                      isPermitOptionsLoading ||
+                                      permitOptionsUnavailable ||
+                                      requiredPermitOptionsMissing ||
+                                      paymentPendingReceiptRequiresCompletion
+                                    }
+                                    renderIcon={isSavingPermit ? PendingIcon : undefined}
+                                    onClick={() => void onSavePermit()}
+                                  >
+                                    {isSavingPermit ? 'Saving…' : 'Save permit'}
+                                  </Button>
+                                  <Button
+                                    kind="tertiary"
+                                    size="sm"
+                                    disabled={isSavingPermit}
+                                    onClick={() => {
+                                      resetPermitFormSection(false)
+                                      setIsEditingPermit(false)
+                                    }}
+                                  >
+                                    Cancel
+                                  </Button>
+                                </>
+                              ) : (
+                                <Button
+                                  kind="tertiary"
+                                  size="sm"
+                                  onClick={() => {
+                                    resetPermitFormSection(false)
+                                    setIsEditingPermit(true)
+                                  }}
+                                >
+                                  Edit permit
+                                </Button>
+                              )}
+                            </div>
+                          )}
 
                           {!feeOverrideContext || !feeOverrideForm ? (
                             <p>
@@ -4688,19 +5048,31 @@ const ProvincialPermitDetailsPage = () => {
                             </p>
                           ) : isEditingFeeOverride ? (
                             <>
-                              <Checkbox
-                                id="permitOverrideEnabled"
-                                labelText="Override calculated permit fee"
-                                checked={feeOverrideForm.overrideEnabled}
+                              <RadioButtonGroup
+                                legendText="Override fees?"
+                                name="permit-override-enabled"
+                                valueSelected={feeOverrideForm.overrideEnabled ? 'true' : 'false'}
                                 disabled={isSavingFeeOverride}
-                                onChange={(_, { checked }) =>
+                                onChange={(value) => {
+                                  setFeeOverrideFieldErrors({})
                                   setFeeOverrideForm((current) =>
                                     current
-                                      ? { ...current, overrideEnabled: Boolean(checked) }
+                                      ? { ...current, overrideEnabled: value === 'true' }
                                       : current,
                                   )
-                                }
-                              />
+                                }}
+                              >
+                                <RadioButton
+                                  id="permitOverrideEnabledNo"
+                                  labelText="No"
+                                  value="false"
+                                />
+                                <RadioButton
+                                  id="permitOverrideEnabledYes"
+                                  labelText="Yes"
+                                  value="true"
+                                />
+                              </RadioButtonGroup>
                               {feeOverrideForm.overrideEnabled && (
                                 <div className="legacy-search-grid">
                                   <TextInput
@@ -4708,28 +5080,40 @@ const ProvincialPermitDetailsPage = () => {
                                     labelText={requiredLabel('Override fee (CAD)')}
                                     aria-required="true"
                                     value={feeOverrideForm.overrideFee}
+                                    invalid={!!feeOverrideFieldErrors.overrideFee}
+                                    invalidText={feeOverrideFieldErrors.overrideFee}
                                     disabled={isSavingFeeOverride}
-                                    onChange={(event) =>
+                                    onChange={(event) => {
+                                      setFeeOverrideFieldErrors((current) => ({
+                                        ...current,
+                                        overrideFee: undefined,
+                                      }))
                                       setFeeOverrideForm((current) =>
                                         current
                                           ? { ...current, overrideFee: event.target.value }
                                           : current,
                                       )
-                                    }
+                                    }}
                                   />
                                   <TextArea
                                     id="permitOverrideComment"
                                     labelText="Override comment"
                                     maxCount={MAX_PERMIT_OVERRIDE_COMMENT_LENGTH}
                                     value={feeOverrideForm.overrideComment}
+                                    invalid={!!feeOverrideFieldErrors.overrideComment}
+                                    invalidText={feeOverrideFieldErrors.overrideComment}
                                     disabled={isSavingFeeOverride}
-                                    onChange={(event) =>
+                                    onChange={(event) => {
+                                      setFeeOverrideFieldErrors((current) => ({
+                                        ...current,
+                                        overrideComment: undefined,
+                                      }))
                                       setFeeOverrideForm((current) =>
                                         current
                                           ? { ...current, overrideComment: event.target.value }
                                           : current,
                                       )
-                                    }
+                                    }}
                                   />
                                 </div>
                               )}
@@ -4749,6 +5133,7 @@ const ProvincialPermitDetailsPage = () => {
                                   disabled={isSavingFeeOverride}
                                   onClick={() => {
                                     setFeeOverrideForm(feeOverrideContext)
+                                    setFeeOverrideFieldErrors({})
                                     setIsEditingFeeOverride(false)
                                   }}
                                 >
@@ -4759,31 +5144,51 @@ const ProvincialPermitDetailsPage = () => {
                           ) : (
                             <>
                               <div className="legacy-search-grid">
-                                <TextInput
-                                  id="permitOverrideStatus"
-                                  labelText="Override fees?"
-                                  value={feeOverrideContext.overrideEnabled ? 'Yes' : 'No'}
+                                <RadioButtonGroup
+                                  legendText="Override fees?"
+                                  name="permit-override-enabled-view"
+                                  valueSelected={
+                                    feeOverrideContext.overrideEnabled ? 'true' : 'false'
+                                  }
                                   disabled
-                                />
-                                <TextInput
-                                  id="permitOverrideFeeDisplay"
-                                  labelText="Override fee (CAD)"
-                                  value={feeOverrideContext.overrideFee || '-'}
-                                  disabled
-                                />
-                                <TextArea
-                                  id="permitOverrideCommentDisplay"
-                                  labelText="Override comment"
-                                  value={feeOverrideContext.overrideComment || '-'}
-                                  disabled
-                                />
+                                >
+                                  <RadioButton
+                                    id="permitOverrideEnabledViewNo"
+                                    labelText="No"
+                                    value="false"
+                                  />
+                                  <RadioButton
+                                    id="permitOverrideEnabledViewYes"
+                                    labelText="Yes"
+                                    value="true"
+                                  />
+                                </RadioButtonGroup>
+                                {feeOverrideContext.overrideEnabled && (
+                                  <>
+                                    <TextInput
+                                      id="permitOverrideFeeDisplay"
+                                      labelText="Override fee (CAD)"
+                                      value={feeOverrideContext.overrideFee}
+                                      disabled
+                                    />
+                                    <TextArea
+                                      id="permitOverrideCommentDisplay"
+                                      labelText="Override comment"
+                                      value={feeOverrideContext.overrideComment}
+                                      disabled
+                                    />
+                                  </>
+                                )}
                               </div>
                               {canEditFeeOverride && (
                                 <div className="legacy-search-actions">
                                   <Button
                                     kind="tertiary"
                                     size="sm"
-                                    onClick={() => setIsEditingFeeOverride(true)}
+                                    onClick={() => {
+                                      setFeeOverrideFieldErrors({})
+                                      setIsEditingFeeOverride(true)
+                                    }}
                                   >
                                     Edit fee override
                                   </Button>
@@ -4837,13 +5242,6 @@ const ProvincialPermitDetailsPage = () => {
                             </TableFrame>
                           </>
                         )}
-                        <TextInput
-                          id="permitFeesFilter"
-                          labelText="Filter fee rows"
-                          value={feesFilter}
-                          onChange={(event) => updateFilterParam('feesFilter', event.target.value)}
-                          placeholder="Filter by package, timber mark, species, grade, or amount"
-                        />
                         {permitFeesErrorMessage ? (
                           <EmptyState
                             title="Fee details unavailable"
@@ -4860,7 +5258,7 @@ const ProvincialPermitDetailsPage = () => {
                             headingLevel={3}
                             role="alert"
                           />
-                        ) : filteredFees.length > 0 ? (
+                        ) : permitFeeRows.length > 0 ? (
                           <TableFrame ariaLabel="Permit fee rows">
                             <Table size="md" useZebraStyles>
                               <TableHead>
@@ -4878,7 +5276,7 @@ const ProvincialPermitDetailsPage = () => {
                                 </TableRow>
                               </TableHead>
                               <TableBody>
-                                {filteredFees.map((row) => (
+                                {permitFeeRows.map((row) => (
                                   <TableRow key={row.id}>
                                     <TableCell>{row.packageNumber || '-'}</TableCell>
                                     <TableCell>{row.timberMark || '-'}</TableCell>
@@ -4903,16 +5301,8 @@ const ProvincialPermitDetailsPage = () => {
                           </TableFrame>
                         ) : (
                           <EmptyState
-                            title={
-                              (tabsData?.fees ?? []).length === 0
-                                ? 'No fee details available'
-                                : 'No matching fee details'
-                            }
-                            description={
-                              (tabsData?.fees ?? []).length === 0
-                                ? 'No fee rows are available for this permit.'
-                                : 'No fee rows matched the current filter.'
-                            }
+                            title="No fee details available"
+                            description="No fee rows are available for this permit."
                             headingLevel={3}
                           />
                         )}
@@ -5007,15 +5397,6 @@ const ProvincialPermitDetailsPage = () => {
                             onUploadComplete={refreshPermitDocuments}
                           />
                         )}
-                        <TextInput
-                          id="permitDocumentsFilter"
-                          labelText="Filter document rows"
-                          value={documentsFilter}
-                          onChange={(event) =>
-                            updateFilterParam('documentsFilter', event.target.value)
-                          }
-                          placeholder="Filter by file name, description, type, source, or id"
-                        />
                         {deferredPermitTabLoading.documents ? (
                           <InlineLoading description="Loading permit documents…" />
                         ) : documentsErrorMessage ? (
@@ -5025,7 +5406,7 @@ const ProvincialPermitDetailsPage = () => {
                             headingLevel={3}
                             role="alert"
                           />
-                        ) : filteredDocumentRows.length > 0 ? (
+                        ) : documentRows.length > 0 ? (
                           <TableFrame ariaLabel="Permit document rows">
                             <Table size="md" useZebraStyles>
                               <TableHead>
@@ -5033,12 +5414,11 @@ const ProvincialPermitDetailsPage = () => {
                                   <TableHeader>File name</TableHeader>
                                   <TableHeader>Description</TableHeader>
                                   <TableHeader>Type</TableHeader>
-                                  <TableHeader>Source</TableHeader>
                                   <TableHeader>Actions</TableHeader>
                                 </TableRow>
                               </TableHead>
                               <TableBody>
-                                {filteredDocumentRows.map((row) => {
+                                {documentRows.map((row) => {
                                   const invoiceDocument = isInvoiceDocumentRow(row)
                                   const canDeleteRow =
                                     canDeletePermitDocuments &&
@@ -5048,7 +5428,6 @@ const ProvincialPermitDetailsPage = () => {
                                       <TableCell>{row.name || '-'}</TableCell>
                                       <TableCell>{row.description || '-'}</TableCell>
                                       <TableCell>{row.type || row.typeCode || '-'}</TableCell>
-                                      <TableCell>{formatDocumentSource(row.source)}</TableCell>
                                       <TableCell>
                                         <div className="legacy-search-actions">
                                           <Button
@@ -5091,16 +5470,8 @@ const ProvincialPermitDetailsPage = () => {
                           </TableFrame>
                         ) : (
                           <EmptyState
-                            title={
-                              documentRows.length === 0
-                                ? 'No permit documents available'
-                                : 'No matching permit documents'
-                            }
-                            description={
-                              documentRows.length === 0
-                                ? 'No documents are available for this permit.'
-                                : 'No document rows matched the current filter.'
-                            }
+                            title="No permit documents available"
+                            description="No documents are available for this permit."
                             headingLevel={3}
                           />
                         )}
@@ -5147,15 +5518,6 @@ const ProvincialPermitDetailsPage = () => {
                             onUploadComplete={refreshPermitDocuments}
                           />
                         )}
-                        <TextInput
-                          id="permitInvoicesFilter"
-                          labelText="Filter invoice rows"
-                          value={invoicesFilter}
-                          onChange={(event) =>
-                            updateFilterParam('invoicesFilter', event.target.value)
-                          }
-                          placeholder="Filter by invoice number, value, rate, or fee-in-lieu"
-                        />
                         {deferredPermitTabLoading.invoices ? (
                           <InlineLoading description="Loading permit invoices…" />
                         ) : invoicesErrorMessage ? (
@@ -5165,7 +5527,7 @@ const ProvincialPermitDetailsPage = () => {
                             headingLevel={3}
                             role="alert"
                           />
-                        ) : filteredInvoiceRows.length > 0 ? (
+                        ) : invoiceRows.length > 0 ? (
                           <TableFrame ariaLabel="Permit invoice rows">
                             <Table size="md" useZebraStyles>
                               <TableHead>
@@ -5178,7 +5540,7 @@ const ProvincialPermitDetailsPage = () => {
                                 </TableRow>
                               </TableHead>
                               <TableBody>
-                                {filteredInvoiceRows.map((row) => (
+                                {invoiceRows.map((row) => (
                                   <TableRow key={row.id}>
                                     <TableCell>{row.invoiceNumber || '-'}</TableCell>
                                     <TableCell>{row.exportValueCad || '-'}</TableCell>
@@ -5197,16 +5559,8 @@ const ProvincialPermitDetailsPage = () => {
                           </TableFrame>
                         ) : (
                           <EmptyState
-                            title={
-                              invoiceRows.length === 0
-                                ? 'No invoices available'
-                                : 'No matching invoices'
-                            }
-                            description={
-                              invoiceRows.length === 0
-                                ? 'No invoices are available for this permit.'
-                                : 'No invoice rows matched the current filter.'
-                            }
+                            title="No invoices available"
+                            description="No invoices are available for this permit."
                             headingLevel={3}
                           />
                         )}

@@ -60,6 +60,7 @@ import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.GbmsInvoiceHist
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PackageDetailsRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PackageCandidateRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PackageInfoRow;
+import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitPackageApplicationRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitFeeOverrideRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitFeeScaleRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitMutationRow;
@@ -2873,15 +2874,31 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
-  void updatePermitShouldClearExplicitlyBlankOptionalTextFields() {
+  void updatePermitShouldDeriveNormalPermitClientsFromFirstLinkedPackageApplication() {
+    PermitMutationRow current = permitMutationRowWithClearableFields();
     when(repository.findPermitMutationByPermitNumber(7000123L))
-        .thenReturn(Optional.of(permitMutationRowWithClearableFields()));
+        .thenReturn(Optional.of(current));
     when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("M"));
     when(exemptionService.findByExemptionNumber("EX-700"))
         .thenReturn(
             Optional.of(
                 exemptionDetailWithClients(
-                    "EX-700", "M", "00077881", "00077880")));
+                    "EX-700", "M", "00070001", "00070002")));
+    when(repository.findFirstPackageApplicationByPermitNumberRequired(7000123L))
+        .thenReturn(Optional.of(new PermitPackageApplicationRow("PKG-902", 1000457L)));
+    when(repository.findApplicationInfoByNumber(1000457L))
+        .thenReturn(
+            Optional.of(
+                permitCreationApplication(
+                    1000457L,
+                    "EX-700",
+                    1835L,
+                    "00070001",
+                    "03",
+                    "00070002",
+                    "04",
+                    "T",
+                    "S")));
     when(repository.updatePermitDetail(
             any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
         .thenReturn(true);
@@ -2897,9 +2914,95 @@ class OraclePermitDetailsRpcServiceTest {
             permitCaptor.capture(), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE));
     assertThat(permitCaptor.getValue().otherPortOfExport()).isNull();
     assertThat(permitCaptor.getValue().remarks()).isNull();
+    assertThat(permitCaptor.getValue().clientNumber()).isEqualTo("00070001");
+    assertThat(permitCaptor.getValue().clientLocationCode()).isEqualTo("03");
+    assertThat(permitCaptor.getValue().agentNumber()).isEqualTo("00070002");
+    assertThat(permitCaptor.getValue().agentLocationCode()).isEqualTo("04");
+    assertThat(permitCaptor.getValue().overrideComment()).isNull();
+  }
+
+  @Test
+  void updatePermitShouldPreserveNormalPermitClientsWhenNoLinkedPackageExists() {
+    PermitMutationRow current = permitMutationRow();
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(current));
+    when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("M"));
+    when(exemptionService.findByExemptionNumber("EX-700"))
+        .thenReturn(
+            Optional.of(
+                exemptionDetailWithClients(
+                    "EX-700", "M", "00077881", "00077880")));
+    when(repository.findFirstPackageApplicationByPermitNumberRequired(7000123L))
+        .thenReturn(Optional.empty());
+    when(repository.updatePermitDetail(
+            any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
+        .thenReturn(true);
+
+    PermitMutationRpcResponseDto response =
+        service.updatePermit(updatePermitRequest(null, null, null, null), "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<PermitMutationRow> permitCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository)
+        .updatePermitDetail(
+            permitCaptor.capture(), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE));
+    assertThat(permitCaptor.getValue().clientNumber()).isEqualTo(current.clientNumber());
+    assertThat(permitCaptor.getValue().clientLocationCode()).isEqualTo(current.clientLocationCode());
+    assertThat(permitCaptor.getValue().agentNumber()).isEqualTo(current.agentNumber());
+    assertThat(permitCaptor.getValue().agentLocationCode())
+        .isEqualTo(current.agentLocationCode());
+  }
+
+  @Test
+  void updatePermitShouldFailWithoutWritingWhenFirstLinkedPackageApplicationIsMissing() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow()));
+    when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("M"));
+    when(exemptionService.findByExemptionNumber("EX-700"))
+        .thenReturn(
+            Optional.of(
+                exemptionDetailWithClients(
+                    "EX-700", "M", "00077881", "00077880")));
+    when(repository.findFirstPackageApplicationByPermitNumberRequired(7000123L))
+        .thenReturn(Optional.of(new PermitPackageApplicationRow("PKG-902", 1000457L)));
+    when(repository.findApplicationInfoByNumber(1000457L)).thenReturn(Optional.empty());
+
+    PermitMutationRpcResponseDto response =
+        service.updatePermit(updatePermitRequest(null, null, null, null), "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactly("The first linked package application could not be loaded.");
+    verify(repository, never()).updatePermitDetail(any(), any(), any());
+  }
+
+  @Test
+  void updatePermitShouldClearBlanketOicAgentWhenExplicitlyUnchecked() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(blanketOicPermitMutationRow()));
+    when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("B"));
+    when(exemptionService.findByExemptionNumber("EX-700"))
+        .thenReturn(
+            Optional.of(
+                exemptionDetailWithClients(
+                    "EX-700", "B", "00077881", "00077880")));
+    stubOicApplicationBinding("EX-700");
+    when(repository.updatePermitDetail(
+            any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
+        .thenReturn(true);
+
+    PermitMutationRpcResponseDto response =
+        service.updatePermit(clearOptionalPermitStringsRequest(), "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<PermitMutationRow> permitCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository)
+        .updatePermitDetail(
+            permitCaptor.capture(), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE));
     assertThat(permitCaptor.getValue().agentNumber()).isNull();
     assertThat(permitCaptor.getValue().agentLocationCode()).isNull();
-    assertThat(permitCaptor.getValue().overrideComment()).isNull();
   }
 
   @Test
@@ -4707,25 +4810,50 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
-  void updatePermitShouldRejectClientMutationOutsideTheCurrentExemptionBinding() {
+  void updatePermitShouldIgnoreSubmittedClientChangesForNormalPermits() {
+    PermitMutationRow current = permitMutationRow();
     when(repository.findPermitMutationByPermitNumber(7000123L))
-        .thenReturn(Optional.of(permitMutationRow()));
+        .thenReturn(Optional.of(current));
     when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("M"));
     when(exemptionService.findByExemptionNumber("EX-700"))
         .thenReturn(
             Optional.of(
                 exemptionDetailWithClients(
-                    "EX-700", "M", "00077881", "00077880")));
+                    "EX-700", "M", "00070001", "00070002")));
+    when(repository.findFirstPackageApplicationByPermitNumberRequired(7000123L))
+        .thenReturn(Optional.of(new PermitPackageApplicationRow("PKG-902", 1000457L)));
+    when(repository.findApplicationInfoByNumber(1000457L))
+        .thenReturn(
+            Optional.of(
+                permitCreationApplication(
+                    1000457L,
+                    "EX-700",
+                    1835L,
+                    "00070001",
+                    "03",
+                    "00070002",
+                    "04",
+                    "T",
+                    "S")));
+    when(repository.updatePermitDetail(
+            any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
+        .thenReturn(true);
 
     PermitMutationRpcResponseDto response =
         service.updatePermit(
             updatePermitRequest("EX-700", "00099999", "00077880", null),
             "idir\\jsmith");
 
-    assertThat(response.success()).isFalse();
-    assertThat(response.errors())
-        .contains("The permit owner does not match the selected exemption.");
-    verify(repository, never()).updatePermitDetail(any(), any(), any());
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<PermitMutationRow> permitCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository)
+        .updatePermitDetail(
+            permitCaptor.capture(), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE));
+    assertThat(permitCaptor.getValue().clientNumber()).isEqualTo("00070001");
+    assertThat(permitCaptor.getValue().clientLocationCode()).isEqualTo("03");
+    assertThat(permitCaptor.getValue().agentNumber()).isEqualTo("00070002");
+    assertThat(permitCaptor.getValue().agentLocationCode()).isEqualTo("04");
   }
 
   @Test

@@ -537,7 +537,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     await selectDetailTab('Documents')
 
     await openDocumentUploadModal()
-    expect(screen.getByLabelText(/Document description/)).toBeInTheDocument()
+    expect(screen.getByLabelText('Document File')).toBeInTheDocument()
   })
 
   it('renders semantic empty states for empty exemption detail collections', async () => {
@@ -676,7 +676,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     ])
 
     render(
-      <MemoryRouter initialEntries={['/provincial/exemption/EX-777']}>
+      <MemoryRouter initialEntries={['/provincial/exemption/EX-777?permitFilter=not-a-match']}>
         <Routes>
           <Route
             path="/provincial/exemption/:exemptionNumber"
@@ -696,6 +696,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(screen.getByText('900101 (Pending)')).toBeInTheDocument()
     expect(screen.getByText('25.5')).toBeInTheDocument()
     expect(screen.getByText('12-Jul-2026')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Filter permits')).not.toBeInTheDocument()
     expect(screen.queryByText('900102')).not.toBeInTheDocument()
     expect(screen.queryByText('10-Jul-2026')).not.toBeInTheDocument()
   })
@@ -867,7 +868,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     const openSpy = vi.spyOn(window, 'open').mockReturnValue({} as Window)
 
     render(
-      <MemoryRouter initialEntries={['/provincial/exemption/EX-777']}>
+      <MemoryRouter initialEntries={['/provincial/exemption/EX-777?documentsFilter=not-a-match']}>
         <Routes>
           <Route
             path="/provincial/exemption/:exemptionNumber"
@@ -880,6 +881,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     await selectDetailTab('Documents')
     await enterDocumentEditMode()
     const documentName = await screen.findByText('exemption-doc.pdf')
+    expect(screen.queryByLabelText('Filter document rows')).not.toBeInTheDocument()
     const documentRow = documentName.closest('tr')
     expect(documentRow).toBeTruthy()
     const openDocumentButton = within(documentRow as HTMLElement).getByRole('button', {

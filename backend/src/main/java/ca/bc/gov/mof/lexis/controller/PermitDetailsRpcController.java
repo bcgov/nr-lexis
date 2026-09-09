@@ -9,6 +9,7 @@ import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.firstPresent;
 
 import ca.bc.gov.mof.lexis.dto.application.ApplicationEditLockDto;
 import ca.bc.gov.mof.lexis.dto.application.ApplicationAccessContextDto;
+import ca.bc.gov.mof.lexis.dto.exemption.ExemptionAccessDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitDetailDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAllScaleFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCountryListRpcResponseDto;
@@ -95,6 +96,7 @@ public class PermitDetailsRpcController {
   private static final String PERMIT_STATUS_ACTIVE = "ACT";
   private static final String PERMIT_STATUS_COMPLETE = "COM";
   private static final String PERMIT_STATUS_EXPIRED = "EXP";
+  private static final String EXEMPTION_TYPE_BLANKET_OIC = "B";
   private static final String LEGACY_ACTION_SAVE_PERMIT = "savePermit";
   private static final String LEGACY_ACTION_REVIEW_PERMITS = "/permitsReview";
   private static final String LEGACY_ACTION_APPLICATION_DETAILS = "/applicationDetails";
@@ -694,11 +696,8 @@ public class PermitDetailsRpcController {
         && !mutationRequest.exemptionNumber().isBlank()) {
       requireExemptionAccess(mutationRequest.exemptionNumber(), authentication);
     }
-    if (provincialAuthorizationService != null
-        && !provincialAuthorizationService.canCreateForClient(
-            authentication,
-            mutationRequest.ownerClientNumber(),
-            mutationRequest.agentClientNumber())) {
+    if (!canUpdatePermitForSubmittedClients(
+        service, permitNumber, mutationRequest, authentication)) {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
     requirePermitDetailsMutable(permitNumber, authentication);
@@ -729,20 +728,17 @@ public class PermitDetailsRpcController {
         exemptionNumbersForPermitMutation(service, mutationRequest);
     exemptionNumbers.forEach(
         exemptionNumber -> requireExemptionAccess(exemptionNumber, authentication));
-    if (provincialAuthorizationService != null
-        && !provincialAuthorizationService.canCreateForClient(
-            authentication,
-            mutationRequest.ownerClientNumber(),
-            mutationRequest.agentClientNumber())) {
-      throw new AccessDeniedException(
-          "Permit client scope changed while the mutation was waiting.");
-    }
     requirePermitDetailsMutable(permitNumber, authentication);
     List<MutationExemptionLock> exemptionLocks =
         acquireMutationExemptionLocks(exemptionNumbers, authentication);
     List<Long> applicationLocksToRelease = List.of();
     try {
       requirePermitEditable(permitNumber, authentication);
+      if (!canUpdatePermitForSubmittedClients(
+          service, permitNumber, mutationRequest, authentication)) {
+        throw new AccessDeniedException(
+            "Permit client scope changed while the mutation was waiting.");
+      }
       List<Long> linkedApplicationNumbers =
           applicationNumbersForPermitMutation(service, mutationRequest);
       linkedApplicationNumbers.forEach(
@@ -779,6 +775,53 @@ public class PermitDetailsRpcController {
       applicationNumbers.add(requestedOicApplicationNumber);
     }
     return List.copyOf(applicationNumbers);
+  }
+
+  /**
+   * Normal permits inherit client fields from their first linked application, so request client
+   * fields must not decide access. Blanket OIC permits maintain those fields directly.
+   */
+  private boolean canUpdatePermitForSubmittedClients(
+      PermitDetailsRpcService service,
+      Long permitNumber,
+      PermitMutationRequestDto mutationRequest,
+      Authentication authentication) {
+    if (provincialAuthorizationService == null
+        || !provincialAuthorizationService.hasClientScope(authentication)
+        || !isCanonicalBlanketOicPermit(service, permitNumber)) {
+      return true;
+    }
+    return provincialAuthorizationService.canCreateForClient(
+        authentication,
+        mutationRequest.ownerClientNumber(),
+        mutationRequest.agentClientNumber());
+  }
+
+  private boolean isCanonicalBlanketOicPermit(
+      PermitDetailsRpcService service, Long permitNumber) {
+    String exemptionNumber =
+        requiredExemptionNumber(service.getExemptionNumberForPermitMutation(permitNumber));
+    if (exemptionService == null) {
+      throw new DataRetrievalFailureException(
+          "The permit exemption type could not be verified for mutation.");
+    }
+    ExemptionAccessDto exemption =
+        exemptionService
+            .findAccessByExemptionNumber(exemptionNumber)
+            .filter(
+                detail ->
+                    exemptionNumber.equalsIgnoreCase(normalizeExemptionNumber(detail.exemptionNumber())))
+            .orElseThrow(
+                () ->
+                    new DataRetrievalFailureException(
+                        "The permit exemption type could not be verified for mutation."));
+    String exemptionType = normalizeExemptionNumber(exemption.exemptionTypeCode());
+    boolean blanketOic = EXEMPTION_TYPE_BLANKET_OIC.equalsIgnoreCase(exemptionType);
+    if (exemptionType == null || exemption.blanketOic() != blanketOic) {
+      throw new DataRetrievalFailureException(
+          "The permit exemption type could not be verified for mutation.");
+    }
+    return blanketOic;
   }
 
   private List<Long> applicationNumbersForExemptionMutation(

@@ -17,6 +17,7 @@ import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.application.ApplicationEditLockDto;
 import ca.bc.gov.mof.lexis.dto.application.ApplicationAccessContextDto;
+import ca.bc.gov.mof.lexis.dto.exemption.ExemptionAccessDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitDetailDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAllScaleFeesRpcResponseDto;
@@ -1469,6 +1470,142 @@ class PermitDetailsRpcControllerTest {
         .requireApplication(authentication, 1000456L);
     verify(editLockService).acquire(1000456L, "idir\\jsmith", "idir\\jsmith", false);
     verify(editLockService).release(1000456L, "idir\\jsmith");
+  }
+
+  @Test
+  void updatePermitShouldAllowScopedSubmitterToSaveNormalPermitWithStaleClientFields() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameterMap())
+        .thenReturn(
+            Map.of(
+                "permitNumber", new String[] {"7000123"},
+                "ownerClientNumber", new String[] {"STALE-OWNER"},
+                "ownerClientLocation", new String[] {"99"},
+                "agentClientNumber", new String[] {"STALE-AGENT"},
+                "agentClientLocation", new String[] {"98"}));
+    when(service.getExemptionNumberForPermitMutation(7000123L)).thenReturn("EX-NORMAL");
+    when(exemptionService.findAccessByExemptionNumber("EX-NORMAL"))
+        .thenReturn(Optional.of(exemptionAccess("EX-NORMAL", false)));
+    when(service.getApplicationNumbersForPermitMutation(7000123L))
+        .thenReturn(List.of(1000456L));
+    when(service.updatePermit(any(PermitMutationRequestDto.class), eq("bceid\\submitter")))
+        .thenReturn(successfulPermitUpdate());
+    TestingAuthenticationToken authentication = scopedSubmitterWithSavePermit();
+    when(provincialAuthorizationService.hasClientScope(authentication)).thenReturn(true);
+    lenient()
+        .when(
+            provincialAuthorizationService.canCreateForClient(
+                authentication, "STALE-OWNER", "STALE-AGENT"))
+        .thenReturn(false);
+    allowApplicationMutationLocksForUser("bceid\\submitter", 1000456L);
+
+    ResponseEntity<PermitMutationRpcResponseDto> response =
+        controller.updatePermit(request, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    verify(provincialAuthorizationService, never())
+        .canCreateForClient(eq(authentication), any(), any());
+    verify(provincialAuthorizationService, times(2))
+        .requirePermit(authentication, 7000123L);
+    verify(provincialAuthorizationService)
+        .requireApplication(authentication, 1000456L);
+    verify(exemptionService, times(2)).findAccessByExemptionNumber("EX-NORMAL");
+    verify(service).updatePermit(any(PermitMutationRequestDto.class), eq("bceid\\submitter"));
+  }
+
+  @Test
+  void updatePermitShouldRejectInaccessibleNormalPermitBeforeClientClassification() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameterMap())
+        .thenReturn(
+            Map.of(
+                "permitNumber", new String[] {"7000123"},
+                "ownerClientNumber", new String[] {"00077881"}));
+    TestingAuthenticationToken authentication = scopedSubmitterWithSavePermit();
+    doThrow(new org.springframework.security.access.AccessDeniedException("permit denied"))
+        .when(provincialAuthorizationService)
+        .requirePermit(authentication, 7000123L);
+
+    assertThatThrownBy(() -> controller.updatePermit(request, authentication))
+        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class)
+        .hasMessage("permit denied");
+
+    verifyNoInteractions(exemptionService);
+    verify(service, never()).updatePermit(any(), any());
+  }
+
+  @Test
+  void updatePermitShouldRejectInaccessibleCanonicalNormalApplication() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameterMap())
+        .thenReturn(
+            Map.of(
+                "permitNumber", new String[] {"7000123"},
+                "ownerClientNumber", new String[] {"STALE-OWNER"},
+                "agentClientNumber", new String[] {"STALE-AGENT"}));
+    when(service.getExemptionNumberForPermitMutation(7000123L)).thenReturn("EX-NORMAL");
+    when(exemptionService.findAccessByExemptionNumber("EX-NORMAL"))
+        .thenReturn(Optional.of(exemptionAccess("EX-NORMAL", false)));
+    when(service.getApplicationNumbersForPermitMutation(7000123L))
+        .thenReturn(List.of(1000456L));
+    TestingAuthenticationToken authentication = scopedSubmitterWithSavePermit();
+    when(provincialAuthorizationService.hasClientScope(authentication)).thenReturn(true);
+    doThrow(new org.springframework.security.access.AccessDeniedException("application denied"))
+        .when(provincialAuthorizationService)
+        .requireApplication(authentication, 1000456L);
+
+    assertThatThrownBy(() -> controller.updatePermit(request, authentication))
+        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class)
+        .hasMessage("application denied");
+
+    verify(provincialAuthorizationService, never())
+        .canCreateForClient(eq(authentication), any(), any());
+    verify(service, never()).updatePermit(any(), any());
+  }
+
+  @Test
+  void updatePermitShouldRejectSubmittedClientChangeForScopedBlanketOicPermit() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameterMap())
+        .thenReturn(
+            Map.of(
+                "permitNumber", new String[] {"7000123"},
+                "ownerClientNumber", new String[] {"00099999"},
+                "agentClientNumber", new String[] {"00088888"}));
+    when(service.getExemptionNumberForPermitMutation(7000123L)).thenReturn("EX-BOIC");
+    when(exemptionService.findAccessByExemptionNumber("EX-BOIC"))
+        .thenReturn(Optional.of(exemptionAccess("EX-BOIC", true)));
+    TestingAuthenticationToken authentication = scopedSubmitterWithSavePermit();
+    when(provincialAuthorizationService.hasClientScope(authentication)).thenReturn(true);
+    when(provincialAuthorizationService.canCreateForClient(
+            authentication, "00099999", "00088888"))
+        .thenReturn(false);
+
+    ResponseEntity<PermitMutationRpcResponseDto> response =
+        controller.updatePermit(request, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    verify(provincialAuthorizationService)
+        .canCreateForClient(authentication, "00099999", "00088888");
+    verify(service, never()).updatePermit(any(), any());
+  }
+
+  @Test
+  void updatePermitShouldFailClosedWhenCanonicalExemptionClassificationIsUnavailable() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameterMap()).thenReturn(Map.of("permitNumber", new String[] {"7000123"}));
+    when(service.getExemptionNumberForPermitMutation(7000123L)).thenReturn("EX-NORMAL");
+    when(exemptionService.findAccessByExemptionNumber("EX-NORMAL")).thenReturn(Optional.empty());
+    TestingAuthenticationToken authentication = scopedSubmitterWithSavePermit();
+    when(provincialAuthorizationService.hasClientScope(authentication)).thenReturn(true);
+
+    assertThatThrownBy(() -> controller.updatePermit(request, authentication))
+        .isInstanceOf(org.springframework.dao.DataRetrievalFailureException.class)
+        .hasMessage("The permit exemption type could not be verified for mutation.");
+
+    verify(provincialAuthorizationService, never())
+        .canCreateForClient(eq(authentication), any(), any());
+    verify(service, never()).updatePermit(any(), any());
   }
 
   @ParameterizedTest
@@ -3046,6 +3183,11 @@ class PermitDetailsRpcControllerTest {
         blanketOic,
         List.of(),
         List.of());
+  }
+
+  private ExemptionAccessDto exemptionAccess(String exemptionNumber, boolean blanketOic) {
+    return new ExemptionAccessDto(
+        exemptionNumber, blanketOic ? "B" : "M", "ACT", blanketOic);
   }
 
   private PermitMutationRpcResponseDto successfulPermitUpdate() {

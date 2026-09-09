@@ -299,6 +299,51 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(screen.queryByText('Application summary options unavailable')).not.toBeInTheDocument()
   })
 
+  it('keeps the owner agent indicator after the client details in view and edit modes', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const ownerDetails = await screen.findByRole('region', { name: 'Owner client details' })
+    const ownerEmail = (await within(ownerDetails).findByText('owner@example.test')).closest(
+      '.detail-field-item',
+    )
+    const ownerAgentIndicator = within(ownerDetails)
+      .getByText('I am an agent')
+      .closest('.detail-field-item')
+
+    expect(ownerEmail).toBeTruthy()
+    expect(ownerAgentIndicator).toBeTruthy()
+    expect(
+      Boolean(
+        (ownerEmail as Node).compareDocumentPosition(ownerAgentIndicator as Node) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+      ),
+    ).toBe(true)
+
+    const ownerTile = getOwnerClientDetailsTile()
+    await userEvent.click(within(ownerTile).getByRole('button', { name: 'Edit owner details' }))
+    const editOwnerEmail = (await within(ownerTile).findByText('owner@example.test')).closest(
+      '.detail-field-item',
+    )
+    const editOwnerAgentIndicator = within(ownerTile).getByLabelText('I am an agent')
+
+    expect(editOwnerEmail).toBeTruthy()
+    expect(
+      Boolean(
+        (editOwnerEmail as Node).compareDocumentPosition(editOwnerAgentIndicator) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+      ),
+    ).toBe(true)
+  })
+
   it('keeps saved client values visible when enrichment fails', async () => {
     mockedFetchApplicationClientData.mockRejectedValue(new Error('client endpoint unavailable'))
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
@@ -1016,7 +1061,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(within(remarksTable).queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
   })
 
-  it('shows offer company and received date from application detail', async () => {
+  it('shows offer rows despite retired filter query parameters', async () => {
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
       ...applicationDetail,
       offers: [
@@ -1031,7 +1076,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     })
 
     render(
-      <MemoryRouter initialEntries={['/provincial/application/321']}>
+      <MemoryRouter initialEntries={['/provincial/application/321?offerFilter=not-a-match']}>
         <Routes>
           <Route
             path="/provincial/application/:applicationNumber"
@@ -1047,6 +1092,12 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(await screen.findByText('Example Lumber')).toBeInTheDocument()
     expect(screen.getByText('2026-04-05')).toBeInTheDocument()
     expect(screen.getByText('OFF-77')).toBeInTheDocument()
+
+    expect(screen.queryByLabelText('Filter offers')).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('group', { name: 'Application offers toolbar' }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Open' })).toBeEnabled()
   })
 
   it('preserves the originating application context when opening an offer', async () => {

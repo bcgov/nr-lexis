@@ -345,7 +345,6 @@ const ApplicationCreateClientSummary = ({
 
   return (
     <section className="application-create-client-summary" aria-label={title}>
-      <h3 className="application-client-summary__title">{title}</h3>
       <dl className="detail-field-grid">
         {[
           ['Company name', displayValue(clientData.companyName)],

@@ -167,6 +167,42 @@ class PermitRpcRepositoryTest {
   }
 
   @Test
+  void firstPackageApplicationShouldPreserveLegacyCursorOrder() throws Exception {
+    stubCursorProcedure("{ call LEXIS_GROUP_5.FIND_PACKAGES_BY_PERMIT(?,?) }", 2);
+    when(resultSet.next()).thenReturn(true, true, false);
+    when(resultSet.getString("PACKAGE_NUMBER")).thenReturn("PKG-200", "PKG-100");
+    when(resultSet.getLong("APPLICATION_NUMBER")).thenReturn(1000457L, 1000456L);
+    when(resultSet.wasNull()).thenReturn(false);
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertThat(repository.findFirstPackageApplicationByPermitNumberRequired(7000123L))
+        .contains(new PermitRpcRepository.PermitPackageApplicationRow("PKG-200", 1000457L));
+    verify(callableStatement).setString(1, "7000123");
+    verify(callableStatement).registerOutParameter(2, Types.REF_CURSOR);
+  }
+
+  @Test
+  void firstPackageApplicationShouldReturnEmptyForAnEmptyCursor() throws Exception {
+    stubCursorProcedure("{ call LEXIS_GROUP_5.FIND_PACKAGES_BY_PERMIT(?,?) }", 2);
+    when(resultSet.next()).thenReturn(false);
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertThat(repository.findFirstPackageApplicationByPermitNumberRequired(7000123L)).isEmpty();
+  }
+
+  @Test
+  void firstPackageApplicationShouldPropagateRequiredCursorFailures() {
+    when(jdbcTemplate.execute(any(String.class), any(CallableStatementCallback.class)))
+        .thenThrow(new DataAccessResourceFailureException("Oracle unavailable"));
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertThatThrownBy(
+            () -> repository.findFirstPackageApplicationByPermitNumberRequired(7000123L))
+        .isInstanceOf(DataAccessResourceFailureException.class)
+        .hasMessage("Oracle unavailable");
+  }
+
+  @Test
   void permitScaleRowsByApplicationShouldUseTheExistingApplicationCursor() throws Exception {
     stubCursorProcedure("{ call LEXIS_GROUP_5.FIND_SCALE_DETAIL_BY_APP(?,?) }", 2);
     when(resultSet.next()).thenReturn(true, false);

@@ -69,6 +69,7 @@ import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitCorePacka
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitCoreScaleRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitFeeScaleRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitDocumentContextRow;
+import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitPackageApplicationRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitScaleDetailRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PackageCandidateRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitMutationRow;
@@ -1762,20 +1763,29 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     }
     ValidatedExemptionBinding targetExemption =
         validateExemptionBinding(targetExemptionNumber, exemptionErrors);
-    if (targetExemption != null) {
-      validateClientBinding(
-          targetExemption,
-          mergeSubmittedText(request.ownerClientNumber(), current.clientNumber()),
-          mergeSubmittedText(request.agentClientNumber(), current.agentNumber()),
-          exemptionErrors);
+    if (!exemptionErrors.isEmpty()) {
+      return failureMutationResponse(exemptionErrors, permitNumber);
     }
+    boolean targetBlanketOic = targetExemption != null && targetExemption.blanketOic();
+    Optional<PermitClientBinding> targetClientsResult =
+        resolvePermitUpdateClientBinding(targetBlanketOic, request, current);
+    if (targetClientsResult.isEmpty()) {
+      return failureMutationResponse(
+          List.of("The first linked package application could not be loaded."), permitNumber);
+    }
+    PermitClientBinding targetClients = targetClientsResult.get();
+    String targetOwnerClientNumber = targetClients.ownerClientNumber();
+    String targetOwnerClientLocation = targetClients.ownerClientLocation();
+    String targetAgentClientNumber = targetClients.agentClientNumber();
+    String targetAgentClientLocation = targetClients.agentClientLocation();
+    validateClientBinding(
+        targetExemption, targetOwnerClientNumber, targetAgentClientNumber, exemptionErrors);
     if (!exemptionErrors.isEmpty()) {
       return failureMutationResponse(exemptionErrors, permitNumber);
     }
 
     Double submittedOicRequestVolume = parseDouble(request.oicPermitTotalVolume());
     List<String> numericErrors = new ArrayList<>();
-    boolean targetBlanketOic = targetExemption != null && targetExemption.blanketOic();
     if (targetBlanketOic
         && isInvalidSubmittedDouble(
             request.oicPermitTotalVolume(), submittedOicRequestVolume)) {
@@ -1856,10 +1866,10 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
             current.entryTimestamp(),
             mergeSubmittedText(request.transportType(), current.transportTypeCode()),
             firstNonNull(trimToNull(current.scaleMethodCode()), EXPORT_SCALE_METHOD_WEIGHT),
-            mergeSubmittedText(request.ownerClientNumber(), current.clientNumber()),
-            mergeSubmittedText(request.ownerClientLocation(), current.clientLocationCode()),
-            mergeSubmittedText(request.agentClientNumber(), current.agentNumber()),
-            mergeSubmittedText(request.agentClientLocation(), current.agentLocationCode()),
+            targetOwnerClientNumber,
+            targetOwnerClientLocation,
+            targetAgentClientNumber,
+            targetAgentClientLocation,
             targetExemptionNumber,
             firstNonNull(parsePositiveLong(firstNonNull(request.orgUnitNumber(), request.oicRegion())), current.orgUnitNo()),
             mergeSubmittedText(request.portOfExport(), current.portOfExportCode()),
@@ -3857,6 +3867,39 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     return new ValidatedExemptionBinding(detail, detailType, blanketOic);
   }
 
+  private Optional<PermitClientBinding> resolvePermitUpdateClientBinding(
+      boolean blanketOic, PermitMutationRequestDto request, PermitMutationRow current) {
+    if (blanketOic) {
+      return Optional.of(
+          new PermitClientBinding(
+              mergeSubmittedText(request.ownerClientNumber(), current.clientNumber()),
+              mergeSubmittedText(request.ownerClientLocation(), current.clientLocationCode()),
+              mergeSubmittedText(request.agentClientNumber(), current.agentNumber()),
+              mergeSubmittedText(request.agentClientLocation(), current.agentLocationCode())));
+    }
+
+    Optional<PermitPackageApplicationRow> firstPackage =
+        repository.findFirstPackageApplicationByPermitNumberRequired(current.permitNumber());
+    if (firstPackage.isEmpty()) {
+      return Optional.of(
+          new PermitClientBinding(
+              current.clientNumber(),
+              current.clientLocationCode(),
+              current.agentNumber(),
+              current.agentLocationCode()));
+    }
+
+    return repository
+        .findApplicationInfoByNumber(firstPackage.get().applicationNumber())
+        .map(
+            application ->
+                new PermitClientBinding(
+                    application.ownerClientNumber(),
+                    application.ownerClientLocationCode(),
+                    application.agentClientNumber(),
+                    application.agentClientLocationCode()));
+  }
+
   private void validateClientBinding(
       ValidatedExemptionBinding exemption,
       String ownerClientNumber,
@@ -5025,6 +5068,12 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
 
   private record ValidatedExemptionBinding(
       ExemptionDetailDto detail, String exemptionTypeCode, boolean blanketOic) {}
+
+  private record PermitClientBinding(
+      String ownerClientNumber,
+      String ownerClientLocation,
+      String agentClientNumber,
+      String agentClientLocation) {}
 
   private record ApplicationScaleAttachmentPlan(
       Long applicationNumber, String sourceStatus, List<ScaleMutationRow> unassignedScales) {}

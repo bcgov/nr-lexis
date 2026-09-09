@@ -687,6 +687,26 @@ public class PermitRpcRepository extends OracleRepositorySupport {
     return findPackageNumbersByPermitNumber(permitNumber, true);
   }
 
+  /**
+   * Reads the first linked package exactly as the legacy permit update does. The cursor order is
+   * deliberate here: unlike list responses, it is neither de-duplicated nor sorted before the
+   * first relationship is selected.
+   */
+  public Optional<PermitPackageApplicationRow> findFirstPackageApplicationByPermitNumberRequired(
+      Long permitNumber) {
+    if (permitNumber == null || permitNumber < 1) {
+      return Optional.empty();
+    }
+
+    return queryCursorSingleRequired(
+        FIND_PACKAGES_BY_PERMIT,
+        cs -> cs.setString(1, permitNumber.toString()),
+        2,
+        rs ->
+            new PermitPackageApplicationRow(
+                getString(rs, "PACKAGE_NUMBER"), getLong(rs, "APPLICATION_NUMBER")));
+  }
+
   private List<String> findPackageNumbersByPermitNumber(
       Long permitNumber, boolean required) {
     if (permitNumber == null || permitNumber < 1) {
@@ -2375,6 +2395,9 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       double averageDiameter,
       String growthTypeCode,
       String productTypeCode) {}
+
+  /** First package/application relationship from the legacy permit package cursor. */
+  public record PermitPackageApplicationRow(String packageNumber, Long applicationNumber) {}
 
   /** Complete package projection returned by the existing permit package cursors. */
   public record PermitCorePackageRow(

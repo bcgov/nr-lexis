@@ -154,7 +154,7 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
     await selectApplicationDetailTab('Documents')
 
     await openDocumentUploadModal()
-    expect(screen.getByLabelText(/Document description/)).toBeInTheDocument()
+    expect(screen.getByLabelText('Document File')).toBeInTheDocument()
   })
 
   it('shows the upload action when an application has no documents', async () => {
@@ -203,7 +203,7 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
     })
 
     render(
-      <MemoryRouter initialEntries={['/provincial/application/321']}>
+      <MemoryRouter initialEntries={['/provincial/application/321?documentsFilter=not-a-match']}>
         <Routes>
           <Route
             path="/provincial/application/:applicationNumber"
@@ -218,13 +218,15 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
     const uploadTrigger = screen.getByRole('button', { name: 'Add document' })
 
     expect(screen.getByRole('region', { name: 'Application document rows' })).toBeInTheDocument()
-    expect(screen.getByLabelText('Filter document rows')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Filter document rows')).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('group', { name: 'Application documents toolbar' }),
+    ).not.toBeInTheDocument()
     expect(
       uploadTrigger.compareDocumentPosition(documentName) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy()
-
     await userEvent.click(uploadTrigger)
-    expect(screen.getByLabelText(/Document description/)).toBeVisible()
+    expect(screen.getByLabelText('Document File')).toBeVisible()
   })
 
   it('allows application uploads for expired applications to match legacy', async () => {
@@ -255,7 +257,7 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
     expect(screen.queryByRole('button', { name: 'Upload Application Document' })).toBeNull()
     expect(await screen.findByRole('button', { name: 'Edit documents' })).toBeInTheDocument()
     await openDocumentUploadModal()
-    expect(screen.getByLabelText(/Document description/)).toBeVisible()
+    expect(screen.getByLabelText('Document File')).toBeVisible()
   })
 
   it('disables application upload for industry users when a permit is complete', async () => {
@@ -325,8 +327,8 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
     })
 
     await openDocumentUploadModal()
-    await userEvent.type(screen.getByLabelText(/Document description/), 'Uploaded')
     await userEvent.upload(screen.getByLabelText('Document File'), file)
+    await userEvent.type(screen.getByLabelText(/Document description/), 'Uploaded')
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Review upload' })).toBeEnabled()
     })
@@ -339,7 +341,7 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
         expect.objectContaining({
           applicationNumber: '321',
           file,
-          fileDescription: 'Uploaded',
+          fileDescription: '',
         }),
       )
       expect(mockedSubmitAdminUpload).toHaveBeenCalledWith(
@@ -395,8 +397,8 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
     await waitFor(() => expect(mockedFetchApplicationDocuments).toHaveBeenCalledTimes(1))
     const file = new File(['test'], 'uploaded-doc.pdf', { type: 'application/pdf' })
     await openDocumentUploadModal()
-    await userEvent.type(screen.getByLabelText(/Document description/), 'Uploaded')
     await userEvent.upload(screen.getByLabelText('Document File'), file)
+    await userEvent.type(screen.getByLabelText(/Document description/), 'Uploaded')
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Review upload' })).toBeEnabled()
     })
@@ -453,11 +455,18 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
 
     await selectApplicationDetailTab('Documents')
     await openDocumentUploadModal()
-    await userEvent.type(await screen.findByLabelText(/Document description/), 'Mixed batch')
     await userEvent.upload(screen.getByLabelText('Document File'), [
       new File(['first'], 'first.pdf', { type: 'application/pdf' }),
       new File(['second'], 'second.pdf', { type: 'application/pdf' }),
     ])
+    await userEvent.type(
+      screen.getByLabelText(/Document description for first.pdf/),
+      'First document',
+    )
+    await userEvent.type(
+      screen.getByLabelText(/Document description for second.pdf/),
+      'Second document',
+    )
     await waitFor(() => expect(screen.getByRole('button', { name: 'Review upload' })).toBeEnabled())
     await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
     await userEvent.click(screen.getByRole('button', { name: 'Submit upload' }))
@@ -471,7 +480,7 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
           {
             id: '901',
             name: 'first.pdf',
-            description: 'Mixed batch',
+            description: 'First document',
             type: 'Attachment',
           },
         ],

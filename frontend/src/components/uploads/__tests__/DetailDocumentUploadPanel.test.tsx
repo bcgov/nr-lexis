@@ -12,7 +12,7 @@ vi.mock('@/service/admin-upload-service', () => ({
 const mockedSubmitAdminUpload = vi.mocked(submitAdminUpload)
 const mockedValidateAdminUpload = vi.mocked(validateAdminUpload)
 
-const openUploadModal = async (label = 'Add document'): Promise<void> => {
+const openUploadForm = async (label = 'Add document'): Promise<void> => {
   await userEvent.click(screen.getByRole('button', { name: label }))
 }
 
@@ -58,7 +58,7 @@ describe('DetailDocumentUploadPanel', () => {
     )
 
     expect(screen.queryByLabelText(/Document description/)).not.toBeInTheDocument()
-    await openUploadModal()
+    await openUploadForm()
     const dialog = screen.getByRole('dialog', { name: 'Add document' })
     expect(dialog).toBeInTheDocument()
     expect(dialog.querySelector('.required-label__marker')).toBeNull()
@@ -66,13 +66,187 @@ describe('DetailDocumentUploadPanel', () => {
     expect(screen.queryByText(/US-ASCII|250 bytes/i)).not.toBeInTheDocument()
 
     await userEvent.upload(screen.getByLabelText('Document File'), file)
+    await userEvent.type(screen.getByLabelText(/Document description/), 'Discard this draft')
     await waitFor(() => expect(screen.getByRole('button', { name: 'Remove' })).toBeEnabled())
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
 
     expect(screen.queryByRole('dialog', { name: 'Add document' })).not.toBeInTheDocument()
-    await openUploadModal()
+    await openUploadForm()
     expect(screen.queryByRole('button', { name: 'Remove' })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/Document description/)).not.toBeInTheDocument()
+    await userEvent.upload(screen.getByLabelText('Document File'), file)
     expect(screen.getByLabelText(/Document description/)).toHaveValue('')
+  })
+
+  it.each(['application', 'exemption', 'permit'] as const)(
+    'keeps a separate description for each %s file through review and submission',
+    async (workflowType) => {
+      mockedSubmitAdminUpload.mockResolvedValue({ message: 'Document uploaded.' })
+      const first = new File(['first'], 'first.pdf', { type: 'application/pdf' })
+      const second = new File(['second'], 'second.pdf', { type: 'application/pdf' })
+      render(
+        <DetailDocumentUploadPanel
+          workflowType={workflowType}
+          targetNumber="321"
+          inputId="documents"
+        />,
+      )
+      await openUploadForm()
+      await userEvent.upload(screen.getByLabelText('Document File'), [first, second])
+      await userEvent.type(
+        screen.getByLabelText(/Document description for first.pdf/),
+        ' First description ',
+      )
+      await userEvent.type(
+        screen.getByLabelText(/Document description for second.pdf/),
+        'Second description',
+      )
+      await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
+      expect(screen.getByLabelText(/Document description for first.pdf/)).toHaveValue(
+        ' First description ',
+      )
+      expect(screen.getByLabelText(/Document description for second.pdf/)).toHaveValue(
+        'Second description',
+      )
+      await userEvent.click(screen.getByRole('button', { name: 'Back' }))
+      await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
+      await userEvent.click(screen.getByRole('button', { name: 'Submit upload' }))
+      await waitFor(() => expect(mockedSubmitAdminUpload).toHaveBeenCalledTimes(2))
+      expect(mockedSubmitAdminUpload).toHaveBeenNthCalledWith(
+        1,
+        workflowType,
+        expect.objectContaining({
+          file: first,
+          fileDescription: 'First description',
+        }),
+      )
+      expect(mockedSubmitAdminUpload).toHaveBeenNthCalledWith(
+        2,
+        workflowType,
+        expect.objectContaining({
+          file: second,
+          fileDescription: 'Second description',
+        }),
+      )
+    },
+  )
+
+  it.each(['application', 'exemption', 'permit'] as const)(
+    'retains descriptions and retries only failed %s submissions',
+    async (workflowType) => {
+      mockedSubmitAdminUpload
+        .mockReset()
+        .mockResolvedValueOnce({ message: 'First document uploaded.' })
+        .mockRejectedValueOnce(new Error('The second upload failed.'))
+        .mockResolvedValueOnce({ message: 'Second document uploaded.' })
+      const onUploadComplete = vi.fn()
+      const first = new File(['first'], 'first.pdf', { type: 'application/pdf' })
+      const second = new File(['second'], 'second.pdf', { type: 'application/pdf' })
+      render(
+        <DetailDocumentUploadPanel
+          workflowType={workflowType}
+          targetNumber="321"
+          inputId="documents"
+          onUploadComplete={onUploadComplete}
+        />,
+      )
+      await openUploadForm()
+      await userEvent.upload(screen.getByLabelText('Document File'), [first, second])
+      await userEvent.type(
+        screen.getByLabelText(/Document description for first.pdf/),
+        'First description',
+      )
+      await userEvent.type(
+        screen.getByLabelText(/Document description for second.pdf/),
+        'Second description',
+      )
+      await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
+      await userEvent.click(screen.getByRole('button', { name: 'Submit upload' }))
+
+      await screen.findByText('1 file failed. Review the queue for details.')
+      expect(mockedSubmitAdminUpload).toHaveBeenCalledTimes(2)
+      const completedDescription = screen.getByLabelText(/Document description for first.pdf/)
+      const failedDescription = screen.getByLabelText(/Document description for second.pdf/)
+      expect(completedDescription).toHaveValue('First description')
+      expect(completedDescription).toBeDisabled()
+      expect(failedDescription).toHaveValue('Second description')
+      expect(failedDescription).toBeEnabled()
+
+      fireEvent.change(failedDescription, { target: { value: 'x'.repeat(251) } })
+      expect(screen.getByRole('button', { name: 'Submit upload' })).toBeDisabled()
+      fireEvent.change(failedDescription, { target: { value: ' Corrected second description ' } })
+      expect(screen.getByRole('button', { name: 'Submit upload' })).toBeEnabled()
+      await userEvent.click(screen.getByRole('button', { name: 'Submit upload' }))
+
+      await waitFor(() => {
+        expect(mockedSubmitAdminUpload).toHaveBeenCalledTimes(3)
+        expect(onUploadComplete).toHaveBeenCalledTimes(2)
+        expect(screen.queryByRole('dialog', { name: 'Add document' })).not.toBeInTheDocument()
+      })
+      expect(mockedSubmitAdminUpload).toHaveBeenNthCalledWith(
+        3,
+        workflowType,
+        expect.objectContaining({ file: second, fileDescription: 'Corrected second description' }),
+      )
+      expect(
+        mockedSubmitAdminUpload.mock.calls.filter(([, request]) => request.file === first),
+      ).toHaveLength(1)
+    },
+  )
+
+  it('blocks review and submission until an invalid per-file description is corrected', async () => {
+    mockedSubmitAdminUpload.mockResolvedValue({ message: 'Document uploaded.' })
+    render(
+      <DetailDocumentUploadPanel workflowType="permit" targetNumber="321" inputId="documents" />,
+    )
+    await openUploadForm()
+    await userEvent.upload(
+      screen.getByLabelText('Document File'),
+      new File(['test'], 'test.pdf', { type: 'application/pdf' }),
+    )
+    fireEvent.change(screen.getByLabelText(/Document description/), {
+      target: { value: 'x'.repeat(251) },
+    })
+    await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
+    expect(screen.getByText('Document description must be 250 characters or fewer.')).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Submit upload' })).not.toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText(/Document description/), {
+      target: { value: 'Valid description' },
+    })
+    await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
+    fireEvent.change(screen.getByLabelText(/Document description/), {
+      target: { value: 'Unsupported \u2603' },
+    })
+    expect(screen.getByRole('button', { name: 'Submit upload' })).toBeDisabled()
+    expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
+    fireEvent.change(screen.getByLabelText(/Document description/), { target: { value: '' } })
+    await userEvent.click(screen.getByRole('button', { name: 'Submit upload' }))
+    await waitFor(() =>
+      expect(mockedSubmitAdminUpload).toHaveBeenCalledWith(
+        'permit',
+        expect.objectContaining({ fileDescription: '' }),
+      ),
+    )
+  })
+
+  it('keeps descriptions with their files when files are removed or replaced', async () => {
+    render(
+      <DetailDocumentUploadPanel workflowType="permit" targetNumber="321" inputId="documents" />,
+    )
+    await openUploadForm()
+    const first = new File(['first'], 'first.pdf', { type: 'application/pdf' })
+    const second = new File(['second'], 'second.pdf', { type: 'application/pdf' })
+    await userEvent.upload(screen.getByLabelText('Document File'), [first, second])
+    await userEvent.type(screen.getByLabelText(/Document description for first.pdf/), 'First')
+    await userEvent.type(screen.getByLabelText(/Document description for second.pdf/), 'Second')
+    await userEvent.click(screen.getAllByRole('button', { name: 'Remove' })[0])
+    expect(screen.queryByLabelText(/Document description for first.pdf/)).not.toBeInTheDocument()
+    expect(screen.getByLabelText(/Document description for second.pdf/)).toHaveValue('Second')
+    await userEvent.upload(screen.getByLabelText('Document File'), first)
+    expect(screen.getByLabelText(/Document description for first.pdf/)).toHaveValue('')
+    expect(screen.getByLabelText(/Document description for second.pdf/)).toHaveValue('Second')
+    await userEvent.upload(screen.getByLabelText('Document File'), second)
+    expect(screen.getByLabelText(/Document description for second.pdf/)).toHaveValue('')
   })
 
   it('keeps Review upload enabled and shows the required file error on click', async () => {
@@ -84,7 +258,7 @@ describe('DetailDocumentUploadPanel', () => {
       />,
     )
 
-    await openUploadModal()
+    await openUploadForm()
     const reviewButton = screen.getByRole('button', { name: 'Review upload' })
     expect(reviewButton).toBeEnabled()
 
@@ -115,7 +289,7 @@ describe('DetailDocumentUploadPanel', () => {
       />,
     )
 
-    await openUploadModal()
+    await openUploadForm()
     await userEvent.upload(screen.getByLabelText('Document File'), [
       new File(['validated document'], 'ready.pdf', { type: 'application/pdf' }),
       new File(['pending document'], 'pending.pdf', { type: 'application/pdf' }),
@@ -166,7 +340,7 @@ describe('DetailDocumentUploadPanel', () => {
       />,
     )
 
-    await openUploadModal()
+    await openUploadForm()
     await userEvent.upload(
       screen.getByLabelText('Document File'),
       new File(['validated document'], 'ready.pdf', { type: 'application/pdf' }),
@@ -200,7 +374,7 @@ describe('DetailDocumentUploadPanel', () => {
       />,
     )
 
-    await openUploadModal()
+    await openUploadForm()
 
     await waitFor(() => {
       expect(document.getElementById('applicationDocumentsUploadModalContent')).toHaveFocus()
@@ -227,7 +401,7 @@ describe('DetailDocumentUploadPanel', () => {
       />,
     )
 
-    await openUploadModal()
+    await openUploadForm()
     await userEvent.upload(screen.getByLabelText('Document File'), file)
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Review upload' })).toBeEnabled()
@@ -281,7 +455,7 @@ describe('DetailDocumentUploadPanel', () => {
       />,
     )
 
-    await openUploadModal()
+    await openUploadForm()
     await userEvent.upload(screen.getByLabelText('Document File'), firstFile)
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Review upload' })).toBeEnabled()
@@ -343,7 +517,7 @@ describe('DetailDocumentUploadPanel', () => {
       />,
     )
 
-    await openUploadModal()
+    await openUploadForm()
     await userEvent.upload(screen.getByLabelText('Document File'), file)
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Review upload' })).toBeEnabled()
@@ -381,7 +555,7 @@ describe('DetailDocumentUploadPanel', () => {
       />,
     )
 
-    await openUploadModal()
+    await openUploadForm()
     await userEvent.upload(screen.getByLabelText('Document File'), file)
 
     await waitFor(() => {
@@ -425,7 +599,7 @@ describe('DetailDocumentUploadPanel', () => {
       />,
     )
 
-    await openUploadModal()
+    await openUploadForm()
     await userEvent.upload(screen.getByLabelText('Document File'), file)
     await waitFor(() => expect(screen.getByRole('button', { name: 'Review upload' })).toBeEnabled())
     await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
@@ -451,7 +625,7 @@ describe('DetailDocumentUploadPanel', () => {
       />,
     )
 
-    await openUploadModal()
+    await openUploadForm()
     await userEvent.upload(screen.getByLabelText('Document File'), files)
     await waitFor(() => {
       const buttons = screen.getAllByRole('button', { name: 'Remove' })
@@ -501,7 +675,7 @@ describe('DetailDocumentUploadPanel', () => {
       />,
     )
 
-    await openUploadModal()
+    await openUploadForm()
     await userEvent.upload(screen.getByLabelText('Document File'), [invalidFile, validFile])
     await waitFor(() => expect(mockedValidateAdminUpload).toHaveBeenCalledTimes(2))
     expect(
@@ -549,14 +723,14 @@ describe('DetailDocumentUploadPanel', () => {
       />,
     )
 
-    await openUploadModal()
+    await openUploadForm()
     await userEvent.upload(screen.getByLabelText('Document File'), file)
     await waitFor(() => expect(screen.getByRole('button', { name: 'Review upload' })).toBeEnabled())
     await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
     expect(screen.getByText('1 queued file needs attention before review.')).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    await openUploadModal()
+    await openUploadForm()
 
     expect(
       screen.queryByText('1 queued file needs attention before review.'),
@@ -587,7 +761,7 @@ describe('DetailDocumentUploadPanel', () => {
         />,
       )
 
-      await openUploadModal()
+      await openUploadForm()
       await userEvent.upload(screen.getByLabelText('Document File'), file)
       await waitFor(() => expect(mockedValidateAdminUpload).toHaveBeenCalledTimes(1))
 
@@ -635,7 +809,7 @@ describe('DetailDocumentUploadPanel', () => {
       />,
     )
 
-    await openUploadModal()
+    await openUploadForm()
     await userEvent.upload(screen.getByLabelText('Document File'), originalFile)
     await waitFor(() => expect(mockedValidateAdminUpload).toHaveBeenCalledTimes(1))
     await userEvent.upload(screen.getByLabelText('Document File'), replacementFile)
@@ -683,7 +857,7 @@ describe('DetailDocumentUploadPanel', () => {
       />,
     )
 
-    await openUploadModal()
+    await openUploadForm()
     await userEvent.upload(screen.getByLabelText('Document File'), [pendingFile, currentFile])
     await waitFor(() => expect(mockedValidateAdminUpload).toHaveBeenCalledTimes(2))
 
@@ -735,7 +909,7 @@ describe('DetailDocumentUploadPanel', () => {
       />,
     )
 
-    await openUploadModal()
+    await openUploadForm()
     await userEvent.upload(screen.getByLabelText('Document File'), [infectedFile, validFile])
 
     await waitFor(() => {
@@ -798,7 +972,7 @@ describe('DetailDocumentUploadPanel', () => {
 
     expect(onDirtyChange).toHaveBeenLastCalledWith(false)
     expect(onBusyChange).toHaveBeenLastCalledWith(false)
-    await openUploadModal()
+    await openUploadForm()
     await userEvent.upload(screen.getByLabelText('Document File'), file)
     await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(true))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Review upload' })).toBeEnabled())
@@ -817,6 +991,36 @@ describe('DetailDocumentUploadPanel', () => {
     await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(false))
   })
 
+  it('opens invoice entry inline and discards the draft on Cancel', async () => {
+    const onDirtyChange = vi.fn()
+    render(
+      <DetailDocumentUploadPanel
+        workflowType="invoice"
+        targetNumber="5001"
+        inputId="invoiceDocuments"
+        onDirtyChange={onDirtyChange}
+      />,
+    )
+    await openUploadForm('Add invoice')
+    const invoiceForm = screen.getByRole('region', { name: 'Add invoice' })
+    expect(invoiceForm).toHaveFocus()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add invoice' })).not.toBeInTheDocument()
+    expect(within(invoiceForm).getByLabelText('Invoice number')).toHaveAttribute(
+      'aria-required',
+      'true',
+    )
+    await userEvent.type(within(invoiceForm).getByLabelText('Invoice number'), 'TEST-INVOICE')
+    await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(true))
+    await userEvent.click(within(invoiceForm).getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('region', { name: 'Add invoice' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add invoice' })).toHaveFocus()
+    expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
+    await openUploadForm('Add invoice')
+    expect(screen.getByLabelText('Invoice number')).toHaveValue('')
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false)
+  })
+
   it('rejects multiple invoice files dropped together before validation', async () => {
     render(
       <DetailDocumentUploadPanel
@@ -825,9 +1029,9 @@ describe('DetailDocumentUploadPanel', () => {
         inputId="invoiceDocuments"
       />,
     )
-    await openUploadModal('Add invoice')
-    await userEvent.type(screen.getByLabelText('Upload invoice number'), 'INV001')
-    await userEvent.type(screen.getByLabelText('Upload invoice export value'), '100')
+    await openUploadForm('Add invoice')
+    await userEvent.type(screen.getByLabelText('Invoice number'), 'INV001')
+    await userEvent.type(screen.getByLabelText('Export value'), '100')
     expect(screen.getByLabelText('Document File')).not.toHaveAttribute('multiple')
     expect(screen.queryByText(/Multiple files can be queued/)).not.toBeInTheDocument()
 
@@ -870,9 +1074,9 @@ describe('DetailDocumentUploadPanel', () => {
           onUploadComplete={onUploadComplete}
         />,
       )
-      await openUploadModal('Add invoice')
-      await userEvent.type(screen.getByLabelText('Upload invoice number'), 'INV001')
-      await userEvent.type(screen.getByLabelText('Upload invoice export value'), '100')
+      await openUploadForm('Add invoice')
+      await userEvent.type(screen.getByLabelText('Invoice number'), 'INV001')
+      await userEvent.type(screen.getByLabelText('Export value'), '100')
       await userEvent.upload(screen.getByLabelText('Document File'), firstFile)
       if (selectionMethod === 'drop') {
         fireEvent.drop(screen.getByRole('button', { name: 'Choose file for File' }), {
@@ -905,7 +1109,7 @@ describe('DetailDocumentUploadPanel', () => {
           file: replacementFile,
         }),
       )
-      expect(screen.queryByRole('dialog', { name: 'Add invoice' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('region', { name: 'Add invoice' })).not.toBeInTheDocument()
     },
   )
 
@@ -921,11 +1125,13 @@ describe('DetailDocumentUploadPanel', () => {
       />,
     )
 
-    await openUploadModal('Add invoice')
+    await openUploadForm('Add invoice')
     expect(
-      screen.getByRole('dialog', { name: 'Add invoice' }).querySelector('.required-label__marker'),
-    ).toBeNull()
-    const conversionRate = screen.getByLabelText('Upload invoice conversion rate')
+      screen
+        .getByRole('region', { name: 'Add invoice' })
+        .querySelectorAll('.required-label__marker'),
+    ).toHaveLength(5)
+    const conversionRate = screen.getByLabelText('Conversion rate')
     expect(conversionRate).toHaveValue('1.25')
     expect(onDirtyChange).toHaveBeenLastCalledWith(false)
     await userEvent.clear(conversionRate)
@@ -946,13 +1152,13 @@ describe('DetailDocumentUploadPanel', () => {
       />,
     )
 
-    await openUploadModal('Add invoice')
-    await userEvent.type(screen.getByLabelText('Upload invoice number'), 'é'.repeat(9))
-    await userEvent.type(screen.getByLabelText('Upload invoice export value'), '10000000')
-    await userEvent.clear(screen.getByLabelText('Upload invoice conversion rate'))
-    await userEvent.type(screen.getByLabelText('Upload invoice conversion rate'), '10')
-    await userEvent.clear(screen.getByLabelText('Upload invoice fee in lieu'))
-    await userEvent.type(screen.getByLabelText('Upload invoice fee in lieu'), '10000000')
+    await openUploadForm('Add invoice')
+    await userEvent.type(screen.getByLabelText('Invoice number'), 'é'.repeat(9))
+    await userEvent.type(screen.getByLabelText('Export value'), '10000000')
+    await userEvent.clear(screen.getByLabelText('Conversion rate'))
+    await userEvent.type(screen.getByLabelText('Conversion rate'), '10')
+    await userEvent.clear(screen.getByLabelText('Fee in lieu'))
+    await userEvent.type(screen.getByLabelText('Fee in lieu'), '10000000')
     await userEvent.upload(screen.getByLabelText('Document File'), file)
 
     expect(
@@ -960,18 +1166,12 @@ describe('DetailDocumentUploadPanel', () => {
         'Invoice number contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
       ),
     ).toBeInTheDocument()
-    expect(
-      screen.getByText('Invoice export value must round to 9999999.99 or less.'),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByText('Invoice conversion rate must round to 9.99999 or less.'),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByText('Invoice fee in lieu must round to 9999999.99 or less.'),
-    ).toBeInTheDocument()
+    expect(screen.getByText('Export value must round to 9999999.99 or less.')).toBeInTheDocument()
+    expect(screen.getByText('Conversion rate must round to 9.99999 or less.')).toBeInTheDocument()
+    expect(screen.getByText('Fee in lieu must round to 9999999.99 or less.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Review upload' })).toBeEnabled()
     await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
-    expect(screen.getByRole('dialog', { name: 'Add invoice' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Add invoice' })).toBeInTheDocument()
     expect(mockedValidateAdminUpload).not.toHaveBeenCalled()
     expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
   })
