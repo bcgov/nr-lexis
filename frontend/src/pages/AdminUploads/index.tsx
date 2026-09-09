@@ -138,10 +138,9 @@ type UploadFormState = {
   invoiceExportValue: string
   invoiceConversionRate: string
   invoiceFeeInLieu: string
-  fileDescription: string
 }
 
-type UploadField = Exclude<keyof UploadFormState, 'fileDescription'> | 'uploadFile'
+type UploadField = keyof UploadFormState | 'uploadFile'
 type UploadWizardStep = 'upload' | 'review'
 
 type QueuedUploadResult = {
@@ -188,7 +187,6 @@ const INITIAL_FORM_STATE: UploadFormState = {
   invoiceExportValue: '',
   invoiceConversionRate: '1.00',
   invoiceFeeInLieu: '1.00',
-  fileDescription: '',
 }
 
 const getWorkflowFromQuery = (
@@ -229,7 +227,6 @@ const buildInitialFormStateFromQuery = (query: URLSearchParams): UploadFormState
     invoiceExportValue: normalizeQueryValue(query.get('invoiceExportValue')),
     invoiceConversionRate: invoiceConversionRate || INITIAL_FORM_STATE.invoiceConversionRate,
     invoiceFeeInLieu: invoiceFeeInLieu || INITIAL_FORM_STATE.invoiceFeeInLieu,
-    fileDescription: normalizeQueryValue(query.get('fileDescription')),
   }
 }
 
@@ -855,7 +852,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
       nextItemsByFileName.set(uploadQueueFileKey(file), {
         id: `${queuedAt}-${index}-${file.name}-${file.size}`,
         file,
-        fileDescription: isApplicationSubmission ? undefined : formState.fileDescription,
+        fileDescription: isApplicationSubmission ? undefined : '',
         workflowLabel: selectedWorkflow.label,
         queuedAt,
         status: validationMessage

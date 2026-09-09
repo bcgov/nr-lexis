@@ -551,14 +551,18 @@ describe('Admin upload workflow smoke', () => {
     expect(screen.queryByLabelText('Application submission file')).not.toBeInTheDocument()
   })
 
-  it('filters queued files in the data preview table and submits multiple documents', async () => {
+  it('filters and submits multiple documents with independent descriptions', async () => {
     mockUploadAccess('/filePermitUpload')
 
-    renderPage('/admin/uploads?type=permit&permitNumber=5001')
+    renderPage(
+      '/admin/uploads?type=permit&permitNumber=5001&fileDescription=Shared%20query%20description',
+    )
 
     const permitDocument = new File(['permit upload'], 'permit.pdf', { type: 'application/pdf' })
     const scaleDocument = new File(['scale upload'], 'scale.csv', { type: 'text/csv' })
     await userEvent.upload(screen.getByLabelText('Document File'), [permitDocument, scaleDocument])
+    expect(screen.getByLabelText(/Document description for permit\.pdf/)).toHaveValue('')
+    expect(screen.getByLabelText(/Document description for scale\.csv/)).toHaveValue('')
     await userEvent.type(
       screen.getByLabelText(/Document description for permit\.pdf/),
       ' Permit evidence ',
