@@ -3598,6 +3598,117 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.getByText('05')).toBeInTheDocument()
   })
 
+  it('requires a reload after a normal permit save cannot refresh derived clients', async () => {
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    configureActivePermit()
+    mockedFetchProvincialPermitDetail
+      .mockResolvedValueOnce({
+        ...permitDetail,
+        permitStatusCode: 'ACT',
+        permitStatusDescription: 'Active',
+      })
+      .mockRejectedValueOnce(new Error('persisted client refresh unavailable'))
+    renderPermitDetails()
+
+    await selectPermitDetailTab('Owner')
+    expect(await screen.findByText('Owner Co')).toBeInTheDocument()
+    await selectPermitDetailTab('Permit')
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    await userEvent.clear(screen.getByLabelText('Remarks'))
+    await userEvent.type(screen.getByLabelText('Remarks'), 'save without refreshed clients')
+    await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
+
+    await waitFor(() => expect(mockedUpdatePermitDetail).toHaveBeenCalledOnce())
+    expect(
+      await screen.findByText(
+        /The permit was updated successfully\. Current permit details could not be refreshed; reload before making another change\./i,
+      ),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'The permit was saved, but its current details could not be refreshed. Reload before making another change.',
+      ),
+    ).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'close notification' }))
+    await waitFor(() =>
+      expect(
+        screen.queryByText(
+          /The permit was updated successfully\. Current permit details could not be refreshed; reload before making another change\./i,
+        ),
+      ).not.toBeInTheDocument(),
+    )
+    expect(
+      screen.getByText(
+        'The permit was saved, but its current details could not be refreshed. Reload before making another change.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Edit permit' })).not.toBeInTheDocument()
+
+    await selectPermitDetailTab('Shipping')
+    expect(screen.queryByRole('button', { name: 'Edit shipping' })).not.toBeInTheDocument()
+    await selectPermitDetailTab('Owner')
+    const ownerTile = screen.getByRole('heading', { level: 2, name: 'Owner' }).closest('.cds--tile')
+    expect(ownerTile).toBeTruthy()
+    expect(within(ownerTile as HTMLElement).queryByText('00067890')).not.toBeInTheDocument()
+    expect(within(ownerTile as HTMLElement).queryByText('Owner Co')).not.toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
+    expect(mockedFetchProvincialPermitDetail).toHaveBeenCalledTimes(2)
+    expect(mockedUpdatePermitDetail).toHaveBeenCalledOnce()
+    expect(mockedUpdatePermitShipping).not.toHaveBeenCalled()
+
+    consoleWarn.mockRestore()
+  })
+
+  it('does not navigate or continue a deferred status transition after a saved normal permit cannot refresh', async () => {
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    configureActivePermit()
+    mockedFetchProvincialPermitDetail
+      .mockResolvedValueOnce({
+        ...permitDetail,
+        permitStatusCode: 'ACT',
+        permitStatusDescription: 'Active',
+      })
+      .mockRejectedValueOnce(new Error('persisted client refresh unavailable'))
+    const router = createMemoryRouter(
+      [
+        {
+          path: '/provincial/permit/:permitNumber',
+          element: (
+            <>
+              <ProvincialPermitDetailsPage />
+              <Link to="/next">Leave permit</Link>
+            </>
+          ),
+        },
+        { path: '/next', element: <h1>Next page</h1> },
+      ],
+      { initialEntries: ['/provincial/permit/777'] },
+    )
+    render(<RouterProvider router={router} />)
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    await userEvent.clear(screen.getByLabelText('Submit date'))
+    await userEvent.type(screen.getByLabelText('Submit date'), '2026-04-11')
+    await userEvent.selectOptions(screen.getByLabelText('Permit status'), 'COM')
+    await userEvent.click(screen.getByRole('link', { name: 'Leave permit' }))
+    await screen.findByRole('dialog', { name: 'Unsaved changes' })
+    await userEvent.click(screen.getByRole('button', { name: 'Save and leave' }))
+
+    await waitFor(() => expect(mockedUpdatePermitDetail).toHaveBeenCalledOnce())
+    expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
+      expect.objectContaining({ permitSubmitDate: '2026-04-11', permitStatus: 'ACT' }),
+    )
+    expect(
+      await screen.findByText(
+        /Current permit details could not be refreshed; reload before making another change\./i,
+      ),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Next page' })).not.toBeInTheDocument()
+    expect(mockedUpdatePermitDetail).toHaveBeenCalledOnce()
+
+    consoleWarn.mockRestore()
+  })
+
   it('validates permit text storage boundaries before saving', async () => {
     configureActivePermit()
     renderPermitDetails()

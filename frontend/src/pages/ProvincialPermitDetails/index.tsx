@@ -604,6 +604,16 @@ const withPersistedPermitClientValues = (
   agentClientLocationCode: persistedDetail.agentClientLocationCode,
 })
 
+const withoutPermitClientValues = (
+  currentDetail: ProvincialPermitDetail,
+): ProvincialPermitDetail => ({
+  ...currentDetail,
+  ownerClientNumber: null,
+  ownerClientLocationCode: null,
+  applicantClientNumber: null,
+  agentClientLocationCode: null,
+})
+
 const withUpdatedPermitShipping = (
   currentDetail: ProvincialPermitDetail,
   form: PermitDetailForm,
@@ -679,6 +689,7 @@ const ProvincialPermitDetailsPage = () => {
   )
   const [editContextLoaded, setEditContextLoaded] = useState(false)
   const [editContextLoadFailed, setEditContextLoadFailed] = useState(false)
+  const [permitDetailRefreshRequired, setPermitDetailRefreshRequired] = useState(false)
   const [feeOverrideForm, setFeeOverrideForm] = useState<PermitFeeOverrideForm | null>(null)
   const [feeOverrideFieldErrors, setFeeOverrideFieldErrors] =
     useState<PermitFeeOverrideFieldErrors>({})
@@ -841,6 +852,7 @@ const ProvincialPermitDetailsPage = () => {
     setClientDataRequested(false)
     setClientDataErrorMessage('')
     setAgentUsed(false)
+    setPermitDetailRefreshRequired(false)
     setAvailablePermitApplications([])
     setPermitApplicationToAdd('')
     setHasLoadedAvailablePermitApplications(false)
@@ -1401,8 +1413,10 @@ const ProvincialPermitDetailsPage = () => {
       'This permit is currently locked for editing by another user.'
     : ''
   const permitEditContextUnavailableMessage =
-    hasPermitMutationPermission && editContextLoadFailed
-      ? 'Permit edit settings could not be loaded. Editing is unavailable until the data can be retrieved.'
+    hasPermitMutationPermission && (editContextLoadFailed || permitDetailRefreshRequired)
+      ? permitDetailRefreshRequired
+        ? 'The permit was saved, but its current details could not be refreshed. Reload before making another change.'
+        : 'Permit edit settings could not be loaded. Editing is unavailable until the data can be retrieved.'
       : ''
   const permitStatusCode = detail?.permitStatusCode?.trim().toUpperCase()
   const requiredPermitOptionsMissing =
@@ -1987,6 +2001,7 @@ const ProvincialPermitDetailsPage = () => {
         setActionErrorMessage('Wait for the current permit change to finish before saving again.')
         return false
       }
+      setPermitDetailRefreshRequired(false)
       setActionErrorMessage('')
       setActionInfoMessage('')
       setIsSavingPermit(true)
@@ -2082,6 +2097,7 @@ const ProvincialPermitDetailsPage = () => {
             return false
           }
         }
+        const permitDetailRefreshFailed = persistedDetail == null
 
         const detailWithPermitChanges = withUpdatedPermitDetail(
           detail,
@@ -2097,7 +2113,7 @@ const ProvincialPermitDetailsPage = () => {
         )
         const persistedUpdatedDetail =
           persistedDetail == null
-            ? updatedDetail
+            ? withoutPermitClientValues(updatedDetail)
             : withPersistedPermitClientValues(updatedDetail, persistedDetail)
         setAgentUsed(Boolean(persistedUpdatedDetail.applicantClientNumber?.trim()))
         setDetail((current) => {
@@ -2115,7 +2131,7 @@ const ProvincialPermitDetailsPage = () => {
             result,
           )
           return persistedDetail == null
-            ? currentUpdatedDetail
+            ? withoutPermitClientValues(currentUpdatedDetail)
             : withPersistedPermitClientValues(currentUpdatedDetail, persistedDetail)
         })
         setPermitForm((current) => {
@@ -2126,24 +2142,40 @@ const ProvincialPermitDetailsPage = () => {
             ? { ...savedForm, permitStatus: targetPermitStatus }
             : savedForm
         })
-        setIsEditingPermit(deferStatusTransition)
+        if (permitDetailRefreshFailed) {
+          setOwnerClientData(null)
+          setAgentClientData(null)
+          setIsClientDataLoading(false)
+          setClientDataErrorMessage('')
+          setPermitDetailRefreshRequired(true)
+          setEditContextLoaded(false)
+          setIsEditingPermit(false)
+          setIsEditingShipping(false)
+          setIsEditingFeeOverride(false)
+        } else {
+          setIsEditingPermit(deferStatusTransition)
+        }
         if (includeShipping && !deferStatusTransition) {
           setIsEditingShipping(false)
         }
         setTouchedPermitFields({})
         setShowPermitValidationErrors(false)
+        const mutationMessage = permitMutationMessage(
+          result,
+          deferStatusTransition
+            ? 'Permit fields were saved before the status transition.'
+            : includeShipping
+              ? 'Permit and shipping saved successfully.'
+              : 'Permit saved successfully.',
+        )
         setActionInfoMessage(
-          permitMutationMessage(
-            result,
-            deferStatusTransition
-              ? 'Permit fields were saved before the status transition.'
-              : includeShipping
-                ? 'Permit and shipping saved successfully.'
-                : 'Permit saved successfully.',
-          ),
+          permitDetailRefreshFailed
+            ? `${mutationMessage} Current permit details could not be refreshed; reload before making another change.`
+            : mutationMessage,
         )
         refreshLoadedPermitFees()
-        return true
+        // The mutation committed, but callers must stop until canonical permit details reload.
+        return !permitDetailRefreshFailed
       } catch (error) {
         if (isLatestRequest()) {
           console.error(error)
