@@ -2879,10 +2879,13 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(page).toHaveURL(/\/provincial\/application\/create(?:\?|$)/)
 
     await page.getByRole('tab', { name: 'Documents' }).click()
-    const createDocumentsHeading = page.getByRole('heading', { name: 'Documents', exact: true })
-    await expect(createDocumentsHeading).toBeVisible()
-    await expect(createDocumentsHeading).not.toContainText('API')
-    const addDocumentButton = page.getByRole('button', { name: 'Add document' })
+    const createDocumentsRegion = page.getByRole('region', { name: 'Documents', exact: true })
+    await expect(createDocumentsRegion).toBeVisible()
+    await expect(createDocumentsRegion).not.toContainText('API')
+    const addDocumentButton = createDocumentsRegion.getByRole('button', {
+      name: 'Add document',
+      exact: true,
+    })
     await expect(addDocumentButton).toBeDisabled()
     await expect(addDocumentButton).toHaveAttribute(
       'title',
@@ -3856,7 +3859,7 @@ test.describe('TEST IDIR admin regression', () => {
           pagePath: '/provincial/application',
           heading: /provincial application search/i,
           searchPath: '/api/lexis/applications/search',
-          numberField: 'applicationNumber',
+          numberField: 'application',
           recordNumber: String(lifecycleApplicationNumber),
         }))
 
