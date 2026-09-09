@@ -350,7 +350,7 @@ function UploadQueuePreview({
                                 kind="ghost"
                                 size="sm"
                                 onClick={() => onRemove(item.id)}
-                                disabled={isSubmitting && item.status === 'uploading'}
+                                disabled={isSubmitting}
                               >
                                 {removeLabel}
                               </Button>

@@ -2886,6 +2886,123 @@ describe('Provincial Permit Detail Action Smoke', () => {
     },
   )
 
+  it.each([
+    ['Package volume (m³)', '10.25', 'Package volume must have no more than one decimal place.'],
+    ['Average length', '0', 'Average length must be greater than 0.'],
+    ['Average top diameter', '100', 'Average diameter must be 99.99 or less.'],
+  ])('keeps invalid Blanket OIC %s out of the save request', async (fieldLabel, value, error) => {
+    configureEditableBlanketOicPackage()
+    renderPermitDetails()
+
+    await selectPermitDetailTab('Items')
+    const packageRow = (await screen.findByRole('cell', { name: 'BOIC-9' })).closest('tr')!
+    await userEvent.click(within(packageRow).getByRole('button', { name: 'Edit' }))
+    const packageEditor = (await screen.findByRole('heading', { name: 'Edit BOIC-9' })).closest(
+      '.application-detail-edit-section',
+    ) as HTMLElement
+    const field = within(packageEditor).getByLabelText(fieldLabel)
+    await userEvent.clear(field)
+    await userEvent.type(field, value)
+    await userEvent.click(within(packageEditor).getByRole('button', { name: 'Save package' }))
+
+    expect(await within(packageEditor).findByText(error)).toBeInTheDocument()
+    expect(mockedUpdateBlanketOicPackage).not.toHaveBeenCalled()
+  })
+
+  it('clears invalid Blanket OIC package feedback when changing package drafts', async () => {
+    configureEditableBlanketOicPackage()
+    mockedFetchProvincialPermitDetailTabs.mockResolvedValue({
+      ...tabsResult,
+      packages: [
+        editableBlanketOicPackage,
+        { ...editableBlanketOicPackage, packageNumber: 'BOIC-10' },
+      ],
+    })
+    mockedFetchBlanketOicPackageEditContext.mockImplementation(async (packageNumber) => ({
+      packageNumber,
+      volume: '120.5',
+      averageLength: '7.1',
+      averageDiameter: '16.2',
+      status: 'ACT',
+      comments: 'Current OIC package',
+      reprocessed: 'N',
+      ageClass: 'O',
+      productType: 'H',
+      endUseCode: 'LU',
+      speciesCodes: ['HE'],
+    }))
+    renderPermitDetails()
+
+    await selectPermitDetailTab('Items')
+    const firstPackageRow = (await screen.findByRole('cell', { name: 'BOIC-9' })).closest('tr')!
+    await userEvent.click(within(firstPackageRow).getByRole('button', { name: 'Edit' }))
+    const firstPackageEditor = (
+      await screen.findByRole('heading', { name: 'Edit BOIC-9' })
+    ).closest('.application-detail-edit-section') as HTMLElement
+    const averageLength = within(firstPackageEditor).getByLabelText('Average length')
+    await userEvent.clear(averageLength)
+    await userEvent.type(averageLength, '0')
+    await userEvent.click(within(firstPackageEditor).getByRole('button', { name: 'Save package' }))
+
+    const validationMessage = 'Average length must be greater than 0.'
+    expect(await within(firstPackageEditor).findByText(validationMessage)).toBeInTheDocument()
+    const packageSelect = screen.getByRole('combobox', { name: 'Package number' })
+    expect(packageSelect).toBeDisabled()
+
+    await userEvent.click(within(firstPackageEditor).getByRole('button', { name: 'Cancel edit' }))
+    expect(screen.queryByText(validationMessage)).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Create package' }))
+    const newPackageEditor = (
+      await screen.findByRole('heading', { name: 'Create Blanket OIC package' })
+    ).closest('.application-detail-edit-section') as HTMLElement
+    expect(within(newPackageEditor).queryByText(validationMessage)).not.toBeInTheDocument()
+    await userEvent.click(within(newPackageEditor).getByRole('button', { name: 'Cancel' }))
+
+    expect(packageSelect).toBeEnabled()
+    await chooseComboBoxOption(packageSelect, 'BOIC-10')
+    const secondPackageRow = (await screen.findByRole('cell', { name: 'BOIC-10' })).closest('tr')!
+    await userEvent.click(within(secondPackageRow).getByRole('button', { name: 'Edit' }))
+    const secondPackageEditor = (
+      await screen.findByRole('heading', { name: 'Edit BOIC-10' })
+    ).closest('.application-detail-edit-section') as HTMLElement
+    expect(within(secondPackageEditor).getByLabelText('Average length')).toHaveValue('7.1')
+    expect(within(secondPackageEditor).queryByText(validationMessage)).not.toBeInTheDocument()
+  })
+
+  it('accepts zero volume and the maximum Blanket OIC package dimensions', async () => {
+    configureEditableBlanketOicPackage()
+    renderPermitDetails()
+
+    await selectPermitDetailTab('Items')
+    const packageRow = (await screen.findByRole('cell', { name: 'BOIC-9' })).closest('tr')!
+    await userEvent.click(within(packageRow).getByRole('button', { name: 'Edit' }))
+    const packageEditor = (await screen.findByRole('heading', { name: 'Edit BOIC-9' })).closest(
+      '.application-detail-edit-section',
+    ) as HTMLElement
+    const volume = within(packageEditor).getByLabelText('Package volume (m³)')
+    await userEvent.clear(volume)
+    await userEvent.type(volume, '0.0')
+    const averageLength = within(packageEditor).getByLabelText('Average length')
+    await userEvent.clear(averageLength)
+    await userEvent.type(averageLength, '99')
+    const averageDiameter = within(packageEditor).getByLabelText('Average top diameter')
+    await userEvent.clear(averageDiameter)
+    await userEvent.type(averageDiameter, '99.99')
+    await userEvent.click(within(packageEditor).getByRole('button', { name: 'Save package' }))
+
+    await waitFor(() =>
+      expect(mockedUpdateBlanketOicPackage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          packageNumber: 'BOIC-9',
+          volume: '0.0',
+          averageLength: '99',
+          averageDiameter: '99.99',
+        }),
+      ),
+    )
+  })
+
   it.each(['00067890', '00012345'])(
     'lets authorized BOIC submitter %s edit an existing package',
     async (clientNumber) => {

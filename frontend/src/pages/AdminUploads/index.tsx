@@ -173,6 +173,7 @@ type UploadTargetNumberSelectProps = {
   invalid?: boolean
   invalidText?: ReactNode
   required?: boolean
+  disabled?: boolean
   searchOptions: (query: string) => Promise<UploadTargetNumberOption[]>
   normalizeInput?: (input: string) => string
   onBlur?: () => void
@@ -253,6 +254,7 @@ function UploadTargetNumberSelect({
   invalid = false,
   invalidText,
   required = false,
+  disabled = false,
   searchOptions,
   normalizeInput = trimTargetNumberInput,
   onBlur,
@@ -313,6 +315,7 @@ function UploadTargetNumberSelect({
       aria-required={required || undefined}
       invalid={invalid}
       invalidText={invalidText}
+      disabled={disabled}
       onBlur={onBlur}
       onInputChange={(inputValue) => {
         setInputText(inputValue)
@@ -699,9 +702,6 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
   const hasValidatedLexisSubmissions =
     selectedWorkflowType === 'applicationSubmission' &&
     uploadQueue.some((item) => item.status === 'validated')
-  const hasSubmittedLexisSubmissions =
-    selectedWorkflowType === 'applicationSubmission' &&
-    uploadQueue.some((item) => item.status === 'uploading' || item.status === 'complete')
   const canReviewLexisSubmissions =
     selectedWorkflowType === 'applicationSubmission' &&
     hasValidatedLexisSubmissions &&
@@ -710,9 +710,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
     selectedWorkflowType === 'applicationSubmission' && uploadQueue.length === 1
       ? 'submission'
       : 'submissions'
-  const isUploadInputLocked =
-    !hasUploadAccess ||
-    (selectedWorkflowType === 'applicationSubmission' && hasSubmittedLexisSubmissions)
+  const isUploadInputLocked = !hasUploadAccess || isSubmitting
   const submitButtonLabel =
     selectedWorkflowType === 'applicationSubmission'
       ? hasValidatingLexisSubmissions
@@ -730,8 +728,10 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
 
   const fieldErrors = useMemo<FieldErrors<UploadField>>(
     () => ({
+      // Application submissions review only validated files; rejected files stay in the issues list.
       uploadFile:
-        invalidUploadCount > 0
+        invalidUploadCount > 0 &&
+        (selectedWorkflowType !== 'applicationSubmission' || !hasValidatedLexisSubmissions)
           ? `${invalidUploadCount} queued file${invalidUploadCount === 1 ? ' needs' : 's need'} attention before upload.`
           : invalidDescriptionCount > 0
             ? `${invalidDescriptionCount} queued file${invalidDescriptionCount === 1 ? ' has' : 's have'} an invalid document description.`
@@ -793,6 +793,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
       formState,
       invalidDescriptionCount,
       invalidUploadCount,
+      hasValidatedLexisSubmissions,
       uploadQueue.length,
       selectedWorkflowType,
     ],
@@ -811,7 +812,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
     getVisibleFieldError(field, fieldErrors, touchedFields, showValidationErrors)
 
   const setWorkflowType = (workflowType: UploadWorkflowType): void => {
-    if (lockedWorkflowType) {
+    if (lockedWorkflowType || isSubmitting) {
       return
     }
     setSelectedWorkflowType(workflowType)
@@ -828,7 +829,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
   }
 
   const addFilesToQueue = (files: FileList | null): void => {
-    if (!files || files.length === 0) {
+    if (isSubmitting || !files || files.length === 0) {
       return
     }
     if (selectedWorkflowType === 'invoice' && files.length > 1) {
@@ -840,6 +841,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
       setApplicationSubmissionStep('upload')
     } else {
       setDocumentUploadStep('upload')
+      setShowValidationErrors(true)
     }
 
     const queuedAt = Date.now()
@@ -917,6 +919,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
   }
 
   const removeQueuedFile = (id: string): void => {
+    if (isSubmitting) return
     const nextLength = uploadQueue.filter((item) => item.id !== id).length
     setUploadQueue((current) => current.filter((item) => item.id !== id))
     if (selectedWorkflowType === 'applicationSubmission' && nextLength === 0) {
@@ -1439,7 +1442,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
     selectedWorkflowType === 'applicationSubmission'
       ? 'The submission type will be detected automatically from your file.'
       : 'Select documents to prepare before reviewing and submitting the upload.'
-  const canSubmitDocumentUpload = hasUploadAccess && invalidDescriptionCount === 0
+  const canSubmitDocumentUpload = hasUploadAccess && validationErrors.length === 0
   const renderQueuedFileDescription = (item: UploadQueueItem): ReactNode => {
     const description = item.fileDescription ?? ''
     const error = validateDocumentUploadDescription(description)
@@ -1491,6 +1494,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
           <SearchableSelect
             id="uploadWorkflowType"
             labelText="Upload type"
+            disabled={isSubmitting}
             value={selectedWorkflowType}
             options={DOCUMENT_UPLOAD_WORKFLOW_DEFINITIONS.map((workflow) => ({
               value: workflow.type,
@@ -1504,6 +1508,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
           <ApplicationNumberSelect
             id="applicationNumber"
             labelText={selectedWorkflow.numberFieldLabel}
+            disabled={isSubmitting}
             required
             value={formState.applicationNumber}
             invalid={!!fieldError('applicationNumber')}
@@ -1522,6 +1527,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
           <UploadTargetNumberSelect
             id="exemptionNumber"
             labelText={selectedWorkflow.numberFieldLabel}
+            disabled={isSubmitting}
             required
             value={formState.exemptionNumber}
             invalid={!!fieldError('exemptionNumber')}
@@ -1542,6 +1548,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
           <UploadTargetNumberSelect
             id="permitNumber"
             labelText={selectedWorkflow.numberFieldLabel}
+            disabled={isSubmitting}
             required
             value={formState.permitNumber}
             invalid={!!fieldError('permitNumber')}
@@ -1563,6 +1570,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
             <TextInput
               id="salesInvoiceNumber"
               labelText="Invoice number"
+              disabled={isSubmitting}
               aria-required="true"
               value={formState.salesInvoiceNumber}
               invalid={!!fieldError('salesInvoiceNumber')}
@@ -1578,6 +1586,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
             <TextInput
               id="invoiceExportValue"
               labelText="Export value (CAD)"
+              disabled={isSubmitting}
               aria-required="true"
               value={formState.invoiceExportValue}
               invalid={!!fieldError('invoiceExportValue')}
@@ -1593,6 +1602,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
             <TextInput
               id="invoiceConversionRate"
               labelText="Conversion rate"
+              disabled={isSubmitting}
               aria-required="true"
               value={formState.invoiceConversionRate}
               invalid={!!fieldError('invoiceConversionRate')}
@@ -1608,6 +1618,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
             <TextInput
               id="invoiceFeeInLieu"
               labelText="Fee in lieu"
+              disabled={isSubmitting}
               aria-required="true"
               value={formState.invoiceFeeInLieu}
               invalid={!!fieldError('invoiceFeeInLieu')}
@@ -1638,9 +1649,9 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
         invalidText={fieldError('uploadFile')}
         disabled={isUploadInputLocked}
         disabledDescription={
-          !hasUploadAccess
-            ? 'Your session does not include the required upload permission.'
-            : 'Current application submissions are submitting or complete. Wait for the upload to finish before choosing more files.'
+          isSubmitting
+            ? 'Upload is submitting.'
+            : 'Your session does not include the required upload permission.'
         }
         renderAsPanel={false}
         variant="fspts"
@@ -1720,6 +1731,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
                   items={uploadQueue}
                   targetSummary={currentUploadTargetSummary}
                   canSubmit={canSubmitDocumentUpload}
+                  canReview={canSubmitDocumentUpload}
                   isSubmitting={isSubmitting}
                   currentStepId={documentUploadStep}
                   actionsPlacement="footer"
@@ -1761,10 +1773,9 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
                 }
                 targetSummary={currentUploadTargetSummary}
                 canSubmit={
-                  hasUploadAccess &&
-                  (selectedWorkflowType === 'applicationSubmission'
-                    ? hasValidatedLexisSubmissions
-                    : invalidDescriptionCount === 0)
+                  selectedWorkflowType === 'applicationSubmission'
+                    ? hasUploadAccess && hasValidatedLexisSubmissions
+                    : canSubmitDocumentUpload
                 }
                 isSubmitting={isSubmitting}
                 currentStepId="review"
