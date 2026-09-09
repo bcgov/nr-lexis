@@ -734,7 +734,9 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
         (selectedWorkflowType !== 'applicationSubmission' || !hasValidatedLexisSubmissions)
           ? `${invalidUploadCount} queued file${invalidUploadCount === 1 ? ' needs' : 's need'} attention before upload.`
           : invalidDescriptionCount > 0
-            ? `${invalidDescriptionCount} queued file${invalidDescriptionCount === 1 ? ' has' : 's have'} an invalid document description.`
+            ? invalidDescriptionCount === 1
+              ? '1 queued file has an invalid document description.'
+              : `${invalidDescriptionCount} queued files have invalid document descriptions.`
             : uploadQueue.length > 0
               ? undefined
               : selectedWorkflowType === 'applicationSubmission'
