@@ -317,7 +317,7 @@ export default function BlanketOicPackageCodeFields({
           type="button"
           kind="tertiary"
           size="sm"
-          disabled={speciesSelectionDisabled || !speciesToAdd}
+          disabled={speciesSelectionDisabled || !normalizeCode(speciesToAdd)}
           onClick={onAddSpecies}
         >
           Add species
