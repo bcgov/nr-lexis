@@ -356,6 +356,7 @@ function Layout({ children }: LayoutProps) {
   const { capabilities, canPerform, defaultRoute, logout } = useAuth()
   const { theme, toggleTheme } = useTheme()
   const [isProfileOpen, setIsProfileOpen] = useState(false)
+  const [isConflictOpen, setIsConflictOpen] = useState(false)
   const [isSideNavCollapsedPreference, setIsSideNavCollapsedPreference] = useState(
     readSideNavCollapsedPreference,
   )
@@ -580,8 +581,10 @@ function Layout({ children }: LayoutProps) {
 
   return (
     <>
-      <OptimisticConflictModal />
-      <div className={`app-shell${isSideNavCollapsed ? ' is-side-nav-collapsed' : ''}`}>
+      <div
+        className={`app-shell${isSideNavCollapsed ? ' is-side-nav-collapsed' : ''}`}
+        inert={isConflictOpen}
+      >
         <SkipToContent />
         <header className="cds--header csp-app-header" aria-label="NR LEXIS">
           <HeaderMenuButton
@@ -755,6 +758,7 @@ function Layout({ children }: LayoutProps) {
           {children}
         </main>
       </div>
+      <OptimisticConflictModal onOpenChange={setIsConflictOpen} />
     </>
   )
 }

@@ -81,6 +81,8 @@ type ScaleFormState = {
   volume: string
 }
 
+type DependentOptionsAvailability = 'idle' | 'loading' | 'available' | 'unavailable'
+
 const displayScaleType = (cascadeSplitCode: string): string => {
   switch (cascadeSplitCode.trim().toUpperCase()) {
     case 'W':
@@ -385,6 +387,9 @@ function ProvincialApplicationItemsPanel({
   >([])
   const [endUseOptions, setEndUseOptions] = useState<ApplicationCodeOption[]>([])
   const [createEndUseOptions, setCreateEndUseOptions] = useState<ApplicationCodeOption[]>([])
+  const [endUseAvailability, setEndUseAvailability] = useState<DependentOptionsAvailability>('idle')
+  const [createEndUseAvailability, setCreateEndUseAvailability] =
+    useState<DependentOptionsAvailability>('idle')
   const [gradeOptions, setGradeOptions] = useState<ApplicationCodeOption[]>([])
   const [speciesToAdd, setSpeciesToAdd] = useState('')
   const [createSpeciesToAdd, setCreateSpeciesToAdd] = useState('')
@@ -702,6 +707,7 @@ function ProvincialApplicationItemsPanel({
         setScales([])
         setRemainingSpeciesOptions([])
         setEndUseOptions([])
+        setEndUseAvailability('idle')
         return
       }
 
@@ -721,6 +727,7 @@ function ProvincialApplicationItemsPanel({
       setScales([])
       setRemainingSpeciesOptions([])
       setEndUseOptions([])
+      setEndUseAvailability('idle')
       try {
         const detailsResult = await fetchApplicationPackageDetails(packageNumber)
         if (!isLatestRequest()) {
@@ -861,24 +868,32 @@ function ProvincialApplicationItemsPanel({
     const loadEndUseOptions = async () => {
       if (!region || speciesDraft.length === 0) {
         setEndUseOptions([])
+        setEndUseAvailability('idle')
         return
       }
+      setEndUseAvailability('loading')
+      setEndUseOptions([])
       try {
         const options = await fetchApplicationEndUsesForSpeciesRegion(region, speciesDraft)
         if (!cancelled) {
           setEndUseOptions(options)
+          setEndUseAvailability('available')
           setPackageForm((current) => ({
             ...current,
-            endUseCode:
-              current.endUseCode && options.some((option) => option.code === current.endUseCode)
-                ? current.endUseCode
-                : (options[0]?.code ?? current.endUseCode),
+            endUseCode: (() => {
+              const normalizedCurrentCode = current.endUseCode.trim().toUpperCase()
+              const matchingOption = options.find(
+                (option) => option.code.trim().toUpperCase() === normalizedCurrentCode,
+              )
+              return matchingOption?.code ?? options[0]?.code ?? current.endUseCode
+            })(),
           }))
         }
       } catch {
         if (!cancelled) {
           setDependentReferenceOptionsUnavailable(true)
           setEndUseOptions([])
+          setEndUseAvailability('unavailable')
         }
       }
     }
@@ -896,24 +911,32 @@ function ProvincialApplicationItemsPanel({
     const loadCreateEndUseOptions = async () => {
       if (!region || createSpeciesDraft.length === 0) {
         setCreateEndUseOptions([])
+        setCreateEndUseAvailability('idle')
         return
       }
+      setCreateEndUseAvailability('loading')
+      setCreateEndUseOptions([])
       try {
         const options = await fetchApplicationEndUsesForSpeciesRegion(region, createSpeciesDraft)
         if (!cancelled) {
           setCreateEndUseOptions(options)
+          setCreateEndUseAvailability('available')
           setCreatePackageForm((current) => ({
             ...current,
-            endUseCode:
-              current.endUseCode && options.some((option) => option.code === current.endUseCode)
-                ? current.endUseCode
-                : (options[0]?.code ?? current.endUseCode),
+            endUseCode: (() => {
+              const normalizedCurrentCode = current.endUseCode.trim().toUpperCase()
+              const matchingOption = options.find(
+                (option) => option.code.trim().toUpperCase() === normalizedCurrentCode,
+              )
+              return matchingOption?.code ?? options[0]?.code ?? current.endUseCode
+            })(),
           }))
         }
       } catch {
         if (!cancelled) {
           setDependentReferenceOptionsUnavailable(true)
           setCreateEndUseOptions([])
+          setCreateEndUseAvailability('unavailable')
         }
       }
     }
@@ -1048,13 +1071,33 @@ function ProvincialApplicationItemsPanel({
 
   const selectedPackageTotalPieces = scales.reduce((total, row) => total + row.pieces, 0)
   const selectedPackageHasPermittedScale = scales.some((row) => row.permitted)
-  const referenceOptionsLoading =
+  const baseReferenceOptionsLoading =
     authoritativeOptionsAvailability === 'loading' || baseReferenceOptionsAvailability === 'loading'
-  const referenceOptionsUnavailable =
+  const selectedEndUseOptionsLoading = speciesDraft.length > 0 && endUseAvailability === 'loading'
+  const createEndUseOptionsLoading =
+    createSpeciesDraft.length > 0 && createEndUseAvailability === 'loading'
+  const baseReferenceOptionsUnavailable =
     authoritativeOptionsAvailability === 'unavailable' ||
     baseReferenceOptionsAvailability === 'unavailable' ||
     dependentReferenceOptionsUnavailable
-  const referenceOptionsAvailable = !referenceOptionsLoading && !referenceOptionsUnavailable
+  const selectedEndUseOptionsUnavailable =
+    speciesDraft.length > 0 && endUseAvailability === 'unavailable'
+  const createEndUseOptionsUnavailable =
+    createSpeciesDraft.length > 0 && createEndUseAvailability === 'unavailable'
+  const referenceOptionsLoading =
+    baseReferenceOptionsLoading || selectedEndUseOptionsLoading || createEndUseOptionsLoading
+  const referenceOptionsUnavailable =
+    baseReferenceOptionsUnavailable ||
+    selectedEndUseOptionsUnavailable ||
+    createEndUseOptionsUnavailable
+  const baseReferenceOptionsAvailable =
+    !baseReferenceOptionsLoading && !baseReferenceOptionsUnavailable
+  const selectedPackageReferenceOptionsAvailable =
+    baseReferenceOptionsAvailable &&
+    !selectedEndUseOptionsLoading &&
+    !selectedEndUseOptionsUnavailable
+  const createPackageReferenceOptionsAvailable =
+    baseReferenceOptionsAvailable && !createEndUseOptionsLoading && !createEndUseOptionsUnavailable
   const normalizedProductTypeCode = productTypeCode.trim().toUpperCase()
   const packageBackedItems = ['H', 'T'].includes(normalizedProductTypeCode)
   const scaleBackedItems = normalizedProductTypeCode === 'H'
@@ -1073,14 +1116,15 @@ function ProvincialApplicationItemsPanel({
   const canSaveSelectedPackage =
     showMutationActions &&
     canEditPackages &&
-    referenceOptionsAvailable &&
+    selectedPackageReferenceOptionsAvailable &&
     packageDataLoaded &&
     !!selectedPackageNumber &&
     !isSavingPackage &&
     !selectedPackageHasPermittedScale
-  const canCreatePackages = showMutationActions && canAddPackages && referenceOptionsAvailable
+  const canCreatePackages =
+    showMutationActions && canAddPackages && createPackageReferenceOptionsAvailable
   const canAddScalesWithReferenceOptions =
-    showMutationActions && canAddScales && referenceOptionsAvailable
+    showMutationActions && canAddScales && baseReferenceOptionsAvailable
   const canDeleteSelectedPackage =
     showMutationActions &&
     canAddPackages &&
@@ -1687,24 +1731,23 @@ function ProvincialApplicationItemsPanel({
                       ]}
                       onChange={(value) => setPackageField('reprocessed', value)}
                     />
-                    <TextInput
+                    <SearchableSelect
                       id="applicationItemsPackageEndUse"
                       labelText="End Use"
                       value={packageForm.endUseCode}
-                      disabled={!canSaveSelectedPackage || endUseOptions.length > 0}
-                      onChange={(event) => setPackageField('endUseCode', event.target.value)}
+                      disabled={!canSaveSelectedPackage || endUseAvailability !== 'available'}
+                      placeholder={
+                        endUseAvailability === 'loading'
+                          ? 'Loading end uses'
+                          : speciesDraft.length === 0
+                            ? 'Select species first'
+                            : endUseAvailability === 'available'
+                              ? 'Select end use'
+                              : 'End uses unavailable'
+                      }
+                      options={endUseOptions.map(toSearchableOption)}
+                      onChange={(value) => setPackageField('endUseCode', value)}
                     />
-                    {endUseOptions.length > 0 && (
-                      <SearchableSelect
-                        id="applicationItemsPackageEndUseSelect"
-                        labelText="End Use Options"
-                        value={packageForm.endUseCode}
-                        disabled={!canSaveSelectedPackage}
-                        placeholder="Select end use"
-                        options={endUseOptions.map(toSearchableOption)}
-                        onChange={(value) => setPackageField('endUseCode', value)}
-                      />
-                    )}
                   </div>
                   <TextArea
                     id="applicationItemsPackageComments"
@@ -1945,24 +1988,23 @@ function ProvincialApplicationItemsPanel({
                 onBlur={() => markItemFieldTouched('createPackageAgeClass')}
                 onChange={(value) => setCreatePackageField('ageClass', value)}
               />
-              <TextInput
+              <SearchableSelect
                 id="applicationItemsCreatePackageEndUse"
                 labelText="End Use"
                 value={createPackageForm.endUseCode}
-                disabled={!canCreatePackages || createEndUseOptions.length > 0}
-                onChange={(event) => setCreatePackageField('endUseCode', event.target.value)}
+                disabled={!canCreatePackages || createEndUseAvailability !== 'available'}
+                placeholder={
+                  createEndUseAvailability === 'loading'
+                    ? 'Loading end uses'
+                    : createSpeciesDraft.length === 0
+                      ? 'Select species first'
+                      : createEndUseAvailability === 'available'
+                        ? 'Select end use'
+                        : 'End uses unavailable'
+                }
+                options={createEndUseOptions.map(toSearchableOption)}
+                onChange={(value) => setCreatePackageField('endUseCode', value)}
               />
-              {createEndUseOptions.length > 0 && (
-                <SearchableSelect
-                  id="applicationItemsCreatePackageEndUseSelect"
-                  labelText="End Use Options"
-                  value={createPackageForm.endUseCode}
-                  disabled={!canCreatePackages}
-                  placeholder="Select end use"
-                  options={createEndUseOptions.map(toSearchableOption)}
-                  onChange={(value) => setCreatePackageField('endUseCode', value)}
-                />
-              )}
             </div>
             <div className="application-items-inline-form">
               <SearchableSelect

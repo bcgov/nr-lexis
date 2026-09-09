@@ -1817,6 +1817,9 @@ describe('Create Page Core Flows', () => {
     expect(screen.getByRole('tab', { name: 'Documents' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Permits' })).toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
+    await selectExemptionCreateTab('Documents')
+    expect(screen.getByText('Save the exemption before uploading documents.')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Add document' })).toBeDisabled()
     await selectExemptionCreateTab('Owner')
     await waitFor(() =>
       expect(screen.getByRole('textbox', { name: 'Client number' })).toHaveValue('00011111'),
