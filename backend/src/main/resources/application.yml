@@ -111,6 +111,10 @@ lexis:
         - "uploadFederalSubmission"
     role-actions:
       LEXIS_ADMIN: ["*"]
+      # INTENTIONAL_LEGACY_DIVERGENCE(READ_ONLY_STAFF_VIEW): Pure Read Only follows the
+      # Application Approver's supported business-record and retained-report view access, while
+      # workflow creation, editing, approval, upload, email, and review-queue actions remain denied.
+      # Legacy Read Only was unfinished and is not the modern authorization baseline.
       LEXIS_READ_ONLY:
         - "/applicationSearch"
         - "/applicationDetails"
@@ -127,7 +131,6 @@ lexis:
         # Preserve the legacy TEST action metadata. Modern route and API retirement rules
         # independently hide and deny Application, TEAC, Exemption, and Fee report screens.
         - "/applicationReport"
-        - "/approvedExemptionReport"
         - "/offerReport"
         - "/teacReport"
         - "/exemptionReport"

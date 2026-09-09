@@ -2837,7 +2837,7 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
-  void legacyApprovedExemptionReportShouldAllowReadOnlyRole() throws Exception {
+  void legacyApprovedExemptionReportShouldRejectReadOnlyRole() throws Exception {
     SimpleGrantedAuthority readOnly = new SimpleGrantedAuthority("LEXIS_READ_ONLY");
 
     mockMvc
@@ -2845,7 +2845,7 @@ class LexisRouteAuthorizationIntegrationTest {
             get("/api/lexis/approvedExemptionReport.do")
                 .param("actionMapping", "view")
                 .with(jwt().authorities(readOnly)))
-        .andExpect(status().isNoContent());
+        .andExpect(status().isForbidden());
   }
 
   @Test

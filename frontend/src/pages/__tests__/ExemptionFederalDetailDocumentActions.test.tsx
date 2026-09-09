@@ -1489,6 +1489,37 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(screen.getByText('Truck')).toBeInTheDocument()
   })
 
+  it('hides an existing federal permit number while preserving it on shipping save', async () => {
+    render(
+      <MemoryRouter initialEntries={['/federal/888']}>
+        <Routes>
+          <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectDetailTab('Shipping details')
+    const shippingTile = screen
+      .getByRole('heading', { name: 'Shipping details', level: 2 })
+      .closest('.cds--tile')
+    expect(shippingTile).toBeTruthy()
+    expect(within(shippingTile as HTMLElement).queryByText('Permit number')).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Edit shipping details' }))
+    expect(screen.queryByLabelText('Permit number')).not.toBeInTheDocument()
+    await userEvent.clear(screen.getByLabelText('Transport name'))
+    await userEvent.type(screen.getByLabelText('Transport name'), 'Rail')
+    await userEvent.click(screen.getByRole('button', { name: 'Save federal permit' }))
+
+    await waitFor(() => {
+      expect(mockedSaveFederalPermit).toHaveBeenCalledWith(
+        '888',
+        expect.objectContaining({ permitNumber: 90001, transportName: 'Rail' }),
+        true,
+      )
+    })
+  })
+
   it('rejects federal shipping text that Oracle cannot store', async () => {
     render(
       <MemoryRouter initialEntries={['/federal/888']}>

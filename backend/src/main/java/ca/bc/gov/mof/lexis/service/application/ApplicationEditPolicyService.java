@@ -56,7 +56,7 @@ public class ApplicationEditPolicyService {
     Set<String> roles = normalizeRoles(parsedRoles);
     boolean administrator = roles.contains(ROLE_ADMIN);
     boolean industryUser = !administrator && isIndustryUser(roles);
-    boolean readOnly = !administrator && roles.contains(ROLE_READ_ONLY);
+    boolean readOnly = !administrator && isPureReadOnlyRole(roles);
     boolean exemptionApprover = !administrator && roles.contains(ROLE_EXEMPTION_APPROVER);
 
     ApplicationEditPolicy denied =
@@ -240,6 +240,10 @@ public class ApplicationEditPolicyService {
     }
     Set<String> normalizedConfiguredRoles = normalizeRoles(configuredIndustryRoles);
     return roles.stream().anyMatch(normalizedConfiguredRoles::contains);
+  }
+
+  private boolean isPureReadOnlyRole(Set<String> roles) {
+    return roles.size() == 1 && roles.contains(ROLE_READ_ONLY);
   }
 
   private String normalizeCode(String value) {

@@ -23,6 +23,9 @@ export const hasRole = (roles: string[] | null | undefined, role: string): boole
   })
 }
 
+export const isPureReadOnlyRole = (roles: string[] | null | undefined): boolean =>
+  normalizeRoles(roles).length === 1 && hasRole(roles, 'READ_ONLY')
+
 export const hasProvincialStaffRole = (roles: string[] | null | undefined): boolean =>
   ['ADMIN', 'READ_ONLY', 'APPLICATION_APPROVER', 'EXEMPTION_APPROVER'].some((role) =>
     hasRole(roles, role),

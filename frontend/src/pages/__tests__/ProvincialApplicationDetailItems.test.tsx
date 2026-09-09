@@ -958,6 +958,210 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     })
   })
 
+  it('keeps selected package and scale actions available after a transient create end use failure', async () => {
+    let createEndUseFailuresRemaining = 1
+    mockedFetchApplicationEndUsesForSpeciesRegion.mockImplementation((_region, speciesCodes) => {
+      if (speciesCodes.includes('CE')) {
+        if (createEndUseFailuresRemaining > 0) {
+          createEndUseFailuresRemaining -= 1
+          return Promise.reject(new Error('Temporary create end use lookup failure'))
+        }
+        return Promise.resolve([{ code: 'SL', description: 'Sawn logs' }])
+      }
+      return Promise.resolve([{ code: 'LU', description: 'Lumber' }])
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationItemsForEditing()
+    const packageDetailsSection = (
+      await screen.findByRole('heading', { name: 'Package Details' })
+    ).closest('section')
+    const createPackageSection = (
+      await screen.findByRole('heading', { name: 'Create Package' })
+    ).closest('section')
+    expect(packageDetailsSection).toBeTruthy()
+    expect(createPackageSection).toBeTruthy()
+
+    const packageDetailsControls = within(packageDetailsSection as HTMLElement)
+    const createPackageControls = within(createPackageSection as HTMLElement)
+    const savePackage = packageDetailsControls.getByRole('button', { name: 'Save Package' })
+    const addScale = screen.getByRole('button', { name: 'Add Scale' })
+    const createSpecies = createPackageControls.getByRole('combobox', {
+      name: 'Create Package Species',
+    })
+    const createPackage = createPackageControls.getByRole('button', { name: 'Create Package' })
+
+    await waitFor(() => {
+      expect(savePackage).toBeEnabled()
+      expect(addScale).toBeEnabled()
+      expect(createSpecies).toBeEnabled()
+    })
+
+    await chooseComboBoxOption(createSpecies, 'CE - Cedar')
+    await userEvent.click(
+      createPackageControls.getByRole('button', { name: 'Add species to new package' }),
+    )
+
+    const createEndUse = createPackageControls.getByRole('combobox', { name: 'End Use' })
+    await waitFor(() => {
+      expect(mockedFetchApplicationEndUsesForSpeciesRegion).toHaveBeenCalledWith('12', ['CE'])
+      expect(createEndUse).toBeDisabled()
+      expect(createPackage).toBeDisabled()
+      expect(savePackage).toBeEnabled()
+      expect(addScale).toBeEnabled()
+      expect(
+        screen.getByText(
+          'Package creation is disabled because End Use options could not be loaded.',
+        ),
+      ).toBeInTheDocument()
+    })
+
+    await userEvent.click(createPackageControls.getByRole('button', { name: 'Reset new package' }))
+    await waitFor(() => expect(createSpecies).toBeEnabled())
+
+    await chooseComboBoxOption(createSpecies, 'CE - Cedar')
+    await userEvent.click(
+      createPackageControls.getByRole('button', { name: 'Add species to new package' }),
+    )
+
+    await waitFor(() => {
+      expect(createEndUse).toHaveValue('SL - Sawn logs')
+      expect(createEndUse).toBeEnabled()
+      expect(createPackage).toBeEnabled()
+    })
+
+    fireEvent.change(createPackageControls.getByLabelText('Package Number'), {
+      target: { value: 'PKG-RECOVERED' },
+    })
+    fireEvent.change(createPackageControls.getByLabelText('Package Volume (m³)'), {
+      target: { value: '25.0' },
+    })
+    fireEvent.change(createPackageControls.getByLabelText('Average Length (m)'), {
+      target: { value: '12.0' },
+    })
+    fireEvent.change(createPackageControls.getByLabelText('Average top diameter (rads)'), {
+      target: { value: '24.0' },
+    })
+    await chooseComboBoxOption(
+      createPackageControls.getByRole('combobox', { name: 'Status Code' }),
+      'ACT - Active',
+    )
+    await chooseComboBoxOption(
+      createPackageControls.getByRole('combobox', { name: 'Product Type' }),
+      'H - Harvested Timber',
+    )
+    await chooseComboBoxOption(
+      createPackageControls.getByRole('combobox', { name: 'Age Class' }),
+      'S - Second Growth',
+    )
+    await userEvent.click(createPackage)
+
+    await waitFor(() => {
+      expect(mockedAddApplicationPackage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          packageNumber: 'PKG-RECOVERED',
+          endUseCode: 'SL',
+          speciesCodes: ['CE'],
+        }),
+      )
+    })
+  })
+
+  it('keeps scale actions available and recovers selected end use after a transient lookup failure', async () => {
+    let failNextSelectedEndUseLookup = false
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      packages: [
+        { packageNumber: 'PKG-1', volume: 100, pieceCount: 5 },
+        { packageNumber: 'PKG-2', volume: 50, pieceCount: 3 },
+      ],
+    })
+    mockedFetchApplicationPackageDetails.mockImplementation(async (packageNumber) => ({
+      success: true,
+      packageNumber,
+      volume: packageNumber === 'PKG-2' ? '50.0' : '100.0',
+      scaledVolume: packageNumber === 'PKG-2' ? 10 : 20,
+      length: '12.0',
+      diameter: '24.0',
+      status: 'ACT',
+      comments: 'Ready',
+      statusDescription: 'Active',
+      reprocessed: 'N',
+      ageClass: 'O',
+      ageClassDescription: 'Old',
+      productType: 'H',
+      productTypeDescription: 'Harvested Timber',
+    }))
+    mockedFetchApplicationEndUsesForSpeciesRegion.mockImplementation((_region, speciesCodes) => {
+      if (speciesCodes.includes('FI') && failNextSelectedEndUseLookup) {
+        failNextSelectedEndUseLookup = false
+        return Promise.reject(new Error('Temporary selected end use lookup failure'))
+      }
+      return Promise.resolve([{ code: 'LU', description: 'Lumber' }])
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationItemsForEditing()
+    const packageDetailsSection = (
+      await screen.findByRole('heading', { name: 'Package Details' })
+    ).closest('section')
+    expect(packageDetailsSection).toBeTruthy()
+    const packageDetailsControls = within(packageDetailsSection as HTMLElement)
+    const savePackage = packageDetailsControls.getByRole('button', { name: 'Save Package' })
+    const addScale = screen.getByRole('button', { name: 'Add Scale' })
+
+    await waitFor(() => {
+      expect(mockedFetchApplicationEndUsesForSpeciesRegion).toHaveBeenCalledWith('12', ['FI'])
+      expect(packageDetailsControls.getByRole('combobox', { name: 'End Use' })).toBeEnabled()
+      expect(savePackage).toBeEnabled()
+      expect(addScale).toBeEnabled()
+    })
+
+    const packageSelector = screen.getByRole('combobox', { name: 'Selected Package' })
+    failNextSelectedEndUseLookup = true
+    await chooseComboBoxOption(packageSelector, 'PKG-2')
+
+    await waitFor(() => {
+      expect(mockedFetchApplicationPackageDetails).toHaveBeenCalledWith('PKG-2')
+      expect(packageDetailsControls.getByRole('combobox', { name: 'End Use' })).toBeDisabled()
+      expect(savePackage).toBeDisabled()
+      expect(addScale).toBeEnabled()
+      expect(
+        screen.getByText('Package saves are disabled because End Use options could not be loaded.'),
+      ).toBeInTheDocument()
+    })
+
+    await chooseComboBoxOption(packageSelector, 'PKG-1')
+    await waitFor(() => {
+      expect(packageDetailsControls.getByRole('combobox', { name: 'End Use' })).toHaveValue(
+        'LU - Lumber',
+      )
+      expect(packageDetailsControls.getByRole('combobox', { name: 'End Use' })).toBeEnabled()
+      expect(savePackage).toBeEnabled()
+      expect(addScale).toBeEnabled()
+    })
+  })
+
   it('keeps a ready selected package available while create package end uses load', async () => {
     let resolveCreateEndUseOptions: ((options: ApplicationCodeOption[]) => void) | undefined
     mockedFetchApplicationEndUsesForSpeciesRegion.mockImplementation((_region, speciesCodes) => {
@@ -1204,6 +1408,11 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     await selectApplicationItemsForEditing()
 
     expect(await screen.findByText('Item options unavailable')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'Package saves, package creation, and scale additions are disabled because item options could not be loaded.',
+      ),
+    ).toBeInTheDocument()
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Save Package' })).toBeDisabled()
       expect(screen.getByRole('button', { name: 'Create Package' })).toBeDisabled()

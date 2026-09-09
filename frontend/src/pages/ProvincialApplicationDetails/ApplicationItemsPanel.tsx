@@ -891,7 +891,6 @@ function ProvincialApplicationItemsPanel({
         }
       } catch {
         if (!cancelled) {
-          setDependentReferenceOptionsUnavailable(true)
           setEndUseOptions([])
           setEndUseAvailability('unavailable')
         }
@@ -934,7 +933,6 @@ function ProvincialApplicationItemsPanel({
         }
       } catch {
         if (!cancelled) {
-          setDependentReferenceOptionsUnavailable(true)
           setCreateEndUseOptions([])
           setCreateEndUseAvailability('unavailable')
         }
@@ -1090,6 +1088,13 @@ function ProvincialApplicationItemsPanel({
     baseReferenceOptionsUnavailable ||
     selectedEndUseOptionsUnavailable ||
     createEndUseOptionsUnavailable
+  const referenceOptionsUnavailableMessage = baseReferenceOptionsUnavailable
+    ? 'Package saves, package creation, and scale additions are disabled because item options could not be loaded.'
+    : selectedEndUseOptionsUnavailable && createEndUseOptionsUnavailable
+      ? 'Package saves and package creation are disabled because End Use options could not be loaded.'
+      : selectedEndUseOptionsUnavailable
+        ? 'Package saves are disabled because End Use options could not be loaded.'
+        : 'Package creation is disabled because End Use options could not be loaded.'
   const baseReferenceOptionsAvailable =
     !baseReferenceOptionsLoading && !baseReferenceOptionsUnavailable
   const selectedPackageReferenceOptionsAvailable =
@@ -1544,7 +1549,7 @@ function ProvincialApplicationItemsPanel({
               className="detail-context-notification"
               kind="warning"
               title="Item options unavailable"
-              subtitle="Package saves, package creation, and scale additions are disabled because authoritative Oracle options could not be verified."
+              subtitle={referenceOptionsUnavailableMessage}
               lowContrast
               hideCloseButton
             />

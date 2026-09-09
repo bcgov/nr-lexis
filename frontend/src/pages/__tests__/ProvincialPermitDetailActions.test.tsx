@@ -2407,6 +2407,44 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
   })
 
+  it('omits the Permit column from Blanket OIC scale rows', async () => {
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      exemptionTypeDescription: 'Blanket OIC',
+      blanketOic: true,
+    })
+    mockedFetchProvincialPermitDetailTabs.mockResolvedValue({
+      ...tabsResult,
+      packages: [{ ...editableBlanketOicPackage, packageNumber: 'BOIC-9' }],
+      items: [
+        {
+          id: 'SCALE-9',
+          timberMark: 'TM-9',
+          scaleType: 'C',
+          species: 'HE',
+          grade: 'A',
+          pieces: 12,
+          volume: 10.5,
+          packageNumber: 'BOIC-9',
+          permitNumber: '777',
+          includedInPermit: true,
+        },
+      ],
+    })
+
+    renderPermitDetails()
+    await selectPermitDetailTab('Items')
+
+    const itemRows = await screen.findByRole('region', { name: 'Permit item rows' })
+    expect(within(itemRows).queryByRole('columnheader', { name: 'Permit' })).not.toBeInTheDocument()
+    expect(
+      within(itemRows)
+        .getAllByRole('columnheader')
+        .map((header) => header.textContent),
+    ).toEqual(['Timber mark', 'Scale type', 'Pieces', 'Species', 'Grade', 'Volume (m³)'])
+    expect(within(itemRows).queryByRole('cell', { name: '777' })).not.toBeInTheDocument()
+  })
+
   it('explains why a Blanket OIC package with scale rows cannot be deleted', async () => {
     configureEditableBlanketOicPackage()
     mockedFetchProvincialPermitDetailTabs.mockResolvedValue({
@@ -5672,7 +5710,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.queryByRole('tab', { name: 'Invoices' })).not.toBeInTheDocument()
   })
 
-  it('opens permit document from API response', async () => {
+  it('downloads a permit document from the API response', async () => {
     mockedFetchPermitDocuments.mockResolvedValue({
       rows: [
         {
@@ -5685,9 +5723,10 @@ describe('Provincial Permit Detail Action Smoke', () => {
       ],
       source: 'api',
     })
+    const documentBlob = new Blob(['test'])
     mockedOpenPermitDocument.mockResolvedValue({
       source: 'api',
-      blob: new Blob(['test']),
+      blob: documentBlob,
       filename: 'permit-doc.pdf',
     })
     const openSpy = vi.spyOn(window, 'open').mockReturnValue({} as Window)
@@ -5705,12 +5744,13 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     await selectPermitDetailTab('Documents')
     await screen.findByText('permit-doc.pdf')
-    const openDocumentButton = await screen.findByRole('button', { name: 'Open' })
-    await userEvent.click(openDocumentButton)
+    const downloadDocumentButton = await screen.findByRole('button', { name: 'Download' })
+    await userEvent.click(downloadDocumentButton)
 
     await waitFor(() => {
       expect(mockedOpenPermitDocument).toHaveBeenCalledWith('500', 'permit-doc.pdf', '777')
     })
+    expect(mockedTriggerBrowserDownload).toHaveBeenCalledWith(documentBlob, 'permit-doc.pdf')
     expect(openSpy).not.toHaveBeenCalled()
   })
 
@@ -5890,6 +5930,49 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.getByRole('button', { name: 'Delete' })).toBeEnabled()
   })
 
+  it('lets application approvers override a concurrent read-only role for active invoice document delete', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({
+          roles: ['LEXIS_APPLICATION_APPROVER', 'LEXIS_READ_ONLY'],
+        }),
+      }),
+    )
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      permitStatusCode: 'ACT',
+      permitStatusDescription: 'Active',
+    })
+    mockedFetchPermitDocuments.mockResolvedValue({
+      rows: [
+        {
+          id: '505',
+          name: 'approver-invoice-doc.pdf',
+          description: 'Approver controlled invoice',
+          type: 'Invoice',
+          typeCode: 'INV',
+        },
+      ],
+      source: 'api',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/permit/777']}>
+        <Routes>
+          <Route
+            path="/provincial/permit/:permitNumber"
+            element={<ProvincialPermitDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectPermitDetailTab('Documents')
+    await enterPermitDocumentEditMode()
+    await screen.findByText('approver-invoice-doc.pdf')
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeEnabled()
+  })
+
   it('disables invoice document delete outside active permit status', async () => {
     mockedFetchPermitDocuments.mockResolvedValue({
       rows: [
@@ -5963,11 +6046,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.getByRole('button', { name: 'Delete' })).toBeDisabled()
   })
 
-  it('allows scoped submitters to delete active permit documents without upload access', async () => {
+  it('allows scoped submitters with a concurrent read-only role to delete active permit documents without upload access', async () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
         capabilities: createTestCapabilities({
-          roles: ['LEXIS_PROVINCIAL_SUBMITTER_00067890'],
+          roles: ['LEXIS_PROVINCIAL_SUBMITTER_00067890', 'LEXIS_READ_ONLY'],
         }),
         canPerform: (action: string) => action === '/permitDetails',
       }),

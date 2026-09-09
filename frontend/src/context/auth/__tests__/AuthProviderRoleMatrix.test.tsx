@@ -369,13 +369,7 @@ describe('Auth Provider Role Matrix', () => {
       roles: ['LEXIS_READ_ONLY'],
       welcomeTarget: null,
       legacyPath: null,
-      grantedActions: [
-        '/applicationSearch',
-        '/applicationReport',
-        '/permitReport',
-        '/approvedExemptionReport',
-        'mofrListing',
-      ],
+      grantedActions: ['/applicationSearch', '/applicationReport', '/permitReport', 'mofrListing'],
     })
 
     renderProbe([
@@ -392,7 +386,7 @@ describe('Auth Provider Role Matrix', () => {
     expect(screen.getByTestId('action-/applicationSearch')).toHaveTextContent('true')
     expect(screen.getByTestId('action-/applicationReport')).toHaveTextContent('true')
     expect(screen.getByTestId('action-/permitReport')).toHaveTextContent('true')
-    expect(screen.getByTestId('action-/approvedExemptionReport')).toHaveTextContent('true')
+    expect(screen.getByTestId('action-/approvedExemptionReport')).toHaveTextContent('false')
     expect(screen.getByTestId('action-/feeReport')).toHaveTextContent('false')
     expect(screen.getByTestId('action-mofrListing')).toHaveTextContent('true')
   })

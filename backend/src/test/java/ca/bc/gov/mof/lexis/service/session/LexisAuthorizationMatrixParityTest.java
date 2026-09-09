@@ -55,6 +55,11 @@ class LexisAuthorizationMatrixParityTest {
                       && !"/approvedExemptionReport".equals(action))
           .toList();
 
+  private static final List<String> READ_ONLY_STAFF_REPORT_ACTIONS =
+      REPORT_ACTIONS.stream()
+          .filter(action -> !"/approvedExemptionReport".equals(action))
+          .toList();
+
   private static final List<String> FEDERAL_READ_ACTIONS =
       List.of(
           "/federalApplicationSearch",
@@ -298,15 +303,17 @@ class LexisAuthorizationMatrixParityTest {
   }
 
   @Test
-  void readOnlyRoleShouldViewSearchesDetailsRemarksAndReportsWithoutMutatingActions() {
+  void readOnlyStaffViewRoleShouldExcludeApprovedExemptionReportAndWorkflowMutations() {
     assertThat(authorizationService.resolveGrantedActions(List.of("LEXIS_READ_ONLY")))
         .containsAll(PROVINCIAL_VIEW_ACTIONS)
         .containsAll(FEDERAL_READ_ACTIONS)
-        .containsAll(REPORT_ACTIONS)
+        .containsAll(READ_ONLY_STAFF_REPORT_ACTIONS)
         .contains("/applicationRemarks")
         .doesNotContain(
             "/summary",
             "/applicationsReview",
+            "/permitsReview",
+            "/changeApplicantType",
             "/editCompletedApplications",
             "/createExemption",
             "/fileApplicationUpload",
@@ -320,9 +327,11 @@ class LexisAuthorizationMatrixParityTest {
             "createApplication",
             "createOffer",
             "createPermit",
+            "manageFederalApplication",
             "saveExemption",
             "savePermit",
-            "uploadApplicationSubmission");
+            "uploadApplicationSubmission",
+            "/approvedExemptionReport");
   }
 
   @Test

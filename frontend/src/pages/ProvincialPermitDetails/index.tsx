@@ -37,7 +37,7 @@ import {
 } from '@carbon/react'
 import { Link, useLocation, useParams } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
-import { hasProvincialSubmitterRole, hasRole } from '@/context/auth/role-utils'
+import { hasProvincialSubmitterRole, hasRole, isPureReadOnlyRole } from '@/context/auth/role-utils'
 import ConfirmationModal from '@/components/ConfirmationModal'
 import ContentLoadingOverlay from '@/components/ContentLoadingOverlay'
 import DetailBreadcrumb from '@/components/DetailBreadcrumb'
@@ -1607,7 +1607,7 @@ const ProvincialPermitDetailsPage = () => {
     editContextLoaded &&
     !permitEditLocked &&
     !permitExpired
-  const readOnlyUser = hasRole(capabilities.roles, 'READ_ONLY')
+  const readOnlyUser = isPureReadOnlyRole(capabilities.roles)
   const adminUser = hasRole(capabilities.roles, 'ADMIN')
   const hasDocumentActorRole =
     adminUser ||
@@ -3298,7 +3298,7 @@ const ProvincialPermitDetailsPage = () => {
         triggerBrowserDownload(result.blob, result.filename)
       } catch (error) {
         console.error(error)
-        setActionErrorMessage('Unable to open permit document.')
+        setActionErrorMessage('Unable to download permit document.')
       }
     },
     [detail?.permitNumber, permitNumber],
@@ -5140,7 +5140,9 @@ const ProvincialPermitDetailsPage = () => {
                                       )}
                                       <TableHeader>Timber mark</TableHeader>
                                       <TableHeader>Scale type</TableHeader>
-                                      <TableHeader>Permit</TableHeader>
+                                      {canDisplayNormalPermitScaleMembership && (
+                                        <TableHeader>Permit</TableHeader>
+                                      )}
                                       {canDisplayNormalPermitScaleMembership && (
                                         <TableHeader>Package</TableHeader>
                                       )}
@@ -5178,7 +5180,9 @@ const ProvincialPermitDetailsPage = () => {
                                         )}
                                         <TableCell>{row.timberMark || '-'}</TableCell>
                                         <TableCell>{row.scaleType || '-'}</TableCell>
-                                        <TableCell>{row.permitNumber || '-'}</TableCell>
+                                        {canDisplayNormalPermitScaleMembership && (
+                                          <TableCell>{row.permitNumber || '-'}</TableCell>
+                                        )}
                                         {canDisplayNormalPermitScaleMembership && (
                                           <TableCell>{row.packageNumber || '-'}</TableCell>
                                         )}
@@ -5735,7 +5739,7 @@ const ProvincialPermitDetailsPage = () => {
                                             disabled={!canPerform('/permitDetails')}
                                             onClick={() => void onOpenDocument(row)}
                                           >
-                                            Open
+                                            Download
                                           </Button>
                                           {isEditingPermitDocuments && (
                                             <Button
