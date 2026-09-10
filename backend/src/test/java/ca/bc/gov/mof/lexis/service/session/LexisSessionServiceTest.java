@@ -41,6 +41,28 @@ class LexisSessionServiceTest {
   }
 
   @Test
+  void shouldRouteMixedApplicationApproverAndReadOnlyUsersToApplicationReview() {
+    LexisSessionWelcomeDto response =
+        service.resolveWelcomeRoute(
+            "idir\\approver", List.of("LEXIS_APPLICATION_APPROVER", "LEXIS_READ_ONLY"));
+
+    assertThat(response.welcomeTarget()).isEqualTo("applicationApprover");
+    assertThat(response.legacyPath()).isEqualTo("/provincial/review");
+    assertThat(response.roles()).containsExactly("LEXIS_APPLICATION_APPROVER", "LEXIS_READ_ONLY");
+  }
+
+  @Test
+  void shouldRouteMixedExemptionApproverAndReadOnlyUsersToExemptionSearch() {
+    LexisSessionWelcomeDto response =
+        service.resolveWelcomeRoute(
+            "idir\\approver", List.of("LEXIS_EXEMPTION_APPROVER", "LEXIS_READ_ONLY"));
+
+    assertThat(response.welcomeTarget()).isEqualTo("exemptionApprover");
+    assertThat(response.legacyPath()).isEqualTo("/provincial/exemption");
+    assertThat(response.roles()).containsExactly("LEXIS_EXEMPTION_APPROVER", "LEXIS_READ_ONLY");
+  }
+
+  @Test
   void shouldRouteAdminsToApplicationReviewWhenOtherRolesArePresent() {
     LexisSessionWelcomeDto response =
         service.resolveWelcomeRoute("idir\\admin", List.of("lexis_admin", "lexis_read_only"));

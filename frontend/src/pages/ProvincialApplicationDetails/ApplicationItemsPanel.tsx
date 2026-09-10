@@ -925,7 +925,7 @@ function ProvincialApplicationItemsPanel({
         const options = await fetchApplicationEndUsesForSpeciesRegion(region, speciesDraft)
         if (!cancelled) {
           setEndUseOptions(options)
-          setEndUseAvailability('available')
+          setEndUseAvailability(options.length > 0 ? 'available' : 'unavailable')
           setPackageForm((current) => ({
             ...current,
             endUseCode: (() => {
@@ -967,7 +967,7 @@ function ProvincialApplicationItemsPanel({
         const options = await fetchApplicationEndUsesForSpeciesRegion(region, createSpeciesDraft)
         if (!cancelled) {
           setCreateEndUseOptions(options)
-          setCreateEndUseAvailability('available')
+          setCreateEndUseAvailability(options.length > 0 ? 'available' : 'unavailable')
           setCreatePackageForm((current) => ({
             ...current,
             endUseCode: (() => {

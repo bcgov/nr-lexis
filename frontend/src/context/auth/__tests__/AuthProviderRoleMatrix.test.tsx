@@ -304,6 +304,60 @@ describe('Auth Provider Role Matrix', () => {
     expect(screen.getByTestId('action-/applicationSearch')).toHaveTextContent('true')
   })
 
+  it.each([
+    {
+      role: 'LEXIS_APPLICATION_APPROVER',
+      route: '/provincial/review',
+      action: '/applicationsReview',
+    },
+    {
+      role: 'LEXIS_EXEMPTION_APPROVER',
+      route: '/provincial/exemption',
+      action: '/exemptionSearch',
+    },
+  ])(
+    'routes mixed $role and read-only roles to the approver route',
+    async ({ role, route, action }) => {
+      mockSessionCapabilities({
+        authenticated: true,
+        principal: 'idir\\approver',
+        roles: [role, 'LEXIS_READ_ONLY'],
+        welcomeTarget: null,
+        legacyPath: null,
+        grantedActions: [action, '/applicationSearch'],
+      })
+
+      renderProbe([action, '/applicationSearch'])
+      await waitForAuthLoad()
+
+      expect(screen.getByTestId('roles')).toHaveTextContent(
+        `${role.replace('LEXIS_', '')},READ_ONLY`,
+      )
+      expect(screen.getByTestId('default-route')).toHaveTextContent(route)
+      expect(screen.getByTestId(`action-${action}`)).toHaveTextContent('true')
+      expect(screen.getByTestId('action-/applicationSearch')).toHaveTextContent('true')
+    },
+  )
+
+  it('preserves the existing mixed-role read route during PROD RTM-only mode', async () => {
+    window.config = { VITE_LEXIS_PROD_RTM_ONLY: 'true' }
+    mockSessionCapabilities({
+      authenticated: true,
+      principal: 'idir\\approver',
+      roles: ['LEXIS_APPLICATION_APPROVER', 'LEXIS_READ_ONLY'],
+      welcomeTarget: null,
+      legacyPath: null,
+      grantedActions: ['/applicationSearch'],
+    })
+
+    renderProbe(['/lexisAgentAdmin', '/applicationSearch'])
+    await waitForAuthLoad()
+
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/provincial/application')
+    expect(screen.getByTestId('action-/lexisAgentAdmin')).toHaveTextContent('false')
+    expect(screen.getByTestId('action-/applicationSearch')).toHaveTextContent('true')
+  })
+
   it('keeps other non-admin roles unauthorized when PROD RTM-only mode is enabled', async () => {
     window.config = { VITE_LEXIS_PROD_RTM_ONLY: 'true' }
     mockSessionCapabilities({

@@ -11,7 +11,7 @@ import SessionTimeoutWarning from '@/components/SessionTimeoutWarning'
 import { AuthContext } from '@/context/auth/AuthContext'
 import { clearLoginDestination } from '@/context/auth/login-destination'
 import { startFederatedLogout } from '@/context/auth/logout-chain'
-import { hasRole } from '@/context/auth/role-utils'
+import { hasRole, isPureReadOnlyRole } from '@/context/auth/role-utils'
 import {
   clearSessionExpiredLoginNotice,
   markSessionExpiredLoginNotice,
@@ -222,7 +222,8 @@ const sanitizeCapabilities = (
 }
 
 const resolveDefaultRoute = (capabilities: LexisSessionCapabilities): string => {
-  const isReadOnlyUser = hasRole(capabilities.roles, ROLE_READ_ONLY)
+  const isReadOnlyUser = isPureReadOnlyRole(capabilities.roles)
+  const hasReadOnlyRole = hasRole(capabilities.roles, ROLE_READ_ONLY)
   const isIndustryUser = capabilities.roles.some((role) => isIndustryRole(role))
   const isProvincialSubmitterUser = capabilities.roles.some((role) => {
     return role === ROLE_PROVINCIAL_SUBMITTER || role.startsWith('PROVINCIAL_SUBMITTER_')
@@ -240,7 +241,9 @@ const resolveDefaultRoute = (capabilities: LexisSessionCapabilities): string => 
     if (isAdminUser) {
       return PROD_RTM_ONLY_ROUTE
     }
-    if (isReadOnlyUser) return '/provincial/application'
+    // Preserve the RTM-only read route for any READ_ONLY assignment; backend capabilities
+    // continue to limit the actions available in this mode.
+    if (hasReadOnlyRole) return '/provincial/application'
     return hasRole(capabilities.roles, ROLE_FEDERAL_READ_ONLY) ? '/federal' : '/unauthorized'
   }
 

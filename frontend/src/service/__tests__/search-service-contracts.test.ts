@@ -508,13 +508,16 @@ describe('search-service contracts', () => {
     },
   )
 
-  it('maps a payment-pending provincial permit search status to the legacy label', async () => {
+  it.each([
+    ['PPD', 'Payment Pending'],
+    ['Completed', 'Completed'],
+  ])('maps provincial permit search status %s to %s', async (statusDescription, expectedStatus) => {
     getCachedResponseMock.mockResolvedValue({
       data: {
         results: [
           {
             permitNumber: 7001,
-            statusDescription: 'PPD',
+            statusDescription,
             applicantClientNumber: '11111111',
             ownerClientNumber: '22222222',
             totalVolume: 12,
@@ -531,7 +534,7 @@ describe('search-service contracts', () => {
     const result = await searchProvincialPermits(permitRequest)
 
     expect(result.content[0]).toEqual(
-      expect.objectContaining({ permitNumber: '7001', status: 'Payment Pending' }),
+      expect.objectContaining({ permitNumber: '7001', status: expectedStatus }),
     )
   })
 

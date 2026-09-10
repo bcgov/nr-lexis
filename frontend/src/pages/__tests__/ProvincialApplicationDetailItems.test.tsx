@@ -1040,13 +1040,15 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     })
   })
 
-  it('keeps selected package and scale actions available after a transient create end use failure', async () => {
+  it.each(['failed', 'empty'])('recovers %s create End Use', async (lookupResult) => {
     let createEndUseFailuresRemaining = 1
     mockedFetchApplicationEndUsesForSpeciesRegion.mockImplementation((_region, speciesCodes) => {
       if (speciesCodes.includes('CE')) {
         if (createEndUseFailuresRemaining > 0) {
           createEndUseFailuresRemaining -= 1
-          return Promise.reject(new Error('Temporary create end use lookup failure'))
+          return lookupResult === 'empty'
+            ? Promise.resolve([])
+            : Promise.reject(new Error('Temporary create end use lookup failure'))
         }
         return Promise.resolve([{ code: 'SL', description: 'Sawn logs' }])
       }
@@ -1108,6 +1110,9 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       ).toBeInTheDocument()
     })
 
+    await userEvent.click(createPackage)
+    expect(mockedAddApplicationPackage).not.toHaveBeenCalled()
+
     await userEvent.click(createPackageControls.getByRole('button', { name: 'Reset new package' }))
     await waitFor(() => expect(createSpecies).toBeEnabled())
 
@@ -1159,7 +1164,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     })
   })
 
-  it('keeps scale actions available and recovers selected end use after a transient lookup failure', async () => {
+  it.each(['failed', 'empty'])('recovers %s selected End Use', async (lookupResult) => {
     let failNextSelectedEndUseLookup = false
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
       ...applicationDetail,
@@ -1187,7 +1192,9 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     mockedFetchApplicationEndUsesForSpeciesRegion.mockImplementation((_region, speciesCodes) => {
       if (speciesCodes.includes('FI') && failNextSelectedEndUseLookup) {
         failNextSelectedEndUseLookup = false
-        return Promise.reject(new Error('Temporary selected end use lookup failure'))
+        return lookupResult === 'empty'
+          ? Promise.resolve([])
+          : Promise.reject(new Error('Temporary selected end use lookup failure'))
       }
       return Promise.resolve([{ code: 'LU', description: 'Lumber' }])
     })
@@ -1232,6 +1239,9 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
         screen.getByText('Package saves are disabled because End Use options could not be loaded.'),
       ).toBeInTheDocument()
     })
+
+    await userEvent.click(savePackage)
+    expect(mockedUpdateApplicationPackage).not.toHaveBeenCalled()
 
     await chooseComboBoxOption(packageSelector, 'PKG-1')
     await waitFor(() => {
