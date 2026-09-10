@@ -529,7 +529,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       waitUntil: 'domcontentloaded',
     })
 
-    await expect(page).toHaveTitle('LEXIS')
+    await expect(page).toHaveTitle('Log Exemption Information System')
     await expect(page.locator('link[rel="icon"]')).toHaveAttribute('type', 'image/png')
     await expect(page.locator('link[rel="icon"]')).toHaveAttribute('href', '/bcid-192x192.png')
     await expect(
