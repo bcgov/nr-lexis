@@ -49,6 +49,35 @@ describe('Protected route guard access', () => {
     window.config = {}
   })
 
+  it.each([
+    '/provincial/application',
+    '/provincial/application/1001',
+    '/provincial/exemption',
+    '/provincial/offers',
+    '/provincial/permit',
+    '/reports/permitReport',
+    '/admin/rtm/emslogamv/upload',
+    '/admin/uploads',
+    '/notifications',
+  ])('denies Federal Read Only direct navigation to %s', async (path) => {
+    const grantedActions = [
+      '/federalApplicationSearch',
+      '/federalApplicationDetails',
+      'viewFederalApplication',
+    ]
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({ roles: ['FEDERAL_READ_ONLY'], grantedActions }),
+        defaultRoute: '/federal',
+        canPerform: (action) => grantedActions.includes(action),
+      }),
+    )
+    renderWithPath(path)
+    expect(
+      await screen.findByRole('heading', { name: "You don't have access to view this page" }),
+    ).toBeInTheDocument()
+  })
+
   it('redirects to unauthorized when required action is missing', async () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({

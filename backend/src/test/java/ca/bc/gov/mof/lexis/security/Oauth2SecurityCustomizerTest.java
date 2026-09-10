@@ -20,6 +20,28 @@ class Oauth2SecurityCustomizerTest {
       "https://loginproxy.example.test/auth/realms/forests";
 
   @Test
+  void federalReadOnlyShouldRequireBusinessBceidWithoutAnyClientScope() {
+    Oauth2SecurityCustomizer customizer = new Oauth2SecurityCustomizer(
+        COGNITO_JWKS, COGNITO_ISSUER, "", "",
+        new LexisSessionService("LEXIS_PROVINCIAL_SUBMITTER"));
+    for (String provider : List.of("bceidbusiness", "idir", "bceidbasic", "unknown")) {
+      var authorities = customizer.normalizedAuthorities(jwt(Map.of(
+          "iss", COGNITO_ISSUER,
+          "custom:idp_name", provider,
+          "cognito:groups", List.of("LEXIS_FEDERAL_READ_ONLY"))));
+      assertThat(authorities.stream().map(GrantedAuthority::getAuthority).toList())
+          .as("provider %s", provider)
+          .containsExactlyElementsOf(provider.equals("bceidbusiness")
+              ? List.of("LEXIS_FEDERAL_READ_ONLY") : List.of());
+    }
+    assertThat(customizer.normalizedAuthorities(jwt(Map.of(
+        "iss", COGNITO_ISSUER, "custom:idp_name", "bceidbusiness",
+        "cognito:groups", List.of("LEXIS_READ_ONLY", "LEXIS_ADMIN",
+            "FEDERAL_READ_ONLY", "LEXIS_FEDERAL_READ_ONLY_00012345")))))
+        .isEmpty();
+  }
+
+  @Test
   void cognitoAuthoritiesShouldIncludeGroupsButIgnoreOauthScopes() {
     Oauth2SecurityCustomizer customizer =
         new Oauth2SecurityCustomizer(

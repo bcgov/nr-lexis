@@ -65,6 +65,33 @@ class ProvincialAuthorizationServiceTest {
   }
 
   @Test
+  void federalReadOnlyCanReadOnlyFederalApplicationsWithoutClientOrRegionScope() {
+    var authentication = new TestingAuthenticationToken(
+        "nexcol-reader", "n/a", "LEXIS_FEDERAL_READ_ONLY");
+    when(applicationServiceProvider.getIfAvailable()).thenReturn(applicationService);
+    when(applicationService.findAccessByApplicationNumber(1L))
+        .thenReturn(Optional.of(applicationAccess(1L, null, null, null, "F")));
+    when(applicationService.findAccessByApplicationNumber(2L))
+        .thenReturn(Optional.of(applicationAccess(2L, null, null, null, "P")));
+    when(applicationService.findByApplicationNumber(1L))
+        .thenReturn(Optional.of(application(1L, null, null, null, "F")));
+    when(applicationService.findByApplicationNumber(2L))
+        .thenReturn(Optional.of(application(2L, null, null, null, "P")));
+
+    assertThat(service.canAccessApplication(authentication, 1L)).isTrue();
+    assertThat(service.canAccessFederalApplication(authentication, 1L)).isTrue();
+    assertThat(service.canAccessApplication(authentication, 2L)).isFalse();
+    assertThat(service.canAccessFederalApplication(authentication, 2L)).isFalse();
+    assertThat(service.canAccessApplication(authentication, application(2L, null, null, null)))
+        .isFalse();
+    assertThat(service.canAccessApplication(authentication, application(1L, null, null, null, "F")))
+        .isTrue();
+    assertThatThrownBy(() -> service.requireApplicationAttachmentMutation(authentication, 1L))
+        .isInstanceOf(AccessDeniedException.class);
+    verifyNoInteractions(principalService);
+  }
+
+  @Test
   void scopedSubmitterCanOnlyAccessApplicationsOwnedOrRepresentedByItsClient() {
     Authentication authentication = submitter("00012345");
     when(applicationServiceProvider.getIfAvailable()).thenReturn(applicationService);
