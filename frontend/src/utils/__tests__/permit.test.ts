@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatPermitNumber } from '@/utils/permit'
+import { formatPermitNumber, formatPermitStatus } from '@/utils/permit'
 
 describe('permit utilities', () => {
   it.each(['ACT', 'Active', ' active '])('marks active permit status %s as pending', (status) => {
@@ -16,5 +16,14 @@ describe('permit utilities', () => {
   it('returns blank when the permit number is absent', () => {
     expect(formatPermitNumber(null, 'ACT')).toBe('')
     expect(formatPermitNumber(' ', 'Active')).toBe('')
+  })
+
+  it.each([
+    ['PPD', undefined, 'Payment Pending'],
+    [' ppd ', 'payment pending', 'Payment Pending'],
+    ['COM', 'Completed', 'Completed'],
+    [null, null, ''],
+  ])('formats %s as %s', (statusCode, statusDescription, expected) => {
+    expect(formatPermitStatus(statusCode, statusDescription)).toBe(expected)
   })
 })

@@ -8,6 +8,7 @@ import {
 import { getSearchCount } from '@/service/search-count-service'
 import { toSearchServiceError } from '@/service/search-service-fallback'
 import { searchResultOptionLabel } from '@/utils/text'
+import { formatPermitStatus } from '@/utils/permit'
 import type {
   ProvincialPermitSearchRequest,
   ProvincialPermitSearchResponse,
@@ -79,7 +80,7 @@ const parseBackendResponse = (payload: unknown): ProvincialPermitSearchResponse 
     applicationNumber: '',
     packageNumber: '',
     permitNumber: String(row.permitNumber ?? ''),
-    status: (row.statusDescription ?? 'Active') as ProvincialPermitStatus,
+    status: formatPermitStatus(row.statusDescription ?? 'Active') as ProvincialPermitStatus,
     applicantClientNumber: row.applicantClientNumber ?? '',
     ownerClientNumber: row.ownerClientNumber ?? '',
     totalVolume: row.totalVolume ?? 0,

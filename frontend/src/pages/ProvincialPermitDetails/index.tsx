@@ -156,7 +156,7 @@ import {
   type ShippingReferenceOptions,
 } from '@/service/shipping-reference-service'
 import { triggerBrowserDownload } from '@/utils/download'
-import { formatPermitNumber } from '@/utils/permit'
+import { formatPermitNumber, formatPermitStatus } from '@/utils/permit'
 import { isValidEmail, normalizeTrimmedText } from '@/utils/text'
 
 const formatAmount = (value: number): string => {
@@ -1512,14 +1512,19 @@ const ProvincialPermitDetailsPage = () => {
       (detail?.blanketOic === true && permitRegionOptions.length === 0))
   const editablePermitStatusOptions = useMemo(() => {
     const currentStatusCode = permitStatusCode ?? ''
-    const options = permitStatusOptions.filter((option) => {
-      const statusCode = option.value.trim().toUpperCase()
-      return (
-        EDITABLE_PERMIT_STATUS_CODES.has(statusCode) ||
-        (statusCode === SERVER_ASSIGNED_PAYMENT_PENDING_STATUS &&
-          currentStatusCode === SERVER_ASSIGNED_PAYMENT_PENDING_STATUS)
-      )
-    })
+    const options = permitStatusOptions
+      .filter((option) => {
+        const statusCode = option.value.trim().toUpperCase()
+        return (
+          EDITABLE_PERMIT_STATUS_CODES.has(statusCode) ||
+          (statusCode === SERVER_ASSIGNED_PAYMENT_PENDING_STATUS &&
+            currentStatusCode === SERVER_ASSIGNED_PAYMENT_PENDING_STATUS)
+        )
+      })
+      .map((option) => ({
+        ...option,
+        label: formatPermitStatus(option.value, option.label),
+      }))
     if (
       currentStatusCode &&
       currentStatusCode !== 'EXP' &&
@@ -1527,7 +1532,7 @@ const ProvincialPermitDetailsPage = () => {
     ) {
       options.push({
         value: currentStatusCode,
-        label: detail?.permitStatusDescription?.trim() || currentStatusCode,
+        label: formatPermitStatus(currentStatusCode, detail?.permitStatusDescription),
       })
     }
     return options
@@ -3731,7 +3736,7 @@ const ProvincialPermitDetailsPage = () => {
           status={
             detail && detailMatchesRoute ? (
               <StatusTag
-                status={detail.permitStatusDescription ?? detail.permitStatusCode ?? ''}
+                status={formatPermitStatus(detail.permitStatusCode, detail.permitStatusDescription)}
                 fallbackLabel="Not provided"
               />
             ) : undefined
@@ -4111,9 +4116,10 @@ const ProvincialPermitDetailsPage = () => {
                               label: 'Status',
                               value: (
                                 <StatusTag
-                                  status={
-                                    detail.permitStatusDescription ?? detail.permitStatusCode ?? ''
-                                  }
+                                  status={formatPermitStatus(
+                                    detail.permitStatusCode,
+                                    detail.permitStatusDescription,
+                                  )}
                                   fallbackLabel="Not provided"
                                 />
                               ),

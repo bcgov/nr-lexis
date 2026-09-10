@@ -3561,7 +3561,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(permitStatusSelect).toHaveValue('COM')
     expect(within(permitStatusSelect).getByRole('option', { name: /Active/ })).toBeInTheDocument()
     expect(
-      within(permitStatusSelect).queryByRole('option', { name: /Payment pending/ }),
+      within(permitStatusSelect).queryByRole('option', { name: /Payment Pending/ }),
     ).not.toBeInTheDocument()
     expect(within(permitStatusSelect).getByRole('option', { name: /Expired/ })).toBeInTheDocument()
     await userEvent.selectOptions(permitStatusSelect, 'ACT')
@@ -4830,7 +4830,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(
       await screen.findByText(/Fee Receipt Number should not be empty for a complete Permit/),
     ).toBeInTheDocument()
-    expect(screen.getAllByText('PPD').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Payment Pending').length).toBeGreaterThan(0)
     const financialTile = screen
       .getByRole('heading', { name: 'Financial and volume' })
       .closest('.cds--tile')
@@ -4888,6 +4888,34 @@ describe('Provincial Permit Detail Action Smoke', () => {
         }),
       )
     })
+  })
+
+  it('labels a current PPD permit and retains its current-only status option when options omit it', async () => {
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      permitStatusCode: 'PPD',
+      permitStatusDescription: 'PPD',
+      receiptNumber: null,
+    })
+    mockedFetchProvincialPermitOptions.mockResolvedValue({
+      permitStatuses: [
+        { value: 'ACT', label: 'Active' },
+        { value: 'COM', label: 'Completed' },
+        { value: 'CAN', label: 'Cancelled' },
+        { value: 'EXP', label: 'Expired' },
+      ],
+      regions: [{ value: '1903', label: 'Cariboo Natural Resource Region' }],
+    })
+    renderPermitDetails()
+
+    expect((await screen.findAllByText('Payment Pending')).length).toBeGreaterThan(0)
+    await userEvent.click(screen.getByRole('button', { name: 'Edit permit' }))
+
+    const permitStatusSelect = screen.getByLabelText('Permit status')
+    expect(permitStatusSelect).toHaveValue('PPD')
+    expect(
+      within(permitStatusSelect).getByRole('option', { name: 'Payment Pending (PPD)' }),
+    ).toBeInTheDocument()
   })
 
   it('keeps an existing invoiced receipt read-only', async () => {
