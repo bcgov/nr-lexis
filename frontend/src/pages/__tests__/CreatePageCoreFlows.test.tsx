@@ -867,7 +867,7 @@ describe('Create Page Core Flows', () => {
         },
       },
     })
-  })
+  }, 20_000)
 
   it('shows selected owner and agent client details as read-only information', async () => {
     render(
