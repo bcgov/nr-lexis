@@ -1355,9 +1355,178 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     expect(unload.defaultPrevented).toBe(false)
   })
 
-  it('fails closed when selected package data cannot be loaded', async () => {
+  it('retains package details and scales when package species cannot be loaded', async () => {
     mockedFetchApplicationPackageSpecies.mockRejectedValue(
-      new Error('Oracle package species lookup failed'),
+      new Error('Package species lookup failed'),
+    )
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationItemsForEditing()
+
+    const packageDetailsSection = (
+      await screen.findByRole('heading', { name: 'Package Details' })
+    ).closest('section')
+    const packageSpeciesSection = screen.getByRole('heading', {
+      name: 'Package Species',
+    }).parentElement
+    const scalesSection = screen
+      .getByRole('heading', { name: 'Summary of Scale' })
+      .closest('section')
+    expect(packageDetailsSection).toBeTruthy()
+    expect(packageSpeciesSection).toBeTruthy()
+    expect(scalesSection).toBeTruthy()
+
+    expect(await screen.findByText('Selected package data unavailable')).toBeInTheDocument()
+    expect(screen.getByLabelText('Package Comments')).toHaveValue('Ready')
+    expect(within(scalesSection as HTMLElement).getByText('TM001')).toBeInTheDocument()
+    expect(
+      within(packageSpeciesSection as HTMLElement).getByText(
+        'Package species could not be loaded.',
+      ),
+    ).toBeInTheDocument()
+    expect(
+      within(packageSpeciesSection as HTMLElement).queryByText(
+        'No species assigned to this package.',
+      ),
+    ).not.toBeInTheDocument()
+    expect(
+      within(packageDetailsSection as HTMLElement)
+        .getByText('End Use', { selector: 'dt' })
+        .parentElement?.querySelector('dd'),
+    ).toHaveTextContent('Not available')
+    expect(screen.getByRole('button', { name: 'Save Package' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Delete Package' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Add Scale' })).toBeDisabled()
+    expect(
+      within(scalesSection as HTMLElement).getByRole('button', { name: 'Delete' }),
+    ).toBeDisabled()
+  })
+
+  it('keeps a partial package load warning after an unrelated create package action', async () => {
+    mockedFetchApplicationPackageSpecies.mockRejectedValue(
+      new Error('Package species lookup failed'),
+    )
+    mockedAddApplicationPackage.mockResolvedValue({
+      valid: false,
+      packageNumber: 'PKG-NEW',
+      errors: ['Package creation was rejected.'],
+      warnings: [],
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationItemsForEditing()
+    expect(await screen.findByText('Selected package data unavailable')).toBeInTheDocument()
+
+    const createPackageSection = (
+      await screen.findByRole('heading', { name: 'Create Package' })
+    ).closest('section')
+    expect(createPackageSection).toBeTruthy()
+    const createPackageControls = within(createPackageSection as HTMLElement)
+    fireEvent.change(createPackageControls.getByLabelText('Package Number'), {
+      target: { value: 'PKG-NEW' },
+    })
+    fireEvent.change(createPackageControls.getByLabelText('Package Volume (m³)'), {
+      target: { value: '25.0' },
+    })
+    fireEvent.change(createPackageControls.getByLabelText('Average Length (m)'), {
+      target: { value: '12.0' },
+    })
+    fireEvent.change(createPackageControls.getByLabelText('Average top diameter (rads)'), {
+      target: { value: '24.0' },
+    })
+    await chooseComboBoxOption(
+      createPackageControls.getByRole('combobox', { name: 'Status Code' }),
+      'ACT - Active',
+    )
+    await chooseComboBoxOption(
+      createPackageControls.getByRole('combobox', { name: 'Product Type' }),
+      'H - Harvested Timber',
+    )
+    await chooseComboBoxOption(
+      createPackageControls.getByRole('combobox', { name: 'Age Class' }),
+      'S - Second Growth',
+    )
+    await userEvent.click(createPackageControls.getByRole('button', { name: 'Create Package' }))
+
+    await waitFor(() => {
+      expect(mockedAddApplicationPackage).toHaveBeenCalled()
+    })
+    expect(screen.getByText('Selected package data unavailable')).toBeInTheDocument()
+  })
+
+  it('retains package details and species when package scales cannot be loaded', async () => {
+    mockedFetchApplicationPackageScales.mockRejectedValue(new Error('Package scale lookup failed'))
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationItemsForEditing()
+
+    const packageDetailsSection = (
+      await screen.findByRole('heading', { name: 'Package Details' })
+    ).closest('section')
+    const packageSpeciesSection = screen.getByRole('heading', {
+      name: 'Package Species',
+    }).parentElement
+    const scalesSection = screen
+      .getByRole('heading', { name: 'Summary of Scale' })
+      .closest('section')
+    expect(packageDetailsSection).toBeTruthy()
+    expect(packageSpeciesSection).toBeTruthy()
+    expect(scalesSection).toBeTruthy()
+
+    expect(await screen.findByText('Selected package data unavailable')).toBeInTheDocument()
+    expect(screen.getByLabelText('Package Comments')).toHaveValue('Ready')
+    expect(
+      within(packageSpeciesSection as HTMLElement).getByText('FI - Douglas-fir'),
+    ).toBeInTheDocument()
+    expect(
+      within(scalesSection as HTMLElement).getByText('Package scales could not be loaded.'),
+    ).toBeInTheDocument()
+    expect(
+      within(scalesSection as HTMLElement).queryByText('No scales assigned to this package.'),
+    ).not.toBeInTheDocument()
+    expect(
+      within(packageDetailsSection as HTMLElement)
+        .getByText('Total Pieces')
+        .parentElement?.querySelector('dd'),
+    ).toHaveTextContent('Not available')
+    expect(screen.getByRole('button', { name: 'Save Package' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Delete Package' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Add Scale' })).toBeDisabled()
+  })
+
+  it('fails closed when package details cannot be loaded', async () => {
+    mockedFetchApplicationPackageDetails.mockRejectedValue(
+      new Error('Package details lookup failed'),
     )
 
     render(
@@ -1376,6 +1545,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     expect(
       await screen.findByText('Unable to retrieve application item details.'),
     ).toBeInTheDocument()
+    expect(screen.getByLabelText('Package Comments')).toHaveValue('')
     expect(screen.getByRole('button', { name: 'Save Package' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Delete Package' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Add Scale' })).toBeDisabled()
@@ -1387,6 +1557,8 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     expect(mockedUpdateApplicationPackage).not.toHaveBeenCalled()
     expect(mockedDeleteApplicationPackage).not.toHaveBeenCalled()
     expect(mockedAddApplicationScaleToPackage).not.toHaveBeenCalled()
+    expect(mockedFetchApplicationPackageSpecies).not.toHaveBeenCalled()
+    expect(mockedFetchApplicationPackageScales).not.toHaveBeenCalled()
   })
 
   it('disables package and scale mutations when authoritative item options fail', async () => {

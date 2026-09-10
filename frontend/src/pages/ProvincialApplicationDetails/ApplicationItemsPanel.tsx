@@ -83,6 +83,18 @@ type ScaleFormState = {
 
 type DependentOptionsAvailability = 'idle' | 'loading' | 'available' | 'unavailable'
 
+type PackageDataAvailability = {
+  details: boolean
+  species: boolean
+  scales: boolean
+}
+
+const unavailablePackageData: PackageDataAvailability = {
+  details: false,
+  species: false,
+  scales: false,
+}
+
 const displayScaleType = (cascadeSplitCode: string): string => {
   switch (cascadeSplitCode.trim().toUpperCase()) {
     case 'W':
@@ -403,7 +415,9 @@ function ProvincialApplicationItemsPanel({
   const [dependentReferenceOptionsUnavailable, setDependentReferenceOptionsUnavailable] =
     useState(false)
   const [itemsLoading, setItemsLoading] = useState(false)
-  const [packageDataLoaded, setPackageDataLoaded] = useState(false)
+  const [packageDataAvailability, setPackageDataAvailability] =
+    useState<PackageDataAvailability>(unavailablePackageData)
+  const [packageLoadWarning, setPackageLoadWarning] = useState('')
   const [itemsErrorMessage, setItemsErrorMessage] = useState('')
   const [itemsInfoMessage, setItemsInfoMessage] = useState('')
   const [isSavingPackage, setIsSavingPackage] = useState(false)
@@ -438,6 +452,14 @@ function ProvincialApplicationItemsPanel({
     scaleDraftTouched && JSON.stringify(scaleForm) !== JSON.stringify(emptyScaleForm)
   const itemsDirty = selectedPackageDraftDirty || createPackageDraftDirty || scaleDraftDirty
   const itemsBusy = isSavingPackage || isSavingScale || !!deletingScaleId
+  const packageDataLoaded =
+    packageDataAvailability.details &&
+    packageDataAvailability.species &&
+    packageDataAvailability.scales
+  const packageSpeciesUnavailable =
+    packageDataAvailability.details && !packageDataAvailability.species && !itemsLoading
+  const packageScalesUnavailable =
+    packageDataAvailability.details && !packageDataAvailability.scales && !itemsLoading
 
   useEffect(() => {
     onDirtyChange?.(itemsDirty)
@@ -694,7 +716,8 @@ function ProvincialApplicationItemsPanel({
       const isLatestRequest = beginItemsRequest()
       if (!packageNumber) {
         setItemsLoading(false)
-        setPackageDataLoaded(false)
+        setPackageDataAvailability(unavailablePackageData)
+        setPackageLoadWarning('')
         const emptyForm = emptyPackageForm(productTypeCode)
         setPackageForm(emptyForm)
         setPackageBaselineForm(emptyForm)
@@ -712,7 +735,8 @@ function ProvincialApplicationItemsPanel({
       }
 
       setItemsLoading(true)
-      setPackageDataLoaded(false)
+      setPackageDataAvailability(unavailablePackageData)
+      setPackageLoadWarning('')
       setItemsErrorMessage('')
       const emptyForm = emptyPackageForm(productTypeCode)
       setPackageForm(emptyForm)
@@ -733,28 +757,45 @@ function ProvincialApplicationItemsPanel({
         if (!isLatestRequest()) {
           return
         }
-        const speciesResult = await fetchApplicationPackageSpecies(packageNumber)
+        const [speciesResult, scalesResult] = await Promise.allSettled([
+          fetchApplicationPackageSpecies(packageNumber),
+          fetchApplicationPackageScales(packageNumber),
+        ])
         if (!isLatestRequest()) {
           return
         }
-        const scalesResult = await fetchApplicationPackageScales(packageNumber)
-        if (!isLatestRequest()) {
-          return
-        }
-        const nextSpeciesDraft = uniqueCodes(speciesResult)
-        const loadedPackageForm = toPackageForm(productTypeCode, detailsResult, speciesResult)
+        const speciesRows = speciesResult.status === 'fulfilled' ? speciesResult.value : []
+        const scaleRows = scalesResult.status === 'fulfilled' ? scalesResult.value : []
+        const speciesLoaded = speciesResult.status === 'fulfilled'
+        const scalesLoaded = scalesResult.status === 'fulfilled'
+        const nextSpeciesDraft = uniqueCodes(speciesRows)
+        const loadedPackageForm = toPackageForm(productTypeCode, detailsResult, speciesRows)
         setPackageForm(loadedPackageForm)
         setPackageBaselineForm(loadedPackageForm)
         setShowPackageValidationErrors(false)
-        setPackageSpeciesRows(speciesResult)
+        setPackageSpeciesRows(speciesRows)
         setSpeciesDraft(nextSpeciesDraft)
         setPackageSpeciesBaseline(nextSpeciesDraft)
         setPackageDraftTouched(false)
-        setScales(scalesResult)
-        setPackageDataLoaded(true)
+        setScales(scaleRows)
+        setPackageDataAvailability({
+          details: true,
+          species: speciesLoaded,
+          scales: scalesLoaded,
+        })
+        setPackageLoadWarning(
+          !speciesLoaded && !scalesLoaded
+            ? 'Package species and scales could not be loaded.'
+            : !speciesLoaded
+              ? 'Package species could not be loaded.'
+              : !scalesLoaded
+                ? 'Package scales could not be loaded.'
+                : '',
+        )
       } catch {
         if (isLatestRequest()) {
-          setPackageDataLoaded(false)
+          setPackageDataAvailability(unavailablePackageData)
+          setPackageLoadWarning('')
           const failedForm = emptyPackageForm(productTypeCode)
           setPackageForm(failedForm)
           setPackageBaselineForm(failedForm)
@@ -1554,6 +1595,16 @@ function ProvincialApplicationItemsPanel({
               hideCloseButton
             />
           )}
+        {!!packageLoadWarning && (
+          <InlineNotification
+            className="detail-context-notification"
+            kind="warning"
+            title="Selected package data unavailable"
+            subtitle={packageLoadWarning}
+            lowContrast
+            hideCloseButton
+          />
+        )}
         {!!itemsErrorMessage && (
           <AppNotification
             kind="error"
@@ -1603,7 +1654,12 @@ function ProvincialApplicationItemsPanel({
                 ['Package Number', selectedPackageNumber || 'None selected'],
                 ['Package Volume (m³)', packageForm.volume || 'Not provided'],
                 ['Total Scale Volume (m³)', packageForm.scaledVolume || 'Not provided'],
-                ['Total Pieces', selectedPackageTotalPieces.toLocaleString()],
+                [
+                  'Total Pieces',
+                  packageScalesUnavailable
+                    ? 'Not available'
+                    : selectedPackageTotalPieces.toLocaleString(),
+                ],
                 ['Average Length (m)', packageForm.averageLength || 'Not provided'],
                 ['Average top diameter (rads)', packageForm.averageDiameter || 'Not provided'],
                 ['Status', optionTextForCode(selectedPackageStatusOptions, packageForm.status)],
@@ -1616,7 +1672,12 @@ function ProvincialApplicationItemsPanel({
                   optionTextForCode(selectedPackageGrowthTypeOptions, packageForm.ageClass),
                 ],
                 ['Reprocessed', packageForm.reprocessed === 'Y' ? 'Yes' : 'No'],
-                ['End Use', packageForm.endUseCode || 'Not provided'],
+                [
+                  'End Use',
+                  packageSpeciesUnavailable
+                    ? 'Not available'
+                    : packageForm.endUseCode || 'Not provided',
+                ],
                 ['Comments', packageForm.comments || 'Not provided'],
               ].map(([label, value]) => (
                 <div key={label} className="detail-field-item">
@@ -1827,32 +1888,40 @@ function ProvincialApplicationItemsPanel({
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {selectedSpeciesOptions.map((row) => {
-                        const existing = packageSpeciesRows.find(
-                          (item) => item.species === row.code,
-                        )
-                        return (
-                          <TableRow key={row.code}>
-                            <TableCell>{asOptionText(row)}</TableCell>
-                            <TableCell>
-                              {existing?.endUseDescription || packageForm.endUseCode || '-'}
-                            </TableCell>
-                            {showMutationActions && (
+                      {packageSpeciesUnavailable ? (
+                        <TableRow>
+                          <TableCell colSpan={showMutationActions ? 3 : 2}>
+                            Package species could not be loaded.
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        selectedSpeciesOptions.map((row) => {
+                          const existing = packageSpeciesRows.find(
+                            (item) => item.species === row.code,
+                          )
+                          return (
+                            <TableRow key={row.code}>
+                              <TableCell>{asOptionText(row)}</TableCell>
                               <TableCell>
-                                <Button
-                                  kind="ghost"
-                                  size="sm"
-                                  disabled={!canSaveSelectedPackage}
-                                  onClick={() => onRemoveSpecies(row.code)}
-                                >
-                                  Remove
-                                </Button>
+                                {existing?.endUseDescription || packageForm.endUseCode || '-'}
                               </TableCell>
-                            )}
-                          </TableRow>
-                        )
-                      })}
-                      {speciesDraft.length === 0 && (
+                              {showMutationActions && (
+                                <TableCell>
+                                  <Button
+                                    kind="ghost"
+                                    size="sm"
+                                    disabled={!canSaveSelectedPackage}
+                                    onClick={() => onRemoveSpecies(row.code)}
+                                  >
+                                    Remove
+                                  </Button>
+                                </TableCell>
+                              )}
+                            </TableRow>
+                          )
+                        })
+                      )}
+                      {!packageSpeciesUnavailable && speciesDraft.length === 0 && (
                         <TableRow>
                           <TableCell colSpan={showMutationActions ? 3 : 2}>
                             No species assigned to this package.
@@ -2240,36 +2309,44 @@ function ProvincialApplicationItemsPanel({
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {scales.map((row) => (
-                    <TableRow key={row.id}>
-                      <TableCell>{row.timberMark}</TableCell>
-                      <TableCell>{displayScaleType(row.cascadeSplitCode)}</TableCell>
-                      <TableCell>{row.pieces.toLocaleString()}</TableCell>
-                      <TableCell>{row.species}</TableCell>
-                      <TableCell>{row.grade}</TableCell>
-                      <TableCell>{row.volume}</TableCell>
-                      {showMutationActions && (
-                        <TableCell>
-                          <Button
-                            type="button"
-                            kind="danger--ghost"
-                            size="sm"
-                            disabled={
-                              !canAddScales ||
-                              !packageDataLoaded ||
-                              deletingScaleId === row.id ||
-                              row.permitted
-                            }
-                            renderIcon={deletingScaleId === row.id ? PendingIcon : TrashCan}
-                            onClick={() => setScalePendingDeletion(row)}
-                          >
-                            {deletingScaleId === row.id ? 'Deleting…' : 'Delete'}
-                          </Button>
-                        </TableCell>
-                      )}
+                  {packageScalesUnavailable ? (
+                    <TableRow>
+                      <TableCell colSpan={showMutationActions ? 7 : 6}>
+                        Package scales could not be loaded.
+                      </TableCell>
                     </TableRow>
-                  ))}
-                  {scales.length === 0 && (
+                  ) : (
+                    scales.map((row) => (
+                      <TableRow key={row.id}>
+                        <TableCell>{row.timberMark}</TableCell>
+                        <TableCell>{displayScaleType(row.cascadeSplitCode)}</TableCell>
+                        <TableCell>{row.pieces.toLocaleString()}</TableCell>
+                        <TableCell>{row.species}</TableCell>
+                        <TableCell>{row.grade}</TableCell>
+                        <TableCell>{row.volume}</TableCell>
+                        {showMutationActions && (
+                          <TableCell>
+                            <Button
+                              type="button"
+                              kind="danger--ghost"
+                              size="sm"
+                              disabled={
+                                !canAddScales ||
+                                !packageDataLoaded ||
+                                deletingScaleId === row.id ||
+                                row.permitted
+                              }
+                              renderIcon={deletingScaleId === row.id ? PendingIcon : TrashCan}
+                              onClick={() => setScalePendingDeletion(row)}
+                            >
+                              {deletingScaleId === row.id ? 'Deleting…' : 'Delete'}
+                            </Button>
+                          </TableCell>
+                        )}
+                      </TableRow>
+                    ))
+                  )}
+                  {!packageScalesUnavailable && scales.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={showMutationActions ? 7 : 6}>
                         No scales assigned to this package.
