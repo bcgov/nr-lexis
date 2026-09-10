@@ -111,11 +111,18 @@ lexis:
         - "uploadFederalSubmission"
     role-actions:
       LEXIS_ADMIN: ["*"]
+      # INTENTIONAL_LEGACY_DIVERGENCE(FEDERAL_READ_ONLY_BCEID): NEXCOL users view all
+      # federal applications using Business BCeID, without a forest-client assignment.
+      LEXIS_FEDERAL_READ_ONLY:
+        - "/federalApplicationSearch"
+        - "/federalApplicationDetails"
+        - "viewFederalApplication"
       # INTENTIONAL_LEGACY_DIVERGENCE(READ_ONLY_STAFF_VIEW): Pure Read Only follows the
       # Application Approver's supported business-record and retained-report view access, while
       # workflow creation, editing, approval, upload, email, and review-queue actions remain denied.
       # Legacy Read Only was unfinished and is not the modern authorization baseline.
       LEXIS_READ_ONLY:
+        - "viewNotifications"
         - "/applicationSearch"
         - "/applicationDetails"
         - "/applicationRemarks"
@@ -142,6 +149,7 @@ lexis:
         - "/tenureReport"
         - "mofrListing"
       LEXIS_APPLICATION_APPROVER:
+        - "viewNotifications"
         - "/applicationsReview"
         - "/changeApplicantType"
         - "/applicationSearch"
@@ -183,6 +191,7 @@ lexis:
         - "/filePermitUpload"
         - "/fileInvoiceUpload"
       LEXIS_EXEMPTION_APPROVER:
+        - "viewNotifications"
         # Legacy Exemption Approvers can open linked applications read-only, but cannot create
         # exemptions. Editing an existing exemption remains governed by saveExemption.
         - "/applicationDetails"
@@ -191,6 +200,7 @@ lexis:
         - "approveExemption"
         - "saveExemption"
       LEXIS_PROVINCIAL_SUBMITTER:
+        - "viewNotifications"
         - "/summary"
         - "/applicationSearch"
         - "/applicationDetails"

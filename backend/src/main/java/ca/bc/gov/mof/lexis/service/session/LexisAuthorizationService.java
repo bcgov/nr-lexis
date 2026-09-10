@@ -18,6 +18,7 @@ public class LexisAuthorizationService {
   private static final String SCOPE_AUTHORITY_PREFIX = "SCOPE_";
   private static final String ROLE_ADMIN = "LEXIS_ADMIN";
   private static final String ROLE_READ_ONLY = "LEXIS_READ_ONLY";
+  private static final String ROLE_FEDERAL_READ_ONLY = "LEXIS_FEDERAL_READ_ONLY";
   private static final String ROLE_APPLICATION_APPROVER = "LEXIS_APPLICATION_APPROVER";
   private static final String ROLE_EXEMPTION_APPROVER = "LEXIS_EXEMPTION_APPROVER";
   private static final Set<String> PROVINCIAL_STAFF_ROLES =
@@ -103,7 +104,8 @@ public class LexisAuthorizationService {
 
   public boolean isReadOnlyRolloutUser(List<String> rawRoles) {
     List<String> roles = normalizeRoles(rawRoles);
-    return !roles.contains(ROLE_ADMIN) && roles.contains(ROLE_READ_ONLY);
+    return !roles.contains(ROLE_ADMIN)
+        && (roles.contains(ROLE_READ_ONLY) || roles.contains(ROLE_FEDERAL_READ_ONLY));
   }
 
   public boolean hasProvincialStaffRole(List<String> rawRoles) {
@@ -169,9 +171,14 @@ public class LexisAuthorizationService {
       return;
     }
 
-    if (roles.contains(ROLE_READ_ONLY)) {
+    if (roles.contains(ROLE_READ_ONLY) || roles.contains(ROLE_FEDERAL_READ_ONLY)) {
       Set<String> readOnlyActions = new LinkedHashSet<>();
-      appendRoleActions(readOnlyActions, ROLE_READ_ONLY);
+      if (roles.contains(ROLE_READ_ONLY)) {
+        appendRoleActions(readOnlyActions, ROLE_READ_ONLY);
+      }
+      if (roles.contains(ROLE_FEDERAL_READ_ONLY)) {
+        appendRoleActions(readOnlyActions, ROLE_FEDERAL_READ_ONLY);
+      }
       granted.retainAll(readOnlyActions);
       return;
     }

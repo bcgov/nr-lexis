@@ -18,6 +18,19 @@ class LexisSessionServiceTest {
       new LexisSessionService("LEXIS_PROVINCIAL_SUBMITTER");
 
   @Test
+  void federalReadOnlyShouldLandOnFederalSearchWithoutForestClientSelection() {
+    var roles = List.of("LEXIS_FEDERAL_READ_ONLY");
+    var welcome = service.resolveWelcomeRoute("bceid\\nexcol-reader", roles);
+    assertThat(welcome.welcomeTarget()).isEqualTo("federalReadOnly");
+    assertThat(welcome.legacyPath()).isEqualTo("/federal");
+    var scope = service.resolveForestClientScope(roles);
+    assertThat(scope.invalid()).isFalse();
+    assertThat(scope.selectionRequired()).isFalse();
+    assertThat(scope.clientNumber()).isNull();
+    assertThat(scope.availableClientNumbers()).isEmpty();
+  }
+
+  @Test
   void shouldRouteReadOnlyUsersToApplicationSearch() {
     LexisSessionWelcomeDto response =
         service.resolveWelcomeRoute("idir\\jsmith", List.of("lexis_read_only"));

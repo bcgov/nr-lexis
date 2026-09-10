@@ -74,6 +74,7 @@ const ROLE_LABELS: Record<string, string> = {
   APPLICATION_APPROVER: 'Application Approver',
   EXEMPTION_APPROVER: 'Exemption Approver',
   READ_ONLY: 'Read Only',
+  FEDERAL_READ_ONLY: 'Federal Read Only',
   PROVINCIAL_SUBMITTER: 'Provincial Submitter',
 }
 
@@ -82,6 +83,7 @@ const ROLE_DISPLAY_PRIORITY = [
   'APPLICATION_APPROVER',
   'EXEMPTION_APPROVER',
   'READ_ONLY',
+  'FEDERAL_READ_ONLY',
   'PROVINCIAL_SUBMITTER',
 ] as const
 
@@ -102,6 +104,7 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
     links: [
       {
         to: '/notifications',
+        requiredActions: ['viewNotifications'],
         label: 'Notifications',
         icon: Notification,
       },
@@ -366,6 +369,7 @@ function Layout({ children }: LayoutProps) {
   const isDarkTheme = theme === 'g100'
   const isSideNavCollapsed = isNarrowViewport ? !isNarrowNavExpanded : isSideNavCollapsedPreference
   const isNavigationOpen = !isSideNavCollapsed
+  const canViewNotifications = canPerform('viewNotifications')
   const notificationAudienceKey = `${capabilities.principal ?? ''}:${capabilities.roles?.join('|') ?? ''}`
   const profileInitials = useMemo(
     () => getProfileInitials(capabilities.principal),
@@ -515,7 +519,7 @@ function Layout({ children }: LayoutProps) {
     let isCurrent = true
 
     const loadNotificationIndicator = async (): Promise<void> => {
-      if (!capabilities.authenticated || !capabilities.principal) {
+      if (!capabilities.authenticated || !capabilities.principal || !canViewNotifications) {
         if (isCurrent) {
           setHasActiveNotifications(false)
         }
@@ -538,7 +542,12 @@ function Layout({ children }: LayoutProps) {
     return () => {
       isCurrent = false
     }
-  }, [capabilities.authenticated, capabilities.principal, notificationAudienceKey])
+  }, [
+    capabilities.authenticated,
+    capabilities.principal,
+    notificationAudienceKey,
+    canViewNotifications,
+  ])
 
   useEffect(() => {
     writeUiPreference(UI_PREFERENCE_KEYS.sideNavCollapsed, String(isSideNavCollapsedPreference))

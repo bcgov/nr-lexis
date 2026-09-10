@@ -70,6 +70,15 @@ class LexisAuthorizationMatrixParityTest {
   private LexisAuthorizationService authorizationService;
 
   @Test
+  void federalReadOnlyShouldGrantExactlyFederalReads() {
+    var roles = List.of("LEXIS_FEDERAL_READ_ONLY");
+    assertThat(authorizationService.hasKnownRole(roles)).isTrue();
+    assertThat(authorizationService.hasProvincialStaffRole(roles)).isFalse();
+    assertThat(authorizationService.resolveGrantedActions(roles))
+        .containsExactlyElementsOf(FEDERAL_READ_ACTIONS);
+  }
+
+  @Test
   void everyLegacyActionShouldHaveAtLeastOneConfiguredRole() {
     List<String> uncoveredActions =
         authorizationService.getKnownActions().stream()

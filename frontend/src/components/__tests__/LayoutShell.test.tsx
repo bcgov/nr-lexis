@@ -98,6 +98,39 @@ describe('Layout shell', () => {
     document.getElementById(NOTIFICATION_REGION_ID)?.remove()
   })
 
+  it.each([false, true])(
+    'shows only federal navigation for an unscoped BCeID reader with rollout mode %s',
+    async (rollout) => {
+      window.config = { VITE_LEXIS_PROD_RTM_ONLY: String(rollout) }
+      const grantedActions = [
+        '/federalApplicationSearch',
+        '/federalApplicationDetails',
+        'viewFederalApplication',
+      ]
+      mockedUseAuth.mockReturnValue(
+        createTestAuthContext({
+          capabilities: createTestCapabilities({
+            principal: 'nexcol-reader',
+            roles: ['FEDERAL_READ_ONLY'],
+            grantedActions,
+          }),
+          defaultRoute: '/federal',
+          canPerform: (action) => grantedActions.includes(action),
+        }),
+      )
+      renderLayout('/federal')
+      expect(screen.getByRole('link', { name: 'Application search' })).toHaveAttribute(
+        'href',
+        '/federal',
+      )
+      for (const name of ['Provincial', 'Reports', 'Admin', 'Notifications']) {
+        expect(screen.queryByText(name)).not.toBeInTheDocument()
+      }
+      expect(mockedFetchNotifications).not.toHaveBeenCalled()
+      expect(mockedFetchUserPreferences).not.toHaveBeenCalled()
+    },
+  )
+
   it('uses and persists public-safe defaults when no preferences exist', () => {
     renderLayout('/provincial/review')
 

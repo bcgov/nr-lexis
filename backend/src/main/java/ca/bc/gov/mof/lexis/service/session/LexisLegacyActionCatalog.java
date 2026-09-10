@@ -54,5 +54,6 @@ final class LexisLegacyActionCatalog {
           "saveExemption",
           "savePermit",
           "uploadApplicationSubmission",
-          "viewFederalApplication");
+          "viewFederalApplication",
+          "viewNotifications");
 }

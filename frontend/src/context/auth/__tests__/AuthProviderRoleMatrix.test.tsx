@@ -103,6 +103,43 @@ describe('Auth Provider Role Matrix', () => {
     clearActiveForestClientNumber()
   })
 
+  it.each([false, true])(
+    'supports unscoped Federal Read Only with rollout mode %s',
+    async (rollout) => {
+      window.config = { VITE_LEXIS_PROD_RTM_ONLY: String(rollout) }
+      const allowed = [
+        '/federalApplicationSearch',
+        '/federalApplicationDetails',
+        'viewFederalApplication',
+      ]
+      const denied = [
+        '/applicationSearch',
+        '/exemptionDetails',
+        'manageFederalApplication',
+        'viewNotifications',
+        '/lexisAgentAdmin',
+      ]
+      mockSessionCapabilities({
+        authenticated: true,
+        principal: 'nexcol-reader',
+        roles: ['LEXIS_FEDERAL_READ_ONLY'],
+        grantedActions: allowed,
+        welcomeTarget: 'federalReadOnly',
+        legacyPath: '/federal',
+      })
+      renderProbe([...allowed, ...denied])
+      await waitForAuthLoad()
+      expect(screen.getByTestId('default-route')).toHaveTextContent('/federal')
+      expect(screen.getByTestId('has-any-role')).toHaveTextContent('true')
+      expect(screen.getByTestId('forest-client-selection-required')).toHaveTextContent('false')
+      expect(screen.getByTestId('forest-client')).toBeEmptyDOMElement()
+      for (const action of allowed)
+        expect(screen.getByTestId(`action-${action}`)).toHaveTextContent('true')
+      for (const action of denied)
+        expect(screen.getByTestId(`action-${action}`)).toHaveTextContent('false')
+    },
+  )
+
   it('normalizes the scoped submitter role without normalizing unknown roles', async () => {
     mockSessionCapabilities({
       authenticated: true,

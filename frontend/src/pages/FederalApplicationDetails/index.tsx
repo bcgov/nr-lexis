@@ -507,11 +507,11 @@ const FederalApplicationDetailsPage = () => {
 
   useEffect(() => {
     return () => {
-      if (applicationNumber) {
+      if (applicationNumber && canManageFederalApplication) {
         void releaseApplicationEditLock(applicationNumber)
       }
     }
-  }, [applicationNumber])
+  }, [applicationNumber, canManageFederalApplication])
 
   const refreshDetail = useCallback(
     async (savedSection: 'status' | 'permit') => {

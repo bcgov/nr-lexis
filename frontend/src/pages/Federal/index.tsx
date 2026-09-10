@@ -744,7 +744,7 @@ const FederalPage = () => {
                       </TableCell>
                       <TableCell>{displayTableValue(row.exemptionType)}</TableCell>
                       <TableCell>
-                        {row.exemptionNumber ? (
+                        {row.exemptionNumber && canPerform('/exemptionDetails') ? (
                           <Link
                             className="cds--link"
                             to={withCurrentSearch(`/provincial/exemption/${row.exemptionNumber}`)}

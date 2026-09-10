@@ -37,6 +37,23 @@ class LexisProdRtmOnlyAuthorizationIntegrationTest {
   @Autowired private MockMvc mockMvc;
 
   @Test
+  void federalReadOnlyShouldRetainOnlyFederalReadsDuringTheReadOnlyRollout() throws Exception {
+    var role = new SimpleGrantedAuthority("LEXIS_FEDERAL_READ_ONLY");
+    mockMvc.perform(get("/api/lexis/session/capabilities").with(jwt().authorities(role)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.grantedActions.length()").value(3));
+    mockMvc.perform(get("/api/lexis/federal/applications/search").with(jwt().authorities(role)))
+        .andExpect(status().isNoContent());
+    mockMvc.perform(get("/api/lexis/applications/search").with(jwt().authorities(role)))
+        .andExpect(status().isForbidden());
+    mockMvc.perform(get("/api/lexis/notifications").with(jwt().authorities(role)))
+        .andExpect(status().isForbidden());
+    mockMvc.perform(post("/api/lexis/federal/applications/9001/status")
+            .with(csrf()).with(jwt().authorities(role)))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
   void prodRtmOnlyModeShouldExposeOnlyExactGetHealthProbes() throws Exception {
     SimpleGrantedAuthority admin = new SimpleGrantedAuthority("LEXIS_ADMIN");
 

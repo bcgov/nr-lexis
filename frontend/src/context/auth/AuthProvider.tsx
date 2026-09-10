@@ -87,6 +87,7 @@ const REPORT_ACTION_ROUTE_MAP: Record<string, string> = {
 const LEGACY_TO_CANONICAL_ROLE_MAP: Record<string, string> = {
   LEXIS_ADMIN: 'ADMIN',
   LEXIS_READ_ONLY: 'READ_ONLY',
+  LEXIS_FEDERAL_READ_ONLY: 'FEDERAL_READ_ONLY',
   LEXIS_APPLICATION_APPROVER: 'APPLICATION_APPROVER',
   LEXIS_EXEMPTION_APPROVER: 'EXEMPTION_APPROVER',
   LEXIS_PROVINCIAL_SUBMITTER: 'PROVINCIAL_SUBMITTER',
@@ -97,12 +98,14 @@ const CANONICAL_LEXIS_PROVINCIAL_CONCRETE_PREFIX = 'LEXIS_PROVINCIAL_SUBMITTER_'
 const CANONICAL_PROVINCIAL_CONCRETE_PREFIX = 'PROVINCIAL_SUBMITTER_'
 const ROLE_ADMIN = 'ADMIN'
 const ROLE_READ_ONLY = 'READ_ONLY'
+const ROLE_FEDERAL_READ_ONLY = 'FEDERAL_READ_ONLY'
 const ROLE_APPLICATION_APPROVER = 'APPLICATION_APPROVER'
 const ROLE_EXEMPTION_APPROVER = 'EXEMPTION_APPROVER'
 const ROLE_PROVINCIAL_SUBMITTER = 'PROVINCIAL_SUBMITTER'
 const APPLICATION_ROLE_NAMES = new Set([
   ROLE_ADMIN,
   ROLE_READ_ONLY,
+  ROLE_FEDERAL_READ_ONLY,
   ROLE_APPLICATION_APPROVER,
   ROLE_EXEMPTION_APPROVER,
 ])
@@ -237,7 +240,8 @@ const resolveDefaultRoute = (capabilities: LexisSessionCapabilities): string => 
     if (isAdminUser) {
       return PROD_RTM_ONLY_ROUTE
     }
-    return isReadOnlyUser ? '/provincial/application' : '/unauthorized'
+    if (isReadOnlyUser) return '/provincial/application'
+    return hasRole(capabilities.roles, ROLE_FEDERAL_READ_ONLY) ? '/federal' : '/unauthorized'
   }
 
   if (isAdminUser) {
@@ -707,7 +711,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
         if (hasRole(capabilities.roles, ROLE_ADMIN)) {
           return normalizeAction(action) === normalizeAction(PROD_RTM_ONLY_ACTION)
         }
-        if (!hasRole(capabilities.roles, ROLE_READ_ONLY)) {
+        if (
+          !hasRole(capabilities.roles, ROLE_READ_ONLY) &&
+          !hasRole(capabilities.roles, ROLE_FEDERAL_READ_ONLY)
+        ) {
           return false
         }
       }

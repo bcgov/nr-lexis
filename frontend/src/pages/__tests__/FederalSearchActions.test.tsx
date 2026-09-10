@@ -103,6 +103,30 @@ describe('Federal Search Actions', () => {
     })
   })
 
+  it('lets federal readers open applications without exemption links or write controls', async () => {
+    const grantedActions = [
+      '/federalApplicationSearch',
+      '/federalApplicationDetails',
+      'viewFederalApplication',
+    ]
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({ roles: ['FEDERAL_READ_ONLY'], grantedActions }),
+        defaultRoute: '/federal',
+        canPerform: (action) => grantedActions.includes(action),
+      }),
+    )
+    renderPage()
+    expect(await screen.findByRole('link', { name: 'FED-1001' })).toHaveAttribute(
+      'href',
+      expect.stringContaining('/federal/application/1001'),
+    )
+    expect(screen.getByText('EX-9')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'EX-9' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /create exemption/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
+  })
+
   it('opens without results or a search request when no search has been applied', async () => {
     renderPage('/federal')
     await waitFor(() => {

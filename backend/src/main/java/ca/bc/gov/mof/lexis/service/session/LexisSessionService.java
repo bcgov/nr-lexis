@@ -21,6 +21,7 @@ public class LexisSessionService {
 
   private static final String ROLE_ADMIN = "LEXIS_ADMIN";
   private static final String ROLE_READ_ONLY = "LEXIS_READ_ONLY";
+  private static final String ROLE_FEDERAL_READ_ONLY = "LEXIS_FEDERAL_READ_ONLY";
   private static final String ROLE_APPLICATION_APPROVER = "LEXIS_APPLICATION_APPROVER";
   private static final String ROLE_EXEMPTION_APPROVER = "LEXIS_EXEMPTION_APPROVER";
   private static final String ROLE_PROVINCIAL_SUBMITTER = "LEXIS_PROVINCIAL_SUBMITTER";
@@ -32,6 +33,7 @@ public class LexisSessionService {
       Set.of(
           ROLE_ADMIN,
           ROLE_READ_ONLY,
+          ROLE_FEDERAL_READ_ONLY,
           ROLE_APPLICATION_APPROVER,
           ROLE_EXEMPTION_APPROVER,
           ROLE_PROVINCIAL_SUBMITTER);
@@ -72,6 +74,8 @@ public class LexisSessionService {
       target = WelcomeTarget.EXEMPTION_APPROVER;
     } else if (applicationApprover) {
       target = WelcomeTarget.APPLICATION_APPROVER;
+    } else if (roleSet.contains(ROLE_FEDERAL_READ_ONLY)) {
+      target = WelcomeTarget.FEDERAL_READ_ONLY;
     } else {
       target = WelcomeTarget.NO_ACCESS;
     }
@@ -364,6 +368,7 @@ public class LexisSessionService {
   private enum WelcomeTarget {
     ADMINISTRATOR("administrator", "/provincial/review"),
     READ_ONLY("readOnly", "/provincial/application"),
+    FEDERAL_READ_ONLY("federalReadOnly", "/federal"),
     APPLICATION_APPROVER("applicationApprover", "/provincial/review"),
     EXEMPTION_APPROVER("exemptionApprover", "/provincial/exemption"),
     PROVINCIAL_SUBMITTER("provincialSubmitter", "/provincial/summary"),
