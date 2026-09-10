@@ -4,6 +4,7 @@ import {
   fetchOfferApplicationVolume,
   fetchOfferClientData,
   fetchOfferPackageList,
+  fetchOfferPackageVolume,
   validateOfferApplication,
 } from '@/service/provincial-offer-create-service'
 
@@ -76,9 +77,11 @@ describe('provincial-offer-create-service', () => {
     })
   })
 
-  it('loads offer package list and filters legacy empty sentinel rows', async () => {
+  it('preserves distinct exact package keys while filtering legacy empty sentinel rows', async () => {
+    const plainPackageNumber = 'PKG-EXISTING'
+    const storedPackageNumber = 'PKG-EXISTING  '
     getCachedDataMock.mockResolvedValue({
-      packageList: [' PKG-1 ', 'No Packages', 'PKG-2'],
+      packageList: [plainPackageNumber, storedPackageNumber, ' No Packages '],
     })
 
     const result = await fetchOfferPackageList('45970')
@@ -93,7 +96,21 @@ describe('provincial-offer-create-service', () => {
         ttlMs: 30_000,
       },
     )
-    expect(result).toEqual(['PKG-1', 'PKG-2'])
+    expect(result).toEqual([plainPackageNumber, storedPackageNumber])
+
+    getCachedDataMock.mockResolvedValueOnce({ volume: '100.0' })
+    await fetchOfferPackageVolume(storedPackageNumber)
+
+    expect(getCachedDataMock).toHaveBeenLastCalledWith(
+      '/lexis/rpc/offer-details/package-volume',
+      {
+        params: { packageNumber: storedPackageNumber },
+      },
+      {
+        cacheKey: `offer-package-volume:${storedPackageNumber}`,
+        ttlMs: 30_000,
+      },
+    )
   })
 
   it('loads the authoritative offering company from the default client location', async () => {

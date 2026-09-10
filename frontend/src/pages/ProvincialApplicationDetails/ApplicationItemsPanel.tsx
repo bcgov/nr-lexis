@@ -194,11 +194,12 @@ const existingPackageNumberError = (
   if (!normalized) {
     return undefined
   }
-  const excluded = excludePackageNumber.trim().toUpperCase()
+  if (value === excludePackageNumber) {
+    return undefined
+  }
   const exists = packageNumbers.some(
     (packageNumber) =>
-      packageNumber.trim().toUpperCase() === normalized &&
-      packageNumber.trim().toUpperCase() !== excluded,
+      packageNumber !== excludePackageNumber && packageNumber.trim().toUpperCase() === normalized,
   )
   return exists ? `Package ${normalized} already exists.` : undefined
 }
@@ -325,11 +326,12 @@ const packageSelectionReducer = (
 
 const toPackageForm = (
   productTypeCode: string | null | undefined,
+  selectedPackageNumber: string,
   packageDetails: ApplicationPackageDetails,
   speciesRows: ApplicationPackageSpeciesRow[],
 ): PackageFormState => ({
-  packageNumber: packageDetails.packageNumber,
-  newPackageNumber: packageDetails.packageNumber,
+  packageNumber: selectedPackageNumber,
+  newPackageNumber: selectedPackageNumber,
   volume: packageDetails.volume,
   scaledVolume: String(packageDetails.scaledVolume),
   averageLength: packageDetails.length,
@@ -769,7 +771,12 @@ function ProvincialApplicationItemsPanel({
         const speciesLoaded = speciesResult.status === 'fulfilled'
         const scalesLoaded = scalesResult.status === 'fulfilled'
         const nextSpeciesDraft = uniqueCodes(speciesRows)
-        const loadedPackageForm = toPackageForm(productTypeCode, detailsResult, speciesRows)
+        const loadedPackageForm = toPackageForm(
+          productTypeCode,
+          packageNumber,
+          detailsResult,
+          speciesRows,
+        )
         setPackageForm(loadedPackageForm)
         setPackageBaselineForm(loadedPackageForm)
         setShowPackageValidationErrors(false)
@@ -1203,10 +1210,7 @@ function ProvincialApplicationItemsPanel({
       return
     }
 
-    if (
-      packageForm.newPackageNumber.trim() !== selectedPackageNumber.trim() &&
-      !canUpdatePackageNumber
-    ) {
+    if (packageForm.newPackageNumber !== selectedPackageNumber && !canUpdatePackageNumber) {
       setItemsErrorMessage('Package number changes are not allowed for this application.')
       return
     }

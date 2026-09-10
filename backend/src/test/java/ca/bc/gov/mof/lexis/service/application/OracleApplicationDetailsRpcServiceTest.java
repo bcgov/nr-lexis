@@ -1534,7 +1534,7 @@ class OracleApplicationDetailsRpcServiceTest {
     when(repository.findEndUsesByPackageNumberRequired("PKG-903"))
         .thenReturn(List.of(new ApplicationDetailsRpcRepository.EndUseRow("FIR", "LUM")));
 
-    Optional<String> response = service.getPackageSelectedEndUse(" PKG-903 ");
+    Optional<String> response = service.getPackageSelectedEndUse("PKG-903");
 
     assertThat(response).contains("LUM");
     verify(repository).findEndUsesByPackageNumberRequired("PKG-903");
@@ -1756,7 +1756,7 @@ class OracleApplicationDetailsRpcServiceTest {
         .thenReturn(Optional.of(permitStatus));
 
     List<ApplicationDetailsRpcService.ApplicationPackageScaleItem> response =
-        service.getScalesForPackage(" PKG-903 ");
+        service.getScalesForPackage("PKG-903");
 
     assertThat(response)
         .extracting(
@@ -2444,6 +2444,30 @@ class OracleApplicationDetailsRpcServiceTest {
     assertThat(scaleCaptor.getValue().packageNumber()).isEqualTo("PKG-904");
     assertThat(scaleCaptor.getValue().updateUserId()).isEqualTo("idir\\jsmith");
     verify(repository).deletePackageById("PKG-903", "idir\\jsmith");
+  }
+
+  @Test
+  void updatePackageShouldPreserveRawExistingKeyWhenRequestRepeatsSelectedKey() {
+    String paddedPackageNumber = "PKG-903  ";
+    Instant entryTimestamp = Instant.parse("2026-05-01T12:00:00Z");
+    when(repository.findPackageMutationByPackageNumber(paddedPackageNumber))
+        .thenReturn(Optional.of(packageMutationRow(paddedPackageNumber, entryTimestamp)));
+    when(repository.findScaleDetailsByPackageNumber(paddedPackageNumber)).thenReturn(List.of());
+    when(repository.updatePackage(any())).thenReturn(true);
+
+    ApplicationDetailsRpcService.PackagePersistenceResult response =
+        service.updatePackage(
+            packageMutationRequest(paddedPackageNumber, paddedPackageNumber, "Edited"),
+            "idir\\jsmith");
+
+    verify(repository).updatePackage(any());
+    assertThat(response.valid()).withFailMessage("errors=%s", response.errors()).isTrue();
+    assertThat(response.packageNumber()).isEqualTo(paddedPackageNumber);
+    ArgumentCaptor<ApplicationDetailsRpcRepository.PackageMutationRecord> recordCaptor =
+        ArgumentCaptor.forClass(ApplicationDetailsRpcRepository.PackageMutationRecord.class);
+    verify(repository).updatePackage(recordCaptor.capture());
+    assertThat(recordCaptor.getValue().packageNumber()).isEqualTo(paddedPackageNumber);
+    verify(repository, never()).insertPackage(any());
   }
 
   @Test
@@ -3263,7 +3287,7 @@ class OracleApplicationDetailsRpcServiceTest {
     when(repository.findGrowthTypeDescription("S")).thenReturn(Optional.of("Standing"));
     when(repository.findProductTypeDescription("H")).thenReturn(Optional.of("Harvested"));
 
-    ApplicationDetailsRpcService.PackageDetailsItem response = service.getPackageDetails(" PKG-903 ");
+    ApplicationDetailsRpcService.PackageDetailsItem response = service.getPackageDetails("PKG-903");
 
     assertThat(response.success()).isTrue();
     assertThat(response.packageNumber()).isEqualTo("PKG-903");
@@ -3342,7 +3366,7 @@ class OracleApplicationDetailsRpcServiceTest {
         .thenReturn(false);
     when(repository.deletePackageById("PKG-903", "idir\\jsmith")).thenReturn(true);
 
-    boolean response = service.deletePackageById(" PKG-903 ", " idir\\jsmith ");
+    boolean response = service.deletePackageById("PKG-903", " idir\\jsmith ");
 
     assertThat(response).isTrue();
     verify(repository).findScaleDetailsByPackageNumber("PKG-903");
@@ -3488,7 +3512,7 @@ class OracleApplicationDetailsRpcServiceTest {
 
     boolean response =
         service.synchronizePackageForPermitTransition(
-            " PKG-903 ", 27.4d, " S ", " H ", " idir\\jsmith ");
+            "PKG-903", 27.4d, " S ", " H ", " idir\\jsmith ");
 
     assertThat(response).isTrue();
     ArgumentCaptor<ApplicationDetailsRpcRepository.PackageMutationRecord> recordCaptor =

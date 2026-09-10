@@ -15,6 +15,7 @@ import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResultDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSummaryEnrichmentDto;
+import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
 import java.sql.CallableStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -539,6 +540,31 @@ class LexisApplicationRepositoryTest {
   }
 
   @Test
+  void detailShouldKeepDistinctStoredPackageKeysAndScalePieceTotals() {
+    LexisApplicationRepository repository = new PackageKeyDetailLexisApplicationRepository();
+
+    assertThat(repository.findByApplicationNumber(900123L))
+        .isPresent()
+        .get()
+        .extracting(LexisApplicationDetailDto::packages)
+        .asList()
+        .containsExactly(
+            new LexisApplicationDetailDto.LexisPackageDto("PKG-EXISTING  ", 50.0d, 3L),
+            new LexisApplicationDetailDto.LexisPackageDto("PKG-EXISTING", 100.0d, 5L));
+  }
+
+  @Test
+  void packageLookupShouldPreserveAnExactStoredPackageKey() {
+    String paddedPackageNumber = "PKG-EXISTING  ";
+    PackageLookupLexisApplicationRepository repository =
+        new PackageLookupLexisApplicationRepository(paddedPackageNumber);
+
+    assertThat(repository.findPackageByPackageNumber(paddedPackageNumber))
+        .contains(new LexisPackageLookupDto(paddedPackageNumber, 900123L, 50.0d, "S"));
+    assertThat(repository.boundPackageNumber()).isEqualTo(paddedPackageNumber);
+  }
+
+  @Test
   void detailShouldMapLegacyLatestUserIdAsAuthor() {
     DetailReadLexisApplicationRepository repository =
         new DetailReadLexisApplicationRepository(null, true);
@@ -947,6 +973,73 @@ class LexisApplicationRepositoryTest {
     }
   }
 
+  private static final class PackageKeyDetailLexisApplicationRepository
+      extends LexisApplicationRepository {
+
+    PackageKeyDetailLexisApplicationRepository() {
+      super(null);
+    }
+
+    @Override
+    protected <T> List<T> queryCursorProcedureFailClosed(
+        String procedureSignature,
+        SqlConsumer<CallableStatement> binder,
+        int cursorOutIndex,
+        SqlRowMapper<T> rowMapper) {
+      try {
+        if ("LEXIS_GROUP_5.FIND_APPLICATION_BY_NUMBER(?,?)".equals(procedureSignature)) {
+          return List.of(rowMapper.map(applicationDetailResultSet()));
+        }
+        if ("LEXIS_GROUP_5.FIND_SCALE_DETAIL_BY_APP(?,?)".equals(procedureSignature)) {
+          return List.of(
+              rowMapper.map(packageScaleResultSet("PKG-EXISTING  ", 3L)),
+              rowMapper.map(packageScaleResultSet("PKG-EXISTING", 5L)));
+        }
+        if ("LEXIS_GROUP_5.FIND_PACKAGES_BY_APP(?,?)".equals(procedureSignature)) {
+          return List.of(
+              rowMapper.map(packageDetailResultSet("PKG-EXISTING  ", 50.0d)),
+              rowMapper.map(packageDetailResultSet("PKG-EXISTING", 100.0d)));
+        }
+        return List.of();
+      } catch (SQLException ex) {
+        throw new AssertionError(ex);
+      }
+    }
+  }
+
+  private static final class PackageLookupLexisApplicationRepository
+      extends LexisApplicationRepository {
+    private final String storedPackageNumber;
+    private String boundPackageNumber;
+
+    PackageLookupLexisApplicationRepository(String storedPackageNumber) {
+      super(null);
+      this.storedPackageNumber = storedPackageNumber;
+    }
+
+    String boundPackageNumber() {
+      return boundPackageNumber;
+    }
+
+    @Override
+    protected <T> Optional<T> queryCursorSingle(
+        String procedureSignature,
+        SqlConsumer<CallableStatement> binder,
+        int cursorOutIndex,
+        SqlRowMapper<T> rowMapper) {
+      CallableStatement statement = mock(CallableStatement.class);
+      try {
+        binder.accept(statement);
+        ArgumentCaptor<String> packageNumber = ArgumentCaptor.forClass(String.class);
+        verify(statement).setString(eq(1), packageNumber.capture());
+        boundPackageNumber = packageNumber.getValue();
+        return Optional.of(rowMapper.map(packageLookupResultSet(storedPackageNumber)));
+      } catch (SQLException ex) {
+        throw new AssertionError(ex);
+      }
+    }
+  }
+
   private static final class OfferReadLexisApplicationRepository
       extends LexisApplicationRepository {
     private final boolean fail;
@@ -1002,6 +1095,34 @@ class LexisApplicationRepositoryTest {
     when(resultSet.getString("EXPORT_JURISDICTION_CODE")).thenReturn("P");
     when(resultSet.getString("ENTRY_USERID")).thenReturn("idir\\application-author");
     when(resultSet.getString("UPDATE_USERID")).thenReturn("idir\\application-editor");
+    when(resultSet.wasNull()).thenReturn(false);
+    return resultSet;
+  }
+
+  private static ResultSet packageDetailResultSet(String packageNumber, double volume)
+      throws SQLException {
+    ResultSet resultSet = org.mockito.Mockito.mock(ResultSet.class);
+    when(resultSet.getString("PACKAGE_NUMBER")).thenReturn(packageNumber);
+    when(resultSet.getDouble("PACKAGE_VOLUME")).thenReturn(volume);
+    when(resultSet.wasNull()).thenReturn(false);
+    return resultSet;
+  }
+
+  private static ResultSet packageLookupResultSet(String packageNumber) throws SQLException {
+    ResultSet resultSet = org.mockito.Mockito.mock(ResultSet.class);
+    when(resultSet.getString("PACKAGE_NUMBER")).thenReturn(packageNumber);
+    when(resultSet.getLong("APPLICATION_NUMBER")).thenReturn(900123L);
+    when(resultSet.getDouble("PACKAGE_VOLUME")).thenReturn(50.0d);
+    when(resultSet.getString("EXPORT_GROWTH_TYPE_CODE")).thenReturn("S");
+    when(resultSet.wasNull()).thenReturn(false);
+    return resultSet;
+  }
+
+  private static ResultSet packageScaleResultSet(String packageNumber, long pieces)
+      throws SQLException {
+    ResultSet resultSet = org.mockito.Mockito.mock(ResultSet.class);
+    when(resultSet.getString("PACKAGE_NUMBER")).thenReturn(packageNumber);
+    when(resultSet.getLong("PIECES_COUNT")).thenReturn(pieces);
     when(resultSet.wasNull()).thenReturn(false);
     return resultSet;
   }

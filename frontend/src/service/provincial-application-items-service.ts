@@ -9,6 +9,7 @@ import {
   parsePayloadArrayOrEmpty,
   payloadValueAsBoolean as asBoolean,
   payloadValueAsNumber as asNumber,
+  payloadValueAsString as asRawString,
   payloadValueAsStringArray as asStringArray,
   payloadValueAsTrimmedString as asString,
 } from '@/service/payload-utils'
@@ -238,7 +239,7 @@ const normalizePackageDetails = (payload: unknown): ApplicationPackageDetails =>
   const source = asRecord(payload)
   return {
     success: asBoolean(source.success),
-    packageNumber: asString(source.packageNumber),
+    packageNumber: asRawString(source.packageNumber),
     volume: asString(source.volume),
     scaledVolume: asNumber(source.scaledVolume),
     length: asString(source.length),
@@ -313,7 +314,7 @@ const normalizePackageMutationResult = (payload: unknown): ApplicationPackageMut
   const source = asRecord(payload)
   return {
     valid: asBoolean(source.valid),
-    packageNumber: asString(source.packageNumber || source.package),
+    packageNumber: asRawString(source.packageNumber || source.package),
     errors: asStringArray(source.errors),
     warnings: asStringArray(source.warnings),
   }

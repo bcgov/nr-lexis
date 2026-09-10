@@ -1,5 +1,6 @@
 import apiService from '@/service/api-service'
 import {
+  payloadValueAsString as asRawString,
   payloadValueAsStringArray as asStringArray,
   payloadValueAsTrimmedString as asString,
 } from '@/service/payload-utils'
@@ -8,6 +9,17 @@ import { recordOrEmpty } from '@/utils/record'
 const OFFER_CREATE_CACHE_TTL_MS = 30_000
 // Application edits can immediately change offer eligibility and advertising dates.
 const OFFER_APPLICATION_CONTEXT_CACHE_TTL_MS = 0
+
+const packageNumberList = (value: unknown): string[] => {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value
+    .map((packageNumber) => asRawString(packageNumber))
+    .filter((packageNumber) => packageNumber.trim().length > 0)
+    .filter((packageNumber) => packageNumber.trim().toLowerCase() !== 'no packages')
+}
 
 export type OfferApplicationDetails = {
   success: boolean
@@ -117,9 +129,7 @@ export const fetchOfferPackageList = async (applicationNumber: string): Promise<
     },
   )
   const source = recordOrEmpty(data)
-  return asStringArray(source.packageList).filter(
-    (packageNumber) => packageNumber.toLowerCase() !== 'no packages',
-  )
+  return packageNumberList(source.packageList)
 }
 
 export const fetchOfferPackageVolume = async (packageNumber: string): Promise<string> => {

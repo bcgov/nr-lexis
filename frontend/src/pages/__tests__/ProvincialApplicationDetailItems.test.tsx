@@ -175,6 +175,88 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     })
   })
 
+  it('preserves a selected stored package key that differs only by trailing spaces', async () => {
+    const plainPackageNumber = 'PKG-EXISTING'
+    const storedPackageNumber = 'PKG-EXISTING  '
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      packages: [
+        { packageNumber: plainPackageNumber, volume: 100, pieceCount: 5 },
+        { packageNumber: storedPackageNumber, volume: 50, pieceCount: 3 },
+      ],
+    })
+    mockedFetchApplicationPackageDetails.mockImplementation(async (packageNumber) => ({
+      success: true,
+      packageNumber: plainPackageNumber,
+      volume: packageNumber === storedPackageNumber ? '50.0' : '100.0',
+      scaledVolume: 20,
+      length: '12.0',
+      diameter: '24.0',
+      status: 'ACT',
+      comments: '',
+      statusDescription: 'Active',
+      reprocessed: 'N',
+      ageClass: 'O',
+      ageClassDescription: 'Old',
+      productType: 'H',
+      productTypeDescription: 'Harvested Timber',
+    }))
+    mockedUpdateApplicationPackage.mockImplementation(async (request) => ({
+      valid: true,
+      packageNumber: request.packageNumber,
+      errors: [],
+      warnings: [],
+    }))
+
+    render(
+      <MemoryRouter
+        initialEntries={['/provincial/application/321?tab=items&packageNumber=PKG-EXISTING%20%20']}
+      >
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await waitFor(() =>
+      expect(mockedFetchApplicationPackageDetails).toHaveBeenCalledWith(storedPackageNumber),
+    )
+    await selectApplicationItemsForEditing()
+    const packageDetailsSection = (
+      await screen.findByRole('heading', { name: 'Package Details' })
+    ).closest('section')
+    expect(packageDetailsSection).toBeTruthy()
+    const packageDetailsControls = within(packageDetailsSection as HTMLElement)
+
+    await waitFor(() => {
+      expect(screen.getByRole('combobox', { name: 'Selected Package' })).toHaveValue(
+        storedPackageNumber,
+      )
+      expect(packageDetailsControls.getByLabelText('Package Number')).toHaveValue(
+        storedPackageNumber,
+      )
+      expect(packageDetailsControls.getByRole('button', { name: 'Save Package' })).toBeEnabled()
+    })
+
+    fireEvent.change(packageDetailsControls.getByLabelText('Package Comments'), {
+      target: { value: 'Updated stored package' },
+    })
+    await userEvent.click(packageDetailsControls.getByRole('button', { name: 'Save Package' }))
+
+    await waitFor(() =>
+      expect(mockedUpdateApplicationPackage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          packageNumber: storedPackageNumber,
+          newPackageNumber: storedPackageNumber,
+          comments: 'Updated stored package',
+        }),
+      ),
+    )
+  })
+
   it('keeps all package rows and totals despite retired filters and package selection', async () => {
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
       ...applicationDetail,

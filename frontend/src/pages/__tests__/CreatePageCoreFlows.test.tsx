@@ -2985,6 +2985,50 @@ describe('Create Page Core Flows', () => {
     })
   }, 15000)
 
+  it('preserves an exact selected package key for offer lookups, scale details, and save', async () => {
+    const plainPackageNumber = 'PKG-EXISTING'
+    const storedPackageNumber = 'PKG-EXISTING  '
+    mockedFetchOfferPackageList.mockResolvedValue([plainPackageNumber, storedPackageNumber])
+    mockedFetchOfferPackageVolume.mockImplementation(async (packageNumber) =>
+      packageNumber === storedPackageNumber ? '95.0' : '40.0',
+    )
+    mockedSubmitProvincialOfferCreate.mockResolvedValue(successfulCreate('8085'))
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/offers/create?applicationNumber=2001&packageNumber=PKG-EXISTING%20%20&companyName=Example%20Lumber&contactName=Sample%20Contact&offerVolume=50.0&purchaseOfferAmount=25000&pickupLocation=Yard%20A',
+        ]}
+      >
+        <Routes>
+          <Route path="/provincial/offers/create" element={<ProvincialOfferCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await waitFor(() =>
+      expect(mockedFetchOfferPackageVolume).toHaveBeenCalledWith(storedPackageNumber),
+    )
+    expect(screen.getByRole('combobox', { name: 'Package number' })).toHaveValue(
+      storedPackageNumber,
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: 'See Scale Detail' }))
+    const scaleDialog = await screen.findByRole('dialog', { name: 'Scale Detail' })
+    expect(mockedFetchOfferScaleDetails).toHaveBeenCalledWith(
+      { packageNumber: storedPackageNumber },
+      expect.any(AbortSignal),
+    )
+    await userEvent.click(within(scaleDialog).getByRole('button', { name: 'Close' }))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save new offer' }))
+    await waitFor(() =>
+      expect(mockedSubmitProvincialOfferCreate).toHaveBeenCalledWith(
+        expect.objectContaining({ packageNumber: storedPackageNumber }),
+      ),
+    )
+  })
+
   it('creates an offer with an explicit zero volume', async () => {
     render(
       <MemoryRouter

@@ -374,7 +374,7 @@ class OfferDetailsRpcControllerTest {
     PurchaseOfferService.CreateOfferRequest request = requestCaptor.getValue();
     assertThat(request.applicationNumber()).isEqualTo(1000456L);
     assertThat(request.exportPurchaseOfferNumber()).isEqualTo(81001L);
-    assertThat(request.packageNumber()).isEqualTo("PKG-903");
+    assertThat(request.packageNumber()).isEqualTo(" PKG-903 ");
     assertThat(request.purchaseOfferDate()).isEqualTo(LocalDate.of(2026, 3, 2));
     assertThat(request.offerWithdrawalDate()).isEqualTo(LocalDate.of(2026, 3, 18));
     assertThat(request.offeringClientNumber()).isEqualTo("00077881");

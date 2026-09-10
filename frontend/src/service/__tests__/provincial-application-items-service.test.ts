@@ -4,6 +4,9 @@ import {
   checkApplicationVolumeUsage,
   deleteApplicationPackage,
   deleteApplicationScale,
+  fetchApplicationPackageDetails,
+  fetchApplicationPackageScales,
+  fetchApplicationPackageSpecies,
   fetchApplicationPackageStatusCodes,
   fetchApplicationSummarySnapshot,
   fetchApplicationRemainingSpecies,
@@ -175,6 +178,127 @@ describe('provincial-application-items-service', () => {
     expect(body.get('packageDialogPackageStatus')).toBe('ACT')
     expect(body.get('updatePackageEndUse')).toBe('LU')
     expect(body.get('updatePackageSpeciesTableValues')).toBe('FI,CE')
+  })
+
+  it('preserves exact existing package identifiers for reads and selected-package mutations', async () => {
+    const plainPackageNumber = 'PKG-EXISTING'
+    const storedPackageNumber = 'PKG-EXISTING  '
+    getCachedResponseMock
+      .mockResolvedValueOnce({
+        data: {
+          success: true,
+          packageNumber: storedPackageNumber,
+          volume: '100.0',
+          scaledVolume: 0,
+          length: '12.0',
+          diameter: '24.0',
+          status: 'ACT',
+          comments: '',
+          reprocessed: 'N',
+          ageClass: 'O',
+          productType: 'H',
+        },
+      })
+      .mockResolvedValueOnce({
+        data: [{ species: 'FI', endUse: 'LU' }],
+      })
+      .mockResolvedValueOnce({
+        data: [
+          {
+            timberMark: 'TM001',
+            species: 'FI',
+            grade: '1',
+            pieces: 1,
+            volume: '1.0',
+            id: '1',
+          },
+        ],
+      })
+
+    const details = await fetchApplicationPackageDetails(storedPackageNumber)
+    await fetchApplicationPackageSpecies(storedPackageNumber)
+    await fetchApplicationPackageScales(storedPackageNumber)
+
+    expect(details.packageNumber).toBe(storedPackageNumber)
+    expect(getCachedResponseMock).toHaveBeenNthCalledWith(
+      1,
+      '/lexis/rpc/application-details/package-details',
+      { params: { packageNumber: storedPackageNumber } },
+      { ttlMs: 30000 },
+    )
+    expect(getCachedResponseMock).toHaveBeenNthCalledWith(
+      2,
+      '/lexis/rpc/application-details/species-for-package',
+      { params: { packageNumber: storedPackageNumber } },
+      { ttlMs: 30000 },
+    )
+    expect(getCachedResponseMock).toHaveBeenNthCalledWith(
+      3,
+      '/lexis/rpc/application-details/package-scales',
+      { params: { packageNumber: storedPackageNumber } },
+      { ttlMs: 30000 },
+    )
+    expect(getCachedResponseMock).not.toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ params: { packageNumber: plainPackageNumber } }),
+      expect.anything(),
+    )
+
+    postMock.mockResolvedValueOnce({
+      data: {
+        valid: true,
+        packageNumber: storedPackageNumber,
+        errors: [],
+        warnings: [],
+      },
+    })
+    const updateResult = await updateApplicationPackage({
+      packageNumber: storedPackageNumber,
+      newPackageNumber: storedPackageNumber,
+      applicationNumber: '321',
+      volume: '100.0',
+      averageLength: '12.0',
+      averageDiameter: '24.0',
+      status: 'ACT',
+      comments: '',
+      reprocessed: 'N',
+      ageClass: 'O',
+      productType: 'H',
+      endUseCode: 'LU',
+      speciesCodes: ['FI'],
+    })
+    expect(updateResult.packageNumber).toBe(storedPackageNumber)
+    expect((postMock.mock.calls[0][1] as URLSearchParams).get('packageNumber')).toBe(
+      storedPackageNumber,
+    )
+    expect((postMock.mock.calls[0][1] as URLSearchParams).get('newPackageNumber')).toBe(
+      storedPackageNumber,
+    )
+
+    postMock.mockResolvedValueOnce({
+      data: { valid: true, result: null, errors: [], warnings: [] },
+    })
+    await addApplicationScaleToPackage({
+      timberMark: 'TM001',
+      packageNumber: storedPackageNumber,
+      gradeCode: '1',
+      speciesCode: 'FI',
+      applicationNumber: '321',
+      pieces: '1',
+      volume: '1.0',
+    })
+    expect((postMock.mock.calls[1][1] as URLSearchParams).get('packageNumber')).toBe(
+      storedPackageNumber,
+    )
+
+    deleteMock.mockResolvedValueOnce({ status: 200, data: { success: true } })
+    await deleteApplicationPackage(storedPackageNumber, '321')
+    expect(deleteMock).toHaveBeenCalledWith('/lexis/rpc/application-details/package', {
+      params: {
+        packageNumber: storedPackageNumber,
+        applicationNumber: '321',
+      },
+    })
   })
 
   it('posts package scale adds and normalizes the persisted row', async () => {

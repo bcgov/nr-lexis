@@ -793,7 +793,7 @@ const ProvincialApplicationDetailsPage = () => {
   const [reviewValidationMessage, setReviewValidationMessage] = useState('')
   const [isSubmittingReviewAction, setIsSubmittingReviewAction] = useState(false)
   const requestedApplicationTab = (searchParams.get('tab') ?? '').trim().toLowerCase()
-  const requestedPackageNumber = (searchParams.get('packageNumber') ?? '').trim()
+  const requestedPackageNumber = searchParams.get('packageNumber') ?? ''
   const shouldFocusScaleSection =
     requestedApplicationTab === 'items' &&
     (searchParams.get('section') ?? '').trim().toLowerCase() === 'scales'
@@ -1139,8 +1139,8 @@ const ProvincialApplicationDetailsPage = () => {
   const offerPackageNumbers = useMemo(
     () =>
       (detail?.packages ?? [])
-        .map((item) => item.packageNumber.trim())
-        .filter((packageNumber) => packageNumber.length > 0),
+        .map((item) => item.packageNumber)
+        .filter((packageNumber) => packageNumber.trim().length > 0),
     [detail?.packages],
   )
   const canCreateApplicationOffer = Boolean(

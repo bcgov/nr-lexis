@@ -197,7 +197,7 @@ public class OfferDetailsRpcController {
 
     TreeSet<String> packageNumbers = new TreeSet<>();
     for (LexisApplicationDetailDto.LexisPackageDto pkg : detail.get().packages()) {
-      String packageNumber = trimToNull(pkg.packageNumber());
+      String packageNumber = preservePackageNumber(pkg.packageNumber());
       if (packageNumber != null) {
         packageNumbers.add(packageNumber);
       }
@@ -220,13 +220,14 @@ public class OfferDetailsRpcController {
       return ResponseEntity.ok(new OfferVolumeResponseDto("0.0"));
     }
 
-    String normalized = trimToNull(packageNumber);
-    if (normalized == null) {
+    String persistedPackageNumber = preservePackageNumber(packageNumber);
+    if (persistedPackageNumber == null) {
       return ResponseEntity.ok(new OfferVolumeResponseDto("0.0"));
     }
-    requirePackageAccess(normalized, authentication);
+    requirePackageAccess(persistedPackageNumber, authentication);
 
-    Optional<LexisPackageLookupDto> pkg = applicationService.findPackageByPackageNumber(normalized);
+    Optional<LexisPackageLookupDto> pkg =
+        applicationService.findPackageByPackageNumber(persistedPackageNumber);
     return ResponseEntity.ok(
         new OfferVolumeResponseDto(
             pkg.map(LexisPackageLookupDto::packageVolume).map(this::formatVolume).orElse("0.0")));
@@ -245,7 +246,7 @@ public class OfferDetailsRpcController {
       return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
     }
 
-    String normalizedPackageNumber;
+    String persistedPackageNumber;
     if (offerNumber != null) {
       PurchaseOfferService offerService = purchaseOfferServiceProvider.getIfAvailable();
       if (offerService == null) {
@@ -260,25 +261,25 @@ public class OfferDetailsRpcController {
       }
       // Existing offers retain their read-only scale view after the offer window closes.
       // Resolve the package from the saved offer, never from a caller-supplied replacement.
-      normalizedPackageNumber = trimToNull(offer.packageNumber());
-      if (normalizedPackageNumber == null
+      persistedPackageNumber = preservePackageNumber(offer.packageNumber());
+      if (persistedPackageNumber == null
           || offer.applicationNumber() == null
           || !service
-              .findApplicationNumberForPackage(normalizedPackageNumber)
+              .findApplicationNumberForPackage(persistedPackageNumber)
               .filter(offer.applicationNumber()::equals)
               .isPresent()) {
         return ResponseEntity.notFound().build();
       }
     } else {
-      normalizedPackageNumber = trimToNull(packageNumber);
-      if (normalizedPackageNumber == null) {
+      persistedPackageNumber = preservePackageNumber(packageNumber);
+      if (persistedPackageNumber == null) {
         return ResponseEntity.badRequest().build();
       }
-      requirePackageAccess(normalizedPackageNumber, authentication);
+      requirePackageAccess(persistedPackageNumber, authentication);
     }
 
     return ResponseEntity.ok(
-        service.getScalesForPackage(normalizedPackageNumber).stream()
+        service.getScalesForPackage(persistedPackageNumber).stream()
             .map(
                 scale ->
                     new OfferPackageScaleResponseDto(
@@ -737,6 +738,10 @@ public class OfferDetailsRpcController {
         applicationNumber, findApplication(applicationNumber), authentication, true);
   }
 
+  private String preservePackageNumber(String value) {
+    return value == null || value.isBlank() ? null : value;
+  }
+
   private void requireClientAccess(String clientNumber) {
     if (provincialAuthorizationService != null
         && !provincialAuthorizationService.canCreateForClient(
@@ -984,7 +989,7 @@ public class OfferDetailsRpcController {
             : current.applicationNumber(),
         current.offerNumber(),
         hasAnyParameter(parameters, "packageNumber")
-            ? firstPresent(parameters, "packageNumber")
+            ? firstRaw(parameters, "packageNumber")
             : current.packageNumber(),
         hasAnyParameter(parameters, "companyName")
             ? firstPresent(parameters, "companyName")
@@ -1047,12 +1052,21 @@ public class OfferDetailsRpcController {
     return false;
   }
 
+  private String firstRaw(MultiValueMap<String, String> parameters, String... names) {
+    for (String name : names) {
+      if (parameters.containsKey(name)) {
+        return parameters.getFirst(name);
+      }
+    }
+    return null;
+  }
+
   private PurchaseOfferService.CreateOfferRequest toCreateOfferRequest(
       MultiValueMap<String, String> parameters) {
     return new PurchaseOfferService.CreateOfferRequest(
         parsePositiveLong(first(parameters, "applicationNumber")),
         parsePositiveLong(first(parameters, "exportPurchaseOfferNumber", "offerNumber")),
-        first(parameters, "packageNumber"),
+        firstRaw(parameters, "packageNumber"),
         first(parameters, "companyName"),
         first(parameters, "contactName"),
         parseOfferDecimal(first(parameters, "purchaseOfferAmount")),

@@ -1573,9 +1573,15 @@ public class ApplicationDetailsRpcController {
   }
 
   private boolean isPackageNumberChange(String packageNumber, String newPackageNumber) {
-    String current = trimToNull(packageNumber);
-    String requested = trimToNull(newPackageNumber);
+    String current = preservePackageNumber(packageNumber);
+    String requested = java.util.Objects.equals(current, newPackageNumber)
+        ? current
+        : trimToNull(newPackageNumber);
     return requested != null && !requested.equals(current);
+  }
+
+  private String preservePackageNumber(String value) {
+    return value == null || value.isBlank() ? null : value;
   }
 
   private ApplicationEditLockDto requireEditable(Long applicationNumber, Authentication authentication) {
@@ -2025,8 +2031,8 @@ public class ApplicationDetailsRpcController {
   private ApplicationDetailsRpcService.PackageMutationRequest toPackageMutationRequest(
       MultiValueMap<String, String> parameters) {
     return new ApplicationDetailsRpcService.PackageMutationRequest(
-        first(parameters, "packageNumber"),
-        first(parameters, "newPackageNumber"),
+        packageNumberParameter(parameters, "packageNumber"),
+        packageNumberParameter(parameters, "newPackageNumber"),
         parsePositiveLong(first(parameters, "applicationNumber")),
         parseDouble(first(parameters, "packageDialogPackageVolume", "packageVolume", "volume")),
         parseDouble(first(parameters, "packageDialogAverageLength", "averageLength", "length")),
@@ -2044,12 +2050,17 @@ public class ApplicationDetailsRpcController {
       MultiValueMap<String, String> parameters) {
     return new ApplicationDetailsRpcService.ScaleMutationRequest(
         first(parameters, "timberMark"),
-        first(parameters, "packageNumber"),
+        packageNumberParameter(parameters, "packageNumber"),
         first(parameters, "gradeCode"),
         first(parameters, "speciesCode"),
         parsePositiveLong(first(parameters, "applicationNumber")),
         parseNonNegativeLong(first(parameters, "scalePieces", "pieces")),
         parseDouble(first(parameters, "scaleVolume", "volume")));
+  }
+
+  private String packageNumberParameter(MultiValueMap<String, String> parameters, String name) {
+    // Preserve stored Oracle keys; the service normalizes newly entered package identifiers.
+    return preservePackageNumber(parameters == null ? null : parameters.getFirst(name));
   }
 
   private boolean hasApplicationFormChanges(
