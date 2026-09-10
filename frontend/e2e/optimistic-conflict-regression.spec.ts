@@ -122,6 +122,33 @@ for (const mode of ['add', 'edit'] as const) {
         ]
       }
       let saved = 0
+      let releaseRefresh!: () => void
+      const refreshGate = new Promise<void>((resolve) => {
+        releaseRefresh = resolve
+      })
+      let reportRefreshStarted!: () => void
+      const refreshStarted = new Promise<void>((resolve) => {
+        reportRefreshStarted = resolve
+      })
+      await page.route(
+        '**/api/lexis/rpc/application-details/application-summary?*',
+        async (route) => {
+          if (saved > 0) {
+            // Hold the secondary lookup after the primary application refresh has settled.
+            reportRefreshStarted()
+            await refreshGate
+          }
+          await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({
+              ...fixture.application,
+              applicationNumber: '321',
+              jurisdictionCode: 'P',
+            }),
+          })
+        },
+      )
       await page.route('**/api/lexis/rpc/application-details/remark', async (route) => {
         saved += 1
         const body = Object.fromEntries(new URLSearchParams(route.request().postData() ?? ''))
@@ -171,6 +198,18 @@ for (const mode of ['add', 'edit'] as const) {
         }
         await expect(action).toBeFocused()
         await page.keyboard.press('Enter')
+      }
+      if (closeAction === 'save') {
+        await refreshStarted
+        try {
+          await expect(dialog).toBeVisible()
+          await expect(field).toHaveAccessibleName(mode === 'add' ? /New Remark/ : /Edit Remark 88/)
+          await expect(field).toHaveValue('Updated synthetic remark')
+          await expect(field).toBeDisabled()
+          await expect(dialog.getByRole('button', { name: 'Saving…', exact: true })).toBeDisabled()
+        } finally {
+          releaseRefresh()
+        }
       }
       await expect(dialog).not.toBeVisible()
       await expect(launcher).toBeFocused()
