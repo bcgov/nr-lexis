@@ -10,7 +10,8 @@ NEXCOL -> Keycloak token -> API gateway -> OpenShift Service -> LEXIS backend
 ## Responsibilities
 
 - Keycloak owns the dedicated NEXCOL client and OAuth scope assignment.
-- The gateway exposes only the three federal `POST` endpoints.
+- The gateway routes federal `POST` path prefixes; backend authorization limits access to the
+  three supported operations.
 - The gateway validates issuer, expiry, required scope and audience when configured.
 - Bearer tokens are accepted through the `Authorization` header, not URL query parameters.
 - The gateway provides centralized routing, traffic controls, metrics and operational visibility.
@@ -44,13 +45,13 @@ the API Directory is a separate API Services Portal action.
 
 ### Environment endpoints
 
-| Environment | Gateway base URL | Status |
-|---|---|---|
-| TEST | `https://nr-lexis-nexcol-test-api-gov-bc-ca.test.api.gov.bc.ca` | Available |
-| PROD | `https://nr-lexis-nexcol.api.gov.bc.ca` | Gateway provisioned; application deployment pending |
+| Environment | Gateway base URL |
+|---|---|
+| TEST | `https://nr-lexis-nexcol-test-api-gov-bc-ca.test.api.gov.bc.ca` |
+| PROD | `https://nr-lexis-nexcol.api.gov.bc.ca` |
 
-The PROD hostname follows the API Services production vanity-URL convention and is listed so
-consumers can prepare environment configuration before production provisioning is complete.
+TEST and PROD have separate gateway configurations. Permitted operations depend on the active
+backend rollout mode.
 
 ## Configuration
 
@@ -71,12 +72,14 @@ admit the OpenShift ingress router, so a Route left by an earlier `oc apply` can
 The public frontend Route remains available for interactive LEXIS traffic, but Caddy returns `404`
 for the NEXCOL-only submission path and its child paths instead of proxying them.
 
-DEV uses ephemeral application deployments and has no long-lived NEXCOL gateway. The PROD gateway
-configuration is ready for the future application rollout, but the upstream cannot become healthy
-until the PROD backend Service is deployed.
+DEV uses ephemeral application deployments and has no long-lived NEXCOL gateway. TEST and PROD
+gateway configuration is published separately from the application deployment workflow.
 
 The integration flow and XML contract are documented in
 [`docs/nexcol-keycloak-service-client.md`](../docs/nexcol-keycloak-service-client.md).
+The [NEXCOL ingress and cutover architecture](../docs/architecture.md#nexcol-ingress-and-cutover)
+explains the external Keycloak realm, legacy overlap, and independent prevalidation/submission
+cutovers.
 
 ## Verification
 
