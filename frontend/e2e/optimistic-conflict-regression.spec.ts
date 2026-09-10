@@ -28,7 +28,13 @@ const installConflictFixture = async (page: Page, code: string) => {
     canEditApplicationDetails: true,
     locked: false,
     packages: [],
-    remarks: [],
+    remarks: [] as Array<{
+      remarkId: number
+      title: string
+      remark: string
+      user: string
+      date: string
+    }>,
     offers: [],
   }
 
@@ -97,7 +103,85 @@ const installConflictFixture = async (page: Page, code: string) => {
       body: JSON.stringify(body),
     })
   })
-  return { writes: () => writes, reads: () => reads }
+  return { writes: () => writes, reads: () => reads, application }
+}
+
+for (const mode of ['add', 'edit'] as const) {
+  for (const closeAction of ['cancel', 'escape', 'save'] as const) {
+    test(`remark ${mode} restores launcher focus after ${closeAction}`, async ({ page }) => {
+      const fixture = await installConflictFixture(page, 'STALE_RECORD')
+      if (mode === 'edit') {
+        fixture.application.remarks = [
+          {
+            remarkId: 88,
+            title: 'Existing remark',
+            remark: 'Existing remark',
+            user: 'FOCUS.TESTER',
+            date: '2026-09-10',
+          },
+        ]
+      }
+      let saved = 0
+      await page.route('**/api/lexis/rpc/application-details/remark', async (route) => {
+        saved += 1
+        const body = Object.fromEntries(new URLSearchParams(route.request().postData() ?? ''))
+        const remark = {
+          remarkId: 88,
+          title: body.remarkBody,
+          remark: body.remarkBody,
+          user: 'FOCUS.TESTER',
+          date: '2026-09-10',
+        }
+        fixture.application.remarks = [remark]
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ status: 'ok', ...remark }),
+        })
+      })
+      await gotoSyntheticRoute(page, '/provincial/application/321')
+      await page.getByRole('tab', { name: 'Remarks', exact: true }).click()
+      const launcher =
+        mode === 'add'
+          ? page.getByRole('button', { name: 'Add remark', exact: true })
+          : page
+              .getByRole('region', { name: 'Application remarks' })
+              .getByRole('button', { name: 'Edit', exact: true })
+      await launcher.focus()
+      await page.keyboard.press('Enter')
+      const dialog = page.getByRole('dialog', {
+        name: mode === 'add' ? 'Add remark' : 'Edit remark',
+      })
+      const field = dialog.getByRole('textbox')
+      await expect(field).toBeFocused()
+      await field.fill('Updated synthetic remark')
+      if (closeAction === 'escape') await page.keyboard.press('Escape')
+      else {
+        const action = dialog.getByRole('button', {
+          name:
+            closeAction === 'cancel' ? 'Cancel' : mode === 'add' ? 'Save Remark' : 'Update Remark',
+          exact: true,
+        })
+        for (
+          let i = 0;
+          i < 5 && !(await action.evaluate((el) => el === document.activeElement));
+          i++
+        ) {
+          await page.keyboard.press('Tab')
+        }
+        await expect(action).toBeFocused()
+        await page.keyboard.press('Enter')
+      }
+      await expect(dialog).not.toBeVisible()
+      await expect(launcher).toBeFocused()
+      expect(saved).toBe(closeAction === 'save' ? 1 : 0)
+      if (closeAction === 'save') {
+        await expect(
+          page.getByRole('cell', { name: 'Updated synthetic remark', exact: true }),
+        ).toBeVisible()
+      }
+    })
+  }
 }
 
 test('conflict recovery also releases a pending document deletion without retrying it', async ({

@@ -711,6 +711,7 @@ const ProvincialApplicationDetailsPage = () => {
   const [editingRemarkId, setEditingRemarkId] = useState<string | null>(null)
   const [isSavingRemark, setIsSavingRemark] = useState(false)
   const [remarkValidationMessage, setRemarkValidationMessage] = useState('')
+  const remarkLauncherRef = useRef<HTMLButtonElement | null>(null)
   const [summaryForm, setSummaryForm] = useState<ApplicationSummaryFormState | null>(null)
   const [summaryBaselineForm, setSummaryBaselineForm] =
     useState<ApplicationSummaryFormState | null>(null)
@@ -2589,7 +2590,6 @@ const ProvincialApplicationDetailsPage = () => {
         )
         setRemarkBody('')
         setEditingRemarkId(null)
-        setIsEditingRemarks(false)
         if (refreshAfterSave) {
           const preservedSummaryForm = summaryForm
           const preservedSummaryBaselineForm = summaryBaselineForm
@@ -2605,6 +2605,8 @@ const ProvincialApplicationDetailsPage = () => {
           setReviewStatusBaselineCode(preservedReviewStatusBaselineCode)
           setReviewStatusRemarkBaseline(preservedReviewStatusRemarkBaseline)
         }
+        // The refresh makes the page inert; return focus only after it finishes.
+        setIsEditingRemarks(false)
         setActionInfoMessage(
           editingRemarkId ? 'Application remark updated.' : 'Application remark saved.',
         )
@@ -5192,12 +5194,13 @@ const ProvincialApplicationDetailsPage = () => {
                           className="application-detail-section application-detail-remarks"
                         >
                           <div className="detail-section-card__header detail-section-card__header--actions-only">
-                            {canManageRemarks && !isEditingRemarks && (
+                            {canManageRemarks && (
                               <Button
                                 kind="tertiary"
                                 size="sm"
                                 renderIcon={Add}
-                                onClick={() => {
+                                onClick={(event) => {
+                                  remarkLauncherRef.current = event.currentTarget
                                   setRemarkBody('')
                                   setEditingRemarkId(null)
                                   setRemarkValidationMessage('')
@@ -5229,7 +5232,7 @@ const ProvincialApplicationDetailsPage = () => {
                                   <TableBody>
                                     {detail.remarks.map((item) => (
                                       <TableRow
-                                        key={`${item.remarkId ?? item.title}-${item.remark}`}
+                                        key={item.remarkId ?? `${item.title}-${item.remark}`}
                                       >
                                         <TableCell>{displayValue(item.date)}</TableCell>
                                         <TableCell>{displayValue(item.user)}</TableCell>
@@ -5241,7 +5244,8 @@ const ProvincialApplicationDetailsPage = () => {
                                               size="sm"
                                               renderIcon={Edit}
                                               disabled={!item.remarkId}
-                                              onClick={() => {
+                                              onClick={(event) => {
+                                                remarkLauncherRef.current = event.currentTarget
                                                 setEditingRemarkId(
                                                   item.remarkId ? String(item.remarkId) : null,
                                                 )
@@ -5261,14 +5265,16 @@ const ProvincialApplicationDetailsPage = () => {
                               </TableFrame>
                             </>
                           )}
-                          {canManageRemarks && isEditingRemarks && (
+                          {/* Keep the dialog mounted so Carbon can return focus to its launcher. */}
+                          {canManageRemarks && (
                             <Modal
-                              open
+                              open={isEditingRemarks}
                               passiveModal
                               size="sm"
                               modalHeading={editingRemarkId ? 'Edit remark' : 'Add remark'}
                               aria-label={editingRemarkId ? 'Edit remark' : 'Add remark'}
                               selectorPrimaryFocus="#applicationRemarkBody"
+                              launcherButtonRef={remarkLauncherRef}
                               preventCloseOnClickOutside
                               onRequestClose={() => {
                                 if (!isSavingRemark) {
@@ -5276,48 +5282,54 @@ const ProvincialApplicationDetailsPage = () => {
                                 }
                               }}
                             >
-                              <TextArea
-                                id="applicationRemarkBody"
-                                labelText={requiredLabel(
-                                  editingRemarkId ? `Edit Remark ${editingRemarkId}` : 'New Remark',
-                                )}
-                                aria-required="true"
-                                rows={6}
-                                enableCounter
-                                maxCount={APPLICATION_REMARK_MAX_LENGTH}
-                                maxLength={APPLICATION_REMARK_MAX_LENGTH}
-                                value={remarkBody}
-                                disabled={isSavingRemark}
-                                invalid={!!remarkValidationMessage}
-                                invalidText={remarkValidationMessage}
-                                onChange={(event) => {
-                                  setRemarkBody(event.target.value)
-                                  if (remarkValidationMessage) {
-                                    setRemarkValidationMessage('')
-                                  }
-                                }}
-                              />
-                              <div className="application-remark-modal__actions">
-                                <Button
-                                  kind="tertiary"
-                                  disabled={isSavingRemark}
-                                  onClick={onCancelRemarkEditing}
-                                >
-                                  Cancel
-                                </Button>
-                                <Button
-                                  kind="primary"
-                                  disabled={isSavingRemark}
-                                  renderIcon={isSavingRemark ? PendingIcon : undefined}
-                                  onClick={() => void onSaveRemark()}
-                                >
-                                  {isSavingRemark
-                                    ? 'Saving…'
-                                    : editingRemarkId
-                                      ? 'Update Remark'
-                                      : 'Save Remark'}
-                                </Button>
-                              </div>
+                              {isEditingRemarks && (
+                                <>
+                                  <TextArea
+                                    id="applicationRemarkBody"
+                                    labelText={requiredLabel(
+                                      editingRemarkId
+                                        ? `Edit Remark ${editingRemarkId}`
+                                        : 'New Remark',
+                                    )}
+                                    aria-required="true"
+                                    rows={6}
+                                    enableCounter
+                                    maxCount={APPLICATION_REMARK_MAX_LENGTH}
+                                    maxLength={APPLICATION_REMARK_MAX_LENGTH}
+                                    value={remarkBody}
+                                    disabled={isSavingRemark}
+                                    invalid={!!remarkValidationMessage}
+                                    invalidText={remarkValidationMessage}
+                                    onChange={(event) => {
+                                      setRemarkBody(event.target.value)
+                                      if (remarkValidationMessage) {
+                                        setRemarkValidationMessage('')
+                                      }
+                                    }}
+                                  />
+                                  <div className="application-remark-modal__actions">
+                                    <Button
+                                      kind="tertiary"
+                                      disabled={isSavingRemark}
+                                      onClick={onCancelRemarkEditing}
+                                    >
+                                      Cancel
+                                    </Button>
+                                    <Button
+                                      kind="primary"
+                                      disabled={isSavingRemark}
+                                      renderIcon={isSavingRemark ? PendingIcon : undefined}
+                                      onClick={() => void onSaveRemark()}
+                                    >
+                                      {isSavingRemark
+                                        ? 'Saving…'
+                                        : editingRemarkId
+                                          ? 'Update Remark'
+                                          : 'Save Remark'}
+                                    </Button>
+                                  </div>
+                                </>
+                              )}
                             </Modal>
                           )}
                         </Tile>
