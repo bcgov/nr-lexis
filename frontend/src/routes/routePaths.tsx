@@ -206,6 +206,7 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
     // Modern LEXIS provides role-targeted operational notices with no legacy screen equivalent.
     path: '/notifications',
     id: 'Notifications',
+    requiredActions: ['viewNotifications'],
     element: (
       <Layout>
         <NotificationsPage />

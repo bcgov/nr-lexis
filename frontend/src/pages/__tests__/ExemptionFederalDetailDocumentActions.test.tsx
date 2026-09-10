@@ -2389,50 +2389,61 @@ describe('Exemption and Federal Detail Document Actions', () => {
     },
   )
 
-  it('denies federal application document delete to read-only users', async () => {
-    mockedUseAuth.mockReturnValue(
-      createTestAuthContext({
-        capabilities: createTestCapabilities({ roles: ['LEXIS_READ_ONLY'] }),
-        canPerform: () => true,
-      }),
-    )
-    mockedFetchFederalApplicationDetail.mockResolvedValue({ ...federalDetail, readOnly: true })
-    mockedFetchFederalApplicationDocuments.mockResolvedValue({
-      rows: [
-        {
-          id: '802',
-          name: 'readonly-federal-doc.pdf',
-          description: 'read only',
-          type: 'Attachment',
-        },
-      ],
-      source: 'api',
-    })
+  it.each(['LEXIS_READ_ONLY', 'LEXIS_FEDERAL_READ_ONLY'])(
+    'denies federal detail changes to %s',
+    async (role) => {
+      mockedUseAuth.mockReturnValue(
+        createTestAuthContext({
+          capabilities: createTestCapabilities({ roles: [role] }),
+          canPerform: (action) =>
+            role === 'LEXIS_READ_ONLY' ||
+            [
+              '/federalApplicationSearch',
+              '/federalApplicationDetails',
+              'viewFederalApplication',
+            ].includes(action),
+        }),
+      )
+      mockedFetchFederalApplicationDetail.mockResolvedValue({ ...federalDetail, readOnly: true })
+      mockedFetchFederalApplicationDocuments.mockResolvedValue({
+        rows: [
+          {
+            id: '802',
+            name: 'readonly-federal-doc.pdf',
+            description: 'read only',
+            type: 'Attachment',
+          },
+        ],
+        source: 'api',
+      })
 
-    render(
-      <MemoryRouter initialEntries={['/federal/888']}>
-        <Routes>
-          <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
-        </Routes>
-      </MemoryRouter>,
-    )
+      render(
+        <MemoryRouter initialEntries={['/federal/888']}>
+          <Routes>
+            <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
+          </Routes>
+        </MemoryRouter>,
+      )
 
-    await selectDetailTab('Documents')
-    const documentRow = (await screen.findByText('readonly-federal-doc.pdf')).closest('tr')
-    expect(documentRow).toBeTruthy()
-    expect(
-      within(documentRow as HTMLElement).queryByRole('button', { name: 'Delete' }),
-    ).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Add document' })).not.toBeInTheDocument()
+      await selectDetailTab('Documents')
+      const documentRow = (await screen.findByText('readonly-federal-doc.pdf')).closest('tr')
+      expect(documentRow).toBeTruthy()
+      expect(
+        within(documentRow as HTMLElement).queryByRole('button', { name: 'Delete' }),
+      ).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Add document' })).not.toBeInTheDocument()
 
-    await selectDetailTab('Application')
-    expect(screen.queryByRole('button', { name: 'Update status' })).not.toBeInTheDocument()
-    await selectDetailTab('Remarks')
-    expect(screen.queryByLabelText('New Remark')).not.toBeInTheDocument()
-    await selectDetailTab('Shipping details')
-    expect(screen.queryByRole('button', { name: 'Edit shipping details' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Save federal permit' })).not.toBeInTheDocument()
-  })
+      await selectDetailTab('Application')
+      expect(screen.queryByRole('button', { name: 'Update status' })).not.toBeInTheDocument()
+      await selectDetailTab('Remarks')
+      expect(screen.queryByLabelText('New Remark')).not.toBeInTheDocument()
+      await selectDetailTab('Shipping details')
+      expect(
+        screen.queryByRole('button', { name: 'Edit shipping details' }),
+      ).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Save federal permit' })).not.toBeInTheDocument()
+    },
+  )
 
   it('shows detail error contract when exemption detail endpoint fails', async () => {
     mockedFetchProvincialExemptionDetail.mockRejectedValue(new Error('backend down'))

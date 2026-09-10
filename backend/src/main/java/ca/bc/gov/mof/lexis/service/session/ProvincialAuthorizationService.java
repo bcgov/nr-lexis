@@ -29,6 +29,7 @@ public class ProvincialAuthorizationService {
 
   private static final String ROLE_ADMIN = "LEXIS_ADMIN";
   private static final String ROLE_READ_ONLY = "LEXIS_READ_ONLY";
+  private static final String ROLE_FEDERAL_READ_ONLY = "LEXIS_FEDERAL_READ_ONLY";
   private static final String ROLE_APPLICATION_APPROVER = "LEXIS_APPLICATION_APPROVER";
   private static final String ROLE_EXEMPTION_APPROVER = "LEXIS_EXEMPTION_APPROVER";
   private static final String ROLE_PROVINCIAL_SUBMITTER = "LEXIS_PROVINCIAL_SUBMITTER";
@@ -85,7 +86,8 @@ public class ProvincialAuthorizationService {
       return true;
     }
     if ("F".equalsIgnoreCase(application.jurisdictionCode())) {
-      return currentRoles.contains(ROLE_APPLICATION_APPROVER)
+      return currentRoles.contains(ROLE_FEDERAL_READ_ONLY)
+          || currentRoles.contains(ROLE_APPLICATION_APPROVER)
           || (currentRoles.contains(ROLE_READ_ONLY)
               && canAccessOrgUnits(
                   authentication,
@@ -94,7 +96,8 @@ public class ProvincialAuthorizationService {
                       : List.of(application.orgUnitNumber()),
                   OrgUnitSurface.FEDERAL_APPLICATION_SEARCH));
     }
-    if (!"P".equalsIgnoreCase(application.jurisdictionCode())) {
+    if (!"P".equalsIgnoreCase(application.jurisdictionCode())
+        || isFederalOnlyUser(currentRoles)) {
       return false;
     }
     String scopedClientNumber = scopedClientNumber(authentication);
@@ -124,7 +127,8 @@ public class ProvincialAuthorizationService {
     if ("F".equalsIgnoreCase(application.jurisdictionCode())) {
       return canAccessFederalApplication(authentication, application);
     }
-    if (!"P".equalsIgnoreCase(application.jurisdictionCode())) {
+    if (!"P".equalsIgnoreCase(application.jurisdictionCode())
+        || isFederalOnlyUser(currentRoles)) {
       return false;
     }
     String scopedClientNumber = scopedClientNumber(authentication);
@@ -370,7 +374,7 @@ public class ProvincialAuthorizationService {
         OrgUnitSurface.PERMIT_DETAIL);
   }
 
-  /** Staff roles with federal read authority use the global FAM staff view. */
+  /** Federal read roles have global federal scope, including unscoped Business BCeID users. */
   public boolean canAccessFederalApplication(
       Authentication authentication, Long applicationNumber) {
     if (applicationNumber == null || applicationNumber < 1) {
@@ -381,7 +385,8 @@ public class ProvincialAuthorizationService {
         || currentRoles.contains(ROLE_APPLICATION_APPROVER)) {
       return true;
     }
-    if (!currentRoles.contains(ROLE_READ_ONLY)) {
+    if (!currentRoles.contains(ROLE_READ_ONLY)
+        && !currentRoles.contains(ROLE_FEDERAL_READ_ONLY)) {
       return false;
     }
 
@@ -680,13 +685,14 @@ public class ProvincialAuthorizationService {
         || currentRoles.contains(ROLE_APPLICATION_APPROVER)) {
       return true;
     }
-    return currentRoles.contains(ROLE_READ_ONLY)
-        && canAccessOrgUnits(
-            authentication,
-            application.orgUnitNumber() == null
-                ? List.of()
-                : List.of(application.orgUnitNumber()),
-            OrgUnitSurface.FEDERAL_APPLICATION_SEARCH);
+    return currentRoles.contains(ROLE_FEDERAL_READ_ONLY)
+        || (currentRoles.contains(ROLE_READ_ONLY)
+            && canAccessOrgUnits(
+                authentication,
+                application.orgUnitNumber() == null
+                    ? List.of()
+                    : List.of(application.orgUnitNumber()),
+                OrgUnitSurface.FEDERAL_APPLICATION_SEARCH));
   }
 
   private boolean matchesApplicationClient(
@@ -739,6 +745,15 @@ public class ProvincialAuthorizationService {
     // scope within their granted actions. Zone and region selections are defaults and filters,
     // not authorization boundaries; Provincial Submitter client scope is enforced separately.
     return false;
+  }
+
+  private boolean isFederalOnlyUser(Set<String> roles) {
+    return roles.contains(ROLE_FEDERAL_READ_ONLY)
+        && !roles.contains(ROLE_ADMIN)
+        && !roles.contains(ROLE_READ_ONLY)
+        && !roles.contains(ROLE_APPLICATION_APPROVER)
+        && !roles.contains(ROLE_EXEMPTION_APPROVER)
+        && !roles.contains(ROLE_PROVINCIAL_SUBMITTER);
   }
 
   private boolean isPureExemptionApprover(Set<String> roles) {

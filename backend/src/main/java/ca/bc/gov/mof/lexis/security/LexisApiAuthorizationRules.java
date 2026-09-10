@@ -219,7 +219,7 @@ final class LexisApiAuthorizationRules {
           authenticated(HttpMethod.GET, "/api/lexis/session/capabilities"),
           provincialStaffRole("/api/lexis/session/preferences"),
           knownRole("/api/lexis/session/**"),
-          knownRole("/api/lexis/notifications"),
+          action(HttpMethod.GET, "viewNotifications", "/api/lexis/notifications"),
           adminAuthority(
               "/api/lexis/admin/notifications", "/api/lexis/admin/notifications/**"),
           knownRole(
@@ -492,6 +492,14 @@ final class LexisApiAuthorizationRules {
               APPLICATION_DETAILS_RPC_ACTIONS,
               "/api/lexis/applicationDetailsRPC",
               "/api/lexis/applicationDetailsRPC.do"),
+          // Federal details reuse only these reads. Controllers verify the application
+          // jurisdiction and the package/document relationship before returning data.
+          anyAction(
+              HttpMethod.GET,
+              List.of(ACTION_APPLICATION_DETAILS, ACTION_FEDERAL_APPLICATION_DETAILS),
+              "/api/lexis/rpc/application-details/document-details",
+              "/api/lexis/rpc/application-details/document",
+              "/api/lexis/rpc/application-details/package-scales"),
           action(
               HttpMethod.GET,
               ACTION_APPLICATION_DETAILS,

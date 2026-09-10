@@ -36,5 +36,9 @@ export const isProdRtmOnlyPathAllowed = (
     return true
   }
 
-  return hasRole(roles, 'READ_ONLY') && !hasRole(roles, 'ADMIN')
+  if (hasRole(roles, 'ADMIN')) return false
+  if (hasRole(roles, 'FEDERAL_READ_ONLY') && !hasRole(roles, 'READ_ONLY')) {
+    return path === '/federal' || path.startsWith('/federal/application/')
+  }
+  return hasRole(roles, 'READ_ONLY')
 }

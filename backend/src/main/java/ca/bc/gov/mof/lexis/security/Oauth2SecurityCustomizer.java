@@ -123,7 +123,8 @@ public class Oauth2SecurityCustomizer
   private static List<String> identityCompatibleFamGroups(
       List<String> groups, String identityProvider) {
     // INTENTIONAL_LEGACY_DIVERGENCE(FAM_STAFF_GLOBAL_DATA_SCOPE): the approved FAM
-    // model keeps IDIR staff authorities separate from client-scoped BCeID submitters.
+    // model keeps IDIR staff authorities separate from BCeID roles. Federal Read Only is
+    // a concrete BCeID role without a forest-client scope; Provincial Submitter is client-scoped.
     if (!IDP_IDIR.equals(identityProvider) && !IDP_BCEID_BUSINESS.equals(identityProvider)) {
       return List.of();
     }
@@ -136,7 +137,8 @@ public class Oauth2SecurityCustomizer
             group ->
                 IDP_IDIR.equals(identityProvider)
                     ? STAFF_ROLES.contains(group)
-                    : isClientScopedProvincialSubmitter(group))
+                    : "LEXIS_FEDERAL_READ_ONLY".equals(group)
+                        || isClientScopedProvincialSubmitter(group))
         .toList();
   }
 
