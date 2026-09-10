@@ -5,6 +5,9 @@
 NEXCOL submits federal LEXIS XML through a synchronous machine-to-machine API. Interactive LEXIS
 authentication remains independent of this integration.
 
+See [NEXCOL ingress and cutover](architecture.md#nexcol-ingress-and-cutover) for the legacy and modern
+diagrams, external Keycloak topology, and gateway/backend authorization.
+
 ```text
 NEXCOL
   -> Keycloak client-credentials token
@@ -48,8 +51,7 @@ included in each service-account access token without a `scope` parameter in the
 | TEST | `lexis-nexcol-test` | `https://nr-lexis-nexcol-test-api-gov-bc-ca.test.api.gov.bc.ca` | `https://test.loginproxy.gov.bc.ca/auth/realms/forests` | `https://test.loginproxy.gov.bc.ca/auth/realms/forests/protocol/openid-connect/token` |
 | PROD | `lexis-nexcol-prod` | `https://nr-lexis-nexcol.api.gov.bc.ca` | `https://loginproxy.gov.bc.ca/auth/realms/forests` | `https://loginproxy.gov.bc.ca/auth/realms/forests/protocol/openid-connect/token` |
 
-The PROD gateway URL is projected for integration configuration and becomes functional after the
-production gateway and LEXIS deployment are provisioned.
+TEST and PROD use separate gateway URLs and Keycloak clients.
 
 An authenticated request must present an unexpired access token issued for the target environment,
 with `lexis:federal-submission:submit` in its `scope` claim, as
@@ -57,7 +59,7 @@ with `lexis:federal-submission:submit` in its `scope` claim, as
 scope, and audience when configured. LEXIS validates the forwarded token and applies the same
 scope-based authorization.
 
-The TEST deployment, and the PROD deployment when enabled, idempotently create or check the client
+The TEST and PROD deployment workflows idempotently create or check the client
 scope, confidential client, and default scope assignment. Each GitHub environment requires:
 
 - secrets `KEYCLOAK_SA_CLIENT_ID` and `KEYCLOAK_SA_CLIENT_SECRET` for the least-privilege
@@ -97,12 +99,13 @@ with the resulting access token; do not enter the provisioning client credential
 ## Endpoints
 
 All three endpoints exist in every backend deployment but are externally exposed only through a
-configured API gateway. TEST provides the supported NEXCOL gateway and service-client integration;
-DEV has no supported NEXCOL gateway/client configuration, and PROD remains unprovisioned.
+configured API gateway. TEST and PROD have gateway and service-client configurations; DEV has no
+supported NEXCOL gateway/client configuration. The active application rollout mode determines which
+operations are permitted in an environment.
 
 The machine-readable gateway contract is available in
 [`gateway/openapi.yaml`](../gateway/openapi.yaml). Its `servers` list contains the TEST URL and the
-projected PROD URL documented above.
+PROD URL documented above.
 
 | Operation | Endpoint | Successful status | Persistence |
 |---|---|---|---|
@@ -200,6 +203,10 @@ rewritten as an authorization `403`.
 
 ### Legacy component decommissioning
 
+The main legacy LEXIS web application can be sunset before the LEXIS agents and ESF integration.
+The separate `lexisvc`, `lexisws`, and ESF intake/status components can continue processing against
+the shared Oracle data model. Shared ESF also serves other applications.
+
 The legacy XML namespace URIs are wire-contract identifiers and are not network dependencies.
 Modern prevalidation does not call the `lexisws` web application or the `lexisvc` queue consumer;
 it calls the installed `THE.LEXISWS_WEB_VALIDATION` Oracle package directly.
@@ -210,6 +217,11 @@ revoke that grant unless its validation logic has first been migrated, deployed,
 modern LEXIS in every environment. Keep `lexisvc` running for as long as submissions continue to
 arrive through the legacy ESF queue; this does not affect submissions sent directly to the modern
 API.
+
+Application prevalidation can cut over independently of ESF submissions. The federal NEXCOL team
+confirmed that NEXCOL removed `BiWeeklyListWebService` from `NEXCOL.LexisAPI` and no longer uses the
+biweekly lookup; no modern replacement is required for NEXCOL. See the
+[biweekly lookup summary](architecture.md#legacy-biweekly-soap-lookup).
 
 ## XML Contract
 

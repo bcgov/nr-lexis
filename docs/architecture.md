@@ -13,7 +13,7 @@ flowchart LR
     Route --> Frontend["Caddy / Coraza / React"]
     Frontend -->|REST with Cognito JWT| Backend["Spring Boot API<br/>1-N replicas"]
 
-    Nexcol[NEXCOL] -->|Client credentials| Keycloak[Keycloak]
+    Nexcol[NEXCOL] -->|Client credentials| Keycloak["External Keycloak<br/>forests realm"]
     Nexcol --> Gateway["API gateway"]
     Gateway -->|Scoped federal POST requests| Backend
 
@@ -96,6 +96,140 @@ validates the forwarded token and scope.
 - Workflow email is published after the database transaction commits and delivered asynchronously
   on a best-effort basis. DEV and TEST replace original recipients with configured override
   recipients.
+
+## NEXCOL ingress and cutover
+
+Modern LEXIS replaces two independent NEXCOL integrations: legacy SOAP application prevalidation
+and ESF submission processing. NEXCOL controls when its client calls switch to the gateway. Starting
+modern LEXIS or changing the interactive LEXIS URL does not redirect either integration.
+
+The LEXIS agents, SOAP services, and ESF integration can remain available after the main legacy
+LEXIS web application is sunset. They continue processing against the shared Oracle data model
+and have a separate retirement lifecycle.
+
+The [NEXCOL API contract](nexcol-keycloak-service-client.md) contains request examples, response
+schemas, environment URLs, and the detailed retry contract.
+
+### Legacy and modern paths
+
+```mermaid
+flowchart LR
+    N[NEXCOL]
+
+    subgraph Legacy["Legacy integration"]
+        W["lexisws<br/>Application prevalidation"]
+        E[ESF]
+        Q[LEXIS submission queue]
+        C["lexisvc agent<br/>Validate and persist"]
+        E --> Q --> C
+        C -->|Acceptance or rejection status| E
+    end
+
+    subgraph Modern["Modern integration"]
+        G["API gateway<br/>Validate bearer token and scope"]
+        P["Modern /prevalidation"]
+        S["Modern /submissions<br/>Validate and persist"]
+        G --> P
+        G --> S
+    end
+
+    K["External Keycloak<br/>forests realm"]
+    V["Oracle validation package<br/>THE.LEXISWS_WEB_VALIDATION"]
+    D["Shared Oracle application,<br/>package and scale tables"]
+
+    N -->|Legacy prevalidation| W
+    N -->|Legacy submission XML| E
+    N -->|Client credentials| K
+    K -->|Access token| N
+    N -.->|Caller switches URL and sends bearer token| G
+    W --> V
+    P --> V
+    C --> D
+    S --> D
+```
+
+The diagram shows application prevalidation and CREATE. The additional legacy biweekly lookup,
+which NEXCOL no longer uses, is summarized below. Modern LEXIS also exposes a full-submission
+`/validation` endpoint, which performs validation without creating business records. Modern
+endpoints run in the same Spring Boot backend and independently validate the forwarded token.
+
+| Stage | Legacy behavior | Modern behavior |
+| --- | --- | --- |
+| Application prevalidation | `lexisws` exposes `LogExportWebService.isValidApplication`; checks client number, client location, boom/package number, and timber marks. | `POST /api/lexis/federal/submissions/prevalidation` reproduces those checks and calls the same Oracle procedures directly. |
+| Submission intake | ESF uploads and schema-validates the XML, saves an ESF submission record, and routes a file message according to the schema/version queue mapping. | NEXCOL sends XML to `POST /api/lexis/federal/submissions`; the gateway forwards it to modern LEXIS. |
+| Business validation and persistence | `lexisvc` consumes the queue, resolves the ESF submitter through WebADE, requires `FEDERAL_SUBMITTER` for federal applications, validates the data, and creates the application and applicable package/scale records. | Modern LEXIS authorizes the machine-client scope, validates the payload, and writes the application and applicable package/scale records in one Oracle transaction. |
+| Completion | ESF finalization acknowledges intake. The queue agent later sends acceptance or rejection through the ESF status queue. | The submission response is synchronous: `201` means persisted; validation failures return `422`. No ESF status-polling endpoint is recreated. |
+| System of record | Legacy LEXIS Oracle tables and packages. | The same Oracle data model; no transfer from a legacy database into a separate modern database is introduced. |
+
+The legacy `lexisvc` queue agent and `lexisws` SOAP application are separate components from the
+legacy LEXIS web application. The queue agent supports federal and provincial submissions. ESF
+also serves other applications, so the LEXIS integration has a separate lifecycle from shared ESF.
+
+### Legacy biweekly SOAP lookup
+
+`lexisws` also exposes `BiWeeklyListWebService.isValidApplicationNumber`. It checks whether an
+existing LEXIS application's advertising date matches a supplied date and returns the match result
+and actual advertising date. This lookup is separate from application prevalidation and ESF
+submission processing.
+
+The federal NEXCOL team confirmed that this service has been removed from `NEXCOL.LexisAPI` and is
+no longer used by NEXCOL. No modern replacement is required for NEXCOL.
+
+### Keycloak authentication
+
+Keycloak is hosted separately from LEXIS. NEXCOL uses a dedicated confidential client in the
+existing `forests` realm, independently of interactive FAM/Cognito authentication.
+
+The [NEXCOL API documentation](https://openapi.apps.gov.bc.ca/?url=https://raw.githubusercontent.com/bcgov/nr-lexis/main/gateway/openapi.yaml)
+covers token endpoints, client credentials, the required scope, and request examples.
+
+### Gateway and backend authorization
+
+```mermaid
+sequenceDiagram
+    participant N as NEXCOL
+    participant K as External Keycloak
+    participant G as API gateway
+    participant B as Modern LEXIS
+    participant O as Oracle
+    N->>K: Client ID and secret using client_credentials
+    K-->>N: Access token with federal-submission scope
+    N->>G: Federal POST with Authorization bearer token
+    G->>G: Validate issuer, signature, expiry and scope
+    G->>B: Forward request and bearer token
+    B->>B: Validate token and authorize federal operation
+    B->>O: Prevalidate, fully validate, or persist submission
+    O-->>B: Validation result or committed identifiers
+    B-->>G: Synchronous operation response
+    G-->>N: HTTP status and response body
+```
+
+The gateway configures POST routes for the three federal paths, with separate OPTIONS handling
+for Swagger CORS. These are [Kong prefix matches](https://developer.konghq.com/gateway/routing/traditional/#path),
+so matching descendants can also reach the backend; backend authorization permits the three
+concrete federal operations and denies unrecognized paths. The gateway accepts JWTs from the
+Authorization header; query-string and cookie token extraction are disabled. Current
+configuration requires the environment's `forests` issuer,
+RS256 signature verification, expiry, and `lexis:federal-submission:submit`. `allowed_aud` is
+currently unset; neither the gateway configuration nor backend adds a dedicated audience/client-ID
+binding. Access therefore depends on valid issuer-signed tokens and the federal-submission scope.
+The [provisioning script](../.github/scripts/ensure-keycloak-scopes.sh) restricts that scope to the
+approved NEXCOL client. A client ID is used for provisioning and caller identity, but it is not an
+extra runtime allowlist check.
+
+The [backend token configuration](../backend/src/main/java/ca/bc/gov/mof/lexis/security/Oauth2SecurityCustomizer.java)
+registers the Cognito issuer for interactive users and the configured Keycloak issuer for machine
+clients. Cognito tokens produce the compatible FAM role authorities; Keycloak tokens produce scope
+authorities. `SCOPE_lexis:federal-submission:submit` maps only to `uploadFederalSubmission`, which
+protects the three federal endpoints. It grants no interactive LEXIS role or general record-read
+access. The backend trusts one configured Keycloak issuer for machine clients.
+
+The gateway forwards to `nr-lexis-backend-${ZONE}.da5fad-${ZONE}.svc:8080` on Gold. The backend
+NetworkPolicy permits the matching environment in the APS Gold gateway namespace and the LEXIS
+frontend, plus monitoring. The backend template declares no public Route and does not admit the
+OpenShift ingress router. Caddy refuses the federal machine paths on the public frontend route.
+NEXCOL therefore uses the gateway URL, independently of the interactive LEXIS URL. CORS supports
+the OpenAPI browser console; NEXCOL's server-to-server access is controlled by tokens and scope.
 
 ## Deployment and operations
 
