@@ -158,9 +158,11 @@ because repeated automated login attempts can lock the TEST account. See
 Production RTM-only rollout is controlled by the optional GitHub environment secret
 `lexis_prod_rtm_only`. Set it to `true` for PROD to pass `LEXIS_PROD_RTM_ONLY` to the backend and
 `VITE_LEXIS_PROD_RTM_ONLY` to the frontend. In that mode, LEXIS admins retain normal Average Monthly
-Values access, users with `LEXIS_READ_ONLY` retain their existing read-only experience, and all other
-application roles are denied. The deployment also forces `LEXIS_EXPIRY_ENABLED=false`; changing the
-secret takes effect on the next deployment.
+Values access, users with `LEXIS_READ_ONLY` retain their existing read-only experience, and users with
+`LEXIS_FEDERAL_READ_ONLY` retain federal application search and read-only details. Administrator
+access takes precedence over either read-only role and remains limited to Average Monthly Values.
+All other application roles are denied. The deployment also forces `LEXIS_EXPIRY_ENABLED=false`;
+changing the secret takes effect on the next deployment.
 
 ## Component docs
 
