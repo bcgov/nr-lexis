@@ -57,6 +57,7 @@ import {
   type ApplicationPackageSpeciesRow,
 } from '@/service/provincial-application-items-service'
 import { requiredLabel } from '@/utils/required-label'
+import { formatPackageNumberLabel } from '@/utils/text'
 
 type PackageFormState = {
   packageNumber: string
@@ -79,6 +80,20 @@ type ScaleFormState = {
   gradeCode: string
   pieces: string
   volume: string
+}
+
+type DependentOptionsAvailability = 'idle' | 'loading' | 'available' | 'unavailable'
+
+type PackageDataAvailability = {
+  details: boolean
+  species: boolean
+  scales: boolean
+}
+
+const unavailablePackageData: PackageDataAvailability = {
+  details: false,
+  species: false,
+  scales: false,
 }
 
 const displayScaleType = (cascadeSplitCode: string): string => {
@@ -180,11 +195,12 @@ const existingPackageNumberError = (
   if (!normalized) {
     return undefined
   }
-  const excluded = excludePackageNumber.trim().toUpperCase()
+  if (value === excludePackageNumber) {
+    return undefined
+  }
   const exists = packageNumbers.some(
     (packageNumber) =>
-      packageNumber.trim().toUpperCase() === normalized &&
-      packageNumber.trim().toUpperCase() !== excluded,
+      packageNumber !== excludePackageNumber && packageNumber.trim().toUpperCase() === normalized,
   )
   return exists ? `Package ${normalized} already exists.` : undefined
 }
@@ -311,11 +327,12 @@ const packageSelectionReducer = (
 
 const toPackageForm = (
   productTypeCode: string | null | undefined,
+  selectedPackageNumber: string,
   packageDetails: ApplicationPackageDetails,
   speciesRows: ApplicationPackageSpeciesRow[],
 ): PackageFormState => ({
-  packageNumber: packageDetails.packageNumber,
-  newPackageNumber: packageDetails.packageNumber,
+  packageNumber: selectedPackageNumber,
+  newPackageNumber: selectedPackageNumber,
   volume: packageDetails.volume,
   scaledVolume: String(packageDetails.scaledVolume),
   averageLength: packageDetails.length,
@@ -385,6 +402,9 @@ function ProvincialApplicationItemsPanel({
   >([])
   const [endUseOptions, setEndUseOptions] = useState<ApplicationCodeOption[]>([])
   const [createEndUseOptions, setCreateEndUseOptions] = useState<ApplicationCodeOption[]>([])
+  const [endUseAvailability, setEndUseAvailability] = useState<DependentOptionsAvailability>('idle')
+  const [createEndUseAvailability, setCreateEndUseAvailability] =
+    useState<DependentOptionsAvailability>('idle')
   const [gradeOptions, setGradeOptions] = useState<ApplicationCodeOption[]>([])
   const [speciesToAdd, setSpeciesToAdd] = useState('')
   const [createSpeciesToAdd, setCreateSpeciesToAdd] = useState('')
@@ -398,7 +418,9 @@ function ProvincialApplicationItemsPanel({
   const [dependentReferenceOptionsUnavailable, setDependentReferenceOptionsUnavailable] =
     useState(false)
   const [itemsLoading, setItemsLoading] = useState(false)
-  const [packageDataLoaded, setPackageDataLoaded] = useState(false)
+  const [packageDataAvailability, setPackageDataAvailability] =
+    useState<PackageDataAvailability>(unavailablePackageData)
+  const [packageLoadWarning, setPackageLoadWarning] = useState('')
   const [itemsErrorMessage, setItemsErrorMessage] = useState('')
   const [itemsInfoMessage, setItemsInfoMessage] = useState('')
   const [isSavingPackage, setIsSavingPackage] = useState(false)
@@ -433,6 +455,14 @@ function ProvincialApplicationItemsPanel({
     scaleDraftTouched && JSON.stringify(scaleForm) !== JSON.stringify(emptyScaleForm)
   const itemsDirty = selectedPackageDraftDirty || createPackageDraftDirty || scaleDraftDirty
   const itemsBusy = isSavingPackage || isSavingScale || !!deletingScaleId
+  const packageDataLoaded =
+    packageDataAvailability.details &&
+    packageDataAvailability.species &&
+    packageDataAvailability.scales
+  const packageSpeciesUnavailable =
+    packageDataAvailability.details && !packageDataAvailability.species && !itemsLoading
+  const packageScalesUnavailable =
+    packageDataAvailability.details && !packageDataAvailability.scales && !itemsLoading
 
   useEffect(() => {
     onDirtyChange?.(itemsDirty)
@@ -689,7 +719,8 @@ function ProvincialApplicationItemsPanel({
       const isLatestRequest = beginItemsRequest()
       if (!packageNumber) {
         setItemsLoading(false)
-        setPackageDataLoaded(false)
+        setPackageDataAvailability(unavailablePackageData)
+        setPackageLoadWarning('')
         const emptyForm = emptyPackageForm(productTypeCode)
         setPackageForm(emptyForm)
         setPackageBaselineForm(emptyForm)
@@ -702,11 +733,13 @@ function ProvincialApplicationItemsPanel({
         setScales([])
         setRemainingSpeciesOptions([])
         setEndUseOptions([])
+        setEndUseAvailability('idle')
         return
       }
 
       setItemsLoading(true)
-      setPackageDataLoaded(false)
+      setPackageDataAvailability(unavailablePackageData)
+      setPackageLoadWarning('')
       setItemsErrorMessage('')
       const emptyForm = emptyPackageForm(productTypeCode)
       setPackageForm(emptyForm)
@@ -721,33 +754,56 @@ function ProvincialApplicationItemsPanel({
       setScales([])
       setRemainingSpeciesOptions([])
       setEndUseOptions([])
+      setEndUseAvailability('idle')
       try {
         const detailsResult = await fetchApplicationPackageDetails(packageNumber)
         if (!isLatestRequest()) {
           return
         }
-        const speciesResult = await fetchApplicationPackageSpecies(packageNumber)
+        const [speciesResult, scalesResult] = await Promise.allSettled([
+          fetchApplicationPackageSpecies(packageNumber),
+          fetchApplicationPackageScales(packageNumber),
+        ])
         if (!isLatestRequest()) {
           return
         }
-        const scalesResult = await fetchApplicationPackageScales(packageNumber)
-        if (!isLatestRequest()) {
-          return
-        }
-        const nextSpeciesDraft = uniqueCodes(speciesResult)
-        const loadedPackageForm = toPackageForm(productTypeCode, detailsResult, speciesResult)
+        const speciesRows = speciesResult.status === 'fulfilled' ? speciesResult.value : []
+        const scaleRows = scalesResult.status === 'fulfilled' ? scalesResult.value : []
+        const speciesLoaded = speciesResult.status === 'fulfilled'
+        const scalesLoaded = scalesResult.status === 'fulfilled'
+        const nextSpeciesDraft = uniqueCodes(speciesRows)
+        const loadedPackageForm = toPackageForm(
+          productTypeCode,
+          packageNumber,
+          detailsResult,
+          speciesRows,
+        )
         setPackageForm(loadedPackageForm)
         setPackageBaselineForm(loadedPackageForm)
         setShowPackageValidationErrors(false)
-        setPackageSpeciesRows(speciesResult)
+        setPackageSpeciesRows(speciesRows)
         setSpeciesDraft(nextSpeciesDraft)
         setPackageSpeciesBaseline(nextSpeciesDraft)
         setPackageDraftTouched(false)
-        setScales(scalesResult)
-        setPackageDataLoaded(true)
+        setScales(scaleRows)
+        setPackageDataAvailability({
+          details: true,
+          species: speciesLoaded,
+          scales: scalesLoaded,
+        })
+        setPackageLoadWarning(
+          !speciesLoaded && !scalesLoaded
+            ? 'Package species and scales could not be loaded.'
+            : !speciesLoaded
+              ? 'Package species could not be loaded.'
+              : !scalesLoaded
+                ? 'Package scales could not be loaded.'
+                : '',
+        )
       } catch {
         if (isLatestRequest()) {
-          setPackageDataLoaded(false)
+          setPackageDataAvailability(unavailablePackageData)
+          setPackageLoadWarning('')
           const failedForm = emptyPackageForm(productTypeCode)
           setPackageForm(failedForm)
           setPackageBaselineForm(failedForm)
@@ -861,24 +917,31 @@ function ProvincialApplicationItemsPanel({
     const loadEndUseOptions = async () => {
       if (!region || speciesDraft.length === 0) {
         setEndUseOptions([])
+        setEndUseAvailability('idle')
         return
       }
+      setEndUseAvailability('loading')
+      setEndUseOptions([])
       try {
         const options = await fetchApplicationEndUsesForSpeciesRegion(region, speciesDraft)
         if (!cancelled) {
           setEndUseOptions(options)
+          setEndUseAvailability(options.length > 0 ? 'available' : 'unavailable')
           setPackageForm((current) => ({
             ...current,
-            endUseCode:
-              current.endUseCode && options.some((option) => option.code === current.endUseCode)
-                ? current.endUseCode
-                : (options[0]?.code ?? current.endUseCode),
+            endUseCode: (() => {
+              const normalizedCurrentCode = current.endUseCode.trim().toUpperCase()
+              const matchingOption = options.find(
+                (option) => option.code.trim().toUpperCase() === normalizedCurrentCode,
+              )
+              return matchingOption?.code ?? options[0]?.code ?? current.endUseCode
+            })(),
           }))
         }
       } catch {
         if (!cancelled) {
-          setDependentReferenceOptionsUnavailable(true)
           setEndUseOptions([])
+          setEndUseAvailability('unavailable')
         }
       }
     }
@@ -896,24 +959,31 @@ function ProvincialApplicationItemsPanel({
     const loadCreateEndUseOptions = async () => {
       if (!region || createSpeciesDraft.length === 0) {
         setCreateEndUseOptions([])
+        setCreateEndUseAvailability('idle')
         return
       }
+      setCreateEndUseAvailability('loading')
+      setCreateEndUseOptions([])
       try {
         const options = await fetchApplicationEndUsesForSpeciesRegion(region, createSpeciesDraft)
         if (!cancelled) {
           setCreateEndUseOptions(options)
+          setCreateEndUseAvailability(options.length > 0 ? 'available' : 'unavailable')
           setCreatePackageForm((current) => ({
             ...current,
-            endUseCode:
-              current.endUseCode && options.some((option) => option.code === current.endUseCode)
-                ? current.endUseCode
-                : (options[0]?.code ?? current.endUseCode),
+            endUseCode: (() => {
+              const normalizedCurrentCode = current.endUseCode.trim().toUpperCase()
+              const matchingOption = options.find(
+                (option) => option.code.trim().toUpperCase() === normalizedCurrentCode,
+              )
+              return matchingOption?.code ?? options[0]?.code ?? current.endUseCode
+            })(),
           }))
         }
       } catch {
         if (!cancelled) {
-          setDependentReferenceOptionsUnavailable(true)
           setCreateEndUseOptions([])
+          setCreateEndUseAvailability('unavailable')
         }
       }
     }
@@ -1048,13 +1118,40 @@ function ProvincialApplicationItemsPanel({
 
   const selectedPackageTotalPieces = scales.reduce((total, row) => total + row.pieces, 0)
   const selectedPackageHasPermittedScale = scales.some((row) => row.permitted)
-  const referenceOptionsLoading =
+  const baseReferenceOptionsLoading =
     authoritativeOptionsAvailability === 'loading' || baseReferenceOptionsAvailability === 'loading'
-  const referenceOptionsUnavailable =
+  const selectedEndUseOptionsLoading = speciesDraft.length > 0 && endUseAvailability === 'loading'
+  const createEndUseOptionsLoading =
+    createSpeciesDraft.length > 0 && createEndUseAvailability === 'loading'
+  const baseReferenceOptionsUnavailable =
     authoritativeOptionsAvailability === 'unavailable' ||
     baseReferenceOptionsAvailability === 'unavailable' ||
     dependentReferenceOptionsUnavailable
-  const referenceOptionsAvailable = !referenceOptionsLoading && !referenceOptionsUnavailable
+  const selectedEndUseOptionsUnavailable =
+    speciesDraft.length > 0 && endUseAvailability === 'unavailable'
+  const createEndUseOptionsUnavailable =
+    createSpeciesDraft.length > 0 && createEndUseAvailability === 'unavailable'
+  const referenceOptionsLoading =
+    baseReferenceOptionsLoading || selectedEndUseOptionsLoading || createEndUseOptionsLoading
+  const referenceOptionsUnavailable =
+    baseReferenceOptionsUnavailable ||
+    selectedEndUseOptionsUnavailable ||
+    createEndUseOptionsUnavailable
+  const referenceOptionsUnavailableMessage = baseReferenceOptionsUnavailable
+    ? 'Package saves, package creation, and scale additions are disabled because item options could not be loaded.'
+    : selectedEndUseOptionsUnavailable && createEndUseOptionsUnavailable
+      ? 'Package saves and package creation are disabled because End Use options could not be loaded.'
+      : selectedEndUseOptionsUnavailable
+        ? 'Package saves are disabled because End Use options could not be loaded.'
+        : 'Package creation is disabled because End Use options could not be loaded.'
+  const baseReferenceOptionsAvailable =
+    !baseReferenceOptionsLoading && !baseReferenceOptionsUnavailable
+  const selectedPackageReferenceOptionsAvailable =
+    baseReferenceOptionsAvailable &&
+    !selectedEndUseOptionsLoading &&
+    !selectedEndUseOptionsUnavailable
+  const createPackageReferenceOptionsAvailable =
+    baseReferenceOptionsAvailable && !createEndUseOptionsLoading && !createEndUseOptionsUnavailable
   const normalizedProductTypeCode = productTypeCode.trim().toUpperCase()
   const packageBackedItems = ['H', 'T'].includes(normalizedProductTypeCode)
   const scaleBackedItems = normalizedProductTypeCode === 'H'
@@ -1073,14 +1170,15 @@ function ProvincialApplicationItemsPanel({
   const canSaveSelectedPackage =
     showMutationActions &&
     canEditPackages &&
-    referenceOptionsAvailable &&
+    selectedPackageReferenceOptionsAvailable &&
     packageDataLoaded &&
     !!selectedPackageNumber &&
     !isSavingPackage &&
     !selectedPackageHasPermittedScale
-  const canCreatePackages = showMutationActions && canAddPackages && referenceOptionsAvailable
+  const canCreatePackages =
+    showMutationActions && canAddPackages && createPackageReferenceOptionsAvailable
   const canAddScalesWithReferenceOptions =
-    showMutationActions && canAddScales && referenceOptionsAvailable
+    showMutationActions && canAddScales && baseReferenceOptionsAvailable
   const canDeleteSelectedPackage =
     showMutationActions &&
     canAddPackages &&
@@ -1113,10 +1211,7 @@ function ProvincialApplicationItemsPanel({
       return
     }
 
-    if (
-      packageForm.newPackageNumber.trim() !== selectedPackageNumber.trim() &&
-      !canUpdatePackageNumber
-    ) {
+    if (packageForm.newPackageNumber !== selectedPackageNumber && !canUpdatePackageNumber) {
       setItemsErrorMessage('Package number changes are not allowed for this application.')
       return
     }
@@ -1500,11 +1595,21 @@ function ProvincialApplicationItemsPanel({
               className="detail-context-notification"
               kind="warning"
               title="Item options unavailable"
-              subtitle="Package saves, package creation, and scale additions are disabled because authoritative Oracle options could not be verified."
+              subtitle={referenceOptionsUnavailableMessage}
               lowContrast
               hideCloseButton
             />
           )}
+        {!!packageLoadWarning && (
+          <InlineNotification
+            className="detail-context-notification"
+            kind="warning"
+            title="Selected package data unavailable"
+            subtitle={packageLoadWarning}
+            lowContrast
+            hideCloseButton
+          />
+        )}
         {!!itemsErrorMessage && (
           <AppNotification
             kind="error"
@@ -1544,7 +1649,7 @@ function ProvincialApplicationItemsPanel({
                 placeholder="Select package"
                 options={packageNumbers.map((packageNumber) => ({
                   value: packageNumber,
-                  label: packageNumber,
+                  label: formatPackageNumberLabel(packageNumber),
                 }))}
                 onChange={requestPackageSelection}
               />
@@ -1554,7 +1659,12 @@ function ProvincialApplicationItemsPanel({
                 ['Package Number', selectedPackageNumber || 'None selected'],
                 ['Package Volume (m³)', packageForm.volume || 'Not provided'],
                 ['Total Scale Volume (m³)', packageForm.scaledVolume || 'Not provided'],
-                ['Total Pieces', selectedPackageTotalPieces.toLocaleString()],
+                [
+                  'Total Pieces',
+                  packageScalesUnavailable
+                    ? 'Not available'
+                    : selectedPackageTotalPieces.toLocaleString(),
+                ],
                 ['Average Length (m)', packageForm.averageLength || 'Not provided'],
                 ['Average top diameter (rads)', packageForm.averageDiameter || 'Not provided'],
                 ['Status', optionTextForCode(selectedPackageStatusOptions, packageForm.status)],
@@ -1567,7 +1677,12 @@ function ProvincialApplicationItemsPanel({
                   optionTextForCode(selectedPackageGrowthTypeOptions, packageForm.ageClass),
                 ],
                 ['Reprocessed', packageForm.reprocessed === 'Y' ? 'Yes' : 'No'],
-                ['End Use', packageForm.endUseCode || 'Not provided'],
+                [
+                  'End Use',
+                  packageSpeciesUnavailable
+                    ? 'Not available'
+                    : packageForm.endUseCode || 'Not provided',
+                ],
                 ['Comments', packageForm.comments || 'Not provided'],
               ].map(([label, value]) => (
                 <div key={label} className="detail-field-item">
@@ -1687,24 +1802,23 @@ function ProvincialApplicationItemsPanel({
                       ]}
                       onChange={(value) => setPackageField('reprocessed', value)}
                     />
-                    <TextInput
+                    <SearchableSelect
                       id="applicationItemsPackageEndUse"
                       labelText="End Use"
                       value={packageForm.endUseCode}
-                      disabled={!canSaveSelectedPackage || endUseOptions.length > 0}
-                      onChange={(event) => setPackageField('endUseCode', event.target.value)}
+                      disabled={!canSaveSelectedPackage || endUseAvailability !== 'available'}
+                      placeholder={
+                        endUseAvailability === 'loading'
+                          ? 'Loading end uses'
+                          : speciesDraft.length === 0
+                            ? 'Select species first'
+                            : endUseAvailability === 'available'
+                              ? 'Select end use'
+                              : 'End uses unavailable'
+                      }
+                      options={endUseOptions.map(toSearchableOption)}
+                      onChange={(value) => setPackageField('endUseCode', value)}
                     />
-                    {endUseOptions.length > 0 && (
-                      <SearchableSelect
-                        id="applicationItemsPackageEndUseSelect"
-                        labelText="End Use Options"
-                        value={packageForm.endUseCode}
-                        disabled={!canSaveSelectedPackage}
-                        placeholder="Select end use"
-                        options={endUseOptions.map(toSearchableOption)}
-                        onChange={(value) => setPackageField('endUseCode', value)}
-                      />
-                    )}
                   </div>
                   <TextArea
                     id="applicationItemsPackageComments"
@@ -1779,32 +1893,40 @@ function ProvincialApplicationItemsPanel({
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {selectedSpeciesOptions.map((row) => {
-                        const existing = packageSpeciesRows.find(
-                          (item) => item.species === row.code,
-                        )
-                        return (
-                          <TableRow key={row.code}>
-                            <TableCell>{asOptionText(row)}</TableCell>
-                            <TableCell>
-                              {existing?.endUseDescription || packageForm.endUseCode || '-'}
-                            </TableCell>
-                            {showMutationActions && (
+                      {packageSpeciesUnavailable ? (
+                        <TableRow>
+                          <TableCell colSpan={showMutationActions ? 3 : 2}>
+                            Package species could not be loaded.
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        selectedSpeciesOptions.map((row) => {
+                          const existing = packageSpeciesRows.find(
+                            (item) => item.species === row.code,
+                          )
+                          return (
+                            <TableRow key={row.code}>
+                              <TableCell>{asOptionText(row)}</TableCell>
                               <TableCell>
-                                <Button
-                                  kind="ghost"
-                                  size="sm"
-                                  disabled={!canSaveSelectedPackage}
-                                  onClick={() => onRemoveSpecies(row.code)}
-                                >
-                                  Remove
-                                </Button>
+                                {existing?.endUseDescription || packageForm.endUseCode || '-'}
                               </TableCell>
-                            )}
-                          </TableRow>
-                        )
-                      })}
-                      {speciesDraft.length === 0 && (
+                              {showMutationActions && (
+                                <TableCell>
+                                  <Button
+                                    kind="ghost"
+                                    size="sm"
+                                    disabled={!canSaveSelectedPackage}
+                                    onClick={() => onRemoveSpecies(row.code)}
+                                  >
+                                    Remove
+                                  </Button>
+                                </TableCell>
+                              )}
+                            </TableRow>
+                          )
+                        })
+                      )}
+                      {!packageSpeciesUnavailable && speciesDraft.length === 0 && (
                         <TableRow>
                           <TableCell colSpan={showMutationActions ? 3 : 2}>
                             No species assigned to this package.
@@ -1945,24 +2067,23 @@ function ProvincialApplicationItemsPanel({
                 onBlur={() => markItemFieldTouched('createPackageAgeClass')}
                 onChange={(value) => setCreatePackageField('ageClass', value)}
               />
-              <TextInput
+              <SearchableSelect
                 id="applicationItemsCreatePackageEndUse"
                 labelText="End Use"
                 value={createPackageForm.endUseCode}
-                disabled={!canCreatePackages || createEndUseOptions.length > 0}
-                onChange={(event) => setCreatePackageField('endUseCode', event.target.value)}
+                disabled={!canCreatePackages || createEndUseAvailability !== 'available'}
+                placeholder={
+                  createEndUseAvailability === 'loading'
+                    ? 'Loading end uses'
+                    : createSpeciesDraft.length === 0
+                      ? 'Select species first'
+                      : createEndUseAvailability === 'available'
+                        ? 'Select end use'
+                        : 'End uses unavailable'
+                }
+                options={createEndUseOptions.map(toSearchableOption)}
+                onChange={(value) => setCreatePackageField('endUseCode', value)}
               />
-              {createEndUseOptions.length > 0 && (
-                <SearchableSelect
-                  id="applicationItemsCreatePackageEndUseSelect"
-                  labelText="End Use Options"
-                  value={createPackageForm.endUseCode}
-                  disabled={!canCreatePackages}
-                  placeholder="Select end use"
-                  options={createEndUseOptions.map(toSearchableOption)}
-                  onChange={(value) => setCreatePackageField('endUseCode', value)}
-                />
-              )}
             </div>
             <div className="application-items-inline-form">
               <SearchableSelect
@@ -2193,36 +2314,44 @@ function ProvincialApplicationItemsPanel({
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {scales.map((row) => (
-                    <TableRow key={row.id}>
-                      <TableCell>{row.timberMark}</TableCell>
-                      <TableCell>{displayScaleType(row.cascadeSplitCode)}</TableCell>
-                      <TableCell>{row.pieces.toLocaleString()}</TableCell>
-                      <TableCell>{row.species}</TableCell>
-                      <TableCell>{row.grade}</TableCell>
-                      <TableCell>{row.volume}</TableCell>
-                      {showMutationActions && (
-                        <TableCell>
-                          <Button
-                            type="button"
-                            kind="danger--ghost"
-                            size="sm"
-                            disabled={
-                              !canAddScales ||
-                              !packageDataLoaded ||
-                              deletingScaleId === row.id ||
-                              row.permitted
-                            }
-                            renderIcon={deletingScaleId === row.id ? PendingIcon : TrashCan}
-                            onClick={() => setScalePendingDeletion(row)}
-                          >
-                            {deletingScaleId === row.id ? 'Deleting…' : 'Delete'}
-                          </Button>
-                        </TableCell>
-                      )}
+                  {packageScalesUnavailable ? (
+                    <TableRow>
+                      <TableCell colSpan={showMutationActions ? 7 : 6}>
+                        Package scales could not be loaded.
+                      </TableCell>
                     </TableRow>
-                  ))}
-                  {scales.length === 0 && (
+                  ) : (
+                    scales.map((row) => (
+                      <TableRow key={row.id}>
+                        <TableCell>{row.timberMark}</TableCell>
+                        <TableCell>{displayScaleType(row.cascadeSplitCode)}</TableCell>
+                        <TableCell>{row.pieces.toLocaleString()}</TableCell>
+                        <TableCell>{row.species}</TableCell>
+                        <TableCell>{row.grade}</TableCell>
+                        <TableCell>{row.volume}</TableCell>
+                        {showMutationActions && (
+                          <TableCell>
+                            <Button
+                              type="button"
+                              kind="danger--ghost"
+                              size="sm"
+                              disabled={
+                                !canAddScales ||
+                                !packageDataLoaded ||
+                                deletingScaleId === row.id ||
+                                row.permitted
+                              }
+                              renderIcon={deletingScaleId === row.id ? PendingIcon : TrashCan}
+                              onClick={() => setScalePendingDeletion(row)}
+                            >
+                              {deletingScaleId === row.id ? 'Deleting…' : 'Delete'}
+                            </Button>
+                          </TableCell>
+                        )}
+                      </TableRow>
+                    ))
+                  )}
+                  {!packageScalesUnavailable && scales.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={showMutationActions ? 7 : 6}>
                         No scales assigned to this package.

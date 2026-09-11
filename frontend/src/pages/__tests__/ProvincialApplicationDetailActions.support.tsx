@@ -712,6 +712,7 @@ export {
   mockedFetchApplicationClientData,
   mockedFetchApplicationClientLocations,
   mockedFetchApplicationDocuments,
+  mockedFetchApplicationEndUsesForSpeciesRegion,
   mockedFetchApplicationGradeCodes,
   mockedFetchApplicationPackageDetails,
   mockedFetchApplicationPackageScales,

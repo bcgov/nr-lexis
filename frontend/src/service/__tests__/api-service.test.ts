@@ -1269,6 +1269,162 @@ describe('api-service cached GET support', () => {
     window.history.replaceState({}, '', previousPath)
   })
 
+  it.each([181, 182])(
+    'coalesces only matching root fields with summary term %s',
+    async (summaryTerm) => {
+      const previousPath = window.location.pathname
+      window.history.replaceState({}, '', '/provincial/application/999000001')
+      const original = {
+        applicationNumber: 999000001,
+        termDays: 180,
+        review: { termDays: 30 },
+      }
+      const latestPrimary = {
+        applicationNumber: 999000001,
+        termDays: 181,
+        review: { termDays: 31 },
+      }
+      const latestSummary = {
+        applicationNumber: 999000001,
+        termDays: summaryTerm,
+        review: { termDays: 32 },
+      }
+      apiService.registerRecordVersion(
+        'application',
+        '999000001',
+        {
+          headers: { [RECORD_VERSION_HEADER]: 'version-1' },
+          data: original,
+        } as unknown as AxiosResponse<unknown>,
+        '/lexis/applications/999000001',
+      )
+      apiService.registerRecordVersion(
+        'application',
+        '999000001',
+        {
+          headers: {},
+          data: original,
+        } as unknown as AxiosResponse<unknown>,
+        '/lexis/rpc/application-details/application-summary',
+        { params: { applicationNumber: '999000001' } },
+      )
+      getMock.mockImplementation((url: string) =>
+        Promise.resolve({
+          ...buildResponse(url === '/lexis/applications/999000001' ? latestPrimary : latestSummary),
+          headers: { [RECORD_VERSION_HEADER]: 'version-2' },
+          config: { url },
+        }),
+      )
+      let receivedProblem: OptimisticConflictEvent['detail']['problem'] | undefined
+      const conflictListener = (event: Event) => {
+        const conflictEvent = event as OptimisticConflictEvent
+        event.preventDefault()
+        receivedProblem = conflictEvent.detail.problem
+      }
+      window.addEventListener(OPTIMISTIC_CONFLICT_EVENT, conflictListener)
+
+      void registeredResponseRejectedInterceptor()({
+        config: {
+          method: 'put',
+          url: '/lexis/rpc/application-details/application-summary',
+          data: 'applicationNumber=999000001',
+        },
+        response: {
+          status: 409,
+          data: { code: 'STALE_RECORD' },
+        },
+      })
+
+      await vi.waitFor(() => expect(receivedProblem).toBeDefined())
+
+      expect(receivedProblem?.changedFields).toEqual([
+        { field: 'termDays', currentValue: 181 },
+        { field: 'review.termDays', currentValue: 31 },
+        ...(summaryTerm === 181 ? [] : [{ field: 'termDays', currentValue: summaryTerm }]),
+        { field: 'review.termDays', currentValue: 32 },
+      ])
+
+      window.removeEventListener(OPTIMISTIC_CONFLICT_EVENT, conflictListener)
+      window.history.replaceState({}, '', previousPath)
+    },
+  )
+
+  it('keeps equal fields from application package contexts separate', async () => {
+    const previousPath = window.location.pathname
+    window.history.replaceState({}, '', '/provincial/application/999000001')
+    apiService.registerRecordVersion(
+      'application',
+      '999000001',
+      {
+        headers: { [RECORD_VERSION_HEADER]: 'version-1' },
+        data: { applicationNumber: 999000001, termDays: 180 },
+      } as unknown as AxiosResponse<unknown>,
+      '/lexis/applications/999000001',
+    )
+    apiService.registerRecordVersion(
+      'application',
+      '999000001',
+      {
+        headers: {},
+        data: { applicationNumber: 999000001, packageNumber: 'A', status: 'NEW' },
+      } as unknown as AxiosResponse<unknown>,
+      '/lexis/rpc/application-details/package-details',
+      { params: { packageNumber: 'A' } },
+    )
+    apiService.registerRecordVersion(
+      'application',
+      '999000001',
+      {
+        headers: {},
+        data: { applicationNumber: 999000001, packageNumber: 'B', status: 'NEW' },
+      } as unknown as AxiosResponse<unknown>,
+      '/lexis/rpc/application-details/package-details',
+      { params: { packageNumber: 'B' } },
+    )
+    getMock.mockImplementation((url: string, config?: AxiosRequestConfig) =>
+      Promise.resolve(
+        buildResponse(
+          url === '/lexis/applications/999000001'
+            ? { applicationNumber: 999000001, termDays: 180 }
+            : {
+                applicationNumber: 999000001,
+                packageNumber: config?.params?.packageNumber,
+                status: 'ACT',
+              },
+        ),
+      ),
+    )
+    let receivedProblem: OptimisticConflictEvent['detail']['problem'] | undefined
+    const conflictListener = (event: Event) => {
+      const conflictEvent = event as OptimisticConflictEvent
+      event.preventDefault()
+      receivedProblem = conflictEvent.detail.problem
+    }
+    window.addEventListener(OPTIMISTIC_CONFLICT_EVENT, conflictListener)
+
+    void registeredResponseRejectedInterceptor()({
+      config: {
+        method: 'post',
+        url: '/lexis/rpc/application-details/package/update',
+        data: 'applicationNumber=999000001',
+      },
+      response: {
+        status: 409,
+        data: { code: 'STALE_RECORD' },
+      },
+    })
+
+    await vi.waitFor(() => expect(receivedProblem).toBeDefined())
+
+    expect(receivedProblem?.changedFields).toEqual([
+      { field: 'status', currentValue: 'ACT' },
+      { field: 'status', currentValue: 'ACT' },
+    ])
+
+    window.removeEventListener(OPTIMISTIC_CONFLICT_EVENT, conflictListener)
+    window.history.replaceState({}, '', previousPath)
+  })
+
   it('falls back to the server conflict when detail enrichment exceeds its deadline', async () => {
     vi.useFakeTimers()
     const previousPath = window.location.pathname

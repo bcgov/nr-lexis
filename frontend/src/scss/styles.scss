@@ -1769,6 +1769,13 @@ $notification-types: 'error', 'info', 'success', 'warning';
   overflow: visible;
 }
 
+@media (max-width: 671px) {
+  .provincial-exemption-create-page .application-detail-tab-panel {
+    // The nested tile already supplies the phone-width form inset.
+    padding-inline: 0;
+  }
+}
+
 .create-form-tile .cds--label {
   margin-block-end: 0.25rem;
   color: var(--csp-text-primary);

@@ -158,10 +158,9 @@ class ApplicationEditPolicyServiceTest {
     assertThat(policy.canUpdatePackageNumber()).isFalse();
   }
 
-  @ParameterizedTest
-  @ValueSource(strings = {"LEXIS_READ_ONLY", "LEXIS_EXEMPTION_APPROVER"})
-  void restrictiveRolesCannotUseInteriorMinisterialItemOverride(String restrictiveRole) {
-    allowRoles("LEXIS_APPLICATION_APPROVER", restrictiveRole);
+  @Test
+  void exemptionApproverCannotUseInteriorMinisterialItemOverride() {
+    allowRoles("LEXIS_APPLICATION_APPROVER", "LEXIS_EXEMPTION_APPROVER");
     context("PMT", TODAY.minusDays(30), true, true, true, true);
 
     ApplicationEditPolicy policy =
@@ -280,12 +279,45 @@ class ApplicationEditPolicyServiceTest {
 
     assertThat(policy.anyEditable()).isFalse();
     assertThat(policy.exemptionApprover()).isTrue();
-    assertThat(policy.readOnly()).isTrue();
+    assertThat(policy.readOnly()).isFalse();
   }
 
   @Test
-  void readOnlyIsAbsoluteDenyWhenCombinedWithApplicationApprover() {
+  void applicationApproverAndReadOnlyRetainApplicationEditPolicy() {
     allowRoles("LEXIS_READ_ONLY", "LEXIS_APPLICATION_APPROVER");
+    context("NEW", TODAY.plusDays(1), false, false, false);
+
+    ApplicationEditPolicy policy =
+        policyService.resolve(authentication, applicationService, APPLICATION_NUMBER);
+
+    assertThat(policy.canEditApplicationDetails()).isTrue();
+    assertThat(policy.canEditPackages()).isTrue();
+    assertThat(policy.canAddPackages()).isTrue();
+    assertThat(policy.canAddScales()).isTrue();
+    assertThat(policy.canUpdatePackageNumber()).isTrue();
+    assertThat(policy.readOnly()).isFalse();
+  }
+
+  @Test
+  void provincialSubmitterAndReadOnlyRetainIndustryApplicationEditPolicy() {
+    allowRoles("LEXIS_PROVINCIAL_SUBMITTER_00012345", "LEXIS_READ_ONLY");
+    context("NEW", TODAY.plusDays(1), false, false, false);
+
+    ApplicationEditPolicy policy =
+        policyService.resolve(authentication, applicationService, APPLICATION_NUMBER);
+
+    assertThat(policy.canEditApplicationDetails()).isTrue();
+    assertThat(policy.canEditPackages()).isTrue();
+    assertThat(policy.canAddPackages()).isTrue();
+    assertThat(policy.canAddScales()).isTrue();
+    assertThat(policy.canUpdatePackageNumber()).isTrue();
+    assertThat(policy.industryUser()).isTrue();
+    assertThat(policy.readOnly()).isFalse();
+  }
+
+  @Test
+  void pureReadOnlyRoleCannotEditApplications() {
+    allowRoles("LEXIS_READ_ONLY");
     context("NEW", TODAY.plusDays(1), false, false, false);
 
     ApplicationEditPolicy policy =
@@ -293,6 +325,18 @@ class ApplicationEditPolicyServiceTest {
 
     assertThat(policy.anyEditable()).isFalse();
     assertThat(policy.readOnly()).isTrue();
+  }
+
+  @Test
+  void mixedReadOnlyRolesStillRequireCreateApplicationAction() {
+    List<String> roles = List.of("LEXIS_APPLICATION_APPROVER", "LEXIS_READ_ONLY");
+    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(roles);
+    context("NEW", TODAY.plusDays(1), false, false, false);
+
+    ApplicationEditPolicy policy =
+        policyService.resolve(authentication, applicationService, APPLICATION_NUMBER);
+
+    assertThat(policy.anyEditable()).isFalse();
   }
 
   @Test

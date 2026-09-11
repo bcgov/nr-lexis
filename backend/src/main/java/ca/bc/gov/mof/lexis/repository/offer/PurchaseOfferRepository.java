@@ -103,7 +103,7 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
             new PurchaseOfferSearchResultDto(
                 getLong(rs, "EXPORT_PURCHASE_OFFER_NUMBER"),
                 getLong(rs, "APPLICATION_NUMBER"),
-                getString(rs, "PACKAGE_NUMBER"),
+                getRawString(rs, "PACKAGE_NUMBER"),
                 getLocalDate(rs, "ADVERTISING_DATE"),
                 firstNonNull(getString(rs, "REGION"), getString(rs, "ORG_UNIT_CODE")),
                 getLocalDate(rs, "OFFER_WITHDRAWAL_DATE")));
@@ -178,7 +178,7 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
             new PurchaseOfferDetailDto(
                 getLong(rs, "EXPORT_PURCHASE_OFFER_NUMBER"),
                 getLong(rs, "APPLICATION_NUMBER"),
-                getString(rs, "PACKAGE_NUMBER"),
+                getRawString(rs, "PACKAGE_NUMBER"),
                 null,
                 null,
                 getString(rs, "COMPANY_NAME"),
@@ -261,17 +261,17 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
   }
 
   public Optional<PackageReferenceRow> findPackageReference(String packageNumber) {
-    String normalized = trim(packageNumber);
-    if (normalized == null) {
+    String persistedPackageNumber = preservePackageNumber(packageNumber);
+    if (persistedPackageNumber == null) {
       return Optional.empty();
     }
     return queryCursorSingleRequired(
         FIND_PACKAGE_BY_NUMBER,
-        cs -> cs.setString(1, normalized),
+        cs -> cs.setString(1, persistedPackageNumber),
         2,
         rs ->
             new PackageReferenceRow(
-                getString(rs, "PACKAGE_NUMBER"),
+                getRawString(rs, "PACKAGE_NUMBER"),
                 getLong(rs, "APPLICATION_NUMBER"),
                 getDouble(rs, "PACKAGE_VOLUME")));
   }
@@ -300,7 +300,7 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
   private void bindPurchaseOfferInsert(CallableStatement cs, PurchaseOfferInsertRecord record)
       throws SQLException {
     int index = 1;
-    setStringOrNull(cs, index++, record.packageNumber());
+    setPackageNumberOrNull(cs, index++, record.packageNumber());
     setStringOrNull(cs, index++, record.companyName());
     setStringOrNull(cs, index++, record.contactName());
     setDoubleOrNull(cs, index++, record.purchaseOfferAmount());
@@ -333,7 +333,7 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
     return new PurchaseOfferUpdateSourceRow(
         getLong(rs, "EXPORT_PURCHASE_OFFER_NUMBER"),
         getLong(rs, "APPLICATION_NUMBER"),
-        getString(rs, "PACKAGE_NUMBER"),
+        getRawString(rs, "PACKAGE_NUMBER"),
         getString(rs, "COMPANY_NAME"),
         getString(rs, "CONTACT_NAME"),
         getDouble(rs, "PURCHASE_OFFER_AMOUNT"),
@@ -358,7 +358,7 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
       throws SQLException {
     int index = 1;
     setLongOrNull(cs, index++, record.exportPurchaseOfferNumber());
-    setStringOrNull(cs, index++, record.packageNumber());
+    setPackageNumberOrNull(cs, index++, record.packageNumber());
     setStringOrNull(cs, index++, record.companyName());
     setStringOrNull(cs, index++, record.contactName());
     setDoubleOrNull(cs, index++, record.purchaseOfferAmount());
@@ -493,6 +493,20 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
     } else {
       cs.setString(index, normalized);
     }
+  }
+
+  private void setPackageNumberOrNull(CallableStatement cs, int index, String value)
+      throws SQLException {
+    String persistedPackageNumber = preservePackageNumber(value);
+    if (persistedPackageNumber == null) {
+      cs.setNull(index, Types.VARCHAR);
+    } else {
+      cs.setString(index, persistedPackageNumber);
+    }
+  }
+
+  private String preservePackageNumber(String value) {
+    return value == null || value.isBlank() ? null : value;
   }
 
   private void setStringOrDefault(CallableStatement cs, int index, String value, String fallback)

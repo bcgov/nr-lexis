@@ -306,10 +306,11 @@ class PurchaseOfferRepositoryTest {
   @Test
   void insertShouldBindBlankManufacturingFacilityDefaultWhenInputIsBlank() throws Exception {
     TestPurchaseOfferRepository repository = new TestPurchaseOfferRepository();
+    String paddedPackageNumber = "PKG-EXISTING  ";
 
     repository.insertOffer(
         new PurchaseOfferRepository.PurchaseOfferInsertRecord(
-            null,
+            paddedPackageNumber,
             "Example Lumber",
             "Sample Contact",
             12500.25d,
@@ -331,6 +332,7 @@ class PurchaseOfferRepositoryTest {
             1000456L,
             99.9d));
 
+    verify(repository.callableStatement()).setString(1, paddedPackageNumber);
     verify(repository.callableStatement()).setString(14, " ");
     verify(repository.callableStatement(), never()).setNull(14, java.sql.Types.VARCHAR);
   }
@@ -338,11 +340,12 @@ class PurchaseOfferRepositoryTest {
   @Test
   void updateShouldBindBlankManufacturingFacilityDefaultWhenInputIsMissing() throws Exception {
     TestPurchaseOfferRepository repository = new TestPurchaseOfferRepository();
+    String paddedPackageNumber = "PKG-EXISTING  ";
 
     repository.updateOffer(
         new PurchaseOfferRepository.PurchaseOfferUpdateRecord(
             81001L,
-            null,
+            paddedPackageNumber,
             "Example Lumber",
             "Sample Contact",
             12500.25d,
@@ -363,6 +366,7 @@ class PurchaseOfferRepositoryTest {
             "idir\\jsmith",
             99.9d));
 
+    verify(repository.callableStatement()).setString(2, paddedPackageNumber);
     verify(repository.callableStatement()).setString(15, " ");
     verify(repository.callableStatement(), never()).setNull(15, java.sql.Types.VARCHAR);
   }
@@ -431,6 +435,16 @@ class PurchaseOfferRepositoryTest {
               assertThat(application.jurisdictionCode()).isEqualTo("P");
               assertThat(application.applicationVolume()).isEqualTo(95.5d);
             });
+  }
+
+  @Test
+  void packageReferenceLookupShouldBindOpaquePackageNumberWithoutTrimming() throws Exception {
+    TestPurchaseOfferRepository repository = new TestPurchaseOfferRepository();
+    String paddedPackageNumber = "PKG-EXISTING  ";
+
+    assertThat(repository.findPackageReference(paddedPackageNumber)).isEmpty();
+
+    verify(repository.callableStatement()).setString(1, paddedPackageNumber);
   }
 
   @Test

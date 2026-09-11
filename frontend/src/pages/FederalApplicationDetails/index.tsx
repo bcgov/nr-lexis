@@ -1701,14 +1701,6 @@ const FederalApplicationDetailsPage = () => {
                               </h2>
                             </div>
                             <div className="federal-shipping-details__form">
-                              {detail.federalPermit && (
-                                <TextInput
-                                  id="federalPermitNumber"
-                                  labelText="Permit number"
-                                  value={String(permitForm.permitNumber ?? '')}
-                                  readOnly
-                                />
-                              )}
                               <IsoDatePicker
                                 id="federalPermitIssueDate"
                                 labelText={requiredLabel('Permit issue date')}
@@ -1938,10 +1930,6 @@ const FederalApplicationDetailsPage = () => {
                                       },
                                     ]
                                   : []),
-                                {
-                                  label: 'Permit number',
-                                  value: displayValue(detail.federalPermit?.permitNumber),
-                                },
                               ].map((field) => (
                                 <div key={field.label} className="detail-field-item">
                                   <dt className="detail-field-label">{field.label}</dt>

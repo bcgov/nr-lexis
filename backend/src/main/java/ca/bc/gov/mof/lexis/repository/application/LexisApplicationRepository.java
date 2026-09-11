@@ -452,18 +452,18 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
   }
 
   public Optional<LexisPackageLookupDto> findPackageByPackageNumber(String packageNumber) {
-    String normalized = trim(packageNumber);
-    if (normalized == null) {
+    String persistedPackageNumber = preservePackageNumber(packageNumber);
+    if (persistedPackageNumber == null) {
       return Optional.empty();
     }
 
     return queryCursorSingle(
         FIND_PACKAGE_BY_NUMBER,
-        cs -> cs.setString(1, normalized),
+        cs -> cs.setString(1, persistedPackageNumber),
         2,
         rs ->
             new LexisPackageLookupDto(
-                getString(rs, "PACKAGE_NUMBER"),
+                getRawString(rs, "PACKAGE_NUMBER"),
                 getLong(rs, "APPLICATION_NUMBER"),
                 coalesce(getDouble(rs, "PACKAGE_VOLUME"), 0.0d),
                 getString(rs, "EXPORT_GROWTH_TYPE_CODE")));
@@ -643,7 +643,7 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
         cs -> cs.setString(1, applicationNumber.toString()),
         2,
         rs -> {
-          String packageNumber = getString(rs, "PACKAGE_NUMBER");
+          String packageNumber = getRawString(rs, "PACKAGE_NUMBER");
           Double volume = getDouble(rs, "PACKAGE_VOLUME");
           long pieceCount = pieceCountByPackage.getOrDefault(packageNumber, 0L);
           return new LexisApplicationDetailDto.LexisPackageDto(
@@ -657,13 +657,19 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
     return String.join(", ", java.util.Collections.nCopies(count, "?"));
   }
 
+  private String preservePackageNumber(String value) {
+    return value == null || value.isBlank() ? null : value;
+  }
+
   private Map<String, Long> loadPieceCountByPackage(Long applicationNumber) {
     List<PieceCountSnapshot> rows =
         queryCursorProcedureFailClosed(
-            FIND_SCALE_DETAIL_BY_APPLICATION,
-            cs -> cs.setString(1, applicationNumber.toString()),
-            2,
-            rs -> new PieceCountSnapshot(getString(rs, "PACKAGE_NUMBER"), getLong(rs, "PIECES_COUNT")));
+        FIND_SCALE_DETAIL_BY_APPLICATION,
+        cs -> cs.setString(1, applicationNumber.toString()),
+        2,
+        rs ->
+            new PieceCountSnapshot(
+                getRawString(rs, "PACKAGE_NUMBER"), getLong(rs, "PIECES_COUNT")));
 
     Map<String, Long> pieceCountByPackage = new HashMap<>();
     for (PieceCountSnapshot row : rows) {

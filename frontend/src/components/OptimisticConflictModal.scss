@@ -1,3 +1,8 @@
+.cds--modal.lexis-optimistic-conflict-modal {
+  // Recovery must appear above Carbon forms (9000) and their nested dialogs (9001).
+  z-index: 9002;
+}
+
 .lexis-optimistic-conflict-modal .cds--modal-container {
   border-radius: 0.5rem;
 }

@@ -935,6 +935,7 @@ describe('Admin upload workflow smoke', () => {
         ownerClientLocationCode: '03',
         ownerContactName: 'CUSTOMER SERVICE',
         jurisdictionCode: 'P',
+        federalApplicationNumber: null,
         orgUnitNumber: 1909,
         sourceApplicationStatusCode: 'SUB',
         exemptionReasonCode: 'U',
@@ -1039,6 +1040,9 @@ describe('Admin upload workflow smoke', () => {
     ).toBeInTheDocument()
     expect(within(applicationDetailsTable).getByText('1074-03')).toBeInTheDocument()
     expect(within(applicationDetailsTable).getByText('CUSTOMER SERVICE')).toBeInTheDocument()
+    expect(
+      within(applicationDetailsTable).getByRole('row', { name: 'Federal application —' }),
+    ).toBeInTheDocument()
     expect(
       within(applicationDetailsTable).getByRole('rowheader', { name: 'Source status' }),
     ).toBeInTheDocument()

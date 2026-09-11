@@ -1765,6 +1765,46 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(exemptionForm).toHaveCSS('overflow', 'visible')
   })
 
+  test('keeps exemption date values readable at phone widths', async ({ page }) => {
+    await page.route('**/api/lexis/exemptions/search/options', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          exemptionTypes: [{ code: 'M', name: 'Ministerial' }],
+          exemptionStatuses: [{ code: 'NEW', name: 'New' }],
+          regions: [{ code: '1903', name: 'Cariboo' }],
+        }),
+      })
+    })
+    await gotoSyntheticRoute(page, '/provincial/exemption/create')
+    await page.getByRole('tab', { name: 'Exemption details', exact: true }).click()
+    await expect(page.getByRole('combobox', { name: 'Exemption type', exact: true })).toBeEnabled()
+    const expiry = page.getByRole('textbox', { name: 'Expiry date (YYYY-MM-DD)', exact: true })
+    await expiry.fill('2026-10-01')
+    await expiry.press('Escape')
+    await expect(expiry).toHaveValue('2026-10-01')
+
+    for (const width of [390, 320]) {
+      await page.setViewportSize({ width, height: 844 })
+      const bounds = await expiry.evaluate((element: HTMLInputElement) => {
+        const style = getComputedStyle(element)
+        const context = document.createElement('canvas').getContext('2d')!
+        context.font = style.font
+        return {
+          available:
+            element.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight),
+          text: context.measureText(element.value).width,
+          right: element.getBoundingClientRect().right,
+          pageWidth: document.documentElement.scrollWidth,
+        }
+      })
+      expect(bounds.available).toBeGreaterThanOrEqual(bounds.text)
+      expect(bounds.right).toBeLessThanOrEqual(width)
+      expect(bounds.pageWidth).toBeLessThanOrEqual(width)
+    }
+  })
+
   test('keeps an impossible typed date visible for correction after blur', async ({ page }) => {
     await gotoSyntheticRoute(page, '/provincial/offers/create', {
       waitUntil: 'domcontentloaded',

@@ -725,7 +725,7 @@ export const addBlanketOicScale = async (
     '/lexis/rpc/permit-details/add-boic-scale',
     toUrlEncodedParams({
       permitNumber: request.permitNumber.trim(),
-      packageNumber: request.packageNumber.trim(),
+      packageNumber: request.packageNumber,
       timberMark: request.timberMark.trim(),
       scaleVolume: request.scaleVolume.trim(),
       scalePieces: request.scalePieces.trim(),
@@ -804,11 +804,18 @@ const normalizeBlanketOicPackageResult = (payload: unknown): BlanketOicPackageMu
 const saveBlanketOicPackage = async (
   path: string,
   request: BlanketOicPackageMutationRequest,
+  packageNumber: string,
 ): Promise<BlanketOicPackageMutationResult> => {
+  const newPackageNumber =
+    request.newPackageNumber === undefined
+      ? null
+      : request.newPackageNumber === request.packageNumber
+        ? request.newPackageNumber
+        : request.newPackageNumber.trim() || null
   const response = await apiService.getAxiosInstance().post<unknown>(path, {
     permitNumber: Number(request.permitNumber),
-    packageNumber: request.packageNumber.trim(),
-    newPackageNumber: request.newPackageNumber?.trim() || null,
+    packageNumber,
+    newPackageNumber,
     volume: Number(request.volume),
     averageLength: Number(request.averageLength),
     averageDiameter: Number(request.averageDiameter),
@@ -826,13 +833,21 @@ const saveBlanketOicPackage = async (
 export const addBlanketOicPackage = async (
   request: BlanketOicPackageMutationRequest,
 ): Promise<BlanketOicPackageMutationResult> => {
-  return saveBlanketOicPackage('/lexis/rpc/permit-details/boic-package', request)
+  return saveBlanketOicPackage(
+    '/lexis/rpc/permit-details/boic-package',
+    request,
+    request.packageNumber.trim(),
+  )
 }
 
 export const updateBlanketOicPackage = async (
   request: BlanketOicPackageMutationRequest,
 ): Promise<BlanketOicPackageMutationResult> => {
-  return saveBlanketOicPackage('/lexis/rpc/permit-details/boic-package/update', request)
+  return saveBlanketOicPackage(
+    '/lexis/rpc/permit-details/boic-package/update',
+    request,
+    request.packageNumber,
+  )
 }
 
 export const deleteBlanketOicPackage = async (
@@ -843,7 +858,7 @@ export const deleteBlanketOicPackage = async (
     .getAxiosInstance()
     .post<unknown>('/lexis/rpc/permit-details/boic-package/delete', {
       permitNumber: Number(permitNumber),
-      packageNumber: packageNumber.trim(),
+      packageNumber,
     })
   return normalizeBlanketOicPackageResult(response.data)
 }
@@ -851,13 +866,12 @@ export const deleteBlanketOicPackage = async (
 export const fetchBlanketOicPackageEditContext = async (
   packageNumber: string,
 ): Promise<BlanketOicPackageEditContext> => {
-  const normalizedPackageNumber = packageNumber.trim()
   const [detailsResponse, speciesResponse] = await Promise.all([
     apiService.getCachedResponse<unknown>('/lexis/rpc/application-details/package-details', {
-      params: { packageNumber: normalizedPackageNumber },
+      params: { packageNumber },
     }),
     apiService.getCachedResponse<unknown>('/lexis/rpc/application-details/species-for-package', {
-      params: { packageNumber: normalizedPackageNumber },
+      params: { packageNumber },
     }),
   ])
   const details = detailsResponse.data
@@ -866,8 +880,7 @@ export const fetchBlanketOicPackageEditContext = async (
     detailsResponse.status !== 200 ||
     !isRecord(details) ||
     details.success !== true ||
-    asString(details.packageNumber).trim().toUpperCase() !==
-      normalizedPackageNumber.toUpperCase() ||
+    asString(details.packageNumber) !== packageNumber ||
     speciesResponse.status !== 200 ||
     speciesRows === null ||
     !speciesRows.every(
@@ -882,7 +895,7 @@ export const fetchBlanketOicPackageEditContext = async (
 
   const normalizedSpeciesRows = speciesRows.map(recordOrEmpty)
   return {
-    packageNumber: normalizedPackageNumber,
+    packageNumber,
     volume: asString(details.volume),
     averageLength: asString(details.length || details.averageLength),
     averageDiameter: asString(details.diameter || details.averageDiameter),

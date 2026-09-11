@@ -10,3 +10,20 @@ export const formatPermitNumber = (
     ? `${number} (Pending)`
     : number
 }
+
+export const formatPermitStatus = (
+  statusCode: string | null | undefined,
+  statusDescription?: string | null | undefined,
+): string => {
+  const code = statusCode?.trim() ?? ''
+  const description = statusDescription?.trim() ?? ''
+  const normalizedCode = code.toUpperCase()
+  const normalizedDescription = description.toUpperCase()
+  const isPaymentPending =
+    normalizedCode === 'PPD' ||
+    normalizedCode === 'PAYMENT PENDING' ||
+    normalizedDescription === 'PPD' ||
+    normalizedDescription === 'PAYMENT PENDING'
+
+  return isPaymentPending ? 'Payment Pending' : description || code
+}

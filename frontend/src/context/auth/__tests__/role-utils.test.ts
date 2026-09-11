@@ -3,6 +3,7 @@ import {
   hasProvincialStaffRole,
   hasProvincialSubmitterRole,
   hasRole,
+  isPureReadOnlyRole,
 } from '@/context/auth/role-utils'
 
 describe('auth role utilities', () => {
@@ -19,6 +20,16 @@ describe('auth role utilities', () => {
     expect(hasProvincialSubmitterRole(['PROVINCIAL_SUBMITTER_00012345'])).toBe(true)
     expect(hasProvincialSubmitterRole(['LEXIS_PROVINCIAL_SUBMITTER_00012345'])).toBe(true)
     expect(hasProvincialSubmitterRole(['LEXIS_INDUSTRY_00012345'])).toBe(false)
+  })
+
+  it('treats read-only as a sole-role restriction', () => {
+    expect(isPureReadOnlyRole(['READ_ONLY'])).toBe(true)
+    expect(isPureReadOnlyRole(['LEXIS_READ_ONLY'])).toBe(true)
+    expect(isPureReadOnlyRole(['READ_ONLY', 'APPLICATION_APPROVER'])).toBe(false)
+    expect(isPureReadOnlyRole(['LEXIS_READ_ONLY', 'LEXIS_PROVINCIAL_SUBMITTER_00012345'])).toBe(
+      false,
+    )
+    expect(isPureReadOnlyRole(['LEXIS_ADMIN', 'LEXIS_READ_ONLY'])).toBe(false)
   })
 
   it('limits region preferences to provincial staff roles', () => {

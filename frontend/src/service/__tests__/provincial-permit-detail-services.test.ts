@@ -1459,7 +1459,7 @@ describe('provincial permit detail services', () => {
     })
   })
 
-  it('posts Blanket OIC scale adds as a legacy form request', async () => {
+  it('preserves the selected Blanket OIC package key when posting a scale add', async () => {
     postMock.mockResolvedValue(
       response({
         success: true,
@@ -1469,7 +1469,7 @@ describe('provincial permit detail services', () => {
 
     const result = await addBlanketOicScale({
       permitNumber: ' 777 ',
-      packageNumber: ' PKG-9 ',
+      packageNumber: 'PKG-9 ',
       timberMark: ' TM-1 ',
       scaleVolume: ' 10.5 ',
       scalePieces: ' 12 ',
@@ -1482,7 +1482,7 @@ describe('provincial permit detail services', () => {
     expect(path).toBe('/lexis/rpc/permit-details/add-boic-scale')
     expect(body).toBeInstanceOf(URLSearchParams)
     expect(body.get('permitNumber')).toBe('777')
-    expect(body.get('packageNumber')).toBe('PKG-9')
+    expect(body.get('packageNumber')).toBe('PKG-9 ')
     expect(body.get('timberMark')).toBe('TM-1')
     expect(body.get('scaleVolume')).toBe('10.5')
     expect(body.get('scalePieces')).toBe('12')
@@ -1533,7 +1533,7 @@ describe('provincial permit detail services', () => {
     })
   })
 
-  it('posts Blanket OIC package creates and updates as atomic JSON requests', async () => {
+  it('normalizes a new Blanket OIC package key but preserves exact existing update keys', async () => {
     postMock.mockResolvedValue(
       response({
         success: true,
@@ -1544,10 +1544,9 @@ describe('provincial permit detail services', () => {
         warnings: [],
       }),
     )
-    const request = {
+    const createRequest = {
       permitNumber: ' 777 ',
-      packageNumber: ' PKG-OLD ',
-      newPackageNumber: ' PKG-NEW ',
+      packageNumber: ' PKG-CREATED ',
       volume: '100.0',
       averageLength: '10.0',
       averageDiameter: '20.0',
@@ -1559,14 +1558,25 @@ describe('provincial permit detail services', () => {
       endUseCode: ' LU ',
       speciesCodes: [' FI ', 'HE'],
     }
+    const updateRequest = {
+      ...createRequest,
+      packageNumber: 'PKG-OLD ',
+      newPackageNumber: ' PKG-NEW ',
+    }
+    const unchangedUpdateRequest = {
+      ...createRequest,
+      packageNumber: 'PKG-OLD ',
+      newPackageNumber: 'PKG-OLD ',
+    }
 
-    const createResult = await addBlanketOicPackage(request)
-    const updateResult = await updateBlanketOicPackage(request)
+    const createResult = await addBlanketOicPackage(createRequest)
+    const updateResult = await updateBlanketOicPackage(updateRequest)
+    const unchangedUpdateResult = await updateBlanketOicPackage(unchangedUpdateRequest)
 
     expect(postMock).toHaveBeenNthCalledWith(1, '/lexis/rpc/permit-details/boic-package', {
       permitNumber: 777,
-      packageNumber: 'PKG-OLD',
-      newPackageNumber: 'PKG-NEW',
+      packageNumber: 'PKG-CREATED',
+      newPackageNumber: null,
       volume: 100,
       averageLength: 10,
       averageDiameter: 20,
@@ -1581,10 +1591,16 @@ describe('provincial permit detail services', () => {
     expect(postMock).toHaveBeenNthCalledWith(
       2,
       '/lexis/rpc/permit-details/boic-package/update',
-      expect.objectContaining({ packageNumber: 'PKG-OLD', newPackageNumber: 'PKG-NEW' }),
+      expect.objectContaining({ packageNumber: 'PKG-OLD ', newPackageNumber: 'PKG-NEW' }),
+    )
+    expect(postMock).toHaveBeenNthCalledWith(
+      3,
+      '/lexis/rpc/permit-details/boic-package/update',
+      expect.objectContaining({ packageNumber: 'PKG-OLD ', newPackageNumber: 'PKG-OLD ' }),
     )
     expect(createResult.applicationNumber).toBe('1000456')
     expect(updateResult.packageNumber).toBe('PKG-NEW')
+    expect(unchangedUpdateResult.packageNumber).toBe('PKG-NEW')
   })
 
   it('posts Blanket OIC package deletes with the parent permit', async () => {
@@ -1597,11 +1613,11 @@ describe('provincial permit detail services', () => {
       }),
     )
 
-    const result = await deleteBlanketOicPackage(' 777 ', ' PKG-1 ')
+    const result = await deleteBlanketOicPackage(' 777 ', 'PKG-1 ')
 
     expect(postMock).toHaveBeenCalledWith('/lexis/rpc/permit-details/boic-package/delete', {
       permitNumber: 777,
-      packageNumber: 'PKG-1',
+      packageNumber: 'PKG-1 ',
     })
     expect(result.success).toBe(true)
     expect(result.packageNumber).toBe('PKG-1')
@@ -1612,7 +1628,7 @@ describe('provincial permit detail services', () => {
       .mockResolvedValueOnce(
         response({
           success: true,
-          packageNumber: 'PKG-1',
+          packageNumber: 'PKG-1 ',
           volume: '100.0',
           length: '10.0',
           diameter: '20.0',
@@ -1630,10 +1646,10 @@ describe('provincial permit detail services', () => {
         ]),
       )
 
-    const result = await fetchBlanketOicPackageEditContext(' PKG-1 ')
+    const result = await fetchBlanketOicPackageEditContext('PKG-1 ')
 
     expect(result).toEqual({
-      packageNumber: 'PKG-1',
+      packageNumber: 'PKG-1 ',
       volume: '100.0',
       averageLength: '10.0',
       averageDiameter: '20.0',
@@ -1645,6 +1661,34 @@ describe('provincial permit detail services', () => {
       endUseCode: 'LU',
       speciesCodes: ['FI', 'HE'],
     })
+    expect(getCachedResponseMock).toHaveBeenNthCalledWith(
+      1,
+      '/lexis/rpc/application-details/package-details',
+      { params: { packageNumber: 'PKG-1 ' } },
+    )
+    expect(getCachedResponseMock).toHaveBeenNthCalledWith(
+      2,
+      '/lexis/rpc/application-details/species-for-package',
+      { params: { packageNumber: 'PKG-1 ' } },
+    )
+  })
+
+  it('rejects an edit context returned for a different padded Blanket OIC package key', async () => {
+    getCachedResponseMock
+      .mockResolvedValueOnce(
+        response({
+          success: true,
+          packageNumber: 'PKG-1',
+          volume: '100.0',
+          length: '10.0',
+          diameter: '20.0',
+        }),
+      )
+      .mockResolvedValueOnce(response([{ species: 'FI', packageEndUse: 'LU' }]))
+
+    await expect(fetchBlanketOicPackageEditContext('PKG-1 ')).rejects.toThrow(
+      'Unexpected Blanket OIC package edit context payload.',
+    )
   })
 
   it.each([

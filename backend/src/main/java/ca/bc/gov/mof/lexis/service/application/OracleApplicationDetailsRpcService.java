@@ -197,7 +197,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   @Override
   public Optional<Long> findApplicationNumberForPackage(String packageNumber) {
     return repository
-        .findPackageMutationByPackageNumber(packageNumber)
+        .findPackageMutationByPackageNumber(preservePackageNumber(packageNumber))
         .map(ApplicationDetailsRpcRepository.PackageMutationRow::applicationNumber)
         .filter(value -> value != null && value > 0);
   }
@@ -788,11 +788,11 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
 
   @Override
   public Optional<String> getPackageSelectedEndUse(String packageNumber) {
-    String normalizedPackageNumber = trimToNull(packageNumber);
-    if (normalizedPackageNumber == null) {
+    String persistedPackageNumber = preservePackageNumber(packageNumber);
+    if (persistedPackageNumber == null) {
       return Optional.empty();
     }
-    return repository.findEndUsesByPackageNumberRequired(normalizedPackageNumber).stream()
+    return repository.findEndUsesByPackageNumberRequired(persistedPackageNumber).stream()
         .map(ApplicationDetailsRpcRepository.EndUseRow::endUseCode)
         .map(TextUtils::trimToNull)
         .filter(value -> value != null)
@@ -855,12 +855,12 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
 
   @Override
   public List<SpeciesEndUseItem> getSpeciesForPackage(String packageNumber) {
-    String normalizedPackageNumber = trimToNull(packageNumber);
-    if (normalizedPackageNumber == null) {
+    String persistedPackageNumber = preservePackageNumber(packageNumber);
+    if (persistedPackageNumber == null) {
       return List.of();
     }
     return toSpeciesEndUseItems(
-        repository.findEndUsesByPackageNumberRequired(normalizedPackageNumber));
+        repository.findEndUsesByPackageNumberRequired(persistedPackageNumber));
   }
 
   @Override
@@ -931,15 +931,15 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
 
   @Override
   public List<ApplicationPackageScaleItem> getScalesForPackage(String packageNumber) {
-    String normalizedPackageNumber = trimToNull(packageNumber);
-    if (normalizedPackageNumber == null) {
+    String persistedPackageNumber = preservePackageNumber(packageNumber);
+    if (persistedPackageNumber == null) {
       return List.of();
     }
 
     Map<String, String> speciesDescriptionByCode = new LinkedHashMap<>();
     Map<String, String> gradeDescriptionByCode = new LinkedHashMap<>();
     Map<Long, Boolean> mutationLockedByPermitNumber = new LinkedHashMap<>();
-    return repository.findScaleDetailsByPackageNumber(normalizedPackageNumber).stream()
+    return repository.findScaleDetailsByPackageNumber(persistedPackageNumber).stream()
         .sorted(
             Comparator
                 .comparing(
@@ -965,20 +965,20 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
 
   @Override
   public PackageDetailsItem getPackageDetails(String packageNumber) {
-    String normalizedPackageNumber = trimToNull(packageNumber);
-    if (normalizedPackageNumber == null) {
+    String persistedPackageNumber = preservePackageNumber(packageNumber);
+    if (persistedPackageNumber == null) {
       return emptyPackageDetails();
     }
 
     ApplicationDetailsRpcRepository.PackageDetailsRow packageDetails =
-        repository.findPackageDetailsByPackageNumberRequired(normalizedPackageNumber).orElse(null);
+        repository.findPackageDetailsByPackageNumberRequired(persistedPackageNumber).orElse(null);
     if (packageDetails == null) {
       return emptyPackageDetails();
     }
 
     BigDecimal scaledVolume = BigDecimal.ZERO.setScale(1, RoundingMode.HALF_UP);
     for (ApplicationDetailsRpcRepository.ApplicationScaleDetailRow scale :
-        repository.findScaleDetailsByPackageNumber(normalizedPackageNumber)) {
+        repository.findScaleDetailsByPackageNumber(persistedPackageNumber)) {
       BigDecimal speciesGradeVolume =
           BigDecimal.valueOf(scale.speciesGradeVolume()).setScale(1, RoundingMode.HALF_UP);
       scaledVolume = scaledVolume.add(speciesGradeVolume).setScale(1, RoundingMode.HALF_UP);
@@ -997,7 +997,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
 
     return new PackageDetailsItem(
         true,
-        nonNull(trimToNull(packageDetails.packageNumber())),
+        nonNull(preservePackageNumber(packageDetails.packageNumber())),
         formatOneDecimal(packageDetails.packageVolume()),
         scaledVolume.doubleValue(),
         formatOneDecimal(packageDetails.averageLength()),
@@ -1060,25 +1060,27 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   private PackagePersistenceResult addPackage(
       PackageMutationRequest request, String userId, boolean hiddenBlanketOicWorkflow) {
     PackageMutationRequest normalized = normalizePackageMutationRequest(request);
+    String newPackageNumber = trimToNull(normalized.packageNumber());
     List<String> errors =
         validatePackageMutation(normalized, false, null, hiddenBlanketOicWorkflow, null);
     if (!errors.isEmpty()) {
-      return invalidPackageResult(normalized.packageNumber(), errors);
+      return invalidPackageResult(newPackageNumber, errors);
     }
 
     ApplicationDetailsRpcRepository.PackageMutationRecord record =
-        toPackageMutationRecord(normalized, null, normalized.packageNumber(), defaultMutationUser(userId), true);
+        toPackageMutationRecord(
+            normalized, null, newPackageNumber, defaultMutationUser(userId), true);
     Optional<ApplicationDetailsRpcRepository.PackageMutationRow> inserted;
     try {
       inserted = repository.insertPackage(record);
     } catch (DuplicatePackageNumberException exception) {
       markRollbackOnly();
-      return duplicatePackageResult(normalized.packageNumber());
+      return duplicatePackageResult(newPackageNumber);
     }
     if (inserted.filter(row -> matchesInsertedPackage(row, record)).isEmpty()) {
       markRollbackOnly();
       return invalidPackageResult(
-          normalized.packageNumber(),
+          newPackageNumber,
           List.of("We were unable to save this package. Please try again."));
     }
 
@@ -1101,19 +1103,26 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   private PackagePersistenceResult updatePackage(
       PackageMutationRequest request, String userId, boolean hiddenBlanketOicWorkflow) {
     PackageMutationRequest normalized = normalizePackageMutationRequest(request);
-    String currentPackageNumber = trimToNull(normalized.packageNumber());
+    String requestedPackageNumber = preservePackageNumber(normalized.packageNumber());
     ApplicationDetailsRpcRepository.PackageMutationRow existing =
-        repository.findPackageMutationByPackageNumber(currentPackageNumber).orElse(null);
+        repository.findPackageMutationByPackageNumber(requestedPackageNumber).orElse(null);
+    String currentPackageNumber =
+        existing == null ? requestedPackageNumber : preservePackageNumber(existing.packageNumber());
+    String normalizedRequestedPackageNumber =
+        normalizeRequestedPackageNumber(normalized.newPackageNumber(), currentPackageNumber);
+    String targetPackageNumber =
+        normalizedRequestedPackageNumber == null
+            ? currentPackageNumber
+            : normalizedRequestedPackageNumber;
     List<String> errors =
         validatePackageMutation(normalized, true, existing, hiddenBlanketOicWorkflow, null);
     if (existing == null) {
       errors.add("Package number " + nonNull(currentPackageNumber) + " does not exist.");
     }
     if (!errors.isEmpty()) {
-      return invalidPackageResult(firstNonBlank(normalized.newPackageNumber(), currentPackageNumber), errors);
+      return invalidPackageResult(targetPackageNumber, errors);
     }
 
-    String targetPackageNumber = firstNonBlank(normalized.newPackageNumber(), currentPackageNumber);
     if (!targetPackageNumber.equals(currentPackageNumber)
         && repository.hasPurchaseOffersForPackageRequired(
             existing.applicationNumber(), currentPackageNumber)) {
@@ -1170,14 +1179,14 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       String productTypeCode,
       String userId,
       boolean fillMissingClassification) {
-    String normalizedPackageNumber = trimToNull(packageNumber);
-    if (normalizedPackageNumber == null
+    String persistedPackageNumber = preservePackageNumber(packageNumber);
+    if (persistedPackageNumber == null
         || (volume != null && (!Double.isFinite(volume) || volume < 0.0d))) {
       return false;
     }
 
     ApplicationDetailsRpcRepository.PackageMutationRow existing =
-        repository.findPackageMutationByPackageNumber(normalizedPackageNumber).orElse(null);
+        repository.findPackageMutationByPackageNumber(persistedPackageNumber).orElse(null);
     if (existing == null) {
       return false;
     }
@@ -1222,7 +1231,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     }
 
     Optional<ApplicationDetailsRpcRepository.PackageMutationRow> persisted =
-        repository.findPackageMutationByPackageNumber(normalizedPackageNumber);
+        repository.findPackageMutationByPackageNumber(persistedPackageNumber);
     if (persisted.isEmpty()
         || !sameNullableDecimal(synchronizedVolume, persisted.get().packageVolume())
         || !java.util.Objects.equals(
@@ -1317,27 +1326,27 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       Long expectedApplicationNumber,
       String userId,
       boolean hiddenBlanketOicWorkflow) {
-    String normalizedPackageNumber = trimToNull(packageNumber);
-    if (normalizedPackageNumber == null) {
+    String persistedPackageNumber = preservePackageNumber(packageNumber);
+    if (persistedPackageNumber == null) {
       return false;
     }
     List<ApplicationDetailsRpcRepository.ApplicationScaleDetailRow> scaleRows =
-        repository.findScaleDetailsByPackageNumber(normalizedPackageNumber);
+        repository.findScaleDetailsByPackageNumber(persistedPackageNumber);
     if (!scaleRows.isEmpty()) {
       return false;
     }
     ApplicationDetailsRpcRepository.PackageMutationRow existing =
-        repository.findPackageMutationByPackageNumber(normalizedPackageNumber).orElse(null);
+        repository.findPackageMutationByPackageNumber(persistedPackageNumber).orElse(null);
     if (existing == null
         || (expectedApplicationNumber != null
             && !expectedApplicationNumber.equals(existing.applicationNumber()))
         || !isPackageApplicationMutationAllowed(
             existing.applicationNumber(), hiddenBlanketOicWorkflow)
         || repository.hasPurchaseOffersForPackageRequired(
-            existing.applicationNumber(), normalizedPackageNumber)) {
+            existing.applicationNumber(), persistedPackageNumber)) {
       return false;
     }
-    return repository.deletePackageById(normalizedPackageNumber, defaultMutationUser(userId));
+    return repository.deletePackageById(persistedPackageNumber, defaultMutationUser(userId));
   }
 
   private PackageMutationRequest normalizePackageMutationRequest(PackageMutationRequest request) {
@@ -1346,8 +1355,8 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
           null, null, null, null, null, null, null, null, null, null, null, null, null, null, List.of());
     }
     return new PackageMutationRequest(
-        trimToNull(request.packageNumber()),
-        trimToNull(request.newPackageNumber()),
+        preservePackageNumber(request.packageNumber()),
+        preservePackageNumber(request.newPackageNumber()),
         request.applicationNumber(),
         request.volume(),
         request.averageLength(),
@@ -1370,9 +1379,16 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       boolean hiddenBlanketOicWorkflow,
       Long referenceOrgUnitNumber) {
     List<String> errors = new ArrayList<>();
-    String packageNumber = trimToNull(request.packageNumber());
-    String newPackageNumber = trimToNull(request.newPackageNumber());
-    String targetPackageNumber = update ? firstNonBlank(newPackageNumber, packageNumber) : packageNumber;
+    String packageNumber =
+        existing == null
+            ? trimToNull(request.packageNumber())
+            : preservePackageNumber(existing.packageNumber());
+    String newPackageNumber =
+        normalizeRequestedPackageNumber(request.newPackageNumber(), packageNumber);
+    String targetPackageNumber =
+        update
+            ? (newPackageNumber == null ? packageNumber : newPackageNumber)
+            : packageNumber;
 
     if (packageNumber == null) {
       errors.add(required("package number"));
@@ -1572,11 +1588,11 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     }
 
     String currentPackageNumber =
-        existing == null ? null : trimToNull(existing.packageNumber());
+        existing == null ? null : preservePackageNumber(existing.packageNumber());
     BigDecimal totalPackageVolume = BigDecimal.ZERO.setScale(1, RoundingMode.HALF_UP);
     for (ApplicationDetailsRpcRepository.PackageDetailsRow row :
         repository.findPackagesByApplicationNumber(applicationNumber)) {
-      String rowPackageNumber = trimToNull(row.packageNumber());
+      String rowPackageNumber = preservePackageNumber(row.packageNumber());
       if (update
           && (equalsNullable(rowPackageNumber, currentPackageNumber)
               || equalsNullable(rowPackageNumber, targetPackageNumber))) {
@@ -1878,7 +1894,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
 
   private PackagePersistenceResult invalidPackageResult(String packageNumber, List<String> errors) {
     return new PackagePersistenceResult(
-        false, nonNull(trimToNull(packageNumber)), null, null, null, null, errors, List.of());
+        false, nonNull(preservePackageNumber(packageNumber)), null, null, null, null, errors, List.of());
   }
 
   private PackagePersistenceResult duplicatePackageResult(String packageNumber) {
@@ -1890,7 +1906,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       String packageNumber, ApplicationDetailsRpcRepository.PackageMutationRecord record) {
     return new PackagePersistenceResult(
         true,
-        nonNull(trimToNull(packageNumber)),
+        nonNull(preservePackageNumber(packageNumber)),
         formatOneDecimal(record.packageVolume() == null ? 0.0d : record.packageVolume()),
         formatOneDecimal(record.averageLength() == null ? 0.0d : record.averageLength()),
         formatOneDecimal(record.averageDiameter() == null ? 0.0d : record.averageDiameter()),
@@ -1905,7 +1921,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     }
     return new ScaleMutationRequest(
         trimToNull(request.timberMark()),
-        trimToNull(request.packageNumber()),
+        preservePackageNumber(request.packageNumber()),
         trimToNull(request.gradeCode()),
         trimToNull(request.speciesCode()),
         request.applicationNumber(),
@@ -1915,7 +1931,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
 
   private List<String> validateScaleMutation(ScaleMutationRequest request) {
     List<String> errors = new ArrayList<>();
-    String packageNumber = trimToNull(request.packageNumber());
+    String packageNumber = preservePackageNumber(request.packageNumber());
     Optional<ApplicationDetailsRpcRepository.ApplicationUpdateRecord> application =
         request.applicationNumber() == null || request.applicationNumber() < 1
             ? Optional.empty()
@@ -2171,8 +2187,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       ApplicationDetailsRpcRepository.PackageMutationRow row,
       ApplicationDetailsRpcRepository.PackageMutationRecord expected) {
     return row != null
-        && java.util.Objects.equals(
-            trimToNull(expected.packageNumber()), trimToNull(row.packageNumber()))
+        && java.util.Objects.equals(expected.packageNumber(), row.packageNumber())
         && java.util.Objects.equals(expected.applicationNumber(), row.applicationNumber())
         && sameNullableDecimal(expected.packageVolume(), row.packageVolume())
         && sameNullableDecimal(expected.averageLength(), row.averageLength())
@@ -2201,8 +2216,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     return row != null
         && parsePositiveLong(row.exportScaleDetailId()) != null
         && java.util.Objects.equals(expected.applicationNumber(), row.applicationNumber())
-        && java.util.Objects.equals(
-            trimToNull(expected.packageNumber()), trimToNull(row.packageNumber()))
+        && java.util.Objects.equals(expected.packageNumber(), row.packageNumber())
         && java.util.Objects.equals(
             trimToNull(expected.timberMark()), trimToNull(row.timberMark()))
         && java.util.Objects.equals(
@@ -2404,6 +2418,21 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
 
   private String nonNull(String value) {
     return value == null ? "" : value;
+  }
+
+  /** Package identifiers are opaque Oracle keys; preserve stored whitespace for existing rows. */
+  private String preservePackageNumber(String value) {
+    return value == null || value.isBlank() ? null : value;
+  }
+
+  private String normalizeRequestedPackageNumber(String requested, String current) {
+    String persistedRequested = preservePackageNumber(requested);
+    if (persistedRequested == null) {
+      return null;
+    }
+    return current != null && current.equals(persistedRequested)
+        ? current
+        : trimToNull(persistedRequested);
   }
 
   private PersistedRemark toPersistedRemark(ApplicationDetailsRpcRepository.RemarkRow row) {

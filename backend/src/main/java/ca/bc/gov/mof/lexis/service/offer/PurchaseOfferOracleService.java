@@ -608,7 +608,7 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
             .map(PurchaseOfferRepository.ApplicationReferenceRow::applicationVolume)
             .orElse(null);
 
-    String packageNumber = trimToNull(request.packageNumber());
+    String packageNumber = preservePackageNumber(request.packageNumber());
     if (packageNumber != null) {
       Optional<PurchaseOfferRepository.PackageReferenceRow> packageReference =
           repository.findPackageReference(packageNumber);
@@ -890,8 +890,14 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
   }
 
   private String normalizePackageNumber(String value) {
-    String normalized = trimToNull(value);
-    return "No Packages".equalsIgnoreCase(normalized) ? null : normalized;
+    if ("No Packages".equalsIgnoreCase(trimToNull(value))) {
+      return null;
+    }
+    return preservePackageNumber(value);
+  }
+
+  private String preservePackageNumber(String value) {
+    return value == null || value.isBlank() ? null : value;
   }
 
   private String defaultMutationUser(String userId) {
