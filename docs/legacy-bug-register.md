@@ -8,6 +8,8 @@ Include historical fixes as well as new findings. For each completed fix, retain
 
 **Historical audit, 11 September 2026:** Entries LEGACY-005 through LEGACY-011 were traced through commits, current source, regression coverage and the existing divergence decisions. Their referenced modern commits are contained in the refreshed `origin/main`. Commit dates are development dates, not deployment dates; except where dated live evidence is identified, these entries establish the modern implementation rather than TEST/PROD acceptance. Documentation commits that recorded an already-correct implementation are labelled accordingly. LEGACY-012 and LEGACY-013 are pending database fixes found during the same review. Modern-only regressions, performance-only changes and business-approved feature changes are not counted as historical legacy bugs here.
 
+**Continued audit, 11 September 2026:** LEGACY-014 through LEGACY-016 identify additional inherited report defects. The source review also expands the affected routines for LEGACY-012 and confirms that modern PDF inherits the CSV procedure defects in LEGACY-013 through LEGACY-016. Historical fixes that restored supported legacy workflows are recorded separately as `PARITY` entries below; they are migration gaps, not claims that legacy itself was broken. Routine UI/CI fixes and accepted feature changes remain outside this register.
+
 ## Register summary
 
 | ID                                                                                   | Issue                                                              | Fix scope                                             | Verification status                                                                                         |
@@ -25,6 +27,33 @@ Include historical fixes as well as new findings. For each completed fix, retain
 | [LEGACY-011](#legacy-011--application-save-depends-on-omitted-staff-controls)        | BCeID application save dereferences absent review controls         | Modern authorized summary save                        | Correct behavior recorded in history; scoped save test retained                                             |
 | [LEGACY-012](#legacy-012--permit-ledger-omits-the-other-species-code)                | Permit Ledger excludes `OT` volume from its Other subtotal         | Shared Oracle reporting procedure                     | Local database fix; not merged; deployment unverified                                                       |
 | [LEGACY-013](#legacy-013--speciesgrade-csv-checks-the-wrong-date-parameter)          | Species/Grade CSV mishandles a one-sided date range                | Shared Oracle reporting procedure                     | Local database fix; not merged; deployment unverified                                                       |
+| [LEGACY-014](#legacy-014--speciesgrade-ignores-the-exemption-type-filter)            | Species/Grade ignores the selected exemption type                  | Shared Oracle CSV procedure; modern PDF also affected | Source and offline reproduction confirmed; correction pending                                               |
+| [LEGACY-015](#legacy-015--speciesgrade-ignores-the-forest-file-filter)               | Species/Grade ignores the selected Forest file ID                  | Three shared Oracle reporting routines                | Source and offline reproduction confirmed; correction pending                                               |
+| [LEGACY-016](#legacy-016--speciesgrade-multiplies-scales-by-linked-applications)     | One scale contributes once per linked application                  | Three shared Oracle reporting routines                | Source and offline reproduction confirmed; correction and Oracle acceptance pending                         |
+
+## Historical migration fixes
+
+These entries record supported legacy behavior that was initially missing or incorrect in modern. Their fix commits are in refreshed modern `origin/main`; historical live checks retain their original role and deployment scope.
+
+| ID                                                                                              | Migration gap                                                           | Correction                                                                 | Verification status                                                                 |
+| ----------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| [PARITY-001](#parity-001--speciesgrade-report-parameters-were-bound-in-the-wrong-order)         | Report criteria were sent to the wrong Oracle parameters                | Corrected binding order and dedicated PDF template                         | Merged; binding/render tests retained; inherited SQL defects remain separately open |
+| [PARITY-002](#parity-002--a-stored-zero-override-blocked-unrelated-permit-edits)                | A disabled stored override caused a permit save rejection               | Treat an omitted stored-zero override as disabled                          | Merged; regression retained; historical DEV-174 acceptance against TEST data        |
+| [PARITY-003](#parity-003--boic-package-classification-and-current-volume-used-the-wrong-values) | BOIC displayed synthetic-application classification and declared volume | Use package classification and authoritative scaled volume, including zero | Merged; regression retained; historical DEV-174 acceptance against TEST data        |
+| [PARITY-004](#parity-004--approved-applications-could-not-receive-supported-review-transitions) | Modern blocked review changes from Approved                             | Separate approval source states from review source states                  | Merged; service and UI regression coverage retained                                 |
+
+## Oracle work remaining
+
+All routines below are in `THE.LEXIS_REPORTING`. The reviewed baseline is `nr-mof-db` main `124a515ddd382d195982201d9eb8cede49782f2d`, file `scripts/THE/PACKAGE_BODIES/V9.00402__LEXIS_REPORTING.sql`. No deployed package body was read in this audit.
+
+| Procedure                     | Required correction                                                                                                                                               | Prepared migration status                                                        |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `PERMIT_LEDGER_REPORT`        | Include `OT` in the Other subtotal — LEGACY-012                                                                                                                   | Local forward/rollback pair in `982f3140`; not merged                            |
+| `SPECIES_GRADE_REPORT_CSV`    | Correct end-date guard; assign exemption-type filter; apply Forest file filter; preserve one contribution per scale; include `OT` — LEGACY-012 through LEGACY-016 | Existing local pair corrects only the end-date guard; other changes not prepared |
+| `SPECIES_GRADE_RPT`           | Apply Forest file filter; preserve one contribution per scale; include `OT` — LEGACY-012, LEGACY-015, LEGACY-016                                                  | Correction not prepared                                                          |
+| `SPECIES_GRADE_REGION_SUBRPT` | Apply Forest file filter; preserve one contribution per scale; include `OT` — LEGACY-012, LEGACY-015, LEGACY-016                                                  | Correction not prepared                                                          |
+
+The existing reporting migration is therefore only a partial fix. Before release, reconcile it with the current package body, retain a matching rollback, compile in Oracle and exercise the affected report criteria/totals. Modern PDF and CSV both obtain Species/Grade data through `OracleLegacyCsvReportService` and `SPECIES_GRADE_REPORT_CSV`; fixing only the old PDF procedure would leave both modern formats affected.
 
 ## LEGACY-001 — Package update dereferences a missing exemption type
 
@@ -76,6 +105,7 @@ New-package entry still requires its existing explicit fields. BOIC permit packa
 
 - Shared Oracle fix: [bcgov-c/nr-mof-db PR #735](https://github.com/bcgov-c/nr-mof-db/pull/735), change commit `6bac178b9`. Five `THE.LEXIS` cursors now join directly to the unique `TIMBER_MARK` row and read `TM.CASCADE_SPLIT_CODE`: `FIND_SCALE_DETAIL_BY_ID`, `FIND_SCALE_DETAIL_BY_APP`, `FIND_SCALE_DETAIL_BY_PKG`, `FIND_SCALE_DETAIL_BY_PRM`, and the `INSERT_SCALE_DETAIL` return cursor. Procedure signatures and return columns remain unchanged. Legacy receives the correction through its existing procedure calls; no legacy WAR release is required for this fix.
 - Modern direct-query fix: [bcgov/nr-lexis PR #214](https://github.com/bcgov/nr-lexis/pull/214), merged 1 September 2026 as `ce32801ce1eb755e285669a84fa67d0b946e10af`. The same direct join replaces the multiplying relationship in `PermitRpcRepository.CORE_SCALE_SELECT` and the fee query's `SCALE_CONTEXT`. Both corrected queries remain present in the current source.
+- Original modern change commit: [06e3cead](https://github.com/bcgov/nr-lexis/commit/06e3cead), `fix: prevent scale query fanout` (20 August 2026), contains those two query corrections; its development date precedes the PR merge/deployment evidence above.
 - Regression coverage: [PermitRpcRepositoryTest.java](../backend/src/test/java/ca/bc/gov/mof/lexis/repository/permit/PermitRpcRepositoryTest.java) checks that scale and fee queries use the direct timber-mark join and exclude the harvesting-authority join path. The left join retains scales without a matching timber-mark record.
 
 **Before/after evidence:** A controlled TEST case containing one saved scale of 12 pieces and 3.0 m³ previously displayed three rows, 36 pieces and 9.0 m³. After correction, legacy and modern showed one row, 12 pieces and 3.0 m³. The dated incident record also reports representative modern fee checks with no duplicate composite rows and matching totals. Those checks establish the sampled paths, not retrospective correction of all previously issued fees.
@@ -162,6 +192,8 @@ New-package entry still requires its existing explicit fields. BOIC permit packa
 
 **History and verification boundary:** Database commit `982f3140043def8589db4cb13c6469610d28b82d`, `fix: correct lexis report totals and date filters` (26 August 2026), is on the local `nr-mof-db` branch `fix/lexis-reporting-safe-db-fixes`. Its paired forward/rollback `LEXIS_REPORTING` migrations include this change and LEGACY-013. The commit is not in refreshed database `origin/main` (`124a515ddd382d195982201d9eb8cede49782f2d`); that main revision's `V9.00402__LEXIS_REPORTING.sql` still omits `OT` in this routine. Deployment is unverified. Before closure, review the migration and compare the affected report subtotal against saved `OT` scale volume in TEST. Do not treat this narrow correction as verification of every report's species grouping.
 
+**Expanded source finding:** `SPECIES_GRADE_RPT`, `SPECIES_GRADE_REPORT_CSV` and `SPECIES_GRADE_REGION_SUBRPT` also omit `OT` from their Other subtotal. The first two enumerate the same five-code list; the region subreport uses equivalent `CASE` branches without `OT`. The existing local migration does **not** correct these three routines. An offline execution of the CSV SELECT with one synthetic `OT` scale of 10 m³ returned `SUM_OT = 0`. Include `OT` in each existing Other grouping and verify PDF, CSV and region totals before closing the wider issue. This is a proposed extension, not a prepared or deployed correction.
+
 ## LEGACY-013 — Species/Grade CSV checks the wrong date parameter
 
 **Status:** Source defect and local database correction identified; not merged. Deployment and report acceptance are unverified.
@@ -169,3 +201,69 @@ New-package entry still requires its existing explicit fields. BOIC permit packa
 **Defect and proposed correction:** `THE.LEXIS_REPORTING.SPECIES_GRADE_REPORT_CSV` assigns `V_DATE_TO := P_DATE_TO` only when **`P_DATE_FROM`** is non-null. An end-only filter is ignored; a start-only filter replaces the default upper bound with null, so date comparisons exclude rows. The local correction checks `P_DATE_TO` before assigning the upper bound, preserving independent optional bounds.
 
 **History and verification boundary:** The same local database commit `982f3140043def8589db4cb13c6469610d28b82d` (26 August 2026) contains this fix and its rollback. Refreshed database `origin/main` still contains the wrong guard; this is not a completed deployment. Closure requires Oracle validation and report checks for no dates, start only, end only and both dates, using supported UI inputs where available. Source behavior does not prove which one-sided combinations each deployed screen permits.
+
+**Modern scope confirmed:** The modern report form exposes both optional date bounds, and `applyLegacySpeciesGradeDefaults` supplies only the default permit status. It does not fill missing dates. Both modern PDF and CSV execute this CSV procedure through [OracleLegacyCsvReportService.java](../backend/src/main/java/ca/bc/gov/mof/lexis/service/report/OracleLegacyCsvReportService.java), so acceptance must cover both formats. The old PDF routine's correct date guard does not protect the modern PDF path.
+
+## LEGACY-014 — Species/Grade ignores the exemption-type filter
+
+**Status:** Confirmed in the reviewed database source and an offline relational reproduction. Correction not prepared; deployed impact unverified.
+
+**Evidence:** `SPECIES_GRADE_REPORT_CSV` declares `V_EXEMPTION_TYPE := '%'` and filters with `E.EXPORT_EXEMPTION_TYPE_CODE LIKE V_EXEMPTION_TYPE`, but never assigns `P_EXEMPTION_TYPE` to that local. Legacy `OracleReportingSpeciesGradeDAO` and modern `bindSpeciesGradeParameters` both send the selected type in parameter 6. The modern report form exposes that selection. The old PDF routine `SPECIES_GRADE_RPT` does contain the missing assignment; modern PDF uses the CSV routine instead.
+
+**Proposed correction:** In `THE.LEXIS_REPORTING.SPECIES_GRADE_REPORT_CSV`, assign the supplied non-null exemption type before opening the cursor, retaining `%` for an unfiltered request. This follows the sibling PDF routine and the existing UI contract; no new eligibility rule or Java parameter change is needed.
+
+**Verification:** The checked-in CSV SELECT was executed locally with synthetic Ministerial data. Selecting OIC still returned 10 m³ while the local remained `%`; assigning the requested `O` produced no rows. This used SQLite with bound PL/SQL locals, not an Oracle session. Oracle acceptance should compare unfiltered and each supported type in modern PDF/CSV and legacy CSV. Existing Java binding tests prove the parameter is sent, not that Oracle applies it.
+
+## LEGACY-015 — Species/Grade ignores the Forest file filter
+
+**Status:** Unused filter confirmed in source; correction not prepared. Live report behavior and the deployed package revision remain unverified.
+
+**Evidence:** Legacy and modern forms expose Forest file ID, mutually exclusive with Timber mark. Legacy CSV DAO and modern report service bind it as parameter 10. `SPECIES_GRADE_REPORT_CSV` copies it into `V_FOREST_FILE_ID` but never uses that local in the SELECT. `SPECIES_GRADE_RPT` and `SPECIES_GRADE_REGION_SUBRPT` declare `P_FOREST_FILE_ID` without using it in their query. A nonmatching synthetic forest file left the offline CSV result unchanged at 10 m³.
+
+**Proposed correction:** Apply the supplied filter in all three named `THE.LEXIS_REPORTING` routines. The legacy DAO maps the criterion to `HA.FOREST_FILE_ID`; the best supported implementation is a correlated `EXISTS` lookup from the scale's timber mark to the matching hauling-authority forest file. Preserve established matching behavior and absent-filter behavior. Avoid an unrestricted one-to-many join that would multiply scale volume.
+
+**Remaining validation:** Confirm the authoritative timber-mark/forest-file relationship and matching semantics against current Oracle metadata and existing records. Verify matching, nonmatching and absent file criteria, multiple authority matches, and unchanged Timber mark behavior in both formats. The old PDF query and region subreport also need acceptance; changing the UI to hide the filter would remove an existing workflow rather than fix it.
+
+## LEGACY-016 — Species/Grade multiplies scales by linked applications
+
+**Status:** Multiplying relationship confirmed in source and reproduced offline using one globally unique package. No deployed totals or completed SQL correction are claimed.
+
+**Evidence:** `SPECIES_GRADE_RPT` and `SPECIES_GRADE_REPORT_CSV` join permit scales to `EXPORT_EXEMPTION_APPLICATION` by exemption number alone, then aggregate volumes. `SPECIES_GRADE_REGION_SUBRPT` uses the same exemption-wide application join. An exemption can have several applications, so each scale can contribute repeatedly or appear under another application's product/growth classification. This is distinct from LEGACY-004's harvesting-authority relationship and LEGACY-010's search queries.
+
+**Reproduction:** The actual checked-in CSV SELECT returned 10 m³ for one synthetic scale and one linked application. Adding a second application under the same exemption, with matching report classifications, changed the result to 20 m³. The package number remained globally unique. An ordinary-package candidate join through the package's `APPLICATION_NUMBER` restored 10 m³. The reproduction used an in-memory SQLite database, bound Oracle locals and an emulated grade-sort function; it proves the relational defect, not Oracle deployment acceptance.
+
+**Proposed correction:** In all three routines, derive each scale's classification from its owning package/application relationship and aggregate each saved scale once. Ordinary packages already expose the application relationship; BOIC must preserve package classification and the existing permit/application association. Use a semijoin where an application is needed only for eligibility. Do not choose an arbitrary application or use `SUM(DISTINCT volume)`, which would lose separate equal-volume scales.
+
+**Remaining validation:** Prepare the complete Oracle query correction only after checking ordinary and BOIC ownership paths, mixed classifications, multiple equal-volume scales and missing optional relationships. Compare raw scale IDs/volumes with PDF, CSV and region totals using existing records or fixtures made through supported application workflows. An initial suspicion that package-number reuse caused this defect was rejected: legacy validates package numbers globally and the table documents a unique package identity.
+
+## PARITY-001 — Species/Grade report parameters were bound in the wrong order
+
+**Status:** Historical modern migration defect corrected; inherited procedure defects remain open above.
+
+**Before/after and history:** Legacy `OracleReportingSpeciesGradeDAO.generateReportingSpeciesGrade` passes permit status in slot 4, then exemption number/type/reason, growth, timber mark and forest file in slots 5–10. Modern initially placed permit status in slot 10 and shifted the intervening criteria, so valid report filters reached the wrong Oracle inputs. [Commit b8cf50ff](https://github.com/bcgov/nr-lexis/commit/b8cf50ff), `fix: repair species grade reports` (26 August 2026), restores the legacy order. It also supplies a dedicated Species/Grade PDF template instead of squeezing the report through the generic table layout.
+
+**Evidence and remaining work:** Current [OracleLegacyCsvReportServiceTest.java](../backend/src/test/java/ca/bc/gov/mof/lexis/service/report/OracleLegacyCsvReportServiceTest.java) asserts the individual parameter positions; [OracleLegacyJasperTableReportServiceTest.java](../backend/src/test/java/ca/bc/gov/mof/lexis/service/report/OracleLegacyJasperTableReportServiceTest.java) covers rendering the dedicated report. This correction is in modern `main` and requires no procedure signature change. It does not fix SQL that ignores correctly bound values or multiplies rows: see LEGACY-012 through LEGACY-016.
+
+## PARITY-002 — A stored zero override blocked unrelated permit edits
+
+**Status:** Historical modern migration defect corrected. The dated Administrator audit records acceptance on DEV PR deployment 174 against TEST data; this is not a new production check.
+
+**Before/after and history:** Legacy interprets a stored fee override of zero as disabled. Modern previously merged that zero into an update omitting override fields, then rejected the otherwise valid save because an enabled override must be positive. [Commit 77a6ef52](https://github.com/bcgov/nr-lexis/commit/77a6ef52), `fix: restore exemption and permit parity` (14 August 2026), treats an omitted stored-zero override as disabled while retaining explicit override validation.
+
+**Regression evidence:** [OraclePermitDetailsRpcServiceTest.java](../backend/src/test/java/ca/bc/gov/mof/lexis/service/permit/OraclePermitDetailsRpcServiceTest.java), `updatePermitShouldTreatStoredZeroOverrideAsDisabledWhenTheRequestOmitsIt`, verifies a successful unrelated update. Current service logic retains the correction. No Oracle procedure change is needed. This is separate from LEGACY-009, which prevents a newly enabled positive override from rounding down to zero.
+
+## PARITY-003 — BOIC package classification and current volume used the wrong values
+
+**Status:** Historical migration corrections retained. The dated Administrator audit records the corrected product display and a scaled-volume change from zero on DEV-174 against TEST data.
+
+**Before/after and history:** Modern could prefer the hidden BOIC application's product type over the actual package classification, and could display declared package volume in the Current package volume field. [Commit 77a6ef52](https://github.com/bcgov/nr-lexis/commit/77a6ef52) (14 August 2026) makes BOIC package classification authoritative and maps current volume from `scaledVolume`/`currentPackageVolume`, preserving zero. Legacy `boicItemsTab.js.getOICPackageDetails` calls the application package-details endpoint and displays its package classification and separately calculated scale total. The ordinary permit `getPackageInfo` endpoint is not the legacy BOIC display baseline.
+
+**Regression evidence:** [OraclePermitDetailsRpcServiceTest.java](../backend/src/test/java/ca/bc/gov/mof/lexis/service/permit/OraclePermitDetailsRpcServiceTest.java), `packageInfoShouldUsePackageClassificationsForBlanketOic`, protects classification precedence. Current [provincial-permit-detail-tabs-service.ts](../frontend/src/service/provincial-permit-detail-tabs-service.ts) retains the null-aware scaled-volume mapping. Historical live evidence supplies the zero-to-positive volume check. No Oracle procedure change or new BOIC workflow is required for these display corrections. This entry does not close the current padded-sibling/offer acceptance work.
+
+## PARITY-004 — Approved applications could not receive supported review transitions
+
+**Status:** Historical modern migration defect corrected; source and automated coverage retained. No new live status transition or email was performed in this audit.
+
+**Before/after and history:** Modern reused the approval source-state list (`NEW`, `PND`) for review changes, blocking supported rejection, withdrawal or expiry of an `APP` application. [Commit 503f0c70](https://github.com/bcgov/nr-lexis/commit/503f0c70), `fix: restore approved application review parity` (17 August 2026), separates the two policies: approval remains restricted to `NEW`/`PND`, while authorized review transitions also accept `APP`. Existing remarks, authorization and record guards remain required.
+
+**Regression evidence:** [ApplicationReviewOracleServiceTest.java](../backend/src/test/java/ca/bc/gov/mof/lexis/service/review/ApplicationReviewOracleServiceTest.java) covers permitted review sources and rejects repeat approval; [ProvincialApplicationDetailReview.test.tsx](../frontend/src/pages/__tests__/ProvincialApplicationDetailReview.test.tsx) covers the detail review controls. The current service retains separate source-state lists. The correction belongs in modern policy/UI code; no shared Oracle procedure change is identified for it.
