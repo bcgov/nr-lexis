@@ -60,4 +60,63 @@ test.describe('navigation transport recovery', () => {
     expect(documents).toBe(2)
     expect(configs).toBe(2)
   })
+
+  test('recovers an interrupted lazy module after the application shell renders', async ({
+    page,
+  }) => {
+    let documents = 0
+    let modules = 0
+    await page.route(`${origin}/**`, async (route) => {
+      if (new URL(route.request().url()).pathname === '/federal.js') {
+        modules += 1
+        if (modules === 1) {
+          await route.abort('timedout')
+          return
+        }
+        await route.fulfill({
+          contentType: 'application/javascript',
+          body: 'document.getElementById("root").innerHTML = "<h1>Federal application search</h1>"',
+        })
+        return
+      }
+      documents += 1
+      await route.fulfill({
+        contentType: 'text/html',
+        body: '<div id="root"><nav>Side navigation</nav></div><script type="module">await import("/federal.js")</script>',
+      })
+    })
+
+    await gotoWithRecovery(page, `${origin}/federal`, {
+      ready: page.getByRole('heading', { name: 'Federal application search' }),
+    })
+
+    expect(documents).toBe(2)
+    expect(modules).toBe(2)
+  })
+
+  test('does not reload a rendered shell when its lazy module is missing', async ({ page }) => {
+    let documents = 0
+    let modules = 0
+    await page.route(`${origin}/**`, async (route) => {
+      if (new URL(route.request().url()).pathname === '/federal.js') {
+        modules += 1
+        await route.fulfill({ status: 404, body: 'Not found' })
+        return
+      }
+      documents += 1
+      await route.fulfill({
+        contentType: 'text/html',
+        body: '<div id="root"><nav>Side navigation</nav></div><script type="module">await import("/federal.js")</script>',
+      })
+    })
+
+    await expect(
+      gotoWithRecovery(page, `${origin}/federal`, {
+        ready: page.getByRole('heading', { name: 'Federal application search' }),
+      }),
+    ).rejects.toThrow(/locator\.waitFor: Timeout/)
+
+    expect(documents).toBe(1)
+    expect(modules).toBe(1)
+  })
 })
