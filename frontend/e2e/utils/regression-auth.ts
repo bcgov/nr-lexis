@@ -1,5 +1,6 @@
 import { expect, type APIResponse, type Page } from '@playwright/test'
 import { E2E_BASE_URL } from './index'
+import { gotoWithRecovery } from './navigation'
 
 type SessionCapabilities = {
   authenticated?: boolean
@@ -65,9 +66,7 @@ const LOGIN_SESSION_TIMEOUT_MS = 30_000
 const LOGIN_BUTTON_VISIBLE_TIMEOUT_MS = 10_000
 const LOGIN_BUTTON_CLICK_TIMEOUT_MS = 15_000
 const LOGIN_SHELL_RENDER_ATTEMPTS = 3
-const APP_ROOT_NAVIGATION_ATTEMPTS = 5
 const APP_ROOT_NAVIGATION_TIMEOUT_MS = 10_000
-const APP_ROOT_NAVIGATION_RETRY_DELAY_MS = 3_000
 const AUTHENTICATED_GET_ATTEMPTS = 4
 const AUTHENTICATED_GET_RETRY_DELAY_MS = 3_000
 const ACCESS_TOKEN_REFRESH_WINDOW_SECONDS = 5
@@ -585,26 +584,9 @@ const visibleLoginError = async (page: Page): Promise<string | null> => {
 }
 
 const gotoAppRoot = async (page: Page): Promise<void> => {
-  let lastError: unknown
-
-  for (let attempt = 1; attempt <= APP_ROOT_NAVIGATION_ATTEMPTS; attempt += 1) {
-    try {
-      await page.goto('/', {
-        waitUntil: 'domcontentloaded',
-        timeout: APP_ROOT_NAVIGATION_TIMEOUT_MS,
-      })
-      return
-    } catch (error) {
-      lastError = error
-      if (attempt < APP_ROOT_NAVIGATION_ATTEMPTS) {
-        await page.waitForTimeout(APP_ROOT_NAVIGATION_RETRY_DELAY_MS)
-      }
-    }
-  }
-
-  throw new Error(
-    `Unable to load LEXIS app root after ${APP_ROOT_NAVIGATION_ATTEMPTS} attempts. Last error: ${String(lastError)}`,
-  )
+  await gotoWithRecovery(page, new URL('/', E2E_BASE_URL).toString(), {
+    ready: page.getByTestId(idirLoginConfig.testId).or(page.locator('#side-navigation')).first(),
+  })
 }
 
 const pageTextSnippet = async (page: Page): Promise<string> => {
@@ -784,19 +766,14 @@ export const collectApiServerErrors = (page: Page): string[] => {
   return errors
 }
 
-const navigateSpaRoute = async (page: Page, path: string): Promise<void> => {
-  await page.goto(new URL(path, E2E_BASE_URL).toString(), {
-    waitUntil: 'domcontentloaded',
-    timeout: 30_000,
-  })
-}
-
 export const expectAccessiblePage = async (
   page: Page,
   path: string,
   heading: RegExp | string,
 ): Promise<void> => {
-  await navigateSpaRoute(page, path)
+  await gotoWithRecovery(page, new URL(path, E2E_BASE_URL).toString(), {
+    ready: page.getByRole('heading', { name: heading }).first(),
+  })
   await expect(page.getByRole('heading', { name: heading }).first()).toBeVisible({
     timeout: 30_000,
   })

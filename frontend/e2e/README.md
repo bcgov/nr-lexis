@@ -46,6 +46,15 @@ regression coverage uses a separate TEST-only Playwright config.
   unit tests; the BCeID-only permit review-request email remains outside the scheduled suite.
 - Credentialed regression jobs are scoped to the `test` GitHub environment, so dev preview deploys
   stay on smoke coverage.
+- Credentialed page loads and the session-timeout setup recover from connection failures, frontend
+  502/503/504 responses, and interrupted or empty app shells for at most 150 seconds. Individual
+  document attempts take at most 10 seconds, with 5/10/20-second backoff; rendering retains its
+  30-second limit per attempt. Recovery logs contain only timing and failure categories.
+- These suites allow four minutes per test so recovery can finish. IDIR login runs inside each test
+  using the shared browser session, rather than in `beforeAll`, so one login failure does not prevent
+  the remaining tests from executing. Credentialed test bodies still have zero retries: saves and
+  cleanup are never replayed by navigation recovery. Wrong headings on rendered pages, denied/missing
+  resources, and JavaScript errors remain failures.
 - CI explicitly masks the credential values and suppresses Playwright HTML reports, screenshots,
   video, and traces for the credentialed regression suite because those runs type real test
   credentials. Credentialed regression artifacts are not uploaded from the public workflow.

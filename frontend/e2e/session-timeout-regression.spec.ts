@@ -7,6 +7,7 @@ import {
   type SyntheticCognitoSession,
 } from './utils'
 import { getWithAuth } from './utils/regression-auth'
+import { gotoWithRecovery } from './utils/navigation'
 
 const SESSION_IDLE_WARNING_DELAY_MS = 25 * 60 * 1000
 const SESSION_IDLE_WARNING_DURATION_MS = 5 * 60 * 1000
@@ -175,6 +176,7 @@ const startAuthorizationProbe = async () => {
 }
 
 test.describe('session timeout regression', () => {
+  test.describe.configure({ timeout: 240_000 })
   test('refreshes an expired token before direct regression API calls', async ({ page }) => {
     const nowSeconds = Math.floor(Date.now() / 1000)
     const syntheticSession = await installSyntheticCognitoSession(page, {
@@ -190,7 +192,9 @@ test.describe('session timeout regression', () => {
       nowSeconds,
     )
     await installSyntheticLexisApi(page)
-    await page.goto('/provincial/application', { waitUntil: 'domcontentloaded' })
+    await gotoWithRecovery(page, new URL('/provincial/application', E2E_BASE_URL).toString(), {
+      ready: page.getByRole('heading', { level: 1, name: 'Provincial application search' }),
+    })
 
     await expect(
       page.getByRole('heading', { level: 1, name: 'Provincial application search' }),
@@ -261,7 +265,9 @@ test.describe('session timeout regression', () => {
     const getRefreshRequestCount = await installSyntheticCognitoRefresh(page, syntheticSession)
     await installSyntheticLexisApi(page)
     await page.setViewportSize({ width: 1440, height: 900 })
-    await page.goto('/provincial/application', { waitUntil: 'domcontentloaded' })
+    await gotoWithRecovery(page, new URL('/provincial/application', E2E_BASE_URL).toString(), {
+      ready: page.getByRole('heading', { level: 1, name: 'Provincial application search' }),
+    })
 
     await expect(
       page.getByRole('heading', { level: 1, name: 'Provincial application search' }),
@@ -374,7 +380,9 @@ test.describe('session timeout regression', () => {
     })
     await installSyntheticLexisApi(page, sessionState)
     await installSyntheticLogoutRedirect(page, sessionState)
-    await page.goto('/provincial/application', { waitUntil: 'domcontentloaded' })
+    await gotoWithRecovery(page, new URL('/provincial/application', E2E_BASE_URL).toString(), {
+      ready: page.getByRole('heading', { level: 1, name: 'Provincial application search' }),
+    })
 
     await expect(
       page.getByRole('heading', { level: 1, name: 'Provincial application search' }),
@@ -394,7 +402,9 @@ test.describe('session timeout regression', () => {
     })
     await installSyntheticLexisApi(page, sessionState)
     await installSyntheticLogoutRedirect(page, sessionState)
-    await page.goto('/provincial/application', { waitUntil: 'domcontentloaded' })
+    await gotoWithRecovery(page, new URL('/provincial/application', E2E_BASE_URL).toString(), {
+      ready: page.getByRole('heading', { level: 1, name: 'Provincial application search' }),
+    })
 
     const profileButton = page.locator('button[aria-controls="profile-panel"]')
     await profileButton.click()

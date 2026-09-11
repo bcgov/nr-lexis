@@ -20,6 +20,7 @@ import {
   redactedTextSnippet,
 } from './utils/regression-auth'
 import { E2E_BASE_URL } from './utils'
+import { gotoWithRecovery } from './utils/navigation'
 import { businessDateParts, formatBusinessIsoDate, formatIsoDateParts } from '../src/utils/date'
 
 const sideNavSection = (name: string) =>
@@ -1693,7 +1694,8 @@ const expectLowercasePackageSearch = async (
 }
 
 test.describe('TEST IDIR admin regression', () => {
-  test.describe.configure({ retries: 0 })
+  // Allow bounded navigation recovery without replaying mutation tests.
+  test.describe.configure({ retries: 0, timeout: 240_000 })
   test.skip(!hasIdirCredentials(), 'IDIR e2e credentials are not configured.')
 
   let idirContext: BrowserContext | undefined
@@ -1717,7 +1719,8 @@ test.describe('TEST IDIR admin regression', () => {
     idirContext = await browser.newContext()
     idirPage = await idirContext.newPage()
     await redirectExternalLogoutToLoginShell(idirPage)
-    await loginWithIdir(idirPage)
+    // Each test signs in through authenticatedIdirPage. A temporary login outage must not
+    // fail beforeAll and leave the remaining independent tests unexecuted.
   })
 
   test.afterAll(async () => {
@@ -1780,9 +1783,7 @@ test.describe('TEST IDIR admin regression', () => {
   test('lands authenticated IDIR admins on provincial application review from the app root', async () => {
     const page = await authenticatedIdirPage()
 
-    await page.goto(new URL('/', E2E_BASE_URL).toString(), {
-      waitUntil: 'domcontentloaded',
-    })
+    await expectAccessiblePage(page, '/', /provincial application review/i)
 
     await expect(page.getByRole('heading', { name: /provincial application review/i })).toBeVisible(
       {
@@ -1927,9 +1928,7 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(federalSection.getByRole('link', { name: /upload/i })).toHaveCount(0)
     await expect(adminSection.getByRole('link', { name: /upload/i })).toHaveCount(0)
 
-    await page.goto(new URL('/federal/application/upload', E2E_BASE_URL).toString(), {
-      waitUntil: 'domcontentloaded',
-    })
+    await expectAccessiblePage(page, '/federal/application/upload', /federal application search/i)
     await expect(page.getByRole('heading', { name: /federal application search/i })).toBeVisible()
     await expect(
       page.getByRole('heading', { name: /upload federal application submission/i }),
@@ -2366,37 +2365,32 @@ test.describe('TEST IDIR admin regression', () => {
     for (const [path, heading] of adminAccessiblePages.filter(([routePath]) =>
       routePath.startsWith('/admin'),
     )) {
-      await expect(async () => {
-        const response = await page.goto(new URL(path, E2E_BASE_URL).toString(), {
-          waitUntil: 'domcontentloaded',
-          timeout: 5_000,
-        })
-
-        expect(response?.status(), `${path} should not be blocked by the frontend WAF`).toBe(200)
-        await expect(page.getByRole('heading', { name: heading }).first()).toBeVisible({
-          timeout: 5_000,
-        })
-        await expect(page.getByRole('heading', { name: 'Unauthorized' })).toHaveCount(0)
-      }).toPass({ intervals: [3_000], timeout: 25_000 })
+      const response = await gotoWithRecovery(page, new URL(path, E2E_BASE_URL).toString(), {
+        ready: page.getByRole('heading', { name: heading }).first(),
+      })
+      expect(response?.status(), `${path} should not be blocked by the frontend WAF`).toBe(200)
+      await expect(page.getByRole('heading', { name: heading }).first()).toBeVisible()
+      await expect(page.getByRole('heading', { name: 'Unauthorized' })).toHaveCount(0)
     }
   })
 
   test('keeps the provincial client summary unavailable to IDIR administrators', async () => {
     const page = await authenticatedIdirPage()
 
-    await expect(async () => {
-      const response = await page.goto(new URL('/provincial/summary', E2E_BASE_URL).toString(), {
-        waitUntil: 'domcontentloaded',
-        timeout: 5_000,
-      })
-
-      expect(response?.status(), 'client summary should load through the frontend route').toBe(200)
-      await expect(
-        page.getByRole('heading', { name: "You don't have access to view this page" }),
-      ).toBeVisible({ timeout: 5_000 })
-      await expect(page.getByRole('heading', { name: '404' })).toHaveCount(0)
-      await expect(page.getByRole('button', { name: /log in with idir/i })).toHaveCount(0)
-    }).toPass({ intervals: [3_000], timeout: 25_000 })
+    const deniedHeading = page.getByRole('heading', {
+      name: "You don't have access to view this page",
+    })
+    const response = await gotoWithRecovery(
+      page,
+      new URL('/provincial/summary', E2E_BASE_URL).toString(),
+      {
+        ready: deniedHeading,
+      },
+    )
+    expect(response?.status(), 'client summary should load through the frontend route').toBe(200)
+    await expect(deniedHeading).toBeVisible()
+    await expect(page.getByRole('heading', { name: '404' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: /log in with idir/i })).toHaveCount(0)
   })
 
   test('keeps review queue bulk actions limited to approve', async () => {
