@@ -804,11 +804,11 @@ class OraclePermitDetailsRpcServiceTest {
     when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("B"));
     when(repository.findCorePackageContexts(7000123L, true))
         .thenReturn(List.of(
-            coreContext("PKG-900", 1000456L, false),
-            coreContext("PKG-903", 1000456L, true)));
+            coreContext("PKG-903", 1000456L, false),
+            coreContext("PKG-903  ", 1000456L, true)));
     when(repository.findPermitFeeScaleRows(7000123L))
         .thenReturn(List.of(new PermitFeeScaleRow(
-            scale("101", "TM1", "HEM", "J", 1.04d, 1L, "7000123", "PKG-903"),
+            scale("101", "TM1", "HEM", "J", 1.04d, 1L, "7000123", "PKG-903  "),
             "T", "Hemlock", "Grade J", "S", "Second Growth", BigDecimal.ONE)));
 
     PermitAllScaleFeesRpcResponseDto response = service.getAllScaleFees(7000123L, true);
@@ -816,8 +816,8 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(response.packageList())
         .extracting("packageNumber", "totalFeeForPackage", "growthType")
         .containsExactly(
-            tuple("PKG-900", "$0.00", "Second Growth"),
-            tuple("PKG-903", "$1.04", "Second Growth"));
+            tuple("PKG-903", "$0.00", "Second Growth"),
+            tuple("PKG-903  ", "$1.04", "Second Growth"));
     assertThat(response.packageList().get(0).scaleList()).isEmpty();
     assertThat(response.packageList().get(1).scaleList())
         .extracting("volume", "fee")
@@ -989,11 +989,11 @@ class OraclePermitDetailsRpcServiceTest {
 
   @Test
   void packageMembershipShouldUseDirectRepositoryPredicateInsteadOfLoadingPackageLists() {
-    when(repository.isPackageAssignedToPermitRequired("PKG-903", 7000123L)).thenReturn(true);
+    when(repository.isPackageAssignedToPermitRequired(" PKG-903 ", 7000123L)).thenReturn(true);
 
     assertThat(service.packageBelongsToPermit(" PKG-903 ", 7000123L)).isTrue();
 
-    verify(repository).isPackageAssignedToPermitRequired("PKG-903", 7000123L);
+    verify(repository).isPackageAssignedToPermitRequired(" PKG-903 ", 7000123L);
     verify(repository, never()).findPackageNumbersByPermitNumberRequired(anyLong());
     verify(repository, never()).findPackageNumbersByOicPermitNumber(anyLong());
   }
@@ -1141,6 +1141,50 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
+  void blanketCoreTabsShouldKeepScalesEndUsesAndVolumesUnderTheirExactPackageKeys() {
+    var plain = coreContext("PKG-100", 1000456L, true);
+    var padded = coreContext("PKG-100  ", 1000456L, true);
+    // These contexts use a Blanket OIC exemption so End Use is package-specific.
+    when(repository.findCorePackageContexts(7000123L, true))
+        .thenReturn(List.of(
+            new PermitCorePackageContextRow(plain.packageRow(), plain.applicationInfo(), "P", "B",
+                "Timber", "Timber", "Second Growth", "Second Growth", "Active", true),
+            new PermitCorePackageContextRow(padded.packageRow(), padded.applicationInfo(), "P", "B",
+                "Timber", "Timber", "Second Growth", "Second Growth", "Active", true)));
+    when(repository.findCoreScaleRows(List.of("PKG-100", "PKG-100  "), 7000123L, true))
+        .thenReturn(List.of(
+            coreScale(scale("101", "TM1", "HE", "A", 1d, 1L, "7000123", "PKG-100", 1000456L)),
+            coreScale(scale("102", "TM2", "FI", "B", 2d, 2L, "7000123", "PKG-100  ", 1000456L))));
+    when(repository.findCoreEndUseRows(List.of(1000456L), List.of("PKG-100", "PKG-100  ")))
+        .thenReturn(List.of(
+            new PermitRpcRepository.PermitCoreEndUseRow("PACKAGE", 1000456L, "PKG-100", "HE", "L", null),
+            new PermitRpcRepository.PermitCoreEndUseRow("PACKAGE", 1000456L, "PKG-100  ", "FI", "P", null)));
+
+    var response = service.getCoreTabs(7000123L, true, ignored -> true);
+
+    assertThat(response.packageList()).extracting("packageNumber")
+        .containsExactly("PKG-100", "PKG-100  ");
+    assertThat(response.packageList().get(0).scaleList()).extracting("id").containsExactly("101");
+    assertThat(response.packageList().get(1).scaleList()).extracting("id").containsExactly("102");
+    assertThat(response.packageList().get(0).packageDetails().scaledVolume()).isEqualTo(1d);
+    assertThat(response.packageList().get(1).packageDetails().scaledVolume()).isEqualTo(2d);
+    assertThat(response.packageList().get(0).packageInfo().enduse()).isEqualTo("HE/L\n");
+    assertThat(response.packageList().get(1).packageInfo().enduse()).isEqualTo("FI/P\n");
+    verify(repository, never()).findEndUsesByPackageNumber(any());
+  }
+
+  @Test
+  void packageVolumeShouldNotIncludeAPaddedSibling() {
+    when(repository.findScaleDetailsByPermitNumber(7000123L))
+        .thenReturn(List.of(
+            scale("101", "TM1", "HE", "A", 1d, 1L, "7000123", "PKG-100", 1000456L),
+            scale("102", "TM2", "FI", "B", 2d, 2L, "7000123", "PKG-100  ", 1000456L)));
+
+    assertThat(service.getPackageVolumeSum(7000123L, "PKG-100").volume()).isEqualTo("1.0");
+    assertThat(service.getPackageVolumeSum(7000123L, "PKG-100  ").volume()).isEqualTo("2.0");
+  }
+
+  @Test
   void coreTabsShouldKeepThreeReadsForHundredsOfPackages() {
     List<PermitCorePackageContextRow> packageRows =
         java.util.stream.IntStream.range(0, 250)
@@ -1281,18 +1325,19 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(response.errorMessage()).isNull();
   }
 
-  @Test
-  void availableApplicationListShouldMatchPackageIdentifiersCaseInsensitively() {
+  @ParameterizedTest
+  @ValueSource(strings = {"pkg-901", "PKG-901  "})
+  void availableApplicationListShouldNotMatchADifferentStoredPackageKey(String candidate) {
     when(repository.findPackagesByExemptionNumberRequired("EX-700"))
-        .thenReturn(List.of(new PackageCandidateRow(1001456L, "pkg-901")));
+        .thenReturn(List.of(new PackageCandidateRow(1001456L, candidate)));
     when(repository.findScaleMutationDetailsByApplicationNumber(1001456L))
-        .thenReturn(List.of(scaleMutation("101", 1001456L, " PKG-901 ", null)));
+        .thenReturn(List.of(scaleMutation("101", 1001456L, "PKG-901", null)));
 
     PermitAvailableApplicationListRpcResponseDto response =
         service.getAvailableApplicationList("EX-700", "", ignored -> true);
 
-    assertThat(response.applicationList()).containsExactly("1001456");
-    assertThat(response.errorMessage()).isNull();
+    assertThat(response.applicationList()).isEmpty();
+    assertThat(response.errorMessage()).isEqualTo("No applications are currently available.");
   }
 
   @Test
@@ -1369,6 +1414,27 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(hidden.errorMessage())
         .isEqualTo("No applications are currently available.")
         .isEqualTo(empty.errorMessage());
+  }
+
+  @Test
+  void availablePackageListShouldPreserveAndExcludeExactStoredKeys() {
+    when(repository.findPackagesByExemptionNumberRequired("EX-700"))
+        .thenReturn(List.of(
+            new PackageCandidateRow(1000456L, "PKG-100"),
+            new PackageCandidateRow(1000456L, "PKG-100  ")));
+    when(repository.findScaleMutationDetailsByApplicationNumber(1000456L))
+        .thenReturn(List.of(
+            scaleMutation("101", 1000456L, "PKG-100", null),
+            scaleMutation("102", 1000456L, "PKG-100  ", null)));
+
+    assertThat(service.getAvailablePackageList("EX-700", "", ignored -> true).packageList())
+        .containsExactly("PKG-100", "PKG-100  ");
+    assertThat(service.getAvailablePackageList("EX-700", "PKG-100  ", ignored -> true).packageList())
+        .containsExactly("PKG-100");
+    assertThat(service.getAvailablePackageList("EX-700", "PKG-100", ignored -> true).packageList())
+        .containsExactly("PKG-100  ");
+    assertThat(service.getAvailablePackageList("EX-700", "PKG-100,PKG-100  ", ignored -> true).packageList())
+        .isEmpty();
   }
 
   @Test
@@ -6606,21 +6672,37 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
+  void addBlanketOicScaleShouldRejectAPaddedSiblingOutsideThePermit() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(blanketOicPermitMutationRow()));
+    when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("B"));
+    when(repository.findPackageNumbersByOicPermitNumber(7000123L)).thenReturn(List.of("PKG-903"));
+
+    var response = service.addBlanketOicScale(
+        7000123L, "PKG-903  ", "TM3", "12.5", 7L, "HE", "A", "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors()).containsExactly("Package is not available for this Blanket OIC permit.");
+    verify(repository, never()).insertBoicScaleDetail(any());
+    verify(repository, never()).findScaleDetailsByPackageNumber(any());
+  }
+
+  @Test
   void addBlanketOicScaleShouldPersistScaleAndRecalculatePermitTotals() {
     permitTotalsUpdateSucceeds();
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(blanketOicPermitMutationRow()));
     when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("B"));
-    when(repository.findPackageNumbersByOicPermitNumber(7000123L)).thenReturn(List.of("PKG-903"));
+    when(repository.findPackageNumbersByOicPermitNumber(7000123L)).thenReturn(List.of("PKG-903  "));
     when(repository.isValidBoicTimberMarkRequired("TM3", "EX-700")).thenReturn(true);
     when(repository.isSpeciesCodeValidRequired("HE")).thenReturn(true);
     when(repository.isGradeCodeValidRequired("A")).thenReturn(true);
-    when(repository.findScaleDetailsByPackageNumber("PKG-903")).thenReturn(List.of());
-    when(repository.findPackageDetailsByPackageNumberRequired("PKG-903"))
+    when(repository.findScaleDetailsByPackageNumber("PKG-903  ")).thenReturn(List.of());
+    when(repository.findPackageDetailsByPackageNumberRequired("PKG-903  "))
         .thenReturn(
             Optional.of(
                 new PackageDetailsRow(
-                    "PKG-903", 100.0d, 10.0d, 20.0d, "ACT", null, "N", "S")));
+                    "PKG-903  ", 100.0d, 10.0d, 20.0d, "ACT", null, "N", "S")));
     stubOicApplicationBinding("EX-700");
     when(repository.findApplicationStatusCodeByNumber(1000999L))
         .thenReturn(Optional.of("EXE"));
@@ -6635,17 +6717,17 @@ class OraclePermitDetailsRpcServiceTest {
         .thenReturn(
             Optional.of(
                 scale(
-                    "103", "TM3", "HE", "A", 12.5d, 7L, "7000123", "PKG-903", 1000999L)));
+                    "103", "TM3", "HE", "A", 12.5d, 7L, "7000123", "PKG-903  ", 1000999L)));
     when(repository.findScaleDetailsByPermitNumber(7000123L))
         .thenReturn(
             List.of(),
             List.of(
                 scale(
-                    "103", "TM3", "HE", "A", 12.5d, 7L, "7000123", "PKG-903", 1000999L)));
+                    "103", "TM3", "HE", "A", 12.5d, 7L, "7000123", "PKG-903  ", 1000999L)));
 
     PermitPersistenceRpcResponseDto response =
         service.addBlanketOicScale(
-            7000123L, "PKG-903", "TM3", "12.5", 7L, "HE", "A", "idir\\jsmith");
+            7000123L, "PKG-903  ", "TM3", "12.5", 7L, "HE", "A", "idir\\jsmith");
 
     assertThat(response.success()).isTrue();
     assertThat(response.message()).isEqualTo("Blanket OIC scale detail was added.");
@@ -6656,7 +6738,7 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(scaleCaptor.getValue().timberMark()).isEqualTo("TM3");
     assertThat(scaleCaptor.getValue().piecesCount()).isEqualTo(7L);
     assertThat(scaleCaptor.getValue().speciesGradeVolume()).isEqualTo(12.5d);
-    assertThat(scaleCaptor.getValue().packageNumber()).isEqualTo("PKG-903");
+    assertThat(scaleCaptor.getValue().packageNumber()).isEqualTo("PKG-903  ");
     assertThat(scaleCaptor.getValue().exportSpeciesCode()).isEqualTo("HE");
     assertThat(scaleCaptor.getValue().exportGradeCode()).isEqualTo("A");
     assertThat(scaleCaptor.getValue().applicationNumber()).isEqualTo(1000999L);
@@ -6722,8 +6804,9 @@ class OraclePermitDetailsRpcServiceTest {
     verify(repository, never()).updatePermitDetail(any(), any(), any());
   }
 
-  @Test
-  void addBlanketOicScaleShouldRollBackWhenInsertReturnsMismatchedParent() {
+  @ParameterizedTest
+  @ValueSource(booleans = {false, true})
+  void addBlanketOicScaleShouldRollBackWhenInsertReturnsMismatchedParent(boolean paddedSibling) {
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(blanketOicPermitMutationRow()));
     when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("B"));
@@ -6755,8 +6838,8 @@ class OraclePermitDetailsRpcServiceTest {
                     12.5d,
                     7L,
                     "7000123",
-                    "PKG-OTHER",
-                    1000456L)));
+                    paddedSibling ? "PKG-903  " : "PKG-OTHER",
+                    paddedSibling ? 1000999L : 1000456L)));
     RecordingTransactionManager transactionManager = new RecordingTransactionManager();
 
     PermitPersistenceRpcResponseDto response =

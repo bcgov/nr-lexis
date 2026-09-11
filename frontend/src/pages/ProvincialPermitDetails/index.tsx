@@ -157,7 +157,7 @@ import {
 } from '@/service/shipping-reference-service'
 import { triggerBrowserDownload } from '@/utils/download'
 import { formatPermitNumber, formatPermitStatus } from '@/utils/permit'
-import { isValidEmail, normalizeTrimmedText } from '@/utils/text'
+import { formatPackageNumberLabel, isValidEmail, normalizeTrimmedText } from '@/utils/text'
 
 const formatAmount = (value: number): string => {
   return value.toLocaleString(undefined, {
@@ -1418,7 +1418,10 @@ const ProvincialPermitDetailsPage = () => {
       (tabsData?.packages ?? [])
         .map((row) => row.packageNumber)
         .filter(Boolean)
-        .map((packageNumber) => ({ value: packageNumber, label: packageNumber })),
+        .map((packageNumber) => ({
+          value: packageNumber,
+          label: formatPackageNumberLabel(packageNumber),
+        })),
     [tabsData],
   )
   const selectedBlanketOicPackageNumber = blanketOicPackageOptions.some(
@@ -1476,8 +1479,10 @@ const ProvincialPermitDetailsPage = () => {
   )
   const permitPackageNumberSummary =
     associatedPermitPackageNumbers.length > 0
-      ? associatedPermitPackageNumbers.join(', ')
+      ? associatedPermitPackageNumbers.map(formatPackageNumberLabel).join(', ')
       : detail?.packageNumber
+        ? formatPackageNumberLabel(detail.packageNumber)
+        : detail?.packageNumber
 
   const permitFeeRows = tabsData?.fees ?? []
   const showMinistryFeeColumn = permitFeeRows.some((row) => row.ministryUser)
@@ -2976,13 +2981,19 @@ const ProvincialPermitDetailsPage = () => {
       return false
     }
     const speciesCodes = parseBlanketOicSpeciesCodes(boicPackageForm.speciesCodes)
+    const packageNumber =
+      editingBoicPackageNumber ?? boicPackageForm.packageNumber.trim().toUpperCase()
+    const newPackageNumber =
+      editingBoicPackageNumber === null
+        ? undefined
+        : boicPackageForm.packageNumber === editingBoicPackageNumber
+          ? editingBoicPackageNumber
+          : boicPackageForm.packageNumber.trim().toUpperCase()
 
     const request: BlanketOicPackageMutationRequest = {
       permitNumber: resolvedPermitNumber,
-      packageNumber: editingBoicPackageNumber ?? boicPackageForm.packageNumber.trim().toUpperCase(),
-      newPackageNumber: editingBoicPackageNumber
-        ? boicPackageForm.packageNumber.trim().toUpperCase()
-        : undefined,
+      packageNumber,
+      newPackageNumber,
       volume: boicPackageForm.volume.trim(),
       averageLength: boicPackageForm.averageLength.trim(),
       averageDiameter: boicPackageForm.averageDiameter.trim(),
@@ -3015,11 +3026,8 @@ const ProvincialPermitDetailsPage = () => {
             : current,
         )
       }
-      const savedPackageNumber = (
-        result.packageNumber ||
-        request.newPackageNumber ||
-        request.packageNumber
-      ).trim()
+      const savedPackageNumber =
+        result.packageNumber || request.newPackageNumber || request.packageNumber
       if (savedPackageNumber) {
         setSelectedBlanketOicPackageNumberState(savedPackageNumber)
       }
@@ -3123,7 +3131,7 @@ const ProvincialPermitDetailsPage = () => {
 
     const request = {
       permitNumber: resolvedPermitNumber,
-      packageNumber: selectedBlanketOicPackageNumber.trim(),
+      packageNumber: selectedBlanketOicPackageNumber,
       timberMark: boicScaleForm.timberMark.trim(),
       scaleVolume: boicScaleForm.scaleVolume.trim(),
       scalePieces: boicScaleForm.scalePieces.trim(),
@@ -3136,7 +3144,7 @@ const ProvincialPermitDetailsPage = () => {
       return false
     }
     if (
-      !request.packageNumber ||
+      !request.packageNumber.trim() ||
       !request.timberMark ||
       !request.scaleVolume ||
       !request.scalePieces ||
@@ -4837,7 +4845,11 @@ const ProvincialPermitDetailsPage = () => {
                                 <TableBody>
                                   {visibleBlanketOicPackages.map((row) => (
                                     <TableRow key={row.packageNumber}>
-                                      <TableCell>{row.packageNumber || '-'}</TableCell>
+                                      <TableCell>
+                                        {row.packageNumber
+                                          ? formatPackageNumberLabel(row.packageNumber)
+                                          : '-'}
+                                      </TableCell>
                                       <TableCell>{row.region || '-'}</TableCell>
                                       <TableCell style={{ whiteSpace: 'pre-line' }}>
                                         {row.speciesEndUseSort || '-'}
@@ -4862,7 +4874,9 @@ const ProvincialPermitDetailsPage = () => {
                                           {(tabsData?.items ?? []).some(
                                             (item) => item.packageNumber === row.packageNumber,
                                           ) && (
-                                            <p id={`boic-package-delete-help-${row.packageNumber}`}>
+                                            <p
+                                              id={`boic-package-delete-help-${encodeURIComponent(row.packageNumber)}`}
+                                            >
                                               Delete unavailable while this package has scale
                                               details.
                                             </p>
@@ -4886,7 +4900,7 @@ const ProvincialPermitDetailsPage = () => {
                                               (tabsData?.items ?? []).some(
                                                 (item) => item.packageNumber === row.packageNumber,
                                               )
-                                                ? `boic-package-delete-help-${row.packageNumber}`
+                                                ? `boic-package-delete-help-${encodeURIComponent(row.packageNumber)}`
                                                 : undefined
                                             }
                                             disabled={
@@ -4943,7 +4957,7 @@ const ProvincialPermitDetailsPage = () => {
                               <div className="application-detail-edit-section">
                                 <h3>
                                   {editingBoicPackageNumber
-                                    ? `Edit ${editingBoicPackageNumber}`
+                                    ? `Edit ${formatPackageNumberLabel(editingBoicPackageNumber)}`
                                     : 'Create Blanket OIC package'}
                                 </h3>
                                 {isLoadingBoicPackage && (
@@ -5522,7 +5536,11 @@ const ProvincialPermitDetailsPage = () => {
                                 <TableBody>
                                   {tabsData.packageFeeSummaries.map((summary) => (
                                     <TableRow key={summary.packageNumber}>
-                                      <TableCell>{summary.packageNumber}</TableCell>
+                                      <TableCell>
+                                        {summary.packageNumber
+                                          ? formatPackageNumberLabel(summary.packageNumber)
+                                          : '-'}
+                                      </TableCell>
                                       <TableCell>{summary.growthType || '-'}</TableCell>
                                       <TableCell>
                                         {detail.exemptionNumber ? (
@@ -5587,7 +5605,11 @@ const ProvincialPermitDetailsPage = () => {
                               <TableBody>
                                 {permitFeeRows.map((row) => (
                                   <TableRow key={row.id}>
-                                    <TableCell>{row.packageNumber || '-'}</TableCell>
+                                    <TableCell>
+                                      {row.packageNumber
+                                        ? formatPackageNumberLabel(row.packageNumber)
+                                        : '-'}
+                                    </TableCell>
                                     <TableCell>{row.timberMark || '-'}</TableCell>
                                     <TableCell>{row.species || '-'}</TableCell>
                                     <TableCell>{row.grade || '-'}</TableCell>
@@ -5979,8 +6001,8 @@ const ProvincialPermitDetailsPage = () => {
       <ConfirmationModal
         open={boicPackageNumberPendingDeletion !== null}
         danger
-        title={`Delete Blanket OIC package ${boicPackageNumberPendingDeletion ?? ''}?`}
-        description={`Delete Blanket OIC package ${boicPackageNumberPendingDeletion ?? ''}. This action cannot be undone.`}
+        title={`Delete Blanket OIC package ${formatPackageNumberLabel(boicPackageNumberPendingDeletion ?? '')}?`}
+        description={`Delete Blanket OIC package ${formatPackageNumberLabel(boicPackageNumberPendingDeletion ?? '')}. This action cannot be undone.`}
         confirmLabel="Delete package"
         pendingLabel="Deleting…"
         onClose={() => setBoicPackageNumberPendingDeletion(null)}

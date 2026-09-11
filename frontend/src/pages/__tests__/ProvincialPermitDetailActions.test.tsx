@@ -3411,6 +3411,143 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
   })
 
+  it('distinguishes padded BOIC package keys and preserves the selected key for package actions and scale adds', async () => {
+    const plainPackage = {
+      ...editableBlanketOicPackage,
+      packageNumber: 'PKG-1',
+      comments: 'Plain package',
+    }
+    const paddedPackage = {
+      ...editableBlanketOicPackage,
+      packageNumber: 'PKG-1 ',
+      comments: 'Padded package',
+    }
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      permitStatusCode: 'ACT',
+      permitStatusDescription: 'Active',
+      exemptionTypeDescription: 'Blanket OIC',
+      blanketOic: true,
+      oicApplicationNumber: 1000999,
+    })
+    mockedFetchProvincialPermitDetailTabs.mockResolvedValue({
+      ...tabsResult,
+      packages: [plainPackage, paddedPackage],
+    })
+    mockedFetchBlanketOicPackageEditContext.mockImplementation(async (packageNumber) => ({
+      packageNumber,
+      volume: '120.5',
+      averageLength: '7.1',
+      averageDiameter: '16.2',
+      status: 'ACT',
+      comments: 'Padded package',
+      reprocessed: 'N',
+      ageClass: 'O',
+      productType: 'H',
+      endUseCode: 'LU',
+      speciesCodes: ['HE'],
+    }))
+    mockedUpdateBlanketOicPackage.mockResolvedValue({
+      success: true,
+      message: 'Blanket OIC package was updated.',
+      errors: [],
+      warnings: [],
+      permitNumber: '777',
+      applicationNumber: '1000999',
+      packageNumber: 'PKG-1 ',
+    })
+
+    renderPermitDetails()
+    await selectPermitDetailTab('Items')
+
+    const packageSelect = await screen.findByRole('combobox', { name: 'Package number' })
+    await userEvent.click(packageSelect)
+    expect(await screen.findByRole('option', { name: 'PKG-1' })).toBeInTheDocument()
+    const paddedOption = await screen.findByRole('option', {
+      name: 'PKG-1 (1 trailing space)',
+    })
+    await userEvent.click(paddedOption)
+
+    expect(packageSelect).toHaveValue('PKG-1 (1 trailing space)')
+    const paddedPackageCell = await screen.findByRole('cell', {
+      name: 'PKG-1 (1 trailing space)',
+    })
+    const paddedPackageRow = paddedPackageCell.closest('tr')!
+    await userEvent.click(within(paddedPackageRow).getByRole('button', { name: 'Edit' }))
+    await waitFor(() => {
+      expect(mockedFetchBlanketOicPackageEditContext).toHaveBeenCalledWith('PKG-1 ')
+    })
+    const packageEditor = (
+      await screen.findByRole('heading', { name: 'Edit PKG-1 (1 trailing space)' })
+    ).closest('.application-detail-edit-section') as HTMLElement
+    expect(within(packageEditor).getByLabelText('Package number')).toHaveValue('PKG-1 ')
+    await userEvent.type(within(packageEditor).getByLabelText('Comments'), ' updated')
+    await userEvent.click(within(packageEditor).getByRole('button', { name: 'Save package' }))
+    await waitFor(() => {
+      expect(mockedUpdateBlanketOicPackage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          packageNumber: 'PKG-1 ',
+          newPackageNumber: 'PKG-1 ',
+          comments: 'Padded package updated',
+        }),
+      )
+      expect(packageSelect).toHaveValue('PKG-1 (1 trailing space)')
+    })
+
+    await userEvent.type(screen.getByLabelText('Timber mark'), 'TM-PAD')
+    await chooseComboBoxOption(screen.getByRole('combobox', { name: 'Species' }), 'HE - Hemlock')
+    await chooseComboBoxOption(screen.getByRole('combobox', { name: 'Grade' }), 'A - Sawlog')
+    await userEvent.type(screen.getByLabelText('Pieces'), '4')
+    await userEvent.type(screen.getByLabelText('Volume (m³)'), '2.5')
+    await userEvent.click(screen.getByRole('button', { name: 'Add scale' }))
+
+    await waitFor(() => {
+      expect(mockedAddBlanketOicScale).toHaveBeenCalledWith(
+        expect.objectContaining({ packageNumber: 'PKG-1 ', timberMark: 'TM-PAD' }),
+      )
+    })
+
+    const refreshedPaddedPackageCell = await screen.findByRole('cell', {
+      name: 'PKG-1 (1 trailing space)',
+    })
+    const refreshedPaddedPackageRow = refreshedPaddedPackageCell.closest('tr')!
+    await userEvent.click(within(refreshedPaddedPackageRow).getByRole('button', { name: 'Delete' }))
+    const dialog = await screen.findByRole('dialog', {
+      name: 'Delete Blanket OIC package PKG-1 (1 trailing space)?',
+    })
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Delete package' }))
+    await waitFor(() => {
+      expect(mockedDeleteBlanketOicPackage).toHaveBeenCalledWith('777', 'PKG-1 ')
+    })
+  })
+
+  it('labels padded BOIC package keys distinctly in fee tables', async () => {
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      exemptionTypeDescription: 'Blanket OIC',
+      blanketOic: true,
+    })
+    mockedFetchProvincialPermitFees.mockResolvedValue({
+      totalFeeVolume: 2,
+      packageFeeSummaries: [
+        { packageNumber: 'PKG-1', growthType: 'Old growth', totalFeeForPackage: '$1.00' },
+        { packageNumber: 'PKG-1 ', growthType: 'Old growth', totalFeeForPackage: '$1.00' },
+      ],
+      fees: [
+        { ...calculatedPermitFees.fees[0], id: 'FEE-PLAIN', packageNumber: 'PKG-1' },
+        { ...calculatedPermitFees.fees[0], id: 'FEE-PADDED', packageNumber: 'PKG-1 ' },
+      ],
+    })
+
+    renderPermitDetails()
+    await selectPermitDetailTab('Fees')
+
+    expect((await screen.findAllByRole('cell', { name: 'PKG-1' })).length).toBe(2)
+    expect((await screen.findAllByRole('cell', { name: 'PKG-1 (1 trailing space)' })).length).toBe(
+      2,
+    )
+  })
+
   it('adds and removes Blanket OIC scale rows from the items tab', async () => {
     const blanketOicPermit = {
       ...permitDetail,

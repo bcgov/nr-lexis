@@ -3,6 +3,7 @@ package ca.bc.gov.mof.lexis.service.permit;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -125,6 +126,67 @@ class OracleBlanketOicPackageServiceTest {
   }
 
   @Test
+  void updatePackageUsesExactPaddedPackageNumberForOwnershipAndPersistence() {
+    OracleBlanketOicPackageService service = service();
+    PermitMutationRow permit = permit(1000456L, 250.0d);
+    when(permitRepository.findPermitMutationByPermitNumber(7000123L)).thenReturn(Optional.of(permit));
+    when(permitRepository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("B"));
+    when(applicationService.findApplicationNumberForPackage(any()))
+        .thenAnswer(
+            invocation ->
+                "PKG-1 ".equals(invocation.getArgument(0))
+                    ? Optional.of(1000456L)
+                    : Optional.of(1000999L));
+    when(permitRepository.findPackageNumbersByOicPermitNumber(7000123L)).thenReturn(List.of());
+    when(applicationService.updateHiddenBlanketOicPackage(any(), eq("idir\\jsmith")))
+        .thenReturn(new ApplicationDetailsRpcService.PackagePersistenceResult(
+            true, "PKG-1 ", "100.0", "10.0", "20.0", "ACT", List.of(), List.of()));
+
+    BlanketOicPackageService.MutationResult result =
+        service.updatePackage(request("PKG-1 ", null, 100.0d), "idir\\jsmith");
+
+    assertThat(result.success()).isTrue();
+    verify(applicationService).findApplicationNumberForPackage("PKG-1 ");
+    ArgumentCaptor<ApplicationDetailsRpcService.PackageMutationRequest> captor =
+        ArgumentCaptor.forClass(ApplicationDetailsRpcService.PackageMutationRequest.class);
+    verify(applicationService)
+        .updateHiddenBlanketOicPackage(captor.capture(), eq("idir\\jsmith"));
+    assertThat(captor.getValue().packageNumber()).isEqualTo("PKG-1 ");
+  }
+
+  @Test
+  void updatePackageIncludesPlainSiblingWhenReplacingPaddedPackageNumber() {
+    OracleBlanketOicPackageService service = service();
+    PermitMutationRow permit = permit(1000456L, 150.0d);
+    when(permitRepository.findPermitMutationByPermitNumber(7000123L)).thenReturn(Optional.of(permit));
+    when(permitRepository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("B"));
+    when(applicationService.findApplicationNumberForPackage(any())).thenReturn(Optional.of(1000456L));
+    when(permitRepository.findPackageNumbersByOicPermitNumber(7000123L))
+        .thenReturn(List.of("PKG-1", "PKG-1 "));
+    when(applicationService.getPackageDetails(any()))
+        .thenAnswer(
+            invocation -> {
+              String currentPackageNumber = invocation.getArgument(0);
+              return packageDetails(
+                  currentPackageNumber,
+                  "PKG-1 ".equals(currentPackageNumber) ? "60.0" : "90.0");
+            });
+    lenient().when(applicationService.updateHiddenBlanketOicPackage(any(), eq("idir\\jsmith")))
+        .thenReturn(new ApplicationDetailsRpcService.PackagePersistenceResult(
+            true, "PKG-1 ", "75.0", "10.0", "20.0", "ACT", List.of(), List.of()));
+
+    BlanketOicPackageService.MutationResult result =
+        service.updatePackage(request("PKG-1 ", null, 75.0d), "idir\\jsmith");
+
+    assertThat(result.success()).isFalse();
+    assertThat(result.errors()).containsExactly(
+        "The total package volume must not exceed the permit request volume (150.0).");
+    verify(applicationService).getPackageDetails("PKG-1");
+    verify(applicationService, never()).getPackageDetails("PKG-1 ");
+    verify(applicationService, never()).updateHiddenBlanketOicPackage(any(), any());
+  }
+
+  @Test
   void deletePackageRejectsAnyDependentScaleRows() {
     OracleBlanketOicPackageService service = service();
     PermitMutationRow permit = permit(1000456L, 250.0d);
@@ -167,6 +229,35 @@ class OracleBlanketOicPackageServiceTest {
     assertThat(result.success()).isTrue();
     verify(applicationService)
         .deleteHiddenBlanketOicPackageById("PKG-1", 1000456L, "idir\\jsmith");
+  }
+
+  @Test
+  void deletePackageUsesExactPaddedPackageNumberForOwnershipAndDeleteTarget() {
+    OracleBlanketOicPackageService service = service();
+    PermitMutationRow permit = permit(1000456L, 250.0d);
+    when(permitRepository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permit));
+    when(permitRepository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("B"));
+    when(applicationService.findApplicationNumberForPackage(any()))
+        .thenAnswer(
+            invocation ->
+                "PKG-1 ".equals(invocation.getArgument(0))
+                    ? Optional.of(1000456L)
+                    : Optional.of(1000999L));
+    when(applicationService.getScalesForPackage("PKG-1 ")).thenReturn(List.of());
+    when(
+            applicationService.deleteHiddenBlanketOicPackageById(
+                "PKG-1 ", 1000456L, "idir\\jsmith"))
+        .thenReturn(true);
+
+    BlanketOicPackageService.MutationResult result =
+        service.deletePackage(7000123L, "PKG-1 ", "idir\\jsmith");
+
+    assertThat(result.success()).isTrue();
+    verify(applicationService).findApplicationNumberForPackage("PKG-1 ");
+    verify(applicationService).getScalesForPackage("PKG-1 ");
+    verify(applicationService)
+        .deleteHiddenBlanketOicPackageById("PKG-1 ", 1000456L, "idir\\jsmith");
   }
 
   @Test

@@ -46,7 +46,7 @@ class PermitRpcRepositoryTest {
   void packagePermitMembershipShouldUseOneDirectPredicateForNormalAndOicRelationships() {
     when(
             jdbcTemplate.queryForObject(
-                anyString(), eq(Long.class), eq("PKG-903"), eq(7000123L), eq(7000123L)))
+                anyString(), eq(Long.class), eq(" PKG-903 "), eq(7000123L), eq(7000123L)))
         .thenReturn(1L);
     PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
 
@@ -55,7 +55,7 @@ class PermitRpcRepositoryTest {
     ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
     verify(jdbcTemplate)
         .queryForObject(
-            sql.capture(), eq(Long.class), eq("PKG-903"), eq(7000123L), eq(7000123L));
+            sql.capture(), eq(Long.class), eq(" PKG-903 "), eq(7000123L), eq(7000123L));
     assertThat(sql.getValue())
         .contains("WHEN EXISTS")
         .contains("FROM EXPORT_PACKAGE P")
@@ -160,10 +160,32 @@ class PermitRpcRepositoryTest {
             "packageStatusCode",
             "growthTypeCode")
         .containsExactly(
-            tuple("PKG-100", 1000457L, 10.0d, "COM", "O"),
-            tuple("PKG-200", 1000456L, 20.0d, "ACT", "S"));
+            tuple(" PKG-200 ", 1000456L, 20.0d, "ACT", "S"),
+            tuple("PKG-100", 1000457L, 10.0d, "COM", "O"));
     verify(callableStatement).setString(1, "7000123");
     verify(callableStatement).registerOutParameter(2, Types.REF_CURSOR);
+  }
+
+  @Test
+  void oicPackageListShouldPreserveDistinctCursorKeys() throws Exception {
+    stubCursorProcedure("{ call LEXIS_GROUP_5.FIND_PACKAGES_BY_OIC_PERMIT(?,?) }", 2);
+    when(resultSet.next()).thenReturn(true, true, true, false);
+    when(resultSet.getString("PACKAGE_NUMBER")).thenReturn("PKG-100  ", "PKG-100", "PKG-100  ");
+
+    assertThat(new PermitRpcRepository(jdbcTemplate).findPackageNumbersByOicPermitNumber(7000123L))
+        .containsExactly("PKG-100", "PKG-100  ");
+  }
+
+  @Test
+  void packageScaleLookupShouldBindAndReturnTheExactKey() throws Exception {
+    stubCursorProcedure("{ call LEXIS_GROUP_5.FIND_SCALE_DETAIL_BY_PKG(?,?) }", 2);
+    when(resultSet.next()).thenReturn(true, false);
+    when(resultSet.getString(anyString())).thenReturn(null);
+    when(resultSet.getString("PACKAGE_NUMBER")).thenReturn("PKG-100  ");
+
+    assertThat(new PermitRpcRepository(jdbcTemplate).findScaleDetailsByPackageNumber("PKG-100  "))
+        .extracting("packageNumber").containsExactly("PKG-100  ");
+    verify(callableStatement).setString(1, "PKG-100  ");
   }
 
   @Test
@@ -328,6 +350,74 @@ class PermitRpcRepositoryTest {
         .contains("ASSIGNED_TO_PERMIT")
         .contains("TARGET_SCALE.EXPORT_PERMIT_DETAIL_NUMBER = ?")
         .contains("ORDER BY P.PACKAGE_NUMBER");
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void corePackageContextsShouldKeepDistinctStoredKeys() {
+    var plain = new PermitRpcRepository.PermitCorePackageContextRow(
+        new PermitRpcRepository.PermitCorePackageRow(
+            "PKG-100", 1000456L, 10d, 1d, 1d, "ACT", null, "N", "S", "H"),
+        null, "P", "B", null, null, null, null, null, false);
+    var padded = new PermitRpcRepository.PermitCorePackageContextRow(
+        new PermitRpcRepository.PermitCorePackageRow(
+            "PKG-100  ", 1000456L, 20d, 1d, 1d, "ACT", null, "N", "S", "H"),
+        null, "P", "B", null, null, null, null, null, true);
+    when(jdbcTemplate.query(anyString(), any(RowMapper.class),
+        eq(7000123L), eq(7000123L), eq(7000123L)))
+        .thenReturn(List.of(padded, plain, padded));
+
+    assertThat(new PermitRpcRepository(jdbcTemplate).findCorePackageContexts(7000123L, true))
+        .containsExactly(plain, padded);
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void bulkPackageLookupsShouldBindBothExactKeys() {
+    when(jdbcTemplate.query(anyString(), any(RowMapper.class), eq("PKG-100"), eq("PKG-100  ")))
+        .thenReturn(List.of());
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    repository.findCoreScaleRows(List.of("PKG-100  ", "PKG-100", "PKG-100  "), 7000123L, true);
+    repository.findCoreEndUseRows(List.of(), List.of("PKG-100  ", "PKG-100", "PKG-100  "));
+
+    verify(jdbcTemplate, org.mockito.Mockito.times(2))
+        .query(anyString(), any(RowMapper.class), eq("PKG-100"), eq("PKG-100  "));
+  }
+
+  @Test
+  @SuppressWarnings({"rawtypes", "unchecked"})
+  void scaleAssignmentUpdateShouldRetainItsStoredPackageKey() throws Exception {
+    when(jdbcTemplate.execute(anyString(), any(CallableStatementCallback.class)))
+        .thenAnswer(invocation -> ((CallableStatementCallback<?>) invocation.getArgument(1))
+            .doInCallableStatement(callableStatement));
+    var record = new PermitRpcRepository.ScaleMutationRecord(
+        "103", "TM3", 7L, 12.5d, "PKG-903  ", "HE", "A", 7000123L,
+        "idir\\jsmith", Timestamp.valueOf("2026-01-01 10:00:00"));
+
+    assertThat(new PermitRpcRepository(jdbcTemplate).updateScaleDetail(record, "idir\\jsmith"))
+        .isTrue();
+    verify(callableStatement).setString(6, "PKG-903  ");
+  }
+
+  @Test
+  void boicScaleInsertShouldBindAndVerifyTheExactPackageKey() throws Exception {
+    stubCursorProcedure("{ call LEXIS_GROUP_9.INSERT_SCALE_DETAIL(?,?,?,?,?,?,?,?,?,?,?,?,?) }", 13);
+    when(resultSet.next()).thenReturn(true, false, true, false);
+    when(resultSet.getString(anyString())).thenReturn(null);
+    when(resultSet.getLong(anyString())).thenReturn(0L);
+    when(resultSet.getString("EXPORT_SCALE_DETAIL_ID")).thenReturn("103");
+    when(resultSet.getLong("APPLICATION_NUMBER")).thenReturn(1000999L);
+    when(resultSet.getString("EXPORT_PERMIT_DETAIL_NUMBER")).thenReturn("7000123");
+    when(resultSet.getString("PACKAGE_NUMBER")).thenReturn("PKG-903  ", "PKG-903");
+    var record = new PermitRpcRepository.BoicScaleMutationRecord(
+        "TM3", 7L, 12.5d, "PKG-903  ", "HE", "A", 1000999L, 7000123L, null,
+        "idir\\jsmith", Timestamp.valueOf("2026-01-01 10:00:00"));
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertThat(repository.insertBoicScaleDetail(record)).isPresent();
+    assertThat(repository.insertBoicScaleDetail(record)).isEmpty();
+    verify(callableStatement, org.mockito.Mockito.times(2)).setString(8, "PKG-903  ");
   }
 
   @Test
@@ -1010,7 +1100,7 @@ class PermitRpcRepositoryTest {
 
     assertThat(repository.findPackagesByExemptionNumberRequired("EX-700"))
         .extracting("applicationNumber", "packageNumber")
-        .containsExactly(tuple(1000456L, "PKG-901"));
+        .containsExactly(tuple(1000456L, " PKG-901 "));
     verify(resultSet, never()).getLong("EXPORT_PERMIT_DETAIL_NUMBER");
     verify(resultSet, never()).getLong("EXPORT_PERMIT_NUMBER");
   }

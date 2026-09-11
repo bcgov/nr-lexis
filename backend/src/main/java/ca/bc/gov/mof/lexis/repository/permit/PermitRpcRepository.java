@@ -615,7 +615,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
           cs.setString(3, trim(record.timberMark()));
           setLongOrNull(cs, 4, record.piecesCount());
           setDoubleOrNull(cs, 5, record.speciesGradeVolume());
-          cs.setString(6, trim(record.packageNumber()));
+          cs.setString(6, preservePackageNumber(record.packageNumber()));
           cs.setString(7, trim(record.exportSpeciesCode()));
           cs.setString(8, trim(record.exportGradeCode()));
           cs.setString(9, auditUserOrDefault(record.entryUserId()));
@@ -627,7 +627,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
   }
 
   public Optional<PermitScaleDetailRow> insertBoicScaleDetail(BoicScaleMutationRecord record) {
-    if (record == null || trim(record.packageNumber()) == null || record.applicationNumber() == null) {
+    if (record == null || preservePackageNumber(record.packageNumber()) == null || record.applicationNumber() == null) {
       return Optional.empty();
     }
 
@@ -641,7 +641,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
           setTimestampOrNull(cs, 5, record.entryTimestamp());
           setStringOrNull(cs, 6, null);
           setTimestampOrNull(cs, 7, null);
-          cs.setString(8, trim(record.packageNumber()));
+          cs.setString(8, preservePackageNumber(record.packageNumber()));
           cs.setString(9, trim(record.exportSpeciesCode()));
           cs.setString(10, trim(record.exportGradeCode()));
           setLongOrNull(cs, 11, record.exportPermitDetailNumber());
@@ -661,7 +661,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
                             row.exportPermitDetailNumber()),
                         record.exportPermitDetailNumber())
                     && java.util.Objects.equals(
-                        trim(row.packageNumber()), trim(record.packageNumber())));
+                        preservePackageNumber(row.packageNumber()), preservePackageNumber(record.packageNumber())));
   }
 
   public boolean deleteScaleDetailById(String scaleDetailId, String userId) {
@@ -704,7 +704,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
         2,
         rs ->
             new PermitPackageApplicationRow(
-                getString(rs, "PACKAGE_NUMBER"), getLong(rs, "APPLICATION_NUMBER")));
+                getRawString(rs, "PACKAGE_NUMBER"), getLong(rs, "APPLICATION_NUMBER")));
   }
 
   private List<String> findPackageNumbersByPermitNumber(
@@ -719,12 +719,12 @@ public class PermitRpcRepository extends OracleRepositorySupport {
                 FIND_PACKAGES_BY_PERMIT,
                 cs -> cs.setString(1, permitNumber.toString()),
                 2,
-                rs -> getString(rs, "PACKAGE_NUMBER"))
+                rs -> getRawString(rs, "PACKAGE_NUMBER"))
             : queryCursorProcedure(
                 FIND_PACKAGES_BY_PERMIT,
                 cs -> cs.setString(1, permitNumber.toString()),
                 2,
-                rs -> getString(rs, "PACKAGE_NUMBER"));
+                rs -> getRawString(rs, "PACKAGE_NUMBER"));
     return packageNumbers
         .stream()
         .filter(packageNumber -> packageNumber != null && !packageNumber.isBlank())
@@ -742,7 +742,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
             FIND_PACKAGES_BY_OIC_PERMIT,
             cs -> cs.setString(1, oicPermitNumber.toString()),
             2,
-            rs -> getString(rs, "PACKAGE_NUMBER"))
+            rs -> getRawString(rs, "PACKAGE_NUMBER"))
         .stream()
         .filter(packageNumber -> packageNumber != null && !packageNumber.isBlank())
         .distinct()
@@ -780,12 +780,11 @@ public class PermitRpcRepository extends OracleRepositorySupport {
 
     Map<String, PermitCorePackageContextRow> packagesByNumber = new TreeMap<>();
     for (PermitCorePackageContextRow row : rows) {
-      String packageNumber = trim(row.packageRow().packageNumber());
+      String packageNumber = preservePackageNumber(row.packageRow().packageNumber());
       if (packageNumber == null) {
         continue;
       }
-      PermitCorePackageRow normalizedPackage = row.packageRow().withPackageNumber(packageNumber);
-      packagesByNumber.putIfAbsent(packageNumber, row.withPackageRow(normalizedPackage));
+      packagesByNumber.putIfAbsent(packageNumber, row);
     }
     if (!blanketOic
         && packagesByNumber.values().stream()
@@ -804,7 +803,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
         packageNumbers == null
             ? List.of()
             : packageNumbers.stream()
-                .map(this::trim)
+                .map(this::preservePackageNumber)
                 .filter(java.util.Objects::nonNull)
                 .distinct()
                 .sorted()
@@ -851,7 +850,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
         packageNumbers == null
             ? List.of()
             : packageNumbers.stream()
-                .map(this::trim)
+                .map(this::preservePackageNumber)
                 .filter(java.util.Objects::nonNull)
                 .distinct()
                 .sorted()
@@ -945,7 +944,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
             new PermitCoreEndUseRow(
                 getString(rs, "ROW_KIND"),
                 getLong(rs, "APPLICATION_NUMBER"),
-                getString(rs, "PACKAGE_NUMBER"),
+                getRawString(rs, "PACKAGE_NUMBER"),
                 getString(rs, "EXPORT_SPECIES_CODE"),
                 getString(rs, "EXPORT_END_USE_CODE"),
                 getString(rs, "EXCOL_TRANSLATION_VALUE")),
@@ -976,11 +975,11 @@ public class PermitRpcRepository extends OracleRepositorySupport {
 
     Map<String, PermitCorePackageRow> packagesByNumber = new TreeMap<>();
     for (PermitCorePackageRow row : rows) {
-      String packageNumber = trim(row.packageNumber());
+      String packageNumber = preservePackageNumber(row.packageNumber());
       if (packageNumber == null) {
         continue;
       }
-      packagesByNumber.putIfAbsent(packageNumber, row.withPackageNumber(packageNumber));
+      packagesByNumber.putIfAbsent(packageNumber, row);
     }
     return List.copyOf(packagesByNumber.values());
   }
@@ -990,8 +989,8 @@ public class PermitRpcRepository extends OracleRepositorySupport {
    * procedures without materializing either list.
    */
   public boolean isPackageAssignedToPermitRequired(String packageNumber, Long permitNumber) {
-    String normalizedPackageNumber = trim(packageNumber);
-    if (normalizedPackageNumber == null || permitNumber == null || permitNumber < 1) {
+    String persistedPackageNumber = preservePackageNumber(packageNumber);
+    if (persistedPackageNumber == null || permitNumber == null || permitNumber < 1) {
       return false;
     }
 
@@ -999,7 +998,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
         jdbcTemplate.queryForObject(
             PACKAGE_BELONGS_TO_PERMIT,
             Long.class,
-            normalizedPackageNumber,
+            persistedPackageNumber,
             permitNumber,
             permitNumber);
     return matches != null && matches > 0;
@@ -1692,7 +1691,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
   }
 
   public List<PermitScaleDetailRow> findScaleDetailsByPackageNumber(String packageNumber) {
-    String normalized = trim(packageNumber);
+    String normalized = preservePackageNumber(packageNumber);
     if (normalized == null) {
       return List.of();
     }
@@ -1710,7 +1709,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
                 coalesce(getLong(rs, "PIECES_COUNT"), 0L),
                 getLong(rs, "APPLICATION_NUMBER"),
                 getString(rs, "EXPORT_PERMIT_DETAIL_NUMBER"),
-                getString(rs, "PACKAGE_NUMBER"),
+                getRawString(rs, "PACKAGE_NUMBER"),
                 getString(rs, "CASCADE_SPLIT_CODE"),
                 getString(rs, "EWB"),
                 getString(rs, "FIL"),
@@ -1764,7 +1763,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
   }
 
   public Optional<PackageInfoRow> findPackageInfoByPackageNumber(String packageNumber) {
-    String normalized = trim(packageNumber);
+    String normalized = preservePackageNumber(packageNumber);
     if (normalized == null) {
       return Optional.empty();
     }
@@ -1775,7 +1774,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
         2,
         rs ->
             new PackageInfoRow(
-                getString(rs, "PACKAGE_NUMBER"),
+                getRawString(rs, "PACKAGE_NUMBER"),
                 getLong(rs, "APPLICATION_NUMBER"),
                 coalesce(getDouble(rs, "PACKAGE_VOLUME"), 0.0d),
                 coalesce(getDouble(rs, "AVERAGE_LENGTH"), 0.0d),
@@ -1786,7 +1785,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
 
   public Optional<PackageDetailsRow> findPackageDetailsByPackageNumberRequired(
       String packageNumber) {
-    String normalized = trim(packageNumber);
+    String normalized = preservePackageNumber(packageNumber);
     if (normalized == null) {
       return Optional.empty();
     }
@@ -1797,7 +1796,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
         2,
         rs ->
             new PackageDetailsRow(
-                getString(rs, "PACKAGE_NUMBER"),
+                getRawString(rs, "PACKAGE_NUMBER"),
                 coalesce(getDouble(rs, "PACKAGE_VOLUME"), 0.0d),
                 coalesce(getDouble(rs, "AVERAGE_LENGTH"), 0.0d),
                 coalesce(getDouble(rs, "AVERAGE_DIAMETER"), 0.0d),
@@ -1862,7 +1861,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
   }
 
   public List<EndUsePairRow> findEndUsesByPackageNumber(String packageNumber) {
-    String normalized = trim(packageNumber);
+    String normalized = preservePackageNumber(packageNumber);
     if (normalized == null) {
       return List.of();
     }
@@ -2081,6 +2080,11 @@ public class PermitRpcRepository extends OracleRepositorySupport {
         .orElse(false);
   }
 
+  // Stored package identifiers are exact Oracle keys, including any padding.
+  private String preservePackageNumber(String value) {
+    return value == null || value.isBlank() ? null : value;
+  }
+
   private String nonNull(String value) {
     return value == null ? "" : value;
   }
@@ -2097,7 +2101,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
   private PackageCandidateRow mapPackageCandidateRow(ResultSet rs) {
     return new PackageCandidateRow(
         getLong(rs, "APPLICATION_NUMBER"),
-        trim(getString(rs, "PACKAGE_NUMBER")));
+        preservePackageNumber(getRawString(rs, "PACKAGE_NUMBER")));
   }
 
   private PermitMutationRow mapPermitMutationRow(ResultSet rs) {
@@ -2145,7 +2149,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
         getString(rs, "TIMBER_MARK"),
         getLong(rs, "PIECES_COUNT"),
         getDouble(rs, "SPECIES_GRADE_VOLUME"),
-        getString(rs, "PACKAGE_NUMBER"),
+        getRawString(rs, "PACKAGE_NUMBER"),
         getString(rs, "EXPORT_SPECIES_CODE"),
         getString(rs, "EXPORT_GRADE_CODE"),
         getLong(rs, "APPLICATION_NUMBER"),
@@ -2164,7 +2168,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
         coalesce(getLong(rs, "PIECES_COUNT"), 0L),
         getLong(rs, "APPLICATION_NUMBER"),
         getString(rs, "EXPORT_PERMIT_DETAIL_NUMBER"),
-        getString(rs, "PACKAGE_NUMBER"),
+        getRawString(rs, "PACKAGE_NUMBER"),
         getString(rs, "CASCADE_SPLIT_CODE"),
         getString(rs, "EWB"),
         getString(rs, "FIL"),
@@ -2173,7 +2177,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
 
   private PermitCorePackageRow mapPermitCorePackageRow(ResultSet rs) {
     return new PermitCorePackageRow(
-        getString(rs, "PACKAGE_NUMBER"),
+        getRawString(rs, "PACKAGE_NUMBER"),
         getLong(rs, "APPLICATION_NUMBER"),
         coalesce(getDouble(rs, "PACKAGE_VOLUME"), 0.0d),
         coalesce(getDouble(rs, "AVERAGE_LENGTH"), 0.0d),
@@ -2410,22 +2414,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       String comments,
       String reprocessedIndicator,
       String growthTypeCode,
-      String productTypeCode) {
-
-    PermitCorePackageRow withPackageNumber(String value) {
-      return new PermitCorePackageRow(
-          value,
-          applicationNumber,
-          packageVolume,
-          averageLength,
-          averageDiameter,
-          packageStatusCode,
-          comments,
-          reprocessedIndicator,
-          growthTypeCode,
-          productTypeCode);
-    }
-  }
+      String productTypeCode) {}
 
   public record PermitCorePackageContextRow(
       PermitCorePackageRow packageRow,
@@ -2437,22 +2426,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       String applicationGrowthTypeDescription,
       String packageGrowthTypeDescription,
       String packageStatusDescription,
-      boolean assignedToPermit) {
-
-    PermitCorePackageContextRow withPackageRow(PermitCorePackageRow value) {
-      return new PermitCorePackageContextRow(
-          value,
-          applicationInfo,
-          jurisdictionCode,
-          exemptionTypeCode,
-          applicationProductTypeDescription,
-          packageProductTypeDescription,
-          applicationGrowthTypeDescription,
-          packageGrowthTypeDescription,
-          packageStatusDescription,
-          assignedToPermit);
-    }
-  }
+      boolean assignedToPermit) {}
 
   public record PermitCoreScaleRow(
       PermitScaleDetailRow scaleRow, String speciesDescription, String gradeDescription) {}

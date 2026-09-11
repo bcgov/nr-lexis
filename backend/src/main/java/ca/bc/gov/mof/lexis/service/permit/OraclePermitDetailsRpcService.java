@@ -439,7 +439,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     List<PermitScaleDetailRow> allPermitScales = repository.findScaleDetailsByPermitNumber(permitNumber);
     FeeCalculationContext feeContext = buildFeeContext(permitNumber, countryCode, applicationDate);
 
-    String normalizedPackageNumber = trimToNull(packageNumber);
+    String persistedPackageNumber = preservePackageNumber(packageNumber);
     String permitNumberString = permitNumber.toString();
     double totalVolume = 0.0d;
     long totalPieces = 0L;
@@ -451,7 +451,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       totalVolume += scale.speciesGradeVolume();
       totalPieces += scale.piecesCount();
       totalFees = totalFees.add(fee);
-      if (normalizedPackageNumber != null && normalizedPackageNumber.equals(scale.packageNumber())) {
+      if (persistedPackageNumber != null && persistedPackageNumber.equals(scale.packageNumber())) {
         totalFeeForPackage = totalFeeForPackage.add(fee);
         scaleList.add(
             toSummaryScaleItem(
@@ -500,8 +500,8 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       String packageNumber,
       Long permitNumber,
       boolean ministryUser) {
-    String normalizedPackageNumber = trimToNull(packageNumber);
-    if (normalizedPackageNumber == null || permitNumber == null || permitNumber < 1) {
+    String persistedPackageNumber = preservePackageNumber(packageNumber);
+    if (persistedPackageNumber == null || permitNumber == null || permitNumber < 1) {
       return new PermitScaleFeesRpcResponseDto("$0.00", List.of(), "");
     }
 
@@ -509,7 +509,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     FeeCalculationContext feeContext = buildFeeContext(permitNumber, null, null);
 
     List<PermitScaleDetailRow> scales =
-        repository.findScaleDetailsByPackageNumber(normalizedPackageNumber).stream()
+        repository.findScaleDetailsByPackageNumber(persistedPackageNumber).stream()
             .filter(scale -> permitNumberString.equals(trimToNull(scale.exportPermitDetailNumber())))
             .toList();
 
@@ -610,7 +610,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
 
     for (PermitFeeScaleRow feeRow : feeRows) {
       PermitScaleDetailRow scale = feeRow.scaleRow();
-      String packageNumber = scale == null ? null : trimToNull(scale.packageNumber());
+      String packageNumber = scale == null ? null : preservePackageNumber(scale.packageNumber());
       if (packageNumber == null) {
         continue;
       }
@@ -666,14 +666,14 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
 
   @Override
   public PermitScalesForPackageRpcResponseDto getScalesForPackage(String packageNumber) {
-    String normalizedPackageNumber = trimToNull(packageNumber);
-    if (normalizedPackageNumber == null) {
+    String persistedPackageNumber = preservePackageNumber(packageNumber);
+    if (persistedPackageNumber == null) {
       return new PermitScalesForPackageRpcResponseDto(List.of());
     }
 
     return new PermitScalesForPackageRpcResponseDto(
         toPermitScaleItems(
-            repository.findScaleDetailsByPackageNumber(normalizedPackageNumber),
+            repository.findScaleDetailsByPackageNumber(persistedPackageNumber),
             new PermitCoreLookupContext()));
   }
 
@@ -705,8 +705,8 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
 
   @Override
   public PermitPackageVolumeSumRpcResponseDto getPackageVolumeSum(Long permitNumber, String packageNumber) {
-    String normalizedPackageNumber = trimToNull(packageNumber);
-    if (permitNumber == null || permitNumber < 1 || normalizedPackageNumber == null) {
+    String persistedPackageNumber = preservePackageNumber(packageNumber);
+    if (permitNumber == null || permitNumber < 1 || persistedPackageNumber == null) {
       return new PermitPackageVolumeSumRpcResponseDto("0.0");
     }
 
@@ -714,7 +714,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     double packageVolume =
         repository.findScaleDetailsByPermitNumber(permitNumber).stream()
             .filter(scale -> permitNumberString.equals(trimToNull(scale.exportPermitDetailNumber())))
-            .filter(scale -> normalizedPackageNumber.equals(trimToNull(scale.packageNumber())))
+            .filter(scale -> persistedPackageNumber.equals(preservePackageNumber(scale.packageNumber())))
             .mapToDouble(PermitScaleDetailRow::speciesGradeVolume)
             .sum();
 
@@ -723,27 +723,27 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
 
   @Override
   public PermitPackageInfoRpcResponseDto getPackageInfo(String packageNumber) {
-    String normalizedPackageNumber = trimToNull(packageNumber);
-    if (normalizedPackageNumber == null) {
+    String persistedPackageNumber = preservePackageNumber(packageNumber);
+    if (persistedPackageNumber == null) {
       return emptyPackageInfo();
     }
 
-    PackageInfoRow packageInfo = repository.findPackageInfoByPackageNumber(normalizedPackageNumber).orElse(null);
+    PackageInfoRow packageInfo = repository.findPackageInfoByPackageNumber(persistedPackageNumber).orElse(null);
     return toPermitPackageInfo(packageInfo, new PermitCoreLookupContext());
   }
 
   @Override
   public PermitPackageDetailsRpcResponseDto getPackageDetails(String packageNumber) {
-    String normalizedPackageNumber = trimToNull(packageNumber);
-    if (normalizedPackageNumber == null) {
+    String persistedPackageNumber = preservePackageNumber(packageNumber);
+    if (persistedPackageNumber == null) {
       return emptyPackageDetails();
     }
 
     PackageDetailsRow packageDetails =
-        repository.findPackageDetailsByPackageNumberRequired(normalizedPackageNumber).orElse(null);
+        repository.findPackageDetailsByPackageNumberRequired(persistedPackageNumber).orElse(null);
     return toPermitPackageDetails(
         packageDetails,
-        repository.findScaleDetailsByPackageNumber(normalizedPackageNumber),
+        repository.findScaleDetailsByPackageNumber(persistedPackageNumber),
         new PermitCoreLookupContext());
   }
 
@@ -767,11 +767,11 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
 
   @Override
   public boolean packageBelongsToPermit(String packageNumber, Long permitNumber) {
-    String normalizedPackageNumber = trimToNull(packageNumber);
-    if (normalizedPackageNumber == null || permitNumber == null || permitNumber < 1) {
+    String persistedPackageNumber = preservePackageNumber(packageNumber);
+    if (persistedPackageNumber == null || permitNumber == null || permitNumber < 1) {
       return false;
     }
-    return repository.isPackageAssignedToPermitRequired(normalizedPackageNumber, permitNumber);
+    return repository.isPackageAssignedToPermitRequired(persistedPackageNumber, permitNumber);
   }
 
   @Override
@@ -838,7 +838,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     List<String> packageNumbers =
         packageRows.stream()
             .map(PermitCorePackageRow::packageNumber)
-            .map(TextUtils::trimToNull)
+            .map(this::preservePackageNumber)
             .filter(java.util.Objects::nonNull)
             .distinct()
             .sorted()
@@ -917,7 +917,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         context.candidateExcolCodesByApplication.computeIfAbsent(
             applicationNumber, ignored -> new ArrayList<>());
       }
-      String packageNumber = trimToNull(packageRow.packageNumber());
+      String packageNumber = preservePackageNumber(packageRow.packageNumber());
       if (packageNumber != null) {
         context.packageEndUsesByNumber.computeIfAbsent(
             packageNumber, ignored -> new ArrayList<>());
@@ -954,7 +954,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
 
     for (PermitCoreScaleRow coreScale : scaleRows) {
       PermitScaleDetailRow scale = coreScale.scaleRow();
-      String packageNumber = scale == null ? null : trimToNull(scale.packageNumber());
+      String packageNumber = scale == null ? null : preservePackageNumber(scale.packageNumber());
       if (packageNumber == null) {
         continue;
       }
@@ -980,7 +980,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
           && row.applicationNumber() > 0) {
         addCoreEndUse(context.applicationEndUsesByNumber, row.applicationNumber(), row);
       } else if ("PACKAGE".equalsIgnoreCase(rowKind)) {
-        String packageNumber = trimToNull(row.packageNumber());
+        String packageNumber = preservePackageNumber(row.packageNumber());
         if (packageNumber != null) {
           addCoreEndUse(context.packageEndUsesByNumber, packageNumber, row);
         }
@@ -1103,13 +1103,19 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
           List.of(), "No applications are currently available.");
     }
 
-    Set<String> selectedPackages = parseCsvSet(selectedPackagesCsv);
+    Set<String> selectedPackages =
+        selectedPackagesCsv == null
+            ? Set.of()
+            : selectedPackagesCsv.lines()
+                .flatMap(line -> java.util.Arrays.stream(line.split(",")))
+                .filter(packageNumber -> !packageNumber.isBlank())
+                .collect(java.util.stream.Collectors.toSet());
     List<String> distinctPackages =
         findUnassignedScalesByApplication(normalizedExemptionNumber, applicationAccess).values()
             .stream()
             .flatMap(List::stream)
             .map(ScaleMutationRow::packageNumber)
-            .map(TextUtils::trimToNull)
+            .map(this::preservePackageNumber)
             .filter(java.util.Objects::nonNull)
             .filter(packageNumber -> !selectedPackages.contains(packageNumber))
             .distinct()
@@ -1136,7 +1142,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     for (PackageCandidateRow candidate :
         repository.findPackagesByExemptionNumberRequired(exemptionNumber)) {
       Long applicationNumber = candidate.applicationNumber();
-      String packageNumber = trimToNull(candidate.packageNumber());
+      String packageNumber = preservePackageNumber(candidate.packageNumber());
       if (applicationNumber == null || applicationNumber < 1 || packageNumber == null) {
         throw new DataRetrievalFailureException(
             "Oracle returned an invalid package relationship for exemption "
@@ -1145,7 +1151,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       }
       packagesByApplication
           .computeIfAbsent(applicationNumber, ignored -> new HashSet<>())
-          .add(normalizeIdentifier(packageNumber));
+          .add(packageNumber);
     }
 
     Map<Long, Boolean> applicationAccessByNumber = new HashMap<>();
@@ -1173,7 +1179,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       List<ScaleMutationRow> unassignedScales =
           scaleRows.stream()
               .filter(
-                  scale -> entry.getValue().contains(normalizeIdentifier(scale.packageNumber())))
+                  scale -> entry.getValue().contains(preservePackageNumber(scale.packageNumber())))
               .filter(scale -> scale.exportPermitDetailNumber() == null)
               .toList();
       result.put(applicationNumber, unassignedScales);
@@ -2632,7 +2638,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       String gradeCode,
       String userId) {
     String normalizedUserId = trimToNull(userId);
-    String normalizedPackageNumber = trimToNull(packageNumber);
+    String persistedPackageNumber = preservePackageNumber(packageNumber);
     String normalizedTimberMark = trimToNull(timberMark);
     String normalizedSpeciesCode = trimToNull(speciesCode);
     String normalizedGradeCode = trimToNull(gradeCode);
@@ -2645,7 +2651,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     if (permitNumber == null || permitNumber < 1) {
       errors.add("A valid permit number is required.");
     }
-    if (normalizedPackageNumber == null) {
+    if (persistedPackageNumber == null) {
       errors.add("A valid package number is required.");
     }
     if (normalizedTimberMark == null) {
@@ -2684,7 +2690,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
           List.of("The permit does not have an OIC application number."), permitNumber);
     }
     Long applicationNumber = current.oicApplicationNumber();
-    if (!repository.findPackageNumbersByOicPermitNumber(permitNumber).contains(normalizedPackageNumber)) {
+    if (!repository.findPackageNumbersByOicPermitNumber(permitNumber).contains(persistedPackageNumber)) {
       return failurePersistenceResponse(
           List.of("Package is not available for this Blanket OIC permit."), permitNumber);
     }
@@ -2713,7 +2719,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
             scalePieces,
             normalizedVolume);
     List<ScaleValues> packageScales =
-        repository.findScaleDetailsByPackageNumber(normalizedPackageNumber).stream()
+        repository.findScaleDetailsByPackageNumber(persistedPackageNumber).stream()
             .map(this::toScaleValues)
             .toList();
     List<ScaleValues> permitScales =
@@ -2727,7 +2733,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     }
 
     Optional<PackageDetailsRow> packageDetails =
-        repository.findPackageDetailsByPackageNumberRequired(normalizedPackageNumber);
+        repository.findPackageDetailsByPackageNumberRequired(persistedPackageNumber);
     if (packageDetails.isEmpty()) {
       errors.add("Package details are unavailable.");
     } else if (ScaleDomainValidator.exceedsVolume(
@@ -2775,7 +2781,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
             normalizedTimberMark,
             scalePieces,
             normalizedVolume,
-            normalizedPackageNumber,
+            persistedPackageNumber,
             normalizedSpeciesCode,
             normalizedGradeCode,
             applicationNumber,
@@ -3239,7 +3245,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
 
   private List<PermitScaleDetailRow> findCorePackageScaleRows(
       PermitCorePackageRow packageRow, PermitCoreLookupContext lookupContext) {
-    String packageNumber = trimToNull(packageRow.packageNumber());
+    String packageNumber = preservePackageNumber(packageRow.packageNumber());
     if (packageNumber == null) {
       return List.of();
     }
@@ -3345,12 +3351,12 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
 
   private String resolveBlanketPackageEndUseSort(
       String packageNumber, PermitCoreLookupContext lookupContext) {
-    String normalizedPackageNumber = trimToNull(packageNumber);
-    if (normalizedPackageNumber == null) {
+    String persistedPackageNumber = preservePackageNumber(packageNumber);
+    if (persistedPackageNumber == null) {
       return "";
     }
     return lookupContext.packageEndUseByNumber.computeIfAbsent(
-        normalizedPackageNumber,
+        persistedPackageNumber,
         value -> buildBlanketPackageEndUseSort(value, lookupContext));
   }
 
@@ -3530,14 +3536,14 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   }
 
   private String resolveGrowthType(String packageNumber) {
-    String normalizedPackageNumber = trimToNull(packageNumber);
-    if (normalizedPackageNumber == null) {
+    String persistedPackageNumber = preservePackageNumber(packageNumber);
+    if (persistedPackageNumber == null) {
       return "";
     }
 
     String growthTypeCode =
         applicationService
-            .findPackageByPackageNumber(normalizedPackageNumber)
+            .findPackageByPackageNumber(persistedPackageNumber)
             .map(LexisPackageLookupDto::growthTypeCode)
             .map(TextUtils::trimToNull)
             .orElse(null);
@@ -4010,9 +4016,9 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         .isPresent();
   }
 
-  private String normalizeIdentifier(String value) {
-    String normalized = trimToNull(value);
-    return normalized == null ? null : normalized.toUpperCase(Locale.ROOT);
+  // Stored package identifiers are exact Oracle keys, including any padding.
+  private String preservePackageNumber(String value) {
+    return value == null || value.isBlank() ? null : value;
   }
 
   private PermitMutationRpcResponseDto failureMutationResponse(List<String> errors, Long permitNumber) {
@@ -4107,7 +4113,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     if (scale == null || permit == null || scale.applicationNumber() == null) {
       return false;
     }
-    String packageNumber = trimToNull(scale.packageNumber());
+    String packageNumber = preservePackageNumber(scale.packageNumber());
     if (packageNumber == null) {
       return false;
     }
@@ -4116,13 +4122,11 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
               permit.oicApplicationNumber(), permit.exemptionNumber())
           && scale.applicationNumber().equals(permit.oicApplicationNumber())
           && repository.findPackageNumbersByOicPermitNumber(permit.permitNumber()).stream()
-              .map(TextUtils::trimToNull)
               .anyMatch(packageNumber::equals);
     }
 
     String exemptionNumber = trimToNull(permit.exemptionNumber());
-    String normalizedPackageNumber = normalizeIdentifier(packageNumber);
-    if (exemptionNumber == null || normalizedPackageNumber == null) {
+    if (exemptionNumber == null) {
       return false;
     }
     boolean belongsToExemption =
@@ -4130,8 +4134,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
             .anyMatch(
                 row ->
                     scale.applicationNumber().equals(row.applicationNumber())
-                        && normalizedPackageNumber.equals(
-                            normalizeIdentifier(row.packageNumber())));
+                        && packageNumber.equals(row.packageNumber()));
     return belongsToExemption
         && (scale.exportPermitDetailNumber() == null
             || permit.permitNumber().equals(scale.exportPermitDetailNumber()));
@@ -4331,7 +4334,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
 
     List<String> packageNumbers =
         repository.findPackageNumbersByPermitNumberRequired(target.permitNumber()).stream()
-            .filter(packageNumber -> trimToNull(packageNumber) != null)
+            .filter(packageNumber -> preservePackageNumber(packageNumber) != null)
             .distinct()
             .sorted()
             .toList();
@@ -4603,7 +4606,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     BigDecimal total = BigDecimal.ZERO;
     for (PermitScaleDetailRow scale : scales) {
       String scaleId = scale == null ? null : trimToNull(scale.exportScaleDetailId());
-      String packageNumber = scale == null ? null : trimToNull(scale.packageNumber());
+      String packageNumber = scale == null ? null : preservePackageNumber(scale.packageNumber());
       if (scale == null
           || !expectedPermitNumber.equals(trimToNull(scale.exportPermitDetailNumber()))
           || scaleId == null
@@ -4827,7 +4830,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         && java.util.Objects.equals(
             parsePositiveLong(row.exportPermitDetailNumber()),
             expected.exportPermitDetailNumber())
-        && sameText(row.packageNumber(), expected.packageNumber())
+        && java.util.Objects.equals(row.packageNumber(), expected.packageNumber())
         && sameText(row.timberMark(), expected.timberMark())
         && sameText(row.exportSpeciesCode(), expected.exportSpeciesCode())
         && sameText(row.exportGradeCode(), expected.exportGradeCode())
