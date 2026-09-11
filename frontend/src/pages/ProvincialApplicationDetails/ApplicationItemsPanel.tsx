@@ -150,6 +150,7 @@ type ProvincialApplicationItemsPanelProps = {
   authoritativeOptionsAvailability: 'loading' | 'available' | 'unavailable'
   productTypeOptions: ApplicationCodeOption[]
   growthTypeOptions: ApplicationCodeOption[]
+  applicationGrowthTypeCode?: string
   editingBlocked?: boolean
   onDetailChanged: () => Promise<void>
   onDirtyChange?: (dirty: boolean) => void
@@ -327,6 +328,7 @@ const packageSelectionReducer = (
 
 const toPackageForm = (
   productTypeCode: string | null | undefined,
+  applicationGrowthTypeCode: string | undefined,
   selectedPackageNumber: string,
   packageDetails: ApplicationPackageDetails,
   speciesRows: ApplicationPackageSpeciesRow[],
@@ -340,7 +342,14 @@ const toPackageForm = (
   status: packageDetails.status,
   comments: packageDetails.comments,
   reprocessed: packageDetails.reprocessed || 'N',
-  ageClass: packageDetails.ageClass,
+  // Ordinary legacy package dialogs omitted classification; preserve explicit package values.
+  ageClass:
+    packageDetails.ageClass ||
+    ((!packageDetails.productType || packageDetails.productType === productTypeCode) &&
+    packageRequiresAgeClass(productTypeCode ?? '')
+      ? applicationGrowthTypeCode
+      : '') ||
+    '',
   productType: packageDetails.productType || productTypeCode || '',
   endUseCode: speciesRows[0]?.endUse ?? '',
 })
@@ -355,6 +364,7 @@ function ProvincialApplicationItemsPanel({
   authoritativeOptionsAvailability,
   productTypeOptions,
   growthTypeOptions,
+  applicationGrowthTypeCode,
   editingBlocked = false,
   onDetailChanged,
   onDirtyChange,
@@ -774,6 +784,7 @@ function ProvincialApplicationItemsPanel({
         const nextSpeciesDraft = uniqueCodes(speciesRows)
         const loadedPackageForm = toPackageForm(
           productTypeCode,
+          applicationGrowthTypeCode,
           packageNumber,
           detailsResult,
           speciesRows,
@@ -822,7 +833,7 @@ function ProvincialApplicationItemsPanel({
         }
       }
     },
-    [beginItemsRequest, productTypeCode],
+    [applicationGrowthTypeCode, beginItemsRequest, productTypeCode],
   )
 
   useEffect(() => {

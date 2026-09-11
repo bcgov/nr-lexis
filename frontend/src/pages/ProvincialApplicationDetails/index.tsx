@@ -5031,6 +5031,12 @@ const ProvincialApplicationDetailsPage = () => {
                         authoritativeOptionsAvailability={packageReferenceOptionsAvailability}
                         productTypeOptions={packageProductTypeOptions}
                         growthTypeOptions={packageGrowthTypeOptions}
+                        applicationGrowthTypeCode={
+                          summaryBaselineForm?.oicIndicator === 'N' &&
+                          summaryBaselineForm.productTypeCode === detail.productTypeCode
+                            ? summaryBaselineForm.growthTypeCode
+                            : undefined
+                        }
                         editingBlocked={isEditingApplicationItems}
                         onDetailChanged={refreshApplicationDetailPreservingDrafts}
                         onDirtyChange={setApplicationItemsDirty}
