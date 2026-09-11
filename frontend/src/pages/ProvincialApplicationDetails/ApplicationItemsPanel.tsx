@@ -57,6 +57,7 @@ import {
   type ApplicationPackageSpeciesRow,
 } from '@/service/provincial-application-items-service'
 import { requiredLabel } from '@/utils/required-label'
+import { formatPackageNumberLabel } from '@/utils/text'
 
 type PackageFormState = {
   packageNumber: string
@@ -1648,7 +1649,7 @@ function ProvincialApplicationItemsPanel({
                 placeholder="Select package"
                 options={packageNumbers.map((packageNumber) => ({
                   value: packageNumber,
-                  label: packageNumber,
+                  label: formatPackageNumberLabel(packageNumber),
                 }))}
                 onChange={requestPackageSelection}
               />

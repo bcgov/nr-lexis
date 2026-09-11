@@ -3,6 +3,7 @@ import {
   displayAuditIdentity,
   displayTableValue,
   displayValue,
+  formatPackageNumberLabel,
   isValidEmail,
   joinNonBlankText,
   leadingDigits,
@@ -55,6 +56,17 @@ describe('text utilities', () => {
     expect(displayAuditIdentity('00000000-0000-4000-8000-000000000001')).toBe('Not available')
     expect(displayAuditIdentity('BCSC\\00000000-0000-4000-8000-000000000002')).toBe('BCSC user')
     expect(displayAuditIdentity(null)).toBe('Not provided')
+  })
+
+  it.each([
+    ['PKG-1', 'PKG-1'],
+    ['PKG-1 ', 'PKG-1 (1 trailing space)'],
+    ['PKG-1  ', 'PKG-1 (2 trailing spaces)'],
+    [' PKG-1', 'PKG-1 (1 leading space)'],
+    ['  PKG-1 ', 'PKG-1 (2 leading spaces, 1 trailing space)'],
+    ['PKG 1', 'PKG 1'],
+  ])('labels package key %j as %s', (packageNumber, expected) => {
+    expect(formatPackageNumberLabel(packageNumber)).toBe(expected)
   })
 
   it('formats optional owner client and region labels', () => {

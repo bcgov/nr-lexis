@@ -178,6 +178,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
   it('preserves a selected stored package key that differs only by trailing spaces', async () => {
     const plainPackageNumber = 'PKG-EXISTING'
     const storedPackageNumber = 'PKG-EXISTING  '
+    const storedPackageLabel = 'PKG-EXISTING (2 trailing spaces)'
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
       ...applicationDetail,
       packages: [
@@ -233,11 +234,25 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('combobox', { name: 'Selected Package' })).toHaveValue(
-        storedPackageNumber,
+        storedPackageLabel,
       )
       expect(packageDetailsControls.getByLabelText('Package Number')).toHaveValue(
         storedPackageNumber,
       )
+      expect(packageDetailsControls.getByRole('button', { name: 'Save Package' })).toBeEnabled()
+    })
+
+    const packageSelector = screen.getByRole('combobox', { name: 'Selected Package' })
+    await chooseComboBoxOption(packageSelector, plainPackageNumber)
+    await waitFor(() => {
+      expect(mockedFetchApplicationPackageDetails).toHaveBeenLastCalledWith(plainPackageNumber)
+      expect(packageDetailsControls.getByLabelText('Package Volume (m³)')).toHaveValue('100.0')
+      expect(packageDetailsControls.getByRole('button', { name: 'Save Package' })).toBeEnabled()
+    })
+    await chooseComboBoxOption(packageSelector, storedPackageLabel)
+    await waitFor(() => {
+      expect(mockedFetchApplicationPackageDetails).toHaveBeenLastCalledWith(storedPackageNumber)
+      expect(packageDetailsControls.getByLabelText('Package Volume (m³)')).toHaveValue('50.0')
       expect(packageDetailsControls.getByRole('button', { name: 'Save Package' })).toBeEnabled()
     })
 

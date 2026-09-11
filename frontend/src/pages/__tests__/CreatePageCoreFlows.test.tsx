@@ -2988,7 +2988,13 @@ describe('Create Page Core Flows', () => {
   it('preserves an exact selected package key for offer lookups, scale details, and save', async () => {
     const plainPackageNumber = 'PKG-EXISTING'
     const storedPackageNumber = 'PKG-EXISTING  '
-    mockedFetchOfferPackageList.mockResolvedValue([plainPackageNumber, storedPackageNumber])
+    const storedPackageLabel = 'PKG-EXISTING (2 trailing spaces)'
+    let resolvePackageList: ((packages: string[]) => void) | undefined
+    mockedFetchOfferPackageList.mockReturnValue(
+      new Promise((resolve) => {
+        resolvePackageList = resolve
+      }),
+    )
     mockedFetchOfferPackageVolume.mockImplementation(async (packageNumber) =>
       packageNumber === storedPackageNumber ? '95.0' : '40.0',
     )
@@ -3006,11 +3012,22 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
+    expect(screen.getByRole('combobox', { name: 'Package number' })).toHaveValue(storedPackageLabel)
+    await act(async () => resolvePackageList?.([plainPackageNumber, storedPackageNumber]))
+
     await waitFor(() =>
       expect(mockedFetchOfferPackageVolume).toHaveBeenCalledWith(storedPackageNumber),
     )
-    expect(screen.getByRole('combobox', { name: 'Package number' })).toHaveValue(
-      storedPackageNumber,
+    const packageSelector = screen.getByRole('combobox', { name: 'Package number' })
+    expect(packageSelector).toHaveValue(storedPackageLabel)
+    await waitFor(() => expect(packageSelector).toBeEnabled())
+    await chooseComboBoxOption(packageSelector, plainPackageNumber)
+    await waitFor(() =>
+      expect(mockedFetchOfferPackageVolume).toHaveBeenLastCalledWith(plainPackageNumber),
+    )
+    await chooseComboBoxOption(packageSelector, storedPackageLabel)
+    await waitFor(() =>
+      expect(mockedFetchOfferPackageVolume).toHaveBeenLastCalledWith(storedPackageNumber),
     )
 
     await userEvent.click(screen.getByRole('button', { name: 'See Scale Detail' }))

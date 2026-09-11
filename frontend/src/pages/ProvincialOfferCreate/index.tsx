@@ -34,7 +34,7 @@ import {
 import type { SearchOption } from '@/service/search-options-service'
 import { formatBusinessIsoDate } from '@/utils/date'
 import { requiredLabel } from '@/utils/required-label'
-import { displayAuditIdentity } from '@/utils/text'
+import { displayAuditIdentity, formatPackageNumberLabel } from '@/utils/text'
 import {
   OFFER_COMPANY_NAME_MAX_LENGTH,
   OFFER_CONDITION_MAX_LENGTH,
@@ -100,7 +100,7 @@ const packageOptionsFromQuery = (query: URLSearchParams): SearchOption[] => {
 
   return Array.from(new Set(packageNumbers)).map((packageNumber) => ({
     value: packageNumber,
-    label: packageNumber,
+    label: formatPackageNumberLabel(packageNumber),
   }))
 }
 
@@ -509,7 +509,7 @@ const ProvincialOfferCreatePage = () => {
         const packageNumbers = packagesResult.value
         const nextPackageOptions = packageNumbers.map((packageNumber) => ({
           value: packageNumber,
-          label: packageNumber,
+          label: formatPackageNumberLabel(packageNumber),
         }))
         const nextApplicationVolume =
           volumeResult.status === 'fulfilled'
