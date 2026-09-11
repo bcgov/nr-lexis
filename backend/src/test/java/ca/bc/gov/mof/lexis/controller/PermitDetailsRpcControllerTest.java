@@ -864,6 +864,24 @@ class PermitDetailsRpcControllerTest {
   }
 
   @Test
+  void gbmsInvoiceHistoryShouldUseStandardHistoryForApplicationApproverWithReadOnlyRole() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    List<PermitGbmsInvoiceHistoryItemRpcResponseDto> dto = List.of();
+    when(service.getGbmsInvoiceHistory("RCPT-1", 7000123L, false)).thenReturn(dto);
+
+    TestingAuthenticationToken authentication =
+        authenticationWithRoles(
+            "idir\\approver", List.of("LEXIS_APPLICATION_APPROVER", "LEXIS_READ_ONLY"));
+
+    ResponseEntity<List<PermitGbmsInvoiceHistoryItemRpcResponseDto>> response =
+        controller.getGbmsInvoiceHistory("RCPT-1", 7000123L, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isEqualTo(dto);
+    verify(service).getGbmsInvoiceHistory("RCPT-1", 7000123L, false);
+  }
+
+  @Test
   void addInvoiceShouldForwardRequestToService() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     PermitPersistenceRpcResponseDto dto =
@@ -2864,6 +2882,43 @@ class PermitDetailsRpcControllerTest {
   }
 
   @Test
+  void removePermitDocumentShouldAllowApplicationApproverWithReadOnlyForActivePermit() {
+    TestingAuthenticationToken authentication =
+        authenticationWithRoles(
+            "idir\\approver", List.of("LEXIS_APPLICATION_APPROVER", "LEXIS_READ_ONLY"));
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    stubPermitDocument(33L, "permit");
+    when(permitService.findByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitDetail("ACT")));
+    when(service.removePermitDocument(33L)).thenReturn(true);
+
+    ResponseEntity<PermitDetailsRpcController.RemoveDocumentResponseDto> response =
+        controller.removePermitDocument("33", 7000123L, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    verify(service).removePermitDocument(33L);
+  }
+
+  @Test
+  void removePermitDocumentShouldAllowScopedSubmitterWithReadOnlyForActivePermit() {
+    TestingAuthenticationToken authentication =
+        authenticationWithRoles(
+            "bceid\\submitter",
+            List.of("LEXIS_PROVINCIAL_SUBMITTER_00077881", "LEXIS_READ_ONLY"));
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    stubPermitDocument(33L, "permit");
+    when(permitService.findByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitDetail("ACT")));
+    when(service.removePermitDocument(33L)).thenReturn(true);
+
+    ResponseEntity<PermitDetailsRpcController.RemoveDocumentResponseDto> response =
+        controller.removePermitDocument("33", 7000123L, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    verify(service).removePermitDocument(33L);
+  }
+
+  @Test
   void removePermitDocumentShouldAllowAdminOutsideActive() {
     TestingAuthenticationToken authentication =
         authenticationWithRoles("idir\\admin", List.of("LEXIS_ADMIN"));
@@ -2955,6 +3010,24 @@ class PermitDetailsRpcControllerTest {
     TestingAuthenticationToken authentication =
         authenticationWithRoles(
             "idir\\admin", List.of("LEXIS_ADMIN", "LEXIS_READ_ONLY"));
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    stubPermitDocument(55L, "invoice");
+    when(permitService.findByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitDetail("ACT")));
+    when(service.removeInvoiceDocument(55L)).thenReturn(true);
+
+    ResponseEntity<PermitDetailsRpcController.RemoveDocumentResponseDto> response =
+        controller.removeInvoiceDocument("55", 7000123L, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    verify(service).removeInvoiceDocument(55L);
+  }
+
+  @Test
+  void removeInvoiceDocumentShouldAllowApplicationApproverWithReadOnlyForActivePermit() {
+    TestingAuthenticationToken authentication =
+        authenticationWithRoles(
+            "idir\\approver", List.of("LEXIS_APPLICATION_APPROVER", "LEXIS_READ_ONLY"));
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     stubPermitDocument(55L, "invoice");
     when(permitService.findByPermitNumber(7000123L))

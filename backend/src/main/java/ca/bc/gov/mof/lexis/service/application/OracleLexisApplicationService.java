@@ -112,11 +112,11 @@ public class OracleLexisApplicationService implements LexisApplicationService {
 
   @Override
   public Optional<LexisPackageLookupDto> findPackageByPackageNumber(String packageNumber) {
-    String normalized = trimToNull(packageNumber);
-    if (normalized == null) {
+    String persistedPackageNumber = preservePackageNumber(packageNumber);
+    if (persistedPackageNumber == null) {
       return Optional.empty();
     }
-    return repository.findPackageByPackageNumber(normalized);
+    return repository.findPackageByPackageNumber(persistedPackageNumber);
   }
 
   @Override
@@ -163,6 +163,10 @@ public class OracleLexisApplicationService implements LexisApplicationService {
         trimToNull(input.sortField()),
         Math.max(0, input.page()),
         Math.max(1, input.size()));
+  }
+
+  private String preservePackageNumber(String value) {
+    return value == null || value.isBlank() ? null : value;
   }
 
   private Long positive(Long value) {

@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewSearchCriteria;
@@ -576,6 +577,21 @@ class ApplicationReviewRepositoryTest {
     assertThat(sameStatus.requiredReads()).isOne();
   }
 
+  @ParameterizedTest
+  @ValueSource(strings = {" ", "NA", " NA "})
+  void statusTransitionShouldPreserveProductLocationExactly(String productLocation)
+      throws Exception {
+    ProductLocationApplicationReviewRepository repository =
+        new ProductLocationApplicationReviewRepository(productLocation);
+
+    ApplicationReviewRepository.ApplicationStatusTransitionRow result =
+        repository.updateStatusWithRemarkFromAllowedSources(
+            46336L, "PMT", null, "idir\\jsmith", List.of("EXE"));
+
+    assertThat(result.updated()).isTrue();
+    verify(repository.statement()).setString(8, productLocation);
+  }
+
   private static ApplicationReviewRepository transactionalProxy(
       ApplicationReviewRepository target, TrackingTransactionManager transactionManager) {
     TransactionInterceptor interceptor = new TransactionInterceptor();
@@ -732,6 +748,48 @@ class ApplicationReviewRepositoryTest {
     protected void executeProcedureRequired(
         String procedureSignature, SqlConsumer<CallableStatement> binder) {
       statusWrites++;
+    }
+  }
+
+  static class ProductLocationApplicationReviewRepository extends ApplicationReviewRepository {
+    private final CallableStatement statement = mock(CallableStatement.class);
+
+    ProductLocationApplicationReviewRepository(String productLocation) {
+      super(null);
+      this.productLocation = productLocation;
+    }
+
+    private final String productLocation;
+
+    CallableStatement statement() {
+      return statement;
+    }
+
+    @Override
+    protected <T> Optional<T> queryCursorSingleRequired(
+        String procedureSignature,
+        SqlConsumer<CallableStatement> binder,
+        int cursorOutIndex,
+        SqlRowMapper<T> rowMapper) {
+      ResultSet resultSet = mock(ResultSet.class);
+      try {
+        when(resultSet.getString("PRODUCT_LOCATION")).thenReturn(productLocation);
+        when(resultSet.getString("EXPORT_APPLICATION_STATUS_CODE")).thenReturn("EXE");
+        when(resultSet.getString("ENTRY_USERID")).thenReturn("idir\\jsmith");
+        return Optional.of(rowMapper.map(resultSet));
+      } catch (SQLException ex) {
+        throw new AssertionError(ex);
+      }
+    }
+
+    @Override
+    protected void executeProcedureRequired(
+        String procedureSignature, SqlConsumer<CallableStatement> binder) {
+      try {
+        binder.accept(statement);
+      } catch (SQLException ex) {
+        throw new AssertionError(ex);
+      }
     }
   }
 

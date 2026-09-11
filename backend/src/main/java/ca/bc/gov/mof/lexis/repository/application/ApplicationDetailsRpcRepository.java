@@ -247,13 +247,13 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
   }
 
   public List<ApplicationScaleDetailRow> findScaleDetailsByPackageNumber(String packageNumber) {
-    String normalized = trim(packageNumber);
-    if (normalized == null) {
+    String persistedPackageNumber = preservePackageNumber(packageNumber);
+    if (persistedPackageNumber == null) {
       return List.of();
     }
     return queryCursorProcedureRequired(
         FIND_SCALE_DETAIL_BY_PACKAGE,
-        cs -> cs.setString(1, normalized),
+        cs -> cs.setString(1, persistedPackageNumber),
         2,
         this::mapApplicationScaleDetailRow);
   }
@@ -283,27 +283,27 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
   }
 
   public boolean packageExists(String packageNumber) {
-    String normalized = trim(packageNumber);
-    if (normalized == null) {
+    String persistedPackageNumber = preservePackageNumber(packageNumber);
+    if (persistedPackageNumber == null) {
       return false;
     }
     return queryCursorSingleRequired(
             FIND_PACKAGE_BY_NUMBER,
-            cs -> cs.setString(1, normalized),
+            cs -> cs.setString(1, persistedPackageNumber),
             2,
-            rs -> getString(rs, "PACKAGE_NUMBER"))
+            rs -> getRawString(rs, "PACKAGE_NUMBER"))
         .isPresent();
   }
 
   public Optional<PackageDetailsRow> findPackageDetailsByPackageNumberRequired(
       String packageNumber) {
-    String normalized = trim(packageNumber);
-    if (normalized == null) {
+    String persistedPackageNumber = preservePackageNumber(packageNumber);
+    if (persistedPackageNumber == null) {
       return Optional.empty();
     }
     return queryCursorSingleRequired(
         FIND_PACKAGE_BY_NUMBER,
-        cs -> cs.setString(1, normalized),
+        cs -> cs.setString(1, persistedPackageNumber),
         2,
         this::mapPackageDetailsRow);
   }
@@ -342,32 +342,32 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
   }
 
   public Optional<PackageMutationRow> findPackageMutationByPackageNumber(String packageNumber) {
-    String normalized = trim(packageNumber);
-    if (normalized == null) {
+    String persistedPackageNumber = preservePackageNumber(packageNumber);
+    if (persistedPackageNumber == null) {
       return Optional.empty();
     }
     return queryCursorSingleRequired(
         FIND_PACKAGE_BY_NUMBER,
-        cs -> cs.setString(1, normalized),
+        cs -> cs.setString(1, persistedPackageNumber),
         2,
         this::mapPackageMutationRow);
   }
 
   public boolean hasPurchaseOffersForPackageRequired(
       Long applicationNumber, String packageNumber) {
-    String normalizedPackageNumber = trim(packageNumber);
+    String persistedPackageNumber = preservePackageNumber(packageNumber);
     if (applicationNumber == null
         || applicationNumber < 1
-        || normalizedPackageNumber == null) {
+        || persistedPackageNumber == null) {
       return true;
     }
     return queryCursorProcedureRequired(
             FIND_PURCHASE_OFFERS_BY_APPLICATION,
             cs -> cs.setString(1, applicationNumber.toString()),
             2,
-            rs -> trim(getString(rs, "PACKAGE_NUMBER")))
+            rs -> getRawString(rs, "PACKAGE_NUMBER"))
         .stream()
-        .anyMatch(normalizedPackageNumber::equals);
+        .anyMatch(persistedPackageNumber::equals);
   }
 
   @Transactional
@@ -393,15 +393,14 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     if (inserted
         .filter(
             row ->
-                java.util.Objects.equals(
-                        trim(row.packageNumber()), trim(record.packageNumber()))
+                java.util.Objects.equals(row.packageNumber(), trim(record.packageNumber()))
                     && java.util.Objects.equals(
                         row.applicationNumber(), record.applicationNumber()))
         .isEmpty()) {
       markRollbackOnly();
       return Optional.empty();
     }
-    if (!insertPackageEndUses(record.packageNumber(), record.endUses())) {
+    if (!insertPackageEndUses(trim(record.packageNumber()), record.endUses())) {
       markRollbackOnly();
       return Optional.empty();
     }
@@ -410,7 +409,7 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
 
   @Transactional
   public boolean updatePackage(PackageMutationRecord record) {
-    if (record == null || trim(record.packageNumber()) == null) {
+    if (record == null || preservePackageNumber(record.packageNumber()) == null) {
       return false;
     }
 
@@ -429,7 +428,7 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
    * synchronization paths that have no authority to change the package's species/end-use set.
    */
   public boolean updatePackagePreservingEndUses(PackageMutationRecord record) {
-    if (record == null || trim(record.packageNumber()) == null) {
+    if (record == null || preservePackageNumber(record.packageNumber()) == null) {
       return false;
     }
     executeProcedureRequired(UPDATE_PACKAGE, cs -> bindPackageUpdate(cs, record));
@@ -437,7 +436,7 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
   }
 
   public Optional<ApplicationScaleDetailRow> insertScaleDetail(ScaleMutationRecord record) {
-    if (record == null || trim(record.packageNumber()) == null) {
+    if (record == null || preservePackageNumber(record.packageNumber()) == null) {
       return Optional.empty();
     }
     Optional<ApplicationScaleDetailRow> inserted =
@@ -449,9 +448,9 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     if (inserted
         .filter(
             row ->
-                parsePositiveLong(row.exportScaleDetailId()) != null
+                    parsePositiveLong(row.exportScaleDetailId()) != null
                     && java.util.Objects.equals(
-                        trim(row.packageNumber()), trim(record.packageNumber()))
+                        row.packageNumber(), record.packageNumber())
                     && java.util.Objects.equals(
                         row.applicationNumber(), record.applicationNumber()))
         .isEmpty()) {
@@ -462,13 +461,13 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
   }
 
   public List<ScaleMutationRow> findScaleMutationDetailsByPackageNumber(String packageNumber) {
-    String normalized = trim(packageNumber);
-    if (normalized == null) {
+    String persistedPackageNumber = preservePackageNumber(packageNumber);
+    if (persistedPackageNumber == null) {
       return List.of();
     }
     return queryCursorProcedureRequired(
         FIND_SCALE_DETAIL_BY_PACKAGE,
-        cs -> cs.setString(1, normalized),
+        cs -> cs.setString(1, persistedPackageNumber),
         2,
         this::mapScaleMutationRow);
   }
@@ -496,14 +495,14 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
   }
 
   public boolean deletePackageById(String packageNumber, String userId) {
-    String normalizedPackageNumber = trim(packageNumber);
-    if (normalizedPackageNumber == null) {
+    String persistedPackageNumber = preservePackageNumber(packageNumber);
+    if (persistedPackageNumber == null) {
       return false;
     }
     executeProcedureRequired(
         DELETE_PACKAGE,
         cs -> {
-          cs.setString(1, normalizedPackageNumber);
+          cs.setString(1, persistedPackageNumber);
           cs.setString(2, auditUserOrDefault(userId));
         });
     return true;
@@ -795,25 +794,25 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
   }
 
   public List<EndUseRow> findEndUsesByPackageNumber(String packageNumber) {
-    String normalizedPackageNumber = trim(packageNumber);
-    if (normalizedPackageNumber == null) {
+    String persistedPackageNumber = preservePackageNumber(packageNumber);
+    if (persistedPackageNumber == null) {
       return List.of();
     }
     return queryCursorProcedure(
         FIND_END_USE_BY_PACKAGE,
-        cs -> cs.setString(1, normalizedPackageNumber),
+        cs -> cs.setString(1, persistedPackageNumber),
         2,
         this::mapEndUseRow);
   }
 
   public List<EndUseRow> findEndUsesByPackageNumberRequired(String packageNumber) {
-    String normalizedPackageNumber = trim(packageNumber);
-    if (normalizedPackageNumber == null) {
+    String persistedPackageNumber = preservePackageNumber(packageNumber);
+    if (persistedPackageNumber == null) {
       return List.of();
     }
     return queryCursorProcedureRequired(
         FIND_END_USE_BY_PACKAGE,
-        cs -> cs.setString(1, normalizedPackageNumber),
+        cs -> cs.setString(1, persistedPackageNumber),
         2,
         this::mapEndUseRow);
   }
@@ -1313,7 +1312,7 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
   private void bindPackageUpdate(CallableStatement cs, PackageMutationRecord record)
       throws SQLException {
     int index = 1;
-    setStringOrNull(cs, index++, record.packageNumber());
+    setPackageNumberOrNull(cs, index++, record.packageNumber());
     setLongOrNull(cs, index++, record.applicationNumber());
     setStringOrNull(cs, index++, record.reprocessedIndicator());
     setDoubleOrNull(cs, index++, record.packageVolume());
@@ -1342,7 +1341,7 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     setTimestampOrNull(cs, index++, record.entryTimestamp());
     setStringOrNull(cs, index++, null);
     setTimestampOrNull(cs, index++, null);
-    setStringOrNull(cs, index++, record.packageNumber());
+    setPackageNumberOrNull(cs, index++, record.packageNumber());
     setStringOrNull(cs, index++, record.speciesCode());
     setStringOrNull(cs, index++, record.gradeCode());
     setLongOrNull(cs, index++, positiveOrNull(record.exportPermitDetailNumber()));
@@ -1357,7 +1356,7 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     setStringOrNull(cs, index++, record.timberMark());
     setLongOrNull(cs, index++, record.piecesCount());
     setDoubleOrNull(cs, index++, record.speciesGradeVolume());
-    setStringOrNull(cs, index++, record.packageNumber());
+    setPackageNumberOrNull(cs, index++, record.packageNumber());
     setStringOrNull(cs, index++, record.speciesCode());
     setStringOrNull(cs, index++, record.gradeCode());
     cs.setString(index++, auditUserOrDefault(record.entryUserId()));
@@ -1399,8 +1398,8 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
   }
 
   private boolean insertPackageEndUses(String packageNumber, List<EndUseMutationRecord> endUses) {
-    String normalizedPackageNumber = trim(packageNumber);
-    if (normalizedPackageNumber == null) {
+    String persistedPackageNumber = preservePackageNumber(packageNumber);
+    if (persistedPackageNumber == null) {
       return false;
     }
     if (endUses == null || endUses.isEmpty()) {
@@ -1415,7 +1414,7 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       executeProcedureRequired(
           INSERT_END_USE_PACKAGE,
           cs -> {
-            cs.setString(1, normalizedPackageNumber);
+            cs.setString(1, persistedPackageNumber);
             cs.setString(2, speciesCode);
             cs.setString(3, endUseCode);
           });
@@ -1424,12 +1423,12 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
   }
 
   private boolean deletePackageEndUses(String packageNumber) {
-    String normalizedPackageNumber = trim(packageNumber);
-    if (normalizedPackageNumber == null) {
+    String persistedPackageNumber = preservePackageNumber(packageNumber);
+    if (persistedPackageNumber == null) {
       return false;
     }
     executeProcedureRequired(
-        DELETE_END_USE_PACKAGE, cs -> cs.setString(1, normalizedPackageNumber));
+        DELETE_END_USE_PACKAGE, cs -> cs.setString(1, persistedPackageNumber));
     return true;
   }
 
@@ -1507,13 +1506,13 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
         zeroIfNull(getLong(rs, "PIECES_COUNT")),
         getLong(rs, "APPLICATION_NUMBER"),
         getString(rs, "EXPORT_PERMIT_DETAIL_NUMBER"),
-        getString(rs, "PACKAGE_NUMBER"),
+        getRawString(rs, "PACKAGE_NUMBER"),
         getString(rs, "CASCADE_SPLIT_CODE"));
   }
 
   private PackageMutationRow mapPackageMutationRow(ResultSet rs) {
     return new PackageMutationRow(
-        getString(rs, "PACKAGE_NUMBER"),
+        getRawString(rs, "PACKAGE_NUMBER"),
         getLong(rs, "APPLICATION_NUMBER"),
         getString(rs, "PACKAGE_REPROCESSED_INDICATOR"),
         getDouble(rs, "PACKAGE_VOLUME"),
@@ -1536,7 +1535,7 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
         getString(rs, "TIMBER_MARK"),
         getLong(rs, "PIECES_COUNT"),
         getDouble(rs, "SPECIES_GRADE_VOLUME"),
-        getString(rs, "PACKAGE_NUMBER"),
+        getRawString(rs, "PACKAGE_NUMBER"),
         getString(rs, "EXPORT_SPECIES_CODE"),
         getString(rs, "EXPORT_GRADE_CODE"),
         getLong(rs, "APPLICATION_NUMBER"),
@@ -1800,7 +1799,7 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
 
   private PackageDetailsRow mapPackageDetailsRow(ResultSet rs) throws SQLException {
     return new PackageDetailsRow(
-        getString(rs, "PACKAGE_NUMBER"),
+        getRawString(rs, "PACKAGE_NUMBER"),
         zeroIfNull(getDouble(rs, "PACKAGE_VOLUME")),
         zeroIfNull(getDouble(rs, "AVERAGE_LENGTH")),
         zeroIfNull(getDouble(rs, "AVERAGE_DIAMETER")),
@@ -1818,6 +1817,20 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     } else {
       cs.setString(index, normalized);
     }
+  }
+
+  private void setPackageNumberOrNull(CallableStatement cs, int index, String value)
+      throws SQLException {
+    String persistedPackageNumber = preservePackageNumber(value);
+    if (persistedPackageNumber == null) {
+      cs.setNull(index, Types.VARCHAR);
+    } else {
+      cs.setString(index, persistedPackageNumber);
+    }
+  }
+
+  private String preservePackageNumber(String value) {
+    return value == null || value.isBlank() ? null : value;
   }
 
   private void setProductLocation(CallableStatement cs, int index, String value) throws SQLException {

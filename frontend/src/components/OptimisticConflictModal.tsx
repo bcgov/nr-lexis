@@ -82,7 +82,7 @@ const formatSavedAt = (value: string | undefined): string | undefined => {
   }).format(date)
 }
 
-const OptimisticConflictModal = () => {
+const OptimisticConflictModal = ({ onOpenChange }: { onOpenChange?: (open: boolean) => void }) => {
   const [queue, setQueue] = useState<OptimisticConflictRequest[]>([])
   const activeConflict = queue[0]
   const changedFields = useMemo(
@@ -97,17 +97,19 @@ const OptimisticConflictModal = () => {
     const handleConflict = (event: Event) => {
       const conflictEvent = event as OptimisticConflictEvent
       event.preventDefault()
+      onOpenChange?.(true)
       setQueue((current) => [...current, conflictEvent.detail])
     }
 
     window.addEventListener(OPTIMISTIC_CONFLICT_EVENT, handleConflict)
     return () => window.removeEventListener(OPTIMISTIC_CONFLICT_EVENT, handleConflict)
-  }, [])
+  }, [onOpenChange])
 
   const refresh = () => {
     if (!activeConflict) return
     activeConflict.refresh()
     setQueue([])
+    onOpenChange?.(false)
   }
 
   return (

@@ -1456,6 +1456,9 @@ const ProvincialExemptionCreatePage = () => {
                   role="region"
                   aria-label="Documents"
                 >
+                  <p className="detail-empty-message">
+                    Save the exemption before uploading documents.
+                  </p>
                   <DetailDocumentUploadPanel
                     workflowType="exemption"
                     targetNumber=""

@@ -27,7 +27,7 @@ export type LexisXmlSubmissionSummary = {
   ownerClientLocationCode?: string
   ownerContactName?: string
   jurisdictionCode?: string
-  federalApplicationNumber?: number
+  federalApplicationNumber?: number | null
   orgUnitNumber?: number
   sourceApplicationStatusCode?: string
   exemptionReasonCode?: string

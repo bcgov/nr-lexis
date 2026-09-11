@@ -174,44 +174,44 @@ public class OracleBlanketOicPackageService implements BlanketOicPackageService 
   public MutationResult deletePackage(
       Long permitNumber, String packageNumber, String userId) {
     PermitMutationRow permit = requireEditableBlanketOicPermit(permitNumber);
-    String normalizedPackageNumber = trimToNull(packageNumber);
+    String persistedPackageNumber = preservePackageNumber(packageNumber);
     if (permit == null
         || permit.oicApplicationNumber() == null
         || permit.oicApplicationNumber() < 1) {
       return failure(
           permitNumber,
           null,
-          normalizedPackageNumber,
+          persistedPackageNumber,
           "A valid editable Blanket OIC permit is required.");
     }
     Long applicationNumber = permit.oicApplicationNumber();
-    if (!packageBelongsToApplication(normalizedPackageNumber, applicationNumber)) {
+    if (!packageBelongsToApplication(persistedPackageNumber, applicationNumber)) {
       return failure(
           permitNumber,
           applicationNumber,
-          normalizedPackageNumber,
+          persistedPackageNumber,
           "Package is not associated with this Blanket OIC permit.");
     }
-    if (!applicationService.getScalesForPackage(normalizedPackageNumber).isEmpty()) {
+    if (!applicationService.getScalesForPackage(persistedPackageNumber).isEmpty()) {
       return failure(
           permitNumber,
           applicationNumber,
-          normalizedPackageNumber,
+          persistedPackageNumber,
           "A Blanket OIC package cannot be deleted while it has scale details.");
     }
     if (!applicationService.deleteHiddenBlanketOicPackageById(
-        normalizedPackageNumber, applicationNumber, userId)) {
+        persistedPackageNumber, applicationNumber, userId)) {
       markRollbackOnly();
       return failure(
           permitNumber,
           applicationNumber,
-          normalizedPackageNumber,
+          persistedPackageNumber,
           "Unable to delete the Blanket OIC package.");
     }
     return success(
         permitNumber,
         applicationNumber,
-        normalizedPackageNumber,
+        persistedPackageNumber,
         "Blanket OIC package was deleted.",
         List.of());
   }
@@ -240,11 +240,11 @@ public class OracleBlanketOicPackageService implements BlanketOicPackageService 
   }
 
   private boolean packageBelongsToApplication(String packageNumber, Long applicationNumber) {
-    String normalizedPackageNumber = trimToNull(packageNumber);
-    return normalizedPackageNumber != null
+    String persistedPackageNumber = preservePackageNumber(packageNumber);
+    return persistedPackageNumber != null
         && applicationNumber != null
         && applicationService
-            .findApplicationNumberForPackage(normalizedPackageNumber)
+            .findApplicationNumberForPackage(persistedPackageNumber)
             .map(applicationNumber::equals)
             .orElse(false);
   }
@@ -350,9 +350,10 @@ public class OracleBlanketOicPackageService implements BlanketOicPackageService 
       return List.of("The permit request volume is unavailable; package volume cannot be verified.");
     }
     BigDecimal total = BigDecimal.ZERO;
+    String persistedPackageToReplace = preservePackageNumber(packageToReplace);
     for (String packageNumber :
         permitRepository.findPackageNumbersByOicPermitNumber(permit.permitNumber())) {
-      if (packageNumber.equalsIgnoreCase(trimToNull(packageToReplace))) {
+      if (persistedPackageToReplace != null && persistedPackageToReplace.equals(packageNumber)) {
         continue;
       }
       String volume = applicationService.getPackageDetails(packageNumber).volume();
@@ -418,6 +419,11 @@ public class OracleBlanketOicPackageService implements BlanketOicPackageService 
         packageNumber,
         normalizedErrors,
         List.of());
+  }
+
+  /** Package identifiers are opaque Oracle keys; preserve stored whitespace for existing rows. */
+  private String preservePackageNumber(String value) {
+    return value == null || value.isBlank() ? null : value;
   }
 
   private String firstError(List<String> errors, String message, String fallback) {

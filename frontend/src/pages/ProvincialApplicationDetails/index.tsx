@@ -711,6 +711,7 @@ const ProvincialApplicationDetailsPage = () => {
   const [editingRemarkId, setEditingRemarkId] = useState<string | null>(null)
   const [isSavingRemark, setIsSavingRemark] = useState(false)
   const [remarkValidationMessage, setRemarkValidationMessage] = useState('')
+  const remarkLauncherRef = useRef<HTMLButtonElement | null>(null)
   const [summaryForm, setSummaryForm] = useState<ApplicationSummaryFormState | null>(null)
   const [summaryBaselineForm, setSummaryBaselineForm] =
     useState<ApplicationSummaryFormState | null>(null)
@@ -793,7 +794,7 @@ const ProvincialApplicationDetailsPage = () => {
   const [reviewValidationMessage, setReviewValidationMessage] = useState('')
   const [isSubmittingReviewAction, setIsSubmittingReviewAction] = useState(false)
   const requestedApplicationTab = (searchParams.get('tab') ?? '').trim().toLowerCase()
-  const requestedPackageNumber = (searchParams.get('packageNumber') ?? '').trim()
+  const requestedPackageNumber = searchParams.get('packageNumber') ?? ''
   const shouldFocusScaleSection =
     requestedApplicationTab === 'items' &&
     (searchParams.get('section') ?? '').trim().toLowerCase() === 'scales'
@@ -858,230 +859,235 @@ const ProvincialApplicationDetailsPage = () => {
     navigationState,
   ])
 
-  const loadApplicationDetail = useCallback(async () => {
-    const isLatestRequest = beginDetailRequest()
-    const detailDocumentRequestSequence = ++documentRequestSequenceRef.current
-    setSummaryAccuracyConfirmationOpen(false)
-    setSummaryAccuracyConfirmed(false)
-    setSummaryAccuracyApplicationNumber(null)
-    setPendingSummarySaveSource('summary')
-    if (!applicationNumber) {
-      seededReviewFieldsApplicationRef.current = null
-      setErrorMessage('Application number is missing from the route.')
-      setDetail(null)
-      setIndustryViewableExemptionNumber(null)
-      setDocumentRows([])
-      setPermitRows([])
-      setDocumentLookupAvailability('unavailable')
-      setPermitLookupAvailability('unavailable')
-      setDocumentsErrorMessage('')
-      setActionErrorMessage('')
-      setActionInfoMessage('')
-      setLoading(false)
-      setSummaryForm(null)
-      setSummaryBaselineForm(null)
-      setIsEditingSummary(false)
-      setIsEditingOwnerDetails(false)
-      setIsEditingAgentDetails(false)
-      setIsTransitioningApplicantToAgent(false)
-      setIsEditingApplicationItems(false)
-      setApplicationItemsEditing(false)
-      setIsEditingDocuments(false)
-      setIsEditingRemarks(false)
-      setIsEditingReview(false)
-      setReviewStatusCode('')
-      setReviewStatusRemark('')
-      setReviewStatusBaselineCode('')
-      setReviewStatusRemarkBaseline('')
-      setShowSummaryValidationErrors(false)
-      return
-    }
-
-    const retainingCurrentDetail =
-      !!currentDetailRef.current &&
-      String(currentDetailRef.current.applicationNumber) === applicationNumber
-
-    setLoading(true)
-    setErrorMessage('')
-    setDocumentsErrorMessage('')
-    setActionErrorMessage('')
-    setActionInfoMessage('')
-    setPermitLookupAvailability('loading')
-    if (!retainingCurrentDetail) {
-      setIsEditingSummary(false)
-      setIsEditingOwnerDetails(false)
-      setIsEditingAgentDetails(false)
-      setIsTransitioningApplicantToAgent(false)
-      setIsEditingApplicationItems(false)
-      setApplicationItemsEditing(false)
-      setIsEditingDocuments(false)
-      setIsEditingRemarks(false)
-      setIsEditingReview(false)
-      setReviewStatusEmailOverride(null)
-      setIndustryViewableExemptionNumber(null)
-      setDocumentRows([])
-      setPermitRows([])
-      setDocumentLookupAvailability('loading')
-    }
-
-    try {
-      const response = await fetchProvincialApplicationDetail(applicationNumber)
-      if (!isLatestRequest()) {
-        return
-      }
-      let editableSummaryForm = response
-        ? normalizeSummaryAgentFields(toSummaryFormState(response))
-        : null
-      setDetail(response)
-      setSummaryForm(editableSummaryForm)
-      setSummaryBaselineForm(editableSummaryForm)
-      setShowSummaryValidationErrors(false)
-      const persistedReviewStatusCode = response?.applicationStatusCode ?? ''
-      const persistedReviewStatusRemark = latestPersistedReviewRemark(response)
-      setReviewStatusCode(persistedReviewStatusCode)
-      setReviewStatusBaselineCode(persistedReviewStatusCode)
-      setReviewStatusRemarkBaseline(persistedReviewStatusRemark)
-      if (seededReviewFieldsApplicationRef.current !== applicationNumber) {
-        seededReviewFieldsApplicationRef.current = response ? applicationNumber : null
-        setReviewStatusRemark(persistedReviewStatusRemark)
-      }
-      setReviewValidationMessage('')
-      setRemarkBody('')
-      setEditingRemarkId(null)
-      if (!response) {
-        setErrorMessage(`No provincial application found for ${applicationNumber}.`)
+  const loadApplicationDetail = useCallback(
+    async ({ preserveRemarkDraft = false } = {}) => {
+      const isLatestRequest = beginDetailRequest()
+      const detailDocumentRequestSequence = ++documentRequestSequenceRef.current
+      setSummaryAccuracyConfirmationOpen(false)
+      setSummaryAccuracyConfirmed(false)
+      setSummaryAccuracyApplicationNumber(null)
+      setPendingSummarySaveSource('summary')
+      if (!applicationNumber) {
+        seededReviewFieldsApplicationRef.current = null
+        setErrorMessage('Application number is missing from the route.')
+        setDetail(null)
+        setIndustryViewableExemptionNumber(null)
         setDocumentRows([])
         setPermitRows([])
         setDocumentLookupAvailability('unavailable')
         setPermitLookupAvailability('unavailable')
+        setDocumentsErrorMessage('')
+        setActionErrorMessage('')
+        setActionInfoMessage('')
+        setLoading(false)
+        setSummaryForm(null)
+        setSummaryBaselineForm(null)
+        setIsEditingSummary(false)
+        setIsEditingOwnerDetails(false)
+        setIsEditingAgentDetails(false)
+        setIsTransitioningApplicantToAgent(false)
+        setIsEditingApplicationItems(false)
+        setApplicationItemsEditing(false)
+        setIsEditingDocuments(false)
+        setIsEditingRemarks(false)
+        setIsEditingReview(false)
+        setReviewStatusCode('')
+        setReviewStatusRemark('')
+        setReviewStatusBaselineCode('')
+        setReviewStatusRemarkBaseline('')
+        setShowSummaryValidationErrors(false)
         return
       }
 
-      const linkedExemptionNumber = response.exemptionNumber?.trim() ?? ''
-      if (response.industryUser && linkedExemptionNumber && canAccessExemptionRoutes) {
-        const verifyIndustryExemptionAccess = async () => {
-          try {
-            const exemption = await fetchProvincialExemptionDetail(linkedExemptionNumber)
-            if (
-              isLatestRequest() &&
-              exemption &&
-              exemption.exemptionStatusCode?.trim().toUpperCase() !== 'NEW'
-            ) {
-              setIndustryViewableExemptionNumber(linkedExemptionNumber)
-            }
-          } catch {
-            // Keep the exemption number as plain text when access or status cannot be verified.
-          }
-        }
-        void verifyIndustryExemptionAccess()
+      const retainingCurrentDetail =
+        !!currentDetailRef.current &&
+        String(currentDetailRef.current.applicationNumber) === applicationNumber
+
+      setLoading(true)
+      setErrorMessage('')
+      setDocumentsErrorMessage('')
+      setActionErrorMessage('')
+      setActionInfoMessage('')
+      setPermitLookupAvailability('loading')
+      if (!retainingCurrentDetail) {
+        setIsEditingSummary(false)
+        setIsEditingOwnerDetails(false)
+        setIsEditingAgentDetails(false)
+        setIsTransitioningApplicantToAgent(false)
+        setIsEditingApplicationItems(false)
+        setApplicationItemsEditing(false)
+        setIsEditingDocuments(false)
+        setIsEditingRemarks(false)
+        setIsEditingReview(false)
+        setReviewStatusEmailOverride(null)
+        setIndustryViewableExemptionNumber(null)
+        setDocumentRows([])
+        setPermitRows([])
+        setDocumentLookupAvailability('loading')
       }
 
-      const [summarySnapshotResult, applicationSpeciesResult] = await Promise.allSettled([
-        fetchApplicationSummarySnapshot(applicationNumber),
-        fetchApplicationSpecies(applicationNumber),
-      ])
-      if (!isLatestRequest()) {
-        return
-      }
-
-      if (
-        summarySnapshotResult.status === 'fulfilled' &&
-        summarySnapshotResult.value &&
-        String(summarySnapshotResult.value.applicationNumber) === applicationNumber
-      ) {
-        editableSummaryForm = normalizeSummaryAgentFields(
-          toSummarySnapshotFormState(summarySnapshotResult.value),
-        )
-      } else if (summarySnapshotResult.status === 'rejected') {
-        setActionErrorMessage('Unable to retrieve complete application summary fields.')
-      }
-
-      if (applicationSpeciesResult.status === 'fulfilled' && editableSummaryForm) {
-        editableSummaryForm = withApplicationSpecies(
-          editableSummaryForm,
-          applicationSpeciesResult.value,
-        )
-      } else if (applicationSpeciesResult.status === 'rejected') {
-        setActionErrorMessage('Unable to retrieve species and end-use fields.')
-      }
-
-      if (editableSummaryForm) {
-        setSummaryForm(editableSummaryForm)
-        setSummaryBaselineForm(editableSummaryForm)
-      }
-
-      // The core application and its editable summary are now stable. Permit and document reads
-      // remain serial to avoid multiplying Oracle demand, but no longer keep the whole page inert.
-      setLoading(false)
-      const loadSecondarySections = async () => {
-        try {
-          const permitsResult = await fetchApplicationPermits(applicationNumber)
-          if (!isLatestRequest()) {
-            return
-          }
-          setPermitRows(permitsResult)
-          setPermitLookupAvailability('available')
-        } catch {
-          if (!isLatestRequest()) {
-            return
-          }
-          if (!retainingCurrentDetail) {
-            setPermitRows([])
-          }
-          setPermitLookupAvailability('unavailable')
-          setActionErrorMessage('Unable to retrieve application permits.')
-        }
-
-        if (detailDocumentRequestSequence !== documentRequestSequenceRef.current) {
+      try {
+        const response = await fetchProvincialApplicationDetail(applicationNumber)
+        if (!isLatestRequest()) {
           return
         }
-        try {
-          const documentsResult = await fetchApplicationDocuments(applicationNumber)
-          if (
-            !isLatestRequest() ||
-            detailDocumentRequestSequence !== documentRequestSequenceRef.current
-          ) {
-            return
-          }
-          setDocumentRows(documentsResult.rows)
-          setDocumentLookupAvailability('available')
-        } catch {
-          if (
-            !isLatestRequest() ||
-            detailDocumentRequestSequence !== documentRequestSequenceRef.current
-          ) {
-            return
-          }
-          if (!retainingCurrentDetail) {
-            setDocumentRows([])
-            setDocumentLookupAvailability('unavailable')
-          }
-          setDocumentsErrorMessage('Unable to retrieve application documents.')
+        let editableSummaryForm = response
+          ? normalizeSummaryAgentFields(toSummaryFormState(response))
+          : null
+        setDetail(response)
+        setSummaryForm(editableSummaryForm)
+        setSummaryBaselineForm(editableSummaryForm)
+        setShowSummaryValidationErrors(false)
+        const persistedReviewStatusCode = response?.applicationStatusCode ?? ''
+        const persistedReviewStatusRemark = latestPersistedReviewRemark(response)
+        setReviewStatusCode(persistedReviewStatusCode)
+        setReviewStatusBaselineCode(persistedReviewStatusCode)
+        setReviewStatusRemarkBaseline(persistedReviewStatusRemark)
+        if (seededReviewFieldsApplicationRef.current !== applicationNumber) {
+          seededReviewFieldsApplicationRef.current = response ? applicationNumber : null
+          setReviewStatusRemark(persistedReviewStatusRemark)
         }
-      }
-      void loadSecondarySections()
-    } catch {
-      if (isLatestRequest()) {
-        setErrorMessage('Unable to retrieve provincial application detail.')
-        if (!retainingCurrentDetail) {
-          setDetail(null)
-          setIndustryViewableExemptionNumber(null)
-          setSummaryForm(null)
-          setSummaryBaselineForm(null)
-          setShowSummaryValidationErrors(false)
+        setReviewValidationMessage('')
+        if (!preserveRemarkDraft) {
+          setRemarkBody('')
+          setEditingRemarkId(null)
+        }
+        if (!response) {
+          setErrorMessage(`No provincial application found for ${applicationNumber}.`)
           setDocumentRows([])
           setPermitRows([])
           setDocumentLookupAvailability('unavailable')
           setPermitLookupAvailability('unavailable')
-          setDocumentsErrorMessage('')
+          return
+        }
+
+        const linkedExemptionNumber = response.exemptionNumber?.trim() ?? ''
+        if (response.industryUser && linkedExemptionNumber && canAccessExemptionRoutes) {
+          const verifyIndustryExemptionAccess = async () => {
+            try {
+              const exemption = await fetchProvincialExemptionDetail(linkedExemptionNumber)
+              if (
+                isLatestRequest() &&
+                exemption &&
+                exemption.exemptionStatusCode?.trim().toUpperCase() !== 'NEW'
+              ) {
+                setIndustryViewableExemptionNumber(linkedExemptionNumber)
+              }
+            } catch {
+              // Keep the exemption number as plain text when access or status cannot be verified.
+            }
+          }
+          void verifyIndustryExemptionAccess()
+        }
+
+        const [summarySnapshotResult, applicationSpeciesResult] = await Promise.allSettled([
+          fetchApplicationSummarySnapshot(applicationNumber),
+          fetchApplicationSpecies(applicationNumber),
+        ])
+        if (!isLatestRequest()) {
+          return
+        }
+
+        if (
+          summarySnapshotResult.status === 'fulfilled' &&
+          summarySnapshotResult.value &&
+          String(summarySnapshotResult.value.applicationNumber) === applicationNumber
+        ) {
+          editableSummaryForm = normalizeSummaryAgentFields(
+            toSummarySnapshotFormState(summarySnapshotResult.value),
+          )
+        } else if (summarySnapshotResult.status === 'rejected') {
+          setActionErrorMessage('Unable to retrieve complete application summary fields.')
+        }
+
+        if (applicationSpeciesResult.status === 'fulfilled' && editableSummaryForm) {
+          editableSummaryForm = withApplicationSpecies(
+            editableSummaryForm,
+            applicationSpeciesResult.value,
+          )
+        } else if (applicationSpeciesResult.status === 'rejected') {
+          setActionErrorMessage('Unable to retrieve species and end-use fields.')
+        }
+
+        if (editableSummaryForm) {
+          setSummaryForm(editableSummaryForm)
+          setSummaryBaselineForm(editableSummaryForm)
+        }
+
+        // The core application and its editable summary are now stable. Permit and document reads
+        // remain serial to avoid multiplying Oracle demand, but no longer keep the whole page inert.
+        setLoading(false)
+        const loadSecondarySections = async () => {
+          try {
+            const permitsResult = await fetchApplicationPermits(applicationNumber)
+            if (!isLatestRequest()) {
+              return
+            }
+            setPermitRows(permitsResult)
+            setPermitLookupAvailability('available')
+          } catch {
+            if (!isLatestRequest()) {
+              return
+            }
+            if (!retainingCurrentDetail) {
+              setPermitRows([])
+            }
+            setPermitLookupAvailability('unavailable')
+            setActionErrorMessage('Unable to retrieve application permits.')
+          }
+
+          if (detailDocumentRequestSequence !== documentRequestSequenceRef.current) {
+            return
+          }
+          try {
+            const documentsResult = await fetchApplicationDocuments(applicationNumber)
+            if (
+              !isLatestRequest() ||
+              detailDocumentRequestSequence !== documentRequestSequenceRef.current
+            ) {
+              return
+            }
+            setDocumentRows(documentsResult.rows)
+            setDocumentLookupAvailability('available')
+          } catch {
+            if (
+              !isLatestRequest() ||
+              detailDocumentRequestSequence !== documentRequestSequenceRef.current
+            ) {
+              return
+            }
+            if (!retainingCurrentDetail) {
+              setDocumentRows([])
+              setDocumentLookupAvailability('unavailable')
+            }
+            setDocumentsErrorMessage('Unable to retrieve application documents.')
+          }
+        }
+        void loadSecondarySections()
+      } catch {
+        if (isLatestRequest()) {
+          setErrorMessage('Unable to retrieve provincial application detail.')
+          if (!retainingCurrentDetail) {
+            setDetail(null)
+            setIndustryViewableExemptionNumber(null)
+            setSummaryForm(null)
+            setSummaryBaselineForm(null)
+            setShowSummaryValidationErrors(false)
+            setDocumentRows([])
+            setPermitRows([])
+            setDocumentLookupAvailability('unavailable')
+            setPermitLookupAvailability('unavailable')
+            setDocumentsErrorMessage('')
+          }
+        }
+      } finally {
+        if (isLatestRequest()) {
+          setLoading(false)
         }
       }
-    } finally {
-      if (isLatestRequest()) {
-        setLoading(false)
-      }
-    }
-  }, [applicationNumber, beginDetailRequest, canAccessExemptionRoutes])
+    },
+    [applicationNumber, beginDetailRequest, canAccessExemptionRoutes],
+  )
 
   useEffect(() => {
     void loadApplicationDetail()
@@ -1139,8 +1145,8 @@ const ProvincialApplicationDetailsPage = () => {
   const offerPackageNumbers = useMemo(
     () =>
       (detail?.packages ?? [])
-        .map((item) => item.packageNumber.trim())
-        .filter((packageNumber) => packageNumber.length > 0),
+        .map((item) => item.packageNumber)
+        .filter((packageNumber) => packageNumber.trim().length > 0),
     [detail?.packages],
   )
   const canCreateApplicationOffer = Boolean(
@@ -2587,9 +2593,6 @@ const ProvincialApplicationDetailsPage = () => {
               }
             : current,
         )
-        setRemarkBody('')
-        setEditingRemarkId(null)
-        setIsEditingRemarks(false)
         if (refreshAfterSave) {
           const preservedSummaryForm = summaryForm
           const preservedSummaryBaselineForm = summaryBaselineForm
@@ -2597,7 +2600,8 @@ const ProvincialApplicationDetailsPage = () => {
           const preservedReviewStatusRemark = reviewStatusRemark
           const preservedReviewStatusBaselineCode = reviewStatusBaselineCode
           const preservedReviewStatusRemarkBaseline = reviewStatusRemarkBaseline
-          await loadApplicationDetail()
+          // Keep the saving dialog's text and edit heading until the refresh finishes.
+          await loadApplicationDetail({ preserveRemarkDraft: true })
           setSummaryForm(preservedSummaryForm)
           setSummaryBaselineForm(preservedSummaryBaselineForm)
           setReviewStatusCode(preservedReviewStatusCode)
@@ -2605,6 +2609,10 @@ const ProvincialApplicationDetailsPage = () => {
           setReviewStatusBaselineCode(preservedReviewStatusBaselineCode)
           setReviewStatusRemarkBaseline(preservedReviewStatusRemarkBaseline)
         }
+        // The refresh makes the page inert; return focus only after it finishes.
+        setIsEditingRemarks(false)
+        setRemarkBody('')
+        setEditingRemarkId(null)
         setActionInfoMessage(
           editingRemarkId ? 'Application remark updated.' : 'Application remark saved.',
         )
@@ -5192,12 +5200,13 @@ const ProvincialApplicationDetailsPage = () => {
                           className="application-detail-section application-detail-remarks"
                         >
                           <div className="detail-section-card__header detail-section-card__header--actions-only">
-                            {canManageRemarks && !isEditingRemarks && (
+                            {canManageRemarks && (
                               <Button
                                 kind="tertiary"
                                 size="sm"
                                 renderIcon={Add}
-                                onClick={() => {
+                                onClick={(event) => {
+                                  remarkLauncherRef.current = event.currentTarget
                                   setRemarkBody('')
                                   setEditingRemarkId(null)
                                   setRemarkValidationMessage('')
@@ -5229,7 +5238,7 @@ const ProvincialApplicationDetailsPage = () => {
                                   <TableBody>
                                     {detail.remarks.map((item) => (
                                       <TableRow
-                                        key={`${item.remarkId ?? item.title}-${item.remark}`}
+                                        key={item.remarkId ?? `${item.title}-${item.remark}`}
                                       >
                                         <TableCell>{displayValue(item.date)}</TableCell>
                                         <TableCell>{displayValue(item.user)}</TableCell>
@@ -5241,7 +5250,8 @@ const ProvincialApplicationDetailsPage = () => {
                                               size="sm"
                                               renderIcon={Edit}
                                               disabled={!item.remarkId}
-                                              onClick={() => {
+                                              onClick={(event) => {
+                                                remarkLauncherRef.current = event.currentTarget
                                                 setEditingRemarkId(
                                                   item.remarkId ? String(item.remarkId) : null,
                                                 )
@@ -5261,14 +5271,16 @@ const ProvincialApplicationDetailsPage = () => {
                               </TableFrame>
                             </>
                           )}
-                          {canManageRemarks && isEditingRemarks && (
+                          {/* Keep the dialog mounted so Carbon can return focus to its launcher. */}
+                          {canManageRemarks && (
                             <Modal
-                              open
+                              open={isEditingRemarks}
                               passiveModal
                               size="sm"
                               modalHeading={editingRemarkId ? 'Edit remark' : 'Add remark'}
                               aria-label={editingRemarkId ? 'Edit remark' : 'Add remark'}
                               selectorPrimaryFocus="#applicationRemarkBody"
+                              launcherButtonRef={remarkLauncherRef}
                               preventCloseOnClickOutside
                               onRequestClose={() => {
                                 if (!isSavingRemark) {
@@ -5276,48 +5288,54 @@ const ProvincialApplicationDetailsPage = () => {
                                 }
                               }}
                             >
-                              <TextArea
-                                id="applicationRemarkBody"
-                                labelText={requiredLabel(
-                                  editingRemarkId ? `Edit Remark ${editingRemarkId}` : 'New Remark',
-                                )}
-                                aria-required="true"
-                                rows={6}
-                                enableCounter
-                                maxCount={APPLICATION_REMARK_MAX_LENGTH}
-                                maxLength={APPLICATION_REMARK_MAX_LENGTH}
-                                value={remarkBody}
-                                disabled={isSavingRemark}
-                                invalid={!!remarkValidationMessage}
-                                invalidText={remarkValidationMessage}
-                                onChange={(event) => {
-                                  setRemarkBody(event.target.value)
-                                  if (remarkValidationMessage) {
-                                    setRemarkValidationMessage('')
-                                  }
-                                }}
-                              />
-                              <div className="application-remark-modal__actions">
-                                <Button
-                                  kind="tertiary"
-                                  disabled={isSavingRemark}
-                                  onClick={onCancelRemarkEditing}
-                                >
-                                  Cancel
-                                </Button>
-                                <Button
-                                  kind="primary"
-                                  disabled={isSavingRemark}
-                                  renderIcon={isSavingRemark ? PendingIcon : undefined}
-                                  onClick={() => void onSaveRemark()}
-                                >
-                                  {isSavingRemark
-                                    ? 'Saving…'
-                                    : editingRemarkId
-                                      ? 'Update Remark'
-                                      : 'Save Remark'}
-                                </Button>
-                              </div>
+                              {isEditingRemarks && (
+                                <>
+                                  <TextArea
+                                    id="applicationRemarkBody"
+                                    labelText={requiredLabel(
+                                      editingRemarkId
+                                        ? `Edit Remark ${editingRemarkId}`
+                                        : 'New Remark',
+                                    )}
+                                    aria-required="true"
+                                    rows={6}
+                                    enableCounter
+                                    maxCount={APPLICATION_REMARK_MAX_LENGTH}
+                                    maxLength={APPLICATION_REMARK_MAX_LENGTH}
+                                    value={remarkBody}
+                                    disabled={isSavingRemark}
+                                    invalid={!!remarkValidationMessage}
+                                    invalidText={remarkValidationMessage}
+                                    onChange={(event) => {
+                                      setRemarkBody(event.target.value)
+                                      if (remarkValidationMessage) {
+                                        setRemarkValidationMessage('')
+                                      }
+                                    }}
+                                  />
+                                  <div className="application-remark-modal__actions">
+                                    <Button
+                                      kind="tertiary"
+                                      disabled={isSavingRemark}
+                                      onClick={onCancelRemarkEditing}
+                                    >
+                                      Cancel
+                                    </Button>
+                                    <Button
+                                      kind="primary"
+                                      disabled={isSavingRemark}
+                                      renderIcon={isSavingRemark ? PendingIcon : undefined}
+                                      onClick={() => void onSaveRemark()}
+                                    >
+                                      {isSavingRemark
+                                        ? 'Saving…'
+                                        : editingRemarkId
+                                          ? 'Update Remark'
+                                          : 'Save Remark'}
+                                    </Button>
+                                  </div>
+                                </>
+                              )}
                             </Modal>
                           )}
                         </Tile>

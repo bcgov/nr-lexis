@@ -35,6 +35,18 @@ describe('Offer scale details', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
+  it('forwards an exact stored package key without normalizing it', async () => {
+    const storedPackageNumber = 'PKG-EXISTING  '
+    render(<OfferScaleDetailAction target={{ packageNumber: storedPackageNumber }} />)
+
+    await userEvent.click(screen.getByRole('button', { name: 'See Scale Detail' }))
+
+    expect(mockedFetchOfferScaleDetails).toHaveBeenCalledWith(
+      { packageNumber: storedPackageNumber },
+      expect.any(AbortSignal),
+    )
+  })
+
   it('shows a load failure and fetches again when reopened', async () => {
     mockedFetchOfferScaleDetails.mockRejectedValueOnce(new Error('Access denied'))
     render(<OfferScaleDetailAction target={{ offerNumber: '81001' }} />)

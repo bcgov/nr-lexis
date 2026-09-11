@@ -58,7 +58,7 @@ public class LexisSessionService {
     Set<String> roleSet = new LinkedHashSet<>(roles);
 
     boolean adminUser = roleSet.contains(ROLE_ADMIN);
-    boolean readOnlyUser = roleSet.contains(ROLE_READ_ONLY);
+    boolean readOnlyUser = isPureReadOnlyRole(roles);
     boolean applicationApprover = roleSet.contains(ROLE_APPLICATION_APPROVER);
     boolean provincialSubmitter = roleSet.contains(ROLE_PROVINCIAL_SUBMITTER);
     boolean exemptionApprover = roleSet.contains(ROLE_EXEMPTION_APPROVER);
@@ -245,6 +245,10 @@ public class LexisSessionService {
       normalized.add(normalizedRole);
     }
     return List.copyOf(normalized);
+  }
+
+  private boolean isPureReadOnlyRole(List<String> roles) {
+    return roles.size() == 1 && roles.contains(ROLE_READ_ONLY);
   }
 
   private Set<String> parseRoleCsv(String csv) {

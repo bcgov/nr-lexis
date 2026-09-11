@@ -21,6 +21,20 @@ export const displayTableValue = (value: string | number | null | undefined): st
   return String(value)
 }
 
+// Display padding explicitly without changing the exact package key used in requests.
+export const formatPackageNumberLabel = (packageNumber: string): string => {
+  const leadingSpaces = packageNumber.length - packageNumber.trimStart().length
+  const trailingSpaces = packageNumber.length - packageNumber.trimEnd().length
+  const padding: string[] = []
+  if (leadingSpaces > 0) {
+    padding.push(`${leadingSpaces} leading space${leadingSpaces === 1 ? '' : 's'}`)
+  }
+  if (trailingSpaces > 0) {
+    padding.push(`${trailingSpaces} trailing space${trailingSpaces === 1 ? '' : 's'}`)
+  }
+  return padding.length > 0 ? `${packageNumber.trim()} (${padding.join(', ')})` : packageNumber
+}
+
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export const displayAuditIdentity = (value: string | null | undefined): string => {

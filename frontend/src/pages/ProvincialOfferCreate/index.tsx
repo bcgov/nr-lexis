@@ -34,7 +34,7 @@ import {
 import type { SearchOption } from '@/service/search-options-service'
 import { formatBusinessIsoDate } from '@/utils/date'
 import { requiredLabel } from '@/utils/required-label'
-import { displayAuditIdentity } from '@/utils/text'
+import { displayAuditIdentity, formatPackageNumberLabel } from '@/utils/text'
 import {
   OFFER_COMPANY_NAME_MAX_LENGTH,
   OFFER_CONDITION_MAX_LENGTH,
@@ -96,13 +96,11 @@ const packageOptionsFromQuery = (query: URLSearchParams): SearchOption[] => {
   const packageNumbers = [
     query.get('packageNumber') ?? '',
     ...(query.get('packageNumbers') ?? '').split(','),
-  ]
-    .map((packageNumber) => packageNumber.trim())
-    .filter((packageNumber) => packageNumber.length > 0)
+  ].filter((packageNumber) => packageNumber.trim().length > 0)
 
   return Array.from(new Set(packageNumbers)).map((packageNumber) => ({
     value: packageNumber,
-    label: packageNumber,
+    label: formatPackageNumberLabel(packageNumber),
   }))
 }
 
@@ -261,9 +259,8 @@ const offerApplicationContextReducer = (
 }
 
 const packageVolumeTargetKey = (applicationNumber: string, packageNumber: string): string => {
-  const normalizedPackageNumber = packageNumber.trim()
-  return normalizedPackageNumber
-    ? `${normalizeProvincialApplicationNumber(applicationNumber)}\u0000${normalizedPackageNumber}`
+  return packageNumber.trim()
+    ? `${normalizeProvincialApplicationNumber(applicationNumber)}\u0000${packageNumber}`
     : ''
 }
 
@@ -373,12 +370,14 @@ const ProvincialOfferCreatePage = () => {
     normalizeProvincialApplicationNumber(form.applicationNumber) !==
       normalizeProvincialApplicationNumber(applicationNumberForLookup)
   const packageNumberForVolumeLookup =
-    packageOptions.length > 0 ? form.packageNumber.trim() : packageNumberForLookup.trim()
+    packageOptions.length > 0 ? form.packageNumber : packageNumberForLookup.trim()
+  const currentPackageNumberForVolumeLookup =
+    packageOptions.length > 0 ? form.packageNumber : form.packageNumber.trim()
   const packageVolumeLookupTarget = isLookupApplicationNumberValid
     ? packageVolumeTargetKey(applicationNumberForLookup, packageNumberForVolumeLookup)
     : ''
   const currentPackageVolumeTarget = isCurrentApplicationNumberValid
-    ? packageVolumeTargetKey(form.applicationNumber, form.packageNumber)
+    ? packageVolumeTargetKey(form.applicationNumber, currentPackageNumberForVolumeLookup)
     : ''
   const isPackageVolumePending =
     Boolean(currentPackageVolumeTarget) &&
@@ -510,7 +509,7 @@ const ProvincialOfferCreatePage = () => {
         const packageNumbers = packagesResult.value
         const nextPackageOptions = packageNumbers.map((packageNumber) => ({
           value: packageNumber,
-          label: packageNumber,
+          label: formatPackageNumberLabel(packageNumber),
         }))
         const nextApplicationVolume =
           volumeResult.status === 'fulfilled'
@@ -548,7 +547,7 @@ const ProvincialOfferCreatePage = () => {
           if (!firstPackageNumber) {
             return current.packageNumber ? { ...current, packageNumber: '' } : current
           }
-          const selectedPackageNumber = current.packageNumber.trim()
+          const selectedPackageNumber = current.packageNumber
           const hasSelectedPackage = nextPackageOptions.some(
             (option) => option.value === selectedPackageNumber,
           )
@@ -643,7 +642,7 @@ const ProvincialOfferCreatePage = () => {
             : null,
         () =>
           packageOptions.length > 0 &&
-          !packageOptions.some((option) => option.value === form.packageNumber.trim())
+          !packageOptions.some((option) => option.value === form.packageNumber)
             ? 'Select a package from this application.'
             : null,
       ),
@@ -930,7 +929,7 @@ const ProvincialOfferCreatePage = () => {
             </div>
             <div className="legacy-search-actions">
               <OfferScaleDetailAction
-                target={{ packageNumber: form.packageNumber.trim() }}
+                target={{ packageNumber: currentPackageNumberForVolumeLookup }}
                 disabled={!form.applicationNumber.trim() || !form.packageNumber.trim()}
               />
             </div>

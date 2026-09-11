@@ -50,8 +50,13 @@ const submissionClientLocationValue = (
   return locationCode ? `${client}-${locationCode}` : client
 }
 
-const submissionValue = (value: string | number | undefined): string => {
-  if (value === undefined || value === '' || (typeof value === 'string' && !value.trim())) {
+const submissionValue = (value: string | number | null | undefined): string => {
+  if (
+    value === null ||
+    value === undefined ||
+    value === '' ||
+    (typeof value === 'string' && !value.trim())
+  ) {
     return '—'
   }
   return String(value)

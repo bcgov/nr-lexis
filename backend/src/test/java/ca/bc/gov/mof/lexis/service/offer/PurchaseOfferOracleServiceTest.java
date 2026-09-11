@@ -833,6 +833,25 @@ class PurchaseOfferOracleServiceTest {
   }
 
   @Test
+  void addOfferShouldPreserveRawSelectedPackageNumber() {
+    String paddedPackageNumber = "PKG-903  ";
+    stubProvincialApplicationWithPackage(1000456L, paddedPackageNumber);
+    when(repository.insertOffer(any(PurchaseOfferRepository.PurchaseOfferInsertRecord.class)))
+        .thenReturn(Optional.of(new PurchaseOfferRepository.PurchaseOfferInsertRow(81002L)));
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.addOffer(
+            validCreateRequest(1000456L, paddedPackageNumber, 12.0d), "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<PurchaseOfferRepository.PurchaseOfferInsertRecord> recordCaptor =
+        ArgumentCaptor.forClass(PurchaseOfferRepository.PurchaseOfferInsertRecord.class);
+    verify(repository).insertOffer(recordCaptor.capture());
+    assertThat(recordCaptor.getValue().packageNumber()).isEqualTo(paddedPackageNumber);
+    verify(repository).findPackageReference(paddedPackageNumber);
+  }
+
+  @Test
   void addOfferShouldRejectVolumeAboveApplicationVolumeBeforeOracleInsert() {
     stubProvincialApplication(1000456L, 100.0d);
 
@@ -1397,6 +1416,30 @@ class PurchaseOfferOracleServiceTest {
     verify(repository).updateOffer(captor.capture());
     assertThat(captor.getValue().packageNumber()).isEqualTo("PKG-904");
     assertThat(captor.getValue().exportJurisdictionCode()).isEqualTo("P");
+  }
+
+  @Test
+  void updateOfferShouldPreserveRawSelectedPackageNumber() {
+    String paddedPackageNumber = "PKG-903  ";
+    when(repository.findUpdateSourceByOfferNumber(81001L))
+        .thenReturn(Optional.of(updateSource(1000456L, paddedPackageNumber, "P")));
+    stubProvincialApplicationWithPackage(1000456L, paddedPackageNumber);
+    when(repository.updateOffer(any(PurchaseOfferRepository.PurchaseOfferUpdateRecord.class)))
+        .thenReturn(true);
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.updateOffer(
+            new PurchaseOfferService.CreateOfferRequest(
+                1000456L, 81001L, paddedPackageNumber, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<PurchaseOfferRepository.PurchaseOfferUpdateRecord> recordCaptor =
+        ArgumentCaptor.forClass(PurchaseOfferRepository.PurchaseOfferUpdateRecord.class);
+    verify(repository).updateOffer(recordCaptor.capture());
+    assertThat(recordCaptor.getValue().packageNumber()).isEqualTo(paddedPackageNumber);
+    verify(repository).findPackageReference(paddedPackageNumber);
   }
 
   @Test

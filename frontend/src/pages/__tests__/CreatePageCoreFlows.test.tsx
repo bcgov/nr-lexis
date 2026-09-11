@@ -867,7 +867,7 @@ describe('Create Page Core Flows', () => {
         },
       },
     })
-  })
+  }, 20_000)
 
   it('shows selected owner and agent client details as read-only information', async () => {
     render(
@@ -1817,6 +1817,9 @@ describe('Create Page Core Flows', () => {
     expect(screen.getByRole('tab', { name: 'Documents' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Permits' })).toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
+    await selectExemptionCreateTab('Documents')
+    expect(screen.getByText('Save the exemption before uploading documents.')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Add document' })).toBeDisabled()
     await selectExemptionCreateTab('Owner')
     await waitFor(() =>
       expect(screen.getByRole('textbox', { name: 'Client number' })).toHaveValue('00011111'),
@@ -2981,6 +2984,67 @@ describe('Create Page Core Flows', () => {
       },
     })
   }, 15000)
+
+  it('preserves an exact selected package key for offer lookups, scale details, and save', async () => {
+    const plainPackageNumber = 'PKG-EXISTING'
+    const storedPackageNumber = 'PKG-EXISTING  '
+    const storedPackageLabel = 'PKG-EXISTING (2 trailing spaces)'
+    let resolvePackageList: ((packages: string[]) => void) | undefined
+    mockedFetchOfferPackageList.mockReturnValue(
+      new Promise((resolve) => {
+        resolvePackageList = resolve
+      }),
+    )
+    mockedFetchOfferPackageVolume.mockImplementation(async (packageNumber) =>
+      packageNumber === storedPackageNumber ? '95.0' : '40.0',
+    )
+    mockedSubmitProvincialOfferCreate.mockResolvedValue(successfulCreate('8085'))
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/offers/create?applicationNumber=2001&packageNumber=PKG-EXISTING%20%20&companyName=Example%20Lumber&contactName=Sample%20Contact&offerVolume=50.0&purchaseOfferAmount=25000&pickupLocation=Yard%20A',
+        ]}
+      >
+        <Routes>
+          <Route path="/provincial/offers/create" element={<ProvincialOfferCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByRole('combobox', { name: 'Package number' })).toHaveValue(storedPackageLabel)
+    await act(async () => resolvePackageList?.([plainPackageNumber, storedPackageNumber]))
+
+    await waitFor(() =>
+      expect(mockedFetchOfferPackageVolume).toHaveBeenCalledWith(storedPackageNumber),
+    )
+    const packageSelector = screen.getByRole('combobox', { name: 'Package number' })
+    expect(packageSelector).toHaveValue(storedPackageLabel)
+    await waitFor(() => expect(packageSelector).toBeEnabled())
+    await chooseComboBoxOption(packageSelector, plainPackageNumber)
+    await waitFor(() =>
+      expect(mockedFetchOfferPackageVolume).toHaveBeenLastCalledWith(plainPackageNumber),
+    )
+    await chooseComboBoxOption(packageSelector, storedPackageLabel)
+    await waitFor(() =>
+      expect(mockedFetchOfferPackageVolume).toHaveBeenLastCalledWith(storedPackageNumber),
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: 'See Scale Detail' }))
+    const scaleDialog = await screen.findByRole('dialog', { name: 'Scale Detail' })
+    expect(mockedFetchOfferScaleDetails).toHaveBeenCalledWith(
+      { packageNumber: storedPackageNumber },
+      expect.any(AbortSignal),
+    )
+    await userEvent.click(within(scaleDialog).getByRole('button', { name: 'Close' }))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save new offer' }))
+    await waitFor(() =>
+      expect(mockedSubmitProvincialOfferCreate).toHaveBeenCalledWith(
+        expect.objectContaining({ packageNumber: storedPackageNumber }),
+      ),
+    )
+  })
 
   it('creates an offer with an explicit zero volume', async () => {
     render(

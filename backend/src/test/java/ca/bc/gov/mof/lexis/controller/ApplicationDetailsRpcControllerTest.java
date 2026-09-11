@@ -2249,14 +2249,15 @@ class ApplicationDetailsRpcControllerTest {
     verify(service).getScalesForPackage("PKG-903");
   }
 
-  @Test
-  void getPackageDetailsLegacyShouldReturnLegacyPackagePayload() {
+  @ParameterizedTest
+  @ValueSource(strings = {"PKG-903", "PKG-903  "})
+  void getPackageDetailsLegacyShouldReturnLegacyPackagePayload(String packageNumber) {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
-    when(service.getPackageDetails("PKG-903"))
+    when(service.getPackageDetails(packageNumber))
         .thenReturn(
             new ApplicationDetailsRpcService.PackageDetailsItem(
                 true,
-                "PKG-903",
+                packageNumber,
                 "10.3",
                 3.6d,
                 "6.0",
@@ -2271,12 +2272,12 @@ class ApplicationDetailsRpcControllerTest {
                 "Harvested"));
 
     ResponseEntity<ApplicationDetailsRpcController.ApplicationPackageDetailsResponseDto> response =
-        controller.getPackageDetailsLegacy("PKG-903");
+        controller.getPackageDetailsLegacy(packageNumber);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isNotNull();
     assertThat(response.getBody().success()).isTrue();
-    assertThat(response.getBody().packageNumber()).isEqualTo("PKG-903");
+    assertThat(response.getBody().packageNumber()).isEqualTo(packageNumber);
     assertThat(response.getBody().volume()).isEqualTo("10.3");
     assertThat(response.getBody().scaledVolume()).isEqualTo(3.6d);
     assertThat(response.getBody().length()).isEqualTo("6.0");
@@ -2289,7 +2290,8 @@ class ApplicationDetailsRpcControllerTest {
     assertThat(response.getBody().ageClassDescription()).isEqualTo("Standing");
     assertThat(response.getBody().productType()).isEqualTo("H");
     assertThat(response.getBody().productTypeDescription()).isEqualTo("Harvested");
-    verify(service).getPackageDetails("PKG-903");
+    verify(service).findApplicationNumberForPackage(packageNumber);
+    verify(service).getPackageDetails(packageNumber);
   }
 
   @Test
@@ -2464,8 +2466,64 @@ class ApplicationDetailsRpcControllerTest {
     assertThat(request.speciesCodes()).containsExactly("CE");
   }
 
+  @ParameterizedTest
+  @CsvSource(
+      value = {
+        "'PKG-EXISTING  ','PKG-EXISTING  ',false",
+        "'PKG-EXISTING  ','PKG-EXISTING',true",
+        "'PKG-EXISTING','  PKG-EXISTING  ',false"
+      },
+      ignoreLeadingAndTrailingWhitespace = false)
+  void packageUpdateShouldPreserveStoredKeyAndApplyRenamePolicyToEffectiveTarget(
+      String packageNumber, String requestedPackageNumber, boolean renamed) {
+    TestingAuthenticationToken authentication = authorized("createApplication");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.updatePackage(any(), any()))
+        .thenReturn(
+            new ApplicationDetailsRpcService.PackagePersistenceResult(
+                true, requestedPackageNumber, "1.0", "1.0", "1.0", "ACT", List.of(), List.of()));
+    MultiValueMap<String, String> parameters = new LinkedMultiValueMap<>();
+    parameters.add("packageNumber", packageNumber);
+    parameters.add("newPackageNumber", requestedPackageNumber);
+    parameters.add("applicationNumber", "1000456");
+
+    assertThat(controller.updatePackage(parameters, authentication).getStatusCode())
+        .isEqualTo(HttpStatus.OK);
+
+    ArgumentCaptor<ApplicationDetailsRpcService.PackageMutationRequest> requestCaptor =
+        ArgumentCaptor.forClass(ApplicationDetailsRpcService.PackageMutationRequest.class);
+    verify(service).updatePackage(requestCaptor.capture(), any());
+    assertThat(requestCaptor.getValue().packageNumber()).isEqualTo(packageNumber);
+    assertThat(requestCaptor.getValue().newPackageNumber()).isEqualTo(requestedPackageNumber);
+    verify(service, times(2)).findApplicationNumberForPackage(packageNumber);
+    verify(applicationEditPolicyService, times(2))
+        .requirePackageEdit(authentication, service, 1000456L);
+    verify(applicationEditPolicyService, times(renamed ? 2 : 0))
+        .requirePackageNumberUpdate(authentication, service, 1000456L);
+  }
+
   @Test
-  void addScaleToPackageLegacyShouldMapLegacyParamsAndReturnScalePayload() {
+  void packageUpdateShouldRejectPaddedKeyFromAnotherApplicationWithoutTryingTrimmedKey() {
+    TestingAuthenticationToken authentication = authorized("createApplication");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.findApplicationNumberForPackage("PKG-EXISTING  "))
+        .thenReturn(Optional.of(900123L));
+    MultiValueMap<String, String> parameters = new LinkedMultiValueMap<>();
+    parameters.add("packageNumber", "PKG-EXISTING  ");
+    parameters.add("newPackageNumber", "PKG-EXISTING  ");
+    parameters.add("applicationNumber", "1000456");
+
+    assertThatThrownBy(() -> controller.updatePackage(parameters, authentication))
+        .isInstanceOf(AccessDeniedException.class)
+        .hasMessage("Package does not belong to the supplied application.");
+    verify(service, never()).findApplicationNumberForPackage("PKG-EXISTING");
+    verify(service, never()).updatePackage(any(), any());
+    verifyNoInteractions(applicationEditPolicyService, editLockService);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"PKG-903", "PKG-903  "})
+  void addScaleToPackageLegacyShouldMapLegacyParamsAndReturnScalePayload(String packageNumber) {
     TestingAuthenticationToken authentication = authorized("createApplication");
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(service.addScaleToPackage(
@@ -2486,7 +2544,7 @@ class ApplicationDetailsRpcControllerTest {
     params.add("gradeCode", "1");
     params.add("speciesCode", "FI");
     params.add("applicationNumber", "1000456");
-    params.add("packageNumber", "PKG-903");
+    params.add("packageNumber", packageNumber);
 
     ResponseEntity<ApplicationDetailsRpcController.ScalePersistenceResponseDto> response =
         controller.addScaleToPackageLegacy(params, authentication);
@@ -2504,7 +2562,7 @@ class ApplicationDetailsRpcControllerTest {
     verify(applicationEditPolicyService, times(2))
         .requireScaleAddOrDelete(authentication, service, 1000456L);
     ApplicationDetailsRpcService.ScaleMutationRequest request = requestCaptor.getValue();
-    assertThat(request.packageNumber()).isEqualTo("PKG-903");
+    assertThat(request.packageNumber()).isEqualTo(packageNumber);
     assertThat(request.applicationNumber()).isEqualTo(1000456L);
     assertThat(request.pieces()).isEqualTo(10L);
     assertThat(request.volume()).isEqualTo(12.5d);

@@ -42,6 +42,12 @@ type RecordSnapshotSource = {
   data: unknown
 }
 
+type CollectedConflictField = {
+  field: string
+  currentValue: unknown
+  rawCurrentValue: unknown
+}
+
 type ActiveRecord = {
   recordType: OptimisticRecordType
   recordId: string
@@ -596,6 +602,7 @@ class APIService {
     try {
       const latestSources: unknown[] = []
       const changedFields: unknown[] = []
+      const sharedActiveRecordFields: CollectedConflictField[] = []
       let latestVersion: unknown
       const sourceResults = await Promise.allSettled(
         snapshot.sources.map(async (source) => ({
@@ -618,7 +625,25 @@ class APIService {
         if (this.snapshotSourceKey(source) === snapshot.primarySourceKey) {
           latestVersion = this.getHeader(latestResponse.headers, RECORD_VERSION_HEADER)
         }
-        changedFields.push(...this.collectChangedFields(source.data, latestResponse.data))
+        const isSharedActiveRecordSource = this.isDirectRecordSnapshotSource(source, activeRecord)
+        for (const changedField of this.collectChangedFields(source.data, latestResponse.data)) {
+          const isDuplicateSharedField =
+            isSharedActiveRecordSource &&
+            sharedActiveRecordFields.some(
+              (existingField) =>
+                existingField.field === changedField.field &&
+                this.valuesEqual(existingField.rawCurrentValue, changedField.rawCurrentValue),
+            )
+          if (isDuplicateSharedField) continue
+
+          if (isSharedActiveRecordSource) {
+            sharedActiveRecordFields.push(changedField)
+          }
+          changedFields.push({
+            field: changedField.field,
+            currentValue: changedField.currentValue,
+          })
+        }
       }
       const suppliedFields = this.hasChangedFields(problem.changedFields)
       return {
@@ -647,8 +672,8 @@ class APIService {
     }
   }
 
-  private collectChangedFields(original: unknown, latest: unknown): unknown[] {
-    const changedFields: unknown[] = []
+  private collectChangedFields(original: unknown, latest: unknown): CollectedConflictField[] {
+    const changedFields: CollectedConflictField[] = []
     this.compareRecordValues(original, latest, '', 0, changedFields)
     return changedFields
   }
@@ -658,7 +683,7 @@ class APIService {
     latest: unknown,
     path: string,
     depth: number,
-    changedFields: unknown[],
+    changedFields: CollectedConflictField[],
   ): void {
     if (
       changedFields.length >= CONFLICT_CHANGED_FIELD_LIMIT ||
@@ -688,7 +713,33 @@ class APIService {
     changedFields.push({
       field: path || 'record',
       currentValue: this.compactConflictValue(latest),
+      rawCurrentValue: latest,
     })
+  }
+
+  private isDirectRecordSnapshotSource(
+    source: RecordSnapshotSource,
+    activeRecord: ActiveRecord,
+  ): boolean {
+    // Child payloads can contain the parent's identifier; only root endpoints share field identity.
+    const detailUrl = source.detailUrl.split('?')[0]?.replace(/\/$/, '') ?? ''
+    const encodedRecordId = encodeURIComponent(activeRecord.recordId)
+    const directDetailUrls: Record<OptimisticRecordType, string> = {
+      application: `/lexis/applications/${encodedRecordId}`,
+      'federal-application': `/lexis/federal/applications/${encodedRecordId}`,
+      exemption: `/lexis/exemptions/${encodedRecordId}`,
+      permit: `/lexis/permits/${encodedRecordId}`,
+      offer: `/lexis/purchase-offers/${encodedRecordId}`,
+    }
+    if (detailUrl === directDetailUrls[activeRecord.recordType]) {
+      return true
+    }
+
+    return (
+      activeRecord.recordType === 'application' &&
+      detailUrl === '/lexis/rpc/application-details/application-summary' &&
+      this.requestValueTargetsRecord(source.detailConfig?.params, activeRecord)
+    )
   }
 
   private asPlainRecord(value: unknown): Record<string, unknown> | null {

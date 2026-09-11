@@ -17,6 +17,7 @@ import java.sql.SQLException;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -266,6 +267,80 @@ class ApplicationDetailsRpcRepositoryTest {
   }
 
   @Test
+  void packageMutationLookupShouldBindOpaquePackageNumberWithoutTrimming() throws Exception {
+    CapturingPackageLookupRepository repository = new CapturingPackageLookupRepository();
+    String paddedPackageNumber = "PKG-EXISTING  ";
+
+    assertThat(repository.findPackageMutationByPackageNumber(paddedPackageNumber)).isEmpty();
+    verify(repository.callableStatement).setString(1, paddedPackageNumber);
+
+    assertThat(repository.findPackageMutationByPackageNumber("PKG-EXISTING")).isEmpty();
+    verify(repository.callableStatement).setString(1, "PKG-EXISTING");
+  }
+
+  @Test
+  void packageMutationAndScaleBindingsShouldPreserveOpaquePackageNumber() throws Exception {
+    String paddedPackageNumber = "PKG-EXISTING  ";
+    CapturingPackageMutationRepository repository =
+        new CapturingPackageMutationRepository(paddedPackageNumber);
+
+    assertThat(repository.findPackageMutationByPackageNumber(paddedPackageNumber))
+        .get()
+        .extracting(ApplicationDetailsRpcRepository.PackageMutationRow::packageNumber)
+        .isEqualTo(paddedPackageNumber);
+    verify(repository.packageLookupStatement).setString(1, paddedPackageNumber);
+
+    assertThat(
+            repository.updatePackage(
+                new ApplicationDetailsRpcRepository.PackageMutationRecord(
+                    paddedPackageNumber,
+                    1000456L,
+                    "N",
+                    100.0d,
+                    4.0d,
+                    3.0d,
+                    "comments",
+                    10.0d,
+                    null,
+                    null,
+                    "A",
+                    "G",
+                    "LOG",
+                    "idir\\jsmith",
+                    Instant.EPOCH,
+                    "idir\\jsmith",
+                    List.of(
+                        new ApplicationDetailsRpcRepository.EndUseMutationRecord("CE", "LU")))))
+        .isTrue();
+    verify(repository.updatePackageStatement).setString(1, paddedPackageNumber);
+    verify(repository.deletePackageEndUsesStatement).setString(1, paddedPackageNumber);
+    verify(repository.insertPackageEndUsesStatement).setString(1, paddedPackageNumber);
+    verify(repository.insertPackageEndUsesStatement).setString(2, "CE");
+    verify(repository.insertPackageEndUsesStatement).setString(3, "LU");
+
+    assertThat(
+            repository.insertScaleDetail(
+                new ApplicationDetailsRpcRepository.ScaleMutationRecord(
+                    null,
+                    "TM-1",
+                    1L,
+                    1.0d,
+                    paddedPackageNumber,
+                    "FI",
+                    "A",
+                    1000456L,
+                    null,
+                    null,
+                    "idir\\jsmith",
+                    Instant.EPOCH,
+                    null)))
+        .get()
+        .extracting(ApplicationDetailsRpcRepository.ApplicationScaleDetailRow::packageNumber)
+        .isEqualTo(paddedPackageNumber);
+    verify(repository.scaleInsertStatement).setString(8, paddedPackageNumber);
+  }
+
+  @Test
   void attachmentOwnershipReadsShouldPropagateOracleFailure() {
     FailingDocumentLookupRepository repository = new FailingDocumentLookupRepository();
 
@@ -511,6 +586,97 @@ class ApplicationDetailsRpcRepositoryTest {
     protected void executeProcedureRequired(
         String procedureSignature, SqlConsumer<CallableStatement> binder) {
       throw new DataAccessResourceFailureException("Oracle unavailable");
+    }
+  }
+
+  private static final class CapturingPackageLookupRepository
+      extends ApplicationDetailsRpcRepository {
+    private CallableStatement callableStatement;
+
+    CapturingPackageLookupRepository() {
+      super(null);
+    }
+
+    @Override
+    protected <T> Optional<T> queryCursorSingleRequired(
+        String procedureSignature,
+        SqlConsumer<CallableStatement> binder,
+        int cursorOutIndex,
+        SqlRowMapper<T> rowMapper) {
+      callableStatement = mock(CallableStatement.class);
+      try {
+        binder.accept(callableStatement);
+      } catch (SQLException ex) {
+        throw new AssertionError(ex);
+      }
+      return Optional.empty();
+    }
+  }
+
+  private static final class CapturingPackageMutationRepository
+      extends ApplicationDetailsRpcRepository {
+    private final String packageNumber;
+    private CallableStatement packageLookupStatement;
+    private CallableStatement updatePackageStatement;
+    private CallableStatement deletePackageEndUsesStatement;
+    private CallableStatement insertPackageEndUsesStatement;
+    private CallableStatement scaleInsertStatement;
+
+    CapturingPackageMutationRepository(String packageNumber) {
+      super(null);
+      this.packageNumber = packageNumber;
+    }
+
+    @Override
+    protected <T> Optional<T> queryCursorSingleRequired(
+        String procedureSignature,
+        SqlConsumer<CallableStatement> binder,
+        int cursorOutIndex,
+        SqlRowMapper<T> rowMapper) {
+      CallableStatement statement = mock(CallableStatement.class);
+      if (procedureSignature.contains("FIND_PACKAGE_BY_NUMBER")) {
+        packageLookupStatement = statement;
+      } else if (procedureSignature.contains("INSERT_SCALE_DETAIL")) {
+        scaleInsertStatement = statement;
+      }
+      try {
+        binder.accept(statement);
+        ResultSet resultSet = mock(ResultSet.class);
+        if (procedureSignature.contains("FIND_PACKAGE_BY_NUMBER")) {
+          when(resultSet.getString("PACKAGE_NUMBER")).thenReturn(packageNumber);
+          when(resultSet.getLong("APPLICATION_NUMBER")).thenReturn(1000456L);
+          when(resultSet.wasNull()).thenReturn(false);
+          return Optional.of(rowMapper.map(resultSet));
+        }
+        if (procedureSignature.contains("INSERT_SCALE_DETAIL")) {
+          when(resultSet.getString("EXPORT_SCALE_DETAIL_ID")).thenReturn("55");
+          when(resultSet.getString("PACKAGE_NUMBER")).thenReturn(packageNumber);
+          when(resultSet.getLong("APPLICATION_NUMBER")).thenReturn(1000456L);
+          when(resultSet.wasNull()).thenReturn(false);
+          return Optional.of(rowMapper.map(resultSet));
+        }
+        return Optional.empty();
+      } catch (SQLException ex) {
+        throw new AssertionError(ex);
+      }
+    }
+
+    @Override
+    protected void executeProcedureRequired(
+        String procedureSignature, SqlConsumer<CallableStatement> binder) {
+      CallableStatement statement = mock(CallableStatement.class);
+      if (procedureSignature.contains("UPDATE_PACKAGE")) {
+        updatePackageStatement = statement;
+      } else if (procedureSignature.contains("DELETE_END_USE_PACKAGE")) {
+        deletePackageEndUsesStatement = statement;
+      } else if (procedureSignature.contains("INSERT_END_USE_PACKAGE")) {
+        insertPackageEndUsesStatement = statement;
+      }
+      try {
+        binder.accept(statement);
+      } catch (SQLException ex) {
+        throw new AssertionError(ex);
+      }
     }
   }
 

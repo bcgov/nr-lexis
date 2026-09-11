@@ -318,14 +318,14 @@ class OracleLexisApplicationServiceTest {
   }
 
   @Test
-  void packageLookupShouldPassThroughRepositoryWhenPackageNumberValid() {
+  void packageLookupShouldPreserveOpaquePackageNumber() {
     LexisPackageLookupDto dto = new LexisPackageLookupDto("PKG-903", 1000456L, 95.0d, "S");
-    when(repository.findPackageByPackageNumber("PKG-903")).thenReturn(Optional.of(dto));
+    when(repository.findPackageByPackageNumber(" PKG-903 ")).thenReturn(Optional.of(dto));
 
     Optional<LexisPackageLookupDto> result = service.findPackageByPackageNumber(" PKG-903 ");
 
     assertThat(result).contains(dto);
-    verify(repository).findPackageByPackageNumber("PKG-903");
+    verify(repository).findPackageByPackageNumber(" PKG-903 ");
   }
 
   @Test

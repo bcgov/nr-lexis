@@ -1442,11 +1442,7 @@ public class PermitDetailsRpcController {
   }
 
   private boolean isReadOnlyUser(Authentication authentication) {
-    List<String> roles = sessionService.parseRolesFromPrincipal(authentication);
-    if (roles == null || roles.isEmpty()) {
-      return false;
-    }
-    return roles.contains(ROLE_READ_ONLY);
+    return isPureReadOnlyRole(sessionService.parseRolesFromPrincipal(authentication));
   }
 
   private boolean canSavePermit(Authentication authentication) {
@@ -1476,7 +1472,7 @@ public class PermitDetailsRpcController {
       return false;
     }
     List<String> normalizedRoles = normalizedRoles(roles);
-    boolean readOnly = normalizedRoles.contains(ROLE_READ_ONLY);
+    boolean readOnly = isPureReadOnlyRole(normalizedRoles);
     boolean admin = normalizedRoles.contains(ROLE_ADMIN);
     return permitService
         .findByPermitNumber(permitNumber)
@@ -1501,7 +1497,7 @@ public class PermitDetailsRpcController {
     if (normalizedRoles.isEmpty()) {
       return false;
     }
-    boolean readOnly = normalizedRoles.contains(ROLE_READ_ONLY);
+    boolean readOnly = isPureReadOnlyRole(normalizedRoles);
     boolean authorizedActor =
         normalizedRoles.stream()
             .anyMatch(
@@ -1521,6 +1517,11 @@ public class PermitDetailsRpcController {
         .filter(role -> role != null)
         .map(role -> role.trim().toUpperCase(Locale.ROOT))
         .toList();
+  }
+
+  private boolean isPureReadOnlyRole(List<String> roles) {
+    List<String> normalizedRoles = normalizedRoles(roles);
+    return normalizedRoles.size() == 1 && normalizedRoles.contains(ROLE_READ_ONLY);
   }
 
   private boolean canReviewPermits(Authentication authentication) {

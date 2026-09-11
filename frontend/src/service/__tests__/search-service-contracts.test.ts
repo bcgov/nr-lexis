@@ -508,6 +508,36 @@ describe('search-service contracts', () => {
     },
   )
 
+  it.each([
+    ['PPD', 'Payment Pending'],
+    ['Completed', 'Completed'],
+  ])('maps provincial permit search status %s to %s', async (statusDescription, expectedStatus) => {
+    getCachedResponseMock.mockResolvedValue({
+      data: {
+        results: [
+          {
+            permitNumber: 7001,
+            statusDescription,
+            applicantClientNumber: '11111111',
+            ownerClientNumber: '22222222',
+            totalVolume: 12,
+            issueDate: '2026-01-10',
+            region: '11',
+          },
+        ],
+        total: 1,
+        page: 0,
+        size: 10,
+      },
+    })
+
+    const result = await searchProvincialPermits(permitRequest)
+
+    expect(result.content[0]).toEqual(
+      expect.objectContaining({ permitNumber: '7001', status: expectedStatus }),
+    )
+  })
+
   it('maps the provincial permit invoice number to search and count requests', async () => {
     getCachedResponseMock
       .mockResolvedValueOnce({

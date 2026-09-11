@@ -851,7 +851,9 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
                 getLocalDate(rs, "RECEIVED_DATE"),
                 getDouble(rs, "EXEMPTION_APPLICATION_VOLUME"),
                 getDouble(rs, "AVERAGE_LOG_VOLUME"),
-                getString(rs, "PRODUCT_LOCATION"),
+                // Oracle stores a single-space sentinel for non-harvested applications because
+                // PRODUCT_LOCATION is NOT NULL. Preserve it through a status transition.
+                getRawString(rs, "PRODUCT_LOCATION"),
                 getString(rs, "ENTRY_USERID"),
                 safeTimestamp(rs, "ENTRY_TIMESTAMP"),
                 getLong(rs, "EXPORT_SCHEDULE_ID"),
@@ -892,7 +894,8 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
     setDateOrNull(cs, index++, record.receivedDate());
     setDoubleOrNull(cs, index++, record.exemptionApplicationVolume());
     setDoubleOrNull(cs, index++, record.averageLogVolume());
-    setStringOrNull(cs, index++, record.productLocation());
+    // Preserve Oracle's single-space PRODUCT_LOCATION sentinel instead of trimming it to SQL NULL.
+    setProductLocation(cs, index++, record.productLocation());
     cs.setString(index++, auditUserOrDefault(record.entryUserId()));
     setTimestampOrNull(cs, index++, record.entryTimestamp());
     cs.setString(index++, auditUserOrDefault(updateUserId));
@@ -966,6 +969,14 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
 
   private void setStringOrNull(CallableStatement cs, int index, String value) throws SQLException {
     if (value == null || value.isBlank()) {
+      cs.setNull(index, Types.VARCHAR);
+    } else {
+      cs.setString(index, value);
+    }
+  }
+
+  private void setProductLocation(CallableStatement cs, int index, String value) throws SQLException {
+    if (value == null) {
       cs.setNull(index, Types.VARCHAR);
     } else {
       cs.setString(index, value);
