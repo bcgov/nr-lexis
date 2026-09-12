@@ -2,11 +2,18 @@
 
 Defects affecting the legacy lift-and-shift, including completed corrections and outstanding work.
 `LEGACY` identifies inherited defects; `PARITY` identifies modern gaps in supported legacy workflows.
-Clear bugs may be corrected using the best supported assumption, recorded with the item.
+Clear application-code bugs may be corrected using the best supported assumption, recorded with the item.
 Business-approved feature changes remain in [intentional legacy divergences](intentional-legacy-divergences.md).
+
+**Working scope:** prioritize major defects and corrections within the modern application. Shared
+Oracle procedure findings are proposals for business approval, not implementation work for this
+lift-and-shift. Leave `nr-mof-db` untouched unless a separately approved change is explicitly assigned.
+The completed, business-confirmed scale-duplication correction in LEGACY-004 is a specific exception;
+it does not authorize further procedure changes.
 
 **Status:** Open = correction needed; Fix prepared = local change awaiting release; Implemented =
 correction in modern `main`; Acceptance pending = implemented with specific live checks outstanding;
+Awaiting business approval = documented proposal outside the current implementation scope;
 Resolved = deployed correction accepted. Deployment or acceptance details are included where known.
 
 ## Register
@@ -24,11 +31,11 @@ Resolved = deployed correction accepted. Deployment or acceptance details are in
 | [LEGACY-009](#legacy-009--a-positive-fee-override-rounds-to-zero)                               | Positive fee override becomes disabled after rounding         | Implemented                                               |
 | [LEGACY-010](#legacy-010--search-joins-duplicate-records-counts-and-balances)                   | Search joins duplicate results, counts and balances           | Implemented                                               |
 | [LEGACY-011](#legacy-011--application-save-depends-on-omitted-staff-controls)                   | Submitter save depends on absent staff controls               | Implemented                                               |
-| [LEGACY-012](#legacy-012--permit-ledger-omits-the-other-species-code)                           | Permit Ledger and Species/Grade omit Other species volume     | Partial fix prepared: Oracle                              |
-| [LEGACY-013](#legacy-013--speciesgrade-csv-checks-the-wrong-date-parameter)                     | Species/Grade mishandles one-sided date ranges                | Fix prepared: Oracle                                      |
-| [LEGACY-014](#legacy-014--speciesgrade-ignores-the-exemption-type-filter)                       | Species/Grade ignores exemption type                          | Open: Oracle                                              |
-| [LEGACY-015](#legacy-015--speciesgrade-ignores-the-forest-file-filter)                          | Species/Grade ignores Forest file ID                          | Open: Oracle                                              |
-| [LEGACY-016](#legacy-016--speciesgrade-multiplies-scales-by-linked-applications)                | Species/Grade counts a scale once per linked application      | Open: Oracle                                              |
+| [LEGACY-012](#legacy-012--permit-ledger-omits-the-other-species-code)                           | Permit Ledger and Species/Grade omit Other species volume     | Awaiting business approval: Oracle                        |
+| [LEGACY-013](#legacy-013--speciesgrade-csv-checks-the-wrong-date-parameter)                     | Species/Grade mishandles one-sided date ranges                | Awaiting business approval: Oracle                        |
+| [LEGACY-014](#legacy-014--speciesgrade-ignores-the-exemption-type-filter)                       | Species/Grade ignores exemption type                          | Awaiting business approval: Oracle                        |
+| [LEGACY-015](#legacy-015--speciesgrade-ignores-the-forest-file-filter)                          | Species/Grade ignores Forest file ID                          | Awaiting business approval: Oracle                        |
+| [LEGACY-016](#legacy-016--speciesgrade-multiplies-scales-by-linked-applications)                | Species/Grade counts a scale once per linked application      | Awaiting business approval: Oracle                        |
 | [PARITY-001](#parity-001--speciesgrade-report-parameters-were-bound-in-the-wrong-order)         | Species/Grade criteria reach the wrong parameters             | Implemented                                               |
 | [PARITY-002](#parity-002--a-stored-zero-override-blocked-unrelated-permit-edits)                | Stored zero override blocks unrelated permit edits            | Implemented; DEV-174 check against TEST passed            |
 | [PARITY-003](#parity-003--boic-package-classification-and-current-volume-used-the-wrong-values) | BOIC classification and current volume use wrong values       | Implemented; DEV-174 check against TEST passed            |
@@ -39,22 +46,27 @@ Resolved = deployed correction accepted. Deployment or acceptance details are in
 | [PARITY-008](#parity-008--permit-summary-omits-associated-applications-and-packages)            | Permit summary omits associated applications and packages     | Implemented                                               |
 | [PARITY-009](#parity-009--tenure-report-variants-share-unrelated-filters)                       | Tenure report variants share unrelated filters                | Implemented                                               |
 
-## Outstanding Oracle changes
+## Oracle proposals awaiting business approval
 
-All routines below belong to `THE.LEXIS_REPORTING`. The existing local database commit `982f3140`
-on `fix/lexis-reporting-safe-db-fixes` prepares only the Permit Ledger Other subtotal and CSV
-end-date corrections. Its forward/rollback pair is not merged; the remaining changes need preparing.
+All routines below belong to `THE.LEXIS_REPORTING`. These findings are retained for a business
+decision on impact, report usage and whether to authorize a procedure correction. Prioritize that
+decision where incorrect volumes or totals materially affect operations; the register does not assume
+every report defect warrants database work or blocks the current application release.
 
-| Procedure                     | Required correction                                                                                                        | Preparation                |
+| Procedure                     | Proposed correction                                                                                                        | Business decision          |
 | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
-| `PERMIT_LEDGER_REPORT`        | Include `OT` in Other — LEGACY-012                                                                                         | Local fix prepared         |
-| `SPECIES_GRADE_REPORT_CSV`    | Correct end-date guard; apply exemption type and Forest file filters; count each scale once; include `OT` — LEGACY-012–016 | Only end-date fix prepared |
-| `SPECIES_GRADE_RPT`           | Apply Forest file filter; count each scale once; include `OT` — LEGACY-012, 015, 016                                       | Not prepared               |
-| `SPECIES_GRADE_REGION_SUBRPT` | Apply Forest file filter; count each scale once; include `OT` — LEGACY-012, 015, 016                                       | Not prepared               |
+| `PERMIT_LEDGER_REPORT`        | Include `OT` in Other — LEGACY-012                                                                                         | Awaiting approval          |
+| `SPECIES_GRADE_REPORT_CSV`    | Correct end-date guard; apply exemption type and Forest file filters; count each scale once; include `OT` — LEGACY-012–016 | Awaiting approval          |
+| `SPECIES_GRADE_RPT`           | Apply Forest file filter; count each scale once; include `OT` — LEGACY-012, 015, 016                                       | Awaiting approval          |
+| `SPECIES_GRADE_REGION_SUBRPT` | Apply Forest file filter; count each scale once; include `OT` — LEGACY-012, 015, 016                                       | Awaiting approval          |
 
-Modern Species/Grade PDF and CSV both use `SPECIES_GRADE_REPORT_CSV`. Changes must be reconciled
-with the current deployed package body, compiled in Oracle and checked against report criteria and
-scale totals before closure. Use existing records or data created through supported application workflows.
+Previously recorded database draft `982f3140` on `fix/lexis-reporting-safe-db-fixes` covers only the
+Permit Ledger Other subtotal and CSV end-date guard. That unmerged draft is on hold; it is not approved
+for release and is not being extended, reverted or otherwise changed as part of this work.
+
+Modern Species/Grade PDF and CSV both use `SPECIES_GRADE_REPORT_CSV`. If a correction is separately
+approved and assigned, reconcile it with the deployed package body, compile in Oracle and verify
+report criteria and scale totals before closure. Use existing records or supported UI-created data.
 
 ## LEGACY-001 — Package update dereferences a missing exemption type
 
@@ -217,10 +229,10 @@ review permission; no Oracle change is required.
 `SPECIES_GRADE_REGION_SUBRPT` have the same omission. An `OT` scale can contribute zero to Other
 instead of its saved volume.
 
-**Correction:** include `OT` in the existing Other group in all four routines. Database commit
-`982f3140` prepares only the Permit Ledger change and rollback. **Remaining:** extend the correction
-to the three Species/Grade routines, then compare PDF, CSV and region subtotals with saved `OT`
-volume in Oracle. No change to saved species codes is proposed.
+**Proposed correction:** include `OT` in the existing Other group in all four routines. The earlier
+Permit Ledger draft is on hold. **Business approval needed:** confirm that affected report usage and
+missing `OT` volume warrant the change. If approved, acceptance must compare PDF, CSV and region
+subtotals with saved `OT` volume. No change to saved species codes is proposed.
 
 ## LEGACY-013 — Species/Grade CSV checks the wrong date parameter
 
@@ -228,9 +240,10 @@ volume in Oracle. No change to saved species codes is proposed.
 is present. An end-only filter is ignored; a start-only filter sets the upper bound to null and excludes
 rows. Modern exposes both optional bounds and uses this procedure for PDF as well as CSV.
 
-**Correction:** guard the assignment with `P_DATE_TO`. Database commit `982f3140` prepares this
-change and rollback. **Remaining:** compile and verify no dates, start only, end only and both dates
-in Oracle and the modern report UI. The old PDF routine already has the correct guard.
+**Proposed correction:** guard the assignment with `P_DATE_TO`; the earlier draft is on hold.
+**Business approval needed:** confirm whether one-sided date searches warrant a procedure change.
+If approved, acceptance must cover no dates, start only, end only and both dates in Oracle and the
+modern report UI. The old PDF routine already has the correct guard.
 
 ## LEGACY-014 — Species/Grade ignores the exemption-type filter
 
@@ -240,7 +253,8 @@ The old PDF routine assigns the parameter correctly; modern PDF uses the affecte
 
 **Proposed correction:** copy the existing non-null parameter assignment into the CSV routine,
 retaining `%` for an unfiltered request. No Java binding or procedure signature change is needed.
-**Remaining:** prepare the migration and compare unfiltered and each supported type in PDF/CSV.
+**Business approval needed:** confirm the reporting impact and authorize the filter correction.
+If approved, acceptance must compare unfiltered and each supported type in PDF/CSV.
 
 ## LEGACY-015 — Species/Grade ignores the Forest file filter
 
@@ -251,8 +265,9 @@ Selecting a nonmatching file can leave the result unchanged.
 **Proposed correction:** apply the filter in all three routines. The legacy DAO maps it to
 `HA.FOREST_FILE_ID`; the best supported approach is a correlated `EXISTS` lookup from the scale's
 timber mark to the matching hauling-authority file, avoiding a join that multiplies scales.
-**Remaining:** confirm the authoritative relationship and matching semantics, prepare the migration,
-and check matching/nonmatching/absent criteria, multiple authority matches and the separate Timber mark filter.
+**Business approval needed:** confirm report usage, the authoritative relationship and matching
+semantics. If approved, acceptance must cover matching/nonmatching/absent criteria, multiple authority
+matches and the separate Timber mark filter.
 
 ## LEGACY-016 — Species/Grade multiplies scales by linked applications
 
@@ -264,8 +279,10 @@ another application's classification. A local relational reproduction changes on
 **Proposed correction:** derive classification from the scale's owning package/application and count
 each saved scale once. BOIC must retain package classification and its permit/application relationship.
 Do not use an arbitrary application or `SUM(DISTINCT volume)`, which would discard separate equal-volume scales.
-**Remaining:** resolve ordinary and BOIC ownership paths, prepare all three query corrections, and
-check mixed classifications, equal-volume scales and missing optional relationships in Oracle.
+**Business approval needed:** prioritize assessment of the inflated totals where this report supports
+operational decisions; confirm the affected use and ordinary/BOIC ownership rules before authorizing
+a correction. If approved, acceptance must cover mixed classifications, equal-volume scales and
+missing optional relationships in Oracle.
 
 ## PARITY-001 — Species/Grade report parameters were bound in the wrong order
 
@@ -276,7 +293,7 @@ the dedicated Species/Grade PDF layout.
 
 [Binding tests](../backend/src/test/java/ca/bc/gov/mof/lexis/service/report/OracleLegacyCsvReportServiceTest.java)
 and [report rendering tests](../backend/src/test/java/ca/bc/gov/mof/lexis/service/report/OracleLegacyJasperTableReportServiceTest.java)
-protect the correction. The inherited SQL issues in LEGACY-012–016 still require the Oracle work listed above.
+protect the correction. The inherited SQL issues in LEGACY-012–016 remain proposals awaiting business approval.
 
 ## PARITY-002 — A stored zero override blocked unrelated permit edits
 
