@@ -14,7 +14,7 @@ Resolved = deployed correction accepted. Deployment or acceptance details are in
 | ID                                                                                              | Issue                                                         | Status                                                    |
 | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | --------------------------------------------------------- |
 | [LEGACY-001](#legacy-001--package-update-dereferences-a-missing-exemption-type)                 | Package update crashes without a linked exemption             | Handled in modern; legacy failure explanation provisional |
-| [LEGACY-002](#legacy-002--package-update-uses-display-text-as-the-stored-identity)              | Padded package update can target its plain sibling            | Acceptance pending: BOIC siblings and offers              |
+| [LEGACY-002](#legacy-002--package-update-uses-display-text-as-the-stored-identity)              | Padded package update can target its plain sibling            | Acceptance pending: offers and permit availability        |
 | [LEGACY-003](#legacy-003--ordinary-legacy-package-dialogs-omit-classification)                  | Missing package age blocks an ordinary comment edit           | Fix prepared: modern Items default                        |
 | [LEGACY-004](#legacy-004--timber-mark-joins-duplicate-scale-rows-and-inflate-totals)            | Timber-mark joins duplicate scale rows and totals             | Resolved: PROD display accepted                           |
 | [LEGACY-005](#legacy-005--client-contact-details-come-from-the-default-location)                | Saved location and displayed contact details disagree         | Implemented; historical TEST check passed                 |
@@ -78,8 +78,17 @@ can lose the space retained by its raw value. Selecting the padded package can t
 [PR #228](https://github.com/bcgov/nr-lexis/pull/228) preserves the exact stored key through modern
 selection, reads and writes, with readable labels to distinguish padding. Tests cover sibling targeting,
 volume exclusion and scale association. A single padded-key edit and restoration passed in TEST,
-including Oracle readback. **Remaining:** complete BOIC same-application sibling and offer checks
-using supported UI-created records, confirming the other sibling and its totals remain unchanged.
+including Oracle readback.
+
+Same-application BOIC siblings created through legacy UI also passed modern TEST checks: padded
+comment edit/restoration, combined package-volume validation, separate scale additions and fee rows,
+scale removal, and padded-package deletion while preserving the plain sibling and its scale. Fresh
+legacy reads confirmed the saved values; final cleanup retained the plain package with zero scales.
+BOIC scale maintenance uses the supported add/remove workflow; neither UI exposes direct scale editing.
+
+**Remaining:** offer creation and permit-availability exclusion with eligible UI-created records.
+The retained ordinary sibling fixture has a future listing date; recheck eligibility when its offer
+window opens. These acceptance checks do not justify bypassing eligibility or adding a new workflow.
 
 ## LEGACY-003 — Ordinary legacy package dialogs omit classification
 
