@@ -16,6 +16,11 @@ correction in modern `main`; Acceptance pending = implemented with specific live
 Awaiting business approval = documented proposal outside the current implementation scope;
 Resolved = deployed correction accepted. Deployment or acceptance details are included where known.
 
+**Evidence:** retain an item only with a concrete source defect or reproducible failure, and identify
+the implementing commit for historical fixes. A plausible explanation of a live incident remains
+provisional until verified. Source/tests establish the correction; deployment and business acceptance
+require their own evidence. Suspicions without a demonstrated failure path are not register entries.
+
 ## Register
 
 | ID                                                                                              | Issue                                                         | Status                                                    |
@@ -52,6 +57,11 @@ All routines below belong to `THE.LEXIS_REPORTING`. These findings are retained 
 decision on impact, report usage and whether to authorize a procedure correction. Prioritize that
 decision where incorrect volumes or totals materially affect operations; the register does not assume
 every report defect warrants database work or blocks the current application release.
+
+LEGACY-012–016 come from the 11 September review of
+`scripts/THE/PACKAGE_BODIES/V9.00402__LEXIS_REPORTING.sql` at database revision `124a515d`.
+Selected CSV query cases were reproduced with synthetic data in SQLite. This establishes defects
+in the reviewed source, not their occurrence in the deployed Oracle package or current business data.
 
 | Procedure                     | Proposed correction                                                                                                        | Business decision          |
 | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
@@ -99,8 +109,9 @@ legacy reads confirmed the saved values; final cleanup retained the plain packag
 BOIC scale maintenance uses the supported add/remove workflow; neither UI exposes direct scale editing.
 
 **Remaining:** offer creation and permit-availability exclusion with eligible UI-created records.
-The retained ordinary sibling fixture has a future listing date; recheck eligibility when its offer
-window opens. These acceptance checks do not justify bypassing eligibility or adding a new workflow.
+The retained ordinary sibling fixture was not yet within its offer window at the 11 September check;
+recheck eligibility before testing. These acceptance checks do not justify bypassing eligibility or
+adding a new workflow.
 
 ## LEGACY-003 — Ordinary legacy package dialogs omit classification
 
@@ -186,6 +197,8 @@ validation to modern invoice entry and upload, preserving supported punctuation 
 limit. [InvoiceStorageConstraints](../backend/src/main/java/ca/bc/gov/mof/lexis/util/InvoiceStorageConstraints.java)
 and [UI tests](../frontend/src/pages/shared/__tests__/invoice-storage-validation.test.ts) capture the rule.
 No schema change or historical invoice repair is required by this correction.
+This is a source-validation/storage-compatibility correction; a live legacy invoice failure has not
+been demonstrated here.
 
 ## LEGACY-009 — A positive fee override rounds to zero
 
@@ -316,7 +329,8 @@ package classification and calculated scale total separately.
 authoritative and uses scaled/current volume with a null-aware fallback that preserves zero.
 [Permit service tests](../backend/src/test/java/ca/bc/gov/mof/lexis/service/permit/OraclePermitDetailsRpcServiceTest.java)
 protect classification precedence. Product display and a zero-to-positive scaled-volume change passed
-on DEV-174 against TEST data. The padded-sibling and offer checks in LEGACY-002 remain outstanding.
+on DEV-174 against TEST data. Subsequent shared TEST BOIC sibling checks passed as recorded in
+LEGACY-002; its offer and permit-availability checks remain outstanding.
 
 ## PARITY-004 — Approved applications could not receive supported review transitions
 
