@@ -1,3 +1,5 @@
+// @vitest-environment node
+
 import { EventEmitter } from 'node:events'
 import type { APIResponse, Locator, Page } from '@playwright/test'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'

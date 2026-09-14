@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events'
-import type { Locator, Page, Request, Response } from '@playwright/test'
+import { errors, type Locator, type Page, type Request, type Response } from '@playwright/test'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { gotoWithRecovery } from '../../../e2e/utils/navigation'
 
@@ -24,15 +24,27 @@ const createPage = (rootText = 'An application page') => {
   const goto = vi.fn().mockResolvedValue(response())
   const waitForTimeout = vi.fn(async (delay: number) => vi.advanceTimersByTime(delay))
   const waitFor = vi.fn().mockResolvedValue(undefined)
+  const root = document.createElement('div')
+  root.textContent = rootText
+  const rootLocator = {
+    count: vi.fn().mockResolvedValue(1),
+    evaluate: vi.fn(async (evaluate: (element: HTMLElement) => unknown) => evaluate(root)),
+  }
   const page = Object.assign(events, {
     goto,
     waitForTimeout,
-    locator: () => ({
-      count: async () => 1,
-      innerText: async () => rootText,
-    }),
+    locator: () => rootLocator,
   }) as unknown as Page
-  return { page, events, goto, waitForTimeout, waitFor, ready: { waitFor } as unknown as Locator }
+  return {
+    page,
+    events,
+    goto,
+    waitForTimeout,
+    waitFor,
+    root,
+    rootLocator,
+    ready: { waitFor } as unknown as Locator,
+  }
 }
 
 describe('regression navigation recovery', () => {
@@ -84,7 +96,7 @@ describe('regression navigation recovery', () => {
       events.emit('requestfailed', request('script', '/config.js'))
       return response()
     })
-    waitFor.mockRejectedValueOnce(new Error('Expected heading did not render'))
+    waitFor.mockRejectedValueOnce(new errors.TimeoutError('Expected heading did not render'))
 
     await gotoWithRecovery(page, target, { ready })
     expect(goto).toHaveBeenCalledTimes(2)
@@ -94,7 +106,7 @@ describe('regression navigation recovery', () => {
 
   it('recovers a stalled empty shell even before a resource failure is reported', async () => {
     const { page, goto, ready, waitFor, waitForTimeout } = createPage('')
-    waitFor.mockRejectedValueOnce(new Error('App shell remained empty'))
+    waitFor.mockRejectedValueOnce(new errors.TimeoutError('App shell remained empty'))
     await gotoWithRecovery(page, target, { ready })
     expect(goto).toHaveBeenCalledTimes(2)
     expect(waitForTimeout).toHaveBeenCalledWith(5_000)
@@ -109,11 +121,116 @@ describe('regression navigation recovery', () => {
         events.emit('pageerror', new Error('Failed to fetch dynamically imported module'))
         return response()
       })
-      waitFor.mockRejectedValueOnce(new Error('Expected heading did not render'))
+      waitFor.mockRejectedValueOnce(new errors.TimeoutError('Expected heading did not render'))
       await gotoWithRecovery(page, target, { ready })
       expect(goto).toHaveBeenCalledTimes(2)
     },
   )
+
+  it.each([
+    { resourceType: 'script', failure: 'transport', readiness: 'visible' },
+    { resourceType: 'script', failure: 'transport', readiness: 'omitted' },
+    { resourceType: 'stylesheet', failure: 'transport', readiness: 'visible' },
+    { resourceType: 'stylesheet', failure: 'transport', readiness: 'omitted' },
+    { resourceType: 'script', failure: 'gateway', readiness: 'visible' },
+    { resourceType: 'script', failure: 'gateway', readiness: 'omitted' },
+    { resourceType: 'stylesheet', failure: 'gateway', readiness: 'visible' },
+    { resourceType: 'stylesheet', failure: 'gateway', readiness: 'omitted' },
+  ])(
+    'recovers $resourceType $failure failure with readiness $readiness',
+    async ({ resourceType, failure, readiness }) => {
+      const { page, events, goto, ready } = createPage()
+      goto.mockImplementationOnce(async () => {
+        const resource = request(resourceType, '/assets/frontend')
+        if (failure === 'transport') events.emit('requestfailed', resource)
+        else events.emit('response', response(503, resource))
+        return response()
+      })
+
+      await gotoWithRecovery(page, target, readiness === 'visible' ? { ready } : {})
+      expect(goto).toHaveBeenCalledTimes(2)
+      expect(console.warn).toHaveBeenCalledWith(
+        expect.stringContaining('frontend resource transport failure'),
+      )
+      expect(events.eventNames()).toEqual([])
+    },
+  )
+
+  it.each(['visible', 'empty'])(
+    'reports an unexplained module error with a %s shell',
+    async (shell) => {
+      const { page, events, goto, ready, waitFor, waitForTimeout } = createPage(
+        shell === 'empty' ? '' : 'Side navigation',
+      )
+      const error = new Error('Failed to fetch dynamically imported module')
+      goto.mockImplementationOnce(async () => {
+        events.emit('pageerror', error)
+        return response()
+      })
+      if (shell === 'empty')
+        waitFor.mockRejectedValue(new errors.TimeoutError('Expected heading did not render'))
+
+      await expect(gotoWithRecovery(page, target, { ready })).rejects.toBe(error)
+      expect(goto).toHaveBeenCalledTimes(1)
+      expect(waitForTimeout).not.toHaveBeenCalled()
+    },
+  )
+
+  it('reports non-transient frontend request failures despite successful readiness', async () => {
+    const { page, events, goto, ready, waitForTimeout } = createPage()
+    goto.mockImplementationOnce(async () => {
+      events.emit(
+        'requestfailed',
+        request('script', '/assets/app.js', 'GET', 'net::ERR_BLOCKED_BY_CLIENT'),
+      )
+      return response()
+    })
+
+    await expect(gotoWithRecovery(page, target, { ready })).rejects.toThrow(
+      'net::ERR_BLOCKED_BY_CLIENT',
+    )
+    expect(goto).toHaveBeenCalledTimes(1)
+    expect(waitForTimeout).not.toHaveBeenCalled()
+  })
+
+  it.each([false, true])(
+    'handles gateway response followed by an abort of a different resource: %s',
+    async (differentResource) => {
+      const { page, events, goto, ready } = createPage()
+      goto.mockImplementationOnce(async () => {
+        const stylesheet = request('stylesheet', '/assets/app.css', 'GET', 'net::ERR_ABORTED')
+        events.emit('response', response(503, stylesheet))
+        events.emit(
+          'requestfailed',
+          differentResource
+            ? request('script', '/assets/app.js', 'GET', 'net::ERR_ABORTED')
+            : stylesheet,
+        )
+        return response()
+      })
+
+      if (differentResource) {
+        await expect(gotoWithRecovery(page, target, { ready })).rejects.toThrow('net::ERR_ABORTED')
+        expect(goto).toHaveBeenCalledTimes(1)
+      } else {
+        await gotoWithRecovery(page, target, { ready })
+        expect(goto).toHaveBeenCalledTimes(2)
+      }
+    },
+  )
+
+  it('does not let an interrupted stylesheet hide a module error', async () => {
+    const { page, events, goto, ready } = createPage()
+    const error = new Error('Failed to fetch dynamically imported module')
+    goto.mockImplementationOnce(async () => {
+      events.emit('requestfailed', request('stylesheet', '/assets/app.css'))
+      events.emit('pageerror', error)
+      return response()
+    })
+
+    await expect(gotoWithRecovery(page, target, { ready })).rejects.toBe(error)
+    expect(goto).toHaveBeenCalledTimes(1)
+  })
 
   it('fails without retrying when a page error occurs despite successful readiness', async () => {
     const { page, events, goto, ready, waitFor, waitForTimeout } = createPage()
@@ -152,7 +269,7 @@ describe('regression navigation recovery', () => {
 
   it('does not retry a rendered page whose expected heading is missing', async () => {
     const { page, events, goto, ready, waitFor } = createPage()
-    const error = new Error('Expected Federal heading is missing')
+    const error = new errors.TimeoutError('Expected Federal heading is missing')
     waitFor.mockRejectedValue(error)
     await expect(gotoWithRecovery(page, target, { ready })).rejects.toBe(error)
     expect(goto).toHaveBeenCalledTimes(1)
@@ -163,7 +280,7 @@ describe('regression navigation recovery', () => {
     'does not retry an empty shell after %s',
     async (failure) => {
       const { page, events, goto, ready, waitFor } = createPage('')
-      const error = new Error('Expected page is missing')
+      const error = new errors.TimeoutError('Expected page is missing')
       goto.mockImplementation(async () => {
         if (failure === 'pageerror') events.emit('pageerror', new Error('Application crashed'))
         else
@@ -174,10 +291,62 @@ describe('regression navigation recovery', () => {
         return response()
       })
       waitFor.mockRejectedValue(error)
-      await expect(gotoWithRecovery(page, target, { ready })).rejects.toBe(error)
+      await expect(gotoWithRecovery(page, target, { ready })).rejects.toThrow(
+        failure === 'pageerror'
+          ? 'Application crashed'
+          : failure === 'denied-route'
+            ? 'HTTP 403'
+            : 'HTTP 404',
+      )
       expect(goto).toHaveBeenCalledTimes(1)
     },
   )
+
+  it('preserves an application error when document navigation also times out', async () => {
+    const { page, events, goto, waitForTimeout } = createPage()
+    const error = new Error('Application crashed')
+    goto.mockImplementation(async () => {
+      events.emit('pageerror', error)
+      throw new errors.TimeoutError('page.goto: Timeout 10000ms exceeded')
+    })
+
+    await expect(gotoWithRecovery(page, target)).rejects.toBe(error)
+    expect(goto).toHaveBeenCalledTimes(1)
+    expect(waitForTimeout).not.toHaveBeenCalled()
+  })
+
+  it('preserves an application error without inspecting the failed page', async () => {
+    const { page, events, goto, ready, waitFor, rootLocator } = createPage('')
+    const error = new Error('Application crashed')
+    waitFor.mockImplementation(async () => {
+      events.emit('pageerror', error)
+      throw new errors.TimeoutError('Expected page is missing')
+    })
+    rootLocator.count.mockRejectedValue(new Error('Target page has been closed'))
+
+    await expect(gotoWithRecovery(page, target, { ready })).rejects.toBe(error)
+    expect(goto).toHaveBeenCalledTimes(1)
+    expect(rootLocator.count).not.toHaveBeenCalled()
+  })
+
+  it('does not retry invalid readiness selectors on an empty shell', async () => {
+    const { page, goto, ready, waitFor } = createPage('')
+    const error = new Error('Unexpected token while parsing css selector')
+    waitFor.mockRejectedValue(error)
+
+    await expect(gotoWithRecovery(page, target, { ready })).rejects.toBe(error)
+    expect(goto).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not mistake rendered elements without text for an empty shell', async () => {
+    const { page, goto, ready, waitFor, root } = createPage('')
+    root.innerHTML = '<span role="progressbar" aria-label="Loading"></span>'
+    const error = new errors.TimeoutError('Expected page is missing')
+    waitFor.mockRejectedValue(error)
+
+    await expect(gotoWithRecovery(page, target, { ready })).rejects.toBe(error)
+    expect(goto).toHaveBeenCalledTimes(1)
+  })
 
   it('does not use failed API writes as a reason to reload', async () => {
     const { page, events, goto, ready, waitFor } = createPage()

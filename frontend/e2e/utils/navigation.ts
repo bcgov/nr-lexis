@@ -1,4 +1,4 @@
-import type { Locator, Page, Request, Response } from '@playwright/test'
+import { errors, type Locator, type Page, type Request, type Response } from '@playwright/test'
 
 export const FRONTEND_RECOVERY_TIMEOUT_MS = 150_000
 const DOCUMENT_TIMEOUT_MS = 10_000
@@ -35,27 +35,41 @@ export const gotoWithRecovery = async (
   while (Date.now() < deadline) {
     attempt += 1
     let interruptedResource = false
+    const interruptedRequests = new Set<Request>()
     let applicationError: Error | undefined
-    const onRequestFailed = (request: Request) => {
+    let moduleLoadError: Error | undefined
+    const assertNoApplicationError = () => {
+      if (applicationError) throw applicationError
       if (
-        isFrontendResource(request) &&
-        TRANSIENT_NAVIGATION_ERROR.test(request.failure()?.errorText ?? '')
-      ) {
+        moduleLoadError &&
+        ![...interruptedRequests].some((request) => request.resourceType() === 'script')
+      )
+        throw moduleLoadError
+    }
+    const onRequestFailed = (request: Request) => {
+      if (!isFrontendResource(request) || interruptedRequests.has(request)) return
+      const errorText = request.failure()?.errorText ?? 'Unknown request failure'
+      if (TRANSIENT_NAVIGATION_ERROR.test(errorText)) {
         interruptedResource = true
-      }
+        interruptedRequests.add(request)
+      } else applicationError ??= new Error(`LEXIS frontend resource failed: ${errorText}.`)
     }
     const onResponse = (response: Response) => {
       if (!isFrontendResource(response.request())) return
-      if (GATEWAY_STATUSES.has(response.status())) interruptedResource = true
-      else if (response.status() >= 400)
+      if (GATEWAY_STATUSES.has(response.status())) {
+        interruptedResource = true
+        // Chromium can also report ERR_ABORTED for this same unsuccessful resource.
+        interruptedRequests.add(response.request())
+      } else if (response.status() >= 400)
         applicationError ??= new Error(
           `LEXIS frontend resource returned HTTP ${response.status()}.`,
         )
     }
     const onPageError = (error: Error) => {
-      // A failed lazy module may also raise a page error. Its failed request is handled above;
-      // missing modules (404) and unrelated JavaScript exceptions must still stop recovery.
-      if (!MODULE_LOAD_ERROR.test(error.message)) applicationError ??= error
+      // A module error is recoverable only when accompanied by an interrupted script.
+      // Preserve unexplained module failures and all unrelated JavaScript exceptions.
+      if (MODULE_LOAD_ERROR.test(error.message)) moduleLoadError ??= error
+      else applicationError ??= error
     }
     page.on('requestfailed', onRequestFailed)
     page.on('response', onResponse)
@@ -70,6 +84,7 @@ export const gotoWithRecovery = async (
           Math.min(options.timeout || DOCUMENT_TIMEOUT_MS, deadline - Date.now()),
         ),
       })
+      assertNoApplicationError()
       if (response && GATEWAY_STATUSES.has(response.status())) {
         lastReason = `frontend HTTP ${response.status()}`
       } else {
@@ -82,21 +97,31 @@ export const gotoWithRecovery = async (
               timeout: Math.max(1, Math.min(RENDER_TIMEOUT_MS, deadline - Date.now())),
             })
           } catch (error) {
-            const root = page.locator('#root')
-            const emptyShell =
-              (await root.count()) === 1 && (await root.innerText({ timeout: 1_000 })).trim() === ''
-            if (applicationError || (!interruptedResource && !emptyShell)) throw error
-            lastReason = interruptedResource
-              ? 'frontend resource transport failure'
-              : 'empty app shell'
+            assertNoApplicationError()
+            if (!(error instanceof errors.TimeoutError)) throw error
+            if (!interruptedResource) {
+              const root = page.locator('#root')
+              const emptyShell =
+                (await root.count()) === 1 &&
+                (await root.evaluate(
+                  (element) =>
+                    element.childElementCount === 0 && !(element.textContent ?? '').trim(),
+                  undefined,
+                  { timeout: Math.max(1, Math.min(1_000, deadline - Date.now())) },
+                ))
+              if (!emptyShell) throw error
+            }
             renderInterrupted = true
           }
         }
-        if (applicationError) throw applicationError
-        if (!renderInterrupted) return response
+        assertNoApplicationError()
+        if (interruptedResource) lastReason = 'frontend resource transport failure'
+        else if (renderInterrupted) lastReason = 'empty app shell'
+        else return response
       }
     } catch (error) {
-      if (applicationError || !TRANSIENT_NAVIGATION_ERROR.test(String(error))) throw error
+      assertNoApplicationError()
+      if (!TRANSIENT_NAVIGATION_ERROR.test(String(error))) throw error
       lastReason = 'document transport failure'
     } finally {
       page.off('requestfailed', onRequestFailed)

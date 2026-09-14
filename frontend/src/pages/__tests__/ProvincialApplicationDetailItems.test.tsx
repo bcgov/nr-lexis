@@ -178,6 +178,12 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
   it.each([
     { classification: 'explicit', ageClass: 'O', productType: 'H', expectedAge: 'O' },
     { classification: 'inherited', ageClass: '', productType: '', expectedAge: 'S' },
+    {
+      classification: 'inherited with matching product',
+      ageClass: '',
+      productType: 'H',
+      expectedAge: 'S',
+    },
   ])(
     'preserves padded siblings with $classification package classification',
     async ({ ageClass, productType, expectedAge }) => {
@@ -298,6 +304,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       productType: 'H',
     },
     { reason: 'application is OIC', growthTypeCode: 'S', oicIndicator: 'Y', productType: 'H' },
+    { reason: 'OIC status is unknown', growthTypeCode: 'S', oicIndicator: '', productType: 'H' },
     { reason: 'package product differs', growthTypeCode: 'S', oicIndicator: 'N', productType: 'S' },
   ])(
     'does not infer package age when $reason',

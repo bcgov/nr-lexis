@@ -114,6 +114,62 @@ test.describe('navigation transport recovery', () => {
     expect(documents).toBe(1)
   })
 
+  for (const { resource, readiness } of [
+    { resource: 'script', readiness: 'visible' },
+    { resource: 'stylesheet', readiness: 'omitted' },
+  ]) {
+    test(`recovers a failed ${resource} with readiness ${readiness}`, async ({ page }) => {
+      let documents = 0
+      let resources = 0
+      await page.route(`${origin}/**`, async (route) => {
+        if (new URL(route.request().url()).pathname === '/asset') {
+          resources += 1
+          if (resources === 1) {
+            if (resource === 'script') await route.abort('failed')
+            else await route.fulfill({ status: 503, body: 'Service unavailable' })
+            return
+          }
+          await route.fulfill({
+            contentType: resource === 'script' ? 'application/javascript' : 'text/css',
+            body: '',
+          })
+          return
+        }
+        documents += 1
+        await route.fulfill({
+          contentType: 'text/html',
+          body:
+            '<div id="root"><nav>Side navigation</nav></div>' +
+            (resource === 'script'
+              ? '<script src="/asset"></script>'
+              : '<link rel="stylesheet" href="/asset">'),
+        })
+      })
+
+      await gotoWithRecovery(page, `${origin}/application`, {
+        waitUntil: 'load',
+        ...(readiness === 'visible' ? { ready: page.getByRole('navigation') } : {}),
+      })
+      expect(documents).toBe(2)
+      expect(resources).toBe(2)
+    })
+  }
+
+  test('reports an invalid readiness selector without retrying an empty page', async ({ page }) => {
+    let documents = 0
+    await page.route(`${origin}/**`, async (route) => {
+      documents += 1
+      await route.fulfill({ contentType: 'text/html', body: '<div id="root"></div>' })
+    })
+
+    await expect(
+      gotoWithRecovery(page, `${origin}/application`, {
+        ready: page.locator('css=['),
+      }),
+    ).rejects.toThrow(/parsing css selector/)
+    expect(documents).toBe(1)
+  })
+
   test('fails on a missing script even when the expected heading renders', async ({ page }) => {
     let documents = 0
     await page.route(`${origin}/**`, async (route) => {
@@ -188,7 +244,7 @@ test.describe('navigation transport recovery', () => {
       gotoWithRecovery(page, `${origin}/federal`, {
         ready: page.getByRole('heading', { name: 'Federal application search' }),
       }),
-    ).rejects.toThrow(/locator\.waitFor: Timeout/)
+    ).rejects.toThrow('HTTP 404')
 
     expect(documents).toBe(1)
     expect(modules).toBe(1)
