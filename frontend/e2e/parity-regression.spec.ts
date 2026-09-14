@@ -217,7 +217,13 @@ const selectTab = async (page: Page, name: string) => {
 test.describe('Frontend parity with mocked API responses', () => {
   test('saving federal shipping preserves an unsaved status draft', async ({ page }) => {
     const fixture = await installParityFixtures(page)
-    await gotoSyntheticRoute(page, '/federal/application/888')
+    await gotoSyntheticRoute(page, '/federal/application/888', {
+      ready: page.getByRole('heading', {
+        level: 1,
+        name: 'Federal application FED-888',
+        exact: true,
+      }),
+    })
     await selectTab(page, 'Application')
     await page.getByRole('button', { name: 'Edit federal status' }).click()
     await page.getByLabel('Status', { exact: true }).selectOption('WDN')
@@ -246,7 +252,13 @@ test.describe('Frontend parity with mocked API responses', () => {
 
   test('saving federal status preserves an unsaved shipping draft', async ({ page }) => {
     const fixture = await installParityFixtures(page)
-    await gotoSyntheticRoute(page, '/federal/application/888')
+    await gotoSyntheticRoute(page, '/federal/application/888', {
+      ready: page.getByRole('heading', {
+        level: 1,
+        name: 'Federal application FED-888',
+        exact: true,
+      }),
+    })
     await selectTab(page, 'Shipping details')
     await page.getByRole('button', { name: 'Edit shipping details' }).click()
     await page.getByLabel('Transport name', { exact: true }).fill('Unsaved truck')
@@ -274,7 +286,9 @@ test.describe('Frontend parity with mocked API responses', () => {
 
   test('reopens a cancelled Blanket OIC with empty locked dates', async ({ page }) => {
     const fixture = await installParityFixtures(page)
-    await gotoSyntheticRoute(page, '/provincial/exemption/PARITY-BOIC')
+    await gotoSyntheticRoute(page, '/provincial/exemption/PARITY-BOIC', {
+      ready: page.getByRole('heading', { level: 1, name: 'Exemption PARITY-BOIC', exact: true }),
+    })
     await page.getByRole('button', { name: 'Edit exemption' }).click()
     for (const label of ['Approval date', 'Expiry date']) {
       const date = page.getByLabel(label, { exact: true })

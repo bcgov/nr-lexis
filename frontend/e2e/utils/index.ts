@@ -1,52 +1,23 @@
-import type { Page, Response } from '@playwright/test'
+import type { Locator, Page, Response } from '@playwright/test'
+import { FRONTEND_RECOVERY_TIMEOUT_MS, gotoWithRecovery } from './navigation'
 
 export const E2E_BASE_URL = process.env.E2E_BASE_URL ?? 'http://127.0.0.1:4173'
 
 const LOCAL_E2E_CLIENT_ID = 'local-e2e-client'
-const RUNTIME_CONFIG_REQUEST_ATTEMPTS = 4
 const RUNTIME_CONFIG_REQUEST_TIMEOUT_MS = 10_000
-const RUNTIME_CONFIG_RETRY_DELAY_MS = 3_000
-const SYNTHETIC_ROUTE_NAVIGATION_ATTEMPTS = 5
-const SYNTHETIC_ROUTE_NAVIGATION_TIMEOUT_MS = 10_000
-const SYNTHETIC_ROUTE_NAVIGATION_RETRY_DELAY_MS = 3_000
-const TRANSIENT_NAVIGATION_ERROR =
-  /net::ERR_(?:CONNECTION_REFUSED|CONNECTION_RESET|CONNECTION_CLOSED|EMPTY_RESPONSE|TIMED_OUT|NAME_NOT_RESOLVED)|page\.goto: Timeout \d+ms exceeded/i
+const TRANSIENT_CONFIG_ERROR =
+  /\b(?:ECONNREFUSED|ECONNRESET|ETIMEDOUT|EAI_AGAIN|ENOTFOUND)\b|socket hang up|apiRequestContext\.get: Timeout \d+ms exceeded/i
 const TRANSIENT_GATEWAY_STATUSES = new Set([502, 503, 504])
 let cachedRuntimeClientId: string | undefined
 
-type GotoOptions = NonNullable<Parameters<Page['goto']>[1]>
+type GotoOptions = NonNullable<Parameters<Page['goto']>[1]> & { ready: Locator }
 
 export const gotoSyntheticRoute = async (
   page: Page,
   path: string,
-  options: GotoOptions = {},
-): Promise<Response | null> => {
-  let lastError: unknown
-
-  for (let attempt = 1; attempt <= SYNTHETIC_ROUTE_NAVIGATION_ATTEMPTS; attempt += 1) {
-    try {
-      const response = await page.goto(path, {
-        ...options,
-        timeout: options.timeout ?? SYNTHETIC_ROUTE_NAVIGATION_TIMEOUT_MS,
-      })
-      if (!response || !TRANSIENT_GATEWAY_STATUSES.has(response.status())) {
-        return response
-      }
-      lastError = new Error(`Frontend route returned HTTP ${response.status()} for ${path}.`)
-    } catch (error) {
-      if (!TRANSIENT_NAVIGATION_ERROR.test(String(error))) {
-        throw error
-      }
-      lastError = error
-    }
-
-    if (attempt < SYNTHETIC_ROUTE_NAVIGATION_ATTEMPTS) {
-      await page.waitForTimeout(SYNTHETIC_ROUTE_NAVIGATION_RETRY_DELAY_MS)
-    }
-  }
-
-  throw lastError
-}
+  options: GotoOptions,
+): Promise<Response | null> =>
+  gotoWithRecovery(page, new URL(path, E2E_BASE_URL).toString(), { waitUntil: 'load', ...options })
 
 export const createUnsignedToken = (payload: Record<string, unknown>): string => {
   const encode = (value: Record<string, unknown>) =>
@@ -59,35 +30,55 @@ const resolveCognitoClientId = async (page: Page): Promise<string> => {
     return cachedRuntimeClientId
   }
 
-  let lastError: unknown
+  const deadline = Date.now() + FRONTEND_RECOVERY_TIMEOUT_MS
+  let attempt = 0
+  let lastReason = 'transport failure'
 
-  for (let attempt = 1; attempt <= RUNTIME_CONFIG_REQUEST_ATTEMPTS; attempt += 1) {
+  while (Date.now() < deadline) {
+    attempt += 1
     try {
       const response = await page.request.get(new URL('/config.js', E2E_BASE_URL).toString(), {
-        timeout: RUNTIME_CONFIG_REQUEST_TIMEOUT_MS,
+        timeout: Math.max(1, Math.min(RUNTIME_CONFIG_REQUEST_TIMEOUT_MS, deadline - Date.now())),
       })
-      if (!response.ok()) {
-        throw new Error(`Runtime config returned ${response.status()}.`)
+      try {
+        if (TRANSIENT_GATEWAY_STATUSES.has(response.status())) {
+          lastReason = `HTTP ${response.status()}`
+        } else {
+          if (!response.ok()) throw new Error(`Runtime config returned ${response.status()}.`)
+          const runtimeConfig = await response.text()
+          const runtimeClientId = runtimeConfig
+            .match(/VITE_USER_POOLS_WEB_CLIENT_ID:\s*"([^"]+)"/)?.[1]
+            ?.trim()
+
+          cachedRuntimeClientId =
+            runtimeClientId ||
+            process.env.VITE_USER_POOLS_WEB_CLIENT_ID?.trim() ||
+            LOCAL_E2E_CLIENT_ID
+          return cachedRuntimeClientId
+        }
+      } finally {
+        await response.dispose()
       }
-
-      const runtimeConfig = await response.text()
-      const runtimeClientId = runtimeConfig
-        .match(/VITE_USER_POOLS_WEB_CLIENT_ID:\s*"([^"]+)"/)?.[1]
-        ?.trim()
-
-      cachedRuntimeClientId =
-        runtimeClientId || process.env.VITE_USER_POOLS_WEB_CLIENT_ID?.trim() || LOCAL_E2E_CLIENT_ID
-      return cachedRuntimeClientId
     } catch (error) {
-      lastError = error
-      if (attempt < RUNTIME_CONFIG_REQUEST_ATTEMPTS) {
-        await page.waitForTimeout(RUNTIME_CONFIG_RETRY_DELAY_MS)
-      }
+      // Retry this read-only bootstrap request only for connection failures, never HTTP 4xx.
+      if (!TRANSIENT_CONFIG_ERROR.test(String(error))) throw error
+      lastReason = 'transport failure'
+    }
+
+    const delay = Math.min(
+      attempt === 1 ? 5_000 : attempt === 2 ? 10_000 : 20_000,
+      deadline - Date.now(),
+    )
+    if (delay > 0) {
+      console.warn(
+        `[LEXIS runtime config] ${new Date().toISOString()} attempt ${attempt}: ${lastReason}; retry in ${delay}ms`,
+      )
+      await page.waitForTimeout(delay)
     }
   }
 
   throw new Error(
-    `Unable to load runtime config for synthetic Cognito session after ${RUNTIME_CONFIG_REQUEST_ATTEMPTS} attempts. Last error: ${String(lastError)}`,
+    `LEXIS runtime config did not recover within ${FRONTEND_RECOVERY_TIMEOUT_MS / 1_000}s (${attempt} attempts; ${lastReason}).`,
   )
 }
 

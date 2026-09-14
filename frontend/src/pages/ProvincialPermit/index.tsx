@@ -105,7 +105,7 @@ const SORT_COLUMNS: {
   { id: 'applicantClientNumber', label: 'Applicant client number' },
   { id: 'ownerClientNumber', label: 'Owner client number' },
   { id: 'permitVolume', label: 'Total volume (m³)' },
-  { id: 'dateIssued', label: 'Issue date' },
+  { id: 'dateIssued', label: 'Issued date' },
   { id: 'region', label: 'Region' },
 ]
 

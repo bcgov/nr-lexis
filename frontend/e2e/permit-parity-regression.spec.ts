@@ -358,7 +358,9 @@ const chooseComboBoxOption = async (
 test.describe('Provincial permit parity regressions', () => {
   test('shows normal permit scale rows with their package association', async ({ page }) => {
     const fixture = await installPermitParityFixtures(page, 'normal')
-    await gotoSyntheticRoute(page, '/provincial/permit/91001')
+    await gotoSyntheticRoute(page, '/provincial/permit/91001', {
+      ready: page.getByRole('heading', { level: 1, name: 'Permit 91001 (Pending)', exact: true }),
+    })
     await expect(page.getByRole('heading', { level: 1, name: /Permit 91001/ })).toBeVisible()
 
     await selectTab(page, 'Items')
@@ -379,7 +381,9 @@ test.describe('Provincial permit parity regressions', () => {
     page,
   }) => {
     const fixture = await installPermitParityFixtures(page, 'blanket-oic', true)
-    await gotoSyntheticRoute(page, '/provincial/permit/91002')
+    await gotoSyntheticRoute(page, '/provincial/permit/91002', {
+      ready: page.getByRole('heading', { level: 1, name: 'Permit 91002 (Pending)', exact: true }),
+    })
     await selectTab(page, 'Items')
     await expect(page.getByRole('group', { name: 'Summary of Scale' })).toBeVisible()
 
@@ -424,7 +428,9 @@ test.describe('Provincial permit parity regressions', () => {
 
   test('keeps owner context visible while a verified location changes', async ({ page }) => {
     const fixture = await installPermitParityFixtures(page, 'blanket-oic')
-    await gotoSyntheticRoute(page, '/provincial/permit/91002')
+    await gotoSyntheticRoute(page, '/provincial/permit/91002', {
+      ready: page.getByRole('heading', { level: 1, name: 'Permit 91002 (Pending)', exact: true }),
+    })
     await selectTab(page, 'Owner')
     await expect(page.getByText('Owner Forestry Ltd.', { exact: true })).toBeVisible()
     await expect(page.getByText('1 Owner Street', { exact: true })).toBeVisible()

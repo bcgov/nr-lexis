@@ -273,7 +273,9 @@ const chooseComboBoxOption = async (
 test('keeps create-package End Use authoritative while options load', async ({ page }) => {
   const fixture = await installEndUseParityFixtures(page)
 
-  await gotoSyntheticRoute(page, '/provincial/application/321?tab=items')
+  await gotoSyntheticRoute(page, '/provincial/application/321?tab=items', {
+    ready: page.getByRole('heading', { level: 1, name: 'Application 321', exact: true }),
+  })
   await expect(page.getByRole('heading', { level: 1, name: 'Application 321' })).toBeVisible()
   await page.getByRole('button', { name: 'Create package', exact: true }).click()
 

@@ -2444,7 +2444,7 @@ const ProvincialExemptionDetailsPage = () => {
                                   <TableHeader>Permit</TableHeader>
                                   <TableHeader>Volume (m³)</TableHeader>
                                   <TableHeader>Status</TableHeader>
-                                  <TableHeader>Issue date</TableHeader>
+                                  <TableHeader>Issued date</TableHeader>
                                   <TableHeader>Actions</TableHeader>
                                 </TableRow>
                               </TableHead>

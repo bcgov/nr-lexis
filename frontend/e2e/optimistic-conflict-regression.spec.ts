@@ -166,7 +166,9 @@ for (const mode of ['add', 'edit'] as const) {
           body: JSON.stringify({ status: 'ok', ...remark }),
         })
       })
-      await gotoSyntheticRoute(page, '/provincial/application/321')
+      await gotoSyntheticRoute(page, '/provincial/application/321', {
+        ready: page.getByRole('heading', { level: 1, name: 'Application 321', exact: true }),
+      })
       await page.getByRole('tab', { name: 'Remarks', exact: true }).click()
       const launcher =
         mode === 'add'
@@ -227,7 +229,9 @@ test('conflict recovery also releases a pending document deletion without retryi
   page,
 }) => {
   const fixture = await installConflictFixture(page, 'STALE_RECORD')
-  await gotoSyntheticRoute(page, '/provincial/application/321')
+  await gotoSyntheticRoute(page, '/provincial/application/321', {
+    ready: page.getByRole('heading', { level: 1, name: 'Application 321', exact: true }),
+  })
   await page.getByRole('tab', { name: 'Documents', exact: true }).click()
   await page.getByRole('button', { name: 'Edit documents', exact: true }).click()
   await page.getByRole('button', { name: 'Delete', exact: true }).click()
@@ -266,7 +270,9 @@ for (const { code, heading, recovery } of [
 ]) {
   test(`conflict recovery stays above a saving remark: ${code}, ${recovery}`, async ({ page }) => {
     const fixture = await installConflictFixture(page, code)
-    await gotoSyntheticRoute(page, '/provincial/application/321')
+    await gotoSyntheticRoute(page, '/provincial/application/321', {
+      ready: page.getByRole('heading', { level: 1, name: 'Application 321', exact: true }),
+    })
     await expect(page.getByRole('heading', { level: 1, name: 'Application 321' })).toBeVisible()
     await page.getByRole('tab', { name: 'Remarks', exact: true }).click()
     await page.getByRole('button', { name: 'Add remark', exact: true }).click()

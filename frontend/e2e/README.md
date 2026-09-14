@@ -24,8 +24,9 @@ regression coverage uses a separate TEST-only Playwright config.
 
 ## CI setup
 
-- The scheduled/manual `Regression` workflow reads TEST credentials from GitHub `test` environment
-  secrets before running Playwright.
+- The scheduled/manual `Regression` workflow runs on the default branch and reads TEST credentials
+  from GitHub `test` environment secrets before running Playwright. Pushing a feature branch does
+  not run this credentialed gate against that branch.
 - Required `test` environment secrets:
   - `E2E_IDIR_USER`
   - `E2E_IDIR_PASSWORD`
@@ -46,6 +47,15 @@ regression coverage uses a separate TEST-only Playwright config.
   unit tests; the BCeID-only permit review-request email remains outside the scheduled suite.
 - Credentialed regression jobs are scoped to the `test` GitHub environment, so dev preview deploys
   stay on smoke coverage.
+- Credentialed page loads and the session-timeout setup recover from connection failures, frontend
+  502/503/504 responses, and interrupted or empty app shells for at most 150 seconds. Individual
+  document attempts take at most 10 seconds, with 5/10/20-second backoff; rendering retains its
+  30-second limit per attempt. Recovery logs contain only timing and failure categories.
+- These suites allow four minutes per test so recovery can finish. IDIR login runs inside each test
+  using the shared browser session, rather than in `beforeAll`, so one login failure does not
+  prevent the remaining tests from executing. Credentialed test bodies still have zero retries:
+  saves and cleanup are never replayed by navigation recovery. Wrong headings on rendered pages,
+  denied/missing resources, and unrelated JavaScript errors remain failures.
 - CI explicitly masks the credential values and suppresses Playwright HTML reports, screenshots,
   video, and traces for the credentialed regression suite because those runs type real test
   credentials. Credentialed regression artifacts are not uploaded from the public workflow.
@@ -54,6 +64,17 @@ regression coverage uses a separate TEST-only Playwright config.
   the Cognito-registered LEXIS origin in `VITE_REDIRECT_SIGN_OUT`.
 
 ## Run commands
+
+Basic E2E uses the same 150-second bounded recovery for synthetic page navigation and runtime-config
+GETs, within a four-minute test limit. Config reads retry transport failures and HTTP 502/503/504;
+other HTTP errors fail immediately. Successful runtime configuration stays cached for the worker.
+These helpers do not replay test bodies or API writes.
+Resource failures are scoped to the navigation attempt that started the request, so late
+cancellations or responses from a timed-out attempt cannot fail the next attempt.
+
+Synthetic navigation requires a `ready` locator for the expected page content (or the loading
+indicator when testing loading states), so interrupted scripts can recover before assertions begin.
+The mocked parity regression specs also use the four-minute test limit.
 
 ```bash
 npm run e2e
@@ -74,3 +95,11 @@ E2E_BASE_URL=https://nr-lexis-test.apps.gold.devops.gov.bc.ca npm run e2e:regres
 
 For local `e2e:regression` runs, export the same `E2E_IDIR_*` credential variables in your shell
 from approved secure sources.
+
+The transport recovery checks intercept every page request and need no credentials or running app.
+They cover a refused document, an interrupted configuration script, an interrupted lazy page module,
+and a missing module that must fail without reloading:
+
+```bash
+CI=1 E2E_BASE_URL=https://navigation.example.test npx playwright test --config=playwright.regression.config.ts e2e/navigation-recovery-regression.spec.ts --project=chromium
+```

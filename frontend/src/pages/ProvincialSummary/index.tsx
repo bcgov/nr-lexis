@@ -590,7 +590,7 @@ const ProvincialSummaryPage = () => {
                         {renderSortHeader(permits, 'exemptionNumber', 'Exemption')}
                         <TableHeader>Total pieces</TableHeader>
                         <TableHeader>Total volume (m³)</TableHeader>
-                        <TableHeader>Issue date</TableHeader>
+                        <TableHeader>Issued date</TableHeader>
                       </TableRow>
                     </TableHead>
                     <TableBody>

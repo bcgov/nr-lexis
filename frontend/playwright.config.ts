@@ -4,7 +4,8 @@ import { E2E_BASE_URL } from './e2e/utils'
 const isRemoteE2E = !!process.env.CI && /^https?:\/\//.test(E2E_BASE_URL)
 
 export default defineConfig({
-  timeout: 120000,
+  // Leave room for the same bounded frontend recovery used by the regression suite.
+  timeout: 240000,
   testDir: './e2e',
   testMatch: /smoke\.spec\.ts/,
   fullyParallel: false,

@@ -164,7 +164,7 @@ const firstInvalidTabIndex = (errors: FormErrors): number => {
 const validateForm = (form: BlanketOicPermitForm, agentUsed: boolean): FormErrors => {
   const errors: FormErrors = {
     permitSubmitDate: requiredDateError(form.permitSubmitDate, 'Submit date'),
-    permitIssueDate: optionalDateError(form.permitIssueDate, 'Issue date'),
+    permitIssueDate: optionalDateError(form.permitIssueDate, 'Issued date'),
     permitExpiryDate: optionalDateError(form.permitExpiryDate, 'Expiry date'),
     orgUnitNumber: form.orgUnitNumber.trim() ? undefined : 'Region is required.',
     ownerClientNumber: clientNumberError(form.ownerClientNumber, 'Owner client number'),
@@ -220,7 +220,7 @@ const validateForm = (form: BlanketOicPermitForm, agentUsed: boolean): FormError
     isPopulatedIsoDate(form.permitIssueDate) &&
     form.permitIssueDate < form.permitSubmitDate
   ) {
-    errors.permitIssueDate = 'Issue date must be after or equal to submit date.'
+    errors.permitIssueDate = 'Issued date must be after or equal to submit date.'
   }
   if (
     isPopulatedIsoDate(form.permitExpiryDate) &&
@@ -640,7 +640,7 @@ const BlanketOicPermitCreateForm = ({
                   />
                   <IsoDatePicker
                     id="boic-permit-issue-date"
-                    labelText="Issue date"
+                    labelText="Issued date"
                     value={form.permitIssueDate}
                     invalid={!!fieldError('permitIssueDate')}
                     invalidText={fieldError('permitIssueDate')}
