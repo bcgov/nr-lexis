@@ -38,6 +38,13 @@ server:
   port: 8080
   forward-headers-strategy: framework
   shutdown: graceful
+  servlet:
+    session:
+      cookie:
+        secure: true
+        http-only: true
+        same-site: lax
+      tracking-modes: cookie
 
 logging:
   level:

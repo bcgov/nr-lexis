@@ -479,11 +479,13 @@ class TestDeploymentTopologyConfigTest {
             "name: ${NAME}-frontend-${ZONE}",
             "targetPort: http",
             "termination: edge",
+            "router.openshift.io/cookie-same-site: Lax",
             "insecureEdgeTerminationPolicy: Redirect");
     assertThat(vanityRoute)
         .contains(
             "kind: Route",
             "host: ${VANITY_HOST}",
+            "router.openshift.io/cookie-same-site: Lax",
             "name: ${NAME}-frontend-${ZONE}",
             "certificate: ${VANITY_TLS_CERTIFICATE}",
             "key: ${VANITY_TLS_KEY}",
@@ -592,7 +594,8 @@ class TestDeploymentTopologyConfigTest {
         .contains(
             "header @dynamic_responses Cache-Control"
                 + " \"no-store, no-cache, must-revalidate, proxy-revalidate\"");
-    assertThat(occurrences(caddyfile, "Cache-Control")).isEqualTo(3);
+    assertThat(caddyfile).contains("header Cache-Control \"no-store\"");
+    assertThat(occurrences(caddyfile, "Cache-Control")).isEqualTo(4);
   }
 
   @Test

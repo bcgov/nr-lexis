@@ -8,6 +8,7 @@ import ca.bc.gov.mof.lexis.service.coordination.OptimisticLockHeaders;
 import java.util.Arrays;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.web.servlet.server.CookieSameSiteSupplier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.Customizer;
@@ -16,6 +17,7 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.www.BasicAuthenticationFilter;
+import org.springframework.security.web.savedrequest.NullRequestCache;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -41,12 +43,20 @@ public class SecurityConfiguration {
         .addFilterAfter(csrfCookieFilter, BasicAuthenticationFilter.class)
         .httpBasic(AbstractHttpConfigurer::disable)
         .formLogin(AbstractHttpConfigurer::disable)
+        // The SPA performs OAuth redirects; this bearer API never replays a saved login request.
+        .requestCache(cache -> cache.requestCache(new NullRequestCache()))
         .cors(Customizer.withDefaults());
 
     http.authorizeHttpRequests(apiAuthorizationCustomizer);
     http.oauth2ResourceServer(oauth2Customizer);
 
     return http.build();
+  }
+
+  @Bean
+  public CookieSameSiteSupplier csrfCookieSameSiteSupplier() {
+    // Apply this at the servlet container so Undertow writes the attribute on the wire.
+    return CookieSameSiteSupplier.ofLax().whenHasName("XSRF-TOKEN");
   }
 
   @Bean

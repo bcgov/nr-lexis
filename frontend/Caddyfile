@@ -4,12 +4,67 @@
 	auto_https off
 	# Keep the admin/metrics endpoint available to the container without exposing it on the pod network.
 	admin 127.0.0.1:3003
-	order coraza_waf first
+	# Apply browser security headers even when the WAF rejects a request.
+	order coraza_waf after header
+	log default {
+		# Coraza's warning message embeds the full URI and cannot be field-filtered.
+		# Matched rule details remain in its safe AKZ audit log; log interruptions below.
+		exclude http.handlers.waf
+		format filter {
+			wrap console
+			fields {
+				# Keep paths/status/timing without OAuth codes, search values, or referrers.
+				request>uri regexp \?.*$ ""
+				request>headers>Referer delete
+				request>headers>X-Xsrf-Token delete
+			}
+		}
+	}
+	log waf {
+		include http.handlers.waf
+		level ERROR
+		format filter {
+			wrap console
+			fields {
+				uri regexp \?.*$ ""
+			}
+		}
+	}
+}
+(security_headers) {
+	header {
+		-Server
+		X-Frame-Options "SAMEORIGIN"
+		X-XSS-Protection "1;mode=block"
+		X-Content-Type-Options "nosniff"
+		Strict-Transport-Security "max-age=31536000"
+		Content-Security-Policy "default-src 'self' https://*.gov.bc.ca;
+			script-src 'self' https://*.gov.bc.ca;
+			style-src 'self' https://fonts.googleapis.com https://use.fontawesome.com 'unsafe-inline';
+			font-src 'self' https://fonts.gstatic.com https://www2.gov.bc.ca;
+			img-src 'self' data: https://fonts.googleapis.com https://www.w3.org https://*.gov.bc.ca https://*.tile.openstreetmap.org;
+			frame-ancestors 'self';
+			form-action 'self';
+			block-all-mixed-content;
+			connect-src 'self' https://*.gov.bc.ca wss://*.gov.bc.ca https://*.amazoncognito.com https://cognito-idp.ca-central-1.amazonaws.com;"
+		Referrer-Policy "no-referrer"
+		Permissions-Policy "fullscreen=(self), camera=(), microphone=()"
+		Cross-Origin-Resource-Policy "same-origin"
+		Cross-Origin-Opener-Policy "same-origin"
+		Cross-Origin-Embedder-Policy "require-corp"
+	}
 }
 :3000 {
 	log {
 		output stdout
-		format console
+		format filter {
+			wrap console
+			fields {
+				request>uri regexp \?.*$ ""
+				request>headers>Referer delete
+				request>headers>X-Xsrf-Token delete
+			}
+		}
 		level {$LOG_LEVEL}
 	}
 
@@ -54,25 +109,12 @@
 		not path /assets/*
 	}
 	header @dynamic_responses Cache-Control "no-store, no-cache, must-revalidate, proxy-revalidate"
-	header {
-		-Server
-		X-Frame-Options "SAMEORIGIN"
-		X-XSS-Protection "1;mode=block"
-		X-Content-Type-Options "nosniff"
-		Strict-Transport-Security "max-age=31536000"
-		Content-Security-Policy "default-src 'self' https://*.gov.bc.ca;
-			script-src 'self' https://*.gov.bc.ca;
-			style-src 'self' https://fonts.googleapis.com https://use.fontawesome.com 'unsafe-inline'; 
-			font-src 'self' https://fonts.gstatic.com https://www2.gov.bc.ca;
-			img-src 'self' data: https://fonts.googleapis.com https://www.w3.org https://*.gov.bc.ca https://*.tile.openstreetmap.org;
-			frame-ancestors 'self'; 
-			form-action 'self';
-			block-all-mixed-content;
-			connect-src 'self' https://*.gov.bc.ca wss://*.gov.bc.ca https://*.amazoncognito.com https://cognito-idp.ca-central-1.amazonaws.com;"
-		Referrer-Policy "same-origin"
-		Permissions-Policy "fullscreen=(self), camera=(), microphone=()"
-		Cross-Origin-Resource-Policy "same-origin"
-		Cross-Origin-Opener-Policy "same-origin"
+	import security_headers
+	# Caddy handles proxy failures and missing files through a separate error route.
+	handle_errors {
+		import security_headers
+		header Cache-Control "no-store"
+		respond "" {err.status_code}
 	}
 }
 :3001 {

@@ -27,11 +27,12 @@ describe('Coraza WAF config', () => {
   it('omits sensitive request and response sections from audit logs', () => {
     const config = readCorazaConfig()
     const auditParts = config.match(/^SecAuditLogParts\s+([A-Z]+)$/m)?.[1]
-    const sensitiveAuditParts = ['B', 'C', 'E', 'F', 'I', 'J']
+    const sensitiveAuditParts = ['B', 'C', 'E', 'F', 'H', 'I', 'J']
 
-    expect(auditParts).toBe('AHZ')
+    expect(auditParts).toBe('AKZ')
+    expect(config).toMatch(/^SecAuditLogFormat\s+Native$/m)
     sensitiveAuditParts.forEach((part) => expect(auditParts).not.toContain(part))
-    expect(config).not.toMatch(/ctl:auditLogParts\s*=\s*\+?[A-Z]*[BCEFIJ]/i)
+    expect(config).not.toMatch(/ctl:auditLogParts\s*=\s*\+?[A-Z]*[BCEFHIJ]/i)
     expect(config).toMatch(/^SecDebugLogLevel\s+0$/m)
     expect(config).not.toMatch(/\blogdata\s*:/i)
     expect(config).not.toMatch(/\bmsg\s*:[^,\n]*%\{/i)
