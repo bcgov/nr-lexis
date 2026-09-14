@@ -19,6 +19,16 @@ const request = (
 const response = (status = 200, resource = request()) =>
   ({ status: () => status, request: () => resource }) as Response
 
+const failRequest = (events: EventEmitter, resource: Request) => {
+  events.emit('request', resource)
+  events.emit('requestfailed', resource)
+}
+
+const receiveResponse = (events: EventEmitter, result: Response) => {
+  events.emit('request', result.request())
+  events.emit('response', result)
+}
+
 const createPage = (rootText = 'An application page') => {
   const events = new EventEmitter()
   const goto = vi.fn().mockResolvedValue(response())
@@ -93,7 +103,7 @@ describe('regression navigation recovery', () => {
   it('reloads after a failed config script leaves a blank shell', async () => {
     const { page, events, goto, ready, waitFor, waitForTimeout } = createPage('')
     goto.mockImplementationOnce(async () => {
-      events.emit('requestfailed', request('script', '/config.js'))
+      failRequest(events, request('script', '/config.js'))
       return response()
     })
     waitFor.mockRejectedValueOnce(new errors.TimeoutError('Expected heading did not render'))
@@ -117,7 +127,7 @@ describe('regression navigation recovery', () => {
     async (errorText) => {
       const { page, events, goto, ready, waitFor } = createPage('Side navigation')
       goto.mockImplementationOnce(async () => {
-        events.emit('requestfailed', request('script', '/assets/federal.js', 'GET', errorText))
+        failRequest(events, request('script', '/assets/federal.js', 'GET', errorText))
         events.emit('pageerror', new Error('Failed to fetch dynamically imported module'))
         return response()
       })
@@ -142,8 +152,8 @@ describe('regression navigation recovery', () => {
       const { page, events, goto, ready } = createPage()
       goto.mockImplementationOnce(async () => {
         const resource = request(resourceType, '/assets/frontend')
-        if (failure === 'transport') events.emit('requestfailed', resource)
-        else events.emit('response', response(503, resource))
+        if (failure === 'transport') failRequest(events, resource)
+        else receiveResponse(events, response(503, resource))
         return response()
       })
 
@@ -179,10 +189,7 @@ describe('regression navigation recovery', () => {
   it('reports non-transient frontend request failures despite successful readiness', async () => {
     const { page, events, goto, ready, waitForTimeout } = createPage()
     goto.mockImplementationOnce(async () => {
-      events.emit(
-        'requestfailed',
-        request('script', '/assets/app.js', 'GET', 'net::ERR_BLOCKED_BY_CLIENT'),
-      )
+      failRequest(events, request('script', '/assets/app.js', 'GET', 'net::ERR_BLOCKED_BY_CLIENT'))
       return response()
     })
 
@@ -199,9 +206,9 @@ describe('regression navigation recovery', () => {
       const { page, events, goto, ready } = createPage()
       goto.mockImplementationOnce(async () => {
         const stylesheet = request('stylesheet', '/assets/app.css', 'GET', 'net::ERR_ABORTED')
-        events.emit('response', response(503, stylesheet))
-        events.emit(
-          'requestfailed',
+        receiveResponse(events, response(503, stylesheet))
+        failRequest(
+          events,
           differentResource
             ? request('script', '/assets/app.js', 'GET', 'net::ERR_ABORTED')
             : stylesheet,
@@ -223,7 +230,7 @@ describe('regression navigation recovery', () => {
     const { page, events, goto, ready } = createPage()
     const error = new Error('Failed to fetch dynamically imported module')
     goto.mockImplementationOnce(async () => {
-      events.emit('requestfailed', request('stylesheet', '/assets/app.css'))
+      failRequest(events, request('stylesheet', '/assets/app.css'))
       events.emit('pageerror', error)
       return response()
     })
@@ -250,7 +257,7 @@ describe('regression navigation recovery', () => {
     async (status) => {
       const { page, events, goto, ready, waitFor, waitForTimeout } = createPage()
       waitFor.mockImplementationOnce(async () => {
-        events.emit('response', response(status, request('script', '/assets/app.js')))
+        receiveResponse(events, response(status, request('script', '/assets/app.js')))
       })
 
       await expect(gotoWithRecovery(page, target, { ready })).rejects.toThrow(`HTTP ${status}`)
@@ -284,8 +291,8 @@ describe('regression navigation recovery', () => {
       goto.mockImplementation(async () => {
         if (failure === 'pageerror') events.emit('pageerror', new Error('Application crashed'))
         else
-          events.emit(
-            'response',
+          receiveResponse(
+            events,
             response(failure === 'denied-route' ? 403 : 404, request('script', '/assets/app.js')),
           )
         return response()
@@ -352,7 +359,7 @@ describe('regression navigation recovery', () => {
     const { page, events, goto, ready, waitFor } = createPage()
     const error = new Error('Save outcome is unknown')
     goto.mockImplementation(async () => {
-      events.emit('requestfailed', request('fetch', '/api/lexis/offer', 'POST'))
+      failRequest(events, request('fetch', '/api/lexis/offer', 'POST'))
       return response()
     })
     waitFor.mockRejectedValue(error)
@@ -366,5 +373,67 @@ describe('regression navigation recovery', () => {
     goto.mockRejectedValue(error)
     await expect(gotoWithRecovery(page, target)).rejects.toBe(error)
     expect(goto).toHaveBeenCalledTimes(1)
+  })
+
+  it.each(['document', 'script', 'stylesheet'])(
+    'ignores a late %s abort from a timed-out attempt',
+    async (resourceType) => {
+      const { page, events, goto, ready } = createPage()
+      const previousRequest = request(resourceType, '/frontend', 'GET', 'net::ERR_ABORTED')
+      goto
+        .mockImplementationOnce(async () => {
+          events.emit('request', previousRequest)
+          vi.advanceTimersByTime(10_000)
+          throw new errors.TimeoutError('page.goto: Timeout 10000ms exceeded')
+        })
+        .mockImplementationOnce(async () => {
+          events.emit('requestfailed', previousRequest)
+          return response()
+        })
+
+      await gotoWithRecovery(page, target, { ready })
+      expect(goto).toHaveBeenCalledTimes(2)
+      expect(events.eventNames()).toEqual([])
+    },
+  )
+
+  it.each([404, 503])(
+    'ignores a late HTTP %s response from a timed-out attempt',
+    async (status) => {
+      const { page, events, goto, ready } = createPage()
+      const previousRequest = request('script', '/assets/app.js')
+      goto
+        .mockImplementationOnce(async () => {
+          events.emit('request', previousRequest)
+          vi.advanceTimersByTime(10_000)
+          throw new errors.TimeoutError('page.goto: Timeout 10000ms exceeded')
+        })
+        .mockImplementationOnce(async () => {
+          events.emit('response', response(status, previousRequest))
+          return response()
+        })
+
+      await gotoWithRecovery(page, target, { ready })
+      expect(goto).toHaveBeenCalledTimes(2)
+    },
+  )
+
+  it('still reports a new request failure when an earlier attempt used the same URL', async () => {
+    const { page, events, goto, ready } = createPage()
+    const previousRequest = request('script', '/assets/app.js', 'GET', 'net::ERR_ABORTED')
+    goto
+      .mockImplementationOnce(async () => {
+        events.emit('request', previousRequest)
+        throw new errors.TimeoutError('page.goto: Timeout 10000ms exceeded')
+      })
+      .mockImplementationOnce(async () => {
+        events.emit('requestfailed', previousRequest)
+        receiveResponse(events, response(404, request('script', '/assets/app.js')))
+        return response()
+      })
+
+    await expect(gotoWithRecovery(page, target, { ready })).rejects.toThrow('HTTP 404')
+    expect(goto).toHaveBeenCalledTimes(2)
+    expect(events.eventNames()).toEqual([])
   })
 })

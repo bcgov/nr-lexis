@@ -69,6 +69,8 @@ Basic E2E uses the same 150-second bounded recovery for synthetic page navigatio
 GETs, within a four-minute test limit. Config reads retry transport failures and HTTP 502/503/504;
 other HTTP errors fail immediately. Successful runtime configuration stays cached for the worker.
 These helpers do not replay test bodies or API writes.
+Resource failures are scoped to the navigation attempt that started the request, so late
+cancellations or responses from a timed-out attempt cannot fail the next attempt.
 
 Synthetic navigation requires a `ready` locator for the expected page content (or the loading
 indicator when testing loading states), so interrupted scripts can recover before assertions begin.

@@ -30,6 +30,44 @@ test.describe('navigation transport recovery', () => {
     expect(documents).toBe(2)
   })
 
+  for (const stalledResource of ['document', 'script']) {
+    test(`recovers when a timed-out ${stalledResource} is aborted by the next navigation`, async ({
+      page,
+    }) => {
+      let documents = 0
+      let scripts = 0
+      const abortedTypes: string[] = []
+      page.on('requestfailed', (request) => {
+        if (request.failure()?.errorText === 'net::ERR_ABORTED') {
+          abortedTypes.push(request.resourceType())
+        }
+      })
+      await page.route(`${origin}/**`, async (route) => {
+        if (new URL(route.request().url()).pathname === '/app.js') {
+          scripts += 1
+          if (stalledResource === 'script' && scripts === 1) return
+          await route.fulfill({ contentType: 'application/javascript', body: '' })
+          return
+        }
+        documents += 1
+        // Leave the first request pending: Chromium cancels it when recovery navigates again.
+        if (stalledResource === 'document' && documents === 1) return
+        await route.fulfill({
+          contentType: 'text/html',
+          body: '<div id="root"><h1>Application search</h1></div><script src="/app.js"></script>',
+        })
+      })
+
+      await gotoWithRecovery(page, `${origin}/application`, {
+        timeout: 1_000,
+        ready: page.getByRole('heading', { name: 'Application search' }),
+      })
+      expect(documents).toBe(2)
+      expect(abortedTypes).toContain(stalledResource)
+      await expect(page.getByRole('heading', { name: 'Application search' })).toBeVisible()
+    })
+  }
+
   test('recovers synthetic navigation when a failed config script leaves the document empty', async ({
     page,
   }) => {

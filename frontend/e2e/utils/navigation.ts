@@ -35,6 +35,7 @@ export const gotoWithRecovery = async (
   while (Date.now() < deadline) {
     attempt += 1
     let interruptedResource = false
+    const attemptRequests = new Set<Request>()
     const interruptedRequests = new Set<Request>()
     let applicationError: Error | undefined
     let moduleLoadError: Error | undefined
@@ -46,8 +47,12 @@ export const gotoWithRecovery = async (
       )
         throw moduleLoadError
     }
+    const onRequest = (request: Request) => {
+      if (isFrontendResource(request)) attemptRequests.add(request)
+    }
     const onRequestFailed = (request: Request) => {
-      if (!isFrontendResource(request) || interruptedRequests.has(request)) return
+      // A new navigation cancels outstanding requests from the previous timed-out attempt.
+      if (!attemptRequests.has(request) || interruptedRequests.has(request)) return
       const errorText = request.failure()?.errorText ?? 'Unknown request failure'
       if (TRANSIENT_NAVIGATION_ERROR.test(errorText)) {
         interruptedResource = true
@@ -55,7 +60,7 @@ export const gotoWithRecovery = async (
       } else applicationError ??= new Error(`LEXIS frontend resource failed: ${errorText}.`)
     }
     const onResponse = (response: Response) => {
-      if (!isFrontendResource(response.request())) return
+      if (!attemptRequests.has(response.request())) return
       if (GATEWAY_STATUSES.has(response.status())) {
         interruptedResource = true
         // Chromium can also report ERR_ABORTED for this same unsuccessful resource.
@@ -71,6 +76,7 @@ export const gotoWithRecovery = async (
       if (MODULE_LOAD_ERROR.test(error.message)) moduleLoadError ??= error
       else applicationError ??= error
     }
+    page.on('request', onRequest)
     page.on('requestfailed', onRequestFailed)
     page.on('response', onResponse)
     page.on('pageerror', onPageError)
@@ -124,6 +130,7 @@ export const gotoWithRecovery = async (
       if (!TRANSIENT_NAVIGATION_ERROR.test(String(error))) throw error
       lastReason = 'document transport failure'
     } finally {
+      page.off('request', onRequest)
       page.off('requestfailed', onRequestFailed)
       page.off('response', onResponse)
       page.off('pageerror', onPageError)
