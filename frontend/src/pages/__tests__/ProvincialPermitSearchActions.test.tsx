@@ -540,7 +540,7 @@ describe('Provincial Permit Search Actions', () => {
   it.each([
     ['Status', 'permitStatus'],
     ['Total volume (m³)', 'permitVolume'],
-    ['Issue date', 'dateIssued'],
+    ['Issued date', 'dateIssued'],
   ] as const)(
     'sends the supported backend sort key when the %s header is clicked',
     async (header, expectedSortField) => {

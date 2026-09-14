@@ -65,6 +65,15 @@ regression coverage uses a separate TEST-only Playwright config.
 
 ## Run commands
 
+Basic E2E uses the same 150-second bounded recovery for synthetic page navigation and runtime-config
+GETs, within a four-minute test limit. Config reads retry transport failures and HTTP 502/503/504;
+other HTTP errors fail immediately. Successful runtime configuration stays cached for the worker.
+These helpers do not replay test bodies or API writes.
+
+Synthetic navigation requires a `ready` locator for the expected page content (or the loading
+indicator when testing loading states), so interrupted scripts can recover before assertions begin.
+The mocked parity regression specs also use the four-minute test limit.
+
 ```bash
 npm run e2e
 npm run e2e:session-timeout

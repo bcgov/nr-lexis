@@ -692,7 +692,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     ).toBeInTheDocument()
     expect(await screen.findByRole('columnheader', { name: 'Volume (m³)' })).toBeInTheDocument()
     expect(screen.getByRole('columnheader', { name: 'Status' })).toBeInTheDocument()
-    expect(screen.getByRole('columnheader', { name: 'Issue date' })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'Issued date' })).toBeInTheDocument()
     expect(screen.getByText('900101 (Pending)')).toBeInTheDocument()
     expect(screen.getByText('25.5')).toBeInTheDocument()
     expect(screen.getByText('12-Jul-2026')).toBeInTheDocument()

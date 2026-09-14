@@ -1,10 +1,10 @@
 import type { Locator, Page, Request, Response } from '@playwright/test'
 
-const RECOVERY_TIMEOUT_MS = 150_000
+export const FRONTEND_RECOVERY_TIMEOUT_MS = 150_000
 const DOCUMENT_TIMEOUT_MS = 10_000
 const RENDER_TIMEOUT_MS = 30_000
 const TRANSIENT_NAVIGATION_ERROR =
-  /net::ERR_(?:CONNECTION_REFUSED|CONNECTION_RESET|CONNECTION_CLOSED|EMPTY_RESPONSE|TIMED_OUT|NAME_NOT_RESOLVED)|page\.goto: Timeout \d+ms exceeded/i
+  /net::ERR_(?:CONNECTION_REFUSED|CONNECTION_RESET|CONNECTION_CLOSED|EMPTY_RESPONSE|TIMED_OUT|NAME_NOT_RESOLVED|FAILED)|page\.goto: Timeout \d+ms exceeded/i
 const GATEWAY_STATUSES = new Set([502, 503, 504])
 const MODULE_LOAD_ERROR =
   /Failed to fetch dynamically imported module|Importing a module script failed/i
@@ -18,7 +18,7 @@ export const gotoWithRecovery = async (
   { ready, ...options }: NavigationOptions = {},
 ): Promise<Response | null> => {
   const origin = new URL(url).origin
-  const deadline = Date.now() + RECOVERY_TIMEOUT_MS
+  const deadline = Date.now() + FRONTEND_RECOVERY_TIMEOUT_MS
   let attempt = 0
   let lastReason = 'document transport failure'
 
@@ -35,7 +35,7 @@ export const gotoWithRecovery = async (
   while (Date.now() < deadline) {
     attempt += 1
     let interruptedResource = false
-    let applicationError = false
+    let applicationError: Error | undefined
     const onRequestFailed = (request: Request) => {
       if (
         isFrontendResource(request) &&
@@ -47,12 +47,15 @@ export const gotoWithRecovery = async (
     const onResponse = (response: Response) => {
       if (!isFrontendResource(response.request())) return
       if (GATEWAY_STATUSES.has(response.status())) interruptedResource = true
-      else if (response.status() >= 400) applicationError = true
+      else if (response.status() >= 400)
+        applicationError ??= new Error(
+          `LEXIS frontend resource returned HTTP ${response.status()}.`,
+        )
     }
     const onPageError = (error: Error) => {
       // A failed lazy module may also raise a page error. Its failed request is handled above;
       // missing modules (404) and unrelated JavaScript exceptions must still stop recovery.
-      if (!MODULE_LOAD_ERROR.test(error.message)) applicationError = true
+      if (!MODULE_LOAD_ERROR.test(error.message)) applicationError ??= error
     }
     page.on('requestfailed', onRequestFailed)
     page.on('response', onResponse)
@@ -89,6 +92,7 @@ export const gotoWithRecovery = async (
             renderInterrupted = true
           }
         }
+        if (applicationError) throw applicationError
         if (!renderInterrupted) return response
       }
     } catch (error) {
@@ -114,6 +118,6 @@ export const gotoWithRecovery = async (
   }
 
   throw new Error(
-    `LEXIS navigation did not recover within ${RECOVERY_TIMEOUT_MS / 1_000}s (${attempt} attempts; ${lastReason}).`,
+    `LEXIS navigation did not recover within ${FRONTEND_RECOVERY_TIMEOUT_MS / 1_000}s (${attempt} attempts; ${lastReason}).`,
   )
 }

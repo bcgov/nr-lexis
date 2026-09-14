@@ -4,12 +4,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { gotoWithRecovery } from '../../../e2e/utils/navigation'
 
 const target = 'https://lexis.example.test/federal?applicationNumber=private-fixture'
-const request = (resourceType = 'document', path = '/federal', method = 'GET') =>
+const request = (
+  resourceType = 'document',
+  path = '/federal',
+  method = 'GET',
+  errorText = 'net::ERR_CONNECTION_REFUSED',
+) =>
   ({
     url: () => new URL(path, target).toString(),
     method: () => method,
     resourceType: () => resourceType,
-    failure: () => ({ errorText: 'net::ERR_CONNECTION_REFUSED' }),
+    failure: () => ({ errorText }),
   }) as Request
 const response = (status = 200, resource = request()) =>
   ({ status: () => status, request: () => resource }) as Response
@@ -95,17 +100,48 @@ describe('regression navigation recovery', () => {
     expect(waitForTimeout).toHaveBeenCalledWith(5_000)
   })
 
-  it('recovers a failed lazy module even when the surrounding application already rendered', async () => {
-    const { page, events, goto, ready, waitFor } = createPage('Side navigation')
-    goto.mockImplementationOnce(async () => {
-      events.emit('requestfailed', request('script', '/assets/federal.js'))
-      events.emit('pageerror', new Error('Failed to fetch dynamically imported module'))
-      return response()
+  it.each(['net::ERR_CONNECTION_REFUSED', 'net::ERR_FAILED'])(
+    'recovers a lazy module with %s after the surrounding application renders',
+    async (errorText) => {
+      const { page, events, goto, ready, waitFor } = createPage('Side navigation')
+      goto.mockImplementationOnce(async () => {
+        events.emit('requestfailed', request('script', '/assets/federal.js', 'GET', errorText))
+        events.emit('pageerror', new Error('Failed to fetch dynamically imported module'))
+        return response()
+      })
+      waitFor.mockRejectedValueOnce(new Error('Expected heading did not render'))
+      await gotoWithRecovery(page, target, { ready })
+      expect(goto).toHaveBeenCalledTimes(2)
+    },
+  )
+
+  it('fails without retrying when a page error occurs despite successful readiness', async () => {
+    const { page, events, goto, ready, waitFor, waitForTimeout } = createPage()
+    const error = new Error('Application crashed')
+    waitFor.mockImplementationOnce(async () => {
+      events.emit('pageerror', error)
     })
-    waitFor.mockRejectedValueOnce(new Error('Expected heading did not render'))
-    await gotoWithRecovery(page, target, { ready })
-    expect(goto).toHaveBeenCalledTimes(2)
+
+    await expect(gotoWithRecovery(page, target, { ready })).rejects.toBe(error)
+    expect(goto).toHaveBeenCalledTimes(1)
+    expect(waitForTimeout).not.toHaveBeenCalled()
+    expect(events.eventNames()).toEqual([])
   })
+
+  it.each([400, 403, 404, 500])(
+    'fails without retrying a frontend HTTP %s response despite successful readiness',
+    async (status) => {
+      const { page, events, goto, ready, waitFor, waitForTimeout } = createPage()
+      waitFor.mockImplementationOnce(async () => {
+        events.emit('response', response(status, request('script', '/assets/app.js')))
+      })
+
+      await expect(gotoWithRecovery(page, target, { ready })).rejects.toThrow(`HTTP ${status}`)
+      expect(goto).toHaveBeenCalledTimes(1)
+      expect(waitForTimeout).not.toHaveBeenCalled()
+      expect(events.eventNames()).toEqual([])
+    },
+  )
 
   it.each([502, 503, 504])('recovers an HTTP %s frontend response', async (status) => {
     const { page, goto } = createPage()

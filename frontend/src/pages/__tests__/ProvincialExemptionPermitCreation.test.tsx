@@ -397,7 +397,7 @@ describe('permit creation from an exemption', () => {
     expect(
       screen.getByText('Enter permit details for Blanket OIC exemption TEST13E3.'),
     ).toBeInTheDocument()
-    expect(within(page).getByLabelText('Issue date')).toHaveValue('')
+    expect(within(page).getByLabelText('Issued date')).toHaveValue('')
     expect(within(page).getByLabelText('Expiry date')).toHaveValue('')
 
     await act(async () => {
@@ -406,7 +406,7 @@ describe('permit creation from an exemption', () => {
       await Promise.all([firstDetail, firstEditContext])
     })
 
-    await waitFor(() => expect(within(page).getByLabelText('Issue date')).toHaveValue(''))
+    await waitFor(() => expect(within(page).getByLabelText('Issued date')).toHaveValue(''))
     expect(within(page).getByLabelText('Expiry date')).toHaveValue('')
   })
 
@@ -552,7 +552,7 @@ describe('permit creation from an exemption', () => {
     expect(
       within(page).getByText(/permit number is assigned only after a successful save/i),
     ).toBeInTheDocument()
-    expect(within(page).getByLabelText('Issue date')).toHaveValue('')
+    expect(within(page).getByLabelText('Issued date')).toHaveValue('')
     expect(within(page).getByLabelText('Expiry date')).toHaveValue('')
     expect(within(page).getByRole('tab', { name: 'Permit' })).toBeInTheDocument()
     expect(within(page).getByRole('tab', { name: 'Owner' })).toBeInTheDocument()

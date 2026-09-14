@@ -1,5 +1,7 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type APIResponse } from '@playwright/test'
+import { gotoSyntheticRoute } from './utils'
 import { gotoWithRecovery } from './utils/navigation'
+import { loginWithIdir } from './utils/regression-auth'
 
 // All requests are intercepted. These checks never use TEST, credentials or business records.
 const origin = 'https://navigation.example.test'
@@ -28,7 +30,7 @@ test.describe('navigation transport recovery', () => {
     expect(documents).toBe(2)
   })
 
-  test('recovers when a failed config script leaves a successful document empty', async ({
+  test('recovers synthetic navigation when a failed config script leaves the document empty', async ({
     page,
   }) => {
     let documents = 0
@@ -53,7 +55,7 @@ test.describe('navigation transport recovery', () => {
       })
     })
 
-    await gotoWithRecovery(page, `${origin}/federal`, {
+    await gotoSyntheticRoute(page, `${origin}/federal`, {
       ready: page.getByRole('heading', { name: 'Federal application search' }),
     })
     await expect(page.getByRole('heading', { name: 'Federal application search' })).toBeVisible()
@@ -61,7 +63,7 @@ test.describe('navigation transport recovery', () => {
     expect(configs).toBe(2)
   })
 
-  test('recovers an interrupted lazy module after the application shell renders', async ({
+  test('recovers a lazy module with ERR_FAILED after the application shell renders', async ({
     page,
   }) => {
     let documents = 0
@@ -70,7 +72,7 @@ test.describe('navigation transport recovery', () => {
       if (new URL(route.request().url()).pathname === '/federal.js') {
         modules += 1
         if (modules === 1) {
-          await route.abort('timedout')
+          await route.abort('failed')
           return
         }
         await route.fulfill({
@@ -92,6 +94,78 @@ test.describe('navigation transport recovery', () => {
 
     expect(documents).toBe(2)
     expect(modules).toBe(2)
+  })
+
+  test('fails on a page error even when the expected heading renders', async ({ page }) => {
+    let documents = 0
+    await page.route(`${origin}/**`, async (route) => {
+      documents += 1
+      await route.fulfill({
+        contentType: 'text/html',
+        body: '<div id="root"><h1>Application search</h1></div><script>throw new Error("Application crashed")</script>',
+      })
+    })
+
+    await expect(
+      gotoWithRecovery(page, `${origin}/application`, {
+        ready: page.getByRole('heading', { name: 'Application search' }),
+      }),
+    ).rejects.toThrow('Application crashed')
+    expect(documents).toBe(1)
+  })
+
+  test('fails on a missing script even when the expected heading renders', async ({ page }) => {
+    let documents = 0
+    await page.route(`${origin}/**`, async (route) => {
+      if (new URL(route.request().url()).pathname === '/missing.js') {
+        await route.fulfill({ status: 404, body: 'Not found' })
+        return
+      }
+      documents += 1
+      await route.fulfill({
+        contentType: 'text/html',
+        body: '<div id="root"><h1>Application search</h1></div><script src="/missing.js"></script>',
+      })
+    })
+
+    await expect(
+      gotoWithRecovery(page, `${origin}/application`, {
+        ready: page.getByRole('heading', { name: 'Application search' }),
+      }),
+    ).rejects.toThrow('HTTP 404')
+    expect(documents).toBe(1)
+  })
+
+  test('logs in through the accessible IDIR button when its test id is absent', async ({
+    page,
+  }) => {
+    let documents = 0
+    await page.route('**/*', async (route) => {
+      documents += 1
+      await route.fulfill({
+        contentType: 'text/html',
+        body: '<div id="root"><button onclick="this.outerHTML = \'<nav id=side-navigation>Signed in</nav>\'">Log in with IDIR</button></div>',
+      })
+    })
+
+    // APIRequestContext calls bypass page routes. Stub the session probe explicitly so this
+    // helper check cannot reach an external API or require credentials.
+    const originalGet = page.request.get
+    page.request.get = async (url) => {
+      expect(url).toBe('/api/lexis/session/capabilities')
+      return {
+        status: () => 200,
+        ok: () => true,
+        json: async () => ({ authenticated: await page.locator('#side-navigation').isVisible() }),
+      } as APIResponse
+    }
+    try {
+      await loginWithIdir(page)
+      await expect(page.locator('#side-navigation')).toHaveText('Signed in')
+      expect(documents).toBe(1)
+    } finally {
+      page.request.get = originalGet
+    }
   })
 
   test('does not reload a rendered shell when its lazy module is missing', async ({ page }) => {

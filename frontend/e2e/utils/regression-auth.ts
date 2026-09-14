@@ -585,7 +585,11 @@ const visibleLoginError = async (page: Page): Promise<string | null> => {
 
 const gotoAppRoot = async (page: Page): Promise<void> => {
   await gotoWithRecovery(page, new URL('/', E2E_BASE_URL).toString(), {
-    ready: page.getByTestId(idirLoginConfig.testId).or(page.locator('#side-navigation')).first(),
+    ready: page
+      .getByTestId(idirLoginConfig.testId)
+      .or(page.getByRole('button', { name: idirLoginConfig.buttonName }))
+      .or(page.locator('#side-navigation'))
+      .first(),
   })
 }
 

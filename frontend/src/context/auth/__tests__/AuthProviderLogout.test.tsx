@@ -378,18 +378,18 @@ describe('AuthProvider logout', () => {
   })
 
   it('keeps the Cognito token fresh while the user remains active', async () => {
-    renderProbe()
-
-    await waitFor(() => {
-      expect(screen.getByTestId('loading')).toHaveTextContent('false')
-    })
-    authMocks.fetchAuthSession.mockClear()
+    // Start the session on the same clock as its activity/keepalive timestamps.
     vi.useFakeTimers()
-    vi.setSystemTime(new Date('2026-01-01T00:01:00Z'))
-
-    window.dispatchEvent(new MouseEvent('mousemove'))
+    vi.setSystemTime(new Date('2026-01-01T00:00:00Z'))
     await act(async () => {
-      await Promise.resolve()
+      renderProbe()
+    })
+    expect(screen.getByTestId('loading')).toHaveTextContent('false')
+    authMocks.fetchAuthSession.mockClear()
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000)
+      window.dispatchEvent(new MouseEvent('mousemove'))
     })
     expect(authMocks.fetchAuthSession).toHaveBeenCalledOnce()
     expect(authMocks.fetchAuthSession).toHaveBeenLastCalledWith({ forceRefresh: false })
@@ -398,11 +398,14 @@ describe('AuthProvider logout', () => {
     expect(authMocks.fetchAuthSession).toHaveBeenCalledOnce()
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(60_000)
+      await vi.advanceTimersByTimeAsync(59_999)
     })
     window.dispatchEvent(new MouseEvent('mousemove'))
+    expect(authMocks.fetchAuthSession).toHaveBeenCalledOnce()
+
     await act(async () => {
-      await Promise.resolve()
+      await vi.advanceTimersByTimeAsync(1)
+      window.dispatchEvent(new MouseEvent('mousemove'))
     })
     expect(authMocks.fetchAuthSession).toHaveBeenCalledTimes(2)
     expect(authMocks.fetchAuthSession).toHaveBeenLastCalledWith({ forceRefresh: false })

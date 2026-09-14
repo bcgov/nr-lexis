@@ -168,7 +168,7 @@ changing the secret takes effect on the next deployment.
 
 - [docs/architecture.md](docs/architecture.md) - Runtime architecture and legacy-to-modern shifts.
 - [docs/intentional-legacy-divergences.md](docs/intentional-legacy-divergences.md) - Business-approved differences from legacy behaviour and their searchable code markers.
-- [docs/legacy-bug-register.md](docs/legacy-bug-register.md) - Legacy and migration defects, corrections and outstanding Oracle work.
+- [docs/legacy-bug-register.md](docs/legacy-bug-register.md) - Legacy defects, modern corrections and proposed procedure changes deferred pending a business request.
 - [docs/shared-clamav-service.md](docs/shared-clamav-service.md) - Shared scanner deployment, policy, verification, and ownership.
 - [backend/README.md](backend/README.md) - Spring profile reference, env-var table, API areas, test commands.
 - [frontend/README.md](frontend/README.md) - Vite scripts, env-var table, project structure, testing libraries.

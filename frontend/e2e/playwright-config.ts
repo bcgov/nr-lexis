@@ -2,7 +2,8 @@ import { devices } from '@playwright/test'
 import type { PlaywrightTestConfig } from '@playwright/test'
 import { E2E_BASE_URL } from './utils'
 
-const E2E_TIMEOUT_MS = 120_000
+// Leave room for the 150-second frontend recovery window and the test's assertions.
+const E2E_TIMEOUT_MS = 240_000
 
 const isRemoteE2E = !!process.env.CI && /^https?:\/\//.test(E2E_BASE_URL)
 
@@ -45,7 +46,7 @@ export const createE2EConfig = ({ testMatch, use }: E2EConfigOptions): Playwrigh
             process.env.VITE_LOGOUT_KEYCLOAK_CLIENT_ID ?? 'local-e2e-keycloak-client',
         },
         reuseExistingServer: !process.env.CI,
-        timeout: E2E_TIMEOUT_MS,
+        timeout: 120_000,
       },
   projects: [
     {
