@@ -18,6 +18,7 @@ import {
   type OfferScaleDetail,
   type OfferScaleTarget,
 } from '@/service/offer-scale-detail-service'
+import './OfferScaleDetailAction.scss'
 
 type OfferScaleDetailActionProps = {
   target: OfferScaleTarget
@@ -55,12 +56,12 @@ const ScaleDetailDialog = ({
   return (
     <Modal
       open
+      passiveModal
       size="lg"
+      className="offer-scale-detail-modal"
       modalHeading="Scale Detail"
       aria-label="Scale Detail"
       closeButtonLabel="Close scale details"
-      primaryButtonText="Close"
-      onRequestSubmit={onClose}
       onRequestClose={onClose}
     >
       {failed ? (
@@ -107,6 +108,11 @@ const ScaleDetailDialog = ({
           </Table>
         </TableFrame>
       )}
+      <div className="offer-scale-detail-modal__actions">
+        <Button type="button" kind="tertiary" onClick={onClose}>
+          Close
+        </Button>
+      </div>
     </Modal>
   )
 }
