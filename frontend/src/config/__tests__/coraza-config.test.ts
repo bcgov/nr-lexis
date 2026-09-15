@@ -59,7 +59,7 @@ describe('Coraza WAF config', () => {
     expect(config).not.toMatch(/^\s*admin\s+(?:0\.0\.0\.0|\[::\]|\*|:)/m)
   })
 
-  it('omits credential fields from both the default and access log encoders', () => {
+  it('omits all headers from both the default and access log encoders', () => {
     const config = readCaddyConfig()
     const requestLogFilters = [...config.matchAll(/fields \{([\s\S]*?)\n\s*\}/g)]
       .map((match) => match[1])
@@ -67,17 +67,19 @@ describe('Coraza WAF config', () => {
 
     expect(requestLogFilters).toHaveLength(2)
     for (const fields of requestLogFilters) {
-      for (const field of [
-        'request>headers>Cookie',
-        'request>headers>Authorization',
-        'request>headers>Proxy-Authorization',
-        'request>headers>X-Xsrf-Token',
-        'resp_headers>Set-Cookie',
-      ]) {
+      for (const field of ['request>headers', 'resp_headers']) {
         expect(fields).toContain(`${field} delete`)
       }
     }
     expect(config).not.toMatch(/^\s*log_credentials\b/m)
+  })
+
+  it('keeps unfilterable WAF messages out of every Caddy logger regardless of severity', () => {
+    const config = readCaddyConfig()
+
+    expect(config).toMatch(/^\s*exclude http\.handlers\.waf\s*$/m)
+    expect(config).not.toMatch(/^\s*include\b[^\n]*http\.handlers\.waf/m)
+    expect(config).not.toMatch(/^\s*log waf\s*\{/m)
   })
 
   it('allows LEXIS SPA admin routes through document navigation', () => {

@@ -22,6 +22,8 @@ const credentialMarkers = {
   authorization: 'wava-authorization-marker',
   proxyAuthorization: 'wava-proxy-authorization-marker',
   setCookie: 'wava-response-cookie-marker',
+  apiKey: 'wava-api-key-marker',
+  location: 'wava-redirect-code-marker',
 }
 const backend = createServer((request, response) => {
   requests.push({ url: request.url, headers: request.headers })
@@ -36,6 +38,7 @@ const backend = createServer((request, response) => {
     Server: 'synthetic-upstream',
     'Referrer-Policy': 'same-origin',
     'Set-Cookie': `SYNTHETIC=${credentialMarkers.setCookie}; HttpOnly; SameSite=Lax`,
+    Location: `/login?code=${credentialMarkers.location}`,
   })
   response.end('%PDF-1.4\nsynthetic report fixture\n%%EOF')
 })
@@ -63,7 +66,12 @@ try {
     '/tmp/coraza/',
     join(temp, 'coraza') + '/',
   )
-  await writeFile(join(temp, 'coraza.conf'), coraza)
+  // Exercise Coraza's ERROR callback as well as the production rules' warning callbacks.
+  // Severity must never determine whether the original URI can bypass log filtering.
+  const criticalProbeRule = `
+SecRule REQUEST_URI "@beginsWith /waf-critical-probe" "id:990001,phase:1,deny,status:403,log,severity:CRITICAL,msg:'Synthetic critical WAF rule'"
+`
+  await writeFile(join(temp, 'coraza.conf'), coraza + criticalProbeRule)
   const config = (await readFile(join(frontend, 'Caddyfile'), 'utf8'))
     .replace('\tmetrics', '\tdefault_bind 127.0.0.1\n\tmetrics')
     .replace('127.0.0.1:3003', `127.0.0.1:${adminPort}`)
@@ -157,6 +165,7 @@ try {
     Cookie: `SYNTHETIC=${credentialMarkers.cookie}`,
     Authorization: `Bearer ${credentialMarkers.authorization}`,
     'Proxy-Authorization': `Bearer ${credentialMarkers.proxyAuthorization}`,
+    'X-Api-Key': credentialMarkers.apiKey,
   }
   await check('/' + query, 200, { headers })
   const credentialResponse = await check('/api/fixture' + query, 200, { headers })
@@ -164,7 +173,13 @@ try {
     credentialResponse.headers.get('set-cookie')?.includes(credentialMarkers.setCookie),
     'Log filtering must preserve response cookies sent to the client',
   )
+  assert.equal(
+    credentialResponse.headers.get('location'),
+    `/login?code=${credentialMarkers.location}`,
+    'Log filtering must preserve redirect locations sent to the client',
+  )
   await check('/.git/' + query, 403, { headers })
+  await check('/waf-critical-probe' + query, 403, { headers })
   await check('/api/disconnect' + query, 502, { headers })
   await check('/api/fixture' + query + '&filter=' + encodeURIComponent("' OR 1=1-- "), 403, {
     headers,
@@ -177,7 +192,7 @@ try {
     requests.some((request) => request.headers['x-xsrf-token'] === markers[3]),
     'Log filtering must preserve the CSRF header sent to the backend',
   )
-  for (const header of ['Cookie', 'Authorization']) {
+  for (const header of ['Cookie', 'Authorization', 'X-Api-Key']) {
     assert.ok(
       requests.some((request) => request.headers[header.toLowerCase()] === headers[header]),
       `Log filtering must preserve the ${header} header sent to the backend`,
@@ -189,6 +204,7 @@ try {
     'WAF denials must still produce matched-rule audit events',
   )
   assert.match(logs, /id:1004/, 'WAF audit events must retain rule IDs')
+  assert.match(logs, /id:990001/, 'Critical WAF events must retain safe audit diagnostics')
   assert.match(
     logs,
     /Access to sensitive path blocked/,
@@ -245,9 +261,17 @@ try {
     assert.ok(!logs.includes(marker), `Sensitive marker in logs: ${marker}`)
   assert.doesNotMatch(
     logs,
-    /"(?:Cookie|Authorization|Proxy-Authorization|Set-Cookie)"\s*:/,
-    'Credential fields must be explicitly removed, not just rely on default value redaction',
+    /"(?:headers|resp_headers)"\s*:/,
+    'Header maps must be omitted, including custom credentials and redirect locations',
   )
+  assert.doesNotMatch(logs, /http\.handlers\.waf/, 'Raw WAF messages must not reach any logger')
+  for (const status of [200, 403, 502]) {
+    assert.match(
+      logs,
+      new RegExp(`http\\.log\\.access[^\\n]+"status":\\s*${status}\\b`),
+      `Access diagnostics must retain HTTP ${status} without the raw WAF logger`,
+    )
+  }
   console.log(
     'PASS: headers, WAF denials, SPA/assets, proxy statuses/downloads, NEXCOL isolation, and log redaction',
   )

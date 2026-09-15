@@ -66,6 +66,7 @@ class RegressionWorkflowDefaultsTest {
     assertThat(config)
         .contains("testMatch: /regression\\.spec\\.ts/")
         .contains("reporter: [['./e2e/safe-regression-reporter.ts']]")
+        .contains("retries: 0")
         .contains("trace: 'off'")
         .contains("screenshot: 'off'")
         .contains("video: 'off'");

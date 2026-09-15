@@ -10,5 +10,7 @@ export default defineConfig({
       video: 'off',
     },
   }),
+  // A failed mutation may already have persisted. Never replay the whole test.
+  retries: 0,
   reporter: [['./e2e/safe-regression-reporter.ts']],
 })

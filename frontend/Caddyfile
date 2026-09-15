@@ -7,31 +7,16 @@
 	# Apply browser security headers even when the WAF rejects a request.
 	order coraza_waf after header
 	log default {
-		# Coraza's warning message embeds the full URI and cannot be field-filtered.
-		# Matched rule details remain in its safe AKZ audit log; log interruptions below.
+		# Coraza messages at any severity can embed request values and cannot be field-filtered.
+		# Use only its AKZ audit log for rule details; access logs retain paths/status/timing.
 		exclude http.handlers.waf
 		format filter {
 			wrap console
 			fields {
-				# Keep paths/status/timing without OAuth codes, search values, or referrers.
+				# Headers can contain custom credentials, referrers and OAuth redirect URLs.
 				request>uri regexp \?.*$ ""
-				request>headers>Referer delete
-				# Caddy redacts credential values by default; also omit the fields explicitly.
-				request>headers>Cookie delete
-				request>headers>Authorization delete
-				request>headers>Proxy-Authorization delete
-				request>headers>X-Xsrf-Token delete
-				resp_headers>Set-Cookie delete
-			}
-		}
-	}
-	log waf {
-		include http.handlers.waf
-		level ERROR
-		format filter {
-			wrap console
-			fields {
-				uri regexp \?.*$ ""
+				request>headers delete
+				resp_headers delete
 			}
 		}
 	}
@@ -66,12 +51,8 @@
 			wrap console
 			fields {
 				request>uri regexp \?.*$ ""
-				request>headers>Referer delete
-				request>headers>Cookie delete
-				request>headers>Authorization delete
-				request>headers>Proxy-Authorization delete
-				request>headers>X-Xsrf-Token delete
-				resp_headers>Set-Cookie delete
+				request>headers delete
+				resp_headers delete
 			}
 		}
 		level {$LOG_LEVEL}
