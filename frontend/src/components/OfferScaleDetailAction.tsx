@@ -9,7 +9,7 @@ import {
   TableHeader,
   TableRow,
 } from '@carbon/react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Modal from '@/components/Modal'
 import TableFrame from '@/components/TableFrame'
 import { useAuth } from '@/context/auth/useAuth'
@@ -119,9 +119,15 @@ const ScaleDetailDialog = ({
 
 const ScaleDetailAction = ({ target, disabled }: OfferScaleDetailActionProps) => {
   const [open, setOpen] = useState(false)
+  const launcherRef = useRef<HTMLButtonElement>(null)
+  const closeDialog = () => {
+    setOpen(false)
+    launcherRef.current?.focus()
+  }
   return (
     <>
       <Button
+        ref={launcherRef}
         type="button"
         kind="ghost"
         size="sm"
@@ -130,7 +136,7 @@ const ScaleDetailAction = ({ target, disabled }: OfferScaleDetailActionProps) =>
       >
         See Scale Detail
       </Button>
-      {open && <ScaleDetailDialog target={target} onClose={() => setOpen(false)} />}
+      {open && <ScaleDetailDialog target={target} onClose={closeDialog} />}
     </>
   )
 }

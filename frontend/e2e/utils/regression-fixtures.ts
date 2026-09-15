@@ -6,6 +6,7 @@ type RegressionReferences = {
   locationCode: string
   regionCode: string
   timberMark: string
+  endUseCode: string
 }
 
 type ValidationResult = {
@@ -59,7 +60,7 @@ const regressionSubmissionXml = (
       <lexis:productDetail>
         <lexis:productTypeCode>H</lexis:productTypeCode>
         <lexis:boomNumber>${escapeXml(packageNumber)}</lexis:boomNumber>
-        <lexis:speciesEndUseSort>HE/PL</lexis:speciesEndUseSort>
+        <lexis:speciesEndUseSort>HE/${escapeXml(references.endUseCode)}</lexis:speciesEndUseSort>
         <lexis:productLocation>LEXIS E2E REGRESSION</lexis:productLocation>
         <lexis:ageClass>S</lexis:ageClass>
         <lexis:avgLength>6.7</lexis:avgLength>
@@ -120,7 +121,12 @@ export const regressionSubmissionFile = (packageNumber: string, xml: string) => 
 export const resolveRegressionSubmission = async (
   page: Page,
   packageNumber: string,
-): Promise<{ ownerClientNumber: string; xml: string; validation: ValidationResult }> => {
+): Promise<{
+  ownerClientNumber: string
+  endUseCode: string
+  xml: string
+  validation: ValidationResult
+}> => {
   const search = await readReferenceJson<{ results: { application: number }[] }>(
     await getWithAuth(page, '/api/lexis/applications/search', {
       params: {
@@ -136,6 +142,7 @@ export const resolveRegressionSubmission = async (
     }),
   )
   const checked = new Set<string>()
+  const endUseByRegion = new Map<string, string>()
   for (const row of search.results.slice(0, referenceSearchLimit)) {
     const params = { applicationNumber: String(row.application) }
     const summary = await readReferenceJson<{
@@ -149,13 +156,24 @@ export const resolveRegressionSubmission = async (
     const locationCode = summary.ownerClientLocationCode?.trim() ?? ''
     const regionCode = regionCodeByOrgUnit[String(summary.orgUnitNumber)]
     if (!clientNumber || !locationCode || !regionCode) continue
+    if (!endUseByRegion.has(regionCode)) {
+      // Resolve the synthetic HE sort from current reference codes, not a historical package.
+      const endUses = await readReferenceJson<{ code: string }[]>(
+        await getWithAuth(page, '/api/lexis/rpc/application-details/end-uses-for-species-region', {
+          params: { orgUnitNumber: String(summary.orgUnitNumber), speciesJSON: '["HE"]' },
+        }),
+      )
+      endUseByRegion.set(regionCode, endUses.find((item) => item.code?.trim())?.code.trim() ?? '')
+    }
+    const endUseCode = endUseByRegion.get(regionCode)!
+    if (!endUseCode) continue
     const scales = await readReferenceJson<{ timberMark: string }[]>(
       await getWithAuth(page, '/api/lexis/rpc/application-details/unique-scales', { params }),
     )
     for (const scale of scales) {
       const timberMark = scale.timberMark?.trim()
       if (!timberMark) continue
-      const references = { clientNumber, locationCode, regionCode, timberMark }
+      const references = { clientNumber, locationCode, regionCode, timberMark, endUseCode }
       const key = JSON.stringify(references)
       if (checked.has(key)) continue
       if (checked.size >= referenceSearchLimit) break
@@ -169,7 +187,7 @@ export const resolveRegressionSubmission = async (
       }
       const validation = (await response.json()) as ValidationResult
       if (response.status() === 200 && validation.status === 'validated') {
-        return { ownerClientNumber: clientNumber, xml, validation }
+        return { ownerClientNumber: clientNumber, endUseCode, xml, validation }
       }
       if (
         response.status() !== 422 ||
@@ -184,6 +202,6 @@ export const resolveRegressionSubmission = async (
     if (checked.size >= referenceSearchLimit) break
   }
   throw new Error(
-    'Regression reference data unavailable: no valid client/location/region/timber mark combination in the bounded lookup. LEXIS cannot provision CLIENT/FTA master data.',
+    'Regression reference data unavailable: no valid client/location/region/end-use/timber mark combination in the bounded lookup. LEXIS cannot provision CLIENT/FTA master data.',
   )
 }

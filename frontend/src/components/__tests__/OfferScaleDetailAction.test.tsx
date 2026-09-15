@@ -33,7 +33,28 @@ describe('Offer scale details', () => {
     expect(await screen.findByText('No scale details found for this package.')).toBeInTheDocument()
     await userEvent.keyboard('{Escape}')
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'See Scale Detail' })).toHaveFocus()
   })
+
+  it.each(['Close', 'Close scale details'])(
+    'returns focus to the matching launcher after %s',
+    async (name) => {
+      render(
+        <>
+          <OfferScaleDetailAction target={{ packageNumber: 'PKG-1' }} />
+          <OfferScaleDetailAction target={{ packageNumber: 'PKG-2' }} />
+        </>,
+      )
+      const launchers = screen.getAllByRole('button', { name: 'See Scale Detail' })
+      await userEvent.click(launchers[1])
+      expect(
+        await screen.findByText('No scale details found for this package.'),
+      ).toBeInTheDocument()
+      await userEvent.click(screen.getByRole('button', { name }))
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      expect(launchers[1]).toHaveFocus()
+    },
+  )
 
   it('forwards an exact stored package key without normalizing it', async () => {
     const storedPackageNumber = 'PKG-EXISTING  '
