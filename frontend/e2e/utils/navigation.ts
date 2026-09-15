@@ -22,6 +22,10 @@ export const gotoWithRecovery = async (
   let attempt = 0
   let lastReason = 'document transport failure'
 
+  const isSessionBootstrap = (request: Request): boolean =>
+    ['fetch', 'xhr'].includes(request.resourceType()) &&
+    new URL(request.url()).pathname === '/api/lexis/session/capabilities'
+
   const isFrontendResource = (request: Request): boolean => {
     const resourceUrl = new URL(request.url())
     return (
@@ -29,7 +33,7 @@ export const gotoWithRecovery = async (
       resourceUrl.origin === origin &&
       (['document', 'script', 'stylesheet'].includes(request.resourceType()) ||
         resourceUrl.pathname === '/config.js' ||
-        resourceUrl.pathname === '/api/lexis/session/capabilities')
+        isSessionBootstrap(request))
     )
   }
 
@@ -68,6 +72,9 @@ export const gotoWithRecovery = async (
     }
     const onResponse = (response: Response) => {
       if (!attemptRequests.has(response.request())) return
+      // An expired session legitimately renders the login shell. Its readiness assertion
+      // still fails if the caller requires authenticated content instead of the login button.
+      if (response.status() === 401 && isSessionBootstrap(response.request())) return
       if (GATEWAY_STATUSES.has(response.status())) {
         interruptedResource = true
         // Chromium can also report ERR_ABORTED for this same unsuccessful resource.

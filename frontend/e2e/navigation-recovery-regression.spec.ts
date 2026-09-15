@@ -232,15 +232,29 @@ test.describe('navigation transport recovery', () => {
     expect(documents).toBe(1)
   })
 
-  test('logs in through the accessible IDIR button when its test id is absent', async ({
+  test('logs in through the accessible IDIR button after a signed-out capabilities response', async ({
     page,
   }) => {
     let documents = 0
+    let probes = 0
     await page.route('**/*', async (route) => {
+      if (new URL(route.request().url()).pathname === '/api/lexis/session/capabilities') {
+        probes += 1
+        await route.fulfill({ status: 401, json: { authenticated: false } })
+        return
+      }
       documents += 1
       await route.fulfill({
         contentType: 'text/html',
-        body: '<div id="root"><button onclick="this.outerHTML = \'<nav id=side-navigation>Signed in</nav>\'">Log in with IDIR</button></div>',
+        body: `<div id="root">Loading</div><script>
+          fetch('/api/lexis/session/capabilities').then((response) => {
+            if (response.status !== 401) throw new Error('Expected signed-out response')
+            document.getElementById('root').innerHTML = '<button id="login">Log in with IDIR</button>'
+            document.getElementById('login').onclick = () => {
+              document.getElementById('root').innerHTML = '<nav id="side-navigation">Signed in</nav>'
+            }
+          })
+        </script>`,
       })
     })
 
@@ -259,6 +273,7 @@ test.describe('navigation transport recovery', () => {
       await loginWithIdir(page)
       await expect(page.locator('#side-navigation')).toHaveText('Signed in')
       expect(documents).toBe(1)
+      expect(probes).toBe(1)
     } finally {
       page.request.get = originalGet
     }

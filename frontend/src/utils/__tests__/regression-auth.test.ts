@@ -84,10 +84,14 @@ describe('getWithAuth', () => {
     },
   )
 
-  it('retries a transient transport failure before returning the response', async () => {
+  it.each([
+    'apiRequestContext.get: connect ETIMEDOUT',
+    'apiRequestContext.get: getaddrinfo ENOTFOUND synthetic.example.test',
+    'apiRequestContext.get: Timeout 30000ms exceeded.',
+  ])('recovers a read after %s', async (message) => {
     const get = vi
       .fn()
-      .mockRejectedValueOnce(new Error('apiRequestContext.get: connect ETIMEDOUT'))
+      .mockRejectedValueOnce(new Error(message))
       .mockResolvedValue(successfulResponse)
     const { page, waitForTimeout } = pageWithGet(get)
 
@@ -96,6 +100,19 @@ describe('getWithAuth', () => {
     )
     expect(get).toHaveBeenCalledTimes(2)
     expect(waitForTimeout).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    'apiRequestContext.get: getaddrinfo ENOTFOUND synthetic.example.test',
+    'apiRequestContext.get: Timeout 30000ms exceeded.',
+  ])('stops a persistent %s after four reads', async (message) => {
+    const error = new Error(message)
+    const get = vi.fn().mockRejectedValue(error)
+    const { page, waitForTimeout } = pageWithGet(get)
+
+    await expect(getWithAuth(page, '/api/lexis/probe')).rejects.toBe(error)
+    expect(get).toHaveBeenCalledTimes(4)
+    expect(waitForTimeout).toHaveBeenCalledTimes(3)
   })
 
   it('does not retry a non-transport failure', async () => {
@@ -340,6 +357,7 @@ describe('mutating regression requests', () => {
   it.each([
     'apiRequestContext.post: read ECONNRESET',
     'apiRequestContext.post: Timeout 30000ms exceeded.',
+    'apiRequestContext.post: getaddrinfo ENOTFOUND synthetic.example.test',
     'apiRequestContext.post: socket hang up\nCall log:\n - data: connect ECONNREFUSED',
     'request payload could not be serialized',
   ])('does not replay an ambiguous or non-connection failure: %s', async (message) => {

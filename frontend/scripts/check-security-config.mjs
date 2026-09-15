@@ -257,6 +257,19 @@ SecRule REQUEST_URI "@beginsWith /waf-critical-probe" "id:990001,phase:1,deny,st
     }
   }
   await delay(100)
+  const auditSections = [...logs.matchAll(/--[a-zA-Z0-9]+-([A-Z])--\n/g)].map((match) => match[1])
+  assert.deepEqual([...new Set(auditSections)].sort(), ['A', 'K', 'Z'])
+  const auditRecords = [
+    ...logs.matchAll(/--([a-zA-Z0-9]+)-A--\n([^\n]*)\n--\1-K--\n[\s\S]*?--\1-Z--/g),
+  ]
+  assert.equal(auditRecords.length, auditSections.filter((section) => section === 'A').length)
+  for (const [, , header] of auditRecords) {
+    assert.match(
+      header,
+      /^\[[^\]\r\n]+\] [a-zA-Z0-9]+ [\da-fA-F.:]+ \d+ [\da-fA-F.:]* \d+$/,
+      'Native audit part A must contain only timestamp, transaction ID and connection metadata',
+    )
+  }
   for (const marker of markers)
     assert.ok(!logs.includes(marker), `Sensitive marker in logs: ${marker}`)
   assert.doesNotMatch(

@@ -74,7 +74,7 @@ const ACCESS_TOKEN_ACTIVITY_REFRESH_TIMEOUT_MS = (ACCESS_TOKEN_REFRESH_WINDOW_SE
 const ACCESS_TOKEN_RELOAD_REFRESH_TIMEOUT_MS = 30_000
 const JWT_PATTERN = /^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/
 const TRANSIENT_REQUEST_ERROR =
-  /\b(?:EAI_AGAIN|ECONNREFUSED|ECONNRESET|EHOSTUNREACH|ENETUNREACH|ETIMEDOUT)\b|socket hang up|network socket disconnected/i
+  /\b(?:EAI_AGAIN|ECONNREFUSED|ECONNRESET|EHOSTUNREACH|ENETUNREACH|ENOTFOUND|ETIMEDOUT)\b|socket hang up|network socket disconnected|apiRequestContext\.get: Timeout \d+ms exceeded/i
 const CONNECTION_NOT_ESTABLISHED =
   /^apiRequestContext\.(?:post|put|delete): connect ECONNREFUSED\b/i
 const LOGIN_ERROR_TEXT =
