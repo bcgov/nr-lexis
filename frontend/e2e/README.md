@@ -30,13 +30,21 @@ regression coverage uses a separate TEST-only Playwright config.
 - Required `test` environment secrets:
   - `E2E_IDIR_USER`
   - `E2E_IDIR_PASSWORD`
-  - `E2E_REGRESSION_CLIENT_NUMBER`
-  - `E2E_REGRESSION_CLIENT_LOCATION_CODE`
-  - `E2E_REGRESSION_LEGACY_REGION_CODE`
-  - `E2E_REGRESSION_TIMBER_MARK`
-- Configure approved TEST fixture identifiers as secrets, not ordinary GitHub variables. No business
-  identifiers are supplied as defaults. The workflow fails before running tests if a secret is
-  missing; local credentialed runs validate the fixture configuration before signing in.
+- No fixture identifiers need configuring. Each lifecycle run creates unique applications, packages,
+  scales, offers, exemptions and permits through the normal APIs. Cleanup runs after success or
+  failure: it removes packages/scales and terminalizes records retained by the business APIs.
+  Existing records are never mutation targets.
+- CLIENT/FTA master records are external reference data; LEXIS has lookup and validation APIs but
+  cannot create clients, locations or timber authorities. The lifecycle reads reference keys from up
+  to 25 recent packaged provincial applications and checks up to 25 distinct combinations with the
+  read-only submission validator. Names, contacts and quantities in the new records are synthetic.
+  Only explicit unavailable-reference errors permit trying another candidate; other validation or
+  API failures fail immediately. Reference values stay in memory and out of public output.
+- An environment with no usable external references cannot run this lifecycle until its CLIENT/FTA
+  data is provisioned. This fails the lifecycle check without blocking unrelated IDIR checks.
+  Current list-date schedules and shipping code tables are also read at runtime. A fully empty
+  environment needs those external/reference services seeded by their owners; the regression account
+  does not gain database or external-registry write access.
 - The IDIR suite asserts the account establishes an authenticated session, has admin grants, can
   reach representative UI/API contracts, and can validate/submit/review/clean fresh TEST application
   data at runtime.
@@ -74,10 +82,9 @@ regression coverage uses a separate TEST-only Playwright config.
   exceptions, headers, assertion values, page contents, attachments, and arbitrary test
   stdout/stderr are suppressed. Keep test names free of business data. Do not override this reporter
   for credentialed public runs or enable debug output.
-- Credentials and fixture values are supplied only to the validation/test steps as GitHub secrets.
-  Traces, screenshots, videos, HTML reports, and artifact uploads remain disabled for credentialed
-  runs. Detailed debugging belongs in a controlled synthetic reproduction or an approved private
-  channel. See
+- Credentials are supplied only to the validation/test steps as GitHub secrets. Traces, screenshots,
+  videos, HTML reports, and artifact uploads remain disabled for credentialed runs. Detailed
+  debugging belongs in a controlled synthetic reproduction or an approved private channel. See
   [GitHub's secure-use guidance](https://docs.github.com/en/actions/reference/security/secure-use).
 - The Chromium job retains `continue-on-error` so the separate **TEST Regression Result** job can
   report the outcome outside the deployment environment. A green Chromium job alone is not a pass.
@@ -115,8 +122,8 @@ E2E_BASE_URL=https://nr-lexis-test.apps.gold.devops.gov.bc.ca npm run e2e:regres
 E2E_BASE_URL=https://nr-lexis-test.apps.gold.devops.gov.bc.ca npm run e2e:regression:idir
 ```
 
-For local `e2e:regression` runs, export the same `E2E_IDIR_*` credentials and `E2E_REGRESSION_*`
-fixture settings in your shell from approved secure sources.
+For local `e2e:regression` runs, export the same `E2E_IDIR_*` credentials in your shell from
+approved secure sources. No `E2E_REGRESSION_*` fixture settings are used.
 
 The transport recovery checks intercept every page request and need no credentials or running app.
 They cover a refused document, an interrupted configuration script, an interrupted lazy page module,

@@ -21,6 +21,7 @@ import {
 } from './utils/regression-auth'
 import { E2E_BASE_URL } from './utils'
 import { gotoWithRecovery } from './utils/navigation'
+import { regressionSubmissionFile, resolveRegressionSubmission } from './utils/regression-fixtures'
 import { businessDateParts, formatBusinessIsoDate, formatIsoDateParts } from '../src/utils/date'
 
 const sideNavSection = (name: string) =>
@@ -420,12 +421,6 @@ const advertisingListReportEndpoint = '/api/lexis/reports/biweeklyListing'
 const recordVersionHeader = 'X-Lexis-Record-Version'
 const regressionEndUseCode = 'PL'
 const regressionSpeciesCode = 'HE'
-const regressionOwnerClientNumber = process.env.E2E_REGRESSION_CLIENT_NUMBER?.trim() ?? ''
-const regressionOwnerClientLocationCode =
-  process.env.E2E_REGRESSION_CLIENT_LOCATION_CODE?.trim() ?? ''
-const regressionLegacyRegionCode =
-  process.env.E2E_REGRESSION_LEGACY_REGION_CODE?.trim().toUpperCase() ?? ''
-const regressionTimberMark = process.env.E2E_REGRESSION_TIMBER_MARK?.trim().toUpperCase() ?? ''
 
 const uniqueRegressionFutureDate = (salt = 0): string => {
   const rawSeed = process.env.GITHUB_RUN_ID ?? Date.now().toString()
@@ -597,83 +592,6 @@ const uniqueRegressionPackageNumber = (): string => {
     .slice(0, 4)
   return `E2E-${timestamp}-${suffix}`
 }
-
-const validateRegressionFixtureConfig = (): void => {
-  const invalidNames: string[] = []
-  if (!/^\d{8}$/.test(regressionOwnerClientNumber)) {
-    invalidNames.push('E2E_REGRESSION_CLIENT_NUMBER')
-  }
-  if (!/^[A-Z0-9]{2}$/i.test(regressionOwnerClientLocationCode)) {
-    invalidNames.push('E2E_REGRESSION_CLIENT_LOCATION_CODE')
-  }
-  if (!/^[A-Z0-9]{3}$/.test(regressionLegacyRegionCode)) {
-    invalidNames.push('E2E_REGRESSION_LEGACY_REGION_CODE')
-  }
-  if (!/^[A-Z0-9 -]{1,10}$/.test(regressionTimberMark)) {
-    invalidNames.push('E2E_REGRESSION_TIMBER_MARK')
-  }
-  if (invalidNames.length > 0) {
-    throw new Error(`Invalid TEST regression fixture configuration: ${invalidNames.join(', ')}`)
-  }
-}
-
-const regressionSubmissionXml = (
-  packageNumber: string,
-): string => `<?xml version="1.0" encoding="UTF-8"?>
-<esf:ESFSubmission xmlns:lexis="http://www.for.gov.bc.ca/schema/lexis" xmlns:esf="http://www.for.gov.bc.ca/schema/esf" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.for.gov.bc.ca/schema/esf http://www.for.gov.bc.ca/schema/esf/1/xsd/MOF/esf-submission.xsd http://www.for.gov.bc.ca/schema/lexis http://www.for.gov.bc.ca/schema/lexis/2/xsd/MOF/mof-lexis.xsd">
-  <esf:submissionContent>
-    <lexis:LexisSubmission>
-      <lexis:applicant>
-        <lexis:applicantDetails>
-          <lexis:clientNumber>${regressionOwnerClientNumber}</lexis:clientNumber>
-          <lexis:clientLocnCode>${regressionOwnerClientLocationCode}</lexis:clientLocnCode>
-          <lexis:name>LEXIS E2E REGRESSION</lexis:name>
-        </lexis:applicantDetails>
-        <lexis:applicantContact>
-          <lexis:contactSurname>REGRESSION</lexis:contactSurname>
-          <lexis:contactFirstname>E2E</lexis:contactFirstname>
-        </lexis:applicantContact>
-      </lexis:applicant>
-      <lexis:applicationDetail>
-        <lexis:jurisdictionCode>P</lexis:jurisdictionCode>
-        <lexis:bcForestRegionCode>${regressionLegacyRegionCode}</lexis:bcForestRegionCode>
-        <lexis:applStatusCode>A</lexis:applStatusCode>
-        <lexis:exemptionRsnCde>S</lexis:exemptionRsnCde>
-        <lexis:applicantTypeCode>O</lexis:applicantTypeCode>
-      </lexis:applicationDetail>
-      <lexis:productDetail>
-        <lexis:productTypeCode>H</lexis:productTypeCode>
-        <lexis:boomNumber>${packageNumber}</lexis:boomNumber>
-        <lexis:speciesEndUseSort>HE/PL</lexis:speciesEndUseSort>
-        <lexis:productLocation>LEXIS E2E REGRESSION</lexis:productLocation>
-        <lexis:ageClass>S</lexis:ageClass>
-        <lexis:avgLength>6.7</lexis:avgLength>
-        <lexis:avgDiameter>12.8</lexis:avgDiameter>
-        <lexis:harvestedTimber>
-          <lexis:timberMark>${regressionTimberMark}</lexis:timberMark>
-          <lexis:numberOfPieces>1500</lexis:numberOfPieces>
-          <lexis:species>HE</lexis:species>
-          <lexis:grade>H</lexis:grade>
-          <lexis:quantityVolume>500</lexis:quantityVolume>
-        </lexis:harvestedTimber>
-        <lexis:harvestedTimber>
-          <lexis:timberMark>${regressionTimberMark}</lexis:timberMark>
-          <lexis:numberOfPieces>50</lexis:numberOfPieces>
-          <lexis:species>HE</lexis:species>
-          <lexis:grade>J</lexis:grade>
-          <lexis:quantityVolume>24.5</lexis:quantityVolume>
-        </lexis:harvestedTimber>
-        <lexis:harvestedTimber>
-          <lexis:timberMark>${regressionTimberMark}</lexis:timberMark>
-          <lexis:numberOfPieces>1</lexis:numberOfPieces>
-          <lexis:species>FI</lexis:species>
-          <lexis:grade>J</lexis:grade>
-          <lexis:quantityVolume>0.5</lexis:quantityVolume>
-        </lexis:harvestedTimber>
-      </lexis:productDetail>
-    </lexis:LexisSubmission>
-  </esf:submissionContent>
-</esf:ESFSubmission>`
 
 const antivirusTestPayloadHex =
   '58354f2150254041505b345c505a58353428505e2937434329377d2445494341522d5354414e444152442d414e544956495255532d544553542d46494c452124482b482a'
@@ -1496,25 +1414,6 @@ const readReportBody = async (response: APIResponse, source: string): Promise<Bu
   return body
 }
 
-const postRegressionSubmission = async (
-  page: Page,
-  path: string,
-  packageNumber: string,
-): Promise<ApplicationSubmissionResponse> => {
-  return readJsonResponse<ApplicationSubmissionResponse>(
-    await postWithCsrf(page, path, {
-      multipart: {
-        userReference: `E2E regression ${packageNumber}`,
-        file: {
-          name: `${packageNumber}.xml`,
-          mimeType: 'application/xml',
-          buffer: Buffer.from(regressionSubmissionXml(packageNumber), 'utf8'),
-        },
-      },
-    }),
-  )
-}
-
 const postRegressionApplicationSubmissionFile = async (
   page: Page,
   path: string,
@@ -1715,8 +1614,6 @@ test.describe('TEST IDIR admin regression', () => {
         `Credentialed IDIR regression is blocked for ${safeUrlForLog(E2E_BASE_URL)}. Use localhost, DEV, TEST, or a numeric PR preview route.`,
       )
     }
-    validateRegressionFixtureConfig()
-
     idirContext = await browser.newContext()
     idirPage = await idirContext.newPage()
     await redirectExternalLogoutToLoginShell(idirPage)
@@ -3823,19 +3720,20 @@ test.describe('TEST IDIR admin regression', () => {
         shipping: await shippingFixture(page),
       }))
 
-      const validationResult = await test.step('validate the XML application submission', () =>
-        postRegressionSubmission(
-          page,
-          '/api/lexis/application-submissions/validation',
-          packageNumber,
-        ))
-      expect(validationResult.status).toBe('validated')
-      expect(validationResult.packageNumber).toBe(packageNumber)
-      expect(validationResult.scaleRows).toBe(3)
-      expect(asStringArray(validationResult.errors)).toEqual([])
+      const submission =
+        await test.step('resolve references and validate a fresh XML submission', () =>
+          resolveRegressionSubmission(page, packageNumber))
+      expect(submission.validation.status).toBe('validated')
+      expect(submission.validation.packageNumber).toBe(packageNumber)
+      expect(submission.validation.scaleRows).toBe(3)
+      expect(asStringArray(submission.validation.errors)).toEqual([])
 
-      const submissionResult = await test.step('import the lifecycle application', () =>
-        postRegressionSubmission(page, '/api/lexis/application-submissions', packageNumber))
+      const submissionResult = await test.step('import the lifecycle application', async () =>
+        readJsonResponse<ApplicationSubmissionResponse>(
+          await postWithCsrf(page, '/api/lexis/application-submissions', {
+            multipart: regressionSubmissionFile(packageNumber, submission.xml),
+          }),
+        ))
       expect(submissionResult.status).toBe('accepted')
       expect(submissionResult.packageNumber).toBe(packageNumber)
       expect(submissionResult.scaleRows).toBe(3)
@@ -3941,8 +3839,8 @@ test.describe('TEST IDIR admin regression', () => {
               packageNumber: '',
               companyName: 'LEXIS E2E REGRESSION',
               contactName: offerMarker,
-              offeringClientNumber: regressionOwnerClientNumber,
-              clientNumber: regressionOwnerClientNumber,
+              offeringClientNumber: submission.ownerClientNumber,
+              clientNumber: submission.ownerClientNumber,
               offerVolume: '1.24',
               purchaseOfferAmount: '100',
               teacReviewDate: '',

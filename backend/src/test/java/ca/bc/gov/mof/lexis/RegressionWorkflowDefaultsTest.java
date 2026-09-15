@@ -24,11 +24,6 @@ class RegressionWorkflowDefaultsTest {
         .contains("test environment secret is required")
         .contains("for required_name in E2E_IDIR_USER E2E_IDIR_PASSWORD")
         .contains("if [[ -z \"${!required_name}\" ]]")
-        .contains("E2E_REGRESSION_CLIENT_NUMBER: ${{ secrets.E2E_REGRESSION_CLIENT_NUMBER }}")
-        .contains(
-            "E2E_REGRESSION_CLIENT_LOCATION_CODE: ${{ secrets.E2E_REGRESSION_CLIENT_LOCATION_CODE }}")
-        .contains("E2E_REGRESSION_LEGACY_REGION_CODE: ${{ secrets.E2E_REGRESSION_LEGACY_REGION_CODE }}")
-        .contains("E2E_REGRESSION_TIMBER_MARK: ${{ secrets.E2E_REGRESSION_TIMBER_MARK }}")
         .contains("permissions: {}")
         .contains("contents: read")
         .contains("persist-credentials: false")
@@ -43,7 +38,7 @@ class RegressionWorkflowDefaultsTest {
         .doesNotContain("playwright install")
         .doesNotContain("npm run e2e:regression")
         .doesNotContain("--reporter=html,list")
-        .doesNotContain("vars.E2E_REGRESSION_")
+        .doesNotContain("E2E_REGRESSION_")
         .doesNotContain("pull_request:")
         .doesNotContain("pull_request_target:")
         .doesNotContain("E2E_BCEID")
@@ -96,17 +91,15 @@ class RegressionWorkflowDefaultsTest {
   }
 
   @Test
-  void regressionSpecShouldRequirePrivateFixtureConfigurationBeforeOpeningTheBrowser()
-      throws IOException {
+  void regressionSpecShouldResolveReferencesInsideTheOwnedRecordLifecycle() throws IOException {
     String spec = Files.readString(resolveRegressionSpec());
 
     assertThat(spec)
-        .contains("process.env.E2E_REGRESSION_CLIENT_NUMBER?.trim() ?? ''")
-        .contains("process.env.E2E_REGRESSION_CLIENT_LOCATION_CODE?.trim() ?? ''")
-        .contains("process.env.E2E_REGRESSION_LEGACY_REGION_CODE?.trim().toUpperCase() ?? ''")
-        .contains("process.env.E2E_REGRESSION_TIMBER_MARK?.trim().toUpperCase() ?? ''")
-        .contains(
-            "validateRegressionFixtureConfig()\n\n    idirContext = await browser.newContext()");
+        .doesNotContain("process.env.E2E_REGRESSION_")
+        .doesNotContain("validateRegressionFixtureConfig")
+        .contains("resolveRegressionSubmission(page, packageNumber)")
+        .contains("regressionSubmissionFile(packageNumber, submission.xml)")
+        .contains("cleanupRegressionPackage(page, lifecycleApplicationNumber, packageNumber)");
   }
 
   @Test
