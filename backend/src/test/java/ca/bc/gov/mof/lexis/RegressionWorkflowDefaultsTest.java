@@ -22,21 +22,30 @@ class RegressionWorkflowDefaultsTest {
         .contains("E2E_IDIR_USER: ${{ secrets.E2E_IDIR_USER }}")
         .contains("E2E_IDIR_PASSWORD: ${{ secrets.E2E_IDIR_PASSWORD }}")
         .contains("test environment secret is required")
-        .contains("test -n \"$E2E_IDIR_USER\"")
-        .contains("test -n \"$E2E_IDIR_PASSWORD\"")
-        .contains("::add-mask::$E2E_IDIR_USER")
-        .contains("::add-mask::$E2E_IDIR_PASSWORD")
+        .contains("for required_name in E2E_IDIR_USER E2E_IDIR_PASSWORD")
+        .contains("if [[ -z \"${!required_name}\" ]]")
+        .contains("E2E_REGRESSION_CLIENT_NUMBER: ${{ secrets.E2E_REGRESSION_CLIENT_NUMBER }}")
+        .contains(
+            "E2E_REGRESSION_CLIENT_LOCATION_CODE: ${{ secrets.E2E_REGRESSION_CLIENT_LOCATION_CODE }}")
+        .contains("E2E_REGRESSION_LEGACY_REGION_CODE: ${{ secrets.E2E_REGRESSION_LEGACY_REGION_CODE }}")
+        .contains("E2E_REGRESSION_TIMBER_MARK: ${{ secrets.E2E_REGRESSION_TIMBER_MARK }}")
+        .contains("permissions: {}")
+        .contains("contents: read")
+        .contains("persist-credentials: false")
         .contains("image: mcr.microsoft.com/playwright:v1.60.0-noble")
         .contains("shell: bash")
         .contains("npx playwright test \\")
         .contains("--config=playwright.regression.config.ts")
         .contains("--project=${{ matrix.project }}")
-        .contains("--reporter=line")
+        .contains("--reporter=./e2e/safe-regression-reporter.ts")
         .doesNotContain("actions/upload-artifact")
         .doesNotContain("playwright-report")
         .doesNotContain("playwright install")
         .doesNotContain("npm run e2e:regression")
         .doesNotContain("--reporter=html,list")
+        .doesNotContain("vars.E2E_REGRESSION_")
+        .doesNotContain("pull_request:")
+        .doesNotContain("pull_request_target:")
         .doesNotContain("E2E_BCEID")
         .doesNotContain("BCEID_PASSWORD")
         .doesNotContain("BCEID_USER");
@@ -61,7 +70,7 @@ class RegressionWorkflowDefaultsTest {
 
     assertThat(config)
         .contains("testMatch: /regression\\.spec\\.ts/")
-        .contains("reporter: [['line']]")
+        .contains("reporter: [['./e2e/safe-regression-reporter.ts']]")
         .contains("trace: 'off'")
         .contains("screenshot: 'off'")
         .contains("video: 'off'");
@@ -84,6 +93,20 @@ class RegressionWorkflowDefaultsTest {
     assertThat(spec)
         .contains("test.describe('TEST IDIR admin regression'")
         .doesNotContain("test.describe.serial('TEST IDIR admin regression'");
+  }
+
+  @Test
+  void regressionSpecShouldRequirePrivateFixtureConfigurationBeforeOpeningTheBrowser()
+      throws IOException {
+    String spec = Files.readString(resolveRegressionSpec());
+
+    assertThat(spec)
+        .contains("process.env.E2E_REGRESSION_CLIENT_NUMBER?.trim() ?? ''")
+        .contains("process.env.E2E_REGRESSION_CLIENT_LOCATION_CODE?.trim() ?? ''")
+        .contains("process.env.E2E_REGRESSION_LEGACY_REGION_CODE?.trim().toUpperCase() ?? ''")
+        .contains("process.env.E2E_REGRESSION_TIMBER_MARK?.trim().toUpperCase() ?? ''")
+        .contains(
+            "validateRegressionFixtureConfig()\n\n    idirContext = await browser.newContext()");
   }
 
   @Test

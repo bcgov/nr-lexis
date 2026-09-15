@@ -1,6 +1,11 @@
 import type { APIResponse, Page } from '@playwright/test'
-import { describe, expect, it, vi } from 'vitest'
-import { getWithAuth } from '../../../e2e/utils/regression-auth'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+  deleteWithCsrf,
+  getWithAuth,
+  postWithCsrf,
+  putWithCsrf,
+} from '../../../e2e/utils/regression-auth'
 
 const successfulResponse = { status: () => 200 } as APIResponse
 
@@ -239,4 +244,105 @@ describe('getWithAuth', () => {
     expect(reload).not.toHaveBeenCalled()
     expect(unauthorized.dispose).not.toHaveBeenCalled()
   })
+})
+
+describe('mutating regression requests', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-09-14T21:52:00Z'))
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+  })
+
+  it.each([
+    { method: 'post', send: postWithCsrf },
+    { method: 'put', send: putWithCsrf },
+    { method: 'delete', send: deleteWithCsrf },
+  ])(
+    'recovers $method only when the connection was refused before sending',
+    async ({ method, send }) => {
+      const request = vi
+        .fn()
+        .mockRejectedValueOnce(new Error(`apiRequestContext.${method}: connect ECONNREFUSED`))
+        .mockResolvedValue(successfulResponse)
+      const { page } = pageWithGet(vi.fn(), { advanceTimersWhenWaiting: true })
+      Object.assign(page.request, { [method]: request })
+
+      await expect(send(page, '/api/lexis/fixture')).resolves.toBe(successfulResponse)
+      expect(request).toHaveBeenCalledTimes(2)
+      // A redirect must be returned as a response: a failed connection after following it
+      // would no longer establish that the original mutation was never sent.
+      expect(request).toHaveBeenLastCalledWith(
+        '/api/lexis/fixture',
+        expect.objectContaining({
+          maxRedirects: 0,
+          maxRetries: 0,
+          failOnStatusCode: false,
+        }),
+      )
+    },
+  )
+
+  it('survives the observed connection outage without rerunning the surrounding report test', async () => {
+    const start = Date.now()
+    const request = vi.fn(async () => {
+      if (Date.now() - start < 110_000) {
+        vi.advanceTimersByTime(10_000)
+        throw new Error('apiRequestContext.post: connect ECONNREFUSED')
+      }
+      return successfulResponse
+    })
+    const { page } = pageWithGet(vi.fn(), { advanceTimersWhenWaiting: true })
+    Object.assign(page.request, { post: request })
+    await expect(postWithCsrf(page, '/api/lexis/reports/transportReport')).resolves.toBe(
+      successfulResponse,
+    )
+    expect(Date.now() - start).toBeGreaterThanOrEqual(110_000)
+    expect(Date.now() - start).toBeLessThan(150_000)
+  })
+
+  it('fails after the bounded connection-recovery window', async () => {
+    const start = Date.now()
+    const request = vi
+      .fn()
+      .mockRejectedValue(new Error('apiRequestContext.post: connect ECONNREFUSED'))
+    const { page } = pageWithGet(vi.fn(), { advanceTimersWhenWaiting: true })
+    Object.assign(page.request, { post: request })
+    await expect(postWithCsrf(page, '/api/lexis/fixture')).rejects.toThrow(
+      'did not recover within 150s',
+    )
+    expect(Date.now() - start).toBe(150_000)
+  })
+
+  it.each([
+    'apiRequestContext.post: read ECONNRESET',
+    'apiRequestContext.post: Timeout 30000ms exceeded.',
+    'apiRequestContext.post: socket hang up\nCall log:\n - data: connect ECONNREFUSED',
+    'request payload could not be serialized',
+  ])('does not replay an ambiguous or non-connection failure: %s', async (message) => {
+    const error = new Error(message)
+    const request = vi.fn().mockRejectedValue(error)
+    const { page, waitForTimeout } = pageWithGet(vi.fn(), { advanceTimersWhenWaiting: true })
+    Object.assign(page.request, { post: request })
+    await expect(postWithCsrf(page, '/api/lexis/fixture')).rejects.toBe(error)
+    expect(request).toHaveBeenCalledTimes(1)
+    expect(waitForTimeout).not.toHaveBeenCalled()
+  })
+
+  it.each([302, 401, 403, 409, 500, 502, 503])(
+    'does not replay an HTTP %s response',
+    async (status) => {
+      const response = { status: () => status } as APIResponse
+      const request = vi.fn().mockResolvedValue(response)
+      const { page, waitForTimeout } = pageWithGet(vi.fn(), { advanceTimersWhenWaiting: true })
+      Object.assign(page.request, { post: request })
+      await expect(postWithCsrf(page, '/api/lexis/fixture')).resolves.toBe(response)
+      expect(request).toHaveBeenCalledTimes(1)
+      expect(waitForTimeout).not.toHaveBeenCalled()
+    },
+  )
 })

@@ -10,5 +10,5 @@ export default defineConfig({
       video: 'off',
     },
   }),
-  reporter: [['line']],
+  reporter: [['./e2e/safe-regression-reporter.ts']],
 })

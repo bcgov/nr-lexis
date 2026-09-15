@@ -420,12 +420,12 @@ const advertisingListReportEndpoint = '/api/lexis/reports/biweeklyListing'
 const recordVersionHeader = 'X-Lexis-Record-Version'
 const regressionEndUseCode = 'PL'
 const regressionSpeciesCode = 'HE'
-const regressionOwnerClientNumber = process.env.E2E_REGRESSION_CLIENT_NUMBER?.trim() || '00001074'
+const regressionOwnerClientNumber = process.env.E2E_REGRESSION_CLIENT_NUMBER?.trim() ?? ''
 const regressionOwnerClientLocationCode =
-  process.env.E2E_REGRESSION_CLIENT_LOCATION_CODE?.trim() || '03'
+  process.env.E2E_REGRESSION_CLIENT_LOCATION_CODE?.trim() ?? ''
 const regressionLegacyRegionCode =
-  process.env.E2E_REGRESSION_LEGACY_REGION_CODE?.trim().toUpperCase() || 'RSC'
-const regressionTimberMark = process.env.E2E_REGRESSION_TIMBER_MARK?.trim().toUpperCase() || 'NCHWP'
+  process.env.E2E_REGRESSION_LEGACY_REGION_CODE?.trim().toUpperCase() ?? ''
+const regressionTimberMark = process.env.E2E_REGRESSION_TIMBER_MARK?.trim().toUpperCase() ?? ''
 
 const uniqueRegressionFutureDate = (salt = 0): string => {
   const rawSeed = process.env.GITHUB_RUN_ID ?? Date.now().toString()
@@ -1715,6 +1715,7 @@ test.describe('TEST IDIR admin regression', () => {
         `Credentialed IDIR regression is blocked for ${safeUrlForLog(E2E_BASE_URL)}. Use localhost, DEV, TEST, or a numeric PR preview route.`,
       )
     }
+    validateRegressionFixtureConfig()
 
     idirContext = await browser.newContext()
     idirPage = await idirContext.newPage()
@@ -3158,9 +3159,12 @@ test.describe('TEST IDIR admin regression', () => {
         }
       })
 
-      await expectAccessiblePage(page, contract.pagePath, contract.heading)
-
-      const searchResponse = await searchResponsePromise
+      // Observe both promises immediately so a navigation failure cannot leave an
+      // unhandled response-wait rejection when Playwright closes this worker's page.
+      const [searchResponse] = await Promise.all([
+        searchResponsePromise,
+        expectAccessiblePage(page, contract.pagePath, contract.heading),
+      ])
       const searchUrl = new URL(searchResponse.url())
       expect(searchResponse.ok(), `${contract.source} initial request should succeed`).toBe(true)
       expect(searchUrl.searchParams.get('page'), `${contract.source} should start on page 0`).toBe(
@@ -3808,7 +3812,6 @@ test.describe('TEST IDIR admin regression', () => {
     let primaryError: unknown
 
     try {
-      validateRegressionFixtureConfig()
       const capabilities = await fetchSessionCapabilities(page)
       expect(capabilities.authenticated).toBe(true)
       expect(
