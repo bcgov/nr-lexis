@@ -71,12 +71,16 @@ describe('credentialed regression reporter', () => {
       reporter.onStdErr(
         `[LEXIS request] 2026-09-14T21:52:45.534Z attempt 1: connection refused before send; retry in 5000ms ${value}\n`,
       )
+      reporter.onStdErr(
+        `[LEXIS navigation] 2026-09-14T21:52:45.534Z attempt 1: frontend HTTP 503; retry in 5000ms ${value}\n`,
+      )
       reporter.onError({ message: value, stack: `Error: ${value}`, snippet: value })
     }
     const log = output.mock.calls.flat().join('\n')
     for (const value of privateValues) expect(log).not.toContain(value)
     expect(log).not.toContain('synthetic-business-value')
     expect(log).not.toContain('connection refused before send')
+    expect(log).not.toContain('frontend HTTP 503')
     expect(output).toHaveBeenCalledTimes(privateValues.length)
   })
 

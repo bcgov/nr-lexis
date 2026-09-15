@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events'
 import { errors, type Locator, type Page, type Request, type Response } from '@playwright/test'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { gotoWithRecovery } from '../../../e2e/utils/navigation'
+import SafeRegressionReporter from '../../../e2e/safe-regression-reporter'
 
 const target = 'https://lexis.example.test/federal?applicationNumber=private-fixture'
 const request = (
@@ -263,10 +264,17 @@ describe('regression navigation recovery', () => {
   )
 
   it.each([502, 503, 504])('recovers an HTTP %s frontend response', async (status) => {
+    const output = vi.spyOn(console, 'log').mockImplementation(() => undefined)
     const { page, goto } = createPage()
     goto.mockResolvedValueOnce(response(status))
     await gotoWithRecovery(page, target)
     expect(goto).toHaveBeenCalledTimes(2)
+    const reporter = new SafeRegressionReporter()
+    const recoveryMessage = vi.mocked(console.warn).mock.calls[0][0] as string
+    reporter.onStdErr(recoveryMessage)
+    expect(output).toHaveBeenCalledExactlyOnceWith(recoveryMessage)
+    expect(recoveryMessage).toContain(`frontend HTTP ${status}; retry in 5000ms`)
+    expect(recoveryMessage).not.toContain('private-fixture')
   })
 
   it('does not retry a rendered page whose expected heading is missing', async () => {

@@ -59,6 +59,27 @@ describe('Coraza WAF config', () => {
     expect(config).not.toMatch(/^\s*admin\s+(?:0\.0\.0\.0|\[::\]|\*|:)/m)
   })
 
+  it('omits credential fields from both the default and access log encoders', () => {
+    const config = readCaddyConfig()
+    const requestLogFilters = [...config.matchAll(/fields \{([\s\S]*?)\n\s*\}/g)]
+      .map((match) => match[1])
+      .filter((fields) => fields.includes('request>uri'))
+
+    expect(requestLogFilters).toHaveLength(2)
+    for (const fields of requestLogFilters) {
+      for (const field of [
+        'request>headers>Cookie',
+        'request>headers>Authorization',
+        'request>headers>Proxy-Authorization',
+        'request>headers>X-Xsrf-Token',
+        'resp_headers>Set-Cookie',
+      ]) {
+        expect(fields).toContain(`${field} delete`)
+      }
+    }
+    expect(config).not.toMatch(/^\s*log_credentials\b/m)
+  })
+
   it('allows LEXIS SPA admin routes through document navigation', () => {
     const pattern = sensitivePathPattern()
 

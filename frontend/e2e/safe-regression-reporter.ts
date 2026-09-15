@@ -10,7 +10,7 @@ import type {
 } from '@playwright/test/reporter'
 
 const RECOVERY_MESSAGE =
-  /^\[LEXIS (?:navigation|runtime config|request)\] \d{4}-\d{2}-\d{2}T[\d:.]+Z attempt \d+: (?:document transport failure|frontend resource transport failure|empty app shell|pending frontend resource|transport failure|HTTP 50[234]|connection refused before send); retry in \d+ms$/
+  /^\[LEXIS (?:navigation|runtime config|request)\] \d{4}-\d{2}-\d{2}T[\d:.]+Z attempt \d+: (?:document transport failure|frontend resource transport failure|empty app shell|pending frontend resource|transport failure|(?:frontend )?HTTP 50[234]|connection refused before send); retry in \d+ms$/
 
 const failureCategory = (error: TestError): string => {
   const message = error.message ?? ''

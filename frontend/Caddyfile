@@ -16,7 +16,12 @@
 				# Keep paths/status/timing without OAuth codes, search values, or referrers.
 				request>uri regexp \?.*$ ""
 				request>headers>Referer delete
+				# Caddy redacts credential values by default; also omit the fields explicitly.
+				request>headers>Cookie delete
+				request>headers>Authorization delete
+				request>headers>Proxy-Authorization delete
 				request>headers>X-Xsrf-Token delete
+				resp_headers>Set-Cookie delete
 			}
 		}
 	}
@@ -62,7 +67,11 @@
 			fields {
 				request>uri regexp \?.*$ ""
 				request>headers>Referer delete
+				request>headers>Cookie delete
+				request>headers>Authorization delete
+				request>headers>Proxy-Authorization delete
 				request>headers>X-Xsrf-Token delete
+				resp_headers>Set-Cookie delete
 			}
 		}
 		level {$LOG_LEVEL}

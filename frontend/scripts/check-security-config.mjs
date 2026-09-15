@@ -17,6 +17,12 @@ const srv = join(temp, 'srv')
 let caddyProcess
 let logs = ''
 const requests = []
+const credentialMarkers = {
+  cookie: 'wava-cookie-marker',
+  authorization: 'wava-authorization-marker',
+  proxyAuthorization: 'wava-proxy-authorization-marker',
+  setCookie: 'wava-response-cookie-marker',
+}
 const backend = createServer((request, response) => {
   requests.push({ url: request.url, headers: request.headers })
   if (request.url.startsWith('/api/disconnect')) {
@@ -29,6 +35,7 @@ const backend = createServer((request, response) => {
     'Content-Disposition': 'attachment; filename="fixture.pdf"',
     Server: 'synthetic-upstream',
     'Referrer-Policy': 'same-origin',
+    'Set-Cookie': `SYNTHETIC=${credentialMarkers.setCookie}; HttpOnly; SameSite=Lax`,
   })
   response.end('%PDF-1.4\nsynthetic report fixture\n%%EOF')
 })
@@ -141,11 +148,22 @@ try {
     'wava-state-marker',
     'wava-business-marker',
     'wava-csrf-marker',
+    ...Object.values(credentialMarkers),
   ]
   const query = `?code=${markers[0]}&state=${markers[1]}&clientNumber=${markers[2]}`
-  const headers = { Referer: origin + '/' + query, 'X-XSRF-TOKEN': markers[3] }
+  const headers = {
+    Referer: origin + '/' + query,
+    'X-XSRF-TOKEN': markers[3],
+    Cookie: `SYNTHETIC=${credentialMarkers.cookie}`,
+    Authorization: `Bearer ${credentialMarkers.authorization}`,
+    'Proxy-Authorization': `Bearer ${credentialMarkers.proxyAuthorization}`,
+  }
   await check('/' + query, 200, { headers })
-  await check('/api/fixture' + query, 200, { headers })
+  const credentialResponse = await check('/api/fixture' + query, 200, { headers })
+  assert.ok(
+    credentialResponse.headers.get('set-cookie')?.includes(credentialMarkers.setCookie),
+    'Log filtering must preserve response cookies sent to the client',
+  )
   await check('/.git/' + query, 403, { headers })
   await check('/api/disconnect' + query, 502, { headers })
   await check('/api/fixture' + query + '&filter=' + encodeURIComponent("' OR 1=1-- "), 403, {
@@ -159,6 +177,12 @@ try {
     requests.some((request) => request.headers['x-xsrf-token'] === markers[3]),
     'Log filtering must preserve the CSRF header sent to the backend',
   )
+  for (const header of ['Cookie', 'Authorization']) {
+    assert.ok(
+      requests.some((request) => request.headers[header.toLowerCase()] === headers[header]),
+      `Log filtering must preserve the ${header} header sent to the backend`,
+    )
+  }
   assert.match(
     logs,
     /--[a-zA-Z0-9]+-K--/,
@@ -219,6 +243,11 @@ try {
   await delay(100)
   for (const marker of markers)
     assert.ok(!logs.includes(marker), `Sensitive marker in logs: ${marker}`)
+  assert.doesNotMatch(
+    logs,
+    /"(?:Cookie|Authorization|Proxy-Authorization|Set-Cookie)"\s*:/,
+    'Credential fields must be explicitly removed, not just rely on default value redaction',
+  )
   console.log(
     'PASS: headers, WAF denials, SPA/assets, proxy statuses/downloads, NEXCOL isolation, and log redaction',
   )

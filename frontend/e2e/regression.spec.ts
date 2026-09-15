@@ -3288,16 +3288,18 @@ test.describe('TEST IDIR admin regression', () => {
           },
         }),
       )
-      expect(addedFeePolicy.success).toBe(true)
-      expect(asStringArray(addedFeePolicy.errors)).toEqual([])
       const feePolicyId = requiredString(
         addedFeePolicy.lexisFeePolicyId,
         'Regression fee policy id',
       )
+      expect(Number.isSafeInteger(Number(feePolicyId))).toBe(true)
       expect(Number(feePolicyId)).toBeGreaterThan(0)
+      // Track the created record before response assertions so failures still run cleanup.
       const feePolicyCleanup = cleanup.defer('delete future fee policy', () =>
         deletePolicyIfPresent(feePolicyPath, feePolicyId, 'Fee policy'),
       )
+      expect(addedFeePolicy.success).toBe(true)
+      expect(asStringArray(addedFeePolicy.errors)).toEqual([])
       expect(addedFeePolicy.effectiveDate).toBe(feeEffectiveDate)
       expect(String(addedFeePolicy.orgUnitNo)).toBe(orgUnitNo)
       expect(String(addedFeePolicy.percentIncrease)).toBe('12')
@@ -3346,16 +3348,17 @@ test.describe('TEST IDIR admin regression', () => {
           },
         }),
       )
-      expect(addedFilPolicy.success).toBe(true)
-      expect(asStringArray(addedFilPolicy.errors)).toEqual([])
       const filPolicyId = requiredString(
         addedFilPolicy.lexisFILPolicyId,
         'Regression fee in lieu policy id',
       )
+      expect(Number.isSafeInteger(Number(filPolicyId))).toBe(true)
       expect(Number(filPolicyId)).toBeGreaterThan(0)
       const filPolicyCleanup = cleanup.defer('delete future fee in lieu policy', () =>
         deletePolicyIfPresent(filPolicyPath, filPolicyId, 'Fee in lieu policy'),
       )
+      expect(addedFilPolicy.success).toBe(true)
+      expect(asStringArray(addedFilPolicy.errors)).toEqual([])
       expect(addedFilPolicy.effectiveDate).toBe(filEffectiveDate)
       expect(String(addedFilPolicy.filPercent)).toBe('23')
       requiredString(addedFilPolicy.entryUserId, 'Regression fee in lieu policy entry user')
@@ -3734,20 +3737,22 @@ test.describe('TEST IDIR admin regression', () => {
             multipart: regressionSubmissionFile(packageNumber, submission.xml),
           }),
         ))
-      expect(submissionResult.status).toBe('accepted')
-      expect(submissionResult.packageNumber).toBe(packageNumber)
-      expect(submissionResult.scaleRows).toBe(3)
-      expect(asStringArray(submissionResult.errors)).toEqual([])
-      expect(submissionResult.applicationNumber).toEqual(expect.any(Number))
       const lifecycleApplicationNumber = Number(submissionResult.applicationNumber)
+      expect(Number.isSafeInteger(lifecycleApplicationNumber)).toBe(true)
       expect(lifecycleApplicationNumber).toBeGreaterThan(0)
 
+      // Register cleanup as soon as the created ID is usable, before other assertions can fail.
       cleanup.defer('delete lifecycle application package and scales', () =>
         cleanupRegressionPackage(page, lifecycleApplicationNumber, packageNumber),
       )
       const lifecycleRejectCleanup = cleanup.defer('reject lifecycle application', () =>
         rejectRegressionApplication(page, lifecycleApplicationNumber, `${marker} cleanup`),
       )
+      expect(submissionResult.status).toBe('accepted')
+      expect(submissionResult.packageNumber).toBe(packageNumber)
+      expect(submissionResult.scaleRows).toBe(3)
+      expect(asStringArray(submissionResult.errors)).toEqual([])
+      expect(submissionResult.applicationNumber).toEqual(expect.any(Number))
 
       await test.step('find the imported application by uppercase and lowercase package number', () =>
         expectLowercasePackageSearch(page, packageNumber, {
@@ -3781,13 +3786,14 @@ test.describe('TEST IDIR admin regression', () => {
             form: createApplicationForm(lifecycleTemplate, schedule.offer.scheduleId, offerMarker),
           }),
         ))
-      expect(createdApplication.valid).toBe(true)
-      expect(asStringArray(createdApplication.errors)).toEqual([])
       const offerApplicationNumber = Number(createdApplication.applicationNumber)
+      expect(Number.isSafeInteger(offerApplicationNumber)).toBe(true)
       expect(offerApplicationNumber).toBeGreaterThan(0)
       const offerApplicationCleanup = cleanup.defer('reject offer application', () =>
         rejectRegressionApplication(page, offerApplicationNumber, `${marker} cleanup`),
       )
+      expect(createdApplication.valid).toBe(true)
+      expect(asStringArray(createdApplication.errors)).toEqual([])
 
       const initialOfferApplication = await readVersionedJson<Record<string, unknown>>(
         page,
@@ -3853,14 +3859,15 @@ test.describe('TEST IDIR admin regression', () => {
             },
           }),
         ))
-      expect(createdOffer.success).toBe(true)
-      expect(createdOffer.sendEmail).toBe(true)
-      expect(asStringArray(createdOffer.errors)).toEqual([])
       const offerNumber = Number(createdOffer.exportPurchaseOfferNumber)
+      expect(Number.isSafeInteger(offerNumber)).toBe(true)
       expect(offerNumber).toBeGreaterThan(0)
       const offerCleanup = cleanup.defer('withdraw purchase offer', () =>
         withdrawRegressionOffer(page, offerNumber, marker),
       )
+      expect(createdOffer.success).toBe(true)
+      expect(createdOffer.sendEmail).toBe(true)
+      expect(asStringArray(createdOffer.errors)).toEqual([])
 
       await expectAccessiblePage(
         page,
@@ -4008,8 +4015,6 @@ test.describe('TEST IDIR admin regression', () => {
           },
         }),
       )
-      expect(createdExemption.success).toBe(true)
-      expect(asStringArray(createdExemption.errors)).toEqual([])
       const exemptionNumber = requiredString(
         createdExemption.exemptionNumber,
         'Created exemption number',
@@ -4017,6 +4022,8 @@ test.describe('TEST IDIR admin regression', () => {
       const exemptionCleanup = cleanup.defer('cancel ministerial exemption', () =>
         cancelRegressionExemption(page, exemptionNumber, orgUnitNumber),
       )
+      expect(createdExemption.success).toBe(true)
+      expect(asStringArray(createdExemption.errors)).toEqual([])
 
       await test.step('reopen a cancelled exemption without inventing missing dates', async () => {
         await cancelRegressionExemption(page, exemptionNumber, orgUnitNumber)
@@ -4174,10 +4181,8 @@ test.describe('TEST IDIR admin regression', () => {
           form: { exemptionNumber },
         }),
       )
-      expect(createdPermit.success).toBe(true)
-      expect(createdPermit.permitStatus).toBe('ACT')
-      expect(asStringArray(createdPermit.errors)).toEqual([])
       const permitNumber = Number(createdPermit.permitNumber)
+      expect(Number.isSafeInteger(permitNumber)).toBe(true)
       expect(permitNumber).toBeGreaterThan(0)
       const permitCleanup = cleanup.defer('cancel provincial permit', () =>
         cancelRegressionPermit(page, permitNumber, lifecycleMarker, schedule.shipping),
@@ -4189,6 +4194,9 @@ test.describe('TEST IDIR admin regression', () => {
         await reactivateRegressionPermit(page, permitNumber, lifecycleMarker, schedule.shipping)
         await detachRegressionPermitApplication(page, permitNumber, lifecycleApplicationNumber)
       })
+      expect(createdPermit.success).toBe(true)
+      expect(createdPermit.permitStatus).toBe('ACT')
+      expect(asStringArray(createdPermit.errors)).toEqual([])
 
       await test.step('find the linked permit by uppercase and lowercase package number', () =>
         expectLowercasePackageSearch(page, packageNumber, {
