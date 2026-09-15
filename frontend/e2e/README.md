@@ -53,6 +53,12 @@ regression coverage uses a separate TEST-only Playwright config.
   required cleanup withdrawal exercise the automatic offer-email paths; the intermediate offer edit
   is intentionally non-notifying. These checks prove the application handed each message to the TEST
   mail sender, not that a mailbox received it.
+- Before a credentialed lifecycle run, verify the running TEST backend has
+  `LEXIS_MAIL_NON_PRODUCTION=true` and valid `LEXIS_MAIL_OVERRIDE_RECIPIENTS`. The application's
+  existing mail policy allows direct delivery without an override; regression emails require
+  interception. Changing a deployment secret without restarting/redeploying the backend does not
+  establish that the running application uses it. This is a deployment prerequisite, not a fixture
+  identifier or an additional regression credential.
 - The suite submits the EICAR test payload to document and submission uploads and expects a
   rejection. This verifies TEST LEXIS can reach its shared ClamAV service; see
   [Shared ClamAV service](../../docs/shared-clamav-service.md) for the deployment and network
@@ -73,10 +79,11 @@ regression coverage uses a separate TEST-only Playwright config.
   saves and cleanup are never replayed by navigation recovery. Wrong headings on rendered pages,
   denied/missing resources, and unrelated JavaScript errors remain failures.
 - IDIR button actionability and federated-navigation completion have separate waits. Authenticated
-  API GETs retain bounded transport retries. POST/PUT/DELETE retry only an explicit connection
-  refusal before sending, with redirect following and implicit retries disabled. They do not retry
-  ambiguous resets, timeouts, or HTTP responses; the existing single auth-refresh retry remains
-  unchanged.
+  API GETs retain bounded transport retries but do not follow redirects, so custom CSRF headers
+  stay on the requested endpoint and unexpected login redirects remain visible failures.
+  POST/PUT/DELETE retry only an explicit connection refusal before sending, with redirect following
+  and implicit retries disabled. They do not retry ambiguous resets, timeouts, or HTTP responses;
+  the existing single auth-refresh retry remains unchanged.
 - Both the regression config and workflow use `safe-regression-reporter.ts`. Public output contains
   static test names, counts, failure categories, source locations, and fixed recovery messages. Raw
   exceptions, headers, assertion values, page contents, attachments, and arbitrary test

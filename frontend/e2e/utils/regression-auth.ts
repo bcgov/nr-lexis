@@ -446,6 +446,10 @@ export const getWithAuth = async (
             ...options.headers,
             ...headers,
           },
+          // API reads must stay on the requested endpoint. Redirects forward custom headers
+          // (including CSRF) and can hide an auth redirect behind a successful final response.
+          maxRedirects: 0,
+          maxRetries: 0,
         }),
       )
     } catch (error) {

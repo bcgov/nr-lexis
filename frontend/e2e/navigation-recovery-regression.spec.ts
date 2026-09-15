@@ -3,7 +3,7 @@ import { createServer } from 'node:http'
 import { expect, test, type APIResponse } from '@playwright/test'
 import { gotoSyntheticRoute } from './utils'
 import { gotoWithRecovery } from './utils/navigation'
-import { loginWithIdir, postWithCsrf } from './utils/regression-auth'
+import { getWithAuth, loginWithIdir, postWithCsrf } from './utils/regression-auth'
 
 // All requests are intercepted. These checks never use TEST, credentials or business records.
 const origin = 'https://navigation.example.test'
@@ -372,6 +372,48 @@ test.describe('navigation transport recovery', () => {
       await expect(page.locator('#side-navigation')).toHaveText('Signed in')
     } finally {
       page.request.get = originalGet
+    }
+  })
+
+  test('does not forward authenticated GET headers to a redirect target', async ({ page }) => {
+    const redirectedHeaders: string[] = []
+    const receiver = createServer((request, response) => {
+      redirectedHeaders.push(String(request.headers['x-xsrf-token'] ?? ''))
+      response.writeHead(200).end('unexpected redirect target')
+    })
+    receiver.listen(0, '127.0.0.1')
+    await once(receiver, 'listening')
+    const address = receiver.address()
+    if (!address || typeof address === 'string') throw new Error('Missing local receiver address')
+    let originalRequests = 0
+    const redirector = createServer((_request, response) => {
+      originalRequests += 1
+      response.writeHead(302, { Location: `http://127.0.0.1:${address.port}/receiver` }).end()
+    })
+    redirector.listen(0, '127.0.0.1')
+    await once(redirector, 'listening')
+    try {
+      const source = redirector.address()
+      if (!source || typeof source === 'string') throw new Error('Missing local redirect address')
+      const response = await getWithAuth(page, `http://127.0.0.1:${source.port}/reference`, {
+        headers: { 'X-XSRF-TOKEN': 'synthetic-csrf-redirect-marker' },
+      })
+      try {
+        expect(redirectedHeaders).toEqual([])
+        expect(response.status()).toBe(302)
+        expect(originalRequests).toBe(1)
+      } finally {
+        await response.dispose()
+      }
+    } finally {
+      await Promise.all(
+        [receiver, redirector].map((server) => {
+          server.closeAllConnections()
+          return new Promise<void>((resolve, reject) =>
+            server.close((error) => (error ? reject(error) : resolve())),
+          )
+        }),
+      )
     }
   })
 

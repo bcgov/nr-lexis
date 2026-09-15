@@ -65,6 +65,25 @@ const pageWithGet = (get: ReturnType<typeof vi.fn>, options: PageWithGetOptions 
 }
 
 describe('getWithAuth', () => {
+  it.each([301, 302, 303, 307, 308])(
+    'returns HTTP %i without following or retrying it',
+    async (status) => {
+      const response = { status: () => status } as APIResponse
+      const get = vi.fn().mockResolvedValue(response)
+      const { page, waitForTimeout } = pageWithGet(get)
+
+      await expect(getWithAuth(page, '/api/lexis/probe')).resolves.toBe(response)
+      expect(get).toHaveBeenCalledExactlyOnceWith(
+        '/api/lexis/probe',
+        expect.objectContaining({
+          maxRedirects: 0,
+          maxRetries: 0,
+        }),
+      )
+      expect(waitForTimeout).not.toHaveBeenCalled()
+    },
+  )
+
   it('retries a transient transport failure before returning the response', async () => {
     const get = vi
       .fn()
