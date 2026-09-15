@@ -15,6 +15,7 @@
     "format:check": "prettier --check \"src/**/*.{ts,tsx,scss}\" \"e2e/**/*.ts\"",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test:unit": "vitest --mode test",
+    "test:security-config": "node scripts/check-security-config.mjs",
     "test:session-timeout": "vitest --mode test --run src/components/SessionTimeoutWarning/SessionTimeoutWarning.test.tsx src/context/auth/__tests__/AuthProviderLogout.test.tsx src/context/auth/__tests__/logout-chain.test.ts src/context/auth/__tests__/session-expiry.test.ts src/pages/__tests__/LandingAuthFlow.test.tsx",
     "test:cov": "vitest run --mode test --coverage --maxWorkers=2",
     "build": "vite build",

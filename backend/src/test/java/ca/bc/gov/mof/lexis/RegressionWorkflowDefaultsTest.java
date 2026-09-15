@@ -22,21 +22,25 @@ class RegressionWorkflowDefaultsTest {
         .contains("E2E_IDIR_USER: ${{ secrets.E2E_IDIR_USER }}")
         .contains("E2E_IDIR_PASSWORD: ${{ secrets.E2E_IDIR_PASSWORD }}")
         .contains("test environment secret is required")
-        .contains("test -n \"$E2E_IDIR_USER\"")
-        .contains("test -n \"$E2E_IDIR_PASSWORD\"")
-        .contains("::add-mask::$E2E_IDIR_USER")
-        .contains("::add-mask::$E2E_IDIR_PASSWORD")
+        .contains("for required_name in E2E_IDIR_USER E2E_IDIR_PASSWORD")
+        .contains("if [[ -z \"${!required_name}\" ]]")
+        .contains("permissions: {}")
+        .contains("contents: read")
+        .contains("persist-credentials: false")
         .contains("image: mcr.microsoft.com/playwright:v1.60.0-noble")
         .contains("shell: bash")
         .contains("npx playwright test \\")
         .contains("--config=playwright.regression.config.ts")
         .contains("--project=${{ matrix.project }}")
-        .contains("--reporter=line")
+        .contains("--reporter=./e2e/safe-regression-reporter.ts")
         .doesNotContain("actions/upload-artifact")
         .doesNotContain("playwright-report")
         .doesNotContain("playwright install")
         .doesNotContain("npm run e2e:regression")
         .doesNotContain("--reporter=html,list")
+        .doesNotContain("E2E_REGRESSION_")
+        .doesNotContain("pull_request:")
+        .doesNotContain("pull_request_target:")
         .doesNotContain("E2E_BCEID")
         .doesNotContain("BCEID_PASSWORD")
         .doesNotContain("BCEID_USER");
@@ -61,7 +65,8 @@ class RegressionWorkflowDefaultsTest {
 
     assertThat(config)
         .contains("testMatch: /regression\\.spec\\.ts/")
-        .contains("reporter: [['line']]")
+        .contains("reporter: [['./e2e/safe-regression-reporter.ts']]")
+        .contains("retries: 0")
         .contains("trace: 'off'")
         .contains("screenshot: 'off'")
         .contains("video: 'off'");
@@ -84,6 +89,18 @@ class RegressionWorkflowDefaultsTest {
     assertThat(spec)
         .contains("test.describe('TEST IDIR admin regression'")
         .doesNotContain("test.describe.serial('TEST IDIR admin regression'");
+  }
+
+  @Test
+  void regressionSpecShouldResolveReferencesInsideTheOwnedRecordLifecycle() throws IOException {
+    String spec = Files.readString(resolveRegressionSpec());
+
+    assertThat(spec)
+        .doesNotContain("process.env.E2E_REGRESSION_")
+        .doesNotContain("validateRegressionFixtureConfig")
+        .contains("resolveRegressionSubmission(page, packageNumber)")
+        .contains("regressionSubmissionFile(packageNumber, submission.xml)")
+        .contains("cleanupRegressionPackage(page, lifecycleApplicationNumber, packageNumber)");
   }
 
   @Test

@@ -1,7 +1,9 @@
+import { once } from 'node:events'
+import { createServer } from 'node:http'
 import { expect, test, type APIResponse } from '@playwright/test'
 import { gotoSyntheticRoute } from './utils'
 import { gotoWithRecovery } from './utils/navigation'
-import { loginWithIdir } from './utils/regression-auth'
+import { getWithAuth, loginWithIdir, postWithCsrf } from './utils/regression-auth'
 
 // All requests are intercepted. These checks never use TEST, credentials or business records.
 const origin = 'https://navigation.example.test'
@@ -230,15 +232,29 @@ test.describe('navigation transport recovery', () => {
     expect(documents).toBe(1)
   })
 
-  test('logs in through the accessible IDIR button when its test id is absent', async ({
+  test('logs in through the accessible IDIR button after a signed-out capabilities response', async ({
     page,
   }) => {
     let documents = 0
+    let probes = 0
     await page.route('**/*', async (route) => {
+      if (new URL(route.request().url()).pathname === '/api/lexis/session/capabilities') {
+        probes += 1
+        await route.fulfill({ status: 401, json: { authenticated: false } })
+        return
+      }
       documents += 1
       await route.fulfill({
         contentType: 'text/html',
-        body: '<div id="root"><button onclick="this.outerHTML = \'<nav id=side-navigation>Signed in</nav>\'">Log in with IDIR</button></div>',
+        body: `<div id="root">Loading</div><script>
+          fetch('/api/lexis/session/capabilities').then((response) => {
+            if (response.status !== 401) throw new Error('Expected signed-out response')
+            document.getElementById('root').innerHTML = '<button id="login">Log in with IDIR</button>'
+            document.getElementById('login').onclick = () => {
+              document.getElementById('root').innerHTML = '<nav id="side-navigation">Signed in</nav>'
+            }
+          })
+        </script>`,
       })
     })
 
@@ -257,6 +273,7 @@ test.describe('navigation transport recovery', () => {
       await loginWithIdir(page)
       await expect(page.locator('#side-navigation')).toHaveText('Signed in')
       expect(documents).toBe(1)
+      expect(probes).toBe(1)
     } finally {
       page.request.get = originalGet
     }
@@ -286,5 +303,156 @@ test.describe('navigation transport recovery', () => {
 
     expect(documents).toBe(1)
     expect(modules).toBe(1)
+  })
+
+  test('recovers a pending lazy import after the loading shell has rendered', async ({ page }) => {
+    let documents = 0
+    let modules = 0
+    await page.route(`${origin}/**`, async (route) => {
+      if (new URL(route.request().url()).pathname === '/text.js') {
+        modules += 1
+        if (modules === 1) return
+        await route.fulfill({
+          contentType: 'application/javascript',
+          body: 'document.getElementById("root").innerHTML = "<h1>Exemption detail</h1>"',
+        })
+        return
+      }
+      documents += 1
+      await route.fulfill({
+        contentType: 'text/html',
+        body: '<div id="root"><nav>Side navigation</nav><p>Loading</p></div><script>setTimeout(() => import("/text.js"), 0)</script>',
+      })
+    })
+    await gotoWithRecovery(page, `${origin}/exemption`, {
+      ready: page.getByRole('heading', { name: 'Exemption detail' }),
+    })
+    expect(documents).toBe(2)
+    expect(modules).toBe(2)
+  })
+
+  test('recovers a refused capabilities request that leaves the login shell', async ({ page }) => {
+    let documents = 0
+    let probes = 0
+    await page.route(`${origin}/**`, async (route) => {
+      if (new URL(route.request().url()).pathname === '/api/lexis/session/capabilities') {
+        probes += 1
+        if (probes === 1) {
+          await route.abort('connectionrefused')
+          return
+        }
+        await route.fulfill({ json: { authenticated: true } })
+        return
+      }
+      documents += 1
+      await route.fulfill({
+        contentType: 'text/html',
+        body: '<div id="root"><p>Loading</p></div><script>fetch("/api/lexis/session/capabilities").then(() => { document.getElementById("root").innerHTML = "<h1>Application review</h1>" }).catch(() => { document.getElementById("root").innerHTML = "<button>Log in with IDIR</button>" })</script>',
+      })
+    })
+    await gotoWithRecovery(page, `${origin}/review`, {
+      ready: page.getByRole('heading', { name: 'Application review' }),
+    })
+    expect(documents).toBe(2)
+    expect(probes).toBe(2)
+  })
+
+  test('lets a successful IDIR click finish a slow federated navigation', async ({ page }) => {
+    await page.route('**/*', async (route) => {
+      if (new URL(route.request().url()).pathname === '/slow-federation') {
+        // Exceeds the 15-second click timeout, but is within the separate login-session wait.
+        await new Promise((resolve) => setTimeout(resolve, 16_000))
+        await route.fulfill({
+          contentType: 'text/html',
+          body: '<nav id="side-navigation">Signed in</nav>',
+        })
+        return
+      }
+      await route.fulfill({
+        contentType: 'text/html',
+        body: '<div id="root"><button data-testid="landing-button__idir" onclick="location.href=\'/slow-federation\'">Log in with IDIR</button></div>',
+      })
+    })
+    const originalGet = page.request.get
+    page.request.get = async (url) => {
+      expect(url).toBe('/api/lexis/session/capabilities')
+      return {
+        status: () => 200,
+        ok: () => true,
+        json: async () => ({ authenticated: await page.locator('#side-navigation').isVisible() }),
+      } as APIResponse
+    }
+    try {
+      await loginWithIdir(page)
+      await expect(page.locator('#side-navigation')).toHaveText('Signed in')
+    } finally {
+      page.request.get = originalGet
+    }
+  })
+
+  test('does not forward authenticated GET headers to a redirect target', async ({ page }) => {
+    const redirectedHeaders: string[] = []
+    const receiver = createServer((request, response) => {
+      redirectedHeaders.push(String(request.headers['x-xsrf-token'] ?? ''))
+      response.writeHead(200).end('unexpected redirect target')
+    })
+    receiver.listen(0, '127.0.0.1')
+    await once(receiver, 'listening')
+    const address = receiver.address()
+    if (!address || typeof address === 'string') throw new Error('Missing local receiver address')
+    let originalRequests = 0
+    const redirector = createServer((_request, response) => {
+      originalRequests += 1
+      response.writeHead(302, { Location: `http://127.0.0.1:${address.port}/receiver` }).end()
+    })
+    redirector.listen(0, '127.0.0.1')
+    await once(redirector, 'listening')
+    try {
+      const source = redirector.address()
+      if (!source || typeof source === 'string') throw new Error('Missing local redirect address')
+      const response = await getWithAuth(page, `http://127.0.0.1:${source.port}/reference`, {
+        headers: { 'X-XSRF-TOKEN': 'synthetic-csrf-redirect-marker' },
+      })
+      try {
+        expect(redirectedHeaders).toEqual([])
+        expect(response.status()).toBe(302)
+        expect(originalRequests).toBe(1)
+      } finally {
+        await response.dispose()
+      }
+    } finally {
+      await Promise.all(
+        [receiver, redirector].map((server) => {
+          server.closeAllConnections()
+          return new Promise<void>((resolve, reject) =>
+            server.close((error) => (error ? reject(error) : resolve())),
+          )
+        }),
+      )
+    }
+  })
+
+  test('returns a mutation redirect without following it or replaying the original request', async ({
+    page,
+  }) => {
+    const methods: string[] = []
+    const server = createServer((request, response) => {
+      methods.push(request.method ?? '')
+      response.writeHead(302, { Location: 'http://127.0.0.1:0/unavailable' }).end()
+    })
+    server.listen(0, '127.0.0.1')
+    await once(server, 'listening')
+    try {
+      const address = server.address()
+      if (!address || typeof address === 'string') throw new Error('Missing local probe address')
+      const response = await postWithCsrf(page, `http://127.0.0.1:${address.port}/mutation`)
+      expect(response.status()).toBe(302)
+      expect(methods).toEqual(['POST'])
+      await response.dispose()
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve())),
+      )
+    }
   })
 })

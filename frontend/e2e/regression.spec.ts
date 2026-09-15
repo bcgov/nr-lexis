@@ -21,6 +21,7 @@ import {
 } from './utils/regression-auth'
 import { E2E_BASE_URL } from './utils'
 import { gotoWithRecovery } from './utils/navigation'
+import { regressionSubmissionFile, resolveRegressionSubmission } from './utils/regression-fixtures'
 import { businessDateParts, formatBusinessIsoDate, formatIsoDateParts } from '../src/utils/date'
 
 const sideNavSection = (name: string) =>
@@ -420,12 +421,6 @@ const advertisingListReportEndpoint = '/api/lexis/reports/biweeklyListing'
 const recordVersionHeader = 'X-Lexis-Record-Version'
 const regressionEndUseCode = 'PL'
 const regressionSpeciesCode = 'HE'
-const regressionOwnerClientNumber = process.env.E2E_REGRESSION_CLIENT_NUMBER?.trim() || '00001074'
-const regressionOwnerClientLocationCode =
-  process.env.E2E_REGRESSION_CLIENT_LOCATION_CODE?.trim() || '03'
-const regressionLegacyRegionCode =
-  process.env.E2E_REGRESSION_LEGACY_REGION_CODE?.trim().toUpperCase() || 'RSC'
-const regressionTimberMark = process.env.E2E_REGRESSION_TIMBER_MARK?.trim().toUpperCase() || 'NCHWP'
 
 const uniqueRegressionFutureDate = (salt = 0): string => {
   const rawSeed = process.env.GITHUB_RUN_ID ?? Date.now().toString()
@@ -597,83 +592,6 @@ const uniqueRegressionPackageNumber = (): string => {
     .slice(0, 4)
   return `E2E-${timestamp}-${suffix}`
 }
-
-const validateRegressionFixtureConfig = (): void => {
-  const invalidNames: string[] = []
-  if (!/^\d{8}$/.test(regressionOwnerClientNumber)) {
-    invalidNames.push('E2E_REGRESSION_CLIENT_NUMBER')
-  }
-  if (!/^[A-Z0-9]{2}$/i.test(regressionOwnerClientLocationCode)) {
-    invalidNames.push('E2E_REGRESSION_CLIENT_LOCATION_CODE')
-  }
-  if (!/^[A-Z0-9]{3}$/.test(regressionLegacyRegionCode)) {
-    invalidNames.push('E2E_REGRESSION_LEGACY_REGION_CODE')
-  }
-  if (!/^[A-Z0-9 -]{1,10}$/.test(regressionTimberMark)) {
-    invalidNames.push('E2E_REGRESSION_TIMBER_MARK')
-  }
-  if (invalidNames.length > 0) {
-    throw new Error(`Invalid TEST regression fixture configuration: ${invalidNames.join(', ')}`)
-  }
-}
-
-const regressionSubmissionXml = (
-  packageNumber: string,
-): string => `<?xml version="1.0" encoding="UTF-8"?>
-<esf:ESFSubmission xmlns:lexis="http://www.for.gov.bc.ca/schema/lexis" xmlns:esf="http://www.for.gov.bc.ca/schema/esf" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.for.gov.bc.ca/schema/esf http://www.for.gov.bc.ca/schema/esf/1/xsd/MOF/esf-submission.xsd http://www.for.gov.bc.ca/schema/lexis http://www.for.gov.bc.ca/schema/lexis/2/xsd/MOF/mof-lexis.xsd">
-  <esf:submissionContent>
-    <lexis:LexisSubmission>
-      <lexis:applicant>
-        <lexis:applicantDetails>
-          <lexis:clientNumber>${regressionOwnerClientNumber}</lexis:clientNumber>
-          <lexis:clientLocnCode>${regressionOwnerClientLocationCode}</lexis:clientLocnCode>
-          <lexis:name>LEXIS E2E REGRESSION</lexis:name>
-        </lexis:applicantDetails>
-        <lexis:applicantContact>
-          <lexis:contactSurname>REGRESSION</lexis:contactSurname>
-          <lexis:contactFirstname>E2E</lexis:contactFirstname>
-        </lexis:applicantContact>
-      </lexis:applicant>
-      <lexis:applicationDetail>
-        <lexis:jurisdictionCode>P</lexis:jurisdictionCode>
-        <lexis:bcForestRegionCode>${regressionLegacyRegionCode}</lexis:bcForestRegionCode>
-        <lexis:applStatusCode>A</lexis:applStatusCode>
-        <lexis:exemptionRsnCde>S</lexis:exemptionRsnCde>
-        <lexis:applicantTypeCode>O</lexis:applicantTypeCode>
-      </lexis:applicationDetail>
-      <lexis:productDetail>
-        <lexis:productTypeCode>H</lexis:productTypeCode>
-        <lexis:boomNumber>${packageNumber}</lexis:boomNumber>
-        <lexis:speciesEndUseSort>HE/PL</lexis:speciesEndUseSort>
-        <lexis:productLocation>LEXIS E2E REGRESSION</lexis:productLocation>
-        <lexis:ageClass>S</lexis:ageClass>
-        <lexis:avgLength>6.7</lexis:avgLength>
-        <lexis:avgDiameter>12.8</lexis:avgDiameter>
-        <lexis:harvestedTimber>
-          <lexis:timberMark>${regressionTimberMark}</lexis:timberMark>
-          <lexis:numberOfPieces>1500</lexis:numberOfPieces>
-          <lexis:species>HE</lexis:species>
-          <lexis:grade>H</lexis:grade>
-          <lexis:quantityVolume>500</lexis:quantityVolume>
-        </lexis:harvestedTimber>
-        <lexis:harvestedTimber>
-          <lexis:timberMark>${regressionTimberMark}</lexis:timberMark>
-          <lexis:numberOfPieces>50</lexis:numberOfPieces>
-          <lexis:species>HE</lexis:species>
-          <lexis:grade>J</lexis:grade>
-          <lexis:quantityVolume>24.5</lexis:quantityVolume>
-        </lexis:harvestedTimber>
-        <lexis:harvestedTimber>
-          <lexis:timberMark>${regressionTimberMark}</lexis:timberMark>
-          <lexis:numberOfPieces>1</lexis:numberOfPieces>
-          <lexis:species>FI</lexis:species>
-          <lexis:grade>J</lexis:grade>
-          <lexis:quantityVolume>0.5</lexis:quantityVolume>
-        </lexis:harvestedTimber>
-      </lexis:productDetail>
-    </lexis:LexisSubmission>
-  </esf:submissionContent>
-</esf:ESFSubmission>`
 
 const antivirusTestPayloadHex =
   '58354f2150254041505b345c505a58353428505e2937434329377d2445494341522d5354414e444152442d414e544956495255532d544553542d46494c452124482b482a'
@@ -1496,25 +1414,6 @@ const readReportBody = async (response: APIResponse, source: string): Promise<Bu
   return body
 }
 
-const postRegressionSubmission = async (
-  page: Page,
-  path: string,
-  packageNumber: string,
-): Promise<ApplicationSubmissionResponse> => {
-  return readJsonResponse<ApplicationSubmissionResponse>(
-    await postWithCsrf(page, path, {
-      multipart: {
-        userReference: `E2E regression ${packageNumber}`,
-        file: {
-          name: `${packageNumber}.xml`,
-          mimeType: 'application/xml',
-          buffer: Buffer.from(regressionSubmissionXml(packageNumber), 'utf8'),
-        },
-      },
-    }),
-  )
-}
-
 const postRegressionApplicationSubmissionFile = async (
   page: Page,
   path: string,
@@ -1715,7 +1614,6 @@ test.describe('TEST IDIR admin regression', () => {
         `Credentialed IDIR regression is blocked for ${safeUrlForLog(E2E_BASE_URL)}. Use localhost, DEV, TEST, or a numeric PR preview route.`,
       )
     }
-
     idirContext = await browser.newContext()
     idirPage = await idirContext.newPage()
     await redirectExternalLogoutToLoginShell(idirPage)
@@ -3158,9 +3056,12 @@ test.describe('TEST IDIR admin regression', () => {
         }
       })
 
-      await expectAccessiblePage(page, contract.pagePath, contract.heading)
-
-      const searchResponse = await searchResponsePromise
+      // Observe both promises immediately so a navigation failure cannot leave an
+      // unhandled response-wait rejection when Playwright closes this worker's page.
+      const [searchResponse] = await Promise.all([
+        searchResponsePromise,
+        expectAccessiblePage(page, contract.pagePath, contract.heading),
+      ])
       const searchUrl = new URL(searchResponse.url())
       expect(searchResponse.ok(), `${contract.source} initial request should succeed`).toBe(true)
       expect(searchUrl.searchParams.get('page'), `${contract.source} should start on page 0`).toBe(
@@ -3387,16 +3288,18 @@ test.describe('TEST IDIR admin regression', () => {
           },
         }),
       )
-      expect(addedFeePolicy.success).toBe(true)
-      expect(asStringArray(addedFeePolicy.errors)).toEqual([])
       const feePolicyId = requiredString(
         addedFeePolicy.lexisFeePolicyId,
         'Regression fee policy id',
       )
+      expect(Number.isSafeInteger(Number(feePolicyId))).toBe(true)
       expect(Number(feePolicyId)).toBeGreaterThan(0)
+      // Track the created record before response assertions so failures still run cleanup.
       const feePolicyCleanup = cleanup.defer('delete future fee policy', () =>
         deletePolicyIfPresent(feePolicyPath, feePolicyId, 'Fee policy'),
       )
+      expect(addedFeePolicy.success).toBe(true)
+      expect(asStringArray(addedFeePolicy.errors)).toEqual([])
       expect(addedFeePolicy.effectiveDate).toBe(feeEffectiveDate)
       expect(String(addedFeePolicy.orgUnitNo)).toBe(orgUnitNo)
       expect(String(addedFeePolicy.percentIncrease)).toBe('12')
@@ -3445,16 +3348,17 @@ test.describe('TEST IDIR admin regression', () => {
           },
         }),
       )
-      expect(addedFilPolicy.success).toBe(true)
-      expect(asStringArray(addedFilPolicy.errors)).toEqual([])
       const filPolicyId = requiredString(
         addedFilPolicy.lexisFILPolicyId,
         'Regression fee in lieu policy id',
       )
+      expect(Number.isSafeInteger(Number(filPolicyId))).toBe(true)
       expect(Number(filPolicyId)).toBeGreaterThan(0)
       const filPolicyCleanup = cleanup.defer('delete future fee in lieu policy', () =>
         deletePolicyIfPresent(filPolicyPath, filPolicyId, 'Fee in lieu policy'),
       )
+      expect(addedFilPolicy.success).toBe(true)
+      expect(asStringArray(addedFilPolicy.errors)).toEqual([])
       expect(addedFilPolicy.effectiveDate).toBe(filEffectiveDate)
       expect(String(addedFilPolicy.filPercent)).toBe('23')
       requiredString(addedFilPolicy.entryUserId, 'Regression fee in lieu policy entry user')
@@ -3808,7 +3712,6 @@ test.describe('TEST IDIR admin regression', () => {
     let primaryError: unknown
 
     try {
-      validateRegressionFixtureConfig()
       const capabilities = await fetchSessionCapabilities(page)
       expect(capabilities.authenticated).toBe(true)
       expect(
@@ -3820,33 +3723,36 @@ test.describe('TEST IDIR admin regression', () => {
         shipping: await shippingFixture(page),
       }))
 
-      const validationResult = await test.step('validate the XML application submission', () =>
-        postRegressionSubmission(
-          page,
-          '/api/lexis/application-submissions/validation',
-          packageNumber,
-        ))
-      expect(validationResult.status).toBe('validated')
-      expect(validationResult.packageNumber).toBe(packageNumber)
-      expect(validationResult.scaleRows).toBe(3)
-      expect(asStringArray(validationResult.errors)).toEqual([])
+      const submission =
+        await test.step('resolve references and validate a fresh XML submission', () =>
+          resolveRegressionSubmission(page, packageNumber))
+      expect(submission.validation.status).toBe('validated')
+      expect(submission.validation.packageNumber).toBe(packageNumber)
+      expect(submission.validation.scaleRows).toBe(3)
+      expect(asStringArray(submission.validation.errors)).toEqual([])
 
-      const submissionResult = await test.step('import the lifecycle application', () =>
-        postRegressionSubmission(page, '/api/lexis/application-submissions', packageNumber))
-      expect(submissionResult.status).toBe('accepted')
-      expect(submissionResult.packageNumber).toBe(packageNumber)
-      expect(submissionResult.scaleRows).toBe(3)
-      expect(asStringArray(submissionResult.errors)).toEqual([])
-      expect(submissionResult.applicationNumber).toEqual(expect.any(Number))
+      const submissionResult = await test.step('import the lifecycle application', async () =>
+        readJsonResponse<ApplicationSubmissionResponse>(
+          await postWithCsrf(page, '/api/lexis/application-submissions', {
+            multipart: regressionSubmissionFile(packageNumber, submission.xml),
+          }),
+        ))
       const lifecycleApplicationNumber = Number(submissionResult.applicationNumber)
+      expect(Number.isSafeInteger(lifecycleApplicationNumber)).toBe(true)
       expect(lifecycleApplicationNumber).toBeGreaterThan(0)
 
+      // Register cleanup as soon as the created ID is usable, before other assertions can fail.
       cleanup.defer('delete lifecycle application package and scales', () =>
         cleanupRegressionPackage(page, lifecycleApplicationNumber, packageNumber),
       )
       const lifecycleRejectCleanup = cleanup.defer('reject lifecycle application', () =>
         rejectRegressionApplication(page, lifecycleApplicationNumber, `${marker} cleanup`),
       )
+      expect(submissionResult.status).toBe('accepted')
+      expect(submissionResult.packageNumber).toBe(packageNumber)
+      expect(submissionResult.scaleRows).toBe(3)
+      expect(asStringArray(submissionResult.errors)).toEqual([])
+      expect(submissionResult.applicationNumber).toEqual(expect.any(Number))
 
       await test.step('find the imported application by uppercase and lowercase package number', () =>
         expectLowercasePackageSearch(page, packageNumber, {
@@ -3880,13 +3786,14 @@ test.describe('TEST IDIR admin regression', () => {
             form: createApplicationForm(lifecycleTemplate, schedule.offer.scheduleId, offerMarker),
           }),
         ))
-      expect(createdApplication.valid).toBe(true)
-      expect(asStringArray(createdApplication.errors)).toEqual([])
       const offerApplicationNumber = Number(createdApplication.applicationNumber)
+      expect(Number.isSafeInteger(offerApplicationNumber)).toBe(true)
       expect(offerApplicationNumber).toBeGreaterThan(0)
       const offerApplicationCleanup = cleanup.defer('reject offer application', () =>
         rejectRegressionApplication(page, offerApplicationNumber, `${marker} cleanup`),
       )
+      expect(createdApplication.valid).toBe(true)
+      expect(asStringArray(createdApplication.errors)).toEqual([])
 
       const initialOfferApplication = await readVersionedJson<Record<string, unknown>>(
         page,
@@ -3938,8 +3845,8 @@ test.describe('TEST IDIR admin regression', () => {
               packageNumber: '',
               companyName: 'LEXIS E2E REGRESSION',
               contactName: offerMarker,
-              offeringClientNumber: regressionOwnerClientNumber,
-              clientNumber: regressionOwnerClientNumber,
+              offeringClientNumber: submission.ownerClientNumber,
+              clientNumber: submission.ownerClientNumber,
               offerVolume: '1.24',
               purchaseOfferAmount: '100',
               teacReviewDate: '',
@@ -3952,14 +3859,15 @@ test.describe('TEST IDIR admin regression', () => {
             },
           }),
         ))
-      expect(createdOffer.success).toBe(true)
-      expect(createdOffer.sendEmail).toBe(true)
-      expect(asStringArray(createdOffer.errors)).toEqual([])
       const offerNumber = Number(createdOffer.exportPurchaseOfferNumber)
+      expect(Number.isSafeInteger(offerNumber)).toBe(true)
       expect(offerNumber).toBeGreaterThan(0)
       const offerCleanup = cleanup.defer('withdraw purchase offer', () =>
         withdrawRegressionOffer(page, offerNumber, marker),
       )
+      expect(createdOffer.success).toBe(true)
+      expect(createdOffer.sendEmail).toBe(true)
+      expect(asStringArray(createdOffer.errors)).toEqual([])
 
       await expectAccessiblePage(
         page,
@@ -4107,8 +4015,6 @@ test.describe('TEST IDIR admin regression', () => {
           },
         }),
       )
-      expect(createdExemption.success).toBe(true)
-      expect(asStringArray(createdExemption.errors)).toEqual([])
       const exemptionNumber = requiredString(
         createdExemption.exemptionNumber,
         'Created exemption number',
@@ -4116,6 +4022,8 @@ test.describe('TEST IDIR admin regression', () => {
       const exemptionCleanup = cleanup.defer('cancel ministerial exemption', () =>
         cancelRegressionExemption(page, exemptionNumber, orgUnitNumber),
       )
+      expect(createdExemption.success).toBe(true)
+      expect(asStringArray(createdExemption.errors)).toEqual([])
 
       await test.step('reopen a cancelled exemption without inventing missing dates', async () => {
         await cancelRegressionExemption(page, exemptionNumber, orgUnitNumber)
@@ -4273,10 +4181,8 @@ test.describe('TEST IDIR admin regression', () => {
           form: { exemptionNumber },
         }),
       )
-      expect(createdPermit.success).toBe(true)
-      expect(createdPermit.permitStatus).toBe('ACT')
-      expect(asStringArray(createdPermit.errors)).toEqual([])
       const permitNumber = Number(createdPermit.permitNumber)
+      expect(Number.isSafeInteger(permitNumber)).toBe(true)
       expect(permitNumber).toBeGreaterThan(0)
       const permitCleanup = cleanup.defer('cancel provincial permit', () =>
         cancelRegressionPermit(page, permitNumber, lifecycleMarker, schedule.shipping),
@@ -4288,6 +4194,9 @@ test.describe('TEST IDIR admin regression', () => {
         await reactivateRegressionPermit(page, permitNumber, lifecycleMarker, schedule.shipping)
         await detachRegressionPermitApplication(page, permitNumber, lifecycleApplicationNumber)
       })
+      expect(createdPermit.success).toBe(true)
+      expect(createdPermit.permitStatus).toBe('ACT')
+      expect(asStringArray(createdPermit.errors)).toEqual([])
 
       await test.step('find the linked permit by uppercase and lowercase package number', () =>
         expectLowercasePackageSearch(page, packageNumber, {

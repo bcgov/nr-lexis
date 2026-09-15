@@ -150,9 +150,10 @@ contract and [gateway/README.md](gateway/README.md) for gateway responsibilities
 ## CI regression
 
 The `Regression` GitHub Actions workflow runs weekly and manually against TEST. It currently reads
-TEST IDIR credentials from GitHub `test` environment secrets and passes the masked values into the
-`npm run e2e:regression` command. Business BCeID browser regression is intentionally not scheduled
-because repeated automated login attempts can lock the TEST account. See
+TEST IDIR credentials from GitHub `test` environment secrets, creates its own lifecycle records and
+resolves external reference keys at runtime. Playwright uses a reporter that suppresses sensitive
+output. Business BCeID browser regression is intentionally not scheduled because repeated automated
+login attempts can lock the TEST account. See
 [frontend/e2e/README.md](frontend/e2e/README.md) for the required GitHub environment secrets.
 
 Production RTM-only rollout is controlled by the optional GitHub environment secret

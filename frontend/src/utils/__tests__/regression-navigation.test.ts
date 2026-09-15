@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events'
 import { errors, type Locator, type Page, type Request, type Response } from '@playwright/test'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { gotoWithRecovery } from '../../../e2e/utils/navigation'
+import SafeRegressionReporter from '../../../e2e/safe-regression-reporter'
 
 const target = 'https://lexis.example.test/federal?applicationNumber=private-fixture'
 const request = (
@@ -122,7 +123,7 @@ describe('regression navigation recovery', () => {
     expect(waitForTimeout).toHaveBeenCalledWith(5_000)
   })
 
-  it.each(['net::ERR_CONNECTION_REFUSED', 'net::ERR_FAILED'])(
+  it.each(['net::ERR_CONNECTION_REFUSED', 'net::ERR_FAILED', 'net::ERR_ABORTED'])(
     'recovers a lazy module with %s after the surrounding application renders',
     async (errorText) => {
       const { page, events, goto, ready, waitFor } = createPage('Side navigation')
@@ -216,13 +217,8 @@ describe('regression navigation recovery', () => {
         return response()
       })
 
-      if (differentResource) {
-        await expect(gotoWithRecovery(page, target, { ready })).rejects.toThrow('net::ERR_ABORTED')
-        expect(goto).toHaveBeenCalledTimes(1)
-      } else {
-        await gotoWithRecovery(page, target, { ready })
-        expect(goto).toHaveBeenCalledTimes(2)
-      }
+      await gotoWithRecovery(page, target, { ready })
+      expect(goto).toHaveBeenCalledTimes(2)
     },
   )
 
@@ -252,7 +248,7 @@ describe('regression navigation recovery', () => {
     expect(events.eventNames()).toEqual([])
   })
 
-  it.each([400, 403, 404, 500])(
+  it.each([400, 401, 403, 404, 500])(
     'fails without retrying a frontend HTTP %s response despite successful readiness',
     async (status) => {
       const { page, events, goto, ready, waitFor, waitForTimeout } = createPage()
@@ -268,10 +264,17 @@ describe('regression navigation recovery', () => {
   )
 
   it.each([502, 503, 504])('recovers an HTTP %s frontend response', async (status) => {
+    const output = vi.spyOn(console, 'log').mockImplementation(() => undefined)
     const { page, goto } = createPage()
     goto.mockResolvedValueOnce(response(status))
     await gotoWithRecovery(page, target)
     expect(goto).toHaveBeenCalledTimes(2)
+    const reporter = new SafeRegressionReporter()
+    const recoveryMessage = vi.mocked(console.warn).mock.calls[0][0] as string
+    reporter.onStdErr(recoveryMessage)
+    expect(output).toHaveBeenCalledExactlyOnceWith(recoveryMessage)
+    expect(recoveryMessage).toContain(`frontend HTTP ${status}; retry in 5000ms`)
+    expect(recoveryMessage).not.toContain('private-fixture')
   })
 
   it('does not retry a rendered page whose expected heading is missing', async () => {
@@ -362,6 +365,107 @@ describe('regression navigation recovery', () => {
       failRequest(events, request('fetch', '/api/lexis/offer', 'POST'))
       return response()
     })
+    waitFor.mockRejectedValue(error)
+    await expect(gotoWithRecovery(page, target, { ready })).rejects.toBe(error)
+    expect(goto).toHaveBeenCalledTimes(1)
+  })
+
+  it('recovers a refused session-bootstrap GET that leaves a login shell', async () => {
+    const { page, events, goto, ready, waitFor } = createPage('Log in with IDIR')
+    goto.mockImplementationOnce(async () => {
+      failRequest(events, request('fetch', '/api/lexis/session/capabilities'))
+      return response()
+    })
+    waitFor.mockRejectedValueOnce(new errors.TimeoutError('Expected heading did not render'))
+    await gotoWithRecovery(page, target, { ready })
+    expect(goto).toHaveBeenCalledTimes(2)
+  })
+
+  it.each(['fetch', 'xhr'])(
+    'allows a signed-out %s session response to render login',
+    async (type) => {
+      const { page, events, goto, ready, waitFor, waitForTimeout } = createPage('Log in with IDIR')
+      goto.mockImplementationOnce(async () => {
+        receiveResponse(events, response(401, request(type, '/api/lexis/session/capabilities')))
+        return response()
+      })
+
+      await expect(gotoWithRecovery(page, target, { ready })).resolves.toBeDefined()
+      expect(waitFor).toHaveBeenCalledOnce()
+      expect(goto).toHaveBeenCalledTimes(1)
+      expect(waitForTimeout).not.toHaveBeenCalled()
+      expect(events.eventNames()).toEqual([])
+    },
+  )
+
+  it('preserves missing authenticated content after a signed-out session response', async () => {
+    const { page, events, goto, ready, waitFor, waitForTimeout } = createPage('Log in with IDIR')
+    goto.mockImplementationOnce(async () => {
+      const bootstrap = request('fetch', '/api/lexis/session/capabilities')
+      receiveResponse(events, response(401, bootstrap))
+      events.emit('requestfinished', bootstrap)
+      return response()
+    })
+    const error = new errors.TimeoutError('Expected authenticated heading did not render')
+    waitFor.mockRejectedValue(error)
+    await expect(gotoWithRecovery(page, target, { ready })).rejects.toBe(error)
+    expect(goto).toHaveBeenCalledTimes(1)
+    expect(waitForTimeout).not.toHaveBeenCalled()
+  })
+
+  it.each([403, 404, 500])('keeps a session HTTP %s response fatal', async (status) => {
+    const { page, events, goto, ready, waitForTimeout } = createPage('Log in with IDIR')
+    goto.mockImplementationOnce(async () => {
+      receiveResponse(events, response(status, request('fetch', '/api/lexis/session/capabilities')))
+      return response()
+    })
+    await expect(gotoWithRecovery(page, target, { ready })).rejects.toThrow(`HTTP ${status}`)
+    expect(goto).toHaveBeenCalledTimes(1)
+    expect(waitForTimeout).not.toHaveBeenCalled()
+  })
+
+  it.each([502, 503, 504])('recovers a session HTTP %s response', async (status) => {
+    const { page, events, goto, ready } = createPage('Log in with IDIR')
+    goto.mockImplementationOnce(async () => {
+      receiveResponse(events, response(status, request('fetch', '/api/lexis/session/capabilities')))
+      return response()
+    })
+    await expect(gotoWithRecovery(page, target, { ready })).resolves.toBeDefined()
+    expect(goto).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps a document HTTP 401 fatal even at the session endpoint', async () => {
+    const { page, events, goto, ready } = createPage('Log in with IDIR')
+    goto.mockImplementationOnce(async () => {
+      receiveResponse(events, response(401, request('document', '/api/lexis/session/capabilities')))
+      return response()
+    })
+    await expect(gotoWithRecovery(page, target, { ready })).rejects.toThrow('HTTP 401')
+    expect(goto).toHaveBeenCalledTimes(1)
+  })
+
+  it('recovers a stalled module GET while the application loading shell is rendered', async () => {
+    const { page, events, goto, ready, waitFor } = createPage('Loading exemption')
+    goto.mockImplementationOnce(async () => {
+      events.emit('request', request('script', '/assets/text.js'))
+      return response()
+    })
+    waitFor.mockRejectedValueOnce(new errors.TimeoutError('Expected heading did not render'))
+    await gotoWithRecovery(page, target, { ready })
+    expect(goto).toHaveBeenCalledTimes(2)
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('pending frontend resource'))
+    expect(events.eventNames()).toEqual([])
+  })
+
+  it('does not treat a completed module as a stalled request when the heading is wrong', async () => {
+    const { page, events, goto, ready, waitFor } = createPage('Wrong heading')
+    goto.mockImplementationOnce(async () => {
+      const script = request('script', '/assets/text.js')
+      receiveResponse(events, response(200, script))
+      events.emit('requestfinished', script)
+      return response()
+    })
+    const error = new errors.TimeoutError('Expected heading did not render')
     waitFor.mockRejectedValue(error)
     await expect(gotoWithRecovery(page, target, { ready })).rejects.toBe(error)
     expect(goto).toHaveBeenCalledTimes(1)

@@ -4,7 +4,7 @@ export const FRONTEND_RECOVERY_TIMEOUT_MS = 150_000
 const DOCUMENT_TIMEOUT_MS = 10_000
 const RENDER_TIMEOUT_MS = 30_000
 const TRANSIENT_NAVIGATION_ERROR =
-  /net::ERR_(?:CONNECTION_REFUSED|CONNECTION_RESET|CONNECTION_CLOSED|EMPTY_RESPONSE|TIMED_OUT|NAME_NOT_RESOLVED|FAILED)|page\.goto: Timeout \d+ms exceeded/i
+  /net::ERR_(?:CONNECTION_REFUSED|CONNECTION_RESET|CONNECTION_CLOSED|EMPTY_RESPONSE|TIMED_OUT|NAME_NOT_RESOLVED|FAILED|ABORTED)|page\.goto: Timeout \d+ms exceeded/i
 const GATEWAY_STATUSES = new Set([502, 503, 504])
 const MODULE_LOAD_ERROR =
   /Failed to fetch dynamically imported module|Importing a module script failed/i
@@ -22,13 +22,18 @@ export const gotoWithRecovery = async (
   let attempt = 0
   let lastReason = 'document transport failure'
 
+  const isSessionBootstrap = (request: Request): boolean =>
+    ['fetch', 'xhr'].includes(request.resourceType()) &&
+    new URL(request.url()).pathname === '/api/lexis/session/capabilities'
+
   const isFrontendResource = (request: Request): boolean => {
     const resourceUrl = new URL(request.url())
     return (
       request.method() === 'GET' &&
       resourceUrl.origin === origin &&
       (['document', 'script', 'stylesheet'].includes(request.resourceType()) ||
-        resourceUrl.pathname === '/config.js')
+        resourceUrl.pathname === '/config.js' ||
+        isSessionBootstrap(request))
     )
   }
 
@@ -36,6 +41,7 @@ export const gotoWithRecovery = async (
     attempt += 1
     let interruptedResource = false
     const attemptRequests = new Set<Request>()
+    const pendingRequests = new Set<Request>()
     const interruptedRequests = new Set<Request>()
     let applicationError: Error | undefined
     let moduleLoadError: Error | undefined
@@ -48,9 +54,14 @@ export const gotoWithRecovery = async (
         throw moduleLoadError
     }
     const onRequest = (request: Request) => {
-      if (isFrontendResource(request)) attemptRequests.add(request)
+      if (isFrontendResource(request)) {
+        attemptRequests.add(request)
+        pendingRequests.add(request)
+      }
     }
+    const onRequestFinished = (request: Request) => pendingRequests.delete(request)
     const onRequestFailed = (request: Request) => {
+      pendingRequests.delete(request)
       // A new navigation cancels outstanding requests from the previous timed-out attempt.
       if (!attemptRequests.has(request) || interruptedRequests.has(request)) return
       const errorText = request.failure()?.errorText ?? 'Unknown request failure'
@@ -61,6 +72,9 @@ export const gotoWithRecovery = async (
     }
     const onResponse = (response: Response) => {
       if (!attemptRequests.has(response.request())) return
+      // An expired session legitimately renders the login shell. Its readiness assertion
+      // still fails if the caller requires authenticated content instead of the login button.
+      if (response.status() === 401 && isSessionBootstrap(response.request())) return
       if (GATEWAY_STATUSES.has(response.status())) {
         interruptedResource = true
         // Chromium can also report ERR_ABORTED for this same unsuccessful resource.
@@ -77,6 +91,7 @@ export const gotoWithRecovery = async (
       else applicationError ??= error
     }
     page.on('request', onRequest)
+    page.on('requestfinished', onRequestFinished)
     page.on('requestfailed', onRequestFailed)
     page.on('response', onResponse)
     page.on('pageerror', onPageError)
@@ -105,7 +120,9 @@ export const gotoWithRecovery = async (
           } catch (error) {
             assertNoApplicationError()
             if (!(error instanceof errors.TimeoutError)) throw error
-            if (!interruptedResource) {
+            // A hanging module or session-bootstrap request can leave a rendered loading
+            // shell without firing requestfailed. Retry only while that GET is still pending.
+            if (!interruptedResource && pendingRequests.size === 0) {
               const root = page.locator('#root')
               const emptyShell =
                 (await root.count()) === 1 &&
@@ -122,7 +139,8 @@ export const gotoWithRecovery = async (
         }
         assertNoApplicationError()
         if (interruptedResource) lastReason = 'frontend resource transport failure'
-        else if (renderInterrupted) lastReason = 'empty app shell'
+        else if (renderInterrupted)
+          lastReason = pendingRequests.size > 0 ? 'pending frontend resource' : 'empty app shell'
         else return response
       }
     } catch (error) {
@@ -131,6 +149,7 @@ export const gotoWithRecovery = async (
       lastReason = 'document transport failure'
     } finally {
       page.off('request', onRequest)
+      page.off('requestfinished', onRequestFinished)
       page.off('requestfailed', onRequestFailed)
       page.off('response', onResponse)
       page.off('pageerror', onPageError)

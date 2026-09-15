@@ -1,6 +1,6 @@
 import { expect, type APIResponse, type Page } from '@playwright/test'
 import { E2E_BASE_URL } from './index'
-import { gotoWithRecovery } from './navigation'
+import { FRONTEND_RECOVERY_TIMEOUT_MS, gotoWithRecovery } from './navigation'
 
 type SessionCapabilities = {
   authenticated?: boolean
@@ -74,7 +74,9 @@ const ACCESS_TOKEN_ACTIVITY_REFRESH_TIMEOUT_MS = (ACCESS_TOKEN_REFRESH_WINDOW_SE
 const ACCESS_TOKEN_RELOAD_REFRESH_TIMEOUT_MS = 30_000
 const JWT_PATTERN = /^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/
 const TRANSIENT_REQUEST_ERROR =
-  /\b(?:EAI_AGAIN|ECONNREFUSED|ECONNRESET|EHOSTUNREACH|ENETUNREACH|ETIMEDOUT)\b|socket hang up|network socket disconnected/i
+  /\b(?:EAI_AGAIN|ECONNREFUSED|ECONNRESET|EHOSTUNREACH|ENETUNREACH|ENOTFOUND|ETIMEDOUT)\b|socket hang up|network socket disconnected|apiRequestContext\.get: Timeout \d+ms exceeded/i
+const CONNECTION_NOT_ESTABLISHED =
+  /^apiRequestContext\.(?:post|put|delete): connect ECONNREFUSED\b/i
 const LOGIN_ERROR_TEXT =
   /username or password.*incorrect|user id or password.*incorrect|user id and password.*don't match|invalid username|invalid password|authentication failed/i
 const SENSITIVE_URL_PARAM_PATTERN =
@@ -444,6 +446,10 @@ export const getWithAuth = async (
             ...options.headers,
             ...headers,
           },
+          // API reads must stay on the requested endpoint. Redirects forward custom headers
+          // (including CSRF) and can hide an auth redirect behind a successful final response.
+          maxRedirects: 0,
+          maxRetries: 0,
         }),
       )
     } catch (error) {
@@ -560,7 +566,6 @@ const firstVisible = async (page: Page, selector: string, timeout = 5000) => {
 }
 
 const currentPageSummary = async (page: Page): Promise<string> => {
-  const title = await page.title().catch(() => '')
   const rawUrl = page.url()
   const safeUrl = (() => {
     try {
@@ -571,7 +576,8 @@ const currentPageSummary = async (page: Page): Promise<string> => {
     }
   })()
 
-  return `${safeUrl}${title ? ` (${title})` : ''}`
+  // Browser titles can contain an entire identity-provider URL, including OAuth state.
+  return safeUrl
 }
 
 const visibleLoginError = async (page: Page): Promise<string | null> => {
@@ -622,7 +628,9 @@ const clickLoginButton = async (page: Page, config: LoginConfig): Promise<void> 
     const button = await visibleLoginButton(page, config)
     if (button) {
       try {
-        await button.click({ timeout: LOGIN_BUTTON_CLICK_TIMEOUT_MS })
+        // The session checks below own the federated navigation wait. A successful click
+        // must not fail just because the identity provider takes longer to start loading.
+        await button.click({ timeout: LOGIN_BUTTON_CLICK_TIMEOUT_MS, noWaitAfter: true })
         return
       } catch (error) {
         throw new Error(
@@ -785,20 +793,55 @@ export const expectAccessiblePage = async (
   await expect(page.getByRole('heading', { name: '404' })).toHaveCount(0)
 }
 
+const requestWithConnectionRecovery = async (
+  page: Page,
+  request: (timeout: number) => Promise<APIResponse>,
+): Promise<APIResponse> => {
+  const deadline = Date.now() + FRONTEND_RECOVERY_TIMEOUT_MS
+  let attempt = 0
+  while (Date.now() < deadline) {
+    attempt += 1
+    try {
+      return await request(Math.max(1, Math.min(30_000, deadline - Date.now())))
+    } catch (error) {
+      // A refused TCP connection sent no HTTP request. Never replay an ambiguous timeout,
+      // reset, HTTP error, save, or email whose request may already have reached the server.
+      const firstLine = (error instanceof Error ? error.message : String(error)).split('\n')[0]
+      if (!CONNECTION_NOT_ESTABLISHED.test(firstLine)) throw error
+    }
+    const delay = Math.min(
+      attempt === 1 ? 5_000 : attempt === 2 ? 10_000 : 20_000,
+      deadline - Date.now(),
+    )
+    if (delay > 0) {
+      console.warn(
+        `[LEXIS request] ${new Date().toISOString()} attempt ${attempt}: connection refused before send; retry in ${delay}ms`,
+      )
+      await page.waitForTimeout(delay)
+    }
+  }
+  throw new Error('Regression API connection did not recover within 150s (ECONNREFUSED).')
+}
+
 export const postWithCsrf = async (
   page: Page,
   path: string,
   options: PostWithCsrfOptions = {},
 ): Promise<APIResponse> => {
-  return requestWithAuthRefresh(page, (headers) =>
-    page.request.post(path, {
-      ...options,
-      headers: {
-        ...options.headers,
-        ...headers,
-      },
-      failOnStatusCode: false,
-    }),
+  return requestWithConnectionRecovery(page, (timeout) =>
+    requestWithAuthRefresh(page, (headers) =>
+      page.request.post(path, {
+        ...options,
+        headers: {
+          ...options.headers,
+          ...headers,
+        },
+        failOnStatusCode: false,
+        maxRedirects: 0,
+        maxRetries: 0,
+        timeout,
+      }),
+    ),
   )
 }
 
@@ -807,15 +850,20 @@ export const putWithCsrf = async (
   path: string,
   options: PostWithCsrfOptions = {},
 ): Promise<APIResponse> => {
-  return requestWithAuthRefresh(page, (headers) =>
-    page.request.put(path, {
-      ...options,
-      headers: {
-        ...options.headers,
-        ...headers,
-      },
-      failOnStatusCode: false,
-    }),
+  return requestWithConnectionRecovery(page, (timeout) =>
+    requestWithAuthRefresh(page, (headers) =>
+      page.request.put(path, {
+        ...options,
+        headers: {
+          ...options.headers,
+          ...headers,
+        },
+        failOnStatusCode: false,
+        maxRedirects: 0,
+        maxRetries: 0,
+        timeout,
+      }),
+    ),
   )
 }
 
@@ -827,15 +875,20 @@ export const deleteWithCsrf = async (
     headers?: Record<string, string>
   } = {},
 ): Promise<APIResponse> => {
-  return requestWithAuthRefresh(page, (headers) =>
-    page.request.delete(path, {
-      ...options,
-      headers: {
-        ...options.headers,
-        ...headers,
-      },
-      failOnStatusCode: false,
-    }),
+  return requestWithConnectionRecovery(page, (timeout) =>
+    requestWithAuthRefresh(page, (headers) =>
+      page.request.delete(path, {
+        ...options,
+        headers: {
+          ...options.headers,
+          ...headers,
+        },
+        failOnStatusCode: false,
+        maxRedirects: 0,
+        maxRetries: 0,
+        timeout,
+      }),
+    ),
   )
 }
 

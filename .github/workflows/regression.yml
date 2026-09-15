@@ -40,10 +40,6 @@ jobs:
       regression-outcome: ${{ steps.run-regression.outcome }}
     env:
       E2E_BASE_URL: https://${{ github.event.repository.name }}-test.apps.gold.devops.gov.bc.ca
-      E2E_REGRESSION_CLIENT_NUMBER: ${{ vars.E2E_REGRESSION_CLIENT_NUMBER }}
-      E2E_REGRESSION_CLIENT_LOCATION_CODE: ${{ vars.E2E_REGRESSION_CLIENT_LOCATION_CODE }}
-      E2E_REGRESSION_LEGACY_REGION_CODE: ${{ vars.E2E_REGRESSION_LEGACY_REGION_CODE }}
-      E2E_REGRESSION_TIMBER_MARK: ${{ vars.E2E_REGRESSION_TIMBER_MARK }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -55,15 +51,17 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Validate and mask regression secrets
+      - name: Validate regression credentials
         env:
           E2E_IDIR_USER: ${{ secrets.E2E_IDIR_USER }}
           E2E_IDIR_PASSWORD: ${{ secrets.E2E_IDIR_PASSWORD }}
         run: |
-          test -n "$E2E_IDIR_USER" || (echo "E2E_IDIR_USER test environment secret is required." && exit 1)
-          test -n "$E2E_IDIR_PASSWORD" || (echo "E2E_IDIR_PASSWORD test environment secret is required." && exit 1)
-          echo "::add-mask::$E2E_IDIR_USER"
-          echo "::add-mask::$E2E_IDIR_PASSWORD"
+          for required_name in E2E_IDIR_USER E2E_IDIR_PASSWORD; do
+            if [[ -z "${!required_name}" ]]; then
+              echo "::error::${required_name} test environment secret is required."
+              exit 1
+            fi
+          done
 
       - name: Install dependencies
         run: npm ci
@@ -82,7 +80,7 @@ jobs:
           npx playwright test \
             --config=playwright.regression.config.ts \
             --project=${{ matrix.project }} \
-            --reporter=line
+            --reporter=./e2e/safe-regression-reporter.ts
 
   regression-result:
     name: TEST Regression Result

@@ -27,11 +27,12 @@ describe('Coraza WAF config', () => {
   it('omits sensitive request and response sections from audit logs', () => {
     const config = readCorazaConfig()
     const auditParts = config.match(/^SecAuditLogParts\s+([A-Z]+)$/m)?.[1]
-    const sensitiveAuditParts = ['B', 'C', 'E', 'F', 'I', 'J']
+    const sensitiveAuditParts = ['B', 'C', 'E', 'F', 'H', 'I', 'J']
 
-    expect(auditParts).toBe('AHZ')
+    expect(auditParts).toBe('AKZ')
+    expect(config).toMatch(/^SecAuditLogFormat\s+Native$/m)
     sensitiveAuditParts.forEach((part) => expect(auditParts).not.toContain(part))
-    expect(config).not.toMatch(/ctl:auditLogParts\s*=\s*\+?[A-Z]*[BCEFIJ]/i)
+    expect(config).not.toMatch(/ctl:auditLogParts\s*=\s*\+?[A-Z]*[BCEFHIJ]/i)
     expect(config).toMatch(/^SecDebugLogLevel\s+0$/m)
     expect(config).not.toMatch(/\blogdata\s*:/i)
     expect(config).not.toMatch(/\bmsg\s*:[^,\n]*%\{/i)
@@ -56,6 +57,29 @@ describe('Coraza WAF config', () => {
     expect(config).toMatch(/^\s*metrics\s*$/m)
     expect(config).toMatch(/^\s*admin\s+127\.0\.0\.1:3003\s*$/m)
     expect(config).not.toMatch(/^\s*admin\s+(?:0\.0\.0\.0|\[::\]|\*|:)/m)
+  })
+
+  it('omits all headers from both the default and access log encoders', () => {
+    const config = readCaddyConfig()
+    const requestLogFilters = [...config.matchAll(/fields \{([\s\S]*?)\n\s*\}/g)]
+      .map((match) => match[1])
+      .filter((fields) => fields.includes('request>uri'))
+
+    expect(requestLogFilters).toHaveLength(2)
+    for (const fields of requestLogFilters) {
+      for (const field of ['request>headers', 'resp_headers']) {
+        expect(fields).toContain(`${field} delete`)
+      }
+    }
+    expect(config).not.toMatch(/^\s*log_credentials\b/m)
+  })
+
+  it('keeps unfilterable WAF messages out of every Caddy logger regardless of severity', () => {
+    const config = readCaddyConfig()
+
+    expect(config).toMatch(/^\s*exclude http\.handlers\.waf\s*$/m)
+    expect(config).not.toMatch(/^\s*include\b[^\n]*http\.handlers\.waf/m)
+    expect(config).not.toMatch(/^\s*log waf\s*\{/m)
   })
 
   it('allows LEXIS SPA admin routes through document navigation', () => {
