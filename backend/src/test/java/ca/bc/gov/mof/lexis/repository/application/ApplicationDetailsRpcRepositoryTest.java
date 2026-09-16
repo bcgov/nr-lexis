@@ -8,6 +8,7 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.io.ByteArrayOutputStream;
@@ -16,17 +17,20 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.ArgumentCaptor;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.CallableStatementCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
 
 @DisplayName("Unit Test | ApplicationDetailsRpcRepository")
 class ApplicationDetailsRpcRepositoryTest {
@@ -348,7 +352,6 @@ class ApplicationDetailsRpcRepositoryTest {
         () -> repository.findApplicationDocumentDetailsByApplicationNumber(1000456L));
     assertOracleFailure(() -> repository.findPermitNumbersByApplicationNumber(1000456L));
     assertOracleFailure(() -> repository.findPermitDocumentDetailsByPermitNumber(7000123L));
-    assertOracleFailure(() -> repository.findAttachmentTypeDescription("UPLOAD"));
   }
 
   @Test
@@ -358,7 +361,78 @@ class ApplicationDetailsRpcRepositoryTest {
     assertThat(repository.findApplicationDocumentDetailsByApplicationNumber(1000456L)).isEmpty();
     assertThat(repository.findPermitNumbersByApplicationNumber(1000456L)).isEmpty();
     assertThat(repository.findPermitDocumentDetailsByPermitNumber(7000123L)).isEmpty();
-    assertThat(repository.findAttachmentTypeDescription("UPLOAD")).isEmpty();
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void attachmentTypeDescriptionShouldUseBoundDirectQueryAndTrimDescription() throws SQLException {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    ResultSet resultSet = mock(ResultSet.class);
+    when(resultSet.getString("DESCRIPTION")).thenReturn(" Uploaded document ");
+    when(jdbcTemplate.query(any(String.class), any(RowMapper.class), eq("UPLOAD")))
+        .thenAnswer(
+            invocation ->
+                List.of(
+                    ((RowMapper<String>) invocation.getArgument(1)).mapRow(resultSet, 0)));
+    ApplicationDetailsRpcRepository repository = new ApplicationDetailsRpcRepository(jdbcTemplate);
+
+    assertThat(repository.findAttachmentTypeDescription(" UPLOAD "))
+        .hasValue("Uploaded document");
+
+    ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+    verify(jdbcTemplate).query(sql.capture(), any(RowMapper.class), eq("UPLOAD"));
+    assertThat(sql.getValue())
+        .contains("FROM THE.EXPORT_ATTACHMENT_TYPE_CODE")
+        .contains("WHERE C.EXPORT_ATTACHMENT_TYPE_CODE = ?");
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void attachmentTypeDescriptionShouldReturnEmptyForNoDescriptionOrABlankFirstRow()
+      throws SQLException {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    ResultSet resultSet = mock(ResultSet.class);
+    when(jdbcTemplate.query(any(String.class), any(RowMapper.class), eq("EMPTY")))
+        .thenReturn(List.of());
+    when(resultSet.getString("DESCRIPTION")).thenReturn(null, "later", "  ", "later");
+    when(jdbcTemplate.query(any(String.class), any(RowMapper.class), eq("NULL")))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<String> mapper = invocation.getArgument(1);
+              return Arrays.asList(mapper.mapRow(resultSet, 0), mapper.mapRow(resultSet, 1));
+            });
+    when(jdbcTemplate.query(any(String.class), any(RowMapper.class), eq("BLANK")))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<String> mapper = invocation.getArgument(1);
+              return Arrays.asList(mapper.mapRow(resultSet, 0), mapper.mapRow(resultSet, 1));
+            });
+    ApplicationDetailsRpcRepository repository = new ApplicationDetailsRpcRepository(jdbcTemplate);
+
+    assertThat(repository.findAttachmentTypeDescription("EMPTY")).isEmpty();
+    assertThat(repository.findAttachmentTypeDescription("NULL")).isEmpty();
+    assertThat(repository.findAttachmentTypeDescription("BLANK")).isEmpty();
+  }
+
+  @Test
+  void attachmentTypeDescriptionShouldSkipLookupForBlankCode() {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    ApplicationDetailsRpcRepository repository = new ApplicationDetailsRpcRepository(jdbcTemplate);
+
+    assertThat(repository.findAttachmentTypeDescription(null)).isEmpty();
+    assertThat(repository.findAttachmentTypeDescription("  ")).isEmpty();
+
+    verifyNoInteractions(jdbcTemplate);
+  }
+
+  @Test
+  void attachmentTypeDescriptionShouldPropagateQueryFailure() {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    when(jdbcTemplate.query(any(String.class), any(RowMapper.class), eq("UPLOAD")))
+        .thenThrow(new DataAccessResourceFailureException("Oracle unavailable"));
+    ApplicationDetailsRpcRepository repository = new ApplicationDetailsRpcRepository(jdbcTemplate);
+
+    assertOracleFailure(() -> repository.findAttachmentTypeDescription("UPLOAD"));
   }
 
   @Test

@@ -14,6 +14,7 @@ import static org.mockito.Mockito.when;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitMutationRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.DocumentRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitDocumentContextRow;
+import ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries;
 import java.io.ByteArrayOutputStream;
 import java.math.BigDecimal;
 import java.sql.CallableStatement;
@@ -827,10 +828,6 @@ class PermitRpcRepositoryTest {
         "US",
         repository::isCountryCodeValidRequired);
     assertRequiredCodeLookup(
-        "{ call LEXIS_CODES.FIND_PORT_CODE(?,?) }",
-        "VA",
-        repository::isPortCodeValidRequired);
-    assertRequiredCodeLookup(
         "{ call LEXIS_CODES.FIND_SCALE_METHOD_CODE(?,?) }",
         "W",
         repository::isScaleMethodCodeValidRequired);
@@ -838,6 +835,50 @@ class PermitRpcRepositoryTest {
         "{ call LEXIS_CODES.FIND_TRANSPORT_TYPE_CODE(?,?) }",
         "TRUCK",
         repository::isTransportTypeCodeValidRequired);
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void portValidationShouldBindTheCodeAndAcceptHistoricalRows() {
+    when(jdbcTemplate.query(eq(LexisCodeQueries.PORT_BY_CODE), any(RowMapper.class), eq("VA")))
+        .thenAnswer(invocation -> {
+          RowMapper<Boolean> mapper = invocation.getArgument(1);
+          return List.of(mapper.mapRow(resultSet, 0));
+        });
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertThat(repository.isPortCodeValidRequired(" VA ")).isTrue();
+
+    ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+    verify(jdbcTemplate).query(sql.capture(), any(RowMapper.class), eq("VA"));
+    assertThat(sql.getValue())
+        .contains("FROM THE.EXPORT_PORT_OF_EXPORT_CODE C")
+        .contains("WHERE C.EXPORT_PORT_OF_EXPORT_CODE = ?")
+        .doesNotContain("SYSDATE", "ORDER BY");
+    verify(jdbcTemplate, never()).execute(anyString(), any(CallableStatementCallback.class));
+  }
+
+  @Test
+  void portValidationShouldSkipBlankInputs() {
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertThat(repository.isPortCodeValidRequired(null)).isFalse();
+    assertThat(repository.isPortCodeValidRequired(" ")).isFalse();
+    verifyNoInteractions(jdbcTemplate);
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void portValidationShouldDistinguishUnknownCodesFromDatabaseFailures() {
+    DataAccessResourceFailureException failure =
+        new DataAccessResourceFailureException("Oracle unavailable");
+    when(jdbcTemplate.query(eq(LexisCodeQueries.PORT_BY_CODE), any(RowMapper.class), eq("VA")))
+        .thenReturn(List.of())
+        .thenThrow(failure);
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertThat(repository.isPortCodeValidRequired("VA")).isFalse();
+    assertThatThrownBy(() -> repository.isPortCodeValidRequired("VA")).isSameAs(failure);
   }
 
   @Test
@@ -1130,21 +1171,109 @@ class PermitRpcRepositoryTest {
     assertThatThrownBy(
             () -> repository.findApplicationDocumentDetailsByApplicationNumber(1000456L))
         .isInstanceOf(DataAccessResourceFailureException.class);
-    assertThatThrownBy(repository::findAllAttachmentTypes)
-        .isInstanceOf(DataAccessResourceFailureException.class);
-    assertThatThrownBy(() -> repository.findAttachmentTypeDescription("INV"))
-        .isInstanceOf(DataAccessResourceFailureException.class);
   }
 
   @Test
   void attachmentOwnershipReadsShouldPreserveLegitimateEmptyResults() throws Exception {
     stubCursorProcedure("{ call LEXIS_GROUP_5.FIND_PERMIT_FILE_DETAILS(?,?) }", 2);
-    stubCursorProcedure("{ call LEXIS_CODES.FIND_ALL_ATTACH_CODES(?) }");
     when(resultSet.next()).thenReturn(false);
     PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
 
     assertThat(repository.findPermitDocumentDetailsByPermitNumber(7000123L)).isEmpty();
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void attachmentTypesShouldKeepHistoricalRowsAndMapOptionalOrderMetadata() throws Exception {
+    when(resultSet.getString("CODE")).thenReturn(" INV ", " ", "OTH", "TXT");
+    when(resultSet.getString("DESCRIPTION"))
+        .thenReturn(" Invoice ", "Blank code", null, "Plain text");
+    when(resultSet.wasNull()).thenReturn(true);
+    when(jdbcTemplate.query(eq(LexisCodeQueries.ATTACHMENT_TYPES), any(RowMapper.class)))
+        .thenAnswer(invocation -> {
+          RowMapper<PermitRpcRepository.AttachmentTypeRow> mapper = invocation.getArgument(1);
+          return List.of(
+              mapper.mapRow(resultSet, 0), mapper.mapRow(resultSet, 1),
+              mapper.mapRow(resultSet, 2), mapper.mapRow(resultSet, 3));
+        });
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertThat(repository.findAllAttachmentTypes())
+        .extracting("code", "description", "groupBy", "orderBy")
+        .containsExactly(tuple("INV", "Invoice", 0L, 0L), tuple("TXT", "Plain text", 0L, 0L));
+    ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+    verify(jdbcTemplate).query(sql.capture(), any(RowMapper.class));
+    assertThat(sql.getValue())
+        .contains("FROM THE.EXPORT_ATTACHMENT_TYPE_CODE C", "NULL AS ORDER_BY", "NULL AS GROUP_BY")
+        .doesNotContain("WHERE", "SYSDATE", "ORDER BY");
+    verify(jdbcTemplate, never()).execute(anyString(), any(CallableStatementCallback.class));
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void attachmentTypeQueriesShouldKeepEmptyResultsAndPropagateFailures() {
+    DataAccessResourceFailureException failure =
+        new DataAccessResourceFailureException("Oracle unavailable");
+    when(jdbcTemplate.query(eq(LexisCodeQueries.ATTACHMENT_TYPES), any(RowMapper.class)))
+        .thenReturn(List.of())
+        .thenThrow(failure);
+    when(jdbcTemplate.query(
+            eq(LexisCodeQueries.ATTACHMENT_TYPE_BY_CODE), any(RowMapper.class), eq("INV")))
+        .thenReturn(List.of())
+        .thenThrow(failure);
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
     assertThat(repository.findAllAttachmentTypes()).isEmpty();
+    assertThat(repository.findAttachmentTypeDescription("INV")).isEmpty();
+    assertThatThrownBy(repository::findAllAttachmentTypes).isSameAs(failure);
+    assertThatThrownBy(() -> repository.findAttachmentTypeDescription("INV")).isSameAs(failure);
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void attachmentDescriptionShouldBindNormalizedInputAndPreserveNullFirstRow() throws Exception {
+    when(resultSet.getString("DESCRIPTION")).thenReturn(" Invoice ", null, " Later ");
+    when(jdbcTemplate.query(
+            eq(LexisCodeQueries.ATTACHMENT_TYPE_BY_CODE), any(RowMapper.class), eq("INV")))
+        .thenAnswer(invocation -> {
+          RowMapper<String> mapper = invocation.getArgument(1);
+          return java.util.Collections.singletonList(mapper.mapRow(resultSet, 0));
+        })
+        .thenAnswer(invocation -> {
+          RowMapper<String> mapper = invocation.getArgument(1);
+          return java.util.Arrays.asList(mapper.mapRow(resultSet, 0), mapper.mapRow(resultSet, 1));
+        });
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertThat(repository.findAttachmentTypeDescription(" INV ")).contains("Invoice");
+    assertThat(repository.findAttachmentTypeDescription("INV")).isEmpty();
+    assertThat(LexisCodeQueries.ATTACHMENT_TYPE_BY_CODE)
+        .contains("WHERE C.EXPORT_ATTACHMENT_TYPE_CODE = ?")
+        .doesNotContain("SYSDATE", "ORDER BY");
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void attachmentDescriptionShouldRetainOptionalColumnCompatibility() throws Exception {
+    when(resultSet.getString("DESCRIPTION")).thenThrow(new SQLException("Invalid column name"));
+    when(jdbcTemplate.query(
+            eq(LexisCodeQueries.ATTACHMENT_TYPE_BY_CODE), any(RowMapper.class), eq("INV")))
+        .thenAnswer(invocation -> {
+          RowMapper<String> mapper = invocation.getArgument(1);
+          return java.util.Collections.singletonList(mapper.mapRow(resultSet, 0));
+        });
+
+    assertThat(new PermitRpcRepository(jdbcTemplate).findAttachmentTypeDescription("INV"))
+        .isEmpty();
+  }
+
+  @Test
+  void attachmentDescriptionShouldSkipBlankInputs() {
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertThat(repository.findAttachmentTypeDescription(null)).isEmpty();
+    assertThat(repository.findAttachmentTypeDescription(" ")).isEmpty();
+    verifyNoInteractions(jdbcTemplate);
   }
 
   @Test

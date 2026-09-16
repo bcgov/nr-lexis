@@ -1,5 +1,7 @@
 package ca.bc.gov.mof.lexis.repository.federal;
 
+import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.PORT_BY_CODE;
+
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import java.sql.CallableStatement;
 import java.sql.Date;
@@ -29,8 +31,6 @@ public class FederalPermitDetailRepository extends OracleRepositorySupport {
       LEXIS_GROUP_3_PACKAGE + "FIND_F_PERM_DET_BY_ID(?,?)";
   private static final String FIND_COUNTRY_CODE =
       LEXIS_CODES_PACKAGE + "FIND_COUNTRY_CODE(?,?)";
-  private static final String FIND_PORT_OF_EXPORT_CODE =
-      LEXIS_CODES_PACKAGE + "FIND_PORT_CODE(?,?)";
   private static final String FIND_TRANSPORT_TYPE_CODE =
       LEXIS_CODES_PACKAGE + "FIND_TRANSPORT_TYPE_CODE(?,?)";
 
@@ -120,7 +120,12 @@ public class FederalPermitDetailRepository extends OracleRepositorySupport {
   }
 
   public boolean portOfExportCodeExistsRequired(String code) {
-    return codeExistsRequired(FIND_PORT_OF_EXPORT_CODE, code);
+    String normalizedCode = trim(code);
+    if (normalizedCode == null) {
+      return false;
+    }
+    return queryDirectRequired(PORT_BY_CODE, rs -> getString(rs, "CODE"), normalizedCode).stream()
+        .anyMatch(normalizedCode::equalsIgnoreCase);
   }
 
   public boolean transportTypeCodeExistsRequired(String code) {

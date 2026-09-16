@@ -3,6 +3,7 @@ package ca.bc.gov.mof.lexis.repository.federal;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -13,17 +14,21 @@ import ca.bc.gov.mof.lexis.repository.federal.FederalPermitDetailRepository.Fede
 import java.sql.CallableStatement;
 import java.sql.Date;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.sql.Types;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataRetrievalFailureException;
 import org.springframework.jdbc.core.CallableStatementCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
 
 @ExtendWith(MockitoExtension.class)
 class FederalPermitDetailRepositoryTest {
@@ -163,22 +168,99 @@ class FederalPermitDetailRepositoryTest {
   }
 
   @Test
-  void permitCodeLookupsShouldUseLegacyProceduresAndBindCodes() throws Exception {
+  void countryAndTransportCodeLookupsShouldUseLegacyProceduresAndBindCodes() throws Exception {
     stubCursorProcedure("{ call LEXIS_CODES.FIND_COUNTRY_CODE(?,?) }", 2);
-    stubCursorProcedure("{ call LEXIS_CODES.FIND_PORT_CODE(?,?) }", 2);
     stubCursorProcedure("{ call LEXIS_CODES.FIND_TRANSPORT_TYPE_CODE(?,?) }", 2);
-    when(resultSet.next()).thenReturn(true, false, true, false, true, false);
-    when(resultSet.getString("CODE")).thenReturn("US", "VAN", "TRK");
+    when(resultSet.next()).thenReturn(true, false, true, false);
+    when(resultSet.getString("CODE")).thenReturn("US", "TRK");
 
     FederalPermitDetailRepository repository = new FederalPermitDetailRepository(jdbcTemplate);
 
     assertThat(repository.countryCodeExistsRequired(" US ")).isTrue();
-    assertThat(repository.portOfExportCodeExistsRequired(" VAN ")).isTrue();
     assertThat(repository.transportTypeCodeExistsRequired(" TRK ")).isTrue();
 
     verify(callableStatement).setString(1, "US");
-    verify(callableStatement).setString(1, "VAN");
     verify(callableStatement).setString(1, "TRK");
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void portOfExportCodeLookupShouldUseDirectSqlBindTheNormalizedCodeAndMatchIgnoringCase()
+      throws Exception {
+    when(jdbcTemplate.query(anyString(), any(RowMapper.class), eq("VA")))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<String> rowMapper = invocation.getArgument(1);
+              when(resultSet.getString("CODE")).thenReturn("va");
+              return List.of(rowMapper.mapRow(resultSet, 0));
+            });
+    FederalPermitDetailRepository repository = new FederalPermitDetailRepository(jdbcTemplate);
+
+    assertThat(repository.portOfExportCodeExistsRequired(" VA ")).isTrue();
+
+    ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+    verify(jdbcTemplate).query(sql.capture(), any(RowMapper.class), eq("VA"));
+    assertThat(sql.getValue())
+        .contains(
+            "SELECT C.EXPORT_PORT_OF_EXPORT_CODE AS CODE",
+            "C.DESCRIPTION",
+            "C.EFFECTIVE_DATE",
+            "C.EXPIRY_DATE",
+            "C.UPDATE_TIMESTAMP",
+            "NULL AS ORDER_BY",
+            "NULL AS GROUP_BY",
+            "FROM THE.EXPORT_PORT_OF_EXPORT_CODE C",
+            "WHERE C.EXPORT_PORT_OF_EXPORT_CODE = ?")
+        .doesNotContain("SYSDATE", "ORDER BY");
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void portOfExportCodeLookupShouldReturnFalseForEmptyOrMismatchedDirectRows() throws Exception {
+    when(jdbcTemplate.query(anyString(), any(RowMapper.class), eq("XX"))).thenReturn(List.of());
+    when(jdbcTemplate.query(anyString(), any(RowMapper.class), eq("VA")))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<String> rowMapper = invocation.getArgument(1);
+              when(resultSet.getString("CODE")).thenReturn("OT");
+              return List.of(rowMapper.mapRow(resultSet, 0));
+            });
+    FederalPermitDetailRepository repository = new FederalPermitDetailRepository(jdbcTemplate);
+
+    assertThat(repository.portOfExportCodeExistsRequired("XX")).isFalse();
+    assertThat(repository.portOfExportCodeExistsRequired("VA")).isFalse();
+  }
+
+  @Test
+  void portOfExportCodeLookupShouldSkipOracleForBlankInput() {
+    FederalPermitDetailRepository repository = new FederalPermitDetailRepository(jdbcTemplate);
+
+    assertThat(repository.portOfExportCodeExistsRequired(" ")).isFalse();
+    assertThat(repository.portOfExportCodeExistsRequired(null)).isFalse();
+
+    verifyNoInteractions(jdbcTemplate);
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void portOfExportCodeLookupShouldPropagateDirectQueryAndMappingFailures() throws Exception {
+    when(jdbcTemplate.query(anyString(), any(RowMapper.class), eq("DOWN")))
+        .thenThrow(new DataRetrievalFailureException("Oracle port lookup failed"));
+    when(jdbcTemplate.query(anyString(), any(RowMapper.class), eq("MAP")))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<String> rowMapper = invocation.getArgument(1);
+              when(resultSet.getString("CODE")).thenThrow(new SQLException("missing CODE"));
+              return List.of(rowMapper.mapRow(resultSet, 0));
+            });
+    FederalPermitDetailRepository repository = new FederalPermitDetailRepository(jdbcTemplate);
+
+    assertThatThrownBy(() -> repository.portOfExportCodeExistsRequired("DOWN"))
+        .isInstanceOf(DataRetrievalFailureException.class)
+        .hasMessage("Oracle port lookup failed");
+    assertThatThrownBy(() -> repository.portOfExportCodeExistsRequired("MAP"))
+        .isInstanceOf(DataRetrievalFailureException.class)
+        .hasMessageContaining("Required Oracle cursor column could not be read [CODE]");
   }
 
   @Test

@@ -291,6 +291,13 @@ public abstract class OracleRepositorySupport {
     return Optional.ofNullable(results.get(0));
   }
 
+  /** Executes a bound SELECT with the same required-column contract as a required cursor read. */
+  protected <T> List<T> queryDirectRequired(
+      String sql, SqlRowMapper<T> rowMapper, Object... bindValues) {
+    return jdbcTemplate.query(
+        sql, (rs, rowNumber) -> mapRequiredCursorRow(rowMapper, rs), bindValues);
+  }
+
   /** Executes one directly paged Oracle query instead of stitching fixed-size procedure pages. */
   protected <T> Page<T> queryDirectPage(
       String selectSql,

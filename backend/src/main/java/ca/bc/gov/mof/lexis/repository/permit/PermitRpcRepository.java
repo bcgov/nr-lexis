@@ -4,6 +4,7 @@ import static ca.bc.gov.mof.lexis.util.ValueUtils.coalesce;
 import static ca.bc.gov.mof.lexis.util.ValueUtils.firstNonNull;
 
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
+import ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries;
 import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import java.io.IOException;
 import java.io.InputStream;
@@ -453,17 +454,12 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       LEXIS_CODES_PACKAGE + "FIND_CONVERSION_FOR_DATE(?,?,?)";
   private static final String FIND_ALL_COUNTRY_CODES = LEXIS_CODES_PACKAGE + "FIND_ALL_COUNTRY_CODES(?)";
   private static final String FIND_COUNTRY_CODE = LEXIS_CODES_PACKAGE + "FIND_COUNTRY_CODE(?,?)";
-  private static final String FIND_PORT_CODE = LEXIS_CODES_PACKAGE + "FIND_PORT_CODE(?,?)";
   private static final String FIND_PERMIT_STATUS_CODE =
       LEXIS_CODES_PACKAGE + "FIND_PERMIT_STATUS_CODE(?,?)";
   private static final String FIND_SCALE_METHOD_CODE =
       LEXIS_CODES_PACKAGE + "FIND_SCALE_METHOD_CODE(?,?)";
   private static final String FIND_TRANSPORT_TYPE_CODE =
       LEXIS_CODES_PACKAGE + "FIND_TRANSPORT_TYPE_CODE(?,?)";
-  private static final String FIND_ALL_ATTACHMENT_TYPE_CODES =
-      LEXIS_CODES_PACKAGE + "FIND_ALL_ATTACH_CODES(?)";
-  private static final String FIND_ATTACHMENT_TYPE_CODE =
-      LEXIS_CODES_PACKAGE + "FIND_ATTACH_TYPE_CODE(?,?)";
   private static final String IS_PERMIT_MU44 = LEXIS_GROUP_5_PACKAGE + "IS_PERMIT_MU44(?,?)";
 
   public PermitRpcRepository(@Qualifier("oracleJdbcTemplate") JdbcTemplate jdbcTemplate) {
@@ -563,7 +559,12 @@ public class PermitRpcRepository extends OracleRepositorySupport {
   }
 
   public boolean isPortCodeValidRequired(String code) {
-    return codeExistsRequired(FIND_PORT_CODE, code);
+    String normalized = trim(code);
+    if (normalized == null) {
+      return false;
+    }
+    return !queryDirectRequired(LexisCodeQueries.PORT_BY_CODE, rs -> Boolean.TRUE, normalized)
+        .isEmpty();
   }
 
   public boolean isScaleMethodCodeValidRequired(String code) {
@@ -1317,11 +1318,9 @@ public class PermitRpcRepository extends OracleRepositorySupport {
   }
 
   public List<AttachmentTypeRow> findAllAttachmentTypes() {
-    return queryCursorProcedureFailClosed(
-            FIND_ALL_ATTACHMENT_TYPE_CODES,
-            null,
-            1,
-            rs ->
+    return jdbcTemplate.query(
+            LexisCodeQueries.ATTACHMENT_TYPES,
+            (rs, rowNumber) ->
                 new AttachmentTypeRow(
                     getString(rs, "CODE"),
                     getString(rs, "DESCRIPTION"),
@@ -1338,12 +1337,15 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       return Optional.empty();
     }
 
-    return queryCursorSingleFailClosed(
-            FIND_ATTACHMENT_TYPE_CODE,
-            cs -> cs.setString(1, normalized),
-            2,
-            rs -> trim(getString(rs, "DESCRIPTION")))
-        .filter(value -> value != null && !value.isBlank());
+    List<String> descriptions =
+        jdbcTemplate.query(
+            LexisCodeQueries.ATTACHMENT_TYPE_BY_CODE,
+            (rs, rowNumber) -> trim(getString(rs, "DESCRIPTION")),
+            normalized);
+    if (descriptions.isEmpty()) {
+      return Optional.empty();
+    }
+    return Optional.ofNullable(descriptions.get(0)).filter(value -> !value.isBlank());
   }
 
   public Optional<SalesInvoiceRow> findSalesInvoiceByNumberAndPermit(
