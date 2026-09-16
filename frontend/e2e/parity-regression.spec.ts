@@ -88,6 +88,8 @@ const installParityFixtures = async (page: Page) => {
               '/exemptionSearch',
               '/exemptionDetails',
               'saveExemption',
+              '/offersSearch',
+              '/offerDetails',
             ],
           }
           break
@@ -96,6 +98,25 @@ const installParityFixtures = async (page: Page) => {
           break
         case '/api/lexis/federal/applications/888':
           body = federal
+          break
+        case '/api/lexis/purchase-offers/81001':
+          body = {
+            offerNumber: 81001,
+            applicationNumber: 888,
+            packageNumber: 'PARITY-PKG',
+            exportJurisdictionCode: 'P',
+            companyName: 'Synthetic buyer',
+            contactName: 'Example contact',
+            author: 'PARITY.TESTER',
+            locked: false,
+            canEditScheduleDates: false,
+            canEditOfferRemarks: false,
+            canEditOfferDetails: false,
+            canEditWithdrawFields: false,
+          }
+          break
+        case '/api/lexis/rpc/offer-details/package-scales':
+          body = []
           break
         case '/api/lexis/rpc/application-details/package-scales':
           body = [
@@ -156,7 +177,8 @@ const installParityFixtures = async (page: Page) => {
       }
     } else if (
       request.method() === 'POST' &&
-      path === '/api/lexis/rpc/application-details/release-lock'
+      (path === '/api/lexis/rpc/application-details/release-lock' ||
+        path === '/api/lexis/rpc/offer-details/release-lock')
     ) {
       body = { success: true }
     } else if (
@@ -215,6 +237,38 @@ const selectTab = async (page: Page, name: string) => {
 }
 
 test.describe('Frontend parity with mocked API responses', () => {
+  for (const dismissal of ['Escape', 'Close', 'Close scale details']) {
+    test(`restores Scale Detail focus after unmount using ${dismissal}`, async ({ page }) => {
+      const fixture = await installParityFixtures(page)
+      await gotoSyntheticRoute(page, '/provincial/offers/81001', {
+        ready: page.getByRole('heading', { name: 'Offer 81001', exact: true }),
+      })
+      const launcher = page.getByRole('button', { name: 'See Scale Detail', exact: true })
+      await launcher.click()
+      const dialog = page.getByRole('dialog', { name: 'Scale Detail', exact: true })
+      await expect(dialog.getByText('No scale details found for this package.')).toBeVisible()
+      await launcher.evaluate((element) => {
+        element.addEventListener('focus', () => {
+          element.setAttribute(
+            'data-dialog-present-on-focus',
+            String(Boolean(document.querySelector('.offer-scale-detail-modal'))),
+          )
+        })
+      })
+      if (dismissal === 'Escape') await page.keyboard.press('Escape')
+      else await dialog.getByRole('button', { name: dismissal, exact: true }).click()
+      await expect(dialog).toHaveCount(0)
+      // Let Carbon's deferred focus callbacks finish before checking the final focus.
+      await page.evaluate(
+        () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+      )
+      await expect(launcher).toBeFocused()
+      await expect(launcher).toHaveAttribute('data-dialog-present-on-focus', 'false')
+      expect(fixture.unexpectedRequests).toEqual([])
+      expect(fixture.writes).toEqual([])
+    })
+  }
+
   test('saving federal shipping preserves an unsaved status draft', async ({ page }) => {
     const fixture = await installParityFixtures(page)
     await gotoSyntheticRoute(page, '/federal/application/888', {

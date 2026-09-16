@@ -9,7 +9,7 @@ import {
   TableHeader,
   TableRow,
 } from '@carbon/react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Modal from '@/components/Modal'
 import TableFrame from '@/components/TableFrame'
 import { useAuth } from '@/context/auth/useAuth'
@@ -119,9 +119,25 @@ const ScaleDetailDialog = ({
 
 const ScaleDetailAction = ({ target, disabled }: OfferScaleDetailActionProps) => {
   const [open, setOpen] = useState(false)
+  const launcherRef = useRef<HTMLButtonElement>(null)
+  const restoreFocusRef = useRef(false)
+
+  useEffect(() => {
+    // Restore only after React has removed the dialog and Carbon's focus handlers.
+    if (!open && restoreFocusRef.current) {
+      restoreFocusRef.current = false
+      launcherRef.current?.focus()
+    }
+  }, [open])
+
+  const closeDialog = () => {
+    restoreFocusRef.current = true
+    setOpen(false)
+  }
   return (
     <>
       <Button
+        ref={launcherRef}
         type="button"
         kind="ghost"
         size="sm"
@@ -130,7 +146,7 @@ const ScaleDetailAction = ({ target, disabled }: OfferScaleDetailActionProps) =>
       >
         See Scale Detail
       </Button>
-      {open && <ScaleDetailDialog target={target} onClose={() => setOpen(false)} />}
+      {open && <ScaleDetailDialog target={target} onClose={closeDialog} />}
     </>
   )
 }

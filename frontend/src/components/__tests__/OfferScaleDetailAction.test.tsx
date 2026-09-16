@@ -27,13 +27,57 @@ describe('Offer scale details', () => {
     mockedFetchOfferScaleDetails.mockResolvedValue([])
   })
 
+  it('does not move focus when a closed scale action mounts', async () => {
+    const { rerender } = render(
+      <div>
+        <button type="button">Other action</button>
+      </div>,
+    )
+    const otherAction = screen.getByRole('button', { name: 'Other action' })
+    await userEvent.click(otherAction)
+    rerender(
+      <div>
+        <button type="button">Other action</button>
+        <OfferScaleDetailAction target={{ packageNumber: 'PKG-1' }} />
+      </div>,
+    )
+    expect(otherAction).toHaveFocus()
+  })
+
   it('shows an empty result and closes using the keyboard', async () => {
     render(<OfferScaleDetailAction target={{ packageNumber: 'PKG-1' }} />)
     await userEvent.click(screen.getByRole('button', { name: 'See Scale Detail' }))
     expect(await screen.findByText('No scale details found for this package.')).toBeInTheDocument()
     await userEvent.keyboard('{Escape}')
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'See Scale Detail' })).toHaveFocus()
   })
+
+  it.each(['Escape', 'Close', 'Close scale details'])(
+    'restores the matching launcher only after the dialog unmounts using %s',
+    async (name) => {
+      render(
+        <>
+          <OfferScaleDetailAction target={{ packageNumber: 'PKG-1' }} />
+          <OfferScaleDetailAction target={{ packageNumber: 'PKG-2' }} />
+        </>,
+      )
+      const launchers = screen.getAllByRole('button', { name: 'See Scale Detail' })
+      await userEvent.click(launchers[1])
+      expect(
+        await screen.findByText('No scale details found for this package.'),
+      ).toBeInTheDocument()
+      const dialogPresentWhenFocused: boolean[] = []
+      launchers[1].addEventListener('focus', () => {
+        dialogPresentWhenFocused.push(Boolean(screen.queryByRole('dialog')))
+      })
+      if (name === 'Escape') await userEvent.keyboard('{Escape}')
+      else await userEvent.click(screen.getByRole('button', { name }))
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      expect(launchers[1]).toHaveFocus()
+      expect(dialogPresentWhenFocused).toEqual([false])
+    },
+  )
 
   it('forwards an exact stored package key without normalizing it', async () => {
     const storedPackageNumber = 'PKG-EXISTING  '

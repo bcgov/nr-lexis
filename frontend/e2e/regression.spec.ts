@@ -419,7 +419,6 @@ const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/
 const landingSubtitle = 'Log Exemption Information System'
 const advertisingListReportEndpoint = '/api/lexis/reports/biweeklyListing'
 const recordVersionHeader = 'X-Lexis-Record-Version'
-const regressionEndUseCode = 'PL'
 const regressionSpeciesCode = 'HE'
 
 const uniqueRegressionFutureDate = (salt = 0): string => {
@@ -1017,6 +1016,7 @@ const applicationSummaryForm = (
   summary: ApplicationSummaryResponse,
   scheduleId: string,
   productLocation: string,
+  endUseCode: string,
 ): Record<string, string> => ({
   applicationNumber: requiredString(summary.applicationNumber, 'Application number'),
   applicationDate: requiredString(summary.applicationDate, 'Application date'),
@@ -1038,7 +1038,7 @@ const applicationSummaryForm = (
   agentContactName: String(summary.agentContactName ?? ''),
   ownerContactName: requiredString(summary.ownerContactName, 'Owner contact'),
   oicIndicator: String(summary.oicIndicator ?? 'N'),
-  applicationEndUseCode: regressionEndUseCode,
+  applicationEndUseCode: endUseCode,
   applicationSelectedSpecies: regressionSpeciesCode,
 })
 
@@ -1046,6 +1046,7 @@ const createApplicationForm = (
   template: ApplicationSummaryResponse,
   scheduleId: string,
   marker: string,
+  endUseCode: string,
 ): Record<string, string> => ({
   applicationDate: formatBusinessIsoDate(),
   exemptionTerm: '30',
@@ -1064,7 +1065,7 @@ const createApplicationForm = (
   exportJurisdictionCode: 'P',
   ageClass: requiredString(template.growthTypeCode, 'Application growth type'),
   oicIndicator: 'N',
-  applicationEndUseCode: regressionEndUseCode,
+  applicationEndUseCode: endUseCode,
   applicationSelectedSpecies: regressionSpeciesCode,
   additionalRemarks: marker,
 })
@@ -3783,7 +3784,12 @@ test.describe('TEST IDIR admin regression', () => {
       const createdApplication = await test.step('create the offer application', async () =>
         readJsonResponse<ApplicationPersistenceResponse>(
           await postWithCsrf(page, '/api/lexis/rpc/application-details/application', {
-            form: createApplicationForm(lifecycleTemplate, schedule.offer.scheduleId, offerMarker),
+            form: createApplicationForm(
+              lifecycleTemplate,
+              schedule.offer.scheduleId,
+              offerMarker,
+              submission.endUseCode,
+            ),
           }),
         ))
       const offerApplicationNumber = Number(createdApplication.applicationNumber)
@@ -3806,6 +3812,7 @@ test.describe('TEST IDIR admin regression', () => {
         offerApplicationSummary,
         schedule.offer.scheduleId,
         `${offerMarker} edited`,
+        submission.endUseCode,
       )
       const updatedApplication = await readJsonResponse<ApplicationPersistenceResponse>(
         await postWithCsrf(page, '/api/lexis/rpc/application-details/application-summary', {
@@ -3950,6 +3957,7 @@ test.describe('TEST IDIR admin regression', () => {
         lifecycleTemplate,
         String(lifecycleTemplate.exportScheduleId ?? ''),
         `${lifecycleMarker} edited`,
+        submission.endUseCode,
       )
       const updatedLifecycleApplication = await readJsonResponse<ApplicationPersistenceResponse>(
         await postWithCsrf(page, '/api/lexis/rpc/application-details/application-summary', {

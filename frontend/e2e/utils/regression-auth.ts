@@ -61,7 +61,6 @@ type AccessTokenDiagnostics = {
 }
 
 const baseOrigin = new URL(E2E_BASE_URL).origin
-const CREDENTIAL_SCREEN_TIMEOUT_MS = 5_000
 const LOGIN_SESSION_TIMEOUT_MS = 30_000
 const LOGIN_BUTTON_VISIBLE_TIMEOUT_MS = 10_000
 const LOGIN_BUTTON_CLICK_TIMEOUT_MS = 15_000
@@ -559,9 +558,9 @@ export const fetchSessionCapabilities = async (page: Page): Promise<SessionCapab
   return (await response.json()) as SessionCapabilities
 }
 
-const firstVisible = async (page: Page, selector: string, timeout = 5000) => {
-  const locator = page.locator(selector).first()
-  const visible = await locator.isVisible({ timeout }).catch(() => false)
+const firstVisible = async (page: Page, selector: string) => {
+  const locator = page.locator(selector).filter({ visible: true }).first()
+  const visible = await locator.isVisible().catch(() => false)
   return visible ? locator : null
 }
 
@@ -655,23 +654,25 @@ const fillCredentialScreen = async (
   page: Page,
   username: string,
   password: string,
+  submittedScreens: Set<string>,
 ): Promise<boolean> => {
   const [usernameInput, passwordInput] = await Promise.all([
     firstVisible(
       page,
       'input[name="user"], input[name*="user" i], input[id*="user" i], input[type="email"], input[type="text"]',
-      CREDENTIAL_SCREEN_TIMEOUT_MS,
     ),
-    firstVisible(
-      page,
-      'input[name="password"], input[type="password"]',
-      CREDENTIAL_SCREEN_TIMEOUT_MS,
-    ),
+    firstVisible(page, 'input[name="password"], input[type="password"]'),
   ])
 
   if (!usernameInput && !passwordInput) {
     return false
   }
+
+  // A slow response can leave the submitted form visible. Wait for its outcome instead
+  // of posting credentials again. A username-only/password-only step is a new screen.
+  const screenKey = JSON.stringify([page.url(), Boolean(usernameInput), Boolean(passwordInput)])
+  if (submittedScreens.has(screenKey) || submittedScreens.size >= 4) return false
+  submittedScreens.add(screenKey)
 
   if (usernameInput) {
     await usernameInput.fill(username)
@@ -721,7 +722,9 @@ const loginWithConfig = async (page: Page, config: LoginConfig): Promise<void> =
   await clickLoginButton(page, config)
   await page.waitForLoadState('domcontentloaded').catch(() => undefined)
 
-  for (let attempt = 0; attempt < 4; attempt += 1) {
+  const deadline = Date.now() + LOGIN_SESSION_TIMEOUT_MS
+  const submittedScreens = new Set<string>()
+  while (Date.now() < deadline) {
     if (await isSessionAuthenticated(page)) {
       return
     }
@@ -733,12 +736,10 @@ const loginWithConfig = async (page: Page, config: LoginConfig): Promise<void> =
       )
     }
 
-    const filled = await fillCredentialScreen(page, username, password)
-    if (!filled && page.url().startsWith(baseOrigin)) {
-      break
-    }
-
-    await page.waitForTimeout(1000)
+    // isVisible does not wait for a form to render. Keep handling late federation screens
+    // throughout the session budget, including when navigation has not left the app yet.
+    await fillCredentialScreen(page, username, password, submittedScreens)
+    await page.waitForTimeout(Math.max(0, Math.min(1000, deadline - Date.now())))
 
     const submittedLoginError = await visibleLoginError(page)
     if (submittedLoginError) {
@@ -748,18 +749,10 @@ const loginWithConfig = async (page: Page, config: LoginConfig): Promise<void> =
     }
   }
 
-  try {
-    await expect
-      .poll(() => isSessionAuthenticated(page), {
-        message: `Expected ${label} login to establish a LEXIS session.`,
-        timeout: LOGIN_SESSION_TIMEOUT_MS,
-      })
-      .toBe(true)
-  } catch {
-    throw new Error(
-      `${label} login did not establish a LEXIS session. Last page: ${await currentPageSummary(page)}. ${await authDiagnostics(page)}.`,
-    )
-  }
+  if (await isSessionAuthenticated(page)) return
+  throw new Error(
+    `${label} login did not establish a LEXIS session. Last page: ${await currentPageSummary(page)}. ${await authDiagnostics(page)}.`,
+  )
 }
 
 export const loginWithIdir = async (page: Page): Promise<void> => {

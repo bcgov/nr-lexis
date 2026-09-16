@@ -28,12 +28,19 @@ const record = (id: number) => ({
     applicationVolume: 98765,
   },
   scales: [{ timberMark: `REF${id}` }],
+  endUses: [{ code: 'SL', description: 'Sawlog' }],
 })
 
 const stubRecords = (records: ReturnType<typeof record>[]) => {
   vi.mocked(getWithAuth).mockImplementation(async (_page, path, options) => {
     if (path === '/api/lexis/applications/search') return response({ results: records })
     const params = options?.params as Record<string, string>
+    if (path.endsWith('/end-uses-for-species-region')) {
+      return response(
+        records.find((item) => String(item.summary.orgUnitNumber) === params.orgUnitNumber)
+          ?.endUses ?? [],
+      )
+    }
     const candidate = records.find((item) => String(item.application) === params.applicationNumber)
     if (path.endsWith('/application-summary')) return response(candidate?.summary)
     if (path.endsWith('/unique-scales')) return response(candidate?.scales)
@@ -53,8 +60,17 @@ describe('regression lifecycle fixtures', () => {
     stubRecords([source])
     const fixture = await resolveRegressionSubmission(page, packageNumber)
     expect(fixture.ownerClientNumber).toBe(source.summary.ownerClientNumber)
+    expect(fixture.endUseCode).toBe('SL')
     expect(fixture.xml).toContain(`<lexis:boomNumber>${packageNumber}</lexis:boomNumber>`)
     expect(fixture.xml).toContain('<lexis:bcForestRegionCode>RCB</lexis:bcForestRegionCode>')
+    expect(fixture.xml).toContain('<lexis:speciesEndUseSort>HE/SL</lexis:speciesEndUseSort>')
+    expect(getWithAuth).toHaveBeenCalledWith(
+      page,
+      '/api/lexis/rpc/application-details/end-uses-for-species-region',
+      {
+        params: { orgUnitNumber: '1903', speciesJSON: '["HE"]' },
+      },
+    )
     expect(fixture.xml).toContain('<lexis:timberMark>REF&amp;&lt;1&gt;</lexis:timberMark>')
     expect(fixture.xml.match(/<lexis:harvestedTimber>/g)).toHaveLength(3)
     expect(fixture.xml).not.toMatch(/PRIVATE SOURCE|98765/)
@@ -90,6 +106,34 @@ describe('regression lifecycle fixtures', () => {
     expect(postWithCsrf).toHaveBeenCalledTimes(1)
   })
 
+  it('uses the selected region lookup instead of a fixed end-use or a historical business value', async () => {
+    const unsupported = record(1)
+    unsupported.endUses = []
+    const supported = record(2)
+    supported.summary.orgUnitNumber = 1910
+    supported.endUses = [{ code: 'PL', description: 'Pulp' }]
+    stubRecords([unsupported, supported])
+    const fixture = await resolveRegressionSubmission(page, packageNumber)
+    expect(fixture.xml).toContain('<lexis:bcForestRegionCode>RWC</lexis:bcForestRegionCode>')
+    expect(fixture.xml).toContain('<lexis:speciesEndUseSort>HE/PL</lexis:speciesEndUseSort>')
+    expect(fixture.endUseCode).toBe('PL')
+    expect(postWithCsrf).toHaveBeenCalledTimes(1)
+  })
+
+  it('fails an end-use lookup outage before validation instead of using a guessed code', async () => {
+    stubRecords([record(1)])
+    const lookup = vi.mocked(getWithAuth).getMockImplementation()!
+    vi.mocked(getWithAuth).mockImplementation((...args) =>
+      args[1].endsWith('/end-uses-for-species-region')
+        ? Promise.resolve(response({ message: 'PRIVATE BODY' }, 503))
+        : lookup(...args),
+    )
+    await expect(resolveRegressionSubmission(page, packageNumber)).rejects.toThrow(
+      'Regression reference lookup failed.',
+    )
+    expect(postWithCsrf).not.toHaveBeenCalled()
+  })
+
   it.each([
     'Application owner location does not exist.',
     'Application region does not exist.',
@@ -120,6 +164,7 @@ describe('regression lifecycle fixtures', () => {
 
   it.each([
     { errors: ['Invalid XML schema.'] },
+    { errors: ['The application species/enduse sort is not valid for the selected region.'] },
     {
       errors: ['Application owner location does not exist.', 'Submission service is unavailable.'],
     },
@@ -173,6 +218,6 @@ describe('regression lifecycle fixtures', () => {
       'Regression reference data unavailable',
     )
     expect(postWithCsrf).toHaveBeenCalledTimes(25)
-    expect(getWithAuth).toHaveBeenCalledTimes(51)
+    expect(getWithAuth).toHaveBeenCalledTimes(52)
   })
 })
