@@ -4,4 +4,11 @@ import java.util.List;
 
 public record PermitAvailableApplicationListRpcResponseDto(
     List<String> applicationList,
-    String errorMessage) {}
+    String errorMessage,
+    List<PermitAvailableApplicationItemRpcResponseDto> applicationItems) {
+
+  public PermitAvailableApplicationListRpcResponseDto(
+      List<String> applicationList, String errorMessage) {
+    this(applicationList, errorMessage, List.of());
+  }
+}

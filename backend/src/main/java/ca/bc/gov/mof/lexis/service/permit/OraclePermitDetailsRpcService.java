@@ -22,6 +22,7 @@ import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAllScaleFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitApplicationListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitApprovedExemptionVolumeRpcResponseDto;
+import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAvailableApplicationItemRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAvailableApplicationListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAvailablePackageListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCountryItemRpcResponseDto;
@@ -1079,17 +1080,87 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         findUnassignedScalesByApplication(
             normalizedExemptionNumber, applicationAccess);
 
-    List<String> applicationList =
+    List<PermitAvailableApplicationItemRpcResponseDto> applicationItems =
         unassignedScalesByApplication.entrySet().stream()
-            .filter(entry -> !entry.getValue().isEmpty())
-            .map(entry -> String.valueOf(entry.getKey()))
-            .filter(applicationNumber -> !selectedApplications.contains(applicationNumber))
-            .sorted()
+            .map(entry -> toAvailableApplicationItem(entry, selectedApplications))
+            .sorted(Comparator.comparing(PermitAvailableApplicationItemRpcResponseDto::applicationNumber))
+            .toList();
+    List<String> applicationList =
+        applicationItems.stream()
+            .filter(item -> !item.disabled())
+            .map(PermitAvailableApplicationItemRpcResponseDto::applicationNumber)
             .toList();
 
     return new PermitAvailableApplicationListRpcResponseDto(
         applicationList,
-        applicationList.isEmpty() ? "No applications are currently available." : null);
+        applicationList.isEmpty() ? "No applications are currently available." : null,
+        applicationItems);
+  }
+
+  private PermitAvailableApplicationItemRpcResponseDto toAvailableApplicationItem(
+      Map.Entry<Long, List<ScaleMutationRow>> entry, Set<String> selectedApplications) {
+    String applicationNumber = String.valueOf(entry.getKey());
+    List<ScaleMutationRow> unassignedScales = entry.getValue();
+    Long unassignedPieces = sumUnassignedPieces(unassignedScales);
+    Double unassignedVolume = sumUnassignedVolume(unassignedScales);
+    if (selectedApplications.contains(applicationNumber)) {
+      return new PermitAvailableApplicationItemRpcResponseDto(
+          applicationNumber,
+          true,
+          "Already associated with this permit.",
+          unassignedPieces,
+          unassignedVolume);
+    }
+    if (unassignedScales.isEmpty()) {
+      return new PermitAvailableApplicationItemRpcResponseDto(
+          applicationNumber,
+          true,
+          "No unassigned scale rows are available.",
+          null,
+          null);
+    }
+
+    String applicationStatus =
+        repository
+            .findApplicationStatusCodeByNumber(entry.getKey())
+            .map(this::normalizeCode)
+            .filter(status -> !status.isBlank())
+            .orElse(null);
+    if (applicationStatus == null) {
+      return new PermitAvailableApplicationItemRpcResponseDto(
+          applicationNumber,
+          true,
+          "Application status could not be verified.",
+          unassignedPieces,
+          unassignedVolume);
+    }
+    if (!APPLICATION_STATUS_EXEMPTED.equals(applicationStatus)
+        && !APPLICATION_STATUS_PERMITTED.equals(applicationStatus)) {
+      return new PermitAvailableApplicationItemRpcResponseDto(
+          applicationNumber,
+          true,
+          "Application must be exempted or permitted before it can be added to a permit.",
+          unassignedPieces,
+          unassignedVolume);
+    }
+    return new PermitAvailableApplicationItemRpcResponseDto(
+        applicationNumber, false, null, unassignedPieces, unassignedVolume);
+  }
+
+  private Long sumUnassignedPieces(List<ScaleMutationRow> unassignedScales) {
+    if (unassignedScales.isEmpty()
+        || unassignedScales.stream().anyMatch(scale -> scale.piecesCount() == null)) {
+      return null;
+    }
+    return unassignedScales.stream().mapToLong(ScaleMutationRow::piecesCount).sum();
+  }
+
+  private Double sumUnassignedVolume(List<ScaleMutationRow> unassignedScales) {
+    if (unassignedScales.isEmpty()
+        || unassignedScales.stream().anyMatch(scale -> scale.speciesGradeVolume() == null)) {
+      return null;
+    }
+    return unassignedScales.stream().mapToDouble(ScaleMutationRow::speciesGradeVolume).sum();
   }
 
   @Override
@@ -1338,22 +1409,25 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     }
 
     PermitMutationRow permit = inserted.get();
-    int attachedScaleCount = 0;
-    for (List<ScaleMutationRow> unassignedScales :
-        findUnassignedScalesByApplication(normalizedExemptionNumber, ignored -> true).values()) {
-      for (ScaleMutationRow scale : unassignedScales) {
-        if (!updateScalePermitAssignment(scale, permit.permitNumber(), normalizedUserId)) {
-          markRollbackOnly();
-          return failureMutationResponse(
-              List.of("Unable to attach exemption scales to the new permit."), permit.permitNumber());
+    // Intentional legacy divergence: MINISTERIAL_PERMIT_EMPTY_CREATION.
+    if (!EXEMPTION_TYPE_MINISTERIAL.equalsIgnoreCase(exemption.exemptionTypeCode())) {
+      int attachedScaleCount = 0;
+      for (List<ScaleMutationRow> unassignedScales :
+          findUnassignedScalesByApplication(normalizedExemptionNumber, ignored -> true).values()) {
+        for (ScaleMutationRow scale : unassignedScales) {
+          if (!updateScalePermitAssignment(scale, permit.permitNumber(), normalizedUserId)) {
+            markRollbackOnly();
+            return failureMutationResponse(
+                List.of("Unable to attach exemption scales to the new permit."), permit.permitNumber());
+          }
+          attachedScaleCount++;
         }
-        attachedScaleCount++;
       }
-    }
-    if (attachedScaleCount > 0 && !updatePermitTotals(permit.permitNumber(), normalizedUserId)) {
-      markRollbackOnly();
-      return failureMutationResponse(
-          List.of("Unable to recalculate the new permit totals."), permit.permitNumber());
+      if (attachedScaleCount > 0 && !updatePermitTotals(permit.permitNumber(), normalizedUserId)) {
+        markRollbackOnly();
+        return failureMutationResponse(
+            List.of("Unable to recalculate the new permit totals."), permit.permitNumber());
+      }
     }
 
     return new PermitMutationRpcResponseDto(
@@ -1774,7 +1848,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     }
     boolean targetBlanketOic = targetExemption != null && targetExemption.blanketOic();
     Optional<PermitClientBinding> targetClientsResult =
-        resolvePermitUpdateClientBinding(targetBlanketOic, request, current);
+        resolvePermitUpdateClientBinding(targetExemption, request, current);
     if (targetClientsResult.isEmpty()) {
       return failureMutationResponse(
           List.of("The first linked package application could not be loaded."), permitNumber);
@@ -3874,8 +3948,10 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   }
 
   private Optional<PermitClientBinding> resolvePermitUpdateClientBinding(
-      boolean blanketOic, PermitMutationRequestDto request, PermitMutationRow current) {
-    if (blanketOic) {
+      ValidatedExemptionBinding exemption,
+      PermitMutationRequestDto request,
+      PermitMutationRow current) {
+    if (exemption.blanketOic()) {
       return Optional.of(
           new PermitClientBinding(
               mergeSubmittedText(request.ownerClientNumber(), current.clientNumber()),
@@ -3888,22 +3964,59 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         repository.findFirstPackageApplicationByPermitNumberRequired(current.permitNumber());
     if (firstPackage.isEmpty()) {
       return Optional.of(
-          new PermitClientBinding(
-              current.clientNumber(),
-              current.clientLocationCode(),
-              current.agentNumber(),
-              current.agentLocationCode()));
+          withMinisterialLocationUpdates(
+              exemption,
+              request,
+              current,
+              new PermitClientBinding(
+                  current.clientNumber(),
+                  current.clientLocationCode(),
+                  current.agentNumber(),
+                  current.agentLocationCode())));
     }
 
     return repository
         .findApplicationInfoByNumber(firstPackage.get().applicationNumber())
         .map(
             application ->
-                new PermitClientBinding(
-                    application.ownerClientNumber(),
-                    application.ownerClientLocationCode(),
-                    application.agentClientNumber(),
-                    application.agentClientLocationCode()));
+                withMinisterialLocationUpdates(
+                    exemption,
+                    request,
+                    current,
+                    new PermitClientBinding(
+                        application.ownerClientNumber(),
+                        application.ownerClientLocationCode(),
+                        application.agentClientNumber(),
+                        application.agentClientLocationCode())));
+  }
+
+  private PermitClientBinding withMinisterialLocationUpdates(
+      ValidatedExemptionBinding exemption,
+      PermitMutationRequestDto request,
+      PermitMutationRow current,
+      PermitClientBinding authoritativeClients) {
+    // Intentional legacy divergence: MINISTERIAL_PERMIT_CLIENT_LOCATIONS.
+    if (!EXEMPTION_TYPE_MINISTERIAL.equalsIgnoreCase(exemption.exemptionTypeCode())) {
+      return authoritativeClients;
+    }
+    String ownerLocation =
+        sameText(authoritativeClients.ownerClientNumber(), current.clientNumber())
+            ? current.clientLocationCode()
+            : authoritativeClients.ownerClientLocation();
+    String agentLocation =
+        sameText(authoritativeClients.agentClientNumber(), current.agentNumber())
+            ? current.agentLocationCode()
+            : authoritativeClients.agentClientLocation();
+    return new PermitClientBinding(
+        authoritativeClients.ownerClientNumber(),
+        mergeSubmittedLocationUpdate(request.ownerClientLocation(), ownerLocation),
+        authoritativeClients.agentClientNumber(),
+        mergeSubmittedLocationUpdate(request.agentClientLocation(), agentLocation));
+  }
+
+  private String mergeSubmittedLocationUpdate(String submitted, String current) {
+    String submittedLocation = trimToNull(submitted);
+    return submittedLocation == null ? current : submittedLocation;
   }
 
   private void validateClientBinding(

@@ -17,6 +17,7 @@ import {
 import EmptyState from '@/components/EmptyState'
 import IsoDatePicker from '@/components/IsoDatePicker'
 import PendingIcon from '@/components/PendingIcon'
+import PermitCountrySelect from '@/components/PermitCountrySelect'
 import UnsavedChangesGuard, { formValuesEqual } from '@/components/UnsavedChangesGuard'
 import {
   CLIENT_LOOKUP_UNAVAILABLE_MESSAGE,
@@ -40,6 +41,9 @@ import {
 } from '@/service/shipping-reference-service'
 import { formatBusinessIsoDate } from '@/utils/date'
 import { requiredLabel } from '@/utils/required-label'
+import { resolveBlanketOicRegionContext } from './region-context'
+
+import './BlanketOicPermitCreateForm.scss'
 
 type BlanketOicPermitForm = {
   permitSubmitDate: string
@@ -83,20 +87,15 @@ type BlanketOicPermitCreateFormProps = {
 const MAX_OIC_REQUEST_PIECES = 9_999_999_999
 const MAX_OIC_REQUEST_VOLUME_LENGTH = 9
 
-const initialForm = (
-  regionOptions: IdTextOption[],
-  defaultRegionNumbers: string[],
-): BlanketOicPermitForm => {
+const initialForm = (defaultRegionNumber: string): BlanketOicPermitForm => {
   const today = formatBusinessIsoDate()
-  const defaultRegion =
-    defaultRegionNumbers.find((id) => regionOptions.some((option) => option.id === id)) ?? ''
   return {
     permitSubmitDate: today,
     permitIssueDate: '',
     permitExpiryDate: '',
     oicPermitTotalPieces: '',
     oicPermitTotalVolume: '',
-    orgUnitNumber: defaultRegion,
+    orgUnitNumber: defaultRegionNumber,
     permitRemarks: '',
     ownerClientNumber: '',
     ownerClientLocation: '',
@@ -167,10 +166,10 @@ const validateForm = (form: BlanketOicPermitForm, agentUsed: boolean): FormError
     permitIssueDate: optionalDateError(form.permitIssueDate, 'Issued date'),
     permitExpiryDate: optionalDateError(form.permitExpiryDate, 'Expiry date'),
     orgUnitNumber: form.orgUnitNumber.trim() ? undefined : 'Region is required.',
-    ownerClientNumber: clientNumberError(form.ownerClientNumber, 'Owner client number'),
+    ownerClientNumber: clientNumberError(form.ownerClientNumber, 'Applicant client number'),
     ownerClientLocation: form.ownerClientLocation.trim()
       ? undefined
-      : 'Owner location is required.',
+      : 'Applicant location is required.',
     destinationCompanyName: requiredTextError(form.destinationCompanyName, 'Purchaser', 52),
     destinationCountry:
       form.destinationCountry.trim().length === 2
@@ -184,29 +183,32 @@ const validateForm = (form: BlanketOicPermitForm, agentUsed: boolean): FormError
       form.portOfExport.trim().length === 2 ? undefined : 'Customs port of export is required.',
     otherPortOfExport:
       form.portOfExport.trim().toUpperCase() === 'OT'
-        ? requiredTextError(form.otherPortOfExport, 'Other port of export', 34)
+        ? requiredTextError(form.otherPortOfExport, 'Other port name', 34)
         : undefined,
   }
 
   const pieces = form.oicPermitTotalPieces.trim()
-  if (pieces && (!/^\d+$/.test(pieces) || Number(pieces) > MAX_OIC_REQUEST_PIECES)) {
+  if (!pieces) {
+    errors.oicPermitTotalPieces = 'Permit request pieces is required.'
+  } else if (!/^\d+$/.test(pieces) || Number(pieces) > MAX_OIC_REQUEST_PIECES) {
     errors.oicPermitTotalPieces =
-      'Permit Request Pieces must be a whole number no greater than 9999999999.'
+      'Permit request pieces must be a whole number no greater than 9999999999.'
   }
 
   const volume = form.oicPermitTotalVolume.trim()
-  if (
-    volume &&
-    (!/^\d+(?:\.\d{1,2})?$/.test(volume) ||
-      Number(volume) < 0 ||
-      volume.length > MAX_OIC_REQUEST_VOLUME_LENGTH)
+  if (!volume) {
+    errors.oicPermitTotalVolume = 'Permit request volume is required.'
+  } else if (
+    !/^\d+(?:\.\d{1,2})?$/.test(volume) ||
+    Number(volume) < 0 ||
+    volume.length > MAX_OIC_REQUEST_VOLUME_LENGTH
   ) {
     errors.oicPermitTotalVolume =
-      'Permit Request Volume must be non-negative, 9 characters or fewer, with at most 2 decimal places.'
+      'Permit request volume must be non-negative, 9 characters or fewer, with at most 2 decimal places.'
   }
 
-  if (form.permitRemarks.trim().length > 254) {
-    errors.permitRemarks = 'Remarks must be 254 characters or fewer.'
+  if (form.permitRemarks.length > 250) {
+    errors.permitRemarks = 'Remarks must be 250 characters or fewer.'
   }
 
   if (
@@ -249,7 +251,8 @@ const BlanketOicPermitCreateForm = ({
   onCreated,
   onUnknownOutcome,
 }: BlanketOicPermitCreateFormProps) => {
-  const [form, setForm] = useState(() => initialForm(regionOptions, defaultRegionNumbers))
+  const regionContext = resolveBlanketOicRegionContext(regionOptions, defaultRegionNumbers)
+  const [form, setForm] = useState(() => initialForm(regionContext.defaultRegionNumber))
   const [agentUsed, setAgentUsed] = useState(false)
   const draftBaselineRef = useRef<BlanketOicPermitDraft>({ form, agentUsed: false })
   const formEditedRef = useRef(false)
@@ -502,9 +505,11 @@ const BlanketOicPermitCreateForm = ({
         setActionError(Object.values(errors)[0] ?? 'Fix the validation errors before creating.')
         return false
       }
-      if (!shippingReferences || shippingReferencesLoading || regionOptions.length === 0) {
+      if (!shippingReferences || shippingReferencesLoading || regionContext.options.length === 0) {
         setActionError(
-          shippingReferencesError || 'Required region or shipping options are unavailable.',
+          shippingReferencesError ||
+            regionContext.errorMessage ||
+            'Required region or shipping options are unavailable.',
         )
         return false
       }
@@ -577,12 +582,26 @@ const BlanketOicPermitCreateForm = ({
 
   return (
     <section aria-label="Blanket OIC permit details">
-      <p>The permit number is assigned only after a successful save.</p>
+      <InlineNotification
+        kind="info"
+        title="The permit number is assigned after a successful save. The Scale, Documents and Fees tabs become available afterwards."
+        lowContrast
+        hideCloseButton
+      />
       {shippingReferencesError && (
         <InlineNotification
           kind="error"
           title="Shipping options unavailable"
           subtitle={shippingReferencesError}
+          lowContrast
+          hideCloseButton
+        />
+      )}
+      {regionContext.errorMessage && (
+        <InlineNotification
+          kind="error"
+          title="Region unavailable"
+          subtitle={regionContext.errorMessage}
           lowContrast
           hideCloseButton
         />
@@ -605,6 +624,28 @@ const BlanketOicPermitCreateForm = ({
           onCloseButtonClick={() => setActionError('')}
         />
       )}
+      <div
+        className="legacy-search-actions application-create-actions"
+        role="group"
+        aria-label="Blanket OIC permit actions"
+      >
+        <Button kind="tertiary" disabled={saving} onClick={close}>
+          Cancel
+        </Button>
+        <Button
+          kind="primary"
+          disabled={
+            saving ||
+            shippingReferencesLoading ||
+            !shippingReferences ||
+            regionContext.options.length === 0
+          }
+          renderIcon={saving ? PendingIcon : undefined}
+          onClick={() => void createPermit()}
+        >
+          {saving ? 'Saving…' : 'Save permit'}
+        </Button>
+      </div>
 
       <Tabs
         selectedIndex={selectedTabIndex}
@@ -616,19 +657,52 @@ const BlanketOicPermitCreateForm = ({
           className="application-tabs__list application-detail-tab-list"
         >
           <Tab>Permit</Tab>
-          <Tab>Owner</Tab>
+          <Tab>Applicant</Tab>
           <Tab>Shipping</Tab>
-          <Tab>Items</Tab>
+          <Tab>Scale</Tab>
           <Tab>Documents</Tab>
           <Tab>Fees</Tab>
         </TabList>
         <TabPanels>
           <TabPanel className="application-detail-tab-panel">
             <Tile className="create-form-tile application-detail-section" aria-label="Permit">
-              <fieldset className="legacy-form-fieldset">
-                <legend className="cds--visually-hidden">Permit</legend>
-                <div className="legacy-search-grid">
-                  <TextInput id="boic-permit-status" labelText="Status" value="Active" disabled />
+              <h2 className="detail-tile-title">Permit details</h2>
+              <fieldset className="legacy-form-fieldset boic-permit-details">
+                <legend className="cds--visually-hidden">Permit details</legend>
+                <dl className="detail-field-grid boic-permit-details__status">
+                  <div className="detail-field-item">
+                    <dt className="detail-field-label">{requiredLabel('Status')}</dt>
+                    <dd className="detail-field-value">Active</dd>
+                  </div>
+                </dl>
+                <dl className="detail-field-grid boic-permit-details__pair">
+                  <div className="detail-field-item">
+                    <dt className="detail-field-label">Exemption number</dt>
+                    <dd className="detail-field-value">{exemptionNumber}</dd>
+                  </div>
+                  <div className="detail-field-item">
+                    <dt className="detail-field-label">Exemption type</dt>
+                    <dd className="detail-field-value">Blanket OIC</dd>
+                  </div>
+                </dl>
+                <div className="boic-permit-details__region">
+                  <Select
+                    id="boic-permit-region"
+                    labelText={requiredLabel('Region')}
+                    aria-required="true"
+                    value={form.orgUnitNumber}
+                    invalid={!!fieldError('orgUnitNumber')}
+                    invalidText={fieldError('orgUnitNumber')}
+                    disabled={regionContext.options.length === 0}
+                    onChange={(event) => setField('orgUnitNumber', event.target.value)}
+                  >
+                    <SelectItem value="" text="Select a region" />
+                    {regionContext.options.map((option) => (
+                      <SelectItem key={option.id} value={option.id} text={option.text} />
+                    ))}
+                  </Select>
+                </div>
+                <div className="boic-permit-details__dates">
                   <IsoDatePicker
                     id="boic-permit-submit-date"
                     labelText={requiredLabel('Submit date')}
@@ -654,9 +728,22 @@ const BlanketOicPermitCreateForm = ({
                     invalidText={fieldError('permitExpiryDate')}
                     onChange={(value) => setField('permitExpiryDate', value)}
                   />
+                </div>
+                <dl className="detail-field-grid boic-permit-details__pair">
+                  <div className="detail-field-item">
+                    <dt className="detail-field-label">Current permit pieces</dt>
+                    <dd className="detail-field-value">—</dd>
+                  </div>
+                  <div className="detail-field-item">
+                    <dt className="detail-field-label">Current permit volume (m³)</dt>
+                    <dd className="detail-field-value">—</dd>
+                  </div>
+                </dl>
+                <div className="boic-permit-details__pair">
                   <TextInput
                     id="boic-permit-request-pieces"
-                    labelText="Permit Request Pieces"
+                    labelText={requiredLabel('Permit request pieces')}
+                    aria-required="true"
                     value={form.oicPermitTotalPieces}
                     invalid={!!fieldError('oicPermitTotalPieces')}
                     invalidText={fieldError('oicPermitTotalPieces')}
@@ -664,34 +751,24 @@ const BlanketOicPermitCreateForm = ({
                   />
                   <TextInput
                     id="boic-permit-request-volume"
-                    labelText="Permit Request Volume (m³)"
+                    labelText={requiredLabel('Permit request volume (m³)')}
+                    aria-required="true"
                     value={form.oicPermitTotalVolume}
                     invalid={!!fieldError('oicPermitTotalVolume')}
                     invalidText={fieldError('oicPermitTotalVolume')}
                     onChange={(event) => setField('oicPermitTotalVolume', event.target.value)}
                   />
-                  <Select
-                    id="boic-permit-region"
-                    labelText={requiredLabel('Region')}
-                    aria-required="true"
-                    value={form.orgUnitNumber}
-                    invalid={!!fieldError('orgUnitNumber')}
-                    invalidText={fieldError('orgUnitNumber')}
-                    disabled={regionOptions.length === 0}
-                    onChange={(event) => setField('orgUnitNumber', event.target.value)}
-                  >
-                    <SelectItem value="" text="Select a region" />
-                    {regionOptions.map((option) => (
-                      <SelectItem key={option.id} value={option.id} text={option.text} />
-                    ))}
-                  </Select>
+                </div>
+                <div className="boic-permit-details__remarks">
                   <TextArea
                     id="boic-permit-remarks"
                     labelText="Remarks"
+                    enableCounter
+                    maxCount={250}
                     value={form.permitRemarks}
                     invalid={!!fieldError('permitRemarks')}
                     invalidText={fieldError('permitRemarks')}
-                    maxLength={254}
+                    maxLength={250}
                     onChange={(event) => setField('permitRemarks', event.target.value)}
                   />
                 </div>
@@ -699,13 +776,13 @@ const BlanketOicPermitCreateForm = ({
             </Tile>
           </TabPanel>
           <TabPanel className="application-detail-tab-panel">
-            <Tile className="create-form-tile application-detail-section" aria-label="Owner">
+            <Tile className="create-form-tile application-detail-section" aria-label="Applicant">
               <fieldset className="legacy-form-fieldset">
-                <legend className="cds--visually-hidden">Owner</legend>
+                <legend className="cds--visually-hidden">Applicant</legend>
                 <div className="legacy-search-grid">
                   <TextInput
                     id="boic-permit-owner-client"
-                    labelText={requiredLabel('Owner client number')}
+                    labelText={requiredLabel('Applicant client number')}
                     aria-required="true"
                     value={form.ownerClientNumber}
                     invalid={
@@ -714,7 +791,7 @@ const BlanketOicPermitCreateForm = ({
                     }
                     invalidText={
                       fieldError('ownerClientNumber') ||
-                      'No verified locations were found for this owner.'
+                      'No verified locations were found for this applicant.'
                     }
                     maxLength={8}
                     onChange={(event) => {
@@ -729,7 +806,7 @@ const BlanketOicPermitCreateForm = ({
                   />
                   <Select
                     id="boic-permit-owner-location"
-                    labelText={requiredLabel('Owner location')}
+                    labelText={requiredLabel('Applicant location')}
                     aria-required="true"
                     value={form.ownerClientLocation}
                     invalid={!!fieldError('ownerClientLocation')}
@@ -739,7 +816,9 @@ const BlanketOicPermitCreateForm = ({
                   >
                     <SelectItem
                       value=""
-                      text={ownerLookupLoading ? 'Loading locations' : 'Select an owner location'}
+                      text={
+                        ownerLookupLoading ? 'Loading locations' : 'Select an applicant location'
+                      }
                     />
                     {ownerLocations.map((location) => (
                       <SelectItem
@@ -749,27 +828,35 @@ const BlanketOicPermitCreateForm = ({
                       />
                     ))}
                   </Select>
-                  <Checkbox
-                    id="boic-permit-agent-used"
-                    labelText="An agent is acting for the owner"
-                    checked={agentUsed}
-                    onChange={(_, { checked }) => {
-                      markFormEdited()
-                      const enabled = Boolean(checked)
-                      setAgentUsed(enabled)
-                      if (!enabled) {
-                        agentLookupRequestRef.current += 1
-                        setAgentLookupLoading(false)
-                        updateClientLookupFailure('agent', false)
-                        setField('agentClientNumber', '')
-                        setField('agentClientLocation', '')
-                        setAgentLocations([])
-                        setAgentLookupAttempted(false)
-                      }
-                    }}
-                  />
-                  {agentUsed && (
-                    <>
+                </div>
+                <Checkbox
+                  id="boic-permit-agent-used"
+                  labelText="I'm an agent"
+                  checked={agentUsed}
+                  onChange={(_, { checked }) => {
+                    markFormEdited()
+                    const enabled = Boolean(checked)
+                    setAgentUsed(enabled)
+                    if (!enabled) {
+                      agentLookupRequestRef.current += 1
+                      setAgentLookupLoading(false)
+                      updateClientLookupFailure('agent', false)
+                      setField('agentClientNumber', '')
+                      setField('agentClientLocation', '')
+                      setAgentLocations([])
+                      setAgentLookupAttempted(false)
+                    }
+                  }}
+                />
+                {agentUsed && (
+                  <section
+                    className="boic-permit-agent-information"
+                    aria-labelledby="boic-permit-agent-information-heading"
+                  >
+                    <h2 id="boic-permit-agent-information-heading" className="detail-tile-title">
+                      Agent information
+                    </h2>
+                    <div className="legacy-search-grid">
                       <TextInput
                         id="boic-permit-agent-client"
                         labelText={requiredLabel('Agent client number')}
@@ -820,9 +907,9 @@ const BlanketOicPermitCreateForm = ({
                           />
                         ))}
                       </Select>
-                    </>
-                  )}
-                </div>
+                    </div>
+                  </section>
+                )}
               </fieldset>
             </Tile>
           </TabPanel>
@@ -835,31 +922,28 @@ const BlanketOicPermitCreateForm = ({
                     id="boic-permit-destination-company"
                     labelText={requiredLabel('Purchaser')}
                     aria-required="true"
+                    helperText="Company name"
                     value={form.destinationCompanyName}
                     invalid={!!fieldError('destinationCompanyName')}
                     invalidText={fieldError('destinationCompanyName')}
                     maxLength={52}
                     onChange={(event) => setField('destinationCompanyName', event.target.value)}
                   />
-                  <Select
+                  <PermitCountrySelect
                     id="boic-permit-destination-country"
                     labelText={requiredLabel('Final destination country')}
-                    aria-required="true"
                     value={form.destinationCountry}
+                    options={(shippingReferences?.countries ?? []).map((option) => ({
+                      value: option.code,
+                      label: formatShippingReferenceOption(option),
+                    }))}
+                    placeholder="Search and select a final destination country"
+                    required
                     invalid={!!fieldError('destinationCountry')}
                     invalidText={fieldError('destinationCountry')}
                     disabled={shippingReferencesLoading || !shippingReferences}
-                    onChange={(event) => setField('destinationCountry', event.target.value)}
-                  >
-                    <SelectItem value="" text="Select a final destination country" />
-                    {(shippingReferences?.countries ?? []).map((option) => (
-                      <SelectItem
-                        key={option.code}
-                        value={option.code}
-                        text={formatShippingReferenceOption(option)}
-                      />
-                    ))}
-                  </Select>
+                    onChange={(value) => setField('destinationCountry', value)}
+                  />
                   <Select
                     id="boic-permit-transport-type"
                     labelText={requiredLabel('Transport type')}
@@ -924,7 +1008,7 @@ const BlanketOicPermitCreateForm = ({
                   {form.portOfExport.trim().toUpperCase() === 'OT' && (
                     <TextInput
                       id="boic-permit-other-port"
-                      labelText={requiredLabel('Other port of export')}
+                      labelText={requiredLabel('Other port name')}
                       aria-required="true"
                       value={form.otherPortOfExport}
                       invalid={!!fieldError('otherPortOfExport')}
@@ -938,10 +1022,10 @@ const BlanketOicPermitCreateForm = ({
             </Tile>
           </TabPanel>
           <TabPanel className="application-detail-tab-panel">
-            <Tile className="create-form-tile application-detail-section" aria-label="Items">
+            <Tile className="create-form-tile application-detail-section" aria-label="Scale">
               <EmptyState
                 title="Save the permit first"
-                description="Package and Summary of Scale details are available after the permit is saved."
+                description="Scale details are available after the permit is saved."
                 headingLevel={2}
               />
             </Tile>
@@ -966,25 +1050,6 @@ const BlanketOicPermitCreateForm = ({
           </TabPanel>
         </TabPanels>
       </Tabs>
-      <div
-        className="legacy-search-actions application-create-actions"
-        role="group"
-        aria-label="Blanket OIC permit actions"
-      >
-        <Button kind="tertiary" disabled={saving} onClick={close}>
-          Cancel
-        </Button>
-        <Button
-          kind="primary"
-          disabled={
-            saving || shippingReferencesLoading || !shippingReferences || regionOptions.length === 0
-          }
-          renderIcon={saving ? PendingIcon : undefined}
-          onClick={() => void createPermit()}
-        >
-          {saving ? 'Saving…' : 'Save permit'}
-        </Button>
-      </div>
       <UnsavedChangesGuard
         isDirty={isDraftDirty}
         isBusy={saving}
@@ -992,8 +1057,9 @@ const BlanketOicPermitCreateForm = ({
         onDiscard={discardDraft}
         subject="this new Blanket OIC permit"
         saveUnavailableReason={
-          shippingReferencesLoading || !shippingReferences || regionOptions.length === 0
-            ? 'Required region and shipping options must load before this permit can be saved.'
+          shippingReferencesLoading || !shippingReferences || regionContext.options.length === 0
+            ? regionContext.errorMessage ||
+              'Required region and shipping options must load before this permit can be saved.'
             : undefined
         }
       />

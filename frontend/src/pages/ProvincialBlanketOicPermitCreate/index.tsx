@@ -228,14 +228,7 @@ const ProvincialBlanketOicPermitCreatePage = () => {
         />
       </Column>
       <Column sm={4} md={8} lg={16} className="detail-page-header">
-        <PageHeader
-          title="Apply for new Blanket OIC permit"
-          subtitle={
-            normalizedExemptionNumber
-              ? `Enter permit details for Blanket OIC exemption ${normalizedExemptionNumber}.`
-              : 'Enter the required permit details.'
-          }
-        />
+        <PageHeader title="Apply for new permit" />
       </Column>
       <BlanketOicPermitCreateContent
         key={normalizedExemptionNumber}
