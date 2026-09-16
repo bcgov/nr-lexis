@@ -327,9 +327,9 @@ const validateBlanketOicPackage = (form: BlanketOicPackageForm): BlanketOicPacka
       () => lessThanOrEqualFieldError(form.averageLength, 'Average length', 99),
     ),
     averageDiameter: firstValidationError(
-      () => requiredNumericFieldError(form.averageDiameter, 'Average diameter'),
-      () => greaterThanFieldError(form.averageDiameter, 'Average diameter', 0),
-      () => lessThanOrEqualFieldError(form.averageDiameter, 'Average diameter', 99.99),
+      () => requiredNumericFieldError(form.averageDiameter, 'Average top diameter'),
+      () => greaterThanFieldError(form.averageDiameter, 'Average top diameter', 0),
+      () => lessThanOrEqualFieldError(form.averageDiameter, 'Average top diameter', 99.99),
     ),
     status: requiredFieldError(form.status, 'Package status') ?? undefined,
     ageClass: requiredFieldError(form.ageClass, 'Age class') ?? undefined,
@@ -3355,9 +3355,11 @@ const ProvincialPermitDetailsPage = () => {
       volume: boicPackageForm.volume.trim(),
       averageLength: boicPackageForm.averageLength.trim(),
       averageDiameter: boicPackageForm.averageDiameter.trim(),
-      status: boicPackageForm.status.trim().toUpperCase(),
+      status: editingBoicPackageNumber ? boicPackageForm.status.trim().toUpperCase() : 'ACT',
       comments: boicPackageForm.comments,
-      reprocessed: boicPackageForm.reprocessed.trim().toUpperCase(),
+      reprocessed: editingBoicPackageNumber
+        ? boicPackageForm.reprocessed.trim().toUpperCase()
+        : 'N',
       ageClass: boicPackageForm.ageClass.trim().toUpperCase(),
       productType: boicPackageForm.productType.trim().toUpperCase(),
       endUseCode: boicPackageForm.endUseCode.trim().toUpperCase(),
@@ -5872,6 +5874,7 @@ const ProvincialPermitDetailsPage = () => {
                                 </div>
                                 <BlanketOicPackageCodeFields
                                   region={String(detail.orgUnitNumber ?? '')}
+                                  isCreating={!editingBoicPackageNumber}
                                   value={boicPackageForm}
                                   onChange={setBlanketOicPackageFormField}
                                   disabled={isLoadingBoicPackage || isSavingBoicPackage}

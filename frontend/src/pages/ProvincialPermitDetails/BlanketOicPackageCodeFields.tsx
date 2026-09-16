@@ -44,6 +44,7 @@ export type BlanketOicPackageCodeFieldsValue = {
 
 export type BlanketOicPackageCodeFieldsProps = {
   region: string
+  isCreating: boolean
   value: BlanketOicPackageCodeFieldsValue
   onChange: (field: BlanketOicPackageCodeField, value: string) => void
   disabled: boolean
@@ -92,6 +93,7 @@ const toSearchableOptions = (options: SearchOption[]): SearchableOption[] =>
 
 export default function BlanketOicPackageCodeFields({
   region,
+  isCreating,
   value,
   onChange,
   disabled,
@@ -145,8 +147,10 @@ export default function BlanketOicPackageCodeFields({
   }, [])
 
   useEffect(() => {
+    if (isCreating) return
     let active = true
     const loadStatusOptions = async () => {
+      setStatusAvailability('loading')
       try {
         const options = await fetchApplicationPackageStatusCodes()
         if (!active) return
@@ -163,7 +167,7 @@ export default function BlanketOicPackageCodeFields({
     return () => {
       active = false
     }
-  }, [])
+  }, [isCreating])
 
   useEffect(() => {
     let active = true
@@ -241,7 +245,7 @@ export default function BlanketOicPackageCodeFields({
 
   const referenceOptionsReady =
     ageClassAvailability === 'available' &&
-    statusAvailability === 'available' &&
+    (isCreating || statusAvailability === 'available') &&
     speciesAvailability === 'available' &&
     (!requiresEndUseOptions || endUseAvailability === 'available')
 
@@ -253,12 +257,12 @@ export default function BlanketOicPackageCodeFields({
 
   const referenceOptionsLoading =
     ageClassAvailability === 'loading' ||
-    statusAvailability === 'loading' ||
+    (!isCreating && statusAvailability === 'loading') ||
     speciesAvailability === 'loading' ||
     (requiresEndUseOptions && endUseAvailability === 'loading')
   const referenceOptionsUnavailable =
     ageClassAvailability === 'unavailable' ||
-    statusAvailability === 'unavailable' ||
+    (!isCreating && statusAvailability === 'unavailable') ||
     speciesAvailability === 'unavailable' ||
     (requiresEndUseOptions && endUseAvailability === 'unavailable')
   const speciesSelectionDisabled = disabled || speciesAvailability !== 'available'
@@ -358,36 +362,43 @@ export default function BlanketOicPackageCodeFields({
           invalidText={fieldErrors?.productType}
           onChange={(nextValue) => onChange('productType', normalizeCode(nextValue))}
         />
-        <SearchableSelect
-          id="boicPackageStatus"
-          labelText={requiredLabel('Status')}
-          required
-          value={value.status}
-          options={statusOptions.map(toSearchableOption)}
-          placeholder="Select package status"
-          disabled={disabled || statusAvailability !== 'available'}
-          invalid={!!fieldErrors?.status}
-          invalidText={fieldErrors?.status}
-          onChange={(nextValue) => onChange('status', normalizeCode(nextValue))}
-        />
-        <RadioButtonGroup
-          legendText="Reprocessed"
-          name="boic-package-reprocessed"
-          valueSelected={value.reprocessed}
-          disabled={disabled}
-          invalid={!!fieldErrors?.reprocessed}
-          invalidText={fieldErrors?.reprocessed}
-          onChange={(nextValue) => onChange('reprocessed', normalizeCode(String(nextValue ?? '')))}
-        >
-          {REPROCESSED_OPTIONS.map((option) => (
-            <RadioButton
-              key={option.value}
-              id={`boicPackageReprocessed${option.value}`}
-              labelText={option.label}
-              value={option.value}
+        {/* INTENTIONAL_LEGACY_DIVERGENCE(BOIC_PACKAGE_CREATE_DEFAULTS): create uses Active/No; edit retains saved values. */}
+        {!isCreating && (
+          <>
+            <SearchableSelect
+              id="boicPackageStatus"
+              labelText={requiredLabel('Status')}
+              required
+              value={value.status}
+              options={statusOptions.map(toSearchableOption)}
+              placeholder="Select package status"
+              disabled={disabled || statusAvailability !== 'available'}
+              invalid={!!fieldErrors?.status}
+              invalidText={fieldErrors?.status}
+              onChange={(nextValue) => onChange('status', normalizeCode(nextValue))}
             />
-          ))}
-        </RadioButtonGroup>
+            <RadioButtonGroup
+              legendText="Reprocessed"
+              name="boic-package-reprocessed"
+              valueSelected={value.reprocessed}
+              disabled={disabled}
+              invalid={!!fieldErrors?.reprocessed}
+              invalidText={fieldErrors?.reprocessed}
+              onChange={(nextValue) =>
+                onChange('reprocessed', normalizeCode(String(nextValue ?? '')))
+              }
+            >
+              {REPROCESSED_OPTIONS.map((option) => (
+                <RadioButton
+                  key={option.value}
+                  id={`boicPackageReprocessed${option.value}`}
+                  labelText={option.label}
+                  value={option.value}
+                />
+              ))}
+            </RadioButtonGroup>
+          </>
+        )}
       </div>
       <div className="application-items-species-panel">
         <h4>Package species</h4>

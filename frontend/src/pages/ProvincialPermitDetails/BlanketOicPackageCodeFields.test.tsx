@@ -40,12 +40,14 @@ const DEFAULT_VALUE: BlanketOicPackageCodeFieldsValue = {
 }
 
 type ControlledFieldsProps = {
+  isCreating?: boolean
   initialValue?: Partial<BlanketOicPackageCodeFieldsValue>
   onChange: (field: BlanketOicPackageCodeField, value: string) => void
   onAvailabilityChange: (ready: boolean) => void
 }
 
 const ControlledFields = ({
+  isCreating = false,
   initialValue,
   onChange,
   onAvailabilityChange,
@@ -58,6 +60,7 @@ const ControlledFields = ({
   return (
     <BlanketOicPackageCodeFields
       region="101"
+      isCreating={isCreating}
       value={value}
       disabled={false}
       onChange={(field, nextValue) => {
@@ -79,6 +82,7 @@ const chooseComboBoxOption = async (combobox: HTMLElement, optionName: string) =
 
 describe('BlanketOicPackageCodeFields', () => {
   beforeEach(() => {
+    vi.clearAllMocks()
     mockedFetchProvincialApplicationOptions.mockResolvedValue({
       exemptionTypes: [],
       exemptionReasons: [],
@@ -145,6 +149,34 @@ describe('BlanketOicPackageCodeFields', () => {
 
     await userEvent.click(screen.getByLabelText('No'))
     expect(onChange).toHaveBeenCalledWith('reprocessed', 'N')
+  })
+
+  it('requires status options only when editing an existing package', async () => {
+    const onChange = vi.fn()
+    const onAvailabilityChange = vi.fn()
+    mockedFetchApplicationPackageStatusCodes.mockRejectedValue(new Error('status unavailable'))
+    const { rerender } = render(
+      <ControlledFields
+        isCreating
+        onChange={onChange}
+        onAvailabilityChange={onAvailabilityChange}
+      />,
+    )
+
+    await waitFor(() => expect(onAvailabilityChange).toHaveBeenLastCalledWith(true))
+    expect(screen.queryByRole('combobox', { name: 'Status' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: 'Reprocessed' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Package options unavailable')).not.toBeInTheDocument()
+    expect(mockedFetchApplicationPackageStatusCodes).not.toHaveBeenCalled()
+
+    rerender(<ControlledFields onChange={onChange} onAvailabilityChange={onAvailabilityChange} />)
+
+    await waitFor(() => expect(screen.getByText('Package options unavailable')).toBeInTheDocument())
+    expect(onAvailabilityChange).toHaveBeenLastCalledWith(false)
+    expect(screen.getByRole('combobox', { name: 'Status' })).toBeDisabled()
+    expect(screen.getByRole('group', { name: 'Reprocessed' })).toBeInTheDocument()
+    expect(screen.getByLabelText('No')).toBeChecked()
+    expect(onChange).not.toHaveBeenCalled()
   })
 
   it('keeps cleared required package-code values blank instead of restoring defaults', async () => {
