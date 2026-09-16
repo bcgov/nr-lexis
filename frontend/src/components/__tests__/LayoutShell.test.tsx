@@ -790,6 +790,50 @@ describe('Layout shell', () => {
     expect(screen.getByTestId('current-path')).toHaveTextContent('/reports/biweeklyListing')
   })
 
+  it('restores every open group from the header but opens only the selected group from the collapsed rail', async () => {
+    renderLayout('/admin/rtm/emslogamv/upload')
+
+    const provincialToggle = screen.getByRole('button', { name: 'Provincial' })
+    const reportsToggle = screen.getByRole('button', { name: 'Reports' })
+    const adminToggle = screen.getByRole('button', { name: 'Admin' })
+
+    await userEvent.click(provincialToggle)
+    await userEvent.click(reportsToggle)
+
+    expect(provincialToggle).toHaveAttribute('aria-expanded', 'true')
+    expect(reportsToggle).toHaveAttribute('aria-expanded', 'true')
+    expect(adminToggle).toHaveAttribute('aria-expanded', 'true')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Close menu' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Open menu' }))
+
+    expect(provincialToggle).toHaveAttribute('aria-expanded', 'true')
+    expect(reportsToggle).toHaveAttribute('aria-expanded', 'true')
+    expect(adminToggle).toHaveAttribute('aria-expanded', 'true')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Close menu' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Federal' }))
+
+    expect(provincialToggle).toHaveAttribute('aria-expanded', 'false')
+    expect(reportsToggle).toHaveAttribute('aria-expanded', 'false')
+    expect(adminToggle).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.getByRole('button', { name: 'Federal' })).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('retains manually opened groups after navigating to a side-navigation destination', async () => {
+    renderLayout('/admin/rtm/emslogamv/upload')
+
+    const adminToggle = screen.getByRole('button', { name: 'Admin' })
+    const reportsToggle = screen.getByRole('button', { name: 'Reports' })
+    await userEvent.click(reportsToggle)
+
+    await userEvent.click(screen.getByRole('link', { name: /Advertising List/i }))
+
+    expect(screen.getByTestId('current-path')).toHaveTextContent('/reports/biweeklyListing')
+    expect(adminToggle).toHaveAttribute('aria-expanded', 'true')
+    expect(reportsToggle).toHaveAttribute('aria-expanded', 'true')
+  })
+
   it('moves the current-page marker from an open child to its closed group and restores focus on Escape', async () => {
     renderLayout('/provincial/application')
 

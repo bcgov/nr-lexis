@@ -437,6 +437,9 @@ function Layout({ children }: LayoutProps) {
       )?.label,
     [activeNavigationLink?.to, visibleNavigationSections],
   )
+  const [expandedSectionLabels, setExpandedSectionLabels] = useState<string[]>(() =>
+    activeSectionLabel ? [activeSectionLabel] : [],
+  )
 
   const handleLogout = () => {
     void logout()
@@ -480,6 +483,18 @@ function Layout({ children }: LayoutProps) {
     } else {
       setIsSideNavCollapsedPreference(false)
     }
+  }
+
+  const toggleNavigationGroup = (label: string): void => {
+    if (isSideNavCollapsed) {
+      setExpandedSectionLabels([label])
+      expandNavigation()
+      return
+    }
+
+    setExpandedSectionLabels((current) =>
+      current.includes(label) ? current.filter((item) => item !== label) : [...current, label],
+    )
   }
 
   const toggleProfile = (): void => {
@@ -748,14 +763,20 @@ function Layout({ children }: LayoutProps) {
 
               return (
                 <SideNavigationGroup
-                  key={`${section.label}:${location.pathname}`}
+                  key={section.label}
                   label={section.label}
                   icon={section.icon}
                   activePage={
                     section.label === activeSectionLabel ? activeNavigationLink?.label : undefined
                   }
                   collapsed={isSideNavCollapsed}
-                  onExpandNavigation={expandNavigation}
+                  open={expandedSectionLabels.includes(section.label)}
+                  onToggle={() => toggleNavigationGroup(section.label)}
+                  onClose={() =>
+                    setExpandedSectionLabels((current) =>
+                      current.filter((label) => label !== section.label),
+                    )
+                  }
                 >
                   {(expanded) =>
                     section.links.map((link) => renderNavigationLink(link, true, expanded))

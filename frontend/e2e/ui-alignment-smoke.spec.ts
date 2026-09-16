@@ -535,6 +535,40 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     expect(layout.subtitleLineHeight).toBe('24px')
   })
 
+  test('restores groups from the header and opens only the chosen collapsed group', async ({
+    page,
+  }) => {
+    await gotoSyntheticRoute(page, '/provincial/application', {
+      ready: page.getByRole('heading', { name: 'Provincial application search', exact: true }),
+    })
+    const provincial = page.getByRole('button', { name: 'Provincial', exact: true })
+    const reports = page.getByRole('button', { name: 'Reports', exact: true })
+    await reports.click()
+    await page.getByRole('button', { name: 'Close menu' }).click()
+    await page.getByRole('button', { name: 'Open menu' }).click()
+    await expect(provincial).toHaveAttribute('aria-expanded', 'true')
+    await expect(reports).toHaveAttribute('aria-expanded', 'true')
+
+    await page.getByRole('button', { name: 'Close menu' }).click()
+    await reports.press('Enter')
+    await expect(provincial).toHaveAttribute('aria-expanded', 'false')
+    await expect(provincial).toHaveAttribute('aria-current', 'true')
+    await expect(reports).toHaveAttribute('aria-expanded', 'true')
+    await expect(page.getByRole('button', { name: 'Close menu' })).toBeVisible()
+
+    await provincial.click()
+    await page.getByRole('link', { name: 'Offers Report', exact: true }).click()
+    await expect(page.getByRole('heading', { name: 'Offers Report', exact: true })).toBeVisible()
+    await expect(provincial).toHaveAttribute('aria-expanded', 'true')
+    await expect(reports).toHaveAttribute('aria-expanded', 'true')
+    await expect(provincial).not.toHaveAttribute('aria-current')
+    await expect(reports).not.toHaveAttribute('aria-current')
+    await expect(page.getByRole('link', { name: 'Offers Report', exact: true })).toHaveAttribute(
+      'aria-current',
+      'page',
+    )
+  })
+
   test('renders the authenticated search composition and persists UI preferences', async ({
     page,
   }) => {

@@ -1,4 +1,4 @@
-import { useId, useRef, useState, type ReactNode } from 'react'
+import { useId, useRef, type ReactNode } from 'react'
 import { ChevronDown, type CarbonIconType } from '@carbon/icons-react'
 
 type SideNavigationGroupProps = {
@@ -6,7 +6,9 @@ type SideNavigationGroupProps = {
   icon: CarbonIconType
   activePage?: string
   collapsed: boolean
-  onExpandNavigation: () => void
+  open: boolean
+  onToggle: () => void
+  onClose: () => void
   children: (expanded: boolean) => ReactNode
 }
 
@@ -15,13 +17,14 @@ function SideNavigationGroup({
   icon: Icon,
   activePage,
   collapsed,
-  onExpandNavigation,
+  open,
+  onToggle,
+  onClose,
   children,
 }: SideNavigationGroupProps) {
-  const [isOpen, setIsOpen] = useState(Boolean(activePage))
   const buttonRef = useRef<HTMLButtonElement>(null)
   const menuId = useId()
-  const expanded = !collapsed && isOpen
+  const expanded = !collapsed && open
   const isCurrentGroup = Boolean(activePage) && !expanded
 
   return (
@@ -32,7 +35,7 @@ function SideNavigationGroup({
       onKeyDown={(event) => {
         if (event.key === 'Escape' && expanded) {
           event.stopPropagation()
-          setIsOpen(false)
+          onClose()
           buttonRef.current?.focus()
         }
       }}
@@ -47,14 +50,7 @@ function SideNavigationGroup({
         aria-current={isCurrentGroup ? 'true' : undefined}
         aria-description={isCurrentGroup ? `Contains current page: ${activePage}` : undefined}
         data-label={activePage ? `${label}: ${activePage}` : label}
-        onClick={() => {
-          if (collapsed) {
-            setIsOpen(true)
-            onExpandNavigation()
-          } else {
-            setIsOpen((current) => !current)
-          }
-        }}
+        onClick={onToggle}
       >
         <span className="cds--side-nav__icon csp-side-nav__icon" aria-hidden="true">
           <Icon size={20} />
