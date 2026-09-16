@@ -4822,7 +4822,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     renderPermitDetails()
 
     await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
-    await userEvent.selectOptions(screen.getByLabelText('Permit status'), 'CAN')
+    await userEvent.selectOptions(screen.getByLabelText('Status'), 'CAN')
     await userEvent.clear(screen.getByLabelText('Issued date'))
     await userEvent.clear(screen.getByLabelText('Expiry date'))
     await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
@@ -5429,7 +5429,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.getByLabelText('Region')).toBeDisabled()
     await userEvent.clear(screen.getByLabelText('Submit date'))
     await userEvent.type(screen.getByLabelText('Submit date'), '2026-04-11')
-    await userEvent.selectOptions(screen.getByLabelText('Permit status'), 'COM')
+    await userEvent.selectOptions(screen.getByLabelText('Status'), 'COM')
 
     await userEvent.click(screen.getByRole('link', { name: 'Leave permit' }))
     await screen.findByRole('dialog', { name: 'Unsaved changes' })
@@ -5587,7 +5587,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     const financialTile = (
       await screen.findByRole('heading', {
-        name: 'Financial and volume',
+        name: 'Volume and remarks',
       })
     ).closest('.cds--tile')
     expect(financialTile).toBeTruthy()
@@ -5700,7 +5700,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     renderPermitDetails()
 
     await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
-    await userEvent.selectOptions(screen.getByLabelText('Permit status'), 'CAN')
+    await userEvent.selectOptions(screen.getByLabelText('Status'), 'CAN')
     expect(screen.getByLabelText('Permit Request Pieces')).toHaveAttribute('aria-required', 'true')
     expect(screen.getByLabelText('Permit Request Volume (m³)')).toHaveAttribute(
       'aria-required',
@@ -5808,7 +5808,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     renderPermitDetails()
 
     await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
-    await userEvent.selectOptions(screen.getByLabelText('Permit status'), 'COM')
+    await userEvent.selectOptions(screen.getByLabelText('Status'), 'COM')
     expect(screen.getByLabelText('Permit Request Pieces')).toHaveAttribute('aria-required', 'true')
     expect(screen.getByLabelText('Permit Request Volume (m³)')).toHaveAttribute(
       'aria-required',
@@ -5860,7 +5860,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       renderPermitDetails()
 
       await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
-      const statusLabel = 'Permit status'
+      const statusLabel = blanketOic ? 'Status' : 'Permit status'
       await userEvent.selectOptions(screen.getByLabelText(statusLabel), 'COM')
 
       const submitDate = screen.getByLabelText('Submit date')

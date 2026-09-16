@@ -4683,7 +4683,7 @@ const ProvincialPermitDetailsPage = () => {
                       ) : isEditingPermit && permitForm ? (
                         <Tile>
                           <h2 className="detail-tile-title">
-                            {ministerialPermit ? 'Permit details' : 'Permit summary'}
+                            {usesReviewedPermitFlow ? 'Permit details' : 'Permit summary'}
                           </h2>
                           <div className="legacy-search-grid">
                             {renderPermitTextInput(
@@ -4716,7 +4716,9 @@ const ProvincialPermitDetailsPage = () => {
                             )}
                             <Select
                               id="permit-permitStatus"
-                              labelText={requiredLabel('Permit status')}
+                              labelText={requiredLabel(
+                                usesReviewedPermitFlow ? 'Status' : 'Permit status',
+                              )}
                               aria-required="true"
                               value={permitForm.permitStatus}
                               invalid={!!permitFieldError('permitStatus')}
@@ -4814,7 +4816,7 @@ const ProvincialPermitDetailsPage = () => {
                         </Tile>
                       ) : (
                         <DetailFieldTile
-                          title={ministerialPermit ? 'Permit details' : 'Permit summary'}
+                          title={usesReviewedPermitFlow ? 'Permit details' : 'Permit summary'}
                           headerAction={
                             canSavePermit ? (
                               <Button
@@ -4901,7 +4903,9 @@ const ProvincialPermitDetailsPage = () => {
                         {isEditingPermit && permitForm ? (
                           <Tile>
                             <h2 className="detail-tile-title">
-                              {ministerialPermit ? 'Volume and remarks' : 'Financial and volume'}
+                              {usesReviewedPermitFlow
+                                ? 'Volume and remarks'
+                                : 'Financial and volume'}
                             </h2>
                             <div className="legacy-search-grid">
                               <TextInput
@@ -4955,7 +4959,7 @@ const ProvincialPermitDetailsPage = () => {
                         ) : (
                           <DetailFieldTile
                             title={
-                              ministerialPermit ? 'Volume and remarks' : 'Financial and volume'
+                              usesReviewedPermitFlow ? 'Volume and remarks' : 'Financial and volume'
                             }
                             fields={[
                               {
@@ -4996,7 +5000,7 @@ const ProvincialPermitDetailsPage = () => {
                       <Column sm={4} md={8} lg={16}>
                         <Tile>
                           <h2 className="detail-tile-title">
-                            {ministerialPermit ? 'Applications' : 'Associated applications'}
+                            {usesReviewedPermitFlow ? 'Applications' : 'Associated applications'}
                           </h2>
                           {ministerialPermit ? (
                             renderMinisterialPermitApplications()
@@ -6108,19 +6112,23 @@ const ProvincialPermitDetailsPage = () => {
                                     : 'No permit items available'
                                 }
                                 description={
-                                  ministerialPermit ? (
-                                    <>
-                                      Scale comes from the applications selected for this permit.
-                                      Select an application on the{' '}
-                                      <button
-                                        type="button"
-                                        className="cds--link"
-                                        onClick={() => selectPermitTab('permit')}
-                                      >
-                                        Permit tab
-                                      </button>
-                                      .
-                                    </>
+                                  usesReviewedPermitFlow ? (
+                                    ministerialPermit ? (
+                                      <>
+                                        Scale comes from the applications selected for this permit.
+                                        Select an application on the{' '}
+                                        <button
+                                          type="button"
+                                          className="cds--link"
+                                          onClick={() => selectPermitTab('permit')}
+                                        >
+                                          Permit tab
+                                        </button>
+                                        .
+                                      </>
+                                    ) : (
+                                      'Add a Blanket OIC package and its scale details to build this permit.'
+                                    )
                                   ) : detail.blanketOic ? (
                                     'No scale entries are available for the selected package.'
                                   ) : (
@@ -6140,7 +6148,7 @@ const ProvincialPermitDetailsPage = () => {
                     <Column sm={4} md={8} lg={16}>
                       <Tile>
                         <h2 className="detail-tile-title">
-                          {ministerialPermit ? 'Fees' : 'Fee calculation details'}
+                          {usesReviewedPermitFlow ? 'Fees' : 'Fee calculation details'}
                         </h2>
                         {!ministerialFeeShellEmpty && (
                           <>
@@ -6611,7 +6619,7 @@ const ProvincialPermitDetailsPage = () => {
                       <Tile>
                         <div className="detail-section-card__header">
                           <h2 className="detail-tile-title">
-                            {ministerialPermit ? 'Documents' : 'Permit documents'}
+                            {usesReviewedPermitFlow ? 'Documents' : 'Permit documents'}
                           </h2>
                           {canEditPermitDocuments &&
                             (isEditingPermitDocuments ? (
@@ -6630,7 +6638,7 @@ const ProvincialPermitDetailsPage = () => {
                                 renderIcon={Edit}
                                 onClick={() => setIsEditingPermitDocuments(true)}
                               >
-                                {ministerialPermit ? 'Add document' : 'Edit permit documents'}
+                                {usesReviewedPermitFlow ? 'Add document' : 'Edit permit documents'}
                               </Button>
                             ))}
                         </div>
@@ -6720,12 +6728,12 @@ const ProvincialPermitDetailsPage = () => {
                         ) : (
                           <EmptyState
                             title={
-                              ministerialPermit
+                              usesReviewedPermitFlow
                                 ? 'No documents for this permit'
                                 : 'No permit documents available'
                             }
                             description={
-                              ministerialPermit
+                              usesReviewedPermitFlow
                                 ? 'Documents added to this permit are listed here.'
                                 : 'No documents are available for this permit.'
                             }
