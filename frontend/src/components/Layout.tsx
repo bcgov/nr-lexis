@@ -7,26 +7,23 @@ import {
   Dashboard,
   DocumentAdd,
   Finance,
+  Folder,
   Logout,
   Moon,
   Notification,
   Report,
   Search,
+  Settings,
   Sun,
   Switcher,
   Tag,
   TaskComplete,
+  Tree,
   Upload,
   UserAvatar,
   type CarbonIconType,
 } from '@carbon/icons-react'
-import {
-  HeaderMenuButton,
-  IconButton,
-  SideNavItems,
-  SideNavMenu,
-  SkipToContent,
-} from '@carbon/react'
+import { HeaderMenuButton, IconButton, SideNavItems, SkipToContent } from '@carbon/react'
 import { Link, matchPath, useLocation, useNavigate } from 'react-router-dom'
 import {
   hasProvincialStaffRole,
@@ -35,6 +32,8 @@ import {
 } from '@/context/auth/role-utils'
 import OptimisticConflictModal from '@/components/OptimisticConflictModal'
 import UserRegionPreference from '@/components/UserRegionPreference'
+import SideNavigationGroup from '@/components/SideNavigationGroup'
+import SideNavigationTooltip from '@/components/SideNavigationTooltip'
 import { isProdRtmOnlyPathAllowed } from '@/config/features'
 import { useAuth } from '@/context/auth/useAuth'
 import { useTheme } from '@/context/theme/useTheme'
@@ -57,6 +56,7 @@ type NavigationLink = {
 
 type NavigationSection = {
   label: string
+  icon: CarbonIconType
   links: NavigationLink[]
   standalone?: boolean
 }
@@ -65,9 +65,9 @@ const UI_PREFERENCE_KEYS = {
   sideNavCollapsed: 'lexis.ui.sideNavCollapsed',
 } as const
 
-// INTENTIONAL_LEGACY_DIVERGENCE(NAVIGATION_MENU_CONTRACT): The business-approved
-// labels, initial section expansion, and role-scoped section visibility are intentional.
-const DEFAULT_EXPANDED_SECTION = 'Provincial'
+// INTENTIONAL_LEGACY_DIVERGENCE(NAVIGATION_MENU_CONTRACT): Business-approved
+// labels and role-scoped section visibility are intentional. The current page's group
+// starts open, following the shared Heartwood side navigation guidance.
 
 const ROLE_LABELS: Record<string, string> = {
   ADMIN: 'Administrator',
@@ -100,6 +100,7 @@ const isNarrowNavigationViewport = (): boolean =>
 const NAVIGATION_SECTIONS: NavigationSection[] = [
   {
     label: 'Notifications',
+    icon: Notification,
     standalone: true,
     links: [
       {
@@ -112,6 +113,7 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
   },
   {
     label: 'Provincial',
+    icon: Tree,
     links: [
       {
         to: '/provincial/summary',
@@ -186,6 +188,7 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
   },
   {
     label: 'Federal',
+    icon: Folder,
     links: [
       {
         to: '/federal',
@@ -198,6 +201,7 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
   },
   {
     label: 'Reports',
+    icon: Report,
     links: [
       {
         to: '/reports/biweeklyListing',
@@ -241,6 +245,7 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
     // INTENTIONAL_LEGACY_DIVERGENCE(ADMIN_PAGE_RETIREMENT): Agent Status and legacy WSDL
     // administration are retired; keep only the active modern administration workflows.
     label: 'Admin',
+    icon: Settings,
     links: [
       {
         to: '/admin/policies/fee',
@@ -433,6 +438,9 @@ function Layout({ children }: LayoutProps) {
       )?.label,
     [activeNavigationLink?.to, visibleNavigationSections],
   )
+  const [expandedSectionLabels, setExpandedSectionLabels] = useState<string[]>(() =>
+    activeSectionLabel ? [activeSectionLabel] : [],
+  )
 
   const handleLogout = () => {
     void logout()
@@ -467,6 +475,27 @@ function Layout({ children }: LayoutProps) {
     }
 
     setIsSideNavCollapsedPreference((current) => !current)
+  }
+
+  const expandNavigation = (): void => {
+    setIsProfileOpen(false)
+    if (isNarrowViewport) {
+      setIsNarrowNavExpanded(true)
+    } else {
+      setIsSideNavCollapsedPreference(false)
+    }
+  }
+
+  const toggleNavigationGroup = (label: string): void => {
+    if (isSideNavCollapsed) {
+      setExpandedSectionLabels([label])
+      expandNavigation()
+      return
+    }
+
+    setExpandedSectionLabels((current) =>
+      current.includes(label) ? current.filter((item) => item !== label) : [...current, label],
+    )
   }
 
   const toggleProfile = (): void => {
@@ -553,9 +582,9 @@ function Layout({ children }: LayoutProps) {
     writeUiPreference(UI_PREFERENCE_KEYS.sideNavCollapsed, String(isSideNavCollapsedPreference))
   }, [isSideNavCollapsedPreference])
 
-  const renderNavigationLink = (link: NavigationLink, nested = true) => {
+  const renderNavigationLink = (link: NavigationLink, nested = true, showCurrent = true) => {
     const LinkIcon = link.icon
-    const isActive = link.to === activeNavigationLink?.to
+    const isActive = showCurrent && link.to === activeNavigationLink?.to
     const showNotificationIndicator = link.to === '/notifications' && hasActiveNotifications
     const accessibleLabel = showNotificationIndicator
       ? 'Notifications, active updates available'
@@ -563,27 +592,36 @@ function Layout({ children }: LayoutProps) {
         ? link.label
         : undefined
     const nestedClassName = nested ? ' cds--side-nav__link--nested' : ''
+    const renderLink = (descriptionId?: string) => (
+      <Link
+        to={link.to}
+        className={`cds--side-nav__link${nestedClassName} csp-side-nav__link${
+          isActive ? ' cds--side-nav__link--active' : ''
+        }`}
+        aria-current={isActive ? 'page' : undefined}
+        aria-label={accessibleLabel}
+        aria-describedby={descriptionId}
+        data-label={link.label}
+      >
+        <span className="cds--side-nav__icon csp-side-nav__icon" aria-hidden="true">
+          <LinkIcon size={20} />
+          {showNotificationIndicator && (
+            <span className="csp-side-nav__notification-indicator" aria-hidden="true" />
+          )}
+        </span>
+        <span className="cds--side-nav__link-text csp-side-nav__link-text">{link.label}</span>
+      </Link>
+    )
 
     return (
       <li key={link.to}>
-        <Link
-          to={link.to}
-          className={`cds--side-nav__link${nestedClassName} csp-side-nav__link${
-            isActive ? ' cds--side-nav__link--active' : ''
-          }`}
-          aria-current={isActive ? 'page' : undefined}
-          aria-label={accessibleLabel}
-          title={isSideNavCollapsed ? link.label : undefined}
-          data-label={link.label}
-        >
-          <span className="cds--side-nav__icon csp-side-nav__icon" aria-hidden="true">
-            <LinkIcon size={20} />
-            {showNotificationIndicator && (
-              <span className="csp-side-nav__notification-indicator" aria-hidden="true" />
-            )}
-          </span>
-          <span className="cds--side-nav__link-text csp-side-nav__link-text">{link.label}</span>
-        </Link>
+        {nested ? (
+          renderLink()
+        ) : (
+          <SideNavigationTooltip enabled={isSideNavCollapsed} label={link.label}>
+            {renderLink}
+          </SideNavigationTooltip>
+        )}
       </li>
     )
   }
@@ -734,30 +772,27 @@ function Layout({ children }: LayoutProps) {
                 )
               }
 
-              if (isSideNavCollapsed) {
-                return (
-                  <li key={section.label} className="csp-side-nav__section">
-                    <span className="csp-side-nav__collapsed-section-label">{section.label}</span>
-                    <ul className="csp-side-nav__section-list">
-                      {section.links.map((link) => renderNavigationLink(link))}
-                    </ul>
-                  </li>
-                )
-              }
-
               return (
-                <SideNavMenu
+                <SideNavigationGroup
                   key={section.label}
-                  className="csp-side-nav__section"
-                  defaultExpanded={
-                    section.label === DEFAULT_EXPANDED_SECTION ||
-                    section.label === activeSectionLabel
+                  label={section.label}
+                  icon={section.icon}
+                  activePage={
+                    section.label === activeSectionLabel ? activeNavigationLink?.label : undefined
                   }
-                  isActive={section.label === activeSectionLabel}
-                  title={section.label}
+                  collapsed={isSideNavCollapsed}
+                  open={expandedSectionLabels.includes(section.label)}
+                  onToggle={() => toggleNavigationGroup(section.label)}
+                  onClose={() =>
+                    setExpandedSectionLabels((current) =>
+                      current.filter((label) => label !== section.label),
+                    )
+                  }
                 >
-                  {section.links.map((link) => renderNavigationLink(link))}
-                </SideNavMenu>
+                  {(expanded) =>
+                    section.links.map((link) => renderNavigationLink(link, true, expanded))
+                  }
+                </SideNavigationGroup>
               )
             })}
           </SideNavItems>
