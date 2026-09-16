@@ -35,19 +35,15 @@ const DEFAULT_VALUE: BlanketOicPackageCodeFieldsValue = {
   endUseCode: '',
   ageClass: 'O',
   productType: 'H',
-  status: 'ACT',
-  reprocessed: 'N',
 }
 
 type ControlledFieldsProps = {
-  isCreating?: boolean
   initialValue?: Partial<BlanketOicPackageCodeFieldsValue>
   onChange: (field: BlanketOicPackageCodeField, value: string) => void
   onAvailabilityChange: (ready: boolean) => void
 }
 
 const ControlledFields = ({
-  isCreating = false,
   initialValue,
   onChange,
   onAvailabilityChange,
@@ -60,7 +56,6 @@ const ControlledFields = ({
   return (
     <BlanketOicPackageCodeFields
       region="101"
-      isCreating={isCreating}
       value={value}
       disabled={false}
       onChange={(field, nextValue) => {
@@ -139,50 +134,24 @@ describe('BlanketOicPackageCodeFields', () => {
     })
   })
 
-  it('emits the source-backed reprocessed Y and N payload values', async () => {
-    const onChange = vi.fn()
-    render(<ControlledFields onChange={onChange} onAvailabilityChange={vi.fn()} />)
-
-    expect(screen.getByLabelText('No')).toBeChecked()
-    await userEvent.click(screen.getByLabelText('Yes'))
-    expect(onChange).toHaveBeenCalledWith('reprocessed', 'Y')
-
-    await userEvent.click(screen.getByLabelText('No'))
-    expect(onChange).toHaveBeenCalledWith('reprocessed', 'N')
-  })
-
-  it('requires status options only when editing an existing package', async () => {
+  it('omits status and reprocessed without requiring their lookup', async () => {
     const onChange = vi.fn()
     const onAvailabilityChange = vi.fn()
     mockedFetchApplicationPackageStatusCodes.mockRejectedValue(new Error('status unavailable'))
-    const { rerender } = render(
-      <ControlledFields
-        isCreating
-        onChange={onChange}
-        onAvailabilityChange={onAvailabilityChange}
-      />,
-    )
+    render(<ControlledFields onChange={onChange} onAvailabilityChange={onAvailabilityChange} />)
 
     await waitFor(() => expect(onAvailabilityChange).toHaveBeenLastCalledWith(true))
     expect(screen.queryByRole('combobox', { name: 'Status' })).not.toBeInTheDocument()
     expect(screen.queryByRole('group', { name: 'Reprocessed' })).not.toBeInTheDocument()
     expect(screen.queryByText('Package options unavailable')).not.toBeInTheDocument()
     expect(mockedFetchApplicationPackageStatusCodes).not.toHaveBeenCalled()
-
-    rerender(<ControlledFields onChange={onChange} onAvailabilityChange={onAvailabilityChange} />)
-
-    await waitFor(() => expect(screen.getByText('Package options unavailable')).toBeInTheDocument())
-    expect(onAvailabilityChange).toHaveBeenLastCalledWith(false)
-    expect(screen.getByRole('combobox', { name: 'Status' })).toBeDisabled()
-    expect(screen.getByRole('group', { name: 'Reprocessed' })).toBeInTheDocument()
-    expect(screen.getByLabelText('No')).toBeChecked()
     expect(onChange).not.toHaveBeenCalled()
   })
 
   it('keeps cleared required package-code values blank instead of restoring defaults', async () => {
     render(
       <ControlledFields
-        initialValue={{ ageClass: '', productType: '', status: '', reprocessed: '' }}
+        initialValue={{ ageClass: '', productType: '' }}
         onChange={vi.fn()}
         onAvailabilityChange={vi.fn()}
       />,
@@ -190,14 +159,10 @@ describe('BlanketOicPackageCodeFields', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('combobox', { name: 'Age class' })).toBeEnabled()
-      expect(screen.getByRole('combobox', { name: 'Status' })).toBeEnabled()
     })
 
     expect(screen.getByRole('combobox', { name: 'Age class' })).toHaveValue('')
     expect(screen.getByRole('combobox', { name: 'Product type' })).toHaveValue('')
-    expect(screen.getByRole('combobox', { name: 'Status' })).toHaveValue('')
-    expect(screen.getByLabelText('Yes')).not.toBeChecked()
-    expect(screen.getByLabelText('No')).not.toBeChecked()
   })
 
   it('keeps an end-use fallback for empty candidates and replaces it after a species change yields allowed candidates', async () => {
@@ -246,7 +211,6 @@ describe('BlanketOicPackageCodeFields', () => {
           endUseCode: 'OLD-END-USE',
           ageClass: 'OLD-AGE',
           productType: 'OLD-PRODUCT',
-          status: 'OLD-STATUS',
         }}
         onChange={onChange}
         onAvailabilityChange={onAvailabilityChange}
@@ -262,8 +226,6 @@ describe('BlanketOicPackageCodeFields', () => {
     expect(screen.getByRole('combobox', { name: 'End use' })).toHaveValue('OLD-END-USE')
     expect(screen.getByRole('combobox', { name: 'Age class' })).toHaveValue('OLD-AGE')
     expect(screen.getByRole('combobox', { name: 'Product type' })).toHaveValue('OLD-PRODUCT')
-    expect(screen.getByRole('combobox', { name: 'Status' })).toHaveValue('OLD-STATUS')
-    expect(screen.getByLabelText('No')).toBeChecked()
     expect(onChange).not.toHaveBeenCalled()
   })
 })

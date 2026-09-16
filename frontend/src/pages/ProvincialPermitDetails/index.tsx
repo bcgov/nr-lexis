@@ -287,6 +287,7 @@ const EMPTY_BLANKET_OIC_SCALE_FORM: BlanketOicScaleForm = {
   scaleVolume: '',
 }
 
+// INTENTIONAL_LEGACY_DIVERGENCE(BOIC_PACKAGE_STATUS_DEFAULTS): hidden fields default only on create; edits preserve saved values.
 const EMPTY_BLANKET_OIC_PACKAGE_FORM: BlanketOicPackageForm = {
   packageNumber: '',
   volume: '0.0',
@@ -331,7 +332,6 @@ const validateBlanketOicPackage = (form: BlanketOicPackageForm): BlanketOicPacka
       () => greaterThanFieldError(form.averageDiameter, 'Average top diameter', 0),
       () => lessThanOrEqualFieldError(form.averageDiameter, 'Average top diameter', 99.99),
     ),
-    status: requiredFieldError(form.status, 'Package status') ?? undefined,
     ageClass: requiredFieldError(form.ageClass, 'Age class') ?? undefined,
     productType: requiredFieldError(form.productType, 'Product type') ?? undefined,
     endUseCode: requiredFieldError(form.endUseCode, 'End use') ?? undefined,
@@ -3281,9 +3281,9 @@ const ProvincialPermitDetailsPage = () => {
           volume: context.volume,
           averageLength: context.averageLength,
           averageDiameter: context.averageDiameter,
-          status: context.status || 'ACT',
+          status: context.status,
           comments: context.comments,
-          reprocessed: context.reprocessed || 'N',
+          reprocessed: context.reprocessed,
           ageClass: context.ageClass || 'O',
           productType: context.productType || 'H',
           endUseCode: context.endUseCode,
@@ -5662,8 +5662,6 @@ const ProvincialPermitDetailsPage = () => {
                                     {detail.blanketOic && (
                                       <>
                                         <TableHeader>Current package volume (m³)</TableHeader>
-                                        <TableHeader>Status</TableHeader>
-                                        <TableHeader>Reprocessed</TableHeader>
                                         <TableHeader>Comments</TableHeader>
                                       </>
                                     )}
@@ -5709,10 +5707,6 @@ const ProvincialPermitDetailsPage = () => {
                                       {detail.blanketOic && (
                                         <>
                                           <TableCell>{row.currentPackageVolume || '-'}</TableCell>
-                                          <TableCell>
-                                            {row.status ? <StatusTag status={row.status} /> : '-'}
-                                          </TableCell>
-                                          <TableCell>{row.reprocessed || '-'}</TableCell>
                                           <TableCell>{row.comments || '-'}</TableCell>
                                         </>
                                       )}
@@ -5874,7 +5868,6 @@ const ProvincialPermitDetailsPage = () => {
                                 </div>
                                 <BlanketOicPackageCodeFields
                                   region={String(detail.orgUnitNumber ?? '')}
-                                  isCreating={!editingBoicPackageNumber}
                                   value={boicPackageForm}
                                   onChange={setBlanketOicPackageFormField}
                                   disabled={isLoadingBoicPackage || isSavingBoicPackage}

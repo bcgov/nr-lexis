@@ -6,6 +6,7 @@ import static org.assertj.core.groups.Tuple.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -1869,6 +1870,8 @@ class OracleApplicationDetailsRpcServiceTest {
     ApplicationDetailsRpcRepository.PackageMutationRecord record = recordCaptor.getValue();
     assertThat(record.packageNumber()).isEqualTo("PKG-903");
     assertThat(record.applicationNumber()).isEqualTo(1000456L);
+    assertThat(record.reprocessedIndicator()).isEqualTo("N");
+    assertThat(record.packageStatusCode()).isEqualTo("A");
     assertThat(record.entryUserId()).isEqualTo("idir\\jsmith");
     assertThat(record.endUses())
         .extracting(
@@ -2213,7 +2216,7 @@ class OracleApplicationDetailsRpcServiceTest {
   }
 
   @Test
-  void hiddenBlanketOicPackageAddShouldAcceptOnlyASystemOwnedApplication() {
+  void hiddenBlanketOicPackageAddShouldForceStatusDefaultsForSystemOwnedApplication() {
     when(repository.findApplicationUpdateRecord(1000456L))
         .thenReturn(Optional.of(applicationUpdateRecordWithOicIndicator("Y")));
     when(repository.packageExists("PKG-903")).thenReturn(false);
@@ -2232,7 +2235,7 @@ class OracleApplicationDetailsRpcServiceTest {
                     null,
                     null,
                     null,
-                    "A",
+                    "ACT",
                     "O",
                     "H",
                     "idir\\jsmith",
@@ -2240,10 +2243,28 @@ class OracleApplicationDetailsRpcServiceTest {
 
     ApplicationDetailsRpcService.PackagePersistenceResult response =
         service.addHiddenBlanketOicPackage(
-            validPackageMutationRequest("PKG-903", null), "idir\\jsmith");
+            new ApplicationDetailsRpcService.PackageMutationRequest(
+                "PKG-903",
+                null,
+                1000456L,
+                100.0d,
+                10.0d,
+                20.0d,
+                "SHT",
+                "Test",
+                "Y",
+                "O",
+                "H",
+                null,
+                List.of()),
+            "idir\\jsmith");
 
     assertThat(response.valid()).isTrue();
-    verify(repository).insertPackage(any());
+    ArgumentCaptor<ApplicationDetailsRpcRepository.PackageMutationRecord> recordCaptor =
+        ArgumentCaptor.forClass(ApplicationDetailsRpcRepository.PackageMutationRecord.class);
+    verify(repository).insertPackage(recordCaptor.capture());
+    assertThat(recordCaptor.getValue().packageStatusCode()).isEqualTo("ACT");
+    assertThat(recordCaptor.getValue().reprocessedIndicator()).isEqualTo("N");
   }
 
   @Test
@@ -2278,6 +2299,111 @@ class OracleApplicationDetailsRpcServiceTest {
 
     assertThat(response.valid()).isTrue();
     verify(repository).updatePackage(any());
+  }
+
+  @Test
+  void hiddenBlanketOicPackageUpdateShouldPreservePersistedStatusAndReprocessed() {
+    Instant entryTimestamp = Instant.parse("2026-05-01T12:00:00Z");
+    ApplicationDetailsRpcRepository.PackageMutationRow existing =
+        new ApplicationDetailsRpcRepository.PackageMutationRow(
+            "PKG-903",
+            1000456L,
+            "Y",
+            100.0d,
+            10.0d,
+            20.0d,
+            "Original comments",
+            null,
+            null,
+            null,
+            "SHT",
+            "O",
+            "H",
+            "idir\\creator",
+            entryTimestamp);
+    when(repository.findPackageMutationByPackageNumber("PKG-903")).thenReturn(Optional.of(existing));
+    when(repository.findApplicationUpdateRecord(1000456L))
+        .thenReturn(Optional.of(applicationUpdateRecordWithOicIndicator("Y")));
+    when(repository.findScaleDetailsByPackageNumber("PKG-903")).thenReturn(List.of());
+    when(repository.findPackagesByApplicationNumber(1000456L)).thenReturn(List.of());
+    when(repository.updatePackage(any())).thenReturn(true);
+
+    for (ApplicationDetailsRpcService.PackageMutationRequest request :
+        List.of(
+            new ApplicationDetailsRpcService.PackageMutationRequest(
+                "PKG-903",
+                null,
+                1000456L,
+                100.0d,
+                10.0d,
+                20.0d,
+                "ACT",
+                "Updated stale values",
+                "N",
+                "O",
+                "H",
+                null,
+                List.of()),
+            new ApplicationDetailsRpcService.PackageMutationRequest(
+                "PKG-903",
+                null,
+                1000456L,
+                100.0d,
+                10.0d,
+                20.0d,
+                " ",
+                "Updated blank values",
+                " ",
+                "O",
+                "H",
+                null,
+                List.of()))) {
+      assertThat(service.updateHiddenBlanketOicPackage(request, "idir\\jsmith").valid()).isTrue();
+    }
+
+    ArgumentCaptor<ApplicationDetailsRpcRepository.PackageMutationRecord> recordCaptor =
+        ArgumentCaptor.forClass(ApplicationDetailsRpcRepository.PackageMutationRecord.class);
+    verify(repository, times(2)).updatePackage(recordCaptor.capture());
+    assertThat(recordCaptor.getAllValues())
+        .extracting(
+            ApplicationDetailsRpcRepository.PackageMutationRecord::packageStatusCode,
+            ApplicationDetailsRpcRepository.PackageMutationRecord::reprocessedIndicator,
+            ApplicationDetailsRpcRepository.PackageMutationRecord::comments)
+        .containsExactly(
+            tuple("SHT", "Y", "Updated stale values"),
+            tuple("SHT", "Y", "Updated blank values"));
+  }
+
+  @Test
+  void hiddenBlanketOicPackageUpdateShouldRejectMissingPersistedReprocessedIndicator() {
+    Instant entryTimestamp = Instant.parse("2026-05-01T12:00:00Z");
+    ApplicationDetailsRpcRepository.PackageMutationRow existing =
+        new ApplicationDetailsRpcRepository.PackageMutationRow(
+            "PKG-903",
+            1000456L,
+            null,
+            100.0d,
+            10.0d,
+            20.0d,
+            "Original comments",
+            null,
+            null,
+            null,
+            "SHT",
+            "O",
+            "H",
+            "idir\\creator",
+            entryTimestamp);
+    when(repository.findPackageMutationByPackageNumber("PKG-903")).thenReturn(Optional.of(existing));
+
+    ApplicationDetailsRpcService.PackagePersistenceResult response =
+        service.updateHiddenBlanketOicPackage(
+            validPackageMutationRequest("PKG-903", null), "idir\\jsmith");
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors())
+        .containsExactly("The saved package details could not be verified.");
+    verify(repository, never()).updatePackage(any());
   }
 
   @ParameterizedTest
@@ -2574,9 +2700,9 @@ class OracleApplicationDetailsRpcServiceTest {
                 100.0d,
                 10.0d,
                 20.0d,
-                "A",
+                "SHT",
                 "Updated",
-                "N",
+                "Y",
                 "O",
                 "H",
                 null,
@@ -2591,6 +2717,8 @@ class OracleApplicationDetailsRpcServiceTest {
     ApplicationDetailsRpcRepository.PackageMutationRecord record = recordCaptor.getValue();
     assertThat(record.federalPermitNumber()).isEqualTo(7000123L);
     assertThat(record.reservePermitNumber()).isEqualTo(8000123L);
+    assertThat(record.packageStatusCode()).isEqualTo("SHT");
+    assertThat(record.reprocessedIndicator()).isEqualTo("Y");
   }
 
   @Test

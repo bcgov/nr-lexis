@@ -63,7 +63,6 @@ import {
   fetchApplicationRemainingSpecies,
   fetchApplicationSpeciesCodes,
   fetchApplicationEndUsesForSpeciesRegion,
-  fetchApplicationPackageStatusCodes,
 } from '@/service/provincial-application-items-service'
 import { fetchShippingReferenceOptions } from '@/service/shipping-reference-service'
 import { triggerBrowserDownload } from '@/utils/download'
@@ -151,7 +150,6 @@ vi.mock('@/service/provincial-application-items-service', () => ({
   fetchApplicationRemainingSpecies: vi.fn(),
   fetchApplicationSpeciesCodes: vi.fn(),
   fetchApplicationEndUsesForSpeciesRegion: vi.fn(),
-  fetchApplicationPackageStatusCodes: vi.fn(),
 }))
 
 vi.mock('@/service/shipping-reference-service', () => ({
@@ -210,7 +208,6 @@ const mockedFetchExemptionClientLocations = vi.mocked(fetchExemptionClientLocati
 const mockedFetchExemptionRegionContext = vi.mocked(fetchExemptionRegionContext)
 const mockedFetchApplicationGradeCodes = vi.mocked(fetchApplicationGradeCodes)
 const mockedFetchApplicationSpeciesCodes = vi.mocked(fetchApplicationSpeciesCodes)
-const mockedFetchApplicationPackageStatusCodes = vi.mocked(fetchApplicationPackageStatusCodes)
 const mockedRunReport = vi.mocked(runReport)
 const mockedFetchProvincialPermitOptions = vi.mocked(fetchProvincialPermitOptions)
 const mockedFetchShippingReferenceOptions = vi.mocked(fetchShippingReferenceOptions)
@@ -462,9 +459,6 @@ describe('Provincial Permit Detail Action Smoke', () => {
       regions: [],
       currentSchedules: [],
     })
-    vi.mocked(fetchApplicationPackageStatusCodes).mockResolvedValue([
-      { code: 'ACT', description: 'Active' },
-    ])
     vi.mocked(fetchApplicationRemainingSpecies).mockImplementation(
       async (_region, _productType, selectedSpecies) =>
         [
@@ -2791,10 +2785,18 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(
       screen.getByRole('columnheader', { name: 'Current package volume (m³)' }),
     ).toBeInTheDocument()
-    expect(screen.getByRole('columnheader', { name: 'Reprocessed' })).toBeInTheDocument()
+    const packageTable = screen.getByRole('region', { name: 'Permit packages' })
+    expect(
+      within(packageTable).queryByRole('columnheader', { name: 'Status' }),
+    ).not.toBeInTheDocument()
+    expect(
+      within(packageTable).queryByRole('columnheader', { name: 'Reprocessed' }),
+    ).not.toBeInTheDocument()
     expect(screen.getByRole('cell', { name: '118.5' })).toBeInTheDocument()
-    const packageStatusCell = screen.getByRole('cell', { name: 'APP - Approved' })
-    expect(packageStatusCell.querySelector('.lexis-status-tag')).toBeInTheDocument()
+    expect(
+      within(packageTable).queryByRole('cell', { name: 'APP - Approved' }),
+    ).not.toBeInTheDocument()
+    expect(within(packageTable).queryByRole('cell', { name: 'N' })).not.toBeInTheDocument()
     expect(screen.getByRole('cell', { name: 'Current OIC package' })).toBeInTheDocument()
     const packageRow = screen.getByRole('cell', { name: 'BOIC-9' }).closest('tr')
     expect(packageRow).toBeTruthy()
@@ -3486,72 +3488,78 @@ describe('Provincial Permit Detail Action Smoke', () => {
     },
   )
 
-  it.each([false, true])(
-    'preserves saved Blanket OIC Shutout and reprocessed values on edit (change: %s)',
-    async (changeValues) => {
-      configureEditableBlanketOicPackage()
-      mockedFetchProvincialPermitDetailTabs.mockResolvedValue({
-        ...tabsResult,
-        packages: [
-          {
-            ...editableBlanketOicPackage,
-            status: 'SHT - Shutout',
-            reprocessed: 'Y',
-          },
-        ],
-      })
-      mockedFetchBlanketOicPackageEditContext.mockResolvedValue({
-        packageNumber: 'BOIC-9',
-        volume: '120.5',
-        averageLength: '7.1',
-        averageDiameter: '16.2',
-        status: 'SHT',
-        comments: 'Current OIC package',
-        reprocessed: 'Y',
-        ageClass: 'O',
-        productType: 'H',
-        endUseCode: 'LU',
-        speciesCodes: ['HE'],
-      })
-      mockedFetchApplicationPackageStatusCodes.mockResolvedValue([
-        { code: 'ACT', description: 'Active' },
-        { code: 'SHT', description: 'Shutout' },
-      ])
-      renderPermitDetails()
+  it('preserves hidden Blanket OIC Shutout and reprocessed values when editing comments', async () => {
+    configureEditableBlanketOicPackage()
+    mockedFetchProvincialPermitDetailTabs.mockResolvedValue({
+      ...tabsResult,
+      packages: [
+        {
+          ...editableBlanketOicPackage,
+          status: 'SHT - Shutout',
+          reprocessed: 'Y',
+        },
+      ],
+    })
+    mockedFetchBlanketOicPackageEditContext.mockResolvedValue({
+      packageNumber: 'BOIC-9',
+      volume: '120.5',
+      averageLength: '7.1',
+      averageDiameter: '16.2',
+      status: 'SHT',
+      comments: 'Current OIC package',
+      reprocessed: 'Y',
+      ageClass: 'O',
+      productType: 'H',
+      endUseCode: 'LU',
+      speciesCodes: ['HE'],
+    })
+    renderPermitDetails()
 
-      await selectPermitDetailTab('Items')
-      const packageRow = (await screen.findByRole('cell', { name: 'BOIC-9' })).closest('tr')!
-      expect(within(packageRow).getByRole('cell', { name: 'SHT - Shutout' })).toBeInTheDocument()
-      expect(within(packageRow).getByRole('cell', { name: 'Y' })).toBeInTheDocument()
+    await selectPermitDetailTab('Items')
+    const packageTable = await screen.findByRole('region', { name: 'Permit packages' })
+    expect(
+      within(packageTable).queryByRole('columnheader', { name: 'Status' }),
+    ).not.toBeInTheDocument()
+    expect(
+      within(packageTable).queryByRole('columnheader', { name: 'Reprocessed' }),
+    ).not.toBeInTheDocument()
+    const packageRow = (await screen.findByRole('cell', { name: 'BOIC-9' })).closest('tr')!
+    expect(
+      within(packageRow).queryByRole('cell', { name: 'SHT - Shutout' }),
+    ).not.toBeInTheDocument()
+    expect(within(packageRow).queryByRole('cell', { name: 'Y' })).not.toBeInTheDocument()
 
-      await userEvent.click(within(packageRow).getByRole('button', { name: 'Edit' }))
-      const packageEditor = (await screen.findByRole('heading', { name: 'Edit BOIC-9' })).closest(
-        '.application-detail-edit-section',
-      ) as HTMLElement
-      const status = await within(packageEditor).findByRole('combobox', { name: 'Status' })
-      await waitFor(() => expect(status).toBeEnabled())
-      expect(status).toHaveValue('SHT - Shutout')
-      const reprocessed = within(packageEditor).getByRole('group', { name: 'Reprocessed' })
-      expect(within(reprocessed).getByRole('radio', { name: 'Yes' })).toBeChecked()
+    await userEvent.click(within(packageRow).getByRole('button', { name: 'Edit' }))
+    const packageEditor = (await screen.findByRole('heading', { name: 'Edit BOIC-9' })).closest(
+      '.application-detail-edit-section',
+    ) as HTMLElement
+    expect(
+      within(packageEditor).queryByRole('combobox', { name: 'Status' }),
+    ).not.toBeInTheDocument()
+    expect(
+      within(packageEditor).queryByRole('group', { name: 'Reprocessed' }),
+    ).not.toBeInTheDocument()
 
-      if (changeValues) {
-        await chooseComboBoxOption(status, 'ACT - Active')
-        await userEvent.click(within(reprocessed).getByRole('radio', { name: 'No' }))
-      }
-      await userEvent.click(within(packageEditor).getByRole('button', { name: 'Save package' }))
+    const comments = within(packageEditor).getByLabelText('Comments')
+    await waitFor(() => {
+      expect(comments).toBeEnabled()
+      expect(comments).toHaveValue('Current OIC package')
+    })
+    await userEvent.type(comments, ' updated')
+    await userEvent.click(within(packageEditor).getByRole('button', { name: 'Save package' }))
 
-      await waitFor(() =>
-        expect(mockedUpdateBlanketOicPackage).toHaveBeenCalledWith(
-          expect.objectContaining({
-            permitNumber: '777',
-            packageNumber: 'BOIC-9',
-            status: changeValues ? 'ACT' : 'SHT',
-            reprocessed: changeValues ? 'N' : 'Y',
-          }),
-        ),
-      )
-    },
-  )
+    await waitFor(() =>
+      expect(mockedUpdateBlanketOicPackage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          permitNumber: '777',
+          packageNumber: 'BOIC-9',
+          comments: 'Current OIC package updated',
+          status: 'SHT',
+          reprocessed: 'Y',
+        }),
+      ),
+    )
+  })
 
   it.each([
     ['Package volume (m³)', '10.25', 'Package volume must have no more than one decimal place.'],
@@ -3730,6 +3738,13 @@ describe('Provincial Permit Detail Action Smoke', () => {
     renderPermitDetails()
 
     await selectPermitDetailTab('Items')
+    const packageTable = await screen.findByRole('region', { name: 'Permit packages' })
+    expect(
+      within(packageTable).queryByRole('columnheader', { name: 'Status' }),
+    ).not.toBeInTheDocument()
+    expect(
+      within(packageTable).queryByRole('columnheader', { name: 'Reprocessed' }),
+    ).not.toBeInTheDocument()
     const packageRow = (await screen.findByRole('cell', { name: 'BOIC-9' })).closest('tr')!
     expect(within(packageRow).queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
     expect(within(packageRow).queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
