@@ -696,8 +696,7 @@ public class PermitDetailsRpcController {
         && !mutationRequest.exemptionNumber().isBlank()) {
       requireExemptionAccess(mutationRequest.exemptionNumber(), authentication);
     }
-    if (!canUpdatePermitForSubmittedClients(
-        service, permitNumber, mutationRequest, authentication)) {
+    if (!canUpdatePermitForPersistedClients(service, permitNumber, authentication)) {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
     requirePermitDetailsMutable(permitNumber, authentication);
@@ -734,8 +733,7 @@ public class PermitDetailsRpcController {
     List<Long> applicationLocksToRelease = List.of();
     try {
       requirePermitEditable(permitNumber, authentication);
-      if (!canUpdatePermitForSubmittedClients(
-          service, permitNumber, mutationRequest, authentication)) {
+      if (!canUpdatePermitForPersistedClients(service, permitNumber, authentication)) {
         throw new AccessDeniedException(
             "Permit client scope changed while the mutation was waiting.");
       }
@@ -778,23 +776,23 @@ public class PermitDetailsRpcController {
   }
 
   /**
-   * Normal permits inherit client fields from their first linked application, so request client
-   * fields must not decide access. Blanket OIC permits maintain those fields directly.
+   * Normal permits inherit client fields from their first linked application, so no direct permit
+   * client-scope check applies. Blanket OIC permits maintain client fields directly; authorize
+   * against the persisted values, never request fields a caller can forge or omit.
    */
-  private boolean canUpdatePermitForSubmittedClients(
+  private boolean canUpdatePermitForPersistedClients(
       PermitDetailsRpcService service,
       Long permitNumber,
-      PermitMutationRequestDto mutationRequest,
       Authentication authentication) {
     if (provincialAuthorizationService == null
         || !provincialAuthorizationService.hasClientScope(authentication)
         || !isCanonicalBlanketOicPermit(service, permitNumber)) {
       return true;
     }
+    PermitDetailsRpcService.PermitMutationClientScope clientScope =
+        service.getClientScopeForPermitMutation(permitNumber);
     return provincialAuthorizationService.canCreateForClient(
-        authentication,
-        mutationRequest.ownerClientNumber(),
-        mutationRequest.agentClientNumber());
+        authentication, clientScope.ownerClientNumber(), clientScope.agentClientNumber());
   }
 
   private boolean isCanonicalBlanketOicPermit(
@@ -1419,8 +1417,8 @@ public class PermitDetailsRpcController {
         firstPresent(parameters, "agentClientLocation"),
         first(parameters, "oicApplicationNumber"),
         first(parameters, "oicRegion"),
-        first(parameters, "oicPermitTotalPieces"),
-        first(parameters, "oicPermitTotalVolume"),
+        firstPresent(parameters, "oicPermitTotalPieces"),
+        firstPresent(parameters, "oicPermitTotalVolume"),
         firstPresent(parameters, "packageAgeClass"),
         firstPresent(parameters, "packageProductType"),
         first(parameters, "overrideInd"),

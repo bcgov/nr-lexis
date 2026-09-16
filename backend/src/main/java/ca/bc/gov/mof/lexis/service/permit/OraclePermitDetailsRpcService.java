@@ -1882,6 +1882,9 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
             request.oicPermitTotalVolume(), submittedOicRequestVolume)) {
       numericErrors.add("A valid Permit Request Volume is required.");
     }
+    if (targetBlanketOic && !isInvoicedPermitStatus(current.permitStatusCode())) {
+      validateExplicitBlanketOicRequestLimitClears(request, numericErrors);
+    }
     validateSubmittedOicRequestLimits(request, targetBlanketOic, numericErrors);
     if (!numericErrors.isEmpty()) {
       return failureMutationResponse(numericErrors, permitNumber);
@@ -2238,6 +2241,14 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
           "Permit " + permitNumber + " has no authoritative exemption relationship.");
     }
     return exemptionNumber;
+  }
+
+  @Override
+  public PermitDetailsRpcService.PermitMutationClientScope getClientScopeForPermitMutation(
+      Long permitNumber) {
+    PermitMutationRow permit = requiredPermitMutationRow(permitNumber);
+    return new PermitDetailsRpcService.PermitMutationClientScope(
+        trimToNull(permit.clientNumber()), trimToNull(permit.agentNumber()));
   }
 
   @Override
@@ -3963,12 +3974,13 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       PermitMutationRequestDto request,
       PermitMutationRow current) {
     if (exemption.blanketOic()) {
+      // Saved Blanket OIC client identities are authoritative; locations remain editable.
       return Optional.of(
           new PermitClientBinding(
-              mergeSubmittedText(request.ownerClientNumber(), current.clientNumber()),
-              mergeSubmittedText(request.ownerClientLocation(), current.clientLocationCode()),
-              mergeSubmittedText(request.agentClientNumber(), current.agentNumber()),
-              mergeSubmittedText(request.agentClientLocation(), current.agentLocationCode())));
+              current.clientNumber(),
+              mergeSubmittedLocationUpdate(request.ownerClientLocation(), current.clientLocationCode()),
+              current.agentNumber(),
+              mergeSubmittedLocationUpdate(request.agentClientLocation(), current.agentLocationCode())));
     }
 
     Optional<PermitPackageApplicationRow> firstPackage =
@@ -5070,6 +5082,21 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
 
   private boolean isInvalidSubmittedDouble(String submitted, Double parsed) {
     return trimToNull(submitted) != null && parsed == null;
+  }
+
+  private void validateExplicitBlanketOicRequestLimitClears(
+      PermitMutationRequestDto request, List<String> errors) {
+    if (request == null) {
+      return;
+    }
+    if (request.oicPermitTotalPieces() != null
+        && trimToNull(request.oicPermitTotalPieces()) == null) {
+      errors.add("Permit Request Pieces is required.");
+    }
+    if (request.oicPermitTotalVolume() != null
+        && trimToNull(request.oicPermitTotalVolume()) == null) {
+      errors.add("Permit Request Volume is required.");
+    }
   }
 
   private void validateSubmittedOicRequestLimits(

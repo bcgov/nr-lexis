@@ -3129,7 +3129,7 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
-  void updatePermitShouldClearBlanketOicAgentWhenExplicitlyUnchecked() {
+  void updatePermitShouldPreserveBlanketOicClientIdentitiesAndPersistLocations() {
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(blanketOicPermitMutationRow()));
     when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("B"));
@@ -3142,9 +3142,14 @@ class OraclePermitDetailsRpcServiceTest {
     when(repository.updatePermitDetail(
             any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
         .thenReturn(true);
+    when(applicationDetailsRpcService.synchronizeApplicationOwner(
+            1000999L, "00077881", "03", "idir\\jsmith"))
+        .thenReturn(true);
 
     PermitMutationRpcResponseDto response =
-        service.updatePermit(clearOptionalPermitStringsRequest(), "idir\\jsmith");
+        service.updatePermit(
+            updatePermitRequest(null, "00099999", "03", "00099998", "04", null),
+            "idir\\jsmith");
 
     assertThat(response.success()).isTrue();
     ArgumentCaptor<PermitMutationRow> permitCaptor =
@@ -3152,8 +3157,12 @@ class OraclePermitDetailsRpcServiceTest {
     verify(repository)
         .updatePermitDetail(
             permitCaptor.capture(), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE));
-    assertThat(permitCaptor.getValue().agentNumber()).isNull();
-    assertThat(permitCaptor.getValue().agentLocationCode()).isNull();
+    assertThat(permitCaptor.getValue().clientNumber()).isEqualTo("00077881");
+    assertThat(permitCaptor.getValue().clientLocationCode()).isEqualTo("03");
+    assertThat(permitCaptor.getValue().agentNumber()).isEqualTo("00077880");
+    assertThat(permitCaptor.getValue().agentLocationCode()).isEqualTo("04");
+    verify(applicationDetailsRpcService)
+        .synchronizeApplicationOwner(1000999L, "00077881", "03", "idir\\jsmith");
   }
 
   @Test
@@ -3401,6 +3410,85 @@ class OraclePermitDetailsRpcServiceTest {
             permitCaptor.capture(), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE));
     assertThat(permitCaptor.getValue().oicRequestPieces()).isZero();
     assertThat(permitCaptor.getValue().oicRequestVolume()).isZero();
+  }
+
+  @Test
+  void updatePermitShouldRejectExplicitBlanketOicRequestLimitClears() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(blanketOicPermitMutationRow()));
+    when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("B"));
+    when(exemptionService.findByExemptionNumber("EX-700"))
+        .thenReturn(
+            Optional.of(
+                exemptionDetailWithClients(
+                    "EX-700", "B", "00077881", "00077880")));
+
+    PermitMutationRpcResponseDto response =
+        service.updatePermit(oicRequestLimitsRequest("ACT", " ", ""), "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactlyInAnyOrder(
+            "Permit Request Pieces is required.", "Permit Request Volume is required.");
+    verify(repository, never()).updatePermitDetail(any(), any(), any());
+  }
+
+  @Test
+  void updatePermitShouldPreserveLegacyNullBlanketOicRequestLimitsWhenPaymentPendingPermitIsCancelled() {
+    stubInvoiceOrchestration();
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(blanketOicPermitMutationRowWithStatus("PPD", null, null)));
+    when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("B"));
+    when(exemptionService.findByExemptionNumber("EX-700"))
+        .thenReturn(
+            Optional.of(
+                exemptionDetailWithClients(
+                    "EX-700", "B", "00077881", "00077880")));
+    stubOicApplicationBinding("EX-700");
+    when(repository.updatePermitDetail(
+            any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
+        .thenReturn(true);
+
+    PermitMutationRpcResponseDto response =
+        service.updatePermit(oicRequestLimitsRequest("CAN", "", " "), "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<PermitMutationRow> permitCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository)
+        .updatePermitDetail(
+            permitCaptor.capture(), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE));
+    assertThat(permitCaptor.getValue().permitStatusCode()).isEqualTo("CAN");
+    assertThat(permitCaptor.getValue().oicRequestPieces()).isNull();
+    assertThat(permitCaptor.getValue().oicRequestVolume()).isNull();
+  }
+
+  @Test
+  void updatePermitShouldPreserveOmittedBlanketOicRequestLimits() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(blanketOicPermitMutationRow()));
+    when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("B"));
+    when(exemptionService.findByExemptionNumber("EX-700"))
+        .thenReturn(
+            Optional.of(
+                exemptionDetailWithClients(
+                    "EX-700", "B", "00077881", "00077880")));
+    stubOicApplicationBinding("EX-700");
+    when(repository.updatePermitDetail(
+            any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
+        .thenReturn(true);
+
+    PermitMutationRpcResponseDto response =
+        service.updatePermit(updatePermitRequest(null, null, null, null), "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<PermitMutationRow> permitCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository)
+        .updatePermitDetail(
+            permitCaptor.capture(), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE));
+    assertThat(permitCaptor.getValue().oicRequestPieces()).isEqualTo(100L);
+    assertThat(permitCaptor.getValue().oicRequestVolume()).isEqualTo(100.0d);
   }
 
   @Test
@@ -4823,7 +4911,7 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
-  void updatePermitShouldSynchronizeBlanketOicHiddenApplicationOwner() {
+  void updatePermitShouldSynchronizeBlanketOicHiddenApplicationOwnerForLocationChange() {
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(blanketOicPermitMutationRow()));
     when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("B"));
@@ -4837,17 +4925,17 @@ class OraclePermitDetailsRpcServiceTest {
             any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
         .thenReturn(true);
     when(applicationDetailsRpcService.synchronizeApplicationOwner(
-            1000999L, "00099999", "01", "idir\\jsmith"))
+            1000999L, "00077881", "03", "idir\\jsmith"))
         .thenReturn(true);
 
     PermitMutationRpcResponseDto response =
         service.updatePermit(
-            updatePermitRequest(null, "00099999", null, "1000999"),
+            updatePermitRequest(null, "00099999", "03", null, null, "1000999"),
             "idir\\jsmith");
 
     assertThat(response.success()).isTrue();
     verify(applicationDetailsRpcService)
-        .synchronizeApplicationOwner(1000999L, "00099999", "01", "idir\\jsmith");
+        .synchronizeApplicationOwner(1000999L, "00077881", "03", "idir\\jsmith");
   }
 
   @Test
@@ -4912,6 +5000,16 @@ class OraclePermitDetailsRpcServiceTest {
 
     assertThat(service.getExemptionNumberForPermitMutation(7000123L))
         .isEqualTo("EX-700");
+  }
+
+  @Test
+  void permitMutationClientScopeShouldComeFromTheAuthoritativePermitRow() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRowWithClients("00077881", "01", null, null)));
+
+    assertThat(service.getClientScopeForPermitMutation(7000123L))
+        .isEqualTo(
+            new PermitDetailsRpcService.PermitMutationClientScope("00077881", null));
   }
 
   @Test
@@ -7878,11 +7976,25 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   private PermitMutationRow blanketOicPermitMutationRowWithStatus(String permitStatus) {
-    return blanketOicPermitMutationRow(LocalDate.of(2026, 3, 15), permitStatus);
+    return blanketOicPermitMutationRowWithStatus(permitStatus, 100L, 100.0d);
+  }
+
+  private PermitMutationRow blanketOicPermitMutationRowWithStatus(
+      String permitStatus, Long oicRequestPieces, Double oicRequestVolume) {
+    return blanketOicPermitMutationRow(
+        LocalDate.of(2026, 3, 15), permitStatus, oicRequestPieces, oicRequestVolume);
   }
 
   private PermitMutationRow blanketOicPermitMutationRow(
       LocalDate receivedDate, String permitStatus) {
+    return blanketOicPermitMutationRow(receivedDate, permitStatus, 100L, 100.0d);
+  }
+
+  private PermitMutationRow blanketOicPermitMutationRow(
+      LocalDate receivedDate,
+      String permitStatus,
+      Long oicRequestPieces,
+      Double oicRequestVolume) {
     return new PermitMutationRow(
         7000123L,
         "Destination Co",
@@ -7916,8 +8028,8 @@ class OraclePermitDetailsRpcServiceTest {
         null,
         null,
         1000999L,
-        100L,
-        100.0d,
+        oicRequestPieces,
+        oicRequestVolume,
         "T");
   }
 

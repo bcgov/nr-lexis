@@ -84,6 +84,7 @@ import {
 } from '@/pages/shared/create-form-utils'
 import BlanketOicPackageCodeFields from './BlanketOicPackageCodeFields'
 import BlanketOicScaleCodeFields from './BlanketOicScaleCodeFields'
+import { resolveBlanketOicRegionContext } from '../ProvincialBlanketOicPermitCreate/region-context'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { useReloadPreservedTab } from '@/pages/shared/useReloadPreservedTab'
 import {
@@ -105,6 +106,7 @@ import {
   type ApplicationClientData,
   type ApplicationClientLocation,
 } from '@/service/application-client-lookup-service'
+import { fetchExemptionRegionContext } from '@/service/provincial-exemption-detail-service'
 import {
   fetchPermitFeeOverrideContext,
   fetchPermitApprovalEmailDefault,
@@ -224,7 +226,7 @@ const MAX_OIC_REQUEST_PIECES = 9_999_999_999
 const MAX_OIC_REQUEST_VOLUME_LENGTH = 9
 const MAX_PERMIT_OVERRIDE_FEE = 9_999_999.99
 const MAX_PERMIT_OVERRIDE_COMMENT_LENGTH = 254
-const MAX_MINISTERIAL_PERMIT_REMARKS_LENGTH = 250
+const MAX_REVIEWED_PERMIT_REMARKS_LENGTH = 250
 const ASCII_PATTERN = /^[\u0000-\u007f]*$/
 // Legacy allows an approver to move a permit to EXP; once expired, the record is read-only.
 const EDITABLE_PERMIT_STATUS_CODES = new Set(['ACT', 'COM', 'CAN', 'EXP'])
@@ -904,6 +906,10 @@ const ProvincialPermitDetailsPage = () => {
   const [shippingReferencesErrorMessage, setShippingReferencesErrorMessage] = useState('')
   const [permitStatusOptions, setPermitStatusOptions] = useState<SearchOption[]>([])
   const [permitRegionOptions, setPermitRegionOptions] = useState<SearchOption[]>([])
+  const [blanketOicExemptionRegionNumbers, setBlanketOicExemptionRegionNumbers] = useState<
+    string[] | null
+  >(null)
+  const [blanketOicRegionContextError, setBlanketOicRegionContextError] = useState('')
   const [isPermitOptionsLoading, setIsPermitOptionsLoading] = useState(true)
   const [permitOptionsUnavailable, setPermitOptionsUnavailable] = useState(false)
   const [permitOptionsErrorMessage, setPermitOptionsErrorMessage] = useState('')
@@ -994,6 +1000,8 @@ const ProvincialPermitDetailsPage = () => {
     setHasLoadedAvailablePermitApplications(false)
     setIsLoadingAvailableApplications(false)
     setAvailablePermitApplicationsError('')
+    setBlanketOicExemptionRegionNumbers(null)
+    setBlanketOicRegionContextError('')
     setPermitApprovalEmailOpen(false)
     setPermitApprovalEmailAddress('')
   }, [
@@ -1084,6 +1092,35 @@ const ProvincialPermitDetailsPage = () => {
       active = false
     }
   }, [])
+
+  useEffect(() => {
+    if (!detail?.blanketOic || !detail.exemptionNumber) {
+      setBlanketOicExemptionRegionNumbers(null)
+      setBlanketOicRegionContextError('')
+      return undefined
+    }
+
+    let active = true
+    setBlanketOicExemptionRegionNumbers(null)
+    setBlanketOicRegionContextError('')
+    void fetchExemptionRegionContext(detail.exemptionNumber)
+      .then((context) => {
+        if (!active) return
+        setBlanketOicExemptionRegionNumbers(context.regionNumbers)
+      })
+      .catch((error: unknown) => {
+        if (!active) return
+        console.error(error)
+        setBlanketOicExemptionRegionNumbers([])
+        setBlanketOicRegionContextError(
+          'The exemption region settings could not be loaded. Reload before changing this permit region.',
+        )
+      })
+
+    return () => {
+      active = false
+    }
+  }, [detail?.blanketOic, detail?.exemptionNumber, permitNumber])
 
   useEffect(() => {
     const load = async () => {
@@ -1283,19 +1320,21 @@ const ProvincialPermitDetailsPage = () => {
 
   const hasPermitAgent = agentUsed
   const ministerialPermit = isMinisterialPermit(detail)
+  const blanketOicPermit = detail?.blanketOic === true
+  const usesReviewedPermitFlow = blanketOicPermit || ministerialPermit
   const hasGbmsHistory = (tabsData?.gbmsEvents.length ?? 0) > 0 || Boolean(gbmsErrorMessage)
   // Legacy retains the invoice upload workflow but hides Invoices from permit navigation.
   const permitDetailTabs = PERMIT_DETAIL_TABS.filter(
     ({ id }) =>
       id !== 'invoices' &&
-      (id !== 'agent' || (hasPermitAgent && !ministerialPermit)) &&
+      (id !== 'agent' || (hasPermitAgent && !usesReviewedPermitFlow)) &&
       (id !== 'gbms' || hasGbmsHistory),
   ).map((tab) => ({
     ...tab,
     label:
-      ministerialPermit && tab.id === 'owner'
+      usesReviewedPermitFlow && tab.id === 'owner'
         ? 'Applicant'
-        : ministerialPermit && tab.id === 'items'
+        : usesReviewedPermitFlow && tab.id === 'items'
           ? 'Scale'
           : tab.label,
   }))
@@ -1600,11 +1639,29 @@ const ProvincialPermitDetailsPage = () => {
         : 'Permit edit settings could not be loaded. Editing is unavailable until the data can be retrieved.'
       : ''
   const permitStatusCode = detail?.permitStatusCode?.trim().toUpperCase()
+  const invoiceMaterialLocked = permitStatusCode === 'COM' || permitStatusCode === 'PPD'
+  const blanketOicRegionContext = useMemo(() => {
+    if (!blanketOicPermit || blanketOicExemptionRegionNumbers === null) {
+      return null
+    }
+    return resolveBlanketOicRegionContext(
+      permitRegionOptions.map((option) => ({ id: option.value, text: option.label })),
+      blanketOicExemptionRegionNumbers,
+    )
+  }, [blanketOicExemptionRegionNumbers, blanketOicPermit, permitRegionOptions])
+  const blanketOicRegionOptionsLoading =
+    blanketOicPermit && blanketOicExemptionRegionNumbers === null
+  const blanketOicRegionError =
+    blanketOicRegionContextError || blanketOicRegionContext?.errorMessage || ''
+  const blanketOicRegionSelectionUnavailable =
+    blanketOicRegionOptionsLoading || !!blanketOicRegionError
   const requiredPermitOptionsMissing =
     !isPermitOptionsLoading &&
     !permitOptionsUnavailable &&
     (permitStatusOptions.length === 0 ||
-      (detail?.blanketOic === true && permitRegionOptions.length === 0))
+      (blanketOicPermit &&
+        !blanketOicRegionOptionsLoading &&
+        (permitRegionOptions.length === 0 || !!blanketOicRegionError)))
   const editablePermitStatusOptions = useMemo(() => {
     const currentStatusCode = permitStatusCode ?? ''
     const options = permitStatusOptions
@@ -1634,6 +1691,29 @@ const ProvincialPermitDetailsPage = () => {
   }, [detail?.permitStatusDescription, permitStatusCode, permitStatusOptions])
   const editablePermitRegionOptions = useMemo(() => {
     const currentOrgUnitNumber = detailValue(detail?.orgUnitNumber).trim()
+    if (blanketOicPermit) {
+      if (!blanketOicRegionContext || blanketOicRegionError) {
+        return []
+      }
+      const options = blanketOicRegionContext.options.map((option) => ({
+        value: option.id,
+        label: option.text,
+      }))
+      if (
+        !invoiceMaterialLocked ||
+        !currentOrgUnitNumber ||
+        options.some((option) => option.value === currentOrgUnitNumber)
+      ) {
+        return options
+      }
+      return [
+        ...options,
+        {
+          value: currentOrgUnitNumber,
+          label: detail?.region?.trim() || currentOrgUnitNumber,
+        },
+      ]
+    }
     if (
       !currentOrgUnitNumber ||
       permitRegionOptions.some((option) => option.value === currentOrgUnitNumber)
@@ -1647,7 +1727,15 @@ const ProvincialPermitDetailsPage = () => {
         label: detail?.region?.trim() || currentOrgUnitNumber,
       },
     ]
-  }, [detail?.orgUnitNumber, detail?.region, permitRegionOptions])
+  }, [
+    blanketOicPermit,
+    blanketOicRegionContext,
+    blanketOicRegionError,
+    detail?.orgUnitNumber,
+    detail?.region,
+    invoiceMaterialLocked,
+    permitRegionOptions,
+  ])
   const permitExpired = permitStatusCode === 'EXP'
   const canUploadPermitDocuments =
     permitExemptionContextReady &&
@@ -1672,7 +1760,6 @@ const ProvincialPermitDetailsPage = () => {
   const canReviewPermits = canPerform('/permitsReview')
   const canCorrectPermitSubmitDate = canSavePermit && canReviewPermits && permitStatusCode === 'ACT'
   const canEditShipping = canMutatePermit && permitStatusCode !== 'CAN'
-  const invoiceMaterialLocked = permitStatusCode === 'COM' || permitStatusCode === 'PPD'
   const canEditPermitClients =
     canSavePermit && !invoiceMaterialLocked && (detail?.blanketOic === true || ministerialPermit)
   const ownerEditMode = isEditingPermit && canEditPermitClients && isEditingPermitClients
@@ -1693,7 +1780,7 @@ const ProvincialPermitDetailsPage = () => {
       !isOwnerClientLookupLoading &&
       !ownerClientLookupError &&
       (!agentUsed ||
-        (ministerialPermit && !permitForm.agentClientNumber.trim()) ||
+        (usesReviewedPermitFlow && !permitForm.agentClientNumber.trim()) ||
         (!!permitForm.agentClientNumber.trim() &&
           hasVerifiedAgentClientLocation &&
           !isAgentClientLookupLoading &&
@@ -1774,7 +1861,7 @@ const ProvincialPermitDetailsPage = () => {
   )
   const permitAgentToggleDirty =
     isEditingPermit &&
-    !ministerialPermit &&
+    !usesReviewedPermitFlow &&
     !!permitBaselineForm &&
     agentUsed !== Boolean(permitBaselineForm.agentClientNumber.trim())
   const permitDetailDirty =
@@ -2045,8 +2132,9 @@ const ProvincialPermitDetailsPage = () => {
     ministerialPermit,
     reloadAvailablePermitApplications,
   ])
+  const requiresOicRequestLimits = blanketOicPermit && !invoiceMaterialLocked
   const requiresPositiveOicRequestLimits =
-    !!detail?.blanketOic && permitForm?.permitStatus.trim().toUpperCase() === 'COM'
+    requiresOicRequestLimits && permitForm?.permitStatus.trim().toUpperCase() === 'COM'
   const requiresPermitCompletionDates = permitForm?.permitStatus.trim().toUpperCase() === 'COM'
   const requiresCompletionSubmitDate =
     requiresPermitCompletionDates && ['ACT', 'CAN'].includes(permitStatusCode ?? '')
@@ -2058,11 +2146,20 @@ const ProvincialPermitDetailsPage = () => {
     return {
       permitNumber: requiredFieldError(permitForm.permitNumber, 'Permit number') ?? undefined,
       permitStatus: requiredFieldError(permitForm.permitStatus, 'Permit status') ?? undefined,
-      orgUnitNumber: detail?.blanketOic
+      orgUnitNumber: blanketOicPermit
         ? firstValidationError(
             () => requiredFieldError(permitForm.orgUnitNumber, 'Region'),
             () => integerFieldError(permitForm.orgUnitNumber, 'Region'),
             () => positiveNumericFieldError(permitForm.orgUnitNumber),
+            () =>
+              !invoiceMaterialLocked &&
+              !blanketOicRegionOptionsLoading &&
+              !blanketOicRegionError &&
+              !editablePermitRegionOptions.some(
+                (option) => option.value === permitForm.orgUnitNumber.trim(),
+              )
+                ? 'Select a region in the exemption area.'
+                : null,
           )
         : undefined,
       permitIssueDate:
@@ -2107,7 +2204,7 @@ const ProvincialPermitDetailsPage = () => {
           () =>
             maxLengthFieldError(
               permitForm.permitRemarks,
-              ministerialPermit ? MAX_MINISTERIAL_PERMIT_REMARKS_LENGTH : 254,
+              usesReviewedPermitFlow ? MAX_REVIEWED_PERMIT_REMARKS_LENGTH : 254,
               'Permit remarks',
             ),
         ) ?? undefined,
@@ -2144,59 +2241,52 @@ const ProvincialPermitDetailsPage = () => {
       permitNumberOfPieces: permitForm.permitNumberOfPieces.trim()
         ? (integerFieldError(permitForm.permitNumberOfPieces, 'Current permit pieces') ?? undefined)
         : undefined,
-      oicPermitTotalPieces:
-        detail?.blanketOic && !invoiceMaterialLocked
-          ? firstValidationError(
-              () =>
-                requiresPositiveOicRequestLimits
-                  ? requiredFieldError(permitForm.oicPermitTotalPieces, 'Permit Request Pieces')
-                  : null,
-              () =>
-                permitForm.oicPermitTotalPieces.trim()
-                  ? integerFieldError(permitForm.oicPermitTotalPieces, 'Permit Request Pieces')
-                  : null,
-              () =>
-                requiresPositiveOicRequestLimits
-                  ? positiveNumericFieldError(permitForm.oicPermitTotalPieces)
-                  : null,
-              () =>
-                maxNumericValueFieldError(
-                  permitForm.oicPermitTotalPieces,
-                  MAX_OIC_REQUEST_PIECES,
-                  'Permit Request Pieces',
-                ),
-            )
-          : undefined,
-      oicPermitTotalVolume:
-        detail?.blanketOic && !invoiceMaterialLocked
-          ? firstValidationError(
-              () =>
-                requiresPositiveOicRequestLimits
-                  ? requiredFieldError(permitForm.oicPermitTotalVolume, 'Permit Request Volume')
-                  : null,
-              () => numericFieldError(permitForm.oicPermitTotalVolume, 'Permit Request Volume'),
-              () =>
-                requiresPositiveOicRequestLimits
-                  ? positiveNumericFieldError(permitForm.oicPermitTotalVolume)
-                  : null,
-              () => oicRequestVolumePrecisionError(permitForm.oicPermitTotalVolume),
-              () =>
-                maxLengthFieldError(
-                  permitForm.oicPermitTotalVolume,
-                  MAX_OIC_REQUEST_VOLUME_LENGTH,
-                  'Permit Request Volume',
-                ),
-            )
-          : undefined,
+      oicPermitTotalPieces: requiresOicRequestLimits
+        ? firstValidationError(
+            () => requiredFieldError(permitForm.oicPermitTotalPieces, 'Permit Request Pieces'),
+            () => integerFieldError(permitForm.oicPermitTotalPieces, 'Permit Request Pieces'),
+            () =>
+              requiresPositiveOicRequestLimits
+                ? positiveNumericFieldError(permitForm.oicPermitTotalPieces)
+                : null,
+            () =>
+              maxNumericValueFieldError(
+                permitForm.oicPermitTotalPieces,
+                MAX_OIC_REQUEST_PIECES,
+                'Permit Request Pieces',
+              ),
+          )
+        : undefined,
+      oicPermitTotalVolume: requiresOicRequestLimits
+        ? firstValidationError(
+            () => requiredFieldError(permitForm.oicPermitTotalVolume, 'Permit Request Volume'),
+            () => numericFieldError(permitForm.oicPermitTotalVolume, 'Permit Request Volume'),
+            () =>
+              requiresPositiveOicRequestLimits
+                ? positiveNumericFieldError(permitForm.oicPermitTotalVolume)
+                : null,
+            () => oicRequestVolumePrecisionError(permitForm.oicPermitTotalVolume),
+            () =>
+              maxLengthFieldError(
+                permitForm.oicPermitTotalVolume,
+                MAX_OIC_REQUEST_VOLUME_LENGTH,
+                'Permit Request Volume',
+              ),
+          )
+        : undefined,
     }
   }, [
-    detail?.blanketOic,
+    blanketOicPermit,
+    blanketOicRegionError,
+    blanketOicRegionOptionsLoading,
+    editablePermitRegionOptions,
     invoiceMaterialLocked,
-    ministerialPermit,
+    requiresPositiveOicRequestLimits,
+    usesReviewedPermitFlow,
     permitForm,
     requiresCompletionSubmitDate,
     requiresPermitCompletionDates,
-    requiresPositiveOicRequestLimits,
+    requiresOicRequestLimits,
   ])
   const hasPermitValidationError = Object.entries(permitFieldErrors).some(
     ([field, error]) => !!error && !SHIPPING_PERMIT_FIELDS.has(field as PermitDetailFormField),
@@ -2394,7 +2484,7 @@ const ProvincialPermitDetailsPage = () => {
 
   const setPermitAgentUsed = (checked: boolean): void => {
     setAgentUsed(checked)
-    if (!checked && !ministerialPermit) {
+    if (!checked && !usesReviewedPermitFlow) {
       resetPermitClientLookup('agent')
       setPermitForm((current) =>
         current ? { ...current, agentClientNumber: '', agentClientLocation: '' } : current,
@@ -2513,6 +2603,7 @@ const ProvincialPermitDetailsPage = () => {
         isSavingPermit ||
         isPermitOptionsLoading ||
         permitOptionsUnavailable ||
+        blanketOicRegionSelectionUnavailable ||
         requiredPermitOptionsMissing
       ) {
         return false
@@ -2579,20 +2670,6 @@ const ProvincialPermitDetailsPage = () => {
             ? current
             : { ...current, ownerClientNumber, agentClientNumber }
         })
-        if (detail.blanketOic && !invoiceMaterialLocked && !requiresPositiveOicRequestLimits) {
-          confirmedRequest = {
-            ...confirmedRequest,
-            oicPermitTotalPieces:
-              !confirmedRequest.oicPermitTotalPieces.trim() && detail.oicRequestPieces != null
-                ? '0'
-                : confirmedRequest.oicPermitTotalPieces,
-            oicPermitTotalVolume:
-              !confirmedRequest.oicPermitTotalVolume.trim() && detail.oicRequestVolume != null
-                ? '0'
-                : confirmedRequest.oicPermitTotalVolume,
-          }
-        }
-
         if (hasPermitValidationError || (includeShipping && hasShippingValidationError)) {
           setShowPermitValidationErrors(true)
           setActionErrorMessage(
@@ -2717,6 +2794,7 @@ const ProvincialPermitDetailsPage = () => {
       }
     },
     [
+      blanketOicRegionSelectionUnavailable,
       canSavePermit,
       detail,
       endPermitMutation,
@@ -2725,7 +2803,6 @@ const ProvincialPermitDetailsPage = () => {
       hasPermitValidationError,
       hasShippingValidationError,
       isEditingPermitClients,
-      invoiceMaterialLocked,
       isSavingPermit,
       isPermitOptionsLoading,
       permitOptionsUnavailable,
@@ -2735,7 +2812,6 @@ const ProvincialPermitDetailsPage = () => {
       permitForm,
       permitNumber,
       refreshLoadedPermitFees,
-      requiresPositiveOicRequestLimits,
       tryBeginPermitMutation,
     ],
   )
@@ -2829,11 +2905,18 @@ const ProvincialPermitDetailsPage = () => {
       )
       return false
     }
-    if (isPermitOptionsLoading || permitOptionsUnavailable || requiredPermitOptionsMissing) {
+    if (
+      isPermitOptionsLoading ||
+      permitOptionsUnavailable ||
+      blanketOicRegionSelectionUnavailable ||
+      requiredPermitOptionsMissing
+    ) {
       setActionErrorMessage(
         permitOptionsUnavailable
           ? SEARCH_OPTIONS_UNAVAILABLE_MESSAGE
-          : 'Required permit status or region options are not configured.',
+          : blanketOicRegionOptionsLoading
+            ? 'Blanket OIC region options are still loading.'
+            : 'Required permit status or region options are not configured.',
       )
       return false
     }
@@ -2846,6 +2929,8 @@ const ProvincialPermitDetailsPage = () => {
     }
     return savePermitMutation(includeShipping)
   }, [
+    blanketOicRegionOptionsLoading,
+    blanketOicRegionSelectionUnavailable,
     onSaveShipping,
     isPermitOptionsLoading,
     permitOptionsUnavailable,
@@ -3875,7 +3960,7 @@ const ProvincialPermitDetailsPage = () => {
     const clientData = isOwner ? ownerEditClientData : agentEditClientData
     const isLoading = isOwner ? isOwnerClientLookupLoading : isAgentClientLookupLoading
     const errorMessage = isOwner ? ownerClientLookupError : agentClientLookupError
-    const label = ministerialPermit && isOwner ? 'Applicant' : isOwner ? 'Owner' : 'Agent'
+    const label = usesReviewedPermitFlow && isOwner ? 'Applicant' : isOwner ? 'Owner' : 'Agent'
 
     return (
       <>
@@ -3886,7 +3971,7 @@ const ProvincialPermitDetailsPage = () => {
             aria-required="true"
             value={clientNumber}
             disabled={isDisabled}
-            readOnly={ministerialPermit}
+            readOnly={usesReviewedPermitFlow}
             maxLength={8}
             onChange={(event) => setPermitClientNumber(kind, event.target.value)}
             onBlur={(event) =>
@@ -3908,7 +3993,7 @@ const ProvincialPermitDetailsPage = () => {
           >
             <SelectItem
               value=""
-              text={isLoading ? 'Loading locations' : `Select a ${label.toLowerCase()} location`}
+              text={isLoading ? 'Loading locations' : `Select ${label.toLowerCase()} location`}
             />
             {locations.filter(isSelectableClientLocation).map((clientLocation) => (
               <SelectItem
@@ -3947,9 +4032,9 @@ const ProvincialPermitDetailsPage = () => {
       onChange={(event) => setPermitFormField(field, event.target.value)}
       disabled={isDisabled}
       rows={3}
-      enableCounter={ministerialPermit && field === 'permitRemarks'}
+      enableCounter={usesReviewedPermitFlow && field === 'permitRemarks'}
       maxCount={maxCount}
-      maxLength={ministerialPermit ? maxCount : undefined}
+      maxLength={usesReviewedPermitFlow ? maxCount : undefined}
     />
   )
 
@@ -4332,6 +4417,18 @@ const ProvincialPermitDetailsPage = () => {
               />
             </Column>
           )}
+          {!!blanketOicRegionError && (
+            <Column sm={4} md={8} lg={16} className="detail-page-error">
+              <InlineNotification
+                className="detail-context-notification"
+                kind="warning"
+                title="Blanket OIC region options unavailable"
+                subtitle={blanketOicRegionError}
+                lowContrast
+                hideCloseButton
+              />
+            </Column>
+          )}
           {requiredPermitOptionsMissing && (
             <Column sm={4} md={8} lg={16} className="detail-page-error">
               <InlineNotification
@@ -4531,7 +4628,7 @@ const ProvincialPermitDetailsPage = () => {
                               'permitRemarks',
                               'Remarks',
                               false,
-                              MAX_MINISTERIAL_PERMIT_REMARKS_LENGTH,
+                              MAX_REVIEWED_PERMIT_REMARKS_LENGTH,
                             )}
                           </div>
                         </Tile>
@@ -4634,7 +4731,9 @@ const ProvincialPermitDetailsPage = () => {
                                 disabled={
                                   invoiceMaterialLocked ||
                                   isPermitOptionsLoading ||
-                                  permitRegionOptions.length === 0
+                                  blanketOicRegionOptionsLoading ||
+                                  !!blanketOicRegionError ||
+                                  editablePermitRegionOptions.length === 0
                                 }
                               >
                                 <SelectItem value="" text="Select a region" />
@@ -4649,7 +4748,9 @@ const ProvincialPermitDetailsPage = () => {
                             ) : (
                               <TextInput
                                 id="permit-orgUnitNumber"
-                                labelText={ministerialPermit ? requiredLabel('Region') : 'Region'}
+                                labelText={
+                                  usesReviewedPermitFlow ? requiredLabel('Region') : 'Region'
+                                }
                                 value={displayValue(detail.region ?? detail.orgUnitNumber)}
                                 disabled
                               />
@@ -4766,7 +4867,7 @@ const ProvincialPermitDetailsPage = () => {
                                   'Permit Request Pieces',
                                   invoiceMaterialLocked,
                                   undefined,
-                                  requiresPositiveOicRequestLimits && !invoiceMaterialLocked,
+                                  requiresOicRequestLimits,
                                 )}
                               {detail.blanketOic &&
                                 renderPermitTextInput(
@@ -4774,7 +4875,7 @@ const ProvincialPermitDetailsPage = () => {
                                   'Permit Request Volume (m³)',
                                   invoiceMaterialLocked,
                                   undefined,
-                                  requiresPositiveOicRequestLimits && !invoiceMaterialLocked,
+                                  requiresOicRequestLimits,
                                 )}
                               {renderPermitTextInput(
                                 'permitTotalVolume',
@@ -4792,7 +4893,7 @@ const ProvincialPermitDetailsPage = () => {
                                 'permitRemarks',
                                 'Remarks',
                                 false,
-                                ministerialPermit ? MAX_MINISTERIAL_PERMIT_REMARKS_LENGTH : 254,
+                                usesReviewedPermitFlow ? MAX_REVIEWED_PERMIT_REMARKS_LENGTH : 254,
                               )}
                             </div>
                           </Tile>
@@ -4975,6 +5076,7 @@ const ProvincialPermitDetailsPage = () => {
                                   isSavingPermit ||
                                   isPermitOptionsLoading ||
                                   permitOptionsUnavailable ||
+                                  blanketOicRegionSelectionUnavailable ||
                                   requiredPermitOptionsMissing ||
                                   paymentPendingReceiptRequiresCompletion ||
                                   !permitClientLookupCanSave
@@ -5009,7 +5111,7 @@ const ProvincialPermitDetailsPage = () => {
                     {!ownerEditMode && (
                       <Column sm={4} md={8} lg={16}>
                         <PermitClientTile
-                          title={ministerialPermit ? 'Applicant details' : 'Owner'}
+                          title={usesReviewedPermitFlow ? 'Applicant details' : 'Owner'}
                           clientNumber={detail.ownerClientNumber}
                           locationCode={detail.ownerClientLocationCode}
                           clientData={ownerClientData}
@@ -5022,7 +5124,7 @@ const ProvincialPermitDetailsPage = () => {
                           checked={agentUsed}
                           disabled
                         />
-                        {ministerialPermit && hasPermitAgent && (
+                        {usesReviewedPermitFlow && hasPermitAgent && (
                           <PermitClientTile
                             title="Agent information"
                             clientNumber={detail.applicantClientNumber}
@@ -5040,21 +5142,21 @@ const ProvincialPermitDetailsPage = () => {
                       <Column sm={4} md={8} lg={16}>
                         <Tile>
                           <h2 className="detail-tile-title">
-                            {ministerialPermit ? 'Applicant details' : 'Edit owner'}
+                            {usesReviewedPermitFlow ? 'Applicant details' : 'Edit owner'}
                           </h2>
                           {renderPermitClientEditor('owner', invoiceMaterialLocked)}
                           <Checkbox
                             id="permit-agent-used"
                             labelText="I'm an agent"
-                            checked={ministerialPermit ? hasPermitAgent : agentUsed}
-                            disabled={ministerialPermit || invoiceMaterialLocked}
+                            checked={usesReviewedPermitFlow ? hasPermitAgent : agentUsed}
+                            disabled={usesReviewedPermitFlow || invoiceMaterialLocked}
                             onChange={
-                              ministerialPermit
+                              usesReviewedPermitFlow
                                 ? undefined
                                 : (_, { checked }) => setPermitAgentUsed(Boolean(checked))
                             }
                           />
-                          {ministerialPermit && agentUsed && (
+                          {usesReviewedPermitFlow && agentUsed && (
                             <>
                               <h3 className="detail-tile-title">Agent information</h3>
                               {renderPermitClientEditor('agent', invoiceMaterialLocked)}
@@ -5075,6 +5177,7 @@ const ProvincialPermitDetailsPage = () => {
                                   isSavingPermit ||
                                   isPermitOptionsLoading ||
                                   permitOptionsUnavailable ||
+                                  blanketOicRegionSelectionUnavailable ||
                                   requiredPermitOptionsMissing ||
                                   paymentPendingReceiptRequiresCompletion ||
                                   !permitClientLookupCanSave
@@ -5095,7 +5198,7 @@ const ProvincialPermitDetailsPage = () => {
                             </>
                           ) : (
                             <Button kind="tertiary" size="sm" onClick={startPermitClientEdit}>
-                              {ministerialPermit ? 'Edit applicant' : 'Edit owner'}
+                              {usesReviewedPermitFlow ? 'Edit applicant' : 'Edit owner'}
                             </Button>
                           )}
                         </div>
@@ -5103,7 +5206,7 @@ const ProvincialPermitDetailsPage = () => {
                     )}
                   </Grid>
                 </TabPanel>
-                {hasPermitAgent && !ministerialPermit && (
+                {hasPermitAgent && !usesReviewedPermitFlow && (
                   <TabPanel key="agent" className="application-detail-tab-panel">
                     <Grid fullWidth className="application-detail-tab-grid">
                       {ownerEditMode && permitForm ? (
@@ -5139,6 +5242,7 @@ const ProvincialPermitDetailsPage = () => {
                                     isSavingPermit ||
                                     isPermitOptionsLoading ||
                                     permitOptionsUnavailable ||
+                                    blanketOicRegionSelectionUnavailable ||
                                     requiredPermitOptionsMissing ||
                                     paymentPendingReceiptRequiresCompletion ||
                                     !permitClientLookupCanSave
@@ -5191,9 +5295,9 @@ const ProvincialPermitDetailsPage = () => {
                               false,
                               52,
                               true,
-                              ministerialPermit ? 'Company name' : undefined,
+                              usesReviewedPermitFlow ? 'Company name' : undefined,
                             )}
-                            {ministerialPermit ? (
+                            {usesReviewedPermitFlow ? (
                               <PermitCountrySelect
                                 id="permit-destinationCountry"
                                 labelText={requiredLabel('Final destination country')}
@@ -5452,7 +5556,7 @@ const ProvincialPermitDetailsPage = () => {
                     <Column sm={4} md={8} lg={16}>
                       <Tile>
                         <h2 className="detail-tile-title">
-                          {ministerialPermit ? 'Scale' : 'Permit items'}
+                          {usesReviewedPermitFlow ? 'Scale' : 'Permit items'}
                         </h2>
                         {ministerialScaleEmpty && (
                           <EmptyState
@@ -5495,7 +5599,11 @@ const ProvincialPermitDetailsPage = () => {
                             <InlineLoading description="Loading permit items…" />
                           ) : permitTablesErrorMessage ? (
                             <EmptyState
-                              title="Permit items unavailable"
+                              title={
+                                usesReviewedPermitFlow
+                                  ? 'Scale unavailable'
+                                  : 'Permit items unavailable'
+                              }
                               description={permitTablesErrorMessage}
                               headingLevel={3}
                               role="alert"
@@ -5509,7 +5617,9 @@ const ProvincialPermitDetailsPage = () => {
                                     <TableHeader>Region</TableHeader>
                                     <TableHeader>Species and end use sort</TableHeader>
                                     <TableHeader>Age class</TableHeader>
-                                    {ministerialPermit && <TableHeader>Package pieces</TableHeader>}
+                                    {usesReviewedPermitFlow && (
+                                      <TableHeader>Package pieces</TableHeader>
+                                    )}
                                     <TableHeader>Package volume (m³)</TableHeader>
                                     <TableHeader>Average length</TableHeader>
                                     <TableHeader>Average top diameter</TableHeader>
@@ -5540,7 +5650,7 @@ const ProvincialPermitDetailsPage = () => {
                                         {row.speciesEndUseSort || '-'}
                                       </TableCell>
                                       <TableCell>{row.ageClass || '-'}</TableCell>
-                                      {ministerialPermit && (
+                                      {usesReviewedPermitFlow && (
                                         <TableCell>
                                           {(
                                             selectedPermitScaleTotalsByPackage.get(
@@ -5550,7 +5660,7 @@ const ProvincialPermitDetailsPage = () => {
                                         </TableCell>
                                       )}
                                       <TableCell>
-                                        {ministerialPermit
+                                        {usesReviewedPermitFlow
                                           ? (
                                               selectedPermitScaleTotalsByPackage.get(
                                                 row.packageNumber,
@@ -5854,7 +5964,11 @@ const ProvincialPermitDetailsPage = () => {
                           {!permitTablesErrorMessage &&
                             !ministerialScaleEmpty &&
                             (packageScopedItems.length > 0 ? (
-                              <TableFrame ariaLabel="Permit item rows">
+                              <TableFrame
+                                ariaLabel={
+                                  usesReviewedPermitFlow ? 'Scale rows' : 'Permit item rows'
+                                }
+                              >
                                 <Table size="md" useZebraStyles>
                                   <TableHead>
                                     <TableRow>
@@ -5940,7 +6054,9 @@ const ProvincialPermitDetailsPage = () => {
                             ) : (
                               <EmptyState
                                 title={
-                                  ministerialPermit ? 'No scale yet' : 'No permit items available'
+                                  usesReviewedPermitFlow
+                                    ? 'No scale yet'
+                                    : 'No permit items available'
                                 }
                                 description={
                                   ministerialPermit ? (
@@ -6052,6 +6168,7 @@ const ProvincialPermitDetailsPage = () => {
                                           isSavingPermit ||
                                           isPermitOptionsLoading ||
                                           permitOptionsUnavailable ||
+                                          blanketOicRegionSelectionUnavailable ||
                                           requiredPermitOptionsMissing ||
                                           paymentPendingReceiptRequiresCompletion ||
                                           !permitClientLookupCanSave
@@ -6794,7 +6911,10 @@ const ProvincialPermitDetailsPage = () => {
         subject="this permit"
         saveUnavailableReason={
           permitDetailDirty &&
-          (isPermitOptionsLoading || permitOptionsUnavailable || requiredPermitOptionsMissing)
+          (isPermitOptionsLoading ||
+            permitOptionsUnavailable ||
+            blanketOicRegionSelectionUnavailable ||
+            requiredPermitOptionsMissing)
             ? 'Authoritative permit options must load before permit changes can be saved.'
             : permitDocumentUploadDirty || invoiceDocumentUploadDirty
               ? 'Finish or reset the queued document uploads before leaving, or discard all changes.'
