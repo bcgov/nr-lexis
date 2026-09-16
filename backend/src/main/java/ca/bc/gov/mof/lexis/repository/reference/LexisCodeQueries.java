@@ -1,6 +1,6 @@
 package ca.bc.gov.mof.lexis.repository.reference;
 
-/** Direct equivalents of the attachment, transport-list and port reads in THE.LEXIS_CODES. */
+/** Direct equivalents of selected reference-code reads in THE.LEXIS_CODES. */
 public final class LexisCodeQueries {
 
   // Attachment types deliberately include historical codes and have no defined row order.
@@ -31,6 +31,22 @@ public final class LexisCodeQueries {
       FROM THE.EXPORT_TRANSPORT_TYPE_CODE C
       INNER JOIN THE.EXPORT_TRNSPRT_TYPE_CODE_ORDER O
         ON O.EXPORT_TRANSPORT_TYPE_CODE = C.EXPORT_TRANSPORT_TYPE_CODE
+      WHERE SYSDATE BETWEEN C.EFFECTIVE_DATE AND C.EXPIRY_DATE
+      ORDER BY O.GROUP_BY, O.ORDER_BY
+      """;
+
+  public static final String ACTIVE_GROWTH_TYPES =
+      """
+      SELECT C.EXPORT_GROWTH_TYPE_CODE AS CODE,
+             C.DESCRIPTION,
+             C.EFFECTIVE_DATE,
+             C.EXPIRY_DATE,
+             C.UPDATE_TIMESTAMP,
+             O.ORDER_BY,
+             O.GROUP_BY
+      FROM THE.EXPORT_GROWTH_TYPE_CODE C
+      INNER JOIN THE.EXPORT_GROWTH_TYPE_CODE_ORDER O
+        ON O.EXPORT_GROWTH_TYPE_CODE = C.EXPORT_GROWTH_TYPE_CODE
       WHERE SYSDATE BETWEEN C.EFFECTIVE_DATE AND C.EXPIRY_DATE
       ORDER BY O.GROUP_BY, O.ORDER_BY
       """;

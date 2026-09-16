@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.repository.report;
 
+import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_GROWTH_TYPES;
 import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_PORTS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -17,11 +18,14 @@ import java.sql.CallableStatement;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Types;
 import java.time.LocalDate;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -42,6 +46,73 @@ class LexisReportScheduleRepositoryTest {
   @Mock private ResultSet orgUnitResultSet;
   @Mock private PreparedStatement preparedStatement;
   @Mock private Connection connection;
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void growthTypeOptionsShouldPrependAllAndPreserveDirectRowOrderAndDuplicates() throws Exception {
+    when(resultSet.getString(1)).thenReturn(" S ", "O", " S ", null, " ");
+    when(resultSet.getString(2))
+        .thenReturn(" Second Growth ", "Old Growth", " Second Growth ", " ", null);
+    when(jdbcTemplate.query(eq(ACTIVE_GROWTH_TYPES), any(RowMapper.class), any(Object[].class)))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<CodeNameDto> mapper = invocation.getArgument(1);
+              return List.of(
+                  mapper.mapRow(resultSet, 0),
+                  mapper.mapRow(resultSet, 1),
+                  mapper.mapRow(resultSet, 2),
+                  mapper.mapRow(resultSet, 3),
+                  mapper.mapRow(resultSet, 4));
+            });
+    LexisReportScheduleRepository repository = new LexisReportScheduleRepository(jdbcTemplate);
+
+    assertThat(repository.loadReportGrowthTypeOptions())
+        .containsExactly(
+            new CodeNameDto("", "All"),
+            new CodeNameDto("S", "Second Growth"),
+            new CodeNameDto("O", "Old Growth"),
+            new CodeNameDto("S", "Second Growth"),
+            new CodeNameDto(null, null),
+            new CodeNameDto(null, null));
+    ArgumentCaptor<Object[]> bindCaptor = ArgumentCaptor.forClass(Object[].class);
+    verify(jdbcTemplate)
+        .query(eq(ACTIVE_GROWTH_TYPES), any(RowMapper.class), bindCaptor.capture());
+    assertThat(bindCaptor.getValue()).isEmpty();
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void growthTypeOptionsShouldReturnOnlyAllForEmptyResultsAndPropagateOracleFailure() {
+    DataAccessResourceFailureException failure =
+        new DataAccessResourceFailureException("Oracle unavailable");
+    when(jdbcTemplate.query(eq(ACTIVE_GROWTH_TYPES), any(RowMapper.class), any(Object[].class)))
+        .thenReturn(List.of())
+        .thenThrow(failure);
+    LexisReportScheduleRepository repository = new LexisReportScheduleRepository(jdbcTemplate);
+
+    assertThat(repository.loadReportGrowthTypeOptions()).containsExactly(new CodeNameDto("", "All"));
+    assertThatThrownBy(repository::loadReportGrowthTypeOptions).isSameAs(failure);
+  }
+
+  @ParameterizedTest
+  @ValueSource(ints = {1, 2})
+  @SuppressWarnings("unchecked")
+  void growthTypeOptionsShouldPropagatePositionalColumnFailure(int column) throws Exception {
+    SQLException failure = new SQLException("Invalid column index " + column);
+    if (column == 2) {
+      when(resultSet.getString(1)).thenReturn("O");
+    }
+    when(resultSet.getString(column)).thenThrow(failure);
+    when(jdbcTemplate.query(eq(ACTIVE_GROWTH_TYPES), any(RowMapper.class), any(Object[].class)))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<CodeNameDto> mapper = invocation.getArgument(1);
+              return List.of(mapper.mapRow(resultSet, 0));
+            });
+    LexisReportScheduleRepository repository = new LexisReportScheduleRepository(jdbcTemplate);
+
+    assertThatThrownBy(repository::loadReportGrowthTypeOptions).isSameAs(failure);
+  }
 
   @Test
   void loadRegionOptionsShouldResolveEachLegacyConfiguredRegionByNumber() throws Exception {

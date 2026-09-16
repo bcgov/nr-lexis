@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.repository.report;
 
+import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_GROWTH_TYPES;
 import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_PORTS;
 
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
@@ -39,8 +40,6 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
       LEXIS_CODES_PACKAGE + "FIND_ALL_EXEMPT_RSN_CODES(?)";
   private static final String FIND_ALL_EXEMPTION_STATUS_CODES =
       LEXIS_CODES_PACKAGE + "FIND_ALL_EXEMPT_STS_CODES(?)";
-  private static final String FIND_ALL_GROWTH_TYPE_CODES =
-      LEXIS_CODES_PACKAGE + "FIND_ALL_GROWTH_TYPE_CODES(?)";
   private static final String FIND_ALL_PERMIT_STATUS_CODES =
       LEXIS_CODES_PACKAGE + "FIND_ALL_PERMIT_STATUS_CODES(?)";
   private static final String FIND_COUNTRY_GROUP =
@@ -310,7 +309,10 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
   }
 
   public List<CodeNameDto> loadReportGrowthTypeOptions() {
-    return withAll(loadCodeNameOptionsRequired(FIND_ALL_GROWTH_TYPE_CODES));
+    return withAll(
+        queryDirectRequired(
+            ACTIVE_GROWTH_TYPES,
+            rs -> new CodeNameDto(trim(rs.getString(1)), trim(rs.getString(2)))));
   }
 
   public List<CodeNameDto> loadReportPermitStatusOptions() {
