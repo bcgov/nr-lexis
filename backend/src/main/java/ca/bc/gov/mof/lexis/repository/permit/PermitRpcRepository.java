@@ -1103,6 +1103,33 @@ public class PermitRpcRepository extends OracleRepositorySupport {
     return findApplicationNumbersByExemptionNumber(exemptionNumber, true);
   }
 
+  /** Loads application numbers and statuses together using the existing exemption cursor. */
+  public List<ApplicationStatusRow> findApplicationStatusesByExemptionNumberRequired(
+      String exemptionNumber) {
+    String normalizedExemptionNumber = trim(exemptionNumber);
+    if (normalizedExemptionNumber == null) {
+      return List.of();
+    }
+
+    List<ApplicationStatusRow> applicationStatuses =
+        queryCursorProcedureRequired(
+            FIND_APPLICATION_BY_EXEMPTION,
+            cs -> cs.setString(1, normalizedExemptionNumber),
+            2,
+            rs ->
+                new ApplicationStatusRow(
+                    getLong(rs, "APPLICATION_NUMBER"),
+                    getString(rs, "EXPORT_APPLICATION_STATUS_CODE")));
+    if (applicationStatuses.stream()
+        .anyMatch(row -> row.applicationNumber() == null || row.applicationNumber() < 1)) {
+      throw new DataRetrievalFailureException(
+          "An invalid application relationship was returned for exemption "
+              + normalizedExemptionNumber
+              + ".");
+    }
+    return applicationStatuses;
+  }
+
   private List<Long> findApplicationNumbersByExemptionNumber(
       String exemptionNumber, boolean strictRelationships) {
     String normalizedExemptionNumber = trim(exemptionNumber);
@@ -2532,6 +2559,9 @@ public class PermitRpcRepository extends OracleRepositorySupport {
    * authoritative only on {@code EXPORT_SCALE_DETAIL.EXPORT_PERMIT_DETAIL_NUMBER}.
    */
   public record PackageCandidateRow(Long applicationNumber, String packageNumber) {}
+
+  /** Application/status projection from the authoritative exemption application cursor. */
+  public record ApplicationStatusRow(Long applicationNumber, String statusCode) {}
 
   public record SalesInvoiceRow(
       String salesInvoiceNumber,

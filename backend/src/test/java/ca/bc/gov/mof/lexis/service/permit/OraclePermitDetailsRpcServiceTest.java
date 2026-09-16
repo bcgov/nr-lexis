@@ -52,6 +52,7 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitSummaryRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitTotalFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.ApplicationInfoRow;
+import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.ApplicationStatusRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.AttachmentTypeRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.BoicScaleMutationRecord;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.CountryCodeRow;
@@ -163,6 +164,9 @@ class OraclePermitDetailsRpcServiceTest {
     lenient()
         .when(repository.findApplicationNumbersByExemptionNumberRequired("EX-700"))
         .thenReturn(List.of(1000456L));
+    lenient()
+        .when(repository.findApplicationStatusesByExemptionNumberRequired("EX-700"))
+        .thenReturn(List.of(new ApplicationStatusRow(1000456L, "EXE")));
     lenient()
         .when(repository.findApplicationStatusCodeByNumber(1000456L))
         .thenReturn(Optional.of("EXE"));
@@ -1295,7 +1299,8 @@ class OraclePermitDetailsRpcServiceTest {
     when(repository.findScaleMutationDetailsByApplicationNumber(1001457L))
         .thenReturn(
             List.of(scaleMutation("102", 1001457L, "PKG-ASSIGNED-902", 7001123L)));
-    when(repository.findApplicationStatusCodeByNumber(1001456L)).thenReturn(Optional.of("EXE"));
+    when(repository.findApplicationStatusesByExemptionNumberRequired("EX-700"))
+        .thenReturn(List.of(new ApplicationStatusRow(1001456L, "EXE")));
 
     PermitAvailableApplicationListRpcResponseDto response =
         service.getAvailableApplicationList("EX-700", "", ignored -> true);
@@ -1319,7 +1324,8 @@ class OraclePermitDetailsRpcServiceTest {
     when(repository.findScaleMutationDetailsByApplicationNumber(1001457L))
         .thenReturn(
             List.of(scaleMutation("103", 1001457L, "PKG-ASSIGNED-902", 7001123L)));
-    when(repository.findApplicationStatusCodeByNumber(1001456L)).thenReturn(Optional.of("EXE"));
+    when(repository.findApplicationStatusesByExemptionNumberRequired("EX-700"))
+        .thenReturn(List.of(new ApplicationStatusRow(1001456L, "EXE")));
 
     PermitAvailableApplicationListRpcResponseDto response =
         service.getAvailableApplicationList("EX-700", "", ignored -> true);
@@ -1439,8 +1445,14 @@ class OraclePermitDetailsRpcServiceTest {
     when(repository.findScaleMutationDetailsByApplicationNumber(1000458L)).thenReturn(List.of());
     when(repository.findScaleMutationDetailsByApplicationNumber(1000459L))
         .thenReturn(List.of(scaleMutation("104", 1000459L, "PKG-904", null)));
-    when(repository.findApplicationStatusCodeByNumber(1000456L)).thenReturn(Optional.of("EXE"));
-    when(repository.findApplicationStatusCodeByNumber(1000459L)).thenReturn(Optional.of("APP"));
+    when(repository.findApplicationStatusesByExemptionNumberRequired("EX-700"))
+        .thenReturn(
+            List.of(
+                new ApplicationStatusRow(1000456L, "EXE"),
+                new ApplicationStatusRow(1000457L, "PMT"),
+                new ApplicationStatusRow(1000458L, "EXE"),
+                new ApplicationStatusRow(1000459L, "APP"),
+                new ApplicationStatusRow(1000460L, "EXE")));
 
     PermitAvailableApplicationListRpcResponseDto response =
         service.getAvailableApplicationList(
@@ -1466,17 +1478,71 @@ class OraclePermitDetailsRpcServiceTest {
                 12L,
                 34.5d));
     verify(repository, never()).findScaleMutationDetailsByApplicationNumber(1000460L);
+    verify(repository).findApplicationStatusesByExemptionNumberRequired("EX-700");
+    verify(repository, never()).findApplicationStatusCodeByNumber(anyLong());
+    verify(repository, never()).findApplicationNumbersByExemptionNumberRequired(any());
+  }
+
+  @Test
+  void availableApplicationListShouldUseOneStatusLookupAndDisableUnverifiedStatuses() {
+    when(repository.findPackagesByExemptionNumberRequired("EX-700"))
+        .thenReturn(
+            List.of(
+                new PackageCandidateRow(1000456L, "PKG-1000456"),
+                new PackageCandidateRow(1000457L, "PKG-1000457"),
+                new PackageCandidateRow(1000458L, "PKG-1000458"),
+                new PackageCandidateRow(1000459L, "PKG-1000459"),
+                new PackageCandidateRow(1000460L, "PKG-1000460")));
+    for (long applicationNumber = 1000456L; applicationNumber <= 1000460L; applicationNumber++) {
+      when(repository.findScaleMutationDetailsByApplicationNumber(applicationNumber))
+          .thenReturn(
+              List.of(
+                  scaleMutation(
+                      String.valueOf(applicationNumber),
+                      applicationNumber,
+                      "PKG-" + applicationNumber,
+                      null)));
+    }
+    when(repository.findApplicationStatusesByExemptionNumberRequired("EX-700"))
+        .thenReturn(
+            List.of(
+                new ApplicationStatusRow(1000456L, " exe "),
+                new ApplicationStatusRow(1000457L, " pmt "),
+                new ApplicationStatusRow(1000458L, null),
+                new ApplicationStatusRow(1000459L, " ")));
+
+    PermitAvailableApplicationListRpcResponseDto response =
+        service.getAvailableApplicationList("EX-700", "", ignored -> true);
+
+    assertThat(response.applicationList()).containsExactly("1000456", "1000457");
+    assertThat(response.applicationItems())
+        .extracting(
+            PermitAvailableApplicationItemRpcResponseDto::applicationNumber,
+            PermitAvailableApplicationItemRpcResponseDto::disabled,
+            PermitAvailableApplicationItemRpcResponseDto::disabledReason)
+        .containsExactly(
+            tuple("1000456", false, null),
+            tuple("1000457", false, null),
+            tuple("1000458", true, "Application status could not be verified."),
+            tuple("1000459", true, "Application status could not be verified."),
+            tuple("1000460", true, "Application status could not be verified."));
+    verify(repository).findApplicationStatusesByExemptionNumberRequired("EX-700");
+    verify(repository, never()).findApplicationStatusCodeByNumber(anyLong());
+    verify(repository, never()).findApplicationNumbersByExemptionNumberRequired(any());
   }
 
   @Test
   void availableApplicationListShouldExposeAccessibleApplicationWithoutPackagesAsDisabled() {
-    when(repository.findApplicationNumbersByExemptionNumberRequired("EX-700"))
-        .thenReturn(List.of(1000456L, 1000457L, 1000458L));
+    when(repository.findApplicationStatusesByExemptionNumberRequired("EX-700"))
+        .thenReturn(
+            List.of(
+                new ApplicationStatusRow(1000456L, "EXE"),
+                new ApplicationStatusRow(1000457L, "EXE"),
+                new ApplicationStatusRow(1000458L, "EXE")));
     when(repository.findPackagesByExemptionNumberRequired("EX-700"))
         .thenReturn(List.of(new PackageCandidateRow(1000456L, "PKG-901")));
     when(repository.findScaleMutationDetailsByApplicationNumber(1000456L))
         .thenReturn(List.of(scaleMutation("101", 1000456L, "PKG-901", null)));
-    when(repository.findApplicationStatusCodeByNumber(1000456L)).thenReturn(Optional.of("EXE"));
 
     PermitAvailableApplicationListRpcResponseDto response =
         service.getAvailableApplicationList(
@@ -1617,6 +1683,19 @@ class OraclePermitDetailsRpcServiceTest {
                 service.getAvailableApplicationList(
                     "EX-700", "", ignored -> true))
         .isSameAs(failure);
+  }
+
+  @Test
+  void availableApplicationListShouldPropagateStatusLookupFailure() {
+    DataAccessResourceFailureException failure =
+        new DataAccessResourceFailureException("Oracle applications unavailable");
+    when(repository.findApplicationStatusesByExemptionNumberRequired("EX-700"))
+        .thenThrow(failure);
+
+    assertThatThrownBy(
+            () -> service.getAvailableApplicationList("EX-700", "", ignored -> true))
+        .isSameAs(failure);
+    verify(repository, never()).findApplicationStatusCodeByNumber(anyLong());
   }
 
   @Test

@@ -58,6 +58,7 @@ import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.CountryCodeRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.DocumentRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.GbmsInvoiceHistoryRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.ApplicationInfoRow;
+import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.ApplicationStatusRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.EndUsePairRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PackageInfoRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PackageDetailsRow;
@@ -1084,16 +1085,22 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         new LinkedHashMap<>(
             findUnassignedScalesByApplication(
                 normalizedExemptionNumber, cachedApplicationAccess));
-    for (Long applicationNumber :
-        repository.findApplicationNumbersByExemptionNumberRequired(normalizedExemptionNumber)) {
+    Map<Long, String> applicationStatusByNumber = new HashMap<>();
+    for (ApplicationStatusRow application :
+        repository.findApplicationStatusesByExemptionNumberRequired(normalizedExemptionNumber)) {
+      Long applicationNumber = application.applicationNumber();
       if (cachedApplicationAccess.test(applicationNumber)) {
         unassignedScalesByApplication.putIfAbsent(applicationNumber, List.of());
+        applicationStatusByNumber.put(applicationNumber, application.statusCode());
       }
     }
 
     List<PermitAvailableApplicationItemRpcResponseDto> applicationItems =
         unassignedScalesByApplication.entrySet().stream()
-            .map(entry -> toAvailableApplicationItem(entry, selectedApplications))
+            .map(
+                entry ->
+                    toAvailableApplicationItem(
+                        entry, selectedApplications, applicationStatusByNumber.get(entry.getKey())))
             .sorted(Comparator.comparing(PermitAvailableApplicationItemRpcResponseDto::applicationNumber))
             .toList();
     List<String> applicationList =
@@ -1109,7 +1116,9 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   }
 
   private PermitAvailableApplicationItemRpcResponseDto toAvailableApplicationItem(
-      Map.Entry<Long, List<ScaleMutationRow>> entry, Set<String> selectedApplications) {
+      Map.Entry<Long, List<ScaleMutationRow>> entry,
+      Set<String> selectedApplications,
+      String statusCode) {
     String applicationNumber = String.valueOf(entry.getKey());
     List<ScaleMutationRow> unassignedScales = entry.getValue();
     Long unassignedPieces = sumUnassignedPieces(unassignedScales);
@@ -1131,12 +1140,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
           null);
     }
 
-    String applicationStatus =
-        repository
-            .findApplicationStatusCodeByNumber(entry.getKey())
-            .map(this::normalizeCode)
-            .filter(status -> !status.isBlank())
-            .orElse(null);
+    String applicationStatus = normalizeCode(statusCode);
     if (applicationStatus == null) {
       return new PermitAvailableApplicationItemRpcResponseDto(
           applicationNumber,
