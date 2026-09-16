@@ -120,9 +120,19 @@ const ScaleDetailDialog = ({
 const ScaleDetailAction = ({ target, disabled }: OfferScaleDetailActionProps) => {
   const [open, setOpen] = useState(false)
   const launcherRef = useRef<HTMLButtonElement>(null)
+  const restoreFocusRef = useRef(false)
+
+  useEffect(() => {
+    // Restore only after React has removed the dialog and Carbon's focus handlers.
+    if (!open && restoreFocusRef.current) {
+      restoreFocusRef.current = false
+      launcherRef.current?.focus()
+    }
+  }, [open])
+
   const closeDialog = () => {
+    restoreFocusRef.current = true
     setOpen(false)
-    launcherRef.current?.focus()
   }
   return (
     <>

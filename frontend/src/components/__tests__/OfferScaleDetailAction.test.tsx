@@ -27,6 +27,23 @@ describe('Offer scale details', () => {
     mockedFetchOfferScaleDetails.mockResolvedValue([])
   })
 
+  it('does not move focus when a closed scale action mounts', async () => {
+    const { rerender } = render(
+      <div>
+        <button type="button">Other action</button>
+      </div>,
+    )
+    const otherAction = screen.getByRole('button', { name: 'Other action' })
+    await userEvent.click(otherAction)
+    rerender(
+      <div>
+        <button type="button">Other action</button>
+        <OfferScaleDetailAction target={{ packageNumber: 'PKG-1' }} />
+      </div>,
+    )
+    expect(otherAction).toHaveFocus()
+  })
+
   it('shows an empty result and closes using the keyboard', async () => {
     render(<OfferScaleDetailAction target={{ packageNumber: 'PKG-1' }} />)
     await userEvent.click(screen.getByRole('button', { name: 'See Scale Detail' }))
@@ -36,8 +53,8 @@ describe('Offer scale details', () => {
     expect(screen.getByRole('button', { name: 'See Scale Detail' })).toHaveFocus()
   })
 
-  it.each(['Close', 'Close scale details'])(
-    'returns focus to the matching launcher after %s',
+  it.each(['Escape', 'Close', 'Close scale details'])(
+    'restores the matching launcher only after the dialog unmounts using %s',
     async (name) => {
       render(
         <>
@@ -50,9 +67,15 @@ describe('Offer scale details', () => {
       expect(
         await screen.findByText('No scale details found for this package.'),
       ).toBeInTheDocument()
-      await userEvent.click(screen.getByRole('button', { name }))
+      const dialogPresentWhenFocused: boolean[] = []
+      launchers[1].addEventListener('focus', () => {
+        dialogPresentWhenFocused.push(Boolean(screen.queryByRole('dialog')))
+      })
+      if (name === 'Escape') await userEvent.keyboard('{Escape}')
+      else await userEvent.click(screen.getByRole('button', { name }))
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
       expect(launchers[1]).toHaveFocus()
+      expect(dialogPresentWhenFocused).toEqual([false])
     },
   )
 
