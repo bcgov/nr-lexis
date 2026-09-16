@@ -75,6 +75,15 @@ const renderLayout = (path: string) => {
   )
 }
 
+const getControlledMenu = (toggle: HTMLElement) => {
+  const menuId = toggle.getAttribute('aria-controls')
+  expect(menuId).toBeTruthy()
+
+  const menu = document.getElementById(menuId as string)
+  expect(menu).toBeInstanceOf(HTMLUListElement)
+  return menu as HTMLUListElement
+}
+
 describe('Layout shell', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
@@ -206,7 +215,11 @@ describe('Layout shell', () => {
     await waitFor(() => expect(mockedFetchNotifications).toHaveBeenCalledOnce())
 
     const notificationsLink = screen.getByRole('link', { name: 'Notifications' })
-    expect(screen.getAllByText('Notifications')).toHaveLength(1)
+    expect(
+      screen
+        .getAllByText('Notifications')
+        .filter((element) => !element.closest('[role="tooltip"]')),
+    ).toHaveLength(1)
     expect(screen.queryByRole('button', { name: 'Notifications' })).not.toBeInTheDocument()
     expect(notificationsLink).not.toHaveClass('cds--side-nav__link--nested')
     expect(
@@ -273,7 +286,7 @@ describe('Layout shell', () => {
 
     const reportsMenu = screen.getByRole('button', { name: 'Reports' })
     expect(reportsMenu).toHaveAttribute('aria-expanded', 'false')
-    expect(reportsMenu.nextElementSibling).toHaveClass('cds--side-nav__menu')
+    expect(getControlledMenu(reportsMenu)).toHaveClass('cds--side-nav__menu')
   })
 
   it('persists preference updates without storing auth or user data', async () => {
@@ -525,7 +538,7 @@ describe('Layout shell', () => {
     expect(screen.getByRole('link', { name: 'Exemption search' })).toBeVisible()
     expect(screen.getByRole('link', { name: 'Offer search' })).toBeVisible()
     expect(screen.getByRole('link', { name: 'Permit search' })).toBeVisible()
-    expect(screen.getByText('Federal')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Federal' })).toBeVisible()
     expect(
       screen.queryByRole('link', { name: /Create\/Edit Application/i }),
     ).not.toBeInTheDocument()
@@ -740,7 +753,7 @@ describe('Layout shell', () => {
     renderLayout('/admin/rtm/emslogamv/upload')
 
     const reportsToggle = screen.getByRole('button', { name: 'Reports' })
-    const reportsMenu = reportsToggle.nextElementSibling
+    const reportsMenu = getControlledMenu(reportsToggle)
     expect(reportsToggle).toHaveAttribute('aria-expanded', 'false')
     expect(reportsToggle).toHaveClass('csp-side-nav__group')
     expect(reportsMenu).toHaveClass('cds--side-nav__menu')
@@ -770,7 +783,7 @@ describe('Layout shell', () => {
     renderLayout('/admin/rtm/emslogamv')
 
     const reportsToggle = screen.getByRole('button', { name: 'Reports' })
-    const reportsMenu = reportsToggle.nextElementSibling
+    const reportsMenu = getControlledMenu(reportsToggle)
     expect(reportsToggle).toHaveAttribute('aria-expanded', 'false')
 
     await userEvent.click(screen.getByRole('button', { name: 'Close menu' }))
@@ -788,6 +801,64 @@ describe('Layout shell', () => {
     const advertisingList = screen.getByRole('link', { name: /Advertising List/i })
     await userEvent.click(advertisingList)
     expect(screen.getByTestId('current-path')).toHaveTextContent('/reports/biweeklyListing')
+  })
+
+  it('describes the current group with its full path when the collapsed rail receives focus', async () => {
+    renderLayout('/provincial/application')
+
+    const provincialToggle = screen.getByRole('button', { name: 'Provincial' })
+    await userEvent.click(screen.getByRole('button', { name: 'Close menu' }))
+    provincialToggle.focus()
+
+    const tooltip = await screen.findByRole('tooltip')
+    expect(tooltip).toHaveTextContent('Provincial: Application search')
+    expect(provincialToggle).toHaveAttribute('aria-describedby', tooltip.id)
+  })
+
+  it('closes a collapsed-rail tooltip when its group opens without moving focus', async () => {
+    renderLayout('/provincial/application')
+
+    const provincialToggle = screen.getByRole('button', { name: 'Provincial' })
+    await userEvent.click(screen.getByRole('button', { name: 'Close menu' }))
+    provincialToggle.focus()
+    await screen.findByRole('tooltip')
+
+    await userEvent.click(provincialToggle)
+
+    expect(provincialToggle).toHaveFocus()
+    expect(provincialToggle).toHaveAttribute('aria-expanded', 'true')
+    expect(provincialToggle).not.toHaveAttribute('aria-describedby')
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+  })
+
+  it('dismisses a collapsed-rail tooltip with Escape', async () => {
+    renderLayout('/admin/rtm/emslogamv')
+
+    const reportsToggle = screen.getByRole('button', { name: 'Reports' })
+    await userEvent.click(screen.getByRole('button', { name: 'Close menu' }))
+    reportsToggle.focus()
+    await screen.findByRole('tooltip')
+
+    await userEvent.keyboard('{Escape}')
+
+    expect(reportsToggle).toHaveFocus()
+    expect(reportsToggle).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+  })
+
+  it('does not expose rail tooltips while the side navigation is expanded', async () => {
+    renderLayout('/provincial/application')
+
+    const provincialToggle = screen.getByRole('button', { name: 'Provincial' })
+    provincialToggle.focus()
+
+    await waitFor(() => {
+      expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+    })
+    expect(
+      provincialToggle.closest('.csp-side-nav__tooltip')?.querySelector('[role="tooltip"]'),
+    ).toHaveAttribute('aria-hidden', 'true')
+    expect(provincialToggle).not.toHaveAttribute('aria-describedby')
   })
 
   it('restores every open group from the header but opens only the selected group from the collapsed rail', async () => {
@@ -838,7 +909,7 @@ describe('Layout shell', () => {
     renderLayout('/provincial/application')
 
     const provincialToggle = screen.getByRole('button', { name: 'Provincial' })
-    const provincialMenu = provincialToggle.nextElementSibling
+    const provincialMenu = getControlledMenu(provincialToggle)
     const applicationSearch = screen
       .getAllByRole('link', { name: /^Application search$/i })
       .find((link) => link.getAttribute('href') === '/provincial/application')

@@ -1,5 +1,6 @@
 import { useId, useRef, type ReactNode } from 'react'
 import { ChevronDown, type CarbonIconType } from '@carbon/icons-react'
+import SideNavigationTooltip from '@/components/SideNavigationTooltip'
 
 type SideNavigationGroupProps = {
   label: string
@@ -40,26 +41,34 @@ function SideNavigationGroup({
         }
       }}
     >
-      <button
-        ref={buttonRef}
-        type="button"
-        className="cds--side-nav__submenu csp-side-nav__group"
-        aria-label={label}
-        aria-expanded={expanded}
-        aria-controls={menuId}
-        aria-current={isCurrentGroup ? 'true' : undefined}
-        aria-description={isCurrentGroup ? `Contains current page: ${activePage}` : undefined}
-        data-label={activePage ? `${label}: ${activePage}` : label}
-        onClick={onToggle}
+      <SideNavigationTooltip
+        enabled={collapsed}
+        label={activePage ? `${label}: ${activePage}` : label}
       >
-        <span className="cds--side-nav__icon csp-side-nav__icon" aria-hidden="true">
-          <Icon size={20} />
-        </span>
-        <span className="cds--side-nav__submenu-title csp-side-nav__link-text">{label}</span>
-        <span className="cds--side-nav__submenu-chevron" aria-hidden="true">
-          <ChevronDown size={20} />
-        </span>
-      </button>
+        {(descriptionId) => (
+          <button
+            ref={buttonRef}
+            type="button"
+            className="cds--side-nav__submenu csp-side-nav__group"
+            aria-label={label}
+            aria-expanded={expanded}
+            aria-controls={menuId}
+            aria-current={isCurrentGroup ? 'true' : undefined}
+            aria-description={isCurrentGroup ? `Contains current page: ${activePage}` : undefined}
+            aria-describedby={descriptionId}
+            data-label={activePage ? `${label}: ${activePage}` : label}
+            onClick={onToggle}
+          >
+            <span className="cds--side-nav__icon csp-side-nav__icon" aria-hidden="true">
+              <Icon size={20} />
+            </span>
+            <span className="cds--side-nav__submenu-title csp-side-nav__link-text">{label}</span>
+            <span className="cds--side-nav__submenu-chevron" aria-hidden="true">
+              <ChevronDown size={20} />
+            </span>
+          </button>
+        )}
+      </SideNavigationTooltip>
       <ul id={menuId} className="cds--side-nav__menu" hidden={!expanded}>
         {children(expanded)}
       </ul>

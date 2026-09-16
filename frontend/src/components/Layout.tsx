@@ -33,6 +33,7 @@ import {
 import OptimisticConflictModal from '@/components/OptimisticConflictModal'
 import UserRegionPreference from '@/components/UserRegionPreference'
 import SideNavigationGroup from '@/components/SideNavigationGroup'
+import SideNavigationTooltip from '@/components/SideNavigationTooltip'
 import { isProdRtmOnlyPathAllowed } from '@/config/features'
 import { useAuth } from '@/context/auth/useAuth'
 import { useTheme } from '@/context/theme/useTheme'
@@ -591,26 +592,36 @@ function Layout({ children }: LayoutProps) {
         ? link.label
         : undefined
     const nestedClassName = nested ? ' cds--side-nav__link--nested' : ''
+    const renderLink = (descriptionId?: string) => (
+      <Link
+        to={link.to}
+        className={`cds--side-nav__link${nestedClassName} csp-side-nav__link${
+          isActive ? ' cds--side-nav__link--active' : ''
+        }`}
+        aria-current={isActive ? 'page' : undefined}
+        aria-label={accessibleLabel}
+        aria-describedby={descriptionId}
+        data-label={link.label}
+      >
+        <span className="cds--side-nav__icon csp-side-nav__icon" aria-hidden="true">
+          <LinkIcon size={20} />
+          {showNotificationIndicator && (
+            <span className="csp-side-nav__notification-indicator" aria-hidden="true" />
+          )}
+        </span>
+        <span className="cds--side-nav__link-text csp-side-nav__link-text">{link.label}</span>
+      </Link>
+    )
 
     return (
       <li key={link.to}>
-        <Link
-          to={link.to}
-          className={`cds--side-nav__link${nestedClassName} csp-side-nav__link${
-            isActive ? ' cds--side-nav__link--active' : ''
-          }`}
-          aria-current={isActive ? 'page' : undefined}
-          aria-label={accessibleLabel}
-          data-label={link.label}
-        >
-          <span className="cds--side-nav__icon csp-side-nav__icon" aria-hidden="true">
-            <LinkIcon size={20} />
-            {showNotificationIndicator && (
-              <span className="csp-side-nav__notification-indicator" aria-hidden="true" />
-            )}
-          </span>
-          <span className="cds--side-nav__link-text csp-side-nav__link-text">{link.label}</span>
-        </Link>
+        {nested ? (
+          renderLink()
+        ) : (
+          <SideNavigationTooltip enabled={isSideNavCollapsed} label={link.label}>
+            {renderLink}
+          </SideNavigationTooltip>
+        )}
       </li>
     )
   }

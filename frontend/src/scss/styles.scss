@@ -455,8 +455,7 @@ body {
   width: var(--csp-active-side-nav-width);
   inline-size: var(--csp-active-side-nav-width);
   max-inline-size: var(--csp-active-side-nav-width);
-  overflow-x: visible;
-  overflow-y: auto;
+  overflow: hidden;
   background-color: var(--csp-content-bg);
   border-inline-end: 1px solid var(--csp-border-subtle-01);
   transition:
@@ -470,6 +469,21 @@ body {
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+// The list scrolls independently; Carbon auto-aligned tooltips use fixed positioning
+// so they can extend outside this clipping area without disabling vertical scrolling.
+.csp-side-nav .csp-side-nav__items {
+  block-size: 100%;
+  min-block-size: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.csp-side-nav__tooltip,
+.csp-side-nav__tooltip-trigger {
+  display: block;
+  inline-size: 100%;
 }
 
 .csp-side-nav__section--standalone {
@@ -549,6 +563,11 @@ a.csp-side-nav__link.cds--side-nav__link--active[aria-current='page'] {
   display: none;
 }
 
+.csp-side-nav .cds--side-nav__menu:not([hidden]) {
+  max-block-size: none;
+  visibility: inherit;
+}
+
 .csp-side-nav__group .cds--side-nav__submenu-chevron {
   display: flex;
   margin-inline-start: 8px;
@@ -576,15 +595,8 @@ a.csp-side-nav__link.cds--side-nav__link--active[aria-current='page'] {
   white-space: nowrap;
 }
 
-.csp-side-nav.is-collapsed,
-.csp-side-nav.is-collapsed .csp-side-nav__items,
-.csp-side-nav.is-collapsed .csp-side-nav__section {
-  overflow: visible;
-}
-
 .csp-side-nav.is-collapsed .csp-side-nav__link,
 .csp-side-nav.is-collapsed .csp-side-nav__group {
-  overflow: visible;
   justify-content: center;
   padding-inline: 0;
 }
@@ -598,9 +610,7 @@ a.csp-side-nav__link.cds--side-nav__link--active[aria-current='page'] {
   display: none;
 }
 
-.csp-navigation-toggle::after,
-.csp-side-nav__link::after,
-.csp-side-nav__group::after {
+.csp-navigation-toggle::after {
   position: absolute;
   inset-block-start: 50%;
   inset-inline-start: calc(100% + 8px);
@@ -621,15 +631,6 @@ a.csp-side-nav__link.cds--side-nav__link--active[aria-current='page'] {
   white-space: nowrap;
 }
 
-.csp-side-nav.is-collapsed .csp-side-nav__link::after,
-.csp-side-nav.is-collapsed .csp-side-nav__group::after {
-  content: attr(data-label);
-}
-
-.csp-side-nav.is-collapsed .csp-side-nav__link:hover::after,
-.csp-side-nav.is-collapsed .csp-side-nav__link:focus-visible::after,
-.csp-side-nav.is-collapsed .csp-side-nav__group:hover::after,
-.csp-side-nav.is-collapsed .csp-side-nav__group:focus-visible::after,
 .csp-navigation-toggle:hover::after,
 .csp-navigation-toggle:focus-visible::after {
   opacity: 1;
@@ -1086,7 +1087,8 @@ legend.cds--label {
   box-shadow: none;
 }
 
-.cds--icon-tooltip > .cds--popover {
+// The icon-only navigation rail still needs labels on hover and keyboard focus.
+.cds--icon-tooltip:not(.csp-side-nav__tooltip) > .cds--popover {
   display: none;
 }
 

@@ -25,7 +25,7 @@ import { regressionSubmissionFile, resolveRegressionSubmission } from './utils/r
 import { businessDateParts, formatBusinessIsoDate, formatIsoDateParts } from '../src/utils/date'
 
 const sideNavSection = (name: string) =>
-  `.csp-side-nav__section:has(> .cds--side-nav__submenu .cds--side-nav__submenu-title:text-is("${name}"))`
+  `.csp-side-nav__section:has(.cds--side-nav__submenu .cds--side-nav__submenu-title:text-is("${name}"))`
 
 const tableRowBackgrounds = (row: Locator): Promise<string[]> =>
   row.evaluate((element) =>
