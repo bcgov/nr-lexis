@@ -831,18 +831,21 @@ describe('Layout shell', () => {
     expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
   })
 
-  it('dismisses a collapsed-rail tooltip with Escape', async () => {
+  it('dismisses a collapsed-rail tooltip and removes its description with Escape', async () => {
     renderLayout('/admin/rtm/emslogamv')
 
     const reportsToggle = screen.getByRole('button', { name: 'Reports' })
     await userEvent.click(screen.getByRole('button', { name: 'Close menu' }))
     reportsToggle.focus()
-    await screen.findByRole('tooltip')
+    const tooltip = await screen.findByRole('tooltip')
+    expect(reportsToggle).toHaveAttribute('aria-describedby', tooltip.id)
 
     await userEvent.keyboard('{Escape}')
 
     expect(reportsToggle).toHaveFocus()
     expect(reportsToggle).toHaveAttribute('aria-expanded', 'false')
+    expect(reportsToggle).not.toHaveAttribute('aria-describedby')
+    expect(tooltip).toHaveAttribute('aria-hidden', 'true')
     expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
   })
 

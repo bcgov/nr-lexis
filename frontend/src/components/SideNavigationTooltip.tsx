@@ -40,7 +40,7 @@ function SideNavigationTooltip({ enabled, label, children }: SideNavigationToolt
         }
       }}
     >
-      <div className="csp-side-nav__tooltip-trigger">{children(enabled ? id : undefined)}</div>
+      <div className="csp-side-nav__tooltip-trigger">{children(open ? id : undefined)}</div>
       <PopoverContent id={id} role="tooltip" aria-hidden={!open} className="cds--tooltip-content">
         {label}
       </PopoverContent>
