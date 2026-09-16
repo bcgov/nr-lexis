@@ -144,6 +144,60 @@ class OracleRepositorySupportTest {
   }
 
   @Test
+  @SuppressWarnings("unchecked")
+  void requiredDirectQueryShouldBindInputsAndUseTheExistingColumnMapping() throws Exception {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    ResultSet resultSet = mock(ResultSet.class);
+    when(resultSet.getString("REQUIRED_VALUE")).thenReturn(" value ");
+    when(jdbcTemplate.query(anyString(), any(RowMapper.class), eq("ACTIVE")))
+        .thenAnswer(invocation -> {
+          RowMapper<String> mapper = invocation.getArgument(1);
+          return List.of(mapper.mapRow(resultSet, 0));
+        });
+    RequiredRepository repository = new RequiredRepository(jdbcTemplate);
+
+    assertThat(repository.loadDirectRequiredColumn()).containsExactly("value");
+    verify(jdbcTemplate).query(
+        eq("SELECT REQUIRED_VALUE FROM TEST_VALUES WHERE CODE = ?"),
+        any(RowMapper.class),
+        eq("ACTIVE"));
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void requiredDirectQueryShouldRejectMissingColumnsAndRestoreOptionalMapping() throws Exception {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    ResultSet resultSet = mock(ResultSet.class);
+    when(resultSet.getString("REQUIRED_VALUE")).thenThrow(new SQLException("Invalid column name"));
+    when(jdbcTemplate.query(anyString(), any(RowMapper.class), eq("ACTIVE")))
+        .thenAnswer(invocation -> {
+          RowMapper<String> mapper = invocation.getArgument(1);
+          return java.util.Collections.singletonList(mapper.mapRow(resultSet, 0));
+        });
+    RequiredRepository repository = new RequiredRepository(jdbcTemplate);
+
+    assertThatThrownBy(repository::loadDirectRequiredColumn)
+        .isInstanceOf(DataRetrievalFailureException.class)
+        .hasMessageContaining("REQUIRED_VALUE");
+    assertThat(repository.readOptionalColumn(resultSet)).isNull();
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void requiredDirectQueryShouldDistinguishEmptyResultsFromDependencyFailure() {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    DataAccessResourceFailureException failure =
+        new DataAccessResourceFailureException("Oracle unavailable");
+    when(jdbcTemplate.query(anyString(), any(RowMapper.class), eq("ACTIVE")))
+        .thenReturn(List.of())
+        .thenThrow(failure);
+    RequiredRepository repository = new RequiredRepository(jdbcTemplate);
+
+    assertThat(repository.loadDirectRequiredColumn()).isEmpty();
+    assertThatThrownBy(repository::loadDirectRequiredColumn).isSameAs(failure);
+  }
+
+  @Test
   void loadCodeNameOptionsShouldFallbackWhenCodePackageReturnsEmpty() {
     TestRepository repository = new TestRepository();
 
@@ -389,6 +443,17 @@ class OracleRepositorySupportTest {
 
     RequiredRepository(JdbcTemplate jdbcTemplate) {
       super(jdbcTemplate);
+    }
+
+    List<String> loadDirectRequiredColumn() {
+      return queryDirectRequired(
+          "SELECT REQUIRED_VALUE FROM TEST_VALUES WHERE CODE = ?",
+          rs -> getString(rs, "REQUIRED_VALUE"),
+          "ACTIVE");
+    }
+
+    String readOptionalColumn(ResultSet resultSet) {
+      return getString(resultSet, "REQUIRED_VALUE");
     }
 
     List<String> loadOptional() {

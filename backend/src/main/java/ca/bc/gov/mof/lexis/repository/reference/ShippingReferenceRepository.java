@@ -1,5 +1,8 @@
 package ca.bc.gov.mof.lexis.repository.reference;
 
+import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_PORTS;
+import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_TRANSPORT_TYPES;
+
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import java.util.List;
@@ -22,11 +25,14 @@ public class ShippingReferenceRepository extends OracleRepositorySupport {
   }
 
   public List<CodeNameDto> findActiveTransportTypesRequired() {
-    return findOptionsRequired(LEXIS_CODES_PACKAGE + "FIND_ALL_TRANSPORT_TYPE_CODES(?)");
+    return queryDirectRequired(
+        ACTIVE_TRANSPORT_TYPES,
+        rs -> new CodeNameDto(getString(rs, "CODE"), getString(rs, "DESCRIPTION")));
   }
 
   public List<CodeNameDto> findActivePortsRequired() {
-    return findOptionsRequired(LEXIS_CODES_PACKAGE + "FIND_ALL_PORT_CODES(?)");
+    return queryDirectRequired(
+        ACTIVE_PORTS, rs -> new CodeNameDto(getString(rs, "CODE"), getString(rs, "DESCRIPTION")));
   }
 
   private List<CodeNameDto> findOptionsRequired(String procedureSignature) {

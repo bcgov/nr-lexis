@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.repository.report;
 
+import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_PORTS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.groups.Tuple.tuple;
@@ -10,6 +11,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.admin.ExportScheduleCreateRequestDto;
 import java.sql.CallableStatement;
 import java.sql.Connection;
@@ -284,18 +286,53 @@ class LexisReportScheduleRepositoryTest {
   }
 
   @Test
-  void portOfExportOptionsShouldUseLegacyPortProcedureAndPrependAll() throws Exception {
-    stubCursorProcedure("{ call LEXIS_CODES.FIND_ALL_PORT_CODES(?) }");
-    when(resultSet.next()).thenReturn(true, false);
-    when(resultSet.getString(1)).thenReturn("VAN");
-    when(resultSet.getString(2)).thenReturn("Vancouver");
+  @SuppressWarnings("unchecked")
+  void portOfExportOptionsShouldUseDirectActivePortQueryAndPrependAll() throws Exception {
+    when(jdbcTemplate.query(eq(ACTIVE_PORTS), any(RowMapper.class)))
+        .thenAnswer(
+            invocation -> {
+              when(resultSet.getString(1)).thenReturn(" VAN ");
+              when(resultSet.getString(2)).thenReturn(" Vancouver ");
+              RowMapper<CodeNameDto> mapper = invocation.getArgument(1);
+              return List.of(mapper.mapRow(resultSet, 0));
+            });
 
     LexisReportScheduleRepository repository = new LexisReportScheduleRepository(jdbcTemplate);
 
     var options = repository.loadReportPortOfExportOptions();
 
-    assertThat(options).extracting("code", "name").containsExactly(tuple("", "All"), tuple("VAN", "Vancouver"));
-    verify(callableStatement).registerOutParameter(1, Types.REF_CURSOR);
+    assertThat(options)
+        .extracting("code", "name")
+        .containsExactly(tuple("", "All"), tuple("VAN", "Vancouver"));
+    verify(jdbcTemplate).query(eq(ACTIVE_PORTS), any(RowMapper.class));
+    verify(resultSet).getString(1);
+    verify(resultSet).getString(2);
+    assertThat(ACTIVE_PORTS)
+        .contains("SYSDATE BETWEEN C.EFFECTIVE_DATE AND C.EXPIRY_DATE")
+        .doesNotContain("ORDER BY");
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void portOfExportOptionsShouldPreserveAnEmptyDirectQueryResult() {
+    when(jdbcTemplate.query(eq(ACTIVE_PORTS), any(RowMapper.class))).thenReturn(List.of());
+    LexisReportScheduleRepository repository = new LexisReportScheduleRepository(jdbcTemplate);
+
+    assertThat(repository.loadReportPortOfExportOptions())
+        .extracting("code", "name")
+        .containsExactly(tuple("", "All"));
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void portOfExportOptionsShouldPropagateDirectQueryFailure() {
+    when(jdbcTemplate.query(eq(ACTIVE_PORTS), any(RowMapper.class)))
+        .thenThrow(new DataAccessResourceFailureException("Oracle unavailable"));
+    LexisReportScheduleRepository repository = new LexisReportScheduleRepository(jdbcTemplate);
+
+    assertThatThrownBy(repository::loadReportPortOfExportOptions)
+        .isInstanceOf(DataAccessResourceFailureException.class)
+        .hasMessage("Oracle unavailable");
   }
 
   @Test

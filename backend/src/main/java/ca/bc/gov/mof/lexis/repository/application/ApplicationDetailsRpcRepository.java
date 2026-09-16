@@ -3,6 +3,7 @@ package ca.bc.gov.mof.lexis.repository.application;
 import static ca.bc.gov.mof.lexis.util.ValueUtils.positiveOrNull;
 
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
+import ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -64,8 +65,6 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       LEXIS_GROUP_5_PACKAGE + "FIND_END_USE_BY_APP(?,?)";
   private static final String FIND_END_USE_BY_PACKAGE =
       LEXIS_GROUP_5_PACKAGE + "FIND_END_USE_BY_PACK(?,?)";
-  private static final String FIND_ATTACHMENT_TYPE_CODE =
-      LEXIS_CODES_PACKAGE + "FIND_ATTACH_TYPE_CODE(?,?)";
   private static final String FIND_ALL_SPECIES_CODES =
       LEXIS_CODES_PACKAGE + "FIND_ALL_SPECIES_CODES(?)";
   private static final String FIND_ALL_PACKAGE_STATUS_CODES =
@@ -514,12 +513,15 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       return Optional.empty();
     }
 
-    return queryCursorSingleFailClosed(
-            FIND_ATTACHMENT_TYPE_CODE,
-            cs -> cs.setString(1, normalized),
-            2,
-            rs -> trim(getString(rs, "DESCRIPTION")))
-        .filter(value -> value != null && !value.isBlank());
+    List<String> descriptions =
+        jdbcTemplate.query(
+            LexisCodeQueries.ATTACHMENT_TYPE_BY_CODE,
+            (rs, rowNum) -> trim(getString(rs, "DESCRIPTION")),
+            normalized);
+    if (descriptions.isEmpty()) {
+      return Optional.empty();
+    }
+    return Optional.ofNullable(descriptions.get(0)).filter(value -> !value.isBlank());
   }
 
   public boolean streamFileAttachment(Long fileId, OutputStream outputStream) throws IOException {
