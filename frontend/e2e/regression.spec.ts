@@ -1716,7 +1716,7 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(page.getByText('No applications found', { exact: true })).toBeVisible()
   })
 
-  test('supports collapsible sidebar sections and collapsed icon navigation', async () => {
+  test('supports collapsible sidebar groups and collapsed group-rail navigation', async () => {
     const page = await authenticatedIdirPage()
 
     await expectAccessiblePage(page, '/provincial/review', /provincial application review/i)
@@ -1731,15 +1731,23 @@ test.describe('TEST IDIR admin regression', () => {
 
     await page.getByRole('button', { name: 'Close menu' }).click()
     await expect(page.getByRole('button', { name: 'Open menu' })).toBeVisible()
-    await expect(page.getByRole('link', { name: 'Application review' })).toHaveAttribute(
-      'title',
-      'Application review',
+    const provincialGroup = page.getByRole('button', { name: 'Provincial', exact: true })
+    const collapsedReportsGroup = page.getByRole('button', { name: 'Reports', exact: true })
+    await expect(provincialGroup).toHaveAttribute('data-label', 'Provincial: Application review')
+    await expect(provincialGroup).toHaveAttribute('aria-current', 'true')
+    await expect(provincialGroup).toHaveAttribute(
+      'aria-description',
+      'Contains current page: Application review',
     )
-    await expect(page.getByRole('link', { name: 'Advertising List' })).toHaveAttribute(
-      'title',
-      'Advertising List',
-    )
-    await page.getByRole('button', { name: 'Open menu' }).click()
+    await expect(collapsedReportsGroup).toHaveAttribute('data-label', 'Reports')
+    await expect(page.getByRole('link', { name: 'Application review' })).toHaveCount(0)
+    await expect(page.getByRole('link', { name: 'Advertising List' })).toHaveCount(0)
+
+    await collapsedReportsGroup.click()
+
+    await expect(page.getByRole('button', { name: 'Close menu' })).toBeVisible()
+    await expect(collapsedReportsGroup).toHaveAttribute('aria-expanded', 'true')
+    await expect(reportsSection.getByRole('link', { name: 'Advertising List' })).toBeVisible()
   })
 
   test('keeps header and tertiary actions accessible in dark mode', async () => {

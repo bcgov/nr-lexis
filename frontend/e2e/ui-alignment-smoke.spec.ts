@@ -564,13 +564,34 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(navigationToggle).toBeVisible()
     await expect(navigationToggle).toHaveCSS('width', '48px')
     await expect(navigationToggle).toHaveCSS('height', '48px')
+    await expect
+      .poll(() =>
+        navigationToggle.evaluate((toggle) => getComputedStyle(toggle, '::after').content),
+      )
+      .toBe('"Close menu"')
+    await navigationToggle.focus()
+    await page.keyboard.press('Tab')
+    await page.keyboard.press('Shift+Tab')
+    await expect(navigationToggle).toBeFocused()
+    await expect
+      .poll(() =>
+        navigationToggle.evaluate((toggle) => getComputedStyle(toggle, '::after').opacity),
+      )
+      .toBe('1')
     await expect(page.locator('.csp-app-header > #navigation-toggle')).toHaveCount(1)
     await expect(page.locator('.csp-side-nav > .csp-side-nav__toggle')).toHaveCount(0)
-    await expect(page.getByRole('link', { name: 'Application search', exact: true })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Provincial', exact: true })).toHaveAttribute(
-      'aria-expanded',
-      'true',
+    await expect(page.getByRole('link', { name: 'Notifications', exact: true })).toBeVisible()
+    const provincialSectionToggle = page.getByRole('button', {
+      name: 'Provincial',
+      exact: true,
+    })
+    const provincialApplicationSearchLink = page.locator(
+      'a.csp-side-nav__link[data-label="Application search"][href="/provincial/application"]',
     )
+    await expect(provincialApplicationSearchLink).toBeVisible()
+    await expect(provincialApplicationSearchLink).toHaveAttribute('aria-current', 'page')
+    await expect(provincialSectionToggle).toHaveAttribute('aria-expanded', 'true')
+    await expect(provincialSectionToggle).not.toHaveAttribute('aria-current')
     await expect(page.getByRole('button', { name: 'Federal', exact: true })).toHaveAttribute(
       'aria-expanded',
       'false',
@@ -583,11 +604,9 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       'aria-expanded',
       'false',
     )
-    const provincialSectionToggle = page.getByRole('button', {
-      name: 'Provincial',
-      exact: true,
-    })
     await expect(provincialSectionToggle).toHaveClass(/cds--side-nav__submenu/)
+    await expect(provincialSectionToggle).toHaveClass(/csp-side-nav__group/)
+    await expect(provincialSectionToggle.locator('+ ul.cds--side-nav__menu')).toBeVisible()
     const sectionToggleLayout = await provincialSectionToggle.evaluate((toggle) => {
       const title = toggle.querySelector('.cds--side-nav__submenu-title')
       const chevron = toggle.querySelector('.cds--side-nav__submenu-chevron svg')
@@ -720,7 +739,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     const inactiveNavLink = page.locator('a.csp-side-nav__link[data-label="Exemption search"]')
     await expect(activeNavLink).toHaveCSS('height', '48px')
     await expect(activeNavLink).toHaveCSS('font-weight', '600')
-    await expect(activeNavLink).toHaveCSS('background-color', 'rgb(232, 232, 232)')
+    await expect(activeNavLink).toHaveCSS('background-color', 'rgba(141, 141, 141, 0.2)')
     await expect(activeNavLink.locator('.csp-side-nav__link-text')).toHaveCSS(
       'color',
       'rgb(19, 19, 21)',
@@ -733,14 +752,37 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     )
     await expect(activeNavLink.locator('.csp-side-nav__icon svg')).toHaveCSS(
       'fill',
-      'rgb(22, 22, 22)',
+      'rgb(0, 92, 184)',
     )
     await expect(inactiveNavLink.locator('.csp-side-nav__icon svg')).toHaveCSS(
       'fill',
       'rgb(0, 92, 184)',
     )
+    await provincialSectionToggle.focus()
+    await provincialSectionToggle.press('Escape')
+    await expect(provincialSectionToggle).toBeFocused()
+    await expect(provincialSectionToggle).toHaveAttribute('aria-expanded', 'false')
+    await expect(provincialSectionToggle).toHaveAttribute('aria-current', 'true')
+    await expect(provincialSectionToggle).toHaveAttribute(
+      'aria-description',
+      'Contains current page: Application search',
+    )
+    await expect(provincialApplicationSearchLink).toBeHidden()
+    await expect(provincialApplicationSearchLink).not.toHaveAttribute('aria-current')
+
     const reportsToggle = page.getByRole('button', { name: 'Reports', exact: true })
+    const reportsTitle = reportsToggle.locator('.csp-side-nav__link-text')
+    await expect(reportsTitle).toHaveCSS('color', 'rgb(96, 96, 98)')
+    await reportsToggle.hover()
+    await expect(reportsTitle).toHaveCSS('color', 'rgb(19, 19, 21)')
+    await expect(reportsToggle.locator('.csp-side-nav__icon svg')).toHaveCSS(
+      'fill',
+      'rgb(0, 92, 184)',
+    )
+    await expect(reportsToggle.locator('+ ul.cds--side-nav__menu')).toBeHidden()
     await reportsToggle.click()
+    await expect(reportsToggle).toHaveAttribute('aria-expanded', 'true')
+    await expect(reportsToggle.locator('+ ul.cds--side-nav__menu')).toBeVisible()
     await expect(page.locator('a.csp-side-nav__link[data-label="Application Report"]')).toHaveCount(
       0,
     )
@@ -865,30 +907,96 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(page.locator('.app-shell')).toHaveClass(/is-side-nav-collapsed/)
     const collapsedNav = page.locator('.csp-side-nav')
     await expect(collapsedNav).toHaveCSS('width', '48px')
-    const collapsedLinkLayout = await page
-      .locator(
-        'a.csp-side-nav__link[data-label="Application search"][href="/provincial/application"]',
-      )
-      .evaluate((link) => {
+    await expect(collapsedNav.locator('.csp-side-nav__items')).toHaveCSS('overflow', 'visible')
+    for (const group of await collapsedNav.locator('.csp-side-nav__section').all()) {
+      await expect(group).toHaveCSS('overflow', 'visible')
+    }
+    expect(
+      await collapsedNav
+        .locator('.cds--side-nav__link--nested')
+        .evaluateAll((links) => links.every((link) => !link.checkVisibility())),
+    ).toBe(true)
+    await expect(
+      collapsedNav.locator('.csp-side-nav__section > .cds--side-nav__submenu'),
+    ).toHaveCount(4)
+    expect(
+      await collapsedNav.locator('.csp-side-nav__items > li').evaluateAll((sections) =>
+        sections.map((section) => {
+          const item = section.querySelector<HTMLElement>(
+            ':scope > .csp-side-nav__group, :scope > .csp-side-nav__section-list > li > a',
+          )
+          return item?.textContent?.trim()
+        }),
+      ),
+    ).toEqual(['Notifications', 'Provincial', 'Federal', 'Reports', 'Admin'])
+    const collapsedProvincialGroup = page.getByRole('button', { name: 'Provincial', exact: true })
+    await expect(collapsedProvincialGroup).toHaveAttribute('aria-current', 'true')
+    const collapsedGroupLayout = await page
+      .getByRole('button', { name: 'Provincial', exact: true })
+      .evaluate((group) => {
         const nav = document.querySelector('.csp-side-nav')
-        const icon = link.querySelector('.csp-side-nav__icon')
+        const icon = group.querySelector('.csp-side-nav__icon')
         if (!(nav instanceof HTMLElement)) throw new Error('Side navigation not found')
         if (!(icon instanceof HTMLElement)) throw new Error('Navigation icon not found')
         const navBounds = nav.getBoundingClientRect()
         const iconBounds = icon.getBoundingClientRect()
-        const tooltipStyle = getComputedStyle(link, '::after')
+        const tooltipStyle = getComputedStyle(group, '::after')
         return {
           centerOffset:
             iconBounds.left + iconBounds.width / 2 - (navBounds.left + navBounds.width / 2),
+          tooltipContent: tooltipStyle.content,
           tooltipBackground: tooltipStyle.backgroundColor,
           tooltipRadius: tooltipStyle.borderRadius,
           tooltipPaddingBlockStart: tooltipStyle.paddingBlockStart,
         }
       })
-    expect(Math.abs(collapsedLinkLayout.centerOffset)).toBeLessThanOrEqual(2)
-    expect(collapsedLinkLayout.tooltipBackground).toBe('rgb(19, 19, 21)')
-    expect(collapsedLinkLayout.tooltipRadius).toBe('4px')
-    expect(collapsedLinkLayout.tooltipPaddingBlockStart).toBe('6px')
+    expect(Math.abs(collapsedGroupLayout.centerOffset)).toBeLessThanOrEqual(2)
+    expect(collapsedGroupLayout.tooltipContent).toBe('"Provincial: Application search"')
+    expect(collapsedGroupLayout.tooltipBackground).toBe('rgb(19, 19, 21)')
+    expect(collapsedGroupLayout.tooltipRadius).toBe('4px')
+    expect(collapsedGroupLayout.tooltipPaddingBlockStart).toBe('6px')
+    await collapsedProvincialGroup.hover()
+    await expect
+      .poll(() =>
+        collapsedProvincialGroup.evaluate((group) => getComputedStyle(group, '::after').opacity),
+      )
+      .toBe('1')
+    await page.mouse.move(1200, 20)
+    await collapsedProvincialGroup.focus()
+    await page.keyboard.press('Tab')
+    await page.keyboard.press('Shift+Tab')
+    await expect(collapsedProvincialGroup).toBeFocused()
+    await expect
+      .poll(() =>
+        collapsedProvincialGroup.evaluate((group) => getComputedStyle(group, '::after').opacity),
+      )
+      .toBe('1')
+
+    await collapsedProvincialGroup.click()
+    await expect(page.getByRole('button', { name: 'Close menu' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    )
+    await expect(collapsedProvincialGroup).toHaveAttribute('aria-expanded', 'true')
+    await expect(collapsedProvincialGroup).not.toHaveAttribute('aria-current')
+    await expect(activeNavLink).toBeVisible()
+    await expect(activeNavLink).toHaveAttribute('aria-current', 'page')
+    await page.getByRole('button', { name: 'Close menu' }).click()
+    const openNavigationToggle = page.getByRole('button', { name: 'Open menu' })
+    await expect
+      .poll(() =>
+        openNavigationToggle.evaluate((toggle) => getComputedStyle(toggle, '::after').content),
+      )
+      .toBe('"Open menu"')
+    await openNavigationToggle.focus()
+    await page.keyboard.press('Tab')
+    await page.keyboard.press('Shift+Tab')
+    await expect(openNavigationToggle).toBeFocused()
+    await expect
+      .poll(() =>
+        openNavigationToggle.evaluate((toggle) => getComputedStyle(toggle, '::after').opacity),
+      )
+      .toBe('1')
 
     await page.reload({ waitUntil: 'domcontentloaded' })
 
@@ -1315,7 +1423,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     const darkActiveNavLink = page.locator(
       'a.csp-side-nav__link[data-label="Application search"][href="/provincial/application"]',
     )
-    await expect(darkActiveNavLink).toHaveCSS('background-color', 'rgb(51, 51, 51)')
+    await expect(darkActiveNavLink).toHaveCSS('background-color', 'rgba(141, 141, 141, 0.24)')
     await expect(darkActiveNavLink.locator('.csp-side-nav__link-text')).toHaveCSS(
       'color',
       'rgb(244, 244, 244)',
@@ -1411,7 +1519,11 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     const provincialApplicationSearchLink = page.locator(
       'a.csp-side-nav__link[data-label="Application search"][href="/provincial/application"]',
     )
-    await expect(provincialApplicationSearchLink).toBeVisible()
+    await expect(provincialApplicationSearchLink).toBeHidden()
+    await expect(page.getByRole('button', { name: 'Provincial', exact: true })).toHaveAttribute(
+      'aria-current',
+      'true',
+    )
 
     await expect(
       page.getByRole('heading', { level: 1, name: 'Provincial application search' }),
@@ -1464,10 +1576,10 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(sideNav).toBeVisible()
     await expect(sideNav).toHaveCSS('width', '48px')
 
-    const hasHorizontalPageOverflow = await page.evaluate(
+    const hasMobileHorizontalPageOverflow = await page.evaluate(
       () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
     )
-    expect(hasHorizontalPageOverflow).toBe(false)
+    expect(hasMobileHorizontalPageOverflow).toBe(false)
 
     const resultsViewport = page.getByRole('region', { name: 'Search results table' })
     const beforeScroll = await resultsViewport.evaluate((viewport) => {
@@ -1506,6 +1618,65 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     expect(afterScroll.scrollLeft).toBeGreaterThan(0)
     expect(afterScroll.columnLeft).toBeGreaterThanOrEqual(afterScroll.viewportLeft - 1)
     expect(afterScroll.columnRight).toBeLessThanOrEqual(afterScroll.viewportRight + 1)
+
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await expect(page.getByRole('button', { name: 'Close menu' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    )
+    await expect(sideNav).toHaveCSS('width', '256px')
+
+    await page.setViewportSize({ width: 640, height: 360 })
+    await expect(page.getByRole('button', { name: 'Open menu' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
+    await expect(sideNav).toHaveCSS('width', '48px')
+    const compactGroups = sideNav.locator('.csp-side-nav__group')
+    await expect(compactGroups).toHaveCount(4)
+    expect(
+      await compactGroups.evaluateAll((groups) =>
+        groups.every((group) => {
+          const bounds = group.getBoundingClientRect()
+          return bounds.top >= 0 && bounds.bottom <= window.innerHeight
+        }),
+      ),
+    ).toBe(true)
+    const compactProvincialGroup = page.getByRole('button', { name: 'Provincial', exact: true })
+    await compactProvincialGroup.hover()
+    await expect
+      .poll(() =>
+        compactProvincialGroup.evaluate((group) => {
+          const tooltip = getComputedStyle(group, '::after')
+          const bounds = group.getBoundingClientRect()
+          return {
+            opacity: tooltip.opacity,
+            tooltipRight: bounds.right + 8 + Number.parseFloat(tooltip.width),
+            viewportRight: window.innerWidth,
+          }
+        }),
+      )
+      .toMatchObject({ opacity: '1', tooltipRight: expect.any(Number), viewportRight: 640 })
+    const compactTooltipBounds = await compactProvincialGroup.evaluate((group) => {
+      const tooltip = getComputedStyle(group, '::after')
+      const bounds = group.getBoundingClientRect()
+      return bounds.right + 8 + Number.parseFloat(tooltip.width) <= window.innerWidth
+    })
+    expect(compactTooltipBounds).toBe(true)
+
+    await compactProvincialGroup.click()
+    await expect(sideNav).toHaveCSS('width', '256px')
+    await expect(provincialApplicationSearchLink).toBeVisible()
+    expect(
+      await page.evaluate(() => {
+        const nav = document.querySelector('.csp-side-nav')
+        const main = document.querySelector('main.app-main')
+        if (!(nav instanceof HTMLElement) || !(main instanceof HTMLElement)) {
+          throw new Error('Application shell not found')
+        }
+        return main.getBoundingClientRect().left >= nav.getBoundingClientRect().right - 1
+      }),
+    ).toBe(true)
   })
 
   test('keeps result toolbar actions within a narrow mobile viewport', async ({ page }) => {

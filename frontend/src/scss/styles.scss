@@ -330,6 +330,7 @@ body {
 }
 
 .csp-navigation-toggle {
+  position: relative;
   display: flex;
   flex: 0 0 var(--csp-header-height);
   width: var(--csp-header-height);
@@ -353,6 +354,7 @@ body {
 .csp-header-action:focus-visible,
 .csp-navigation-toggle:focus-visible,
 .csp-side-nav__link:focus-visible,
+.csp-side-nav__group:focus-visible,
 .profile-panel__close:focus-visible,
 .profile-panel__action:focus-visible,
 .profile-panel__signout:focus-visible {
@@ -361,6 +363,7 @@ body {
 }
 
 .csp-side-nav__link:focus-visible,
+.csp-side-nav__group:focus-visible,
 .profile-panel__close:focus-visible,
 .profile-panel__action:focus-visible,
 .profile-panel__signout:focus-visible {
@@ -473,12 +476,12 @@ body {
   margin-top: 8px;
 }
 
-a.csp-side-nav__link.cds--side-nav__link {
+a.csp-side-nav__link.cds--side-nav__link,
+button.csp-side-nav__group.cds--side-nav__submenu {
   align-items: center;
   display: flex;
   height: 48px;
   padding: 0 16px;
-  border-left: 3px solid transparent;
   color: var(--csp-text-secondary);
   font-size: 14px;
   font-weight: 400;
@@ -495,25 +498,32 @@ a.csp-side-nav__link.cds--side-nav__link {
 }
 
 .csp-side-nav__link:hover,
-.csp-side-nav__link:focus-visible {
+.csp-side-nav__link:focus-visible,
+.csp-side-nav__group:hover,
+.csp-side-nav__group:focus-visible {
   background-color: var(--csp-layer-hover);
+  color: var(--csp-text-primary);
+}
+
+.csp-side-nav .csp-side-nav__link:hover .csp-side-nav__link-text,
+.csp-side-nav .csp-side-nav__link:focus-visible .csp-side-nav__link-text,
+.csp-side-nav .csp-side-nav__group:hover .csp-side-nav__link-text,
+.csp-side-nav .csp-side-nav__group:focus-visible .csp-side-nav__link-text {
+  color: var(--csp-text-primary);
 }
 
 a.csp-side-nav__link.cds--side-nav__link--active[aria-current='page'] {
-  background-color: var(--csp-layer-hover);
-  border-left-color: var(--csp-interactive);
+  background-color: var(--cds-background-selected);
   color: var(--csp-text-primary);
   font-weight: 600;
 }
 
 .csp-side-nav__icon {
   align-items: center;
-  color: var(--csp-interactive);
   display: flex;
   flex: 0 0 20px;
   height: 20px;
   justify-content: center;
-  margin-right: 16px;
   position: relative;
   width: 20px;
 }
@@ -525,10 +535,23 @@ a.csp-side-nav__link.cds--side-nav__link--active[aria-current='page'] {
   width: 20px;
 }
 
-// Carbon marks the whole parent menu active when one child is selected, which otherwise changes
-// every icon in that menu to the primary text colour. Keep only the selected link icon black.
-a.csp-side-nav__link:not([aria-current='page']) .csp-side-nav__icon > svg {
+// Heartwood keeps the same blue icon for every destination, including the current page.
+.csp-side-nav .csp-side-nav__icon > svg {
+  color: var(--csp-interactive);
   fill: currentcolor;
+}
+
+.csp-side-nav .csp-side-nav__icon:not(.cds--side-nav__submenu-chevron) {
+  margin-inline-end: 16px;
+}
+
+.csp-side-nav .cds--side-nav__menu[hidden] {
+  display: none;
+}
+
+.csp-side-nav__group .cds--side-nav__submenu-chevron {
+  display: flex;
+  margin-inline-start: 8px;
 }
 
 .csp-side-nav__notification-indicator {
@@ -553,42 +576,31 @@ a.csp-side-nav__link:not([aria-current='page']) .csp-side-nav__icon > svg {
   white-space: nowrap;
 }
 
-.csp-side-nav.is-collapsed {
+.csp-side-nav.is-collapsed,
+.csp-side-nav.is-collapsed .csp-side-nav__items,
+.csp-side-nav.is-collapsed .csp-side-nav__section {
   overflow: visible;
 }
 
-.csp-side-nav__collapsed-section-label {
-  display: block;
-  height: 1px;
-  padding-inline: 16px;
-  padding-top: 8px;
-  padding-bottom: 2px;
-  border-top: 1px solid var(--csp-border-subtle-01);
-  color: var(--csp-category-label);
-  font-size: 12px;
-  opacity: 0;
-  overflow: hidden;
-  pointer-events: none;
-  white-space: nowrap;
-}
-
-.csp-side-nav.is-collapsed .csp-side-nav__link {
+.csp-side-nav.is-collapsed .csp-side-nav__link,
+.csp-side-nav.is-collapsed .csp-side-nav__group {
   overflow: visible;
   justify-content: center;
   padding-inline: 0;
 }
 
-.csp-side-nav.is-collapsed .csp-side-nav__icon {
-  margin-right: 0;
+.csp-side-nav.is-collapsed .csp-side-nav__icon:not(.cds--side-nav__submenu-chevron) {
+  margin-inline-end: 0;
 }
 
-.csp-side-nav.is-collapsed .csp-side-nav__link-text {
-  flex: 0;
-  width: 0;
-  opacity: 0;
+.csp-side-nav.is-collapsed .csp-side-nav__link-text,
+.csp-side-nav.is-collapsed .cds--side-nav__submenu-chevron {
+  display: none;
 }
 
-.csp-side-nav__link::after {
+.csp-navigation-toggle::after,
+.csp-side-nav__link::after,
+.csp-side-nav__group::after {
   position: absolute;
   inset-block-start: 50%;
   inset-inline-start: calc(100% + 8px);
@@ -609,13 +621,25 @@ a.csp-side-nav__link:not([aria-current='page']) .csp-side-nav__icon > svg {
   white-space: nowrap;
 }
 
-.csp-side-nav.is-collapsed .csp-side-nav__link::after {
+.csp-side-nav.is-collapsed .csp-side-nav__link::after,
+.csp-side-nav.is-collapsed .csp-side-nav__group::after {
   content: attr(data-label);
 }
 
 .csp-side-nav.is-collapsed .csp-side-nav__link:hover::after,
-.csp-side-nav.is-collapsed .csp-side-nav__link:focus-visible::after {
+.csp-side-nav.is-collapsed .csp-side-nav__link:focus-visible::after,
+.csp-side-nav.is-collapsed .csp-side-nav__group:hover::after,
+.csp-side-nav.is-collapsed .csp-side-nav__group:focus-visible::after,
+.csp-navigation-toggle:hover::after,
+.csp-navigation-toggle:focus-visible::after {
   opacity: 1;
+}
+
+.csp-navigation-toggle::after {
+  content: attr(aria-label);
+  inset-block-start: calc(100% + 8px);
+  inset-inline-start: 8px;
+  transform: none;
 }
 
 .profile-panel {
