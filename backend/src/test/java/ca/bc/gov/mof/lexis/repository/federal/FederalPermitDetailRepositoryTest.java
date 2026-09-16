@@ -185,12 +185,13 @@ class FederalPermitDetailRepositoryTest {
 
   @Test
   @SuppressWarnings("unchecked")
-  void portOfExportCodeLookupShouldUseDirectSqlBindTheNormalizedCodeAndMatchIgnoringCase()
+  void portOfExportCodeLookupShouldBindTrimmedCodeAndCompareReturnedCodesIgnoringCase()
       throws Exception {
     when(jdbcTemplate.query(anyString(), any(RowMapper.class), eq("VA")))
         .thenAnswer(
             invocation -> {
               RowMapper<String> rowMapper = invocation.getArgument(1);
+              // Exercise the legacy returned-row comparison, not Oracle's predicate/collation.
               when(resultSet.getString("CODE")).thenReturn("va");
               return List.of(rowMapper.mapRow(resultSet, 0));
             });

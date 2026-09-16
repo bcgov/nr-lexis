@@ -51,6 +51,7 @@ public final class LexisCodeQueries {
       PORT_SELECT + " WHERE SYSDATE BETWEEN C.EFFECTIVE_DATE AND C.EXPIRY_DATE";
 
   // Unlike the active list, the legacy detail lookup also accepts historical port codes.
+  // Preserve FIND_PORT_CODE's equality predicate; it does not normalize case with UPPER.
   public static final String PORT_BY_CODE =
       PORT_SELECT + " WHERE C.EXPORT_PORT_OF_EXPORT_CODE = ?";
 
