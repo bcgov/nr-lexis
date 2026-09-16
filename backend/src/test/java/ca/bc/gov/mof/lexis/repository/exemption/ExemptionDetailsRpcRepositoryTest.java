@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.io.ByteArrayOutputStream;
@@ -14,6 +15,7 @@ import java.sql.CallableStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
@@ -194,7 +196,6 @@ class ExemptionDetailsRpcRepositoryTest {
         () -> repository.findExemptionDocumentDetailsByExemptionNumber("EX-205"));
     assertOracleFailure(
         () -> repository.findApplicationDocumentDetailsByApplicationNumber(1000456L));
-    assertOracleFailure(() -> repository.findAttachmentTypeDescription("UPLOAD"));
   }
 
   @Test
@@ -203,7 +204,78 @@ class ExemptionDetailsRpcRepositoryTest {
 
     assertThat(repository.findExemptionDocumentDetailsByExemptionNumber("EX-205")).isEmpty();
     assertThat(repository.findApplicationDocumentDetailsByApplicationNumber(1000456L)).isEmpty();
-    assertThat(repository.findAttachmentTypeDescription("UPLOAD")).isEmpty();
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void attachmentTypeDescriptionShouldUseBoundDirectQueryAndTrimDescription() throws SQLException {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    ResultSet resultSet = mock(ResultSet.class);
+    when(resultSet.getString("DESCRIPTION")).thenReturn(" Uploaded document ");
+    when(jdbcTemplate.query(any(String.class), any(RowMapper.class), eq("UPLOAD")))
+        .thenAnswer(
+            invocation ->
+                List.of(
+                    ((RowMapper<String>) invocation.getArgument(1)).mapRow(resultSet, 0)));
+    ExemptionDetailsRpcRepository repository = new ExemptionDetailsRpcRepository(jdbcTemplate);
+
+    assertThat(repository.findAttachmentTypeDescription(" UPLOAD "))
+        .hasValue("Uploaded document");
+
+    ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+    verify(jdbcTemplate).query(sql.capture(), any(RowMapper.class), eq("UPLOAD"));
+    assertThat(sql.getValue())
+        .contains("FROM THE.EXPORT_ATTACHMENT_TYPE_CODE")
+        .contains("WHERE C.EXPORT_ATTACHMENT_TYPE_CODE = ?");
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void attachmentTypeDescriptionShouldReturnEmptyForNoDescriptionOrABlankFirstRow()
+      throws SQLException {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    ResultSet resultSet = mock(ResultSet.class);
+    when(jdbcTemplate.query(any(String.class), any(RowMapper.class), eq("EMPTY")))
+        .thenReturn(List.of());
+    when(resultSet.getString("DESCRIPTION")).thenReturn(null, "later", "  ", "later");
+    when(jdbcTemplate.query(any(String.class), any(RowMapper.class), eq("NULL")))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<String> mapper = invocation.getArgument(1);
+              return Arrays.asList(mapper.mapRow(resultSet, 0), mapper.mapRow(resultSet, 1));
+            });
+    when(jdbcTemplate.query(any(String.class), any(RowMapper.class), eq("BLANK")))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<String> mapper = invocation.getArgument(1);
+              return Arrays.asList(mapper.mapRow(resultSet, 0), mapper.mapRow(resultSet, 1));
+            });
+    ExemptionDetailsRpcRepository repository = new ExemptionDetailsRpcRepository(jdbcTemplate);
+
+    assertThat(repository.findAttachmentTypeDescription("EMPTY")).isEmpty();
+    assertThat(repository.findAttachmentTypeDescription("NULL")).isEmpty();
+    assertThat(repository.findAttachmentTypeDescription("BLANK")).isEmpty();
+  }
+
+  @Test
+  void attachmentTypeDescriptionShouldSkipLookupForBlankCode() {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    ExemptionDetailsRpcRepository repository = new ExemptionDetailsRpcRepository(jdbcTemplate);
+
+    assertThat(repository.findAttachmentTypeDescription(null)).isEmpty();
+    assertThat(repository.findAttachmentTypeDescription("  ")).isEmpty();
+
+    verifyNoInteractions(jdbcTemplate);
+  }
+
+  @Test
+  void attachmentTypeDescriptionShouldPropagateQueryFailure() {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    when(jdbcTemplate.query(any(String.class), any(RowMapper.class), eq("UPLOAD")))
+        .thenThrow(new DataAccessResourceFailureException("Oracle unavailable"));
+    ExemptionDetailsRpcRepository repository = new ExemptionDetailsRpcRepository(jdbcTemplate);
+
+    assertOracleFailure(() -> repository.findAttachmentTypeDescription("UPLOAD"));
   }
 
   @Test

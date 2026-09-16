@@ -1,5 +1,7 @@
 package ca.bc.gov.mof.lexis.repository.report;
 
+import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_PORTS;
+
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.admin.ExportScheduleCreateRequestDto;
 import ca.bc.gov.mof.lexis.dto.admin.ExportScheduleRowDto;
@@ -45,8 +47,6 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
       LEXIS_CODES_PACKAGE + "FIND_COUNTRY_GROUP(?,?)";
   private static final String FIND_ALL_COUNTRY_CODES =
       LEXIS_CODES_PACKAGE + "FIND_ALL_COUNTRY_CODES(?)";
-  private static final String FIND_ALL_PORTS_OF_EXPORT =
-      LEXIS_CODES_PACKAGE + "FIND_ALL_PORT_CODES(?)";
   private static final String FIND_FOREST_CLIENT = LEXIS_CODES_PACKAGE + "FIND_FOREST_CLIENT(?,?)";
   private static final String FIND_ORG_UNIT_BY_CODE =
       LEXIS_CODES_PACKAGE + "FIND_ORG_UNIT_BY_CODE(?,?)";
@@ -335,7 +335,10 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
   }
 
   public List<CodeNameDto> loadReportPortOfExportOptions() {
-    return withAll(loadCodeNameOptionsRequired(FIND_ALL_PORTS_OF_EXPORT));
+    return withAll(
+        jdbcTemplate.query(
+            ACTIVE_PORTS,
+            (rs, rowNum) -> new CodeNameDto(trim(rs.getString(1)), trim(rs.getString(2)))));
   }
 
   public Optional<String> findDefaultRegionForForestClientNumber(String forestClientNumber) {

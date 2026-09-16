@@ -4,6 +4,7 @@ import static ca.bc.gov.mof.lexis.util.ValueUtils.coalesce;
 import static ca.bc.gov.mof.lexis.util.ValueUtils.positiveOrNull;
 
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
+import ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -114,8 +115,6 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
       ORDER BY DR.SOURCE_ORDER, DR.SOURCE_APPLICATION_NUMBER, EFA.EXPORT_ATTACHMENT_ID
       """;
   private static final String FIND_FILE_ATTACHMENT = LEXIS_GROUP_5_PACKAGE + "FIND_FILE_ATTACHMENT(?,?)";
-  private static final String FIND_ATTACHMENT_TYPE_CODE =
-      LEXIS_CODES_PACKAGE + "FIND_ATTACH_TYPE_CODE(?,?)";
   private static final String FIND_RATE_BY_EXEMPTION =
       LEXIS_CODES_PACKAGE + "FIND_RATE_BY_EXEMPTION(?,?)";
   private static final String FIND_EXEMPTION_TYPE_CODE =
@@ -396,12 +395,15 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
     if (normalized == null) {
       return Optional.empty();
     }
-    return queryCursorSingleFailClosed(
-            FIND_ATTACHMENT_TYPE_CODE,
-            cs -> cs.setString(1, normalized),
-            2,
-            rs -> trim(getString(rs, "DESCRIPTION")))
-        .filter(value -> value != null && !value.isBlank());
+    List<String> descriptions =
+        jdbcTemplate.query(
+            LexisCodeQueries.ATTACHMENT_TYPE_BY_CODE,
+            (rs, rowNum) -> trim(getString(rs, "DESCRIPTION")),
+            normalized);
+    if (descriptions.isEmpty()) {
+      return Optional.empty();
+    }
+    return Optional.ofNullable(descriptions.get(0)).filter(value -> !value.isBlank());
   }
 
   public boolean streamFileAttachment(Long fileId, OutputStream outputStream) throws IOException {

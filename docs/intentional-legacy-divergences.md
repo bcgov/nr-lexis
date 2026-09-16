@@ -6,8 +6,9 @@ controls, and approved retirements use the searchable code marker
 defects.
 
 Only observable differences in supported inputs, user workflow, authorization, persistence, or
-integration behaviour belong in this register. Refactors, duplicated service-boundary enforcement,
-and early validation of existing legacy or database constraints are parity work, not divergences.
+integration behaviour belong in the divergence table. Refactors, duplicated service-boundary
+enforcement, and early validation of existing legacy or database constraints are parity work.
+Stored-procedure replacements are listed separately below as an implementation inventory.
 
 The business-approved 100-row default applies only to IDIR Application Review, which also offers
 150/200-row options. All other search pages retain the legacy 10-row default; the general Search
@@ -64,3 +65,24 @@ Business direction confirms the retirement of Application Report, Create TEAC Pa
 Report, and Fees Report.
 
 Keep markers next to the controlling code rather than on every consuming component.
+
+## Stored-procedure replacements
+
+These active modern paths replace legacy procedure calls. This inventory describes application
+usage; the shared database procedures remain available to legacy and other callers.
+
+| Modern path | Legacy procedure calls replaced | Current implementation |
+| --- | --- | --- |
+| Attachment type list and descriptions | `LEXIS_CODES.FIND_ALL_ATTACH_CODES`, `LEXIS_CODES.FIND_ATTACH_TYPE_CODE` | Direct SELECTs in [LexisCodeQueries](../backend/src/main/java/ca/bc/gov/mof/lexis/repository/reference/LexisCodeQueries.java), preserving historical codes. |
+| Shipping transport options | `LEXIS_CODES.FIND_ALL_TRANSPORT_TYPE_CODES` | Direct SELECT with the existing validity filter, ordering-table join and ordering. Individual transport-code validation still uses `FIND_TRANSPORT_TYPE_CODE`. |
+| Shipping/report port options and permit port validation | `LEXIS_CODES.FIND_ALL_PORT_CODES`, `LEXIS_CODES.FIND_PORT_CODE` | Direct SELECTs in `LexisCodeQueries`; lists retain the validity filter, while by-code validation retains the legacy equality predicate and accepts historical codes. |
+| Provincial/federal application searches | `LEXIS_GROUP_5.FIND_APPLICATIONS_BY_CRITERIA`, `LEXIS_GROUP_5.COUNT_APPLICATIONS_BY_CRITERIA` | Direct count/page queries in [LexisApplicationRepository](../backend/src/main/java/ca/bc/gov/mof/lexis/repository/application/LexisApplicationRepository.java) and [FederalApplicationRepository](../backend/src/main/java/ca/bc/gov/mof/lexis/repository/federal/FederalApplicationRepository.java). |
+| Exemption search | `LEXIS_GROUP_5.FIND_EXEMPTIONS_BY_CRITERIA`, `LEXIS_GROUP_5.COUNT_EXEMPTIONS_BY_CRITERIA` | Direct count/page queries in [ExemptionRepository](../backend/src/main/java/ca/bc/gov/mof/lexis/repository/exemption/ExemptionRepository.java). |
+| Provincial permit search | `LEXIS_GROUP_5.FIND_PERMIT_BY_CRITERIA`, `LEXIS_GROUP_5.COUNT_PERMIT_BY_CRITERIA` | Direct count/page queries in [PermitRepository](../backend/src/main/java/ca/bc/gov/mof/lexis/repository/permit/PermitRepository.java). |
+| Exemption/permit document lists | `LEXIS_GROUP_5.FIND_EXEMPT_FILE_DETAILS`, `LEXIS_GROUP_5.FIND_PERMIT_FILE_DETAILS` | Direct context queries in [ExemptionDetailsRpcRepository](../backend/src/main/java/ca/bc/gov/mof/lexis/repository/exemption/ExemptionDetailsRpcRepository.java) and [PermitRpcRepository](../backend/src/main/java/ca/bc/gov/mof/lexis/repository/permit/PermitRpcRepository.java) combine direct/linked documents, type descriptions and ownership. The old repository methods remain but are not used by these service paths. |
+| AMV workbook saves | `RTM_EMS_LOG_AMV_INSERT`, `RTM_EMS_LOG_AMV_UPDATE` | Transactional `MERGE` for reviewed batches and compatibility workbook uploads; see the [RTM procedure boundary](rtm-amv-ui-and-procedure-contract.md#legacy-procedure-boundary). Legacy single-row methods remain in source but have no exposed mutation route. |
+
+Other procedures still have modern callers: application documents use `LEXIS_GROUP_5.FIND_APPL_FILE_DETAILS`,
+and package/scale/end-use procedures remain in use outside the consolidated permit detail queries.
+Advertising List still calls `LEXIS_REPORTING.BIWEEKLY_REPORT_CSV` for CSV and
+`LEXIS_REPORTING.BIWEEKLY_RPT` / `BIWEEKLY_SUBREPORT_RPT` for PDF; these are not retired.
