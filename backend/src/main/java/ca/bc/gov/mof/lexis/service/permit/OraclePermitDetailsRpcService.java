@@ -1076,9 +1076,20 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     }
 
     Set<String> selectedApplications = parseCsvSet(selectedApplicationsCsv);
+    Map<Long, Boolean> applicationAccessByNumber = new HashMap<>();
+    Predicate<Long> cachedApplicationAccess =
+        applicationNumber ->
+            canAccessApplication(applicationNumber, applicationAccess, applicationAccessByNumber);
     Map<Long, List<ScaleMutationRow>> unassignedScalesByApplication =
-        findUnassignedScalesByApplication(
-            normalizedExemptionNumber, applicationAccess);
+        new LinkedHashMap<>(
+            findUnassignedScalesByApplication(
+                normalizedExemptionNumber, cachedApplicationAccess));
+    for (Long applicationNumber :
+        repository.findApplicationNumbersByExemptionNumberRequired(normalizedExemptionNumber)) {
+      if (cachedApplicationAccess.test(applicationNumber)) {
+        unassignedScalesByApplication.putIfAbsent(applicationNumber, List.of());
+      }
+    }
 
     List<PermitAvailableApplicationItemRpcResponseDto> applicationItems =
         unassignedScalesByApplication.entrySet().stream()

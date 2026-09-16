@@ -1469,6 +1469,36 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
+  void availableApplicationListShouldExposeAccessibleApplicationWithoutPackagesAsDisabled() {
+    when(repository.findApplicationNumbersByExemptionNumberRequired("EX-700"))
+        .thenReturn(List.of(1000456L, 1000457L, 1000458L));
+    when(repository.findPackagesByExemptionNumberRequired("EX-700"))
+        .thenReturn(List.of(new PackageCandidateRow(1000456L, "PKG-901")));
+    when(repository.findScaleMutationDetailsByApplicationNumber(1000456L))
+        .thenReturn(List.of(scaleMutation("101", 1000456L, "PKG-901", null)));
+    when(repository.findApplicationStatusCodeByNumber(1000456L)).thenReturn(Optional.of("EXE"));
+
+    PermitAvailableApplicationListRpcResponseDto response =
+        service.getAvailableApplicationList(
+            "EX-700", "", applicationNumber -> applicationNumber != 1000458L);
+
+    assertThat(response.applicationList()).containsExactly("1000456");
+    assertThat(response.errorMessage()).isNull();
+    assertThat(response.applicationItems())
+        .extracting(
+            PermitAvailableApplicationItemRpcResponseDto::applicationNumber,
+            PermitAvailableApplicationItemRpcResponseDto::disabled,
+            PermitAvailableApplicationItemRpcResponseDto::disabledReason,
+            PermitAvailableApplicationItemRpcResponseDto::unassignedPieces,
+            PermitAvailableApplicationItemRpcResponseDto::unassignedVolume)
+        .containsExactly(
+            tuple("1000456", false, null, 12L, 34.5d),
+            tuple("1000457", true, "No unassigned scale rows are available.", null, null));
+    verify(repository, never()).findScaleMutationDetailsByApplicationNumber(1000457L);
+    verify(repository, never()).findScaleMutationDetailsByApplicationNumber(1000458L);
+  }
+
+  @Test
   void availablePackageListShouldPreserveAndExcludeExactStoredKeys() {
     when(repository.findPackagesByExemptionNumberRequired("EX-700"))
         .thenReturn(List.of(
