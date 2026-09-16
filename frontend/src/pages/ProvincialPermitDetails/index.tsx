@@ -1321,6 +1321,8 @@ const ProvincialPermitDetailsPage = () => {
   const hasPermitAgent = agentUsed
   const ministerialPermit = isMinisterialPermit(detail)
   const blanketOicPermit = detail?.blanketOic === true
+  const blanketOicRegionBoundToApplication =
+    blanketOicPermit && detail?.oicApplicationNumber != null
   const usesReviewedPermitFlow = blanketOicPermit || ministerialPermit
   const hasGbmsHistory = (tabsData?.gbmsEvents.length ?? 0) > 0 || Boolean(gbmsErrorMessage)
   // Legacy retains the invoice upload workflow but hides Invoices from permit navigation.
@@ -1699,6 +1701,20 @@ const ProvincialPermitDetailsPage = () => {
         value: option.id,
         label: option.text,
       }))
+      if (blanketOicRegionBoundToApplication) {
+        return currentOrgUnitNumber
+          ? [
+              {
+                value: currentOrgUnitNumber,
+                label:
+                  permitRegionOptions.find((option) => option.value === currentOrgUnitNumber)
+                    ?.label ||
+                  detail?.region?.trim() ||
+                  currentOrgUnitNumber,
+              },
+            ]
+          : []
+      }
       if (
         !invoiceMaterialLocked ||
         !currentOrgUnitNumber ||
@@ -1729,6 +1745,7 @@ const ProvincialPermitDetailsPage = () => {
     ]
   }, [
     blanketOicPermit,
+    blanketOicRegionBoundToApplication,
     blanketOicRegionContext,
     blanketOicRegionError,
     detail?.orgUnitNumber,
@@ -3305,6 +3322,13 @@ const ProvincialPermitDetailsPage = () => {
     ) {
       return false
     }
+    if (
+      permitForm &&
+      permitForm.orgUnitNumber.trim() !== detailValue(detail?.orgUnitNumber).trim()
+    ) {
+      setActionErrorMessage('Save or discard the Region change before saving a package.')
+      return false
+    }
     const fieldErrors = validateBlanketOicPackage(boicPackageForm)
     if (Object.values(fieldErrors).some(Boolean)) {
       setBoicPackageFieldErrors(fieldErrors)
@@ -3392,9 +3416,11 @@ const ProvincialPermitDetailsPage = () => {
     blanketOicScaleDirty,
     isLoadingBoicPackage,
     canEditBlanketOicPackages,
+    detail?.orgUnitNumber,
     detail?.permitNumber,
     editingBoicPackageNumber,
     isSavingBoicPackage,
+    permitForm,
     permitNumber,
     reloadPermitTabs,
     resetBlanketOicPackageForm,
@@ -4724,12 +4750,19 @@ const ProvincialPermitDetailsPage = () => {
                                 value={permitForm.orgUnitNumber}
                                 invalid={!!permitFieldError('orgUnitNumber')}
                                 invalidText={permitFieldError('orgUnitNumber')}
+                                helperText={
+                                  blanketOicRegionBoundToApplication
+                                    ? 'Region cannot be changed after the first package is created.'
+                                    : undefined
+                                }
                                 onBlur={() => markPermitFieldTouched('orgUnitNumber')}
                                 onChange={(event) =>
                                   setPermitFormField('orgUnitNumber', event.target.value)
                                 }
                                 disabled={
                                   invoiceMaterialLocked ||
+                                  blanketOicRegionBoundToApplication ||
+                                  isSavingBoicPackage ||
                                   isPermitOptionsLoading ||
                                   blanketOicRegionOptionsLoading ||
                                   !!blanketOicRegionError ||

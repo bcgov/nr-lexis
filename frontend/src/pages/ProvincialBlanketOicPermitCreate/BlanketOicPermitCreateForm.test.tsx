@@ -68,6 +68,15 @@ const renderForm = () => {
   return { onCreated }
 }
 
+const fillRequiredPermitAndShippingFields = async (user: ReturnType<typeof userEvent.setup>) => {
+  await user.type(screen.getByLabelText('Permit request pieces'), '0')
+  await user.type(screen.getByLabelText('Permit request volume (m³)'), '0')
+  await user.click(screen.getByRole('tab', { name: 'Shipping' }))
+  await user.type(screen.getByLabelText('Purchaser'), 'Test purchaser')
+  await user.type(screen.getByLabelText('Transport name'), 'Test barge')
+  await user.type(screen.getByLabelText('Estimated shipping date'), '2099-01-01')
+}
+
 describe('BlanketOicPermitCreateForm', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -160,5 +169,119 @@ describe('BlanketOicPermitCreateForm', () => {
     expect(screen.getByRole('heading', { name: 'Agent information' })).toBeInTheDocument()
     expect(screen.getByLabelText('Agent client number')).toBeInTheDocument()
     expect(screen.getByLabelText('Agent location')).toBeInTheDocument()
+  })
+
+  it('uses selectable applicant and agent locations when the lookup also returns synthetic rows', async () => {
+    const user = userEvent.setup()
+    vi.mocked(fetchExemptionClientLocations).mockImplementation(async (clientNumber) =>
+      clientNumber === '12345678'
+        ? [
+            { locationCode: '0', locationName: 'Synthetic applicant', selected: true },
+            { locationCode: '01', locationName: 'Applicant location', selected: false },
+          ]
+        : [
+            { locationCode: '0', locationName: 'Synthetic agent', selected: true },
+            { locationCode: '02', locationName: 'Agent location', selected: false },
+          ],
+    )
+    vi.mocked(fetchExemptionClientData).mockImplementation(async (clientNumber) => ({
+      clientNumber,
+      companyName: 'Test client',
+      address: '',
+      city: '',
+      province: '',
+      postalCode: '',
+      country: '',
+      phone: '',
+      fax: '',
+      email: '',
+      notfound: '',
+    }))
+    const { onCreated } = renderForm()
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save permit' })).toBeEnabled())
+    await user.click(screen.getByRole('tab', { name: 'Applicant' }))
+    await user.type(screen.getByLabelText('Applicant client number'), '12345678')
+    await user.tab()
+    await waitFor(() => expect(screen.getByLabelText('Applicant location')).toHaveValue('01'))
+    expect(
+      screen.getByLabelText('Applicant location').querySelector('option[value="0"]'),
+    ).toBeNull()
+
+    await user.click(screen.getByRole('checkbox', { name: "I'm an agent" }))
+    await user.type(screen.getByLabelText('Agent client number'), '87654321')
+    await user.tab()
+    await waitFor(() => expect(screen.getByLabelText('Agent location')).toHaveValue('02'))
+    expect(screen.getByLabelText('Agent location').querySelector('option[value="0"]')).toBeNull()
+
+    await user.click(screen.getByRole('tab', { name: 'Permit' }))
+    await fillRequiredPermitAndShippingFields(user)
+    await user.click(screen.getByRole('button', { name: 'Save permit' }))
+
+    await waitFor(() => expect(addPermitDetail).toHaveBeenCalledTimes(1))
+    expect(addPermitDetail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ownerClientLocation: '01',
+        agentClientLocation: '02',
+      }),
+    )
+    expect(fetchExemptionClientData).not.toHaveBeenCalledWith('12345678', '0')
+    expect(fetchExemptionClientData).not.toHaveBeenCalledWith('87654321', '0')
+    await waitFor(() => expect(onCreated).toHaveBeenCalledWith('9001'))
+  })
+
+  it.each([
+    {
+      kind: 'applicant',
+      blockedClientNumber: '12345678',
+      locationLabel: 'Applicant location',
+      errorMessage: 'No verified locations were found for this applicant.',
+    },
+    {
+      kind: 'agent',
+      blockedClientNumber: '87654321',
+      locationLabel: 'Agent location',
+      errorMessage: 'No verified locations were found for this agent.',
+    },
+  ])('does not submit a permit with only a synthetic $kind location', async (scenario) => {
+    const user = userEvent.setup()
+    vi.mocked(fetchExemptionClientLocations).mockImplementation(async (clientNumber) =>
+      clientNumber === scenario.blockedClientNumber
+        ? [{ locationCode: '0', locationName: 'Synthetic location', selected: true }]
+        : [{ locationCode: '01', locationName: 'Verified location', selected: true }],
+    )
+    renderForm()
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save permit' })).toBeEnabled())
+    await user.click(screen.getByRole('tab', { name: 'Applicant' }))
+    if (scenario.kind === 'agent') {
+      await user.type(screen.getByLabelText('Applicant client number'), '12345678')
+      await user.tab()
+      await waitFor(() => expect(screen.getByLabelText('Applicant location')).toHaveValue('01'))
+      await user.click(screen.getByRole('checkbox', { name: "I'm an agent" }))
+      await user.type(screen.getByLabelText('Agent client number'), scenario.blockedClientNumber)
+    } else {
+      await user.type(
+        screen.getByLabelText('Applicant client number'),
+        scenario.blockedClientNumber,
+      )
+    }
+    await user.tab()
+
+    await waitFor(() => expect(screen.getByText(scenario.errorMessage)).toBeInTheDocument())
+    expect(screen.getByLabelText(scenario.locationLabel)).toBeDisabled()
+    expect(
+      screen.getByLabelText(scenario.locationLabel).querySelector('option[value="0"]'),
+    ).toBeNull()
+
+    await user.click(screen.getByRole('tab', { name: 'Permit' }))
+    await fillRequiredPermitAndShippingFields(user)
+    await user.click(screen.getByRole('button', { name: 'Save permit' }))
+
+    await screen.findByText(
+      `${scenario.kind === 'applicant' ? 'Applicant' : 'Agent'} location is required.`,
+    )
+    expect(addPermitDetail).not.toHaveBeenCalled()
+    expect(fetchExemptionClientData).not.toHaveBeenCalledWith(scenario.blockedClientNumber, '0')
   })
 })

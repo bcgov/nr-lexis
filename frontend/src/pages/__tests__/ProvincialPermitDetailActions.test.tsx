@@ -3126,7 +3126,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       permitStatusDescription: 'Active',
       exemptionTypeDescription: 'Blanket OIC',
       blanketOic: true,
-      oicApplicationNumber: 1000999,
+      oicApplicationNumber: null,
       oicRequestPieces: 200,
       oicRequestVolume: 120.5,
     }))
@@ -3452,6 +3452,20 @@ describe('Provincial Permit Detail Action Smoke', () => {
         expect(mockedFetchProvincialPermitDetailTabs).toHaveBeenCalledTimes(2)
         expect(screen.getByText('Blanket OIC package was created.')).toBeInTheDocument()
       })
+
+      await selectPermitDetailTab('Permit')
+      await userEvent.click(screen.getByRole('button', { name: 'Edit permit' }))
+      const regionSelect = screen.getByLabelText('Region')
+      expect(regionSelect).toBeDisabled()
+      expect(regionSelect).toHaveValue('1903')
+      expect(
+        within(regionSelect)
+          .getAllByRole('option')
+          .map((option) => option.getAttribute('value')),
+      ).toEqual(['', '1903'])
+      expect(
+        screen.getByText('Region cannot be changed after the first package is created.'),
+      ).toBeInTheDocument()
     },
   )
 
@@ -4843,7 +4857,9 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.click(await screen.findByRole('option', { name: 'United States (US)' }))
     await selectPermitDetailTab('Permit')
     await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
-    await userEvent.selectOptions(screen.getByLabelText('Region'), '1904')
+    expect(screen.getByLabelText('Region')).toBeDisabled()
+    await userEvent.clear(screen.getByLabelText('Submit date'))
+    await userEvent.type(screen.getByLabelText('Submit date'), '2026-04-11')
     await userEvent.selectOptions(screen.getByLabelText('Permit status'), 'COM')
 
     await userEvent.click(screen.getByRole('link', { name: 'Leave permit' }))
@@ -4858,7 +4874,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
       1,
       expect.objectContaining({
         destinationCountry: 'US',
-        orgUnitNumber: '1904',
+        orgUnitNumber: '1903',
+        permitSubmitDate: '2026-04-11',
         permitStatus: 'ACT',
       }),
     )
@@ -4911,6 +4928,80 @@ describe('Provincial Permit Detail Action Smoke', () => {
       )
     })
   })
+
+  it('requires a BOIC Region draft to be saved or discarded before creating a package', async () => {
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      permitStatusCode: 'ACT',
+      permitStatusDescription: 'Active',
+      exemptionTypeDescription: 'Blanket OIC',
+      blanketOic: true,
+      oicRequestPieces: 200,
+      oicRequestVolume: 120.5,
+    })
+    renderPermitDetails()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    await userEvent.selectOptions(screen.getByLabelText('Region'), '1904')
+    await selectPermitDetailTab('Scale')
+    await userEvent.click(screen.getByRole('button', { name: 'Create package' }))
+    const packageEditor = (
+      await screen.findByRole('heading', { name: 'Create Blanket OIC package' })
+    ).closest('.application-detail-edit-section') as HTMLElement
+    await userEvent.click(within(packageEditor).getByRole('button', { name: 'Create package' }))
+
+    expect(
+      await screen.findByText('Save or discard the Region change before saving a package.'),
+    ).toBeInTheDocument()
+    expect(mockedAddBlanketOicPackage).not.toHaveBeenCalled()
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+    await selectPermitDetailTab('Permit')
+    expect(screen.getByLabelText('Region')).toBeEnabled()
+    expect(screen.getByLabelText('Region')).toHaveValue('1904')
+  })
+
+  it.each([1903, 1908])(
+    'keeps linked BOIC region %s fixed even without current packages',
+    async (orgUnitNumber) => {
+      mockedFetchProvincialPermitDetail.mockResolvedValue({
+        ...permitDetail,
+        permitStatusCode: 'ACT',
+        permitStatusDescription: 'Active',
+        exemptionTypeDescription: 'Blanket OIC',
+        blanketOic: true,
+        oicApplicationNumber: 1000999,
+        oicRequestPieces: 200,
+        oicRequestVolume: 120.5,
+        orgUnitNumber,
+      })
+      renderPermitDetails()
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+      const regionSelect = screen.getByLabelText('Region')
+      await waitFor(() => expect(regionSelect).toHaveValue(String(orgUnitNumber)))
+      expect(regionSelect).toBeDisabled()
+      expect(
+        within(regionSelect)
+          .getAllByRole('option')
+          .map((option) => option.getAttribute('value')),
+      ).toEqual(['', String(orgUnitNumber)])
+      expect(
+        screen.getByText('Region cannot be changed after the first package is created.'),
+      ).toBeInTheDocument()
+      await userEvent.clear(screen.getByLabelText('Remarks'))
+      await userEvent.type(screen.getByLabelText('Remarks'), 'Updated remarks')
+      await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
+
+      await waitFor(() => {
+        expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
+          expect.objectContaining({
+            orgUnitNumber: String(orgUnitNumber),
+            permitRemarks: 'Updated remarks',
+          }),
+        )
+      })
+    },
+  )
 
   it('shows Blanket OIC request ceilings only for Blanket OIC permits', async () => {
     mockedFetchProvincialPermitDetail.mockResolvedValue({

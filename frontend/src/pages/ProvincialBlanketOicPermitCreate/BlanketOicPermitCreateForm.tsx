@@ -22,6 +22,8 @@ import UnsavedChangesGuard, { formValuesEqual } from '@/components/UnsavedChange
 import {
   CLIENT_LOOKUP_UNAVAILABLE_MESSAGE,
   clientLocationLabel,
+  isSelectableClientLocation,
+  resolveClientLocationCode,
 } from '@/pages/shared/application-form-utils'
 import { isValidIsoDate } from '@/pages/shared/create-form-utils'
 import type { IdTextOption } from '@/pages/shared/search-query-utils'
@@ -408,8 +410,11 @@ const BlanketOicPermitCreateForm = ({
       if (!isLatestRequest()) {
         return currentSelection()
       }
-      const selectedLocation =
-        locations.find(({ selected }) => selected)?.locationCode ?? locations[0]?.locationCode ?? ''
+      const selectableLocations = locations.filter(isSelectableClientLocation)
+      const selectedLocation = resolveClientLocationCode(
+        selectableLocations,
+        currentSelection().locationCode,
+      )
       const clientData = selectedLocation
         ? await fetchExemptionClientData(clientNumber, selectedLocation)
         : null
@@ -418,7 +423,7 @@ const BlanketOicPermitCreateForm = ({
       }
       const confirmedClientNumber = clientData?.clientNumber.trim() || clientNumber
       updateClientLookupFailure(kind, false)
-      setLocations(locations)
+      setLocations(selectableLocations)
       setForm((current) => {
         const currentClientNumber =
           kind === 'owner' ? current.ownerClientNumber.trim() : current.agentClientNumber.trim()
@@ -476,14 +481,25 @@ const BlanketOicPermitCreateForm = ({
       let ownerLocation = form.ownerClientLocation.trim()
       let agentClientNumber = agentUsed ? form.agentClientNumber.trim() : ''
       let agentLocation = agentUsed ? form.agentClientLocation.trim() : ''
-      if ((!ownerLocation || ownerClientNumber.length < 8) && /^\d{1,8}$/.test(ownerClientNumber)) {
+      const hasSelectedOwnerLocation = ownerLocations.some(
+        (location) =>
+          isSelectableClientLocation(location) && location.locationCode === ownerLocation,
+      )
+      const hasSelectedAgentLocation = agentLocations.some(
+        (location) =>
+          isSelectableClientLocation(location) && location.locationCode === agentLocation,
+      )
+      if (
+        (!ownerLocation || !hasSelectedOwnerLocation || ownerClientNumber.length < 8) &&
+        /^\d{1,8}$/.test(ownerClientNumber)
+      ) {
         const confirmedOwner = await loadClientLocations('owner')
         ownerClientNumber = confirmedOwner.clientNumber
         ownerLocation = confirmedOwner.locationCode
       }
       if (
         agentUsed &&
-        (!agentLocation || agentClientNumber.length < 8) &&
+        (!agentLocation || !hasSelectedAgentLocation || agentClientNumber.length < 8) &&
         /^\d{1,8}$/.test(agentClientNumber)
       ) {
         const confirmedAgent = await loadClientLocations('agent')
@@ -787,7 +803,9 @@ const BlanketOicPermitCreateForm = ({
                     value={form.ownerClientNumber}
                     invalid={
                       !!fieldError('ownerClientNumber') ||
-                      (ownerLookupAttempted && !ownerLookupLoading && ownerLocations.length === 0)
+                      (ownerLookupAttempted &&
+                        !ownerLookupLoading &&
+                        !ownerLocations.some(isSelectableClientLocation))
                     }
                     invalidText={
                       fieldError('ownerClientNumber') ||
@@ -811,7 +829,9 @@ const BlanketOicPermitCreateForm = ({
                     value={form.ownerClientLocation}
                     invalid={!!fieldError('ownerClientLocation')}
                     invalidText={fieldError('ownerClientLocation')}
-                    disabled={ownerLookupLoading || ownerLocations.length === 0}
+                    disabled={
+                      ownerLookupLoading || !ownerLocations.some(isSelectableClientLocation)
+                    }
                     onChange={(event) => setField('ownerClientLocation', event.target.value)}
                   >
                     <SelectItem
@@ -820,7 +840,7 @@ const BlanketOicPermitCreateForm = ({
                         ownerLookupLoading ? 'Loading locations' : 'Select an applicant location'
                       }
                     />
-                    {ownerLocations.map((location) => (
+                    {ownerLocations.filter(isSelectableClientLocation).map((location) => (
                       <SelectItem
                         key={location.locationCode}
                         value={location.locationCode}
@@ -866,7 +886,7 @@ const BlanketOicPermitCreateForm = ({
                           !!fieldError('agentClientNumber') ||
                           (agentLookupAttempted &&
                             !agentLookupLoading &&
-                            agentLocations.length === 0)
+                            !agentLocations.some(isSelectableClientLocation))
                         }
                         invalidText={
                           fieldError('agentClientNumber') ||
@@ -890,7 +910,9 @@ const BlanketOicPermitCreateForm = ({
                         value={form.agentClientLocation}
                         invalid={!!fieldError('agentClientLocation')}
                         invalidText={fieldError('agentClientLocation')}
-                        disabled={agentLookupLoading || agentLocations.length === 0}
+                        disabled={
+                          agentLookupLoading || !agentLocations.some(isSelectableClientLocation)
+                        }
                         onChange={(event) => setField('agentClientLocation', event.target.value)}
                       >
                         <SelectItem
@@ -899,7 +921,7 @@ const BlanketOicPermitCreateForm = ({
                             agentLookupLoading ? 'Loading locations' : 'Select an agent location'
                           }
                         />
-                        {agentLocations.map((location) => (
+                        {agentLocations.filter(isSelectableClientLocation).map((location) => (
                           <SelectItem
                             key={location.locationCode}
                             value={location.locationCode}
