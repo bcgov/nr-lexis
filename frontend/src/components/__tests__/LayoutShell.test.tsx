@@ -75,6 +75,15 @@ const renderLayout = (path: string) => {
   )
 }
 
+const getControlledMenu = (toggle: HTMLElement) => {
+  const menuId = toggle.getAttribute('aria-controls')
+  expect(menuId).toBeTruthy()
+
+  const menu = document.getElementById(menuId as string)
+  expect(menu).toBeInstanceOf(HTMLUListElement)
+  return menu as HTMLUListElement
+}
+
 describe('Layout shell', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
@@ -161,6 +170,29 @@ describe('Layout shell', () => {
     expect(window.localStorage.getItem('lexis.ui.collapsedSections')).toBeNull()
   })
 
+  it('opens only the active non-Provincial group and closes every group for notifications', () => {
+    const groupNames = ['Provincial', 'Federal', 'Reports', 'Admin']
+
+    renderLayout('/reports/biweeklyListing')
+
+    for (const groupName of groupNames) {
+      expect(screen.getByRole('button', { name: groupName })).toHaveAttribute(
+        'aria-expanded',
+        groupName === 'Reports' ? 'true' : 'false',
+      )
+    }
+
+    cleanup()
+    renderLayout('/notifications')
+
+    for (const groupName of groupNames) {
+      expect(screen.getByRole('button', { name: groupName })).toHaveAttribute(
+        'aria-expanded',
+        'false',
+      )
+    }
+  })
+
   it('shows an active-updates indicator only when the visible notifications endpoint returns data', async () => {
     mockedFetchNotifications.mockResolvedValue([activeNotification])
 
@@ -183,7 +215,11 @@ describe('Layout shell', () => {
     await waitFor(() => expect(mockedFetchNotifications).toHaveBeenCalledOnce())
 
     const notificationsLink = screen.getByRole('link', { name: 'Notifications' })
-    expect(screen.getAllByText('Notifications')).toHaveLength(1)
+    expect(
+      screen
+        .getAllByText('Notifications')
+        .filter((element) => !element.closest('[role="tooltip"]')),
+    ).toHaveLength(1)
     expect(screen.queryByRole('button', { name: 'Notifications' })).not.toBeInTheDocument()
     expect(notificationsLink).not.toHaveClass('cds--side-nav__link--nested')
     expect(
@@ -250,7 +286,7 @@ describe('Layout shell', () => {
 
     const reportsMenu = screen.getByRole('button', { name: 'Reports' })
     expect(reportsMenu).toHaveAttribute('aria-expanded', 'false')
-    expect(reportsMenu.nextElementSibling).toHaveClass('cds--side-nav__menu')
+    expect(getControlledMenu(reportsMenu)).toHaveClass('cds--side-nav__menu')
   })
 
   it('persists preference updates without storing auth or user data', async () => {
@@ -415,7 +451,7 @@ describe('Layout shell', () => {
     expect(document.querySelectorAll('.cds--side-nav__link--active')).toHaveLength(0)
   })
 
-  it('omits export schedule from the admin side-nav', () => {
+  it('omits export schedule from the admin side-nav', async () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
         capabilities: createTestCapabilities({
@@ -427,6 +463,8 @@ describe('Layout shell', () => {
     )
 
     renderLayout('/admin/schedules')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Admin' }))
 
     const feePolicyLink = screen.getByRole('link', { name: /Multiplication Factor/i })
     const filPolicyLink = screen.getByRole('link', {
@@ -500,7 +538,7 @@ describe('Layout shell', () => {
     expect(screen.getByRole('link', { name: 'Exemption search' })).toBeVisible()
     expect(screen.getByRole('link', { name: 'Offer search' })).toBeVisible()
     expect(screen.getByRole('link', { name: 'Permit search' })).toBeVisible()
-    expect(screen.getByText('Federal')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Federal' })).toBeVisible()
     expect(
       screen.queryByRole('link', { name: /Create\/Edit Application/i }),
     ).not.toBeInTheDocument()
@@ -509,7 +547,7 @@ describe('Layout shell', () => {
     expect(screen.queryByRole('link', { name: /Average Monthly Values/i })).not.toBeInTheDocument()
   })
 
-  it('renders side-nav links with standard icons and collapsed labels', () => {
+  it('renders side-nav links with standard icons and collapsed labels', async () => {
     renderLayout('/admin/rtm/emslogamv/upload')
 
     const sideNav = screen.getByRole('navigation', { name: 'Side navigation' })
@@ -519,6 +557,7 @@ describe('Layout shell', () => {
     expect(screen.queryByRole('link', { name: 'Advertising List (PDF)' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Advertising List (CSV)' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Help/i })).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Provincial' }))
     const uploadLinks = screen.getAllByRole('link', { name: /^Upload$/i })
     expect(uploadLinks.map((link) => link.getAttribute('href'))).toEqual([
       '/provincial/application/upload',
@@ -714,16 +753,22 @@ describe('Layout shell', () => {
     renderLayout('/admin/rtm/emslogamv/upload')
 
     const reportsToggle = screen.getByRole('button', { name: 'Reports' })
-    const reportsMenu = reportsToggle.nextElementSibling
+    const reportsMenu = getControlledMenu(reportsToggle)
     expect(reportsToggle).toHaveAttribute('aria-expanded', 'false')
+    expect(reportsToggle).toHaveClass('csp-side-nav__group')
     expect(reportsMenu).toHaveClass('cds--side-nav__menu')
+    expect(reportsMenu).toHaveAttribute('hidden')
     expect(
-      within(reportsMenu as HTMLElement).getByRole('link', { name: /Advertising List/i }),
+      within(reportsMenu as HTMLElement).getByRole('link', {
+        name: /Advertising List/i,
+        hidden: true,
+      }),
     ).toBeInTheDocument()
 
     await userEvent.click(reportsToggle)
 
     expect(reportsToggle).toHaveAttribute('aria-expanded', 'true')
+    expect(reportsMenu).not.toHaveAttribute('hidden')
     expect(
       within(reportsMenu as HTMLElement).getByRole('link', { name: /Advertising List/i }),
     ).toBeInTheDocument()
@@ -734,17 +779,167 @@ describe('Layout shell', () => {
     expect(reportsToggle).toHaveAttribute('aria-expanded', 'false')
   })
 
-  it('keeps section links available as icons when the full side nav is collapsed', async () => {
+  it('keeps only group icons in the collapsed rail and opens the selected group with the panel', async () => {
     renderLayout('/admin/rtm/emslogamv')
 
-    expect(screen.getByRole('button', { name: 'Reports' })).toHaveAttribute(
-      'aria-expanded',
-      'false',
-    )
+    const reportsToggle = screen.getByRole('button', { name: 'Reports' })
+    const reportsMenu = getControlledMenu(reportsToggle)
+    expect(reportsToggle).toHaveAttribute('aria-expanded', 'false')
 
     await userEvent.click(screen.getByRole('button', { name: 'Close menu' }))
 
-    expect(screen.getByRole('link', { name: /Advertising List/i })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Open menu' })).toBeVisible()
+    expect(reportsToggle).toBeVisible()
+    expect(screen.queryByRole('link', { name: /Advertising List/i })).not.toBeInTheDocument()
+    expect(reportsMenu).toHaveAttribute('hidden')
+
+    await userEvent.click(reportsToggle)
+
+    expect(screen.getByRole('button', { name: 'Close menu' })).toBeVisible()
+    expect(reportsToggle).toHaveAttribute('aria-expanded', 'true')
+    expect(reportsMenu).not.toHaveAttribute('hidden')
+    const advertisingList = screen.getByRole('link', { name: /Advertising List/i })
+    await userEvent.click(advertisingList)
+    expect(screen.getByTestId('current-path')).toHaveTextContent('/reports/biweeklyListing')
+  })
+
+  it('describes the current group with its full path when the collapsed rail receives focus', async () => {
+    renderLayout('/provincial/application')
+
+    const provincialToggle = screen.getByRole('button', { name: 'Provincial' })
+    await userEvent.click(screen.getByRole('button', { name: 'Close menu' }))
+    provincialToggle.focus()
+
+    const tooltip = await screen.findByRole('tooltip')
+    expect(tooltip).toHaveTextContent('Provincial: Application search')
+    expect(provincialToggle).toHaveAttribute('aria-describedby', tooltip.id)
+  })
+
+  it('closes a collapsed-rail tooltip when its group opens without moving focus', async () => {
+    renderLayout('/provincial/application')
+
+    const provincialToggle = screen.getByRole('button', { name: 'Provincial' })
+    await userEvent.click(screen.getByRole('button', { name: 'Close menu' }))
+    provincialToggle.focus()
+    await screen.findByRole('tooltip')
+
+    await userEvent.click(provincialToggle)
+
+    expect(provincialToggle).toHaveFocus()
+    expect(provincialToggle).toHaveAttribute('aria-expanded', 'true')
+    expect(provincialToggle).not.toHaveAttribute('aria-describedby')
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+  })
+
+  it('dismisses a collapsed-rail tooltip and removes its description with Escape', async () => {
+    renderLayout('/admin/rtm/emslogamv')
+
+    const reportsToggle = screen.getByRole('button', { name: 'Reports' })
+    await userEvent.click(screen.getByRole('button', { name: 'Close menu' }))
+    reportsToggle.focus()
+    const tooltip = await screen.findByRole('tooltip')
+    expect(reportsToggle).toHaveAttribute('aria-describedby', tooltip.id)
+
+    await userEvent.keyboard('{Escape}')
+
+    expect(reportsToggle).toHaveFocus()
+    expect(reportsToggle).toHaveAttribute('aria-expanded', 'false')
+    expect(reportsToggle).not.toHaveAttribute('aria-describedby')
+    expect(tooltip).toHaveAttribute('aria-hidden', 'true')
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+  })
+
+  it('does not expose rail tooltips while the side navigation is expanded', async () => {
+    renderLayout('/provincial/application')
+
+    const provincialToggle = screen.getByRole('button', { name: 'Provincial' })
+    provincialToggle.focus()
+
+    await waitFor(() => {
+      expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+    })
+    expect(
+      provincialToggle.closest('.csp-side-nav__tooltip')?.querySelector('[role="tooltip"]'),
+    ).toHaveAttribute('aria-hidden', 'true')
+    expect(provincialToggle).not.toHaveAttribute('aria-describedby')
+  })
+
+  it('restores every open group from the header but opens only the selected group from the collapsed rail', async () => {
+    renderLayout('/admin/rtm/emslogamv/upload')
+
+    const provincialToggle = screen.getByRole('button', { name: 'Provincial' })
+    const reportsToggle = screen.getByRole('button', { name: 'Reports' })
+    const adminToggle = screen.getByRole('button', { name: 'Admin' })
+
+    await userEvent.click(provincialToggle)
+    await userEvent.click(reportsToggle)
+
+    expect(provincialToggle).toHaveAttribute('aria-expanded', 'true')
+    expect(reportsToggle).toHaveAttribute('aria-expanded', 'true')
+    expect(adminToggle).toHaveAttribute('aria-expanded', 'true')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Close menu' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Open menu' }))
+
+    expect(provincialToggle).toHaveAttribute('aria-expanded', 'true')
+    expect(reportsToggle).toHaveAttribute('aria-expanded', 'true')
+    expect(adminToggle).toHaveAttribute('aria-expanded', 'true')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Close menu' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Federal' }))
+
+    expect(provincialToggle).toHaveAttribute('aria-expanded', 'false')
+    expect(reportsToggle).toHaveAttribute('aria-expanded', 'false')
+    expect(adminToggle).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.getByRole('button', { name: 'Federal' })).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('retains manually opened groups after navigating to a side-navigation destination', async () => {
+    renderLayout('/admin/rtm/emslogamv/upload')
+
+    const adminToggle = screen.getByRole('button', { name: 'Admin' })
+    const reportsToggle = screen.getByRole('button', { name: 'Reports' })
+    await userEvent.click(reportsToggle)
+
+    await userEvent.click(screen.getByRole('link', { name: /Advertising List/i }))
+
+    expect(screen.getByTestId('current-path')).toHaveTextContent('/reports/biweeklyListing')
+    expect(adminToggle).toHaveAttribute('aria-expanded', 'true')
+    expect(reportsToggle).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('moves the current-page marker from an open child to its closed group and restores focus on Escape', async () => {
+    renderLayout('/provincial/application')
+
+    const provincialToggle = screen.getByRole('button', { name: 'Provincial' })
+    const provincialMenu = getControlledMenu(provincialToggle)
+    const applicationSearch = screen
+      .getAllByRole('link', { name: /^Application search$/i })
+      .find((link) => link.getAttribute('href') === '/provincial/application')
+
+    expect(applicationSearch).toHaveAttribute('aria-current', 'page')
+    expect(provincialToggle).not.toHaveAttribute('aria-current')
+    expect(provincialToggle).not.toHaveAttribute('aria-description')
+
+    await userEvent.click(provincialToggle)
+
+    expect(provincialToggle).toHaveAttribute('aria-expanded', 'false')
+    expect(provincialToggle).toHaveAttribute('aria-current', 'true')
+    expect(provincialToggle).toHaveAttribute(
+      'aria-description',
+      'Contains current page: Application search',
+    )
+    expect(provincialMenu).toHaveAttribute('hidden')
+    expect(applicationSearch).not.toHaveAttribute('aria-current')
+
+    await userEvent.click(provincialToggle)
+    expect(provincialToggle).toHaveAttribute('aria-expanded', 'true')
+    expect(applicationSearch).toHaveAttribute('aria-current', 'page')
+
+    await userEvent.keyboard('{Escape}')
+
+    expect(provincialToggle).toHaveFocus()
+    expect(provincialToggle).toHaveAttribute('aria-expanded', 'false')
   })
 
   it('defaults the side nav open and supports collapsing it', async () => {
@@ -938,10 +1133,8 @@ describe('Layout shell', () => {
     expect(openMenuButton).toHaveAttribute('aria-controls', 'side-navigation')
     expect(sideNav).not.toHaveAttribute('aria-hidden')
     expect(sideNav).not.toHaveAttribute('inert')
-    const provincialSearchLink = screen
-      .getAllByRole('link', { name: 'Application search' })
-      .find((link) => link.getAttribute('href') === '/provincial/application')
-    expect(provincialSearchLink).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Provincial' })).toBeVisible()
+    expect(screen.queryByRole('link', { name: 'Application search' })).not.toBeInTheDocument()
     expect(window.localStorage.getItem(SIDE_NAV_PREFERENCE_KEY)).toBe('true')
 
     await userEvent.click(openMenuButton)
