@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -74,6 +74,44 @@ vi.mock('@/service/provincial-application-search-service', () => ({
 
 vi.mock('@/context/auth/useAuth', () => ({
   useAuth: vi.fn(),
+}))
+
+vi.mock('@/components/ForestClientComboBox', () => ({
+  default: ({
+    id,
+    labelText,
+    value,
+    onChange,
+    onBlur,
+    disabled,
+    invalid,
+    invalidText,
+    counterpartyClientNumber,
+  }: {
+    id: string
+    labelText: string
+    value: string
+    onChange: (value: string) => void
+    onBlur?: () => void
+    disabled?: boolean
+    invalid?: boolean
+    invalidText?: string
+    counterpartyClientNumber?: string
+  }) => (
+    <div>
+      <label htmlFor={id}>{labelText}</label>
+      <input
+        id={id}
+        value={value}
+        disabled={disabled}
+        aria-invalid={invalid || undefined}
+        data-counterparty-client-number={counterpartyClientNumber ?? ''}
+        onBlur={onBlur}
+        onChange={(event) => onChange(event.target.value)}
+      />
+      {invalid && invalidText ? <div>{invalidText}</div> : null}
+    </div>
+  ),
 }))
 
 Element.prototype.scrollIntoView = vi.fn()
@@ -284,7 +322,9 @@ describe('create page unsaved changes', () => {
     const router = renderCreatePage(testCase.createPath, testCase.targetPath, testCase.element)
     await screen.findByRole('heading', { level: 1, name: testCase.heading })
     await userEvent.click(screen.getByRole('tab', { name: 'Owner' }))
-    await userEvent.type(screen.getByRole('textbox', { name: 'Client number' }), '00011111')
+    fireEvent.change(screen.getByRole('textbox', { name: 'Client number' }), {
+      target: { value: '00011111' },
+    })
     await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled())
 
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))

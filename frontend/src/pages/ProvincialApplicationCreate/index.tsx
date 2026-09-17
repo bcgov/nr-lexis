@@ -17,6 +17,7 @@ import {
 } from '@carbon/react'
 import SearchableSelect from '../../components/SearchableSelect'
 import { AppNotification } from '../../components/AppNotification'
+import ForestClientComboBox from '@/components/ForestClientComboBox'
 import Modal from '@/components/Modal'
 import DetailDocumentUploadPanel from '../../components/uploads/DetailDocumentUploadPanel'
 import PageHeader from '@/components/PageHeader'
@@ -402,6 +403,7 @@ const ProvincialApplicationCreatePage = () => {
   const currentFormRef = useRef(form)
   currentFormRef.current = form
   const [formEdited, setFormEdited] = useState(false)
+  const [clientSearchResetKey, setClientSearchResetKey] = useState(0)
   const [createdApplicationNavigation, setCreatedApplicationNavigation] =
     useState<CreatedApplicationNavigation | null>(null)
   const [productTypes, setProductTypes] = useState<SearchOption[]>([])
@@ -1560,6 +1562,7 @@ const ProvincialApplicationCreatePage = () => {
   const onDiscardCreateDraft = (): void => {
     setForm(draftBaselineRef.current)
     setFormEdited(false)
+    setClientSearchResetKey((current) => current + 1)
     setTouchedFields({})
     setShowAllValidationErrors(false)
     setStatus(null)
@@ -1665,33 +1668,56 @@ const ProvincialApplicationCreatePage = () => {
                 aria-label="Owner"
               >
                 <div className="legacy-search-grid create-form-grid">
-                  <TextInput
-                    id="ownerClientNumber"
-                    labelText={requiredLabel('Client number')}
-                    aria-required="true"
-                    value={form.ownerClientNumber}
-                    readOnly={provincialSubmitterIdentityLocked}
-                    helperText={
-                      provincialSubmitterIdentityLocked
-                        ? 'Loaded from your authenticated forest client access.'
-                        : undefined
-                    }
-                    invalid={!!fieldError('ownerClientNumber')}
-                    invalidText={fieldError('ownerClientNumber')}
-                    onBlur={() => markFieldTouched('ownerClientNumber')}
-                    onChange={(event) => {
-                      markFormEdited()
-                      setOwnerClientLocations([])
-                      setOwnerClientContacts([])
-                      setOwnerClientData(null)
-                      setForm((current) => ({
-                        ...current,
-                        ownerClientNumber: event.target.value,
-                        ownerClientLocationCode: '',
-                        ownerContactName: '',
-                      }))
-                    }}
-                  />
+                  {provincialSubmitterIdentityLocked ? (
+                    <TextInput
+                      id="ownerClientNumber"
+                      labelText={requiredLabel('Client number')}
+                      aria-required="true"
+                      value={form.ownerClientNumber}
+                      readOnly
+                      helperText="Loaded from your authenticated forest client access."
+                      invalid={!!fieldError('ownerClientNumber')}
+                      invalidText={fieldError('ownerClientNumber')}
+                      onBlur={() => markFieldTouched('ownerClientNumber')}
+                      onChange={(event) => {
+                        markFormEdited()
+                        setOwnerClientLocations([])
+                        setOwnerClientContacts([])
+                        setOwnerClientData(null)
+                        setForm((current) => ({
+                          ...current,
+                          ownerClientNumber: event.target.value,
+                          ownerClientLocationCode: '',
+                          ownerContactName: '',
+                        }))
+                      }}
+                    />
+                  ) : (
+                    <ForestClientComboBox
+                      id="ownerClientNumber"
+                      labelText={requiredLabel('Client number')}
+                      value={form.ownerClientNumber}
+                      resetKey={clientSearchResetKey}
+                      selectedClientName={ownerClientData?.companyName}
+                      counterpartyClientNumber={form.agentClientNumber}
+                      required
+                      invalid={!!fieldError('ownerClientNumber')}
+                      invalidText={fieldError('ownerClientNumber')}
+                      onBlur={() => markFieldTouched('ownerClientNumber')}
+                      onChange={(ownerClientNumber) => {
+                        markFormEdited()
+                        setOwnerClientLocations([])
+                        setOwnerClientContacts([])
+                        setOwnerClientData(null)
+                        setForm((current) => ({
+                          ...current,
+                          ownerClientNumber,
+                          ownerClientLocationCode: '',
+                          ownerContactName: '',
+                        }))
+                      }}
+                    />
+                  )}
                   {canChangeApplicantType ? (
                     <SearchableSelect
                       id="applicantTypeCode"
@@ -1822,22 +1848,25 @@ const ProvincialApplicationCreatePage = () => {
                       aria-label="Agent"
                     >
                       <div className="legacy-search-grid create-form-grid">
-                        <TextInput
+                        <ForestClientComboBox
                           id="agentClientNumber"
                           labelText={requiredLabel('Agent number')}
-                          aria-required="true"
                           value={form.agentClientNumber}
+                          resetKey={clientSearchResetKey}
+                          selectedClientName={agentClientData?.companyName}
+                          counterpartyClientNumber={form.ownerClientNumber}
+                          required
                           invalid={!!fieldError('agentClientNumber')}
                           invalidText={fieldError('agentClientNumber')}
                           onBlur={() => markFieldTouched('agentClientNumber')}
-                          onChange={(event) => {
+                          onChange={(agentClientNumber) => {
                             markFormEdited()
                             setAgentClientLocations([])
                             setAgentClientContacts([])
                             setAgentClientData(null)
                             setForm((current) => ({
                               ...current,
-                              agentClientNumber: event.target.value,
+                              agentClientNumber,
                               agentClientLocationCode: '',
                               agentContactName: '',
                             }))

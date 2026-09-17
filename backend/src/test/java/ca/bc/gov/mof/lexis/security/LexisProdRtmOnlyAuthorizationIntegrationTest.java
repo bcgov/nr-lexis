@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.security;
 
+import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasItems;
 import static org.hamcrest.Matchers.not;
@@ -41,7 +42,9 @@ class LexisProdRtmOnlyAuthorizationIntegrationTest {
     var role = new SimpleGrantedAuthority("LEXIS_FEDERAL_READ_ONLY");
     mockMvc.perform(get("/api/lexis/session/capabilities").with(jwt().authorities(role)))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.grantedActions.length()").value(3));
+        .andExpect(jsonPath("$.grantedActions").value(containsInAnyOrder(
+            "/federalApplicationSearch", "/federalApplicationDetails",
+            "searchClients", "viewFederalApplication")));
     mockMvc.perform(get("/api/lexis/federal/applications/search").with(jwt().authorities(role)))
         .andExpect(status().isNoContent());
     mockMvc.perform(get("/api/lexis/applications/search").with(jwt().authorities(role)))

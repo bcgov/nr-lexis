@@ -15,6 +15,7 @@ import {
   Tile,
 } from '@carbon/react'
 import EmptyState from '@/components/EmptyState'
+import ForestClientComboBox from '@/components/ForestClientComboBox'
 import IsoDatePicker from '@/components/IsoDatePicker'
 import PendingIcon from '@/components/PendingIcon'
 import PermitCountrySelect from '@/components/PermitCountrySelect'
@@ -76,6 +77,8 @@ type BlanketOicPermitDraft = {
 }
 
 type ClientKind = 'owner' | 'agent'
+type ClientLookupResult = { clientNumber: string; locationCode: string }
+type PendingClientLookup = { clientNumber: string; promise: Promise<ClientLookupResult> }
 
 type BlanketOicPermitCreateFormProps = {
   exemptionNumber: string
@@ -259,6 +262,7 @@ const BlanketOicPermitCreateForm = ({
   const draftBaselineRef = useRef<BlanketOicPermitDraft>({ form, agentUsed: false })
   const formEditedRef = useRef(false)
   const [formEdited, setFormEdited] = useState(false)
+  const [clientSearchResetKey, setClientSearchResetKey] = useState(0)
   const [ownerLocations, setOwnerLocations] = useState<ApplicationClientLocation[]>([])
   const [agentLocations, setAgentLocations] = useState<ApplicationClientLocation[]>([])
   const [ownerLookupLoading, setOwnerLookupLoading] = useState(false)
@@ -283,6 +287,8 @@ const BlanketOicPermitCreateForm = ({
   const currentFormRef = useRef(form)
   const ownerLookupRequestRef = useRef(0)
   const agentLookupRequestRef = useRef(0)
+  const ownerPendingLookupRef = useRef<PendingClientLookup | null>(null)
+  const agentPendingLookupRef = useRef<PendingClientLookup | null>(null)
   currentFormRef.current = form
   const formErrors = validateForm(form, agentUsed)
   const isDraftDirty = formEdited && !formValuesEqual({ form, agentUsed }, draftBaselineRef.current)
@@ -367,9 +373,14 @@ const BlanketOicPermitCreateForm = ({
 
   const loadClientLocations = async (
     kind: ClientKind,
-  ): Promise<{ clientNumber: string; locationCode: string }> => {
-    const clientNumber =
-      kind === 'owner' ? form.ownerClientNumber.trim() : form.agentClientNumber.trim()
+    clientNumberOverride?: string,
+  ): Promise<ClientLookupResult> => {
+    const clientNumber = (
+      clientNumberOverride ??
+      (kind === 'owner'
+        ? currentFormRef.current.ownerClientNumber
+        : currentFormRef.current.agentClientNumber)
+    ).trim()
     const setLocations = kind === 'owner' ? setOwnerLocations : setAgentLocations
     const setLoading = kind === 'owner' ? setOwnerLookupLoading : setAgentLookupLoading
     const setAttempted = kind === 'owner' ? setOwnerLookupAttempted : setAgentLookupAttempted
@@ -450,6 +461,73 @@ const BlanketOicPermitCreateForm = ({
     }
   }
 
+  const requestClientLocations = (
+    kind: ClientKind,
+    clientNumberOverride?: string,
+  ): Promise<ClientLookupResult> => {
+    const clientNumber = (
+      clientNumberOverride ??
+      (kind === 'owner'
+        ? currentFormRef.current.ownerClientNumber
+        : currentFormRef.current.agentClientNumber)
+    ).trim()
+    const pendingLookupRef = kind === 'owner' ? ownerPendingLookupRef : agentPendingLookupRef
+    const pending = pendingLookupRef.current
+    if (pending?.clientNumber === clientNumber) {
+      return pending.promise
+    }
+
+    const promise = loadClientLocations(kind, clientNumber)
+    const nextPending = { clientNumber, promise }
+    pendingLookupRef.current = nextPending
+    void promise.then(
+      () => {
+        if (pendingLookupRef.current === nextPending) {
+          pendingLookupRef.current = null
+        }
+      },
+      () => {
+        if (pendingLookupRef.current === nextPending) {
+          pendingLookupRef.current = null
+        }
+      },
+    )
+    return promise
+  }
+
+  const selectClient = (kind: ClientKind, clientNumber: string): void => {
+    const requestRef = kind === 'owner' ? ownerLookupRequestRef : agentLookupRequestRef
+    const pendingLookupRef = kind === 'owner' ? ownerPendingLookupRef : agentPendingLookupRef
+    const setLoading = kind === 'owner' ? setOwnerLookupLoading : setAgentLookupLoading
+    const setLocations = kind === 'owner' ? setOwnerLocations : setAgentLocations
+    const setAttempted = kind === 'owner' ? setOwnerLookupAttempted : setAgentLookupAttempted
+    const clientNumberField: FormField =
+      kind === 'owner' ? 'ownerClientNumber' : 'agentClientNumber'
+    const locationField: FormField =
+      kind === 'owner' ? 'ownerClientLocation' : 'agentClientLocation'
+    const nextForm = {
+      ...currentFormRef.current,
+      [clientNumberField]: clientNumber,
+      [locationField]: '',
+    }
+
+    requestRef.current += 1
+    pendingLookupRef.current = null
+    setLoading(false)
+    setLocations([])
+    setAttempted(false)
+    markFormEdited()
+    currentFormRef.current = nextForm
+    setForm((current) => ({
+      ...current,
+      [clientNumberField]: clientNumber,
+      [locationField]: '',
+    }))
+    if (clientNumber) {
+      void requestClientLocations(kind, clientNumber)
+    }
+  }
+
   const markDraftSaved = (nextForm: BlanketOicPermitForm) => {
     draftBaselineRef.current = { form: nextForm, agentUsed }
     formEditedRef.current = false
@@ -462,6 +540,7 @@ const BlanketOicPermitCreateForm = ({
     setAgentUsed(baseline.agentUsed)
     formEditedRef.current = false
     setFormEdited(false)
+    setClientSearchResetKey((current) => current + 1)
   }
 
   const reportUnknownOutcome = (message: string, nextForm: BlanketOicPermitForm = form) => {
@@ -493,7 +572,7 @@ const BlanketOicPermitCreateForm = ({
         (!ownerLocation || !hasSelectedOwnerLocation || ownerClientNumber.length < 8) &&
         /^\d{1,8}$/.test(ownerClientNumber)
       ) {
-        const confirmedOwner = await loadClientLocations('owner')
+        const confirmedOwner = await requestClientLocations('owner')
         ownerClientNumber = confirmedOwner.clientNumber
         ownerLocation = confirmedOwner.locationCode
       }
@@ -502,7 +581,7 @@ const BlanketOicPermitCreateForm = ({
         (!agentLocation || !hasSelectedAgentLocation || agentClientNumber.length < 8) &&
         /^\d{1,8}$/.test(agentClientNumber)
       ) {
-        const confirmedAgent = await loadClientLocations('agent')
+        const confirmedAgent = await requestClientLocations('agent')
         agentClientNumber = confirmedAgent.clientNumber
         agentLocation = confirmedAgent.locationCode
       }
@@ -796,11 +875,13 @@ const BlanketOicPermitCreateForm = ({
               <fieldset className="legacy-form-fieldset">
                 <legend className="cds--visually-hidden">Applicant</legend>
                 <div className="legacy-search-grid">
-                  <TextInput
+                  <ForestClientComboBox
                     id="boic-permit-owner-client"
                     labelText={requiredLabel('Applicant client number')}
-                    aria-required="true"
                     value={form.ownerClientNumber}
+                    resetKey={clientSearchResetKey}
+                    counterpartyClientNumber={form.agentClientNumber}
+                    required
                     invalid={
                       !!fieldError('ownerClientNumber') ||
                       (ownerLookupAttempted &&
@@ -811,16 +892,12 @@ const BlanketOicPermitCreateForm = ({
                       fieldError('ownerClientNumber') ||
                       'No verified locations were found for this applicant.'
                     }
-                    maxLength={8}
-                    onChange={(event) => {
-                      ownerLookupRequestRef.current += 1
-                      setOwnerLookupLoading(false)
-                      setField('ownerClientNumber', event.target.value)
-                      setField('ownerClientLocation', '')
-                      setOwnerLocations([])
-                      setOwnerLookupAttempted(false)
+                    onBlur={() => {
+                      if (form.ownerClientNumber.trim()) {
+                        void requestClientLocations('owner')
+                      }
                     }}
-                    onBlur={() => void loadClientLocations('owner')}
+                    onChange={(ownerClientNumber) => selectClient('owner', ownerClientNumber)}
                   />
                   <Select
                     id="boic-permit-owner-location"
@@ -877,11 +954,13 @@ const BlanketOicPermitCreateForm = ({
                       Agent information
                     </h2>
                     <div className="legacy-search-grid">
-                      <TextInput
+                      <ForestClientComboBox
                         id="boic-permit-agent-client"
                         labelText={requiredLabel('Agent client number')}
-                        aria-required="true"
                         value={form.agentClientNumber}
+                        resetKey={clientSearchResetKey}
+                        counterpartyClientNumber={form.ownerClientNumber}
+                        required
                         invalid={
                           !!fieldError('agentClientNumber') ||
                           (agentLookupAttempted &&
@@ -892,16 +971,12 @@ const BlanketOicPermitCreateForm = ({
                           fieldError('agentClientNumber') ||
                           'No verified locations were found for this agent.'
                         }
-                        maxLength={8}
-                        onChange={(event) => {
-                          agentLookupRequestRef.current += 1
-                          setAgentLookupLoading(false)
-                          setField('agentClientNumber', event.target.value)
-                          setField('agentClientLocation', '')
-                          setAgentLocations([])
-                          setAgentLookupAttempted(false)
+                        onBlur={() => {
+                          if (form.agentClientNumber.trim()) {
+                            void requestClientLocations('agent')
+                          }
                         }}
-                        onBlur={() => void loadClientLocations('agent')}
+                        onChange={(agentClientNumber) => selectClient('agent', agentClientNumber)}
                       />
                       <Select
                         id="boic-permit-agent-location"
