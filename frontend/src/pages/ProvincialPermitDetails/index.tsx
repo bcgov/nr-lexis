@@ -5000,7 +5000,7 @@ const ProvincialPermitDetailsPage = () => {
                       <Column sm={4} md={8} lg={16}>
                         <Tile>
                           <h2 className="detail-tile-title">
-                            {usesReviewedPermitFlow ? 'Applications' : 'Associated applications'}
+                            {ministerialPermit ? 'Applications' : 'Associated applications'}
                           </h2>
                           {ministerialPermit ? (
                             renderMinisterialPermitApplications()
@@ -6112,23 +6112,19 @@ const ProvincialPermitDetailsPage = () => {
                                     : 'No permit items available'
                                 }
                                 description={
-                                  usesReviewedPermitFlow ? (
-                                    ministerialPermit ? (
-                                      <>
-                                        Scale comes from the applications selected for this permit.
-                                        Select an application on the{' '}
-                                        <button
-                                          type="button"
-                                          className="cds--link"
-                                          onClick={() => selectPermitTab('permit')}
-                                        >
-                                          Permit tab
-                                        </button>
-                                        .
-                                      </>
-                                    ) : (
-                                      'Add a Blanket OIC package and its scale details to build this permit.'
-                                    )
+                                  ministerialPermit ? (
+                                    <>
+                                      Scale comes from the applications selected for this permit.
+                                      Select an application on the{' '}
+                                      <button
+                                        type="button"
+                                        className="cds--link"
+                                        onClick={() => selectPermitTab('permit')}
+                                      >
+                                        Permit tab
+                                      </button>
+                                      .
+                                    </>
                                   ) : detail.blanketOic ? (
                                     'No scale entries are available for the selected package.'
                                   ) : (
