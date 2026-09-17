@@ -32,6 +32,8 @@ const clientLabel = (client: ForestClientSuggestion | string | null | undefined)
 
 const EMPTY_SUGGESTIONS: ForestClientSuggestion[] = []
 
+// INTENTIONAL_LEGACY_DIVERGENCE(SEARCHABLE_CLIENT_SELECTION): Offer name/number
+// discovery while passing only the selected client number to search and save workflows.
 export default function ForestClientComboBox(props: ForestClientComboBoxProps) {
   const auth = use(AuthContext)
   const scope = JSON.stringify([
