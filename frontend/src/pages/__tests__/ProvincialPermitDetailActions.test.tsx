@@ -2723,7 +2723,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.queryByRole('button', { name: 'close notification' })).not.toBeInTheDocument()
   })
 
-  it('shows recalculated Blanket OIC package pieces and volume on the Scale tab', async () => {
+  it('shows recalculated Blanket OIC package pieces while retaining package volume on the Scale tab', async () => {
     mockedFetchProvincialPermitDetail.mockResolvedValue({
       ...permitDetail,
       exemptionTypeDescription: 'Blanket OIC',
@@ -2792,7 +2792,6 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(
       within(packageTable).queryByRole('columnheader', { name: 'Reprocessed' }),
     ).not.toBeInTheDocument()
-    expect(screen.getByRole('cell', { name: '118.5' })).toBeInTheDocument()
     expect(
       within(packageTable).queryByRole('cell', { name: 'APP - Approved' }),
     ).not.toBeInTheDocument()
@@ -2802,13 +2801,41 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(packageRow).toBeTruthy()
     expect(within(packageRow as HTMLElement).getByRole('cell', { name: '12' })).toBeInTheDocument()
     expect(
-      within(packageRow as HTMLElement).getByRole('cell', { name: '10.5' }),
+      within(packageRow as HTMLElement).getByRole('cell', { name: '120.5' }),
+    ).toBeInTheDocument()
+    expect(
+      within(packageRow as HTMLElement).getByRole('cell', { name: '118.5' }),
     ).toBeInTheDocument()
     expect(mockedFetchProvincialPermitDetailTabs).toHaveBeenCalledWith({
       permitNumber: '777',
       receiptNumber: 'R-1',
       blanketOic: true,
     })
+  })
+
+  it('keeps a saved Blanket OIC package volume when no scale rows are attached', async () => {
+    configureEditableBlanketOicPackage()
+    mockedFetchProvincialPermitDetailTabs.mockResolvedValue({
+      ...tabsResult,
+      packages: [
+        {
+          ...editableBlanketOicPackage,
+          packageNumber: 'T260917R1',
+          packageVolume: '1.0',
+          currentPackageVolume: '0.0',
+        },
+      ],
+      items: [],
+    })
+
+    renderPermitDetails()
+    await selectPermitDetailTab('Scale')
+
+    const packageRow = (await screen.findByRole('cell', { name: 'T260917R1' })).closest('tr')
+    expect(packageRow).toBeTruthy()
+    expect(within(packageRow as HTMLElement).getByRole('cell', { name: '0' })).toBeInTheDocument()
+    expect(within(packageRow as HTMLElement).getByRole('cell', { name: '1.0' })).toBeInTheDocument()
+    expect(within(packageRow as HTMLElement).getByRole('cell', { name: '0.0' })).toBeInTheDocument()
   })
 
   it('omits the Permit column from Blanket OIC scale rows', async () => {

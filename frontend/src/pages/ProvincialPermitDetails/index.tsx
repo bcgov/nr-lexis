@@ -5693,7 +5693,7 @@ const ProvincialPermitDetailsPage = () => {
                                         </TableCell>
                                       )}
                                       <TableCell>
-                                        {usesReviewedPermitFlow
+                                        {ministerialPermit
                                           ? (
                                               selectedPermitScaleTotalsByPackage.get(
                                                 row.packageNumber,
