@@ -53,6 +53,7 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScaleFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScalesForPackageRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitSummaryRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitTotalFeesRpcResponseDto;
+import ca.bc.gov.mof.lexis.repository.exemption.ExemptionDetailsRpcRepository;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.AttachmentTypeRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.CountryCodeRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.DocumentRow;
@@ -170,6 +171,11 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   private static final Set<Long> GBMS_INTERIOR_ORG_UNITS =
       Set.of(1833L, 1834L, 1903L, 1904L, 1905L, 1906L, 1907L, 1908L);
   private static final Set<Long> GBMS_COASTAL_ORG_UNITS = Set.of(1835L, 1909L, 1910L);
+  private static final List<Set<Long>> BLANKET_OIC_REGION_GROUPS =
+      List.of(
+          Set.of(1909L, 1910L),
+          Set.of(1905L, 1906L, 1908L),
+          Set.of(1903L, 1904L, 1907L));
   private static final long RSK_REGION_CODE = 1908L;
   private static final long RSC_REGION_CODE = 1909L;
   private static final long RWC_REGION_CODE = 1910L;
@@ -181,6 +187,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   private final PermitRpcRepository repository;
   private final LexisApplicationService applicationService;
   private final ExemptionService exemptionService;
+  private final ExemptionDetailsRpcRepository exemptionDetailsRpcRepository;
   private final ApplicationReviewRepository applicationReviewRepository;
   private final ClientLookupService clientLookupService;
   private final ApplicationNotificationRecipientResolver notificationRecipientResolver;
@@ -194,6 +201,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       PermitRpcRepository repository,
       LexisApplicationService applicationService,
       ExemptionService exemptionService,
+      ExemptionDetailsRpcRepository exemptionDetailsRpcRepository,
       ApplicationReviewRepository applicationReviewRepository,
       ClientLookupService clientLookupService,
       ApplicationNotificationRecipientResolver notificationRecipientResolver,
@@ -204,6 +212,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     this.repository = repository;
     this.applicationService = applicationService;
     this.exemptionService = exemptionService;
+    this.exemptionDetailsRpcRepository = exemptionDetailsRpcRepository;
     this.applicationReviewRepository = applicationReviewRepository;
     this.clientLookupService = clientLookupService;
     this.notificationRecipientResolver = notificationRecipientResolver;
@@ -1635,6 +1644,9 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
             : application.orgUnitNo();
     if (orgUnitNumber == null) {
       errors.add("A valid region is required.");
+    } else if (blanketOic) {
+      validateBlanketOicRegion(
+          exemptionBinding.detail().exemptionNumber(), orgUnitNumber, errors);
     }
 
     String permitStatus =
@@ -1667,6 +1679,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       errors.add("A valid Permit Request Volume is required.");
     }
     validateSubmittedOicRequestLimits(request, blanketOic, errors);
+    validateRequiredBlanketOicRequestLimitsOnCreate(request, blanketOic, errors);
 
     String submittedGrowthTypeCode =
         firstNonNull(trimToNull(request.packageAgeClass()), trimToNull(request.permitGrowthType()));
@@ -1899,6 +1912,19 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     boolean allowActiveDraftDateClear =
         EXPORT_PERMIT_STATUS_ACTIVE.equalsIgnoreCase(current.permitStatusCode())
             && EXPORT_PERMIT_STATUS_ACTIVE.equals(targetPermitStatusCode);
+    Long targetOrgUnitNumber =
+        firstNonNull(
+            parsePositiveLong(firstNonNull(request.orgUnitNumber(), request.oicRegion())),
+            current.orgUnitNo());
+    if (targetBlanketOic
+        && current.oicApplicationNumber() == null
+        && !java.util.Objects.equals(current.orgUnitNo(), targetOrgUnitNumber)) {
+      validateBlanketOicRegion(
+          targetExemption.detail().exemptionNumber(), targetOrgUnitNumber, exemptionErrors);
+      if (!exemptionErrors.isEmpty()) {
+        return failureMutationResponse(exemptionErrors, permitNumber);
+      }
+    }
 
     Double overrideFee = parseDouble(request.overrideFee());
     String overrideComment = trimToNull(request.overrideComment());
@@ -1969,7 +1995,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
             targetAgentClientNumber,
             targetAgentClientLocation,
             targetExemptionNumber,
-            firstNonNull(parsePositiveLong(firstNonNull(request.orgUnitNumber(), request.oicRegion())), current.orgUnitNo()),
+            targetOrgUnitNumber,
             mergeSubmittedText(request.portOfExport(), current.portOfExportCode()),
             normalizeCode(
                 mergeSubmittedText(request.permitStatus(), current.permitStatusCode())),
@@ -5086,6 +5112,45 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
 
   private boolean isInvalidSubmittedDouble(String submitted, Double parsed) {
     return trimToNull(submitted) != null && parsed == null;
+  }
+
+  private void validateRequiredBlanketOicRequestLimitsOnCreate(
+      PermitMutationRequestDto request, boolean blanketOic, List<String> errors) {
+    if (!blanketOic || request == null) {
+      return;
+    }
+    if (trimToNull(request.oicPermitTotalPieces()) == null) {
+      errors.add("Permit Request Pieces is required.");
+    }
+    if (trimToNull(request.oicPermitTotalVolume()) == null) {
+      errors.add("Permit Request Volume is required.");
+    }
+  }
+
+  private void validateBlanketOicRegion(
+      String exemptionNumber, Long regionNumber, List<String> errors) {
+    List<Long> exemptionRegions =
+        exemptionDetailsRpcRepository.findExemptionOrgUnitNumbers(exemptionNumber);
+    Set<Long> allowedRegions = null;
+    if (exemptionRegions != null) {
+      for (Long exemptionRegion : exemptionRegions) {
+        for (Set<Long> regionGroup : BLANKET_OIC_REGION_GROUPS) {
+          if (regionGroup.contains(exemptionRegion)) {
+            allowedRegions = regionGroup;
+            break;
+          }
+        }
+        if (allowedRegions != null) {
+          break;
+        }
+      }
+    }
+
+    if (allowedRegions == null) {
+      errors.add("No recognized region is available for this exemption.");
+    } else if (regionNumber == null || !allowedRegions.contains(regionNumber)) {
+      errors.add("The selected region is not available for this exemption.");
+    }
   }
 
   private void validateExplicitBlanketOicRequestLimitClears(
