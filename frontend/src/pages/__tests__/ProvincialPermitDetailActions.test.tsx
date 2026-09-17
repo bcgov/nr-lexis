@@ -2419,6 +2419,252 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(await screen.findByText('Scale detail was removed from the permit.')).toBeInTheDocument()
   })
 
+  it('restores a Ministerial application after its last scale is removed', async () => {
+    const initialDetail = configureMinisterialActivePermit({
+      receiptNumber: null,
+      numberOfPieces: 9,
+      permitVolume: 28.4,
+      exemptionVolumeRemaining: 344.2,
+    })
+    const refreshedDetail = {
+      ...initialDetail,
+      numberOfPieces: 0,
+      permitVolume: 0,
+    }
+    const attachedScale = {
+      id: 'SCALE-1',
+      timberMark: 'TM-1',
+      scaleType: '',
+      species: 'Fir',
+      grade: 'A',
+      pieces: 9,
+      volume: 28.4,
+      packageNumber: 'PKG-9',
+      permitNumber: '777',
+      includedInPermit: true,
+    }
+    mockedFetchProvincialPermitDetail
+      .mockResolvedValueOnce(initialDetail)
+      .mockResolvedValue(refreshedDetail)
+    mockedFetchProvincialPermitExemptionContext.mockResolvedValue({
+      approvedExemptionVolume: 400,
+      exemptionVolumeRemaining: 372.6,
+      exemptionTypeDescription: 'Ministerial',
+      blanketOic: false,
+    })
+    mockedFetchProvincialPermitDetailTabs
+      .mockResolvedValueOnce({
+        ...tabsResult,
+        applications: ['APP-SCALE'],
+        items: [attachedScale],
+      })
+      .mockResolvedValue({
+        ...tabsResult,
+        applications: [],
+        items: [{ ...attachedScale, permitNumber: '', includedInPermit: false }],
+      })
+    mockedFetchAvailablePermitApplications
+      .mockResolvedValueOnce({
+        applicationList: [],
+        applicationItems: [
+          {
+            applicationNumber: 'APP-SCALE',
+            disabled: true,
+            disabledReason: 'Already associated with this permit.',
+            unassignedPieces: null,
+            unassignedVolume: null,
+          },
+        ],
+        errorMessage: '',
+      })
+      .mockResolvedValue({
+        applicationList: ['APP-SCALE'],
+        applicationItems: [
+          {
+            applicationNumber: 'APP-SCALE',
+            disabled: false,
+            disabledReason: '',
+            unassignedPieces: 9,
+            unassignedVolume: 28.4,
+          },
+        ],
+        errorMessage: '',
+      })
+    mockedUpdatePermitScaleAttachment.mockResolvedValue({
+      success: true,
+      message: 'Scale detail was removed from the permit.',
+      errors: [],
+      warnings: [],
+    })
+
+    renderPermitDetails()
+
+    expect(
+      await screen.findByRole('checkbox', {
+        name: 'Include application APP-SCALE in permit',
+      }),
+    ).toBeDisabled()
+    await selectPermitDetailTab('Scale')
+    const includeScale = await screen.findByRole('checkbox', {
+      name: 'Include scale SCALE-1 in permit',
+    })
+    await waitFor(() => expect(includeScale).toBeEnabled())
+    await userEvent.click(includeScale)
+
+    await waitFor(() => {
+      expect(mockedUpdatePermitScaleAttachment).toHaveBeenCalledWith({
+        scaleId: 'SCALE-1',
+        permitNumber: '777',
+        attachInd: false,
+      })
+    })
+    await selectPermitDetailTab('Permit')
+
+    await waitFor(() => {
+      const pieces = screen.getByText('Current permit pieces').parentElement?.querySelector('dd')
+      const volume = screen
+        .getByText('Current permit volume (m³)')
+        .parentElement?.querySelector('dd')
+      const remaining = screen
+        .getByText('Total volume remaining (m³)')
+        .parentElement?.querySelector('dd')
+      expect(pieces).toHaveTextContent('0')
+      expect(volume).toHaveTextContent('0')
+      expect(remaining).toHaveTextContent('372.6')
+      expect(mockedFetchAvailablePermitApplications).toHaveBeenLastCalledWith('EX-9', [])
+    })
+    const restoredApplication = await screen.findByRole('checkbox', {
+      name: 'Include application APP-SCALE in permit',
+    })
+    expect(restoredApplication).toBeEnabled()
+    const availableApplications = screen.getByRole('region', {
+      name: 'Applications available for this permit',
+    })
+    const applicationRow = within(availableApplications)
+      .getByRole('link', { name: 'APP-SCALE' })
+      .closest('tr')
+    expect(applicationRow).toBeTruthy()
+    expect(within(applicationRow as HTMLElement).getByText('9')).toBeInTheDocument()
+    expect(within(applicationRow as HTMLElement).getByText('28.4')).toBeInTheDocument()
+  })
+
+  it('keeps a Ministerial application unavailable while another scale remains attached', async () => {
+    const initialDetail = configureMinisterialActivePermit({
+      receiptNumber: null,
+      numberOfPieces: 9,
+      permitVolume: 28.4,
+      exemptionVolumeRemaining: 344.2,
+    })
+    const refreshedDetail = {
+      ...initialDetail,
+      numberOfPieces: 5,
+      permitVolume: 18.4,
+    }
+    const scaleToRemove = {
+      id: 'SCALE-1',
+      timberMark: 'TM-1',
+      scaleType: '',
+      species: 'Fir',
+      grade: 'A',
+      pieces: 4,
+      volume: 10,
+      packageNumber: 'PKG-9',
+      permitNumber: '777',
+      includedInPermit: true,
+    }
+    const retainedScale = {
+      id: 'SCALE-2',
+      timberMark: 'TM-2',
+      scaleType: '',
+      species: 'Cedar',
+      grade: 'B',
+      pieces: 5,
+      volume: 18.4,
+      packageNumber: 'PKG-9',
+      permitNumber: '777',
+      includedInPermit: true,
+    }
+    mockedFetchProvincialPermitDetail
+      .mockResolvedValueOnce(initialDetail)
+      .mockResolvedValue(refreshedDetail)
+    mockedFetchProvincialPermitExemptionContext.mockResolvedValue({
+      approvedExemptionVolume: 400,
+      exemptionVolumeRemaining: 354.2,
+      exemptionTypeDescription: 'Ministerial',
+      blanketOic: false,
+    })
+    mockedFetchProvincialPermitDetailTabs
+      .mockResolvedValueOnce({
+        ...tabsResult,
+        applications: ['APP-SCALE'],
+        items: [scaleToRemove, retainedScale],
+      })
+      .mockResolvedValue({
+        ...tabsResult,
+        applications: ['APP-SCALE'],
+        items: [{ ...scaleToRemove, permitNumber: '', includedInPermit: false }, retainedScale],
+      })
+    mockedFetchAvailablePermitApplications.mockResolvedValue({
+      applicationList: [],
+      applicationItems: [
+        {
+          applicationNumber: 'APP-SCALE',
+          disabled: true,
+          disabledReason: 'Already associated with this permit.',
+          unassignedPieces: null,
+          unassignedVolume: null,
+        },
+      ],
+      errorMessage: '',
+    })
+    mockedUpdatePermitScaleAttachment.mockResolvedValue({
+      success: true,
+      message: 'Scale detail was removed from the permit.',
+      errors: [],
+      warnings: [],
+    })
+
+    renderPermitDetails()
+
+    await screen.findByRole('checkbox', {
+      name: 'Include application APP-SCALE in permit',
+    })
+    await selectPermitDetailTab('Scale')
+    const includeScale = await screen.findByRole('checkbox', {
+      name: 'Include scale SCALE-1 in permit',
+    })
+    await waitFor(() => expect(includeScale).toBeEnabled())
+    await userEvent.click(includeScale)
+
+    await waitFor(() => {
+      expect(mockedUpdatePermitScaleAttachment).toHaveBeenCalledWith({
+        scaleId: 'SCALE-1',
+        permitNumber: '777',
+        attachInd: false,
+      })
+    })
+    await selectPermitDetailTab('Permit')
+
+    await waitFor(() => {
+      const pieces = screen.getByText('Current permit pieces').parentElement?.querySelector('dd')
+      const volume = screen
+        .getByText('Current permit volume (m³)')
+        .parentElement?.querySelector('dd')
+      const remaining = screen
+        .getByText('Total volume remaining (m³)')
+        .parentElement?.querySelector('dd')
+      expect(pieces).toHaveTextContent('5')
+      expect(volume).toHaveTextContent('18.4')
+      expect(remaining).toHaveTextContent('354.2')
+      expect(mockedFetchAvailablePermitApplications).toHaveBeenLastCalledWith('EX-9', ['APP-SCALE'])
+    })
+    expect(
+      screen.getByRole('checkbox', {
+        name: 'Include application APP-SCALE in permit',
+      }),
+    ).toBeDisabled()
+  })
+
   it.each([
     { permitStatusCode: 'PPD', permitStatusDescription: 'Payment pending' },
     { permitStatusCode: 'EXP', permitStatusDescription: 'Expired' },

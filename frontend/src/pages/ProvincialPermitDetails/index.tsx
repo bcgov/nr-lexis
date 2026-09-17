@@ -3067,6 +3067,10 @@ const ProvincialPermitDetailsPage = () => {
           return
         }
 
+        setAvailablePermitApplications([])
+        setAvailablePermitApplicationItems(null)
+        setHasLoadedAvailablePermitApplications(false)
+        setAvailablePermitApplicationsError('')
         await reloadPermitScaleState()
         setActionInfoMessage(result.message || 'Permit item rows were updated.')
       } catch (error) {
