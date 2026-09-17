@@ -1,0 +1,50 @@
+.boic-permit-details {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.boic-permit-details__status,
+.boic-permit-details__pair,
+.boic-permit-details__dates {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1fr);
+  margin: 0;
+}
+
+.boic-permit-details__region {
+  max-inline-size: 22rem;
+}
+
+.boic-permit-details__dates {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+}
+
+.boic-permit-details__pair > *,
+.boic-permit-details__dates > *,
+.boic-permit-details__remarks,
+.boic-permit-details__region {
+  min-inline-size: 0;
+}
+
+.boic-permit-details__dates .cds--date-picker,
+.boic-permit-details__dates .cds--date-picker-container,
+.boic-permit-details__dates .cds--date-picker-input__wrapper,
+.boic-permit-details__dates .cds--date-picker-input__wrapper > span,
+.boic-permit-details__dates .cds--date-picker--single .cds--date-picker__input,
+.boic-permit-details__dates .cds--date-picker-input__wrapper input,
+.boic-permit-details__pair .cds--text-input,
+.boic-permit-details__remarks .cds--text-area {
+  inline-size: 100%;
+  max-inline-size: 100%;
+}
+
+.boic-permit-agent-information {
+  margin-block-start: 1.5rem;
+}
+
+@media (min-width: 672px) {
+  .boic-permit-details__pair {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

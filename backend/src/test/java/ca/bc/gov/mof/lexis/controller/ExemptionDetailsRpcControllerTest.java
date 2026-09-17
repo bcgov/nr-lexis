@@ -103,6 +103,40 @@ class ExemptionDetailsRpcControllerTest {
   }
 
   @Test
+  void regionContextShouldAuthorizeExemptionWithoutAcquiringAnEditLock() {
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken("idir\\admin", "n/a");
+    controller.setProvincialAuthorizationService(provincialAuthorizationService);
+    controller.setApplicationEditLockService(editLockService);
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getEditContext("EX-700"))
+        .thenReturn(new ExemptionDetailsRpcService.ExemptionEditContext(
+            false, null, List.of(1909L, 1910L)));
+
+    var response = controller.getRegionContext(" EX-700 ", authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody().exemptionNumber()).isEqualTo("EX-700");
+    assertThat(response.getBody().regionNumbers()).containsExactly(1909L, 1910L);
+    verify(provincialAuthorizationService).requireExemption(authentication, "EX-700");
+    verifyNoInteractions(editLockService, authorizationService);
+  }
+
+  @Test
+  void regionContextShouldRejectAnInaccessibleExemptionBeforeReadingRegions() {
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken("bceid\\submitter", "n/a");
+    controller.setProvincialAuthorizationService(provincialAuthorizationService);
+    controller.setApplicationEditLockService(editLockService);
+    doThrow(new AccessDeniedException("exemption denied"))
+        .when(provincialAuthorizationService).requireExemption(authentication, "EX-700");
+
+    assertThatThrownBy(() -> controller.getRegionContext("EX-700", authentication))
+        .isInstanceOf(AccessDeniedException.class);
+    verifyNoInteractions(service, editLockService);
+  }
+
+  @Test
   void createPreviewShouldAuthorizeApplicationsAndReturnDerivedDefaults() {
     TestingAuthenticationToken authentication =
         new TestingAuthenticationToken("idir\\approver", "n/a");

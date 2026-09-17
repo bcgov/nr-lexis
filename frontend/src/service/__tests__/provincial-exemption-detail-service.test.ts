@@ -5,6 +5,7 @@ import {
   fetchExemptionApplications,
   fetchExemptionBlanketOicTotals,
   fetchExemptionEditContext,
+  fetchExemptionRegionContext,
   fetchExemptionPermits,
   removeApplicationFromExemption,
   sendExemptionApprovalEmails,
@@ -33,6 +34,31 @@ describe('provincial exemption detail service', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
+
+  it('loads regions without registering exemption edit state', async () => {
+    getMock.mockResolvedValue({
+      data: { exemptionNumber: 'BOIC-205', regionNumbers: [1909, 1910] },
+    })
+
+    await expect(fetchExemptionRegionContext(' BOIC-205 ')).resolves.toEqual({
+      exemptionNumber: 'BOIC-205',
+      regionNumbers: ['1909', '1910'],
+    })
+    expect(getMock).toHaveBeenCalledWith('/lexis/rpc/exemption-details/region-context', {
+      params: { exemptionNumber: 'BOIC-205' },
+    })
+    expect(registerRecordVersionMock).not.toHaveBeenCalled()
+  })
+
+  it.each([undefined, {}, { exemptionNumber: 'BOIC-205', regionNumbers: null }])(
+    'rejects unavailable or malformed region context: %j',
+    async (data) => {
+      getMock.mockResolvedValue({ data })
+      await expect(fetchExemptionRegionContext('BOIC-205')).rejects.toThrow(
+        'Unexpected exemption region context payload.',
+      )
+    },
+  )
 
   it('rejects an empty edit-context response instead of treating it as editable state', async () => {
     getMock.mockResolvedValue({ data: undefined, status: 204 })

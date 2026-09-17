@@ -1582,7 +1582,7 @@ class PermitDetailsRpcControllerTest {
   }
 
   @Test
-  void updatePermitShouldRejectSubmittedClientChangeForScopedBlanketOicPermit() {
+  void updatePermitShouldAuthorizeScopedBlanketOicPermitAgainstPersistedClientsDespiteForgedRequest() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(request.getParameterMap())
         .thenReturn(
@@ -1596,7 +1596,39 @@ class PermitDetailsRpcControllerTest {
     TestingAuthenticationToken authentication = scopedSubmitterWithSavePermit();
     when(provincialAuthorizationService.hasClientScope(authentication)).thenReturn(true);
     when(provincialAuthorizationService.canCreateForClient(
-            authentication, "00099999", "00088888"))
+            authentication, "00077881", "00077880"))
+        .thenReturn(true);
+    when(service.getClientScopeForPermitMutation(7000123L))
+        .thenReturn(new PermitDetailsRpcService.PermitMutationClientScope("00077881", "00077880"));
+    when(service.getApplicationNumbersForPermitMutation(7000123L)).thenReturn(List.of());
+    when(service.updatePermit(any(PermitMutationRequestDto.class), eq("bceid\\submitter")))
+        .thenReturn(successfulPermitUpdate());
+    allowApplicationMutationLocksForUser("bceid\\submitter");
+
+    ResponseEntity<PermitMutationRpcResponseDto> response =
+        controller.updatePermit(request, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    verify(provincialAuthorizationService, times(2))
+        .canCreateForClient(authentication, "00077881", "00077880");
+    verify(provincialAuthorizationService, never())
+        .canCreateForClient(authentication, "00099999", "00088888");
+    verify(service, times(2)).getClientScopeForPermitMutation(7000123L);
+    verify(service).updatePermit(any(), eq("bceid\\submitter"));
+  }
+
+  @Test
+  void updatePermitShouldRejectScopedBlanketOicPermitWithOutOfScopePersistedClientsWhenRequestOmitsThem() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameterMap()).thenReturn(Map.of("permitNumber", new String[] {"7000123"}));
+    when(service.getExemptionNumberForPermitMutation(7000123L)).thenReturn("EX-BOIC");
+    when(exemptionService.findAccessByExemptionNumber("EX-BOIC"))
+        .thenReturn(Optional.of(exemptionAccess("EX-BOIC", true)));
+    when(service.getClientScopeForPermitMutation(7000123L))
+        .thenReturn(new PermitDetailsRpcService.PermitMutationClientScope("00099999", null));
+    TestingAuthenticationToken authentication = scopedSubmitterWithSavePermit();
+    when(provincialAuthorizationService.hasClientScope(authentication)).thenReturn(true);
+    when(provincialAuthorizationService.canCreateForClient(authentication, "00099999", null))
         .thenReturn(false);
 
     ResponseEntity<PermitMutationRpcResponseDto> response =
@@ -1604,8 +1636,32 @@ class PermitDetailsRpcControllerTest {
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
     verify(provincialAuthorizationService)
-        .canCreateForClient(authentication, "00099999", "00088888");
+        .canCreateForClient(authentication, "00099999", null);
     verify(service, never()).updatePermit(any(), any());
+  }
+
+  @Test
+  void updatePermitShouldPreserveExplicitBlanketOicRequestLimitFieldsForValidation() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameterMap())
+        .thenReturn(
+            Map.of(
+                "permitNumber", new String[] {"7000123"},
+                "oicPermitTotalPieces", new String[] {""},
+                "oicPermitTotalVolume", new String[] {" "}));
+    when(service.updatePermit(any(PermitMutationRequestDto.class), eq("idir\\jsmith")))
+        .thenReturn(successfulPermitUpdate());
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+
+    ResponseEntity<PermitMutationRpcResponseDto> response =
+        controller.updatePermit(request, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    org.mockito.ArgumentCaptor<PermitMutationRequestDto> requestCaptor =
+        org.mockito.ArgumentCaptor.forClass(PermitMutationRequestDto.class);
+    verify(service).updatePermit(requestCaptor.capture(), eq("idir\\jsmith"));
+    assertThat(requestCaptor.getValue().oicPermitTotalPieces()).isEmpty();
+    assertThat(requestCaptor.getValue().oicPermitTotalVolume()).isEmpty();
   }
 
   @Test

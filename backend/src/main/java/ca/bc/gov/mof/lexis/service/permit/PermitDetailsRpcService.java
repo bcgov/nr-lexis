@@ -123,6 +123,8 @@ public interface PermitDetailsRpcService {
 
   String getExemptionNumberForPermitMutation(Long permitNumber);
 
+  PermitMutationClientScope getClientScopeForPermitMutation(Long permitNumber);
+
   List<Long> getApplicationNumbersForPermitMutation(Long permitNumber);
 
   List<Long> getApplicationNumbersForExemptionMutation(String exemptionNumber);
@@ -218,6 +220,8 @@ public interface PermitDetailsRpcService {
   boolean removeInvoiceDocument(Long documentId);
 
   record PermitEditContext(boolean overrideEnabled, String overrideFee, String overrideComment) {}
+
+  record PermitMutationClientScope(String ownerClientNumber, String agentClientNumber) {}
 
   @FunctionalInterface
   interface DocumentStreamer {

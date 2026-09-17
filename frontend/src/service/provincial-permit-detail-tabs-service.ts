@@ -602,10 +602,22 @@ export const fetchProvincialPermitDetailTabs = async (
 ): Promise<ProvincialPermitDetailTabsData> =>
   fetchProvincialPermitDetailTabsData(request, true, true)
 
+export type PermitAvailableApplicationItem = {
+  applicationNumber: string
+  disabled: boolean
+  disabledReason: string
+  unassignedPieces: number | null
+  unassignedVolume: number | null
+}
+
 export const fetchAvailablePermitApplications = async (
   exemptionNumber: string,
   selectedApplications: string[],
-): Promise<{ applicationList: string[]; errorMessage: string }> => {
+): Promise<{
+  applicationList: string[]
+  applicationItems?: PermitAvailableApplicationItem[]
+  errorMessage: string
+}> => {
   const response = await apiService.getCachedResponse<unknown>(
     '/lexis/rpc/permit-details/available-application-list',
     {
@@ -619,9 +631,39 @@ export const fetchAvailablePermitApplications = async (
     { ttlMs: PERMIT_TAB_CACHE_TTL_MS },
   )
   const payload = recordOrEmpty(response.status === 204 ? {} : response.data)
-  const applicationList = Array.isArray(payload.applicationList) ? payload.applicationList : []
+  const applicationList = (Array.isArray(payload.applicationList) ? payload.applicationList : [])
+    .map(asString)
+    .filter(Boolean)
+  const optionalTotal = (value: unknown): number | null =>
+    typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null
+  const applicationItems: PermitAvailableApplicationItem[] = Array.isArray(payload.applicationItems)
+    ? payload.applicationItems.flatMap((entry) => {
+        const item = recordOrEmpty(entry)
+        const applicationNumber = asString(item.applicationNumber)
+        if (!applicationNumber) return []
+        const disabled = item.disabled !== false || !applicationList.includes(applicationNumber)
+        return [
+          {
+            applicationNumber,
+            disabled,
+            disabledReason: disabled
+              ? asString(item.disabledReason) || 'This application is unavailable for this permit.'
+              : '',
+            unassignedPieces: optionalTotal(item.unassignedPieces),
+            unassignedVolume: optionalTotal(item.unassignedVolume),
+          },
+        ]
+      })
+    : applicationList.map((applicationNumber) => ({
+        applicationNumber,
+        disabled: false,
+        disabledReason: '',
+        unassignedPieces: null,
+        unassignedVolume: null,
+      }))
   return {
-    applicationList: applicationList.map(asString).filter(Boolean),
+    applicationList,
+    applicationItems,
     errorMessage: asString(payload.errorMessage),
   }
 }
