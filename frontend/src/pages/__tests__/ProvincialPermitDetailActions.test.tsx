@@ -52,6 +52,7 @@ import {
   fetchExemptionClientData,
   fetchExemptionClientLocations,
 } from '@/service/application-client-lookup-service'
+import { fetchExemptionRegionContext } from '@/service/provincial-exemption-detail-service'
 import { runReport } from '@/service/report-service'
 import {
   fetchProvincialApplicationOptions,
@@ -62,7 +63,6 @@ import {
   fetchApplicationRemainingSpecies,
   fetchApplicationSpeciesCodes,
   fetchApplicationEndUsesForSpeciesRegion,
-  fetchApplicationPackageStatusCodes,
 } from '@/service/provincial-application-items-service'
 import { fetchShippingReferenceOptions } from '@/service/shipping-reference-service'
 import { triggerBrowserDownload } from '@/utils/download'
@@ -126,6 +126,10 @@ vi.mock('@/service/application-client-lookup-service', () => ({
   fetchExemptionClientLocations: vi.fn(),
 }))
 
+vi.mock('@/service/provincial-exemption-detail-service', () => ({
+  fetchExemptionRegionContext: vi.fn(),
+}))
+
 vi.mock('@/service/report-service', () => ({
   ReportRequestError: class ReportRequestError extends Error {
     constructor(message: string) {
@@ -146,7 +150,6 @@ vi.mock('@/service/provincial-application-items-service', () => ({
   fetchApplicationRemainingSpecies: vi.fn(),
   fetchApplicationSpeciesCodes: vi.fn(),
   fetchApplicationEndUsesForSpeciesRegion: vi.fn(),
-  fetchApplicationPackageStatusCodes: vi.fn(),
 }))
 
 vi.mock('@/service/shipping-reference-service', () => ({
@@ -240,6 +243,7 @@ const mockedUpdatePermitShipping = vi.mocked(updatePermitShipping)
 const mockedFetchApplicationClientData = vi.mocked(fetchApplicationClientData)
 const mockedFetchExemptionClientData = vi.mocked(fetchExemptionClientData)
 const mockedFetchExemptionClientLocations = vi.mocked(fetchExemptionClientLocations)
+const mockedFetchExemptionRegionContext = vi.mocked(fetchExemptionRegionContext)
 const mockedFetchApplicationGradeCodes = vi.mocked(fetchApplicationGradeCodes)
 const mockedFetchApplicationSpeciesCodes = vi.mocked(fetchApplicationSpeciesCodes)
 const mockedRunReport = vi.mocked(runReport)
@@ -351,7 +355,14 @@ const gbmsHistoryRow = {
 }
 
 const selectPermitDetailTab = async (name: string) => {
-  const tab = await screen.findByRole('tab', { name })
+  await screen.findByRole('tab', { name: 'Permit' })
+  const reviewedFlowTabName =
+    name === 'Owner' && !screen.queryByRole('tab', { name: 'Owner' })
+      ? 'Applicant'
+      : name === 'Items' && !screen.queryByRole('tab', { name: 'Items' })
+        ? 'Scale'
+        : name
+  const tab = screen.getByRole('tab', { name: reviewedFlowTabName })
   if (tab.getAttribute('aria-selected') !== 'true') {
     await userEvent.click(tab)
   }
@@ -442,6 +453,28 @@ const configureActivePermit = () => {
   })
 }
 
+const configureMinisterialActivePermit = (overrides: Partial<ProvincialPermitDetail> = {}) => {
+  const ministerialPermitDetail: ProvincialPermitDetail = {
+    ...permitDetail,
+    permitStatusCode: 'ACT',
+    permitStatusDescription: 'Active',
+    exemptionTypeDescription: 'Ministerial',
+    blanketOic: false,
+    applicationNumber: null,
+    packageNumber: null,
+    ...overrides,
+  }
+  mockedFetchProvincialPermitDetail.mockResolvedValue(ministerialPermitDetail)
+  mockedFetchProvincialPermitDetailTabs.mockResolvedValue(tabsResult)
+  mockedFetchProvincialPermitExemptionContext.mockResolvedValue({
+    approvedExemptionVolume: ministerialPermitDetail.approvedExemptionVolume,
+    exemptionVolumeRemaining: ministerialPermitDetail.exemptionVolumeRemaining,
+    exemptionTypeDescription: 'Ministerial',
+    blanketOic: false,
+  })
+  return ministerialPermitDetail
+}
+
 const openBlanketOicPackageDeleteConfirmation = async () => {
   await selectPermitDetailTab('Items')
   const packageRow = (await screen.findByRole('cell', { name: 'BOIC-9' })).closest('tr')
@@ -464,9 +497,6 @@ describe('Provincial Permit Detail Action Smoke', () => {
       regions: [],
       currentSchedules: [],
     })
-    vi.mocked(fetchApplicationPackageStatusCodes).mockResolvedValue([
-      { code: 'ACT', description: 'Active' },
-    ])
     vi.mocked(fetchApplicationRemainingSpecies).mockImplementation(
       async (_region, _productType, selectedSpecies) =>
         [
@@ -502,8 +532,14 @@ describe('Provincial Permit Detail Action Smoke', () => {
       ],
       regions: [
         { value: '1903', label: 'Cariboo Natural Resource Region' },
+        { value: '1904', label: 'Kootenay-Boundary Natural Resource Region' },
+        { value: '1907', label: 'Thompson-Okanagan Natural Resource Region' },
         { value: '1908', label: 'Skeena Natural Resource Region' },
       ],
+    })
+    mockedFetchExemptionRegionContext.mockResolvedValue({
+      exemptionNumber: 'EX-9',
+      regionNumbers: ['1903'],
     })
     mockedFetchAvailablePermitApplications.mockResolvedValue({
       applicationList: [],
@@ -881,6 +917,509 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.getByRole('cell', { name: '2022-02-15' })).toBeInTheDocument()
     expect(mockedFetchPermitInvoices).not.toHaveBeenCalled()
   }, 15000)
+
+  it('opens a newly created Ministerial permit in editable tabs and consumes the route signal', async () => {
+    configureMinisterialActivePermit({ remarks: '' })
+    const router = createMemoryRouter(
+      [
+        {
+          path: '/provincial/permit/:permitNumber',
+          element: <ProvincialPermitDetailsPage />,
+        },
+      ],
+      {
+        initialEntries: [
+          {
+            pathname: '/provincial/permit/777',
+            search: '?from=create',
+            hash: '#permit',
+            state: { permitCreated: true, source: 'permit-create' },
+          },
+        ],
+      },
+    )
+    render(<RouterProvider router={router} />)
+
+    const remarks = await screen.findByLabelText('Remarks')
+    expect(remarks).toBeEnabled()
+    expect(remarks).toHaveAttribute(
+      'aria-describedby',
+      expect.stringContaining('permit-permitRemarks-counter-desc'),
+    )
+    expect(screen.getByText('0/250')).toBeVisible()
+    await waitFor(() => {
+      expect(router.state.location.state).toEqual({ source: 'permit-create' })
+      expect(router.state.location.search).toBe('?from=create')
+      expect(router.state.location.hash).toBe('#permit')
+    })
+
+    expect(screen.getByRole('tab', { name: 'Applicant' })).toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Scale' })).toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'Items' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Edit permit' })).not.toBeInTheDocument()
+
+    await selectPermitDetailTab('Applicant')
+    expect(await screen.findByRole('heading', { name: 'Applicant details' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Applicant client number')).toHaveAttribute('readonly')
+    expect(screen.getByLabelText('Agent client number')).toHaveAttribute('readonly')
+    const agentUsedCheckbox = screen.getByRole('checkbox', { name: "I'm an agent" })
+    expect(agentUsedCheckbox).toBeChecked()
+    expect(agentUsedCheckbox).toBeDisabled()
+    await userEvent.click(agentUsedCheckbox)
+    expect(screen.getByRole('heading', { name: 'Agent information' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Agent client number')).toHaveValue('00012345')
+
+    await selectPermitDetailTab('Shipping')
+    expect(await screen.findByLabelText('Purchaser')).toBeEnabled()
+    expect(screen.queryByRole('button', { name: 'Edit shipping' })).not.toBeInTheDocument()
+  })
+
+  it('saves Ministerial client location changes without changing authoritative client numbers', async () => {
+    configureMinisterialActivePermit()
+    renderPermitDetails()
+
+    await selectPermitDetailTab('Applicant')
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit applicant' }))
+
+    expect(screen.getByLabelText('Applicant client number')).toHaveAttribute('readonly')
+    expect(screen.getByLabelText('Agent client number')).toHaveAttribute('readonly')
+    expect(screen.getByRole('checkbox', { name: "I'm an agent" })).toBeDisabled()
+
+    const applicantLocation = screen.getByLabelText('Applicant location')
+    const agentLocation = screen.getByLabelText('Agent location')
+    await waitFor(() => {
+      expect(applicantLocation).toBeEnabled()
+      expect(agentLocation).toBeEnabled()
+    })
+    await userEvent.selectOptions(applicantLocation, '04')
+    await userEvent.selectOptions(agentLocation, '02')
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save permit' })).toBeEnabled())
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
+
+    await waitFor(() => {
+      expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ownerClientNumber: '00067890',
+          ownerClientLocation: '04',
+          agentClientNumber: '00012345',
+          agentClientLocation: '02',
+        }),
+      )
+    })
+  })
+
+  it('adds eligible Ministerial applications and explains empty scale, documents, and fees', async () => {
+    configureMinisterialActivePermit({ receiptNumber: null })
+    mockedFetchAvailablePermitApplications.mockResolvedValue({
+      applicationList: ['APP-ELIGIBLE'],
+      applicationItems: [
+        {
+          applicationNumber: 'APP-ELIGIBLE',
+          disabled: false,
+          disabledReason: '',
+          unassignedPieces: 8,
+          unassignedVolume: 12.5,
+        },
+        {
+          applicationNumber: 'APP-BLOCKED',
+          disabled: true,
+          disabledReason: 'This application is already attached to another permit.',
+          unassignedPieces: 3,
+          unassignedVolume: 4.5,
+        },
+      ],
+      errorMessage: '',
+    })
+    renderPermitDetails()
+
+    expect(
+      await screen.findByRole('columnheader', { name: 'Include in permit' }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'Application number' })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'Pieces' })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'Volume (m³)' })).toBeInTheDocument()
+    expect(screen.getByRole('cell', { name: '8' })).toBeInTheDocument()
+    expect(screen.getByRole('cell', { name: '12.5' })).toBeInTheDocument()
+
+    const blockedCheckbox = screen.getByRole('checkbox', {
+      name: 'Include application APP-BLOCKED in permit',
+    })
+    expect(blockedCheckbox).toBeDisabled()
+    const blockedTooltip = blockedCheckbox.closest('.disabled-button-tooltip') as HTMLElement
+    expect(blockedTooltip).toBeTruthy()
+    await userEvent.hover(blockedTooltip)
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      'This application is already attached to another permit.',
+    )
+
+    const applicationsFrame = screen.getByRole('region', {
+      name: 'Applications available for this permit',
+    })
+    const applicationsTile = applicationsFrame.closest('.cds--tile') as HTMLElement
+    expect(applicationsTile).toBeTruthy()
+    const addApplicationButton = within(applicationsTile).getByRole('button', {
+      name: 'Add application',
+    })
+    expect(addApplicationButton).toBeDisabled()
+    await userEvent.click(
+      screen.getByRole('checkbox', { name: 'Include application APP-ELIGIBLE in permit' }),
+    )
+    await waitFor(() => {
+      expect(
+        within(applicationsTile).getByRole('button', { name: 'Add application' }),
+      ).toBeEnabled()
+    })
+    await userEvent.click(within(applicationsTile).getByRole('button', { name: 'Add application' }))
+    await waitFor(() => {
+      expect(mockedAddApplicationsToPermit).toHaveBeenCalledWith({
+        permitNumber: '777',
+        selectedApplications: ['APP-ELIGIBLE'],
+      })
+    })
+
+    await selectPermitDetailTab('Scale')
+    const scaleEmptyState = (await screen.findByRole('heading', { name: 'No scale yet' })).closest(
+      '.lexis-empty-state',
+    )
+    expect(scaleEmptyState).toHaveTextContent(
+      'Scale comes from the applications selected for this permit. Select an application on the Permit tab.',
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Permit tab' }))
+    expect(screen.getByRole('tab', { name: 'Permit' })).toHaveAttribute('aria-selected', 'true')
+
+    await selectPermitDetailTab('Documents')
+    expect(
+      await screen.findByRole('heading', { name: 'No documents for this permit' }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Documents added to this permit are listed here.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add document' })).toBeInTheDocument()
+
+    await selectPermitDetailTab('Fees')
+    const feesEmptyState = (await screen.findByRole('heading', { name: 'No fees yet' })).closest(
+      '.lexis-empty-state',
+    )
+    expect(feesEmptyState).toHaveTextContent(
+      "Fees are calculated from the permit's Summary of Scale. They appear once an application is selected on the Permit tab.",
+    )
+    expect(screen.queryByLabelText('Receipt number')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Edit fee override' })).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Permit tab' }))
+    expect(screen.getByRole('tab', { name: 'Permit' })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('shows a failed Ministerial application lookup once and retries only when requested', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    configureMinisterialActivePermit()
+    mockedFetchAvailablePermitApplications
+      .mockRejectedValueOnce(new Error('available applications unavailable'))
+      .mockResolvedValueOnce({
+        applicationList: ['APP-RETRY'],
+        applicationItems: [
+          {
+            applicationNumber: 'APP-RETRY',
+            disabled: false,
+            disabledReason: '',
+            unassignedPieces: 2,
+            unassignedVolume: 3.5,
+          },
+        ],
+        errorMessage: '',
+      })
+    render(
+      <MemoryRouter
+        initialEntries={[{ pathname: '/provincial/permit/777', state: { permitCreated: true } }]}
+      >
+        <Routes>
+          <Route
+            path="/provincial/permit/:permitNumber"
+            element={<ProvincialPermitDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const unavailableState = (
+      await screen.findByRole('heading', { name: 'Applications unavailable' })
+    ).closest('.lexis-empty-state')
+    expect(unavailableState).toBeTruthy()
+    expect(unavailableState).toHaveTextContent('Applications unavailable')
+    expect(unavailableState).toHaveTextContent('Applications could not be loaded. Try again.')
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(mockedFetchAvailablePermitApplications).toHaveBeenCalledTimes(1)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    await waitFor(() => expect(mockedFetchAvailablePermitApplications).toHaveBeenCalledTimes(2))
+    expect(await screen.findByRole('link', { name: 'APP-RETRY' })).toBeInTheDocument()
+
+    consoleError.mockRestore()
+  })
+
+  it('prevents duplicate Ministerial application mutations while an add is in progress', async () => {
+    configureMinisterialActivePermit()
+    mockedFetchAvailablePermitApplications.mockResolvedValue({
+      applicationList: ['APP-ONCE'],
+      applicationItems: [
+        {
+          applicationNumber: 'APP-ONCE',
+          disabled: false,
+          disabledReason: '',
+          unassignedPieces: 2,
+          unassignedVolume: 3.5,
+        },
+      ],
+      errorMessage: '',
+    })
+    let resolveAdd:
+      | ((result: {
+          success: boolean
+          message: string
+          errors: string[]
+          warnings: string[]
+        }) => void)
+      | undefined
+    mockedAddApplicationsToPermit.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveAdd = resolve
+        }),
+    )
+    renderPermitDetails()
+
+    await userEvent.click(
+      await screen.findByRole('checkbox', { name: 'Include application APP-ONCE in permit' }),
+    )
+    const addApplicationButton = screen.getByRole('button', { name: 'Add application' })
+    act(() => {
+      fireEvent.click(addApplicationButton)
+      fireEvent.click(addApplicationButton)
+    })
+    expect(mockedAddApplicationsToPermit).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      resolveAdd?.({
+        success: true,
+        message: 'Application was added to the permit.',
+        errors: [],
+        warnings: [],
+      })
+    })
+    await waitFor(() => {
+      expect(screen.getByText('Application was added to the permit.')).toBeInTheDocument()
+    })
+  })
+
+  it('refreshes Ministerial totals and available applications after adding without discarding permit edits', async () => {
+    const initialDetail = configureMinisterialActivePermit({ receiptNumber: null, remarks: '' })
+    const refreshedDetail = {
+      ...initialDetail,
+      numberOfPieces: 18,
+      permitVolume: 132.5,
+    }
+    mockedFetchProvincialPermitExemptionContext.mockResolvedValue({
+      approvedExemptionVolume: 250,
+      exemptionVolumeRemaining: 117.5,
+      exemptionTypeDescription: 'Ministerial',
+      blanketOic: false,
+    })
+    mockedFetchProvincialPermitDetail
+      .mockResolvedValueOnce(initialDetail)
+      .mockResolvedValue(refreshedDetail)
+    mockedFetchProvincialPermitDetailTabs
+      .mockResolvedValueOnce(tabsResult)
+      .mockResolvedValue({ ...tabsResult, applications: ['APP-REFRESH'] })
+    mockedFetchAvailablePermitApplications
+      .mockResolvedValueOnce({
+        applicationList: ['APP-REFRESH'],
+        applicationItems: [
+          {
+            applicationNumber: 'APP-REFRESH',
+            disabled: false,
+            disabledReason: '',
+            unassignedPieces: 8,
+            unassignedVolume: 12.5,
+          },
+        ],
+        errorMessage: '',
+      })
+      .mockResolvedValue({
+        applicationList: [],
+        applicationItems: [
+          {
+            applicationNumber: 'APP-REFRESH',
+            disabled: true,
+            disabledReason: 'Already associated with this permit.',
+            unassignedPieces: 8,
+            unassignedVolume: 12.5,
+          },
+        ],
+        errorMessage: '',
+      })
+    renderPermitDetails()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    const remarks = screen.getByLabelText('Remarks')
+    await userEvent.type(remarks, 'Keep this draft remark')
+    await userEvent.click(
+      screen.getByRole('checkbox', { name: 'Include application APP-REFRESH in permit' }),
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Add application' }))
+
+    await waitFor(() => {
+      const pieces = screen.getByText('Current permit pieces').parentElement?.querySelector('dd')
+      const volume = screen
+        .getByText('Current permit volume (m³)')
+        .parentElement?.querySelector('dd')
+      const remaining = screen
+        .getByText('Total volume remaining (m³)')
+        .parentElement?.querySelector('dd')
+      expect(pieces).toHaveTextContent('18')
+      expect(volume).toHaveTextContent('132.5')
+      expect(remaining).toHaveTextContent('117.5')
+    })
+    await waitFor(() => {
+      expect(mockedFetchAvailablePermitApplications).toHaveBeenLastCalledWith('EX-9', [
+        'APP-REFRESH',
+      ])
+    })
+    expect(
+      screen.getByRole('checkbox', { name: 'Include application APP-REFRESH in permit' }),
+    ).toBeDisabled()
+    expect(screen.getByLabelText('Remarks')).toHaveValue('Keep this draft remark')
+  })
+
+  it('keeps a saved Ministerial application addition when exemption totals cannot refresh', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const initialDetail = configureMinisterialActivePermit({ receiptNumber: null, remarks: '' })
+    const refreshedDetail = {
+      ...initialDetail,
+      numberOfPieces: 18,
+      permitVolume: 132.5,
+    }
+    mockedFetchProvincialPermitDetail
+      .mockResolvedValueOnce(initialDetail)
+      .mockResolvedValue(refreshedDetail)
+    mockedFetchProvincialPermitExemptionContext.mockRejectedValueOnce(
+      new Error('exemption totals unavailable'),
+    )
+    mockedFetchAvailablePermitApplications.mockResolvedValue({
+      applicationList: ['APP-REFRESH'],
+      applicationItems: [
+        {
+          applicationNumber: 'APP-REFRESH',
+          disabled: false,
+          disabledReason: '',
+          unassignedPieces: 8,
+          unassignedVolume: 12.5,
+        },
+      ],
+      errorMessage: '',
+    })
+
+    renderPermitDetails()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    await userEvent.type(screen.getByLabelText('Remarks'), 'Keep this draft remark')
+    await userEvent.click(
+      screen.getByRole('checkbox', { name: 'Include application APP-REFRESH in permit' }),
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Add application' }))
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          'Application was added to the permit. Reload before changing application links again.',
+        ),
+      ).toBeInTheDocument()
+    })
+    expect(screen.getByLabelText('Remarks')).toHaveValue('Keep this draft remark')
+    consoleError.mockRestore()
+  })
+
+  it('refreshes Ministerial remaining volume and available applications after removing an application', async () => {
+    const initialDetail = configureMinisterialActivePermit({ receiptNumber: null })
+    const refreshedDetail = {
+      ...initialDetail,
+      numberOfPieces: 0,
+      permitVolume: 0,
+    }
+    mockedFetchProvincialPermitExemptionContext.mockResolvedValue({
+      approvedExemptionVolume: 250,
+      exemptionVolumeRemaining: 372.6,
+      exemptionTypeDescription: 'Ministerial',
+      blanketOic: false,
+    })
+    mockedFetchProvincialPermitDetail
+      .mockResolvedValueOnce(initialDetail)
+      .mockResolvedValue(refreshedDetail)
+    mockedFetchProvincialPermitDetailTabs
+      .mockResolvedValueOnce({ ...tabsResult, applications: ['APP-REFRESH'] })
+      .mockResolvedValue(tabsResult)
+    mockedFetchAvailablePermitApplications
+      .mockResolvedValueOnce({
+        applicationList: [],
+        applicationItems: [
+          {
+            applicationNumber: 'APP-REFRESH',
+            disabled: true,
+            disabledReason: 'Already associated with this permit.',
+            unassignedPieces: 8,
+            unassignedVolume: 28.4,
+          },
+        ],
+        errorMessage: '',
+      })
+      .mockResolvedValue({
+        applicationList: ['APP-REFRESH'],
+        applicationItems: [
+          {
+            applicationNumber: 'APP-REFRESH',
+            disabled: false,
+            disabledReason: '',
+            unassignedPieces: 8,
+            unassignedVolume: 28.4,
+          },
+        ],
+        errorMessage: '',
+      })
+
+    renderPermitDetails()
+
+    const includedApplications = await screen.findByRole('region', {
+      name: 'Included permit applications',
+    })
+    const applicationRow = within(includedApplications)
+      .getByRole('link', { name: 'APP-REFRESH' })
+      .closest('tr')
+    expect(applicationRow).toBeTruthy()
+    await userEvent.click(
+      within(applicationRow as HTMLElement).getByRole('button', { name: 'Remove' }),
+    )
+    const removalConfirmation = await screen.findByRole('dialog', {
+      name: 'Remove associated application?',
+    })
+    await userEvent.click(within(removalConfirmation).getByRole('button', { name: 'Remove' }))
+
+    await waitFor(() => {
+      const pieces = screen.getByText('Current permit pieces').parentElement?.querySelector('dd')
+      const volume = screen
+        .getByText('Current permit volume (m³)')
+        .parentElement?.querySelector('dd')
+      const remaining = screen
+        .getByText('Total volume remaining (m³)')
+        .parentElement?.querySelector('dd')
+      expect(pieces).toHaveTextContent('0')
+      expect(volume).toHaveTextContent('0')
+      expect(remaining).toHaveTextContent('372.6')
+    })
+    await waitFor(() => {
+      expect(mockedFetchAvailablePermitApplications).toHaveBeenLastCalledWith('EX-9', [])
+    })
+    expect(
+      screen.getByRole('checkbox', { name: 'Include application APP-REFRESH in permit' }),
+    ).toBeEnabled()
+  })
 
   it('shows saved permit client values when client enrichment is unavailable', async () => {
     const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
@@ -1918,6 +2457,252 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(await screen.findByText('Scale detail was removed from the permit.')).toBeInTheDocument()
   })
 
+  it('restores a Ministerial application after its last scale is removed', async () => {
+    const initialDetail = configureMinisterialActivePermit({
+      receiptNumber: null,
+      numberOfPieces: 9,
+      permitVolume: 28.4,
+      exemptionVolumeRemaining: 344.2,
+    })
+    const refreshedDetail = {
+      ...initialDetail,
+      numberOfPieces: 0,
+      permitVolume: 0,
+    }
+    const attachedScale = {
+      id: 'SCALE-1',
+      timberMark: 'TM-1',
+      scaleType: '',
+      species: 'Fir',
+      grade: 'A',
+      pieces: 9,
+      volume: 28.4,
+      packageNumber: 'PKG-9',
+      permitNumber: '777',
+      includedInPermit: true,
+    }
+    mockedFetchProvincialPermitDetail
+      .mockResolvedValueOnce(initialDetail)
+      .mockResolvedValue(refreshedDetail)
+    mockedFetchProvincialPermitExemptionContext.mockResolvedValue({
+      approvedExemptionVolume: 400,
+      exemptionVolumeRemaining: 372.6,
+      exemptionTypeDescription: 'Ministerial',
+      blanketOic: false,
+    })
+    mockedFetchProvincialPermitDetailTabs
+      .mockResolvedValueOnce({
+        ...tabsResult,
+        applications: ['APP-SCALE'],
+        items: [attachedScale],
+      })
+      .mockResolvedValue({
+        ...tabsResult,
+        applications: [],
+        items: [{ ...attachedScale, permitNumber: '', includedInPermit: false }],
+      })
+    mockedFetchAvailablePermitApplications
+      .mockResolvedValueOnce({
+        applicationList: [],
+        applicationItems: [
+          {
+            applicationNumber: 'APP-SCALE',
+            disabled: true,
+            disabledReason: 'Already associated with this permit.',
+            unassignedPieces: null,
+            unassignedVolume: null,
+          },
+        ],
+        errorMessage: '',
+      })
+      .mockResolvedValue({
+        applicationList: ['APP-SCALE'],
+        applicationItems: [
+          {
+            applicationNumber: 'APP-SCALE',
+            disabled: false,
+            disabledReason: '',
+            unassignedPieces: 9,
+            unassignedVolume: 28.4,
+          },
+        ],
+        errorMessage: '',
+      })
+    mockedUpdatePermitScaleAttachment.mockResolvedValue({
+      success: true,
+      message: 'Scale detail was removed from the permit.',
+      errors: [],
+      warnings: [],
+    })
+
+    renderPermitDetails()
+
+    expect(
+      await screen.findByRole('checkbox', {
+        name: 'Include application APP-SCALE in permit',
+      }),
+    ).toBeDisabled()
+    await selectPermitDetailTab('Scale')
+    const includeScale = await screen.findByRole('checkbox', {
+      name: 'Include scale SCALE-1 in permit',
+    })
+    await waitFor(() => expect(includeScale).toBeEnabled())
+    await userEvent.click(includeScale)
+
+    await waitFor(() => {
+      expect(mockedUpdatePermitScaleAttachment).toHaveBeenCalledWith({
+        scaleId: 'SCALE-1',
+        permitNumber: '777',
+        attachInd: false,
+      })
+    })
+    await selectPermitDetailTab('Permit')
+
+    await waitFor(() => {
+      const pieces = screen.getByText('Current permit pieces').parentElement?.querySelector('dd')
+      const volume = screen
+        .getByText('Current permit volume (m³)')
+        .parentElement?.querySelector('dd')
+      const remaining = screen
+        .getByText('Total volume remaining (m³)')
+        .parentElement?.querySelector('dd')
+      expect(pieces).toHaveTextContent('0')
+      expect(volume).toHaveTextContent('0')
+      expect(remaining).toHaveTextContent('372.6')
+      expect(mockedFetchAvailablePermitApplications).toHaveBeenLastCalledWith('EX-9', [])
+    })
+    const restoredApplication = await screen.findByRole('checkbox', {
+      name: 'Include application APP-SCALE in permit',
+    })
+    expect(restoredApplication).toBeEnabled()
+    const availableApplications = screen.getByRole('region', {
+      name: 'Applications available for this permit',
+    })
+    const applicationRow = within(availableApplications)
+      .getByRole('link', { name: 'APP-SCALE' })
+      .closest('tr')
+    expect(applicationRow).toBeTruthy()
+    expect(within(applicationRow as HTMLElement).getByText('9')).toBeInTheDocument()
+    expect(within(applicationRow as HTMLElement).getByText('28.4')).toBeInTheDocument()
+  })
+
+  it('keeps a Ministerial application unavailable while another scale remains attached', async () => {
+    const initialDetail = configureMinisterialActivePermit({
+      receiptNumber: null,
+      numberOfPieces: 9,
+      permitVolume: 28.4,
+      exemptionVolumeRemaining: 344.2,
+    })
+    const refreshedDetail = {
+      ...initialDetail,
+      numberOfPieces: 5,
+      permitVolume: 18.4,
+    }
+    const scaleToRemove = {
+      id: 'SCALE-1',
+      timberMark: 'TM-1',
+      scaleType: '',
+      species: 'Fir',
+      grade: 'A',
+      pieces: 4,
+      volume: 10,
+      packageNumber: 'PKG-9',
+      permitNumber: '777',
+      includedInPermit: true,
+    }
+    const retainedScale = {
+      id: 'SCALE-2',
+      timberMark: 'TM-2',
+      scaleType: '',
+      species: 'Cedar',
+      grade: 'B',
+      pieces: 5,
+      volume: 18.4,
+      packageNumber: 'PKG-9',
+      permitNumber: '777',
+      includedInPermit: true,
+    }
+    mockedFetchProvincialPermitDetail
+      .mockResolvedValueOnce(initialDetail)
+      .mockResolvedValue(refreshedDetail)
+    mockedFetchProvincialPermitExemptionContext.mockResolvedValue({
+      approvedExemptionVolume: 400,
+      exemptionVolumeRemaining: 354.2,
+      exemptionTypeDescription: 'Ministerial',
+      blanketOic: false,
+    })
+    mockedFetchProvincialPermitDetailTabs
+      .mockResolvedValueOnce({
+        ...tabsResult,
+        applications: ['APP-SCALE'],
+        items: [scaleToRemove, retainedScale],
+      })
+      .mockResolvedValue({
+        ...tabsResult,
+        applications: ['APP-SCALE'],
+        items: [{ ...scaleToRemove, permitNumber: '', includedInPermit: false }, retainedScale],
+      })
+    mockedFetchAvailablePermitApplications.mockResolvedValue({
+      applicationList: [],
+      applicationItems: [
+        {
+          applicationNumber: 'APP-SCALE',
+          disabled: true,
+          disabledReason: 'Already associated with this permit.',
+          unassignedPieces: null,
+          unassignedVolume: null,
+        },
+      ],
+      errorMessage: '',
+    })
+    mockedUpdatePermitScaleAttachment.mockResolvedValue({
+      success: true,
+      message: 'Scale detail was removed from the permit.',
+      errors: [],
+      warnings: [],
+    })
+
+    renderPermitDetails()
+
+    await screen.findByRole('checkbox', {
+      name: 'Include application APP-SCALE in permit',
+    })
+    await selectPermitDetailTab('Scale')
+    const includeScale = await screen.findByRole('checkbox', {
+      name: 'Include scale SCALE-1 in permit',
+    })
+    await waitFor(() => expect(includeScale).toBeEnabled())
+    await userEvent.click(includeScale)
+
+    await waitFor(() => {
+      expect(mockedUpdatePermitScaleAttachment).toHaveBeenCalledWith({
+        scaleId: 'SCALE-1',
+        permitNumber: '777',
+        attachInd: false,
+      })
+    })
+    await selectPermitDetailTab('Permit')
+
+    await waitFor(() => {
+      const pieces = screen.getByText('Current permit pieces').parentElement?.querySelector('dd')
+      const volume = screen
+        .getByText('Current permit volume (m³)')
+        .parentElement?.querySelector('dd')
+      const remaining = screen
+        .getByText('Total volume remaining (m³)')
+        .parentElement?.querySelector('dd')
+      expect(pieces).toHaveTextContent('5')
+      expect(volume).toHaveTextContent('18.4')
+      expect(remaining).toHaveTextContent('354.2')
+      expect(mockedFetchAvailablePermitApplications).toHaveBeenLastCalledWith('EX-9', ['APP-SCALE'])
+    })
+    expect(
+      screen.getByRole('checkbox', {
+        name: 'Include application APP-SCALE in permit',
+      }),
+    ).toBeDisabled()
+  })
+
   it.each([
     { permitStatusCode: 'PPD', permitStatusDescription: 'Payment pending' },
     { permitStatusCode: 'EXP', permitStatusDescription: 'Expired' },
@@ -2389,7 +3174,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.queryByRole('button', { name: 'close notification' })).not.toBeInTheDocument()
   })
 
-  it('shows Blanket OIC package columns on the items tab', async () => {
+  it('shows recalculated Blanket OIC package pieces while retaining package volume on the Scale tab', async () => {
     mockedFetchProvincialPermitDetail.mockResolvedValue({
       ...permitDetail,
       exemptionTypeDescription: 'Blanket OIC',
@@ -2413,6 +3198,20 @@ describe('Provincial Permit Detail Action Smoke', () => {
           comments: 'Current OIC package',
         },
       ],
+      items: [
+        {
+          id: 'SCALE-9',
+          timberMark: 'TM-9',
+          scaleType: 'C',
+          species: 'HE',
+          grade: 'A',
+          pieces: 12,
+          volume: 10.5,
+          packageNumber: 'BOIC-9',
+          permitNumber: '777',
+          includedInPermit: true,
+        },
+      ],
     })
 
     render(
@@ -2426,23 +3225,68 @@ describe('Provincial Permit Detail Action Smoke', () => {
       </MemoryRouter>,
     )
 
-    await selectPermitDetailTab('Items')
+    await selectPermitDetailTab('Scale')
 
     expect(await screen.findByText('Blanket OIC package details')).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Applicant' })).toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'Owner' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'Items' })).not.toBeInTheDocument()
     expect(screen.getByRole('group', { name: 'Summary of Scale' })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'Package pieces' })).toBeInTheDocument()
     expect(
       screen.getByRole('columnheader', { name: 'Current package volume (m³)' }),
     ).toBeInTheDocument()
-    expect(screen.getByRole('columnheader', { name: 'Reprocessed' })).toBeInTheDocument()
-    expect(screen.getByRole('cell', { name: '118.5' })).toBeInTheDocument()
-    const packageStatusCell = screen.getByRole('cell', { name: 'APP - Approved' })
-    expect(packageStatusCell.querySelector('.lexis-status-tag')).toBeInTheDocument()
+    const packageTable = screen.getByRole('region', { name: 'Permit packages' })
+    expect(
+      within(packageTable).queryByRole('columnheader', { name: 'Status' }),
+    ).not.toBeInTheDocument()
+    expect(
+      within(packageTable).queryByRole('columnheader', { name: 'Reprocessed' }),
+    ).not.toBeInTheDocument()
+    expect(
+      within(packageTable).queryByRole('cell', { name: 'APP - Approved' }),
+    ).not.toBeInTheDocument()
+    expect(within(packageTable).queryByRole('cell', { name: 'N' })).not.toBeInTheDocument()
     expect(screen.getByRole('cell', { name: 'Current OIC package' })).toBeInTheDocument()
+    const packageRow = screen.getByRole('cell', { name: 'BOIC-9' }).closest('tr')
+    expect(packageRow).toBeTruthy()
+    expect(within(packageRow as HTMLElement).getByRole('cell', { name: '12' })).toBeInTheDocument()
+    expect(
+      within(packageRow as HTMLElement).getByRole('cell', { name: '120.5' }),
+    ).toBeInTheDocument()
+    expect(
+      within(packageRow as HTMLElement).getByRole('cell', { name: '118.5' }),
+    ).toBeInTheDocument()
     expect(mockedFetchProvincialPermitDetailTabs).toHaveBeenCalledWith({
       permitNumber: '777',
       receiptNumber: 'R-1',
       blanketOic: true,
     })
+  })
+
+  it('keeps a saved Blanket OIC package volume when no scale rows are attached', async () => {
+    configureEditableBlanketOicPackage()
+    mockedFetchProvincialPermitDetailTabs.mockResolvedValue({
+      ...tabsResult,
+      packages: [
+        {
+          ...editableBlanketOicPackage,
+          packageNumber: 'T260917R1',
+          packageVolume: '1.0',
+          currentPackageVolume: '0.0',
+        },
+      ],
+      items: [],
+    })
+
+    renderPermitDetails()
+    await selectPermitDetailTab('Scale')
+
+    const packageRow = (await screen.findByRole('cell', { name: 'T260917R1' })).closest('tr')
+    expect(packageRow).toBeTruthy()
+    expect(within(packageRow as HTMLElement).getByRole('cell', { name: '0' })).toBeInTheDocument()
+    expect(within(packageRow as HTMLElement).getByRole('cell', { name: '1.0' })).toBeInTheDocument()
+    expect(within(packageRow as HTMLElement).getByRole('cell', { name: '0.0' })).toBeInTheDocument()
   })
 
   it('omits the Permit column from Blanket OIC scale rows', async () => {
@@ -2473,7 +3317,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     renderPermitDetails()
     await selectPermitDetailTab('Items')
 
-    const itemRows = await screen.findByRole('region', { name: 'Permit item rows' })
+    const itemRows = await screen.findByRole('region', { name: 'Scale rows' })
     expect(within(itemRows).queryByRole('columnheader', { name: 'Permit' })).not.toBeInTheDocument()
     expect(
       within(itemRows)
@@ -2755,6 +3599,76 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.queryByRole('heading', { name: 'Edit BOIC-9' })).not.toBeInTheDocument()
   })
 
+  it.each(['loaded', 'failed'])(
+    'reloads %s BOIC region context when switching permits in the same exemption',
+    async (previousLookup) => {
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+      const regionLookupError =
+        'The exemption region settings could not be loaded. Reload before changing this permit region.'
+      if (previousLookup === 'failed') {
+        mockedFetchExemptionRegionContext.mockRejectedValue(new Error('Region lookup failed'))
+      }
+      mockedFetchProvincialPermitDetail.mockImplementation(async (requestedPermitNumber) => ({
+        ...permitDetail,
+        permitNumber: Number(requestedPermitNumber),
+        permitStatusCode: 'ACT',
+        permitStatusDescription: 'Active',
+        exemptionTypeDescription: 'Blanket OIC',
+        blanketOic: true,
+        oicApplicationNumber: null,
+        oicRequestPieces: 200,
+        oicRequestVolume: 120.5,
+      }))
+
+      render(
+        <MemoryRouter initialEntries={['/provincial/permit/777']}>
+          <PermitRouteSwitcher />
+          <Routes>
+            <Route
+              path="/provincial/permit/:permitNumber"
+              element={<ProvincialPermitDetailsPage />}
+            />
+          </Routes>
+        </MemoryRouter>,
+      )
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+      if (previousLookup === 'failed') {
+        expect(await screen.findByText(regionLookupError)).toBeInTheDocument()
+        expect(screen.getByLabelText('Region')).toBeDisabled()
+      } else {
+        await waitFor(() => expect(screen.getByLabelText('Region')).toBeEnabled())
+      }
+      const initialRegionContextCallCount = mockedFetchExemptionRegionContext.mock.calls.length
+      let resolveRegionContext!: (
+        value: Awaited<ReturnType<typeof fetchExemptionRegionContext>>,
+      ) => void
+      mockedFetchExemptionRegionContext.mockReturnValue(
+        new Promise((resolve) => {
+          resolveRegionContext = resolve
+        }),
+      )
+
+      await userEvent.click(screen.getByRole('button', { name: 'Switch permit' }))
+      await waitFor(() => expect(mockedFetchProvincialPermitDetail).toHaveBeenCalledWith('888'))
+      await waitFor(() =>
+        expect(mockedFetchExemptionRegionContext.mock.calls.length).toBeGreaterThan(
+          initialRegionContextCallCount,
+        ),
+      )
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+      expect(screen.getByLabelText('Region')).toBeDisabled()
+      expect(screen.queryByText(regionLookupError)).not.toBeInTheDocument()
+      await act(async () => {
+        resolveRegionContext({ exemptionNumber: 'EX-9', regionNumbers: ['1903'] })
+      })
+      await waitFor(() => expect(screen.getByLabelText('Region')).toBeEnabled())
+      expect(screen.getByLabelText('Region')).toHaveValue('1903')
+      consoleError.mockRestore()
+    },
+  )
+
   it('ignores a package edit response after cancelling and opening Create package', async () => {
     configureEditableBlanketOicPackage()
     let resolveContext!: (
@@ -3005,6 +3919,12 @@ describe('Provincial Permit Detail Action Smoke', () => {
       const heading = await screen.findByRole('heading', { name: 'Create Blanket OIC package' })
       const packageEditor = heading.closest('.application-detail-edit-section') as HTMLElement
       expect(packageEditor).toBeTruthy()
+      expect(
+        within(packageEditor).queryByRole('combobox', { name: 'Status' }),
+      ).not.toBeInTheDocument()
+      expect(
+        within(packageEditor).queryByRole('group', { name: 'Reprocessed' }),
+      ).not.toBeInTheDocument()
 
       await userEvent.type(within(packageEditor).getByLabelText('Package number'), 'boic-new')
       await chooseComboBoxOption(
@@ -3023,8 +3943,18 @@ describe('Provincial Permit Detail Action Smoke', () => {
       )
       await userEvent.clear(within(packageEditor).getByLabelText('Package volume (m³)'))
       await userEvent.type(within(packageEditor).getByLabelText('Package volume (m³)'), '100.0')
-      await userEvent.type(within(packageEditor).getByLabelText('Average length'), '10.0')
+      const averageLength = within(packageEditor).getByLabelText('Average length')
+      await userEvent.type(averageLength, '0')
       await userEvent.type(within(packageEditor).getByLabelText('Average top diameter'), '20.0')
+      await userEvent.click(within(packageEditor).getByRole('button', { name: 'Create package' }))
+
+      expect(
+        await within(packageEditor).findByText('Average length must be greater than 0.'),
+      ).toBeInTheDocument()
+      expect(mockedAddBlanketOicPackage).not.toHaveBeenCalled()
+
+      await userEvent.clear(averageLength)
+      await userEvent.type(averageLength, '10.0')
       await userEvent.click(within(packageEditor).getByRole('button', { name: 'Create package' }))
 
       await waitFor(() => {
@@ -3046,13 +3976,103 @@ describe('Provincial Permit Detail Action Smoke', () => {
         expect(mockedFetchProvincialPermitDetailTabs).toHaveBeenCalledTimes(2)
         expect(screen.getByText('Blanket OIC package was created.')).toBeInTheDocument()
       })
+
+      await selectPermitDetailTab('Permit')
+      await userEvent.click(screen.getByRole('button', { name: 'Edit permit' }))
+      const regionSelect = screen.getByLabelText('Region')
+      expect(regionSelect).toBeDisabled()
+      expect(regionSelect).toHaveValue('1903')
+      expect(
+        within(regionSelect)
+          .getAllByRole('option')
+          .map((option) => option.getAttribute('value')),
+      ).toEqual(['', '1903'])
+      expect(
+        screen.getByText('Region cannot be changed after the first package is created.'),
+      ).toBeInTheDocument()
     },
   )
+
+  it('preserves hidden Blanket OIC Shutout and reprocessed values when editing comments', async () => {
+    configureEditableBlanketOicPackage()
+    mockedFetchProvincialPermitDetailTabs.mockResolvedValue({
+      ...tabsResult,
+      packages: [
+        {
+          ...editableBlanketOicPackage,
+          status: 'SHT - Shutout',
+          reprocessed: 'Y',
+        },
+      ],
+    })
+    mockedFetchBlanketOicPackageEditContext.mockResolvedValue({
+      packageNumber: 'BOIC-9',
+      volume: '120.5',
+      averageLength: '7.1',
+      averageDiameter: '16.2',
+      status: 'SHT',
+      comments: 'Current OIC package',
+      reprocessed: 'Y',
+      ageClass: 'O',
+      productType: 'H',
+      endUseCode: 'LU',
+      speciesCodes: ['HE'],
+    })
+    renderPermitDetails()
+
+    await selectPermitDetailTab('Items')
+    const packageTable = await screen.findByRole('region', { name: 'Permit packages' })
+    expect(
+      within(packageTable).queryByRole('columnheader', { name: 'Status' }),
+    ).not.toBeInTheDocument()
+    expect(
+      within(packageTable).queryByRole('columnheader', { name: 'Reprocessed' }),
+    ).not.toBeInTheDocument()
+    const packageRow = (await screen.findByRole('cell', { name: 'BOIC-9' })).closest('tr')!
+    expect(
+      within(packageRow).queryByRole('cell', { name: 'SHT - Shutout' }),
+    ).not.toBeInTheDocument()
+    expect(within(packageRow).queryByRole('cell', { name: 'Y' })).not.toBeInTheDocument()
+
+    await userEvent.click(within(packageRow).getByRole('button', { name: 'Edit' }))
+    const packageEditor = (await screen.findByRole('heading', { name: 'Edit BOIC-9' })).closest(
+      '.application-detail-edit-section',
+    ) as HTMLElement
+    expect(
+      within(packageEditor).queryByRole('combobox', { name: 'Status' }),
+    ).not.toBeInTheDocument()
+    expect(
+      within(packageEditor).queryByRole('group', { name: 'Reprocessed' }),
+    ).not.toBeInTheDocument()
+
+    const comments = within(packageEditor).getByLabelText('Comments')
+    await waitFor(() => {
+      expect(comments).toBeEnabled()
+      expect(comments).toHaveValue('Current OIC package')
+    })
+    await userEvent.type(comments, ' updated')
+    await userEvent.click(within(packageEditor).getByRole('button', { name: 'Save package' }))
+
+    await waitFor(() =>
+      expect(mockedUpdateBlanketOicPackage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          permitNumber: '777',
+          packageNumber: 'BOIC-9',
+          comments: 'Current OIC package updated',
+          status: 'SHT',
+          reprocessed: 'Y',
+        }),
+      ),
+    )
+  })
 
   it.each([
     ['Package volume (m³)', '10.25', 'Package volume must have no more than one decimal place.'],
     ['Average length', '0', 'Average length must be greater than 0.'],
-    ['Average top diameter', '100', 'Average diameter must be 99.99 or less.'],
+    ['Average length', '-1', 'Average length must be numeric.'],
+    ['Average top diameter', '0', 'Average top diameter must be greater than 0.'],
+    ['Average top diameter', '-1', 'Average top diameter must be numeric.'],
+    ['Average top diameter', '100', 'Average top diameter must be 99.99 or less.'],
   ])('keeps invalid Blanket OIC %s out of the save request', async (fieldLabel, value, error) => {
     configureEditableBlanketOicPackage()
     renderPermitDetails()
@@ -3223,6 +4243,13 @@ describe('Provincial Permit Detail Action Smoke', () => {
     renderPermitDetails()
 
     await selectPermitDetailTab('Items')
+    const packageTable = await screen.findByRole('region', { name: 'Permit packages' })
+    expect(
+      within(packageTable).queryByRole('columnheader', { name: 'Status' }),
+    ).not.toBeInTheDocument()
+    expect(
+      within(packageTable).queryByRole('columnheader', { name: 'Reprocessed' }),
+    ).not.toBeInTheDocument()
     const packageRow = (await screen.findByRole('cell', { name: 'BOIC-9' })).closest('tr')!
     expect(within(packageRow).queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
     expect(within(packageRow).queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
@@ -3827,6 +4854,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
       permitStatusCode: 'ACT',
       permitStatusDescription: 'Active',
       blanketOic: true,
+      oicRequestPieces: 200,
+      oicRequestVolume: 120.5,
     })
     renderPermitDetails()
 
@@ -3856,6 +4885,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
       permitStatusCode: 'ACT',
       permitStatusDescription: 'Active',
       blanketOic: true,
+      oicRequestPieces: 200,
+      oicRequestVolume: 120.5,
     })
     renderPermitDetails()
 
@@ -3893,61 +4924,47 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.getByLabelText('Expiry date')).toHaveValue('')
   })
 
-  it('submits a selected canonical owner client number when editing a Blanket OIC permit', async () => {
+  it('keeps saved Blanket OIC client identities immutable while saving verified locations', async () => {
     configureEditableBlanketOicPackage()
-    mockedFetchApplicationClientData.mockImplementation(
-      async (clientNumber, clientLocationCode) => ({
-        clientNumber,
-        companyName: 'Owner Co',
-        address: '1 Owner St',
-        city: 'Victoria',
-        province: 'BC',
-        postalCode: 'V8V 1A1',
-        country: 'Canada',
-        phone: '2505551111',
-        fax: '',
-        email: 'owner@example.test',
-        notfound: clientLocationCode ? '' : 'true',
-      }),
-    )
     renderPermitDetails()
 
     await selectPermitDetailTab('Owner')
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit owner' }))
-    const ownerClientNumber = screen.getByLabelText('Owner client number')
-    fireEvent.change(ownerClientNumber, { target: { value: '00067890' } })
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit applicant' }))
+    expect(screen.getByLabelText('Applicant client number')).toHaveAttribute('readonly')
+    expect(screen.getByLabelText('Agent client number')).toHaveAttribute('readonly')
+    expect(screen.getByRole('checkbox', { name: "I'm an agent" })).toBeDisabled()
     await waitFor(() => {
-      expect(mockedFetchExemptionClientLocations).toHaveBeenCalledWith('00067890')
-      expect(screen.getByLabelText('Owner location')).toHaveValue('03')
+      expect(screen.getByLabelText('Applicant location')).toBeEnabled()
+      expect(screen.getByLabelText('Agent location')).toBeEnabled()
     })
+    await userEvent.selectOptions(screen.getByLabelText('Applicant location'), '04')
+    await userEvent.selectOptions(screen.getByLabelText('Agent location'), '02')
     await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
 
     await waitFor(() => {
-      expect(mockedFetchExemptionClientData).toHaveBeenCalledWith('00067890', '03')
       expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
-        expect.objectContaining({ ownerClientNumber: '00067890' }),
+        expect.objectContaining({
+          ownerClientNumber: '00067890',
+          ownerClientLocation: '04',
+          agentClientNumber: '00012345',
+          agentClientLocation: '02',
+        }),
       )
     })
   })
 
-  it('uses verified named locations and keeps owner and agent contact context visible while editing a Blanket OIC permit', async () => {
+  it('shows saved Blanket OIC applicant and agent contact details in one tab', async () => {
     configureEditableBlanketOicPackage()
     renderPermitDetails()
 
     await selectPermitDetailTab('Owner')
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit owner' }))
     await waitFor(() => {
-      expect(mockedFetchExemptionClientLocations).toHaveBeenCalledWith('00067890')
-      expect(screen.getByRole('option', { name: '03 - Owner office' })).toBeInTheDocument()
       expect(screen.getByText('Owner Co')).toBeInTheDocument()
-    })
-
-    await selectPermitDetailTab('Agent')
-    await waitFor(() => {
-      expect(mockedFetchExemptionClientLocations).toHaveBeenCalledWith('00012345')
-      expect(screen.getByRole('option', { name: '01 - Agent office' })).toBeInTheDocument()
       expect(screen.getByText('Agent Co')).toBeInTheDocument()
     })
+    expect(screen.getByRole('heading', { name: 'Applicant details' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Agent information' })).toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
   })
 
   it('blocks Blanket OIC client saves until each selected client location is verified', async () => {
@@ -3970,9 +4987,10 @@ describe('Provincial Permit Detail Action Smoke', () => {
     renderPermitDetails()
 
     await selectPermitDetailTab('Owner')
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit owner' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit applicant' }))
     const saveButton = screen.getByRole('button', { name: 'Save permit' })
     expect(saveButton).toBeDisabled()
+    expect(screen.getByLabelText('Applicant client number')).toHaveAttribute('readonly')
 
     await act(async () =>
       resolveOwnerLocations?.([
@@ -3980,46 +4998,26 @@ describe('Provincial Permit Detail Action Smoke', () => {
       ]),
     )
     await waitFor(() => expect(saveButton).toBeEnabled())
-
-    const ownerClientNumber = screen.getByLabelText('Owner client number')
-    fireEvent.change(ownerClientNumber, { target: { value: '11111111' } })
-    expect(saveButton).toBeDisabled()
-    await waitFor(() => {
-      expect(
-        screen.getByText('No verified locations were found for this client.'),
-      ).toBeInTheDocument()
-      expect(saveButton).toBeDisabled()
-    })
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
   })
 
-  it('allows Blanket OIC agent maintenance and clears the Agent tab when unchecked', async () => {
+  it('does not offer removal of a saved Blanket OIC agent', async () => {
     configureEditableBlanketOicPackage()
     renderPermitDetails()
 
-    await selectPermitDetailTab('Agent')
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit agent' }))
-    expect(screen.getByLabelText('Agent client number')).toHaveValue('00012345')
-    expect(screen.getByLabelText('Agent location')).toHaveValue('01')
-
     await selectPermitDetailTab('Owner')
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit applicant' }))
     const agentUsedCheckbox = screen.getByRole('checkbox', { name: "I'm an agent" })
     expect(agentUsedCheckbox).toBeChecked()
+    expect(agentUsedCheckbox).toBeDisabled()
     await userEvent.click(agentUsedCheckbox)
     expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
-
-    await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
-    await waitFor(() => {
-      expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
-        expect.objectContaining({
-          agentClientNumber: '',
-          agentClientLocation: '',
-        }),
-      )
-    })
+    expect(screen.getByRole('heading', { name: 'Agent information' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Agent client number')).toHaveValue('00012345')
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
   })
 
-  it('treats a checked blank Blanket OIC Agent tab as dirty and restores it on cancel', async () => {
+  it('does not offer addition of a saved Blanket OIC agent', async () => {
     configureEditableBlanketOicPackage()
     mockedFetchProvincialPermitDetail.mockResolvedValue({
       ...permitDetail,
@@ -4036,22 +5034,14 @@ describe('Provincial Permit Detail Action Smoke', () => {
     renderPermitDetails()
 
     await selectPermitDetailTab('Owner')
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit owner' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit applicant' }))
     const agentUsedCheckbox = screen.getByRole('checkbox', { name: "I'm an agent" })
     expect(agentUsedCheckbox).not.toBeChecked()
+    expect(agentUsedCheckbox).toBeDisabled()
     await userEvent.click(agentUsedCheckbox)
-    expect(await screen.findByRole('tab', { name: 'Agent' })).toBeInTheDocument()
-
-    const dirtyUnload = new Event('beforeunload', { cancelable: true })
-    window.dispatchEvent(dirtyUnload)
-    expect(dirtyUnload.defaultPrevented).toBe(true)
-
-    await userEvent.click(screen.getAllByRole('button', { name: 'Cancel' })[0])
-    expect(screen.getByRole('checkbox', { name: "I'm an agent" })).not.toBeChecked()
     expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
-    const cancelledUnload = new Event('beforeunload', { cancelable: true })
-    window.dispatchEvent(cancelledUnload)
-    expect(cancelledUnload.defaultPrevented).toBe(false)
+    expect(screen.queryByRole('heading', { name: 'Agent information' })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Agent client number')).not.toBeInTheDocument()
   })
 
   it('refreshes normal permit client details from the persisted save result', async () => {
@@ -4467,10 +5457,16 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     await selectPermitDetailTab('Shipping')
     await userEvent.click(await screen.findByRole('button', { name: 'Edit shipping' }))
-    await userEvent.selectOptions(screen.getByLabelText('Final destination country'), 'US')
+    const destinationCountry = screen.getByRole('combobox', {
+      name: 'Final destination country',
+    })
+    await userEvent.click(destinationCountry)
+    await userEvent.click(await screen.findByRole('option', { name: 'United States (US)' }))
     await selectPermitDetailTab('Permit')
     await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
-    await userEvent.selectOptions(screen.getByLabelText('Region'), '1908')
+    expect(screen.getByLabelText('Region')).toBeDisabled()
+    await userEvent.clear(screen.getByLabelText('Submit date'))
+    await userEvent.type(screen.getByLabelText('Submit date'), '2026-04-11')
     await userEvent.selectOptions(screen.getByLabelText('Permit status'), 'COM')
 
     await userEvent.click(screen.getByRole('link', { name: 'Leave permit' }))
@@ -4485,7 +5481,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
       1,
       expect.objectContaining({
         destinationCountry: 'US',
-        orgUnitNumber: '1908',
+        orgUnitNumber: '1903',
+        permitSubmitDate: '2026-04-11',
         permitStatus: 'ACT',
       }),
     )
@@ -4502,7 +5499,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
   })
 
-  it('submits the selected numeric org unit for a Blanket OIC permit', async () => {
+  it('limits editable Blanket OIC regions to the exemption area', async () => {
     mockedFetchProvincialPermitDetail.mockResolvedValue({
       ...permitDetail,
       permitStatusCode: 'ACT',
@@ -4518,18 +5515,100 @@ describe('Provincial Permit Detail Action Smoke', () => {
     const regionSelect = screen.getByLabelText('Region')
     expect(regionSelect).toBeEnabled()
     expect(regionSelect).toHaveValue('1903')
-    await userEvent.selectOptions(regionSelect, '1908')
+    expect(
+      within(regionSelect).getByRole('option', {
+        name: /Kootenay-Boundary Natural Resource Region/,
+      }),
+    ).toBeInTheDocument()
+    expect(
+      within(regionSelect).queryByRole('option', { name: /Skeena Natural Resource Region/ }),
+    ).not.toBeInTheDocument()
+    await userEvent.selectOptions(regionSelect, '1904')
     await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
 
     await waitFor(() => {
       expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
         expect.objectContaining({
           permitNumber: '777',
-          orgUnitNumber: '1908',
+          orgUnitNumber: '1904',
         }),
       )
     })
   })
+
+  it('requires a BOIC Region draft to be saved or discarded before creating a package', async () => {
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      permitStatusCode: 'ACT',
+      permitStatusDescription: 'Active',
+      exemptionTypeDescription: 'Blanket OIC',
+      blanketOic: true,
+      oicRequestPieces: 200,
+      oicRequestVolume: 120.5,
+    })
+    renderPermitDetails()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    await userEvent.selectOptions(screen.getByLabelText('Region'), '1904')
+    await selectPermitDetailTab('Scale')
+    await userEvent.click(screen.getByRole('button', { name: 'Create package' }))
+    const packageEditor = (
+      await screen.findByRole('heading', { name: 'Create Blanket OIC package' })
+    ).closest('.application-detail-edit-section') as HTMLElement
+    await userEvent.click(within(packageEditor).getByRole('button', { name: 'Create package' }))
+
+    expect(
+      await screen.findByText('Save or discard the Region change before saving a package.'),
+    ).toBeInTheDocument()
+    expect(mockedAddBlanketOicPackage).not.toHaveBeenCalled()
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+    await selectPermitDetailTab('Permit')
+    expect(screen.getByLabelText('Region')).toBeEnabled()
+    expect(screen.getByLabelText('Region')).toHaveValue('1904')
+  })
+
+  it.each([1903, 1908])(
+    'keeps linked BOIC region %s fixed even without current packages',
+    async (orgUnitNumber) => {
+      mockedFetchProvincialPermitDetail.mockResolvedValue({
+        ...permitDetail,
+        permitStatusCode: 'ACT',
+        permitStatusDescription: 'Active',
+        exemptionTypeDescription: 'Blanket OIC',
+        blanketOic: true,
+        oicApplicationNumber: 1000999,
+        oicRequestPieces: 200,
+        oicRequestVolume: 120.5,
+        orgUnitNumber,
+      })
+      renderPermitDetails()
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+      const regionSelect = screen.getByLabelText('Region')
+      await waitFor(() => expect(regionSelect).toHaveValue(String(orgUnitNumber)))
+      expect(regionSelect).toBeDisabled()
+      expect(
+        within(regionSelect)
+          .getAllByRole('option')
+          .map((option) => option.getAttribute('value')),
+      ).toEqual(['', String(orgUnitNumber)])
+      expect(
+        screen.getByText('Region cannot be changed after the first package is created.'),
+      ).toBeInTheDocument()
+      await userEvent.clear(screen.getByLabelText('Remarks'))
+      await userEvent.type(screen.getByLabelText('Remarks'), 'Updated remarks')
+      await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
+
+      await waitFor(() => {
+        expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
+          expect.objectContaining({
+            orgUnitNumber: String(orgUnitNumber),
+            permitRemarks: 'Updated remarks',
+          }),
+        )
+      })
+    },
+  )
 
   it('shows Blanket OIC request ceilings only for Blanket OIC permits', async () => {
     mockedFetchProvincialPermitDetail.mockResolvedValue({
@@ -4567,7 +5646,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     ['populated', '250', '999999999'],
     ['zero', '0', '0'],
   ])(
-    'saves %s active Blanket OIC request ceilings with the legacy mutation field names',
+    'saves %s active Blanket OIC request values with the existing mutation field names',
     async (_description, pieces, volume) => {
       mockedFetchProvincialPermitDetail.mockResolvedValue({
         ...permitDetail,
@@ -4585,16 +5664,20 @@ describe('Provincial Permit Detail Action Smoke', () => {
       expect(screen.getByLabelText('Received date')).toBeDisabled()
       expect(screen.getByLabelText('Current permit volume (m³)')).toBeDisabled()
       expect(screen.getByLabelText('Current permit pieces')).toBeDisabled()
-      expect(screen.getByLabelText('Permit Request Pieces')).not.toHaveAttribute('aria-required')
-      expect(screen.getByLabelText('Permit Request Volume (m³)')).not.toHaveAttribute(
+      expect(screen.getByLabelText('Permit Request Pieces')).toHaveAttribute(
         'aria-required',
+        'true',
+      )
+      expect(screen.getByLabelText('Permit Request Volume (m³)')).toHaveAttribute(
+        'aria-required',
+        'true',
       )
       expect(
         document.querySelector('label[for="permit-oicPermitTotalPieces"] .required-label__marker'),
-      ).not.toBeInTheDocument()
+      ).toBeInTheDocument()
       expect(
         document.querySelector('label[for="permit-oicPermitTotalVolume"] .required-label__marker'),
-      ).not.toBeInTheDocument()
+      ).toBeInTheDocument()
       await userEvent.clear(screen.getByLabelText('Permit Request Pieces'))
       if (pieces) {
         await userEvent.type(screen.getByLabelText('Permit Request Pieces'), pieces)
@@ -4616,7 +5699,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     },
   )
 
-  it('normalizes cleared active Blanket OIC request ceilings to zero', async () => {
+  it('requires nonblank active Blanket OIC request values without coercing them to zero', async () => {
     mockedFetchProvincialPermitDetail.mockResolvedValue({
       ...permitDetail,
       permitStatusCode: 'ACT',
@@ -4632,33 +5715,18 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.clear(screen.getByLabelText('Permit Request Volume (m³)'))
     await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
 
-    await waitFor(() => {
-      expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
-        expect.objectContaining({
-          oicPermitTotalPieces: '0',
-          oicPermitTotalVolume: '0',
-        }),
-      )
-    })
-    const financialTile = (
-      await screen.findByRole('heading', { name: 'Financial and volume' })
-    ).closest('.cds--tile')
-    expect(financialTile).toBeTruthy()
-    const requestPiecesLabel = within(financialTile as HTMLElement).getByText(
-      'Permit Request Pieces',
-    )
     expect(
-      within(requestPiecesLabel.closest('.detail-field-item') as HTMLElement).getByText('0'),
-    ).toBeInTheDocument()
-    const requestVolumeLabel = within(financialTile as HTMLElement).getByText(
-      'Permit Request Volume (m³)',
-    )
+      (await screen.findAllByText('Permit Request Pieces is required.')).length,
+    ).toBeGreaterThan(0)
     expect(
-      within(requestVolumeLabel.closest('.detail-field-item') as HTMLElement).getByText('0'),
-    ).toBeInTheDocument()
+      (await screen.findAllByText('Permit Request Volume is required.')).length,
+    ).toBeGreaterThan(0)
+    expect(screen.getByLabelText('Permit Request Pieces')).toHaveValue('')
+    expect(screen.getByLabelText('Permit Request Volume (m³)')).toHaveValue('')
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
   })
 
-  it('normalizes cleared Blanket OIC request ceilings when cancelling an active permit', async () => {
+  it('allows zero Blanket OIC request values while cancelling an active permit', async () => {
     mockedFetchProvincialPermitDetail.mockResolvedValue({
       ...permitDetail,
       permitStatusCode: 'ACT',
@@ -4671,10 +5739,15 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
     await userEvent.selectOptions(screen.getByLabelText('Permit status'), 'CAN')
-    expect(screen.getByLabelText('Permit Request Pieces')).not.toHaveAttribute('aria-required')
-    expect(screen.getByLabelText('Permit Request Volume (m³)')).not.toHaveAttribute('aria-required')
+    expect(screen.getByLabelText('Permit Request Pieces')).toHaveAttribute('aria-required', 'true')
+    expect(screen.getByLabelText('Permit Request Volume (m³)')).toHaveAttribute(
+      'aria-required',
+      'true',
+    )
     await userEvent.clear(screen.getByLabelText('Permit Request Pieces'))
+    await userEvent.type(screen.getByLabelText('Permit Request Pieces'), '0')
     await userEvent.clear(screen.getByLabelText('Permit Request Volume (m³)'))
+    await userEvent.type(screen.getByLabelText('Permit Request Volume (m³)'), '0')
     await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
 
     await waitFor(() => {
@@ -4688,7 +5761,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
   })
 
-  it('preserves blank request ceilings on an active Blanket OIC draft', async () => {
+  it('requires request values before saving an active Blanket OIC permit with blank legacy values', async () => {
     mockedFetchProvincialPermitDetail.mockResolvedValue({
       ...permitDetail,
       permitStatusCode: 'ACT',
@@ -4702,14 +5775,13 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
     await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
 
-    await waitFor(() => {
-      expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
-        expect.objectContaining({
-          oicPermitTotalPieces: '',
-          oicPermitTotalVolume: '',
-        }),
-      )
-    })
+    expect(
+      (await screen.findAllByText('Permit Request Pieces is required.')).length,
+    ).toBeGreaterThan(0)
+    expect(
+      (await screen.findAllByText('Permit Request Volume is required.')).length,
+    ).toBeGreaterThan(0)
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
   })
 
   it('validates Blanket OIC request ceilings before saving', async () => {
@@ -4826,7 +5898,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
       renderPermitDetails()
 
       await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
-      await userEvent.selectOptions(screen.getByLabelText('Permit status'), 'COM')
+      const statusLabel = 'Permit status'
+      await userEvent.selectOptions(screen.getByLabelText(statusLabel), 'COM')
 
       const submitDate = screen.getByLabelText('Submit date')
       const issueDate = screen.getByLabelText('Issued date')
@@ -4858,7 +5931,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       expect(await screen.findByText('Expiry date is required.')).toBeInTheDocument()
       expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
 
-      await userEvent.selectOptions(screen.getByLabelText('Permit status'), 'ACT')
+      await userEvent.selectOptions(screen.getByLabelText(statusLabel), 'ACT')
       expect(submitDate).not.toHaveAttribute('aria-required')
       expect(issueDate).not.toHaveAttribute('aria-required')
       expect(expiryDate).not.toHaveAttribute('aria-required')
@@ -6445,9 +7518,9 @@ describe('Provincial Permit Detail Action Smoke', () => {
     mockedFetchProvincialPermitDetailTabs.mockRejectedValue(new Error('tables unavailable'))
 
     renderPermitDetails()
-    await selectPermitDetailTab('Items')
+    await selectPermitDetailTab('Scale')
 
-    expect(await screen.findByText('Permit items unavailable')).toBeInTheDocument()
+    expect(await screen.findByText('Scale unavailable')).toBeInTheDocument()
     expect(
       screen.queryByRole('heading', { name: 'Create Blanket OIC package' }),
     ).not.toBeInTheDocument()

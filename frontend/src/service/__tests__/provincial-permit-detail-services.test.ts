@@ -935,8 +935,72 @@ describe('provincial permit detail services', () => {
     )
     expect(result).toEqual({
       applicationList: ['1000456', '1000457'],
+      applicationItems: ['1000456', '1000457'].map((applicationNumber) => ({
+        applicationNumber,
+        disabled: false,
+        disabledReason: '',
+        unassignedPieces: null,
+        unassignedVolume: null,
+      })),
       errorMessage: '',
     })
+  })
+
+  it('retains disabled application reasons and attachable totals without enabling invalid options', async () => {
+    getCachedResponseMock.mockResolvedValue(
+      response({
+        applicationList: ['101101'],
+        applicationItems: [
+          {
+            applicationNumber: '101101',
+            disabled: false,
+            disabledReason: '',
+            unassignedPieces: 12,
+            unassignedVolume: 25.5,
+          },
+          {
+            applicationNumber: '101102',
+            disabled: true,
+            disabledReason: 'No unassigned scale rows.',
+            unassignedPieces: null,
+            unassignedVolume: null,
+          },
+          {
+            applicationNumber: '101103',
+            disabled: false,
+            unassignedPieces: -1,
+            unassignedVolume: 'invalid',
+          },
+        ],
+        errorMessage: '',
+      }),
+    )
+
+    const result = await fetchAvailablePermitApplications('EX-700', [])
+
+    expect(result.applicationItems).toEqual([
+      {
+        applicationNumber: '101101',
+        disabled: false,
+        disabledReason: '',
+        unassignedPieces: 12,
+        unassignedVolume: 25.5,
+      },
+      {
+        applicationNumber: '101102',
+        disabled: true,
+        disabledReason: 'No unassigned scale rows.',
+        unassignedPieces: null,
+        unassignedVolume: null,
+      },
+      {
+        applicationNumber: '101103',
+        disabled: true,
+        disabledReason: 'This application is unavailable for this permit.',
+        unassignedPieces: null,
+        unassignedVolume: null,
+      },
+    ])
   })
 
   it('loads permit invoice details sequentially after the invoice list', async () => {
