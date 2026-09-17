@@ -3561,48 +3561,75 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.queryByRole('heading', { name: 'Edit BOIC-9' })).not.toBeInTheDocument()
   })
 
-  it('reloads the BOIC region context when switching permits in the same exemption', async () => {
-    mockedFetchProvincialPermitDetail.mockImplementation(async (requestedPermitNumber) => ({
-      ...permitDetail,
-      permitNumber: Number(requestedPermitNumber),
-      permitStatusCode: 'ACT',
-      permitStatusDescription: 'Active',
-      exemptionTypeDescription: 'Blanket OIC',
-      blanketOic: true,
-      oicApplicationNumber: null,
-      oicRequestPieces: 200,
-      oicRequestVolume: 120.5,
-    }))
+  it.each(['loaded', 'failed'])(
+    'reloads %s BOIC region context when switching permits in the same exemption',
+    async (previousLookup) => {
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+      const regionLookupError =
+        'The exemption region settings could not be loaded. Reload before changing this permit region.'
+      if (previousLookup === 'failed') {
+        mockedFetchExemptionRegionContext.mockRejectedValue(new Error('Region lookup failed'))
+      }
+      mockedFetchProvincialPermitDetail.mockImplementation(async (requestedPermitNumber) => ({
+        ...permitDetail,
+        permitNumber: Number(requestedPermitNumber),
+        permitStatusCode: 'ACT',
+        permitStatusDescription: 'Active',
+        exemptionTypeDescription: 'Blanket OIC',
+        blanketOic: true,
+        oicApplicationNumber: null,
+        oicRequestPieces: 200,
+        oicRequestVolume: 120.5,
+      }))
 
-    render(
-      <MemoryRouter initialEntries={['/provincial/permit/777']}>
-        <PermitRouteSwitcher />
-        <Routes>
-          <Route
-            path="/provincial/permit/:permitNumber"
-            element={<ProvincialPermitDetailsPage />}
-          />
-        </Routes>
-      </MemoryRouter>,
-    )
+      render(
+        <MemoryRouter initialEntries={['/provincial/permit/777']}>
+          <PermitRouteSwitcher />
+          <Routes>
+            <Route
+              path="/provincial/permit/:permitNumber"
+              element={<ProvincialPermitDetailsPage />}
+            />
+          </Routes>
+        </MemoryRouter>,
+      )
 
-    await waitFor(() =>
-      expect(mockedFetchExemptionRegionContext.mock.calls.length).toBeGreaterThan(0),
-    )
-    const initialRegionContextCallCount = mockedFetchExemptionRegionContext.mock.calls.length
+      await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+      if (previousLookup === 'failed') {
+        expect(await screen.findByText(regionLookupError)).toBeInTheDocument()
+        expect(screen.getByLabelText('Region')).toBeDisabled()
+      } else {
+        await waitFor(() => expect(screen.getByLabelText('Region')).toBeEnabled())
+      }
+      const initialRegionContextCallCount = mockedFetchExemptionRegionContext.mock.calls.length
+      let resolveRegionContext!: (
+        value: Awaited<ReturnType<typeof fetchExemptionRegionContext>>,
+      ) => void
+      mockedFetchExemptionRegionContext.mockReturnValue(
+        new Promise((resolve) => {
+          resolveRegionContext = resolve
+        }),
+      )
 
-    await userEvent.click(screen.getByRole('button', { name: 'Switch permit' }))
-    await waitFor(() => expect(mockedFetchProvincialPermitDetail).toHaveBeenCalledWith('888'))
-    await waitFor(() =>
-      expect(mockedFetchExemptionRegionContext.mock.calls.length).toBeGreaterThan(
-        initialRegionContextCallCount,
-      ),
-    )
+      await userEvent.click(screen.getByRole('button', { name: 'Switch permit' }))
+      await waitFor(() => expect(mockedFetchProvincialPermitDetail).toHaveBeenCalledWith('888'))
+      await waitFor(() =>
+        expect(mockedFetchExemptionRegionContext.mock.calls.length).toBeGreaterThan(
+          initialRegionContextCallCount,
+        ),
+      )
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
-    await waitFor(() => expect(screen.getByLabelText('Region')).toBeEnabled())
-    expect(screen.getByLabelText('Region')).toHaveValue('1903')
-  })
+      await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+      expect(screen.getByLabelText('Region')).toBeDisabled()
+      expect(screen.queryByText(regionLookupError)).not.toBeInTheDocument()
+      await act(async () => {
+        resolveRegionContext({ exemptionNumber: 'EX-9', regionNumbers: ['1903'] })
+      })
+      await waitFor(() => expect(screen.getByLabelText('Region')).toBeEnabled())
+      expect(screen.getByLabelText('Region')).toHaveValue('1903')
+      consoleError.mockRestore()
+    },
+  )
 
   it('ignores a package edit response after cancelling and opening Create package', async () => {
     configureEditableBlanketOicPackage()

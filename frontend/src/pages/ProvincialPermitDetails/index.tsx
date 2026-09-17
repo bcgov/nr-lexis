@@ -906,10 +906,15 @@ const ProvincialPermitDetailsPage = () => {
   const [shippingReferencesErrorMessage, setShippingReferencesErrorMessage] = useState('')
   const [permitStatusOptions, setPermitStatusOptions] = useState<SearchOption[]>([])
   const [permitRegionOptions, setPermitRegionOptions] = useState<SearchOption[]>([])
-  const [blanketOicExemptionRegionNumbers, setBlanketOicExemptionRegionNumbers] = useState<
-    string[] | null
-  >(null)
-  const [blanketOicRegionContextError, setBlanketOicRegionContextError] = useState('')
+  const [blanketOicRegionLookup, setBlanketOicRegionLookup] = useState<{
+    key: string
+    regionNumbers: string[]
+    errorMessage: string
+  } | null>(null)
+  const blanketOicRegionLookupKey =
+    detail?.blanketOic && detail.exemptionNumber
+      ? JSON.stringify([permitNumber, detail.exemptionNumber])
+      : null
   const [isPermitOptionsLoading, setIsPermitOptionsLoading] = useState(true)
   const [permitOptionsUnavailable, setPermitOptionsUnavailable] = useState(false)
   const [permitOptionsErrorMessage, setPermitOptionsErrorMessage] = useState('')
@@ -1000,8 +1005,7 @@ const ProvincialPermitDetailsPage = () => {
     setHasLoadedAvailablePermitApplications(false)
     setIsLoadingAvailableApplications(false)
     setAvailablePermitApplicationsError('')
-    setBlanketOicExemptionRegionNumbers(null)
-    setBlanketOicRegionContextError('')
+    setBlanketOicRegionLookup(null)
     setPermitApprovalEmailOpen(false)
     setPermitApprovalEmailAddress('')
   }, [
@@ -1094,33 +1098,35 @@ const ProvincialPermitDetailsPage = () => {
   }, [])
 
   useEffect(() => {
-    if (!detail?.blanketOic || !detail.exemptionNumber) {
-      setBlanketOicExemptionRegionNumbers(null)
-      setBlanketOicRegionContextError('')
+    if (!blanketOicRegionLookupKey || !detail?.exemptionNumber) {
       return undefined
     }
 
     let active = true
-    setBlanketOicExemptionRegionNumbers(null)
-    setBlanketOicRegionContextError('')
     void fetchExemptionRegionContext(detail.exemptionNumber)
       .then((context) => {
         if (!active) return
-        setBlanketOicExemptionRegionNumbers(context.regionNumbers)
+        setBlanketOicRegionLookup({
+          key: blanketOicRegionLookupKey,
+          regionNumbers: context.regionNumbers,
+          errorMessage: '',
+        })
       })
       .catch((error: unknown) => {
         if (!active) return
         console.error(error)
-        setBlanketOicExemptionRegionNumbers([])
-        setBlanketOicRegionContextError(
-          'The exemption region settings could not be loaded. Reload before changing this permit region.',
-        )
+        setBlanketOicRegionLookup({
+          key: blanketOicRegionLookupKey,
+          regionNumbers: [],
+          errorMessage:
+            'The exemption region settings could not be loaded. Reload before changing this permit region.',
+        })
       })
 
     return () => {
       active = false
     }
-  }, [detail?.blanketOic, detail?.exemptionNumber, permitNumber])
+  }, [blanketOicRegionLookupKey, detail?.exemptionNumber])
 
   useEffect(() => {
     const load = async () => {
@@ -1642,6 +1648,10 @@ const ProvincialPermitDetailsPage = () => {
       : ''
   const permitStatusCode = detail?.permitStatusCode?.trim().toUpperCase()
   const invoiceMaterialLocked = permitStatusCode === 'COM' || permitStatusCode === 'PPD'
+  const currentBlanketOicRegionLookup =
+    blanketOicRegionLookup?.key === blanketOicRegionLookupKey ? blanketOicRegionLookup : null
+  const blanketOicExemptionRegionNumbers = currentBlanketOicRegionLookup?.regionNumbers ?? null
+  const blanketOicRegionContextError = currentBlanketOicRegionLookup?.errorMessage ?? ''
   const blanketOicRegionContext = useMemo(() => {
     if (!blanketOicPermit || blanketOicExemptionRegionNumbers === null) {
       return null
