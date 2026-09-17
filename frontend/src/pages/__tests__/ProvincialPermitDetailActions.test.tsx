@@ -1172,29 +1172,52 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
   })
 
-  it('refreshes Ministerial scale totals after adding an application without discarding permit edits', async () => {
+  it('refreshes Ministerial totals and available applications after adding without discarding permit edits', async () => {
     const initialDetail = configureMinisterialActivePermit({ receiptNumber: null, remarks: '' })
     const refreshedDetail = {
       ...initialDetail,
       numberOfPieces: 18,
       permitVolume: 132.5,
     }
+    mockedFetchProvincialPermitExemptionContext.mockResolvedValue({
+      approvedExemptionVolume: 250,
+      exemptionVolumeRemaining: 117.5,
+      exemptionTypeDescription: 'Ministerial',
+      blanketOic: false,
+    })
     mockedFetchProvincialPermitDetail
       .mockResolvedValueOnce(initialDetail)
       .mockResolvedValue(refreshedDetail)
-    mockedFetchAvailablePermitApplications.mockResolvedValue({
-      applicationList: ['APP-REFRESH'],
-      applicationItems: [
-        {
-          applicationNumber: 'APP-REFRESH',
-          disabled: false,
-          disabledReason: '',
-          unassignedPieces: 8,
-          unassignedVolume: 12.5,
-        },
-      ],
-      errorMessage: '',
-    })
+    mockedFetchProvincialPermitDetailTabs
+      .mockResolvedValueOnce(tabsResult)
+      .mockResolvedValue({ ...tabsResult, applications: ['APP-REFRESH'] })
+    mockedFetchAvailablePermitApplications
+      .mockResolvedValueOnce({
+        applicationList: ['APP-REFRESH'],
+        applicationItems: [
+          {
+            applicationNumber: 'APP-REFRESH',
+            disabled: false,
+            disabledReason: '',
+            unassignedPieces: 8,
+            unassignedVolume: 12.5,
+          },
+        ],
+        errorMessage: '',
+      })
+      .mockResolvedValue({
+        applicationList: [],
+        applicationItems: [
+          {
+            applicationNumber: 'APP-REFRESH',
+            disabled: true,
+            disabledReason: 'Already associated with this permit.',
+            unassignedPieces: 8,
+            unassignedVolume: 12.5,
+          },
+        ],
+        errorMessage: '',
+      })
     renderPermitDetails()
 
     await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
@@ -1210,10 +1233,154 @@ describe('Provincial Permit Detail Action Smoke', () => {
       const volume = screen
         .getByText('Current permit volume (m³)')
         .parentElement?.querySelector('dd')
+      const remaining = screen
+        .getByText('Total volume remaining (m³)')
+        .parentElement?.querySelector('dd')
       expect(pieces).toHaveTextContent('18')
       expect(volume).toHaveTextContent('132.5')
+      expect(remaining).toHaveTextContent('117.5')
+    })
+    await waitFor(() => {
+      expect(mockedFetchAvailablePermitApplications).toHaveBeenLastCalledWith('EX-9', [
+        'APP-REFRESH',
+      ])
+    })
+    expect(
+      screen.getByRole('checkbox', { name: 'Include application APP-REFRESH in permit' }),
+    ).toBeDisabled()
+    expect(screen.getByLabelText('Remarks')).toHaveValue('Keep this draft remark')
+  })
+
+  it('keeps a saved Ministerial application addition when exemption totals cannot refresh', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const initialDetail = configureMinisterialActivePermit({ receiptNumber: null, remarks: '' })
+    const refreshedDetail = {
+      ...initialDetail,
+      numberOfPieces: 18,
+      permitVolume: 132.5,
+    }
+    mockedFetchProvincialPermitDetail
+      .mockResolvedValueOnce(initialDetail)
+      .mockResolvedValue(refreshedDetail)
+    mockedFetchProvincialPermitExemptionContext.mockRejectedValueOnce(
+      new Error('exemption totals unavailable'),
+    )
+    mockedFetchAvailablePermitApplications.mockResolvedValue({
+      applicationList: ['APP-REFRESH'],
+      applicationItems: [
+        {
+          applicationNumber: 'APP-REFRESH',
+          disabled: false,
+          disabledReason: '',
+          unassignedPieces: 8,
+          unassignedVolume: 12.5,
+        },
+      ],
+      errorMessage: '',
+    })
+
+    renderPermitDetails()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    await userEvent.type(screen.getByLabelText('Remarks'), 'Keep this draft remark')
+    await userEvent.click(
+      screen.getByRole('checkbox', { name: 'Include application APP-REFRESH in permit' }),
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Add application' }))
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          'Application was added to the permit. Reload before changing application links again.',
+        ),
+      ).toBeInTheDocument()
     })
     expect(screen.getByLabelText('Remarks')).toHaveValue('Keep this draft remark')
+    consoleError.mockRestore()
+  })
+
+  it('refreshes Ministerial remaining volume and available applications after removing an application', async () => {
+    const initialDetail = configureMinisterialActivePermit({ receiptNumber: null })
+    const refreshedDetail = {
+      ...initialDetail,
+      numberOfPieces: 0,
+      permitVolume: 0,
+    }
+    mockedFetchProvincialPermitExemptionContext.mockResolvedValue({
+      approvedExemptionVolume: 250,
+      exemptionVolumeRemaining: 372.6,
+      exemptionTypeDescription: 'Ministerial',
+      blanketOic: false,
+    })
+    mockedFetchProvincialPermitDetail
+      .mockResolvedValueOnce(initialDetail)
+      .mockResolvedValue(refreshedDetail)
+    mockedFetchProvincialPermitDetailTabs
+      .mockResolvedValueOnce({ ...tabsResult, applications: ['APP-REFRESH'] })
+      .mockResolvedValue(tabsResult)
+    mockedFetchAvailablePermitApplications
+      .mockResolvedValueOnce({
+        applicationList: [],
+        applicationItems: [
+          {
+            applicationNumber: 'APP-REFRESH',
+            disabled: true,
+            disabledReason: 'Already associated with this permit.',
+            unassignedPieces: 8,
+            unassignedVolume: 28.4,
+          },
+        ],
+        errorMessage: '',
+      })
+      .mockResolvedValue({
+        applicationList: ['APP-REFRESH'],
+        applicationItems: [
+          {
+            applicationNumber: 'APP-REFRESH',
+            disabled: false,
+            disabledReason: '',
+            unassignedPieces: 8,
+            unassignedVolume: 28.4,
+          },
+        ],
+        errorMessage: '',
+      })
+
+    renderPermitDetails()
+
+    const includedApplications = await screen.findByRole('region', {
+      name: 'Included permit applications',
+    })
+    const applicationRow = within(includedApplications)
+      .getByRole('link', { name: 'APP-REFRESH' })
+      .closest('tr')
+    expect(applicationRow).toBeTruthy()
+    await userEvent.click(
+      within(applicationRow as HTMLElement).getByRole('button', { name: 'Remove' }),
+    )
+    const removalConfirmation = await screen.findByRole('dialog', {
+      name: 'Remove associated application?',
+    })
+    await userEvent.click(within(removalConfirmation).getByRole('button', { name: 'Remove' }))
+
+    await waitFor(() => {
+      const pieces = screen.getByText('Current permit pieces').parentElement?.querySelector('dd')
+      const volume = screen
+        .getByText('Current permit volume (m³)')
+        .parentElement?.querySelector('dd')
+      const remaining = screen
+        .getByText('Total volume remaining (m³)')
+        .parentElement?.querySelector('dd')
+      expect(pieces).toHaveTextContent('0')
+      expect(volume).toHaveTextContent('0')
+      expect(remaining).toHaveTextContent('372.6')
+    })
+    await waitFor(() => {
+      expect(mockedFetchAvailablePermitApplications).toHaveBeenLastCalledWith('EX-9', [])
+    })
+    expect(
+      screen.getByRole('checkbox', { name: 'Include application APP-REFRESH in permit' }),
+    ).toBeEnabled()
   })
 
   it('shows saved permit client values when client enrichment is unavailable', async () => {

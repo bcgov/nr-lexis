@@ -2028,9 +2028,13 @@ const ProvincialPermitDetailsPage = () => {
       return
     }
 
-    const [, refreshedDetail] = await Promise.all([
+    const exemptionNumber = detail?.exemptionNumber
+    const [, refreshedDetail, refreshedExemptionContext] = await Promise.all([
       reloadPermitTabs(),
       fetchProvincialPermitDetail(resolvedPermitNumber),
+      exemptionNumber
+        ? fetchProvincialPermitExemptionContext(exemptionNumber)
+        : Promise.resolve(null),
     ])
     if (!refreshedDetail) {
       throw new Error(`No provincial permit found for ${resolvedPermitNumber}.`)
@@ -2042,6 +2046,11 @@ const ProvincialPermitDetailsPage = () => {
             ...current,
             permitVolume: refreshedDetail.permitVolume,
             numberOfPieces: refreshedDetail.numberOfPieces,
+            approvedExemptionVolume:
+              refreshedExemptionContext?.approvedExemptionVolume ?? current.approvedExemptionVolume,
+            exemptionVolumeRemaining:
+              refreshedExemptionContext?.exemptionVolumeRemaining ??
+              current.exemptionVolumeRemaining,
           }
         : refreshedDetail,
     )
@@ -2054,7 +2063,7 @@ const ProvincialPermitDetailsPage = () => {
           }
         : buildPermitDetailForm(refreshedDetail),
     )
-  }, [detail?.permitNumber, permitNumber, reloadPermitTabs])
+  }, [detail?.exemptionNumber, detail?.permitNumber, permitNumber, reloadPermitTabs])
 
   const reloadAvailablePermitApplications = useCallback(async () => {
     const isLatestRequest = beginAvailablePermitApplicationsRequest()
@@ -3107,13 +3116,10 @@ const ProvincialPermitDetailsPage = () => {
 
       setPermitApplicationToAdd('')
       setMinisterialPermitApplicationsToAdd([])
-      setAvailablePermitApplications((current) =>
-        current.filter((applicationNumber) => !selectedApplications.includes(applicationNumber)),
-      )
-      setAvailablePermitApplicationItems(
-        (current) =>
-          current?.filter((item) => !selectedApplications.includes(item.applicationNumber)) ?? null,
-      )
+      setAvailablePermitApplications([])
+      setAvailablePermitApplicationItems(null)
+      setHasLoadedAvailablePermitApplications(false)
+      setAvailablePermitApplicationsError('')
       setTabsData((current) =>
         current
           ? {
