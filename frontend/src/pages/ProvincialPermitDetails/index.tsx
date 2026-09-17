@@ -43,6 +43,7 @@ import ContentLoadingOverlay from '@/components/ContentLoadingOverlay'
 import DetailBreadcrumb from '@/components/DetailBreadcrumb'
 import DetailLoadError from '@/components/DetailLoadError'
 import EmptyState from '@/components/EmptyState'
+import ForestClientComboBox from '@/components/ForestClientComboBox'
 import IsoDatePicker from '@/components/IsoDatePicker'
 import PageHeader from '@/components/PageHeader'
 import PendingIcon from '@/components/PendingIcon'
@@ -3629,17 +3630,24 @@ const ProvincialPermitDetailsPage = () => {
     return (
       <>
         <div className="legacy-search-grid">
-          <TextInput
+          <ForestClientComboBox
             id={`permit-${clientNumberField}`}
             labelText={requiredLabel(`${label} client number`)}
-            aria-required="true"
             value={clientNumber}
-            disabled={isDisabled}
-            maxLength={8}
-            onChange={(event) => setPermitClientNumber(kind, event.target.value)}
-            onBlur={(event) =>
-              void loadPermitClientLocations(kind, event.target.value, locationCode)
+            selectedClientName={clientData?.companyName}
+            counterpartyClientNumber={
+              isOwner
+                ? (permitForm?.agentClientNumber ?? '')
+                : (permitForm?.ownerClientNumber ?? '')
             }
+            required
+            disabled={isDisabled}
+            onChange={(selectedClientNumber) => {
+              setPermitClientNumber(kind, selectedClientNumber)
+              if (selectedClientNumber) {
+                void loadPermitClientLocations(kind, selectedClientNumber, '')
+              }
+            }}
           />
           <Select
             id={`permit-${locationField}`}

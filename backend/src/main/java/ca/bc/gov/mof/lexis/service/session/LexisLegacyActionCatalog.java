@@ -53,6 +53,7 @@ final class LexisLegacyActionCatalog {
           "mofrListing",
           "saveExemption",
           "savePermit",
+          "searchClients",
           "uploadApplicationSubmission",
           "viewFederalApplication",
           "viewNotifications");

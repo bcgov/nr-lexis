@@ -8,6 +8,7 @@ import {
   countFederalApplications,
   searchFederalApplications,
 } from '@/service/federal-application-search-service'
+import { searchForestClients } from '@/service/client-search-service'
 import { fetchFederalApplicationOptions } from '@/service/search-options-service'
 import { createTestAuthContext, createTestCapabilities } from '@/test-utils/auth'
 
@@ -34,9 +35,14 @@ vi.mock('@/service/search-options-service', () => ({
   fetchFederalApplicationOptions: vi.fn(),
 }))
 
+vi.mock('@/service/client-search-service', () => ({
+  searchForestClients: vi.fn(),
+}))
+
 const mockedUseAuth = vi.mocked(useAuth)
 const mockedCountFederalApplications = vi.mocked(countFederalApplications)
 const mockedSearchFederalApplications = vi.mocked(searchFederalApplications)
+const mockedSearchForestClients = vi.mocked(searchForestClients)
 const mockedFetchFederalApplicationOptions = vi.mocked(fetchFederalApplicationOptions)
 
 const renderPage = (path = '/federal?applicationStatus=APP&page=1&pageSize=10') => {
@@ -92,6 +98,7 @@ describe('Federal Search Actions', () => {
         { value: 'APPROVED', label: 'Approved' },
       ],
     })
+    mockedSearchForestClients.mockResolvedValue([])
     mockedSearchFederalApplications.mockResolvedValue({
       content: defaultRows,
       page: {
@@ -154,6 +161,55 @@ describe('Federal Search Actions', () => {
       expect(resultsTable).not.toBeVisible()
     })
     expect(mockedSearchFederalApplications).toHaveBeenCalledTimes(searchCallsBeforeClear)
+  })
+
+  it('clears an unselected client search term with Clear all', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({ canPerform: (action: string) => action === '/createExemption' }),
+    )
+
+    renderPage('/federal')
+
+    const clientInput = await screen.findByRole('combobox', { name: 'Client number' })
+    await userEvent.type(clientInput, 'Pine')
+    expect(clientInput).toHaveValue('Pine')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Clear all' }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('combobox', { name: 'Client number' })).toHaveValue('')
+    })
+  })
+
+  it('uses a selected canonical client number for the federal search', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({ canPerform: (action: string) => action === '/createExemption' }),
+    )
+    mockedSearchForestClients.mockResolvedValue([
+      {
+        clientNumber: '00012345',
+        companyName: 'Pine Forestry',
+        clientAcronym: '',
+      },
+    ])
+
+    renderPage('/federal')
+
+    const clientInput = await screen.findByRole('combobox', { name: 'Client number' })
+    await userEvent.type(clientInput, 'Pine')
+    const option = await screen.findByRole('option', {
+      name: 'Pine Forestry · 00012345',
+    })
+    await userEvent.click(option)
+    await userEvent.click(screen.getByRole('button', { name: 'Search' }))
+
+    await waitFor(() => {
+      expect(
+        mockedSearchFederalApplications.mock.calls.some(
+          ([request]) => request.filters.clientNumber === '00012345',
+        ),
+      ).toBe(true)
+    })
   })
 
   it('applies the legacy Approved default on the first search', async () => {
@@ -423,7 +479,7 @@ describe('Federal Search Actions', () => {
     expect(
       screen.queryByRole('checkbox', { name: /Select federal application/ }),
     ).not.toBeInTheDocument()
-    expect(screen.getByLabelText('Client number')).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: 'Client number' })).toBeInTheDocument()
   })
 
   it('keeps repeated federal numbers linked to their distinct internal applications', async () => {

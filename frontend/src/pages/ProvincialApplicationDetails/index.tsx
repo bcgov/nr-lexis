@@ -101,6 +101,7 @@ import {
 import DetailDocumentUploadPanel from '../../components/uploads/DetailDocumentUploadPanel'
 import IsoDatePicker from '../../components/IsoDatePicker'
 import SearchableSelect from '../../components/SearchableSelect'
+import ForestClientComboBox from '@/components/ForestClientComboBox'
 import { nonNegativeWholeNumberFieldError } from '@/pages/shared/application-term-utils'
 import {
   CLIENT_LOOKUP_UNAVAILABLE_MESSAGE,
@@ -4152,16 +4153,18 @@ const ProvincialApplicationDetailsPage = () => {
                         {isEditingOwnerDetails && summaryForm ? (
                           <>
                             <div className="legacy-search-grid application-client-edit-grid">
-                              <TextInput
+                              <ForestClientComboBox
                                 id="applicationOwnerClientNumberEdit"
                                 labelText={requiredLabel('Client number')}
-                                aria-required="true"
                                 value={summaryForm.ownerClientNumber}
+                                selectedClientName={ownerClientData?.companyName}
+                                counterpartyClientNumber={summaryForm.agentClientNumber}
+                                required
                                 invalid={Boolean(visibleSummaryFieldError('ownerClientNumber'))}
                                 invalidText={visibleSummaryFieldError('ownerClientNumber')}
                                 disabled={isSavingSummary}
-                                onChange={(event) =>
-                                  onSummaryFormChange('ownerClientNumber', event.target.value)
+                                onChange={(ownerClientNumber) =>
+                                  onSummaryFormChange('ownerClientNumber', ownerClientNumber)
                                 }
                               />
                               {canChangeApplicantType ? (
@@ -4341,16 +4344,18 @@ const ProvincialApplicationDetailsPage = () => {
                           {isEditingAgentDetails && summaryForm ? (
                             <>
                               <div className="legacy-search-grid application-client-edit-grid">
-                                <TextInput
+                                <ForestClientComboBox
                                   id="applicationAgentClientNumberEdit"
                                   labelText={requiredLabel('Agent number')}
-                                  aria-required="true"
                                   value={summaryForm.agentClientNumber}
+                                  selectedClientName={agentClientData?.companyName}
+                                  counterpartyClientNumber={summaryForm.ownerClientNumber}
+                                  required
                                   invalid={Boolean(visibleSummaryFieldError('agentClientNumber'))}
                                   invalidText={visibleSummaryFieldError('agentClientNumber')}
                                   disabled={isSavingSummary}
-                                  onChange={(event) =>
-                                    onSummaryFormChange('agentClientNumber', event.target.value)
+                                  onChange={(agentClientNumber) =>
+                                    onSummaryFormChange('agentClientNumber', agentClientNumber)
                                   }
                                 />
                                 <TextInput

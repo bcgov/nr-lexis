@@ -5,7 +5,10 @@ import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
 import ca.bc.gov.mof.lexis.repository.client.ClientLookupRepository;
 import ca.bc.gov.mof.lexis.repository.client.ClientLookupRepository.ClientLocationRow;
+import ca.bc.gov.mof.lexis.repository.client.ClientLookupRepository.ClientSuggestionRow;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
@@ -15,6 +18,7 @@ import org.springframework.stereotype.Service;
 public class OracleClientLookupService implements ClientLookupService {
 
   private static final String NOT_ON_FILE = "Not on file";
+  private static final int MAX_CLIENT_SUGGESTIONS = 15;
 
   private final ClientLookupRepository repository;
 
@@ -88,6 +92,29 @@ public class OracleClientLookupService implements ClientLookupService {
       return List.of(new ClientContact("No contacts on file for this location", "0"));
     }
     return contacts;
+  }
+
+  @Override
+  public List<ClientSuggestion> findClientSuggestions(
+      String searchTerm, boolean federalOnly, String allowedClientNumber) {
+    String normalizedSearchTerm = trimToNull(searchTerm);
+    if (normalizedSearchTerm == null) {
+      return List.of();
+    }
+
+    Map<String, ClientSuggestion> suggestionsByClientNumber = new LinkedHashMap<>();
+    for (ClientSuggestionRow row :
+        repository.findClientSuggestions(normalizedSearchTerm, federalOnly, allowedClientNumber)) {
+      String clientNumber = normalizeClientNumber(row.clientNumber());
+      if (clientNumber == null) {
+        continue;
+      }
+      suggestionsByClientNumber.putIfAbsent(
+          clientNumber,
+          new ClientSuggestion(
+              clientNumber, trimToNull(row.companyName()), trimToNull(row.clientAcronym())));
+    }
+    return suggestionsByClientNumber.values().stream().limit(MAX_CLIENT_SUGGESTIONS).toList();
   }
 
   private ClientData toClientData(ClientLocationRow row) {

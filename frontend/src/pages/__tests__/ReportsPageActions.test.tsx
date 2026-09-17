@@ -40,6 +40,28 @@ vi.mock('@/utils/download', () => ({
   triggerBrowserDownload: vi.fn(),
 }))
 
+vi.mock('@/components/ForestClientComboBox', () => ({
+  default: ({
+    id,
+    labelText,
+    value,
+    onChange,
+  }: {
+    id: string
+    labelText: string
+    value: string
+    onChange: (value: string) => void
+  }) => (
+    <div>
+      <label htmlFor={id}>{labelText}</label>
+      <input id={id} readOnly value={value} />
+      <button type="button" onClick={() => onChange('00012345')}>
+        Select {labelText}
+      </button>
+    </div>
+  ),
+}))
+
 const mockedUseAuth = vi.mocked(useAuth)
 const mockedRunReport = vi.mocked(runReport)
 const mockedFetchReportOptions = vi.mocked(fetchReportOptions)
@@ -292,6 +314,34 @@ describe('Reports Page Actions', () => {
     expect(screen.getByLabelText('Client number')).toHaveValue('00012345')
     expect(screen.getByLabelText('Listing from date')).toHaveValue('2026-01-15')
     expect(screen.getByLabelText('Listing from date')).toHaveAttribute('placeholder', 'YYYY-MM-DD')
+  })
+
+  it('uses the canonical client selection when generating an active report', async () => {
+    mockReportPermissions((action: string) => action === '/offerReport')
+
+    render(
+      <MemoryRouter initialEntries={['/reports/offerReport']}>
+        <Routes>
+          <Route path="/reports/:reportId" element={<ReportsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { name: 'Offers Report' })
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Generate report' })).toBeEnabled(),
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Select Client number' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Generate report' }))
+
+    await waitFor(() => {
+      expect(mockedRunReport).toHaveBeenCalledWith(
+        expect.objectContaining({
+          reportId: 'offerReport',
+          values: expect.objectContaining({ clientNumber: '00012345' }),
+        }),
+      )
+    })
   })
 
   it('rejects invalid report dates in the shared Carbon date field', async () => {

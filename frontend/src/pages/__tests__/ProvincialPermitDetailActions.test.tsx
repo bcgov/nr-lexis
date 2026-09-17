@@ -167,6 +167,44 @@ vi.mock('@/utils/download', () => ({
   triggerBrowserDownload: vi.fn(),
 }))
 
+vi.mock('@/components/ForestClientComboBox', () => ({
+  default: ({
+    id,
+    labelText,
+    value,
+    onChange,
+    onBlur,
+    disabled,
+    invalid,
+    invalidText,
+    counterpartyClientNumber,
+  }: {
+    id: string
+    labelText: string
+    value: string
+    onChange: (value: string) => void
+    onBlur?: () => void
+    disabled?: boolean
+    invalid?: boolean
+    invalidText?: string
+    counterpartyClientNumber?: string
+  }) => (
+    <div>
+      <label htmlFor={id}>{labelText}</label>
+      <input
+        id={id}
+        value={value}
+        disabled={disabled}
+        aria-invalid={invalid || undefined}
+        data-counterparty-client-number={counterpartyClientNumber ?? ''}
+        onBlur={onBlur}
+        onChange={(event) => onChange(event.target.value)}
+      />
+      {invalid && invalidText ? <div>{invalidText}</div> : null}
+    </div>
+  ),
+}))
+
 // This file renders the full provincial permit detail page; several tests exercise
 // Carbon inputs and async child panels, which can exceed Vitest's 5s default in CI.
 vi.setConfig({ testTimeout: 20000 })
@@ -3855,11 +3893,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.getByLabelText('Expiry date')).toHaveValue('')
   })
 
-  it('submits the confirmed full owner client number when editing a Blanket OIC permit', async () => {
+  it('submits a selected canonical owner client number when editing a Blanket OIC permit', async () => {
     configureEditableBlanketOicPackage()
     mockedFetchApplicationClientData.mockImplementation(
       async (clientNumber, clientLocationCode) => ({
-        clientNumber: clientNumber === '67890' ? '00067890' : clientNumber,
+        clientNumber,
         companyName: 'Owner Co',
         address: '1 Owner St',
         city: 'Victoria',
@@ -3877,17 +3915,15 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await selectPermitDetailTab('Owner')
     await userEvent.click(await screen.findByRole('button', { name: 'Edit owner' }))
     const ownerClientNumber = screen.getByLabelText('Owner client number')
-    await userEvent.clear(ownerClientNumber)
-    await userEvent.type(ownerClientNumber, '67890')
-    await userEvent.tab()
+    fireEvent.change(ownerClientNumber, { target: { value: '00067890' } })
     await waitFor(() => {
-      expect(mockedFetchExemptionClientLocations).toHaveBeenCalledWith('67890')
+      expect(mockedFetchExemptionClientLocations).toHaveBeenCalledWith('00067890')
       expect(screen.getByLabelText('Owner location')).toHaveValue('03')
     })
     await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
 
     await waitFor(() => {
-      expect(mockedFetchExemptionClientData).toHaveBeenCalledWith('67890', '03')
+      expect(mockedFetchExemptionClientData).toHaveBeenCalledWith('00067890', '03')
       expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
         expect.objectContaining({ ownerClientNumber: '00067890' }),
       )
@@ -3946,10 +3982,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await waitFor(() => expect(saveButton).toBeEnabled())
 
     const ownerClientNumber = screen.getByLabelText('Owner client number')
-    await userEvent.clear(ownerClientNumber)
-    await userEvent.type(ownerClientNumber, '11111111')
+    fireEvent.change(ownerClientNumber, { target: { value: '11111111' } })
     expect(saveButton).toBeDisabled()
-    await userEvent.tab()
     await waitFor(() => {
       expect(
         screen.getByText('No verified locations were found for this client.'),

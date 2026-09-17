@@ -218,6 +218,7 @@ class LexisRouteAuthorizationIntegrationTest {
   void knownModernAndLegacyEntryPointsShouldResolveExpectedActions() {
     List.of(
             expected(HttpMethod.GET, "/api/lexis/applications/search", null, "/applicationSearch"),
+            expected(HttpMethod.GET, "/api/lexis/client-search", null, "searchClients"),
             expected(
                 HttpMethod.GET,
                 "/api/lexis/record-versions/application",
@@ -938,6 +939,29 @@ class LexisRouteAuthorizationIntegrationTest {
                 .param("actionMapping", "getClientLocations")
                 .param("clientNumber", "77881")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_EXEMPTION_APPROVER"))))
+        .andExpect(status().isNoContent());
+  }
+
+  @Test
+  void clientSearchShouldRequireAnExplicitClientSearchRole() throws Exception {
+    String path = "/api/lexis/client-search";
+
+    mockMvc.perform(get(path).param("q", "Acme")).andExpect(status().isUnauthorized());
+    mockMvc
+        .perform(
+            get(path)
+                .param("q", "Acme")
+                .with(jwt().authorities(new SimpleGrantedAuthority("UNKNOWN"))))
+        .andExpect(status().isForbidden());
+    mockMvc.perform(get(path).param("q", "Acme").with(machineJwt())).andExpect(status().isForbidden());
+    mockMvc
+        .perform(
+            get(path)
+                .param("q", "Acme")
+                .with(
+                    jwt()
+                        .authorities(
+                            new SimpleGrantedAuthority("LEXIS_FEDERAL_READ_ONLY"))))
         .andExpect(status().isNoContent());
   }
 

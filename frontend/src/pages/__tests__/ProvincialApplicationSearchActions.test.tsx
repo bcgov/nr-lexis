@@ -39,6 +39,31 @@ vi.mock('@/service/search-options-service', () => ({
   fetchProvincialApplicationOptions: vi.fn(),
 }))
 
+vi.mock('@/components/ForestClientComboBox', () => ({
+  default: ({
+    id,
+    labelText,
+    value,
+    onChange,
+  }: {
+    id: string
+    labelText: string
+    value: string
+    onChange: (value: string) => void
+  }) => (
+    <div>
+      <label htmlFor={id}>{labelText}</label>
+      <input id={id} readOnly value={value} />
+      <button
+        type="button"
+        onClick={() => onChange(labelText.startsWith('Owner') ? '00054321' : '00012345')}
+      >
+        Select {labelText}
+      </button>
+    </div>
+  ),
+}))
+
 const mockedUseAuth = vi.mocked(useAuth)
 const mockedUseDefaultRegionPreference = vi.mocked(useDefaultRegionPreference)
 const mockedCountProvincialApplications = vi.mocked(countProvincialApplications)
@@ -479,6 +504,26 @@ describe('Provincial Application Search Actions', () => {
     expect(screen.queryByText('Applicant client number')).not.toBeInTheDocument()
     expect(screen.queryByText('11111111')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Owner client number' })).toBeInTheDocument()
+  })
+
+  it('uses canonical applicant and owner client selections in the search request', async () => {
+    renderPage('/provincial/application')
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Search' })).toBeEnabled())
+
+    await userEvent.click(screen.getByRole('button', { name: 'Select Applicant client number' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Select Owner client number' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Search' }))
+
+    await waitFor(() => {
+      expect(
+        mockedSearchProvincialApplications.mock.calls.some(
+          ([request]) =>
+            request.filters.applicantClientNumber === '00012345' &&
+            request.filters.ownerClientNumber === '00054321',
+        ),
+      ).toBe(true)
+    })
   })
 
   it('renders legacy non-sortable application result headers as plain text', async () => {
