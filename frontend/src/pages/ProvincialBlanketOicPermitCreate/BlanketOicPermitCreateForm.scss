@@ -16,6 +16,10 @@
   max-inline-size: 22rem;
 }
 
+.boic-permit-details__dates {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+}
+
 .boic-permit-details__pair > *,
 .boic-permit-details__dates > *,
 .boic-permit-details__remarks,
@@ -42,9 +46,5 @@
 @media (min-width: 672px) {
   .boic-permit-details__pair {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .boic-permit-details__dates {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
