@@ -92,8 +92,10 @@ const fillRequiredPermitAndShippingFields = async (user: ReturnType<typeof userE
   await user.type(screen.getByLabelText('Permit request pieces'), '0')
   await user.type(screen.getByLabelText('Permit request volume (m³)'), '0')
   await user.click(screen.getByRole('tab', { name: /^Shipping(?:,|$)/ }))
-  await user.type(screen.getByLabelText('Purchaser'), 'Test purchaser')
-  await user.type(screen.getByLabelText('Transport name'), 'Test barge')
+  await user.click(screen.getByLabelText('Purchaser'))
+  await user.paste('Test purchaser')
+  await user.click(screen.getByLabelText('Transport name'))
+  await user.paste('Test barge')
   await user.type(screen.getByLabelText('Estimated shipping date'), '2099-01-01')
 }
 
@@ -139,9 +141,8 @@ describe('BlanketOicPermitCreateForm', () => {
     })
   })
 
-  it('requires blank request totals but accepts explicit zero values when saving', async () => {
-    const user = userEvent.setup()
-    const { onCreated } = renderForm()
+  it('shows the permit details and tab icons before validation is requested', async () => {
+    renderForm()
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Save permit' })).toBeEnabled())
     expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
@@ -159,6 +160,13 @@ describe('BlanketOicPermitCreateForm', () => {
     expect(screen.getByText('0/250')).toBeInTheDocument()
     for (const tab of screen.getAllByRole('tab')) expect(tab.querySelector('svg')).not.toBeNull()
     expect(screen.queryByRole('group', { name: 'Permit needs attention' })).not.toBeInTheDocument()
+  })
+
+  it('requires blank request totals and updates the tab as explicit zeros are entered', async () => {
+    const user = userEvent.setup()
+    renderForm()
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save permit' })).toBeEnabled())
 
     await user.click(screen.getByRole('button', { name: 'Save permit' }))
 
@@ -192,14 +200,20 @@ describe('BlanketOicPermitCreateForm', () => {
     ).toBeInTheDocument()
     await user.type(screen.getByLabelText('Permit request volume (m³)'), '0')
     expect(screen.getByRole('tab', { name: 'Permit' }).querySelector('svg')).not.toBeNull()
+  })
+
+  it('saves explicit zero request totals after correcting the required fields', async () => {
+    const user = userEvent.setup()
+    const { onCreated } = renderForm()
+
+    await user.click(screen.getByRole('button', { name: 'Save permit' }))
+    await screen.findByRole('group', { name: 'Permit needs attention' })
+    await fillRequiredPermitAndShippingFields(user)
     await user.click(screen.getByRole('tab', { name: /^Applicant,/ }))
     await selectForestClient(user, 'Applicant client number', '12345678')
     await waitFor(() => expect(screen.getByLabelText('Applicant location')).toHaveValue('00'))
 
-    await user.click(screen.getByRole('tab', { name: /^Shipping,/ }))
-    await user.type(screen.getByLabelText('Purchaser'), 'Test purchaser')
-    await user.type(screen.getByLabelText('Transport name'), 'Test barge')
-    await user.type(screen.getByLabelText('Estimated shipping date'), '2099-01-01')
+    await user.click(screen.getByRole('tab', { name: 'Shipping' }))
     expect(screen.queryByRole('group', { name: 'Permit needs attention' })).not.toBeInTheDocument()
     expect(
       screen.getByText(/The permit number is assigned after a successful save/),

@@ -6,7 +6,7 @@ type PermitScenario = 'normal' | 'ministerial' | 'blanket-oic' | 'blanket-oic-em
 type CapturedWrite = {
   method: string
   path: string
-  body: Record<string, string>
+  body: Record<string, unknown>
 }
 
 type PermitParityFixture = {
@@ -310,6 +310,17 @@ const installPermitParityFixtures = async (
             regions: [{ code: '1903', name: 'Cariboo Natural Resource Region' }],
           }
           break
+        case '/api/lexis/applications/search/options':
+          body = {
+            exemptionTypes: [{ code: 'B', name: 'Blanket OIC' }],
+            exemptionReasons: [],
+            applicationStatuses: [{ code: 'ACT', name: 'Active' }],
+            productTypes: [{ code: 'H', name: 'Harvested' }],
+            growthTypes: [{ code: 'O', name: 'Old growth' }],
+            regions: [{ code: '1903', name: 'Cariboo Natural Resource Region' }],
+            currentSchedules: [{ code: '2026', name: '2026' }],
+          }
+          break
         case '/api/lexis/shipping-reference-options':
           if (delayedShipping) await shippingReady
           body = {
@@ -377,6 +388,29 @@ const installPermitParityFixtures = async (
             { code: 'AL', description: 'Alder' },
             { code: 'FI', description: 'Fir' },
           ]
+          break
+        case '/api/lexis/rpc/application-details/remaining-species':
+          body = [{ code: 'FI', description: 'Fir' }]
+          break
+        case '/api/lexis/rpc/application-details/end-uses-for-species-region':
+          body = [{ code: 'LU', description: 'Lumber' }]
+          break
+        case '/api/lexis/rpc/application-details/package-details':
+          body = {
+            success: true,
+            packageNumber: 'BOIC-A',
+            volume: '120.5',
+            length: '7.1',
+            diameter: '16.2',
+            status: 'ACT',
+            comments: 'Synthetic Blanket OIC package',
+            reprocessed: 'N',
+            ageClass: 'O',
+            productType: 'H',
+          }
+          break
+        case '/api/lexis/rpc/application-details/species-for-package':
+          body = [{ species: 'FI', enduse: 'LU', endUseDescription: 'Lumber' }]
           break
         case '/api/lexis/rpc/application-details/grade-codes':
           if (
@@ -450,6 +484,41 @@ const installPermitParityFixtures = async (
           message: 'The permit was updated successfully.',
           errors: [],
           warnings: [],
+        }
+      } else if (path === '/api/lexis/rpc/permit-details/boic-package') {
+        const payload = request.postDataJSON() as Record<string, unknown>
+        writes.push({ method: request.method(), path, body: payload })
+        const packageNumber = String(payload.newPackageNumber || payload.packageNumber)
+        coreTabs.packageList.push({
+          packageNumber,
+          packageInfo: {
+            region: 'Cariboo',
+            enduse: 'LU',
+            ageclass: 'O',
+            volume: String(payload.volume),
+            length: String(payload.averageLength),
+            diameter: String(payload.averageDiameter),
+            productType: 'H',
+          },
+          packageDetails: {
+            scaledVolume: '0.0',
+            status: 'ACT',
+            statusDescription: 'Active',
+            reprocessed: 'N',
+            ageClass: 'O',
+            comments: String(payload.comments ?? ''),
+          },
+          scaleList: [],
+        })
+        version += 1
+        body = {
+          success: true,
+          message: 'Blanket OIC package was created.',
+          errors: [],
+          warnings: [],
+          permitNumber,
+          applicationNumber: '123456',
+          packageNumber,
         }
       } else if (
         path === '/api/lexis/rpc/permit-details/release-lock' ||
@@ -842,4 +911,230 @@ test.describe('Provincial permit parity regressions', () => {
     ])
     expect(fixture.unexpectedRequests).toEqual([])
   })
+
+  test('opens the Blanket OIC package form as a right panel without hiding the package table', async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width: 1440, height: 1000 })
+    const fixture = await installPermitParityFixtures(page, 'blanket-oic')
+    await gotoSyntheticRoute(page, '/provincial/permit/91002', {
+      ready: page.getByRole('heading', { level: 1, name: 'Permit 91002 (Pending)', exact: true }),
+    })
+    await selectTab(page, 'Scale')
+    const content = page.locator('#permit-detail-content')
+    const initialContentLayout = await content.evaluate((element) => ({
+      right: element.getBoundingClientRect().right,
+      marginInlineEnd: (element as HTMLElement).style.marginInlineEnd,
+      inlineSize: (element as HTMLElement).style.inlineSize,
+      transition: (element as HTMLElement).style.transition,
+    }))
+    const trigger = page.getByRole('button', { name: 'Create package', exact: true })
+    const packageRow = page.getByRole('row').filter({ hasText: 'BOIC-A' })
+    await expect(packageRow).toBeVisible()
+
+    await trigger.click()
+    const panel = page.locator('.permit-package-panel')
+    await expect(panel).toBeVisible()
+    await expect(
+      panel.getByRole('heading', { name: 'Create Blanket OIC package', exact: true }),
+    ).toBeVisible()
+    await expect
+      .poll(async () => {
+        const [contentBox, panelBox] = await Promise.all([
+          content.boundingBox(),
+          panel.boundingBox(),
+        ])
+        return !!contentBox && !!panelBox && contentBox.x + contentBox.width <= panelBox.x
+      })
+      .toBe(true)
+
+    const packageNumber = panel.getByLabel('Package number', { exact: true })
+    await panel.getByRole('button', { name: 'Create package', exact: true }).click()
+    await expect(panel.getByText('Package number is required.', { exact: true })).toBeVisible()
+    await expect(packageNumber).toBeFocused()
+    await page.screenshot({
+      path: testInfo.outputPath('permit-package-panel-desktop.png'),
+      fullPage: false,
+      animations: 'disabled',
+    })
+
+    await page.setViewportSize({ width: 390, height: 844 })
+    await expect
+      .poll(async () => {
+        const panelBox = await panel.boundingBox()
+        return !!panelBox && panelBox.x === 0 && panelBox.width <= 390
+      })
+      .toBe(true)
+    await expect(packageNumber).toBeVisible()
+    await packageNumber.fill('RESIZE-DRAFT')
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    ).toBe(true)
+    await page.screenshot({
+      path: testInfo.outputPath('permit-package-panel-narrow.png'),
+      fullPage: false,
+      animations: 'disabled',
+    })
+
+    await page.setViewportSize({ width: 1440, height: 1000 })
+    await expect
+      .poll(async () => {
+        const [contentBox, panelBox] = await Promise.all([
+          content.boundingBox(),
+          panel.boundingBox(),
+        ])
+        return !!contentBox && !!panelBox && contentBox.x + contentBox.width <= panelBox.x
+      })
+      .toBe(true)
+    await expect(packageNumber).toHaveValue('RESIZE-DRAFT')
+    await panel.getByRole('button', { name: 'Cancel', exact: true }).click()
+    await expect(panel).toHaveCount(0)
+    await expect(trigger).toBeFocused()
+    expect(
+      await content.evaluate((element) => ({
+        marginInlineEnd: (element as HTMLElement).style.marginInlineEnd,
+        inlineSize: (element as HTMLElement).style.inlineSize,
+        transition: (element as HTMLElement).style.transition,
+      })),
+    ).toEqual({
+      marginInlineEnd: initialContentLayout.marginInlineEnd,
+      inlineSize: initialContentLayout.inlineSize,
+      transition: initialContentLayout.transition,
+    })
+    const restoredContentBox = await content.boundingBox()
+    expect((restoredContentBox?.x ?? 0) + (restoredContentBox?.width ?? 0)).toBeCloseTo(
+      initialContentLayout.right,
+      1,
+    )
+    expect(fixture.writes).toEqual([])
+    expect(fixture.unexpectedRequests).toEqual([])
+  })
+
+  test('cancels and escapes create and edit package drafts without mutation', async ({ page }) => {
+    const fixture = await installPermitParityFixtures(page, 'blanket-oic')
+    await gotoSyntheticRoute(page, '/provincial/permit/91002', {
+      ready: page.getByRole('heading', { level: 1, name: 'Permit 91002 (Pending)', exact: true }),
+    })
+    await selectTab(page, 'Scale')
+    const trigger = page.getByRole('button', { name: 'Create package', exact: true })
+    await trigger.click()
+    const panel = page.locator('.permit-package-panel')
+    await expect(panel).toBeVisible()
+    await panel.getByLabel('Package number', { exact: true }).fill('DRAFT-CANCEL')
+    await panel.getByRole('button', { name: 'Cancel', exact: true }).click()
+    await expect(panel).toHaveCount(0)
+    await expect(trigger).toBeFocused()
+
+    await trigger.click()
+    await expect(panel.getByLabel('Package number', { exact: true })).toHaveValue('')
+    await panel.getByLabel('Package number', { exact: true }).fill('DRAFT-ESCAPE')
+    await page.keyboard.press('Escape')
+    await expect(panel).toHaveCount(0)
+    await expect(trigger).toBeFocused()
+
+    const packageRow = page.getByRole('row').filter({ hasText: 'BOIC-A' })
+    const editTrigger = packageRow.getByRole('button', { name: 'Edit', exact: true })
+    await editTrigger.click()
+    await expect(panel).toBeVisible()
+    await expect(editTrigger).toBeVisible()
+    const editedPackageNumber = panel.getByLabel('Package number', { exact: true })
+    await expect(editedPackageNumber).toHaveValue('BOIC-A')
+    await expect(editedPackageNumber).toBeFocused()
+    await panel.getByRole('button', { name: 'Cancel edit', exact: true }).click()
+    await expect(panel).toHaveCount(0)
+    await expect(editTrigger).toBeFocused()
+
+    await editTrigger.click()
+    await expect(editedPackageNumber).toHaveValue('BOIC-A')
+    await expect(editedPackageNumber).toBeFocused()
+    await page.keyboard.press('Escape')
+    await expect(panel).toHaveCount(0)
+    await expect(editTrigger).toBeFocused()
+    expect(fixture.writes).toEqual([])
+    expect(fixture.unexpectedRequests).toEqual([])
+  })
+
+  test('creates a Blanket OIC package, closes the panel, and reloads its package row', async ({
+    page,
+  }) => {
+    const fixture = await installPermitParityFixtures(page, 'blanket-oic-empty')
+    await gotoSyntheticRoute(page, '/provincial/permit/91002', {
+      ready: page.getByRole('heading', { level: 1, name: 'Permit 91002 (Pending)', exact: true }),
+    })
+    await selectTab(page, 'Scale')
+    await page.getByRole('button', { name: 'Create package', exact: true }).click()
+    const panel = page.locator('.permit-package-panel')
+    await expect(panel).toBeVisible()
+    await panel.getByLabel('Package number', { exact: true }).fill('BOIC-NEW')
+    await panel.getByLabel('Package volume (m³)', { exact: true }).fill('100.0')
+    await panel.getByLabel('Average length', { exact: true }).fill('10.0')
+    await panel.getByLabel('Average top diameter', { exact: true }).fill('20.0')
+    await chooseComboBoxOption(page, 'Species', 'FI - Fir')
+    await panel.getByRole('button', { name: 'Add species', exact: true }).click()
+    await expect(panel.getByRole('combobox', { name: 'End use', exact: true })).toHaveValue(
+      'LU - Lumber',
+    )
+    await panel.getByRole('button', { name: 'Create package', exact: true }).click()
+
+    await expect(panel).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Create package', exact: true })).toBeFocused()
+    await expect(page.getByText('Blanket OIC package was created.', { exact: true })).toBeVisible()
+    await expect(page.getByRole('row').filter({ hasText: 'BOIC-NEW' })).toBeVisible()
+    expect(fixture.writes).toEqual([
+      expect.objectContaining({
+        method: 'POST',
+        path: '/api/lexis/rpc/permit-details/boic-package',
+        body: expect.objectContaining({
+          permitNumber: 91002,
+          packageNumber: 'BOIC-NEW',
+          volume: 100,
+          averageLength: 10,
+          averageDiameter: 20,
+          endUseCode: 'LU',
+          speciesCodes: ['FI'],
+        }),
+      }),
+    ])
+    expect(fixture.unexpectedRequests).toEqual([])
+  })
+
+  for (const [viewport, layout] of [
+    [{ width: 1440, height: 1000 }, 'desktop slide-in'],
+    [{ width: 390, height: 844 }, 'narrow overlay'],
+  ] as const) {
+    test(`keeps a package draft open when Escape closes the Species list in ${layout}`, async ({
+      page,
+    }) => {
+      await page.setViewportSize(viewport)
+      const fixture = await installPermitParityFixtures(page, 'blanket-oic-empty')
+      await gotoSyntheticRoute(page, '/provincial/permit/91002', {
+        ready: page.getByRole('heading', {
+          level: 1,
+          name: 'Permit 91002 (Pending)',
+          exact: true,
+        }),
+      })
+      await selectTab(page, 'Scale')
+      const trigger = page.getByRole('button', { name: 'Create package', exact: true })
+      await trigger.click()
+      const panel = page.locator('.permit-package-panel')
+      const packageNumber = panel.getByLabel('Package number', { exact: true })
+      await packageNumber.fill('DRAFT-ESCAPE')
+      const species = panel.getByRole('combobox', { name: 'Species', exact: true })
+      await expect(species).toBeEnabled()
+      await species.click()
+      await expect(page.getByRole('listbox')).toBeVisible()
+      await page.keyboard.press('Escape')
+
+      await expect(page.getByRole('listbox')).toHaveCount(0)
+      await expect(panel).toBeVisible()
+      await expect(packageNumber).toHaveValue('DRAFT-ESCAPE')
+      await packageNumber.focus()
+      await page.keyboard.press('Escape')
+      await expect(panel).toHaveCount(0)
+      await expect(trigger).toBeFocused()
+      expect(fixture.writes).toEqual([])
+      expect(fixture.unexpectedRequests).toEqual([])
+    })
+  }
 })

@@ -5179,6 +5179,82 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
+  void updatePermitShouldPersistBlanketOicLocationsBeforeFirstPackageCreatesHiddenApplication() {
+    PermitMutationRow current =
+        withAggregateRelationships(
+            blanketOicPermitMutationRowWithStatus("ACT", 0L, 0.0d), "EX-700", null);
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(current));
+    when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("B"));
+    when(exemptionService.findByExemptionNumber("EX-700"))
+        .thenReturn(
+            Optional.of(
+                exemptionDetailWithClients("EX-700", "B", "00077881", "00077880")));
+    when(repository.findScaleDetailsByPermitNumber(7000123L)).thenReturn(List.of());
+    when(repository.updatePermitDetail(
+            any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
+        .thenReturn(true);
+    RecordingTransactionManager transactionManager = new RecordingTransactionManager();
+
+    PermitMutationRpcResponseDto response =
+        transactionalService(transactionManager)
+            .updatePermit(
+                updatePermitRequest(null, null, "03", null, "04", null), "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    assertThat(transactionManager.commits).isEqualTo(1);
+    assertThat(transactionManager.rollbacks).isZero();
+    ArgumentCaptor<PermitMutationRow> permitCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository)
+        .updatePermitDetail(
+            permitCaptor.capture(), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE));
+    PermitMutationRow saved = permitCaptor.getValue();
+    assertThat(saved.clientNumber()).isEqualTo(current.clientNumber());
+    assertThat(saved.clientLocationCode()).isEqualTo("03");
+    assertThat(saved.agentNumber()).isEqualTo(current.agentNumber());
+    assertThat(saved.agentLocationCode()).isEqualTo("04");
+    assertThat(saved.oicApplicationNumber()).isNull();
+    assertThat(saved.permitVolume()).isZero();
+    assertThat(saved.numberOfPieces()).isZero();
+    assertThat(saved.oicRequestVolume()).isZero();
+    assertThat(saved.oicRequestPieces()).isZero();
+    verifyNoInteractions(applicationDetailsRpcService);
+  }
+
+  @Test
+  void updatePermitShouldRollBackWhenBlanketOicHiddenApplicationOwnerSynchronizationFails() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(blanketOicPermitMutationRow()));
+    when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("B"));
+    when(exemptionService.findByExemptionNumber("EX-700"))
+        .thenReturn(
+            Optional.of(
+                exemptionDetailWithClients("EX-700", "B", "00077881", "00077880")));
+    stubOicApplicationBinding("EX-700");
+    when(repository.updatePermitDetail(
+            any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
+        .thenReturn(true);
+    when(applicationDetailsRpcService.synchronizeApplicationOwner(
+            1000999L, "00077881", "03", "idir\\jsmith"))
+        .thenReturn(false);
+    RecordingTransactionManager transactionManager = new RecordingTransactionManager();
+
+    PermitMutationRpcResponseDto response =
+        transactionalService(transactionManager)
+            .updatePermit(
+                updatePermitRequest(null, null, "03", null, null, null), "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactly("Unable to synchronize linked application or package data.");
+    assertThat(transactionManager.commits).isZero();
+    assertThat(transactionManager.rollbacks).isEqualTo(1);
+    verify(applicationDetailsRpcService)
+        .synchronizeApplicationOwner(1000999L, "00077881", "03", "idir\\jsmith");
+  }
+
+  @Test
   void updatePermitShouldSynchronizeBlanketOicHiddenApplicationOwnerForLocationChange() {
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(blanketOicPermitMutationRow()));
