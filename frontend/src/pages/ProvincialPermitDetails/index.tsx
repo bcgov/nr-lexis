@@ -3363,7 +3363,7 @@ const ProvincialPermitDetailsPage = () => {
         if (!isLatestRequest()) return
         console.error(error)
         resetBlanketOicPackageForm()
-        setActionErrorMessage('Unable to load the Blanket OIC package for editing.')
+        setBoicPackageErrorMessage('Unable to load the Blanket OIC package for editing.')
       } finally {
         if (isLatestRequest()) {
           setIsLoadingBoicPackage(false)
@@ -3509,6 +3509,7 @@ const ProvincialPermitDetailsPage = () => {
       }
       setActionErrorMessage('')
       setActionInfoMessage('')
+      setBoicPackageErrorMessage('')
       setIsDeletingBoicPackageNumber(packageNumberToDelete)
       let failureMessage = ''
       try {
@@ -5100,6 +5101,18 @@ const ProvincialPermitDetailsPage = () => {
                 subtitle={actionErrorMessage}
                 lowContrast
                 onCloseButtonClick={() => setActionErrorMessage('')}
+              />
+            </Column>
+          )}
+
+          {!!boicPackageErrorMessage && !blanketOicPackageEditorOpen && (
+            <Column sm={4} md={8} lg={16} className="detail-page-error">
+              <InlineNotification
+                kind="error"
+                title="Package needs attention"
+                subtitle={boicPackageErrorMessage}
+                lowContrast
+                onCloseButtonClick={() => setBoicPackageErrorMessage('')}
               />
             </Column>
           )}
