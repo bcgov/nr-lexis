@@ -7349,6 +7349,106 @@ describe('Provincial Permit Detail Action Smoke', () => {
     consoleError.mockRestore()
   })
 
+  it('keeps a delayed document error on the page while creating and cancelling a package', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    configureBlanketOicDocument()
+    let rejectDocument!: (error: Error) => void
+    mockedOpenPermitDocument.mockReturnValueOnce(
+      new Promise((_resolve, reject) => {
+        rejectDocument = reject
+      }),
+    )
+    renderPermitDetails()
+    await selectPermitDetailTab('Documents')
+    await userEvent.click(await screen.findByRole('button', { name: 'Open' }))
+    await selectPermitDetailTab('Items')
+    await userEvent.click(screen.getByRole('button', { name: 'Create package' }))
+    const packageEditor = (
+      await screen.findByRole('heading', { name: 'Create Blanket OIC package' })
+    ).closest('.application-detail-edit-section') as HTMLElement
+
+    await act(() => rejectDocument(new Error('document unavailable')))
+
+    const documentError = await screen.findByText('Unable to open permit document.')
+    expect(documentError).toBeVisible()
+    expect(packageEditor).not.toContainElement(documentError)
+    expect(screen.getByText('Action failed')).toBeVisible()
+    expect(within(packageEditor).queryByText('Package needs attention')).not.toBeInTheDocument()
+
+    await userEvent.click(within(packageEditor).getByRole('button', { name: 'Cancel' }))
+    expect(screen.getByText('Unable to open permit document.')).toBeVisible()
+    await userEvent.click(screen.getByRole('button', { name: 'Create package' }))
+    expect(screen.getByText('Unable to open permit document.')).toBeVisible()
+    expect(screen.queryByText('Package needs attention')).not.toBeInTheDocument()
+    expect(mockedAddBlanketOicPackage).not.toHaveBeenCalled()
+    consoleError.mockRestore()
+  })
+
+  it.each(['response error', 'request rejection'])(
+    'keeps a package save %s in its panel without replacing an unrelated page error',
+    async (failure) => {
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+      configureBlanketOicDocument()
+      mockedOpenPermitDocument.mockRejectedValueOnce(new Error('document unavailable'))
+      if (failure === 'response error') {
+        mockedUpdateBlanketOicPackage.mockResolvedValueOnce({
+          success: false,
+          message: 'Blanket OIC package was not updated.',
+          errors: ['The package could not be saved.'],
+          warnings: [],
+          permitNumber: '777',
+          applicationNumber: '1000999',
+          packageNumber: 'BOIC-9',
+        })
+      } else {
+        mockedUpdateBlanketOicPackage.mockRejectedValueOnce(new Error('package unavailable'))
+      }
+      renderPermitDetails()
+      await selectPermitDetailTab('Documents')
+      await userEvent.click(await screen.findByRole('button', { name: 'Open' }))
+      expect(await screen.findByText('Unable to open permit document.')).toBeVisible()
+      await selectPermitDetailTab('Items')
+      const packageRow = (await screen.findByRole('cell', { name: 'BOIC-9' })).closest('tr')!
+      await userEvent.click(within(packageRow).getByRole('button', { name: 'Edit' }))
+      const packageEditor = (await screen.findByRole('heading', { name: 'Edit BOIC-9' })).closest(
+        '.application-detail-edit-section',
+      ) as HTMLElement
+      const saveButton = within(packageEditor).getByRole('button', { name: 'Save package' })
+      await waitFor(() => expect(saveButton).toBeEnabled())
+      expect(screen.getByText('Unable to open permit document.')).toBeVisible()
+      fireEvent.change(within(packageEditor).getByLabelText('Comments'), {
+        target: { value: 'Unsaved package changes' },
+      })
+      await userEvent.click(saveButton)
+
+      const packageError = await within(packageEditor).findByText('Package needs attention')
+      expect(packageError).toBeVisible()
+      const packageMessage =
+        failure === 'response error'
+          ? 'The package could not be saved.'
+          : 'Unable to save the Blanket OIC package.'
+      expect(within(packageEditor).getByText(packageMessage)).toBeVisible()
+      expect(screen.getAllByText(packageMessage)).toHaveLength(1)
+      expect(within(packageEditor).getByLabelText('Comments')).toHaveValue(
+        'Unsaved package changes',
+      )
+      const documentError = screen.getByText('Unable to open permit document.')
+      expect(documentError).toBeVisible()
+      expect(packageEditor).not.toContainElement(documentError)
+      expect(screen.getByText('Action failed')).toBeVisible()
+      expect(mockedUpdateBlanketOicPackage).toHaveBeenCalledOnce()
+
+      await userEvent.click(within(packageEditor).getByRole('button', { name: 'Cancel edit' }))
+      expect(screen.getByText('Unable to open permit document.')).toBeVisible()
+      await userEvent.click(screen.getByRole('button', { name: 'Create package' }))
+      expect(screen.getByText('Unable to open permit document.')).toBeVisible()
+      expect(screen.queryByText('Package needs attention')).not.toBeInTheDocument()
+      expect(screen.queryByText(packageMessage)).not.toBeInTheDocument()
+      expect(mockedAddBlanketOicPackage).not.toHaveBeenCalled()
+      consoleError.mockRestore()
+    },
+  )
+
   it('completes concurrent document downloads for the same permit', async () => {
     configureBlanketOicDocument()
     const pendingDocuments: Array<(value: Awaited<ReturnType<typeof openPermitDocument>>) => void> =

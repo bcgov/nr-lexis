@@ -862,6 +862,7 @@ const ProvincialPermitDetailsPage = () => {
   )
   const [boicPackageFieldErrors, setBoicPackageFieldErrors] =
     useState<BlanketOicPackageFieldErrors>({})
+  const [boicPackageErrorMessage, setBoicPackageErrorMessage] = useState('')
   const [editingBoicPackageNumber, setEditingBoicPackageNumber] = useState<string | null>(null)
   const [isCreatingBoicPackage, setIsCreatingBoicPackage] = useState(false)
   const [boicCodeOptionsReady, setBoicCodeOptionsReady] = useState(false)
@@ -989,6 +990,7 @@ const ProvincialPermitDetailsPage = () => {
     setBoicPackageForm(EMPTY_BLANKET_OIC_PACKAGE_FORM)
     setBoicPackageBaselineForm(EMPTY_BLANKET_OIC_PACKAGE_FORM)
     setBoicPackageFieldErrors({})
+    setBoicPackageErrorMessage('')
     setEditingBoicPackageNumber(null)
     setIsLoadingBoicPackage(false)
     setIsSavingBoicPackage(false)
@@ -3312,7 +3314,7 @@ const ProvincialPermitDetailsPage = () => {
 
   const resetBlanketOicPackageForm = useCallback(() => {
     beginBoicPackageEditRequest()
-    setActionErrorMessage('')
+    setBoicPackageErrorMessage('')
     setIsLoadingBoicPackage(false)
     setBoicCodeOptionsReady(false)
     setIsCreatingBoicPackage(false)
@@ -3324,7 +3326,6 @@ const ProvincialPermitDetailsPage = () => {
 
   const startBlanketOicPackageCreate = useCallback(() => {
     if (blanketOicPackageActionsDisabled) return
-    setActionErrorMessage('')
     resetBlanketOicPackageForm()
     setIsCreatingBoicPackage(true)
   }, [blanketOicPackageActionsDisabled, resetBlanketOicPackageForm])
@@ -3334,7 +3335,6 @@ const ProvincialPermitDetailsPage = () => {
       if (!canEditBlanketOicPackages || !packageNumberToEdit || blanketOicPackageActionsDisabled) {
         return
       }
-      setActionErrorMessage('')
       resetBlanketOicPackageForm()
       setEditingBoicPackageNumber(packageNumberToEdit)
       const isLatestRequest = beginBoicPackageEditRequest()
@@ -3394,13 +3394,13 @@ const ProvincialPermitDetailsPage = () => {
       permitForm &&
       permitForm.orgUnitNumber.trim() !== detailValue(detail?.orgUnitNumber).trim()
     ) {
-      setActionErrorMessage('Save or discard the Region change before saving a package.')
+      setBoicPackageErrorMessage('Save or discard the Region change before saving a package.')
       return false
     }
     const fieldErrors = validateBlanketOicPackage(boicPackageForm)
     if (Object.values(fieldErrors).some(Boolean)) {
       setBoicPackageFieldErrors(fieldErrors)
-      setActionErrorMessage(
+      setBoicPackageErrorMessage(
         Object.values(fieldErrors).find((error): error is string => !!error) ??
           'Please fix validation errors before saving the Blanket OIC package.',
       )
@@ -3434,7 +3434,7 @@ const ProvincialPermitDetailsPage = () => {
       speciesCodes,
     }
 
-    setActionErrorMessage('')
+    setBoicPackageErrorMessage('')
     setActionInfoMessage('')
     setIsSavingBoicPackage(true)
     try {
@@ -3442,7 +3442,7 @@ const ProvincialPermitDetailsPage = () => {
         ? await updateBlanketOicPackage(request)
         : await addBlanketOicPackage(request)
       if (!result.success) {
-        setActionErrorMessage(
+        setBoicPackageErrorMessage(
           result.errors[0] || result.message || 'Unable to save the Blanket OIC package.',
         )
         return false
@@ -3475,7 +3475,7 @@ const ProvincialPermitDetailsPage = () => {
       return true
     } catch (error) {
       console.error(error)
-      setActionErrorMessage('Unable to save the Blanket OIC package.')
+      setBoicPackageErrorMessage('Unable to save the Blanket OIC package.')
       return false
     } finally {
       setIsSavingBoicPackage(false)
@@ -5092,7 +5092,7 @@ const ProvincialPermitDetailsPage = () => {
             </Column>
           )}
 
-          {!!actionErrorMessage && !blanketOicPackageEditorOpen && (
+          {!!actionErrorMessage && (
             <Column sm={4} md={8} lg={16} className="detail-page-error">
               <AppNotification
                 kind="error"
@@ -7016,7 +7016,7 @@ const ProvincialPermitDetailsPage = () => {
           ]}
         >
           <div className="permit-package-panel__form">
-            {!!actionErrorMessage && (
+            {!!boicPackageErrorMessage && (
               <div tabIndex={-1} data-package-error>
                 <InlineNotification
                   kind="error"
@@ -7024,7 +7024,7 @@ const ProvincialPermitDetailsPage = () => {
                   subtitle={
                     Object.values(boicPackageFieldErrors).some(Boolean)
                       ? 'Check the highlighted fields and try again.'
-                      : actionErrorMessage
+                      : boicPackageErrorMessage
                   }
                   lowContrast
                   hideCloseButton
