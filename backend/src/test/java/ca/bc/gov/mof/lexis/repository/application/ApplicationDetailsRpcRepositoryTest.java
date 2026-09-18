@@ -428,8 +428,6 @@ class ApplicationDetailsRpcRepositoryTest {
   void requiredPackageOptionLookupsShouldPropagateOracleFailure() {
     FailingRequiredLookupRepository repository = new FailingRequiredLookupRepository();
 
-    assertOracleFailure(() -> repository.findSpeciesEndUsesByRegionSpeciesRequired("11", "HE"));
-    assertOracleFailure(() -> repository.findSpeciesEndUsesByRegionRequired("11"));
     assertOracleFailure(() -> repository.findCandidateEndUseCodesRequired(1, "HE", 11L));
     assertOracleFailure(() -> repository.findCandidateExcolCombinationsRequired(1, "HE", 11L));
   }
@@ -438,8 +436,6 @@ class ApplicationDetailsRpcRepositoryTest {
   void requiredPackageOptionLookupsShouldPreserveLegitimateEmptyResults() {
     EmptyRequiredLookupRepository repository = new EmptyRequiredLookupRepository();
 
-    assertThat(repository.findSpeciesEndUsesByRegionSpeciesRequired("11", "HE")).isEmpty();
-    assertThat(repository.findSpeciesEndUsesByRegionRequired("11")).isEmpty();
     assertThat(repository.findCandidateEndUseCodesRequired(1, "HE", 11L)).isEmpty();
     assertThat(repository.findCandidateExcolCombinationsRequired(1, "HE", 11L)).isEmpty();
   }

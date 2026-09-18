@@ -74,10 +74,6 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       LEXIS_CODES_PACKAGE + "FIND_PACKAGE_STATUS_CODE(?,?)";
   private static final String FIND_PRODUCT_TYPE_CODE =
       LEXIS_CODES_PACKAGE + "FIND_PRODUCT_TYPE_CODE(?,?)";
-  private static final String FIND_SPECIES_GRADE_BY_REGION_SPECIES =
-      LEXIS_CODES_PACKAGE + "FIND_SPEC_GRAD_BY_REG_SPEC(?,?,?)";
-  private static final String FIND_SPECIES_GRADE_BY_REGION =
-      LEXIS_CODES_PACKAGE + "FIND_SPEC_GRAD_BY_REGION(?,?)";
   private static final String FIND_CANDIDATE_END_USES =
       LEXIS_CODES_PACKAGE + "FIND_CANDIDATE_END_USES(?,?,?,?)";
   private static final String FIND_CANDIDATE_EXCOL_VALUES =
@@ -921,14 +917,11 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     if (normalizedOrgUnitNumber == null || normalizedSpeciesCode == null) {
       return List.of();
     }
-    return queryCursorProcedureRequired(
-            FIND_SPECIES_GRADE_BY_REGION_SPECIES,
-            cs -> {
-              cs.setString(1, normalizedOrgUnitNumber);
-              cs.setString(2, normalizedSpeciesCode);
-            },
-            3,
-            this::mapSpeciesGradeEndUseRow)
+    return queryDirectRequired(
+            LexisCodeQueries.SPECIES_GRADE_END_USES_BY_REGION_SPECIES,
+            this::mapSpeciesGradeEndUseRow,
+            normalizedOrgUnitNumber,
+            normalizedSpeciesCode)
         .stream()
         .filter(row -> trim(row.gradeCode()) != null)
         .toList();
@@ -939,11 +932,10 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     if (normalizedOrgUnitNumber == null) {
       return List.of();
     }
-    return queryCursorProcedureRequired(
-        FIND_SPECIES_GRADE_BY_REGION,
-        cs -> cs.setString(1, normalizedOrgUnitNumber),
-        2,
-        this::mapSpeciesGradeEndUseRow);
+    return queryDirectRequired(
+        LexisCodeQueries.SPECIES_GRADE_END_USES_BY_REGION,
+        this::mapSpeciesGradeEndUseRow,
+        normalizedOrgUnitNumber);
   }
 
   public List<ExcolValidationRow> findCandidateEndUseCodesRequired(

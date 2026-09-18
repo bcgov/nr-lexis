@@ -411,6 +411,21 @@ public final class LexisCodeQueries {
       ORDER BY O.GROUP_BY, O.ORDER_BY
       """;
 
+  public static final String SPECIES_GRADE_END_USES_BY_REGION =
+      """
+      SELECT SGE.EXPORT_SPECIES_CODE,
+             SGE.SPECIES_GRADE_ENDUSE_REGION_ID,
+             SGE.EXCOL_TRANSLATION_VALUE,
+             SGE.EXPORT_END_USE_CODE,
+             SGE.ORG_UNIT_NO,
+             SGE.EXPORT_GRADE_CODE
+      FROM THE.SPECIES_GRADE_ENDUSE_RGN_XREF SGE
+      WHERE SGE.ORG_UNIT_NO = ?
+      """;
+
+  public static final String SPECIES_GRADE_END_USES_BY_REGION_SPECIES =
+      SPECIES_GRADE_END_USES_BY_REGION + " AND SGE.EXPORT_SPECIES_CODE = ?";
+
   public static final String SPECIES_BY_CODE =
       """
       SELECT C.EXPORT_SPECIES_CODE AS CODE,
