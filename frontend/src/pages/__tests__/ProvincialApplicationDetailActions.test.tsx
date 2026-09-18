@@ -730,9 +730,9 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     )
   })
 
-  it('submits the confirmed full owner client number when editing an application', async () => {
+  it('submits a selected canonical owner client number when editing an application', async () => {
     mockedFetchApplicationClientData.mockImplementation(async (clientNumber) => ({
-      clientNumber: clientNumber === '2176' ? '00002176' : clientNumber,
+      clientNumber,
       companyName: 'Owner Forestry Ltd.',
       address: '22 Owner Road',
       city: 'Victoria',
@@ -760,13 +760,14 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     const ownerControls = within(getOwnerClientDetailsTile())
     await userEvent.click(ownerControls.getByRole('button', { name: 'Edit owner details' }))
     const ownerClientNumber = ownerControls.getByLabelText('Client number')
-    await userEvent.clear(ownerClientNumber)
-    await userEvent.type(ownerClientNumber, '2176')
+    fireEvent.change(ownerClientNumber, { target: { value: '00002176' } })
 
     await waitFor(() => expect(ownerClientNumber).toHaveValue('00002176'))
-    expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('2176', '00', {
-      applicationNumber: '321',
-    })
+    await waitFor(() =>
+      expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00002176', '00', {
+        applicationNumber: '321',
+      }),
+    )
 
     await userEvent.click(ownerControls.getByRole('button', { name: 'Save changes' }))
 
@@ -2658,7 +2659,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     })
   })
 
-  it('debounces owner client lookups while the client number is typed', async () => {
+  it('loads owner client details after a canonical client selection', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
         <Routes>
@@ -2690,9 +2691,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     mockedFetchApplicationClientContacts.mockClear()
 
     const ownerClientNumberInput = ownerControls.getByLabelText('Client number')
-    for (const value of ['0', '00', '000', '0004', '00044', '000444', '0004444', '00044444']) {
-      fireEvent.change(ownerClientNumberInput, { target: { value } })
-    }
+    fireEvent.change(ownerClientNumberInput, { target: { value: '00044444' } })
 
     expect(mockedFetchApplicationClientData).not.toHaveBeenCalled()
     expect(mockedFetchApplicationClientLocations).not.toHaveBeenCalled()

@@ -17,6 +17,7 @@ import {
 import { Add } from '@carbon/icons-react'
 import SearchResultsTableFrame from '../../components/SearchResultsTableFrame'
 import EmptyState from '@/components/EmptyState'
+import ForestClientComboBox from '@/components/ForestClientComboBox'
 import AuthoritativeOptionsUnavailableNotification from '@/components/AuthoritativeOptionsUnavailableNotification'
 import IsoDatePicker from '../../components/IsoDatePicker'
 import RegionMultiSelect from '@/components/RegionMultiSelect'
@@ -194,6 +195,7 @@ const ProvincialOffersPage = () => {
   }, [searchParams])
   const appliedFilters = urlState.filters
   const [filters, setFilters] = useSearchFilterDraft(appliedFilters)
+  const [clientSearchResetKey, setClientSearchResetKey] = useState(0)
   const sortField = urlState.sortField
   const sortDirection = urlState.sortDirection
   const pageSize = urlState.pageSize
@@ -500,6 +502,7 @@ const ProvincialOffersPage = () => {
   }
 
   const onClearFilters = () => {
+    setClientSearchResetKey((current) => current + 1)
     const defaultFilters = {
       ...INITIAL_FILTERS,
       listingToDate: defaultListingToDate,
@@ -553,11 +556,12 @@ const ProvincialOffersPage = () => {
                   value={filters.packageNumber}
                   onChange={(event) => updateFilter('packageNumber', event.target.value)}
                 />
-                <TextInput
+                <ForestClientComboBox
                   id="clientNumber"
                   labelText="Client number"
                   value={filters.clientNumber}
-                  onChange={(event) => updateFilter('clientNumber', event.target.value)}
+                  resetKey={clientSearchResetKey}
+                  onChange={(value) => updateFilter('clientNumber', value)}
                 />
                 <RegionMultiSelect
                   id="region"

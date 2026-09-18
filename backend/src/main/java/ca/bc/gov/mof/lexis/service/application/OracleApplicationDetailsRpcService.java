@@ -76,6 +76,8 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   private static final String PACKAGE_EXISTS_MESSAGE_TEMPLATE = "Package %s already exists.";
   private static final String PACKAGE_PERMITTED_SCALE_MESSAGE =
       "Package changes are not allowed after a scale has been permitted.";
+  private static final String BLANKET_OIC_PACKAGE_STATUS_ACTIVE = "ACT";
+  private static final String BLANKET_OIC_PACKAGE_REPROCESSED_NO = "N";
   private static final String SCALE_PERMITTED_MESSAGE =
       "Scale changes are not allowed after a permit has been completed.";
   private static final int REMARK_DISPLAY_LIMIT = 70;
@@ -1060,6 +1062,11 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   private PackagePersistenceResult addPackage(
       PackageMutationRequest request, String userId, boolean hiddenBlanketOicWorkflow) {
     PackageMutationRequest normalized = normalizePackageMutationRequest(request);
+    if (hiddenBlanketOicWorkflow) {
+      normalized =
+          withPackageStatusAndReprocessed(
+              normalized, BLANKET_OIC_PACKAGE_STATUS_ACTIVE, BLANKET_OIC_PACKAGE_REPROCESSED_NO);
+    }
     String newPackageNumber = trimToNull(normalized.packageNumber());
     List<String> errors =
         validatePackageMutation(normalized, false, null, hiddenBlanketOicWorkflow, null);
@@ -1106,6 +1113,17 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     String requestedPackageNumber = preservePackageNumber(normalized.packageNumber());
     ApplicationDetailsRpcRepository.PackageMutationRow existing =
         repository.findPackageMutationByPackageNumber(requestedPackageNumber).orElse(null);
+    if (hiddenBlanketOicWorkflow && existing != null) {
+      String persistedStatus = trimToNull(existing.packageStatusCode());
+      String persistedReprocessed = trimToNull(existing.reprocessedIndicator());
+      if (persistedStatus == null || persistedReprocessed == null) {
+        return invalidPackageResult(
+            requestedPackageNumber,
+            List.of("The saved package details could not be verified."));
+      }
+      normalized =
+          withPackageStatusAndReprocessed(normalized, persistedStatus, persistedReprocessed);
+    }
     String currentPackageNumber =
         existing == null ? requestedPackageNumber : preservePackageNumber(existing.packageNumber());
     String normalizedRequestedPackageNumber =
@@ -1370,6 +1388,27 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         trimToNull(request.productType()),
         trimToNull(request.endUseCode()),
         normalizeCodes(request.speciesCodes()));
+  }
+
+  // INTENTIONAL_LEGACY_DIVERGENCE(BOIC_PACKAGE_STATUS_DEFAULTS): hidden values are authoritative.
+  private PackageMutationRequest withPackageStatusAndReprocessed(
+      PackageMutationRequest request, String status, String reprocessed) {
+    return new PackageMutationRequest(
+        request.packageNumber(),
+        request.newPackageNumber(),
+        request.applicationNumber(),
+        request.volume(),
+        request.averageLength(),
+        request.averageDiameter(),
+        status,
+        request.comments(),
+        request.federalPermitNumber(),
+        request.reservePermitNumber(),
+        reprocessed,
+        request.ageClass(),
+        request.productType(),
+        request.endUseCode(),
+        request.speciesCodes());
   }
 
   private List<String> validatePackageMutation(

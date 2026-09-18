@@ -352,6 +352,7 @@ const ProvincialExemptionDetailsPage = () => {
   const [permitCreationSavedRequiresReload, setPermitCreationSavedRequiresReload] = useState(false)
   const [creatingPermit, setCreatingPermit] = useState(false)
   const [permitCreationDestination, setPermitCreationDestination] = useState<string | null>(null)
+  const [createdMinisterialPermit, setCreatedMinisterialPermit] = useState(false)
   const [permitCreationRequiresReload, setPermitCreationRequiresReload] = useState(false)
   const [generatingReport, setGeneratingReport] = useState(false)
   const [applicationNumberToAdd, setApplicationNumberToAdd] = useState('')
@@ -396,17 +397,21 @@ const ProvincialExemptionDetailsPage = () => {
 
     const destination = withCurrentSearch(permitCreationDestination)
     navigate(destination, {
-      state: withDetailReturnTo(
-        location.state,
-        {
-          label: 'Provincial exemption detail',
-          to: locationPath(location),
-        },
-        detailReturnTo,
-      ),
+      state: {
+        ...withDetailReturnTo(
+          location.state,
+          {
+            label: 'Provincial exemption detail',
+            to: locationPath(location),
+          },
+          detailReturnTo,
+        ),
+        permitCreated: createdMinisterialPermit,
+      },
     })
   }, [
     creatingPermit,
+    createdMinisterialPermit,
     detailReturnTo,
     location,
     navigate,
@@ -531,6 +536,7 @@ const ProvincialExemptionDetailsPage = () => {
         setPermitCreationSavedRequiresReload(false)
         setCreatingPermit(false)
         setPermitCreationDestination(null)
+        setCreatedMinisterialPermit(false)
         setPermitCreationRequiresReload(false)
         setApplicationNumberToAdd('')
         setApplicationMutationNumber(null)
@@ -1339,9 +1345,7 @@ const ProvincialExemptionDetailsPage = () => {
         permitTypeCode === 'B' &&
         permitStatusCode === 'ACT'
       ) {
-        setPermitCreationDestination(
-          `/provincial/exemption/${encodeURIComponent(permitDetail.exemptionNumber)}/permit/new`,
-        )
+        setPermitCreationConfirmationOpen(true)
         return
       }
       if (
@@ -1475,6 +1479,7 @@ const ProvincialExemptionDetailsPage = () => {
 
     if (newPermitPath) {
       setPermitCreationConfirmationOpen(false)
+      setCreatedMinisterialPermit((detail.exemptionTypeCode ?? '').trim().toUpperCase() === 'M')
       setPermitCreationDestination(newPermitPath)
     }
   }, [canCreateApplicationBackedPermit, creatingPermit, detail])
@@ -2854,41 +2859,67 @@ const ProvincialExemptionDetailsPage = () => {
           </div>
         </Modal>
       )}
-      {permitCreationConfirmationOpen && canCreateApplicationBackedPermit && currentDetail && (
-        <Modal
-          open
-          passiveModal
-          size="sm"
-          modalHeading="Apply for new permit"
-          className="permit-creation-confirmation-modal"
-          aria-describedby="permit-creation-confirmation-description"
-          onRequestClose={closePermitCreationConfirmation}
-        >
-          <p id="permit-creation-confirmation-description">
-            This creates a new active permit for {currentDetail.exemptionTypeDescription} exemption{' '}
-            {currentDetail.exemptionNumber}.
-          </p>
-          <p>Once created, this permit cannot be removed.</p>
-          <p>Eligible application scales from this exemption will be added automatically.</p>
-          <div className="permit-creation-confirmation-modal__actions">
-            <Button
-              kind="tertiary"
-              disabled={creatingPermit}
-              onClick={closePermitCreationConfirmation}
-            >
-              Cancel
-            </Button>
-            <Button
-              kind="primary"
-              disabled={creatingPermit}
-              renderIcon={creatingPermit ? PendingIcon : undefined}
-              onClick={() => void onCreatePermitFromExemption()}
-            >
-              {creatingPermit ? 'Creating…' : 'Create permit'}
-            </Button>
-          </div>
-        </Modal>
-      )}
+      {permitCreationConfirmationOpen &&
+        (canCreateApplicationBackedPermit || canStartBlanketOicPermitCreation) &&
+        currentDetail && (
+          <Modal
+            open
+            passiveModal
+            size="sm"
+            modalHeading="Apply for new permit"
+            className="permit-creation-confirmation-modal"
+            aria-describedby="permit-creation-confirmation-description"
+            onRequestClose={closePermitCreationConfirmation}
+          >
+            <p id="permit-creation-confirmation-description">
+              {currentDetail.blanketOic ? (
+                <>
+                  You're about to start a new permit for Blanket OIC Exemption{' '}
+                  {currentDetail.exemptionNumber}. The permit is created when you save it, and
+                  cannot be deleted afterwards.
+                </>
+              ) : (
+                <>
+                  A new permit will be created for Exemption {currentDetail.exemptionNumber}. Once
+                  created, a permit cannot be deleted.
+                </>
+              )}
+            </p>
+            {(currentDetail.exemptionTypeCode ?? '').trim().toUpperCase() === 'O' && (
+              <p>Eligible application scales from this exemption will be added automatically.</p>
+            )}
+            <div className="permit-creation-confirmation-modal__actions">
+              <Button
+                kind="tertiary"
+                disabled={creatingPermit}
+                onClick={closePermitCreationConfirmation}
+              >
+                Cancel
+              </Button>
+              <Button
+                kind="primary"
+                disabled={creatingPermit}
+                renderIcon={creatingPermit ? PendingIcon : undefined}
+                onClick={() => {
+                  if (currentDetail.blanketOic) {
+                    setPermitCreationConfirmationOpen(false)
+                    setPermitCreationDestination(
+                      `/provincial/exemption/${encodeURIComponent(currentDetail.exemptionNumber)}/permit/new`,
+                    )
+                  } else {
+                    void onCreatePermitFromExemption()
+                  }
+                }}
+              >
+                {creatingPermit
+                  ? 'Creating…'
+                  : currentDetail.blanketOic
+                    ? 'Continue'
+                    : 'Create permit'}
+              </Button>
+            </div>
+          </Modal>
+        )}
       <UnsavedChangesGuard
         isDirty={isExemptionDirty}
         isBusy={

@@ -280,6 +280,22 @@ public class ExemptionDetailsRpcController {
     return getBlanketOicTotals(exemptionNumber);
   }
 
+  @GetMapping("/rpc/exemption-details/region-context")
+  public ResponseEntity<ExemptionRegionContextResponseDto> getRegionContext(
+      @RequestParam(name = "exemptionNumber") String exemptionNumber,
+      Authentication authentication) {
+    String normalizedExemptionNumber = exemptionNumber.trim();
+    requireExemptionAccess(normalizedExemptionNumber, authentication);
+    ExemptionDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      return ResponseEntity.noContent().build();
+    }
+    return ResponseEntity.ok(
+        new ExemptionRegionContextResponseDto(
+            normalizedExemptionNumber,
+            service.getEditContext(normalizedExemptionNumber).regionNumbers()));
+  }
+
   @GetMapping("/rpc/exemption-details/edit-context")
   public ResponseEntity<ExemptionEditContextResponseDto> getEditContext(
       @RequestParam(name = "exemptionNumber", required = false) String exemptionNumber) {
@@ -1566,6 +1582,9 @@ public class ExemptionDetailsRpcController {
       boolean canViewPermit) {}
 
   public record BlanketOicTotalsResponseDto(String requestedVolume, String completedVolume) {}
+
+  public record ExemptionRegionContextResponseDto(
+      String exemptionNumber, List<Long> regionNumbers) {}
 
   public record ExemptionEditContextResponseDto(
       boolean rateOverrideEnabled,

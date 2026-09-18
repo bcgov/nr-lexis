@@ -29,6 +29,7 @@ final class LexisApiAuthorizationRules {
   private static final String ACTION_APPLICATIONS_REVIEW = "/applicationsReview";
   private static final String ACTION_APPROVED_EXEMPTION_REPORT = "/approvedExemptionReport";
   private static final String ACTION_CREATE_APPLICATION = "createApplication";
+  private static final String ACTION_CLIENT_SEARCH = "searchClients";
   private static final String ACTION_CREATE_EXEMPTION = "/createExemption";
   private static final String ACTION_CREATE_OFFER = "createOffer";
   private static final String ACTION_CREATE_PERMIT = "createPermit";
@@ -232,6 +233,7 @@ final class LexisApiAuthorizationRules {
               "/api/lexis/errorPage",
               "/api/lexis/errorPage.do"),
           anyAction(HttpMethod.GET, REPORT_WORKSPACE_ACTIONS, "/api/lexis/reports/options"),
+          action(HttpMethod.GET, ACTION_CLIENT_SEARCH, "/api/lexis/client-search"),
           anyAction(
               HttpMethod.GET,
               List.of("/applicationSearch", ACTION_APPLICATION_DETAILS),

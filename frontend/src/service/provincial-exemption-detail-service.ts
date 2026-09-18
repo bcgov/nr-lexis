@@ -44,6 +44,11 @@ export type ExemptionBlanketOicTotals = {
   completedVolume: string
 }
 
+export type ExemptionRegionContext = {
+  exemptionNumber: string
+  regionNumbers: string[]
+}
+
 export type ExemptionEditContext = {
   rateOverrideEnabled: boolean
   fixedFeeRate: string
@@ -188,6 +193,27 @@ export const fetchExemptionBlanketOicTotals = async (
   return {
     requestedVolume: asString(response.data.requestedVolume),
     completedVolume: asString(response.data.completedVolume),
+  }
+}
+
+export const fetchExemptionRegionContext = async (
+  exemptionNumber: string,
+): Promise<ExemptionRegionContext> => {
+  const response = await apiService
+    .getAxiosInstance()
+    .get<unknown>('/lexis/rpc/exemption-details/region-context', {
+      params: { exemptionNumber: exemptionNumber.trim() },
+    })
+  if (
+    !isRecord(response.data) ||
+    typeof response.data.exemptionNumber !== 'string' ||
+    !Array.isArray(response.data.regionNumbers)
+  ) {
+    throw new Error('Unexpected exemption region context payload.')
+  }
+  return {
+    exemptionNumber: response.data.exemptionNumber,
+    regionNumbers: asStringArray(response.data.regionNumbers),
   }
 }
 

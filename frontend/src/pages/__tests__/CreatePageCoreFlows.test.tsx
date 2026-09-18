@@ -96,6 +96,44 @@ vi.mock('@/service/offer-scale-detail-service', () => ({
   fetchOfferScaleDetails: vi.fn(),
 }))
 
+vi.mock('@/components/ForestClientComboBox', () => ({
+  default: ({
+    id,
+    labelText,
+    value,
+    onChange,
+    onBlur,
+    disabled,
+    invalid,
+    invalidText,
+    counterpartyClientNumber,
+  }: {
+    id: string
+    labelText: string
+    value: string
+    onChange: (value: string) => void
+    onBlur?: () => void
+    disabled?: boolean
+    invalid?: boolean
+    invalidText?: string
+    counterpartyClientNumber?: string
+  }) => (
+    <div>
+      <label htmlFor={id}>{labelText}</label>
+      <input
+        id={id}
+        value={value}
+        disabled={disabled}
+        aria-invalid={invalid || undefined}
+        data-counterparty-client-number={counterpartyClientNumber ?? ''}
+        onBlur={onBlur}
+        onChange={(event) => onChange(event.target.value)}
+      />
+      {invalid && invalidText ? <div>{invalidText}</div> : null}
+    </div>
+  ),
+}))
+
 Element.prototype.scrollIntoView = vi.fn()
 
 const mockedFetchProvincialApplicationOptions = vi.mocked(fetchProvincialApplicationOptions)
@@ -958,7 +996,7 @@ describe('Create Page Core Flows', () => {
     })
   })
 
-  it('debounces client lookups while an owner client number is typed', async () => {
+  it('loads owner locations after a canonical client selection', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/application/create']}>
         <Routes>
@@ -974,9 +1012,7 @@ describe('Create Page Core Flows', () => {
     const ownerClientNumberInput = screen.getByRole('textbox', { name: 'Client number' })
     mockedFetchApplicationClientLocations.mockClear()
 
-    for (const value of ['0', '00', '000', '0001', '00011', '000111', '0001111', '00011111']) {
-      fireEvent.change(ownerClientNumberInput, { target: { value } })
-    }
+    fireEvent.change(ownerClientNumberInput, { target: { value: '00011111' } })
 
     expect(mockedFetchApplicationClientLocations).not.toHaveBeenCalled()
 
@@ -1117,7 +1153,7 @@ describe('Create Page Core Flows', () => {
   )
 
   // Initializing the owner and agent lookup state is interaction-heavy under coverage.
-  it('clears stale agent location and contact when the agent number changes', async () => {
+  it('clears stale agent location and contact when the client selection is cleared', async () => {
     render(
       <MemoryRouter
         initialEntries={[
@@ -1143,7 +1179,7 @@ describe('Create Page Core Flows', () => {
       ),
     )
 
-    fireEvent.change(agentNumber, { target: { value: '123456789' } })
+    fireEvent.change(agentNumber, { target: { value: '' } })
 
     await waitFor(() => {
       const contactLocation = within(agentSection).getByRole('combobox', {
@@ -1158,9 +1194,7 @@ describe('Create Page Core Flows', () => {
     expect(screen.queryByRole('region', { name: 'Agent client details' })).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
-    expect(
-      await screen.findAllByText('Agent client number must be 1 to 8 digits.'),
-    ).not.toHaveLength(0)
+    expect(await screen.findAllByText('Agent client number is required.')).not.toHaveLength(0)
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
   }, 20_000)
 
