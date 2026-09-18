@@ -960,7 +960,7 @@ describe('permit creation from an exemption', () => {
     await userEvent.click(within(page).getByRole('tab', { name: 'Applicant' }))
     const ownerClientNumber = within(page).getByLabelText('Applicant client number')
     fireEvent.change(ownerClientNumber, { target: { value: '11111111' } })
-    expect(await within(page).findByText('Permit not created')).toBeInTheDocument()
+    expect(await within(page).findByText('Permit needs attention')).toBeInTheDocument()
 
     await userEvent.click(within(page).getByRole('checkbox', { name: "I'm an agent" }))
     const agentClientNumber = within(page).getByLabelText('Agent client number')
@@ -970,7 +970,7 @@ describe('permit creation from an exemption', () => {
     await userEvent.click(ownerClientNumber)
     await userEvent.tab()
     await waitFor(() => expect(within(page).getByLabelText('Applicant location')).toHaveValue('00'))
-    expect(within(page).getByText('Permit not created')).toBeInTheDocument()
+    expect(within(page).getByText('Permit needs attention')).toBeInTheDocument()
     expect(
       within(page).getByText(
         'Client details could not be retrieved. Existing selections were preserved. Please try again.',
@@ -980,7 +980,7 @@ describe('permit creation from an exemption', () => {
     await userEvent.click(agentClientNumber)
     await userEvent.tab()
     await waitFor(() => expect(within(page).getByLabelText('Agent location')).toHaveValue('00'))
-    expect(within(page).queryByText('Permit not created')).not.toBeInTheDocument()
+    expect(within(page).queryByText('Permit needs attention')).not.toBeInTheDocument()
 
     consoleError.mockRestore()
   })

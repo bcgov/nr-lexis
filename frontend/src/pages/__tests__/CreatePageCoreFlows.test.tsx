@@ -1145,7 +1145,7 @@ describe('Create Page Core Flows', () => {
       await userEvent.click(submitButton)
 
       expect(
-        await screen.findAllByText('Owner client number must be 1 to 8 digits.'),
+        await screen.findAllByText('Applicant client number must be 1 to 8 digits.'),
       ).not.toHaveLength(0)
       expect(mockedFetchApplicationClientLocations).not.toHaveBeenCalled()
       expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
@@ -1243,7 +1243,7 @@ describe('Create Page Core Flows', () => {
 
     expect(
       await screen.findAllByText(
-        'Owner name contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
+        'Applicant contact name contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
       ),
     ).not.toHaveLength(0)
     await selectApplicationCreateTab('Items')
@@ -1404,9 +1404,9 @@ describe('Create Page Core Flows', () => {
     await waitFor(() => expect(submitButton).toBeEnabled())
     await userEvent.click(submitButton)
 
-    expect(await screen.findAllByText('Owner client location code is required.')).not.toHaveLength(
-      0,
-    )
+    expect(
+      await screen.findAllByText('Applicant client location code is required.'),
+    ).not.toHaveLength(0)
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
   })
 
@@ -2006,7 +2006,7 @@ describe('Create Page Core Flows', () => {
       await screen.findByRole('heading', { level: 1, name: 'Create exemption' })
       await waitFor(() => expect(mockedFetchApplicationSummarySnapshot).toHaveBeenCalledWith('321'))
       expect(screen.getByRole('textbox', { name: 'Client number' })).toHaveValue('')
-      expect(screen.getByText('Loading owner details…')).toBeInTheDocument()
+      expect(screen.getByText('Loading applicant details…')).toBeInTheDocument()
 
       await selectExemptionCreateTab('Applications')
       const selectedApplications = screen.getByRole('list', { name: 'Selected applications' })
@@ -2018,7 +2018,7 @@ describe('Create Page Core Flows', () => {
       await selectExemptionCreateTab('Applicant')
       expect(screen.getByRole('textbox', { name: 'Client number' })).toHaveValue('')
       expect(
-        screen.getByText(/A standalone Ministerial exemption has no linked owner details/),
+        screen.getByText(/A standalone Ministerial exemption has no linked applicant details/),
       ).toBeInTheDocument()
 
       await selectExemptionCreateTab('Applications')
@@ -2032,7 +2032,7 @@ describe('Create Page Core Flows', () => {
 
       await selectExemptionCreateTab('Applicant')
       expect(screen.getByRole('textbox', { name: 'Client number' })).toHaveValue('')
-      expect(screen.getByText('Loading owner details…')).toBeInTheDocument()
+      expect(screen.getByText('Loading applicant details…')).toBeInTheDocument()
 
       await act(async () => {
         resolveFirstSnapshot(

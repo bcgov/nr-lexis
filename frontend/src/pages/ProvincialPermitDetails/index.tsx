@@ -2689,7 +2689,9 @@ const ProvincialPermitDetailsPage = () => {
         return false
       }
       if (isEditingPermitClients && !permitClientLookupCanSave) {
-        setActionErrorMessage('Select verified owner and agent locations before saving the permit.')
+        setActionErrorMessage(
+          'Select verified applicant and agent locations before saving the permit.',
+        )
         return false
       }
       let confirmedRequest: PermitDetailMutationRequest = request

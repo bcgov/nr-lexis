@@ -158,11 +158,11 @@ describe('BlanketOicPermitCreateForm', () => {
     expect(screen.getAllByText('—')).toHaveLength(2)
     expect(screen.getByText('0/250')).toBeInTheDocument()
     for (const tab of screen.getAllByRole('tab')) expect(tab.querySelector('svg')).not.toBeNull()
-    expect(screen.queryByRole('group', { name: 'Permit not created' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: 'Permit needs attention' })).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Save permit' }))
 
-    const summary = await screen.findByRole('group', { name: 'Permit not created' })
+    const summary = await screen.findByRole('group', { name: 'Permit needs attention' })
     expect(within(summary).getByText('Permit request pieces is required.')).toBeInTheDocument()
     expect(within(summary).getByText('Permit request volume is required.')).toBeInTheDocument()
     expect(within(summary).getByText('Purchaser is required.')).toBeInTheDocument()
@@ -200,7 +200,7 @@ describe('BlanketOicPermitCreateForm', () => {
     await user.type(screen.getByLabelText('Purchaser'), 'Test purchaser')
     await user.type(screen.getByLabelText('Transport name'), 'Test barge')
     await user.type(screen.getByLabelText('Estimated shipping date'), '2099-01-01')
-    expect(screen.queryByRole('group', { name: 'Permit not created' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: 'Permit needs attention' })).not.toBeInTheDocument()
     expect(
       screen.getByText(/The permit number is assigned after a successful save/),
     ).toBeInTheDocument()
@@ -231,7 +231,7 @@ describe('BlanketOicPermitCreateForm', () => {
     expect(screen.getByRole('button', { name: 'Save permit' })).toBeEnabled()
     await user.click(screen.getByRole('button', { name: 'Save permit' }))
 
-    const summary = screen.getByRole('group', { name: 'Permit not created' })
+    const summary = screen.getByRole('group', { name: 'Permit needs attention' })
     expect(summary).toHaveFocus()
     expect(
       within(summary).getByText(/Shipping reference options are still loading/),

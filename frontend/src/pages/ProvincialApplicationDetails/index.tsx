@@ -1242,11 +1242,11 @@ const ProvincialApplicationDetailsPage = () => {
     [isAgentClientLookupPending, isOwnerClientLookupPending, isTransitioningApplicantToAgent],
   )
   const ownerClientLocationPlaceholder = !summaryOwnerClientNumber
-    ? 'Enter owner client number first'
+    ? 'Enter applicant client number first'
     : isLoadingOwnerClientLocations
       ? 'Loading locations'
       : hasSelectableOwnerClientLocations
-        ? 'Select owner client location'
+        ? 'Select applicant client location'
         : 'No locations on file'
   const agentClientLocationPlaceholder = !summaryAgentClientNumber
     ? 'Enter agent client number first'
@@ -1256,11 +1256,11 @@ const ProvincialApplicationDetailsPage = () => {
         ? 'Select agent client location'
         : 'No locations on file'
   const ownerContactPlaceholder = !summaryOwnerClientLocationCode
-    ? 'Select owner location first'
+    ? 'Select applicant location first'
     : isLoadingOwnerClientContacts
       ? 'Loading contacts'
       : hasSelectableOwnerClientContacts
-        ? 'Select owner contact'
+        ? 'Select applicant contact'
         : 'No contacts on file'
   const agentContactPlaceholder = !summaryAgentClientLocationCode
     ? 'Select agent location first'
@@ -1430,18 +1430,18 @@ const ProvincialApplicationDetailsPage = () => {
     return {
       ownerClientNumber: applicationClientNumberFieldError(
         summaryForm.ownerClientNumber,
-        'Owner client number',
+        'Applicant client number',
       ),
       ownerClientLocationCode:
         requiredMaxLengthFieldError(
           summaryForm.ownerClientLocationCode,
           2,
-          'Owner client location code',
+          'Applicant client location code',
         ) ?? undefined,
       ownerContactName: applicationTextStorageFieldError(
         summaryForm.ownerContactName,
         APPLICATION_CONTACT_NAME_MAX_LENGTH,
-        'Owner contact name',
+        'Applicant contact name',
         true,
       ),
       agentClientNumber: isAgentApplicant(summaryForm.applicantTypeCode)
@@ -4146,7 +4146,7 @@ const ProvincialApplicationDetailsPage = () => {
                                   setIsEditingOwnerDetails(true)
                                 }}
                               >
-                                Edit owner details
+                                Edit applicant details
                               </Button>
                             )}
                         </div>

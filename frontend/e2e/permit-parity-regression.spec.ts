@@ -477,7 +477,7 @@ test.describe('Provincial permit parity regressions', () => {
     await selectTab(page, 'Permit')
     await save.click()
 
-    const summary = page.getByRole('group', { name: 'Permit not created', exact: true })
+    const summary = page.getByRole('group', { name: 'Permit needs attention', exact: true })
     await expect(summary).toBeFocused()
     await expect(summary).toContainText('Permit request pieces is required.')
     await expect(summary).toContainText('Purchaser is required.')

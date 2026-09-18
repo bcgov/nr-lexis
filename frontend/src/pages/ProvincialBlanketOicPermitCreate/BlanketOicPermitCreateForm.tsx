@@ -833,11 +833,11 @@ const BlanketOicPermitCreateForm = ({
   return (
     <section aria-label="Blanket OIC permit details">
       {errorMessages.length > 0 ? (
-        <div ref={errorSummaryRef} tabIndex={-1} role="group" aria-label="Permit not created">
+        <div ref={errorSummaryRef} tabIndex={-1} role="group" aria-label="Permit needs attention">
           <InlineNotification
             kind="error"
             role="alert"
-            title="Permit not created"
+            title="Permit needs attention"
             lowContrast
             hideCloseButton
           >

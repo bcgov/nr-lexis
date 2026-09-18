@@ -329,7 +329,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     ).toBe(true)
 
     const ownerTile = getOwnerClientDetailsTile()
-    await userEvent.click(within(ownerTile).getByRole('button', { name: 'Edit owner details' }))
+    await userEvent.click(within(ownerTile).getByRole('button', { name: 'Edit applicant details' }))
     const editOwnerEmail = (await within(ownerTile).findByText('owner@example.test')).closest(
       '.detail-field-item',
     )
@@ -457,7 +457,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       ),
     )
 
-    await userEvent.click(ownerControls.getByRole('button', { name: 'Edit owner details' }))
+    await userEvent.click(ownerControls.getByRole('button', { name: 'Edit applicant details' }))
     mockedFetchApplicationClientLocations.mockRejectedValueOnce(
       new Error('changed client endpoint unavailable'),
     )
@@ -500,7 +500,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     await screen.findByRole('heading', { level: 2, name: 'Applicant client details' })
     const ownerControls = within(getOwnerClientDetailsTile())
     expect(await ownerControls.findByText('Owner Forestry Ltd.')).toBeInTheDocument()
-    await userEvent.click(ownerControls.getByRole('button', { name: 'Edit owner details' }))
+    await userEvent.click(ownerControls.getByRole('button', { name: 'Edit applicant details' }))
 
     mockedFetchApplicationClientLocations.mockRejectedValueOnce(
       new Error('changed client endpoint unavailable'),
@@ -597,7 +597,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     ).not.toBeInTheDocument()
     await userEvent.click(
       ownerControls.getByRole('button', {
-        name: 'Edit owner details',
+        name: 'Edit applicant details',
       }),
     )
 
@@ -644,7 +644,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     })
     expect(
       await ownerControls.findByRole('button', {
-        name: 'Edit owner details',
+        name: 'Edit applicant details',
       }),
     ).toBeInTheDocument()
     expect(screen.getByText('Applicant client details saved.')).toBeInTheDocument()
@@ -677,7 +677,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     await screen.findByRole('heading', { level: 1, name: 'Application 321' })
     const ownerControls = within(getOwnerClientDetailsTile())
-    await userEvent.click(ownerControls.getByRole('button', { name: 'Edit owner details' }))
+    await userEvent.click(ownerControls.getByRole('button', { name: 'Edit applicant details' }))
     const applicantType = getSummaryComboBox(ownerControls, 'Applicant type')
 
     expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
@@ -693,7 +693,9 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     )
     await selectApplicationDetailTab('Applicant')
     const resetOwnerControls = within(getOwnerClientDetailsTile())
-    await userEvent.click(resetOwnerControls.getByRole('button', { name: 'Edit owner details' }))
+    await userEvent.click(
+      resetOwnerControls.getByRole('button', { name: 'Edit applicant details' }),
+    )
     expect(getSummaryComboBox(resetOwnerControls, 'Applicant type')).toHaveValue('Ministerial')
     await chooseComboBoxOption(getSummaryComboBox(resetOwnerControls, 'Applicant type'), 'Agent')
     await waitFor(() =>
@@ -758,7 +760,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     await screen.findByRole('heading', { level: 1, name: 'Application 321' })
     const ownerControls = within(getOwnerClientDetailsTile())
-    await userEvent.click(ownerControls.getByRole('button', { name: 'Edit owner details' }))
+    await userEvent.click(ownerControls.getByRole('button', { name: 'Edit applicant details' }))
     const ownerClientNumber = ownerControls.getByLabelText('Client number')
     fireEvent.change(ownerClientNumber, { target: { value: '00002176' } })
 
@@ -797,7 +799,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     const ownerControls = within(getOwnerClientDetailsTile())
     await userEvent.click(
       ownerControls.getByRole('button', {
-        name: 'Edit owner details',
+        name: 'Edit applicant details',
       }),
     )
     fireEvent.change(ownerControls.getByLabelText('Client number'), {
@@ -829,7 +831,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(await ownerControls.findByText('Owner Forestry Ltd.')).toBeInTheDocument()
 
     const callsBeforeEdit = mockedFetchApplicationClientData.mock.calls.length
-    await userEvent.click(ownerControls.getByRole('button', { name: 'Edit owner details' }))
+    await userEvent.click(ownerControls.getByRole('button', { name: 'Edit applicant details' }))
     await waitFor(() =>
       expect(mockedFetchApplicationClientData.mock.calls.length).toBeGreaterThan(callsBeforeEdit),
     )
@@ -1009,7 +1011,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(mockedFetchProvincialApplicationOptions).toHaveBeenCalled()
     expect(
       within(getOwnerClientDetailsTile()).queryByRole('button', {
-        name: 'Edit owner details',
+        name: 'Edit applicant details',
       }),
     ).not.toBeInTheDocument()
 
@@ -1599,7 +1601,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       )
       await userEvent.click(
         controls.getByRole('button', {
-          name: saveSource === 'owner' ? 'Edit owner details' : 'Edit agent details',
+          name: saveSource === 'owner' ? 'Edit applicant details' : 'Edit agent details',
         }),
       )
       const contactName = controls.getByRole('combobox', { name: 'Contact name' })
@@ -1863,7 +1865,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     await selectApplicationDetailTab('Applicant')
     const ownerControls = within(getOwnerClientDetailsTile())
-    await userEvent.click(ownerControls.getByRole('button', { name: 'Edit owner details' }))
+    await userEvent.click(ownerControls.getByRole('button', { name: 'Edit applicant details' }))
     const applicantType = await ownerControls.findByLabelText('Applicant type')
     expect(applicantType).toHaveAttribute('readonly')
     expect(applicantType).toHaveValue('Agent')
@@ -2643,7 +2645,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     await selectApplicationDetailTab('Applicant')
     const ownerControls = within(getOwnerClientDetailsTile())
-    await userEvent.click(ownerControls.getByRole('button', { name: 'Edit owner details' }))
+    await userEvent.click(ownerControls.getByRole('button', { name: 'Edit applicant details' }))
     const ownerContactInput = await ownerControls.findByLabelText('Contact name', {
       selector: '#applicationOwnerContactNameEdit',
     })
@@ -2673,7 +2675,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     await selectApplicationDetailTab('Applicant')
     const ownerControls = within(getOwnerClientDetailsTile())
-    await userEvent.click(ownerControls.getByRole('button', { name: 'Edit owner details' }))
+    await userEvent.click(ownerControls.getByRole('button', { name: 'Edit applicant details' }))
     await waitFor(() => {
       expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00011122', '00', {
         applicationNumber: '321',

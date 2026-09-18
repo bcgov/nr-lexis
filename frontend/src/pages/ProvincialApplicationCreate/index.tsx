@@ -1153,17 +1153,17 @@ const ProvincialApplicationCreatePage = () => {
 
   const fieldErrors = useMemo<FieldErrors<ProvincialApplicationCreateField>>(
     () => ({
-      ownerClientNumber: clientNumberFieldError(form.ownerClientNumber, 'Owner client number'),
+      ownerClientNumber: clientNumberFieldError(form.ownerClientNumber, 'Applicant client number'),
       ownerClientLocationCode:
         requiredMaxLengthFieldError(
           form.ownerClientLocationCode,
           2,
-          'Owner client location code',
+          'Applicant client location code',
         ) ?? undefined,
       ownerContactName: applicationTextStorageFieldError(
         form.ownerContactName,
         APPLICATION_CONTACT_NAME_MAX_LENGTH,
-        'Owner name',
+        'Applicant contact name',
         true,
       ),
       agentClientNumber: isAgentApplicant(form.applicantTypeCode)
@@ -1319,13 +1319,13 @@ const ProvincialApplicationCreatePage = () => {
     isLoadingApplicationSpecies ||
     applicationSpeciesSelectOptions.length === 0
   const ownerClientLocationPlaceholder = !form.ownerClientNumber.trim()
-    ? 'Enter owner client number first'
+    ? 'Enter applicant client number first'
     : !hasValidOwnerClientNumber
-      ? 'Enter a valid owner client number'
+      ? 'Enter a valid applicant client number'
       : isLoadingOwnerClientLocations
         ? 'Loading locations'
         : hasSelectableOwnerClientLocations
-          ? 'Select owner client location'
+          ? 'Select applicant client location'
           : 'No locations on file'
   const agentClientLocationPlaceholder = !form.agentClientNumber.trim()
     ? 'Enter agent client number first'
@@ -1337,11 +1337,11 @@ const ProvincialApplicationCreatePage = () => {
           ? 'Select agent client location'
           : 'No locations on file'
   const ownerContactPlaceholder = !form.ownerClientLocationCode.trim()
-    ? 'Select owner location first'
+    ? 'Select applicant location first'
     : isLoadingOwnerClientContacts
       ? 'Loading contacts'
       : hasSelectableOwnerClientContacts
-        ? 'Select owner contact'
+        ? 'Select applicant contact'
         : 'No contacts on file'
   const agentContactPlaceholder = !form.agentClientLocationCode.trim()
     ? 'Select agent location first'
@@ -1819,7 +1819,7 @@ const ProvincialApplicationCreatePage = () => {
                       aria-required="true"
                       value={form.ownerContactName}
                       disabled={!form.ownerClientLocationCode.trim()}
-                      placeholder="Enter owner contact name"
+                      placeholder="Enter applicant contact name"
                       invalid={!!fieldError('ownerContactName')}
                       invalidText={fieldError('ownerContactName')}
                       onBlur={() => markFieldTouched('ownerContactName')}
