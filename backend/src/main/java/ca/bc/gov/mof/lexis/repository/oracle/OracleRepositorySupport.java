@@ -319,6 +319,19 @@ public abstract class OracleRepositorySupport {
     return Optional.ofNullable(results.get(0));
   }
 
+  /** Executes a soft SELECT, preserving optional columns and returning no rows on query failure. */
+  protected <T> List<T> queryDirect(
+      String sql, SqlRowMapper<T> rowMapper, Object... bindValues) {
+    try {
+      return jdbcTemplate.query(sql, (rs, rowNumber) -> rowMapper.map(rs), bindValues);
+    } catch (DataAccessException ex) {
+      logger.warn(
+          "event=lexis_oracle_repository operation=direct_query outcome=failed failureType={}",
+          exceptionType(ex));
+      return List.of();
+    }
+  }
+
   /** Executes a bound SELECT with the same required-column contract as a required cursor read. */
   protected <T> List<T> queryDirectRequired(
       String sql, SqlRowMapper<T> rowMapper, Object... bindValues) {

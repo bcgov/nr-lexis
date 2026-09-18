@@ -860,17 +860,8 @@ class PermitRpcRepositoryTest {
   }
 
   @Test
-  void requiredScaleCodeAndBoicMarkLookupsShouldUseOracleRows() throws Exception {
-    stubCursorProcedure("{ call LEXIS_CODES.FIND_SPECIES_CODE(?,?) }", 2);
-    when(resultSet.next()).thenReturn(true, false);
-
+  void requiredBoicMarkLookupShouldUseOracleRows() throws Exception {
     PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
-
-    assertThat(repository.isSpeciesCodeValidRequired("HE")).isTrue();
-    verify(callableStatement).setString(1, "HE");
-    verify(callableStatement).registerOutParameter(2, Types.REF_CURSOR);
-
-    org.mockito.Mockito.reset(callableStatement, resultSet);
     stubCursorProcedure("{ call LEXIS_CODES.FIND_VALID_BOIC_TIMBER_MARK(?,?,?) }", 3);
     when(resultSet.next()).thenReturn(true, false);
 

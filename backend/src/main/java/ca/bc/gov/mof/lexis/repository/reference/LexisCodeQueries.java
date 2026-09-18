@@ -411,6 +411,57 @@ public final class LexisCodeQueries {
       ORDER BY O.GROUP_BY, O.ORDER_BY
       """;
 
+  public static final String SPECIES_BY_CODE =
+      """
+      SELECT C.EXPORT_SPECIES_CODE AS CODE,
+             C.DESCRIPTION,
+             C.EFFECTIVE_DATE,
+             C.EXPIRY_DATE,
+             C.UPDATE_TIMESTAMP,
+             O.ORDER_BY,
+             O.GROUP_BY
+      FROM THE.EXPORT_SPECIES_CODE C
+      INNER JOIN THE.EXPORT_SPECIES_CODE_ORDER O
+        ON O.EXPORT_SPECIES_CODE = C.EXPORT_SPECIES_CODE
+      WHERE C.EXPORT_SPECIES_CODE = ?
+        AND SYSDATE BETWEEN C.EFFECTIVE_DATE AND C.EXPIRY_DATE
+      ORDER BY O.GROUP_BY, O.ORDER_BY
+      """;
+
+  public static final String GRADE_BY_CODE =
+      """
+      SELECT C.EXPORT_GRADE_CODE AS CODE,
+             C.DESCRIPTION,
+             C.EFFECTIVE_DATE,
+             C.EXPIRY_DATE,
+             C.UPDATE_TIMESTAMP,
+             O.ORDER_BY,
+             O.GROUP_BY
+      FROM THE.EXPORT_GRADE_CODE C
+      INNER JOIN THE.EXPORT_GRADE_CODE_ORDER O
+        ON O.EXPORT_GRADE_CODE = C.EXPORT_GRADE_CODE
+      WHERE C.EXPORT_GRADE_CODE = ?
+        AND SYSDATE BETWEEN C.EFFECTIVE_DATE AND C.EXPIRY_DATE
+      ORDER BY O.GROUP_BY, O.ORDER_BY
+      """;
+
+  public static final String END_USE_BY_CODE =
+      """
+      SELECT C.EXPORT_END_USE_CODE AS CODE,
+             C.DESCRIPTION,
+             C.EFFECTIVE_DATE,
+             C.EXPIRY_DATE,
+             C.UPDATE_TIMESTAMP,
+             O.ORDER_BY,
+             O.GROUP_BY
+      FROM THE.EXPORT_END_USE_CODE C
+      INNER JOIN THE.EXPORT_END_USE_CODE_ORDER O
+        ON O.EXPORT_END_USE_CODE = C.EXPORT_END_USE_CODE
+      WHERE C.EXPORT_END_USE_CODE = ?
+        AND SYSDATE BETWEEN C.EFFECTIVE_DATE AND C.EXPIRY_DATE
+      ORDER BY O.GROUP_BY, O.ORDER_BY
+      """;
+
   public static final String GROWTH_TYPE_BY_CODE =
       """
       SELECT C.EXPORT_GROWTH_TYPE_CODE AS CODE,

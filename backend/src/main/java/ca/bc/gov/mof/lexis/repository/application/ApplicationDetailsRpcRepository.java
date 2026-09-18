@@ -65,12 +65,9 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       LEXIS_GROUP_5_PACKAGE + "FIND_END_USE_BY_APP(?,?)";
   private static final String FIND_END_USE_BY_PACKAGE =
       LEXIS_GROUP_5_PACKAGE + "FIND_END_USE_BY_PACK(?,?)";
-  private static final String FIND_SPECIES_CODE = LEXIS_CODES_PACKAGE + "FIND_SPECIES_CODE(?,?)";
-  private static final String FIND_GRADE_CODE = LEXIS_CODES_PACKAGE + "FIND_GRADE_CODE(?,?)";
   private static final String FIND_TIMBER_MARK = LEXIS_CODES_PACKAGE + "FIND_TIMBER_MARK(?,?)";
   private static final String FIND_TIMBER_MARK_BY_ORG_UNIT =
       LEXIS_CODES_PACKAGE + "FIND_TIMBER_MARK_BY_ORG_UNITS(?,?,?)";
-  private static final String FIND_END_USE_CODE = LEXIS_CODES_PACKAGE + "FIND_END_USE_CODE(?,?)";
   private static final String FIND_GROWTH_TYPE_CODE =
       LEXIS_CODES_PACKAGE + "FIND_GROWTH_TYPE_CODE(?,?)";
   private static final String FIND_PACKAGE_STATUS_CODE =
@@ -836,71 +833,19 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
   }
 
   public Optional<CodeRow> findGradeCode(String gradeCode) {
-    String normalized = trim(gradeCode);
-    if (normalized == null) {
-      return Optional.empty();
-    }
-    return queryCursorSingle(
-        FIND_GRADE_CODE,
-        cs -> cs.setString(1, normalized),
-        2,
-        rs ->
-            new CodeRow(
-                getString(rs, "CODE"),
-                getString(rs, "DESCRIPTION"),
-                zeroIfNull(getLong(rs, "GROUP_BY")),
-                zeroIfNull(getLong(rs, "ORDER_BY"))));
+    return findCodeRow(LexisCodeQueries.GRADE_BY_CODE, gradeCode, false);
   }
 
   public Optional<CodeRow> findGradeCodeRequired(String gradeCode) {
-    String normalized = trim(gradeCode);
-    if (normalized == null) {
-      return Optional.empty();
-    }
-    return queryCursorSingleRequired(
-        FIND_GRADE_CODE,
-        cs -> cs.setString(1, normalized),
-        2,
-        rs ->
-            new CodeRow(
-                getString(rs, "CODE"),
-                getString(rs, "DESCRIPTION"),
-                zeroIfNull(getLong(rs, "GROUP_BY")),
-                zeroIfNull(getLong(rs, "ORDER_BY"))));
+    return findCodeRow(LexisCodeQueries.GRADE_BY_CODE, gradeCode, true);
   }
 
   public Optional<CodeRow> findSpeciesCode(String speciesCode) {
-    String normalized = trim(speciesCode);
-    if (normalized == null) {
-      return Optional.empty();
-    }
-    return queryCursorSingle(
-        FIND_SPECIES_CODE,
-        cs -> cs.setString(1, normalized),
-        2,
-        rs ->
-            new CodeRow(
-                getString(rs, "CODE"),
-                getString(rs, "DESCRIPTION"),
-                zeroIfNull(getLong(rs, "GROUP_BY")),
-                zeroIfNull(getLong(rs, "ORDER_BY"))));
+    return findCodeRow(LexisCodeQueries.SPECIES_BY_CODE, speciesCode, false);
   }
 
   public Optional<CodeRow> findSpeciesCodeRequired(String speciesCode) {
-    String normalized = trim(speciesCode);
-    if (normalized == null) {
-      return Optional.empty();
-    }
-    return queryCursorSingleRequired(
-        FIND_SPECIES_CODE,
-        cs -> cs.setString(1, normalized),
-        2,
-        rs ->
-            new CodeRow(
-                getString(rs, "CODE"),
-                getString(rs, "DESCRIPTION"),
-                zeroIfNull(getLong(rs, "GROUP_BY")),
-                zeroIfNull(getLong(rs, "ORDER_BY"))));
+    return findCodeRow(LexisCodeQueries.SPECIES_BY_CODE, speciesCode, true);
   }
 
   public Optional<TimberMarkRow> findTimberMark(String timberMark) {
@@ -947,37 +892,11 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
   }
 
   public Optional<CodeRow> findEndUseCode(String endUseCode) {
-    String normalized = trim(endUseCode);
-    if (normalized == null) {
-      return Optional.empty();
-    }
-    return queryCursorSingle(
-        FIND_END_USE_CODE,
-        cs -> cs.setString(1, normalized),
-        2,
-        rs ->
-            new CodeRow(
-                getString(rs, "CODE"),
-                getString(rs, "DESCRIPTION"),
-                zeroIfNull(getLong(rs, "GROUP_BY")),
-                zeroIfNull(getLong(rs, "ORDER_BY"))));
+    return findCodeRow(LexisCodeQueries.END_USE_BY_CODE, endUseCode, false);
   }
 
   public Optional<CodeRow> findEndUseCodeRequired(String endUseCode) {
-    String normalized = trim(endUseCode);
-    if (normalized == null) {
-      return Optional.empty();
-    }
-    return queryCursorSingleRequired(
-        FIND_END_USE_CODE,
-        cs -> cs.setString(1, normalized),
-        2,
-        rs ->
-            new CodeRow(
-                getString(rs, "CODE"),
-                getString(rs, "DESCRIPTION"),
-                zeroIfNull(getLong(rs, "GROUP_BY")),
-                zeroIfNull(getLong(rs, "ORDER_BY"))));
+    return findCodeRow(LexisCodeQueries.END_USE_BY_CODE, endUseCode, true);
   }
 
   public Optional<String> findGrowthTypeDescription(String growthTypeCode) {
@@ -1178,6 +1097,25 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       pattern.append("/%");
     }
     return pattern.toString();
+  }
+
+  private Optional<CodeRow> findCodeRow(String sql, String code, boolean required) {
+    String normalized = trim(code);
+    if (normalized == null) {
+      return Optional.empty();
+    }
+    SqlRowMapper<CodeRow> mapper =
+        rs ->
+            new CodeRow(
+                getString(rs, "CODE"),
+                getString(rs, "DESCRIPTION"),
+                zeroIfNull(getLong(rs, "GROUP_BY")),
+                zeroIfNull(getLong(rs, "ORDER_BY")));
+    List<CodeRow> rows =
+        required
+            ? queryDirectRequired(sql, mapper, normalized)
+            : queryDirect(sql, mapper, normalized);
+    return rows.isEmpty() ? Optional.empty() : Optional.ofNullable(rows.get(0));
   }
 
   private boolean directCodeExistsRequired(String sql, String code) {

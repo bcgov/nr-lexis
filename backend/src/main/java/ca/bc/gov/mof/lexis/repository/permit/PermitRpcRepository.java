@@ -1896,19 +1896,21 @@ public class PermitRpcRepository extends OracleRepositorySupport {
   }
 
   public Optional<String> findSpeciesDescription(String speciesCode) {
-    return findCodeDescription(FIND_SPECIES_CODE, speciesCode);
+    return findCodeDescriptionDirect(
+        LexisCodeQueries.SPECIES_BY_CODE, FIND_SPECIES_CODE, speciesCode);
   }
 
   public boolean isSpeciesCodeValidRequired(String speciesCode) {
-    return codeExistsRequired(FIND_SPECIES_CODE, speciesCode);
+    return codeExistsDirectRequired(LexisCodeQueries.SPECIES_BY_CODE, speciesCode);
   }
 
   public Optional<String> findGradeDescription(String gradeCode) {
-    return findCodeDescription(FIND_GRADE_CODE, gradeCode);
+    return findCodeDescriptionDirect(
+        LexisCodeQueries.GRADE_BY_CODE, FIND_GRADE_CODE, gradeCode);
   }
 
   public boolean isGradeCodeValidRequired(String gradeCode) {
-    return codeExistsRequired(FIND_GRADE_CODE, gradeCode);
+    return codeExistsDirectRequired(LexisCodeQueries.GRADE_BY_CODE, gradeCode);
   }
 
   public boolean isValidBoicTimberMarkRequired(
@@ -2075,39 +2077,12 @@ public class PermitRpcRepository extends OracleRepositorySupport {
     return count > 0;
   }
 
-  private Optional<String> findCodeDescription(String procedureSignature, String code) {
-    String normalized = trim(code);
-    if (normalized == null) {
-      return Optional.empty();
-    }
-    return queryCursorSingle(
-            procedureSignature,
-            cs -> cs.setString(1, normalized),
-            2,
-            rs -> trim(rs.getString(2)))
-        .filter(value -> value != null && !value.isBlank())
-        .or(() -> fallbackCodeDescription(procedureSignature, normalized));
-  }
-
   private boolean codeExistsDirectRequired(String sql, String code) {
     String normalized = trim(code);
     if (normalized == null) {
       return false;
     }
     return !queryDirectRequired(sql, rs -> Boolean.TRUE, normalized).isEmpty();
-  }
-
-  private boolean codeExistsRequired(String procedureSignature, String code) {
-    String normalized = trim(code);
-    if (normalized == null) {
-      return false;
-    }
-    return queryCursorSingleRequired(
-            procedureSignature,
-            cs -> cs.setString(1, normalized),
-            2,
-            rs -> Boolean.TRUE)
-        .orElse(false);
   }
 
   // Stored package identifiers are exact Oracle keys, including any padding.
