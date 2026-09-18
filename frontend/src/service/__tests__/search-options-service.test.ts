@@ -25,6 +25,36 @@ describe('search-options-service', () => {
     vi.clearAllMocks()
   })
 
+  it.each([
+    ['application', fetchProvincialApplicationOptions],
+    ['exemption', fetchProvincialExemptionOptions],
+  ])('keeps None exclusive to %s search callers', async (_name, fetchOptions) => {
+    getCachedDataMock.mockResolvedValue({
+      exemptionTypes: [
+        { code: 'NULL', name: 'None' },
+        { code: 'M', name: 'Ministerial' },
+      ],
+      exemptionReasons: [],
+      exemptionStatuses: [],
+      applicationStatuses: [],
+      productTypes: [],
+      growthTypes: [],
+      regions: [],
+      currentSchedules: [],
+    })
+
+    expect((await fetchOptions(true)).exemptionTypes).toEqual([
+      { value: 'NULL', label: 'None' },
+      { value: 'M', label: 'Ministerial' },
+    ])
+    // Creation, detail and report callers use the default, including after a search fetch.
+    expect((await fetchOptions()).exemptionTypes).toEqual([{ value: 'M', label: 'Ministerial' }])
+    expect((await fetchOptions(true)).exemptionTypes[0]).toEqual({
+      value: 'NULL',
+      label: 'None',
+    })
+  })
+
   it('parses provincial application options', async () => {
     getCachedDataMock.mockResolvedValue({
       exemptionTypes: [

@@ -7,9 +7,11 @@ import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.application.ApplicationEditLockDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchCriteria;
+import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResultDto;
 import ca.bc.gov.mof.lexis.service.application.ApplicationEditLockService;
@@ -26,6 +28,9 @@ import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -67,8 +72,49 @@ class LexisApplicationControllerUnitTest {
                     false, invocation.getArgument(1)));
   }
 
-  @Test
-  void searchShouldOverrideClientFiltersWhenUserHasScopedForestClient() {
+  @ParameterizedTest
+  @ValueSource(booleans = {true, false})
+  void optionsShouldExposeNoneOnlyWhenBlanketOicIsVisible(boolean canViewBlanketOic) {
+    LexisApplicationSearchOptionsDto options =
+        new LexisApplicationSearchOptionsDto(
+            List.of(
+                new CodeNameDto("ALL", "All"),
+                new CodeNameDto("NULL", "None"),
+                new CodeNameDto("M", "Ministerial"),
+                new CodeNameDto("O", "OIC"),
+                new CodeNameDto("B", "BOIC")),
+            List.of(new CodeNameDto("R", "Reason")),
+            List.of(new CodeNameDto("NEW", "New")),
+            List.of(new CodeNameDto("L", "Logs")),
+            List.of(new CodeNameDto("O", "Old Growth")),
+            List.of(new CodeNameDto("12", "Coast")),
+            List.of(new CodeNameDto("1", "Current")),
+            List.of(new CodeNameDto("2", "Next")));
+    when(service.searchOptions()).thenReturn(options);
+    when(provincialAuthorizationService.canViewBlanketOic(authentication))
+        .thenReturn(canViewBlanketOic);
+
+    LexisApplicationSearchOptionsDto result = controller.searchOptions(authentication).getBody();
+
+    assertThat(result).isNotNull();
+    assertThat(result.exemptionTypes())
+        .extracting(CodeNameDto::code)
+        .containsExactly(
+            canViewBlanketOic
+                ? new String[] {"ALL", "NULL", "M", "O", "B"}
+                : new String[] {"ALL", "M", "O", "B"});
+    assertThat(result)
+        .usingRecursiveComparison()
+        .ignoringFields("exemptionTypes")
+        .isEqualTo(options);
+    assertThat(options.exemptionTypes()).extracting(CodeNameDto::code).contains("NULL");
+  }
+
+  @ParameterizedTest
+  @NullSource
+  @ValueSource(strings = "NULL")
+  void searchAndCountShouldOverrideClientFiltersWhenUserHasScopedForestClient(
+      String exemptionType) {
     when(sessionService.resolveForestClientNumber(authentication)).thenReturn("00077881");
     when(service.search(any(LexisApplicationSearchCriteria.class)))
         .thenReturn(new LexisApplicationSearchResponseDto(List.of(), 0, 0, 25));
@@ -77,7 +123,7 @@ class LexisApplicationControllerUnitTest {
         null,
         null,
         null,
-        null,
+        exemptionType,
         null,
         "00099999",
         "00088888",
@@ -102,6 +148,30 @@ class LexisApplicationControllerUnitTest {
     assertThat(criteria.ownerClientNumber()).isNull();
     assertThat(criteria.agentClientNumber()).isEqualTo("00077881");
     assertThat(criteria.broadClientMatch()).isTrue();
+    assertThat(criteria.exemptionType()).isEqualTo(exemptionType);
+
+    controller.count(
+        null,
+        null,
+        null,
+        exemptionType,
+        null,
+        "00099999",
+        "00088888",
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        List.of(),
+        authentication);
+    verify(service).count(criteriaCaptor.capture());
+    LexisApplicationSearchCriteria countCriteria = criteriaCaptor.getValue();
+    assertThat(countCriteria.ownerClientNumber()).isNull();
+    assertThat(countCriteria.agentClientNumber()).isEqualTo("00077881");
+    assertThat(countCriteria.broadClientMatch()).isTrue();
+    assertThat(countCriteria.exemptionType()).isEqualTo(exemptionType);
   }
 
   @Test

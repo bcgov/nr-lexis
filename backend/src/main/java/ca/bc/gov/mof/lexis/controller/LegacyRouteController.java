@@ -202,7 +202,7 @@ public class LegacyRouteController {
       @RequestParam(name = "size", defaultValue = "25") @Min(1) @Max(200) Integer size,
       Authentication authentication) {
     if (ACTION_VIEW.equalsIgnoreCase(actionMapping)) {
-      return applicationController.searchOptions();
+      return applicationController.searchOptions(authentication);
     }
     if (ACTION_VERIFY_APPLICATION_CLIENTS.equalsIgnoreCase(actionMapping)) {
       return applicationController.verifyClients(applications, authentication);

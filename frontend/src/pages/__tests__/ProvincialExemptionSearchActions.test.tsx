@@ -93,7 +93,7 @@ const exemptionSearchResponse = (
 const renderPage = (
   path = '/provincial/exemption?region=11&page=1&pageSize=10&sortField=exemptionNumber&sortDirection=desc',
 ) => {
-  render(
+  return render(
     <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route path="/provincial/exemption" element={<ProvincialExemptionPage />} />
@@ -110,7 +110,10 @@ describe('Provincial Exemption Search Actions', () => {
       preferenceLoading: false,
     })
     mockedFetchProvincialExemptionOptions.mockResolvedValue({
-      exemptionTypes: [{ value: 'SECTION_1', label: 'Section 1' }],
+      exemptionTypes: [
+        { value: 'NULL', label: 'None' },
+        { value: 'SECTION_1', label: 'Section 1' },
+      ],
       exemptionStatuses: [{ value: 'NEW', label: 'New' }],
       regions: [{ value: '11', label: 'Cariboo' }],
     })
@@ -166,6 +169,57 @@ describe('Provincial Exemption Search Actions', () => {
     mockedSendExemptionApprovalEmails.mockResolvedValue({
       success: true,
       message: 'Approval email sent.',
+    })
+  })
+
+  it('submits and restores None as literal NULL, while clearing restores All types', async () => {
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
+    const page = renderPage()
+    await screen.findByText('EX-1001')
+    expect(mockedFetchProvincialExemptionOptions).toHaveBeenCalledWith(true)
+
+    const exemptionType = screen.getByRole('combobox', { name: 'Exemption type' })
+    expect(exemptionType).toHaveValue('')
+    expect(exemptionType).toHaveAttribute('placeholder', 'All types')
+    await userEvent.click(exemptionType)
+    await userEvent.click(screen.getByRole('option', { name: 'None' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Search' }))
+
+    await waitFor(() => {
+      expect(mockedSearchProvincialExemptions).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({ exemptionTypeCode: 'NULL' }),
+        }),
+        expect.any(Object),
+      )
+    })
+    const storageKey = 'lexis.search-state.v1.provincial-exemptions'
+    expect(
+      new URLSearchParams(sessionStorage.getItem(storageKey) ?? '').get('exemptionTypeCode'),
+    ).toBe('NULL')
+
+    page.unmount()
+    mockedSearchProvincialExemptions.mockClear()
+    renderPage('/provincial/exemption')
+    await screen.findByText('EX-1001')
+    expect(screen.getByRole('combobox', { name: 'Exemption type' })).toHaveValue('None')
+    await userEvent.click(screen.getByRole('button', { name: 'Search' }))
+    expect(mockedSearchProvincialExemptions).toHaveBeenLastCalledWith(
+      expect.objectContaining({ filters: expect.objectContaining({ exemptionTypeCode: 'NULL' }) }),
+      expect.any(Object),
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: 'Clear all' }))
+    expect(screen.getByRole('combobox', { name: 'Exemption type' })).toHaveValue('')
+    expect(
+      new URLSearchParams(sessionStorage.getItem(storageKey) ?? '').has('exemptionTypeCode'),
+    ).toBe(false)
+    await userEvent.click(screen.getByRole('button', { name: 'Search' }))
+    await waitFor(() => {
+      expect(mockedSearchProvincialExemptions).toHaveBeenLastCalledWith(
+        expect.objectContaining({ filters: expect.objectContaining({ exemptionTypeCode: '' }) }),
+        expect.any(Object),
+      )
     })
   })
 

@@ -190,6 +190,7 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
   public List<CodeNameDto> loadExemptionTypeOptions() {
     List<CodeNameDto> options = new ArrayList<>();
     options.add(new CodeNameDto("ALL", "All"));
+    options.add(new CodeNameDto("NULL", "None"));
     options.addAll(
         loadCodeNameOptionsDirectRequired(ACTIVE_EXEMPTION_TYPES).stream()
             .filter(option -> option.code() == null || !JURISDICTION_FEDERAL.equalsIgnoreCase(option.code()))
@@ -286,7 +287,10 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
     }
 
     String exemptionType = trim(criteria.exemptionType());
-    if (exemptionType != null && !"ALL".equalsIgnoreCase(exemptionType)) {
+    if ("NULL".equals(exemptionType)) {
+      // Legacy's synthetic None option selects a missing type, distinct from unrestricted All.
+      where.addRaw(" AND v.EXPORT_EXEMPTION_TYPE_CODE IS NULL");
+    } else if (exemptionType != null && !"ALL".equalsIgnoreCase(exemptionType)) {
       where.addEquals("v.EXPORT_EXEMPTION_TYPE_CODE", exemptionType);
     }
 

@@ -32,6 +32,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.dao.DataAccessResourceFailureException;
@@ -333,6 +334,62 @@ class LexisApplicationRepositoryTest {
         .containsExactly(new CodeNameDto("U", "Utilization"));
     assertThat(repository.codeNameSql())
         .isEqualTo(ACTIVE_EXEMPTION_REASONS);
+  }
+
+  @Test
+  void exemptionTypeOptionsShouldDistinguishAllFromNone() {
+    TestLexisApplicationRepository repository = new TestLexisApplicationRepository();
+
+    assertThat(repository.loadExemptionTypeOptions())
+        .containsExactly(
+            new CodeNameDto("ALL", "All"),
+            new CodeNameDto("NULL", "None"),
+            new CodeNameDto("U", "Utilization"));
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"NULL", " NULL "})
+  void noneTypeShouldFilterNullInPageAndCountWithoutChangingClientOrRegionScope(String type) {
+    TestLexisApplicationRepository repository = new TestLexisApplicationRepository();
+    LexisApplicationSearchCriteria criteria =
+        new LexisApplicationSearchCriteria(
+            null, null, null, type, "NULL", null, "00012345", null,
+            null, null, null, null, List.of(76L), true, null, 0, 10);
+
+    repository.search(criteria);
+
+    assertThat(repository.whereSql())
+        .contains("v.EXPORT_EXEMPTION_TYPE_CODE IS NULL")
+        .doesNotContain("v.EXPORT_EXEMPTION_TYPE_CODE = ?")
+        .contains("v.EXPORT_APPLICATION_STATUS_CODE = ?")
+        .contains("v.EXPORT_JURISDICTION_CODE <> 'F'")
+        .contains("v.OIC_INDICATOR = ?")
+        .contains("v.ORG_UNIT_NO IN (?)")
+        .contains("v.OWNER_CLIENT_NUMBER LIKE '%' || ? || '%' OR v.AGENT_CLIENT_NUMBER LIKE");
+    assertThat(repository.countWhereSql()).contains("v.EXPORT_EXEMPTION_TYPE_CODE IS NULL");
+    assertThat(repository.bindValues()).containsExactly("NULL", "N", 76L, "00012345", "00012345");
+    assertThat(repository.countBindValues()).isEqualTo(repository.bindValues());
+
+    repository.count(criteria);
+
+    assertThat(repository.countWhereSql()).contains("v.EXPORT_EXEMPTION_TYPE_CODE IS NULL");
+    assertThat(repository.countBindValues()).isEqualTo(repository.bindValues());
+  }
+
+  @ParameterizedTest
+  @NullAndEmptySource
+  @ValueSource(strings = {"ALL", " "})
+  void allTypesShouldNotAddANullOrEqualityFilter(String type) {
+    TestLexisApplicationRepository repository = new TestLexisApplicationRepository();
+
+    repository.search(
+        new LexisApplicationSearchCriteria(
+            null, null, null, type, null, null, null, null,
+            null, null, null, null, List.of(), null, 0, 10));
+
+    assertThat(repository.whereSql()).doesNotContain("v.EXPORT_EXEMPTION_TYPE_CODE");
+    assertThat(repository.countWhereSql()).doesNotContain("v.EXPORT_EXEMPTION_TYPE_CODE");
+    assertThat(repository.bindValues()).containsExactly("N");
   }
 
   @Test

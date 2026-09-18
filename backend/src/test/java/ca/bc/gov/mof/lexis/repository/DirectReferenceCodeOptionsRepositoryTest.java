@@ -127,6 +127,7 @@ class DirectReferenceCodeOptionsRepositoryTest {
     CodeNameDto blank = new CodeNameDto(null, null);
     CodeNameDto all = new CodeNameDto("", "All");
     CodeNameDto allApplicationTypes = new CodeNameDto("ALL", "All");
+    CodeNameDto noApplicationType = new CodeNameDto("NULL", "None");
     List<CodeNameDto> allRows =
         List.of(f, o, i, dal, rej, wdn, exp, missingCode, blank, o, f, rej);
     List<CodeNameDto> leadingAll =
@@ -140,8 +141,8 @@ class DirectReferenceCodeOptionsRepositoryTest {
         new OptionCase(
             "application exemption types", ACTIVE_EXEMPTION_TYPES,
             jdbc -> new LexisApplicationRepository(jdbc).loadExemptionTypeOptions(),
-            List.of(allApplicationTypes, o, i, dal, rej, wdn, exp, missingCode, blank, o, rej),
-            List.of(allApplicationTypes)),
+            List.of(allApplicationTypes, noApplicationType, o, i, dal, rej, wdn, exp, missingCode, blank, o, rej),
+            List.of(allApplicationTypes, noApplicationType)),
         new OptionCase(
             "application exemption reasons", ACTIVE_EXEMPTION_REASONS,
             jdbc -> new LexisApplicationRepository(jdbc).loadExemptionReasonOptions(),

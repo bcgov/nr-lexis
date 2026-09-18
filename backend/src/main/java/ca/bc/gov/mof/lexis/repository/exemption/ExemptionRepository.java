@@ -571,7 +571,12 @@ public class ExemptionRepository extends OracleRepositorySupport {
           packageNumber);
     }
     where.addLike("EE.EXEMPTION_NUMBER", criteria.exemptionNumber());
-    where.addEquals("EE.EXPORT_EXEMPTION_TYPE_CODE", criteria.exemptionType());
+    if ("NULL".equals(trim(criteria.exemptionType()))) {
+      // None refers to the exemption's own missing type, not an unlinked application.
+      where.addRaw(" AND EE.EXPORT_EXEMPTION_TYPE_CODE IS NULL");
+    } else {
+      where.addEquals("EE.EXPORT_EXEMPTION_TYPE_CODE", criteria.exemptionType());
+    }
     if (criteria.excludeBlanketOic()) {
       where.addRaw(" AND EE.EXPORT_EXEMPTION_TYPE_CODE != 'B'");
     }
