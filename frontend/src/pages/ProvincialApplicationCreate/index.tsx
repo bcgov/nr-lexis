@@ -135,7 +135,7 @@ const APPLICATION_CREATE_TABS: ApplicationCreateTab[] = [
 ]
 
 const APPLICATION_CREATE_TAB_LABELS: Record<ApplicationCreateTab, string> = {
-  owner: 'Owner',
+  owner: 'Applicant',
   agent: 'Agent',
   application: 'Application',
   items: 'Items',
@@ -1665,7 +1665,7 @@ const ProvincialApplicationCreatePage = () => {
               <Tile
                 className="create-form-tile application-detail-section"
                 role="region"
-                aria-label="Owner"
+                aria-label="Applicant"
               >
                 <div className="legacy-search-grid create-form-grid">
                   {provincialSubmitterIdentityLocked ? (
@@ -1833,7 +1833,7 @@ const ProvincialApplicationCreatePage = () => {
                     />
                   )}
                   <ApplicationCreateClientSummary
-                    title="Owner client details"
+                    title="Applicant client details"
                     clientData={ownerClientData}
                   />
                 </div>

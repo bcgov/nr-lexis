@@ -3133,7 +3133,7 @@ const ProvincialApplicationDetailsPage = () => {
       if (saved && source === 'owner') {
         setIsEditingOwnerDetails(false)
         setIsTransitioningApplicantToAgent(false)
-        setActionInfoMessage('Owner client details saved.')
+        setActionInfoMessage('Applicant client details saved.')
       }
       if (saved && source === 'agent') {
         setIsEditingAgentDetails(false)
@@ -3605,7 +3605,7 @@ const ProvincialApplicationDetailsPage = () => {
   ]
   const ownerClientSummaryContent = (
     <ClientDataSummary
-      title="Owner client details"
+      title="Applicant client details"
       showTitle={false}
       clientData={ownerClientData}
       isLoading={isLoadingOwnerClientData}
@@ -4111,7 +4111,7 @@ const ProvincialApplicationDetailsPage = () => {
                 contained
                 className="application-tabs__list application-detail-tab-list"
               >
-                <Tab>Owner</Tab>
+                <Tab>Applicant</Tab>
                 {isSummaryAgentApplicant && <Tab>Agent</Tab>}
                 <Tab>Application</Tab>
                 <Tab>Items</Tab>
@@ -4129,7 +4129,7 @@ const ProvincialApplicationDetailsPage = () => {
                         className="application-detail-section application-detail-clients"
                       >
                         <div className="detail-section-card__header detail-section-card__header--actions-only">
-                          <h2 className="cds--visually-hidden">Owner client details</h2>
+                          <h2 className="cds--visually-hidden">Applicant client details</h2>
                           {canEditSummary &&
                             summaryForm &&
                             !isEditingSummary &&
@@ -4266,7 +4266,7 @@ const ProvincialApplicationDetailsPage = () => {
                               )}
                             </div>
                             <ClientDataSummary
-                              title="Owner client details"
+                              title="Applicant client details"
                               showTitle={false}
                               clientData={ownerClientData}
                               isLoading={isLoadingOwnerClientData}

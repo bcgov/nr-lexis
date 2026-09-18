@@ -162,6 +162,7 @@ import {
   type ShippingReferenceOptions,
 } from '@/service/shipping-reference-service'
 import { triggerBrowserDownload } from '@/utils/download'
+import { openDocumentPreview } from '@/utils/document-preview'
 import { formatPermitNumber, formatPermitStatus } from '@/utils/permit'
 import { formatPackageNumberLabel, isValidEmail, normalizeTrimmedText } from '@/utils/text'
 
@@ -243,7 +244,7 @@ const SHIPPING_PERMIT_FIELDS = new Set<PermitDetailFormField>([
 ])
 const PERMIT_DETAIL_TABS = [
   { id: 'permit', label: 'Permit' },
-  { id: 'owner', label: 'Owner' },
+  { id: 'owner', label: 'Applicant' },
   { id: 'agent', label: 'Agent' },
   { id: 'shipping', label: 'Shipping' },
   { id: 'items', label: 'Items' },
@@ -630,6 +631,14 @@ const withoutNewlyCreatedPermitNavigation = (state: Record<string, unknown>) => 
   return remainingState
 }
 
+const isNewlyCreatedBlanketOicPermitNavigation = (
+  state: unknown,
+): state is Record<string, unknown> & { blanketOicPermitCreated: string } =>
+  typeof state === 'object' &&
+  state !== null &&
+  !Array.isArray(state) &&
+  typeof (state as Record<string, unknown>).blanketOicPermitCreated === 'string'
+
 const withUpdatedPermitDetail = (
   currentDetail: ProvincialPermitDetail,
   form: PermitDetailForm,
@@ -833,6 +842,7 @@ const ProvincialPermitDetailsPage = () => {
   )
   const [actionErrorMessage, setActionErrorMessage] = useState('')
   const [actionInfoMessage, setActionInfoMessage] = useState('')
+  const [createdBlanketOicPermitNumber, setCreatedBlanketOicPermitNumber] = useState('')
   const [documentSuccessMessage, setDocumentSuccessMessage] = useState('')
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
   const [documentPendingDeletion, setDocumentPendingDeletion] = useState<PermitDocumentRow | null>(
@@ -921,6 +931,9 @@ const ProvincialPermitDetailsPage = () => {
   const [permitOptionsErrorMessage, setPermitOptionsErrorMessage] = useState('')
   const beginDetailRequest = useLatestRequestGuard()
   const beginDocumentRefreshRequest = useLatestRequestGuard()
+  const beginDocumentOpenRequest = useLatestRequestGuard()
+  const isCurrentDocumentRouteRef = useRef<() => boolean>(() => false)
+  const pendingDocumentPreviewsRef = useRef(new Set<Window>())
   const beginPermitFeesRequest = useLatestRequestGuard()
   const beginPermitDocumentsRequest = useLatestRequestGuard()
   const beginPermitInvoicesRequest = useLatestRequestGuard()
@@ -943,7 +956,16 @@ const ProvincialPermitDetailsPage = () => {
     permitMutationInFlightRef.current = false
   }, [])
 
+  useEffect(() => {
+    const pendingPreviews = pendingDocumentPreviewsRef.current
+    return () => {
+      pendingPreviews.forEach((previewTarget) => previewTarget.close())
+      pendingPreviews.clear()
+    }
+  }, [permitNumber])
+
   const resetPermitRouteDrafts = useCallback(() => {
+    isCurrentDocumentRouteRef.current = beginDocumentOpenRequest()
     beginPermitFeesRequest()
     beginPermitDocumentsRequest()
     beginPermitInvoicesRequest()
@@ -960,6 +982,7 @@ const ProvincialPermitDetailsPage = () => {
     setBoicScaleCodeOptionsReady(false)
     setSelectedBlanketOicPackageNumberState('')
     setDocumentSuccessMessage('')
+    setCreatedBlanketOicPermitNumber('')
     void beginAvailablePermitApplicationsRequest()
     setBoicPackageForm(EMPTY_BLANKET_OIC_PACKAGE_FORM)
     setBoicPackageBaselineForm(EMPTY_BLANKET_OIC_PACKAGE_FORM)
@@ -1012,6 +1035,7 @@ const ProvincialPermitDetailsPage = () => {
   }, [
     beginAvailablePermitApplicationsRequest,
     beginBoicPackageEditRequest,
+    beginDocumentOpenRequest,
     beginPermitDocumentsRequest,
     beginPermitFeesRequest,
     beginPermitGbmsRequest,
@@ -2563,6 +2587,25 @@ const ProvincialPermitDetailsPage = () => {
   }
 
   useEffect(() => {
+    if (
+      !isNewlyCreatedBlanketOicPermitNavigation(location.state) ||
+      !detail ||
+      String(detail.permitNumber) !== permitNumber
+    ) {
+      return
+    }
+
+    if (detail.blanketOic && location.state.blanketOicPermitCreated === permitNumber) {
+      // Keep the one-time notice visible after consuming its navigation signal.
+      // eslint-disable-next-line @eslint-react/set-state-in-effect
+      setCreatedBlanketOicPermitNumber(permitNumber)
+    }
+    const remainingState: Record<string, unknown> = { ...location.state }
+    delete remainingState.blanketOicPermitCreated
+    navigate(locationPath(location), { replace: true, state: remainingState })
+  }, [detail, location, navigate, permitNumber])
+
+  useEffect(() => {
     const openNewlyCreatedMinisterialPermit = async (): Promise<void> => {
       const routeKey = `${location.key}:${permitNumber ?? ''}`
       if (
@@ -3682,22 +3725,51 @@ const ProvincialPermitDetailsPage = () => {
   }, [])
 
   const onOpenDocument = useCallback(
-    async (row: PermitDocumentRow) => {
+    async (row: PermitDocumentRow, preview = false) => {
       const resolvedPermitNumber = String(detail?.permitNumber ?? permitNumber ?? '').trim()
-      if (!resolvedPermitNumber) {
+      if (!resolvedPermitNumber || !canPerform('/permitDetails')) {
         return
+      }
+      const isLatestRequest = isCurrentDocumentRouteRef.current
+      let previewTarget: Window | null = null
+      const closePendingPreview = () => {
+        if (previewTarget && pendingDocumentPreviewsRef.current.delete(previewTarget)) {
+          previewTarget.close()
+        }
       }
       setActionErrorMessage('')
       setActionInfoMessage('')
       try {
+        if (preview) {
+          // Reserve the tab during the click so slow document reads cannot lose popup permission.
+          previewTarget = window.open('about:blank', '_blank')
+          if (previewTarget) {
+            pendingDocumentPreviewsRef.current.add(previewTarget)
+            previewTarget.opener = null
+          }
+        }
         const result = await openPermitDocument(row.id, row.name, resolvedPermitNumber)
-        triggerBrowserDownload(result.blob, result.filename)
+        if (!isLatestRequest()) {
+          closePendingPreview()
+          return
+        }
+        if (preview) {
+          openDocumentPreview(result.blob, result.filename, previewTarget)
+        } else {
+          triggerBrowserDownload(result.blob, result.filename)
+        }
       } catch (error) {
+        closePendingPreview()
+        if (!isLatestRequest()) return
         console.error(error)
-        setActionErrorMessage('Unable to download permit document.')
+        setActionErrorMessage(
+          preview ? 'Unable to open permit document.' : 'Unable to download permit document.',
+        )
+      } finally {
+        if (previewTarget) pendingDocumentPreviewsRef.current.delete(previewTarget)
       }
     },
-    [detail?.permitNumber, permitNumber],
+    [canPerform, detail?.permitNumber, permitNumber],
   )
 
   const onOpenPermitReport = useCallback(async () => {
@@ -4009,7 +4081,7 @@ const ProvincialPermitDetailsPage = () => {
     const clientData = isOwner ? ownerEditClientData : agentEditClientData
     const isLoading = isOwner ? isOwnerClientLookupLoading : isAgentClientLookupLoading
     const errorMessage = isOwner ? ownerClientLookupError : agentClientLookupError
-    const label = usesReviewedPermitFlow && isOwner ? 'Applicant' : isOwner ? 'Owner' : 'Agent'
+    const label = isOwner ? 'Applicant' : 'Agent'
 
     return (
       <>
@@ -4341,6 +4413,40 @@ const ProvincialPermitDetailsPage = () => {
       </>
     )
   }
+
+  const permitVolumeAndRemarksFields = detail
+    ? [
+        {
+          label: 'Total exemption volume (m³)',
+          value: displayValue(detail.approvedExemptionVolume),
+        },
+        {
+          label: 'Total volume remaining (m³)',
+          value: displayValue(detail.exemptionVolumeRemaining),
+        },
+        ...(detail.blanketOic
+          ? [
+              {
+                label: 'Permit Request Pieces',
+                value: displayValue(detail.oicRequestPieces),
+              },
+              {
+                label: 'Permit Request Volume (m³)',
+                value: displayValue(detail.oicRequestVolume),
+              },
+            ]
+          : []),
+        {
+          label: 'Current permit volume (m³)',
+          value: displayValue(detail.permitVolume),
+        },
+        {
+          label: 'Current permit pieces',
+          value: displayValue(detail.numberOfPieces),
+        },
+        { label: 'Remarks', value: displayValue(detail.remarks) },
+      ]
+    : []
 
   const renderPermitVolumeAndRemarks = () => {
     if (!detail) return null
@@ -4943,6 +5049,18 @@ const ProvincialPermitDetailsPage = () => {
               />
             </Column>
           )}
+          {createdBlanketOicPermitNumber === permitNumber && (
+            <Column sm={4} md={8} lg={16} className="detail-page-error">
+              <AppNotification
+                kind="success"
+                title="Permit created"
+                subtitle="The permit was saved."
+                lowContrast
+                autoDismissMs={6000}
+                onCloseButtonClick={() => setCreatedBlanketOicPermitNumber('')}
+              />
+            </Column>
+          )}
           {!!actionInfoMessage && (
             <Column sm={4} md={8} lg={16} className="detail-page-error">
               <AppNotification
@@ -5350,62 +5468,36 @@ const ProvincialPermitDetailsPage = () => {
                               ),
                             },
                             { label: 'Region', value: displayValue(detail.region) },
+                            ...(detail.blanketOic ? permitVolumeAndRemarksFields : []),
                           ]}
                         />
                       )}
                     </Column>
 
-                    {!(usesReviewedPermitFlow && isEditingPermit && permitForm) && (
-                      <Column sm={4} md={8} lg={16}>
-                        {isEditingPermit && permitForm ? (
-                          <Tile>
-                            <h2 className="detail-tile-title">
-                              {usesReviewedPermitFlow
-                                ? 'Volume and remarks'
-                                : 'Financial and volume'}
-                            </h2>
-                            {renderPermitVolumeAndRemarks()}
-                          </Tile>
-                        ) : (
-                          <DetailFieldTile
-                            title={
-                              usesReviewedPermitFlow ? 'Volume and remarks' : 'Financial and volume'
-                            }
-                            fields={[
-                              {
-                                label: 'Total exemption volume (m³)',
-                                value: displayValue(detail.approvedExemptionVolume),
-                              },
-                              {
-                                label: 'Total volume remaining (m³)',
-                                value: displayValue(detail.exemptionVolumeRemaining),
-                              },
-                              ...(detail.blanketOic
-                                ? [
-                                    {
-                                      label: 'Permit Request Pieces',
-                                      value: displayValue(detail.oicRequestPieces),
-                                    },
-                                    {
-                                      label: 'Permit Request Volume (m³)',
-                                      value: displayValue(detail.oicRequestVolume),
-                                    },
-                                  ]
-                                : []),
-                              {
-                                label: 'Current permit volume (m³)',
-                                value: displayValue(detail.permitVolume),
-                              },
-                              {
-                                label: 'Current permit pieces',
-                                value: displayValue(detail.numberOfPieces),
-                              },
-                              { label: 'Remarks', value: displayValue(detail.remarks) },
-                            ]}
-                          />
-                        )}
-                      </Column>
-                    )}
+                    {!detail.blanketOic &&
+                      !(usesReviewedPermitFlow && isEditingPermit && permitForm) && (
+                        <Column sm={4} md={8} lg={16}>
+                          {isEditingPermit && permitForm ? (
+                            <Tile>
+                              <h2 className="detail-tile-title">
+                                {usesReviewedPermitFlow
+                                  ? 'Volume and remarks'
+                                  : 'Financial and volume'}
+                              </h2>
+                              {renderPermitVolumeAndRemarks()}
+                            </Tile>
+                          ) : (
+                            <DetailFieldTile
+                              title={
+                                usesReviewedPermitFlow
+                                  ? 'Volume and remarks'
+                                  : 'Financial and volume'
+                              }
+                              fields={permitVolumeAndRemarksFields}
+                            />
+                          )}
+                        </Column>
+                      )}
                     {!isMinisterialPermitEdit && !detail.blanketOic && (
                       <Column sm={4} md={8} lg={16}>
                         <Tile>
@@ -5580,7 +5672,7 @@ const ProvincialPermitDetailsPage = () => {
                     {!ownerEditMode && (
                       <Column sm={4} md={8} lg={16}>
                         <PermitClientTile
-                          title={usesReviewedPermitFlow ? 'Applicant details' : 'Owner'}
+                          title="Applicant details"
                           clientNumber={detail.ownerClientNumber}
                           locationCode={detail.ownerClientLocationCode}
                           clientData={ownerClientData}
@@ -5610,9 +5702,7 @@ const ProvincialPermitDetailsPage = () => {
                     {ownerEditMode && permitForm && (
                       <Column sm={4} md={8} lg={16}>
                         <Tile>
-                          <h2 className="detail-tile-title">
-                            {usesReviewedPermitFlow ? 'Applicant details' : 'Edit owner'}
-                          </h2>
+                          <h2 className="detail-tile-title">Applicant details</h2>
                           {renderPermitClientEditor('owner', invoiceMaterialLocked)}
                           <Checkbox
                             id="permit-agent-used"
@@ -5667,7 +5757,7 @@ const ProvincialPermitDetailsPage = () => {
                             </>
                           ) : (
                             <Button kind="tertiary" size="sm" onClick={startPermitClientEdit}>
-                              {usesReviewedPermitFlow ? 'Edit applicant' : 'Edit owner'}
+                              Edit applicant
                             </Button>
                           )}
                         </div>
@@ -6639,7 +6729,21 @@ const ProvincialPermitDetailsPage = () => {
                           <h2 className="detail-tile-title">
                             {usesReviewedPermitFlow ? 'Documents' : 'Permit documents'}
                           </h2>
-                          {canEditPermitDocuments &&
+                          {detail.blanketOic && canUploadPermitDocuments && (
+                            <Button
+                              kind="tertiary"
+                              size="sm"
+                              disabled={permitDocumentUploadBusy}
+                              onClick={() => {
+                                setPermitDocumentUploadResetKey((current) => current + 1)
+                                setIsEditingPermitDocuments(true)
+                              }}
+                            >
+                              Add document
+                            </Button>
+                          )}
+                          {!detail.blanketOic &&
+                            canEditPermitDocuments &&
                             (isEditingPermitDocuments ? (
                               <Button
                                 kind="tertiary"
@@ -6667,6 +6771,9 @@ const ProvincialPermitDetailsPage = () => {
                             targetNumber={String(detail.permitNumber ?? permitNumber ?? '')}
                             inputId="permitDocumentUpload"
                             disabled={!detail.permitNumber}
+                            presentation={detail.blanketOic ? 'side-panel' : 'modal'}
+                            initiallyOpen={detail.blanketOic}
+                            onClose={detail.blanketOic ? onCancelPermitDocumentEditing : undefined}
                             onDirtyChange={setPermitDocumentUploadDirty}
                             onBusyChange={setPermitDocumentUploadBusy}
                             onUploadComplete={refreshPermitDocuments}
@@ -6705,6 +6812,17 @@ const ProvincialPermitDetailsPage = () => {
                                       <TableCell>{row.type || row.typeCode || '-'}</TableCell>
                                       <TableCell>
                                         <div className="legacy-search-actions">
+                                          {detail.blanketOic && (
+                                            <Button
+                                              kind="ghost"
+                                              size="sm"
+                                              disabled={!canPerform('/permitDetails')}
+                                              title="Open supported files in a new tab; other formats download."
+                                              onClick={() => void onOpenDocument(row, true)}
+                                            >
+                                              Open
+                                            </Button>
+                                          )}
                                           <Button
                                             kind="ghost"
                                             size="sm"
@@ -6713,7 +6831,8 @@ const ProvincialPermitDetailsPage = () => {
                                           >
                                             Download
                                           </Button>
-                                          {isEditingPermitDocuments && (
+                                          {(isEditingPermitDocuments ||
+                                            (detail.blanketOic && canDeletePermitDocuments)) && (
                                             <Button
                                               kind="danger--ghost"
                                               size="sm"

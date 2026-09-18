@@ -78,6 +78,109 @@ describe('DetailDocumentUploadPanel', () => {
     expect(screen.getByLabelText(/Document description/)).toHaveValue('')
   })
 
+  it('opens the opt-in side panel directly and closes a clean draft without confirmation', async () => {
+    const onClose = vi.fn()
+    render(
+      <DetailDocumentUploadPanel
+        workflowType="permit"
+        targetNumber="321"
+        inputId="permitDocuments"
+        presentation="side-panel"
+        initiallyOpen
+        onClose={onClose}
+      />,
+    )
+
+    const dialog = screen.getByRole('dialog', { name: 'Add documents' })
+    expect(dialog.closest('.detail-document-upload-modal--side-panel')).not.toBeNull()
+    expect(screen.queryByRole('button', { name: 'Add documents' })).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Document File')).toHaveAttribute('multiple')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('preserves side-panel files and descriptions until discard is confirmed, ignoring late validation', async () => {
+    const onClose = vi.fn()
+    let resolveValidation!: (value: Awaited<ReturnType<typeof validateAdminUpload>>) => void
+    mockedValidateAdminUpload.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveValidation = resolve
+      }),
+    )
+    const file = new File(['document'], 'pending.pdf', { type: 'application/pdf' })
+    render(
+      <DetailDocumentUploadPanel
+        workflowType="permit"
+        targetNumber="321"
+        inputId="permitDocuments"
+        presentation="side-panel"
+        initiallyOpen
+        onClose={onClose}
+      />,
+    )
+    await userEvent.upload(screen.getByLabelText('Document File'), file)
+    await userEvent.type(screen.getByLabelText(/Document description/), 'Keep this description')
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    const confirmation = screen.getByRole('dialog', { name: 'Discard changes?' })
+    expect(onClose).not.toHaveBeenCalled()
+    await userEvent.click(within(confirmation).getByRole('button', { name: 'Keep editing' }))
+    expect(screen.getByLabelText(/Document description/)).toHaveValue('Keep this description')
+    expect(screen.getByText('pending.pdf')).toBeInTheDocument()
+
+    const dialog = screen.getByRole('dialog', { name: 'Add documents' })
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Close' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Discard changes' }))
+    await act(async () => resolveValidation({ status: 'validated', message: 'Validated.' }))
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.queryByText('pending.pdf')).not.toBeInTheDocument()
+    expect(onClose).toHaveBeenCalledTimes(1)
+    expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
+  })
+
+  it('keeps the side panel open during submission and preserves the success result after closing', async () => {
+    const onClose = vi.fn()
+    const onUploadComplete = vi.fn()
+    let resolveSubmission!: (value: Awaited<ReturnType<typeof submitAdminUpload>>) => void
+    mockedSubmitAdminUpload.mockReset().mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveSubmission = resolve
+      }),
+    )
+    const file = new File(['document'], 'document.pdf', { type: 'application/pdf' })
+    render(
+      <DetailDocumentUploadPanel
+        workflowType="permit"
+        targetNumber="321"
+        inputId="permitDocuments"
+        presentation="side-panel"
+        initiallyOpen
+        onClose={onClose}
+        onUploadComplete={onUploadComplete}
+      />,
+    )
+    await userEvent.upload(screen.getByLabelText('Document File'), file)
+    await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save documents' }))
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled()
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(onClose).not.toHaveBeenCalled()
+    expect(screen.getByRole('dialog', { name: 'Add documents' })).toBeInTheDocument()
+
+    await act(async () => resolveSubmission({ message: 'Document uploaded.' }))
+    expect(mockedSubmitAdminUpload).toHaveBeenCalledExactlyOnceWith(
+      'permit',
+      expect.objectContaining({ permitNumber: '321', file }),
+    )
+    expect(onUploadComplete).toHaveBeenCalledTimes(1)
+    expect(onClose).not.toHaveBeenCalled()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByText('Document uploaded.')).toBeInTheDocument()
+  })
+
   it.each(['application', 'exemption', 'permit'] as const)(
     'keeps a separate description for each %s file through review and submission',
     async (workflowType) => {

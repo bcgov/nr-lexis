@@ -75,7 +75,11 @@ function ClientInput({
       : { clientNumber: value, companyName: selectedClientName ?? '', clientAcronym: '' }
   }, [value, chosen, selectedClientName])
   const requestKey = JSON.stringify([query, value, disabled, counterpartyClientNumber, retry])
-  const items = result?.key === requestKey ? result.items : EMPTY_SUGGESTIONS
+  const items = selected
+    ? [selected]
+    : result?.key === requestKey
+      ? result.items
+      : EMPTY_SUGGESTIONS
   const status = result?.key === requestKey ? result.status : 'idle'
 
   useEffect(() => {

@@ -1903,7 +1903,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     })
 
     const ownerFields = page
-      .getByRole('heading', { level: 2, name: 'Owner' })
+      .getByRole('heading', { level: 2, name: 'Applicant' })
       .locator('..')
       .locator('..')
       .locator('.detail-field-grid')

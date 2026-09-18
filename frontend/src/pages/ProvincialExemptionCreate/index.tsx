@@ -119,7 +119,7 @@ const EXEMPTION_CREATE_TABS: readonly ExemptionCreateTab[] = [
 ]
 
 const EXEMPTION_CREATE_TAB_LABELS: Record<ExemptionCreateTab, string> = {
-  owner: 'Owner',
+  owner: 'Applicant',
   agent: 'Agent',
   summary: 'Exemption details',
   applications: 'Applications',
@@ -1099,7 +1099,7 @@ const ProvincialExemptionCreatePage = () => {
                   <Tile
                     className="create-form-tile application-detail-section"
                     role="region"
-                    aria-label="Owner"
+                    aria-label="Applicant"
                   >
                     <div className="legacy-search-grid create-form-grid">
                       <TextInput
@@ -1162,7 +1162,7 @@ const ProvincialExemptionCreatePage = () => {
                       />
                     )}
                     <ExemptionCreateClientSummary
-                      title="Owner client details"
+                      title="Applicant client details"
                       clientData={ownerClientData}
                     />
                   </Tile>

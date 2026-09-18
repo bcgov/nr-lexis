@@ -44,7 +44,7 @@ import ProvincialApplicationDetailsPage from '@/pages/ProvincialApplicationDetai
 
 const getOwnerClientDetailsTile = (): HTMLElement => {
   const title = screen.getByRole('heading', {
-    name: 'Owner client details',
+    name: 'Applicant client details',
     level: 2,
   })
   const tile = title.closest('.cds--tile')
@@ -214,7 +214,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     ).not.toBeInTheDocument()
     expect(screen.queryByRole('group', { name: 'Application highlights' })).not.toBeInTheDocument()
     expect(tabs.map((tab) => tab.textContent)).toEqual([
-      'Owner',
+      'Applicant',
       'Agent',
       'Application',
       'Items',
@@ -295,7 +295,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Save Summary' })).toBeDisabled()
 
-    await selectApplicationDetailTab('Owner')
+    await selectApplicationDetailTab('Applicant')
     expect(screen.queryByText('Application summary options unavailable')).not.toBeInTheDocument()
   })
 
@@ -311,7 +311,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       </MemoryRouter>,
     )
 
-    const ownerDetails = await screen.findByRole('region', { name: 'Owner client details' })
+    const ownerDetails = await screen.findByRole('region', { name: 'Applicant client details' })
     const ownerEmail = (await within(ownerDetails).findByText('owner@example.test')).closest(
       '.detail-field-item',
     )
@@ -364,7 +364,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       </MemoryRouter>,
     )
 
-    const ownerDetails = await screen.findByRole('region', { name: 'Owner client details' })
+    const ownerDetails = await screen.findByRole('region', { name: 'Applicant client details' })
     expect(within(ownerDetails).getByText('00011122')).toBeInTheDocument()
     expect(await within(ownerDetails).findByText('00 - Owner Main Location')).toBeInTheDocument()
     expect(within(ownerDetails).getByText('Owner Contact')).toBeInTheDocument()
@@ -445,7 +445,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { level: 2, name: 'Owner client details' })
+    await screen.findByRole('heading', { level: 2, name: 'Applicant client details' })
     const ownerTile = getOwnerClientDetailsTile()
     const ownerControls = within(ownerTile)
     expect(await ownerControls.findByText('Owner Forestry Ltd.')).toBeInTheDocument()
@@ -497,7 +497,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { level: 2, name: 'Owner client details' })
+    await screen.findByRole('heading', { level: 2, name: 'Applicant client details' })
     const ownerControls = within(getOwnerClientDetailsTile())
     expect(await ownerControls.findByText('Owner Forestry Ltd.')).toBeInTheDocument()
     await userEvent.click(ownerControls.getByRole('button', { name: 'Edit owner details' }))
@@ -591,7 +591,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     expect(
       ownerControls.queryByRole('heading', {
-        name: 'Owner client details',
+        name: 'Applicant client details',
         level: 3,
       }),
     ).not.toBeInTheDocument()
@@ -647,7 +647,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
         name: 'Edit owner details',
       }),
     ).toBeInTheDocument()
-    expect(screen.getByText('Owner client details saved.')).toBeInTheDocument()
+    expect(screen.getByText('Applicant client details saved.')).toBeInTheDocument()
     expect(mockedCheckApplicationVolumeUsage).not.toHaveBeenCalled()
   })
 
@@ -691,7 +691,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     await waitFor(() =>
       expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument(),
     )
-    await selectApplicationDetailTab('Owner')
+    await selectApplicationDetailTab('Applicant')
     const resetOwnerControls = within(getOwnerClientDetailsTile())
     await userEvent.click(resetOwnerControls.getByRole('button', { name: 'Edit owner details' }))
     expect(getSummaryComboBox(resetOwnerControls, 'Applicant type')).toHaveValue('Ministerial')
@@ -998,7 +998,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       </MemoryRouter>,
     )
 
-    const ownerDetails = await screen.findByRole('region', { name: 'Owner client details' })
+    const ownerDetails = await screen.findByRole('region', { name: 'Applicant client details' })
     expect(within(ownerDetails).getByText('Owner Contact')).toBeInTheDocument()
     expect(mockedFetchApplicationSummarySnapshot).toHaveBeenCalledWith('321')
     expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00011122', '00', {
@@ -1536,7 +1536,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
         applicationNumber: '321',
       })
     })
-    await selectApplicationDetailTab('Owner')
+    await selectApplicationDetailTab('Applicant')
     expect(await screen.findByText('Owner Forestry Ltd.')).toBeInTheDocument()
     expect(screen.getByText('owner@example.test')).toBeInTheDocument()
 
@@ -1593,7 +1593,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       )
 
       await screen.findByRole('heading', { level: 1, name: 'Application 321' })
-      await selectApplicationDetailTab(saveSource === 'owner' ? 'Owner' : 'Agent')
+      await selectApplicationDetailTab(saveSource === 'owner' ? 'Applicant' : 'Agent')
       const controls = within(
         saveSource === 'owner' ? getOwnerClientDetailsTile() : getAgentDetailsTile(),
       )
@@ -1806,7 +1806,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     await waitFor(() => {
       expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
-        'Owner',
+        'Applicant',
         'Application',
         'Items',
         'Documents',
@@ -1861,7 +1861,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       </MemoryRouter>,
     )
 
-    await selectApplicationDetailTab('Owner')
+    await selectApplicationDetailTab('Applicant')
     const ownerControls = within(getOwnerClientDetailsTile())
     await userEvent.click(ownerControls.getByRole('button', { name: 'Edit owner details' }))
     const applicantType = await ownerControls.findByLabelText('Applicant type')
@@ -2641,7 +2641,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       </MemoryRouter>,
     )
 
-    await selectApplicationDetailTab('Owner')
+    await selectApplicationDetailTab('Applicant')
     const ownerControls = within(getOwnerClientDetailsTile())
     await userEvent.click(ownerControls.getByRole('button', { name: 'Edit owner details' }))
     const ownerContactInput = await ownerControls.findByLabelText('Contact name', {
@@ -2671,7 +2671,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       </MemoryRouter>,
     )
 
-    await selectApplicationDetailTab('Owner')
+    await selectApplicationDetailTab('Applicant')
     const ownerControls = within(getOwnerClientDetailsTile())
     await userEvent.click(ownerControls.getByRole('button', { name: 'Edit owner details' }))
     await waitFor(() => {

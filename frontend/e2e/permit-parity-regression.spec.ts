@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import { gotoSyntheticRoute, installSyntheticCognitoSession } from './utils'
 
-type PermitScenario = 'normal' | 'blanket-oic'
+type PermitScenario = 'normal' | 'blanket-oic' | 'blanket-oic-empty'
 
 type CapturedWrite = {
   method: string
@@ -13,6 +13,7 @@ type PermitParityFixture = {
   writes: CapturedWrite[]
   unexpectedRequests: string[]
   resolveDelayedGrade: (options: Array<{ code: string; description: string }>) => void
+  resolveDelayedShipping: () => void
 }
 
 const ownerClientData = (locationCode: string) =>
@@ -48,6 +49,7 @@ const installPermitParityFixtures = async (
   page: Page,
   scenario: PermitScenario,
   delayedGrade = false,
+  delayedShipping = false,
 ): Promise<PermitParityFixture> => {
   await installSyntheticCognitoSession(page, {
     username: 'PERMIT.PARITY.TESTER',
@@ -56,6 +58,7 @@ const installPermitParityFixtures = async (
 
   const permitNumber = scenario === 'normal' ? '91001' : '91002'
   let ownerLocationCode = '03'
+  let createdPayload: Record<string, string> | null = null
   let version = 1
   const writes: CapturedWrite[] = []
   const unexpectedRequests: string[] = []
@@ -67,11 +70,32 @@ const installPermitParityFixtures = async (
       resolveGradeOptions = resolve
     },
   )
+  let resolveShipping: (() => void) | null = null
+  const shippingReady = new Promise<void>((resolve) => {
+    resolveShipping = resolve
+  })
+  const exemption = {
+    exemptionNumber: 'EX-BOIC-91002',
+    exemptionTypeCode: 'B',
+    exemptionTypeDescription: 'Blanket OIC',
+    exemptionStatusCode: 'ACT',
+    exemptionStatusDescription: 'Active',
+    approvalDate: null,
+    expiryDate: null,
+    approvedVolume: 500,
+    usedVolume: 0,
+    remainingVolume: 500,
+    otherConditions: '',
+    blanketOic: true,
+    permitNumbers: [],
+    remarks: [],
+  }
 
   const permit = () => ({
     permitNumber: Number(permitNumber),
-    applicationNumber: 111,
-    packageNumber: scenario === 'normal' ? 'PKG-A' : 'BOIC-A',
+    applicationNumber: scenario === 'blanket-oic-empty' ? null : 111,
+    packageNumber:
+      scenario === 'blanket-oic-empty' ? null : scenario === 'normal' ? 'PKG-A' : 'BOIC-A',
     exemptionNumber: scenario === 'normal' ? '' : 'EX-BOIC-91002',
     permitStatusCode: 'ACT',
     permitStatusDescription: 'Active',
@@ -91,19 +115,27 @@ const installPermitParityFixtures = async (
     expiryDate: '2026-10-01',
     receivedDate: '2026-09-01',
     estimatedShippingDate: '2026-09-10',
-    permitVolume: scenario === 'normal' ? 50 : 120.5,
+    permitVolume: scenario === 'blanket-oic-empty' ? 0 : scenario === 'normal' ? 50 : 120.5,
     approvedExemptionVolume: 500,
     exemptionVolumeRemaining: 500,
     exemptionTypeDescription: scenario === 'normal' ? 'Standard exemption' : 'Blanket OIC',
-    blanketOic: scenario === 'blanket-oic',
-    numberOfPieces: 3,
-    receiptNumber: 'R-91002',
+    blanketOic: scenario !== 'normal',
+    numberOfPieces: scenario === 'blanket-oic-empty' ? 0 : 3,
+    receiptNumber: scenario === 'blanket-oic-empty' ? null : 'R-91002',
     federalPermitNumber: null,
     invoiceNumber: null,
     remarks: 'Synthetic parity fixture',
     oicApplicationNumber: scenario === 'blanket-oic' ? 123456 : null,
-    oicRequestPieces: scenario === 'blanket-oic' ? 200 : null,
-    oicRequestVolume: scenario === 'blanket-oic' ? 120.5 : null,
+    oicRequestPieces: createdPayload
+      ? Number(createdPayload.oicPermitTotalPieces)
+      : scenario !== 'normal'
+        ? 200
+        : null,
+    oicRequestVolume: createdPayload
+      ? Number(createdPayload.oicPermitTotalVolume)
+      : scenario !== 'normal'
+        ? 120.5
+        : null,
     orgUnitNumber: 1903,
     region: 'Cariboo Natural Resource Region',
   })
@@ -186,7 +218,7 @@ const installPermitParityFixtures = async (
 
   const coreTabs = {
     applicationList: scenario === 'normal' ? ['111'] : [],
-    packageList,
+    packageList: scenario === 'blanket-oic-empty' ? [] : packageList,
   }
 
   const respond = async (route: Parameters<Parameters<Page['route']>[1]>[0], body: unknown) => {
@@ -214,7 +246,15 @@ const installPermitParityFixtures = async (
             welcomeTarget: '/provincial/review',
             legacyPath: null,
             orgUnitNo: '1903',
-            grantedActions: ['/permitSearch', '/permitDetails', 'savePermit'],
+            grantedActions: [
+              '/permitSearch',
+              '/permitDetails',
+              'savePermit',
+              'createPermit',
+              '/exemptionDetails',
+              '/exemptionSearch',
+              '/filePermitUpload',
+            ],
           }
           break
         case '/api/lexis/session/preferences':
@@ -223,6 +263,39 @@ const installPermitParityFixtures = async (
         case `/api/lexis/permits/${permitNumber}`:
           body = permit()
           break
+        case '/api/lexis/exemptions/EX-BOIC-91002':
+          body = exemption
+          break
+        case '/api/lexis/exemptions/search/options':
+          body = {
+            exemptionTypes: [{ code: 'B', name: 'Blanket OIC' }],
+            exemptionStatuses: [{ code: 'ACT', name: 'Active' }],
+            regions: [{ code: '1903', name: 'Cariboo Natural Resource Region' }],
+          }
+          break
+        case '/api/lexis/rpc/exemption-details/edit-context':
+          body = {
+            rateOverrideEnabled: false,
+            fixedFeeRate: '',
+            regionNumbers: ['1903'],
+            locked: false,
+            lockMessage: '',
+          }
+          break
+        case '/api/lexis/rpc/exemption-details/region-context':
+          body = { exemptionNumber: exemption.exemptionNumber, regionNumbers: ['1903'] }
+          break
+        case '/api/lexis/rpc/exemption-details/applications':
+          body = { applications: [], containsUnmanu: false, ownerNumber: '' }
+          break
+        case '/api/lexis/rpc/exemption-details/blanket-oic-totals':
+          body = { requestedVolume: '0', completedVolume: '0' }
+          break
+        case '/api/lexis/client-search':
+          body = [
+            { clientNumber: '00067890', companyName: 'Owner Forestry Ltd.', clientAcronym: 'OFL' },
+          ]
+          break
         case '/api/lexis/permits/search/options':
           body = {
             permitStatuses: [{ code: 'ACT', name: 'Active' }],
@@ -230,8 +303,19 @@ const installPermitParityFixtures = async (
           }
           break
         case '/api/lexis/shipping-reference-options':
+          if (delayedShipping) await shippingReady
           body = {
-            countries: [{ code: 'CA', name: 'Canada' }],
+            countries: [
+              { code: 'CO', name: 'Colombia' },
+              { code: 'CA', name: 'Canada' },
+              { code: 'US', name: 'United States' },
+              { code: 'CL', name: 'Chile' },
+              { code: 'JP', name: 'Japan' },
+              { code: 'CN', name: 'China' },
+              { code: 'KR', name: 'Korea' },
+              { code: 'TW', name: 'Taiwan' },
+              { code: 'KH', name: 'Cambodia' },
+            ],
             transportTypes: [{ code: 'S', name: 'Ship' }],
             ports: [{ code: 'VA', name: 'Vancouver' }],
           }
@@ -249,8 +333,14 @@ const installPermitParityFixtures = async (
           body = coreTabs
           break
         case '/api/lexis/rpc/permit-details/gbms-invoice-history':
+        case '/api/lexis/rpc/permit-details/document-details':
+        case '/api/lexis/rpc/exemption-details/document-details':
+        case '/api/lexis/rpc/exemption-details/permits':
         case '/api/lexis/notifications':
           body = []
+          break
+        case '/api/lexis/rpc/permit-details/all-scale-fees':
+          body = { packageList: [], totalVolume: '0' }
           break
         case '/api/lexis/rpc/application-details/species-codes':
           body = [
@@ -281,7 +371,19 @@ const installPermitParityFixtures = async (
           break
       }
     } else if (request.method() === 'POST') {
-      if (path === '/api/lexis/rpc/permit-details/add-boic-scale') {
+      if (path === '/api/lexis/rpc/permit-details/add-permit') {
+        createdPayload = Object.fromEntries(new URLSearchParams(request.postData() ?? ''))
+        writes.push({ method: request.method(), path, body: createdPayload })
+        ownerLocationCode = createdPayload.ownerClientLocation
+        version += 1
+        body = {
+          success: true,
+          message: 'The permit was saved successfully.',
+          errors: [],
+          warnings: [],
+          permitNumber,
+        }
+      } else if (path === '/api/lexis/rpc/permit-details/add-boic-scale') {
         const payload = Object.fromEntries(new URLSearchParams(request.postData() ?? '')) as Record<
           string,
           string
@@ -319,7 +421,10 @@ const installPermitParityFixtures = async (
           errors: [],
           warnings: [],
         }
-      } else if (path === '/api/lexis/rpc/permit-details/release-lock') {
+      } else if (
+        path === '/api/lexis/rpc/permit-details/release-lock' ||
+        path === '/api/lexis/rpc/exemption-details/release-lock'
+      ) {
         body = { success: true }
       }
     }
@@ -337,6 +442,7 @@ const installPermitParityFixtures = async (
     writes,
     unexpectedRequests,
     resolveDelayedGrade: (options) => resolveGradeOptions?.(options),
+    resolveDelayedShipping: () => resolveShipping?.(),
   }
 }
 
@@ -356,6 +462,183 @@ const chooseComboBoxOption = async (
 }
 
 test.describe('Provincial permit parity regressions', () => {
+  test('shows live BOIC validation, country choices and client details before opening the saved permit', async ({
+    page,
+  }, testInfo) => {
+    const fixture = await installPermitParityFixtures(page, 'blanket-oic-empty')
+    await gotoSyntheticRoute(page, '/provincial/exemption/EX-BOIC-91002/permit/new', {
+      ready: page.getByRole('heading', { level: 1, name: 'Apply for new permit', exact: true }),
+    })
+    const save = page.getByRole('button', { name: 'Save permit', exact: true })
+    await expect(save).toBeEnabled()
+    await selectTab(page, 'Shipping')
+    const country = page.getByRole('combobox', { name: 'Final destination country', exact: true })
+    await expect(country).toHaveValue('United States (US)')
+    await selectTab(page, 'Permit')
+    await save.click()
+
+    const summary = page.getByRole('group', { name: 'Permit not created', exact: true })
+    await expect(summary).toBeFocused()
+    await expect(summary).toContainText('Permit request pieces is required.')
+    await expect(summary).toContainText('Purchaser is required.')
+    await expect(
+      page.getByText(/The permit number is assigned after a successful save/),
+    ).toHaveCount(0)
+    await expect(
+      page.getByRole('tab', { name: 'Permit, 2 required fields outstanding', exact: true }),
+    ).toBeVisible()
+    await save.click()
+    await expect(summary).toBeFocused()
+    const sideNavBounds = await page.locator('.cds--side-nav').boundingBox()
+    const sideNavRight = (sideNavBounds?.x ?? 0) + (sideNavBounds?.width ?? 0)
+    expect((await summary.boundingBox())?.x).toBeGreaterThanOrEqual(sideNavRight)
+    await page.screenshot({
+      path: testInfo.outputPath('boic-required-summary.png'),
+      fullPage: false,
+      animations: 'disabled',
+    })
+    expect((await summary.boundingBox())?.x).toBeGreaterThanOrEqual(sideNavRight)
+    await expect(summary).toBeFocused()
+
+    await page.getByLabel('Permit request pieces', { exact: true }).fill('0')
+    await expect(
+      page.getByRole('tab', { name: 'Permit, 1 required field outstanding', exact: true }),
+    ).toBeVisible()
+    await page.getByLabel('Permit request volume (m³)', { exact: true }).fill('0')
+    await expect(
+      page.getByRole('tab', { name: 'Permit', exact: true }).locator('svg'),
+    ).toBeVisible()
+    await page
+      .getByRole('tab', { name: 'Applicant, 2 required fields outstanding', exact: true })
+      .click()
+    await page.getByRole('combobox', { name: 'Applicant client number', exact: true }).fill('Owner')
+    await page
+      .getByRole('option', { name: 'Owner Forestry Ltd. (OFL) · 00067890', exact: true })
+      .click()
+    await expect(
+      page.getByRole('region', { name: 'Applicant details', exact: true }),
+    ).toContainText('1 Owner Street')
+    await page.getByLabel('Applicant location', { exact: true }).selectOption('04')
+    await expect(
+      page.getByRole('region', { name: 'Applicant details', exact: true }),
+    ).toContainText('4 Mill Road')
+
+    await page
+      .getByRole('tab', { name: 'Shipping, 3 required fields outstanding', exact: true })
+      .click()
+    await country.click()
+    const countries = page.getByRole('listbox').getByRole('option')
+    await expect(countries).toHaveText([
+      'United States (US)',
+      'Japan (JP)',
+      'China (CN)',
+      'Korea (KR)',
+      'Taiwan (TW)',
+      'Canada (CA)',
+      'Cambodia (KH)',
+      'Chile (CL)',
+      'Colombia (CO)',
+    ])
+    await page.screenshot({
+      path: testInfo.outputPath('boic-country-list.png'),
+      fullPage: false,
+      animations: 'disabled',
+    })
+    await country.fill('c')
+    await expect(countries).toHaveText([
+      'China (CN)',
+      'Canada (CA)',
+      'Cambodia (KH)',
+      'Chile (CL)',
+      'Colombia (CO)',
+    ])
+    await page.getByRole('option', { name: 'Canada (CA)', exact: true }).click()
+    await page.getByLabel('Purchaser', { exact: true }).fill('Synthetic Purchaser')
+    await page.getByLabel('Transport name', { exact: true }).fill('Synthetic vessel')
+    await page.getByLabel('Estimated shipping date', { exact: true }).fill('2099-01-01')
+    await expect(summary).toHaveCount(0)
+    await expect(
+      page.getByText(/The permit number is assigned after a successful save/),
+    ).toBeVisible()
+    await save.click()
+
+    await expect(page).toHaveURL(/\/provincial\/permit\/91002$/)
+    await expect(page.getByText('Permit created', { exact: true })).toBeVisible()
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'Permit 91002 (Pending)', exact: true }),
+    ).toBeVisible()
+    await expect(page.getByRole('tab', { name: 'Permit', exact: true })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+    const permitCard = page
+      .locator('.cds--tile')
+      .filter({ has: page.getByRole('heading', { name: 'Permit details', exact: true }) })
+    await expect(permitCard).toContainText('Current permit volume (m³)')
+    await expect(permitCard).toContainText('Remarks')
+    await expect(
+      page.getByRole('heading', { name: 'Volume and remarks', exact: true }),
+    ).toHaveCount(0)
+    await page.screenshot({
+      path: testInfo.outputPath('boic-created-permit.png'),
+      fullPage: false,
+      animations: 'disabled',
+    })
+    await selectTab(page, 'Scale')
+    await expect(page.getByRole('heading', { name: 'No packages yet', exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Create package', exact: true })).toBeVisible()
+    await expect(page.getByRole('group', { name: 'Summary of Scale', exact: true })).toHaveCount(0)
+    await selectTab(page, 'Fees')
+    await expect(page.getByRole('heading', { name: 'Permit fees', exact: true })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Package fees', exact: true })).toBeVisible()
+    await expect(page.getByRole('region', { name: 'Permit fee rows', exact: true })).toHaveCount(0)
+    await expect(page.getByLabel('Total volume (m³)', { exact: true })).toHaveValue('0.0')
+    await selectTab(page, 'Documents')
+    await page.getByRole('button', { name: 'Add document', exact: true }).click()
+    await expect(page.getByRole('dialog', { name: 'Add documents', exact: true })).toBeVisible()
+    await page.screenshot({
+      path: testInfo.outputPath('boic-document-drawer.png'),
+      fullPage: false,
+      animations: 'disabled',
+    })
+    expect(fixture.writes).toEqual([
+      expect.objectContaining({
+        path: '/api/lexis/rpc/permit-details/add-permit',
+        body: expect.objectContaining({
+          ownerClientNumber: '00067890',
+          ownerClientLocation: '04',
+          oicPermitTotalPieces: '0',
+          oicPermitTotalVolume: '0',
+          destinationCountry: 'CA',
+        }),
+      }),
+    ])
+    expect(fixture.unexpectedRequests).toEqual([])
+  })
+
+  test('keeps BOIC Save available while defaults load and leaves without a warning after reverting an edit', async ({
+    page,
+  }) => {
+    const fixture = await installPermitParityFixtures(page, 'blanket-oic-empty', false, true)
+    await gotoSyntheticRoute(page, '/provincial/exemption/EX-BOIC-91002/permit/new', {
+      ready: page.getByRole('heading', { level: 1, name: 'Apply for new permit', exact: true }),
+    })
+    await expect(page.getByRole('button', { name: 'Save permit', exact: true })).toBeEnabled()
+    await page.getByLabel('Remarks', { exact: true }).fill('Temporary draft')
+    fixture.resolveDelayedShipping()
+    await selectTab(page, 'Shipping')
+    await expect(
+      page.getByRole('combobox', { name: 'Final destination country', exact: true }),
+    ).toHaveValue('United States (US)')
+    await selectTab(page, 'Permit')
+    await page.getByLabel('Remarks', { exact: true }).fill('')
+    await page.getByRole('button', { name: 'Cancel', exact: true }).click()
+    await expect(page).toHaveURL(/\/provincial\/exemption\/EX-BOIC-91002$/)
+    await expect(page.getByRole('dialog', { name: 'Unsaved changes', exact: true })).toHaveCount(0)
+    expect(fixture.writes).toEqual([])
+    expect(fixture.unexpectedRequests).toEqual([])
+  })
+
   test('shows normal permit scale rows with their package association', async ({ page }) => {
     const fixture = await installPermitParityFixtures(page, 'normal')
     await gotoSyntheticRoute(page, '/provincial/permit/91001', {
@@ -384,7 +667,7 @@ test.describe('Provincial permit parity regressions', () => {
     await gotoSyntheticRoute(page, '/provincial/permit/91002', {
       ready: page.getByRole('heading', { level: 1, name: 'Permit 91002 (Pending)', exact: true }),
     })
-    await selectTab(page, 'Items')
+    await selectTab(page, 'Scale')
     await expect(page.getByRole('group', { name: 'Summary of Scale' })).toBeVisible()
 
     const species = page.getByRole('combobox', { name: 'Species', exact: true })
@@ -431,12 +714,12 @@ test.describe('Provincial permit parity regressions', () => {
     await gotoSyntheticRoute(page, '/provincial/permit/91002', {
       ready: page.getByRole('heading', { level: 1, name: 'Permit 91002 (Pending)', exact: true }),
     })
-    await selectTab(page, 'Owner')
+    await selectTab(page, 'Applicant')
     await expect(page.getByText('Owner Forestry Ltd.', { exact: true })).toBeVisible()
     await expect(page.getByText('1 Owner Street', { exact: true })).toBeVisible()
 
-    await page.getByRole('button', { name: 'Edit owner', exact: true }).click()
-    const ownerLocation = page.getByLabel('Owner location', { exact: true })
+    await page.getByRole('button', { name: 'Edit applicant', exact: true }).click()
+    const ownerLocation = page.getByLabel('Applicant location', { exact: true })
     await expect(ownerLocation).toHaveValue('03')
     await expect(
       page.getByRole('option', { name: '03 - Owner office', exact: true }),

@@ -96,6 +96,66 @@ describe('ForestClientComboBox', () => {
     expect(input()).toHaveValue('')
   })
 
+  it('reopens the selected client as the highlighted current option without another search', async () => {
+    search.mockResolvedValueOnce([
+      sample,
+      { clientNumber: '00054321', companyName: 'Sample Other Forest', clientAcronym: '' },
+    ])
+    render(<Harness />)
+    type('Sam')
+    await tick()
+    fireEvent.click(screen.getByRole('option', { name: 'Sample Forest · 00012345' }))
+
+    expect(input()).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.getByRole('button', { name: 'Clear selected item' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Open' })).toBeVisible()
+    fireEvent.click(input())
+
+    expect(input()).toHaveAttribute('aria-expanded', 'true')
+    const selectedOption = screen.getByRole('option', { name: 'Sample Forest · 00012345' })
+    expect(selectedOption).toHaveAttribute('aria-selected', 'true')
+    expect(selectedOption).toHaveClass('cds--list-box__menu-item--active')
+    expect(screen.getAllByRole('option')).toHaveLength(1)
+    expect(screen.queryByRole('option', { name: /Sample Other Forest/ })).not.toBeInTheDocument()
+    fireEvent.click(selectedOption)
+    await tick()
+
+    expect(screen.getByTestId('value')).toHaveTextContent('00012345')
+    expect(input()).toHaveValue('Sample Forest · 00012345')
+    expect(search).toHaveBeenCalledTimes(1)
+  })
+
+  it('opens a restored selection with the chevron and retains it with keyboard selection', async () => {
+    render(<Harness initial="00012345" />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open' }))
+    expect(screen.getByRole('option', { name: '00012345' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+    fireEvent.keyDown(input(), { key: 'ArrowDown' })
+    fireEvent.keyDown(input(), { key: 'Enter' })
+    await tick()
+
+    expect(screen.getByTestId('value')).toHaveTextContent('00012345')
+    expect(input()).toHaveValue('00012345')
+    expect(search).not.toHaveBeenCalled()
+  })
+
+  it('keeps a disabled selected client unchanged and does not expose suggestions', async () => {
+    render(<Harness initial="00012345" disabled />)
+
+    expect(input()).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Open' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Clear selected item' })).toBeDisabled()
+    fireEvent.click(input())
+    await tick()
+
+    expect(screen.queryByRole('option')).not.toBeInTheDocument()
+    expect(screen.getByTestId('value')).toHaveTextContent('00012345')
+    expect(search).not.toHaveBeenCalled()
+  })
+
   it('resets a selected client when the parent clears it', async () => {
     render(<Harness />)
     type('Sam')
