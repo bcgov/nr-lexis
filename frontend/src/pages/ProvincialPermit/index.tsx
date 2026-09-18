@@ -16,6 +16,7 @@ import {
 } from '@carbon/react'
 import SearchResultsTableFrame from '../../components/SearchResultsTableFrame'
 import EmptyState from '@/components/EmptyState'
+import ForestClientComboBox from '@/components/ForestClientComboBox'
 import PageHeader from '@/components/PageHeader'
 import SearchSubmitButton from '@/components/SearchSubmitButton'
 import AuthoritativeOptionsUnavailableNotification from '@/components/AuthoritativeOptionsUnavailableNotification'
@@ -197,6 +198,7 @@ const ProvincialPermitPage = () => {
   }, [searchParams])
   const appliedFilters = urlState.filters
   const [filters, setFilters] = useSearchFilterDraft(appliedFilters)
+  const [clientSearchResetKey, setClientSearchResetKey] = useState(0)
   const sortField = urlState.sortField
   const sortDirection = urlState.sortDirection
   const pageSize = urlState.pageSize
@@ -457,6 +459,7 @@ const ProvincialPermitPage = () => {
   }
 
   const onClearFilters = () => {
+    setClientSearchResetKey((current) => current + 1)
     const defaultFilters = {
       ...INITIAL_FILTERS,
       region: defaultZoneRegionIds,
@@ -560,17 +563,19 @@ const ProvincialPermitPage = () => {
                   value={filters.invoiceNumber}
                   onChange={(event) => updateFilter('invoiceNumber', event.target.value)}
                 />
-                <TextInput
+                <ForestClientComboBox
                   id="applicantClientNumber"
                   labelText="Applicant client number"
                   value={filters.applicantClientNumber}
-                  onChange={(event) => updateFilter('applicantClientNumber', event.target.value)}
+                  resetKey={clientSearchResetKey}
+                  onChange={(value) => updateFilter('applicantClientNumber', value)}
                 />
-                <TextInput
+                <ForestClientComboBox
                   id="ownerClientNumber"
                   labelText="Owner client number"
                   value={filters.ownerClientNumber}
-                  onChange={(event) => updateFilter('ownerClientNumber', event.target.value)}
+                  resetKey={clientSearchResetKey}
+                  onChange={(value) => updateFilter('ownerClientNumber', value)}
                 />
               </div>
               <div className="legacy-search-actions">

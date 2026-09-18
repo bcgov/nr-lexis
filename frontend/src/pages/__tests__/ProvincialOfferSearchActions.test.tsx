@@ -34,6 +34,28 @@ vi.mock('@/service/search-options-service', () => ({
   fetchProvincialOfferOptions: vi.fn(),
 }))
 
+vi.mock('@/components/ForestClientComboBox', () => ({
+  default: ({
+    id,
+    labelText,
+    value,
+    onChange,
+  }: {
+    id: string
+    labelText: string
+    value: string
+    onChange: (value: string) => void
+  }) => (
+    <div>
+      <label htmlFor={id}>{labelText}</label>
+      <input id={id} readOnly value={value} />
+      <button type="button" onClick={() => onChange('00012345')}>
+        Select {labelText}
+      </button>
+    </div>
+  ),
+}))
+
 const mockedUseAuth = vi.mocked(useAuth)
 const mockedUseDefaultRegionPreference = vi.mocked(useDefaultRegionPreference)
 const mockedCountProvincialOffers = vi.mocked(countProvincialOffers)
@@ -372,6 +394,25 @@ describe('Provincial Offer Search Actions', () => {
       'Withdrawn from date',
       'Withdrawn to date',
     ])
+  })
+
+  it('uses the canonical client selection in the offer search request', async () => {
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
+
+    renderPage('/provincial/offers')
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Search' })).toBeEnabled())
+
+    await userEvent.click(screen.getByRole('button', { name: 'Select Client number' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Search' }))
+
+    await waitFor(() => {
+      expect(
+        mockedSearchProvincialOffers.mock.calls.some(
+          ([request]) => request.filters.clientNumber === '00012345',
+        ),
+      ).toBe(true)
+    })
   })
 
   it('disables search for invalid dates and updates search sort direction from header click', async () => {

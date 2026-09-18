@@ -3,6 +3,7 @@ package ca.bc.gov.mof.lexis.repository.client;
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import java.util.List;
 import java.util.Optional;
+import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -18,6 +19,49 @@ public class ClientLookupRepository extends OracleRepositorySupport {
       LEXIS_GROUP_5_PACKAGE + "FIND_CLIENT_LOCATIONS(?,?)";
   private static final String FIND_CONTACTS_BY_LOCATION =
       LEXIS_GROUP_5_PACKAGE + "FIND_CONTACTS_BY_LOCATION(?,?,?)";
+  private static final int MINIMUM_CLIENT_SEARCH_LENGTH = 3;
+  private static final int MAXIMUM_CLIENT_SEARCH_LENGTH = 60;
+  private static final int CLIENT_NUMBER_LENGTH = 8;
+  private static final Pattern NUMERIC_SEARCH_TERM = Pattern.compile("[0-9]+");
+  private static final String FIND_CLIENT_SUGGESTIONS =
+      """
+      SELECT CLIENT_NUMBER,
+             COMPANY_NAME
+      FROM (
+        SELECT FC.CLIENT_NUMBER,
+               TRIM(
+                 DECODE(
+                   TRIM(FC.LEGAL_FIRST_NAME),
+                   NULL,
+                   FC.CLIENT_NAME,
+                   FC.CLIENT_NAME
+                     || ', '
+                     || TRIM(FC.LEGAL_FIRST_NAME)
+                     || ' '
+                     || TRIM(FC.LEGAL_MIDDLE_NAME))) AS COMPANY_NAME
+        FROM THE.V_CLIENT_PUBLIC FC
+        WHERE (
+          (? = 1 AND FC.CLIENT_NUMBER = LPAD(?, 8, '0'))
+          OR
+          (? = 0 AND UPPER(FC.CLIENT_NAME) LIKE UPPER(?) || '%' ESCAPE '\\')
+        )
+        AND (? IS NULL OR FC.CLIENT_NUMBER = ?)
+        AND (
+          ? = 0
+          OR EXISTS (
+            SELECT 1
+            FROM THE.EXPORT_EXEMPTION_APPLICATION EEA
+            WHERE EEA.EXPORT_JURISDICTION_CODE = 'F'
+              AND (
+                EEA.OWNER_CLIENT_NUMBER = FC.CLIENT_NUMBER
+                OR EEA.AGENT_CLIENT_NUMBER = FC.CLIENT_NUMBER
+              )
+          )
+        )
+        ORDER BY UPPER(FC.CLIENT_NAME), FC.CLIENT_NUMBER
+      )
+      WHERE ROWNUM <= 15
+      """;
 
   public ClientLookupRepository(@Qualifier("oracleJdbcTemplate") JdbcTemplate jdbcTemplate) {
     super(jdbcTemplate);
@@ -135,6 +179,49 @@ public class ClientLookupRepository extends OracleRepositorySupport {
         rs -> new ClientContactRow(getString(rs, "CONTACT_NAME"), getString(rs, "CLIENT_CONTACT_ID")));
   }
 
+  public List<ClientSuggestionRow> findClientSuggestions(
+      String searchTerm, boolean federalOnly, String allowedClientNumber) {
+    String normalizedSearchTerm = trim(searchTerm);
+    String normalizedAllowedClientNumber = trim(allowedClientNumber);
+    if (!isSearchableClientTerm(normalizedSearchTerm)) {
+      return List.of();
+    }
+
+    boolean numericSearchTerm = NUMERIC_SEARCH_TERM.matcher(normalizedSearchTerm).matches();
+    String escapedSearchTerm = escapeLike(normalizedSearchTerm);
+    return jdbcTemplate.query(
+        FIND_CLIENT_SUGGESTIONS,
+        ps -> {
+          int parameterIndex = 1;
+          ps.setInt(parameterIndex++, numericSearchTerm ? 1 : 0);
+          ps.setString(parameterIndex++, normalizedSearchTerm);
+          ps.setInt(parameterIndex++, numericSearchTerm ? 1 : 0);
+          ps.setString(parameterIndex++, escapedSearchTerm);
+          ps.setString(parameterIndex++, normalizedAllowedClientNumber);
+          ps.setString(parameterIndex++, normalizedAllowedClientNumber);
+          ps.setInt(parameterIndex, federalOnly ? 1 : 0);
+        },
+        (rs, rowNumber) ->
+            new ClientSuggestionRow(
+                trim(rs.getString("CLIENT_NUMBER")),
+                trim(rs.getString("COMPANY_NAME")),
+                null));
+  }
+
+  private static boolean isSearchableClientTerm(String searchTerm) {
+    if (searchTerm == null
+        || searchTerm.length() < MINIMUM_CLIENT_SEARCH_LENGTH
+        || searchTerm.length() > MAXIMUM_CLIENT_SEARCH_LENGTH) {
+      return false;
+    }
+    return !NUMERIC_SEARCH_TERM.matcher(searchTerm).matches()
+        || searchTerm.length() <= CLIENT_NUMBER_LENGTH;
+  }
+
+  private static String escapeLike(String searchTerm) {
+    return searchTerm.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+  }
+
   public record ClientLocationRow(
       String clientNumber,
       String clientLocationCode,
@@ -152,4 +239,6 @@ public class ClientLookupRepository extends OracleRepositorySupport {
       String emailAddress) {}
 
   public record ClientContactRow(String contactName, String contactId) {}
+
+  public record ClientSuggestionRow(String clientNumber, String companyName, String clientAcronym) {}
 }

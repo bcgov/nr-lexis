@@ -1,0 +1,50 @@
+@use '@carbon/styles/scss/theme' as *;
+
+.forest-client-combobox {
+  min-width: 0;
+
+  .cds--list-box__menu-item,
+  .cds--list-box__menu-item__option {
+    block-size: auto;
+    min-block-size: 2.5rem;
+  }
+
+  .cds--list-box__menu-item__option {
+    padding-block: 0.5rem;
+    line-height: 1.5;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  &__label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  &__spinner {
+    width: 0.875rem;
+    height: 0.875rem;
+    min-width: 0.875rem;
+  }
+
+  &__status {
+    color: $text-secondary;
+    font-size: 0.75rem;
+    line-height: 1.5;
+
+    &:not(:empty) {
+      margin-top: 0.25rem;
+    }
+
+    button {
+      padding: 0;
+      border: 0;
+      background: none;
+      color: $link-primary;
+      font: inherit;
+      text-decoration: underline;
+      cursor: pointer;
+    }
+  }
+}

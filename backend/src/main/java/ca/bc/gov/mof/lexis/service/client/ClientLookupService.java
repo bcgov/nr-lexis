@@ -14,6 +14,10 @@ public interface ClientLookupService {
 
   List<ClientContact> getContactsForLocation(String clientNumber, String locationCode);
 
+  /** Returns at most fifteen name or client-number matches for the authorized search scope. */
+  List<ClientSuggestion> findClientSuggestions(
+      String searchTerm, boolean federalOnly, String allowedClientNumber);
+
   record ClientData(
       String clientNumber,
       String companyName,
@@ -29,4 +33,6 @@ public interface ClientLookupService {
   record ClientLocation(String locationName, String locationCode, boolean selected) {}
 
   record ClientContact(String contactName, String contactId) {}
+
+  record ClientSuggestion(String clientNumber, String companyName, String clientAcronym) {}
 }

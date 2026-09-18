@@ -75,7 +75,11 @@ class LexisAuthorizationMatrixParityTest {
     assertThat(authorizationService.hasKnownRole(roles)).isTrue();
     assertThat(authorizationService.hasProvincialStaffRole(roles)).isFalse();
     assertThat(authorizationService.resolveGrantedActions(roles))
-        .containsExactlyElementsOf(FEDERAL_READ_ACTIONS);
+        .containsExactly(
+            "/federalApplicationSearch",
+            "/federalApplicationDetails",
+            "searchClients",
+            "viewFederalApplication");
   }
 
   @Test

@@ -3,6 +3,7 @@ import { Navigate, useParams, useSearchParams } from 'react-router-dom'
 import { Button, Column, Grid, InlineNotification, TextArea, TextInput, Tile } from '@carbon/react'
 import { AppNotification } from '../../components/AppNotification'
 import EmptyState from '@/components/EmptyState'
+import ForestClientComboBox from '@/components/ForestClientComboBox'
 import IsoDatePicker from '@/components/IsoDatePicker'
 import PageHeader from '@/components/PageHeader'
 import PendingIcon from '@/components/PendingIcon'
@@ -970,6 +971,7 @@ export const ReportsPageContent = () => {
   const [reportValuesById, setReportValuesById] = useState<Record<string, Record<string, string>>>({
     [initialReport.id]: initialReportValues,
   })
+  const [clientSearchResetKey, setClientSearchResetKey] = useState(0)
   const [selectedActionById, setSelectedActionById] = useState<Record<string, string>>({
     [initialReport.id]: initialSelectedAction,
   })
@@ -1283,6 +1285,7 @@ export const ReportsPageContent = () => {
   }
 
   const onResetFields = (): void => {
+    setClientSearchResetKey((current) => current + 1)
     setReportValuesById((current) => ({
       ...current,
       [selectedReport.id]: {},
@@ -1549,6 +1552,20 @@ export const ReportsPageContent = () => {
                         value={resolvedCurrentValue}
                         invalid={!isValidIsoDate(resolvedCurrentValue)}
                         invalidText="Date must be YYYY-MM-DD"
+                        onChange={(value) => onUpdateField(field.key, value)}
+                      />
+                    )
+                  }
+
+                  if (field.key === 'clientNumber') {
+                    return (
+                      <ForestClientComboBox
+                        key={field.key}
+                        id={`${selectedReport.id}-${field.key}`}
+                        labelText={field.label}
+                        value={resolvedCurrentValue}
+                        helperText={field.helperText}
+                        resetKey={`${selectedReport.id}:${clientSearchResetKey}`}
                         onChange={(value) => onUpdateField(field.key, value)}
                       />
                     )

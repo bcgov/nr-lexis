@@ -44,6 +44,31 @@ vi.mock('@/service/record-version-service', () => ({
   fetchCurrentExemptionRecordVersion: vi.fn(),
 }))
 
+vi.mock('@/components/ForestClientComboBox', () => ({
+  default: ({
+    id,
+    labelText,
+    value,
+    onChange,
+  }: {
+    id: string
+    labelText: string
+    value: string
+    onChange: (value: string) => void
+  }) => (
+    <div>
+      <label htmlFor={id}>{labelText}</label>
+      <input id={id} readOnly value={value} />
+      <button
+        type="button"
+        onClick={() => onChange(labelText.startsWith('Owner') ? '00054321' : '00012345')}
+      >
+        Select {labelText}
+      </button>
+    </div>
+  ),
+}))
+
 const mockedUseAuth = vi.mocked(useAuth)
 const mockedUseDefaultRegionPreference = vi.mocked(useDefaultRegionPreference)
 const mockedSearchProvincialExemptions = vi.mocked(searchProvincialExemptions)
@@ -795,6 +820,33 @@ describe('Provincial Exemption Search Actions', () => {
 
     expect(screen.getByLabelText('Applicant client number')).toBeInTheDocument()
     expect(screen.getByLabelText('Owner client number')).toBeInTheDocument()
+  })
+
+  it('uses canonical applicant and owner client selections in a staff search', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({ roles: ['LEXIS_EXEMPTION_APPROVER'] }),
+        canPerform: () => false,
+      }),
+    )
+
+    renderPage('/provincial/exemption')
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Search' })).toBeEnabled())
+
+    await userEvent.click(screen.getByRole('button', { name: 'Select Applicant client number' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Select Owner client number' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Search' }))
+
+    await waitFor(() => {
+      expect(
+        mockedSearchProvincialExemptions.mock.calls.some(
+          ([request]) =>
+            request.filters.applicantClientNumber === '00012345' &&
+            request.filters.ownerClientNumber === '00054321',
+        ),
+      ).toBe(true)
+    })
   })
 
   it('defaults approver filters without applying a region when no preference exists', async () => {

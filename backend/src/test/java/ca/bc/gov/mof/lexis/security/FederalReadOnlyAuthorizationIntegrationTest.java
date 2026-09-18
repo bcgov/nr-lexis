@@ -1,6 +1,7 @@
 package ca.bc.gov.mof.lexis.security;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -71,7 +72,9 @@ class FederalReadOnlyAuthorizationIntegrationTest {
     mvc.perform(get("/api/lexis/session/capabilities").with(federalReader()))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.roles[0]").value("LEXIS_FEDERAL_READ_ONLY"))
-        .andExpect(jsonPath("$.grantedActions.length()").value(3))
+        .andExpect(jsonPath("$.grantedActions").value(containsInAnyOrder(
+            "/federalApplicationSearch", "/federalApplicationDetails",
+            "searchClients", "viewFederalApplication")))
         .andExpect(jsonPath("$.forestClientSelectionRequired").value(false))
         .andExpect(jsonPath("$.availableForestClientNumbers").isEmpty());
     var detail = mapper.readValue("""

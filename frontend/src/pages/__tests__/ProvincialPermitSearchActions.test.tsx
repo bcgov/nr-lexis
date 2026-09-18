@@ -31,6 +31,31 @@ vi.mock('@/service/search-options-service', () => ({
   fetchProvincialPermitOptions: vi.fn(),
 }))
 
+vi.mock('@/components/ForestClientComboBox', () => ({
+  default: ({
+    id,
+    labelText,
+    value,
+    onChange,
+  }: {
+    id: string
+    labelText: string
+    value: string
+    onChange: (value: string) => void
+  }) => (
+    <div>
+      <label htmlFor={id}>{labelText}</label>
+      <input id={id} readOnly value={value} />
+      <button
+        type="button"
+        onClick={() => onChange(labelText.startsWith('Owner') ? '00054321' : '00012345')}
+      >
+        Select {labelText}
+      </button>
+    </div>
+  ),
+}))
+
 const mockedUseAuth = vi.mocked(useAuth)
 const mockedUseDefaultRegionPreference = vi.mocked(useDefaultRegionPreference)
 const mockedCountProvincialPermits = vi.mocked(countProvincialPermits)
@@ -503,6 +528,28 @@ describe('Provincial Permit Search Actions', () => {
       'Applicant client number',
       'Owner client number',
     ])
+  })
+
+  it('uses canonical applicant and owner client selections in the search request', async () => {
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
+
+    renderPage('/provincial/permit')
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Search' })).toBeEnabled())
+
+    await userEvent.click(screen.getByRole('button', { name: 'Select Applicant client number' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Select Owner client number' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Search' }))
+
+    await waitFor(() => {
+      expect(
+        mockedSearchProvincialPermits.mock.calls.some(
+          ([request]) =>
+            request.filters.applicantClientNumber === '00012345' &&
+            request.filters.ownerClientNumber === '00054321',
+        ),
+      ).toBe(true)
+    })
   })
 
   it('disables search for invalid dates and requests descending sort when permit header is clicked', async () => {

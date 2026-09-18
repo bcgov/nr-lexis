@@ -91,6 +91,44 @@ vi.mock('@/service/report-service', () => ({
   runReport: vi.fn(),
 }))
 
+vi.mock('@/components/ForestClientComboBox', () => ({
+  default: ({
+    id,
+    labelText,
+    value,
+    onChange,
+    onBlur,
+    disabled,
+    invalid,
+    invalidText,
+    counterpartyClientNumber,
+  }: {
+    id: string
+    labelText: string
+    value: string
+    onChange: (value: string) => void
+    onBlur?: () => void
+    disabled?: boolean
+    invalid?: boolean
+    invalidText?: string
+    counterpartyClientNumber?: string
+  }) => (
+    <div>
+      <label htmlFor={id}>{labelText}</label>
+      <input
+        id={id}
+        value={value}
+        disabled={disabled}
+        aria-invalid={invalid || undefined}
+        data-counterparty-client-number={counterpartyClientNumber ?? ''}
+        onBlur={onBlur}
+        onChange={(event) => onChange(event.target.value)}
+      />
+      {invalid && invalidText ? <div>{invalidText}</div> : null}
+    </div>
+  ),
+}))
+
 const activeMinisterialExemption: ProvincialExemptionDetail = {
   exemptionNumber: 'EX-205',
   exemptionTypeCode: 'M',
@@ -248,8 +286,9 @@ const fillRequiredBlanketOicFields = async (
   }
   await userEvent.type(screen.getByLabelText('Remarks'), 'test blanket permit')
   await userEvent.click(screen.getByRole('tab', { name: 'Applicant' }))
-  await userEvent.type(screen.getByLabelText('Applicant client number'), '1074')
-  await userEvent.tab()
+  fireEvent.change(screen.getByLabelText('Applicant client number'), {
+    target: { value: '00001074' },
+  })
   await waitFor(() => expect(screen.getByLabelText('Applicant location')).toHaveValue('00'))
   expect(screen.getByLabelText('Applicant client number')).toHaveValue('00001074')
   await userEvent.click(screen.getByRole('tab', { name: 'Shipping' }))
@@ -618,6 +657,30 @@ describe('permit creation from an exemption', () => {
     expect(router.state.location.search).toBe('?permitFilter=902')
   })
 
+  it('loads locations after selecting applicant and agent clients', async () => {
+    mockRole(['LEXIS_APPLICATION_APPROVER'], ['createPermit', 'savePermit'])
+    configureBlanketOicCreationDependencies()
+    renderPage(activeBlanketOicExemption)
+
+    await openPermitsTab()
+    const page = await openBlanketOicCreatePage()
+    await userEvent.click(within(page).getByRole('tab', { name: 'Applicant' }))
+
+    fireEvent.change(within(page).getByLabelText('Applicant client number'), {
+      target: { value: '00001074' },
+    })
+    await waitFor(() => expect(within(page).getByLabelText('Applicant location')).toHaveValue('00'))
+
+    await userEvent.click(within(page).getByRole('checkbox', { name: "I'm an agent" }))
+    fireEvent.change(within(page).getByLabelText('Agent client number'), {
+      target: { value: '00012345' },
+    })
+    await waitFor(() => expect(within(page).getByLabelText('Agent location')).toHaveValue('00'))
+
+    expect(fetchExemptionClientLocations).toHaveBeenCalledWith('00001074')
+    expect(fetchExemptionClientLocations).toHaveBeenCalledWith('00012345')
+  })
+
   it.each([['zero', { pieces: '0', volume: '0' }]])(
     'allows %s request totals on an active Blanket OIC permit',
     async (_description, totals) => {
@@ -847,8 +910,7 @@ describe('permit creation from an exemption', () => {
     const page = await openBlanketOicCreatePage()
     await userEvent.click(within(page).getByRole('tab', { name: 'Applicant' }))
     const ownerClientNumber = within(page).getByLabelText('Applicant client number')
-    await userEvent.type(ownerClientNumber, '1074')
-    await userEvent.tab()
+    fireEvent.change(ownerClientNumber, { target: { value: '00001074' } })
     await waitFor(() => expect(within(page).getByLabelText('Applicant location')).toHaveValue('00'))
 
     vi.mocked(fetchExemptionClientLocations).mockRejectedValueOnce(
@@ -892,14 +954,12 @@ describe('permit creation from an exemption', () => {
     const page = await openBlanketOicCreatePage()
     await userEvent.click(within(page).getByRole('tab', { name: 'Applicant' }))
     const ownerClientNumber = within(page).getByLabelText('Applicant client number')
-    await userEvent.type(ownerClientNumber, '11111111')
-    await userEvent.tab()
+    fireEvent.change(ownerClientNumber, { target: { value: '11111111' } })
     expect(await within(page).findByText('Client details unavailable')).toBeInTheDocument()
 
     await userEvent.click(within(page).getByRole('checkbox', { name: "I'm an agent" }))
     const agentClientNumber = within(page).getByLabelText('Agent client number')
-    await userEvent.type(agentClientNumber, '22222222')
-    await userEvent.tab()
+    fireEvent.change(agentClientNumber, { target: { value: '22222222' } })
     await waitFor(() => expect(lookupAttempts.get('22222222')).toBe(1))
 
     await userEvent.click(ownerClientNumber)
@@ -945,14 +1005,10 @@ describe('permit creation from an exemption', () => {
     const ownerClientNumber = within(page).getByLabelText('Applicant client number')
     const ownerLocation = within(page).getByLabelText('Applicant location')
 
-    await userEvent.type(ownerClientNumber, '11111111')
-    await userEvent.tab()
+    fireEvent.change(ownerClientNumber, { target: { value: '11111111' } })
     await waitFor(() => expect(fetchExemptionClientLocations).toHaveBeenCalledWith('11111111'))
 
-    await userEvent.click(ownerClientNumber)
-    await userEvent.clear(ownerClientNumber)
-    await userEvent.type(ownerClientNumber, '22222222')
-    await userEvent.tab()
+    fireEvent.change(ownerClientNumber, { target: { value: '22222222' } })
     await waitFor(() => expect(ownerLocation).toHaveValue('22'))
 
     resolveFirstLookup([

@@ -170,6 +170,44 @@ vi.mock('@/utils/download', () => ({
   triggerBrowserDownload: vi.fn(),
 }))
 
+vi.mock('@/components/ForestClientComboBox', () => ({
+  default: ({
+    id,
+    labelText,
+    value,
+    onChange,
+    onBlur,
+    disabled,
+    invalid,
+    invalidText,
+    counterpartyClientNumber,
+  }: {
+    id: string
+    labelText: string
+    value: string
+    onChange: (value: string) => void
+    onBlur?: () => void
+    disabled?: boolean
+    invalid?: boolean
+    invalidText?: string
+    counterpartyClientNumber?: string
+  }) => (
+    <div>
+      <label htmlFor={id}>{labelText}</label>
+      <input
+        id={id}
+        value={value}
+        disabled={disabled}
+        aria-invalid={invalid || undefined}
+        data-counterparty-client-number={counterpartyClientNumber ?? ''}
+        onBlur={onBlur}
+        onChange={(event) => onChange(event.target.value)}
+      />
+      {invalid && invalidText ? <div>{invalidText}</div> : null}
+    </div>
+  ),
+}))
+
 // This file renders the full provincial permit detail page; several tests exercise
 // Carbon inputs and async child panels, which can exceed Vitest's 5s default in CI.
 vi.setConfig({ testTimeout: 20000 })

@@ -123,6 +123,7 @@ lexis:
       LEXIS_FEDERAL_READ_ONLY:
         - "/federalApplicationSearch"
         - "/federalApplicationDetails"
+        - "searchClients"
         - "viewFederalApplication"
       # INTENTIONAL_LEGACY_DIVERGENCE(READ_ONLY_STAFF_VIEW): Pure Read Only follows the
       # Application Approver's supported business-record and retained-report view access, while
@@ -130,6 +131,7 @@ lexis:
       # Legacy Read Only was unfinished and is not the modern authorization baseline.
       LEXIS_READ_ONLY:
         - "viewNotifications"
+        - "searchClients"
         - "/applicationSearch"
         - "/applicationDetails"
         - "/applicationRemarks"
@@ -157,6 +159,7 @@ lexis:
         - "mofrListing"
       LEXIS_APPLICATION_APPROVER:
         - "viewNotifications"
+        - "searchClients"
         - "/applicationsReview"
         - "/changeApplicantType"
         - "/applicationSearch"
@@ -199,6 +202,7 @@ lexis:
         - "/fileInvoiceUpload"
       LEXIS_EXEMPTION_APPROVER:
         - "viewNotifications"
+        - "searchClients"
         # Legacy Exemption Approvers can open linked applications read-only, but cannot create
         # exemptions. Editing an existing exemption remains governed by saveExemption.
         - "/applicationDetails"
@@ -208,6 +212,7 @@ lexis:
         - "saveExemption"
       LEXIS_PROVINCIAL_SUBMITTER:
         - "viewNotifications"
+        - "searchClients"
         - "/summary"
         - "/applicationSearch"
         - "/applicationDetails"

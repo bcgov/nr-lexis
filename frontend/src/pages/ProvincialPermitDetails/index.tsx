@@ -44,6 +44,7 @@ import DetailBreadcrumb from '@/components/DetailBreadcrumb'
 import DetailLoadError from '@/components/DetailLoadError'
 import DisabledButtonTooltip from '@/components/DisabledButtonTooltip'
 import EmptyState from '@/components/EmptyState'
+import ForestClientComboBox from '@/components/ForestClientComboBox'
 import IsoDatePicker from '@/components/IsoDatePicker'
 import PageHeader from '@/components/PageHeader'
 import PendingIcon from '@/components/PendingIcon'
@@ -4013,19 +4014,40 @@ const ProvincialPermitDetailsPage = () => {
     return (
       <>
         <div className="legacy-search-grid">
-          <TextInput
-            id={`permit-${clientNumberField}`}
-            labelText={requiredLabel(`${label} client number`)}
-            aria-required="true"
-            value={clientNumber}
-            disabled={isDisabled}
-            readOnly={usesReviewedPermitFlow}
-            maxLength={8}
-            onChange={(event) => setPermitClientNumber(kind, event.target.value)}
-            onBlur={(event) =>
-              void loadPermitClientLocations(kind, event.target.value, locationCode)
-            }
-          />
+          {usesReviewedPermitFlow ? (
+            <TextInput
+              id={`permit-${clientNumberField}`}
+              labelText={requiredLabel(`${label} client number`)}
+              aria-required="true"
+              value={clientNumber}
+              disabled={isDisabled}
+              readOnly
+              maxLength={8}
+              onBlur={(event) =>
+                void loadPermitClientLocations(kind, event.target.value, locationCode)
+              }
+            />
+          ) : (
+            <ForestClientComboBox
+              id={`permit-${clientNumberField}`}
+              labelText={requiredLabel(`${label} client number`)}
+              value={clientNumber}
+              selectedClientName={clientData?.companyName}
+              counterpartyClientNumber={
+                isOwner
+                  ? (permitForm?.agentClientNumber ?? '')
+                  : (permitForm?.ownerClientNumber ?? '')
+              }
+              required
+              disabled={isDisabled}
+              onChange={(selectedClientNumber) => {
+                setPermitClientNumber(kind, selectedClientNumber)
+                if (selectedClientNumber) {
+                  void loadPermitClientLocations(kind, selectedClientNumber, '')
+                }
+              }}
+            />
+          )}
           <Select
             id={`permit-${locationField}`}
             labelText={requiredLabel(`${label} location`)}

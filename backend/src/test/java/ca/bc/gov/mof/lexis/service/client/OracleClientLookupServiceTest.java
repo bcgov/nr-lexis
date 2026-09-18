@@ -6,6 +6,7 @@ import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.repository.client.ClientLookupRepository;
 import ca.bc.gov.mof.lexis.repository.client.ClientLookupRepository.ClientLocationRow;
+import ca.bc.gov.mof.lexis.repository.client.ClientLookupRepository.ClientSuggestionRow;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
@@ -117,5 +118,32 @@ class OracleClientLookupServiceTest {
     assertThat(response).hasSize(1);
     assertThat(response.get(0).contactId()).isEqualTo("0");
     assertThat(response.get(0).contactName()).isEqualTo("No contacts on file for this location");
+  }
+
+  @Test
+  void findClientSuggestionsShouldDeduplicateAndCapResults() {
+    List<ClientSuggestionRow> rows =
+        java.util.stream.IntStream.range(0, 17)
+            .mapToObj(
+                index ->
+                    new ClientSuggestionRow(
+                        String.format("%08d", index), "Client " + index, "C" + index))
+            .collect(java.util.stream.Collectors.toCollection(java.util.ArrayList::new));
+    rows.add(new ClientSuggestionRow("00000000", "Duplicate", "DUP"));
+    when(repository.findClientSuggestions("Acme", true, "00077881")).thenReturn(rows);
+
+    List<ClientLookupService.ClientSuggestion> response =
+        service.findClientSuggestions(" Acme ", true, "00077881");
+
+    assertThat(response).hasSize(15);
+    assertThat(response.get(0))
+        .isEqualTo(new ClientLookupService.ClientSuggestion("00000000", "Client 0", "C0"));
+    assertThat(response).doesNotContain(new ClientLookupService.ClientSuggestion("00000015", "Client 15", "C15"));
+    verify(repository).findClientSuggestions("Acme", true, "00077881");
+  }
+
+  @Test
+  void findClientSuggestionsShouldNotQueryForBlankTerms() {
+    assertThat(service.findClientSuggestions(" ", false, null)).isEmpty();
   }
 }
