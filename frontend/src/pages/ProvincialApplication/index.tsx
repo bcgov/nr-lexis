@@ -462,7 +462,7 @@ const ProvincialApplicationPage = () => {
   useEffect(() => {
     const loadOptions = async () => {
       try {
-        const options = await fetchProvincialApplicationOptions()
+        const options = await fetchProvincialApplicationOptions(true)
 
         setExemptionTypeOptions(options.exemptionTypes)
         setApplicationStatusOptions(options.applicationStatuses)

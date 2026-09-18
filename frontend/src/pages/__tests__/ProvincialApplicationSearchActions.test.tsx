@@ -73,7 +73,7 @@ const mockedFetchProvincialApplicationOptions = vi.mocked(fetchProvincialApplica
 const renderPage = (
   path = '/provincial/application?region=11&page=1&pageSize=10&sortField=applicationNumber&sortDirection=desc',
 ) => {
-  render(
+  return render(
     <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route path="/provincial/application" element={<ProvincialApplicationPage />} />
@@ -131,7 +131,10 @@ describe('Provincial Application Search Actions', () => {
       }),
     )
     mockedFetchProvincialApplicationOptions.mockResolvedValue({
-      exemptionTypes: [{ value: 'FEE', label: 'Fee in Lieu' }],
+      exemptionTypes: [
+        { value: 'NULL', label: 'None' },
+        { value: 'FEE', label: 'Fee in Lieu' },
+      ],
       exemptionReasons: [],
       applicationStatuses: [{ value: 'NEW', label: 'New' }],
       productTypes: [{ value: 'LOG', label: 'Logs' }],
@@ -147,6 +150,54 @@ describe('Provincial Application Search Actions', () => {
         totalElements: 2,
         totalPages: 1,
       },
+    })
+  })
+
+  it('submits and restores None as literal NULL, while clearing restores All types', async () => {
+    const page = renderPage()
+    await screen.findByText('321')
+    expect(mockedFetchProvincialApplicationOptions).toHaveBeenCalledWith(true)
+
+    const exemptionType = screen.getByRole('combobox', { name: 'Exemption type' })
+    expect(exemptionType).toHaveValue('')
+    expect(exemptionType).toHaveAttribute('placeholder', 'All types')
+    await userEvent.click(exemptionType)
+    await userEvent.click(screen.getByRole('option', { name: 'None' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Search' }))
+
+    await waitFor(() => {
+      expect(mockedSearchProvincialApplications).toHaveBeenLastCalledWith(
+        expect.objectContaining({ filters: expect.objectContaining({ exemptionType: 'NULL' }) }),
+        expect.any(Object),
+      )
+    })
+    const storageKey = 'lexis.search-state.v1.provincial-applications'
+    expect(new URLSearchParams(sessionStorage.getItem(storageKey) ?? '').get('exemptionType')).toBe(
+      'NULL',
+    )
+
+    page.unmount()
+    mockedSearchProvincialApplications.mockClear()
+    renderPage('/provincial/application')
+    await screen.findByText('321')
+    expect(screen.getByRole('combobox', { name: 'Exemption type' })).toHaveValue('None')
+    await userEvent.click(screen.getByRole('button', { name: 'Search' }))
+    expect(mockedSearchProvincialApplications).toHaveBeenLastCalledWith(
+      expect.objectContaining({ filters: expect.objectContaining({ exemptionType: 'NULL' }) }),
+      expect.any(Object),
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: 'Clear all' }))
+    expect(screen.getByRole('combobox', { name: 'Exemption type' })).toHaveValue('')
+    expect(new URLSearchParams(sessionStorage.getItem(storageKey) ?? '').has('exemptionType')).toBe(
+      false,
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Search' }))
+    await waitFor(() => {
+      expect(mockedSearchProvincialApplications).toHaveBeenLastCalledWith(
+        expect.objectContaining({ filters: expect.objectContaining({ exemptionType: '' }) }),
+        expect.any(Object),
+      )
     })
   })
 

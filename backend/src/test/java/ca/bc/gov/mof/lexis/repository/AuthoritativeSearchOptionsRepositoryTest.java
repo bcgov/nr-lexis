@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.jdbc.core.CallableStatementCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
 
 class AuthoritativeSearchOptionsRepositoryTest {
 
@@ -26,6 +27,8 @@ class AuthoritativeSearchOptionsRepositoryTest {
   void everySearchOptionLoaderShouldPropagateOracleFailure() {
     JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
     when(jdbcTemplate.execute(anyString(), any(CallableStatementCallback.class)))
+        .thenThrow(new DataAccessResourceFailureException("Oracle unavailable"));
+    when(jdbcTemplate.query(anyString(), any(RowMapper.class), any(Object[].class)))
         .thenThrow(new DataAccessResourceFailureException("Oracle unavailable"));
 
     LexisApplicationRepository applications = new LexisApplicationRepository(jdbcTemplate);
@@ -55,6 +58,7 @@ class AuthoritativeSearchOptionsRepositoryTest {
 
     LexisReportScheduleRepository reports = new LexisReportScheduleRepository(jdbcTemplate);
     assertUnavailable(reports::loadRegionOptions);
+    assertUnavailable(reports::loadReportGrowthTypeOptions);
 
     FederalApplicationRepository federal = new FederalApplicationRepository(jdbcTemplate);
     assertUnavailable(federal::loadApplicationStatusOptions);

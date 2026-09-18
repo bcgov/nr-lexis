@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.repository.reference;
 
+import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_COUNTRIES;
 import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_PORTS;
 import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_TRANSPORT_TYPES;
 
@@ -21,7 +22,9 @@ public class ShippingReferenceRepository extends OracleRepositorySupport {
   }
 
   public List<CodeNameDto> findActiveCountriesRequired() {
-    return findOptionsRequired(LEXIS_CODES_PACKAGE + "FIND_ALL_COUNTRY_CODES(?)");
+    return queryDirectRequired(
+        ACTIVE_COUNTRIES,
+        rs -> new CodeNameDto(getString(rs, "CODE"), getString(rs, "DESCRIPTION")));
   }
 
   public List<CodeNameDto> findActiveTransportTypesRequired() {
@@ -33,13 +36,5 @@ public class ShippingReferenceRepository extends OracleRepositorySupport {
   public List<CodeNameDto> findActivePortsRequired() {
     return queryDirectRequired(
         ACTIVE_PORTS, rs -> new CodeNameDto(getString(rs, "CODE"), getString(rs, "DESCRIPTION")));
-  }
-
-  private List<CodeNameDto> findOptionsRequired(String procedureSignature) {
-    return queryCursorProcedureRequired(
-        procedureSignature,
-        null,
-        1,
-        rs -> new CodeNameDto(getString(rs, "CODE"), getString(rs, "DESCRIPTION")));
   }
 }

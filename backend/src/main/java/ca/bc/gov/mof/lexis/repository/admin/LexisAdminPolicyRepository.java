@@ -3,6 +3,7 @@ package ca.bc.gov.mof.lexis.repository.admin;
 import static ca.bc.gov.mof.lexis.util.ValueUtils.coalesce;
 
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
+import ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries;
 import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.util.List;
@@ -35,9 +36,6 @@ public class LexisAdminPolicyRepository extends OracleRepositorySupport {
   private static final String INSERT_FIL_POLICY = LEXIS_GROUP_12_PACKAGE + "INSERT_FIL_POLICY(?,?,?,?)";
   private static final String DELETE_FIL_POLICY = LEXIS_GROUP_12_PACKAGE + "DELETE_FIL_POLICY(?)";
   private static final String COUNT_FIL_POLICIES = LEXIS_GROUP_12_PACKAGE + "COUNT_FIL_POLICIES(?)";
-
-  private static final String FIND_ORG_UNIT_BY_NUMBER =
-      LEXIS_CODES_PACKAGE + "FIND_ORG_UNIT_BY_NUMBER(?,?)";
 
   public LexisAdminPolicyRepository(@Qualifier("oracleJdbcTemplate") JdbcTemplate jdbcTemplate) {
     super(jdbcTemplate);
@@ -243,15 +241,16 @@ public class LexisAdminPolicyRepository extends OracleRepositorySupport {
       return Optional.empty();
     }
 
-    return queryCursorSingleFailClosed(
-        FIND_ORG_UNIT_BY_NUMBER,
-        cs -> cs.setLong(1, orgUnitNo),
-        2,
-        rs ->
-            new OrgUnitRow(
-                coalesce(getLong(rs, "ORG_UNIT_NO"), orgUnitNo),
-                defaultString(getString(rs, "ORG_UNIT_CODE")),
-                defaultString(getString(rs, "ORG_UNIT_NAME"))));
+    List<OrgUnitRow> orgUnits =
+        jdbcTemplate.query(
+            LexisCodeQueries.ORG_UNIT_BY_NUMBER,
+            (rs, rowNumber) ->
+                new OrgUnitRow(
+                    coalesce(getLong(rs, "ORG_UNIT_NO"), orgUnitNo),
+                    defaultString(getString(rs, "ORG_UNIT_CODE")),
+                    defaultString(getString(rs, "ORG_UNIT_NAME"))),
+            orgUnitNo);
+    return orgUnits.isEmpty() ? Optional.empty() : Optional.ofNullable(orgUnits.get(0));
   }
 
   private FeePolicyRow mapFeePolicyRow(java.sql.ResultSet rs) {

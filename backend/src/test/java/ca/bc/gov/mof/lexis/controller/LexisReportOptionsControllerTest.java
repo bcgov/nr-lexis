@@ -269,6 +269,19 @@ class LexisReportOptionsControllerTest {
   }
 
   @Test
+  void optionsShouldPropagateGrowthTypeLookupFailureForProblemDetail503Handling() {
+    when(scheduleRepositoryProvider.getIfAvailable()).thenReturn(scheduleRepository);
+    DataAccessResourceFailureException failure =
+        new DataAccessResourceFailureException("Growth types unavailable");
+    when(scheduleRepository.loadReportGrowthTypeOptions()).thenThrow(failure);
+    LexisReportOptionsController controller =
+        new LexisReportOptionsController(
+            scheduleRepositoryProvider, sessionService, principalService);
+
+    assertThatThrownBy(() -> controller.options(authentication)).isSameAs(failure);
+  }
+
+  @Test
   void optionsShouldPreferAvailableIdirOrgUnitRegion() {
     when(scheduleRepositoryProvider.getIfAvailable()).thenReturn(scheduleRepository);
     when(scheduleRepository.loadRegionOptions())

@@ -27,6 +27,10 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -85,20 +89,28 @@ class ExemptionControllerTest {
   }
 
   @Test
-  void optionsShouldReturnPayloadWhenServiceAvailable() {
+  void optionsShouldAddNoneWhenBlanketOicIsVisible() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
 
     ExemptionSearchOptionsDto dto =
         new ExemptionSearchOptionsDto(
-            List.of(new CodeNameDto("OIC", "Order in Council")),
+            List.of(new CodeNameDto("M", "Ministerial"), new CodeNameDto("O", "OIC")),
             List.of(new CodeNameDto("APR", "Approved")),
             List.of(new CodeNameDto("12", "Coast")));
     when(service.searchOptions()).thenReturn(dto);
 
-    ResponseEntity<ExemptionSearchOptionsDto> response = controller.searchOptions();
+    ResponseEntity<ExemptionSearchOptionsDto> response = controller.searchOptions(authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-    assertThat(response.getBody()).isEqualTo(dto);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().exemptionTypes())
+        .containsExactly(
+            new CodeNameDto("NULL", "None"),
+            new CodeNameDto("M", "Ministerial"),
+            new CodeNameDto("O", "OIC"));
+    assertThat(response.getBody().exemptionStatuses()).isEqualTo(dto.exemptionStatuses());
+    assertThat(response.getBody().regions()).isEqualTo(dto.regions());
+    assertThat(dto.exemptionTypes()).extracting(CodeNameDto::code).containsExactly("M", "O");
     verify(service).searchOptions();
   }
 
@@ -229,8 +241,11 @@ class ExemptionControllerTest {
     assertThat(criteria.size()).isEqualTo(25);
   }
 
-  @Test
-  void searchShouldOverrideClientFiltersWhenUserHasScopedForestClient() {
+  @ParameterizedTest
+  @NullSource
+  @ValueSource(strings = "NULL")
+  void searchAndCountShouldOverrideClientFiltersWhenUserHasScopedForestClient(
+      String exemptionType) {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(sessionService.resolveForestClientNumber(authentication)).thenReturn("00077881");
     when(service.search(any(ExemptionSearchCriteria.class)))
@@ -240,7 +255,7 @@ class ExemptionControllerTest {
         null,
         null,
         null,
-        null,
+        exemptionType,
         null,
         null,
         null,
@@ -268,10 +283,39 @@ class ExemptionControllerTest {
     assertThat(criteria.ownerClientNumber()).isNull();
     assertThat(criteria.includeBlanketOic()).isTrue();
     assertThat(criteria.broadClientMatch()).isTrue();
+    assertThat(criteria.exemptionType()).isEqualTo(exemptionType);
+
+    controller.count(
+        null,
+        null,
+        null,
+        exemptionType,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        "00099999",
+        "00088888",
+        List.of(),
+        authentication);
+    verify(service).count(criteriaCaptor.capture());
+    ExemptionSearchCriteria countCriteria = criteriaCaptor.getValue();
+    assertThat(countCriteria.applicantClientNumber()).isEqualTo("00077881");
+    assertThat(countCriteria.ownerClientNumber()).isNull();
+    assertThat(countCriteria.includeBlanketOic()).isTrue();
+    assertThat(countCriteria.broadClientMatch()).isTrue();
+    assertThat(countCriteria.exemptionType()).isEqualTo(exemptionType);
   }
 
-  @Test
-  void searchShouldForceMinisterialTypeForPureExemptionApprover() {
+  @ParameterizedTest
+  @CsvSource({"O,", "NULL,", ",NULL", "NULL,O", "O,NULL"})
+  void searchShouldForceMinisterialTypeForPureExemptionApprover(
+      String exemptionType, String exemptionTypeCode) {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(provincialAuthorizationService.canViewBlanketOic(authentication)).thenReturn(false);
     when(service.search(any(ExemptionSearchCriteria.class)))
@@ -281,8 +325,8 @@ class ExemptionControllerTest {
         null,
         null,
         null,
-        "O",
-        null,
+        exemptionType,
+        exemptionTypeCode,
         null,
         null,
         null,
@@ -311,8 +355,10 @@ class ExemptionControllerTest {
     assertThat(criteria.broadClientMatch()).isFalse();
   }
 
-  @Test
-  void countShouldForceMinisterialTypeForPureExemptionApprover() {
+  @ParameterizedTest
+  @CsvSource({"O,", "NULL,", ",NULL", "NULL,O", "O,NULL"})
+  void countShouldForceMinisterialTypeForPureExemptionApprover(
+      String exemptionType, String exemptionTypeCode) {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(provincialAuthorizationService.canViewBlanketOic(authentication)).thenReturn(false);
     when(service.count(any(ExemptionSearchCriteria.class))).thenReturn(0);
@@ -321,8 +367,8 @@ class ExemptionControllerTest {
         null,
         null,
         null,
-        "O",
-        null,
+        exemptionType,
+        exemptionTypeCode,
         null,
         null,
         null,

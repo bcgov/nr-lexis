@@ -3,6 +3,7 @@ package ca.bc.gov.mof.lexis.repository.upload;
 import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.exceptionType;
 
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
+import ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries;
 import java.io.InputStream;
 import java.math.BigDecimal;
 import java.sql.CallableStatement;
@@ -10,6 +11,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.sql.Types;
+import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -31,7 +33,6 @@ public class UploadRepository extends OracleRepositorySupport {
       LEXIS_GROUP_9_PACKAGE + "INSERT_EXEMPT_FILE_ATTACHMENT(?,?,?,?,?,?,?,?,?,?,?)";
   private static final String INSERT_INVOICE_FILE_ATTACHMENT =
       LEXIS_GROUP_9_PACKAGE + "INSERT_INVOICE_FILE_ATTACHMENT(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
-  private static final String FIND_FILE_TYPE_CODE = LEXIS_CODES_PACKAGE + "FIND_FILE_TYPE_CODE(?,?)";
 
   public UploadRepository(@Qualifier("oracleJdbcTemplate") JdbcTemplate jdbcTemplate) {
     super(jdbcTemplate);
@@ -204,13 +205,10 @@ public class UploadRepository extends OracleRepositorySupport {
       return false;
     }
 
-    return queryCursorSingleRequired(
-            FIND_FILE_TYPE_CODE,
-            cs -> cs.setString(1, normalized),
-            2,
-            rs -> trim(getString(rs, "CODE")))
-        .filter(normalized::equalsIgnoreCase)
-        .isPresent();
+    List<String> codes =
+        queryDirectRequired(
+            LexisCodeQueries.FILE_TYPE_BY_CODE, rs -> trim(getString(rs, "CODE")), normalized);
+    return !codes.isEmpty() && normalized.equalsIgnoreCase(codes.get(0));
   }
 
   private UploadPersistenceResult executeUpload(

@@ -186,6 +186,33 @@ describe('search-service contracts', () => {
     expect(() => requireParsedSearchResponse(null, 'missing')).toThrow('missing')
   })
 
+  it.each(['NULL', ''])(
+    'preserves exemption type %j in search and count requests',
+    async (code) => {
+      getCachedResponseMock.mockResolvedValue({
+        data: { results: [], total: 0, page: 0, size: 10 },
+      })
+      const applications = {
+        ...applicationRequest,
+        filters: { ...applicationRequest.filters, exemptionType: code },
+      }
+      const exemptions = {
+        ...exemptionRequest,
+        filters: { ...exemptionRequest.filters, exemptionTypeCode: code },
+      }
+
+      await searchProvincialApplications(applications)
+      await countProvincialApplications(applications)
+      await searchProvincialExemptions(exemptions)
+      await countProvincialExemptions(exemptions)
+
+      expect(readParams(0).get('exemptionType')).toBe(code || null)
+      expect(readParams(1).get('exemptionType')).toBe(code || null)
+      expect(readParams(2).get('exemptionTypeCode')).toBe(code || null)
+      expect(readParams(3).get('exemptionTypeCode')).toBe(code || null)
+    },
+  )
+
   it('maps provincial application results and backend query params', async () => {
     getCachedResponseMock.mockResolvedValue({
       data: {

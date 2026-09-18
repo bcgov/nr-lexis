@@ -27,6 +27,8 @@ import java.time.LocalDate;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -511,14 +513,24 @@ class PermitRpcRepositoryTest {
   }
 
   @Test
-  void findAllCountryCodesShouldUseOracleRowsWhenAvailable() throws Exception {
-    stubCursorProcedure("{ call LEXIS_CODES.FIND_ALL_COUNTRY_CODES(?) }");
-    when(resultSet.next()).thenReturn(true, true, false);
-    when(resultSet.getString("CODE")).thenReturn("US", "NZ");
-    when(resultSet.getString("DESCRIPTION")).thenReturn("United States", "New Zealand");
-    when(resultSet.getLong("GROUP_BY")).thenReturn(2L, 2L);
-    when(resultSet.getLong("ORDER_BY")).thenReturn(1L, 2L);
+  @SuppressWarnings("unchecked")
+  void findAllCountryCodesShouldPreserveDirectRowOrderDuplicatesAndMetadata() throws Exception {
+    when(resultSet.getString("CODE")).thenReturn(" US ", "NZ", " US ");
+    when(resultSet.getString("DESCRIPTION"))
+        .thenReturn(" United States ", "New Zealand", " United States ");
+    when(resultSet.getLong("GROUP_BY")).thenReturn(2L, 1L, 2L);
+    when(resultSet.getLong("ORDER_BY")).thenReturn(3L, 2L, 3L);
     when(resultSet.wasNull()).thenReturn(false);
+    when(jdbcTemplate.query(
+            eq(LexisCodeQueries.ACTIVE_COUNTRIES), any(RowMapper.class), any(Object[].class)))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<PermitRpcRepository.CountryCodeRow> mapper = invocation.getArgument(1);
+              return List.of(
+                  mapper.mapRow(resultSet, 0),
+                  mapper.mapRow(resultSet, 1),
+                  mapper.mapRow(resultSet, 2));
+            });
 
     PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
 
@@ -527,36 +539,100 @@ class PermitRpcRepositoryTest {
     assertThat(rows)
         .extracting("code", "description", "groupBy", "orderBy")
         .containsExactly(
-            tuple("US", "United States", 2L, 1L),
-            tuple("NZ", "New Zealand", 2L, 2L));
-    verify(callableStatement).registerOutParameter(1, Types.REF_CURSOR);
+            tuple("US", "United States", 2L, 3L),
+            tuple("NZ", "New Zealand", 1L, 2L),
+            tuple("US", "United States", 2L, 3L));
+    ArgumentCaptor<Object[]> bindCaptor = ArgumentCaptor.forClass(Object[].class);
+    verify(jdbcTemplate)
+        .query(eq(LexisCodeQueries.ACTIVE_COUNTRIES), any(RowMapper.class), bindCaptor.capture());
+    assertThat(bindCaptor.getValue()).isEmpty();
   }
 
   @Test
-  void findAllCountryCodesShouldPreserveLegitimateEmptyResult() throws Exception {
-    stubCursorProcedure("{ call LEXIS_CODES.FIND_ALL_COUNTRY_CODES(?) }");
-    when(resultSet.next()).thenReturn(false);
+  @SuppressWarnings("unchecked")
+  void findAllCountryCodesShouldDefaultNullOrderingAndFilterMissingCodeOrDescription()
+      throws Exception {
+    when(resultSet.getString("CODE")).thenReturn(" US ", " ", "CA", "NZ");
+    when(resultSet.getString("DESCRIPTION"))
+        .thenReturn(" United States ", "Missing code", " ", null);
+    when(resultSet.wasNull()).thenReturn(true);
+    when(jdbcTemplate.query(
+            eq(LexisCodeQueries.ACTIVE_COUNTRIES), any(RowMapper.class), any(Object[].class)))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<PermitRpcRepository.CountryCodeRow> mapper = invocation.getArgument(1);
+              return List.of(
+                  mapper.mapRow(resultSet, 0),
+                  mapper.mapRow(resultSet, 1),
+                  mapper.mapRow(resultSet, 2),
+                  mapper.mapRow(resultSet, 3));
+            });
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertThat(repository.findAllCountryCodesRequired())
+        .extracting("code", "description", "groupBy", "orderBy")
+        .containsExactly(tuple("US", "United States", 0L, 0L));
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void findAllCountryCodesShouldPreserveLegitimateEmptyResult() {
+    when(jdbcTemplate.query(
+            eq(LexisCodeQueries.ACTIVE_COUNTRIES), any(RowMapper.class), any(Object[].class)))
+        .thenReturn(List.of());
 
     PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
 
     var rows = repository.findAllCountryCodesRequired();
 
     assertThat(rows).isEmpty();
-    verify(callableStatement).registerOutParameter(1, Types.REF_CURSOR);
   }
 
   @Test
+  @SuppressWarnings("unchecked")
   void findAllCountryCodesShouldPropagateOracleFailure() {
     DataAccessResourceFailureException failure =
         new DataAccessResourceFailureException("country lookup unavailable");
-    when(
-            jdbcTemplate.execute(
-                eq("{ call LEXIS_CODES.FIND_ALL_COUNTRY_CODES(?) }"),
-                any(CallableStatementCallback.class)))
+    when(jdbcTemplate.query(
+            eq(LexisCodeQueries.ACTIVE_COUNTRIES), any(RowMapper.class), any(Object[].class)))
         .thenThrow(failure);
     PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
 
     assertThatThrownBy(repository::findAllCountryCodesRequired).isSameAs(failure);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"CODE", "DESCRIPTION", "GROUP_BY", "ORDER_BY"})
+  @SuppressWarnings("unchecked")
+  void findAllCountryCodesShouldFailWhenARequiredColumnCannotBeRead(String column) throws Exception {
+    SQLException failure = new SQLException("Missing " + column);
+    if (!column.equals("CODE")) {
+      when(resultSet.getString("CODE")).thenReturn("US");
+    }
+    if (column.equals("GROUP_BY") || column.equals("ORDER_BY")) {
+      when(resultSet.getString("DESCRIPTION")).thenReturn("United States");
+    }
+    if (column.equals("ORDER_BY")) {
+      when(resultSet.getLong("GROUP_BY")).thenReturn(1L);
+    }
+    if (column.equals("CODE") || column.equals("DESCRIPTION")) {
+      when(resultSet.getString(column)).thenThrow(failure);
+    } else {
+      when(resultSet.getLong(column)).thenThrow(failure);
+    }
+    when(jdbcTemplate.query(
+            eq(LexisCodeQueries.ACTIVE_COUNTRIES), any(RowMapper.class), any(Object[].class)))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<PermitRpcRepository.CountryCodeRow> mapper = invocation.getArgument(1);
+              return List.of(mapper.mapRow(resultSet, 0));
+            });
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+
+    assertThatThrownBy(repository::findAllCountryCodesRequired)
+        .isInstanceOf(DataRetrievalFailureException.class)
+        .hasMessageContaining(column)
+        .hasCause(failure);
   }
 
   @Test
@@ -817,23 +893,23 @@ class PermitRpcRepositoryTest {
   }
 
   @Test
-  void requiredPermitValidationCodesShouldUseLegacyCodeProcedures() throws Exception {
+  void requiredPermitValidationCodesShouldUseBoundDirectQueries() throws Exception {
     PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
 
     assertRequiredCodeLookup(
-        "{ call LEXIS_CODES.FIND_PERMIT_STATUS_CODE(?,?) }",
+        LexisCodeQueries.PERMIT_STATUS_BY_CODE,
         "ACT",
         repository::isPermitStatusCodeValidRequired);
     assertRequiredCodeLookup(
-        "{ call LEXIS_CODES.FIND_COUNTRY_CODE(?,?) }",
+        LexisCodeQueries.COUNTRY_BY_CODE,
         "US",
         repository::isCountryCodeValidRequired);
     assertRequiredCodeLookup(
-        "{ call LEXIS_CODES.FIND_SCALE_METHOD_CODE(?,?) }",
+        LexisCodeQueries.SCALE_METHOD_BY_CODE,
         "W",
         repository::isScaleMethodCodeValidRequired);
     assertRequiredCodeLookup(
-        "{ call LEXIS_CODES.FIND_TRANSPORT_TYPE_CODE(?,?) }",
+        LexisCodeQueries.TRANSPORT_TYPE_BY_CODE,
         "TRUCK",
         repository::isTransportTypeCodeValidRequired);
   }
@@ -905,8 +981,10 @@ class PermitRpcRepositoryTest {
   }
 
   @Test
+  @SuppressWarnings("unchecked")
   void requiredPermitValidationCodeLookupShouldPropagateOracleFailure() {
-    when(jdbcTemplate.execute(any(String.class), any(CallableStatementCallback.class)))
+    when(jdbcTemplate.query(
+            eq(LexisCodeQueries.PERMIT_STATUS_BY_CODE), any(RowMapper.class), eq("ACT")))
         .thenThrow(new DataAccessResourceFailureException("Oracle unavailable"));
     PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
 
@@ -1484,17 +1562,21 @@ class PermitRpcRepositoryTest {
     when(callableStatement.getObject(cursorIndex)).thenReturn(resultSet);
   }
 
+  @SuppressWarnings("unchecked")
   private void assertRequiredCodeLookup(
-      String call,
+      String sql,
       String code,
       java.util.function.Predicate<String> lookup)
       throws Exception {
-    org.mockito.Mockito.reset(callableStatement, resultSet);
-    stubCursorProcedure(call, 2);
-    when(resultSet.next()).thenReturn(true, false);
+    when(jdbcTemplate.query(eq(sql), any(RowMapper.class), eq(code)))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<Boolean> mapper = invocation.getArgument(1);
+              return List.of(mapper.mapRow(resultSet, 0));
+            });
 
-    assertThat(lookup.test(code)).isTrue();
-    verify(callableStatement).setString(1, code);
-    verify(callableStatement).registerOutParameter(2, Types.REF_CURSOR);
+    assertThat(lookup.test(" " + code + " ")).isTrue();
+    verify(jdbcTemplate).query(eq(sql), any(RowMapper.class), eq(code));
+    verifyNoInteractions(resultSet);
   }
 }

@@ -5,6 +5,7 @@ import static ca.bc.gov.mof.lexis.controller.SearchRequestUtils.parseSearchDate;
 import static ca.bc.gov.mof.lexis.controller.ScopedClientRequestSupport.currentForestClientNumber;
 import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.exceptionType;
 
+import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.SearchCountResponseDto;
 import ca.bc.gov.mof.lexis.dto.application.ApplicationEditLockDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
@@ -22,6 +23,7 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.PositiveOrZero;
 import java.util.List;
+import java.util.stream.Stream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -67,7 +69,13 @@ public class ExemptionController {
     }
     ExemptionSearchOptionsDto options = service.searchOptions();
     if (provincialAuthorizationService.canViewBlanketOic(authentication)) {
-      return ResponseEntity.ok(options);
+      return ResponseEntity.ok(
+          new ExemptionSearchOptionsDto(
+              Stream.concat(
+                      Stream.of(new CodeNameDto("NULL", "None")), options.exemptionTypes().stream())
+                  .toList(),
+              options.exemptionStatuses(),
+              options.regions()));
     }
     return ResponseEntity.ok(
         new ExemptionSearchOptionsDto(

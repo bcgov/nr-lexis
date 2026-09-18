@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.repository.oracle;
 
+import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ORG_UNIT_BY_NUMBER;
 import static ca.bc.gov.mof.lexis.util.OracleAuditUserId.encode;
 import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.exceptionType;
 
@@ -47,8 +48,6 @@ public abstract class OracleRepositorySupport {
   protected static final String LEXIS_READ_ONLY_PACKAGE = "LEXIS_READ_ONLY.";
 
   private static final Pattern SAFE_IDENTIFIER = Pattern.compile("[A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)*");
-  private static final String FIND_ORG_UNIT_BY_NUMBER =
-      LEXIS_CODES_PACKAGE + "FIND_ORG_UNIT_BY_NUMBER(?,?)";
   private static final List<String> NATURAL_RESOURCE_REGION_CODES =
       List.of("1903", "1904", "1905", "1906", "1907", "1908", "1909", "1910");
 
@@ -94,6 +93,12 @@ public abstract class OracleRepositorySupport {
         rs -> new CodeNameDto(trim(rs.getString(1)), trim(rs.getString(2))));
   }
 
+  /** Loads a direct code list with the same positional mapping and failure contract. */
+  protected List<CodeNameDto> loadCodeNameOptionsDirectRequired(String sql) {
+    return queryDirectRequired(
+        sql, rs -> new CodeNameDto(trim(rs.getString(1)), trim(rs.getString(2))));
+  }
+
   protected Optional<String> fallbackCodeDescription(String procedureSignature, String code) {
     String normalized = trim(code);
     if (procedureSignature == null || normalized == null) {
@@ -127,7 +132,7 @@ public abstract class OracleRepositorySupport {
 
   /**
    * Loads the legacy configured natural-resource regions without production fallback data.
-   * Oracle and cursor failures propagate to the API boundary.
+   * Oracle query failures propagate to the API boundary.
    */
   protected List<CodeNameDto> loadOrgUnitOptionsRequired(boolean displayName) {
     return loadNaturalResourceRegions(displayName);
@@ -136,10 +141,11 @@ public abstract class OracleRepositorySupport {
   private List<CodeNameDto> loadNaturalResourceRegions(boolean displayName) {
     List<CodeNameDto> regions = new ArrayList<>();
     for (String orgUnitNumber : NATURAL_RESOURCE_REGION_CODES) {
-      SqlConsumer<CallableStatement> binder = cs -> cs.setString(1, orgUnitNumber);
-      SqlRowMapper<CodeNameDto> mapper = rs -> mapOrgUnitOption(rs, displayName);
       List<CodeNameDto> rows =
-          queryCursorProcedureFailClosed(FIND_ORG_UNIT_BY_NUMBER, binder, 2, mapper);
+          jdbcTemplate.query(
+              ORG_UNIT_BY_NUMBER,
+              (rs, rowNumber) -> mapOrgUnitOption(rs, displayName),
+              orgUnitNumber);
       rows.stream()
           .filter(option -> orgUnitNumber.equals(option.code()))
           .findFirst()

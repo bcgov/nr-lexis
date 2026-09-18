@@ -27,6 +27,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.dao.DataRetrievalFailureException;
@@ -44,7 +46,7 @@ class ExemptionRepositoryTest {
     ExemptionRepository repository =
         new ExemptionRepository(null) {
           @Override
-          protected List<CodeNameDto> loadCodeNameOptionsRequired(String procedureSignature) {
+          protected List<CodeNameDto> loadCodeNameOptionsDirectRequired(String sql) {
             return List.of(
                 new CodeNameDto("NEW", "New"),
                 new CodeNameDto("EXP", "Expired"));
@@ -186,6 +188,68 @@ class ExemptionRepositoryTest {
         .isFalse();
 
     verifyNoInteractions(jdbcTemplate);
+  }
+
+  @Test
+  void noneTypeShouldPreserveClientAndRegionFiltersInPageAndCount() {
+    TestExemptionRepository repository = new TestExemptionRepository();
+    ExemptionSearchCriteria criteria =
+        new ExemptionSearchCriteria(
+            null, null, null, " NULL ", "NULL", "00012345", null,
+            null, null, null, null, List.of(76L), 0, 10);
+
+    repository.search(criteria);
+
+    assertThat(repository.whereSql())
+        .contains("EE.EXPORT_EXEMPTION_TYPE_CODE IS NULL")
+        .doesNotContain("EE.EXPORT_EXEMPTION_TYPE_CODE = ?")
+        .contains("EE.EXPORT_EXEMPTION_STATUS_CODE = ?")
+        .contains("EEA.AGENT_CLIENT_NUMBER LIKE")
+        .contains("EEA.OWNER_CLIENT_NUMBER LIKE")
+        .contains("EEA.AGENT_CLIENT_NUMBER IS NULL")
+        .contains("EEA_REGION.ORG_UNIT_NO IN (?)")
+        .contains("OEO_REGION.ORG_UNIT_NO IN (?)");
+    assertThat(repository.countWhereSql).contains("EE.EXPORT_EXEMPTION_TYPE_CODE IS NULL");
+    assertThat(repository.bindValues()).containsExactly("NULL", "00012345", "00012345", 76L, 76L);
+    assertThat(repository.countBindValues).isEqualTo(repository.bindValues());
+
+    repository.count(criteria);
+
+    assertThat(repository.countWhereSql).contains("EE.EXPORT_EXEMPTION_TYPE_CODE IS NULL");
+    assertThat(repository.countBindValues).isEqualTo(repository.bindValues());
+  }
+
+  @Test
+  void noneTypeShouldAlsoApplyToTheFilterOnlyCountAndPagePlan() {
+    TestExemptionRepository repository = new TestExemptionRepository();
+    ExemptionSearchCriteria criteria =
+        new ExemptionSearchCriteria(
+            null, null, null, "NULL", null, null, null,
+            null, null, null, null, List.of(), 0, 10);
+
+    repository.search(criteria);
+
+    assertThat(repository.whereSql()).contains("EE.EXPORT_EXEMPTION_TYPE_CODE IS NULL");
+    assertThat(repository.countWhereSql).contains("EE.EXPORT_EXEMPTION_TYPE_CODE IS NULL");
+    assertThat(repository.countSelectSql()).doesNotContain("CANONICAL_EXEMPTION_APPLICATION");
+    assertThat(repository.bindValues()).isEmpty();
+    assertThat(repository.countBindValues).isEmpty();
+  }
+
+  @ParameterizedTest
+  @NullAndEmptySource
+  @ValueSource(strings = {" "})
+  void allTypesShouldNotAddANullOrEqualityFilter(String type) {
+    TestExemptionRepository repository = new TestExemptionRepository();
+
+    repository.search(
+        new ExemptionSearchCriteria(
+            null, null, null, type, null, null, null,
+            null, null, null, null, List.of(), 0, 10));
+
+    assertThat(repository.whereSql()).doesNotContain("EE.EXPORT_EXEMPTION_TYPE_CODE");
+    assertThat(repository.countWhereSql).doesNotContain("EE.EXPORT_EXEMPTION_TYPE_CODE");
+    assertThat(repository.bindValues()).isEmpty();
   }
 
   @Test
@@ -921,6 +985,8 @@ class ExemptionRepositoryTest {
     private List<Object> bindValues;
     private String pageSelectSql;
     private String countSelectSql;
+    private String countWhereSql;
+    private List<Object> countBindValues;
     private int countCalls;
     private int pageCalls;
 
@@ -960,6 +1026,8 @@ class ExemptionRepositoryTest {
     @Override
     protected int queryDirectCount(String selectSql, DirectSql where) {
       countSelectSql = selectSql;
+      countWhereSql = where.sql();
+      countBindValues = where.bindValues();
       whereSql = where.sql();
       bindValues = where.bindValues();
       countCalls++;

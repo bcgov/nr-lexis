@@ -1,6 +1,15 @@
 package ca.bc.gov.mof.lexis.repository.report;
 
+import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_COUNTRIES;
+import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_COUNTRIES_BY_GROUP;
+import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_EXEMPTION_REASONS;
+import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_EXEMPTION_STATUSES;
+import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_EXEMPTION_TYPES;
+import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_GROWTH_TYPES;
+import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_JURISDICTIONS;
+import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_PERMIT_STATUSES;
 import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_PORTS;
+import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ORG_UNIT_BY_CODE;
 
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.admin.ExportScheduleCreateRequestDto;
@@ -31,25 +40,7 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
       LEXIS_CODES_PACKAGE + "FIND_CURRENT_SCHEDULES(?)";
   private static final String FIND_NEXT_SCHEDULES =
       LEXIS_CODES_PACKAGE + "FIND_NEXT_SCHEDULES(?)";
-  private static final String FIND_ALL_JURISDICTION_CODES =
-      LEXIS_CODES_PACKAGE + "FIND_ALL_JURISDICTION_CODES(?)";
-  private static final String FIND_ALL_EXEMPTION_TYPE_CODES =
-      LEXIS_CODES_PACKAGE + "FIND_ALL_EXEMPTION_TYPE_CODES(?)";
-  private static final String FIND_ALL_EXEMPTION_REASON_CODES =
-      LEXIS_CODES_PACKAGE + "FIND_ALL_EXEMPT_RSN_CODES(?)";
-  private static final String FIND_ALL_EXEMPTION_STATUS_CODES =
-      LEXIS_CODES_PACKAGE + "FIND_ALL_EXEMPT_STS_CODES(?)";
-  private static final String FIND_ALL_GROWTH_TYPE_CODES =
-      LEXIS_CODES_PACKAGE + "FIND_ALL_GROWTH_TYPE_CODES(?)";
-  private static final String FIND_ALL_PERMIT_STATUS_CODES =
-      LEXIS_CODES_PACKAGE + "FIND_ALL_PERMIT_STATUS_CODES(?)";
-  private static final String FIND_COUNTRY_GROUP =
-      LEXIS_CODES_PACKAGE + "FIND_COUNTRY_GROUP(?,?)";
-  private static final String FIND_ALL_COUNTRY_CODES =
-      LEXIS_CODES_PACKAGE + "FIND_ALL_COUNTRY_CODES(?)";
   private static final String FIND_FOREST_CLIENT = LEXIS_CODES_PACKAGE + "FIND_FOREST_CLIENT(?,?)";
-  private static final String FIND_ORG_UNIT_BY_CODE =
-      LEXIS_CODES_PACKAGE + "FIND_ORG_UNIT_BY_CODE(?,?)";
   private static final String EXPORT_SCHEDULE_SELECT =
       """
       SELECT ES.EXPORT_SCHEDULE_ID,
@@ -279,59 +270,63 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
   public List<CodeNameDto> loadReportJurisdictionOptions() {
     return withAll(
         withoutRetiredIndianReserveJurisdiction(
-            loadCodeNameOptionsRequired(FIND_ALL_JURISDICTION_CODES)));
+            loadCodeNameOptionsDirectRequired(ACTIVE_JURISDICTIONS)));
   }
 
   public List<CodeNameDto> loadBiweeklyJurisdictionOptions() {
     return withAll(
         withoutRetiredIndianReserveJurisdiction(
-            loadCodeNameOptionsRequired(FIND_ALL_JURISDICTION_CODES)));
+            loadCodeNameOptionsDirectRequired(ACTIVE_JURISDICTIONS)));
   }
 
   public List<CodeNameDto> loadTeacJurisdictionOptions() {
     return withoutRetiredIndianReserveJurisdiction(
-        loadCodeNameOptionsRequired(FIND_ALL_JURISDICTION_CODES));
+        loadCodeNameOptionsDirectRequired(ACTIVE_JURISDICTIONS));
   }
 
   public List<CodeNameDto> loadReportExemptionTypeOptions() {
-    return withAll(loadCodeNameOptionsRequired(FIND_ALL_EXEMPTION_TYPE_CODES));
+    return withAll(loadCodeNameOptionsDirectRequired(ACTIVE_EXEMPTION_TYPES));
   }
 
   public List<CodeNameDto> loadTenureExemptionTypeOptions() {
-    return withTrailingAll(loadCodeNameOptionsRequired(FIND_ALL_EXEMPTION_TYPE_CODES));
+    return withTrailingAll(loadCodeNameOptionsDirectRequired(ACTIVE_EXEMPTION_TYPES));
   }
 
   public List<CodeNameDto> loadReportExemptionReasonOptions() {
-    return withAll(loadCodeNameOptionsRequired(FIND_ALL_EXEMPTION_REASON_CODES));
+    return withAll(loadCodeNameOptionsDirectRequired(ACTIVE_EXEMPTION_REASONS));
   }
 
   public List<CodeNameDto> loadReportExemptionStatusOptions() {
-    return withAll(loadCodeNameOptionsRequired(FIND_ALL_EXEMPTION_STATUS_CODES));
+    return withAll(loadCodeNameOptionsDirectRequired(ACTIVE_EXEMPTION_STATUSES));
   }
 
   public List<CodeNameDto> loadReportGrowthTypeOptions() {
-    return withAll(loadCodeNameOptionsRequired(FIND_ALL_GROWTH_TYPE_CODES));
+    return withAll(
+        queryDirectRequired(
+            ACTIVE_GROWTH_TYPES,
+            rs -> new CodeNameDto(trim(rs.getString(1)), trim(rs.getString(2)))));
   }
 
   public List<CodeNameDto> loadReportPermitStatusOptions() {
-    return withAll(loadCodeNameOptionsRequired(FIND_ALL_PERMIT_STATUS_CODES));
+    return withAll(loadCodeNameOptionsDirectRequired(ACTIVE_PERMIT_STATUSES));
   }
 
   public List<CodeNameDto> loadReportDestinationCountryOptions() {
     List<CodeNameDto> options =
-        queryCursorProcedureFailClosed(
-                FIND_COUNTRY_GROUP,
-                cs -> cs.setInt(1, 1),
-                2,
-                rs ->
-                    new CodeNameDto(getString(rs, "CODE"), getString(rs, "DESCRIPTION")))
+        jdbcTemplate.query(
+                ACTIVE_COUNTRIES_BY_GROUP,
+                (rs, rowNumber) ->
+                    new CodeNameDto(getString(rs, "CODE"), getString(rs, "DESCRIPTION")),
+                1)
             .stream()
             .toList();
     return withAll(options);
   }
 
   public List<CodeNameDto> loadAllReportDestinationCountryOptions() {
-    return loadCodeNameOptionsRequired(FIND_ALL_COUNTRY_CODES);
+    return queryDirectRequired(
+        ACTIVE_COUNTRIES,
+        rs -> new CodeNameDto(trim(rs.getString(1)), trim(rs.getString(2))));
   }
 
   public List<CodeNameDto> loadReportPortOfExportOptions() {
@@ -465,14 +460,15 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
       return Optional.empty();
     }
 
-    return queryCursorSingleFailClosed(
-        FIND_ORG_UNIT_BY_CODE,
-        cs -> cs.setString(1, normalizedOrgUnitCode),
-        2,
-        rs -> {
-          Long orgUnitNo = getLong(rs, "ORG_UNIT_NO");
-          return orgUnitNo == null ? null : orgUnitNo.toString();
-        });
+    List<String> orgUnitNumbers =
+        jdbcTemplate.query(
+            ORG_UNIT_BY_CODE,
+            (rs, rowNumber) -> {
+              Long orgUnitNo = getLong(rs, "ORG_UNIT_NO");
+              return orgUnitNo == null ? null : orgUnitNo.toString();
+            },
+            normalizedOrgUnitCode);
+    return orgUnitNumbers.isEmpty() ? Optional.empty() : Optional.ofNullable(orgUnitNumbers.get(0));
   }
 
   private List<CodeNameDto> withAll(List<CodeNameDto> options) {
