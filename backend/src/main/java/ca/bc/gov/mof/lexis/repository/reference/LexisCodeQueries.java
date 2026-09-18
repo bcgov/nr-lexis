@@ -51,6 +51,22 @@ public final class LexisCodeQueries {
       ORDER BY O.GROUP_BY, O.ORDER_BY
       """;
 
+  public static final String ACTIVE_PRODUCT_TYPES =
+      """
+      SELECT C.EXPORT_PRODUCT_TYPE_CODE AS CODE,
+             C.DESCRIPTION,
+             C.EFFECTIVE_DATE,
+             C.EXPIRY_DATE,
+             C.UPDATE_TIMESTAMP,
+             O.ORDER_BY,
+             O.GROUP_BY
+      FROM THE.EXPORT_PRODUCT_TYPE_CODE C
+      INNER JOIN THE.EXPORT_PRODUCT_TYPE_CODE_ORDER O
+        ON C.EXPORT_PRODUCT_TYPE_CODE = O.EXPORT_PRODUCT_TYPE_CODE
+      WHERE SYSDATE BETWEEN C.EFFECTIVE_DATE AND C.EXPIRY_DATE
+      ORDER BY O.GROUP_BY, O.ORDER_BY
+      """;
+
   private static final String PORT_SELECT =
       """
       SELECT C.EXPORT_PORT_OF_EXPORT_CODE AS CODE,

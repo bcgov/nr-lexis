@@ -1,6 +1,7 @@
 package ca.bc.gov.mof.lexis.repository.application;
 
 import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_GROWTH_TYPES;
+import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_PRODUCT_TYPES;
 import static ca.bc.gov.mof.lexis.util.ValueUtils.coalesce;
 import static ca.bc.gov.mof.lexis.util.ValueUtils.firstNonNull;
 
@@ -51,8 +52,6 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
       LEXIS_CODES_PACKAGE + "FIND_ALL_EXEMPT_RSN_CODES(?)";
   private static final String FIND_ALL_APPLICATION_STATUS_CODES =
       LEXIS_CODES_PACKAGE + "FIND_ALL_APP_STATUS_CODES(?)";
-  private static final String FIND_ALL_PRODUCT_TYPE_CODES =
-      LEXIS_CODES_PACKAGE + "FIND_ALL_PRODUCT_TYPE_CODES(?)";
   private static final String APPLICATION_SEARCH_SOURCE =
       """
       (
@@ -215,7 +214,10 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
   public List<CodeNameDto> loadProductTypeOptions() {
     List<CodeNameDto> options = new ArrayList<>();
     options.add(new CodeNameDto("", "All"));
-    options.addAll(loadCodeNameOptionsRequired(FIND_ALL_PRODUCT_TYPE_CODES));
+    options.addAll(
+        queryDirectRequired(
+            ACTIVE_PRODUCT_TYPES,
+            rs -> new CodeNameDto(trim(rs.getString(1)), trim(rs.getString(2)))));
     return options;
   }
 

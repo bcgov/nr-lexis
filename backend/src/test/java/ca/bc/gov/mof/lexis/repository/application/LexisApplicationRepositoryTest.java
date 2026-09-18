@@ -1,6 +1,7 @@
 package ca.bc.gov.mof.lexis.repository.application;
 
 import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_GROWTH_TYPES;
+import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_PRODUCT_TYPES;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -41,6 +42,78 @@ import org.springframework.jdbc.core.RowMapper;
 
 @DisplayName("Unit Test | LexisApplicationRepository")
 class LexisApplicationRepositoryTest {
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void productTypeOptionsShouldPrependAllAndPreserveDirectRowOrderAndDuplicates() throws Exception {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    ResultSet resultSet = mock(ResultSet.class);
+    when(resultSet.getString(1)).thenReturn(" T ", "H", " T ", null, " ");
+    when(resultSet.getString(2))
+        .thenReturn(" Unmanufactured Timber ", "Harvested Timber", " Unmanufactured Timber ", " ", null);
+    when(jdbcTemplate.query(eq(ACTIVE_PRODUCT_TYPES), any(RowMapper.class), any(Object[].class)))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<CodeNameDto> mapper = invocation.getArgument(1);
+              return List.of(
+                  mapper.mapRow(resultSet, 0),
+                  mapper.mapRow(resultSet, 1),
+                  mapper.mapRow(resultSet, 2),
+                  mapper.mapRow(resultSet, 3),
+                  mapper.mapRow(resultSet, 4));
+            });
+    LexisApplicationRepository repository = new LexisApplicationRepository(jdbcTemplate);
+
+    assertThat(repository.loadProductTypeOptions())
+        .containsExactly(
+            new CodeNameDto("", "All"),
+            new CodeNameDto("T", "Unmanufactured Timber"),
+            new CodeNameDto("H", "Harvested Timber"),
+            new CodeNameDto("T", "Unmanufactured Timber"),
+            new CodeNameDto(null, null),
+            new CodeNameDto(null, null));
+    ArgumentCaptor<Object[]> bindCaptor = ArgumentCaptor.forClass(Object[].class);
+    verify(jdbcTemplate)
+        .query(eq(ACTIVE_PRODUCT_TYPES), any(RowMapper.class), bindCaptor.capture());
+    assertThat(bindCaptor.getValue()).isEmpty();
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void productTypeOptionsShouldReturnOnlyAllForEmptyResultsAndPropagateOracleFailure() {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    DataAccessResourceFailureException failure =
+        new DataAccessResourceFailureException("Oracle unavailable");
+    when(jdbcTemplate.query(eq(ACTIVE_PRODUCT_TYPES), any(RowMapper.class), any(Object[].class)))
+        .thenReturn(List.of())
+        .thenThrow(failure);
+    LexisApplicationRepository repository = new LexisApplicationRepository(jdbcTemplate);
+
+    assertThat(repository.loadProductTypeOptions()).containsExactly(new CodeNameDto("", "All"));
+    assertThatThrownBy(repository::loadProductTypeOptions).isSameAs(failure);
+  }
+
+  @ParameterizedTest
+  @ValueSource(ints = {1, 2})
+  @SuppressWarnings("unchecked")
+  void productTypeOptionsShouldPropagatePositionalColumnFailure(int column) throws Exception {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    ResultSet resultSet = mock(ResultSet.class);
+    SQLException failure = new SQLException("Invalid column index " + column);
+    if (column == 2) {
+      when(resultSet.getString(1)).thenReturn("T");
+    }
+    when(resultSet.getString(column)).thenThrow(failure);
+    when(jdbcTemplate.query(eq(ACTIVE_PRODUCT_TYPES), any(RowMapper.class), any(Object[].class)))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<CodeNameDto> mapper = invocation.getArgument(1);
+              return List.of(mapper.mapRow(resultSet, 0));
+            });
+    LexisApplicationRepository repository = new LexisApplicationRepository(jdbcTemplate);
+
+    assertThatThrownBy(repository::loadProductTypeOptions).isSameAs(failure);
+  }
 
   @Test
   @SuppressWarnings("unchecked")

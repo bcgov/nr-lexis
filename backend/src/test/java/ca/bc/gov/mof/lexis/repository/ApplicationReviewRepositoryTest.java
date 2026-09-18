@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.repository;
 
+import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_PRODUCT_TYPES;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -10,6 +11,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewSearchResultDto;
 import ca.bc.gov.mof.lexis.repository.review.ApplicationReviewRepository;
@@ -25,6 +27,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.ArgumentCaptor;
 import org.springframework.aop.framework.ProxyFactory;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.data.domain.Page;
@@ -34,6 +37,7 @@ import org.springframework.data.domain.Slice;
 import org.springframework.data.domain.SliceImpl;
 import org.springframework.jdbc.core.CallableStatementCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.AnnotationTransactionAttributeSource;
 import org.springframework.transaction.interceptor.TransactionInterceptor;
@@ -42,6 +46,78 @@ import org.springframework.transaction.support.DefaultTransactionStatus;
 
 @DisplayName("Unit Test | ApplicationReviewRepository")
 class ApplicationReviewRepositoryTest {
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void productTypeOptionsShouldPrependAllAndPreserveDirectRowOrderAndDuplicates() throws Exception {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    ResultSet resultSet = mock(ResultSet.class);
+    when(resultSet.getString(1)).thenReturn(" T ", "H", " T ", null, " ");
+    when(resultSet.getString(2))
+        .thenReturn(" Unmanufactured Timber ", "Harvested Timber", " Unmanufactured Timber ", " ", null);
+    when(jdbcTemplate.query(eq(ACTIVE_PRODUCT_TYPES), any(RowMapper.class), any(Object[].class)))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<CodeNameDto> mapper = invocation.getArgument(1);
+              return List.of(
+                  mapper.mapRow(resultSet, 0),
+                  mapper.mapRow(resultSet, 1),
+                  mapper.mapRow(resultSet, 2),
+                  mapper.mapRow(resultSet, 3),
+                  mapper.mapRow(resultSet, 4));
+            });
+    ApplicationReviewRepository repository = new ApplicationReviewRepository(jdbcTemplate);
+
+    assertThat(repository.loadProductTypeOptions())
+        .containsExactly(
+            new CodeNameDto("", "All"),
+            new CodeNameDto("T", "Unmanufactured Timber"),
+            new CodeNameDto("H", "Harvested Timber"),
+            new CodeNameDto("T", "Unmanufactured Timber"),
+            new CodeNameDto(null, null),
+            new CodeNameDto(null, null));
+    ArgumentCaptor<Object[]> bindCaptor = ArgumentCaptor.forClass(Object[].class);
+    verify(jdbcTemplate)
+        .query(eq(ACTIVE_PRODUCT_TYPES), any(RowMapper.class), bindCaptor.capture());
+    assertThat(bindCaptor.getValue()).isEmpty();
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void productTypeOptionsShouldReturnOnlyAllForEmptyResultsAndPropagateOracleFailure() {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    DataAccessResourceFailureException failure =
+        new DataAccessResourceFailureException("Oracle unavailable");
+    when(jdbcTemplate.query(eq(ACTIVE_PRODUCT_TYPES), any(RowMapper.class), any(Object[].class)))
+        .thenReturn(List.of())
+        .thenThrow(failure);
+    ApplicationReviewRepository repository = new ApplicationReviewRepository(jdbcTemplate);
+
+    assertThat(repository.loadProductTypeOptions()).containsExactly(new CodeNameDto("", "All"));
+    assertThatThrownBy(repository::loadProductTypeOptions).isSameAs(failure);
+  }
+
+  @ParameterizedTest
+  @ValueSource(ints = {1, 2})
+  @SuppressWarnings("unchecked")
+  void productTypeOptionsShouldPropagatePositionalColumnFailure(int column) throws Exception {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    ResultSet resultSet = mock(ResultSet.class);
+    SQLException failure = new SQLException("Invalid column index " + column);
+    if (column == 2) {
+      when(resultSet.getString(1)).thenReturn("T");
+    }
+    when(resultSet.getString(column)).thenThrow(failure);
+    when(jdbcTemplate.query(eq(ACTIVE_PRODUCT_TYPES), any(RowMapper.class), any(Object[].class)))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<CodeNameDto> mapper = invocation.getArgument(1);
+              return List.of(mapper.mapRow(resultSet, 0));
+            });
+    ApplicationReviewRepository repository = new ApplicationReviewRepository(jdbcTemplate);
+
+    assertThatThrownBy(repository::loadProductTypeOptions).isSameAs(failure);
+  }
 
   @Test
   void searchShouldNotConstrainRegionWhenNoRegionSelected() {
