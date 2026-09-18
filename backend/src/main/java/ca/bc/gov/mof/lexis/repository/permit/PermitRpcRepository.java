@@ -452,7 +452,6 @@ public class PermitRpcRepository extends OracleRepositorySupport {
   private static final String FIND_LOG_AMV_BY_SCALE = LEXIS_CODES_PACKAGE + "FIND_LOG_AMV(?,?)";
   private static final String FIND_CONVERSION_FOR_DATE =
       LEXIS_CODES_PACKAGE + "FIND_CONVERSION_FOR_DATE(?,?,?)";
-  private static final String FIND_ALL_COUNTRY_CODES = LEXIS_CODES_PACKAGE + "FIND_ALL_COUNTRY_CODES(?)";
   private static final String FIND_COUNTRY_CODE = LEXIS_CODES_PACKAGE + "FIND_COUNTRY_CODE(?,?)";
   private static final String FIND_PERMIT_STATUS_CODE =
       LEXIS_CODES_PACKAGE + "FIND_PERMIT_STATUS_CODE(?,?)";
@@ -1302,10 +1301,8 @@ public class PermitRpcRepository extends OracleRepositorySupport {
   }
 
   public List<CountryCodeRow> findAllCountryCodesRequired() {
-    return queryCursorProcedureRequired(
-            FIND_ALL_COUNTRY_CODES,
-            null,
-            1,
+    return queryDirectRequired(
+            LexisCodeQueries.ACTIVE_COUNTRIES,
             rs ->
                 new CountryCodeRow(
                     getString(rs, "CODE"),

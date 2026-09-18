@@ -67,6 +67,22 @@ public final class LexisCodeQueries {
       ORDER BY O.GROUP_BY, O.ORDER_BY
       """;
 
+  public static final String ACTIVE_COUNTRIES =
+      """
+      SELECT C.EXPORT_COUNTRY_CODE AS CODE,
+             C.DESCRIPTION,
+             C.EFFECTIVE_DATE,
+             C.EXPIRY_DATE,
+             C.UPDATE_TIMESTAMP,
+             O.ORDER_BY,
+             O.GROUP_BY
+      FROM THE.EXPORT_COUNTRY_CODE C
+      INNER JOIN THE.EXPORT_COUNTRY_CODE_ORDER O
+        ON O.EXPORT_COUNTRY_CODE = C.EXPORT_COUNTRY_CODE
+      WHERE SYSDATE BETWEEN C.EFFECTIVE_DATE AND C.EXPIRY_DATE
+      ORDER BY O.GROUP_BY, O.ORDER_BY
+      """;
+
   private static final String PORT_SELECT =
       """
       SELECT C.EXPORT_PORT_OF_EXPORT_CODE AS CODE,

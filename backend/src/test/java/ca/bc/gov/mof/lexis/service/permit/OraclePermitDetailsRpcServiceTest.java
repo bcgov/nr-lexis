@@ -1577,15 +1577,16 @@ class OraclePermitDetailsRpcServiceTest {
         .thenReturn(
             List.of(
                 new CountryCodeRow("US", "United States", 2L, 2L),
+                new CountryCodeRow("NZ", "New Zealand", 2L, 1L),
                 new CountryCodeRow("CA", "Canada", 1L, 1L),
+                new CountryCodeRow("DE", "Germany", 2L, 1L),
                 new CountryCodeRow("GB", "United Kingdom", 0L, 1L)));
 
     PermitCountryListRpcResponseDto response = service.getCountryList();
 
-    assertThat(response.countryList()).hasSize(3);
-    assertThat(response.countryList().get(0).code()).isEqualTo("CA");
-    assertThat(response.countryList().get(1).code()).isEqualTo("US");
-    assertThat(response.countryList().get(2).code()).isEqualTo("GB");
+    assertThat(response.countryList())
+        .extracting(item -> item.code())
+        .containsExactly("CA", "DE", "NZ", "US", "GB");
   }
 
   @Test

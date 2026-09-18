@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.repository.report;
 
+import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_COUNTRIES;
 import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_GROWTH_TYPES;
 import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_PORTS;
 
@@ -44,8 +45,6 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
       LEXIS_CODES_PACKAGE + "FIND_ALL_PERMIT_STATUS_CODES(?)";
   private static final String FIND_COUNTRY_GROUP =
       LEXIS_CODES_PACKAGE + "FIND_COUNTRY_GROUP(?,?)";
-  private static final String FIND_ALL_COUNTRY_CODES =
-      LEXIS_CODES_PACKAGE + "FIND_ALL_COUNTRY_CODES(?)";
   private static final String FIND_FOREST_CLIENT = LEXIS_CODES_PACKAGE + "FIND_FOREST_CLIENT(?,?)";
   private static final String FIND_ORG_UNIT_BY_CODE =
       LEXIS_CODES_PACKAGE + "FIND_ORG_UNIT_BY_CODE(?,?)";
@@ -333,7 +332,9 @@ public class LexisReportScheduleRepository extends OracleRepositorySupport {
   }
 
   public List<CodeNameDto> loadAllReportDestinationCountryOptions() {
-    return loadCodeNameOptionsRequired(FIND_ALL_COUNTRY_CODES);
+    return queryDirectRequired(
+        ACTIVE_COUNTRIES,
+        rs -> new CodeNameDto(trim(rs.getString(1)), trim(rs.getString(2))));
   }
 
   public List<CodeNameDto> loadReportPortOfExportOptions() {
