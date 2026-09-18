@@ -42,6 +42,7 @@ import ConfirmationModal from '@/components/ConfirmationModal'
 import ContentLoadingOverlay from '@/components/ContentLoadingOverlay'
 import DetailBreadcrumb from '@/components/DetailBreadcrumb'
 import DetailLoadError from '@/components/DetailLoadError'
+import DetailSidePanel from '@/components/DetailSidePanel'
 import DisabledButtonTooltip from '@/components/DisabledButtonTooltip'
 import EmptyState from '@/components/EmptyState'
 import ForestClientComboBox from '@/components/ForestClientComboBox'
@@ -861,6 +862,7 @@ const ProvincialPermitDetailsPage = () => {
   )
   const [boicPackageFieldErrors, setBoicPackageFieldErrors] =
     useState<BlanketOicPackageFieldErrors>({})
+  const [boicPackageErrorMessage, setBoicPackageErrorMessage] = useState('')
   const [editingBoicPackageNumber, setEditingBoicPackageNumber] = useState<string | null>(null)
   const [isCreatingBoicPackage, setIsCreatingBoicPackage] = useState(false)
   const [boicCodeOptionsReady, setBoicCodeOptionsReady] = useState(false)
@@ -947,6 +949,7 @@ const ProvincialPermitDetailsPage = () => {
   const deferredPermitTabLoadsRef = useRef(new Set<DeferredPermitTabId>())
   const loadedDeferredPermitTabsRef = useRef(new Set<DeferredPermitTabId>())
   const permitMutationInFlightRef = useRef(false)
+  const packagePanelLauncherRef = useRef<HTMLButtonElement | null>(null)
   const tryBeginPermitMutation = useCallback(() => {
     if (permitMutationInFlightRef.current) return null
     permitMutationInFlightRef.current = true
@@ -987,6 +990,7 @@ const ProvincialPermitDetailsPage = () => {
     setBoicPackageForm(EMPTY_BLANKET_OIC_PACKAGE_FORM)
     setBoicPackageBaselineForm(EMPTY_BLANKET_OIC_PACKAGE_FORM)
     setBoicPackageFieldErrors({})
+    setBoicPackageErrorMessage('')
     setEditingBoicPackageNumber(null)
     setIsLoadingBoicPackage(false)
     setIsSavingBoicPackage(false)
@@ -3310,7 +3314,7 @@ const ProvincialPermitDetailsPage = () => {
 
   const resetBlanketOicPackageForm = useCallback(() => {
     beginBoicPackageEditRequest()
-    setActionErrorMessage('')
+    setBoicPackageErrorMessage('')
     setIsLoadingBoicPackage(false)
     setBoicCodeOptionsReady(false)
     setIsCreatingBoicPackage(false)
@@ -3322,7 +3326,6 @@ const ProvincialPermitDetailsPage = () => {
 
   const startBlanketOicPackageCreate = useCallback(() => {
     if (blanketOicPackageActionsDisabled) return
-    setActionErrorMessage('')
     resetBlanketOicPackageForm()
     setIsCreatingBoicPackage(true)
   }, [blanketOicPackageActionsDisabled, resetBlanketOicPackageForm])
@@ -3332,7 +3335,6 @@ const ProvincialPermitDetailsPage = () => {
       if (!canEditBlanketOicPackages || !packageNumberToEdit || blanketOicPackageActionsDisabled) {
         return
       }
-      setActionErrorMessage('')
       resetBlanketOicPackageForm()
       setEditingBoicPackageNumber(packageNumberToEdit)
       const isLatestRequest = beginBoicPackageEditRequest()
@@ -3361,7 +3363,7 @@ const ProvincialPermitDetailsPage = () => {
         if (!isLatestRequest()) return
         console.error(error)
         resetBlanketOicPackageForm()
-        setActionErrorMessage('Unable to load the Blanket OIC package for editing.')
+        setBoicPackageErrorMessage('Unable to load the Blanket OIC package for editing.')
       } finally {
         if (isLatestRequest()) {
           setIsLoadingBoicPackage(false)
@@ -3392,13 +3394,13 @@ const ProvincialPermitDetailsPage = () => {
       permitForm &&
       permitForm.orgUnitNumber.trim() !== detailValue(detail?.orgUnitNumber).trim()
     ) {
-      setActionErrorMessage('Save or discard the Region change before saving a package.')
+      setBoicPackageErrorMessage('Save or discard the Region change before saving a package.')
       return false
     }
     const fieldErrors = validateBlanketOicPackage(boicPackageForm)
     if (Object.values(fieldErrors).some(Boolean)) {
       setBoicPackageFieldErrors(fieldErrors)
-      setActionErrorMessage(
+      setBoicPackageErrorMessage(
         Object.values(fieldErrors).find((error): error is string => !!error) ??
           'Please fix validation errors before saving the Blanket OIC package.',
       )
@@ -3432,7 +3434,7 @@ const ProvincialPermitDetailsPage = () => {
       speciesCodes,
     }
 
-    setActionErrorMessage('')
+    setBoicPackageErrorMessage('')
     setActionInfoMessage('')
     setIsSavingBoicPackage(true)
     try {
@@ -3440,7 +3442,7 @@ const ProvincialPermitDetailsPage = () => {
         ? await updateBlanketOicPackage(request)
         : await addBlanketOicPackage(request)
       if (!result.success) {
-        setActionErrorMessage(
+        setBoicPackageErrorMessage(
           result.errors[0] || result.message || 'Unable to save the Blanket OIC package.',
         )
         return false
@@ -3473,7 +3475,7 @@ const ProvincialPermitDetailsPage = () => {
       return true
     } catch (error) {
       console.error(error)
-      setActionErrorMessage('Unable to save the Blanket OIC package.')
+      setBoicPackageErrorMessage('Unable to save the Blanket OIC package.')
       return false
     } finally {
       setIsSavingBoicPackage(false)
@@ -3507,6 +3509,7 @@ const ProvincialPermitDetailsPage = () => {
       }
       setActionErrorMessage('')
       setActionInfoMessage('')
+      setBoicPackageErrorMessage('')
       setIsDeletingBoicPackageNumber(packageNumberToDelete)
       let failureMessage = ''
       try {
@@ -4884,6 +4887,7 @@ const ProvincialPermitDetailsPage = () => {
 
   return (
     <Grid
+      id="permit-detail-content"
       fullWidth
       className={`default-grid detail-page-grid content-loading-region${
         isRefreshingDetail ? ' is-loading' : ''
@@ -5097,6 +5101,18 @@ const ProvincialPermitDetailsPage = () => {
                 subtitle={actionErrorMessage}
                 lowContrast
                 onCloseButtonClick={() => setActionErrorMessage('')}
+              />
+            </Column>
+          )}
+
+          {!!boicPackageErrorMessage && !blanketOicPackageEditorOpen && (
+            <Column sm={4} md={8} lg={16} className="detail-page-error">
+              <InlineNotification
+                kind="error"
+                title="Package needs attention"
+                subtitle={boicPackageErrorMessage}
+                lowContrast
+                onCloseButtonClick={() => setBoicPackageErrorMessage('')}
               />
             </Column>
           )}
@@ -6253,9 +6269,10 @@ const ProvincialPermitDetailsPage = () => {
                                             kind="ghost"
                                             size="sm"
                                             disabled={blanketOicPackageActionsDisabled}
-                                            onClick={() =>
+                                            onClick={(event) => {
+                                              packagePanelLauncherRef.current = event.currentTarget
                                               void onEditBlanketOicPackage(row.packageNumber)
-                                            }
+                                            }}
                                           >
                                             Edit
                                           </Button>
@@ -6308,143 +6325,23 @@ const ProvincialPermitDetailsPage = () => {
                               headingLevel={3}
                             />
                           )}
-                          {canEditBlanketOicPackages &&
-                            !isCreatingBoicPackage &&
-                            !editingBoicPackageNumber && (
-                              <div className="application-detail-edit-section">
-                                <Button
-                                  type="button"
-                                  kind="primary"
-                                  size="sm"
-                                  disabled={blanketOicPackageActionsDisabled}
-                                  onClick={startBlanketOicPackageCreate}
-                                >
-                                  Create package
-                                </Button>
-                              </div>
-                            )}
-                          {canEditBlanketOicPackages &&
-                            (isCreatingBoicPackage || !!editingBoicPackageNumber) && (
-                              <div className="application-detail-edit-section">
-                                <h3>
-                                  {editingBoicPackageNumber
-                                    ? `Edit ${formatPackageNumberLabel(editingBoicPackageNumber)}`
-                                    : 'Create Blanket OIC package'}
-                                </h3>
-                                {isLoadingBoicPackage && (
-                                  <InlineLoading description="Loading package…" />
-                                )}
-                                <div className="legacy-search-grid">
-                                  <TextInput
-                                    id="boicPackageNumber"
-                                    labelText={requiredLabel('Package number')}
-                                    aria-required="true"
-                                    maxLength={20}
-                                    value={boicPackageForm.packageNumber}
-                                    invalid={!!boicPackageFieldErrors.packageNumber}
-                                    invalidText={boicPackageFieldErrors.packageNumber}
-                                    disabled={isLoadingBoicPackage || isSavingBoicPackage}
-                                    onChange={(event) =>
-                                      setBlanketOicPackageFormField(
-                                        'packageNumber',
-                                        event.target.value.toUpperCase(),
-                                      )
-                                    }
-                                  />
-                                  <TextInput
-                                    id="boicPackageVolume"
-                                    labelText={requiredLabel('Package volume (m³)')}
-                                    aria-required="true"
-                                    value={boicPackageForm.volume}
-                                    invalid={!!boicPackageFieldErrors.volume}
-                                    invalidText={boicPackageFieldErrors.volume}
-                                    disabled={isLoadingBoicPackage || isSavingBoicPackage}
-                                    onChange={(event) =>
-                                      setBlanketOicPackageFormField('volume', event.target.value)
-                                    }
-                                  />
-                                  <TextInput
-                                    id="boicPackageAverageLength"
-                                    helperText="Enter greater than 0 and no more than 99."
-                                    labelText={requiredLabel('Average length')}
-                                    aria-required="true"
-                                    value={boicPackageForm.averageLength}
-                                    invalid={!!boicPackageFieldErrors.averageLength}
-                                    invalidText={boicPackageFieldErrors.averageLength}
-                                    disabled={isLoadingBoicPackage || isSavingBoicPackage}
-                                    onChange={(event) =>
-                                      setBlanketOicPackageFormField(
-                                        'averageLength',
-                                        event.target.value,
-                                      )
-                                    }
-                                  />
-                                  <TextInput
-                                    id="boicPackageAverageDiameter"
-                                    helperText="Enter greater than 0 and no more than 99.99."
-                                    labelText={requiredLabel('Average top diameter')}
-                                    aria-required="true"
-                                    value={boicPackageForm.averageDiameter}
-                                    invalid={!!boicPackageFieldErrors.averageDiameter}
-                                    invalidText={boicPackageFieldErrors.averageDiameter}
-                                    disabled={isLoadingBoicPackage || isSavingBoicPackage}
-                                    onChange={(event) =>
-                                      setBlanketOicPackageFormField(
-                                        'averageDiameter',
-                                        event.target.value,
-                                      )
-                                    }
-                                  />
-                                </div>
-                                <BlanketOicPackageCodeFields
-                                  region={String(detail.orgUnitNumber ?? '')}
-                                  value={boicPackageForm}
-                                  onChange={setBlanketOicPackageFormField}
-                                  disabled={isLoadingBoicPackage || isSavingBoicPackage}
-                                  onAvailabilityChange={setBoicCodeOptionsReady}
-                                  fieldErrors={boicPackageFieldErrors}
-                                />
-                                <TextArea
-                                  id="boicPackageComments"
-                                  labelText="Comments"
-                                  value={boicPackageForm.comments}
-                                  disabled={isLoadingBoicPackage || isSavingBoicPackage}
-                                  onChange={(event) =>
-                                    setBlanketOicPackageFormField('comments', event.target.value)
-                                  }
-                                />
-                                <div className="application-detail-actions">
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    disabled={
-                                      isLoadingBoicPackage ||
-                                      isSavingBoicPackage ||
-                                      !boicCodeOptionsReady
-                                    }
-                                    renderIcon={isSavingBoicPackage ? PendingIcon : undefined}
-                                    onClick={() => void onSaveBlanketOicPackage()}
-                                  >
-                                    {isSavingBoicPackage
-                                      ? 'Saving…'
-                                      : editingBoicPackageNumber
-                                        ? 'Save package'
-                                        : 'Create package'}
-                                  </Button>
-                                  {(editingBoicPackageNumber || isCreatingBoicPackage) && (
-                                    <Button
-                                      type="button"
-                                      kind="ghost"
-                                      size="sm"
-                                      disabled={isSavingBoicPackage}
-                                      onClick={resetBlanketOicPackageForm}
-                                    >
-                                      {editingBoicPackageNumber ? 'Cancel edit' : 'Cancel'}
-                                    </Button>
-                                  )}
-                                </div>
-                              </div>
-                            )}
+                          {canEditBlanketOicPackages && (
+                            <div className="application-detail-edit-section">
+                              <Button
+                                id="create-boic-package"
+                                type="button"
+                                kind="primary"
+                                size="sm"
+                                disabled={blanketOicPackageActionsDisabled}
+                                onClick={(event) => {
+                                  packagePanelLauncherRef.current = event.currentTarget
+                                  startBlanketOicPackageCreate()
+                                }}
+                              >
+                                Create package
+                              </Button>
+                            </div>
+                          )}
                         </fieldset>
                         <fieldset
                           className="legacy-form-fieldset"
@@ -7085,6 +6982,138 @@ const ProvincialPermitDetailsPage = () => {
           }
         }}
       />
+      {detail?.blanketOic && (
+        <DetailSidePanel
+          open={canEditBlanketOicPackages && blanketOicPackageEditorOpen}
+          title={
+            editingBoicPackageNumber
+              ? `Edit ${formatPackageNumberLabel(editingBoicPackageNumber)}`
+              : 'Create Blanket OIC package'
+          }
+          className="permit-package-panel application-detail-edit-section"
+          contentSelector="#permit-detail-content"
+          initialFocusSelector="#boicPackageNumber"
+          launcherRef={packagePanelLauncherRef}
+          fallbackFocusSelector="#create-boic-package"
+          loading={isLoadingBoicPackage}
+          busy={isSavingBoicPackage}
+          onClose={resetBlanketOicPackageForm}
+          actions={[
+            {
+              label: editingBoicPackageNumber ? 'Cancel edit' : 'Cancel',
+              kind: 'secondary',
+              disabled: isSavingBoicPackage,
+              onClick: resetBlanketOicPackageForm,
+            },
+            {
+              label: isSavingBoicPackage
+                ? 'Saving…'
+                : editingBoicPackageNumber
+                  ? 'Save package'
+                  : 'Create package',
+              kind: 'primary',
+              disabled: isLoadingBoicPackage || isSavingBoicPackage || !boicCodeOptionsReady,
+              renderIcon: isSavingBoicPackage ? PendingIcon : undefined,
+              onClick: async () => {
+                if (await onSaveBlanketOicPackage()) return
+                requestAnimationFrame(() => {
+                  const panel = document.querySelector('.permit-package-panel')
+                  const invalid = panel?.querySelector<HTMLElement>('[aria-invalid="true"]')
+                  const target =
+                    invalid ?? panel?.querySelector<HTMLElement>('[data-package-error]')
+                  target?.focus()
+                  target?.scrollIntoView({ block: 'nearest' })
+                })
+              },
+            },
+          ]}
+        >
+          <div className="permit-package-panel__form">
+            {!!boicPackageErrorMessage && (
+              <div tabIndex={-1} data-package-error>
+                <InlineNotification
+                  kind="error"
+                  title="Package needs attention"
+                  subtitle={
+                    Object.values(boicPackageFieldErrors).some(Boolean)
+                      ? 'Check the highlighted fields and try again.'
+                      : boicPackageErrorMessage
+                  }
+                  lowContrast
+                  hideCloseButton
+                />
+              </div>
+            )}
+            {isLoadingBoicPackage && <InlineLoading description="Loading package…" />}
+            <div className="legacy-search-grid">
+              <TextInput
+                id="boicPackageNumber"
+                labelText={requiredLabel('Package number')}
+                aria-required="true"
+                maxLength={20}
+                value={boicPackageForm.packageNumber}
+                invalid={!!boicPackageFieldErrors.packageNumber}
+                invalidText={boicPackageFieldErrors.packageNumber}
+                disabled={isLoadingBoicPackage || isSavingBoicPackage}
+                onChange={(event) =>
+                  setBlanketOicPackageFormField('packageNumber', event.target.value.toUpperCase())
+                }
+              />
+              <TextInput
+                id="boicPackageVolume"
+                labelText={requiredLabel('Package volume (m³)')}
+                aria-required="true"
+                value={boicPackageForm.volume}
+                invalid={!!boicPackageFieldErrors.volume}
+                invalidText={boicPackageFieldErrors.volume}
+                disabled={isLoadingBoicPackage || isSavingBoicPackage}
+                onChange={(event) => setBlanketOicPackageFormField('volume', event.target.value)}
+              />
+              <TextInput
+                id="boicPackageAverageLength"
+                helperText="Enter greater than 0 and no more than 99."
+                labelText={requiredLabel('Average length')}
+                aria-required="true"
+                value={boicPackageForm.averageLength}
+                invalid={!!boicPackageFieldErrors.averageLength}
+                invalidText={boicPackageFieldErrors.averageLength}
+                disabled={isLoadingBoicPackage || isSavingBoicPackage}
+                onChange={(event) =>
+                  setBlanketOicPackageFormField('averageLength', event.target.value)
+                }
+              />
+              <TextInput
+                id="boicPackageAverageDiameter"
+                helperText="Enter greater than 0 and no more than 99.99."
+                labelText={requiredLabel('Average top diameter')}
+                aria-required="true"
+                value={boicPackageForm.averageDiameter}
+                invalid={!!boicPackageFieldErrors.averageDiameter}
+                invalidText={boicPackageFieldErrors.averageDiameter}
+                disabled={isLoadingBoicPackage || isSavingBoicPackage}
+                onChange={(event) =>
+                  setBlanketOicPackageFormField('averageDiameter', event.target.value)
+                }
+              />
+            </div>
+            <BlanketOicPackageCodeFields
+              region={String(detail.orgUnitNumber ?? '')}
+              value={boicPackageForm}
+              onChange={setBlanketOicPackageFormField}
+              disabled={isLoadingBoicPackage || isSavingBoicPackage}
+              onAvailabilityChange={setBoicCodeOptionsReady}
+              fieldErrors={boicPackageFieldErrors}
+            />
+            <TextArea
+              id="boicPackageComments"
+              labelText="Comments"
+              value={boicPackageForm.comments}
+              disabled={isLoadingBoicPackage || isSavingBoicPackage}
+              onChange={(event) => setBlanketOicPackageFormField('comments', event.target.value)}
+            />
+          </div>
+        </DetailSidePanel>
+      )}
       <UnsavedChangesGuard
         isDirty={isPermitDirty}
         isBusy={

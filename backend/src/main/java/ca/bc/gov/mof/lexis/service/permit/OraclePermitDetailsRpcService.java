@@ -4474,15 +4474,16 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
 
   private boolean synchronizePermitTransitionState(
       PermitMutationRow previous, PermitMutationRow target, String userId) {
+    // The hidden application is created with the permit's current client locations on first package.
     if (isBlanketOicPermit(target)
+        && target.oicApplicationNumber() != null
         && (!java.util.Objects.equals(
                 trimToNull(previous.clientNumber()), trimToNull(target.clientNumber()))
             || !java.util.Objects.equals(
                 trimToNull(previous.clientLocationCode()),
                 trimToNull(target.clientLocationCode())))) {
       Long applicationNumber = target.oicApplicationNumber();
-      if (applicationNumber == null
-          || applicationDetailsRpcService == null
+      if (applicationDetailsRpcService == null
           || !applicationDetailsRpcService.synchronizeApplicationOwner(
               applicationNumber,
               target.clientNumber(),
