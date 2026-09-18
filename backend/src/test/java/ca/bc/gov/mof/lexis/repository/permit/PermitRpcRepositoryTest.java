@@ -892,23 +892,23 @@ class PermitRpcRepositoryTest {
   }
 
   @Test
-  void requiredPermitValidationCodesShouldUseLegacyCodeProcedures() throws Exception {
+  void requiredPermitValidationCodesShouldUseBoundDirectQueries() throws Exception {
     PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
 
     assertRequiredCodeLookup(
-        "{ call LEXIS_CODES.FIND_PERMIT_STATUS_CODE(?,?) }",
+        LexisCodeQueries.PERMIT_STATUS_BY_CODE,
         "ACT",
         repository::isPermitStatusCodeValidRequired);
     assertRequiredCodeLookup(
-        "{ call LEXIS_CODES.FIND_COUNTRY_CODE(?,?) }",
+        LexisCodeQueries.COUNTRY_BY_CODE,
         "US",
         repository::isCountryCodeValidRequired);
     assertRequiredCodeLookup(
-        "{ call LEXIS_CODES.FIND_SCALE_METHOD_CODE(?,?) }",
+        LexisCodeQueries.SCALE_METHOD_BY_CODE,
         "W",
         repository::isScaleMethodCodeValidRequired);
     assertRequiredCodeLookup(
-        "{ call LEXIS_CODES.FIND_TRANSPORT_TYPE_CODE(?,?) }",
+        LexisCodeQueries.TRANSPORT_TYPE_BY_CODE,
         "TRUCK",
         repository::isTransportTypeCodeValidRequired);
   }
@@ -980,8 +980,10 @@ class PermitRpcRepositoryTest {
   }
 
   @Test
+  @SuppressWarnings("unchecked")
   void requiredPermitValidationCodeLookupShouldPropagateOracleFailure() {
-    when(jdbcTemplate.execute(any(String.class), any(CallableStatementCallback.class)))
+    when(jdbcTemplate.query(
+            eq(LexisCodeQueries.PERMIT_STATUS_BY_CODE), any(RowMapper.class), eq("ACT")))
         .thenThrow(new DataAccessResourceFailureException("Oracle unavailable"));
     PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
 
@@ -1503,17 +1505,21 @@ class PermitRpcRepositoryTest {
     when(callableStatement.getObject(cursorIndex)).thenReturn(resultSet);
   }
 
+  @SuppressWarnings("unchecked")
   private void assertRequiredCodeLookup(
-      String call,
+      String sql,
       String code,
       java.util.function.Predicate<String> lookup)
       throws Exception {
-    org.mockito.Mockito.reset(callableStatement, resultSet);
-    stubCursorProcedure(call, 2);
-    when(resultSet.next()).thenReturn(true, false);
+    when(jdbcTemplate.query(eq(sql), any(RowMapper.class), eq(code)))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<Boolean> mapper = invocation.getArgument(1);
+              return List.of(mapper.mapRow(resultSet, 0));
+            });
 
-    assertThat(lookup.test(code)).isTrue();
-    verify(callableStatement).setString(1, code);
-    verify(callableStatement).registerOutParameter(2, Types.REF_CURSOR);
+    assertThat(lookup.test(" " + code + " ")).isTrue();
+    verify(jdbcTemplate).query(eq(sql), any(RowMapper.class), eq(code));
+    verifyNoInteractions(resultSet);
   }
 }

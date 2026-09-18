@@ -44,7 +44,7 @@ class ExemptionRepositoryTest {
     ExemptionRepository repository =
         new ExemptionRepository(null) {
           @Override
-          protected List<CodeNameDto> loadCodeNameOptionsRequired(String procedureSignature) {
+          protected List<CodeNameDto> loadCodeNameOptionsDirectRequired(String sql) {
             return List.of(
                 new CodeNameDto("NEW", "New"),
                 new CodeNameDto("EXP", "Expired"));

@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.repository.upload;
 
+import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.FILE_TYPE_BY_CODE;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -15,6 +16,8 @@ import java.sql.CallableStatement;
 import java.sql.ResultSet;
 import java.sql.Timestamp;
 import java.sql.Types;
+import java.util.ArrayList;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -24,6 +27,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.jdbc.core.CallableStatementCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
 
 @ExtendWith(MockitoExtension.class)
 class UploadRepositoryTest {
@@ -33,16 +37,16 @@ class UploadRepositoryTest {
   @Mock private ResultSet resultSet;
 
   @Test
-  void isFileTypeCodeValidRequiredShouldUseLexisFileTypeLookup() throws Exception {
-    stubCursorProcedure("{ call LEXIS_CODES.FIND_FILE_TYPE_CODE(?,?) }", 2);
+  @SuppressWarnings("unchecked")
+  void isFileTypeCodeValidRequiredShouldUseDirectFileTypeLookup() throws Exception {
+    stubFileTypeQuery();
     when(resultSet.next()).thenReturn(true, false);
     when(resultSet.getString("CODE")).thenReturn("PDF");
 
     UploadRepository repository = new UploadRepository(jdbcTemplate);
 
     assertThat(repository.isFileTypeCodeValidRequired("PDF")).isTrue();
-    verify(callableStatement).setString(1, "PDF");
-    verify(callableStatement).registerOutParameter(2, Types.REF_CURSOR);
+    verify(jdbcTemplate).query(eq(FILE_TYPE_BY_CODE), any(RowMapper.class), eq("PDF"));
   }
 
   @Test
@@ -54,19 +58,19 @@ class UploadRepositoryTest {
   }
 
   @Test
+  @SuppressWarnings("unchecked")
   void isFileTypeCodeValidRequiredShouldPreserveLegitimateEmptyResult() throws Exception {
-    stubCursorProcedure("{ call LEXIS_CODES.FIND_FILE_TYPE_CODE(?,?) }", 2);
+    stubFileTypeQuery();
     when(resultSet.next()).thenReturn(false);
     UploadRepository repository = new UploadRepository(jdbcTemplate);
 
     assertThat(repository.isFileTypeCodeValidRequired("PDF")).isFalse();
-    verify(callableStatement).setString(1, "PDF");
-    verify(callableStatement).registerOutParameter(2, Types.REF_CURSOR);
+    verify(jdbcTemplate).query(eq(FILE_TYPE_BY_CODE), any(RowMapper.class), eq("PDF"));
   }
 
   @Test
   void isFileTypeCodeValidRequiredShouldRejectMismatchedOracleCode() throws Exception {
-    stubCursorProcedure("{ call LEXIS_CODES.FIND_FILE_TYPE_CODE(?,?) }", 2);
+    stubFileTypeQuery();
     when(resultSet.next()).thenReturn(true, false);
     when(resultSet.getString("CODE")).thenReturn("ZIP");
     UploadRepository repository = new UploadRepository(jdbcTemplate);
@@ -75,17 +79,29 @@ class UploadRepositoryTest {
   }
 
   @Test
+  @SuppressWarnings("unchecked")
   void isFileTypeCodeValidRequiredShouldPropagateOracleFailure() {
     DataAccessResourceFailureException failure =
         new DataAccessResourceFailureException("file type lookup unavailable");
-    when(
-            jdbcTemplate.execute(
-                eq("{ call LEXIS_CODES.FIND_FILE_TYPE_CODE(?,?) }"),
-                any(CallableStatementCallback.class)))
+    when(jdbcTemplate.query(eq(FILE_TYPE_BY_CODE), any(RowMapper.class), eq("PDF")))
         .thenThrow(failure);
     UploadRepository repository = new UploadRepository(jdbcTemplate);
 
     assertThatThrownBy(() -> repository.isFileTypeCodeValidRequired("PDF")).isSameAs(failure);
+  }
+
+  @SuppressWarnings("unchecked")
+  private void stubFileTypeQuery() {
+    when(jdbcTemplate.query(eq(FILE_TYPE_BY_CODE), any(RowMapper.class), eq("PDF")))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<String> mapper = invocation.getArgument(1);
+              List<String> rows = new ArrayList<>();
+              while (resultSet.next()) {
+                rows.add(mapper.mapRow(resultSet, rows.size()));
+              }
+              return rows;
+            });
   }
 
   @Test

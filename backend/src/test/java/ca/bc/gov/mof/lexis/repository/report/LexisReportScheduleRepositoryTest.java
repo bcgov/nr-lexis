@@ -1,12 +1,18 @@
 package ca.bc.gov.mof.lexis.repository.report;
 
 import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_COUNTRIES;
+import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_COUNTRIES_BY_GROUP;
+import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_EXEMPTION_TYPES;
 import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_GROWTH_TYPES;
+import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_JURISDICTIONS;
 import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_PORTS;
+import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ORG_UNIT_BY_CODE;
+import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ORG_UNIT_BY_NUMBER;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.groups.Tuple.tuple;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -22,6 +28,8 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -116,18 +124,14 @@ class LexisReportScheduleRepositoryTest {
   }
 
   @Test
+  @SuppressWarnings("unchecked")
   void loadRegionOptionsShouldResolveEachLegacyConfiguredRegionByNumber() throws Exception {
-    stubCursorProcedure("{ call LEXIS_CODES.FIND_ORG_UNIT_BY_NUMBER(?,?) }", 2);
-    when(resultSet.next())
-        .thenReturn(
-            true, false,
-            true, false,
-            true, false,
-            true, false,
-            true, false,
-            true, false,
-            true, false,
-            true, false);
+    when(jdbcTemplate.query(eq(ORG_UNIT_BY_NUMBER), any(RowMapper.class), anyString()))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<CodeNameDto> mapper = invocation.getArgument(1);
+              return List.of(mapper.mapRow(resultSet, 0));
+            });
     when(resultSet.getLong("ORG_UNIT_NO"))
         .thenReturn(1903L, 1904L, 1905L, 1906L, 1907L, 1908L, 1909L, 1910L);
     when(resultSet.wasNull()).thenReturn(false);
@@ -159,25 +163,25 @@ class LexisReportScheduleRepositoryTest {
             tuple("1908", "Skeena Natural Resource Region"),
             tuple("1909", "South Coast Natural Resource Region"),
             tuple("1910", "West Coast Natural Resource Region"));
-    verify(callableStatement, times(8)).registerOutParameter(2, Types.REF_CURSOR);
-    for (long orgUnitNumber = 1903L; orgUnitNumber <= 1910L; orgUnitNumber++) {
-      verify(callableStatement).setString(1, Long.toString(orgUnitNumber));
-    }
+    ArgumentCaptor<String> regionBinds = ArgumentCaptor.forClass(String.class);
+    verify(jdbcTemplate, times(8))
+        .query(eq(ORG_UNIT_BY_NUMBER), any(RowMapper.class), regionBinds.capture());
+    assertThat(regionBinds.getAllValues())
+        .containsExactly("1903", "1904", "1905", "1906", "1907", "1908", "1909", "1910");
   }
 
   @Test
+  @SuppressWarnings("unchecked")
   void loadRegionOptionsShouldNotSynthesizeAnUnresolvedRegion() throws Exception {
-    stubCursorProcedure("{ call LEXIS_CODES.FIND_ORG_UNIT_BY_NUMBER(?,?) }", 2);
-    when(resultSet.next())
-        .thenReturn(
-            true, false,
-            false,
-            false,
-            false,
-            false,
-            false,
-            false,
-            false);
+    when(jdbcTemplate.query(eq(ORG_UNIT_BY_NUMBER), any(RowMapper.class), anyString()))
+        .thenAnswer(
+            invocation -> {
+              if (!"1903".equals(invocation.getArgument(2))) {
+                return List.of();
+              }
+              RowMapper<CodeNameDto> mapper = invocation.getArgument(1);
+              return List.of(mapper.mapRow(resultSet, 0));
+            });
     when(resultSet.getLong("ORG_UNIT_NO")).thenReturn(1903L);
     when(resultSet.wasNull()).thenReturn(false);
     when(resultSet.getString("ORG_UNIT_CODE")).thenReturn("RCB");
@@ -188,13 +192,13 @@ class LexisReportScheduleRepositoryTest {
     assertThat(repository.loadRegionOptions())
         .extracting("code", "name")
         .containsExactly(tuple("1903", "Cariboo Natural Resource Region"));
-    verify(callableStatement, times(8)).registerOutParameter(2, Types.REF_CURSOR);
+    verify(jdbcTemplate, times(8))
+        .query(eq(ORG_UNIT_BY_NUMBER), any(RowMapper.class), anyString());
   }
 
   @Test
   void reportExemptionTypeOptionsShouldPrependAllLikeLegacyReportSelects() throws Exception {
-    stubCursorProcedure("{ call LEXIS_CODES.FIND_ALL_EXEMPTION_TYPE_CODES(?) }");
-    when(resultSet.next()).thenReturn(true, true, false);
+    stubDirectCodeOptions(ACTIVE_EXEMPTION_TYPES, 2);
     when(resultSet.getString(1)).thenReturn("F ", "O");
     when(resultSet.getString(2)).thenReturn(" Federal ", "Order In Council");
 
@@ -205,13 +209,11 @@ class LexisReportScheduleRepositoryTest {
     assertThat(options)
         .extracting("code", "name")
         .containsExactly(tuple("", "All"), tuple("F", "Federal"), tuple("O", "Order In Council"));
-    verify(callableStatement).registerOutParameter(1, Types.REF_CURSOR);
   }
 
   @Test
   void tenureExemptionTypeOptionsShouldAppendAllLikeLegacyTenureSelect() throws Exception {
-    stubCursorProcedure("{ call LEXIS_CODES.FIND_ALL_EXEMPTION_TYPE_CODES(?) }");
-    when(resultSet.next()).thenReturn(true, true, false);
+    stubDirectCodeOptions(ACTIVE_EXEMPTION_TYPES, 2);
     when(resultSet.getString(1)).thenReturn("F", "O");
     when(resultSet.getString(2)).thenReturn("Federal", "Order In Council");
 
@@ -222,13 +224,11 @@ class LexisReportScheduleRepositoryTest {
     assertThat(options)
         .extracting("code", "name")
         .containsExactly(tuple("F", "Federal"), tuple("O", "Order In Council"), tuple("", "All"));
-    verify(callableStatement).registerOutParameter(1, Types.REF_CURSOR);
   }
 
   @Test
   void jurisdictionOptionsShouldRemoveRetiredIndianReserveJurisdiction() throws Exception {
-    stubCursorProcedure("{ call LEXIS_CODES.FIND_ALL_JURISDICTION_CODES(?) }");
-    when(resultSet.next()).thenReturn(true, true, true, false);
+    stubDirectCodeOptions(ACTIVE_JURISDICTIONS, 3);
     when(resultSet.getString(1)).thenReturn("P", "F", "I");
     when(resultSet.getString(2)).thenReturn("Provincial", "Federal", "Reserve");
 
@@ -239,14 +239,12 @@ class LexisReportScheduleRepositoryTest {
     assertThat(options)
         .extracting("code", "name")
         .containsExactly(tuple("", "All"), tuple("P", "Provincial"), tuple("F", "Federal"));
-    verify(callableStatement).registerOutParameter(1, Types.REF_CURSOR);
   }
 
   @Test
   void biweeklyJurisdictionOptionsShouldPrependAllAndRemoveRetiredIndianReserveJurisdiction()
       throws Exception {
-    stubCursorProcedure("{ call LEXIS_CODES.FIND_ALL_JURISDICTION_CODES(?) }");
-    when(resultSet.next()).thenReturn(true, true, true, false);
+    stubDirectCodeOptions(ACTIVE_JURISDICTIONS, 3);
     when(resultSet.getString(1)).thenReturn("P", "F", "I");
     when(resultSet.getString(2)).thenReturn("Provincial", "Federal", "Reserve");
 
@@ -257,14 +255,12 @@ class LexisReportScheduleRepositoryTest {
     assertThat(options)
         .extracting("code", "name")
         .containsExactly(tuple("", "All"), tuple("P", "Provincial"), tuple("F", "Federal"));
-    verify(callableStatement).registerOutParameter(1, Types.REF_CURSOR);
   }
 
   @Test
   void teacJurisdictionOptionsShouldRemoveRetiredIndianReserveJurisdictionWithoutAddingAllLikeLegacy()
       throws Exception {
-    stubCursorProcedure("{ call LEXIS_CODES.FIND_ALL_JURISDICTION_CODES(?) }");
-    when(resultSet.next()).thenReturn(true, true, true, false);
+    stubDirectCodeOptions(ACTIVE_JURISDICTIONS, 3);
     when(resultSet.getString(1)).thenReturn("P", "F", "I");
     when(resultSet.getString(2)).thenReturn("Provincial", "Federal", "Reserve");
 
@@ -275,15 +271,23 @@ class LexisReportScheduleRepositoryTest {
     assertThat(options)
         .extracting("code", "name")
         .containsExactly(tuple("P", "Provincial"), tuple("F", "Federal"));
-    verify(callableStatement).registerOutParameter(1, Types.REF_CURSOR);
   }
 
   @Test
+  @SuppressWarnings("unchecked")
   void destinationCountryOptionsShouldUseLegacyReportShortCountryGroup() throws Exception {
-    stubCursorProcedure("{ call LEXIS_CODES.FIND_COUNTRY_GROUP(?,?) }", 2);
-    when(resultSet.next()).thenReturn(true, true, false);
-    when(resultSet.getString("CODE")).thenReturn("US", "JP");
-    when(resultSet.getString("DESCRIPTION")).thenReturn("United States", "Japan");
+    when(jdbcTemplate.query(eq(ACTIVE_COUNTRIES_BY_GROUP), any(RowMapper.class), eq(1)))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<CodeNameDto> mapper = invocation.getArgument(1);
+              return List.of(
+                  mapper.mapRow(resultSet, 0),
+                  mapper.mapRow(resultSet, 1),
+                  mapper.mapRow(resultSet, 2));
+            });
+    when(resultSet.getString("CODE")).thenReturn(" US ", "JP", " US ");
+    when(resultSet.getString("DESCRIPTION"))
+        .thenReturn(" United States ", "Japan", " United States ");
 
     LexisReportScheduleRepository repository = new LexisReportScheduleRepository(jdbcTemplate);
 
@@ -294,16 +298,19 @@ class LexisReportScheduleRepositoryTest {
         .containsExactly(
             tuple("", "All"),
             tuple("US", "United States"),
-            tuple("JP", "Japan"));
-    verify(callableStatement).setInt(1, 1);
-    verify(callableStatement).registerOutParameter(2, Types.REF_CURSOR);
+            tuple("JP", "Japan"),
+            tuple("US", "United States"));
+    verify(jdbcTemplate).query(eq(ACTIVE_COUNTRIES_BY_GROUP), any(RowMapper.class), eq(1));
   }
 
   @Test
-  void destinationCountryOptionsShouldPreserveEmptyCodePackageResultWithoutStaticCountries()
-      throws Exception {
-    stubCursorProcedure("{ call LEXIS_CODES.FIND_COUNTRY_GROUP(?,?) }", 2);
-    when(resultSet.next()).thenReturn(false);
+  @SuppressWarnings("unchecked")
+  void destinationCountryOptionsShouldPreserveEmptyResultsAndPropagateQueryFailures() {
+    DataAccessResourceFailureException failure =
+        new DataAccessResourceFailureException("Country group unavailable");
+    when(jdbcTemplate.query(eq(ACTIVE_COUNTRIES_BY_GROUP), any(RowMapper.class), eq(1)))
+        .thenReturn(List.of())
+        .thenThrow(failure);
 
     LexisReportScheduleRepository repository = new LexisReportScheduleRepository(jdbcTemplate);
 
@@ -312,16 +319,42 @@ class LexisReportScheduleRepositoryTest {
     assertThat(options)
         .extracting("code", "name")
         .containsExactly(tuple("", "All"));
-    verify(callableStatement).setInt(1, 1);
-    verify(callableStatement).registerOutParameter(2, Types.REF_CURSOR);
+    assertThatThrownBy(repository::loadReportDestinationCountryOptions).isSameAs(failure);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"CODE", "DESCRIPTION"})
+  @SuppressWarnings("unchecked")
+  void destinationCountryOptionsShouldRetainOptionalColumnCompatibility(String missingColumn)
+      throws Exception {
+    if (missingColumn.equals("CODE")) {
+      when(resultSet.getString("CODE")).thenThrow(new SQLException("Missing code"));
+      when(resultSet.getString("DESCRIPTION")).thenReturn(" United States ");
+    } else {
+      when(resultSet.getString("CODE")).thenReturn(" US ");
+      when(resultSet.getString("DESCRIPTION")).thenThrow(new SQLException("Missing description"));
+    }
+    when(jdbcTemplate.query(eq(ACTIVE_COUNTRIES_BY_GROUP), any(RowMapper.class), eq(1)))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<CodeNameDto> mapper = invocation.getArgument(1);
+              return List.of(mapper.mapRow(resultSet, 0));
+            });
+    LexisReportScheduleRepository repository = new LexisReportScheduleRepository(jdbcTemplate);
+
+    assertThat(repository.loadReportDestinationCountryOptions())
+        .containsExactly(
+            new CodeNameDto("", "All"),
+            missingColumn.equals("CODE")
+                ? new CodeNameDto(null, "United States")
+                : new CodeNameDto("US", null));
   }
 
   @Test
   @SuppressWarnings({"rawtypes", "unchecked"})
   void reportCodeOptionsShouldPropagateOracleFailureInsteadOfReturningStaticChoices() {
-    when(jdbcTemplate.execute(
-            eq("{ call LEXIS_CODES.FIND_ALL_EXEMPTION_TYPE_CODES(?) }"),
-            any(CallableStatementCallback.class)))
+    when(jdbcTemplate.query(
+            eq(ACTIVE_EXEMPTION_TYPES), any(RowMapper.class), any(Object[].class)))
         .thenThrow(new DataAccessResourceFailureException("Oracle unavailable"));
     LexisReportScheduleRepository repository = new LexisReportScheduleRepository(jdbcTemplate);
 
@@ -331,9 +364,8 @@ class LexisReportScheduleRepositoryTest {
   }
 
   @Test
-  void reportCodeOptionsShouldPreserveLegitimatelyEmptyCursor() throws Exception {
-    stubCursorProcedure("{ call LEXIS_CODES.FIND_ALL_JURISDICTION_CODES(?) }");
-    when(resultSet.next()).thenReturn(false);
+  void reportCodeOptionsShouldPreserveLegitimatelyEmptyResults() throws Exception {
+    stubDirectCodeOptions(ACTIVE_JURISDICTIONS, 0);
 
     LexisReportScheduleRepository repository = new LexisReportScheduleRepository(jdbcTemplate);
 
@@ -462,24 +494,79 @@ class LexisReportScheduleRepositoryTest {
   }
 
   @Test
+  @SuppressWarnings("unchecked")
   void findDefaultRegionForForestClientNumberShouldUseLegacyClientAcronymFallback() throws Exception {
-    stubCursorProcedure("{ call LEXIS_CODES.FIND_FOREST_CLIENT(?,?) }", 2);
-    stubCursorProcedure("{ call LEXIS_CODES.FIND_ORG_UNIT_BY_CODE(?,?) }", 2);
-    when(callableStatement.getObject(2)).thenReturn(clientResultSet, orgUnitResultSet);
-    when(clientResultSet.next()).thenReturn(true, false);
-    when(clientResultSet.getString("CLIENT_ACRONYM")).thenReturn(" RCO ");
-    when(orgUnitResultSet.next()).thenReturn(true, false);
-    when(orgUnitResultSet.getLong("ORG_UNIT_NO")).thenReturn(1903L);
+    stubClientAcronym(" RCO ");
+    when(jdbcTemplate.query(eq(ORG_UNIT_BY_CODE), any(RowMapper.class), eq("RCO")))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<String> mapper = invocation.getArgument(1);
+              return List.of(
+                  mapper.mapRow(orgUnitResultSet, 0), mapper.mapRow(orgUnitResultSet, 1));
+            });
+    when(orgUnitResultSet.getLong("ORG_UNIT_NO")).thenReturn(1903L, 1910L);
     when(orgUnitResultSet.wasNull()).thenReturn(false);
 
     LexisReportScheduleRepository repository = new LexisReportScheduleRepository(jdbcTemplate);
 
-    var defaultRegion = repository.findDefaultRegionForForestClientNumber("00077881");
+    var defaultRegion = repository.findDefaultRegionForForestClientNumber(" 00077881 ");
 
     assertThat(defaultRegion).contains("1903");
     verify(callableStatement).setString(1, "00077881");
-    verify(callableStatement).setString(1, "RCO");
-    verify(callableStatement, org.mockito.Mockito.times(2)).registerOutParameter(2, Types.REF_CURSOR);
+    verify(jdbcTemplate).query(eq(ORG_UNIT_BY_CODE), any(RowMapper.class), eq("RCO"));
+    verify(callableStatement).registerOutParameter(2, Types.REF_CURSOR);
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void defaultRegionShouldRemainEmptyWhenNoOrgUnitMatchesTheClientAcronym() throws Exception {
+    stubClientAcronym("RCO");
+    when(jdbcTemplate.query(eq(ORG_UNIT_BY_CODE), any(RowMapper.class), eq("RCO")))
+        .thenReturn(List.of());
+    LexisReportScheduleRepository repository = new LexisReportScheduleRepository(jdbcTemplate);
+
+    assertThat(repository.findDefaultRegionForForestClientNumber("00077881")).isEmpty();
+  }
+
+  @ParameterizedTest
+  @ValueSource(booleans = {false, true})
+  @SuppressWarnings("unchecked")
+  void defaultRegionShouldPreserveNullFirstRowIncludingOptionalColumnFailure(boolean missingColumn)
+      throws Exception {
+    stubClientAcronym("RCO");
+    if (missingColumn) {
+      when(orgUnitResultSet.getLong("ORG_UNIT_NO"))
+          .thenThrow(new SQLException("Missing org unit number"))
+          .thenReturn(1910L);
+      when(orgUnitResultSet.wasNull()).thenReturn(false);
+    } else {
+      when(orgUnitResultSet.getLong("ORG_UNIT_NO")).thenReturn(0L, 1910L);
+      when(orgUnitResultSet.wasNull()).thenReturn(true, false);
+    }
+    when(jdbcTemplate.query(eq(ORG_UNIT_BY_CODE), any(RowMapper.class), eq("RCO")))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<String> mapper = invocation.getArgument(1);
+              return Arrays.asList(
+                  mapper.mapRow(orgUnitResultSet, 0), mapper.mapRow(orgUnitResultSet, 1));
+            });
+    LexisReportScheduleRepository repository = new LexisReportScheduleRepository(jdbcTemplate);
+
+    assertThat(repository.findDefaultRegionForForestClientNumber("00077881")).isEmpty();
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void defaultRegionShouldPropagateOrgUnitQueryFailure() throws Exception {
+    stubClientAcronym("RCO");
+    DataAccessResourceFailureException failure =
+        new DataAccessResourceFailureException("Org units unavailable");
+    when(jdbcTemplate.query(eq(ORG_UNIT_BY_CODE), any(RowMapper.class), eq("RCO")))
+        .thenThrow(failure);
+    LexisReportScheduleRepository repository = new LexisReportScheduleRepository(jdbcTemplate);
+
+    assertThatThrownBy(() -> repository.findDefaultRegionForForestClientNumber("00077881"))
+        .isSameAs(failure);
   }
 
   @Test
@@ -787,6 +874,26 @@ class LexisReportScheduleRepositoryTest {
     LexisReportScheduleRepository repository = new LexisReportScheduleRepository(jdbcTemplate);
 
     assertThat(repository.deleteExportSchedule(1002L)).isTrue();
+  }
+
+  private void stubClientAcronym(String acronym) throws Exception {
+    stubCursorProcedure("{ call LEXIS_CODES.FIND_FOREST_CLIENT(?,?) }", 2);
+    when(resultSet.next()).thenReturn(true, false);
+    when(resultSet.getString("CLIENT_ACRONYM")).thenReturn(acronym);
+  }
+
+  @SuppressWarnings("unchecked")
+  private void stubDirectCodeOptions(String sql, int rowCount) throws Exception {
+    when(jdbcTemplate.query(eq(sql), any(RowMapper.class), any(Object[].class)))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<CodeNameDto> mapper = invocation.getArgument(1);
+              List<CodeNameDto> rows = new ArrayList<>();
+              for (int row = 0; row < rowCount; row++) {
+                rows.add(mapper.mapRow(resultSet, row));
+              }
+              return rows;
+            });
   }
 
   @SuppressWarnings({"rawtypes", "unchecked"})

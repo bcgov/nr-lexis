@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.repository.review;
 
+import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_APPLICATION_STATUSES;
 import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_PRODUCT_TYPES;
 import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.controlSafe;
 import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.exceptionType;
@@ -40,9 +41,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Repository
 @Profile("oracle")
 public class ApplicationReviewRepository extends OracleRepositorySupport {
-
-  private static final String FIND_ALL_APPLICATION_STATUS_CODES =
-      LEXIS_CODES_PACKAGE + "FIND_ALL_APP_STATUS_CODES(?)";
 
   private static final String SEARCH_APPLICATION_REVIEWS =
       """
@@ -140,7 +138,7 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
   }
 
   public List<CodeNameDto> loadReviewStatusOptions() {
-    return loadCodeNameOptionsRequired(FIND_ALL_APPLICATION_STATUS_CODES).stream()
+    return loadCodeNameOptionsDirectRequired(ACTIVE_APPLICATION_STATUSES).stream()
         .filter(option -> option.code() != null)
         .filter(
             option ->

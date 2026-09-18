@@ -1,5 +1,7 @@
 package ca.bc.gov.mof.lexis.repository.exemption;
 
+import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.EXEMPTION_TYPE_BY_CODE;
+import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ORG_UNIT_BY_NUMBER;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -28,6 +30,73 @@ import org.springframework.jdbc.core.RowMapper;
 
 @DisplayName("Unit Test | ExemptionDetailsRpcRepository")
 class ExemptionDetailsRpcRepositoryTest {
+
+  @Test
+  void orgUnitValidationShouldRejectInvalidInputsWithoutQuerying() {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    ExemptionDetailsRpcRepository repository = new ExemptionDetailsRpcRepository(jdbcTemplate);
+
+    assertThat(repository.isOrgUnitValidRequired(null)).isFalse();
+    assertThat(repository.isOrgUnitValidRequired(0L)).isFalse();
+    assertThat(repository.isOrgUnitValidRequired(-1L)).isFalse();
+    verifyNoInteractions(jdbcTemplate);
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void orgUnitValidationShouldBindNumberAndUseOnlyTheFirstNullableRow() throws Exception {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    ResultSet resultSet = mock(ResultSet.class);
+    when(resultSet.getLong("ORG_UNIT_NO")).thenReturn(1903L, 9999L, 1904L, 1903L, 0L, 1903L);
+    when(resultSet.wasNull()).thenReturn(false, false, false, false, true, false);
+    when(jdbcTemplate.query(eq(ORG_UNIT_BY_NUMBER), any(RowMapper.class), eq(1903L)))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<Long> mapper = invocation.getArgument(1);
+              return Arrays.asList(mapper.mapRow(resultSet, 0), mapper.mapRow(resultSet, 1));
+            });
+    ExemptionDetailsRpcRepository repository = new ExemptionDetailsRpcRepository(jdbcTemplate);
+
+    assertThat(repository.isOrgUnitValidRequired(1903L)).isTrue();
+    assertThat(repository.isOrgUnitValidRequired(1903L)).isFalse();
+    assertThat(repository.isOrgUnitValidRequired(1903L)).isFalse();
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void orgUnitValidationShouldDistinguishAbsentRowsFromQueryFailure() {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    DataAccessResourceFailureException failure =
+        new DataAccessResourceFailureException("Oracle unavailable");
+    when(jdbcTemplate.query(eq(ORG_UNIT_BY_NUMBER), any(RowMapper.class), eq(1903L)))
+        .thenReturn(List.of())
+        .thenThrow(failure);
+    ExemptionDetailsRpcRepository repository = new ExemptionDetailsRpcRepository(jdbcTemplate);
+
+    assertThat(repository.isOrgUnitValidRequired(1903L)).isFalse();
+    assertThatThrownBy(() -> repository.isOrgUnitValidRequired(1903L)).isSameAs(failure);
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void orgUnitValidationShouldRejectAnUnreadableRequiredNumber() throws Exception {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    ResultSet resultSet = mock(ResultSet.class);
+    SQLException failure = new SQLException("Invalid column name");
+    when(resultSet.getLong("ORG_UNIT_NO")).thenThrow(failure);
+    when(jdbcTemplate.query(eq(ORG_UNIT_BY_NUMBER), any(RowMapper.class), eq(1903L)))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<Long> mapper = invocation.getArgument(1);
+              return java.util.Collections.singletonList(mapper.mapRow(resultSet, 0));
+            });
+    ExemptionDetailsRpcRepository repository = new ExemptionDetailsRpcRepository(jdbcTemplate);
+
+    assertThatThrownBy(() -> repository.isOrgUnitValidRequired(1903L))
+        .isInstanceOf(org.springframework.dao.DataRetrievalFailureException.class)
+        .hasMessageContaining("ORG_UNIT_NO")
+        .hasCause(failure);
+  }
 
   @Test
   @SuppressWarnings("unchecked")
@@ -180,8 +249,12 @@ class ExemptionDetailsRpcRepositoryTest {
   }
 
   @Test
+  @SuppressWarnings("unchecked")
   void activationCodeLookupShouldPropagateOracleFailure() {
-    ExemptionDetailsRpcRepository repository = new FailingExemptionDetailsRpcRepository();
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    when(jdbcTemplate.query(eq(EXEMPTION_TYPE_BY_CODE), any(RowMapper.class), eq("M")))
+        .thenThrow(new DataAccessResourceFailureException("Oracle unavailable"));
+    ExemptionDetailsRpcRepository repository = new ExemptionDetailsRpcRepository(jdbcTemplate);
 
     assertThatThrownBy(() -> repository.isExemptionTypeCodeValidRequired("M"))
         .isInstanceOf(DataAccessResourceFailureException.class)

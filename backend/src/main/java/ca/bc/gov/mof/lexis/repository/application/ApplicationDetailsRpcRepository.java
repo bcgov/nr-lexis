@@ -65,10 +65,6 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       LEXIS_GROUP_5_PACKAGE + "FIND_END_USE_BY_APP(?,?)";
   private static final String FIND_END_USE_BY_PACKAGE =
       LEXIS_GROUP_5_PACKAGE + "FIND_END_USE_BY_PACK(?,?)";
-  private static final String FIND_ALL_SPECIES_CODES =
-      LEXIS_CODES_PACKAGE + "FIND_ALL_SPECIES_CODES(?)";
-  private static final String FIND_ALL_PACKAGE_STATUS_CODES =
-      LEXIS_CODES_PACKAGE + "FIND_ALL_PACKAGE_STATUS_CODES(?)";
   private static final String FIND_SPECIES_CODE = LEXIS_CODES_PACKAGE + "FIND_SPECIES_CODE(?,?)";
   private static final String FIND_GRADE_CODE = LEXIS_CODES_PACKAGE + "FIND_GRADE_CODE(?,?)";
   private static final String FIND_TIMBER_MARK = LEXIS_CODES_PACKAGE + "FIND_TIMBER_MARK(?,?)";
@@ -81,16 +77,6 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       LEXIS_CODES_PACKAGE + "FIND_PACKAGE_STATUS_CODE(?,?)";
   private static final String FIND_PRODUCT_TYPE_CODE =
       LEXIS_CODES_PACKAGE + "FIND_PRODUCT_TYPE_CODE(?,?)";
-  private static final String FIND_EXEMPTION_REASON_CODE =
-      LEXIS_CODES_PACKAGE + "FIND_EXEMPTION_REASON_CODE(?,?)";
-  private static final String FIND_APPLICATION_STATUS_CODE =
-      LEXIS_CODES_PACKAGE + "FIND_APPLICATION_STATUS_CODE(?,?)";
-  private static final String FIND_APPLICANT_TYPE_CODE =
-      LEXIS_CODES_PACKAGE + "FIND_APPLICANT_TYPE_CODE(?,?)";
-  private static final String FIND_JURISDICTION_CODE =
-      LEXIS_CODES_PACKAGE + "FIND_JURISDICTION_CODE(?,?)";
-  private static final String FIND_ORG_UNIT_BY_NUMBER =
-      LEXIS_CODES_PACKAGE + "FIND_ORG_UNIT_BY_NUMBER(?,?)";
   private static final String FIND_SPECIES_GRADE_BY_REGION_SPECIES =
       LEXIS_CODES_PACKAGE + "FIND_SPEC_GRAD_BY_REG_SPEC(?,?,?)";
   private static final String FIND_SPECIES_GRADE_BY_REGION =
@@ -820,10 +806,8 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
   }
 
   public List<CodeRow> findAllSpeciesCodesRequired() {
-    return queryCursorProcedureRequired(
-            FIND_ALL_SPECIES_CODES,
-            null,
-            1,
+    return queryDirectRequired(
+            LexisCodeQueries.ACTIVE_SPECIES,
             rs ->
                 new CodeRow(
                     getString(rs, "CODE"),
@@ -837,10 +821,8 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
   }
 
   public List<CodeRow> findAllPackageStatusCodesRequired() {
-    return queryCursorProcedureRequired(
-            FIND_ALL_PACKAGE_STATUS_CODES,
-            null,
-            1,
+    return queryDirectRequired(
+            LexisCodeQueries.ACTIVE_PACKAGE_STATUSES,
             rs ->
                 new CodeRow(
                     getString(rs, "CODE"),
@@ -1109,32 +1091,31 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
   }
 
   public boolean isExemptionReasonCodeValidRequired(String code) {
-    return codeExistsRequired(FIND_EXEMPTION_REASON_CODE, code);
+    return directCodeExistsRequired(LexisCodeQueries.EXEMPTION_REASON_BY_CODE, code);
   }
 
   public boolean isApplicationStatusCodeValidRequired(String code) {
-    return codeExistsRequired(FIND_APPLICATION_STATUS_CODE, code);
+    return directCodeExistsRequired(LexisCodeQueries.APPLICATION_STATUS_BY_CODE, code);
   }
 
   public boolean isApplicantTypeCodeValidRequired(String code) {
-    return codeExistsRequired(FIND_APPLICANT_TYPE_CODE, code);
+    return directCodeExistsRequired(LexisCodeQueries.APPLICANT_TYPE_BY_CODE, code);
   }
 
   public boolean isJurisdictionCodeValidRequired(String code) {
-    return codeExistsRequired(FIND_JURISDICTION_CODE, code);
+    return directCodeExistsRequired(LexisCodeQueries.JURISDICTION_BY_CODE, code);
   }
 
   public boolean isOrgUnitValidRequired(Long orgUnitNumber) {
     if (orgUnitNumber == null || orgUnitNumber < 1) {
       return false;
     }
-    return queryCursorSingleRequired(
-            FIND_ORG_UNIT_BY_NUMBER,
-            cs -> cs.setLong(1, orgUnitNumber),
-            2,
-            rs -> getLong(rs, "ORG_UNIT_NO"))
-        .filter(value -> value.equals(orgUnitNumber))
-        .isPresent();
+    List<Long> orgUnits =
+        queryDirectRequired(
+            LexisCodeQueries.ORG_UNIT_BY_NUMBER,
+            rs -> getLong(rs, "ORG_UNIT_NO"),
+            orgUnitNumber);
+    return !orgUnits.isEmpty() && orgUnitNumber.equals(orgUnits.get(0));
   }
 
   public List<ExcolValidationRow> findCandidateExcolCombinationsRequired(
@@ -1208,6 +1189,15 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
             rs -> trim(rs.getString(2)))
         .filter(value -> value != null && !value.isBlank())
         .or(() -> fallbackCodeDescription(procedureSignature, normalized));
+  }
+
+  private boolean directCodeExistsRequired(String sql, String code) {
+    String normalized = trim(code);
+    if (normalized == null) {
+      return false;
+    }
+    List<String> codes = queryDirectRequired(sql, rs -> trim(rs.getString(1)), normalized);
+    return !codes.isEmpty() && normalized.equalsIgnoreCase(codes.get(0));
   }
 
   private boolean codeExistsRequired(String procedureSignature, String code) {

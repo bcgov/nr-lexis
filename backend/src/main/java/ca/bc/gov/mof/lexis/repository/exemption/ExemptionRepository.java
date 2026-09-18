@@ -1,5 +1,7 @@
 package ca.bc.gov.mof.lexis.repository.exemption;
 
+import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_EXEMPTION_STATUSES;
+import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_EXEMPTION_TYPES;
 import static ca.bc.gov.mof.lexis.util.ValueUtils.coalesce;
 import static ca.bc.gov.mof.lexis.util.ValueUtils.firstNonNull;
 import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.exceptionType;
@@ -35,10 +37,6 @@ public class ExemptionRepository extends OracleRepositorySupport {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(ExemptionRepository.class);
 
-  private static final String FIND_ALL_EXEMPTION_TYPE_CODES =
-      LEXIS_CODES_PACKAGE + "FIND_ALL_EXEMPTION_TYPE_CODES(?)";
-  private static final String FIND_ALL_EXEMPTION_STATUS_CODES =
-      LEXIS_CODES_PACKAGE + "FIND_ALL_EXEMPT_STS_CODES(?)";
   // INTENTIONAL_LEGACY_DIVERGENCE(CANONICAL_SEARCH_RESULTS): keep one application row per
   // exemption so linked applications cannot duplicate results or multiply permit balances.
   private static final String CANONICAL_EXEMPTION_APPLICATION_CTE =
@@ -471,13 +469,13 @@ public class ExemptionRepository extends OracleRepositorySupport {
   }
 
   public List<CodeNameDto> loadExemptionTypeOptions() {
-    return loadCodeNameOptionsRequired(FIND_ALL_EXEMPTION_TYPE_CODES).stream()
+    return loadCodeNameOptionsDirectRequired(ACTIVE_EXEMPTION_TYPES).stream()
         .filter(option -> option.code() != null && !"F".equalsIgnoreCase(option.code()))
         .toList();
   }
 
   public List<CodeNameDto> loadExemptionStatusOptions() {
-    return loadCodeNameOptionsRequired(FIND_ALL_EXEMPTION_STATUS_CODES).stream()
+    return loadCodeNameOptionsDirectRequired(ACTIVE_EXEMPTION_STATUSES).stream()
         .filter(option -> option.code() != null)
         .toList();
   }

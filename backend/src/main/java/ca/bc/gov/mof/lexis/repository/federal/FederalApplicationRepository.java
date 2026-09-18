@@ -1,5 +1,7 @@
 package ca.bc.gov.mof.lexis.repository.federal;
 
+import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_APPLICATION_STATUSES;
+import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_EXEMPTION_TYPES;
 import static ca.bc.gov.mof.lexis.util.ValueUtils.firstNonNull;
 
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
@@ -22,11 +24,6 @@ import org.springframework.stereotype.Repository;
 @Repository
 @Profile("oracle")
 public class FederalApplicationRepository extends OracleRepositorySupport {
-
-  private static final String FIND_ALL_APPLICATION_STATUS_CODES =
-      LEXIS_CODES_PACKAGE + "FIND_ALL_APP_STATUS_CODES(?)";
-  private static final String FIND_ALL_EXEMPTION_TYPE_CODES =
-      LEXIS_CODES_PACKAGE + "FIND_ALL_EXEMPTION_TYPE_CODES(?)";
 
   private static final String FEDERAL_APPLICATION_SEARCH_SOURCE =
       """
@@ -90,13 +87,13 @@ public class FederalApplicationRepository extends OracleRepositorySupport {
   }
 
   public List<CodeNameDto> loadApplicationStatusOptions() {
-    return loadCodeNameOptionsRequired(FIND_ALL_APPLICATION_STATUS_CODES).stream()
+    return loadCodeNameOptionsDirectRequired(ACTIVE_APPLICATION_STATUSES).stream()
         .filter(option -> option.code() == null || !"DAL".equalsIgnoreCase(option.code()))
         .toList();
   }
 
   public List<CodeNameDto> loadFederalExemptionTypeOptions() {
-    return loadCodeNameOptionsRequired(FIND_ALL_EXEMPTION_TYPE_CODES).stream()
+    return loadCodeNameOptionsDirectRequired(ACTIVE_EXEMPTION_TYPES).stream()
         .filter(option -> "F".equalsIgnoreCase(option.code()))
         .toList();
   }

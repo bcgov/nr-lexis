@@ -1,5 +1,8 @@
 package ca.bc.gov.mof.lexis.repository.application;
 
+import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_APPLICATION_STATUSES;
+import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_EXEMPTION_REASONS;
+import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_EXEMPTION_TYPES;
 import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_GROWTH_TYPES;
 import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_PRODUCT_TYPES;
 import static ca.bc.gov.mof.lexis.util.ValueUtils.coalesce;
@@ -46,12 +49,6 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
       "EXPORT_EXMPTN_APPL_REMARK_NMBR";
   private static final String INDICATOR_YES = "Y";
 
-  private static final String FIND_ALL_EXEMPTION_TYPE_CODES =
-      LEXIS_CODES_PACKAGE + "FIND_ALL_EXEMPTION_TYPE_CODES(?)";
-  private static final String FIND_ALL_EXEMPTION_REASON_CODES =
-      LEXIS_CODES_PACKAGE + "FIND_ALL_EXEMPT_RSN_CODES(?)";
-  private static final String FIND_ALL_APPLICATION_STATUS_CODES =
-      LEXIS_CODES_PACKAGE + "FIND_ALL_APP_STATUS_CODES(?)";
   private static final String APPLICATION_SEARCH_SOURCE =
       """
       (
@@ -194,20 +191,20 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
     List<CodeNameDto> options = new ArrayList<>();
     options.add(new CodeNameDto("ALL", "All"));
     options.addAll(
-        loadCodeNameOptionsRequired(FIND_ALL_EXEMPTION_TYPE_CODES).stream()
+        loadCodeNameOptionsDirectRequired(ACTIVE_EXEMPTION_TYPES).stream()
             .filter(option -> option.code() == null || !JURISDICTION_FEDERAL.equalsIgnoreCase(option.code()))
             .toList());
     return options;
   }
 
   public List<CodeNameDto> loadExemptionReasonOptions() {
-    return loadCodeNameOptionsRequired(FIND_ALL_EXEMPTION_REASON_CODES);
+    return loadCodeNameOptionsDirectRequired(ACTIVE_EXEMPTION_REASONS);
   }
 
   public List<CodeNameDto> loadApplicationStatusOptions() {
     List<CodeNameDto> options = new ArrayList<>();
     options.add(new CodeNameDto("", "All"));
-    options.addAll(loadCodeNameOptionsRequired(FIND_ALL_APPLICATION_STATUS_CODES));
+    options.addAll(loadCodeNameOptionsDirectRequired(ACTIVE_APPLICATION_STATUSES));
     return options;
   }
 

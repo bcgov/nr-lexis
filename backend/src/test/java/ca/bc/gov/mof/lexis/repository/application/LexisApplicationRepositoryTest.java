@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.repository.application;
 
+import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_EXEMPTION_REASONS;
 import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_GROWTH_TYPES;
 import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_PRODUCT_TYPES;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -325,13 +326,13 @@ class LexisApplicationRepositoryTest {
   }
 
   @Test
-  void loadExemptionReasonOptionsShouldUseLegacyProcedureName() {
+  void loadExemptionReasonOptionsShouldUseSharedDirectQuery() {
     TestLexisApplicationRepository repository = new TestLexisApplicationRepository();
 
     assertThat(repository.loadExemptionReasonOptions())
         .containsExactly(new CodeNameDto("U", "Utilization"));
-    assertThat(repository.codeNameProcedureSignature())
-        .isEqualTo("LEXIS_CODES.FIND_ALL_EXEMPT_RSN_CODES(?)");
+    assertThat(repository.codeNameSql())
+        .isEqualTo(ACTIVE_EXEMPTION_REASONS);
   }
 
   @Test
@@ -899,7 +900,7 @@ class LexisApplicationRepositoryTest {
     private String countSelectSql;
     private String countWhereSql;
     private List<Object> countBindValues;
-    private String codeNameProcedureSignature;
+    private String codeNameSql;
     private int countCalls;
     private int pageCalls;
 
@@ -944,19 +945,14 @@ class LexisApplicationRepositoryTest {
       return pageCalls;
     }
 
-    String codeNameProcedureSignature() {
-      return codeNameProcedureSignature;
+    String codeNameSql() {
+      return codeNameSql;
     }
 
     @Override
-    protected List<CodeNameDto> loadCodeNameOptions(String procedureSignature) {
-      codeNameProcedureSignature = procedureSignature;
+    protected List<CodeNameDto> loadCodeNameOptionsDirectRequired(String sql) {
+      codeNameSql = sql;
       return List.of(new CodeNameDto("U", "Utilization"));
-    }
-
-    @Override
-    protected List<CodeNameDto> loadCodeNameOptionsRequired(String procedureSignature) {
-      return loadCodeNameOptions(procedureSignature);
     }
 
     @Override
