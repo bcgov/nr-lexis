@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import { gotoSyntheticRoute, installSyntheticCognitoSession } from './utils'
 
-type PermitScenario = 'normal' | 'blanket-oic' | 'blanket-oic-empty'
+type PermitScenario = 'normal' | 'ministerial' | 'blanket-oic' | 'blanket-oic-empty'
 
 type CapturedWrite = {
   method: string
@@ -56,7 +56,8 @@ const installPermitParityFixtures = async (
     orgUnitNo: '1903',
   })
 
-  const permitNumber = scenario === 'normal' ? '91001' : '91002'
+  const blanketOic = scenario === 'blanket-oic' || scenario === 'blanket-oic-empty'
+  const permitNumber = blanketOic ? '91002' : '91001'
   let ownerLocationCode = '03'
   let createdPayload: Record<string, string> | null = null
   let version = 1
@@ -94,9 +95,12 @@ const installPermitParityFixtures = async (
   const permit = () => ({
     permitNumber: Number(permitNumber),
     applicationNumber: scenario === 'blanket-oic-empty' ? null : 111,
-    packageNumber:
-      scenario === 'blanket-oic-empty' ? null : scenario === 'normal' ? 'PKG-A' : 'BOIC-A',
-    exemptionNumber: scenario === 'normal' ? '' : 'EX-BOIC-91002',
+    packageNumber: scenario === 'blanket-oic-empty' ? null : blanketOic ? 'BOIC-A' : 'PKG-A',
+    exemptionNumber: blanketOic
+      ? 'EX-BOIC-91002'
+      : scenario === 'ministerial'
+        ? 'EX-MIN-91001'
+        : '',
     permitStatusCode: 'ACT',
     permitStatusDescription: 'Active',
     author: 'PERMIT.PARITY.TESTER',
@@ -115,11 +119,15 @@ const installPermitParityFixtures = async (
     expiryDate: '2026-10-01',
     receivedDate: '2026-09-01',
     estimatedShippingDate: '2026-09-10',
-    permitVolume: scenario === 'blanket-oic-empty' ? 0 : scenario === 'normal' ? 50 : 120.5,
+    permitVolume: scenario === 'blanket-oic-empty' ? 0 : blanketOic ? 120.5 : 50,
     approvedExemptionVolume: 500,
     exemptionVolumeRemaining: 500,
-    exemptionTypeDescription: scenario === 'normal' ? 'Standard exemption' : 'Blanket OIC',
-    blanketOic: scenario !== 'normal',
+    exemptionTypeDescription: blanketOic
+      ? 'Blanket OIC'
+      : scenario === 'ministerial'
+        ? 'Ministerial'
+        : 'Standard exemption',
+    blanketOic,
     numberOfPieces: scenario === 'blanket-oic-empty' ? 0 : 3,
     receiptNumber: scenario === 'blanket-oic-empty' ? null : 'R-91002',
     federalPermitNumber: null,
@@ -128,12 +136,12 @@ const installPermitParityFixtures = async (
     oicApplicationNumber: scenario === 'blanket-oic' ? 123456 : null,
     oicRequestPieces: createdPayload
       ? Number(createdPayload.oicPermitTotalPieces)
-      : scenario !== 'normal'
+      : blanketOic
         ? 200
         : null,
     oicRequestVolume: createdPayload
       ? Number(createdPayload.oicPermitTotalVolume)
-      : scenario !== 'normal'
+      : blanketOic
         ? 120.5
         : null,
     orgUnitNumber: 1903,
@@ -141,7 +149,7 @@ const installPermitParityFixtures = async (
   })
 
   const packageList =
-    scenario === 'normal'
+    scenario === 'normal' || scenario === 'ministerial'
       ? [
           {
             packageNumber: 'PKG-A',
@@ -217,7 +225,7 @@ const installPermitParityFixtures = async (
         ]
 
   const coreTabs = {
-    applicationList: scenario === 'normal' ? ['111'] : [],
+    applicationList: blanketOic ? [] : ['111'],
     packageList: scenario === 'blanket-oic-empty' ? [] : packageList,
   }
 
@@ -340,7 +348,29 @@ const installPermitParityFixtures = async (
           body = []
           break
         case '/api/lexis/rpc/permit-details/all-scale-fees':
-          body = { packageList: [], totalVolume: '0' }
+          body =
+            scenario === 'ministerial'
+              ? {
+                  packageList: packageList.map((entry, index) => ({
+                    packageNumber: entry.packageNumber,
+                    growthType: 'Synthetic growth type',
+                    totalFeeForPackage: `$${(index + 1) * 10}.00`,
+                    scaleList: entry.scaleList.map((scale) => ({
+                      ...scale,
+                      ministryUser: true,
+                      amv: '$100.00',
+                      ewb: '$100.00',
+                      fil: '10%',
+                      mf: '1',
+                      fee: `${(index + 1) * 10}.00`,
+                    })),
+                  })),
+                  totalVolume: '3.0',
+                }
+              : { packageList: [], totalVolume: '0' }
+          break
+        case '/api/lexis/rpc/permit-details/available-application-list':
+          body = { applicationList: [], applicationItems: [], errorMessage: '' }
           break
         case '/api/lexis/rpc/application-details/species-codes':
           body = [
@@ -660,6 +690,61 @@ test.describe('Provincial permit parity regressions', () => {
     expect(fixture.unexpectedRequests).toEqual([])
   })
 
+  test('shows the selected Ministerial package consistently on Scale and Fees', async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width: 1440, height: 1000 })
+    const fixture = await installPermitParityFixtures(page, 'ministerial')
+    await gotoSyntheticRoute(page, '/provincial/permit/91001', {
+      ready: page.getByRole('heading', { level: 1, name: 'Permit 91001 (Pending)', exact: true }),
+    })
+
+    await selectTab(page, 'Scale')
+    const scaleRows = page.getByRole('region', { name: 'Scale rows', exact: true })
+    await expect(scaleRows).toContainText('TM-A')
+    await expect(scaleRows).not.toContainText('TM-B')
+    await chooseComboBoxOption(page, 'Package number', 'PKG-B')
+    await expect(scaleRows).toContainText('TM-B')
+    await expect(scaleRows).not.toContainText('TM-A')
+    await page.screenshot({
+      path: testInfo.outputPath('ministerial-selected-scale.png'),
+      fullPage: false,
+      animations: 'disabled',
+    })
+
+    await selectTab(page, 'Fees')
+    const feeRows = page.getByRole('region', { name: 'Permit fee rows', exact: true })
+    await expect(page.getByRole('combobox', { name: 'Package number', exact: true })).toHaveValue(
+      'PKG-B',
+    )
+    await expect(feeRows).toContainText('TM-B')
+    await expect(feeRows).not.toContainText('TM-A')
+    await chooseComboBoxOption(page, 'Package number', 'PKG-A')
+    await expect(feeRows).toContainText('TM-A')
+    await expect(feeRows).not.toContainText('TM-B')
+    await page.screenshot({
+      path: testInfo.outputPath('ministerial-selected-fees.png'),
+      fullPage: false,
+      animations: 'disabled',
+    })
+
+    await page.setViewportSize({ width: 390, height: 844 })
+    await expect(page.getByRole('combobox', { name: 'Package number', exact: true })).toBeVisible()
+    await page
+      .getByRole('combobox', { name: 'Package number', exact: true })
+      .scrollIntoViewIfNeeded()
+    await page.screenshot({
+      path: testInfo.outputPath('ministerial-selected-fees-mobile.png'),
+      fullPage: false,
+      animations: 'disabled',
+    })
+    await selectTab(page, 'Scale')
+    await expect(scaleRows).toContainText('TM-A')
+    await expect(scaleRows).not.toContainText('TM-B')
+    expect(fixture.writes).toEqual([])
+    expect(fixture.unexpectedRequests).toEqual([])
+  })
+
   test('keeps BOIC scale entry disabled during delayed grade loading and submits selected codes', async ({
     page,
   }) => {
@@ -709,7 +794,9 @@ test.describe('Provincial permit parity regressions', () => {
     expect(fixture.unexpectedRequests).toEqual([])
   })
 
-  test('keeps owner context visible while a verified location changes', async ({ page }) => {
+  test('keeps owner context visible while a verified location changes', async ({
+    page,
+  }, testInfo) => {
     const fixture = await installPermitParityFixtures(page, 'blanket-oic')
     await gotoSyntheticRoute(page, '/provincial/permit/91002', {
       ready: page.getByRole('heading', { level: 1, name: 'Permit 91002 (Pending)', exact: true }),
@@ -736,6 +823,13 @@ test.describe('Provincial permit parity regressions', () => {
     await expect(
       page.getByText('The permit was updated successfully.', { exact: true }),
     ).toBeVisible()
+    const successNotice = page.locator('.cds--toast-notification--success')
+    await expect(successNotice).toContainText('Applicant details saved')
+    await page.screenshot({
+      path: testInfo.outputPath('applicant-save-success.png'),
+      fullPage: false,
+      animations: 'disabled',
+    })
     expect(fixture.writes).toEqual([
       expect.objectContaining({
         method: 'POST',

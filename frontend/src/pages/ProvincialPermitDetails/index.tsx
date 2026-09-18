@@ -223,6 +223,10 @@ type BlanketOicPackageFieldErrors = Partial<Record<BlanketOicPackageField, strin
 type PermitFeeOverrideForm = PermitFeeOverrideContext
 type PermitFeeOverrideField = 'overrideFee' | 'overrideComment'
 type PermitFeeOverrideFieldErrors = Partial<Record<PermitFeeOverrideField, string>>
+type ActionSuccessNotification = {
+  title: string
+  subtitle: string
+}
 
 const MAX_OIC_REQUEST_PIECES = 9_999_999_999
 const MAX_OIC_REQUEST_VOLUME_LENGTH = 9
@@ -842,6 +846,8 @@ const ProvincialPermitDetailsPage = () => {
   )
   const [actionErrorMessage, setActionErrorMessage] = useState('')
   const [actionInfoMessage, setActionInfoMessage] = useState('')
+  const [actionSuccessNotification, setActionSuccessNotification] =
+    useState<ActionSuccessNotification | null>(null)
   const [createdBlanketOicPermitNumber, setCreatedBlanketOicPermitNumber] = useState('')
   const [documentSuccessMessage, setDocumentSuccessMessage] = useState('')
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
@@ -899,6 +905,8 @@ const ProvincialPermitDetailsPage = () => {
     EMPTY_BLANKET_OIC_SCALE_FORM,
   )
   const [selectedBlanketOicPackageNumberState, setSelectedBlanketOicPackageNumberState] =
+    useState('')
+  const [selectedMinisterialPackageNumberState, setSelectedMinisterialPackageNumberState] =
     useState('')
   const [permitDocumentUploadDirty, setPermitDocumentUploadDirty] = useState(false)
   const [permitDocumentUploadBusy, setPermitDocumentUploadBusy] = useState(false)
@@ -981,6 +989,8 @@ const ProvincialPermitDetailsPage = () => {
     setBoicCodeOptionsReady(false)
     setBoicScaleCodeOptionsReady(false)
     setSelectedBlanketOicPackageNumberState('')
+    setSelectedMinisterialPackageNumberState('')
+    setActionSuccessNotification(null)
     setDocumentSuccessMessage('')
     setCreatedBlanketOicPermitNumber('')
     void beginAvailablePermitApplicationsRequest()
@@ -1564,24 +1574,69 @@ const ProvincialPermitDetailsPage = () => {
     ? selectedBlanketOicPackageNumberState
     : (blanketOicPackageOptions[0]?.value ?? '')
 
+  const ministerialPackageOptions = useMemo(
+    () =>
+      ministerialPermit
+        ? (tabsData?.packages ?? [])
+            .map((row) => row.packageNumber)
+            .filter(Boolean)
+            .map((packageNumber) => ({
+              value: packageNumber,
+              label: formatPackageNumberLabel(packageNumber),
+            }))
+        : [],
+    [ministerialPermit, tabsData],
+  )
+  const selectedMinisterialPackageNumber = ministerialPackageOptions.some(
+    (option) => option.value === selectedMinisterialPackageNumberState,
+  )
+    ? selectedMinisterialPackageNumberState
+    : (ministerialPackageOptions[0]?.value ?? '')
+  const selectedMinisterialPackage = (tabsData?.packages ?? []).find(
+    (row) => row.packageNumber === selectedMinisterialPackageNumber,
+  )
+  const selectedMinisterialPackageFeeSummary = (tabsData?.packageFeeSummaries ?? []).find(
+    (summary) => summary.packageNumber === selectedMinisterialPackageNumber,
+  )
+
   const packageScopedItems = useMemo(() => {
     if (!tabsData) {
       return []
     }
-    if (!detail?.blanketOic) {
-      return tabsData.items
-    }
-    return tabsData.items.filter((row) => row.packageNumber === selectedBlanketOicPackageNumber)
-  }, [detail?.blanketOic, selectedBlanketOicPackageNumber, tabsData])
+    const selectedPackageNumber = detail?.blanketOic
+      ? selectedBlanketOicPackageNumber
+      : ministerialPermit
+        ? selectedMinisterialPackageNumber
+        : ''
+    return selectedPackageNumber
+      ? tabsData.items.filter((row) => row.packageNumber === selectedPackageNumber)
+      : tabsData.items
+  }, [
+    detail?.blanketOic,
+    ministerialPermit,
+    selectedBlanketOicPackageNumber,
+    selectedMinisterialPackageNumber,
+    tabsData,
+  ])
 
-  const visibleBlanketOicPackages = useMemo(
+  const visiblePackages = useMemo(
     () =>
       detail?.blanketOic
         ? (tabsData?.packages ?? []).filter(
             (row) => row.packageNumber === selectedBlanketOicPackageNumber,
           )
-        : (tabsData?.packages ?? []),
-    [detail?.blanketOic, selectedBlanketOicPackageNumber, tabsData],
+        : ministerialPermit
+          ? (tabsData?.packages ?? []).filter(
+              (row) => row.packageNumber === selectedMinisterialPackageNumber,
+            )
+          : (tabsData?.packages ?? []),
+    [
+      detail?.blanketOic,
+      ministerialPermit,
+      selectedBlanketOicPackageNumber,
+      selectedMinisterialPackageNumber,
+      tabsData,
+    ],
   )
 
   const resolvedBlanketOicScaleForm = {
@@ -2704,6 +2759,7 @@ const ProvincialPermitDetailsPage = () => {
       setPermitDetailRefreshRequired(false)
       setActionErrorMessage('')
       setActionInfoMessage('')
+      setActionSuccessNotification(null)
       setIsSavingPermit(true)
       try {
         const resolvedPermitNumber = String(detail.permitNumber ?? permitNumber ?? '').trim()
@@ -2853,14 +2909,25 @@ const ProvincialPermitDetailsPage = () => {
           deferStatusTransition
             ? 'Permit fields were saved before the status transition.'
             : includeShipping
-              ? 'Permit and shipping saved successfully.'
-              : 'Permit saved successfully.',
+              ? 'Permit and shipping details were saved.'
+              : activePermitTabId === 'owner'
+                ? 'Applicant details were saved.'
+                : 'Permit details were saved.',
         )
-        setActionInfoMessage(
-          permitDetailRefreshFailed
-            ? `${mutationMessage} Current permit details could not be refreshed; reload before making another change.`
-            : mutationMessage,
-        )
+        if (permitDetailRefreshFailed) {
+          setActionInfoMessage(
+            `${mutationMessage} Current permit details could not be refreshed; reload before making another change.`,
+          )
+        } else {
+          setActionSuccessNotification({
+            title: includeShipping
+              ? 'Permit and shipping details saved'
+              : activePermitTabId === 'owner'
+                ? 'Applicant details saved'
+                : 'Permit details saved',
+            subtitle: mutationMessage,
+          })
+        }
         refreshLoadedPermitFees()
         // The mutation committed, but callers must stop until canonical permit details reload.
         return !permitDetailRefreshFailed
@@ -2894,6 +2961,7 @@ const ProvincialPermitDetailsPage = () => {
       permitForm,
       permitNumber,
       refreshLoadedPermitFees,
+      activePermitTabId,
       tryBeginPermitMutation,
     ],
   )
@@ -2928,6 +2996,7 @@ const ProvincialPermitDetailsPage = () => {
     }
     setActionErrorMessage('')
     setActionInfoMessage('')
+    setActionSuccessNotification(null)
     setIsSavingShipping(true)
     try {
       const result = await updatePermitShipping(request)
@@ -2954,7 +3023,10 @@ const ProvincialPermitDetailsPage = () => {
       setIsEditingShipping(false)
       setTouchedPermitFields({})
       setShowPermitValidationErrors(false)
-      setActionInfoMessage(permitMutationMessage(result, 'Shipping saved successfully.'))
+      setActionSuccessNotification({
+        title: 'Shipping details saved',
+        subtitle: permitMutationMessage(result, 'Shipping details were saved.'),
+      })
       refreshLoadedPermitFees()
       return true
     } catch (error) {
@@ -3053,6 +3125,7 @@ const ProvincialPermitDetailsPage = () => {
     }
     setActionErrorMessage('')
     setActionInfoMessage('')
+    setActionSuccessNotification(null)
     setIsSavingFeeOverride(true)
     try {
       const result = await updatePermitDetail(permitMutationRequest(request, detail.blanketOic))
@@ -3077,7 +3150,10 @@ const ProvincialPermitDetailsPage = () => {
       setFeeOverrideForm(savedContext)
       setFeeOverrideFieldErrors({})
       setIsEditingFeeOverride(false)
-      setActionInfoMessage(result.message || 'Permit fee override saved successfully.')
+      setActionSuccessNotification({
+        title: 'Fee override saved',
+        subtitle: result.message || 'The fee override was saved.',
+      })
       refreshLoadedPermitFees()
       return true
     } catch (error) {
@@ -3109,6 +3185,7 @@ const ProvincialPermitDetailsPage = () => {
 
       setActionErrorMessage('')
       setActionInfoMessage('')
+      setActionSuccessNotification(null)
       setIsUpdatingScaleId(scaleId)
       try {
         const result = await updatePermitScaleAttachment({
@@ -3158,6 +3235,7 @@ const ProvincialPermitDetailsPage = () => {
 
     setActionErrorMessage('')
     setActionInfoMessage('')
+    setActionSuccessNotification(null)
     setIsSavingPermitApplication(true)
     try {
       const result = await addApplicationsToPermit({
@@ -3237,6 +3315,7 @@ const ProvincialPermitDetailsPage = () => {
 
       setActionErrorMessage('')
       setActionInfoMessage('')
+      setActionSuccessNotification(null)
       setIsRemovingPermitApplication(applicationNumber)
       try {
         const result = await removeApplicationFromPermit({
@@ -3434,6 +3513,7 @@ const ProvincialPermitDetailsPage = () => {
 
     setActionErrorMessage('')
     setActionInfoMessage('')
+    setActionSuccessNotification(null)
     setIsSavingBoicPackage(true)
     try {
       const result = editingBoicPackageNumber
@@ -3507,6 +3587,7 @@ const ProvincialPermitDetailsPage = () => {
       }
       setActionErrorMessage('')
       setActionInfoMessage('')
+      setActionSuccessNotification(null)
       setIsDeletingBoicPackageNumber(packageNumberToDelete)
       let failureMessage = ''
       try {
@@ -3585,6 +3666,7 @@ const ProvincialPermitDetailsPage = () => {
 
     setActionErrorMessage('')
     setActionInfoMessage('')
+    setActionSuccessNotification(null)
     setIsSavingBoicScale(true)
     try {
       const result = await addBlanketOicScale(request)
@@ -3642,6 +3724,7 @@ const ProvincialPermitDetailsPage = () => {
 
       setActionErrorMessage('')
       setActionInfoMessage('')
+      setActionSuccessNotification(null)
       setIsDeletingBoicScaleId(row.id)
       try {
         const result = await deleteBlanketOicScale({
@@ -3741,6 +3824,7 @@ const ProvincialPermitDetailsPage = () => {
       }
       setActionErrorMessage('')
       setActionInfoMessage('')
+      setActionSuccessNotification(null)
       try {
         if (preview) {
           // Reserve the tab during the click so slow document reads cannot lose popup permission.
@@ -3782,6 +3866,7 @@ const ProvincialPermitDetailsPage = () => {
 
     setActionErrorMessage('')
     setActionInfoMessage('')
+    setActionSuccessNotification(null)
     setIsOpeningPermitReport(true)
     try {
       const result = await runReport({
@@ -3818,6 +3903,7 @@ const ProvincialPermitDetailsPage = () => {
       }
       setActionErrorMessage('')
       setActionInfoMessage('')
+      setActionSuccessNotification(null)
       setIsSendingPermitEmail(true)
       try {
         const result =
@@ -3900,6 +3986,7 @@ const ProvincialPermitDetailsPage = () => {
       const isLatestRequest = beginDocumentRefreshRequest()
       setActionErrorMessage('')
       setActionInfoMessage('')
+      setActionSuccessNotification(null)
       setDocumentSuccessMessage('')
       setIsRemovingDocumentId(row.id)
       try {
@@ -4746,9 +4833,69 @@ const ProvincialPermitDetailsPage = () => {
 
   const renderPackageFees = () => {
     if (!detail) return null
+    const displayedFeeRows = ministerialPermit
+      ? permitFeeRows.filter((row) => row.packageNumber === selectedMinisterialPackageNumber)
+      : permitFeeRows
+    const showDisplayedMinistryFeeColumn = ministerialPermit
+      ? displayedFeeRows.some((row) => row.ministryUser)
+      : showMinistryFeeColumn
     return (
       <>
-        {!ministerialFeeShellEmpty &&
+        {ministerialPermit &&
+          feeSummaryStatus === null &&
+          ministerialPackageOptions.length > 0 &&
+          selectedMinisterialPackage && (
+            <>
+              <div className="legacy-search-grid">
+                <SearchableSelect
+                  id="ministerialFeesPackageNumber"
+                  labelText="Package number"
+                  value={selectedMinisterialPackageNumber}
+                  options={ministerialPackageOptions}
+                  placeholder="Select package"
+                  onChange={setSelectedMinisterialPackageNumberState}
+                />
+              </div>
+              <dl className="detail-field-grid ministerial-package-summary">
+                <div className="detail-field-item">
+                  <dt className="detail-field-label">Age class</dt>
+                  <dd className="detail-field-value">
+                    {selectedMinisterialPackage.ageClass || '—'}
+                  </dd>
+                </div>
+                <div className="detail-field-item">
+                  <dt className="detail-field-label">Exemption number</dt>
+                  <dd className="detail-field-value">
+                    {detail.exemptionNumber ? (
+                      <Link
+                        to={`/provincial/exemption/${encodeURIComponent(detail.exemptionNumber)}`}
+                        state={withDetailReturnTo(
+                          location.state,
+                          {
+                            label: 'Provincial permit detail',
+                            to: locationPath(location),
+                          },
+                          detailReturnTo,
+                        )}
+                      >
+                        {detail.exemptionNumber}
+                      </Link>
+                    ) : (
+                      '—'
+                    )}
+                  </dd>
+                </div>
+                <div className="detail-field-item">
+                  <dt className="detail-field-label">Package fee (CAD)</dt>
+                  <dd className="detail-field-value">
+                    {selectedMinisterialPackageFeeSummary?.totalFeeForPackage ?? 'Unavailable'}
+                  </dd>
+                </div>
+              </dl>
+            </>
+          )}
+        {!ministerialPermit &&
+          !ministerialFeeShellEmpty &&
           feeSummaryStatus === null &&
           !!tabsData?.packageFeeSummaries.length && (
             <>
@@ -4815,35 +4962,37 @@ const ProvincialPermitDetailsPage = () => {
             headingLevel={3}
             role="alert"
           />
-        ) : permitFeeRows.length > 0 ? (
+        ) : displayedFeeRows.length > 0 ? (
           <TableFrame ariaLabel="Permit fee rows">
             <Table size="md" useZebraStyles>
               <TableHead>
                 <TableRow>
-                  <TableHeader>Package</TableHeader>
+                  {!ministerialPermit && <TableHeader>Package</TableHeader>}
                   <TableHeader>Timber mark</TableHeader>
                   <TableHeader>Species</TableHeader>
                   <TableHeader>Grade</TableHeader>
                   <TableHeader>AMV ($/m³ CAD)</TableHeader>
                   <TableHeader>Volume (m³)</TableHeader>
-                  {showMinistryFeeColumn && <TableHeader>EWB$</TableHeader>}
+                  {showDisplayedMinistryFeeColumn && <TableHeader>EWB$</TableHeader>}
                   <TableHeader>FIL%</TableHeader>
                   <TableHeader>MF%</TableHeader>
                   <TableHeader>Fee (CAD)</TableHeader>
                 </TableRow>
               </TableHead>
               <TableBody>
-                {permitFeeRows.map((row) => (
+                {displayedFeeRows.map((row) => (
                   <TableRow key={row.id}>
-                    <TableCell>
-                      {row.packageNumber ? formatPackageNumberLabel(row.packageNumber) : '-'}
-                    </TableCell>
+                    {!ministerialPermit && (
+                      <TableCell>
+                        {row.packageNumber ? formatPackageNumberLabel(row.packageNumber) : '-'}
+                      </TableCell>
+                    )}
                     <TableCell>{row.timberMark || '-'}</TableCell>
                     <TableCell>{row.species || '-'}</TableCell>
                     <TableCell>{row.grade || '-'}</TableCell>
                     <TableCell>{row.amv || '-'}</TableCell>
                     <TableCell>{row.volume.toLocaleString()}</TableCell>
-                    {showMinistryFeeColumn && <TableCell>{row.ewb || '-'}</TableCell>}
+                    {showDisplayedMinistryFeeColumn && <TableCell>{row.ewb || '-'}</TableCell>}
                     <TableCell>{row.filPercent || '-'}</TableCell>
                     <TableCell>{row.mfPercent || '-'}</TableCell>
                     <TableCell>
@@ -5072,6 +5221,19 @@ const ProvincialPermitDetailsPage = () => {
                 lowContrast
                 autoDismissMs={6000}
                 onCloseButtonClick={() => setActionInfoMessage('')}
+              />
+            </Column>
+          )}
+
+          {!!actionSuccessNotification && (
+            <Column sm={4} md={8} lg={16} className="detail-page-error">
+              <AppNotification
+                kind="success"
+                title={actionSuccessNotification.title}
+                subtitle={actionSuccessNotification.subtitle}
+                lowContrast
+                autoDismissMs={6000}
+                onCloseButtonClick={() => setActionSuccessNotification(null)}
               />
             </Column>
           )}
@@ -6156,6 +6318,18 @@ const ProvincialPermitDetailsPage = () => {
                               />
                             </div>
                           )}
+                          {ministerialPermit && ministerialPackageOptions.length > 0 && (
+                            <div className="legacy-search-grid">
+                              <SearchableSelect
+                                id="ministerialScalePackageNumber"
+                                labelText="Package number"
+                                value={selectedMinisterialPackageNumber}
+                                options={ministerialPackageOptions}
+                                placeholder="Select package"
+                                onChange={setSelectedMinisterialPackageNumberState}
+                              />
+                            </div>
+                          )}
                           {isPermitTablesLoading ? (
                             <InlineLoading description="Loading permit items…" />
                           ) : permitTablesErrorMessage ? (
@@ -6169,7 +6343,45 @@ const ProvincialPermitDetailsPage = () => {
                               headingLevel={3}
                               role="alert"
                             />
-                          ) : visibleBlanketOicPackages.length > 0 ? (
+                          ) : ministerialPermit && selectedMinisterialPackage ? (
+                            <dl className="detail-field-grid ministerial-package-summary">
+                              {[
+                                ['Region', selectedMinisterialPackage.region],
+                                [
+                                  'Species and end use sort',
+                                  selectedMinisterialPackage.speciesEndUseSort,
+                                ],
+                                ['Age class', selectedMinisterialPackage.ageClass],
+                                ['Product type', selectedMinisterialPackage.productType],
+                                [
+                                  'Package volume (m³)',
+                                  (
+                                    selectedPermitScaleTotalsByPackage.get(
+                                      selectedMinisterialPackage.packageNumber,
+                                    )?.volume ?? 0
+                                  ).toLocaleString(),
+                                ],
+                                [
+                                  'Package pieces',
+                                  (
+                                    selectedPermitScaleTotalsByPackage.get(
+                                      selectedMinisterialPackage.packageNumber,
+                                    )?.pieces ?? 0
+                                  ).toLocaleString(),
+                                ],
+                                ['Average length (m)', selectedMinisterialPackage.averageLength],
+                                [
+                                  'Average top diameter (rads)',
+                                  selectedMinisterialPackage.averageTopDiameter,
+                                ],
+                              ].map(([label, value]) => (
+                                <div key={label} className="detail-field-item">
+                                  <dt className="detail-field-label">{label}</dt>
+                                  <dd className="detail-field-value">{value || '—'}</dd>
+                                </div>
+                              ))}
+                            </dl>
+                          ) : visiblePackages.length > 0 ? (
                             <TableFrame ariaLabel="Permit packages">
                               <Table size="md" useZebraStyles>
                                 <TableHead>
@@ -6197,7 +6409,7 @@ const ProvincialPermitDetailsPage = () => {
                                   </TableRow>
                                 </TableHead>
                                 <TableBody>
-                                  {visibleBlanketOicPackages.map((row) => (
+                                  {visiblePackages.map((row) => (
                                     <TableRow key={row.packageNumber}>
                                       <TableCell>
                                         {row.packageNumber
@@ -6539,9 +6751,8 @@ const ProvincialPermitDetailsPage = () => {
                                       {canDisplayNormalPermitScaleMembership && (
                                         <TableHeader>Permit</TableHeader>
                                       )}
-                                      {canDisplayNormalPermitScaleMembership && (
-                                        <TableHeader>Package</TableHeader>
-                                      )}
+                                      {canDisplayNormalPermitScaleMembership &&
+                                        !ministerialPermit && <TableHeader>Package</TableHeader>}
                                       <TableHeader>Pieces</TableHeader>
                                       <TableHeader>Species</TableHeader>
                                       <TableHeader>Grade</TableHeader>
@@ -6579,9 +6790,10 @@ const ProvincialPermitDetailsPage = () => {
                                         {canDisplayNormalPermitScaleMembership && (
                                           <TableCell>{row.permitNumber || '-'}</TableCell>
                                         )}
-                                        {canDisplayNormalPermitScaleMembership && (
-                                          <TableCell>{row.packageNumber || '-'}</TableCell>
-                                        )}
+                                        {canDisplayNormalPermitScaleMembership &&
+                                          !ministerialPermit && (
+                                            <TableCell>{row.packageNumber || '-'}</TableCell>
+                                          )}
                                         <TableCell>{row.pieces.toLocaleString()}</TableCell>
                                         <TableCell>{row.species || '-'}</TableCell>
                                         <TableCell>{row.grade || '-'}</TableCell>
