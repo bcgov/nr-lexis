@@ -3,6 +3,7 @@ import { Button, TextArea, TextInput } from '@carbon/react'
 import { Add, ArrowRight } from '@carbon/icons-react'
 import { AppNotification } from '../AppNotification'
 import Modal from '@/components/Modal'
+import ConfirmationModal from '@/components/ConfirmationModal'
 import { requiredLabel } from '@/utils/required-label'
 import {
   buildUploadResultMessage,
@@ -32,6 +33,7 @@ import {
   invoiceNumberStorageFieldError,
 } from '@/pages/shared/invoice-storage-validation'
 import { submitAdminUpload, validateAdminUpload } from '@/service/admin-upload-service'
+import './DetailDocumentUploadPanel.scss'
 
 type DetailDocumentUploadType = 'application' | 'exemption' | 'permit' | 'invoice'
 type DetailDocumentUploadStep = 'upload' | 'review'
@@ -46,6 +48,10 @@ type DetailDocumentUploadPanelProps = {
   onBusyChange?: (isBusy: boolean) => void
   onDirtyChange?: (isDirty: boolean) => void
   onUploadComplete?: () => Promise<void> | void
+  presentation?: 'modal' | 'side-panel'
+  initiallyOpen?: boolean
+  /** User-requested close only; successful uploads keep their result notification mounted. */
+  onClose?: () => void
 }
 
 type UploadCopy = {
@@ -97,8 +103,12 @@ const DetailDocumentUploadPanel = ({
   onBusyChange,
   onDirtyChange,
   onUploadComplete,
+  presentation = 'modal',
+  initiallyOpen = false,
+  onClose,
 }: DetailDocumentUploadPanelProps) => {
   const copy = UPLOAD_COPY[workflowType]
+  const isSidePanel = presentation === 'side-panel' && workflowType !== 'invoice'
   const disabledReason =
     disabledReasonProp ?? 'Your session does not include the required upload permission.'
   const [salesInvoiceNumber, setSalesInvoiceNumber] = useState('')
@@ -114,7 +124,8 @@ const DetailDocumentUploadPanel = ({
   const [showFileValidationError, setShowFileValidationError] = useState(false)
   const [showInvoiceValidationErrors, setShowInvoiceValidationErrors] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false)
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(initiallyOpen && !disabled)
+  const [isDiscardConfirmationOpen, setIsDiscardConfirmationOpen] = useState(false)
   const [uploadStep, setUploadStep] = useState<DetailDocumentUploadStep>('upload')
   const validationRequestsRef = useRef(new Map<string, ValidationRequest>())
   const nextValidationTokenRef = useRef(0)
@@ -710,17 +721,26 @@ const DetailDocumentUploadPanel = ({
     setIsUploadModalOpen(true)
   }
 
+  const discardUploadAndClose = (): void => {
+    resetUpload()
+    setIsDiscardConfirmationOpen(false)
+    setIsUploadModalOpen(false)
+    onClose?.()
+  }
+
   const closeUploadModal = (): void => {
     if (isSubmitting) {
       return
     }
-
-    resetUpload()
-    setIsUploadModalOpen(false)
+    if (isSidePanel && isDirty) {
+      setIsDiscardConfirmationOpen(true)
+      return
+    }
+    discardUploadAndClose()
   }
 
   const documentNoun = workflowType === 'invoice' ? 'invoice' : 'document'
-  const modalHeading = `Add ${documentNoun}`
+  const modalHeading = isSidePanel ? 'Add documents' : `Add ${documentNoun}`
   const modalInitialFocusId = `${inputId}UploadModalContent`
 
   const inlineInvoiceFormRef = useRef<HTMLElement>(null)
@@ -912,7 +932,9 @@ const DetailDocumentUploadPanel = ({
           {isSubmitting
             ? 'Submitting upload…'
             : uploadStep === 'review'
-              ? 'Submit upload'
+              ? isSidePanel
+                ? 'Save documents'
+                : 'Submit upload'
               : 'Review upload'}
         </Button>
       </div>
@@ -940,7 +962,7 @@ const DetailDocumentUploadPanel = ({
           onCloseButtonClick={() => setErrorMessage('')}
         />
       )}
-      {(!isUploadModalOpen || workflowType !== 'invoice') && (
+      {!initiallyOpen && (!isUploadModalOpen || workflowType !== 'invoice') && (
         <div className="detail-document-upload__trigger">
           <Button
             kind="primary"
@@ -975,13 +997,29 @@ const DetailDocumentUploadPanel = ({
           size="sm"
           modalHeading={modalHeading}
           aria-label={modalHeading}
-          className="detail-document-upload-modal"
+          className={
+            isSidePanel
+              ? 'detail-document-upload-modal detail-document-upload-modal--side-panel'
+              : 'detail-document-upload-modal'
+          }
           selectorPrimaryFocus={`#${modalInitialFocusId}`}
           onRequestClose={closeUploadModal}
           preventCloseOnClickOutside
         >
           {uploadContent}
         </Modal>
+      )}
+      {isDiscardConfirmationOpen && (
+        <ConfirmationModal
+          open
+          title="Discard changes?"
+          description="Your changes will be lost."
+          confirmLabel="Discard changes"
+          cancelLabel="Keep editing"
+          danger
+          onConfirm={discardUploadAndClose}
+          onClose={() => setIsDiscardConfirmationOpen(false)}
+        />
       )}
     </div>
   )

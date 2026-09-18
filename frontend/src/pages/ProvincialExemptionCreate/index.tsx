@@ -119,7 +119,7 @@ const EXEMPTION_CREATE_TABS: readonly ExemptionCreateTab[] = [
 ]
 
 const EXEMPTION_CREATE_TAB_LABELS: Record<ExemptionCreateTab, string> = {
-  owner: 'Owner',
+  owner: 'Applicant',
   agent: 'Agent',
   summary: 'Exemption details',
   applications: 'Applications',
@@ -584,7 +584,7 @@ const ProvincialExemptionCreatePage = () => {
             agentClientData: null,
             ownerClientLocations: [],
             agentClientLocations: [],
-            error: 'Owner details could not be retrieved from the selected application.',
+            error: 'Applicant details could not be retrieved from the selected application.',
           })
         }
         return
@@ -602,7 +602,7 @@ const ProvincialExemptionCreatePage = () => {
           agentClientData: null,
           ownerClientLocations: [],
           agentClientLocations: [],
-          error: 'Owner details could not be retrieved from the selected application.',
+          error: 'Applicant details could not be retrieved from the selected application.',
         })
         return
       }
@@ -667,7 +667,7 @@ const ProvincialExemptionCreatePage = () => {
         error: [ownerDataResult, ownerLocationsResult, agentDataResult, agentLocationsResult].some(
           (result) => result.status === 'rejected',
         )
-          ? 'Some client details could not be retrieved. The selected application remains the source of owner information.'
+          ? 'Some client details could not be retrieved. The selected application remains the source of applicant information.'
           : '',
       })
     }
@@ -1099,7 +1099,7 @@ const ProvincialExemptionCreatePage = () => {
                   <Tile
                     className="create-form-tile application-detail-section"
                     role="region"
-                    aria-label="Owner"
+                    aria-label="Applicant"
                   >
                     <div className="legacy-search-grid create-form-grid">
                       <TextInput
@@ -1144,25 +1144,25 @@ const ProvincialExemptionCreatePage = () => {
                     </div>
                     {!applicationOwnerSnapshot && ownerContextState === 'idle' && (
                       <p className="detail-empty-message">
-                        Owner details are derived from the first selected application. A standalone
-                        Ministerial exemption has no linked owner details.
+                        Applicant details are derived from the first selected application. A
+                        standalone Ministerial exemption has no linked applicant details.
                       </p>
                     )}
                     {ownerContextState === 'loading' && (
-                      <p className="detail-empty-message">Loading owner details…</p>
+                      <p className="detail-empty-message">Loading applicant details…</p>
                     )}
                     {!!ownerContextError && (
                       <InlineNotification
                         className="detail-context-notification"
                         kind="warning"
-                        title="Owner details unavailable"
+                        title="Applicant details unavailable"
                         subtitle={ownerContextError}
                         lowContrast
                         hideCloseButton
                       />
                     )}
                     <ExemptionCreateClientSummary
-                      title="Owner client details"
+                      title="Applicant client details"
                       clientData={ownerClientData}
                     />
                   </Tile>

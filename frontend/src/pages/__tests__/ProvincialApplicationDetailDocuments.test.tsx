@@ -65,7 +65,7 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
       screen.queryByRole('heading', { level: 3, name: 'No permits found' }),
     ).not.toBeInTheDocument()
 
-    await selectApplicationDetailTab('Owner')
+    await selectApplicationDetailTab('Applicant')
     expect(
       screen.queryByText(
         'Application document upload is unavailable while permit information cannot be retrieved.',
@@ -247,7 +247,7 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByText('Owner client details')).toBeInTheDocument()
+    expect(await screen.findByText('Applicant client details')).toBeInTheDocument()
     expect(
       screen.queryByText('Application document upload is unavailable for expired applications.'),
     ).not.toBeInTheDocument()

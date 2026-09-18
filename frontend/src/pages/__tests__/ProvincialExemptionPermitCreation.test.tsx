@@ -655,6 +655,11 @@ describe('permit creation from an exemption', () => {
     )
     await waitFor(() => expect(router.state.location.pathname).toBe('/provincial/permit/9020948'))
     expect(router.state.location.search).toBe('?permitFilter=902')
+    expect(router.state.location.state).toMatchObject({
+      blanketOicPermitCreated: '9020948',
+      lexisDetailTab: 'permit',
+      returnTo: { to: '/provincial/exemption/TEST13E2?permitFilter=902' },
+    })
   })
 
   it('loads locations after selecting applicant and agent clients', async () => {
@@ -955,7 +960,7 @@ describe('permit creation from an exemption', () => {
     await userEvent.click(within(page).getByRole('tab', { name: 'Applicant' }))
     const ownerClientNumber = within(page).getByLabelText('Applicant client number')
     fireEvent.change(ownerClientNumber, { target: { value: '11111111' } })
-    expect(await within(page).findByText('Client details unavailable')).toBeInTheDocument()
+    expect(await within(page).findByText('Permit needs attention')).toBeInTheDocument()
 
     await userEvent.click(within(page).getByRole('checkbox', { name: "I'm an agent" }))
     const agentClientNumber = within(page).getByLabelText('Agent client number')
@@ -965,12 +970,17 @@ describe('permit creation from an exemption', () => {
     await userEvent.click(ownerClientNumber)
     await userEvent.tab()
     await waitFor(() => expect(within(page).getByLabelText('Applicant location')).toHaveValue('00'))
-    expect(within(page).getByText('Client details unavailable')).toBeInTheDocument()
+    expect(within(page).getByText('Permit needs attention')).toBeInTheDocument()
+    expect(
+      within(page).getByText(
+        'Client details could not be retrieved. Existing selections were preserved. Please try again.',
+      ),
+    ).toBeInTheDocument()
 
     await userEvent.click(agentClientNumber)
     await userEvent.tab()
     await waitFor(() => expect(within(page).getByLabelText('Agent location')).toHaveValue('00'))
-    expect(within(page).queryByText('Client details unavailable')).not.toBeInTheDocument()
+    expect(within(page).queryByText('Permit needs attention')).not.toBeInTheDocument()
 
     consoleError.mockRestore()
   })
@@ -1036,13 +1046,14 @@ describe('permit creation from an exemption', () => {
     await openPermitsTab()
     const page = await openBlanketOicCreatePage()
     await userEvent.click(within(page).getByRole('button', { name: 'Save permit' }))
-    expect(within(page).getByRole('tab', { name: 'Permit' })).toHaveAttribute(
-      'aria-selected',
-      'true',
+    expect(
+      within(page).getByRole('tab', { name: 'Permit, 2 required fields outstanding' }),
+    ).toHaveAttribute('aria-selected', 'true')
+    expect(within(page).getAllByText('Permit request pieces is required.')).not.toHaveLength(0)
+    expect(within(page).getAllByText('Permit request volume is required.')).not.toHaveLength(0)
+    await userEvent.click(
+      within(page).getByRole('tab', { name: /^Applicant, \d+ required fields outstanding$/ }),
     )
-    expect(within(page).getByText('Permit request pieces is required.')).toBeInTheDocument()
-    expect(within(page).getByText('Permit request volume is required.')).toBeInTheDocument()
-    await userEvent.click(within(page).getByRole('tab', { name: 'Applicant' }))
 
     expect(
       await within(page).findAllByText('Applicant client number must be exactly 8 digits.'),

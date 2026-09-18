@@ -211,7 +211,11 @@ const ProvincialBlanketOicPermitCreatePage = () => {
 
   const created = (permitNumber: string) => {
     navigate(`/provincial/permit/${encodeURIComponent(permitNumber)}${location.search}`, {
-      state: withDetailReturnTo(detailReturnTo.state, detailReturnTo),
+      state: {
+        ...withDetailReturnTo(detailReturnTo.state, detailReturnTo),
+        blanketOicPermitCreated: permitNumber,
+        lexisDetailTab: 'permit',
+      },
     })
   }
 

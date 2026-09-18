@@ -979,7 +979,7 @@ const FederalApplicationDetailsPage = () => {
                 contained
                 className="application-tabs__list application-detail-tab-list"
               >
-                <Tab>Owner</Tab>
+                <Tab>Applicant</Tab>
                 {hasAgent && <Tab>Agent</Tab>}
                 <Tab>Application</Tab>
                 <Tab>Items</Tab>
@@ -993,7 +993,7 @@ const FederalApplicationDetailsPage = () => {
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
                       <DetailFieldTile
-                        title="Owner"
+                        title="Applicant"
                         fields={[
                           {
                             label: 'Client number',
