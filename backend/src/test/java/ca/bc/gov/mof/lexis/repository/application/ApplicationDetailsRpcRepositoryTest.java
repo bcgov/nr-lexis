@@ -435,7 +435,6 @@ class ApplicationDetailsRpcRepositoryTest {
     assertOracleFailure(() -> repository.findSpeciesEndUsesByRegionRequired("11"));
     assertOracleFailure(() -> repository.findCandidateEndUseCodesRequired(1, "HE", 11L));
     assertOracleFailure(() -> repository.findCandidateExcolCombinationsRequired(1, "HE", 11L));
-    assertOracleFailure(() -> repository.isPackageStatusCodeValidRequired("A"));
   }
 
   @Test
@@ -447,7 +446,6 @@ class ApplicationDetailsRpcRepositoryTest {
     assertThat(repository.findSpeciesEndUsesByRegionRequired("11")).isEmpty();
     assertThat(repository.findCandidateEndUseCodesRequired(1, "HE", 11L)).isEmpty();
     assertThat(repository.findCandidateExcolCombinationsRequired(1, "HE", 11L)).isEmpty();
-    assertThat(repository.isPackageStatusCodeValidRequired("A")).isFalse();
   }
 
   @Test

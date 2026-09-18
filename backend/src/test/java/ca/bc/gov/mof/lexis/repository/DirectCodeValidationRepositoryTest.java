@@ -117,6 +117,15 @@ class DirectCodeValidationRepositoryTest {
   private static Stream<ValidationCase> validators() {
     return Stream.of(
         new ValidationCase(
+            "growth type", LexisCodeQueries.GROWTH_TYPE_BY_CODE, false,
+            jdbc -> new ApplicationDetailsRpcRepository(jdbc)::isGrowthTypeCodeValidRequired),
+        new ValidationCase(
+            "product type", LexisCodeQueries.PRODUCT_TYPE_BY_CODE, false,
+            jdbc -> new ApplicationDetailsRpcRepository(jdbc)::isProductTypeCodeValidRequired),
+        new ValidationCase(
+            "package status", LexisCodeQueries.PACKAGE_STATUS_BY_CODE, false,
+            jdbc -> new ApplicationDetailsRpcRepository(jdbc)::isPackageStatusCodeValidRequired),
+        new ValidationCase(
             "application status", LexisCodeQueries.APPLICATION_STATUS_BY_CODE, false,
             jdbc -> new ApplicationDetailsRpcRepository(jdbc)::isApplicationStatusCodeValidRequired),
         new ValidationCase(

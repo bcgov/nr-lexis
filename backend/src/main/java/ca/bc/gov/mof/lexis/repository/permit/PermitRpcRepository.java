@@ -1930,15 +1930,18 @@ public class PermitRpcRepository extends OracleRepositorySupport {
   }
 
   public Optional<String> findGrowthTypeDescription(String growthTypeCode) {
-    return findCodeDescription(FIND_GROWTH_TYPE_CODE, growthTypeCode);
+    return findCodeDescriptionDirect(
+        LexisCodeQueries.GROWTH_TYPE_BY_CODE, FIND_GROWTH_TYPE_CODE, growthTypeCode);
   }
 
   public Optional<String> findPackageStatusDescription(String packageStatusCode) {
-    return findCodeDescription(FIND_PACKAGE_STATUS_CODE, packageStatusCode);
+    return findCodeDescriptionDirect(
+        LexisCodeQueries.PACKAGE_STATUS_BY_CODE, FIND_PACKAGE_STATUS_CODE, packageStatusCode);
   }
 
   public Optional<String> findProductTypeDescription(String productTypeCode) {
-    return findCodeDescription(FIND_PRODUCT_TYPE_CODE, productTypeCode);
+    return findCodeDescriptionDirect(
+        LexisCodeQueries.PRODUCT_TYPE_BY_CODE, FIND_PRODUCT_TYPE_CODE, productTypeCode);
   }
 
   public List<String> findCandidateExcolCodes(

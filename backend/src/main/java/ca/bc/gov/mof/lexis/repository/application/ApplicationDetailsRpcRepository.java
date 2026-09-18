@@ -981,15 +981,18 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
   }
 
   public Optional<String> findGrowthTypeDescription(String growthTypeCode) {
-    return findCodeDescription(FIND_GROWTH_TYPE_CODE, growthTypeCode);
+    return findCodeDescriptionDirect(
+        LexisCodeQueries.GROWTH_TYPE_BY_CODE, FIND_GROWTH_TYPE_CODE, growthTypeCode);
   }
 
   public Optional<String> findPackageStatusDescription(String packageStatusCode) {
-    return findCodeDescription(FIND_PACKAGE_STATUS_CODE, packageStatusCode);
+    return findCodeDescriptionDirect(
+        LexisCodeQueries.PACKAGE_STATUS_BY_CODE, FIND_PACKAGE_STATUS_CODE, packageStatusCode);
   }
 
   public Optional<String> findProductTypeDescription(String productTypeCode) {
-    return findCodeDescription(FIND_PRODUCT_TYPE_CODE, productTypeCode);
+    return findCodeDescriptionDirect(
+        LexisCodeQueries.PRODUCT_TYPE_BY_CODE, FIND_PRODUCT_TYPE_CODE, productTypeCode);
   }
 
   public List<SpeciesGradeEndUseRow> findSpeciesEndUsesByRegionSpeciesRequired(
@@ -1079,15 +1082,15 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
   }
 
   public boolean isProductTypeCodeValidRequired(String code) {
-    return codeExistsRequired(FIND_PRODUCT_TYPE_CODE, code);
+    return directCodeExistsRequired(LexisCodeQueries.PRODUCT_TYPE_BY_CODE, code);
   }
 
   public boolean isGrowthTypeCodeValidRequired(String code) {
-    return codeExistsRequired(FIND_GROWTH_TYPE_CODE, code);
+    return directCodeExistsRequired(LexisCodeQueries.GROWTH_TYPE_BY_CODE, code);
   }
 
   public boolean isPackageStatusCodeValidRequired(String code) {
-    return codeExistsRequired(FIND_PACKAGE_STATUS_CODE, code);
+    return directCodeExistsRequired(LexisCodeQueries.PACKAGE_STATUS_BY_CODE, code);
   }
 
   public boolean isExemptionReasonCodeValidRequired(String code) {
@@ -1177,20 +1180,6 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     return pattern.toString();
   }
 
-  private Optional<String> findCodeDescription(String procedureSignature, String code) {
-    String normalized = trim(code);
-    if (normalized == null) {
-      return Optional.empty();
-    }
-    return queryCursorSingle(
-            procedureSignature,
-            cs -> cs.setString(1, normalized),
-            2,
-            rs -> trim(rs.getString(2)))
-        .filter(value -> value != null && !value.isBlank())
-        .or(() -> fallbackCodeDescription(procedureSignature, normalized));
-  }
-
   private boolean directCodeExistsRequired(String sql, String code) {
     String normalized = trim(code);
     if (normalized == null) {
@@ -1198,20 +1187,6 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     }
     List<String> codes = queryDirectRequired(sql, rs -> trim(rs.getString(1)), normalized);
     return !codes.isEmpty() && normalized.equalsIgnoreCase(codes.get(0));
-  }
-
-  private boolean codeExistsRequired(String procedureSignature, String code) {
-    String normalized = trim(code);
-    if (normalized == null) {
-      return false;
-    }
-    return queryCursorSingleRequired(
-            procedureSignature,
-            cs -> cs.setString(1, normalized),
-            2,
-            rs -> trim(rs.getString(1)))
-        .filter(normalized::equalsIgnoreCase)
-        .isPresent();
   }
 
   private void bindApplicationInsert(CallableStatement cs, ApplicationInsertRecord record)
