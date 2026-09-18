@@ -59,7 +59,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
 
     const tabs = await screen.findAllByRole('tab')
     expect(tabs.map((tab) => tab.textContent)).toEqual([
-      'Owner',
+      'Applicant',
       'Agent',
       'Application',
       'Items',
@@ -432,7 +432,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByRole('tab', { name: 'Owner' })).toBeInTheDocument()
+    expect(await screen.findByRole('tab', { name: 'Applicant' })).toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: 'Remarks' })).not.toBeInTheDocument()
     expect(screen.queryByLabelText('New Remark')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save Remark' })).not.toBeInTheDocument()
@@ -617,16 +617,16 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationDetailTab('Owner')
+    await selectApplicationDetailTab('Applicant')
     const ownerDetailsTile = (
-      await screen.findByRole('heading', { name: 'Owner client details', level: 2 })
+      await screen.findByRole('heading', { name: 'Applicant client details', level: 2 })
     ).closest('.cds--tile')
     expect(ownerDetailsTile).toBeTruthy()
     expect(
       within(ownerDetailsTile as HTMLElement).getByText('owner@example.test'),
     ).toBeInTheDocument()
     expect(
-      screen.queryByRole('heading', { name: 'Owner client details', level: 3 }),
+      screen.queryByRole('heading', { name: 'Applicant client details', level: 3 }),
     ).not.toBeInTheDocument()
     expect(screen.queryByText('Notification email')).not.toBeInTheDocument()
 
@@ -674,9 +674,9 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationDetailTab('Owner')
+    await selectApplicationDetailTab('Applicant')
     const ownerDetailsTile = (
-      await screen.findByRole('heading', { name: 'Owner client details', level: 2 })
+      await screen.findByRole('heading', { name: 'Applicant client details', level: 2 })
     ).closest('.cds--tile')
     expect(ownerDetailsTile).toBeTruthy()
     const applicantTypeField = within(ownerDetailsTile as HTMLElement)

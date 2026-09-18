@@ -1123,7 +1123,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     )
 
     for (const tabName of [
-      'Owner',
+      'Applicant',
       'Agent',
       'Application',
       'Items',
@@ -1159,7 +1159,9 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(screen.getByText('250-555-0101')).toBeInTheDocument()
     expect(screen.getByText('250-555-0102')).toBeInTheDocument()
     expect(screen.getByText('owner@example.test')).toBeInTheDocument()
-    const ownerTile = screen.getByRole('heading', { name: 'Owner', level: 2 }).closest('.cds--tile')
+    const ownerTile = screen
+      .getByRole('heading', { name: 'Applicant', level: 2 })
+      .closest('.cds--tile')
     expect(ownerTile).toBeTruthy()
     const ownerApplicantTypeField = within(ownerTile as HTMLElement)
       .getByText('Applicant type')
@@ -1293,9 +1295,11 @@ describe('Exemption and Federal Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByRole('tab', { name: 'Owner' })).toBeInTheDocument()
+    expect(await screen.findByRole('tab', { name: 'Applicant' })).toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
-    const ownerTile = screen.getByRole('heading', { name: 'Owner', level: 2 }).closest('.cds--tile')
+    const ownerTile = screen
+      .getByRole('heading', { name: 'Applicant', level: 2 })
+      .closest('.cds--tile')
     expect(ownerTile).toBeTruthy()
     expect(within(ownerTile as HTMLElement).queryByText('O')).not.toBeInTheDocument()
 
@@ -2140,7 +2144,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByRole('tab', { name: 'Owner' })).toBeInTheDocument()
+    expect(await screen.findByRole('tab', { name: 'Applicant' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Back to Your landing page' })).toHaveAttribute(
       'href',
       '/provincial/review',

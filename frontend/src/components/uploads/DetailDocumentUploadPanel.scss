@@ -1,0 +1,14 @@
+.detail-document-upload-modal--side-panel.cds--modal {
+  align-items: stretch;
+  justify-content: flex-end;
+  padding: 0;
+
+  .cds--modal-container {
+    inline-size: min(48rem, 100vw);
+    max-inline-size: 100vw;
+    block-size: 100dvh;
+    max-block-size: 100dvh;
+    margin: 0;
+    border-radius: 0;
+  }
+}

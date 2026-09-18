@@ -381,7 +381,7 @@ describe('Create Page Core Flows', () => {
     )
 
     for (const tabName of [
-      'Owner',
+      'Applicant',
       'Agent',
       'Application',
       'Items',
@@ -421,7 +421,7 @@ describe('Create Page Core Flows', () => {
       screen.getByRole('heading', { level: 1, name: 'Create provincial application' }),
     ).toBeInTheDocument()
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
-    expect(screen.getByRole('region', { name: 'Owner' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Applicant' })).toBeInTheDocument()
     const applicationFormActions = screen.getByRole('group', {
       name: 'Application form actions',
     })
@@ -441,7 +441,7 @@ describe('Create Page Core Flows', () => {
     expect(screen.queryByRole('group', { name: 'New application state' })).not.toBeInTheDocument()
     expect(screen.queryByRole('textbox', { name: /application number/i })).not.toBeInTheDocument()
     for (const tabName of [
-      'Owner',
+      'Applicant',
       'Application',
       'Items',
       'Documents',
@@ -852,7 +852,7 @@ describe('Create Page Core Flows', () => {
     )
 
     expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
-      'Owner',
+      'Applicant',
       'Agent',
       'Application',
       'Items',
@@ -923,14 +923,14 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationCreateTab('Owner')
-    const ownerDetails = await screen.findByRole('region', { name: 'Owner client details' })
+    await selectApplicationCreateTab('Applicant')
+    const ownerDetails = await screen.findByRole('region', { name: 'Applicant client details' })
     expect(within(ownerDetails).getByText('Owner Forestry Ltd.')).toBeInTheDocument()
     expect(within(ownerDetails).getByText('123 Timber Road')).toBeInTheDocument()
     expect(within(ownerDetails).getByText('owner@example.test')).toBeInTheDocument()
     expect(
       within(ownerDetails).queryByRole('heading', {
-        name: 'Owner client details',
+        name: 'Applicant client details',
         level: 3,
       }),
     ).not.toBeInTheDocument()
@@ -971,7 +971,7 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationCreateTab('Owner')
+    await selectApplicationCreateTab('Applicant')
     expect(screen.getByRole('combobox', { name: 'Applicant type' })).toHaveValue('Ministerial')
     expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
 
@@ -1008,7 +1008,7 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationCreateTab('Owner')
+    await selectApplicationCreateTab('Applicant')
     const ownerClientNumberInput = screen.getByRole('textbox', { name: 'Client number' })
     mockedFetchApplicationClientLocations.mockClear()
 
@@ -1145,7 +1145,7 @@ describe('Create Page Core Flows', () => {
       await userEvent.click(submitButton)
 
       expect(
-        await screen.findAllByText('Owner client number must be 1 to 8 digits.'),
+        await screen.findAllByText('Applicant client number must be 1 to 8 digits.'),
       ).not.toHaveLength(0)
       expect(mockedFetchApplicationClientLocations).not.toHaveBeenCalled()
       expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
@@ -1243,7 +1243,7 @@ describe('Create Page Core Flows', () => {
 
     expect(
       await screen.findAllByText(
-        'Owner name contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
+        'Applicant contact name contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
       ),
     ).not.toHaveLength(0)
     await selectApplicationCreateTab('Items')
@@ -1259,7 +1259,7 @@ describe('Create Page Core Flows', () => {
     expect(screen.getByText('Remarks must be 254 characters or fewer.')).toBeInTheDocument()
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
 
-    await selectApplicationCreateTab('Owner')
+    await selectApplicationCreateTab('Applicant')
     fireEvent.change(screen.getByRole('combobox', { name: 'Contact name' }), {
       target: { value: 'O'.repeat(120) },
     })
@@ -1312,7 +1312,7 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationCreateTab('Owner')
+    await selectApplicationCreateTab('Applicant')
     const applicantType = screen.getByRole('textbox', { name: 'Applicant type' })
     expect(applicantType).toHaveValue('Owner')
     expect(applicantType).toHaveAttribute('readonly')
@@ -1404,9 +1404,9 @@ describe('Create Page Core Flows', () => {
     await waitFor(() => expect(submitButton).toBeEnabled())
     await userEvent.click(submitButton)
 
-    expect(await screen.findAllByText('Owner client location code is required.')).not.toHaveLength(
-      0,
-    )
+    expect(
+      await screen.findAllByText('Applicant client location code is required.'),
+    ).not.toHaveLength(0)
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
   })
 
@@ -1456,7 +1456,7 @@ describe('Create Page Core Flows', () => {
     })
 
     expect(screen.getByRole('combobox', { name: 'Region' })).toBeEnabled()
-    await selectApplicationCreateTab('Owner')
+    await selectApplicationCreateTab('Applicant')
     expect(screen.getByRole('textbox', { name: 'Client number' })).not.toHaveAttribute('readonly')
   })
 
@@ -1509,7 +1509,7 @@ describe('Create Page Core Flows', () => {
     expect(screen.getByRole('combobox', { name: 'Region' })).toBeEnabled()
     expect(screen.getByRole('spinbutton', { name: 'Exemption term (days)' })).toHaveValue(180)
 
-    await selectApplicationCreateTab('Owner')
+    await selectApplicationCreateTab('Applicant')
     expect(screen.getByRole('textbox', { name: 'Client number' })).toHaveValue('00077881')
     expect(screen.getByRole('textbox', { name: 'Client number' })).toHaveAttribute('readonly')
     await waitFor(() => {
@@ -1612,7 +1612,7 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationCreateTab('Owner')
+    await selectApplicationCreateTab('Applicant')
     const ownerNameInput = await screen.findByRole('combobox', { name: 'Contact name' })
     await waitFor(() => expect(ownerNameInput).toHaveValue('Owner Contact'))
     fireEvent.change(ownerNameInput, { target: { value: 'Advertising Owner' } })
@@ -1845,7 +1845,7 @@ describe('Create Page Core Flows', () => {
 
     await screen.findByRole('heading', { level: 1, name: 'Create exemption' })
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
-    expect(screen.getByRole('tab', { name: 'Owner' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Applicant' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Exemption details' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Applications' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Documents' })).toBeInTheDocument()
@@ -1854,7 +1854,7 @@ describe('Create Page Core Flows', () => {
     await selectExemptionCreateTab('Documents')
     expect(screen.getByText('Save the exemption before uploading documents.')).toBeVisible()
     expect(screen.getByRole('button', { name: 'Add document' })).toBeDisabled()
-    await selectExemptionCreateTab('Owner')
+    await selectExemptionCreateTab('Applicant')
     await waitFor(() =>
       expect(screen.getByRole('textbox', { name: 'Client number' })).toHaveValue('00011111'),
     )
@@ -1882,7 +1882,7 @@ describe('Create Page Core Flows', () => {
     )
     expect(screen.queryByRole('group', { name: 'New exemption state' })).not.toBeInTheDocument()
     expect(screen.queryByRole('textbox', { name: /exemption number/i })).not.toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: 'Owner' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Applicant' })).toBeInTheDocument()
     await waitFor(() => expect(screen.getByLabelText('Approved volume (m³)')).toHaveValue('250.5'))
     expect(mockedFetchProvincialExemptionCreatePreview).toHaveBeenCalledWith(['321', '654'])
     await waitFor(() =>
@@ -1959,7 +1959,7 @@ describe('Create Page Core Flows', () => {
     await screen.findByRole('heading', { level: 1, name: 'Create exemption' })
     await waitFor(() => expect(screen.getByRole('tab', { name: 'Agent' })).toBeInTheDocument())
     expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
-      'Owner',
+      'Applicant',
       'Agent',
       'Exemption details',
       'Applications',
@@ -1972,7 +1972,7 @@ describe('Create Page Core Flows', () => {
       expect(screen.getByRole('textbox', { name: 'Agent number' })).toHaveValue('00002176'),
     )
     expect(screen.getByRole('textbox', { name: 'Contact name' })).toHaveValue('Agent Contact')
-    await selectExemptionCreateTab('Owner')
+    await selectExemptionCreateTab('Applicant')
     expect(screen.getByRole('textbox', { name: "I'm an agent" })).toHaveValue('Yes')
   })
 
@@ -2006,7 +2006,7 @@ describe('Create Page Core Flows', () => {
       await screen.findByRole('heading', { level: 1, name: 'Create exemption' })
       await waitFor(() => expect(mockedFetchApplicationSummarySnapshot).toHaveBeenCalledWith('321'))
       expect(screen.getByRole('textbox', { name: 'Client number' })).toHaveValue('')
-      expect(screen.getByText('Loading owner details…')).toBeInTheDocument()
+      expect(screen.getByText('Loading applicant details…')).toBeInTheDocument()
 
       await selectExemptionCreateTab('Applications')
       const selectedApplications = screen.getByRole('list', { name: 'Selected applications' })
@@ -2015,10 +2015,10 @@ describe('Create Page Core Flows', () => {
           name: 'Remove application 321',
         }),
       )
-      await selectExemptionCreateTab('Owner')
+      await selectExemptionCreateTab('Applicant')
       expect(screen.getByRole('textbox', { name: 'Client number' })).toHaveValue('')
       expect(
-        screen.getByText(/A standalone Ministerial exemption has no linked owner details/),
+        screen.getByText(/A standalone Ministerial exemption has no linked applicant details/),
       ).toBeInTheDocument()
 
       await selectExemptionCreateTab('Applications')
@@ -2030,9 +2030,9 @@ describe('Create Page Core Flows', () => {
       await waitFor(() => expect(mockedFetchApplicationSummarySnapshot).toHaveBeenCalledTimes(2))
       expect(mockedFetchApplicationSummarySnapshot).toHaveBeenLastCalledWith(nextApplicationNumber)
 
-      await selectExemptionCreateTab('Owner')
+      await selectExemptionCreateTab('Applicant')
       expect(screen.getByRole('textbox', { name: 'Client number' })).toHaveValue('')
-      expect(screen.getByText('Loading owner details…')).toBeInTheDocument()
+      expect(screen.getByText('Loading applicant details…')).toBeInTheDocument()
 
       await act(async () => {
         resolveFirstSnapshot(
@@ -2280,7 +2280,7 @@ describe('Create Page Core Flows', () => {
       'Documents',
       'Permits',
     ])
-    expect(screen.queryByRole('tab', { name: 'Owner' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'Applicant' })).not.toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
     await selectExemptionCreateTab('Applications')
     expect(

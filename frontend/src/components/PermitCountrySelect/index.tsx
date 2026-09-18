@@ -1,5 +1,6 @@
 import { ComboBox } from '@carbon/react'
 import { useMemo, useState, type ReactNode } from 'react'
+import './PermitCountrySelect.scss'
 
 export type PermitCountrySelectOption = {
   value: string
@@ -20,7 +21,7 @@ type PermitCountrySelectProps = {
   onChange: (value: string) => void
 }
 
-const PREFERRED_COUNTRY_COUNT = 6
+const PREFERRED_COUNTRY_CODES = ['US', 'JP', 'CN', 'KR', 'TW', 'CA']
 
 const itemToString = (item: PermitCountrySelectOption | null | undefined): string =>
   item?.label ?? ''
@@ -36,8 +37,8 @@ const matchesCountrySearch = (item: PermitCountrySelectOption, inputValue: strin
 
 /**
  * Keeps the legacy country ordering useful without hiding active country codes.
- * The source procedure orders its preferred countries first; an empty typeahead
- * therefore shows its first six entries, while typing searches the full list.
+ * Preferred countries appear once at the top, followed by the remaining countries
+ * alphabetically. Search keeps preferred matches first without a group divider.
  */
 export default function PermitCountrySelect({
   id,
@@ -58,29 +59,52 @@ export default function PermitCountrySelect({
       options.find((option) => option.value === value) ?? (value ? { value, label: value } : null),
     [options, value],
   )
-  const preferredOptions = useMemo(() => options.slice(0, PREFERRED_COUNTRY_COUNT), [options])
+  const availableOptions = useMemo(
+    () => (selectedItem && !options.includes(selectedItem) ? [...options, selectedItem] : options),
+    [options, selectedItem],
+  )
+  const preferredOptions = useMemo(
+    () =>
+      PREFERRED_COUNTRY_CODES.flatMap((code) => {
+        const option = availableOptions.find(({ value }) => value === code)
+        return option ? [option] : []
+      }),
+    [availableOptions],
+  )
+  const otherOptions = useMemo(
+    () =>
+      availableOptions
+        .filter(({ value }) => !PREFERRED_COUNTRY_CODES.includes(value))
+        .sort((left, right) => left.label.localeCompare(right.label, 'en')),
+    [availableOptions],
+  )
   const isSearching = Boolean(inputText.trim()) && inputText !== selectedItem?.label
-  const visibleOptions = useMemo(() => {
-    if (isSearching) {
-      return options
-    }
-
-    if (!selectedItem || preferredOptions.some((option) => option.value === selectedItem.value)) {
-      return preferredOptions
-    }
-
-    return [...preferredOptions, selectedItem]
-  }, [isSearching, options, preferredOptions, selectedItem])
+  const visibleOptions = useMemo(
+    () => [...preferredOptions, ...otherOptions],
+    [preferredOptions, otherOptions],
+  )
 
   return (
     <ComboBox
       id={id}
+      className="permit-country-select"
       titleText={labelText}
       items={visibleOptions}
       selectedItem={selectedItem}
       itemToString={itemToString}
+      itemToElement={(item) => (
+        <span
+          className={
+            !isSearching && preferredOptions.length > 0 && item === otherOptions[0]
+              ? 'permit-country-select__after-preferred'
+              : undefined
+          }
+        >
+          {item.label}
+        </span>
+      )}
       shouldFilterItem={({ item, inputValue }) =>
-        !isSearching || matchesCountrySearch(item, inputValue ?? '')
+        inputValue === selectedItem?.label || matchesCountrySearch(item, inputValue ?? '')
       }
       placeholder={placeholder}
       aria-required={required || undefined}

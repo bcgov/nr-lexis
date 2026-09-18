@@ -162,6 +162,7 @@ import {
   type ShippingReferenceOptions,
 } from '@/service/shipping-reference-service'
 import { triggerBrowserDownload } from '@/utils/download'
+import { openDocumentPreview } from '@/utils/document-preview'
 import { formatPermitNumber, formatPermitStatus } from '@/utils/permit'
 import { formatPackageNumberLabel, isValidEmail, normalizeTrimmedText } from '@/utils/text'
 
@@ -243,7 +244,7 @@ const SHIPPING_PERMIT_FIELDS = new Set<PermitDetailFormField>([
 ])
 const PERMIT_DETAIL_TABS = [
   { id: 'permit', label: 'Permit' },
-  { id: 'owner', label: 'Owner' },
+  { id: 'owner', label: 'Applicant' },
   { id: 'agent', label: 'Agent' },
   { id: 'shipping', label: 'Shipping' },
   { id: 'items', label: 'Items' },
@@ -630,6 +631,14 @@ const withoutNewlyCreatedPermitNavigation = (state: Record<string, unknown>) => 
   return remainingState
 }
 
+const isNewlyCreatedBlanketOicPermitNavigation = (
+  state: unknown,
+): state is Record<string, unknown> & { blanketOicPermitCreated: string } =>
+  typeof state === 'object' &&
+  state !== null &&
+  !Array.isArray(state) &&
+  typeof (state as Record<string, unknown>).blanketOicPermitCreated === 'string'
+
 const withUpdatedPermitDetail = (
   currentDetail: ProvincialPermitDetail,
   form: PermitDetailForm,
@@ -833,6 +842,7 @@ const ProvincialPermitDetailsPage = () => {
   )
   const [actionErrorMessage, setActionErrorMessage] = useState('')
   const [actionInfoMessage, setActionInfoMessage] = useState('')
+  const [createdBlanketOicPermitNumber, setCreatedBlanketOicPermitNumber] = useState('')
   const [documentSuccessMessage, setDocumentSuccessMessage] = useState('')
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
   const [documentPendingDeletion, setDocumentPendingDeletion] = useState<PermitDocumentRow | null>(
@@ -921,6 +931,9 @@ const ProvincialPermitDetailsPage = () => {
   const [permitOptionsErrorMessage, setPermitOptionsErrorMessage] = useState('')
   const beginDetailRequest = useLatestRequestGuard()
   const beginDocumentRefreshRequest = useLatestRequestGuard()
+  const beginDocumentOpenRequest = useLatestRequestGuard()
+  const isCurrentDocumentRouteRef = useRef<() => boolean>(() => false)
+  const pendingDocumentPreviewsRef = useRef(new Set<Window>())
   const beginPermitFeesRequest = useLatestRequestGuard()
   const beginPermitDocumentsRequest = useLatestRequestGuard()
   const beginPermitInvoicesRequest = useLatestRequestGuard()
@@ -943,7 +956,16 @@ const ProvincialPermitDetailsPage = () => {
     permitMutationInFlightRef.current = false
   }, [])
 
+  useEffect(() => {
+    const pendingPreviews = pendingDocumentPreviewsRef.current
+    return () => {
+      pendingPreviews.forEach((previewTarget) => previewTarget.close())
+      pendingPreviews.clear()
+    }
+  }, [permitNumber])
+
   const resetPermitRouteDrafts = useCallback(() => {
+    isCurrentDocumentRouteRef.current = beginDocumentOpenRequest()
     beginPermitFeesRequest()
     beginPermitDocumentsRequest()
     beginPermitInvoicesRequest()
@@ -960,6 +982,7 @@ const ProvincialPermitDetailsPage = () => {
     setBoicScaleCodeOptionsReady(false)
     setSelectedBlanketOicPackageNumberState('')
     setDocumentSuccessMessage('')
+    setCreatedBlanketOicPermitNumber('')
     void beginAvailablePermitApplicationsRequest()
     setBoicPackageForm(EMPTY_BLANKET_OIC_PACKAGE_FORM)
     setBoicPackageBaselineForm(EMPTY_BLANKET_OIC_PACKAGE_FORM)
@@ -1012,6 +1035,7 @@ const ProvincialPermitDetailsPage = () => {
   }, [
     beginAvailablePermitApplicationsRequest,
     beginBoicPackageEditRequest,
+    beginDocumentOpenRequest,
     beginPermitDocumentsRequest,
     beginPermitFeesRequest,
     beginPermitGbmsRequest,
@@ -2563,6 +2587,25 @@ const ProvincialPermitDetailsPage = () => {
   }
 
   useEffect(() => {
+    if (
+      !isNewlyCreatedBlanketOicPermitNavigation(location.state) ||
+      !detail ||
+      String(detail.permitNumber) !== permitNumber
+    ) {
+      return
+    }
+
+    if (detail.blanketOic && location.state.blanketOicPermitCreated === permitNumber) {
+      // Keep the one-time notice visible after consuming its navigation signal.
+      // eslint-disable-next-line @eslint-react/set-state-in-effect
+      setCreatedBlanketOicPermitNumber(permitNumber)
+    }
+    const remainingState: Record<string, unknown> = { ...location.state }
+    delete remainingState.blanketOicPermitCreated
+    navigate(locationPath(location), { replace: true, state: remainingState })
+  }, [detail, location, navigate, permitNumber])
+
+  useEffect(() => {
     const openNewlyCreatedMinisterialPermit = async (): Promise<void> => {
       const routeKey = `${location.key}:${permitNumber ?? ''}`
       if (
@@ -2646,7 +2689,9 @@ const ProvincialPermitDetailsPage = () => {
         return false
       }
       if (isEditingPermitClients && !permitClientLookupCanSave) {
-        setActionErrorMessage('Select verified owner and agent locations before saving the permit.')
+        setActionErrorMessage(
+          'Select verified applicant and agent locations before saving the permit.',
+        )
         return false
       }
       let confirmedRequest: PermitDetailMutationRequest = request
@@ -3682,22 +3727,51 @@ const ProvincialPermitDetailsPage = () => {
   }, [])
 
   const onOpenDocument = useCallback(
-    async (row: PermitDocumentRow) => {
+    async (row: PermitDocumentRow, preview = false) => {
       const resolvedPermitNumber = String(detail?.permitNumber ?? permitNumber ?? '').trim()
-      if (!resolvedPermitNumber) {
+      if (!resolvedPermitNumber || !canPerform('/permitDetails')) {
         return
+      }
+      const isLatestRequest = isCurrentDocumentRouteRef.current
+      let previewTarget: Window | null = null
+      const closePendingPreview = () => {
+        if (previewTarget && pendingDocumentPreviewsRef.current.delete(previewTarget)) {
+          previewTarget.close()
+        }
       }
       setActionErrorMessage('')
       setActionInfoMessage('')
       try {
+        if (preview) {
+          // Reserve the tab during the click so slow document reads cannot lose popup permission.
+          previewTarget = window.open('about:blank', '_blank')
+          if (previewTarget) {
+            pendingDocumentPreviewsRef.current.add(previewTarget)
+            previewTarget.opener = null
+          }
+        }
         const result = await openPermitDocument(row.id, row.name, resolvedPermitNumber)
-        triggerBrowserDownload(result.blob, result.filename)
+        if (!isLatestRequest()) {
+          closePendingPreview()
+          return
+        }
+        if (preview) {
+          openDocumentPreview(result.blob, result.filename, previewTarget)
+        } else {
+          triggerBrowserDownload(result.blob, result.filename)
+        }
       } catch (error) {
+        closePendingPreview()
+        if (!isLatestRequest()) return
         console.error(error)
-        setActionErrorMessage('Unable to download permit document.')
+        setActionErrorMessage(
+          preview ? 'Unable to open permit document.' : 'Unable to download permit document.',
+        )
+      } finally {
+        if (previewTarget) pendingDocumentPreviewsRef.current.delete(previewTarget)
       }
     },
-    [detail?.permitNumber, permitNumber],
+    [canPerform, detail?.permitNumber, permitNumber],
   )
 
   const onOpenPermitReport = useCallback(async () => {
@@ -4009,7 +4083,7 @@ const ProvincialPermitDetailsPage = () => {
     const clientData = isOwner ? ownerEditClientData : agentEditClientData
     const isLoading = isOwner ? isOwnerClientLookupLoading : isAgentClientLookupLoading
     const errorMessage = isOwner ? ownerClientLookupError : agentClientLookupError
-    const label = usesReviewedPermitFlow && isOwner ? 'Applicant' : isOwner ? 'Owner' : 'Agent'
+    const label = isOwner ? 'Applicant' : 'Agent'
 
     return (
       <>
@@ -4342,6 +4416,472 @@ const ProvincialPermitDetailsPage = () => {
     )
   }
 
+  const permitVolumeAndRemarksFields = detail
+    ? [
+        {
+          label: 'Total exemption volume (m³)',
+          value: displayValue(detail.approvedExemptionVolume),
+        },
+        {
+          label: 'Total volume remaining (m³)',
+          value: displayValue(detail.exemptionVolumeRemaining),
+        },
+        ...(detail.blanketOic
+          ? [
+              {
+                label: 'Permit Request Pieces',
+                value: displayValue(detail.oicRequestPieces),
+              },
+              {
+                label: 'Permit Request Volume (m³)',
+                value: displayValue(detail.oicRequestVolume),
+              },
+            ]
+          : []),
+        {
+          label: 'Current permit volume (m³)',
+          value: displayValue(detail.permitVolume),
+        },
+        {
+          label: 'Current permit pieces',
+          value: displayValue(detail.numberOfPieces),
+        },
+        { label: 'Remarks', value: displayValue(detail.remarks) },
+      ]
+    : []
+
+  const renderPermitVolumeAndRemarks = () => {
+    if (!detail) return null
+    return (
+      <>
+        <div className="legacy-search-grid">
+          <TextInput
+            id="permit-approvedExemptionVolume"
+            labelText="Total exemption volume (m³)"
+            value={displayValue(detail.approvedExemptionVolume)}
+            disabled
+          />
+          <TextInput
+            id="permit-exemptionVolumeRemaining"
+            labelText="Total volume remaining (m³)"
+            value={displayValue(detail.exemptionVolumeRemaining)}
+            disabled
+          />
+          {detail.blanketOic &&
+            renderPermitTextInput(
+              'oicPermitTotalPieces',
+              'Permit Request Pieces',
+              invoiceMaterialLocked,
+              undefined,
+              requiresOicRequestLimits,
+            )}
+          {detail.blanketOic &&
+            renderPermitTextInput(
+              'oicPermitTotalVolume',
+              'Permit Request Volume (m³)',
+              invoiceMaterialLocked,
+              undefined,
+              requiresOicRequestLimits,
+            )}
+          {renderPermitTextInput('permitTotalVolume', 'Current permit volume (m³)', true)}
+          {renderPermitTextInput('permitNumberOfPieces', 'Current permit pieces', true)}
+        </div>
+        <div className="legacy-search-grid">
+          {renderPermitTextArea(
+            'permitRemarks',
+            'Remarks',
+            false,
+            usesReviewedPermitFlow ? MAX_REVIEWED_PERMIT_REMARKS_LENGTH : 254,
+          )}
+        </div>
+      </>
+    )
+  }
+
+  const renderPermitFeeSummary = () => {
+    if (!detail) return null
+    return (
+      <fieldset className="legacy-form-fieldset">
+        <legend>Permit fee summary</legend>
+        <div className="legacy-search-grid">
+          {isEditingPermit && permitForm ? (
+            renderPermitTextInput(
+              'permitReceiptNo',
+              'Receipt number',
+              invoiceMaterialLocked && !canEnterPaymentReceipt,
+              50,
+            )
+          ) : (
+            <TextInput
+              id="permitFeeReceiptNumber"
+              labelText="Receipt number"
+              value={displayValue(detail.receiptNumber)}
+              disabled
+            />
+          )}
+          <TextInput
+            id="permitFeeTotalVolume"
+            labelText="Total volume (m³)"
+            value={
+              feeSummaryStatus ??
+              totalFeeVolume?.toLocaleString(undefined, {
+                minimumFractionDigits: 1,
+                maximumFractionDigits: 1,
+              }) ??
+              'Unavailable'
+            }
+            disabled
+          />
+          <TextInput
+            id="permitCalculatedFee"
+            labelText="Calculated fee (CAD)"
+            value={
+              feeSummaryStatus ?? (permitFeesMasked ? '$' : `$${formatAmount(calculatedPermitFee)}`)
+            }
+            disabled
+          />
+          <TextInput
+            id="permitEffectiveFee"
+            labelText="Effective fee (CAD)"
+            value={
+              feeSummaryStatus ??
+              (feeOverrideContext?.overrideEnabled
+                ? `$${formatAmount(Number(feeOverrideContext.overrideFee))}`
+                : permitFeesMasked
+                  ? '$'
+                  : `$${formatAmount(calculatedPermitFee)}`)
+            }
+            disabled
+          />
+        </div>
+        {showPaymentPendingReceiptGuidance && (
+          <p id="permit-fee-receipt-help">
+            Enter a receipt number here, then select Completed on the Permit tab before saving.
+          </p>
+        )}
+        {canSavePermit && (
+          <div className="legacy-search-actions">
+            {isEditingPermit ? (
+              <>
+                <Button
+                  kind="primary"
+                  size="sm"
+                  disabled={
+                    isSavingPermit ||
+                    isPermitOptionsLoading ||
+                    permitOptionsUnavailable ||
+                    blanketOicRegionSelectionUnavailable ||
+                    requiredPermitOptionsMissing ||
+                    paymentPendingReceiptRequiresCompletion ||
+                    !permitClientLookupCanSave
+                  }
+                  renderIcon={isSavingPermit ? PendingIcon : undefined}
+                  onClick={() => void onSavePermit()}
+                >
+                  {isSavingPermit ? 'Saving…' : 'Save permit'}
+                </Button>
+                <Button
+                  kind="tertiary"
+                  size="sm"
+                  disabled={isSavingPermit}
+                  onClick={() => {
+                    resetPermitFormSection(false)
+                    setIsEditingPermitClients(false)
+                    setIsEditingPermit(false)
+                  }}
+                >
+                  Cancel
+                </Button>
+              </>
+            ) : (
+              <Button
+                kind="tertiary"
+                size="sm"
+                onClick={() => {
+                  resetPermitFormSection(false)
+                  setIsEditingPermit(true)
+                }}
+              >
+                Edit permit
+              </Button>
+            )}
+          </div>
+        )}
+
+        {!feeOverrideContext || !feeOverrideForm ? (
+          <p>
+            {editContextLoadFailed
+              ? 'Fee override details are unavailable. No override changes can be saved.'
+              : 'Loading fee override details…'}
+          </p>
+        ) : isEditingFeeOverride ? (
+          <>
+            <RadioButtonGroup
+              legendText="Override fees?"
+              name="permit-override-enabled"
+              valueSelected={feeOverrideForm.overrideEnabled ? 'true' : 'false'}
+              disabled={isSavingFeeOverride}
+              onChange={(value) => {
+                setFeeOverrideFieldErrors({})
+                setFeeOverrideForm((current) =>
+                  current ? { ...current, overrideEnabled: value === 'true' } : current,
+                )
+              }}
+            >
+              <RadioButton id="permitOverrideEnabledNo" labelText="No" value="false" />
+              <RadioButton id="permitOverrideEnabledYes" labelText="Yes" value="true" />
+            </RadioButtonGroup>
+            {feeOverrideForm.overrideEnabled && (
+              <div className="legacy-search-grid">
+                <TextInput
+                  id="permitOverrideFee"
+                  labelText={requiredLabel('Override fee (CAD)')}
+                  aria-required="true"
+                  value={feeOverrideForm.overrideFee}
+                  invalid={!!feeOverrideFieldErrors.overrideFee}
+                  invalidText={feeOverrideFieldErrors.overrideFee}
+                  disabled={isSavingFeeOverride}
+                  onChange={(event) => {
+                    setFeeOverrideFieldErrors((current) => ({
+                      ...current,
+                      overrideFee: undefined,
+                    }))
+                    setFeeOverrideForm((current) =>
+                      current ? { ...current, overrideFee: event.target.value } : current,
+                    )
+                  }}
+                />
+                <TextArea
+                  id="permitOverrideComment"
+                  labelText="Override comment"
+                  maxCount={MAX_PERMIT_OVERRIDE_COMMENT_LENGTH}
+                  value={feeOverrideForm.overrideComment}
+                  invalid={!!feeOverrideFieldErrors.overrideComment}
+                  invalidText={feeOverrideFieldErrors.overrideComment}
+                  disabled={isSavingFeeOverride}
+                  onChange={(event) => {
+                    setFeeOverrideFieldErrors((current) => ({
+                      ...current,
+                      overrideComment: undefined,
+                    }))
+                    setFeeOverrideForm((current) =>
+                      current ? { ...current, overrideComment: event.target.value } : current,
+                    )
+                  }}
+                />
+              </div>
+            )}
+            <div className="legacy-search-actions">
+              <Button
+                kind="primary"
+                size="sm"
+                disabled={isSavingFeeOverride}
+                renderIcon={isSavingFeeOverride ? PendingIcon : undefined}
+                onClick={() => void onSaveFeeOverride()}
+              >
+                {isSavingFeeOverride ? 'Saving…' : 'Save fee override'}
+              </Button>
+              <Button
+                kind="tertiary"
+                size="sm"
+                disabled={isSavingFeeOverride}
+                onClick={() => {
+                  setFeeOverrideForm(feeOverrideContext)
+                  setFeeOverrideFieldErrors({})
+                  setIsEditingFeeOverride(false)
+                }}
+              >
+                Cancel
+              </Button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="legacy-search-grid">
+              <RadioButtonGroup
+                legendText="Override fees?"
+                name="permit-override-enabled-view"
+                valueSelected={feeOverrideContext.overrideEnabled ? 'true' : 'false'}
+                disabled
+              >
+                <RadioButton id="permitOverrideEnabledViewNo" labelText="No" value="false" />
+                <RadioButton id="permitOverrideEnabledViewYes" labelText="Yes" value="true" />
+              </RadioButtonGroup>
+              {feeOverrideContext.overrideEnabled && (
+                <>
+                  <TextInput
+                    id="permitOverrideFeeDisplay"
+                    labelText="Override fee (CAD)"
+                    value={feeOverrideContext.overrideFee}
+                    disabled
+                  />
+                  <TextArea
+                    id="permitOverrideCommentDisplay"
+                    labelText="Override comment"
+                    value={feeOverrideContext.overrideComment}
+                    disabled
+                  />
+                </>
+              )}
+            </div>
+            {canEditFeeOverride && (
+              <div className="legacy-search-actions">
+                <Button
+                  kind="tertiary"
+                  size="sm"
+                  onClick={() => {
+                    setFeeOverrideFieldErrors({})
+                    setIsEditingFeeOverride(true)
+                  }}
+                >
+                  Edit fee override
+                </Button>
+              </div>
+            )}
+          </>
+        )}
+      </fieldset>
+    )
+  }
+
+  const renderPackageFees = () => {
+    if (!detail) return null
+    return (
+      <>
+        {!ministerialFeeShellEmpty &&
+          feeSummaryStatus === null &&
+          !!tabsData?.packageFeeSummaries.length && (
+            <>
+              <h3 className="detail-tile-title">Package fee summary</h3>
+              <TableFrame ariaLabel="Permit package fee summaries">
+                <Table size="md" useZebraStyles>
+                  <TableHead>
+                    <TableRow>
+                      <TableHeader>Package</TableHeader>
+                      <TableHeader>Age class</TableHeader>
+                      <TableHeader>Exemption number</TableHeader>
+                      <TableHeader>Package fee (CAD)</TableHeader>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {tabsData.packageFeeSummaries.map((summary) => (
+                      <TableRow key={summary.packageNumber}>
+                        <TableCell>
+                          {summary.packageNumber
+                            ? formatPackageNumberLabel(summary.packageNumber)
+                            : '-'}
+                        </TableCell>
+                        <TableCell>{summary.growthType || '-'}</TableCell>
+                        <TableCell>
+                          {detail.exemptionNumber ? (
+                            <Link
+                              to={`/provincial/exemption/${encodeURIComponent(detail.exemptionNumber)}`}
+                              state={withDetailReturnTo(
+                                location.state,
+                                {
+                                  label: 'Provincial permit detail',
+                                  to: locationPath(location),
+                                },
+                                detailReturnTo,
+                              )}
+                            >
+                              {detail.exemptionNumber}
+                            </Link>
+                          ) : (
+                            '-'
+                          )}
+                        </TableCell>
+                        <TableCell>{summary.totalFeeForPackage}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableFrame>
+            </>
+          )}
+        {permitFeesErrorMessage ? (
+          <EmptyState
+            title="Fee details unavailable"
+            description={permitFeesErrorMessage}
+            headingLevel={3}
+            role="alert"
+          />
+        ) : deferredPermitTabLoading.fees ? (
+          <InlineLoading description="Loading permit fee details…" />
+        ) : permitTablesErrorMessage ? (
+          <EmptyState
+            title="Fee calculation unavailable"
+            description={permitTablesErrorMessage}
+            headingLevel={3}
+            role="alert"
+          />
+        ) : permitFeeRows.length > 0 ? (
+          <TableFrame ariaLabel="Permit fee rows">
+            <Table size="md" useZebraStyles>
+              <TableHead>
+                <TableRow>
+                  <TableHeader>Package</TableHeader>
+                  <TableHeader>Timber mark</TableHeader>
+                  <TableHeader>Species</TableHeader>
+                  <TableHeader>Grade</TableHeader>
+                  <TableHeader>AMV ($/m³ CAD)</TableHeader>
+                  <TableHeader>Volume (m³)</TableHeader>
+                  {showMinistryFeeColumn && <TableHeader>EWB$</TableHeader>}
+                  <TableHeader>FIL%</TableHeader>
+                  <TableHeader>MF%</TableHeader>
+                  <TableHeader>Fee (CAD)</TableHeader>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {permitFeeRows.map((row) => (
+                  <TableRow key={row.id}>
+                    <TableCell>
+                      {row.packageNumber ? formatPackageNumberLabel(row.packageNumber) : '-'}
+                    </TableCell>
+                    <TableCell>{row.timberMark || '-'}</TableCell>
+                    <TableCell>{row.species || '-'}</TableCell>
+                    <TableCell>{row.grade || '-'}</TableCell>
+                    <TableCell>{row.amv || '-'}</TableCell>
+                    <TableCell>{row.volume.toLocaleString()}</TableCell>
+                    {showMinistryFeeColumn && <TableCell>{row.ewb || '-'}</TableCell>}
+                    <TableCell>{row.filPercent || '-'}</TableCell>
+                    <TableCell>{row.mfPercent || '-'}</TableCell>
+                    <TableCell>
+                      {row.amountDisplay.trim() === '$' ? '$' : `$${formatAmount(row.amount)}`}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableFrame>
+        ) : (
+          <EmptyState
+            title={ministerialFeeShellEmpty ? 'No fees yet' : 'No fee details available'}
+            description={
+              ministerialFeeShellEmpty ? (
+                <>
+                  Fees are calculated from the permit&apos;s Summary of Scale. They appear once an
+                  application is selected on the{' '}
+                  <button
+                    type="button"
+                    className="cds--link"
+                    onClick={() => selectPermitTab('permit')}
+                  >
+                    Permit tab
+                  </button>
+                  .
+                </>
+              ) : (
+                'No fee rows are available for this permit.'
+              )
+            }
+            headingLevel={3}
+          />
+        )}
+      </>
+    )
+  }
+
   return (
     <Grid
       fullWidth
@@ -4508,6 +5048,18 @@ const ProvincialPermitDetailsPage = () => {
                 subtitle="A required permit status or Blanket OIC region list is empty. Permit saves are disabled."
                 lowContrast
                 hideCloseButton
+              />
+            </Column>
+          )}
+          {createdBlanketOicPermitNumber === permitNumber && (
+            <Column sm={4} md={8} lg={16} className="detail-page-error">
+              <AppNotification
+                kind="success"
+                title="Permit created"
+                subtitle="The permit was saved."
+                lowContrast
+                autoDismissMs={6000}
+                onCloseButtonClick={() => setCreatedBlanketOicPermitNumber('')}
               />
             </Column>
           )}
@@ -4703,9 +5255,11 @@ const ProvincialPermitDetailsPage = () => {
                           </div>
                         </Tile>
                       ) : isEditingPermit && permitForm ? (
-                        <Tile>
+                        <Tile
+                          className={detail.blanketOic ? 'boic-permit-details-edit' : undefined}
+                        >
                           <h2 className="detail-tile-title">
-                            {ministerialPermit ? 'Permit details' : 'Permit summary'}
+                            {usesReviewedPermitFlow ? 'Permit details' : 'Permit summary'}
                           </h2>
                           <div className="legacy-search-grid">
                             {renderPermitTextInput(
@@ -4738,7 +5292,9 @@ const ProvincialPermitDetailsPage = () => {
                             )}
                             <Select
                               id="permit-permitStatus"
-                              labelText={requiredLabel('Permit status')}
+                              labelText={requiredLabel(
+                                usesReviewedPermitFlow ? 'Status' : 'Permit status',
+                              )}
                               aria-required="true"
                               value={permitForm.permitStatus}
                               invalid={!!permitFieldError('permitStatus')}
@@ -4833,10 +5389,11 @@ const ProvincialPermitDetailsPage = () => {
                               />
                             )}
                           </div>
+                          {detail.blanketOic && renderPermitVolumeAndRemarks()}
                         </Tile>
                       ) : (
                         <DetailFieldTile
-                          title={ministerialPermit ? 'Permit details' : 'Permit summary'}
+                          title={usesReviewedPermitFlow ? 'Permit details' : 'Permit summary'}
                           headerAction={
                             canSavePermit ? (
                               <Button
@@ -4913,107 +5470,36 @@ const ProvincialPermitDetailsPage = () => {
                               ),
                             },
                             { label: 'Region', value: displayValue(detail.region) },
+                            ...(detail.blanketOic ? permitVolumeAndRemarksFields : []),
                           ]}
                         />
                       )}
                     </Column>
 
-                    {!isMinisterialPermitEdit && (
-                      <Column sm={4} md={8} lg={16}>
-                        {isEditingPermit && permitForm ? (
-                          <Tile>
-                            <h2 className="detail-tile-title">
-                              {ministerialPermit ? 'Volume and remarks' : 'Financial and volume'}
-                            </h2>
-                            <div className="legacy-search-grid">
-                              <TextInput
-                                id="permit-approvedExemptionVolume"
-                                labelText="Total exemption volume (m³)"
-                                value={displayValue(detail.approvedExemptionVolume)}
-                                disabled
-                              />
-                              <TextInput
-                                id="permit-exemptionVolumeRemaining"
-                                labelText="Total volume remaining (m³)"
-                                value={displayValue(detail.exemptionVolumeRemaining)}
-                                disabled
-                              />
-                              {detail.blanketOic &&
-                                renderPermitTextInput(
-                                  'oicPermitTotalPieces',
-                                  'Permit Request Pieces',
-                                  invoiceMaterialLocked,
-                                  undefined,
-                                  requiresOicRequestLimits,
-                                )}
-                              {detail.blanketOic &&
-                                renderPermitTextInput(
-                                  'oicPermitTotalVolume',
-                                  'Permit Request Volume (m³)',
-                                  invoiceMaterialLocked,
-                                  undefined,
-                                  requiresOicRequestLimits,
-                                )}
-                              {renderPermitTextInput(
-                                'permitTotalVolume',
-                                'Current permit volume (m³)',
-                                true,
-                              )}
-                              {renderPermitTextInput(
-                                'permitNumberOfPieces',
-                                'Current permit pieces',
-                                true,
-                              )}
-                            </div>
-                            <div className="legacy-search-grid">
-                              {renderPermitTextArea(
-                                'permitRemarks',
-                                'Remarks',
-                                false,
-                                usesReviewedPermitFlow ? MAX_REVIEWED_PERMIT_REMARKS_LENGTH : 254,
-                              )}
-                            </div>
-                          </Tile>
-                        ) : (
-                          <DetailFieldTile
-                            title={
-                              ministerialPermit ? 'Volume and remarks' : 'Financial and volume'
-                            }
-                            fields={[
-                              {
-                                label: 'Total exemption volume (m³)',
-                                value: displayValue(detail.approvedExemptionVolume),
-                              },
-                              {
-                                label: 'Total volume remaining (m³)',
-                                value: displayValue(detail.exemptionVolumeRemaining),
-                              },
-                              ...(detail.blanketOic
-                                ? [
-                                    {
-                                      label: 'Permit Request Pieces',
-                                      value: displayValue(detail.oicRequestPieces),
-                                    },
-                                    {
-                                      label: 'Permit Request Volume (m³)',
-                                      value: displayValue(detail.oicRequestVolume),
-                                    },
-                                  ]
-                                : []),
-                              {
-                                label: 'Current permit volume (m³)',
-                                value: displayValue(detail.permitVolume),
-                              },
-                              {
-                                label: 'Current permit pieces',
-                                value: displayValue(detail.numberOfPieces),
-                              },
-                              { label: 'Remarks', value: displayValue(detail.remarks) },
-                            ]}
-                          />
-                        )}
-                      </Column>
-                    )}
+                    {!detail.blanketOic &&
+                      !(usesReviewedPermitFlow && isEditingPermit && permitForm) && (
+                        <Column sm={4} md={8} lg={16}>
+                          {isEditingPermit && permitForm ? (
+                            <Tile>
+                              <h2 className="detail-tile-title">
+                                {usesReviewedPermitFlow
+                                  ? 'Volume and remarks'
+                                  : 'Financial and volume'}
+                              </h2>
+                              {renderPermitVolumeAndRemarks()}
+                            </Tile>
+                          ) : (
+                            <DetailFieldTile
+                              title={
+                                usesReviewedPermitFlow
+                                  ? 'Volume and remarks'
+                                  : 'Financial and volume'
+                              }
+                              fields={permitVolumeAndRemarksFields}
+                            />
+                          )}
+                        </Column>
+                      )}
                     {!isMinisterialPermitEdit && !detail.blanketOic && (
                       <Column sm={4} md={8} lg={16}>
                         <Tile>
@@ -5188,7 +5674,7 @@ const ProvincialPermitDetailsPage = () => {
                     {!ownerEditMode && (
                       <Column sm={4} md={8} lg={16}>
                         <PermitClientTile
-                          title={usesReviewedPermitFlow ? 'Applicant details' : 'Owner'}
+                          title="Applicant details"
                           clientNumber={detail.ownerClientNumber}
                           locationCode={detail.ownerClientLocationCode}
                           clientData={ownerClientData}
@@ -5218,9 +5704,7 @@ const ProvincialPermitDetailsPage = () => {
                     {ownerEditMode && permitForm && (
                       <Column sm={4} md={8} lg={16}>
                         <Tile>
-                          <h2 className="detail-tile-title">
-                            {usesReviewedPermitFlow ? 'Applicant details' : 'Edit owner'}
-                          </h2>
+                          <h2 className="detail-tile-title">Applicant details</h2>
                           {renderPermitClientEditor('owner', invoiceMaterialLocked)}
                           <Checkbox
                             id="permit-agent-used"
@@ -5275,7 +5759,7 @@ const ProvincialPermitDetailsPage = () => {
                             </>
                           ) : (
                             <Button kind="tertiary" size="sm" onClick={startPermitClientEdit}>
-                              {usesReviewedPermitFlow ? 'Edit applicant' : 'Edit owner'}
+                              Edit applicant
                             </Button>
                           )}
                         </div>
@@ -5808,11 +6292,15 @@ const ProvincialPermitDetailsPage = () => {
                               </Table>
                             </TableFrame>
                           ) : detail.blanketOic ? (
-                            <p className="detail-empty-message">
-                              {canEditBlanketOicPackages
-                                ? 'Create a package before adding Summary of Scale entries.'
-                                : 'No package has been created for this Blanket OIC permit.'}
-                            </p>
+                            <EmptyState
+                              title="No packages yet"
+                              description={
+                                canEditBlanketOicPackages
+                                  ? 'Scale is recorded by package. Create a package, then add its scales.'
+                                  : 'No package has been created for this Blanket OIC permit.'
+                              }
+                              headingLevel={3}
+                            />
                           ) : ministerialScaleEmpty ? null : (
                             <EmptyState
                               title="No package details"
@@ -6159,424 +6647,32 @@ const ProvincialPermitDetailsPage = () => {
                 </TabPanel>
                 <TabPanel key="fees" className="application-detail-tab-panel">
                   <Grid fullWidth className="application-detail-tab-grid">
-                    <Column sm={4} md={8} lg={16}>
-                      <Tile>
-                        <h2 className="detail-tile-title">
-                          {ministerialPermit ? 'Fees' : 'Fee calculation details'}
-                        </h2>
-                        {!ministerialFeeShellEmpty && (
-                          <>
-                            <fieldset className="legacy-form-fieldset">
-                              <legend>Permit fee summary</legend>
-                              <div className="legacy-search-grid">
-                                {isEditingPermit && permitForm ? (
-                                  renderPermitTextInput(
-                                    'permitReceiptNo',
-                                    'Receipt number',
-                                    invoiceMaterialLocked && !canEnterPaymentReceipt,
-                                    50,
-                                  )
-                                ) : (
-                                  <TextInput
-                                    id="permitFeeReceiptNumber"
-                                    labelText="Receipt number"
-                                    value={displayValue(detail.receiptNumber)}
-                                    disabled
-                                  />
-                                )}
-                                <TextInput
-                                  id="permitFeeTotalVolume"
-                                  labelText="Total volume (m³)"
-                                  value={
-                                    feeSummaryStatus ??
-                                    totalFeeVolume?.toLocaleString(undefined, {
-                                      minimumFractionDigits: 1,
-                                      maximumFractionDigits: 1,
-                                    }) ??
-                                    'Unavailable'
-                                  }
-                                  disabled
-                                />
-                                <TextInput
-                                  id="permitCalculatedFee"
-                                  labelText="Calculated fee (CAD)"
-                                  value={
-                                    feeSummaryStatus ??
-                                    (permitFeesMasked
-                                      ? '$'
-                                      : `$${formatAmount(calculatedPermitFee)}`)
-                                  }
-                                  disabled
-                                />
-                                <TextInput
-                                  id="permitEffectiveFee"
-                                  labelText="Effective fee (CAD)"
-                                  value={
-                                    feeSummaryStatus ??
-                                    (feeOverrideContext?.overrideEnabled
-                                      ? `$${formatAmount(Number(feeOverrideContext.overrideFee))}`
-                                      : permitFeesMasked
-                                        ? '$'
-                                        : `$${formatAmount(calculatedPermitFee)}`)
-                                  }
-                                  disabled
-                                />
-                              </div>
-                              {showPaymentPendingReceiptGuidance && (
-                                <p id="permit-fee-receipt-help">
-                                  Enter a receipt number here, then select Completed on the Permit
-                                  tab before saving.
-                                </p>
-                              )}
-                              {canSavePermit && (
-                                <div className="legacy-search-actions">
-                                  {isEditingPermit ? (
-                                    <>
-                                      <Button
-                                        kind="primary"
-                                        size="sm"
-                                        disabled={
-                                          isSavingPermit ||
-                                          isPermitOptionsLoading ||
-                                          permitOptionsUnavailable ||
-                                          blanketOicRegionSelectionUnavailable ||
-                                          requiredPermitOptionsMissing ||
-                                          paymentPendingReceiptRequiresCompletion ||
-                                          !permitClientLookupCanSave
-                                        }
-                                        renderIcon={isSavingPermit ? PendingIcon : undefined}
-                                        onClick={() => void onSavePermit()}
-                                      >
-                                        {isSavingPermit ? 'Saving…' : 'Save permit'}
-                                      </Button>
-                                      <Button
-                                        kind="tertiary"
-                                        size="sm"
-                                        disabled={isSavingPermit}
-                                        onClick={() => {
-                                          resetPermitFormSection(false)
-                                          setIsEditingPermitClients(false)
-                                          setIsEditingPermit(false)
-                                        }}
-                                      >
-                                        Cancel
-                                      </Button>
-                                    </>
-                                  ) : (
-                                    <Button
-                                      kind="tertiary"
-                                      size="sm"
-                                      onClick={() => {
-                                        resetPermitFormSection(false)
-                                        setIsEditingPermit(true)
-                                      }}
-                                    >
-                                      Edit permit
-                                    </Button>
-                                  )}
-                                </div>
-                              )}
-
-                              {!feeOverrideContext || !feeOverrideForm ? (
-                                <p>
-                                  {editContextLoadFailed
-                                    ? 'Fee override details are unavailable. No override changes can be saved.'
-                                    : 'Loading fee override details…'}
-                                </p>
-                              ) : isEditingFeeOverride ? (
-                                <>
-                                  <RadioButtonGroup
-                                    legendText="Override fees?"
-                                    name="permit-override-enabled"
-                                    valueSelected={
-                                      feeOverrideForm.overrideEnabled ? 'true' : 'false'
-                                    }
-                                    disabled={isSavingFeeOverride}
-                                    onChange={(value) => {
-                                      setFeeOverrideFieldErrors({})
-                                      setFeeOverrideForm((current) =>
-                                        current
-                                          ? { ...current, overrideEnabled: value === 'true' }
-                                          : current,
-                                      )
-                                    }}
-                                  >
-                                    <RadioButton
-                                      id="permitOverrideEnabledNo"
-                                      labelText="No"
-                                      value="false"
-                                    />
-                                    <RadioButton
-                                      id="permitOverrideEnabledYes"
-                                      labelText="Yes"
-                                      value="true"
-                                    />
-                                  </RadioButtonGroup>
-                                  {feeOverrideForm.overrideEnabled && (
-                                    <div className="legacy-search-grid">
-                                      <TextInput
-                                        id="permitOverrideFee"
-                                        labelText={requiredLabel('Override fee (CAD)')}
-                                        aria-required="true"
-                                        value={feeOverrideForm.overrideFee}
-                                        invalid={!!feeOverrideFieldErrors.overrideFee}
-                                        invalidText={feeOverrideFieldErrors.overrideFee}
-                                        disabled={isSavingFeeOverride}
-                                        onChange={(event) => {
-                                          setFeeOverrideFieldErrors((current) => ({
-                                            ...current,
-                                            overrideFee: undefined,
-                                          }))
-                                          setFeeOverrideForm((current) =>
-                                            current
-                                              ? { ...current, overrideFee: event.target.value }
-                                              : current,
-                                          )
-                                        }}
-                                      />
-                                      <TextArea
-                                        id="permitOverrideComment"
-                                        labelText="Override comment"
-                                        maxCount={MAX_PERMIT_OVERRIDE_COMMENT_LENGTH}
-                                        value={feeOverrideForm.overrideComment}
-                                        invalid={!!feeOverrideFieldErrors.overrideComment}
-                                        invalidText={feeOverrideFieldErrors.overrideComment}
-                                        disabled={isSavingFeeOverride}
-                                        onChange={(event) => {
-                                          setFeeOverrideFieldErrors((current) => ({
-                                            ...current,
-                                            overrideComment: undefined,
-                                          }))
-                                          setFeeOverrideForm((current) =>
-                                            current
-                                              ? { ...current, overrideComment: event.target.value }
-                                              : current,
-                                          )
-                                        }}
-                                      />
-                                    </div>
-                                  )}
-                                  <div className="legacy-search-actions">
-                                    <Button
-                                      kind="primary"
-                                      size="sm"
-                                      disabled={isSavingFeeOverride}
-                                      renderIcon={isSavingFeeOverride ? PendingIcon : undefined}
-                                      onClick={() => void onSaveFeeOverride()}
-                                    >
-                                      {isSavingFeeOverride ? 'Saving…' : 'Save fee override'}
-                                    </Button>
-                                    <Button
-                                      kind="tertiary"
-                                      size="sm"
-                                      disabled={isSavingFeeOverride}
-                                      onClick={() => {
-                                        setFeeOverrideForm(feeOverrideContext)
-                                        setFeeOverrideFieldErrors({})
-                                        setIsEditingFeeOverride(false)
-                                      }}
-                                    >
-                                      Cancel
-                                    </Button>
-                                  </div>
-                                </>
-                              ) : (
-                                <>
-                                  <div className="legacy-search-grid">
-                                    <RadioButtonGroup
-                                      legendText="Override fees?"
-                                      name="permit-override-enabled-view"
-                                      valueSelected={
-                                        feeOverrideContext.overrideEnabled ? 'true' : 'false'
-                                      }
-                                      disabled
-                                    >
-                                      <RadioButton
-                                        id="permitOverrideEnabledViewNo"
-                                        labelText="No"
-                                        value="false"
-                                      />
-                                      <RadioButton
-                                        id="permitOverrideEnabledViewYes"
-                                        labelText="Yes"
-                                        value="true"
-                                      />
-                                    </RadioButtonGroup>
-                                    {feeOverrideContext.overrideEnabled && (
-                                      <>
-                                        <TextInput
-                                          id="permitOverrideFeeDisplay"
-                                          labelText="Override fee (CAD)"
-                                          value={feeOverrideContext.overrideFee}
-                                          disabled
-                                        />
-                                        <TextArea
-                                          id="permitOverrideCommentDisplay"
-                                          labelText="Override comment"
-                                          value={feeOverrideContext.overrideComment}
-                                          disabled
-                                        />
-                                      </>
-                                    )}
-                                  </div>
-                                  {canEditFeeOverride && (
-                                    <div className="legacy-search-actions">
-                                      <Button
-                                        kind="tertiary"
-                                        size="sm"
-                                        onClick={() => {
-                                          setFeeOverrideFieldErrors({})
-                                          setIsEditingFeeOverride(true)
-                                        }}
-                                      >
-                                        Edit fee override
-                                      </Button>
-                                    </div>
-                                  )}
-                                </>
-                              )}
-                            </fieldset>
-                            {feeSummaryStatus === null &&
-                              !!tabsData?.packageFeeSummaries.length && (
-                                <>
-                                  <h3 className="detail-tile-title">Package fee summary</h3>
-                                  <TableFrame ariaLabel="Permit package fee summaries">
-                                    <Table size="md" useZebraStyles>
-                                      <TableHead>
-                                        <TableRow>
-                                          <TableHeader>Package</TableHeader>
-                                          <TableHeader>Age class</TableHeader>
-                                          <TableHeader>Exemption number</TableHeader>
-                                          <TableHeader>Package fee (CAD)</TableHeader>
-                                        </TableRow>
-                                      </TableHead>
-                                      <TableBody>
-                                        {tabsData.packageFeeSummaries.map((summary) => (
-                                          <TableRow key={summary.packageNumber}>
-                                            <TableCell>
-                                              {summary.packageNumber
-                                                ? formatPackageNumberLabel(summary.packageNumber)
-                                                : '-'}
-                                            </TableCell>
-                                            <TableCell>{summary.growthType || '-'}</TableCell>
-                                            <TableCell>
-                                              {detail.exemptionNumber ? (
-                                                <Link
-                                                  to={`/provincial/exemption/${encodeURIComponent(detail.exemptionNumber)}`}
-                                                  state={withDetailReturnTo(
-                                                    location.state,
-                                                    {
-                                                      label: 'Provincial permit detail',
-                                                      to: locationPath(location),
-                                                    },
-                                                    detailReturnTo,
-                                                  )}
-                                                >
-                                                  {detail.exemptionNumber}
-                                                </Link>
-                                              ) : (
-                                                '-'
-                                              )}
-                                            </TableCell>
-                                            <TableCell>{summary.totalFeeForPackage}</TableCell>
-                                          </TableRow>
-                                        ))}
-                                      </TableBody>
-                                    </Table>
-                                  </TableFrame>
-                                </>
-                              )}
-                          </>
-                        )}
-                        {permitFeesErrorMessage ? (
-                          <EmptyState
-                            title="Fee details unavailable"
-                            description={permitFeesErrorMessage}
-                            headingLevel={3}
-                            role="alert"
-                          />
-                        ) : deferredPermitTabLoading.fees ? (
-                          <InlineLoading description="Loading permit fee details…" />
-                        ) : permitTablesErrorMessage ? (
-                          <EmptyState
-                            title="Fee calculation unavailable"
-                            description={permitTablesErrorMessage}
-                            headingLevel={3}
-                            role="alert"
-                          />
-                        ) : permitFeeRows.length > 0 ? (
-                          <TableFrame ariaLabel="Permit fee rows">
-                            <Table size="md" useZebraStyles>
-                              <TableHead>
-                                <TableRow>
-                                  <TableHeader>Package</TableHeader>
-                                  <TableHeader>Timber mark</TableHeader>
-                                  <TableHeader>Species</TableHeader>
-                                  <TableHeader>Grade</TableHeader>
-                                  <TableHeader>AMV ($/m³ CAD)</TableHeader>
-                                  <TableHeader>Volume (m³)</TableHeader>
-                                  {showMinistryFeeColumn && <TableHeader>EWB$</TableHeader>}
-                                  <TableHeader>FIL%</TableHeader>
-                                  <TableHeader>MF%</TableHeader>
-                                  <TableHeader>Fee (CAD)</TableHeader>
-                                </TableRow>
-                              </TableHead>
-                              <TableBody>
-                                {permitFeeRows.map((row) => (
-                                  <TableRow key={row.id}>
-                                    <TableCell>
-                                      {row.packageNumber
-                                        ? formatPackageNumberLabel(row.packageNumber)
-                                        : '-'}
-                                    </TableCell>
-                                    <TableCell>{row.timberMark || '-'}</TableCell>
-                                    <TableCell>{row.species || '-'}</TableCell>
-                                    <TableCell>{row.grade || '-'}</TableCell>
-                                    <TableCell>{row.amv || '-'}</TableCell>
-                                    <TableCell>{row.volume.toLocaleString()}</TableCell>
-                                    {showMinistryFeeColumn && (
-                                      <TableCell>{row.ewb || '-'}</TableCell>
-                                    )}
-                                    <TableCell>{row.filPercent || '-'}</TableCell>
-                                    <TableCell>{row.mfPercent || '-'}</TableCell>
-                                    <TableCell>
-                                      {row.amountDisplay.trim() === '$'
-                                        ? '$'
-                                        : `$${formatAmount(row.amount)}`}
-                                    </TableCell>
-                                  </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
-                          </TableFrame>
-                        ) : (
-                          <EmptyState
-                            title={
-                              ministerialFeeShellEmpty ? 'No fees yet' : 'No fee details available'
-                            }
-                            description={
-                              ministerialFeeShellEmpty ? (
-                                <>
-                                  Fees are calculated from the permit&apos;s Summary of Scale. They
-                                  appear once an application is selected on the{' '}
-                                  <button
-                                    type="button"
-                                    className="cds--link"
-                                    onClick={() => selectPermitTab('permit')}
-                                  >
-                                    Permit tab
-                                  </button>
-                                  .
-                                </>
-                              ) : (
-                                'No fee rows are available for this permit.'
-                              )
-                            }
-                            headingLevel={3}
-                          />
-                        )}
-                      </Tile>
-                    </Column>
+                    {usesReviewedPermitFlow && !ministerialFeeShellEmpty ? (
+                      <>
+                        <Column sm={4} md={8} lg={16}>
+                          <Tile>
+                            <h2 className="detail-tile-title">Permit fees</h2>
+                            {renderPermitFeeSummary()}
+                          </Tile>
+                        </Column>
+                        <Column sm={4} md={8} lg={16}>
+                          <Tile>
+                            <h2 className="detail-tile-title">Package fees</h2>
+                            {renderPackageFees()}
+                          </Tile>
+                        </Column>
+                      </>
+                    ) : (
+                      <Column sm={4} md={8} lg={16}>
+                        <Tile>
+                          <h2 className="detail-tile-title">
+                            {usesReviewedPermitFlow ? 'Fees' : 'Fee calculation details'}
+                          </h2>
+                          {!ministerialFeeShellEmpty && renderPermitFeeSummary()}
+                          {renderPackageFees()}
+                        </Tile>
+                      </Column>
+                    )}
                   </Grid>
                 </TabPanel>
                 {hasGbmsHistory && (
@@ -6633,9 +6729,23 @@ const ProvincialPermitDetailsPage = () => {
                       <Tile>
                         <div className="detail-section-card__header">
                           <h2 className="detail-tile-title">
-                            {ministerialPermit ? 'Documents' : 'Permit documents'}
+                            {usesReviewedPermitFlow ? 'Documents' : 'Permit documents'}
                           </h2>
-                          {canEditPermitDocuments &&
+                          {detail.blanketOic && canUploadPermitDocuments && (
+                            <Button
+                              kind="tertiary"
+                              size="sm"
+                              disabled={permitDocumentUploadBusy}
+                              onClick={() => {
+                                setPermitDocumentUploadResetKey((current) => current + 1)
+                                setIsEditingPermitDocuments(true)
+                              }}
+                            >
+                              Add document
+                            </Button>
+                          )}
+                          {!detail.blanketOic &&
+                            canEditPermitDocuments &&
                             (isEditingPermitDocuments ? (
                               <Button
                                 kind="tertiary"
@@ -6652,7 +6762,7 @@ const ProvincialPermitDetailsPage = () => {
                                 renderIcon={Edit}
                                 onClick={() => setIsEditingPermitDocuments(true)}
                               >
-                                {ministerialPermit ? 'Add document' : 'Edit permit documents'}
+                                {usesReviewedPermitFlow ? 'Add document' : 'Edit permit documents'}
                               </Button>
                             ))}
                         </div>
@@ -6663,6 +6773,9 @@ const ProvincialPermitDetailsPage = () => {
                             targetNumber={String(detail.permitNumber ?? permitNumber ?? '')}
                             inputId="permitDocumentUpload"
                             disabled={!detail.permitNumber}
+                            presentation={detail.blanketOic ? 'side-panel' : 'modal'}
+                            initiallyOpen={detail.blanketOic}
+                            onClose={detail.blanketOic ? onCancelPermitDocumentEditing : undefined}
                             onDirtyChange={setPermitDocumentUploadDirty}
                             onBusyChange={setPermitDocumentUploadBusy}
                             onUploadComplete={refreshPermitDocuments}
@@ -6701,6 +6814,17 @@ const ProvincialPermitDetailsPage = () => {
                                       <TableCell>{row.type || row.typeCode || '-'}</TableCell>
                                       <TableCell>
                                         <div className="legacy-search-actions">
+                                          {detail.blanketOic && (
+                                            <Button
+                                              kind="ghost"
+                                              size="sm"
+                                              disabled={!canPerform('/permitDetails')}
+                                              title="Open supported files in a new tab; other formats download."
+                                              onClick={() => void onOpenDocument(row, true)}
+                                            >
+                                              Open
+                                            </Button>
+                                          )}
                                           <Button
                                             kind="ghost"
                                             size="sm"
@@ -6709,7 +6833,8 @@ const ProvincialPermitDetailsPage = () => {
                                           >
                                             Download
                                           </Button>
-                                          {isEditingPermitDocuments && (
+                                          {(isEditingPermitDocuments ||
+                                            (detail.blanketOic && canDeletePermitDocuments)) && (
                                             <Button
                                               kind="danger--ghost"
                                               size="sm"
@@ -6742,12 +6867,12 @@ const ProvincialPermitDetailsPage = () => {
                         ) : (
                           <EmptyState
                             title={
-                              ministerialPermit
+                              usesReviewedPermitFlow
                                 ? 'No documents for this permit'
                                 : 'No permit documents available'
                             }
                             description={
-                              ministerialPermit
+                              usesReviewedPermitFlow
                                 ? 'Documents added to this permit are listed here.'
                                 : 'No documents are available for this permit.'
                             }

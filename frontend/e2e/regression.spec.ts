@@ -2655,7 +2655,7 @@ test.describe('TEST IDIR admin regression', () => {
     expect(paragraphMetrics.fontSize).toBe(normalFieldMetrics.fontSize)
     expect(paragraphMetrics.resize).toBe('vertical')
 
-    await page.getByRole('tab', { name: 'Owner' }).click()
+    await page.getByRole('tab', { name: 'Applicant' }).click()
     await expect(page.getByRole('combobox', { name: 'Applicant type' })).toHaveValue('Owner')
   })
 

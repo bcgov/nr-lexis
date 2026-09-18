@@ -321,7 +321,7 @@ describe('create page unsaved changes', () => {
     const testCase = createCases[0]
     const router = renderCreatePage(testCase.createPath, testCase.targetPath, testCase.element)
     await screen.findByRole('heading', { level: 1, name: testCase.heading })
-    await userEvent.click(screen.getByRole('tab', { name: 'Owner' }))
+    await userEvent.click(screen.getByRole('tab', { name: 'Applicant' }))
     fireEvent.change(screen.getByRole('textbox', { name: 'Client number' }), {
       target: { value: '00011111' },
     })

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import {
   Button,
   Checkbox,
+  InlineLoading,
   InlineNotification,
   Select,
   SelectItem,
@@ -10,10 +11,19 @@ import {
   TabPanel,
   TabPanels,
   Tabs,
+  Tag,
   TextArea,
   TextInput,
   Tile,
 } from '@carbon/react'
+import {
+  CurrencyDollar,
+  DataTable,
+  Delivery,
+  Document,
+  DocumentAttachment,
+  User,
+} from '@carbon/icons-react'
 import EmptyState from '@/components/EmptyState'
 import ForestClientComboBox from '@/components/ForestClientComboBox'
 import IsoDatePicker from '@/components/IsoDatePicker'
@@ -31,6 +41,7 @@ import type { IdTextOption } from '@/pages/shared/search-query-utils'
 import {
   fetchExemptionClientData,
   fetchExemptionClientLocations,
+  type ApplicationClientData,
   type ApplicationClientLocation,
 } from '@/service/application-client-lookup-service'
 import {
@@ -91,6 +102,67 @@ type BlanketOicPermitCreateFormProps = {
 
 const MAX_OIC_REQUEST_PIECES = 9_999_999_999
 const MAX_OIC_REQUEST_VOLUME_LENGTH = 9
+
+const FORM_TABS = [
+  {
+    label: 'Permit',
+    icon: Document,
+    requiredFields: [
+      'permitSubmitDate',
+      'orgUnitNumber',
+      'oicPermitTotalPieces',
+      'oicPermitTotalVolume',
+    ],
+  },
+  {
+    label: 'Applicant',
+    icon: User,
+    requiredFields: [
+      'ownerClientNumber',
+      'ownerClientLocation',
+      'agentClientNumber',
+      'agentClientLocation',
+    ],
+  },
+  {
+    label: 'Shipping',
+    icon: Delivery,
+    requiredFields: [
+      'destinationCompanyName',
+      'destinationCountry',
+      'transportType',
+      'transportName',
+      'estimatedShippingDate',
+      'portOfExport',
+      'otherPortOfExport',
+    ],
+  },
+  { label: 'Scale', icon: DataTable, requiredFields: [] },
+  { label: 'Documents', icon: DocumentAttachment, requiredFields: [] },
+  { label: 'Fees', icon: CurrencyDollar, requiredFields: [] },
+] as const
+
+const withShippingDefaults = (
+  form: BlanketOicPermitForm,
+  options: ShippingReferenceOptions,
+): BlanketOicPermitForm => ({
+  ...form,
+  destinationCountry:
+    form.destinationCountry ||
+    options.countries.find(({ code }) => code === 'US')?.code ||
+    options.countries[0]?.code ||
+    '',
+  transportType:
+    form.transportType ||
+    options.transportTypes.find(({ code }) => code === 'B')?.code ||
+    options.transportTypes[0]?.code ||
+    '',
+  portOfExport:
+    form.portOfExport ||
+    options.ports.find(({ code }) => code === 'CB')?.code ||
+    options.ports[0]?.code ||
+    '',
+})
 
 const initialForm = (defaultRegionNumber: string): BlanketOicPermitForm => {
   const today = formatBusinessIsoDate()
@@ -265,6 +337,8 @@ const BlanketOicPermitCreateForm = ({
   const [clientSearchResetKey, setClientSearchResetKey] = useState(0)
   const [ownerLocations, setOwnerLocations] = useState<ApplicationClientLocation[]>([])
   const [agentLocations, setAgentLocations] = useState<ApplicationClientLocation[]>([])
+  const [ownerClientData, setOwnerClientData] = useState<ApplicationClientData | null>(null)
+  const [agentClientData, setAgentClientData] = useState<ApplicationClientData | null>(null)
   const [ownerLookupLoading, setOwnerLookupLoading] = useState(false)
   const [agentLookupLoading, setAgentLookupLoading] = useState(false)
   const [ownerLookupAttempted, setOwnerLookupAttempted] = useState(false)
@@ -280,6 +354,8 @@ const BlanketOicPermitCreateForm = ({
   const [createdPermitNumber, setCreatedPermitNumber] = useState<string | null>(null)
   const [unknownOutcomeMessage, setUnknownOutcomeMessage] = useState('')
   const [actionError, setActionError] = useState('')
+  const [failedSubmitCount, setFailedSubmitCount] = useState(0)
+  const errorSummaryRef = useRef<HTMLDivElement>(null)
   const [clientLookupFailures, setClientLookupFailures] = useState<ReadonlySet<ClientKind>>(
     () => new Set(),
   )
@@ -291,7 +367,25 @@ const BlanketOicPermitCreateForm = ({
   const agentPendingLookupRef = useRef<PendingClientLookup | null>(null)
   currentFormRef.current = form
   const formErrors = validateForm(form, agentUsed)
+  const errorMessages = Array.from(
+    new Set(
+      [
+        ...(showValidationErrors ? Object.values(formErrors) : []),
+        shippingReferencesError,
+        regionContext.errorMessage,
+        clientLookupFailures.size > 0 ? CLIENT_LOOKUP_UNAVAILABLE_MESSAGE : '',
+        showValidationErrors && shippingReferencesLoading
+          ? 'Shipping reference options are still loading. Try saving again when they are ready.'
+          : '',
+        actionError,
+      ].filter(Boolean),
+    ),
+  )
   const isDraftDirty = formEdited && !formValuesEqual({ form, agentUsed }, draftBaselineRef.current)
+
+  useEffect(() => {
+    if (failedSubmitCount > 0) errorSummaryRef.current?.focus()
+  }, [failedSubmitCount])
 
   useEffect(() => {
     if (createdPermitNumber) onCreated(createdPermitNumber)
@@ -307,24 +401,12 @@ const BlanketOicPermitCreateForm = ({
       .then((options) => {
         if (!active) return
         setShippingReferences(options)
-        setForm((current) => ({
-          ...current,
-          destinationCountry:
-            current.destinationCountry ||
-            options.countries.find(({ code }) => code === 'US')?.code ||
-            options.countries[0]?.code ||
-            '',
-          transportType:
-            current.transportType ||
-            options.transportTypes.find(({ code }) => code === 'B')?.code ||
-            options.transportTypes[0]?.code ||
-            '',
-          portOfExport:
-            current.portOfExport ||
-            options.ports.find(({ code }) => code === 'CB')?.code ||
-            options.ports[0]?.code ||
-            '',
-        }))
+        // Reference defaults belong to the initial draft, even if the user started editing first.
+        draftBaselineRef.current = {
+          ...draftBaselineRef.current,
+          form: withShippingDefaults(draftBaselineRef.current.form, options),
+        }
+        setForm((current) => withShippingDefaults(current, options))
       })
       .catch((error) => {
         if (!active) return
@@ -343,6 +425,7 @@ const BlanketOicPermitCreateForm = ({
   }, [])
 
   const markFormEdited = () => {
+    setActionError('')
     if (!formEditedRef.current) {
       draftBaselineRef.current = { form, agentUsed }
       formEditedRef.current = true
@@ -382,6 +465,7 @@ const BlanketOicPermitCreateForm = ({
         : currentFormRef.current.agentClientNumber)
     ).trim()
     const setLocations = kind === 'owner' ? setOwnerLocations : setAgentLocations
+    const setClientData = kind === 'owner' ? setOwnerClientData : setAgentClientData
     const setLoading = kind === 'owner' ? setOwnerLookupLoading : setAgentLookupLoading
     const setAttempted = kind === 'owner' ? setOwnerLookupAttempted : setAgentLookupAttempted
     const requestRef = kind === 'owner' ? ownerLookupRequestRef : agentLookupRequestRef
@@ -411,6 +495,7 @@ const BlanketOicPermitCreateForm = ({
     if (!/^\d{1,8}$/.test(clientNumber)) {
       updateClientLookupFailure(kind, false)
       setLocations([])
+      setClientData(null)
       setField(locationField, '')
       return { clientNumber, locationCode: '' }
     }
@@ -435,6 +520,7 @@ const BlanketOicPermitCreateForm = ({
       const confirmedClientNumber = clientData?.clientNumber.trim() || clientNumber
       updateClientLookupFailure(kind, false)
       setLocations(selectableLocations)
+      setClientData(clientData)
       setForm((current) => {
         const currentClientNumber =
           kind === 'owner' ? current.ownerClientNumber.trim() : current.agentClientNumber.trim()
@@ -500,6 +586,7 @@ const BlanketOicPermitCreateForm = ({
     const pendingLookupRef = kind === 'owner' ? ownerPendingLookupRef : agentPendingLookupRef
     const setLoading = kind === 'owner' ? setOwnerLookupLoading : setAgentLookupLoading
     const setLocations = kind === 'owner' ? setOwnerLocations : setAgentLocations
+    const setClientData = kind === 'owner' ? setOwnerClientData : setAgentClientData
     const setAttempted = kind === 'owner' ? setOwnerLookupAttempted : setAgentLookupAttempted
     const clientNumberField: FormField =
       kind === 'owner' ? 'ownerClientNumber' : 'agentClientNumber'
@@ -515,6 +602,8 @@ const BlanketOicPermitCreateForm = ({
     pendingLookupRef.current = null
     setLoading(false)
     setLocations([])
+    setClientData(null)
+    updateClientLookupFailure(kind, false)
     setAttempted(false)
     markFormEdited()
     currentFormRef.current = nextForm
@@ -526,6 +615,74 @@ const BlanketOicPermitCreateForm = ({
     if (clientNumber) {
       void requestClientLocations(kind, clientNumber)
     }
+  }
+
+  const selectClientLocation = async (kind: ClientKind, locationCode: string): Promise<void> => {
+    const requestRef = kind === 'owner' ? ownerLookupRequestRef : agentLookupRequestRef
+    const pendingLookupRef = kind === 'owner' ? ownerPendingLookupRef : agentPendingLookupRef
+    const setLoading = kind === 'owner' ? setOwnerLookupLoading : setAgentLookupLoading
+    const setClientData = kind === 'owner' ? setOwnerClientData : setAgentClientData
+    const clientNumberField = kind === 'owner' ? 'ownerClientNumber' : 'agentClientNumber'
+    const locationField = kind === 'owner' ? 'ownerClientLocation' : 'agentClientLocation'
+    const clientNumber = currentFormRef.current[clientNumberField].trim()
+    const requestId = ++requestRef.current
+    pendingLookupRef.current = null
+    setField(locationField, locationCode)
+    currentFormRef.current = { ...currentFormRef.current, [locationField]: locationCode }
+    setClientData(null)
+    updateClientLookupFailure(kind, false)
+    if (!clientNumber || !locationCode) {
+      setLoading(false)
+      return
+    }
+
+    const isLatestRequest = () =>
+      requestRef.current === requestId &&
+      currentFormRef.current[clientNumberField].trim() === clientNumber &&
+      currentFormRef.current[locationField] === locationCode
+    setLoading(true)
+    try {
+      const clientData = await fetchExemptionClientData(clientNumber, locationCode)
+      if (isLatestRequest()) setClientData(clientData)
+    } catch (error) {
+      if (isLatestRequest()) {
+        console.error(error)
+        updateClientLookupFailure(kind, true)
+      }
+    } finally {
+      if (isLatestRequest()) setLoading(false)
+    }
+  }
+
+  const renderClientDetails = (kind: ClientKind) => {
+    const clientData = kind === 'owner' ? ownerClientData : agentClientData
+    const loading = kind === 'owner' ? ownerLookupLoading : agentLookupLoading
+    const title = kind === 'owner' ? 'Applicant details' : 'Agent details'
+    if (loading) return <InlineLoading description={`Loading ${title.toLowerCase()}…`} />
+    if (!clientData) return null
+
+    return (
+      <section aria-label={title} className="application-client-summary">
+        <dl className="detail-field-grid">
+          {[
+            ['Company name', clientData.companyName],
+            ['Address', clientData.address],
+            ['City', clientData.city],
+            ['Province', clientData.province],
+            ['Postal code', clientData.postalCode],
+            ['Country', clientData.country],
+            ['Phone', clientData.phone],
+            ['Fax', clientData.fax],
+            ['Email', clientData.email],
+          ].map(([label, value]) => (
+            <div key={label} className="detail-field-item">
+              <dt className="detail-field-label">{label}</dt>
+              <dd className="detail-field-value">{value || '—'}</dd>
+            </div>
+          ))}
+        </dl>
+      </section>
+    )
   }
 
   const markDraftSaved = (nextForm: BlanketOicPermitForm) => {
@@ -553,7 +710,6 @@ const BlanketOicPermitCreateForm = ({
     createPermitInFlightRef.current = true
     setSaving(true)
     try {
-      setShowValidationErrors(true)
       setActionError('')
 
       let ownerClientNumber = form.ownerClientNumber.trim()
@@ -597,15 +753,13 @@ const BlanketOicPermitCreateForm = ({
       if (Object.keys(errors).length > 0) {
         setForm(requestForm)
         setSelectedTabIndex(firstInvalidTabIndex(errors))
-        setActionError(Object.values(errors)[0] ?? 'Fix the validation errors before creating.')
+        setShowValidationErrors(true)
+        setFailedSubmitCount((count) => count + 1)
         return false
       }
       if (!shippingReferences || shippingReferencesLoading || regionContext.options.length === 0) {
-        setActionError(
-          shippingReferencesError ||
-            regionContext.errorMessage ||
-            'Required region or shipping options are unavailable.',
-        )
+        setShowValidationErrors(true)
+        setFailedSubmitCount((count) => count + 1)
         return false
       }
 
@@ -640,6 +794,7 @@ const BlanketOicPermitCreateForm = ({
       const result = await addPermitDetail(request)
       if (!result.success) {
         setActionError(result.errors.join(' ') || result.message || 'Unable to create the permit.')
+        setFailedSubmitCount((count) => count + 1)
         return false
       }
       const permitNumber = result.permitNumber.trim()
@@ -677,46 +832,28 @@ const BlanketOicPermitCreateForm = ({
 
   return (
     <section aria-label="Blanket OIC permit details">
-      <InlineNotification
-        kind="info"
-        title="The permit number is assigned after a successful save. The Scale, Documents and Fees tabs become available afterwards."
-        lowContrast
-        hideCloseButton
-      />
-      {shippingReferencesError && (
+      {errorMessages.length > 0 ? (
+        <div ref={errorSummaryRef} tabIndex={-1} role="group" aria-label="Permit needs attention">
+          <InlineNotification
+            kind="error"
+            role="alert"
+            title="Permit needs attention"
+            lowContrast
+            hideCloseButton
+          >
+            <ul>
+              {errorMessages.map((message) => (
+                <li key={message}>{message}</li>
+              ))}
+            </ul>
+          </InlineNotification>
+        </div>
+      ) : (
         <InlineNotification
-          kind="error"
-          title="Shipping options unavailable"
-          subtitle={shippingReferencesError}
+          kind="info"
+          title="The permit number is assigned after a successful save. The Scale, Documents and Fees tabs become available afterwards."
           lowContrast
           hideCloseButton
-        />
-      )}
-      {regionContext.errorMessage && (
-        <InlineNotification
-          kind="error"
-          title="Region unavailable"
-          subtitle={regionContext.errorMessage}
-          lowContrast
-          hideCloseButton
-        />
-      )}
-      {clientLookupFailures.size > 0 && (
-        <InlineNotification
-          kind="error"
-          title="Client details unavailable"
-          subtitle={CLIENT_LOOKUP_UNAVAILABLE_MESSAGE}
-          lowContrast
-          onCloseButtonClick={() => setClientLookupFailures(new Set())}
-        />
-      )}
-      {actionError && (
-        <InlineNotification
-          kind="error"
-          title="Permit not created"
-          subtitle={actionError}
-          lowContrast
-          onCloseButtonClick={() => setActionError('')}
         />
       )}
       <div
@@ -729,12 +866,7 @@ const BlanketOicPermitCreateForm = ({
         </Button>
         <Button
           kind="primary"
-          disabled={
-            saving ||
-            shippingReferencesLoading ||
-            !shippingReferences ||
-            regionContext.options.length === 0
-          }
+          disabled={saving}
           renderIcon={saving ? PendingIcon : undefined}
           onClick={() => void createPermit()}
         >
@@ -751,12 +883,29 @@ const BlanketOicPermitCreateForm = ({
           contained
           className="application-tabs__list application-detail-tab-list"
         >
-          <Tab>Permit</Tab>
-          <Tab>Applicant</Tab>
-          <Tab>Shipping</Tab>
-          <Tab>Scale</Tab>
-          <Tab>Documents</Tab>
-          <Tab>Fees</Tab>
+          {FORM_TABS.map(({ label, icon, requiredFields }) => {
+            const outstanding = showValidationErrors
+              ? requiredFields.filter((field) => !!formErrors[field]).length
+              : 0
+            return (
+              <Tab
+                key={label}
+                renderIcon={outstanding ? undefined : icon}
+                aria-label={
+                  outstanding
+                    ? `${label}, ${outstanding} required ${outstanding === 1 ? 'field' : 'fields'} outstanding`
+                    : label
+                }
+              >
+                {label}
+                {outstanding > 0 && (
+                  <Tag type="red" size="sm" aria-hidden="true">
+                    {outstanding}
+                  </Tag>
+                )}
+              </Tab>
+            )
+          })}
         </TabList>
         <TabPanels>
           <TabPanel className="application-detail-tab-panel">
@@ -909,7 +1058,7 @@ const BlanketOicPermitCreateForm = ({
                     disabled={
                       ownerLookupLoading || !ownerLocations.some(isSelectableClientLocation)
                     }
-                    onChange={(event) => setField('ownerClientLocation', event.target.value)}
+                    onChange={(event) => void selectClientLocation('owner', event.target.value)}
                   >
                     <SelectItem
                       value=""
@@ -926,6 +1075,7 @@ const BlanketOicPermitCreateForm = ({
                     ))}
                   </Select>
                 </div>
+                {renderClientDetails('owner')}
                 <Checkbox
                   id="boic-permit-agent-used"
                   labelText="I'm an agent"
@@ -941,6 +1091,7 @@ const BlanketOicPermitCreateForm = ({
                       setField('agentClientNumber', '')
                       setField('agentClientLocation', '')
                       setAgentLocations([])
+                      setAgentClientData(null)
                       setAgentLookupAttempted(false)
                     }
                   }}
@@ -988,7 +1139,7 @@ const BlanketOicPermitCreateForm = ({
                         disabled={
                           agentLookupLoading || !agentLocations.some(isSelectableClientLocation)
                         }
-                        onChange={(event) => setField('agentClientLocation', event.target.value)}
+                        onChange={(event) => void selectClientLocation('agent', event.target.value)}
                       >
                         <SelectItem
                           value=""
@@ -1005,6 +1156,7 @@ const BlanketOicPermitCreateForm = ({
                         ))}
                       </Select>
                     </div>
+                    {renderClientDetails('agent')}
                   </section>
                 )}
               </fieldset>

@@ -136,7 +136,7 @@ const EXEMPTION_DETAIL_TAB_SLOTS: readonly ExemptionDetailTabKey[] = [
 ]
 
 const EXEMPTION_DETAIL_TAB_LABELS: Record<ExemptionDetailTabKey, string> = {
-  owner: 'Owner',
+  owner: 'Applicant',
   agent: 'Agent',
   summary: 'Exemption details',
   applications: 'Applications',
@@ -492,7 +492,7 @@ const ProvincialExemptionDetailsPage = () => {
         setOwnerClientLocations([])
         setAgentClientLocations([])
         setClientContextErrorMessage(
-          'Owner and agent details could not be retrieved from the linked application.',
+          'Applicant and agent details could not be retrieved from the linked application.',
         )
       } finally {
         if (isActive) {
@@ -1908,7 +1908,7 @@ const ProvincialExemptionDetailsPage = () => {
                           />
                         ) : (
                           <ExemptionClientTile
-                            title="Owner client details"
+                            title="Applicant client details"
                             clientNumber={exemptionOwnerClientNumber}
                             applicantType={clientContextApplication?.applicantTypeCode ?? ''}
                             locationCode={ownerClientLocationCode}

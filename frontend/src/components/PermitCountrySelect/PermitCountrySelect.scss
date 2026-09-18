@@ -1,0 +1,5 @@
+.permit-country-select {
+  .cds--list-box__menu-item:has(.permit-country-select__after-preferred) {
+    border-block-start: 1px solid var(--cds-border-strong-01);
+  }
+}
