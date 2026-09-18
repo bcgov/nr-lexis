@@ -1,0 +1,19 @@
+@use '@carbon/ibm-products/scss/components/SidePanel';
+
+.detail-side-panel-host {
+  display: contents;
+}
+
+.detail-side-panel.c4p--side-panel {
+  margin: 0;
+  inset-block-start: var(--csp-header-height, 3rem);
+  block-size: calc(100dvh - var(--csp-header-height, 3rem));
+}
+
+@media (max-width: 671px) {
+  .detail-side-panel.c4p--side-panel {
+    inline-size: 100%;
+    min-inline-size: 0;
+    max-inline-size: 100%;
+  }
+}
