@@ -452,14 +452,6 @@ public class PermitRpcRepository extends OracleRepositorySupport {
   private static final String FIND_LOG_AMV_BY_SCALE = LEXIS_CODES_PACKAGE + "FIND_LOG_AMV(?,?)";
   private static final String FIND_CONVERSION_FOR_DATE =
       LEXIS_CODES_PACKAGE + "FIND_CONVERSION_FOR_DATE(?,?,?)";
-  private static final String FIND_ALL_COUNTRY_CODES = LEXIS_CODES_PACKAGE + "FIND_ALL_COUNTRY_CODES(?)";
-  private static final String FIND_COUNTRY_CODE = LEXIS_CODES_PACKAGE + "FIND_COUNTRY_CODE(?,?)";
-  private static final String FIND_PERMIT_STATUS_CODE =
-      LEXIS_CODES_PACKAGE + "FIND_PERMIT_STATUS_CODE(?,?)";
-  private static final String FIND_SCALE_METHOD_CODE =
-      LEXIS_CODES_PACKAGE + "FIND_SCALE_METHOD_CODE(?,?)";
-  private static final String FIND_TRANSPORT_TYPE_CODE =
-      LEXIS_CODES_PACKAGE + "FIND_TRANSPORT_TYPE_CODE(?,?)";
   private static final String IS_PERMIT_MU44 = LEXIS_GROUP_5_PACKAGE + "IS_PERMIT_MU44(?,?)";
 
   public PermitRpcRepository(@Qualifier("oracleJdbcTemplate") JdbcTemplate jdbcTemplate) {
@@ -551,11 +543,11 @@ public class PermitRpcRepository extends OracleRepositorySupport {
   }
 
   public boolean isPermitStatusCodeValidRequired(String code) {
-    return codeExistsRequired(FIND_PERMIT_STATUS_CODE, code);
+    return codeExistsDirectRequired(LexisCodeQueries.PERMIT_STATUS_BY_CODE, code);
   }
 
   public boolean isCountryCodeValidRequired(String code) {
-    return codeExistsRequired(FIND_COUNTRY_CODE, code);
+    return codeExistsDirectRequired(LexisCodeQueries.COUNTRY_BY_CODE, code);
   }
 
   public boolean isPortCodeValidRequired(String code) {
@@ -568,11 +560,11 @@ public class PermitRpcRepository extends OracleRepositorySupport {
   }
 
   public boolean isScaleMethodCodeValidRequired(String code) {
-    return codeExistsRequired(FIND_SCALE_METHOD_CODE, code);
+    return codeExistsDirectRequired(LexisCodeQueries.SCALE_METHOD_BY_CODE, code);
   }
 
   public boolean isTransportTypeCodeValidRequired(String code) {
-    return codeExistsRequired(FIND_TRANSPORT_TYPE_CODE, code);
+    return codeExistsDirectRequired(LexisCodeQueries.TRANSPORT_TYPE_BY_CODE, code);
   }
 
   public Optional<ScaleMutationRow> findScaleMutationById(String scaleDetailId) {
@@ -1329,10 +1321,8 @@ public class PermitRpcRepository extends OracleRepositorySupport {
   }
 
   public List<CountryCodeRow> findAllCountryCodesRequired() {
-    return queryCursorProcedureRequired(
-            FIND_ALL_COUNTRY_CODES,
-            null,
-            1,
+    return queryDirectRequired(
+            LexisCodeQueries.ACTIVE_COUNTRIES,
             rs ->
                 new CountryCodeRow(
                     getString(rs, "CODE"),
@@ -2094,6 +2084,14 @@ public class PermitRpcRepository extends OracleRepositorySupport {
             rs -> trim(rs.getString(2)))
         .filter(value -> value != null && !value.isBlank())
         .or(() -> fallbackCodeDescription(procedureSignature, normalized));
+  }
+
+  private boolean codeExistsDirectRequired(String sql, String code) {
+    String normalized = trim(code);
+    if (normalized == null) {
+      return false;
+    }
+    return !queryDirectRequired(sql, rs -> Boolean.TRUE, normalized).isEmpty();
   }
 
   private boolean codeExistsRequired(String procedureSignature, String code) {

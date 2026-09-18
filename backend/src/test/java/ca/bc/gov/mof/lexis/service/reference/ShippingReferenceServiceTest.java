@@ -10,6 +10,8 @@ import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataRetrievalFailureException;
@@ -31,7 +33,7 @@ class ShippingReferenceServiceTest {
     when(repository.findActiveCountriesRequired())
         .thenReturn(
             List.of(
-                new CodeNameDto("US", "United States"),
+                new CodeNameDto(" us ", " United States "),
                 new CodeNameDto("CA", "Canada")));
     when(repository.findActiveTransportTypesRequired())
         .thenReturn(List.of(new CodeNameDto("T", "Truck"), new CodeNameDto("S", "Ship")));
@@ -44,7 +46,9 @@ class ShippingReferenceServiceTest {
 
     var result = service.findActiveOptionsRequired();
 
-    assertThat(result.countries()).extracting(CodeNameDto::code).containsExactly("US", "CA");
+    assertThat(result.countries())
+        .containsExactly(
+            new CodeNameDto("US", "United States"), new CodeNameDto("CA", "Canada"));
     assertThat(result.transportTypes()).extracting(CodeNameDto::code).containsExactly("T", "S");
     assertThat(result.ports()).extracting(CodeNameDto::code).containsExactly("OT", "VA", "ZZ");
   }
@@ -59,7 +63,7 @@ class ShippingReferenceServiceTest {
   }
 
   @Test
-  void shouldFailClosedForInvalidOrDuplicateCodes() {
+  void shouldFailClosedForDuplicateCountryCodes() {
     when(repository.findActiveCountriesRequired())
         .thenReturn(
             List.of(
@@ -69,5 +73,15 @@ class ShippingReferenceServiceTest {
     assertThatThrownBy(service::findActiveOptionsRequired)
         .isInstanceOf(DataRetrievalFailureException.class)
         .hasMessageContaining("duplicate country");
+  }
+
+  @ParameterizedTest
+  @CsvSource({",United States", "' ',United States", "USA,United States", "US,", "US,' '"})
+  void shouldFailClosedForMalformedCountryOptions(String code, String name) {
+    when(repository.findActiveCountriesRequired()).thenReturn(List.of(new CodeNameDto(code, name)));
+
+    assertThatThrownBy(service::findActiveOptionsRequired)
+        .isInstanceOf(DataRetrievalFailureException.class)
+        .hasMessageContaining("invalid country");
   }
 }

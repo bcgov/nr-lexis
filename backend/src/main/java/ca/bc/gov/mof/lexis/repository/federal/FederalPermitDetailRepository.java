@@ -1,6 +1,8 @@
 package ca.bc.gov.mof.lexis.repository.federal;
 
+import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.COUNTRY_BY_CODE;
 import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.PORT_BY_CODE;
+import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.TRANSPORT_TYPE_BY_CODE;
 
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import java.sql.CallableStatement;
@@ -29,10 +31,6 @@ public class FederalPermitDetailRepository extends OracleRepositorySupport {
       LEXIS_GROUP_3_PACKAGE + "UPDATE_FEDERAL_PERMIT(?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
   private static final String FIND_FEDERAL_PERMIT_BY_ID =
       LEXIS_GROUP_3_PACKAGE + "FIND_F_PERM_DET_BY_ID(?,?)";
-  private static final String FIND_COUNTRY_CODE =
-      LEXIS_CODES_PACKAGE + "FIND_COUNTRY_CODE(?,?)";
-  private static final String FIND_TRANSPORT_TYPE_CODE =
-      LEXIS_CODES_PACKAGE + "FIND_TRANSPORT_TYPE_CODE(?,?)";
 
   public FederalPermitDetailRepository(@Qualifier("oracleJdbcTemplate") JdbcTemplate jdbcTemplate) {
     super(jdbcTemplate);
@@ -116,7 +114,7 @@ public class FederalPermitDetailRepository extends OracleRepositorySupport {
   }
 
   public boolean countryCodeExistsRequired(String code) {
-    return codeExistsRequired(FIND_COUNTRY_CODE, code);
+    return codeExistsRequired(COUNTRY_BY_CODE, code);
   }
 
   public boolean portOfExportCodeExistsRequired(String code) {
@@ -129,19 +127,15 @@ public class FederalPermitDetailRepository extends OracleRepositorySupport {
   }
 
   public boolean transportTypeCodeExistsRequired(String code) {
-    return codeExistsRequired(FIND_TRANSPORT_TYPE_CODE, code);
+    return codeExistsRequired(TRANSPORT_TYPE_BY_CODE, code);
   }
 
-  private boolean codeExistsRequired(String procedureSignature, String code) {
+  private boolean codeExistsRequired(String sql, String code) {
     String normalizedCode = trim(code);
     if (normalizedCode == null) {
       return false;
     }
-    return queryCursorProcedureRequired(
-            procedureSignature,
-            cs -> cs.setString(1, normalizedCode),
-            2,
-            rs -> trim(rs.getString("CODE")))
+    return queryDirectRequired(sql, rs -> trim(rs.getString("CODE")), normalizedCode)
         .stream()
         .anyMatch(normalizedCode::equalsIgnoreCase);
   }

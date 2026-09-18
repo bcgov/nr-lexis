@@ -86,6 +86,10 @@ const parseOptions = (input: unknown, allowEmptyCode = false): SearchOption[] =>
 const parseRegionOptions = (input: unknown): SearchOption[] =>
   parseOptions(input).filter((option) => NATURAL_RESOURCE_REGION_CODES.has(option.value))
 
+// These endpoints also supply create/edit and report forms; None is a search predicate only.
+const parseExemptionTypeOptions = (input: unknown, includeNone: boolean): SearchOption[] =>
+  parseOptions(input).filter((option) => includeNone || option.value !== 'NULL')
+
 const parseApplicationStatusOptions = (input: unknown): SearchOption[] =>
   parseOptions(input).filter(
     (option) =>
@@ -127,7 +131,9 @@ const fetchRequiredOptions = async (path: string): Promise<Record<string, unknow
   return data
 }
 
-export const fetchProvincialApplicationOptions = async (): Promise<{
+export const fetchProvincialApplicationOptions = async (
+  includeNoneExemptionType = false,
+): Promise<{
   exemptionTypes: SearchOption[]
   exemptionReasons: SearchOption[]
   applicationStatuses: SearchOption[]
@@ -148,7 +154,7 @@ export const fetchProvincialApplicationOptions = async (): Promise<{
   ])
 
   return {
-    exemptionTypes: parseOptions(data.exemptionTypes),
+    exemptionTypes: parseExemptionTypeOptions(data.exemptionTypes, includeNoneExemptionType),
     exemptionReasons: parseOptions(data.exemptionReasons),
     applicationStatuses: parseApplicationStatusOptions(data.applicationStatuses),
     productTypes: parseOptions(data.productTypes),
@@ -161,7 +167,9 @@ export const fetchProvincialApplicationOptions = async (): Promise<{
   }
 }
 
-export const fetchProvincialExemptionOptions = async (): Promise<{
+export const fetchProvincialExemptionOptions = async (
+  includeNoneExemptionType = false,
+): Promise<{
   exemptionTypes: SearchOption[]
   exemptionStatuses: SearchOption[]
   regions: SearchOption[]
@@ -173,7 +181,7 @@ export const fetchProvincialExemptionOptions = async (): Promise<{
   ])
 
   return {
-    exemptionTypes: parseOptions(data.exemptionTypes),
+    exemptionTypes: parseExemptionTypeOptions(data.exemptionTypes, includeNoneExemptionType),
     exemptionStatuses: parseOptions(data.exemptionStatuses),
     regions: parseRegionOptions(data.regions),
   }

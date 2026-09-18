@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.repository.reference;
 
+import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_COUNTRIES;
 import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_PORTS;
 import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_TRANSPORT_TYPES;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -11,19 +12,18 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
-import java.sql.CallableStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Types;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.dao.DataRetrievalFailureException;
-import org.springframework.jdbc.core.CallableStatementCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 
@@ -31,32 +31,74 @@ import org.springframework.jdbc.core.RowMapper;
 class ShippingReferenceRepositoryTest {
 
   @Mock private JdbcTemplate jdbcTemplate;
-  @Mock private CallableStatement callableStatement;
   @Mock private ResultSet resultSet;
 
   @Test
-  @SuppressWarnings({"rawtypes", "unchecked"})
-  void activeCountriesShouldRemainARequiredCursorLookup() throws Exception {
-    when(jdbcTemplate.execute(
-            eq("{ call LEXIS_CODES.FIND_ALL_COUNTRY_CODES(?) }"),
-            any(CallableStatementCallback.class)))
+  @SuppressWarnings("unchecked")
+  void activeCountriesShouldPreserveDirectRowOrderDuplicatesAndTrimmedValues() throws Exception {
+    when(resultSet.getString("CODE")).thenReturn(" US ", "CA", " US ", null, " ");
+    when(resultSet.getString("DESCRIPTION"))
+        .thenReturn(" United States ", "Canada", " United States ", " ", null);
+    when(jdbcTemplate.query(eq(ACTIVE_COUNTRIES), any(RowMapper.class), any(Object[].class)))
         .thenAnswer(
             invocation -> {
-              CallableStatementCallback<?> callback = invocation.getArgument(1);
-              return callback.doInCallableStatement(callableStatement);
+              RowMapper<CodeNameDto> mapper = invocation.getArgument(1);
+              return List.of(
+                  mapper.mapRow(resultSet, 0),
+                  mapper.mapRow(resultSet, 1),
+                  mapper.mapRow(resultSet, 2),
+                  mapper.mapRow(resultSet, 3),
+                  mapper.mapRow(resultSet, 4));
             });
-    when(callableStatement.getObject(1)).thenReturn(resultSet);
-    when(resultSet.next()).thenReturn(true, false);
-    when(resultSet.getString("CODE")).thenReturn(" US ");
-    when(resultSet.getString("DESCRIPTION")).thenReturn(" United States ");
     ShippingReferenceRepository repository = new ShippingReferenceRepository(jdbcTemplate);
 
     assertThat(repository.findActiveCountriesRequired())
-        .containsExactly(new CodeNameDto("US", "United States"));
+        .containsExactly(
+            new CodeNameDto("US", "United States"),
+            new CodeNameDto("CA", "Canada"),
+            new CodeNameDto("US", "United States"),
+            new CodeNameDto(null, null),
+            new CodeNameDto(null, null));
+    ArgumentCaptor<Object[]> bindCaptor = ArgumentCaptor.forClass(Object[].class);
+    verify(jdbcTemplate).query(eq(ACTIVE_COUNTRIES), any(RowMapper.class), bindCaptor.capture());
+    assertThat(bindCaptor.getValue()).isEmpty();
+  }
 
-    verify(callableStatement).registerOutParameter(1, Types.REF_CURSOR);
-    verify(resultSet).getString("CODE");
-    verify(resultSet).getString("DESCRIPTION");
+  @Test
+  @SuppressWarnings("unchecked")
+  void activeCountriesShouldPreserveEmptyResultsAndPropagateQueryFailures() {
+    DataAccessResourceFailureException failure =
+        new DataAccessResourceFailureException("countries unavailable");
+    when(jdbcTemplate.query(eq(ACTIVE_COUNTRIES), any(RowMapper.class), any(Object[].class)))
+        .thenReturn(List.of())
+        .thenThrow(failure);
+    ShippingReferenceRepository repository = new ShippingReferenceRepository(jdbcTemplate);
+
+    assertThat(repository.findActiveCountriesRequired()).isEmpty();
+    assertThatThrownBy(repository::findActiveCountriesRequired).isSameAs(failure);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"CODE", "DESCRIPTION"})
+  @SuppressWarnings("unchecked")
+  void activeCountriesShouldFailWhenARequiredColumnCannotBeRead(String column) throws Exception {
+    SQLException failure = new SQLException("Missing " + column);
+    if (column.equals("DESCRIPTION")) {
+      when(resultSet.getString("CODE")).thenReturn("US");
+    }
+    when(resultSet.getString(column)).thenThrow(failure);
+    when(jdbcTemplate.query(eq(ACTIVE_COUNTRIES), any(RowMapper.class), any(Object[].class)))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<CodeNameDto> mapper = invocation.getArgument(1);
+              return List.of(mapper.mapRow(resultSet, 0));
+            });
+    ShippingReferenceRepository repository = new ShippingReferenceRepository(jdbcTemplate);
+
+    assertThatThrownBy(repository::findActiveCountriesRequired)
+        .isInstanceOf(DataRetrievalFailureException.class)
+        .hasMessageContaining(column)
+        .hasCause(failure);
   }
 
   @Test

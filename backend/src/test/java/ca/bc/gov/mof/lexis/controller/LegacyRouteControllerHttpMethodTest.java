@@ -20,6 +20,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.TestingAuthenticationToken;
+import org.springframework.security.core.Authentication;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -56,6 +58,32 @@ class LegacyRouteControllerHttpMethodTest {
             sessionService,
             authorizationService);
     mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
+  }
+
+  @Test
+  void searchOptionsShouldForwardAuthenticationForNoneVisibility() throws Exception {
+    Authentication authentication =
+        new TestingAuthenticationToken("idir\\approver", "n/a", "LEXIS_EXEMPTION_APPROVER");
+    when(applicationController.searchOptions(authentication))
+        .thenReturn(ResponseEntity.noContent().build());
+    when(exemptionController.searchOptions(authentication))
+        .thenReturn(ResponseEntity.noContent().build());
+
+    mockMvc
+        .perform(
+            get("/api/lexis/applicationSearch.do")
+                .param("actionMapping", "view")
+                .principal(authentication))
+        .andExpect(status().isNoContent());
+    mockMvc
+        .perform(
+            get("/api/lexis/exemptionSearch.do")
+                .param("actionMapping", "view")
+                .principal(authentication))
+        .andExpect(status().isNoContent());
+
+    verify(applicationController).searchOptions(authentication);
+    verify(exemptionController).searchOptions(authentication);
   }
 
   @Test

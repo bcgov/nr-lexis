@@ -81,8 +81,27 @@ public class LexisApplicationController {
   }
 
   @GetMapping("/search/options")
+  public ResponseEntity<LexisApplicationSearchOptionsDto> searchOptions(Authentication authentication) {
+    LexisApplicationSearchOptionsDto options = service.searchOptions();
+    if (provincialAuthorizationService.canViewBlanketOic(authentication)) {
+      return ResponseEntity.ok(options);
+    }
+    return ResponseEntity.ok(
+        new LexisApplicationSearchOptionsDto(
+            options.exemptionTypes().stream()
+                .filter(option -> !"NULL".equals(option.code()))
+                .toList(),
+            options.exemptionReasons(),
+            options.applicationStatuses(),
+            options.productTypes(),
+            options.growthTypes(),
+            options.regions(),
+            options.currentSchedules(),
+            options.nextSchedules()));
+  }
+
   public ResponseEntity<LexisApplicationSearchOptionsDto> searchOptions() {
-    return ResponseEntity.ok(service.searchOptions());
+    return searchOptions(null);
   }
 
   @GetMapping("/search")

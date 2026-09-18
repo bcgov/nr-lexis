@@ -1,5 +1,7 @@
 package ca.bc.gov.mof.lexis.repository.federal;
 
+import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.COUNTRY_BY_CODE;
+import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.TRANSPORT_TYPE_BY_CODE;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -168,10 +170,20 @@ class FederalPermitDetailRepositoryTest {
   }
 
   @Test
-  void countryAndTransportCodeLookupsShouldUseLegacyProceduresAndBindCodes() throws Exception {
-    stubCursorProcedure("{ call LEXIS_CODES.FIND_COUNTRY_CODE(?,?) }", 2);
-    stubCursorProcedure("{ call LEXIS_CODES.FIND_TRANSPORT_TYPE_CODE(?,?) }", 2);
-    when(resultSet.next()).thenReturn(true, false, true, false);
+  @SuppressWarnings("unchecked")
+  void countryAndTransportCodeLookupsShouldUseDirectQueriesAndBindCodes() throws Exception {
+    when(jdbcTemplate.query(eq(COUNTRY_BY_CODE), any(RowMapper.class), eq("US")))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<String> mapper = invocation.getArgument(1);
+              return List.of(mapper.mapRow(resultSet, 0));
+            });
+    when(jdbcTemplate.query(eq(TRANSPORT_TYPE_BY_CODE), any(RowMapper.class), eq("TRK")))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<String> mapper = invocation.getArgument(1);
+              return List.of(mapper.mapRow(resultSet, 0));
+            });
     when(resultSet.getString("CODE")).thenReturn("US", "TRK");
 
     FederalPermitDetailRepository repository = new FederalPermitDetailRepository(jdbcTemplate);
@@ -179,8 +191,8 @@ class FederalPermitDetailRepositoryTest {
     assertThat(repository.countryCodeExistsRequired(" US ")).isTrue();
     assertThat(repository.transportTypeCodeExistsRequired(" TRK ")).isTrue();
 
-    verify(callableStatement).setString(1, "US");
-    verify(callableStatement).setString(1, "TRK");
+    verify(jdbcTemplate).query(eq(COUNTRY_BY_CODE), any(RowMapper.class), eq("US"));
+    verify(jdbcTemplate).query(eq(TRANSPORT_TYPE_BY_CODE), any(RowMapper.class), eq("TRK"));
   }
 
   @Test
@@ -265,21 +277,21 @@ class FederalPermitDetailRepositoryTest {
   }
 
   @Test
-  void permitCodeLookupShouldReturnFalseWhenOracleHasNoMatchingCode() throws Exception {
-    stubCursorProcedure("{ call LEXIS_CODES.FIND_COUNTRY_CODE(?,?) }", 2);
-    when(resultSet.next()).thenReturn(false);
+  @SuppressWarnings("unchecked")
+  void permitCodeLookupShouldReturnFalseWhenOracleHasNoMatchingCode() {
+    when(jdbcTemplate.query(eq(COUNTRY_BY_CODE), any(RowMapper.class), eq("XX")))
+        .thenReturn(List.of());
 
     FederalPermitDetailRepository repository = new FederalPermitDetailRepository(jdbcTemplate);
 
     assertThat(repository.countryCodeExistsRequired("XX")).isFalse();
-    verify(callableStatement).setString(1, "XX");
+    verify(jdbcTemplate).query(eq(COUNTRY_BY_CODE), any(RowMapper.class), eq("XX"));
   }
 
   @Test
+  @SuppressWarnings("unchecked")
   void permitCodeLookupShouldPropagateOracleDependencyFailure() {
-    when(jdbcTemplate.execute(
-            eq("{ call LEXIS_CODES.FIND_COUNTRY_CODE(?,?) }"),
-            any(CallableStatementCallback.class)))
+    when(jdbcTemplate.query(eq(COUNTRY_BY_CODE), any(RowMapper.class), eq("US")))
         .thenThrow(new DataRetrievalFailureException("Oracle lookup failed"));
 
     FederalPermitDetailRepository repository = new FederalPermitDetailRepository(jdbcTemplate);

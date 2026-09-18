@@ -1,5 +1,8 @@
 package ca.bc.gov.mof.lexis.repository.application;
 
+import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_EXEMPTION_REASONS;
+import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_GROWTH_TYPES;
+import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_PRODUCT_TYPES;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -29,6 +32,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.dao.DataAccessResourceFailureException;
@@ -40,6 +44,149 @@ import org.springframework.jdbc.core.RowMapper;
 
 @DisplayName("Unit Test | LexisApplicationRepository")
 class LexisApplicationRepositoryTest {
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void productTypeOptionsShouldPrependAllAndPreserveDirectRowOrderAndDuplicates() throws Exception {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    ResultSet resultSet = mock(ResultSet.class);
+    when(resultSet.getString(1)).thenReturn(" T ", "H", " T ", null, " ");
+    when(resultSet.getString(2))
+        .thenReturn(" Unmanufactured Timber ", "Harvested Timber", " Unmanufactured Timber ", " ", null);
+    when(jdbcTemplate.query(eq(ACTIVE_PRODUCT_TYPES), any(RowMapper.class), any(Object[].class)))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<CodeNameDto> mapper = invocation.getArgument(1);
+              return List.of(
+                  mapper.mapRow(resultSet, 0),
+                  mapper.mapRow(resultSet, 1),
+                  mapper.mapRow(resultSet, 2),
+                  mapper.mapRow(resultSet, 3),
+                  mapper.mapRow(resultSet, 4));
+            });
+    LexisApplicationRepository repository = new LexisApplicationRepository(jdbcTemplate);
+
+    assertThat(repository.loadProductTypeOptions())
+        .containsExactly(
+            new CodeNameDto("", "All"),
+            new CodeNameDto("T", "Unmanufactured Timber"),
+            new CodeNameDto("H", "Harvested Timber"),
+            new CodeNameDto("T", "Unmanufactured Timber"),
+            new CodeNameDto(null, null),
+            new CodeNameDto(null, null));
+    ArgumentCaptor<Object[]> bindCaptor = ArgumentCaptor.forClass(Object[].class);
+    verify(jdbcTemplate)
+        .query(eq(ACTIVE_PRODUCT_TYPES), any(RowMapper.class), bindCaptor.capture());
+    assertThat(bindCaptor.getValue()).isEmpty();
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void productTypeOptionsShouldReturnOnlyAllForEmptyResultsAndPropagateOracleFailure() {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    DataAccessResourceFailureException failure =
+        new DataAccessResourceFailureException("Oracle unavailable");
+    when(jdbcTemplate.query(eq(ACTIVE_PRODUCT_TYPES), any(RowMapper.class), any(Object[].class)))
+        .thenReturn(List.of())
+        .thenThrow(failure);
+    LexisApplicationRepository repository = new LexisApplicationRepository(jdbcTemplate);
+
+    assertThat(repository.loadProductTypeOptions()).containsExactly(new CodeNameDto("", "All"));
+    assertThatThrownBy(repository::loadProductTypeOptions).isSameAs(failure);
+  }
+
+  @ParameterizedTest
+  @ValueSource(ints = {1, 2})
+  @SuppressWarnings("unchecked")
+  void productTypeOptionsShouldPropagatePositionalColumnFailure(int column) throws Exception {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    ResultSet resultSet = mock(ResultSet.class);
+    SQLException failure = new SQLException("Invalid column index " + column);
+    if (column == 2) {
+      when(resultSet.getString(1)).thenReturn("T");
+    }
+    when(resultSet.getString(column)).thenThrow(failure);
+    when(jdbcTemplate.query(eq(ACTIVE_PRODUCT_TYPES), any(RowMapper.class), any(Object[].class)))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<CodeNameDto> mapper = invocation.getArgument(1);
+              return List.of(mapper.mapRow(resultSet, 0));
+            });
+    LexisApplicationRepository repository = new LexisApplicationRepository(jdbcTemplate);
+
+    assertThatThrownBy(repository::loadProductTypeOptions).isSameAs(failure);
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void growthTypeOptionsShouldMapDirectRowsInOrderWithoutAllOrDeduplication() throws Exception {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    ResultSet resultSet = mock(ResultSet.class);
+    when(resultSet.getString(1)).thenReturn(" S ", "O", " S ", null, " ");
+    when(resultSet.getString(2))
+        .thenReturn(" Second Growth ", "Old Growth", " Second Growth ", " ", null);
+    when(jdbcTemplate.query(eq(ACTIVE_GROWTH_TYPES), any(RowMapper.class), any(Object[].class)))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<CodeNameDto> mapper = invocation.getArgument(1);
+              return List.of(
+                  mapper.mapRow(resultSet, 0),
+                  mapper.mapRow(resultSet, 1),
+                  mapper.mapRow(resultSet, 2),
+                  mapper.mapRow(resultSet, 3),
+                  mapper.mapRow(resultSet, 4));
+            });
+    LexisApplicationRepository repository = new LexisApplicationRepository(jdbcTemplate);
+
+    assertThat(repository.loadGrowthTypeOptions())
+        .containsExactly(
+            new CodeNameDto("S", "Second Growth"),
+            new CodeNameDto("O", "Old Growth"),
+            new CodeNameDto("S", "Second Growth"),
+            new CodeNameDto(null, null),
+            new CodeNameDto(null, null));
+    ArgumentCaptor<Object[]> bindCaptor = ArgumentCaptor.forClass(Object[].class);
+    verify(jdbcTemplate)
+        .query(eq(ACTIVE_GROWTH_TYPES), any(RowMapper.class), bindCaptor.capture());
+    assertThat(bindCaptor.getValue()).isEmpty();
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void growthTypeOptionsShouldDistinguishEmptyResultsFromOracleFailure() {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    DataAccessResourceFailureException failure =
+        new DataAccessResourceFailureException("Oracle unavailable");
+    when(jdbcTemplate.query(eq(ACTIVE_GROWTH_TYPES), any(RowMapper.class), any(Object[].class)))
+        .thenReturn(List.of())
+        .thenThrow(failure);
+    LexisApplicationRepository repository = new LexisApplicationRepository(jdbcTemplate);
+
+    assertThat(repository.loadGrowthTypeOptions()).isEmpty();
+    assertThatThrownBy(repository::loadGrowthTypeOptions).isSameAs(failure);
+  }
+
+  @ParameterizedTest
+  @ValueSource(ints = {1, 2})
+  @SuppressWarnings("unchecked")
+  void growthTypeOptionsShouldPropagatePositionalColumnFailure(int column) throws Exception {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    ResultSet resultSet = mock(ResultSet.class);
+    SQLException failure = new SQLException("Invalid column index " + column);
+    if (column == 2) {
+      when(resultSet.getString(1)).thenReturn("O");
+    }
+    when(resultSet.getString(column)).thenThrow(failure);
+    when(jdbcTemplate.query(eq(ACTIVE_GROWTH_TYPES), any(RowMapper.class), any(Object[].class)))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<CodeNameDto> mapper = invocation.getArgument(1);
+              return List.of(mapper.mapRow(resultSet, 0));
+            });
+    LexisApplicationRepository repository = new LexisApplicationRepository(jdbcTemplate);
+
+    assertThatThrownBy(repository::loadGrowthTypeOptions).isSameAs(failure);
+  }
 
   @Test
   @SuppressWarnings("unchecked")
@@ -180,13 +327,69 @@ class LexisApplicationRepositoryTest {
   }
 
   @Test
-  void loadExemptionReasonOptionsShouldUseLegacyProcedureName() {
+  void loadExemptionReasonOptionsShouldUseSharedDirectQuery() {
     TestLexisApplicationRepository repository = new TestLexisApplicationRepository();
 
     assertThat(repository.loadExemptionReasonOptions())
         .containsExactly(new CodeNameDto("U", "Utilization"));
-    assertThat(repository.codeNameProcedureSignature())
-        .isEqualTo("LEXIS_CODES.FIND_ALL_EXEMPT_RSN_CODES(?)");
+    assertThat(repository.codeNameSql())
+        .isEqualTo(ACTIVE_EXEMPTION_REASONS);
+  }
+
+  @Test
+  void exemptionTypeOptionsShouldDistinguishAllFromNone() {
+    TestLexisApplicationRepository repository = new TestLexisApplicationRepository();
+
+    assertThat(repository.loadExemptionTypeOptions())
+        .containsExactly(
+            new CodeNameDto("ALL", "All"),
+            new CodeNameDto("NULL", "None"),
+            new CodeNameDto("U", "Utilization"));
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"NULL", " NULL "})
+  void noneTypeShouldFilterNullInPageAndCountWithoutChangingClientOrRegionScope(String type) {
+    TestLexisApplicationRepository repository = new TestLexisApplicationRepository();
+    LexisApplicationSearchCriteria criteria =
+        new LexisApplicationSearchCriteria(
+            null, null, null, type, "NULL", null, "00012345", null,
+            null, null, null, null, List.of(76L), true, null, 0, 10);
+
+    repository.search(criteria);
+
+    assertThat(repository.whereSql())
+        .contains("v.EXPORT_EXEMPTION_TYPE_CODE IS NULL")
+        .doesNotContain("v.EXPORT_EXEMPTION_TYPE_CODE = ?")
+        .contains("v.EXPORT_APPLICATION_STATUS_CODE = ?")
+        .contains("v.EXPORT_JURISDICTION_CODE <> 'F'")
+        .contains("v.OIC_INDICATOR = ?")
+        .contains("v.ORG_UNIT_NO IN (?)")
+        .contains("v.OWNER_CLIENT_NUMBER LIKE '%' || ? || '%' OR v.AGENT_CLIENT_NUMBER LIKE");
+    assertThat(repository.countWhereSql()).contains("v.EXPORT_EXEMPTION_TYPE_CODE IS NULL");
+    assertThat(repository.bindValues()).containsExactly("NULL", "N", 76L, "00012345", "00012345");
+    assertThat(repository.countBindValues()).isEqualTo(repository.bindValues());
+
+    repository.count(criteria);
+
+    assertThat(repository.countWhereSql()).contains("v.EXPORT_EXEMPTION_TYPE_CODE IS NULL");
+    assertThat(repository.countBindValues()).isEqualTo(repository.bindValues());
+  }
+
+  @ParameterizedTest
+  @NullAndEmptySource
+  @ValueSource(strings = {"ALL", " "})
+  void allTypesShouldNotAddANullOrEqualityFilter(String type) {
+    TestLexisApplicationRepository repository = new TestLexisApplicationRepository();
+
+    repository.search(
+        new LexisApplicationSearchCriteria(
+            null, null, null, type, null, null, null, null,
+            null, null, null, null, List.of(), null, 0, 10));
+
+    assertThat(repository.whereSql()).doesNotContain("v.EXPORT_EXEMPTION_TYPE_CODE");
+    assertThat(repository.countWhereSql()).doesNotContain("v.EXPORT_EXEMPTION_TYPE_CODE");
+    assertThat(repository.bindValues()).containsExactly("N");
   }
 
   @Test
@@ -754,7 +957,7 @@ class LexisApplicationRepositoryTest {
     private String countSelectSql;
     private String countWhereSql;
     private List<Object> countBindValues;
-    private String codeNameProcedureSignature;
+    private String codeNameSql;
     private int countCalls;
     private int pageCalls;
 
@@ -799,19 +1002,14 @@ class LexisApplicationRepositoryTest {
       return pageCalls;
     }
 
-    String codeNameProcedureSignature() {
-      return codeNameProcedureSignature;
+    String codeNameSql() {
+      return codeNameSql;
     }
 
     @Override
-    protected List<CodeNameDto> loadCodeNameOptions(String procedureSignature) {
-      codeNameProcedureSignature = procedureSignature;
+    protected List<CodeNameDto> loadCodeNameOptionsDirectRequired(String sql) {
+      codeNameSql = sql;
       return List.of(new CodeNameDto("U", "Utilization"));
-    }
-
-    @Override
-    protected List<CodeNameDto> loadCodeNameOptionsRequired(String procedureSignature) {
-      return loadCodeNameOptions(procedureSignature);
     }
 
     @Override

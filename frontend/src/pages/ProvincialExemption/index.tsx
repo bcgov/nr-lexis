@@ -527,7 +527,7 @@ const ProvincialExemptionPage = () => {
   useEffect(() => {
     const loadOptions = async () => {
       try {
-        const options = await fetchProvincialExemptionOptions()
+        const options = await fetchProvincialExemptionOptions(true)
 
         setExemptionTypeOptions(options.exemptionTypes)
         setExemptionStatusOptions(options.exemptionStatuses)

@@ -1,5 +1,8 @@
 package ca.bc.gov.mof.lexis.repository.application;
 
+import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_PACKAGE_STATUSES;
+import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_SPECIES;
+import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ORG_UNIT_BY_NUMBER;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -11,6 +14,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import ca.bc.gov.mof.lexis.repository.application.ApplicationDetailsRpcRepository.CodeRow;
 import java.io.ByteArrayOutputStream;
 import java.sql.CallableStatement;
 import java.sql.ResultSet;
@@ -23,6 +27,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.dao.DataAccessResourceFailureException;
@@ -34,6 +39,185 @@ import org.springframework.jdbc.core.RowMapper;
 
 @DisplayName("Unit Test | ApplicationDetailsRpcRepository")
 class ApplicationDetailsRpcRepositoryTest {
+
+  @ParameterizedTest
+  @ValueSource(booleans = {true, false})
+  @SuppressWarnings("unchecked")
+  void packageCodeListsShouldPreserveMetadataStableSortingAndFiltering(boolean species)
+      throws Exception {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    String sql = species ? ACTIVE_SPECIES : ACTIVE_PACKAGE_STATUSES;
+    List<ResultSet> rows =
+        List.of(
+            codeOptionRow("Z", "Last group", 2L, 1L),
+            codeOptionRow(" B ", " First tie ", 1L, 7L),
+            codeOptionRow("A", "Second tie", 1L, 7L),
+            codeOptionRow(" B ", " First tie ", 1L, 7L),
+            codeOptionRow(" N ", " Null metadata ", null, null),
+            codeOptionRow(" ", "Missing code", 0L, 0L),
+            codeOptionRow("X", null, 0L, 0L));
+    when(jdbcTemplate.query(eq(sql), any(RowMapper.class), any(Object[].class)))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<CodeRow> mapper = invocation.getArgument(1);
+              List<CodeRow> mapped = new java.util.ArrayList<>();
+              for (int index = 0; index < rows.size(); index++) {
+                mapped.add(mapper.mapRow(rows.get(index), index));
+              }
+              return mapped;
+            });
+    ApplicationDetailsRpcRepository repository = new ApplicationDetailsRpcRepository(jdbcTemplate);
+
+    List<CodeRow> options =
+        species
+            ? repository.findAllSpeciesCodesRequired()
+            : repository.findAllPackageStatusCodesRequired();
+
+    assertThat(options)
+        .containsExactly(
+            new CodeRow("N", "Null metadata", 0L, 0L),
+            new CodeRow("B", "First tie", 1L, 7L),
+            new CodeRow("A", "Second tie", 1L, 7L),
+            new CodeRow("B", "First tie", 1L, 7L),
+            new CodeRow("Z", "Last group", 2L, 1L));
+    ArgumentCaptor<Object[]> binds = ArgumentCaptor.forClass(Object[].class);
+    verify(jdbcTemplate).query(eq(sql), any(RowMapper.class), binds.capture());
+    assertThat(binds.getValue()).isEmpty();
+  }
+
+  @ParameterizedTest
+  @ValueSource(booleans = {true, false})
+  @SuppressWarnings("unchecked")
+  void packageCodeListsShouldDistinguishEmptyResultsFromOracleFailure(boolean species) {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    String sql = species ? ACTIVE_SPECIES : ACTIVE_PACKAGE_STATUSES;
+    DataAccessResourceFailureException failure =
+        new DataAccessResourceFailureException("Oracle unavailable");
+    when(jdbcTemplate.query(eq(sql), any(RowMapper.class), any(Object[].class)))
+        .thenReturn(List.of())
+        .thenThrow(failure);
+    ApplicationDetailsRpcRepository repository = new ApplicationDetailsRpcRepository(jdbcTemplate);
+    java.util.function.Supplier<List<CodeRow>> loader =
+        species
+            ? repository::findAllSpeciesCodesRequired
+            : repository::findAllPackageStatusCodesRequired;
+
+    assertThat(loader.get()).isEmpty();
+    assertThatThrownBy(loader::get).isSameAs(failure);
+  }
+
+  @ParameterizedTest
+  @CsvSource({
+    "true,CODE", "true,DESCRIPTION", "true,GROUP_BY", "true,ORDER_BY",
+    "false,CODE", "false,DESCRIPTION", "false,GROUP_BY", "false,ORDER_BY"
+  })
+  @SuppressWarnings("unchecked")
+  void packageCodeListsShouldRejectUnreadableRequiredColumns(boolean species, String column)
+      throws Exception {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    ResultSet resultSet = mock(ResultSet.class);
+    SQLException failure = new SQLException("Invalid column name");
+    if (column.equals("CODE") || column.equals("DESCRIPTION")) {
+      when(resultSet.getString(column)).thenThrow(failure);
+    } else {
+      when(resultSet.getLong(column)).thenThrow(failure);
+    }
+    String sql = species ? ACTIVE_SPECIES : ACTIVE_PACKAGE_STATUSES;
+    when(jdbcTemplate.query(eq(sql), any(RowMapper.class), any(Object[].class)))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<CodeRow> mapper = invocation.getArgument(1);
+              return List.of(mapper.mapRow(resultSet, 0));
+            });
+    ApplicationDetailsRpcRepository repository = new ApplicationDetailsRpcRepository(jdbcTemplate);
+    java.util.function.Supplier<List<CodeRow>> loader =
+        species
+            ? repository::findAllSpeciesCodesRequired
+            : repository::findAllPackageStatusCodesRequired;
+
+    assertThatThrownBy(loader::get)
+        .isInstanceOf(org.springframework.dao.DataRetrievalFailureException.class)
+        .hasMessageContaining(column)
+        .hasCause(failure);
+  }
+
+  private static ResultSet codeOptionRow(String code, String description, Long group, Long order)
+      throws SQLException {
+    ResultSet resultSet = mock(ResultSet.class);
+    when(resultSet.getString("CODE")).thenReturn(code);
+    when(resultSet.getString("DESCRIPTION")).thenReturn(description);
+    when(resultSet.getLong("GROUP_BY")).thenReturn(group == null ? 0L : group);
+    when(resultSet.getLong("ORDER_BY")).thenReturn(order == null ? 0L : order);
+    when(resultSet.wasNull()).thenReturn(group == null, order == null);
+    return resultSet;
+  }
+
+  @Test
+  void orgUnitValidationShouldRejectInvalidInputsWithoutQuerying() {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    ApplicationDetailsRpcRepository repository = new ApplicationDetailsRpcRepository(jdbcTemplate);
+
+    assertThat(repository.isOrgUnitValidRequired(null)).isFalse();
+    assertThat(repository.isOrgUnitValidRequired(0L)).isFalse();
+    assertThat(repository.isOrgUnitValidRequired(-1L)).isFalse();
+    verifyNoInteractions(jdbcTemplate);
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void orgUnitValidationShouldBindNumberAndUseOnlyTheFirstNullableRow() throws Exception {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    ResultSet resultSet = mock(ResultSet.class);
+    when(resultSet.getLong("ORG_UNIT_NO")).thenReturn(1903L, 9999L, 1904L, 1903L, 0L, 1903L);
+    when(resultSet.wasNull()).thenReturn(false, false, false, false, true, false);
+    when(jdbcTemplate.query(eq(ORG_UNIT_BY_NUMBER), any(RowMapper.class), eq(1903L)))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<Long> mapper = invocation.getArgument(1);
+              return Arrays.asList(mapper.mapRow(resultSet, 0), mapper.mapRow(resultSet, 1));
+            });
+    ApplicationDetailsRpcRepository repository = new ApplicationDetailsRpcRepository(jdbcTemplate);
+
+    assertThat(repository.isOrgUnitValidRequired(1903L)).isTrue();
+    assertThat(repository.isOrgUnitValidRequired(1903L)).isFalse();
+    assertThat(repository.isOrgUnitValidRequired(1903L)).isFalse();
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void orgUnitValidationShouldDistinguishAbsentRowsFromQueryFailure() {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    DataAccessResourceFailureException failure =
+        new DataAccessResourceFailureException("Oracle unavailable");
+    when(jdbcTemplate.query(eq(ORG_UNIT_BY_NUMBER), any(RowMapper.class), eq(1903L)))
+        .thenReturn(List.of())
+        .thenThrow(failure);
+    ApplicationDetailsRpcRepository repository = new ApplicationDetailsRpcRepository(jdbcTemplate);
+
+    assertThat(repository.isOrgUnitValidRequired(1903L)).isFalse();
+    assertThatThrownBy(() -> repository.isOrgUnitValidRequired(1903L)).isSameAs(failure);
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void orgUnitValidationShouldRejectAnUnreadableRequiredNumber() throws Exception {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    ResultSet resultSet = mock(ResultSet.class);
+    SQLException failure = new SQLException("Invalid column name");
+    when(resultSet.getLong("ORG_UNIT_NO")).thenThrow(failure);
+    when(jdbcTemplate.query(eq(ORG_UNIT_BY_NUMBER), any(RowMapper.class), eq(1903L)))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<Long> mapper = invocation.getArgument(1);
+              return java.util.Collections.singletonList(mapper.mapRow(resultSet, 0));
+            });
+    ApplicationDetailsRpcRepository repository = new ApplicationDetailsRpcRepository(jdbcTemplate);
+
+    assertThatThrownBy(() -> repository.isOrgUnitValidRequired(1903L))
+        .isInstanceOf(org.springframework.dao.DataRetrievalFailureException.class)
+        .hasMessageContaining("ORG_UNIT_NO")
+        .hasCause(failure);
+  }
 
   @ParameterizedTest
   @ValueSource(strings = {
@@ -246,8 +430,6 @@ class ApplicationDetailsRpcRepositoryTest {
   void requiredPackageOptionLookupsShouldPropagateOracleFailure() {
     FailingRequiredLookupRepository repository = new FailingRequiredLookupRepository();
 
-    assertOracleFailure(repository::findAllSpeciesCodesRequired);
-    assertOracleFailure(repository::findAllPackageStatusCodesRequired);
     assertOracleFailure(() -> repository.findEndUseCodeRequired("LU"));
     assertOracleFailure(() -> repository.findSpeciesEndUsesByRegionSpeciesRequired("11", "HE"));
     assertOracleFailure(() -> repository.findSpeciesEndUsesByRegionRequired("11"));
@@ -260,8 +442,6 @@ class ApplicationDetailsRpcRepositoryTest {
   void requiredPackageOptionLookupsShouldPreserveLegitimateEmptyResults() {
     EmptyRequiredLookupRepository repository = new EmptyRequiredLookupRepository();
 
-    assertThat(repository.findAllSpeciesCodesRequired()).isEmpty();
-    assertThat(repository.findAllPackageStatusCodesRequired()).isEmpty();
     assertThat(repository.findEndUseCodeRequired("LU")).isEmpty();
     assertThat(repository.findSpeciesEndUsesByRegionSpeciesRequired("11", "HE")).isEmpty();
     assertThat(repository.findSpeciesEndUsesByRegionRequired("11")).isEmpty();

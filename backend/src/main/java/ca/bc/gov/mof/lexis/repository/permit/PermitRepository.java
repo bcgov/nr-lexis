@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.repository.permit;
 
+import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_PERMIT_STATUSES;
 import static ca.bc.gov.mof.lexis.util.ValueUtils.coalesce;
 import static ca.bc.gov.mof.lexis.util.ValueUtils.firstNonNull;
 
@@ -28,9 +29,6 @@ import org.springframework.stereotype.Repository;
 public class PermitRepository extends OracleRepositorySupport {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(PermitRepository.class);
-
-  private static final String FIND_ALL_PERMIT_STATUS_CODES =
-      LEXIS_CODES_PACKAGE + "FIND_ALL_PERMIT_STATUS_CODES(?)";
 
   private static final String SEARCH_PERMIT_COLUMNS =
       """
@@ -139,7 +137,7 @@ public class PermitRepository extends OracleRepositorySupport {
   }
 
   public List<CodeNameDto> loadPermitStatusOptions() {
-    return loadCodeNameOptionsRequired(FIND_ALL_PERMIT_STATUS_CODES);
+    return loadCodeNameOptionsDirectRequired(ACTIVE_PERMIT_STATUSES);
   }
 
   public List<CodeNameDto> loadRegionOptions() {

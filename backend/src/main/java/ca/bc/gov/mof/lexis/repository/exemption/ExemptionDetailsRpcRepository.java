@@ -117,12 +117,6 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
   private static final String FIND_FILE_ATTACHMENT = LEXIS_GROUP_5_PACKAGE + "FIND_FILE_ATTACHMENT(?,?)";
   private static final String FIND_RATE_BY_EXEMPTION =
       LEXIS_CODES_PACKAGE + "FIND_RATE_BY_EXEMPTION(?,?)";
-  private static final String FIND_EXEMPTION_TYPE_CODE =
-      LEXIS_CODES_PACKAGE + "FIND_EXEMPTION_TYPE_CODE(?,?)";
-  private static final String FIND_EXEMPTION_STATUS_CODE =
-      LEXIS_CODES_PACKAGE + "FIND_EXEMPTION_STATUS_CODE(?,?)";
-  private static final String FIND_ORG_UNIT_BY_NUMBER =
-      LEXIS_CODES_PACKAGE + "FIND_ORG_UNIT_BY_NUMBER(?,?)";
   private static final String FIND_EXEMPTION_ORG_UNIT =
       LEXIS_GROUP_5_PACKAGE + "FIND_EXEMPTION_ORG_UNIT(?,?)";
   private static final String DELETE_EXEMPTION_FILE_ATTACHMENT =
@@ -318,24 +312,23 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
   }
 
   public boolean isExemptionTypeCodeValidRequired(String code) {
-    return codeExistsRequired(FIND_EXEMPTION_TYPE_CODE, code);
+    return codeExistsRequired(LexisCodeQueries.EXEMPTION_TYPE_BY_CODE, code);
   }
 
   public boolean isExemptionStatusCodeValidRequired(String code) {
-    return codeExistsRequired(FIND_EXEMPTION_STATUS_CODE, code);
+    return codeExistsRequired(LexisCodeQueries.EXEMPTION_STATUS_BY_CODE, code);
   }
 
   public boolean isOrgUnitValidRequired(Long orgUnitNumber) {
     if (orgUnitNumber == null || orgUnitNumber < 1) {
       return false;
     }
-    return queryCursorSingleRequired(
-            FIND_ORG_UNIT_BY_NUMBER,
-            cs -> cs.setLong(1, orgUnitNumber),
-            2,
-            rs -> getLong(rs, "ORG_UNIT_NO"))
-        .filter(orgUnitNumber::equals)
-        .isPresent();
+    List<Long> orgUnits =
+        queryDirectRequired(
+            LexisCodeQueries.ORG_UNIT_BY_NUMBER,
+            rs -> getLong(rs, "ORG_UNIT_NO"),
+            orgUnitNumber);
+    return !orgUnits.isEmpty() && orgUnitNumber.equals(orgUnits.get(0));
   }
 
   public boolean updateApplicationExemption(ApplicationLinkUpdateRecord record) {
@@ -763,18 +756,13 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
     setStringOrNull(cs, index, app.oicIndicator());
   }
 
-  private boolean codeExistsRequired(String procedureSignature, String code) {
+  private boolean codeExistsRequired(String sql, String code) {
     String normalized = trim(code);
     if (normalized == null) {
       return false;
     }
-    return queryCursorSingleRequired(
-            procedureSignature,
-            cs -> cs.setString(1, normalized),
-            2,
-            rs -> trim(rs.getString(1)))
-        .filter(normalized::equalsIgnoreCase)
-        .isPresent();
+    List<String> codes = queryDirectRequired(sql, rs -> trim(rs.getString(1)), normalized);
+    return !codes.isEmpty() && normalized.equalsIgnoreCase(codes.get(0));
   }
 
   private String valueOrEmpty(String value) {
