@@ -8,6 +8,8 @@ import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_J
 import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_PORTS;
 import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ORG_UNIT_BY_CODE;
 import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ORG_UNIT_BY_NUMBER;
+import static ca.bc.gov.mof.lexis.repository.reference.LexisScheduleQueries.CURRENT_SCHEDULES;
+import static ca.bc.gov.mof.lexis.repository.reference.LexisScheduleQueries.NEXT_SCHEDULES;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.groups.Tuple.tuple;
@@ -21,6 +23,7 @@ import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.admin.ExportScheduleCreateRequestDto;
+import ca.bc.gov.mof.lexis.repository.report.LexisReportScheduleRepository.CurrentScheduleRow;
 import java.sql.CallableStatement;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -39,6 +42,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.dao.DataRetrievalFailureException;
 import org.springframework.jdbc.core.CallableStatementCallback;
 import org.springframework.jdbc.core.ConnectionCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -586,62 +590,96 @@ class LexisReportScheduleRepositoryTest {
     verify(callableStatement).registerOutParameter(2, Types.REF_CURSOR);
   }
 
-  @Test
-  void findCurrentSchedulesRequiredShouldUseLegacyCursorProcedureForReportListDates()
+  @ParameterizedTest
+  @ValueSource(booleans = {false, true})
+  void scheduleListsShouldMapDirectRowsInDatabaseOrderIncludingNulls(boolean next)
       throws Exception {
-    stubCursorProcedure("{ call LEXIS_CODES.FIND_CURRENT_SCHEDULES(?) }");
-    when(resultSet.next()).thenReturn(true, true, false);
-    when(resultSet.getLong("EXPORT_SCHEDULE_ID")).thenReturn(1001L, 1002L);
-    when(resultSet.wasNull()).thenReturn(false);
+    String sql = next ? NEXT_SCHEDULES : CURRENT_SCHEDULES;
+    stubDirectScheduleRows(sql, 3);
+    when(resultSet.getLong("EXPORT_SCHEDULE_ID")).thenReturn(1002L, 1001L, 0L);
+    when(resultSet.wasNull()).thenReturn(false, false, true);
     when(resultSet.getDate("ADVERTISING_DATE"))
-        .thenReturn(java.sql.Date.valueOf("2026-07-02"), java.sql.Date.valueOf("2026-07-08"));
+        .thenReturn(java.sql.Date.valueOf("2026-07-08"), java.sql.Date.valueOf("2026-07-02"), null);
 
     LexisReportScheduleRepository repository = new LexisReportScheduleRepository(jdbcTemplate);
 
-    var schedules = repository.findCurrentSchedulesRequired();
+    var schedules = next ? repository.findNextSchedulesRequired() : repository.findCurrentSchedulesRequired();
 
     assertThat(schedules)
         .extracting("exportScheduleId", "advertisingDate")
         .containsExactly(
+            tuple(1002L, LocalDate.of(2026, 7, 8)),
             tuple(1001L, LocalDate.of(2026, 7, 2)),
-            tuple(1002L, LocalDate.of(2026, 7, 8)));
-    verify(callableStatement).registerOutParameter(1, Types.REF_CURSOR);
+            tuple(null, null));
+    ArgumentCaptor<Object[]> binds = ArgumentCaptor.forClass(Object[].class);
+    verify(jdbcTemplate).query(eq(sql), any(RowMapper.class), binds.capture());
+    assertThat(binds.getValue()).isEmpty();
   }
 
-  @Test
-  @SuppressWarnings({"rawtypes", "unchecked"})
-  void findCurrentSchedulesRequiredShouldPropagateOracleFailure() {
-    when(jdbcTemplate.execute(
-            eq("{ call LEXIS_CODES.FIND_CURRENT_SCHEDULES(?) }"),
-            any(CallableStatementCallback.class)))
-        .thenThrow(new DataAccessResourceFailureException("Oracle unavailable"));
+  @ParameterizedTest
+  @ValueSource(booleans = {false, true})
+  @SuppressWarnings("unchecked")
+  void scheduleListsShouldDistinguishEmptyResultsFromQueryFailures(boolean next) {
+    String sql = next ? NEXT_SCHEDULES : CURRENT_SCHEDULES;
+    DataAccessResourceFailureException failure =
+        new DataAccessResourceFailureException("Schedules unavailable");
+    when(jdbcTemplate.query(eq(sql), any(RowMapper.class), any(Object[].class)))
+        .thenReturn(List.of())
+        .thenThrow(failure);
     LexisReportScheduleRepository repository = new LexisReportScheduleRepository(jdbcTemplate);
 
-    assertThatThrownBy(repository::findCurrentSchedulesRequired)
-        .isInstanceOf(DataAccessResourceFailureException.class)
-        .hasMessage("Oracle unavailable");
+    assertThat(next ? repository.findNextSchedulesRequired() : repository.findCurrentSchedulesRequired())
+        .isEmpty();
+    assertThatThrownBy(
+            () -> {
+              if (next) {
+                repository.findNextSchedulesRequired();
+              } else {
+                repository.findCurrentSchedulesRequired();
+              }
+            })
+        .isSameAs(failure);
   }
 
-  @Test
-  void findNextSchedulesRequiredShouldUseLegacyCursorProcedureForApplicationListDates()
+  @ParameterizedTest
+  @ValueSource(booleans = {false, true})
+  void scheduleListsShouldPropagateRequiredIdColumnFailure(boolean next)
       throws Exception {
-    stubCursorProcedure("{ call LEXIS_CODES.FIND_NEXT_SCHEDULES(?) }");
-    when(resultSet.next()).thenReturn(true, true, false);
-    when(resultSet.getLong("EXPORT_SCHEDULE_ID")).thenReturn(1003L, 1004L);
-    when(resultSet.wasNull()).thenReturn(false);
-    when(resultSet.getDate("ADVERTISING_DATE"))
-        .thenReturn(java.sql.Date.valueOf("2026-08-05"), java.sql.Date.valueOf("2026-08-12"));
-
+    stubDirectScheduleRows(next ? NEXT_SCHEDULES : CURRENT_SCHEDULES, 1);
+    SQLException failure = new SQLException("Missing schedule id");
+    when(resultSet.getLong("EXPORT_SCHEDULE_ID")).thenThrow(failure);
     LexisReportScheduleRepository repository = new LexisReportScheduleRepository(jdbcTemplate);
 
-    var schedules = repository.findNextSchedulesRequired();
+    assertThatThrownBy(
+            () -> {
+              if (next) {
+                repository.findNextSchedulesRequired();
+              } else {
+                repository.findCurrentSchedulesRequired();
+              }
+            })
+        .isInstanceOf(DataRetrievalFailureException.class)
+        .hasCause(failure);
+  }
 
-    assertThat(schedules)
-        .extracting("exportScheduleId", "advertisingDate")
-        .containsExactly(
-            tuple(1003L, LocalDate.of(2026, 8, 5)),
-            tuple(1004L, LocalDate.of(2026, 8, 12)));
-    verify(callableStatement).registerOutParameter(1, Types.REF_CURSOR);
+  @ParameterizedTest
+  @ValueSource(booleans = {false, true})
+  void scheduleListsShouldPropagateAdvertisingDateColumnFailure(boolean next)
+      throws Exception {
+    stubDirectScheduleRows(next ? NEXT_SCHEDULES : CURRENT_SCHEDULES, 1);
+    SQLException failure = new SQLException("Missing advertising date");
+    when(resultSet.getDate("ADVERTISING_DATE")).thenThrow(failure);
+    LexisReportScheduleRepository repository = new LexisReportScheduleRepository(jdbcTemplate);
+
+    assertThatThrownBy(
+            () -> {
+              if (next) {
+                repository.findNextSchedulesRequired();
+              } else {
+                repository.findCurrentSchedulesRequired();
+              }
+            })
+        .isSameAs(failure);
   }
 
   @Test
@@ -880,6 +918,20 @@ class LexisReportScheduleRepositoryTest {
     stubCursorProcedure("{ call LEXIS_CODES.FIND_FOREST_CLIENT(?,?) }", 2);
     when(resultSet.next()).thenReturn(true, false);
     when(resultSet.getString("CLIENT_ACRONYM")).thenReturn(acronym);
+  }
+
+  @SuppressWarnings("unchecked")
+  private void stubDirectScheduleRows(String sql, int rowCount) {
+    when(jdbcTemplate.query(eq(sql), any(RowMapper.class), any(Object[].class)))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<CurrentScheduleRow> mapper = invocation.getArgument(1);
+              List<CurrentScheduleRow> rows = new ArrayList<>();
+              for (int row = 0; row < rowCount; row++) {
+                rows.add(mapper.mapRow(resultSet, row));
+              }
+              return rows;
+            });
   }
 
   @SuppressWarnings("unchecked")

@@ -3,6 +3,7 @@ package ca.bc.gov.mof.lexis.repository.application;
 import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_EXEMPTION_REASONS;
 import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_GROWTH_TYPES;
 import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_PRODUCT_TYPES;
+import static ca.bc.gov.mof.lexis.repository.reference.LexisScheduleQueries.SCHEDULE_BY_APPLICATION;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -10,6 +11,7 @@ import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
@@ -19,6 +21,7 @@ import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResultDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSummaryEnrichmentDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
+import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import java.sql.CallableStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -33,6 +36,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.dao.DataAccessResourceFailureException;
@@ -739,7 +743,121 @@ class LexisApplicationRepositoryTest {
               assertThat(detail.remarks()).isEmpty();
               assertThat(detail.offers()).isEmpty();
               assertThat(detail.teacMeetingDate()).isNull();
+              assertThat(detail.canCreateOffers()).isFalse();
             });
+  }
+
+  @ParameterizedTest
+  @NullSource
+  @ValueSource(longs = {0, -1})
+  void detailShouldSkipScheduleQueriesForInvalidApplicationNumbers(Long applicationNumber) {
+    JdbcTemplate jdbc = mock(JdbcTemplate.class);
+    LexisApplicationRepository repository = new LexisApplicationRepository(jdbc);
+
+    assertThat(repository.findByApplicationNumber(applicationNumber)).isEmpty();
+    verifyNoInteractions(jdbc);
+  }
+
+  @ParameterizedTest
+  @CsvSource({"0,0,true", "-1,0,true", "0,1,true", "1,2,false", "-2,-1,false"})
+  @SuppressWarnings("unchecked")
+  void detailShouldBindScheduleApplicationAsStringAndPreserveOfferWindowBoundaries(
+      int advertisingOffset, int receiptOffset, boolean expectedCanCreate) throws Exception {
+    JdbcTemplate jdbc = mock(JdbcTemplate.class);
+    ResultSet schedule = mock(ResultSet.class);
+    LocalDate today = LexisBusinessTime.today();
+    when(schedule.getTimestamp("ADVERTISING_DATE"))
+        .thenReturn(Timestamp.valueOf(today.plusDays(advertisingOffset).atStartOfDay()));
+    when(schedule.getTimestamp("OFFER_RECEIPT_DATE"))
+        .thenReturn(Timestamp.valueOf(today.plusDays(receiptOffset).atStartOfDay()));
+    when(schedule.getTimestamp("TEAC_MEETING_DATE"))
+        .thenReturn(Timestamp.valueOf(today.plusDays(7).atTime(15, 30)));
+    stubScheduleRows(jdbc, schedule);
+    LexisApplicationRepository repository =
+        new DetailReadLexisApplicationRepository(jdbc, null, true);
+
+    LexisApplicationDetailDto detail = repository.findByApplicationNumber(900123L).orElseThrow();
+
+    assertThat(detail.canCreateOffers()).isEqualTo(expectedCanCreate);
+    assertThat(detail.teacMeetingDate()).isEqualTo(today.plusDays(7));
+    verify(jdbc).query(eq(SCHEDULE_BY_APPLICATION), any(RowMapper.class), eq("900123"));
+  }
+
+  @Test
+  void detailShouldKeepNullableFirstScheduleInsteadOfSelectingLaterUsableRow() throws Exception {
+    JdbcTemplate jdbc = mock(JdbcTemplate.class);
+    ResultSet first = mock(ResultSet.class);
+    ResultSet later = mock(ResultSet.class);
+    LocalDate today = LexisBusinessTime.today();
+    when(later.getTimestamp("ADVERTISING_DATE"))
+        .thenReturn(Timestamp.valueOf(today.atStartOfDay()));
+    when(later.getTimestamp("OFFER_RECEIPT_DATE"))
+        .thenReturn(Timestamp.valueOf(today.atStartOfDay()));
+    when(later.getTimestamp("TEAC_MEETING_DATE"))
+        .thenReturn(Timestamp.valueOf(today.plusDays(7).atStartOfDay()));
+    stubScheduleRows(jdbc, first, later);
+    LexisApplicationRepository repository =
+        new DetailReadLexisApplicationRepository(jdbc, null, true);
+
+    LexisApplicationDetailDto detail = repository.findByApplicationNumber(900123L).orElseThrow();
+
+    assertThat(detail.canCreateOffers()).isFalse();
+    assertThat(detail.teacMeetingDate()).isNull();
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"ADVERTISING_DATE", "OFFER_RECEIPT_DATE", "TEAC_MEETING_DATE"})
+  void detailShouldPreserveOptionalScheduleColumnFailures(String column) throws Exception {
+    JdbcTemplate jdbc = mock(JdbcTemplate.class);
+    ResultSet schedule = mock(ResultSet.class);
+    LocalDate today = LexisBusinessTime.today();
+    for (String name : List.of("ADVERTISING_DATE", "OFFER_RECEIPT_DATE", "TEAC_MEETING_DATE")) {
+      when(schedule.getTimestamp(name)).thenReturn(Timestamp.valueOf(today.atStartOfDay()));
+    }
+    when(schedule.getTimestamp(column)).thenThrow(new SQLException("Timestamp unavailable"));
+    when(schedule.getDate(column)).thenThrow(new SQLException("Date unavailable"));
+    stubScheduleRows(jdbc, schedule);
+    LexisApplicationRepository repository =
+        new DetailReadLexisApplicationRepository(jdbc, null, true);
+
+    LexisApplicationDetailDto detail = repository.findByApplicationNumber(900123L).orElseThrow();
+
+    assertThat(detail.canCreateOffers()).isEqualTo("TEAC_MEETING_DATE".equals(column));
+    assertThat(detail.teacMeetingDate())
+        .isEqualTo("TEAC_MEETING_DATE".equals(column) ? null : today);
+  }
+
+  @Test
+  void detailShouldRetainDateFallbackWhenScheduleTimestampGetterFails() throws Exception {
+    JdbcTemplate jdbc = mock(JdbcTemplate.class);
+    ResultSet schedule = mock(ResultSet.class);
+    LocalDate today = LexisBusinessTime.today();
+    for (String column : List.of("ADVERTISING_DATE", "OFFER_RECEIPT_DATE", "TEAC_MEETING_DATE")) {
+      when(schedule.getTimestamp(column)).thenThrow(new SQLException("Timestamp unavailable"));
+      when(schedule.getDate(column)).thenReturn(java.sql.Date.valueOf(today));
+    }
+    stubScheduleRows(jdbc, schedule);
+    LexisApplicationRepository repository =
+        new DetailReadLexisApplicationRepository(jdbc, null, true);
+
+    LexisApplicationDetailDto detail = repository.findByApplicationNumber(900123L).orElseThrow();
+
+    assertThat(detail.canCreateOffers()).isTrue();
+    assertThat(detail.teacMeetingDate()).isEqualTo(today);
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void detailShouldPropagateScheduleQueryFailure() {
+    JdbcTemplate jdbc = mock(JdbcTemplate.class);
+    DataAccessResourceFailureException failure =
+        new DataAccessResourceFailureException("Schedule unavailable");
+    when(jdbc.query(eq(SCHEDULE_BY_APPLICATION), any(RowMapper.class), eq("900123")))
+        .thenThrow(failure);
+    LexisApplicationRepository repository =
+        new DetailReadLexisApplicationRepository(jdbc, null, true);
+
+    assertThatThrownBy(() -> repository.findByApplicationNumber(900123L)).isSameAs(failure);
   }
 
   @Test
@@ -797,7 +915,6 @@ class LexisApplicationRepositoryTest {
   @ValueSource(
       strings = {
         "LEXIS_GROUP_5.FIND_APPLICATION_BY_NUMBER(?,?)",
-        "LEXIS_CODES.FIND_SCHEDULE_BY_APP(?,?)",
         "LEXIS_GROUP_5.FIND_SCALE_DETAIL_BY_APP(?,?)",
         "LEXIS_GROUP_5.FIND_PACKAGES_BY_APP(?,?)",
         "LEXIS_GROUP_5.FIND_REMARKS_BY_APP(?,?)",
@@ -1108,7 +1225,7 @@ class LexisApplicationRepositoryTest {
     private final String exemptionStatusCode;
 
     ExemptedDetailLexisApplicationRepository(String exemptionStatusCode) {
-      super(null);
+      super(mock(JdbcTemplate.class));
       this.exemptionStatusCode = exemptionStatusCode;
     }
 
@@ -1141,7 +1258,12 @@ class LexisApplicationRepositoryTest {
     private final boolean applicationPresent;
 
     DetailReadLexisApplicationRepository(String failingProcedure, boolean applicationPresent) {
-      super(null);
+      this(mock(JdbcTemplate.class), failingProcedure, applicationPresent);
+    }
+
+    DetailReadLexisApplicationRepository(
+        JdbcTemplate jdbcTemplate, String failingProcedure, boolean applicationPresent) {
+      super(jdbcTemplate);
       this.failingProcedure = failingProcedure;
       this.applicationPresent = applicationPresent;
     }
@@ -1175,7 +1297,7 @@ class LexisApplicationRepositoryTest {
       extends LexisApplicationRepository {
 
     PackageKeyDetailLexisApplicationRepository() {
-      super(null);
+      super(mock(JdbcTemplate.class));
     }
 
     @Override
@@ -1264,7 +1386,7 @@ class LexisApplicationRepositoryTest {
       extends LexisApplicationRepository {
 
     RemarkOrderingLexisApplicationRepository() {
-      super(null);
+      super(mock(JdbcTemplate.class));
     }
 
     @Override
@@ -1285,6 +1407,20 @@ class LexisApplicationRepositoryTest {
         throw new AssertionError(ex);
       }
     }
+  }
+
+  @SuppressWarnings("unchecked")
+  private static void stubScheduleRows(JdbcTemplate jdbc, ResultSet... resultSets) {
+    when(jdbc.query(eq(SCHEDULE_BY_APPLICATION), any(RowMapper.class), eq("900123")))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<?> mapper = invocation.getArgument(1);
+              List<Object> rows = new java.util.ArrayList<>();
+              for (int index = 0; index < resultSets.length; index++) {
+                rows.add(mapper.mapRow(resultSets[index], index));
+              }
+              return rows;
+            });
   }
 
   private static ResultSet applicationDetailResultSet() throws SQLException {
