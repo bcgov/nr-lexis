@@ -28,6 +28,7 @@
     "e2e:report": "playwright show-report"
   },
   "dependencies": {
+    "@carbon/ibm-products": "2.90.0",
     "@carbon/icons-react": "^11.64.0",
     "@carbon/pictograms-react": "^11.109.0",
     "@carbon/react": "^1.88.0",
@@ -69,6 +70,9 @@
     "vitest": "^4.0.0"
   },
   "overrides": {
+    "@carbon/ibm-products": {
+      "@carbon/ibm-products-styles": "2.89.0"
+    },
     "rollup@<4.22.4": "^4.22.4",
     "@types/react": "^19.0.10",
     "@tiptap/extension-bubble-menu": "3.30.4",
