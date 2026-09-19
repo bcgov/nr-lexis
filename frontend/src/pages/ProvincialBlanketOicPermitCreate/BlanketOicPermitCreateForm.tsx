@@ -17,13 +17,14 @@ import {
   Tile,
 } from '@carbon/react'
 import {
-  CurrencyDollar,
-  DataTable,
-  Delivery,
-  Document,
+  Box,
+  Certificate,
+  Currency,
   DocumentAttachment,
-  User,
+  EarthFilled,
+  Enterprise,
 } from '@carbon/icons-react'
+import { Link, useLocation } from 'react-router-dom'
 import EmptyState from '@/components/EmptyState'
 import ForestClientComboBox from '@/components/ForestClientComboBox'
 import IsoDatePicker from '@/components/IsoDatePicker'
@@ -37,6 +38,7 @@ import {
   resolveClientLocationCode,
 } from '@/pages/shared/application-form-utils'
 import { isValidIsoDate } from '@/pages/shared/create-form-utils'
+import { readDetailReturnTo } from '@/pages/shared/detail-navigation'
 import type { IdTextOption } from '@/pages/shared/search-query-utils'
 import {
   fetchExemptionClientData,
@@ -106,7 +108,7 @@ const MAX_OIC_REQUEST_VOLUME_LENGTH = 9
 const FORM_TABS = [
   {
     label: 'Permit',
-    icon: Document,
+    icon: Certificate,
     requiredFields: [
       'permitSubmitDate',
       'orgUnitNumber',
@@ -116,7 +118,7 @@ const FORM_TABS = [
   },
   {
     label: 'Applicant',
-    icon: User,
+    icon: Enterprise,
     requiredFields: [
       'ownerClientNumber',
       'ownerClientLocation',
@@ -126,7 +128,7 @@ const FORM_TABS = [
   },
   {
     label: 'Shipping',
-    icon: Delivery,
+    icon: EarthFilled,
     requiredFields: [
       'destinationCompanyName',
       'destinationCountry',
@@ -137,9 +139,9 @@ const FORM_TABS = [
       'otherPortOfExport',
     ],
   },
-  { label: 'Scale', icon: DataTable, requiredFields: [] },
+  { label: 'Scale', icon: Box, requiredFields: [] },
   { label: 'Documents', icon: DocumentAttachment, requiredFields: [] },
-  { label: 'Fees', icon: CurrencyDollar, requiredFields: [] },
+  { label: 'Fees', icon: Currency, requiredFields: [] },
 ] as const
 
 const withShippingDefaults = (
@@ -328,6 +330,8 @@ const BlanketOicPermitCreateForm = ({
   onCreated,
   onUnknownOutcome,
 }: BlanketOicPermitCreateFormProps) => {
+  const location = useLocation()
+  const exemptionReturnTo = readDetailReturnTo(location.state)
   const regionContext = resolveBlanketOicRegionContext(regionOptions, defaultRegionNumbers)
   const [form, setForm] = useState(() => initialForm(regionContext.defaultRegionNumber))
   const [agentUsed, setAgentUsed] = useState(false)
@@ -922,7 +926,18 @@ const BlanketOicPermitCreateForm = ({
                 <dl className="detail-field-grid boic-permit-details__pair">
                   <div className="detail-field-item">
                     <dt className="detail-field-label">Exemption number</dt>
-                    <dd className="detail-field-value">{exemptionNumber}</dd>
+                    <dd className="detail-field-value">
+                      <Link
+                        className="cds--link"
+                        to={
+                          exemptionReturnTo?.to ??
+                          `/provincial/exemption/${encodeURIComponent(exemptionNumber)}`
+                        }
+                        state={exemptionReturnTo?.state}
+                      >
+                        {exemptionNumber}
+                      </Link>
+                    </dd>
                   </div>
                   <div className="detail-field-item">
                     <dt className="detail-field-label">Exemption type</dt>
@@ -973,16 +988,6 @@ const BlanketOicPermitCreateForm = ({
                     onChange={(value) => setField('permitExpiryDate', value)}
                   />
                 </div>
-                <dl className="detail-field-grid boic-permit-details__pair">
-                  <div className="detail-field-item">
-                    <dt className="detail-field-label">Current permit pieces</dt>
-                    <dd className="detail-field-value">—</dd>
-                  </div>
-                  <div className="detail-field-item">
-                    <dt className="detail-field-label">Current permit volume (m³)</dt>
-                    <dd className="detail-field-value">—</dd>
-                  </div>
-                </dl>
                 <div className="boic-permit-details__pair">
                   <TextInput
                     id="boic-permit-request-pieces"
@@ -1003,6 +1008,16 @@ const BlanketOicPermitCreateForm = ({
                     onChange={(event) => setField('oicPermitTotalVolume', event.target.value)}
                   />
                 </div>
+                <dl className="detail-field-grid boic-permit-details__pair">
+                  <div className="detail-field-item">
+                    <dt className="detail-field-label">Current permit pieces</dt>
+                    <dd className="detail-field-value">0</dd>
+                  </div>
+                  <div className="detail-field-item">
+                    <dt className="detail-field-label">Current permit volume (m³)</dt>
+                    <dd className="detail-field-value">0</dd>
+                  </div>
+                </dl>
                 <div className="boic-permit-details__remarks">
                   <TextArea
                     id="boic-permit-remarks"

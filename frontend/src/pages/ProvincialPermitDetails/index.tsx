@@ -7,7 +7,16 @@ import {
   useRef,
   useState,
 } from 'react'
-import { Edit, TrashCan } from '@carbon/icons-react'
+import {
+  Box,
+  Certificate,
+  Currency,
+  DocumentAttachment,
+  EarthFilled,
+  Edit,
+  Enterprise,
+  TrashCan,
+} from '@carbon/icons-react'
 import {
   Button,
   Checkbox,
@@ -224,6 +233,10 @@ type BlanketOicPackageFieldErrors = Partial<Record<BlanketOicPackageField, strin
 type PermitFeeOverrideForm = PermitFeeOverrideContext
 type PermitFeeOverrideField = 'overrideFee' | 'overrideComment'
 type PermitFeeOverrideFieldErrors = Partial<Record<PermitFeeOverrideField, string>>
+type ActionSuccessNotification = {
+  title: string
+  subtitle: string
+}
 
 const MAX_OIC_REQUEST_PIECES = 9_999_999_999
 const MAX_OIC_REQUEST_VOLUME_LENGTH = 9
@@ -244,17 +257,17 @@ const SHIPPING_PERMIT_FIELDS = new Set<PermitDetailFormField>([
   'otherPortOfExport',
 ])
 const PERMIT_DETAIL_TABS = [
-  { id: 'permit', label: 'Permit' },
-  { id: 'owner', label: 'Applicant' },
-  { id: 'agent', label: 'Agent' },
-  { id: 'shipping', label: 'Shipping' },
-  { id: 'items', label: 'Items' },
-  { id: 'documents', label: 'Documents' },
-  { id: 'fees', label: 'Fees' },
-  { id: 'gbms', label: 'GBMS' },
+  { id: 'permit', label: 'Permit', icon: Certificate },
+  { id: 'owner', label: 'Applicant', icon: Enterprise },
+  { id: 'agent', label: 'Agent', icon: undefined },
+  { id: 'shipping', label: 'Shipping', icon: EarthFilled },
+  { id: 'items', label: 'Items', icon: Box },
+  { id: 'documents', label: 'Documents', icon: DocumentAttachment },
+  { id: 'fees', label: 'Fees', icon: Currency },
+  { id: 'gbms', label: 'GBMS', icon: undefined },
   // INTENTIONAL_LEGACY_DIVERGENCE(PERMIT_INVOICE_VISIBILITY):
   // Modern permit detail exposes the invoice workflow that legacy keeps hidden.
-  { id: 'invoices', label: 'Invoices' },
+  { id: 'invoices', label: 'Invoices', icon: undefined },
 ] as const
 
 type PermitDetailTabId = (typeof PERMIT_DETAIL_TABS)[number]['id']
@@ -843,6 +856,8 @@ const ProvincialPermitDetailsPage = () => {
   )
   const [actionErrorMessage, setActionErrorMessage] = useState('')
   const [actionInfoMessage, setActionInfoMessage] = useState('')
+  const [actionSuccessNotification, setActionSuccessNotification] =
+    useState<ActionSuccessNotification | null>(null)
   const [createdBlanketOicPermitNumber, setCreatedBlanketOicPermitNumber] = useState('')
   const [documentSuccessMessage, setDocumentSuccessMessage] = useState('')
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
@@ -901,6 +916,8 @@ const ProvincialPermitDetailsPage = () => {
     EMPTY_BLANKET_OIC_SCALE_FORM,
   )
   const [selectedBlanketOicPackageNumberState, setSelectedBlanketOicPackageNumberState] =
+    useState('')
+  const [selectedMinisterialPackageNumberState, setSelectedMinisterialPackageNumberState] =
     useState('')
   const [permitDocumentUploadDirty, setPermitDocumentUploadDirty] = useState(false)
   const [permitDocumentUploadBusy, setPermitDocumentUploadBusy] = useState(false)
@@ -984,6 +1001,8 @@ const ProvincialPermitDetailsPage = () => {
     setBoicCodeOptionsReady(false)
     setBoicScaleCodeOptionsReady(false)
     setSelectedBlanketOicPackageNumberState('')
+    setSelectedMinisterialPackageNumberState('')
+    setActionSuccessNotification(null)
     setDocumentSuccessMessage('')
     setCreatedBlanketOicPermitNumber('')
     void beginAvailablePermitApplicationsRequest()
@@ -1568,24 +1587,69 @@ const ProvincialPermitDetailsPage = () => {
     ? selectedBlanketOicPackageNumberState
     : (blanketOicPackageOptions[0]?.value ?? '')
 
+  const ministerialPackageOptions = useMemo(
+    () =>
+      ministerialPermit
+        ? (tabsData?.packages ?? [])
+            .map((row) => row.packageNumber)
+            .filter(Boolean)
+            .map((packageNumber) => ({
+              value: packageNumber,
+              label: formatPackageNumberLabel(packageNumber),
+            }))
+        : [],
+    [ministerialPermit, tabsData],
+  )
+  const selectedMinisterialPackageNumber = ministerialPackageOptions.some(
+    (option) => option.value === selectedMinisterialPackageNumberState,
+  )
+    ? selectedMinisterialPackageNumberState
+    : (ministerialPackageOptions[0]?.value ?? '')
+  const selectedMinisterialPackage = (tabsData?.packages ?? []).find(
+    (row) => row.packageNumber === selectedMinisterialPackageNumber,
+  )
+  const selectedMinisterialPackageFeeSummary = (tabsData?.packageFeeSummaries ?? []).find(
+    (summary) => summary.packageNumber === selectedMinisterialPackageNumber,
+  )
+
   const packageScopedItems = useMemo(() => {
     if (!tabsData) {
       return []
     }
-    if (!detail?.blanketOic) {
-      return tabsData.items
-    }
-    return tabsData.items.filter((row) => row.packageNumber === selectedBlanketOicPackageNumber)
-  }, [detail?.blanketOic, selectedBlanketOicPackageNumber, tabsData])
+    const selectedPackageNumber = detail?.blanketOic
+      ? selectedBlanketOicPackageNumber
+      : ministerialPermit
+        ? selectedMinisterialPackageNumber
+        : ''
+    return selectedPackageNumber
+      ? tabsData.items.filter((row) => row.packageNumber === selectedPackageNumber)
+      : tabsData.items
+  }, [
+    detail?.blanketOic,
+    ministerialPermit,
+    selectedBlanketOicPackageNumber,
+    selectedMinisterialPackageNumber,
+    tabsData,
+  ])
 
-  const visibleBlanketOicPackages = useMemo(
+  const visiblePackages = useMemo(
     () =>
       detail?.blanketOic
         ? (tabsData?.packages ?? []).filter(
             (row) => row.packageNumber === selectedBlanketOicPackageNumber,
           )
-        : (tabsData?.packages ?? []),
-    [detail?.blanketOic, selectedBlanketOicPackageNumber, tabsData],
+        : ministerialPermit
+          ? (tabsData?.packages ?? []).filter(
+              (row) => row.packageNumber === selectedMinisterialPackageNumber,
+            )
+          : (tabsData?.packages ?? []),
+    [
+      detail?.blanketOic,
+      ministerialPermit,
+      selectedBlanketOicPackageNumber,
+      selectedMinisterialPackageNumber,
+      tabsData,
+    ],
   )
 
   const resolvedBlanketOicScaleForm = {
@@ -2669,6 +2733,7 @@ const ProvincialPermitDetailsPage = () => {
 
   const savePermitMutation = useCallback(
     async (includeShipping = false, deferStatusTransition = false): Promise<boolean> => {
+      setActionSuccessNotification(null)
       const targetPermitStatus = permitForm?.permitStatus ?? ''
       const baseRequest: PermitDetailMutationRequest | null =
         detail && permitForm
@@ -2857,14 +2922,25 @@ const ProvincialPermitDetailsPage = () => {
           deferStatusTransition
             ? 'Permit fields were saved before the status transition.'
             : includeShipping
-              ? 'Permit and shipping saved successfully.'
-              : 'Permit saved successfully.',
+              ? 'Permit and shipping details were saved.'
+              : activePermitTabId === 'owner'
+                ? 'Applicant details were saved.'
+                : 'Permit details were saved.',
         )
-        setActionInfoMessage(
-          permitDetailRefreshFailed
-            ? `${mutationMessage} Current permit details could not be refreshed; reload before making another change.`
-            : mutationMessage,
-        )
+        if (permitDetailRefreshFailed) {
+          setActionInfoMessage(
+            `${mutationMessage} Current permit details could not be refreshed; reload before making another change.`,
+          )
+        } else {
+          setActionSuccessNotification({
+            title: includeShipping
+              ? 'Permit and shipping details saved'
+              : activePermitTabId === 'owner'
+                ? 'Applicant details saved'
+                : 'Permit details saved',
+            subtitle: mutationMessage,
+          })
+        }
         refreshLoadedPermitFees()
         // The mutation committed, but callers must stop until canonical permit details reload.
         return !permitDetailRefreshFailed
@@ -2898,11 +2974,13 @@ const ProvincialPermitDetailsPage = () => {
       permitForm,
       permitNumber,
       refreshLoadedPermitFees,
+      activePermitTabId,
       tryBeginPermitMutation,
     ],
   )
 
   const onSaveShipping = useCallback(async (): Promise<boolean> => {
+    setActionSuccessNotification(null)
     const request: PermitDetailMutationRequest | null =
       detail && permitForm
         ? mergePermitFormSection(buildPermitDetailForm(detail), permitForm, true)
@@ -2958,7 +3036,10 @@ const ProvincialPermitDetailsPage = () => {
       setIsEditingShipping(false)
       setTouchedPermitFields({})
       setShowPermitValidationErrors(false)
-      setActionInfoMessage(permitMutationMessage(result, 'Shipping saved successfully.'))
+      setActionSuccessNotification({
+        title: 'Shipping details saved',
+        subtitle: permitMutationMessage(result, 'Shipping details were saved.'),
+      })
       refreshLoadedPermitFees()
       return true
     } catch (error) {
@@ -2985,6 +3066,7 @@ const ProvincialPermitDetailsPage = () => {
   ])
 
   const onSavePermit = useCallback(async (): Promise<boolean> => {
+    setActionSuccessNotification(null)
     if (paymentPendingReceiptRequiresCompletion) {
       setActionErrorMessage(
         'Select Completed on the Permit tab before saving a payment-pending receipt.',
@@ -3033,6 +3115,7 @@ const ProvincialPermitDetailsPage = () => {
       return false
     }
 
+    setActionSuccessNotification(null)
     const normalizedFee = feeOverrideForm.overrideFee.trim()
     const normalizedComment = feeOverrideForm.overrideComment.trim()
     const { fieldErrors, roundedFee } = validatePermitFeeOverride(feeOverrideForm)
@@ -3081,7 +3164,10 @@ const ProvincialPermitDetailsPage = () => {
       setFeeOverrideForm(savedContext)
       setFeeOverrideFieldErrors({})
       setIsEditingFeeOverride(false)
-      setActionInfoMessage(result.message || 'Permit fee override saved successfully.')
+      setActionSuccessNotification({
+        title: 'Fee override saved',
+        subtitle: result.message || 'The fee override was saved.',
+      })
       refreshLoadedPermitFees()
       return true
     } catch (error) {
@@ -3113,6 +3199,7 @@ const ProvincialPermitDetailsPage = () => {
 
       setActionErrorMessage('')
       setActionInfoMessage('')
+      setActionSuccessNotification(null)
       setIsUpdatingScaleId(scaleId)
       try {
         const result = await updatePermitScaleAttachment({
@@ -3162,6 +3249,7 @@ const ProvincialPermitDetailsPage = () => {
 
     setActionErrorMessage('')
     setActionInfoMessage('')
+    setActionSuccessNotification(null)
     setIsSavingPermitApplication(true)
     try {
       const result = await addApplicationsToPermit({
@@ -3241,6 +3329,7 @@ const ProvincialPermitDetailsPage = () => {
 
       setActionErrorMessage('')
       setActionInfoMessage('')
+      setActionSuccessNotification(null)
       setIsRemovingPermitApplication(applicationNumber)
       try {
         const result = await removeApplicationFromPermit({
@@ -3390,6 +3479,7 @@ const ProvincialPermitDetailsPage = () => {
     ) {
       return false
     }
+    setActionSuccessNotification(null)
     if (
       permitForm &&
       permitForm.orgUnitNumber.trim() !== detailValue(detail?.orgUnitNumber).trim()
@@ -3509,6 +3599,7 @@ const ProvincialPermitDetailsPage = () => {
       }
       setActionErrorMessage('')
       setActionInfoMessage('')
+      setActionSuccessNotification(null)
       setBoicPackageErrorMessage('')
       setIsDeletingBoicPackageNumber(packageNumberToDelete)
       let failureMessage = ''
@@ -3559,6 +3650,7 @@ const ProvincialPermitDetailsPage = () => {
     ) {
       return false
     }
+    setActionSuccessNotification(null)
 
     const request = {
       permitNumber: resolvedPermitNumber,
@@ -3645,6 +3737,7 @@ const ProvincialPermitDetailsPage = () => {
 
       setActionErrorMessage('')
       setActionInfoMessage('')
+      setActionSuccessNotification(null)
       setIsDeletingBoicScaleId(row.id)
       try {
         const result = await deleteBlanketOicScale({
@@ -3744,6 +3837,7 @@ const ProvincialPermitDetailsPage = () => {
       }
       setActionErrorMessage('')
       setActionInfoMessage('')
+      setActionSuccessNotification(null)
       try {
         if (preview) {
           // Reserve the tab during the click so slow document reads cannot lose popup permission.
@@ -3785,6 +3879,7 @@ const ProvincialPermitDetailsPage = () => {
 
     setActionErrorMessage('')
     setActionInfoMessage('')
+    setActionSuccessNotification(null)
     setIsOpeningPermitReport(true)
     try {
       const result = await runReport({
@@ -3814,6 +3909,7 @@ const ProvincialPermitDetailsPage = () => {
       ) {
         return false
       }
+      setActionSuccessNotification(null)
       const clientEmail = normalizeTrimmedText(approvalEmailAddress)
       if (type === 'approval' && !isValidEmail(clientEmail)) {
         setActionErrorMessage('Enter one valid applicant email address.')
@@ -3903,6 +3999,7 @@ const ProvincialPermitDetailsPage = () => {
       const isLatestRequest = beginDocumentRefreshRequest()
       setActionErrorMessage('')
       setActionInfoMessage('')
+      setActionSuccessNotification(null)
       setDocumentSuccessMessage('')
       setIsRemovingDocumentId(row.id)
       try {
@@ -4503,60 +4600,100 @@ const ProvincialPermitDetailsPage = () => {
 
   const renderPermitFeeSummary = () => {
     if (!detail) return null
+    const showReviewedPermitFeeSummary = usesReviewedPermitFlow && !isEditingPermit
     return (
       <fieldset className="legacy-form-fieldset">
-        <legend>Permit fee summary</legend>
-        <div className="legacy-search-grid">
-          {isEditingPermit && permitForm ? (
-            renderPermitTextInput(
-              'permitReceiptNo',
-              'Receipt number',
-              invoiceMaterialLocked && !canEnterPaymentReceipt,
-              50,
-            )
-          ) : (
+        <legend className={showReviewedPermitFeeSummary ? 'cds--visually-hidden' : undefined}>
+          Permit fee summary
+        </legend>
+        {showReviewedPermitFeeSummary ? (
+          <dl className="detail-field-grid ministerial-package-summary">
+            {[
+              ['Receipt number', displayValue(detail.receiptNumber)],
+              [
+                'Total volume (m³)',
+                feeSummaryStatus ??
+                  totalFeeVolume?.toLocaleString(undefined, {
+                    minimumFractionDigits: 1,
+                    maximumFractionDigits: 1,
+                  }) ??
+                  'Unavailable',
+              ],
+              [
+                'Calculated fee (CAD)',
+                feeSummaryStatus ??
+                  (permitFeesMasked ? '$' : `$${formatAmount(calculatedPermitFee)}`),
+              ],
+              [
+                'Effective fee (CAD)',
+                feeSummaryStatus ??
+                  (feeOverrideContext?.overrideEnabled
+                    ? `$${formatAmount(Number(feeOverrideContext.overrideFee))}`
+                    : permitFeesMasked
+                      ? '$'
+                      : `$${formatAmount(calculatedPermitFee)}`),
+              ],
+            ].map(([label, value]) => (
+              <div key={label} className="detail-field-item">
+                <dt className="detail-field-label">{label}</dt>
+                <dd className="detail-field-value">{value}</dd>
+              </div>
+            ))}
+          </dl>
+        ) : (
+          <div className="legacy-search-grid">
+            {isEditingPermit && permitForm ? (
+              renderPermitTextInput(
+                'permitReceiptNo',
+                'Receipt number',
+                invoiceMaterialLocked && !canEnterPaymentReceipt,
+                50,
+              )
+            ) : (
+              <TextInput
+                id="permitFeeReceiptNumber"
+                labelText="Receipt number"
+                value={displayValue(detail.receiptNumber)}
+                disabled
+              />
+            )}
             <TextInput
-              id="permitFeeReceiptNumber"
-              labelText="Receipt number"
-              value={displayValue(detail.receiptNumber)}
+              id="permitFeeTotalVolume"
+              labelText="Total volume (m³)"
+              value={
+                feeSummaryStatus ??
+                totalFeeVolume?.toLocaleString(undefined, {
+                  minimumFractionDigits: 1,
+                  maximumFractionDigits: 1,
+                }) ??
+                'Unavailable'
+              }
               disabled
             />
-          )}
-          <TextInput
-            id="permitFeeTotalVolume"
-            labelText="Total volume (m³)"
-            value={
-              feeSummaryStatus ??
-              totalFeeVolume?.toLocaleString(undefined, {
-                minimumFractionDigits: 1,
-                maximumFractionDigits: 1,
-              }) ??
-              'Unavailable'
-            }
-            disabled
-          />
-          <TextInput
-            id="permitCalculatedFee"
-            labelText="Calculated fee (CAD)"
-            value={
-              feeSummaryStatus ?? (permitFeesMasked ? '$' : `$${formatAmount(calculatedPermitFee)}`)
-            }
-            disabled
-          />
-          <TextInput
-            id="permitEffectiveFee"
-            labelText="Effective fee (CAD)"
-            value={
-              feeSummaryStatus ??
-              (feeOverrideContext?.overrideEnabled
-                ? `$${formatAmount(Number(feeOverrideContext.overrideFee))}`
-                : permitFeesMasked
-                  ? '$'
-                  : `$${formatAmount(calculatedPermitFee)}`)
-            }
-            disabled
-          />
-        </div>
+            <TextInput
+              id="permitCalculatedFee"
+              labelText="Calculated fee (CAD)"
+              value={
+                feeSummaryStatus ??
+                (permitFeesMasked ? '$' : `$${formatAmount(calculatedPermitFee)}`)
+              }
+              disabled
+            />
+            <TextInput
+              id="permitEffectiveFee"
+              labelText="Effective fee (CAD)"
+              value={
+                feeSummaryStatus ??
+                (feeOverrideContext?.overrideEnabled
+                  ? `$${formatAmount(Number(feeOverrideContext.overrideFee))}`
+                  : permitFeesMasked
+                    ? '$'
+                    : `$${formatAmount(calculatedPermitFee)}`)
+              }
+              disabled
+            />
+          </div>
+        )}
         {showPaymentPendingReceiptGuidance && (
           <p id="permit-fee-receipt-help">
             Enter a receipt number here, then select Completed on the Permit tab before saving.
@@ -4605,7 +4742,7 @@ const ProvincialPermitDetailsPage = () => {
                   setIsEditingPermit(true)
                 }}
               >
-                Edit permit
+                {usesReviewedPermitFlow ? 'Edit fee details' : 'Edit permit'}
               </Button>
             )}
           </div>
@@ -4749,9 +4886,69 @@ const ProvincialPermitDetailsPage = () => {
 
   const renderPackageFees = () => {
     if (!detail) return null
+    const displayedFeeRows = ministerialPermit
+      ? permitFeeRows.filter((row) => row.packageNumber === selectedMinisterialPackageNumber)
+      : permitFeeRows
+    const showDisplayedMinistryFeeColumn = ministerialPermit
+      ? displayedFeeRows.some((row) => row.ministryUser)
+      : showMinistryFeeColumn
     return (
       <>
-        {!ministerialFeeShellEmpty &&
+        {ministerialPermit &&
+          feeSummaryStatus === null &&
+          ministerialPackageOptions.length > 0 &&
+          selectedMinisterialPackage && (
+            <>
+              <div className="legacy-search-grid">
+                <SearchableSelect
+                  id="ministerialFeesPackageNumber"
+                  labelText="Package number"
+                  value={selectedMinisterialPackageNumber}
+                  options={ministerialPackageOptions}
+                  placeholder="Select package"
+                  onChange={setSelectedMinisterialPackageNumberState}
+                />
+              </div>
+              <dl className="detail-field-grid ministerial-package-summary">
+                <div className="detail-field-item">
+                  <dt className="detail-field-label">Age class</dt>
+                  <dd className="detail-field-value">
+                    {selectedMinisterialPackage.ageClass || '—'}
+                  </dd>
+                </div>
+                <div className="detail-field-item">
+                  <dt className="detail-field-label">Exemption number</dt>
+                  <dd className="detail-field-value">
+                    {detail.exemptionNumber ? (
+                      <Link
+                        to={`/provincial/exemption/${encodeURIComponent(detail.exemptionNumber)}`}
+                        state={withDetailReturnTo(
+                          location.state,
+                          {
+                            label: 'Provincial permit detail',
+                            to: locationPath(location),
+                          },
+                          detailReturnTo,
+                        )}
+                      >
+                        {detail.exemptionNumber}
+                      </Link>
+                    ) : (
+                      '—'
+                    )}
+                  </dd>
+                </div>
+                <div className="detail-field-item">
+                  <dt className="detail-field-label">Package fee (CAD)</dt>
+                  <dd className="detail-field-value">
+                    {selectedMinisterialPackageFeeSummary?.totalFeeForPackage ?? 'Unavailable'}
+                  </dd>
+                </div>
+              </dl>
+            </>
+          )}
+        {!ministerialPermit &&
+          !ministerialFeeShellEmpty &&
           feeSummaryStatus === null &&
           !!tabsData?.packageFeeSummaries.length && (
             <>
@@ -4818,35 +5015,37 @@ const ProvincialPermitDetailsPage = () => {
             headingLevel={3}
             role="alert"
           />
-        ) : permitFeeRows.length > 0 ? (
+        ) : displayedFeeRows.length > 0 ? (
           <TableFrame ariaLabel="Permit fee rows">
             <Table size="md" useZebraStyles>
               <TableHead>
                 <TableRow>
-                  <TableHeader>Package</TableHeader>
+                  {!ministerialPermit && <TableHeader>Package</TableHeader>}
                   <TableHeader>Timber mark</TableHeader>
                   <TableHeader>Species</TableHeader>
                   <TableHeader>Grade</TableHeader>
                   <TableHeader>AMV ($/m³ CAD)</TableHeader>
                   <TableHeader>Volume (m³)</TableHeader>
-                  {showMinistryFeeColumn && <TableHeader>EWB$</TableHeader>}
+                  {showDisplayedMinistryFeeColumn && <TableHeader>EWB$</TableHeader>}
                   <TableHeader>FIL%</TableHeader>
                   <TableHeader>MF%</TableHeader>
                   <TableHeader>Fee (CAD)</TableHeader>
                 </TableRow>
               </TableHead>
               <TableBody>
-                {permitFeeRows.map((row) => (
+                {displayedFeeRows.map((row) => (
                   <TableRow key={row.id}>
-                    <TableCell>
-                      {row.packageNumber ? formatPackageNumberLabel(row.packageNumber) : '-'}
-                    </TableCell>
+                    {!ministerialPermit && (
+                      <TableCell>
+                        {row.packageNumber ? formatPackageNumberLabel(row.packageNumber) : '-'}
+                      </TableCell>
+                    )}
                     <TableCell>{row.timberMark || '-'}</TableCell>
                     <TableCell>{row.species || '-'}</TableCell>
                     <TableCell>{row.grade || '-'}</TableCell>
                     <TableCell>{row.amv || '-'}</TableCell>
                     <TableCell>{row.volume.toLocaleString()}</TableCell>
-                    {showMinistryFeeColumn && <TableCell>{row.ewb || '-'}</TableCell>}
+                    {showDisplayedMinistryFeeColumn && <TableCell>{row.ewb || '-'}</TableCell>}
                     <TableCell>{row.filPercent || '-'}</TableCell>
                     <TableCell>{row.mfPercent || '-'}</TableCell>
                     <TableCell>
@@ -5080,6 +5279,19 @@ const ProvincialPermitDetailsPage = () => {
             </Column>
           )}
 
+          {!!actionSuccessNotification && (
+            <Column sm={4} md={8} lg={16} className="detail-page-error">
+              <AppNotification
+                kind="success"
+                title={actionSuccessNotification.title}
+                subtitle={actionSuccessNotification.subtitle}
+                lowContrast
+                autoDismissMs={6000}
+                onCloseButtonClick={() => setActionSuccessNotification(null)}
+              />
+            </Column>
+          )}
+
           {!!documentSuccessMessage && (
             <Column sm={4} md={8} lg={16} className="detail-page-error">
               <AppNotification
@@ -5142,8 +5354,10 @@ const ProvincialPermitDetailsPage = () => {
                 contained
                 className="application-tabs__list application-detail-tab-list"
               >
-                {permitDetailTabs.map(({ id, label }) => (
-                  <Tab key={id}>{label}</Tab>
+                {permitDetailTabs.map(({ id, label, icon }) => (
+                  <Tab key={id} renderIcon={icon}>
+                    {label}
+                  </Tab>
                 ))}
               </TabList>
               <ContiguousTabPanels order={permitDetailTabs.map(({ id }) => id)}>
@@ -5407,6 +5621,219 @@ const ProvincialPermitDetailsPage = () => {
                           </div>
                           {detail.blanketOic && renderPermitVolumeAndRemarks()}
                         </Tile>
+                      ) : ministerialPermit ? (
+                        <Tile className="ministerial-permit-details">
+                          <div className="detail-section-card__header">
+                            <h2 className="detail-tile-title">Permit details</h2>
+                            {canSavePermit && (
+                              <Button
+                                kind="tertiary"
+                                size="sm"
+                                onClick={() => {
+                                  resetPermitFormSection(false)
+                                  setIsEditingPermit(true)
+                                }}
+                              >
+                                Edit permit
+                              </Button>
+                            )}
+                          </div>
+                          <dl className="ministerial-permit-details__status">
+                            <div className="detail-field-item">
+                              <dt className="detail-field-label">Status</dt>
+                              <dd className="detail-field-value">
+                                <StatusTag
+                                  status={formatPermitStatus(
+                                    detail.permitStatusCode,
+                                    detail.permitStatusDescription,
+                                  )}
+                                  fallbackLabel="Not provided"
+                                />
+                              </dd>
+                            </div>
+                          </dl>
+                          <dl className="ministerial-permit-details__static-fields">
+                            <div className="detail-field-item">
+                              <dt className="detail-field-label">Exemption number</dt>
+                              <dd className="detail-field-value">
+                                {detail.exemptionNumber ? (
+                                  <Link
+                                    to={`/provincial/exemption/${encodeURIComponent(detail.exemptionNumber)}`}
+                                    state={withDetailReturnTo(
+                                      location.state,
+                                      {
+                                        label: 'Provincial permit detail',
+                                        to: locationPath(location),
+                                      },
+                                      detailReturnTo,
+                                    )}
+                                  >
+                                    {detail.exemptionNumber}
+                                  </Link>
+                                ) : (
+                                  displayValue(detail.exemptionNumber)
+                                )}
+                              </dd>
+                            </div>
+                            <div className="detail-field-item">
+                              <dt className="detail-field-label">Exemption type</dt>
+                              <dd className="detail-field-value">
+                                {displayValue(detail.exemptionTypeDescription)}
+                              </dd>
+                            </div>
+                            <div className="detail-field-item">
+                              <dt className="detail-field-label">Region</dt>
+                              <dd className="detail-field-value">
+                                {displayValue(detail.region ?? detail.orgUnitNumber)}
+                              </dd>
+                            </div>
+                          </dl>
+                          <dl className="ministerial-permit-details__dates">
+                            {[
+                              ['Submit date', detail.applicationDate],
+                              ['Issued date', detail.issueDate],
+                              ['Expiry date', detail.expiryDate],
+                            ].map(([label, value]) => (
+                              <div key={label} className="detail-field-item">
+                                <dt className="detail-field-label">{label}</dt>
+                                <dd className="detail-field-value">{displayValue(value)}</dd>
+                              </div>
+                            ))}
+                          </dl>
+                          <dl className="ministerial-permit-details__totals">
+                            {[
+                              ['Total exemption volume (m³)', detail.approvedExemptionVolume],
+                              ['Total volume remaining (m³)', detail.exemptionVolumeRemaining],
+                              ['Current permit pieces', detail.numberOfPieces],
+                              ['Current permit volume (m³)', detail.permitVolume],
+                            ].map(([label, value]) => (
+                              <div key={label} className="detail-field-item">
+                                <dt className="detail-field-label">{label}</dt>
+                                <dd className="detail-field-value">{displayValue(value)}</dd>
+                              </div>
+                            ))}
+                          </dl>
+                          <section className="ministerial-permit-details__applications">
+                            <h3 className="detail-tile-title">Applications</h3>
+                            {renderMinisterialPermitApplications()}
+                          </section>
+                          <dl className="ministerial-permit-details__remarks detail-field-grid">
+                            <div className="detail-field-item detail-field-item--full">
+                              <dt className="detail-field-label">Remarks</dt>
+                              <dd className="detail-field-value">{displayValue(detail.remarks)}</dd>
+                            </div>
+                          </dl>
+                        </Tile>
+                      ) : detail.blanketOic ? (
+                        <Tile className="boic-permit-details">
+                          <div className="detail-section-card__header">
+                            <h2 className="detail-tile-title">Permit details</h2>
+                            {canSavePermit && (
+                              <Button
+                                kind="tertiary"
+                                size="sm"
+                                onClick={() => {
+                                  resetPermitFormSection(false)
+                                  setIsEditingPermit(true)
+                                }}
+                              >
+                                Edit permit
+                              </Button>
+                            )}
+                          </div>
+                          <dl className="boic-permit-details__status">
+                            <div className="detail-field-item">
+                              <dt className="detail-field-label">Status</dt>
+                              <dd className="detail-field-value">
+                                <StatusTag
+                                  status={formatPermitStatus(
+                                    detail.permitStatusCode,
+                                    detail.permitStatusDescription,
+                                  )}
+                                  fallbackLabel="Not provided"
+                                />
+                              </dd>
+                            </div>
+                          </dl>
+                          <dl className="boic-permit-details__static-fields">
+                            <div className="detail-field-item">
+                              <dt className="detail-field-label">Exemption number</dt>
+                              <dd className="detail-field-value">
+                                {detail.exemptionNumber ? (
+                                  <Link
+                                    to={`/provincial/exemption/${encodeURIComponent(detail.exemptionNumber)}`}
+                                    state={withDetailReturnTo(
+                                      location.state,
+                                      {
+                                        label: 'Provincial permit detail',
+                                        to: locationPath(location),
+                                      },
+                                      detailReturnTo,
+                                    )}
+                                  >
+                                    {detail.exemptionNumber}
+                                  </Link>
+                                ) : (
+                                  displayValue(detail.exemptionNumber)
+                                )}
+                              </dd>
+                            </div>
+                            <div className="detail-field-item">
+                              <dt className="detail-field-label">Exemption type</dt>
+                              <dd className="detail-field-value">
+                                {displayValue(detail.exemptionTypeDescription)}
+                              </dd>
+                            </div>
+                            <div className="detail-field-item">
+                              <dt className="detail-field-label">Region</dt>
+                              <dd className="detail-field-value">
+                                {displayValue(detail.region ?? detail.orgUnitNumber)}
+                              </dd>
+                            </div>
+                          </dl>
+                          <dl className="boic-permit-details__dates">
+                            {[
+                              ['Submit date', detail.applicationDate],
+                              ['Issued date', detail.issueDate],
+                              ['Expiry date', detail.expiryDate],
+                            ].map(([label, value]) => (
+                              <div key={label} className="detail-field-item">
+                                <dt className="detail-field-label">{label}</dt>
+                                <dd className="detail-field-value">{displayValue(value)}</dd>
+                              </div>
+                            ))}
+                          </dl>
+                          <dl className="boic-permit-details__totals">
+                            {[
+                              ['Total exemption volume (m³)', detail.approvedExemptionVolume],
+                              ['Total volume remaining (m³)', detail.exemptionVolumeRemaining],
+                              ['Current permit pieces', detail.numberOfPieces],
+                              ['Current permit volume (m³)', detail.permitVolume],
+                            ].map(([label, value]) => (
+                              <div key={label} className="detail-field-item">
+                                <dt className="detail-field-label">{label}</dt>
+                                <dd className="detail-field-value">{displayValue(value)}</dd>
+                              </div>
+                            ))}
+                          </dl>
+                          <dl className="boic-permit-details__request-totals">
+                            {[
+                              ['Permit Request Pieces', detail.oicRequestPieces],
+                              ['Permit Request Volume (m³)', detail.oicRequestVolume],
+                            ].map(([label, value]) => (
+                              <div key={label} className="detail-field-item">
+                                <dt className="detail-field-label">{label}</dt>
+                                <dd className="detail-field-value">{displayValue(value)}</dd>
+                              </div>
+                            ))}
+                          </dl>
+                          <dl className="boic-permit-details__remarks detail-field-grid">
+                            <div className="detail-field-item detail-field-item--full">
+                              <dt className="detail-field-label">Remarks</dt>
+                              <dd className="detail-field-value">{displayValue(detail.remarks)}</dd>
+                            </div>
+                          </dl>
+                        </Tile>
                       ) : (
                         <DetailFieldTile
                           title={usesReviewedPermitFlow ? 'Permit details' : 'Permit summary'}
@@ -5492,7 +5919,8 @@ const ProvincialPermitDetailsPage = () => {
                       )}
                     </Column>
 
-                    {!detail.blanketOic &&
+                    {!ministerialPermit &&
+                      !detail.blanketOic &&
                       !(usesReviewedPermitFlow && isEditingPermit && permitForm) && (
                         <Column sm={4} md={8} lg={16}>
                           {isEditingPermit && permitForm ? (
@@ -5516,7 +5944,7 @@ const ProvincialPermitDetailsPage = () => {
                           )}
                         </Column>
                       )}
-                    {!isMinisterialPermitEdit && !detail.blanketOic && (
+                    {!ministerialPermit && !detail.blanketOic && (
                       <Column sm={4} md={8} lg={16}>
                         <Tile>
                           <h2 className="detail-tile-title">
@@ -5854,7 +6282,9 @@ const ProvincialPermitDetailsPage = () => {
                     <Column sm={4} md={8} lg={16}>
                       {isEditingShipping && permitForm ? (
                         <Tile>
-                          <h2 className="detail-tile-title">Shipping</h2>
+                          <h2 className="detail-tile-title">
+                            {usesReviewedPermitFlow ? 'Shipping details' : 'Shipping'}
+                          </h2>
                           {shippingReferencesErrorMessage && (
                             <InlineNotification
                               className="detail-context-notification"
@@ -5953,6 +6383,18 @@ const ProvincialPermitDetailsPage = () => {
                               26,
                               true,
                             )}
+                            <IsoDatePicker
+                              id="permit-estimatedShippingDate"
+                              labelText={requiredLabel('Estimated shipping date')}
+                              required
+                              value={permitForm.estimatedShippingDate}
+                              invalid={!!permitFieldError('estimatedShippingDate')}
+                              invalidText={permitFieldError('estimatedShippingDate')}
+                              onBlur={() => markPermitFieldTouched('estimatedShippingDate')}
+                              onChange={(value) =>
+                                setPermitFormField('estimatedShippingDate', value)
+                              }
+                            />
                             <Select
                               id="permit-portOfExport"
                               labelText={requiredLabel('Customs port of export')}
@@ -5995,18 +6437,6 @@ const ProvincialPermitDetailsPage = () => {
                                 34,
                                 true,
                               )}
-                            <IsoDatePicker
-                              id="permit-estimatedShippingDate"
-                              labelText={requiredLabel('Estimated shipping date')}
-                              required
-                              value={permitForm.estimatedShippingDate}
-                              invalid={!!permitFieldError('estimatedShippingDate')}
-                              invalidText={permitFieldError('estimatedShippingDate')}
-                              onBlur={() => markPermitFieldTouched('estimatedShippingDate')}
-                              onChange={(value) =>
-                                setPermitFormField('estimatedShippingDate', value)
-                              }
-                            />
                           </div>
                         </Tile>
                       ) : (
@@ -6022,7 +6452,7 @@ const ProvincialPermitDetailsPage = () => {
                             />
                           )}
                           <DetailFieldTile
-                            title="Shipping"
+                            title={usesReviewedPermitFlow ? 'Shipping details' : 'Shipping'}
                             headerAction={
                               canEditShipping ? (
                                 <Button
@@ -6034,7 +6464,9 @@ const ProvincialPermitDetailsPage = () => {
                                     setIsEditingShipping(true)
                                   }}
                                 >
-                                  Edit shipping
+                                  {usesReviewedPermitFlow
+                                    ? 'Edit shipping details'
+                                    : 'Edit shipping'}
                                 </Button>
                               ) : undefined
                             }
@@ -6066,6 +6498,10 @@ const ProvincialPermitDetailsPage = () => {
                                 value: displayValue(detail.transportName),
                               },
                               {
+                                label: 'Estimated shipping date',
+                                value: displayValue(detail.estimatedShippingDate),
+                              },
+                              {
                                 label: 'Customs port of export',
                                 value: displayValue(
                                   shippingReferenceLabel(
@@ -6082,10 +6518,6 @@ const ProvincialPermitDetailsPage = () => {
                                     },
                                   ]
                                 : []),
-                              {
-                                label: 'Estimated shipping date',
-                                value: displayValue(detail.estimatedShippingDate),
-                              },
                             ]}
                           />
                         </>
@@ -6172,6 +6604,18 @@ const ProvincialPermitDetailsPage = () => {
                               />
                             </div>
                           )}
+                          {ministerialPermit && ministerialPackageOptions.length > 0 && (
+                            <div className="legacy-search-grid">
+                              <SearchableSelect
+                                id="ministerialScalePackageNumber"
+                                labelText="Package number"
+                                value={selectedMinisterialPackageNumber}
+                                options={ministerialPackageOptions}
+                                placeholder="Select package"
+                                onChange={setSelectedMinisterialPackageNumberState}
+                              />
+                            </div>
+                          )}
                           {isPermitTablesLoading ? (
                             <InlineLoading description="Loading permit items…" />
                           ) : permitTablesErrorMessage ? (
@@ -6185,7 +6629,45 @@ const ProvincialPermitDetailsPage = () => {
                               headingLevel={3}
                               role="alert"
                             />
-                          ) : visibleBlanketOicPackages.length > 0 ? (
+                          ) : ministerialPermit && selectedMinisterialPackage ? (
+                            <dl className="detail-field-grid ministerial-package-summary">
+                              {[
+                                ['Region', selectedMinisterialPackage.region],
+                                [
+                                  'Species and end use sort',
+                                  selectedMinisterialPackage.speciesEndUseSort,
+                                ],
+                                ['Age class', selectedMinisterialPackage.ageClass],
+                                ['Product type', selectedMinisterialPackage.productType],
+                                [
+                                  'Package volume (m³)',
+                                  (
+                                    selectedPermitScaleTotalsByPackage.get(
+                                      selectedMinisterialPackage.packageNumber,
+                                    )?.volume ?? 0
+                                  ).toLocaleString(),
+                                ],
+                                [
+                                  'Package pieces',
+                                  (
+                                    selectedPermitScaleTotalsByPackage.get(
+                                      selectedMinisterialPackage.packageNumber,
+                                    )?.pieces ?? 0
+                                  ).toLocaleString(),
+                                ],
+                                ['Average length (m)', selectedMinisterialPackage.averageLength],
+                                [
+                                  'Average top diameter (rads)',
+                                  selectedMinisterialPackage.averageTopDiameter,
+                                ],
+                              ].map(([label, value]) => (
+                                <div key={label} className="detail-field-item">
+                                  <dt className="detail-field-label">{label}</dt>
+                                  <dd className="detail-field-value">{value || '—'}</dd>
+                                </div>
+                              ))}
+                            </dl>
+                          ) : visiblePackages.length > 0 ? (
                             <TableFrame ariaLabel="Permit packages">
                               <Table size="md" useZebraStyles>
                                 <TableHead>
@@ -6213,7 +6695,7 @@ const ProvincialPermitDetailsPage = () => {
                                   </TableRow>
                                 </TableHead>
                                 <TableBody>
-                                  {visibleBlanketOicPackages.map((row) => (
+                                  {visiblePackages.map((row) => (
                                     <TableRow key={row.packageNumber}>
                                       <TableCell>
                                         {row.packageNumber
@@ -6436,9 +6918,8 @@ const ProvincialPermitDetailsPage = () => {
                                       {canDisplayNormalPermitScaleMembership && (
                                         <TableHeader>Permit</TableHeader>
                                       )}
-                                      {canDisplayNormalPermitScaleMembership && (
-                                        <TableHeader>Package</TableHeader>
-                                      )}
+                                      {canDisplayNormalPermitScaleMembership &&
+                                        !ministerialPermit && <TableHeader>Package</TableHeader>}
                                       <TableHeader>Pieces</TableHeader>
                                       <TableHeader>Species</TableHeader>
                                       <TableHeader>Grade</TableHeader>
@@ -6476,9 +6957,10 @@ const ProvincialPermitDetailsPage = () => {
                                         {canDisplayNormalPermitScaleMembership && (
                                           <TableCell>{row.permitNumber || '-'}</TableCell>
                                         )}
-                                        {canDisplayNormalPermitScaleMembership && (
-                                          <TableCell>{row.packageNumber || '-'}</TableCell>
-                                        )}
+                                        {canDisplayNormalPermitScaleMembership &&
+                                          !ministerialPermit && (
+                                            <TableCell>{row.packageNumber || '-'}</TableCell>
+                                          )}
                                         <TableCell>{row.pieces.toLocaleString()}</TableCell>
                                         <TableCell>{row.species || '-'}</TableCell>
                                         <TableCell>{row.grade || '-'}</TableCell>
@@ -6671,8 +7153,10 @@ const ProvincialPermitDetailsPage = () => {
                             inputId="permitDocumentUpload"
                             disabled={!detail.permitNumber}
                             presentation={detail.blanketOic ? 'side-panel' : 'modal'}
-                            initiallyOpen={detail.blanketOic}
-                            onClose={detail.blanketOic ? onCancelPermitDocumentEditing : undefined}
+                            initiallyOpen={usesReviewedPermitFlow}
+                            onClose={
+                              usesReviewedPermitFlow ? onCancelPermitDocumentEditing : undefined
+                            }
                             onDirtyChange={setPermitDocumentUploadDirty}
                             onBusyChange={setPermitDocumentUploadBusy}
                             onUploadComplete={refreshPermitDocuments}
@@ -6770,7 +7254,7 @@ const ProvincialPermitDetailsPage = () => {
                             }
                             description={
                               usesReviewedPermitFlow
-                                ? 'Documents added to this permit are listed here.'
+                                ? 'Documents stay with the record as it moves through the application, exemption and permit stages.'
                                 : 'No documents are available for this permit.'
                             }
                             headingLevel={3}
@@ -7059,6 +7543,16 @@ const ProvincialPermitDetailsPage = () => {
                   setBlanketOicPackageFormField('packageNumber', event.target.value.toUpperCase())
                 }
               />
+            </div>
+            <BlanketOicPackageCodeFields
+              region={String(detail.orgUnitNumber ?? '')}
+              value={boicPackageForm}
+              onChange={setBlanketOicPackageFormField}
+              disabled={isLoadingBoicPackage || isSavingBoicPackage}
+              onAvailabilityChange={setBoicCodeOptionsReady}
+              fieldErrors={boicPackageFieldErrors}
+            />
+            <div className="legacy-search-grid">
               <TextInput
                 id="boicPackageVolume"
                 labelText={requiredLabel('Package volume (m³)')}
@@ -7072,7 +7566,7 @@ const ProvincialPermitDetailsPage = () => {
               <TextInput
                 id="boicPackageAverageLength"
                 helperText="Enter greater than 0 and no more than 99."
-                labelText={requiredLabel('Average length')}
+                labelText={requiredLabel('Average length (m)')}
                 aria-required="true"
                 value={boicPackageForm.averageLength}
                 invalid={!!boicPackageFieldErrors.averageLength}
@@ -7085,7 +7579,7 @@ const ProvincialPermitDetailsPage = () => {
               <TextInput
                 id="boicPackageAverageDiameter"
                 helperText="Enter greater than 0 and no more than 99.99."
-                labelText={requiredLabel('Average top diameter')}
+                labelText={requiredLabel('Average top diameter (rads)')}
                 aria-required="true"
                 value={boicPackageForm.averageDiameter}
                 invalid={!!boicPackageFieldErrors.averageDiameter}
@@ -7096,14 +7590,6 @@ const ProvincialPermitDetailsPage = () => {
                 }
               />
             </div>
-            <BlanketOicPackageCodeFields
-              region={String(detail.orgUnitNumber ?? '')}
-              value={boicPackageForm}
-              onChange={setBlanketOicPackageFormField}
-              disabled={isLoadingBoicPackage || isSavingBoicPackage}
-              onAvailabilityChange={setBoicCodeOptionsReady}
-              fieldErrors={boicPackageFieldErrors}
-            />
             <TextArea
               id="boicPackageComments"
               labelText="Comments"

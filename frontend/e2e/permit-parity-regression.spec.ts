@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import { gotoSyntheticRoute, installSyntheticCognitoSession } from './utils'
 
-type PermitScenario = 'normal' | 'blanket-oic' | 'blanket-oic-empty'
+type PermitScenario = 'normal' | 'ministerial' | 'blanket-oic' | 'blanket-oic-empty'
 
 type CapturedWrite = {
   method: string
@@ -56,7 +56,8 @@ const installPermitParityFixtures = async (
     orgUnitNo: '1903',
   })
 
-  const permitNumber = scenario === 'normal' ? '91001' : '91002'
+  const blanketOic = scenario === 'blanket-oic' || scenario === 'blanket-oic-empty'
+  const permitNumber = blanketOic ? '91002' : '91001'
   let ownerLocationCode = '03'
   let createdPayload: Record<string, string> | null = null
   let version = 1
@@ -94,9 +95,12 @@ const installPermitParityFixtures = async (
   const permit = () => ({
     permitNumber: Number(permitNumber),
     applicationNumber: scenario === 'blanket-oic-empty' ? null : 111,
-    packageNumber:
-      scenario === 'blanket-oic-empty' ? null : scenario === 'normal' ? 'PKG-A' : 'BOIC-A',
-    exemptionNumber: scenario === 'normal' ? '' : 'EX-BOIC-91002',
+    packageNumber: scenario === 'blanket-oic-empty' ? null : blanketOic ? 'BOIC-A' : 'PKG-A',
+    exemptionNumber: blanketOic
+      ? 'EX-BOIC-91002'
+      : scenario === 'ministerial'
+        ? 'EX-MIN-91001'
+        : '',
     permitStatusCode: 'ACT',
     permitStatusDescription: 'Active',
     author: 'PERMIT.PARITY.TESTER',
@@ -115,11 +119,15 @@ const installPermitParityFixtures = async (
     expiryDate: '2026-10-01',
     receivedDate: '2026-09-01',
     estimatedShippingDate: '2026-09-10',
-    permitVolume: scenario === 'blanket-oic-empty' ? 0 : scenario === 'normal' ? 50 : 120.5,
+    permitVolume: scenario === 'blanket-oic-empty' ? 0 : blanketOic ? 120.5 : 50,
     approvedExemptionVolume: 500,
     exemptionVolumeRemaining: 500,
-    exemptionTypeDescription: scenario === 'normal' ? 'Standard exemption' : 'Blanket OIC',
-    blanketOic: scenario !== 'normal',
+    exemptionTypeDescription: blanketOic
+      ? 'Blanket OIC'
+      : scenario === 'ministerial'
+        ? 'Ministerial'
+        : 'Standard exemption',
+    blanketOic,
     numberOfPieces: scenario === 'blanket-oic-empty' ? 0 : 3,
     receiptNumber: scenario === 'blanket-oic-empty' ? null : 'R-91002',
     federalPermitNumber: null,
@@ -128,12 +136,12 @@ const installPermitParityFixtures = async (
     oicApplicationNumber: scenario === 'blanket-oic' ? 123456 : null,
     oicRequestPieces: createdPayload
       ? Number(createdPayload.oicPermitTotalPieces)
-      : scenario !== 'normal'
+      : blanketOic
         ? 200
         : null,
     oicRequestVolume: createdPayload
       ? Number(createdPayload.oicPermitTotalVolume)
-      : scenario !== 'normal'
+      : blanketOic
         ? 120.5
         : null,
     orgUnitNumber: 1903,
@@ -141,7 +149,7 @@ const installPermitParityFixtures = async (
   })
 
   const packageList =
-    scenario === 'normal'
+    scenario === 'normal' || scenario === 'ministerial'
       ? [
           {
             packageNumber: 'PKG-A',
@@ -217,7 +225,7 @@ const installPermitParityFixtures = async (
         ]
 
   const coreTabs = {
-    applicationList: scenario === 'normal' ? ['111'] : [],
+    applicationList: blanketOic ? [] : ['111'],
     packageList: scenario === 'blanket-oic-empty' ? [] : packageList,
   }
 
@@ -351,7 +359,29 @@ const installPermitParityFixtures = async (
           body = []
           break
         case '/api/lexis/rpc/permit-details/all-scale-fees':
-          body = { packageList: [], totalVolume: '0' }
+          body =
+            scenario === 'ministerial'
+              ? {
+                  packageList: packageList.map((entry, index) => ({
+                    packageNumber: entry.packageNumber,
+                    growthType: 'Synthetic growth type',
+                    totalFeeForPackage: `$${(index + 1) * 10}.00`,
+                    scaleList: entry.scaleList.map((scale) => ({
+                      ...scale,
+                      ministryUser: true,
+                      amv: '$100.00',
+                      ewb: '$100.00',
+                      fil: '10%',
+                      mf: '1',
+                      fee: `${(index + 1) * 10}.00`,
+                    })),
+                  })),
+                  totalVolume: '3.0',
+                }
+              : { packageList: [], totalVolume: '0' }
+          break
+        case '/api/lexis/rpc/permit-details/available-application-list':
+          body = { applicationList: [], applicationItems: [], errorMessage: '' }
           break
         case '/api/lexis/rpc/application-details/species-codes':
           body = [
@@ -533,7 +563,7 @@ const chooseComboBoxOption = async (
 test.describe('Provincial permit parity regressions', () => {
   test('shows live BOIC validation, country choices and client details before opening the saved permit', async ({
     page,
-  }, testInfo) => {
+  }) => {
     const fixture = await installPermitParityFixtures(page, 'blanket-oic-empty')
     await gotoSyntheticRoute(page, '/provincial/exemption/EX-BOIC-91002/permit/new', {
       ready: page.getByRole('heading', { level: 1, name: 'Apply for new permit', exact: true }),
@@ -560,12 +590,6 @@ test.describe('Provincial permit parity regressions', () => {
     await expect(summary).toBeFocused()
     const sideNavBounds = await page.locator('.cds--side-nav').boundingBox()
     const sideNavRight = (sideNavBounds?.x ?? 0) + (sideNavBounds?.width ?? 0)
-    expect((await summary.boundingBox())?.x).toBeGreaterThanOrEqual(sideNavRight)
-    await page.screenshot({
-      path: testInfo.outputPath('boic-required-summary.png'),
-      fullPage: false,
-      animations: 'disabled',
-    })
     expect((await summary.boundingBox())?.x).toBeGreaterThanOrEqual(sideNavRight)
     await expect(summary).toBeFocused()
 
@@ -608,11 +632,6 @@ test.describe('Provincial permit parity regressions', () => {
       'Chile (CL)',
       'Colombia (CO)',
     ])
-    await page.screenshot({
-      path: testInfo.outputPath('boic-country-list.png'),
-      fullPage: false,
-      animations: 'disabled',
-    })
     await country.fill('c')
     await expect(countries).toHaveText([
       'China (CN)',
@@ -648,11 +667,6 @@ test.describe('Provincial permit parity regressions', () => {
     await expect(
       page.getByRole('heading', { name: 'Volume and remarks', exact: true }),
     ).toHaveCount(0)
-    await page.screenshot({
-      path: testInfo.outputPath('boic-created-permit.png'),
-      fullPage: false,
-      animations: 'disabled',
-    })
     await selectTab(page, 'Scale')
     await expect(page.getByRole('heading', { name: 'No packages yet', exact: true })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Create package', exact: true })).toBeVisible()
@@ -661,15 +675,12 @@ test.describe('Provincial permit parity regressions', () => {
     await expect(page.getByRole('heading', { name: 'Permit fees', exact: true })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Package fees', exact: true })).toBeVisible()
     await expect(page.getByRole('region', { name: 'Permit fee rows', exact: true })).toHaveCount(0)
-    await expect(page.getByLabel('Total volume (m³)', { exact: true })).toHaveValue('0.0')
+    await expect(
+      page.locator('.detail-field-item').filter({ hasText: 'Total volume (m³)' }),
+    ).toHaveText('Total volume (m³)0.0')
     await selectTab(page, 'Documents')
     await page.getByRole('button', { name: 'Add document', exact: true }).click()
     await expect(page.getByRole('dialog', { name: 'Add documents', exact: true })).toBeVisible()
-    await page.screenshot({
-      path: testInfo.outputPath('boic-document-drawer.png'),
-      fullPage: false,
-      animations: 'disabled',
-    })
     expect(fixture.writes).toEqual([
       expect.objectContaining({
         path: '/api/lexis/rpc/permit-details/add-permit',
@@ -726,6 +737,44 @@ test.describe('Provincial permit parity regressions', () => {
     const packageBRow = itemTable.getByRole('row').filter({ hasText: 'TM-B' })
     await expect(packageARow.getByRole('cell', { name: 'PKG-A', exact: true })).toBeVisible()
     await expect(packageBRow.getByRole('cell', { name: 'PKG-B', exact: true })).toBeVisible()
+    expect(fixture.unexpectedRequests).toEqual([])
+  })
+
+  test('shows the selected Ministerial package consistently on Scale and Fees', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 1000 })
+    const fixture = await installPermitParityFixtures(page, 'ministerial')
+    await gotoSyntheticRoute(page, '/provincial/permit/91001', {
+      ready: page.getByRole('heading', { level: 1, name: 'Permit 91001 (Pending)', exact: true }),
+    })
+
+    await selectTab(page, 'Scale')
+    const scaleRows = page.getByRole('region', { name: 'Scale rows', exact: true })
+    await expect(scaleRows).toContainText('TM-A')
+    await expect(scaleRows).not.toContainText('TM-B')
+    await chooseComboBoxOption(page, 'Package number', 'PKG-B')
+    await expect(scaleRows).toContainText('TM-B')
+    await expect(scaleRows).not.toContainText('TM-A')
+    await selectTab(page, 'Fees')
+    const feeRows = page.getByRole('region', { name: 'Permit fee rows', exact: true })
+    await expect(page.getByRole('combobox', { name: 'Package number', exact: true })).toHaveValue(
+      'PKG-B',
+    )
+    await expect(feeRows).toContainText('TM-B')
+    await expect(feeRows).not.toContainText('TM-A')
+    await chooseComboBoxOption(page, 'Package number', 'PKG-A')
+    await expect(feeRows).toContainText('TM-A')
+    await expect(feeRows).not.toContainText('TM-B')
+    await page.setViewportSize({ width: 390, height: 844 })
+    await expect(page.getByRole('combobox', { name: 'Package number', exact: true })).toBeVisible()
+    await page
+      .getByRole('combobox', { name: 'Package number', exact: true })
+      .scrollIntoViewIfNeeded()
+    await selectTab(page, 'Scale')
+    await expect(scaleRows).toContainText('TM-A')
+    await expect(scaleRows).not.toContainText('TM-B')
+    expect(fixture.writes).toEqual([])
     expect(fixture.unexpectedRequests).toEqual([])
   })
 
@@ -805,6 +854,8 @@ test.describe('Provincial permit parity regressions', () => {
     await expect(
       page.getByText('The permit was updated successfully.', { exact: true }),
     ).toBeVisible()
+    const successNotice = page.locator('.cds--toast-notification--success')
+    await expect(successNotice).toContainText('Applicant details saved')
     expect(fixture.writes).toEqual([
       expect.objectContaining({
         method: 'POST',
@@ -820,7 +871,7 @@ test.describe('Provincial permit parity regressions', () => {
 
   test('opens the Blanket OIC package form as a right panel without hiding the package table', async ({
     page,
-  }, testInfo) => {
+  }) => {
     await page.setViewportSize({ width: 1440, height: 1000 })
     const fixture = await installPermitParityFixtures(page, 'blanket-oic')
     await gotoSyntheticRoute(page, '/provincial/permit/91002', {
@@ -858,12 +909,6 @@ test.describe('Provincial permit parity regressions', () => {
     await panel.getByRole('button', { name: 'Create package', exact: true }).click()
     await expect(panel.getByText('Package number is required.', { exact: true })).toBeVisible()
     await expect(packageNumber).toBeFocused()
-    await page.screenshot({
-      path: testInfo.outputPath('permit-package-panel-desktop.png'),
-      fullPage: false,
-      animations: 'disabled',
-    })
-
     await page.setViewportSize({ width: 390, height: 844 })
     await expect
       .poll(async () => {
@@ -876,12 +921,6 @@ test.describe('Provincial permit parity regressions', () => {
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
     ).toBe(true)
-    await page.screenshot({
-      path: testInfo.outputPath('permit-package-panel-narrow.png'),
-      fullPage: false,
-      animations: 'disabled',
-    })
-
     await page.setViewportSize({ width: 1440, height: 1000 })
     await expect
       .poll(async () => {
@@ -973,8 +1012,8 @@ test.describe('Provincial permit parity regressions', () => {
     await expect(panel).toBeVisible()
     await panel.getByLabel('Package number', { exact: true }).fill('BOIC-NEW')
     await panel.getByLabel('Package volume (m³)', { exact: true }).fill('100.0')
-    await panel.getByLabel('Average length', { exact: true }).fill('10.0')
-    await panel.getByLabel('Average top diameter', { exact: true }).fill('20.0')
+    await panel.getByLabel('Average length (m)', { exact: true }).fill('10.0')
+    await panel.getByLabel('Average top diameter (rads)', { exact: true }).fill('20.0')
     await chooseComboBoxOption(page, 'Species', 'FI - Fir')
     await panel.getByRole('button', { name: 'Add species', exact: true }).click()
     await expect(panel.getByRole('combobox', { name: 'End use', exact: true })).toHaveValue(

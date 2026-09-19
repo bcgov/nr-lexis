@@ -156,7 +156,11 @@ describe('BlanketOicPermitCreateForm', () => {
     expect(screen.getByRole('heading', { name: 'Permit details' })).toBeInTheDocument()
     expect(screen.getByText('TEST13E2')).toBeInTheDocument()
     expect(screen.getByText('Blanket OIC')).toBeInTheDocument()
-    expect(screen.getAllByText('—')).toHaveLength(2)
+    for (const label of ['Current permit pieces', 'Current permit volume (m³)']) {
+      const field = screen.getByText(label).closest('.detail-field-item')
+      expect(field).toBeTruthy()
+      expect(within(field as HTMLElement).getByText('0')).toBeInTheDocument()
+    }
     expect(screen.getByText('0/250')).toBeInTheDocument()
     for (const tab of screen.getAllByRole('tab')) expect(tab.querySelector('svg')).not.toBeNull()
     expect(screen.queryByRole('group', { name: 'Permit needs attention' })).not.toBeInTheDocument()

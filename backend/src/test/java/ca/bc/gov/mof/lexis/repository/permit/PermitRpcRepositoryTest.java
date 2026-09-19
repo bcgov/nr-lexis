@@ -338,7 +338,11 @@ class PermitRpcRepositoryTest {
   void corePackageContextsShouldUseOneDirectPermitQuery() {
     when(
             jdbcTemplate.query(
-                any(String.class), any(RowMapper.class), eq(7000123L), eq(7000123L)))
+                any(String.class),
+                any(RowMapper.class),
+                eq(7000123L),
+                eq(7000123L),
+                eq(7000123L)))
         .thenReturn(List.of());
     PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
 
@@ -346,13 +350,21 @@ class PermitRpcRepositoryTest {
 
     ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
     verify(jdbcTemplate)
-        .query(sql.capture(), any(RowMapper.class), eq(7000123L), eq(7000123L));
+        .query(
+            sql.capture(),
+            any(RowMapper.class),
+            eq(7000123L),
+            eq(7000123L),
+            eq(7000123L));
     assertThat(sql.getValue())
         .contains("FROM EXPORT_PACKAGE P")
         .contains("LEFT JOIN EXPORT_EXEMPTION_APPLICATION EEA")
         .contains("LEFT JOIN EXPORT_EXEMPTION EE")
         .contains("ASSIGNED_TO_PERMIT")
         .contains("TARGET_SCALE.EXPORT_PERMIT_DETAIL_NUMBER = ?")
+        .contains("UNASSIGNED_SCALE.EXPORT_PERMIT_DETAIL_NUMBER IS NULL")
+        .contains("ASSOCIATED_PACKAGE.APPLICATION_NUMBER = P.APPLICATION_NUMBER")
+        .contains("ASSOCIATED_SCALE.EXPORT_PERMIT_DETAIL_NUMBER = ?")
         .contains("ORDER BY P.PACKAGE_NUMBER");
   }
 

@@ -1,7 +1,12 @@
 .ministerial-permit-details.cds--tile,
+.boic-permit-details.cds--tile,
 .boic-permit-details-edit.cds--tile {
   display: grid;
   gap: 1.5rem;
+}
+
+.ministerial-package-summary.detail-field-grid {
+  margin-block: 1.5rem;
 }
 
 .ministerial-permit-details__status,
@@ -9,7 +14,13 @@
 .ministerial-permit-details__dates,
 .ministerial-permit-details__totals,
 .ministerial-permit-details__applications,
-.ministerial-permit-details__remarks {
+.ministerial-permit-details__remarks,
+.boic-permit-details__status,
+.boic-permit-details__static-fields,
+.boic-permit-details__dates,
+.boic-permit-details__totals,
+.boic-permit-details__request-totals,
+.boic-permit-details__remarks {
   min-inline-size: 0;
 }
 
@@ -17,9 +28,17 @@
   max-inline-size: 22rem;
 }
 
+.boic-permit-details__status {
+  max-inline-size: 22rem;
+}
+
 .ministerial-permit-details__static-fields,
 .ministerial-permit-details__dates,
-.ministerial-permit-details__totals {
+.ministerial-permit-details__totals,
+.boic-permit-details__static-fields,
+.boic-permit-details__dates,
+.boic-permit-details__totals,
+.boic-permit-details__request-totals {
   display: grid;
   gap: 1rem;
   grid-template-columns: minmax(0, 1fr);
@@ -55,7 +74,9 @@
 }
 
 .ministerial-permit-details__remarks .cds--text-area__wrapper,
-.ministerial-permit-details__remarks .cds--text-area {
+.ministerial-permit-details__remarks .cds--text-area,
+.boic-permit-details__remarks .cds--text-area__wrapper,
+.boic-permit-details__remarks .cds--text-area {
   inline-size: 100%;
   max-inline-size: 100%;
 }
@@ -63,18 +84,25 @@
 @media (min-width: 672px) {
   .ministerial-permit-details__static-fields,
   .ministerial-permit-details__dates,
-  .ministerial-permit-details__totals {
+  .ministerial-permit-details__totals,
+  .boic-permit-details__static-fields,
+  .boic-permit-details__dates,
+  .boic-permit-details__totals,
+  .boic-permit-details__request-totals {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (min-width: 1056px) {
   .ministerial-permit-details__static-fields,
-  .ministerial-permit-details__dates {
+  .ministerial-permit-details__dates,
+  .boic-permit-details__static-fields,
+  .boic-permit-details__dates {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
-  .ministerial-permit-details__totals {
+  .ministerial-permit-details__totals,
+  .boic-permit-details__totals {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }

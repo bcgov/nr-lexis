@@ -108,6 +108,19 @@ public class PermitRpcRepository extends OracleRepositorySupport {
           + "SELECT 1 FROM EXPORT_SCALE_DETAIL TARGET_SCALE "
           + "WHERE TARGET_SCALE.PACKAGE_NUMBER = P.PACKAGE_NUMBER "
           + "AND TARGET_SCALE.EXPORT_PERMIT_DETAIL_NUMBER = ?)"
+          // Keep a package in the Scale selector after its final scale is removed, provided the
+          // same application still has a scale on this permit. Core scales remain restricted to
+          // the current permit or unassigned rows below.
+          + " OR (EXISTS ("
+          + "SELECT 1 FROM EXPORT_SCALE_DETAIL UNASSIGNED_SCALE "
+          + "WHERE UNASSIGNED_SCALE.PACKAGE_NUMBER = P.PACKAGE_NUMBER "
+          + "AND UNASSIGNED_SCALE.EXPORT_PERMIT_DETAIL_NUMBER IS NULL) "
+          + "AND EXISTS ("
+          + "SELECT 1 FROM EXPORT_SCALE_DETAIL ASSOCIATED_SCALE "
+          + "JOIN EXPORT_PACKAGE ASSOCIATED_PACKAGE "
+          + "ON ASSOCIATED_PACKAGE.PACKAGE_NUMBER = ASSOCIATED_SCALE.PACKAGE_NUMBER "
+          + "WHERE ASSOCIATED_PACKAGE.APPLICATION_NUMBER = P.APPLICATION_NUMBER "
+          + "AND ASSOCIATED_SCALE.EXPORT_PERMIT_DETAIL_NUMBER = ?))"
           + " ORDER BY P.PACKAGE_NUMBER";
   private static final String FIND_CORE_PACKAGES_BY_OIC_PERMIT =
       CORE_PACKAGE_SELECT
@@ -764,10 +777,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
     }
 
     String sql = blanketOic ? FIND_CORE_PACKAGES_BY_OIC_PERMIT : FIND_CORE_PACKAGES_BY_PERMIT;
-    Object[] bindValues =
-        blanketOic
-            ? new Object[] {permitNumber, permitNumber, permitNumber}
-            : new Object[] {permitNumber, permitNumber};
+    Object[] bindValues = {permitNumber, permitNumber, permitNumber};
     List<PermitCorePackageContextRow> rows =
         jdbcTemplate.query(sql, (rs, rowNumber) -> mapPermitCorePackageContextRow(rs), bindValues);
 
