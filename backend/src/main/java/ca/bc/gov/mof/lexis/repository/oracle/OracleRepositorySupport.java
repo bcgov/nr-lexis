@@ -99,6 +99,28 @@ public abstract class OracleRepositorySupport {
         sql, rs -> new CodeNameDto(trim(rs.getString(1)), trim(rs.getString(2))));
   }
 
+  /** Reads the first description while retaining the family's legacy display fallback. */
+  protected Optional<String> findCodeDescriptionDirect(
+      String sql, String fallbackProcedureSignature, String code) {
+    String normalized = trim(code);
+    if (normalized == null) {
+      return Optional.empty();
+    }
+    try {
+      Optional<String> description =
+          firstResult(queryDirectRequired(sql, rs -> trim(rs.getString(2)), normalized))
+              .filter(value -> !value.isBlank());
+      if (description.isPresent()) {
+        return description;
+      }
+    } catch (DataAccessException ex) {
+      logger.warn(
+          "event=lexis_oracle_repository operation=direct_code_description outcome=failed failureType={}",
+          exceptionType(ex));
+    }
+    return fallbackCodeDescription(fallbackProcedureSignature, normalized);
+  }
+
   protected Optional<String> fallbackCodeDescription(String procedureSignature, String code) {
     String normalized = trim(code);
     if (procedureSignature == null || normalized == null) {
@@ -295,6 +317,19 @@ public abstract class OracleRepositorySupport {
       return Optional.empty();
     }
     return Optional.ofNullable(results.get(0));
+  }
+
+  /** Executes a soft SELECT, preserving optional columns and returning no rows on query failure. */
+  protected <T> List<T> queryDirect(
+      String sql, SqlRowMapper<T> rowMapper, Object... bindValues) {
+    try {
+      return jdbcTemplate.query(sql, (rs, rowNumber) -> rowMapper.map(rs), bindValues);
+    } catch (DataAccessException ex) {
+      logger.warn(
+          "event=lexis_oracle_repository operation=direct_query outcome=failed failureType={}",
+          exceptionType(ex));
+      return List.of();
+    }
   }
 
   /** Executes a bound SELECT with the same required-column contract as a required cursor read. */

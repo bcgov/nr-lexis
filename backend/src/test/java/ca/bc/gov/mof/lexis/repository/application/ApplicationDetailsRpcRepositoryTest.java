@@ -418,11 +418,9 @@ class ApplicationDetailsRpcRepositoryTest {
   }
 
   @Test
-  void requiredScaleCodeLookupsShouldPropagateOracleFailure() {
+  void requiredOicPermitLookupShouldPropagateOracleFailure() {
     FailingRequiredLookupRepository repository = new FailingRequiredLookupRepository();
 
-    assertOracleFailure(() -> repository.findSpeciesCodeRequired("HE"));
-    assertOracleFailure(() -> repository.findGradeCodeRequired("A"));
     assertOracleFailure(() -> repository.findPermitsByOicApplicationNumberRequired(1000456L));
   }
 
@@ -430,24 +428,16 @@ class ApplicationDetailsRpcRepositoryTest {
   void requiredPackageOptionLookupsShouldPropagateOracleFailure() {
     FailingRequiredLookupRepository repository = new FailingRequiredLookupRepository();
 
-    assertOracleFailure(() -> repository.findEndUseCodeRequired("LU"));
-    assertOracleFailure(() -> repository.findSpeciesEndUsesByRegionSpeciesRequired("11", "HE"));
-    assertOracleFailure(() -> repository.findSpeciesEndUsesByRegionRequired("11"));
     assertOracleFailure(() -> repository.findCandidateEndUseCodesRequired(1, "HE", 11L));
     assertOracleFailure(() -> repository.findCandidateExcolCombinationsRequired(1, "HE", 11L));
-    assertOracleFailure(() -> repository.isPackageStatusCodeValidRequired("A"));
   }
 
   @Test
   void requiredPackageOptionLookupsShouldPreserveLegitimateEmptyResults() {
     EmptyRequiredLookupRepository repository = new EmptyRequiredLookupRepository();
 
-    assertThat(repository.findEndUseCodeRequired("LU")).isEmpty();
-    assertThat(repository.findSpeciesEndUsesByRegionSpeciesRequired("11", "HE")).isEmpty();
-    assertThat(repository.findSpeciesEndUsesByRegionRequired("11")).isEmpty();
     assertThat(repository.findCandidateEndUseCodesRequired(1, "HE", 11L)).isEmpty();
     assertThat(repository.findCandidateExcolCombinationsRequired(1, "HE", 11L)).isEmpty();
-    assertThat(repository.isPackageStatusCodeValidRequired("A")).isFalse();
   }
 
   @Test

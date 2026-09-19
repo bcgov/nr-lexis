@@ -2995,6 +2995,43 @@ class OracleApplicationDetailsRpcServiceTest {
     verify(repository).insertScaleDetail(any());
   }
 
+  @ParameterizedTest
+  @ValueSource(booleans = {false, true})
+  void addFederalScaleShouldPropagateRegionLookupFailureBeforeInsert(boolean speciesScoped) {
+    ApplicationDetailsRpcRepository.TimberMarkRow federalTimberMark =
+        new ApplicationDetailsRpcRepository.TimberMarkRow("TM001", "ACT", "FF-1", "B08");
+    when(repository.packageExists("PKG-903")).thenReturn(true);
+    when(repository.findTimberMark("TM001")).thenReturn(Optional.of(federalTimberMark));
+    when(repository.findTimberMarkByOrgUnit("TM001", 11L))
+        .thenReturn(Optional.of(federalTimberMark));
+    when(repository.findApplicationUpdateRecord(1000456L))
+        .thenReturn(
+            Optional.of(
+                applicationUpdateRecordWithProductFields(
+                    federalApplicationUpdateRecord(), "T", null, 1.5d, "Camp 1")));
+    when(repository.findGradeCodeRequired("1"))
+        .thenReturn(
+            Optional.of(
+                new ApplicationDetailsRpcRepository.CodeRow("1", "Sawlog", 1L, 1L)));
+    DataAccessResourceFailureException failure =
+        new DataAccessResourceFailureException("Region species and grade lookup unavailable");
+    if (speciesScoped) {
+      when(repository.findSpeciesEndUsesByRegionSpeciesRequired("11", "HE"))
+          .thenThrow(failure);
+    } else {
+      when(repository.findSpeciesEndUsesByRegionRequired("11")).thenThrow(failure);
+    }
+
+    assertThatThrownBy(
+            () ->
+                service.addScaleToPackage(
+                    new ApplicationDetailsRpcService.ScaleMutationRequest(
+                        "TM001", "PKG-903", "1", "HE", 1000456L, 999_999_999L, 10.0d),
+                    "idir\\jsmith"))
+        .isSameAs(failure);
+    verify(repository, never()).insertScaleDetail(any());
+  }
+
   @Test
   void addScaleToPackageShouldRollBackWhenInsertReturnsNoRow() {
     when(repository.packageExists("PKG-903")).thenReturn(true);
