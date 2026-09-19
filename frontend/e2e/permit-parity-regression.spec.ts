@@ -675,7 +675,9 @@ test.describe('Provincial permit parity regressions', () => {
     await expect(page.getByRole('heading', { name: 'Permit fees', exact: true })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Package fees', exact: true })).toBeVisible()
     await expect(page.getByRole('region', { name: 'Permit fee rows', exact: true })).toHaveCount(0)
-    await expect(page.getByLabel('Total volume (m³)', { exact: true })).toHaveValue('0.0')
+    await expect(
+      page.locator('.detail-field-item').filter({ hasText: 'Total volume (m³)' }),
+    ).toHaveText('Total volume (m³)0.0')
     await selectTab(page, 'Documents')
     await page.getByRole('button', { name: 'Add document', exact: true }).click()
     await expect(page.getByRole('dialog', { name: 'Add documents', exact: true })).toBeVisible()

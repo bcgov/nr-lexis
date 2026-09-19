@@ -4600,13 +4600,13 @@ const ProvincialPermitDetailsPage = () => {
 
   const renderPermitFeeSummary = () => {
     if (!detail) return null
-    const showMinisterialFeeSummary = ministerialPermit && !isEditingPermit
+    const showReviewedPermitFeeSummary = usesReviewedPermitFlow && !isEditingPermit
     return (
       <fieldset className="legacy-form-fieldset">
-        <legend className={showMinisterialFeeSummary ? 'cds--visually-hidden' : undefined}>
+        <legend className={showReviewedPermitFeeSummary ? 'cds--visually-hidden' : undefined}>
           Permit fee summary
         </legend>
-        {showMinisterialFeeSummary ? (
+        {showReviewedPermitFeeSummary ? (
           <dl className="detail-field-grid ministerial-package-summary">
             {[
               ['Receipt number', displayValue(detail.receiptNumber)],
@@ -4742,7 +4742,7 @@ const ProvincialPermitDetailsPage = () => {
                   setIsEditingPermit(true)
                 }}
               >
-                Edit permit
+                {usesReviewedPermitFlow ? 'Edit fee details' : 'Edit permit'}
               </Button>
             )}
           </div>
@@ -5724,6 +5724,116 @@ const ProvincialPermitDetailsPage = () => {
                             </div>
                           </dl>
                         </Tile>
+                      ) : detail.blanketOic ? (
+                        <Tile className="boic-permit-details">
+                          <div className="detail-section-card__header">
+                            <h2 className="detail-tile-title">Permit details</h2>
+                            {canSavePermit && (
+                              <Button
+                                kind="tertiary"
+                                size="sm"
+                                onClick={() => {
+                                  resetPermitFormSection(false)
+                                  setIsEditingPermit(true)
+                                }}
+                              >
+                                Edit permit
+                              </Button>
+                            )}
+                          </div>
+                          <dl className="boic-permit-details__status">
+                            <div className="detail-field-item">
+                              <dt className="detail-field-label">Status</dt>
+                              <dd className="detail-field-value">
+                                <StatusTag
+                                  status={formatPermitStatus(
+                                    detail.permitStatusCode,
+                                    detail.permitStatusDescription,
+                                  )}
+                                  fallbackLabel="Not provided"
+                                />
+                              </dd>
+                            </div>
+                          </dl>
+                          <dl className="boic-permit-details__static-fields">
+                            <div className="detail-field-item">
+                              <dt className="detail-field-label">Exemption number</dt>
+                              <dd className="detail-field-value">
+                                {detail.exemptionNumber ? (
+                                  <Link
+                                    to={`/provincial/exemption/${encodeURIComponent(detail.exemptionNumber)}`}
+                                    state={withDetailReturnTo(
+                                      location.state,
+                                      {
+                                        label: 'Provincial permit detail',
+                                        to: locationPath(location),
+                                      },
+                                      detailReturnTo,
+                                    )}
+                                  >
+                                    {detail.exemptionNumber}
+                                  </Link>
+                                ) : (
+                                  displayValue(detail.exemptionNumber)
+                                )}
+                              </dd>
+                            </div>
+                            <div className="detail-field-item">
+                              <dt className="detail-field-label">Exemption type</dt>
+                              <dd className="detail-field-value">
+                                {displayValue(detail.exemptionTypeDescription)}
+                              </dd>
+                            </div>
+                            <div className="detail-field-item">
+                              <dt className="detail-field-label">Region</dt>
+                              <dd className="detail-field-value">
+                                {displayValue(detail.region ?? detail.orgUnitNumber)}
+                              </dd>
+                            </div>
+                          </dl>
+                          <dl className="boic-permit-details__dates">
+                            {[
+                              ['Submit date', detail.applicationDate],
+                              ['Issued date', detail.issueDate],
+                              ['Expiry date', detail.expiryDate],
+                            ].map(([label, value]) => (
+                              <div key={label} className="detail-field-item">
+                                <dt className="detail-field-label">{label}</dt>
+                                <dd className="detail-field-value">{displayValue(value)}</dd>
+                              </div>
+                            ))}
+                          </dl>
+                          <dl className="boic-permit-details__totals">
+                            {[
+                              ['Total exemption volume (m³)', detail.approvedExemptionVolume],
+                              ['Total volume remaining (m³)', detail.exemptionVolumeRemaining],
+                              ['Current permit pieces', detail.numberOfPieces],
+                              ['Current permit volume (m³)', detail.permitVolume],
+                            ].map(([label, value]) => (
+                              <div key={label} className="detail-field-item">
+                                <dt className="detail-field-label">{label}</dt>
+                                <dd className="detail-field-value">{displayValue(value)}</dd>
+                              </div>
+                            ))}
+                          </dl>
+                          <dl className="boic-permit-details__request-totals">
+                            {[
+                              ['Permit Request Pieces', detail.oicRequestPieces],
+                              ['Permit Request Volume (m³)', detail.oicRequestVolume],
+                            ].map(([label, value]) => (
+                              <div key={label} className="detail-field-item">
+                                <dt className="detail-field-label">{label}</dt>
+                                <dd className="detail-field-value">{displayValue(value)}</dd>
+                              </div>
+                            ))}
+                          </dl>
+                          <dl className="boic-permit-details__remarks detail-field-grid">
+                            <div className="detail-field-item detail-field-item--full">
+                              <dt className="detail-field-label">Remarks</dt>
+                              <dd className="detail-field-value">{displayValue(detail.remarks)}</dd>
+                            </div>
+                          </dl>
+                        </Tile>
                       ) : (
                         <DetailFieldTile
                           title={usesReviewedPermitFlow ? 'Permit details' : 'Permit summary'}
@@ -6172,7 +6282,9 @@ const ProvincialPermitDetailsPage = () => {
                     <Column sm={4} md={8} lg={16}>
                       {isEditingShipping && permitForm ? (
                         <Tile>
-                          <h2 className="detail-tile-title">Shipping</h2>
+                          <h2 className="detail-tile-title">
+                            {usesReviewedPermitFlow ? 'Shipping details' : 'Shipping'}
+                          </h2>
                           {shippingReferencesErrorMessage && (
                             <InlineNotification
                               className="detail-context-notification"
@@ -6271,6 +6383,18 @@ const ProvincialPermitDetailsPage = () => {
                               26,
                               true,
                             )}
+                            <IsoDatePicker
+                              id="permit-estimatedShippingDate"
+                              labelText={requiredLabel('Estimated shipping date')}
+                              required
+                              value={permitForm.estimatedShippingDate}
+                              invalid={!!permitFieldError('estimatedShippingDate')}
+                              invalidText={permitFieldError('estimatedShippingDate')}
+                              onBlur={() => markPermitFieldTouched('estimatedShippingDate')}
+                              onChange={(value) =>
+                                setPermitFormField('estimatedShippingDate', value)
+                              }
+                            />
                             <Select
                               id="permit-portOfExport"
                               labelText={requiredLabel('Customs port of export')}
@@ -6313,18 +6437,6 @@ const ProvincialPermitDetailsPage = () => {
                                 34,
                                 true,
                               )}
-                            <IsoDatePicker
-                              id="permit-estimatedShippingDate"
-                              labelText={requiredLabel('Estimated shipping date')}
-                              required
-                              value={permitForm.estimatedShippingDate}
-                              invalid={!!permitFieldError('estimatedShippingDate')}
-                              invalidText={permitFieldError('estimatedShippingDate')}
-                              onBlur={() => markPermitFieldTouched('estimatedShippingDate')}
-                              onChange={(value) =>
-                                setPermitFormField('estimatedShippingDate', value)
-                              }
-                            />
                           </div>
                         </Tile>
                       ) : (
@@ -6340,7 +6452,7 @@ const ProvincialPermitDetailsPage = () => {
                             />
                           )}
                           <DetailFieldTile
-                            title="Shipping"
+                            title={usesReviewedPermitFlow ? 'Shipping details' : 'Shipping'}
                             headerAction={
                               canEditShipping ? (
                                 <Button
@@ -6352,7 +6464,9 @@ const ProvincialPermitDetailsPage = () => {
                                     setIsEditingShipping(true)
                                   }}
                                 >
-                                  Edit shipping
+                                  {usesReviewedPermitFlow
+                                    ? 'Edit shipping details'
+                                    : 'Edit shipping'}
                                 </Button>
                               ) : undefined
                             }
@@ -6384,6 +6498,10 @@ const ProvincialPermitDetailsPage = () => {
                                 value: displayValue(detail.transportName),
                               },
                               {
+                                label: 'Estimated shipping date',
+                                value: displayValue(detail.estimatedShippingDate),
+                              },
+                              {
                                 label: 'Customs port of export',
                                 value: displayValue(
                                   shippingReferenceLabel(
@@ -6400,10 +6518,6 @@ const ProvincialPermitDetailsPage = () => {
                                     },
                                   ]
                                 : []),
-                              {
-                                label: 'Estimated shipping date',
-                                value: displayValue(detail.estimatedShippingDate),
-                              },
                             ]}
                           />
                         </>
@@ -7039,8 +7153,10 @@ const ProvincialPermitDetailsPage = () => {
                             inputId="permitDocumentUpload"
                             disabled={!detail.permitNumber}
                             presentation={detail.blanketOic ? 'side-panel' : 'modal'}
-                            initiallyOpen={detail.blanketOic}
-                            onClose={detail.blanketOic ? onCancelPermitDocumentEditing : undefined}
+                            initiallyOpen={usesReviewedPermitFlow}
+                            onClose={
+                              usesReviewedPermitFlow ? onCancelPermitDocumentEditing : undefined
+                            }
                             onDirtyChange={setPermitDocumentUploadDirty}
                             onBusyChange={setPermitDocumentUploadBusy}
                             onUploadComplete={refreshPermitDocuments}
