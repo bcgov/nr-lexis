@@ -71,6 +71,53 @@ class ApplicationApprovalEligibilityServiceTest {
   }
 
   @Test
+  void shouldRejectUnknownProductTypeCodeWithoutApproving() {
+    stubValidApplication();
+    when(applicationRepository.isProductTypeCodeValidRequired("H")).thenReturn(false);
+
+    var result = service.evaluate(1000456L);
+
+    assertThat(result.eligible()).isFalse();
+    assertThat(result.errors())
+        .containsExactly("Application product type code does not exist.");
+  }
+
+  @Test
+  void shouldRejectUnknownGrowthTypeCodeWithoutApproving() {
+    stubValidApplication();
+    when(applicationRepository.isGrowthTypeCodeValidRequired("O")).thenReturn(false);
+
+    var result = service.evaluate(1000456L);
+
+    assertThat(result.eligible()).isFalse();
+    assertThat(result.errors())
+        .containsExactly("Application growth type code does not exist.");
+  }
+
+  @Test
+  void shouldPropagateRequiredProductTypeLookupFailureWithoutApproving() {
+    when(applicationRepository.findApplicationUpdateRecord(1000456L))
+        .thenReturn(Optional.of(validApplication(null)));
+    DataRetrievalFailureException failure =
+        new DataRetrievalFailureException("Product type lookup unavailable");
+    when(applicationRepository.isProductTypeCodeValidRequired("H")).thenThrow(failure);
+
+    assertThatThrownBy(() -> service.evaluate(1000456L)).isSameAs(failure);
+  }
+
+  @Test
+  void shouldPropagateRequiredGrowthTypeLookupFailureWithoutApproving() {
+    when(applicationRepository.findApplicationUpdateRecord(1000456L))
+        .thenReturn(Optional.of(validApplication(null)));
+    when(applicationRepository.isProductTypeCodeValidRequired("H")).thenReturn(true);
+    DataRetrievalFailureException failure =
+        new DataRetrievalFailureException("Growth type lookup unavailable");
+    when(applicationRepository.isGrowthTypeCodeValidRequired("O")).thenThrow(failure);
+
+    assertThatThrownBy(() -> service.evaluate(1000456L)).isSameAs(failure);
+  }
+
+  @Test
   void shouldRejectEveryLegacyReadyForApprovalAssociation() {
     stubValidApplication();
     when(applicationRepository.findApplicationUpdateRecord(1000456L))

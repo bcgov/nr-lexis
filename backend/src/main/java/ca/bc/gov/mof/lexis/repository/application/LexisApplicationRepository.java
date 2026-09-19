@@ -5,6 +5,7 @@ import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_E
 import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_EXEMPTION_TYPES;
 import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_GROWTH_TYPES;
 import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_PRODUCT_TYPES;
+import static ca.bc.gov.mof.lexis.repository.reference.LexisScheduleQueries.SCHEDULE_BY_APPLICATION;
 import static ca.bc.gov.mof.lexis.util.ValueUtils.coalesce;
 import static ca.bc.gov.mof.lexis.util.ValueUtils.firstNonNull;
 
@@ -164,8 +165,6 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
       LEXIS_GROUP_5_PACKAGE + "FIND_REMARKS_BY_APP(?,?)";
   private static final String FIND_PURCHASE_OFFERS_BY_APPLICATION =
       LEXIS_GROUP_5_PACKAGE + "FIND_PURCHASE_OFFERS_BY_APP(?,?)";
-  private static final String FIND_SCHEDULE_BY_APPLICATION =
-      LEXIS_CODES_PACKAGE + "FIND_SCHEDULE_BY_APP(?,?)";
   private static final String FIND_SCALE_DETAIL_BY_APPLICATION =
       LEXIS_GROUP_5_PACKAGE + "FIND_SCALE_DETAIL_BY_APP(?,?)";
   private static final String APPLICATION_SUMMARY_ENRICHMENT_SELECT =
@@ -751,15 +750,16 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
     if (applicationNumber == null || applicationNumber < 1) {
       return Optional.empty();
     }
-    return queryCursorSingleFailClosed(
-        FIND_SCHEDULE_BY_APPLICATION,
-        cs -> cs.setString(1, applicationNumber.toString()),
-        2,
-        rs ->
-            new ScheduleSnapshot(
-                getLocalDate(rs, "ADVERTISING_DATE"),
-                getLocalDate(rs, "OFFER_RECEIPT_DATE"),
-                getLocalDate(rs, "TEAC_MEETING_DATE")));
+    List<ScheduleSnapshot> schedules =
+        jdbcTemplate.query(
+            SCHEDULE_BY_APPLICATION,
+            (rs, rowNumber) ->
+                new ScheduleSnapshot(
+                    getLocalDate(rs, "ADVERTISING_DATE"),
+                    getLocalDate(rs, "OFFER_RECEIPT_DATE"),
+                    getLocalDate(rs, "TEAC_MEETING_DATE")),
+            applicationNumber.toString());
+    return schedules.isEmpty() ? Optional.empty() : Optional.ofNullable(schedules.get(0));
   }
 
   protected Optional<String> loadExemptionStatusCode(String exemptionNumber) {
