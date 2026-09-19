@@ -976,11 +976,11 @@ const BlanketOicPermitCreateForm = ({
                 <dl className="detail-field-grid boic-permit-details__pair">
                   <div className="detail-field-item">
                     <dt className="detail-field-label">Current permit pieces</dt>
-                    <dd className="detail-field-value">—</dd>
+                    <dd className="detail-field-value">0</dd>
                   </div>
                   <div className="detail-field-item">
                     <dt className="detail-field-label">Current permit volume (m³)</dt>
-                    <dd className="detail-field-value">—</dd>
+                    <dd className="detail-field-value">0</dd>
                   </div>
                 </dl>
                 <div className="boic-permit-details__pair">

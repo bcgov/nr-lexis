@@ -1229,7 +1229,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(
       await screen.findByRole('heading', { name: 'No documents for this permit' }),
     ).toBeInTheDocument()
-    expect(screen.getByText('Documents added to this permit are listed here.')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'Documents stay with the record as it moves through the application, exemption and permit stages.',
+      ),
+    ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Add document' })).toBeInTheDocument()
 
     await selectPermitDetailTab('Fees')
@@ -4312,9 +4316,12 @@ describe('Provincial Permit Detail Action Smoke', () => {
       )
       await userEvent.clear(within(packageEditor).getByLabelText('Package volume (m³)'))
       await userEvent.type(within(packageEditor).getByLabelText('Package volume (m³)'), '100.0')
-      const averageLength = within(packageEditor).getByLabelText('Average length')
+      const averageLength = within(packageEditor).getByLabelText('Average length (m)')
       await userEvent.type(averageLength, '0')
-      await userEvent.type(within(packageEditor).getByLabelText('Average top diameter'), '20.0')
+      await userEvent.type(
+        within(packageEditor).getByLabelText('Average top diameter (rads)'),
+        '20.0',
+      )
       await userEvent.click(within(packageEditor).getByRole('button', { name: 'Create package' }))
 
       expect(
@@ -4437,11 +4444,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
   it.each([
     ['Package volume (m³)', '10.25', 'Package volume must have no more than one decimal place.'],
-    ['Average length', '0', 'Average length must be greater than 0.'],
-    ['Average length', '-1', 'Average length must be numeric.'],
-    ['Average top diameter', '0', 'Average top diameter must be greater than 0.'],
-    ['Average top diameter', '-1', 'Average top diameter must be numeric.'],
-    ['Average top diameter', '100', 'Average top diameter must be 99.99 or less.'],
+    ['Average length (m)', '0', 'Average length must be greater than 0.'],
+    ['Average length (m)', '-1', 'Average length must be numeric.'],
+    ['Average top diameter (rads)', '0', 'Average top diameter must be greater than 0.'],
+    ['Average top diameter (rads)', '-1', 'Average top diameter must be numeric.'],
+    ['Average top diameter (rads)', '100', 'Average top diameter must be 99.99 or less.'],
   ])('keeps invalid Blanket OIC %s out of the save request', async (fieldLabel, value, error) => {
     configureEditableBlanketOicPackage()
     renderPermitDetails()
@@ -4491,7 +4498,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     const firstPackageEditor = (
       await screen.findByRole('heading', { name: 'Edit BOIC-9' })
     ).closest('.application-detail-edit-section') as HTMLElement
-    const averageLength = within(firstPackageEditor).getByLabelText('Average length')
+    const averageLength = within(firstPackageEditor).getByLabelText('Average length (m)')
     await userEvent.clear(averageLength)
     await userEvent.type(averageLength, '0')
     await userEvent.click(within(firstPackageEditor).getByRole('button', { name: 'Save package' }))
@@ -4518,7 +4525,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     const secondPackageEditor = (
       await screen.findByRole('heading', { name: 'Edit BOIC-10' })
     ).closest('.application-detail-edit-section') as HTMLElement
-    expect(within(secondPackageEditor).getByLabelText('Average length')).toHaveValue('7.1')
+    expect(within(secondPackageEditor).getByLabelText('Average length (m)')).toHaveValue('7.1')
     expect(within(secondPackageEditor).queryByText(validationMessage)).not.toBeInTheDocument()
   })
 
@@ -4535,10 +4542,10 @@ describe('Provincial Permit Detail Action Smoke', () => {
     const volume = within(packageEditor).getByLabelText('Package volume (m³)')
     await userEvent.clear(volume)
     await userEvent.type(volume, '0.0')
-    const averageLength = within(packageEditor).getByLabelText('Average length')
+    const averageLength = within(packageEditor).getByLabelText('Average length (m)')
     await userEvent.clear(averageLength)
     await userEvent.type(averageLength, '99')
-    const averageDiameter = within(packageEditor).getByLabelText('Average top diameter')
+    const averageDiameter = within(packageEditor).getByLabelText('Average top diameter (rads)')
     await userEvent.clear(averageDiameter)
     await userEvent.type(averageDiameter, '99.99')
     await userEvent.click(within(packageEditor).getByRole('button', { name: 'Save package' }))
@@ -4677,8 +4684,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
     await userEvent.clear(within(packageEditor).getByLabelText('Package volume (m³)'))
     await userEvent.type(within(packageEditor).getByLabelText('Package volume (m³)'), '100.0')
-    await userEvent.type(within(packageEditor).getByLabelText('Average length'), '10.0')
-    await userEvent.type(within(packageEditor).getByLabelText('Average top diameter'), '20.0')
+    await userEvent.type(within(packageEditor).getByLabelText('Average length (m)'), '10.0')
+    await userEvent.type(
+      within(packageEditor).getByLabelText('Average top diameter (rads)'),
+      '20.0',
+    )
     await userEvent.click(within(packageEditor).getByRole('button', { name: 'Create package' }))
 
     await waitFor(() => expect(mockedAddBlanketOicPackage).toHaveBeenCalledTimes(1))
@@ -7161,6 +7171,26 @@ describe('Provincial Permit Detail Action Smoke', () => {
       ),
     ).toBeInTheDocument()
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+  })
+
+  it('clears a prior success notification when fee override validation blocks a save', async () => {
+    configureActivePermit()
+    renderPermitDetails()
+
+    await selectPermitDetailTab('Fees')
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit fee override' }))
+    await userEvent.click(screen.getByRole('radio', { name: 'Yes' }))
+    await userEvent.type(screen.getByLabelText('Override fee (CAD)'), '45.25')
+    await userEvent.click(screen.getByRole('button', { name: 'Save fee override' }))
+
+    expect(await screen.findByText('Fee override saved')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Edit fee override' }))
+    await userEvent.clear(screen.getByLabelText('Override fee (CAD)'))
+    await userEvent.click(screen.getByRole('button', { name: 'Save fee override' }))
+
+    expect(screen.getByText('Override fee is required.')).toBeInTheDocument()
+    expect(screen.queryByText('Fee override saved')).not.toBeInTheDocument()
+    expect(mockedUpdatePermitDetail).toHaveBeenCalledTimes(1)
   })
 
   it('validates permit fee override storage boundaries before saving', async () => {

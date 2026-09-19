@@ -563,7 +563,7 @@ const chooseComboBoxOption = async (
 test.describe('Provincial permit parity regressions', () => {
   test('shows live BOIC validation, country choices and client details before opening the saved permit', async ({
     page,
-  }, testInfo) => {
+  }) => {
     const fixture = await installPermitParityFixtures(page, 'blanket-oic-empty')
     await gotoSyntheticRoute(page, '/provincial/exemption/EX-BOIC-91002/permit/new', {
       ready: page.getByRole('heading', { level: 1, name: 'Apply for new permit', exact: true }),
@@ -590,12 +590,6 @@ test.describe('Provincial permit parity regressions', () => {
     await expect(summary).toBeFocused()
     const sideNavBounds = await page.locator('.cds--side-nav').boundingBox()
     const sideNavRight = (sideNavBounds?.x ?? 0) + (sideNavBounds?.width ?? 0)
-    expect((await summary.boundingBox())?.x).toBeGreaterThanOrEqual(sideNavRight)
-    await page.screenshot({
-      path: testInfo.outputPath('boic-required-summary.png'),
-      fullPage: false,
-      animations: 'disabled',
-    })
     expect((await summary.boundingBox())?.x).toBeGreaterThanOrEqual(sideNavRight)
     await expect(summary).toBeFocused()
 
@@ -638,11 +632,6 @@ test.describe('Provincial permit parity regressions', () => {
       'Chile (CL)',
       'Colombia (CO)',
     ])
-    await page.screenshot({
-      path: testInfo.outputPath('boic-country-list.png'),
-      fullPage: false,
-      animations: 'disabled',
-    })
     await country.fill('c')
     await expect(countries).toHaveText([
       'China (CN)',
@@ -678,11 +667,6 @@ test.describe('Provincial permit parity regressions', () => {
     await expect(
       page.getByRole('heading', { name: 'Volume and remarks', exact: true }),
     ).toHaveCount(0)
-    await page.screenshot({
-      path: testInfo.outputPath('boic-created-permit.png'),
-      fullPage: false,
-      animations: 'disabled',
-    })
     await selectTab(page, 'Scale')
     await expect(page.getByRole('heading', { name: 'No packages yet', exact: true })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Create package', exact: true })).toBeVisible()
@@ -695,11 +679,6 @@ test.describe('Provincial permit parity regressions', () => {
     await selectTab(page, 'Documents')
     await page.getByRole('button', { name: 'Add document', exact: true }).click()
     await expect(page.getByRole('dialog', { name: 'Add documents', exact: true })).toBeVisible()
-    await page.screenshot({
-      path: testInfo.outputPath('boic-document-drawer.png'),
-      fullPage: false,
-      animations: 'disabled',
-    })
     expect(fixture.writes).toEqual([
       expect.objectContaining({
         path: '/api/lexis/rpc/permit-details/add-permit',
@@ -761,7 +740,7 @@ test.describe('Provincial permit parity regressions', () => {
 
   test('shows the selected Ministerial package consistently on Scale and Fees', async ({
     page,
-  }, testInfo) => {
+  }) => {
     await page.setViewportSize({ width: 1440, height: 1000 })
     const fixture = await installPermitParityFixtures(page, 'ministerial')
     await gotoSyntheticRoute(page, '/provincial/permit/91001', {
@@ -775,12 +754,6 @@ test.describe('Provincial permit parity regressions', () => {
     await chooseComboBoxOption(page, 'Package number', 'PKG-B')
     await expect(scaleRows).toContainText('TM-B')
     await expect(scaleRows).not.toContainText('TM-A')
-    await page.screenshot({
-      path: testInfo.outputPath('ministerial-selected-scale.png'),
-      fullPage: false,
-      animations: 'disabled',
-    })
-
     await selectTab(page, 'Fees')
     const feeRows = page.getByRole('region', { name: 'Permit fee rows', exact: true })
     await expect(page.getByRole('combobox', { name: 'Package number', exact: true })).toHaveValue(
@@ -791,22 +764,11 @@ test.describe('Provincial permit parity regressions', () => {
     await chooseComboBoxOption(page, 'Package number', 'PKG-A')
     await expect(feeRows).toContainText('TM-A')
     await expect(feeRows).not.toContainText('TM-B')
-    await page.screenshot({
-      path: testInfo.outputPath('ministerial-selected-fees.png'),
-      fullPage: false,
-      animations: 'disabled',
-    })
-
     await page.setViewportSize({ width: 390, height: 844 })
     await expect(page.getByRole('combobox', { name: 'Package number', exact: true })).toBeVisible()
     await page
       .getByRole('combobox', { name: 'Package number', exact: true })
       .scrollIntoViewIfNeeded()
-    await page.screenshot({
-      path: testInfo.outputPath('ministerial-selected-fees-mobile.png'),
-      fullPage: false,
-      animations: 'disabled',
-    })
     await selectTab(page, 'Scale')
     await expect(scaleRows).toContainText('TM-A')
     await expect(scaleRows).not.toContainText('TM-B')
@@ -863,9 +825,7 @@ test.describe('Provincial permit parity regressions', () => {
     expect(fixture.unexpectedRequests).toEqual([])
   })
 
-  test('keeps owner context visible while a verified location changes', async ({
-    page,
-  }, testInfo) => {
+  test('keeps owner context visible while a verified location changes', async ({ page }) => {
     const fixture = await installPermitParityFixtures(page, 'blanket-oic')
     await gotoSyntheticRoute(page, '/provincial/permit/91002', {
       ready: page.getByRole('heading', { level: 1, name: 'Permit 91002 (Pending)', exact: true }),
@@ -894,11 +854,6 @@ test.describe('Provincial permit parity regressions', () => {
     ).toBeVisible()
     const successNotice = page.locator('.cds--toast-notification--success')
     await expect(successNotice).toContainText('Applicant details saved')
-    await page.screenshot({
-      path: testInfo.outputPath('applicant-save-success.png'),
-      fullPage: false,
-      animations: 'disabled',
-    })
     expect(fixture.writes).toEqual([
       expect.objectContaining({
         method: 'POST',
@@ -914,7 +869,7 @@ test.describe('Provincial permit parity regressions', () => {
 
   test('opens the Blanket OIC package form as a right panel without hiding the package table', async ({
     page,
-  }, testInfo) => {
+  }) => {
     await page.setViewportSize({ width: 1440, height: 1000 })
     const fixture = await installPermitParityFixtures(page, 'blanket-oic')
     await gotoSyntheticRoute(page, '/provincial/permit/91002', {
@@ -952,12 +907,6 @@ test.describe('Provincial permit parity regressions', () => {
     await panel.getByRole('button', { name: 'Create package', exact: true }).click()
     await expect(panel.getByText('Package number is required.', { exact: true })).toBeVisible()
     await expect(packageNumber).toBeFocused()
-    await page.screenshot({
-      path: testInfo.outputPath('permit-package-panel-desktop.png'),
-      fullPage: false,
-      animations: 'disabled',
-    })
-
     await page.setViewportSize({ width: 390, height: 844 })
     await expect
       .poll(async () => {
@@ -970,12 +919,6 @@ test.describe('Provincial permit parity regressions', () => {
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
     ).toBe(true)
-    await page.screenshot({
-      path: testInfo.outputPath('permit-package-panel-narrow.png'),
-      fullPage: false,
-      animations: 'disabled',
-    })
-
     await page.setViewportSize({ width: 1440, height: 1000 })
     await expect
       .poll(async () => {
@@ -1067,8 +1010,8 @@ test.describe('Provincial permit parity regressions', () => {
     await expect(panel).toBeVisible()
     await panel.getByLabel('Package number', { exact: true }).fill('BOIC-NEW')
     await panel.getByLabel('Package volume (m³)', { exact: true }).fill('100.0')
-    await panel.getByLabel('Average length', { exact: true }).fill('10.0')
-    await panel.getByLabel('Average top diameter', { exact: true }).fill('20.0')
+    await panel.getByLabel('Average length (m)', { exact: true }).fill('10.0')
+    await panel.getByLabel('Average top diameter (rads)', { exact: true }).fill('20.0')
     await chooseComboBoxOption(page, 'Species', 'FI - Fir')
     await panel.getByRole('button', { name: 'Add species', exact: true }).click()
     await expect(panel.getByRole('combobox', { name: 'End use', exact: true })).toHaveValue(
