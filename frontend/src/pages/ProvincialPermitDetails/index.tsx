@@ -7,7 +7,16 @@ import {
   useRef,
   useState,
 } from 'react'
-import { Edit, TrashCan } from '@carbon/icons-react'
+import {
+  Box,
+  Certificate,
+  Currency,
+  DocumentAttachment,
+  EarthFilled,
+  Edit,
+  Enterprise,
+  TrashCan,
+} from '@carbon/icons-react'
 import {
   Button,
   Checkbox,
@@ -248,17 +257,17 @@ const SHIPPING_PERMIT_FIELDS = new Set<PermitDetailFormField>([
   'otherPortOfExport',
 ])
 const PERMIT_DETAIL_TABS = [
-  { id: 'permit', label: 'Permit' },
-  { id: 'owner', label: 'Applicant' },
-  { id: 'agent', label: 'Agent' },
-  { id: 'shipping', label: 'Shipping' },
-  { id: 'items', label: 'Items' },
-  { id: 'documents', label: 'Documents' },
-  { id: 'fees', label: 'Fees' },
-  { id: 'gbms', label: 'GBMS' },
+  { id: 'permit', label: 'Permit', icon: Certificate },
+  { id: 'owner', label: 'Applicant', icon: Enterprise },
+  { id: 'agent', label: 'Agent', icon: undefined },
+  { id: 'shipping', label: 'Shipping', icon: EarthFilled },
+  { id: 'items', label: 'Items', icon: Box },
+  { id: 'documents', label: 'Documents', icon: DocumentAttachment },
+  { id: 'fees', label: 'Fees', icon: Currency },
+  { id: 'gbms', label: 'GBMS', icon: undefined },
   // INTENTIONAL_LEGACY_DIVERGENCE(PERMIT_INVOICE_VISIBILITY):
   // Modern permit detail exposes the invoice workflow that legacy keeps hidden.
-  { id: 'invoices', label: 'Invoices' },
+  { id: 'invoices', label: 'Invoices', icon: undefined },
 ] as const
 
 type PermitDetailTabId = (typeof PERMIT_DETAIL_TABS)[number]['id']
@@ -5345,8 +5354,10 @@ const ProvincialPermitDetailsPage = () => {
                 contained
                 className="application-tabs__list application-detail-tab-list"
               >
-                {permitDetailTabs.map(({ id, label }) => (
-                  <Tab key={id}>{label}</Tab>
+                {permitDetailTabs.map(({ id, label, icon }) => (
+                  <Tab key={id} renderIcon={icon}>
+                    {label}
+                  </Tab>
                 ))}
               </TabList>
               <ContiguousTabPanels order={permitDetailTabs.map(({ id }) => id)}>

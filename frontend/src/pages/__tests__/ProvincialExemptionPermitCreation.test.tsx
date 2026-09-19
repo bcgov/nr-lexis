@@ -840,14 +840,14 @@ describe('permit creation from an exemption', () => {
     await waitFor(() => expect(router.state.location.pathname).toBe('/provincial/permit/9020950'))
   })
 
-  it('returns to the exemption without persisting a Blanket OIC draft', async () => {
+  it('returns to the linked exemption without persisting a pristine Blanket OIC draft', async () => {
     mockRole(['LEXIS_APPLICATION_APPROVER'], ['createPermit', 'savePermit'])
     configureBlanketOicCreationDependencies()
     const router = renderPage(activeBlanketOicExemption, '?permitFilter=902')
 
     await openPermitsTab()
     const page = await openBlanketOicCreatePage()
-    await userEvent.click(within(page).getByRole('button', { name: 'Cancel' }))
+    await userEvent.click(within(page).getByRole('link', { name: 'TEST13E2' }))
 
     await waitFor(() =>
       expect(router.state.location.pathname).toBe('/provincial/exemption/TEST13E2'),
@@ -856,7 +856,7 @@ describe('permit creation from an exemption', () => {
     expect(addPermitDetail).not.toHaveBeenCalled()
   })
 
-  it('asks before discarding a dirty Blanket OIC draft', async () => {
+  it('asks before leaving through the linked exemption from a dirty Blanket OIC draft', async () => {
     mockRole(['LEXIS_APPLICATION_APPROVER'], ['createPermit', 'savePermit'])
     configureBlanketOicCreationDependencies()
     const router = renderPage(activeBlanketOicExemption)
@@ -864,7 +864,7 @@ describe('permit creation from an exemption', () => {
     await openPermitsTab()
     const page = await openBlanketOicCreatePage()
     await userEvent.type(within(page).getByLabelText('Permit request pieces'), '4')
-    await userEvent.click(within(page).getByRole('button', { name: 'Cancel' }))
+    await userEvent.click(within(page).getByRole('link', { name: 'TEST13E2' }))
 
     const dialog = await screen.findByRole('dialog', { name: 'Unsaved changes' })
     expect(
@@ -873,7 +873,7 @@ describe('permit creation from an exemption', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: 'Stay' }))
     expect(router.state.location.pathname).toBe('/provincial/exemption/TEST13E2/permit/new')
 
-    await userEvent.click(within(page).getByRole('button', { name: 'Cancel' }))
+    await userEvent.click(within(page).getByRole('link', { name: 'TEST13E2' }))
     await userEvent.click(
       within(await screen.findByRole('dialog', { name: 'Unsaved changes' })).getByRole('button', {
         name: 'Discard and leave',
@@ -898,7 +898,8 @@ describe('permit creation from an exemption', () => {
     await userEvent.click(within(page).getByRole('button', { name: 'Save permit' }))
     await waitFor(() => expect(addPermitDetail).toHaveBeenCalledOnce())
 
-    await userEvent.click(screen.getByRole('link', { name: 'Provincial exemption detail' }))
+    await userEvent.click(within(page).getByRole('tab', { name: 'Permit' }))
+    await userEvent.click(within(page).getByRole('link', { name: 'TEST13E2' }))
 
     const dialog = await screen.findByRole('dialog', { name: 'Unsaved changes' })
     expect(within(dialog).getByRole('button', { name: 'Discard and leave' })).toBeDisabled()
