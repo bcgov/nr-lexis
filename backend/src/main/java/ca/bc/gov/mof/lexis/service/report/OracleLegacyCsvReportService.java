@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.service.report;
 
+import static ca.bc.gov.mof.lexis.repository.exemption.ExemptionDetailQueries.BY_NUMBER;
 import static ca.bc.gov.mof.lexis.service.report.ReportParameterUtils.first;
 import static ca.bc.gov.mof.lexis.util.DateUtils.parseIsoOrLegacyDate;
 import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.controlSafe;
@@ -13,6 +14,7 @@ import java.nio.charset.StandardCharsets;
 import java.sql.Array;
 import java.sql.CallableStatement;
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
@@ -57,9 +59,6 @@ public class OracleLegacyCsvReportService {
       "{ call LEXIS_REPORTING.EXEMPTION_LEDGER_RPT_CSV(?,?,?,?) }";
   private static final String PERMIT_LEDGER_CSV_PROCEDURE =
       "{ call LEXIS_REPORTING.PERMIT_LEDGER_REPORT(?,?,?,?,?,?,?,?,?,?,?,?) }";
-  private static final String APPROVED_EXEMPTION_PROCEDURE =
-      "{ call LEXIS_GROUP_5.FIND_EXEMPTION_BY_NUMBER(?,?) }";
-
   private static final String JURISDICTION_PROVINCIAL = "P";
   private static final String JURISDICTION_FEDERAL = "F";
 
@@ -152,11 +151,7 @@ public class OracleLegacyCsvReportService {
           LOGGER.warn("Approved exemption report request missing exemptionNumber");
           yield Optional.empty();
         }
-        yield executeCursorProcedure(
-            APPROVED_EXEMPTION_PROCEDURE,
-            cs -> setNullableString(cs, 1, exemptionNumber),
-            2,
-            processor);
+        yield executeQuery(BY_NUMBER, exemptionNumber, processor);
       }
       default -> Optional.empty();
     };
@@ -490,6 +485,24 @@ public class OracleLegacyCsvReportService {
     }
   }
 
+  private <T, E extends Exception> Optional<T> executeQuery(
+      String sql, String exemptionNumber, LegacyCursorProcessor<T, E> processor) throws E {
+    try (Connection connection = dataSource.getConnection();
+        PreparedStatement statement = connection.prepareStatement(sql)) {
+      reportResources.applyQueryControls(statement);
+      setNullableString(statement, 1, exemptionNumber);
+      try (ResultSet rs = statement.executeQuery()) {
+        reportResources.applyFetchSize(rs);
+        return Optional.of(processor.process(rs));
+      }
+    } catch (SQLException ex) {
+      LOGGER.error(
+          "event=lexis_report operation=tabular_cursor_load outcome=failed failureType={}",
+          exceptionType(ex));
+      throw new LexisReportGenerationException("The report data could not be loaded", ex);
+    }
+  }
+
   private ResultSet requiredCursor(CallableStatement statement, int cursorOutIndex)
       throws SQLException {
     Object cursor = statement.getObject(cursorOutIndex);
@@ -706,12 +719,13 @@ public class OracleLegacyCsvReportService {
     }
   }
 
-  private void setNullableString(CallableStatement cs, int index, String value) throws SQLException {
+  private void setNullableString(PreparedStatement statement, int index, String value)
+      throws SQLException {
     if (value == null || value.isEmpty()) {
-      cs.setNull(index, Types.VARCHAR);
+      statement.setNull(index, Types.VARCHAR);
       return;
     }
-    cs.setString(index, value);
+    statement.setString(index, value);
   }
 
   @FunctionalInterface

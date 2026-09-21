@@ -13,6 +13,7 @@ import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import java.sql.Array;
 import java.sql.CallableStatement;
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
@@ -39,6 +40,7 @@ class OracleLegacyCsvReportServiceTest {
   @Mock private DataSource dataSource;
   @Mock private Connection connection;
   @Mock private CallableStatement callableStatement;
+  @Mock private PreparedStatement preparedStatement;
   @Mock private ResultSet resultSet;
   @Mock private ResultSetMetaData metaData;
   @Mock private OracleConnection oracleConnection;
@@ -378,11 +380,12 @@ class OracleLegacyCsvReportServiceTest {
   }
 
   @Test
-  void shouldLoadApprovedExemptionDataFromLegacyProcedure() throws Exception {
+  void shouldLoadApprovedExemptionDataFromBoundQuery() throws Exception {
     when(dataSource.getConnection()).thenReturn(connection);
-    when(connection.prepareCall("{ call LEXIS_GROUP_5.FIND_EXEMPTION_BY_NUMBER(?,?) }"))
-        .thenReturn(callableStatement);
-    when(callableStatement.getObject(2)).thenReturn(resultSet);
+    when(connection.prepareStatement(
+            ca.bc.gov.mof.lexis.repository.exemption.ExemptionDetailQueries.BY_NUMBER))
+        .thenReturn(preparedStatement);
+    when(preparedStatement.executeQuery()).thenReturn(resultSet);
 
     when(resultSet.getMetaData()).thenReturn(metaData);
     when(metaData.getColumnName(1)).thenReturn("EXEMPTION_NUMBER");
@@ -417,8 +420,34 @@ class OracleLegacyCsvReportServiceTest {
         .containsExactly("EXEMPTION_NUMBER", "APPROVED_VOLUME", "EXPORT_EXEMPTION_STATUS_CODE");
     assertThat(data.orElseThrow().getValue()).containsExactly("EX-123", "1200", "ACT");
 
-    verify(callableStatement).setString(1, "EX-123");
-    verify(callableStatement).registerOutParameter(2, Types.REF_CURSOR);
+    verify(preparedStatement).setString(1, "EX-123");
+    verify(preparedStatement).setQueryTimeout(120);
+    verify(preparedStatement).setFetchSize(100);
+    verify(resultSet).setFetchSize(100);
+    verify(resultSet).close();
+    verify(preparedStatement).close();
+    verify(connection).close();
+  }
+
+  @Test
+  void shouldFailApprovedExemptionReportWhenBoundQueryFails() throws Exception {
+    when(dataSource.getConnection()).thenReturn(connection);
+    when(connection.prepareStatement(
+            ca.bc.gov.mof.lexis.repository.exemption.ExemptionDetailQueries.BY_NUMBER))
+        .thenThrow(new SQLException("database unavailable"));
+    OracleLegacyCsvReportService service = new OracleLegacyCsvReportService(dataSource);
+
+    assertThatThrownBy(
+            () ->
+                service.withLegacyTabularReportCursor(
+                    LexisJasperReportDefinition.APPROVED_EXEMPTION_REPORT,
+                    new LexisReportRequestDto(Map.of("exemptionNumber", "EX-123"), "PDF"),
+                    cursor -> null))
+        .isInstanceOf(LexisReportGenerationException.class)
+        .hasMessage("The report data could not be loaded")
+        .hasCauseInstanceOf(SQLException.class);
+
+    verify(connection).close();
   }
 
   @Test
