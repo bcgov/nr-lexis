@@ -175,9 +175,14 @@ describe('BlanketOicPermitCreateForm', () => {
     await user.click(screen.getByRole('button', { name: 'Save permit' }))
 
     const summary = await screen.findByRole('group', { name: 'Permit needs attention' })
-    expect(within(summary).getByText('Permit request pieces is required.')).toBeInTheDocument()
-    expect(within(summary).getByText('Permit request volume is required.')).toBeInTheDocument()
-    expect(within(summary).getByText('Purchaser is required.')).toBeInTheDocument()
+    expect(within(summary).getByText('Cannot save yet.')).toBeInTheDocument()
+    expect(
+      within(summary).getByText(
+        'Complete the required fields in Permit, Applicant and Shipping tabs.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Permit request pieces is required.')).toBeInTheDocument()
+    expect(screen.getByText('Permit request volume is required.')).toBeInTheDocument()
     expect(summary).toHaveFocus()
     expect(
       screen.queryByText(/The permit number is assigned after a successful save/),
@@ -204,6 +209,29 @@ describe('BlanketOicPermitCreateForm', () => {
     ).toBeInTheDocument()
     await user.type(screen.getByLabelText('Permit request volume (m³)'), '0')
     expect(screen.getByRole('tab', { name: 'Permit' }).querySelector('svg')).not.toBeNull()
+    expect(
+      within(summary).getByText('Complete the required fields in Applicant and Shipping tabs.'),
+    ).toBeInTheDocument()
+  })
+
+  it('keeps optional date errors visible when all required fields are complete', async () => {
+    const user = userEvent.setup()
+    renderForm()
+
+    await fillRequiredPermitAndShippingFields(user)
+    await user.click(screen.getByRole('tab', { name: 'Applicant' }))
+    await selectForestClient(user, 'Applicant client number', '12345678')
+    await waitFor(() => expect(screen.getByLabelText('Applicant location')).toHaveValue('00'))
+    await user.click(screen.getByRole('tab', { name: 'Permit' }))
+    await user.type(screen.getByLabelText('Issued date'), '1900-01-01')
+    await user.click(screen.getByRole('button', { name: 'Save permit' }))
+
+    const summary = await screen.findByRole('group', { name: 'Permit needs attention' })
+    expect(
+      within(summary).getByText('Issued date must be after or equal to submit date.'),
+    ).toBeInTheDocument()
+    expect(summary).toHaveFocus()
+    expect(addPermitDetail).not.toHaveBeenCalled()
   })
 
   it('saves explicit zero request totals after correcting the required fields', async () => {
@@ -479,9 +507,13 @@ describe('BlanketOicPermitCreateForm', () => {
     await fillRequiredPermitAndShippingFields(user)
     await user.click(screen.getByRole('button', { name: 'Save permit' }))
 
-    await screen.findAllByText(
-      `${scenario.kind === 'applicant' ? 'Applicant' : 'Agent'} location is required.`,
-    )
+    expect(
+      await screen.findByText('Complete the required fields in Applicant tab.'),
+    ).toBeInTheDocument()
+    expect(screen.getByText(scenario.errorMessage)).toBeInTheDocument()
+    expect(
+      screen.getByRole('tab', { name: 'Applicant, 1 required field outstanding' }),
+    ).toHaveAttribute('aria-selected', 'true')
     expect(addPermitDetail).not.toHaveBeenCalled()
     expect(fetchExemptionClientData).not.toHaveBeenCalledWith(scenario.blockedClientNumber, '0')
   })

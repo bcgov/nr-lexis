@@ -13,17 +13,48 @@
   padding-block: 0.5rem;
 }
 
+.permit-client-tile .detail-field-grid.permit-client-tile__identity {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-block: 1.5rem;
+}
+
+.permit-client-tile .detail-field-grid.permit-client-tile__address-fields,
 .detail-field-grid.permit-client-editor__address-fields {
   grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.permit-client-tile .detail-field-grid.permit-client-tile__contact-fields,
+.detail-field-grid.permit-client-editor__contact-fields {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.permit-client-tile .detail-field-grid.permit-client-tile__address-fields {
+  margin-block-start: 1.5rem;
+}
+
+.permit-client-tile .detail-field-grid.permit-client-tile__contact-fields {
+  margin-block-start: 1rem;
+}
+
+.permit-client-editor__required-hint {
+  margin: 0.5rem 0 1.5rem;
+}
+
+.permit-client-editor__actions {
+  justify-content: flex-end;
+  margin-block-start: 1.5rem;
+}
+
+.detail-field-grid.permit-client-editor__address-fields {
   margin-block-start: 1.5rem;
 }
 
 .detail-field-grid.permit-client-editor__contact-fields {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
   margin-block-start: 1rem;
 }
 
 @media (max-width: 1055px) {
+  .permit-client-tile .detail-field-grid.permit-client-tile__address-fields,
   .detail-field-grid.permit-client-editor__address-fields {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -31,7 +62,10 @@
 
 @media (max-width: 671px) {
   .detail-field-grid.permit-client-editor__address-fields,
-  .detail-field-grid.permit-client-editor__contact-fields {
+  .detail-field-grid.permit-client-editor__contact-fields,
+  .permit-client-tile .detail-field-grid.permit-client-tile__identity,
+  .permit-client-tile .detail-field-grid.permit-client-tile__address-fields,
+  .permit-client-tile .detail-field-grid.permit-client-tile__contact-fields {
     grid-template-columns: minmax(0, 1fr);
   }
 }

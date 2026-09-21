@@ -375,6 +375,7 @@ type PermitClientTileProps = {
   isLoading: boolean
   errorMessage: string
   headerAction?: ReactNode
+  reviewedLayout?: boolean
 }
 
 type PermitClientKind = 'owner' | 'agent'
@@ -398,31 +399,81 @@ const PermitClientTile = ({
   isLoading,
   errorMessage,
   headerAction,
+  reviewedLayout = false,
 }: PermitClientTileProps) => (
   <>
-    <DetailFieldTile
-      title={title}
-      headerAction={headerAction}
-      fields={[
-        { label: 'Client number', value: displayValue(clientNumber) },
-        { label: 'Location', value: displayValue(locationCode) },
-        {
-          label: 'Company name',
-          value: isLoading ? 'Loading…' : displayValue(clientData?.companyName),
-        },
-        { label: 'Address', value: isLoading ? 'Loading…' : displayValue(clientData?.address) },
-        { label: 'City', value: isLoading ? 'Loading…' : displayValue(clientData?.city) },
-        { label: 'Province', value: isLoading ? 'Loading…' : displayValue(clientData?.province) },
-        {
-          label: 'Postal code',
-          value: isLoading ? 'Loading…' : displayValue(clientData?.postalCode),
-        },
-        { label: 'Country', value: isLoading ? 'Loading…' : displayValue(clientData?.country) },
-        { label: 'Phone', value: isLoading ? 'Loading…' : displayValue(clientData?.phone) },
-        { label: 'Fax', value: isLoading ? 'Loading…' : displayValue(clientData?.fax) },
-        { label: 'Email', value: isLoading ? 'Loading…' : displayValue(clientData?.email) },
-      ]}
-    />
+    {reviewedLayout ? (
+      <Tile className="detail-section-card permit-client-tile">
+        <div className="detail-section-card__header">
+          <h2 className="detail-tile-title">{title}</h2>
+          {headerAction}
+        </div>
+        <dl className="detail-field-grid permit-client-tile__identity">
+          <div className="detail-field-item">
+            <dt className="detail-field-label">Client</dt>
+            <dd className="detail-field-value">
+              {isLoading
+                ? 'Loading…'
+                : displayValue([clientData?.companyName, clientNumber].filter(Boolean).join(' · '))}
+            </dd>
+          </div>
+          <div className="detail-field-item">
+            <dt className="detail-field-label">Location</dt>
+            <dd className="detail-field-value">{displayValue(locationCode)}</dd>
+          </div>
+        </dl>
+        <dl className="detail-field-grid permit-client-tile__address-fields">
+          {[
+            ['Address', clientData?.address],
+            ['City', clientData?.city],
+            ['Province', clientData?.province],
+            ['Country', clientData?.country],
+            ['Postal code', clientData?.postalCode],
+          ].map(([label, value]) => (
+            <div key={label} className="detail-field-item">
+              <dt className="detail-field-label">{label}</dt>
+              <dd className="detail-field-value">{isLoading ? 'Loading…' : displayValue(value)}</dd>
+            </div>
+          ))}
+        </dl>
+        <dl className="detail-field-grid permit-client-tile__contact-fields">
+          {[
+            ['Phone number', clientData?.phone],
+            ['Fax number', clientData?.fax],
+            ['Email address', clientData?.email],
+          ].map(([label, value]) => (
+            <div key={label} className="detail-field-item">
+              <dt className="detail-field-label">{label}</dt>
+              <dd className="detail-field-value">{isLoading ? 'Loading…' : displayValue(value)}</dd>
+            </div>
+          ))}
+        </dl>
+      </Tile>
+    ) : (
+      <DetailFieldTile
+        title={title}
+        headerAction={headerAction}
+        fields={[
+          { label: 'Client number', value: displayValue(clientNumber) },
+          { label: 'Location', value: displayValue(locationCode) },
+          {
+            label: 'Company name',
+            value: isLoading ? 'Loading…' : displayValue(clientData?.companyName),
+          },
+          { label: 'Address', value: isLoading ? 'Loading…' : displayValue(clientData?.address) },
+          { label: 'City', value: isLoading ? 'Loading…' : displayValue(clientData?.city) },
+          { label: 'Province', value: isLoading ? 'Loading…' : displayValue(clientData?.province) },
+          {
+            label: 'Postal code',
+            value: isLoading ? 'Loading…' : displayValue(clientData?.postalCode),
+          },
+          { label: 'Country', value: isLoading ? 'Loading…' : displayValue(clientData?.country) },
+          { label: 'Phone', value: isLoading ? 'Loading…' : displayValue(clientData?.phone) },
+          { label: 'Fax', value: isLoading ? 'Loading…' : displayValue(clientData?.fax) },
+          { label: 'Email', value: isLoading ? 'Loading…' : displayValue(clientData?.email) },
+        ]}
+      />
+    )}
     {errorMessage ? (
       <InlineNotification
         className="detail-context-notification"
@@ -4199,9 +4250,9 @@ const ProvincialPermitDetailsPage = () => {
       ['Postal code', clientData?.postalCode],
     ]
     const reviewedContactFields = [
-      ['Phone', clientData?.phone],
-      ['Fax', clientData?.fax],
-      ['Email', clientData?.email],
+      ['Phone number', clientData?.phone],
+      ['Fax number', clientData?.fax],
+      ['Email address', clientData?.email],
     ]
 
     return (
@@ -6175,6 +6226,7 @@ const ProvincialPermitDetailsPage = () => {
                           clientData={ownerClientData}
                           isLoading={isClientDataLoading}
                           errorMessage={activePermitTabId === 'owner' ? clientDataErrorMessage : ''}
+                          reviewedLayout={usesReviewedPermitFlow}
                           headerAction={
                             usesReviewedPermitFlow && canEditPermitClients ? (
                               <Button kind="tertiary" size="sm" onClick={startPermitClientEdit}>
@@ -6199,6 +6251,7 @@ const ProvincialPermitDetailsPage = () => {
                             errorMessage={
                               activePermitTabId === 'owner' ? clientDataErrorMessage : ''
                             }
+                            reviewedLayout
                           />
                         )}
                       </Column>
@@ -6207,6 +6260,11 @@ const ProvincialPermitDetailsPage = () => {
                       <Column sm={4} md={8} lg={16}>
                         <Tile>
                           <h2 className="detail-tile-title">Applicant details</h2>
+                          {usesReviewedPermitFlow && (
+                            <p className="permit-client-editor__required-hint">
+                              {requiredLabel('Required fields')}
+                            </p>
+                          )}
                           {renderPermitClientEditor('owner', invoiceMaterialLocked)}
                           {usesReviewedPermitFlow && (
                             <hr className="permit-client-editor__agent-divider" />
@@ -6228,10 +6286,39 @@ const ProvincialPermitDetailsPage = () => {
                               {renderPermitClientEditor('agent', invoiceMaterialLocked)}
                             </>
                           )}
+                          {usesReviewedPermitFlow && (
+                            <div className="legacy-search-actions permit-client-editor__actions">
+                              <Button
+                                kind="tertiary"
+                                size="sm"
+                                disabled={isSavingPermit}
+                                onClick={cancelPermitClientEdit}
+                              >
+                                Cancel
+                              </Button>
+                              <Button
+                                kind="primary"
+                                size="sm"
+                                disabled={
+                                  isSavingPermit ||
+                                  isPermitOptionsLoading ||
+                                  permitOptionsUnavailable ||
+                                  blanketOicRegionSelectionUnavailable ||
+                                  requiredPermitOptionsMissing ||
+                                  paymentPendingReceiptRequiresCompletion ||
+                                  !permitClientLookupCanSave
+                                }
+                                renderIcon={isSavingPermit ? PendingIcon : undefined}
+                                onClick={() => void onSavePermit()}
+                              >
+                                {isSavingPermit ? 'Saving…' : 'Save changes'}
+                              </Button>
+                            </div>
+                          )}
                         </Tile>
                       </Column>
                     )}
-                    {canEditPermitClients && (
+                    {canEditPermitClients && !usesReviewedPermitFlow && (
                       <Column sm={4} md={8} lg={16}>
                         <div className="legacy-search-actions">
                           {isEditingPermit ? (
@@ -7221,6 +7308,15 @@ const ProvincialPermitDetailsPage = () => {
                             onDirtyChange={setPermitDocumentUploadDirty}
                             onBusyChange={setPermitDocumentUploadBusy}
                             onUploadComplete={refreshPermitDocuments}
+                            onUploadSuccess={
+                              usesReviewedPermitFlow
+                                ? (message) =>
+                                    setActionSuccessNotification({
+                                      title: 'Document uploaded',
+                                      subtitle: message,
+                                    })
+                                : undefined
+                            }
                           />
                         )}
                         {deferredPermitTabLoading.documents ? (
@@ -7276,7 +7372,8 @@ const ProvincialPermitDetailsPage = () => {
                                             Download
                                           </Button>
                                           {(isEditingPermitDocuments ||
-                                            (detail.blanketOic && canDeletePermitDocuments)) && (
+                                            ((detail.blanketOic || usesReviewedPermitFlow) &&
+                                              canDeletePermitDocuments)) && (
                                             <Button
                                               kind="danger--ghost"
                                               size="sm"

@@ -578,8 +578,9 @@ test.describe('Provincial permit parity regressions', () => {
 
     const summary = page.getByRole('group', { name: 'Permit needs attention', exact: true })
     await expect(summary).toBeFocused()
-    await expect(summary).toContainText('Permit request pieces is required.')
-    await expect(summary).toContainText('Purchaser is required.')
+    await expect(summary).toContainText(
+      'Complete the required fields in Permit, Applicant and Shipping tabs.',
+    )
     await expect(
       page.getByText(/The permit number is assigned after a successful save/),
     ).toHaveCount(0)
@@ -833,7 +834,7 @@ test.describe('Provincial permit parity regressions', () => {
       ready: page.getByRole('heading', { level: 1, name: 'Permit 91002 (Pending)', exact: true }),
     })
     await selectTab(page, 'Applicant')
-    await expect(page.getByText('Owner Forestry Ltd.', { exact: true })).toBeVisible()
+    await expect(page.getByText('Owner Forestry Ltd. · 00067890', { exact: true })).toBeVisible()
     await expect(page.getByText('1 Owner Street', { exact: true })).toBeVisible()
 
     await page.getByRole('button', { name: 'Edit applicant details', exact: true }).click()
@@ -849,7 +850,7 @@ test.describe('Provincial permit parity regressions', () => {
     await ownerLocation.selectOption('04')
     await expect(page.getByText('Owner Mill Ltd. · 00067890', { exact: true })).toBeVisible()
     await expect(page.getByText('4 Mill Road', { exact: true })).toBeVisible()
-    await page.getByRole('button', { name: 'Save permit', exact: true }).click()
+    await page.getByRole('button', { name: 'Save changes', exact: true }).click()
 
     await expect(
       page.getByText('The permit was updated successfully.', { exact: true }),

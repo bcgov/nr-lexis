@@ -1145,9 +1145,9 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
     await userEvent.selectOptions(applicantLocation, '04')
     await userEvent.selectOptions(agentLocation, '02')
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Save permit' })).toBeEnabled())
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save changes' })).toBeEnabled())
 
-    await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() => {
       expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
@@ -5429,7 +5429,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
     await userEvent.selectOptions(screen.getByLabelText('Applicant location'), '04')
     await userEvent.selectOptions(screen.getByLabelText('Agent location'), '02')
-    await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() => {
       expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
@@ -5449,12 +5449,40 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     await selectPermitDetailTab('Owner')
     await waitFor(() => {
-      expect(screen.getByText('Owner Co')).toBeInTheDocument()
-      expect(screen.getByText('Agent Co')).toBeInTheDocument()
+      expect(screen.getByText('Owner Co · 00067890')).toBeInTheDocument()
+      expect(screen.getByText('Agent Co · 00012345')).toBeInTheDocument()
     })
     expect(screen.getByRole('heading', { name: 'Applicant details' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Agent information' })).toBeInTheDocument()
+    expect(screen.getAllByText('Client')).toHaveLength(2)
+    expect(screen.getAllByText('Location')).toHaveLength(2)
+    expect(screen.getAllByText('Phone number')).toHaveLength(2)
+    expect(screen.getAllByText('Fax number')).toHaveLength(2)
+    expect(screen.getAllByText('Email address')).toHaveLength(2)
     expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
+  })
+
+  it('keeps reviewed applicant save actions and required guidance inside the edit card', async () => {
+    configureEditableBlanketOicPackage()
+    renderPermitDetails()
+
+    await selectPermitDetailTab('Owner')
+    await userEvent.click(
+      await screen.findByRole('button', { name: /Edit applicant(?: details)?/ }),
+    )
+
+    const applicantCard = screen
+      .getByRole('heading', { name: 'Applicant details' })
+      .closest('.cds--tile')
+    expect(applicantCard).toBeTruthy()
+    expect(within(applicantCard as HTMLElement).getByText('Required fields')).toBeInTheDocument()
+    expect(
+      within(applicantCard as HTMLElement).getByRole('button', { name: 'Cancel' }),
+    ).toBeInTheDocument()
+    expect(
+      within(applicantCard as HTMLElement).getByRole('button', { name: 'Save changes' }),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save permit' })).not.toBeInTheDocument()
   })
 
   it('blocks Blanket OIC client saves until each selected client location is verified', async () => {
@@ -5480,7 +5508,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.click(
       await screen.findByRole('button', { name: /Edit applicant(?: details)?/ }),
     )
-    const saveButton = screen.getByRole('button', { name: 'Save permit' })
+    const saveButton = screen.getByRole('button', { name: 'Save changes' })
     expect(saveButton).toBeDisabled()
 
     await act(async () =>
@@ -5995,7 +6023,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
         await userEvent.type(screen.getByLabelText('Remarks'), 'Delayed permit save')
       }
 
-      await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
+      await userEvent.click(
+        screen.getByRole('button', {
+          name: origin === 'Applicant' ? 'Save changes' : 'Save permit',
+        }),
+      )
       await waitFor(() => expect(mockedUpdatePermitDetail).toHaveBeenCalledOnce())
 
       await selectPermitDetailTab(destination)
@@ -7649,6 +7681,90 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(await screen.findByRole('dialog', { name: 'Add document' })).toBeInTheDocument()
   })
 
+  it('closes the Ministerial upload modal after each successful upload and keeps Add document available', async () => {
+    configureMinisterialActivePermit()
+    renderPermitDetails()
+    await selectPermitDetailTab('Documents')
+
+    const firstFile = new File(['first test'], 'first-ministerial.pdf', { type: 'application/pdf' })
+    await userEvent.click(await screen.findByRole('button', { name: 'Add document' }))
+    const firstModal = await screen.findByRole('dialog', { name: 'Add document' })
+    await userEvent.upload(within(firstModal).getByLabelText('Document File'), firstFile)
+    await userEvent.click(within(firstModal).getByRole('button', { name: 'Review upload' }))
+    await userEvent.click(within(firstModal).getByRole('button', { name: 'Submit upload' }))
+
+    await waitFor(() =>
+      expect(submitAdminUpload).toHaveBeenCalledWith(
+        'permit',
+        expect.objectContaining({ file: firstFile, permitNumber: '777' }),
+      ),
+    )
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Add document' })).not.toBeInTheDocument(),
+    )
+    expect(screen.getByText('Document uploaded')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add document' })).toBeInTheDocument()
+    const documentSection = screen
+      .getByRole('heading', { name: 'Documents', exact: true })
+      .closest('.cds--tile')
+    expect(documentSection).toBeTruthy()
+    expect(
+      within(documentSection as HTMLElement).queryByRole('button', { name: 'Cancel', exact: true }),
+    ).not.toBeInTheDocument()
+
+    const secondFile = new File(['second test'], 'second-ministerial.pdf', {
+      type: 'application/pdf',
+    })
+    await userEvent.click(screen.getByRole('button', { name: 'Add document' }))
+    const secondModal = await screen.findByRole('dialog', { name: 'Add document' })
+    await userEvent.upload(within(secondModal).getByLabelText('Document File'), secondFile)
+    await userEvent.click(within(secondModal).getByRole('button', { name: 'Review upload' }))
+    await userEvent.click(within(secondModal).getByRole('button', { name: 'Submit upload' }))
+
+    await waitFor(() => expect(submitAdminUpload).toHaveBeenCalledTimes(2))
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Add document' })).not.toBeInTheDocument(),
+    )
+    expect(mockedFetchPermitDocuments).toHaveBeenCalledTimes(3)
+    expect(screen.getByText('Document uploaded')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add document' })).toBeInTheDocument()
+    expect(
+      within(documentSection as HTMLElement).queryByRole('button', { name: 'Cancel', exact: true }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('allows an authorized Ministerial user to delete an existing document before uploading', async () => {
+    configureMinisterialActivePermit()
+    mockedFetchPermitDocuments.mockResolvedValue({
+      source: 'api',
+      rows: [
+        {
+          id: 'MIN-DOC-1',
+          name: 'ministerial-document.pdf',
+          description: 'Synthetic Ministerial document',
+          type: 'Permit',
+          typeCode: 'PMT',
+          source: 'permit',
+          deletable: true,
+        },
+      ],
+    })
+    renderPermitDetails()
+    await selectPermitDetailTab('Documents')
+
+    const documentRow = (await screen.findByText('ministerial-document.pdf')).closest('tr')
+    expect(documentRow).toBeTruthy()
+    await userEvent.click(
+      within(documentRow as HTMLElement).getByRole('button', { name: 'Delete' }),
+    )
+    const confirmation = await screen.findByRole('dialog', { name: 'Delete document' })
+    expect(confirmation).toHaveTextContent(
+      'Permanently delete ministerial-document.pdf? This cannot be undone.',
+    )
+    await userEvent.click(within(confirmation).getByRole('button', { name: 'Cancel' }))
+    expect(mockedRemovePermitDocument).not.toHaveBeenCalled()
+  })
+
   it('opens the Blanket OIC document side panel directly and preserves queued files until discard is confirmed', async () => {
     configureBlanketOicDocument()
     renderPermitDetails()
@@ -7684,7 +7800,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.getByRole('button', { name: 'Delete' })).toBeEnabled()
   })
 
-  it('saves Blanket OIC documents through the side panel and retains success after closing', async () => {
+  it('saves consecutive Blanket OIC documents and retains the latest success after each panel closes', async () => {
     configureBlanketOicDocument()
     renderPermitDetails()
     await selectPermitDetailTab('Documents')
@@ -7708,10 +7824,34 @@ describe('Provincial Permit Detail Action Smoke', () => {
       expect(screen.queryByRole('dialog', { name: 'Add documents' })).not.toBeInTheDocument(),
     )
     expect(mockedFetchPermitDocuments).toHaveBeenCalledTimes(2)
-    expect(screen.getByText('Upload submitted')).toBeInTheDocument()
+    expect(screen.getByText('Document uploaded')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Add document' }))
-    expect(await screen.findByRole('dialog', { name: 'Add documents' })).toBeInTheDocument()
+    const secondPanel = await screen.findByRole('dialog', { name: 'Add documents' })
     expect(screen.queryByLabelText(/Document description for new.pdf/)).not.toBeInTheDocument()
+    const secondFile = new File(['second test'], 'second-new.pdf', { type: 'application/pdf' })
+    await userEvent.upload(within(secondPanel).getByLabelText('Document File'), secondFile)
+    await userEvent.type(
+      within(secondPanel).getByLabelText(/Document description for second-new.pdf/),
+      'Second document',
+    )
+    await userEvent.click(within(secondPanel).getByRole('button', { name: 'Review upload' }))
+    await userEvent.click(within(secondPanel).getByRole('button', { name: 'Save documents' }))
+
+    await waitFor(() =>
+      expect(submitAdminUpload).toHaveBeenCalledWith(
+        'permit',
+        expect.objectContaining({
+          file: secondFile,
+          fileDescription: 'Second document',
+          permitNumber: '777',
+        }),
+      ),
+    )
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Add documents' })).not.toBeInTheDocument(),
+    )
+    expect(mockedFetchPermitDocuments).toHaveBeenCalledTimes(3)
+    expect(screen.getByText('Document uploaded')).toBeInTheDocument()
   })
 
   it('opens Blanket OIC documents separately from Download using the authenticated permit target', async () => {

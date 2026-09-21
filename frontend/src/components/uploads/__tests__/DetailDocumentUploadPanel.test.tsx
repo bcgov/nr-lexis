@@ -141,10 +141,17 @@ describe('DetailDocumentUploadPanel', () => {
     expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
   })
 
-  it('keeps the side panel open during submission and preserves the success result after closing', async () => {
+  it('closes an initially open side panel once after its successful refresh', async () => {
     const onClose = vi.fn()
-    const onUploadComplete = vi.fn()
+    const onUploadSuccess = vi.fn()
     let resolveSubmission!: (value: Awaited<ReturnType<typeof submitAdminUpload>>) => void
+    let resolveRefresh!: () => void
+    const onUploadComplete = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveRefresh = resolve
+        }),
+    )
     mockedSubmitAdminUpload.mockReset().mockReturnValueOnce(
       new Promise((resolve) => {
         resolveSubmission = resolve
@@ -160,6 +167,7 @@ describe('DetailDocumentUploadPanel', () => {
         initiallyOpen
         onClose={onClose}
         onUploadComplete={onUploadComplete}
+        onUploadSuccess={onUploadSuccess}
       />,
     )
     await userEvent.upload(screen.getByLabelText('Document File'), file)
@@ -176,9 +184,47 @@ describe('DetailDocumentUploadPanel', () => {
       expect.objectContaining({ permitNumber: '321', file }),
     )
     expect(onUploadComplete).toHaveBeenCalledTimes(1)
+    expect(onUploadSuccess).not.toHaveBeenCalled()
     expect(onClose).not.toHaveBeenCalled()
+    expect(screen.getByRole('dialog', { name: 'Add documents' })).toBeInTheDocument()
+
+    await act(async () => resolveRefresh())
+    expect(onUploadSuccess).toHaveBeenCalledExactlyOnceWith('Document uploaded.')
+    expect(onClose).toHaveBeenCalledTimes(1)
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(screen.getByText('Document uploaded.')).toBeInTheDocument()
+  })
+
+  it('keeps an initially open side panel mounted after a partial upload failure', async () => {
+    const onClose = vi.fn()
+    const onUploadSuccess = vi.fn()
+    mockedSubmitAdminUpload
+      .mockResolvedValueOnce({ message: 'First document uploaded.' })
+      .mockRejectedValueOnce(new Error('Second document failed.'))
+    const first = new File(['first'], 'first.pdf', { type: 'application/pdf' })
+    const second = new File(['second'], 'second.pdf', { type: 'application/pdf' })
+    render(
+      <DetailDocumentUploadPanel
+        workflowType="permit"
+        targetNumber="321"
+        inputId="permitDocuments"
+        presentation="side-panel"
+        initiallyOpen
+        onClose={onClose}
+        onUploadSuccess={onUploadSuccess}
+      />,
+    )
+
+    await userEvent.upload(screen.getByLabelText('Document File'), [first, second])
+    await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save documents' }))
+
+    expect(
+      await screen.findByText('1 file failed. Review the queue for details.'),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: 'Add documents' })).toBeInTheDocument()
+    expect(onUploadSuccess).not.toHaveBeenCalled()
+    expect(onClose).not.toHaveBeenCalled()
   })
 
   it.each(['application', 'exemption', 'permit'] as const)(

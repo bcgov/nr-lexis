@@ -371,10 +371,21 @@ const BlanketOicPermitCreateForm = ({
   const agentPendingLookupRef = useRef<PendingClientLookup | null>(null)
   currentFormRef.current = form
   const formErrors = validateForm(form, agentUsed)
+  const invalidTabLabels = showValidationErrors
+    ? FORM_TABS.filter(({ requiredFields }) =>
+        requiredFields.some((field) => formErrors[field]),
+      ).map(({ label }) => label)
+    : []
+  const invalidTabsText =
+    invalidTabLabels.length > 1
+      ? `${invalidTabLabels.slice(0, -1).join(', ')} and ${invalidTabLabels.at(-1)}`
+      : invalidTabLabels[0]
   const errorMessages = Array.from(
     new Set(
       [
-        ...(showValidationErrors ? Object.values(formErrors) : []),
+        ...(showValidationErrors
+          ? [formErrors.permitIssueDate, formErrors.permitExpiryDate, formErrors.permitRemarks]
+          : []),
         shippingReferencesError,
         regionContext.errorMessage,
         clientLookupFailures.size > 0 ? CLIENT_LOOKUP_UNAVAILABLE_MESSAGE : '',
@@ -836,20 +847,27 @@ const BlanketOicPermitCreateForm = ({
 
   return (
     <section aria-label="Blanket OIC permit details">
-      {errorMessages.length > 0 ? (
+      {invalidTabLabels.length > 0 || errorMessages.length > 0 ? (
         <div ref={errorSummaryRef} tabIndex={-1} role="group" aria-label="Permit needs attention">
           <InlineNotification
             kind="error"
             role="alert"
-            title="Permit needs attention"
+            title={invalidTabLabels.length > 0 ? 'Cannot save yet.' : 'Permit needs attention'}
+            subtitle={
+              invalidTabLabels.length > 0
+                ? `Complete the required fields in ${invalidTabsText} ${invalidTabLabels.length === 1 ? 'tab' : 'tabs'}.`
+                : undefined
+            }
             lowContrast
             hideCloseButton
           >
-            <ul>
-              {errorMessages.map((message) => (
-                <li key={message}>{message}</li>
-              ))}
-            </ul>
+            {errorMessages.length > 0 && (
+              <ul>
+                {errorMessages.map((message) => (
+                  <li key={message}>{message}</li>
+                ))}
+              </ul>
+            )}
           </InlineNotification>
         </div>
       ) : (
@@ -920,6 +938,7 @@ const BlanketOicPermitCreateForm = ({
           <TabPanel className="application-detail-tab-panel">
             <Tile className="create-form-tile application-detail-section" aria-label="Permit">
               <h2 className="detail-tile-title">Permit details</h2>
+              <p className="boic-permit-required-hint">{requiredLabel('Required fields')}</p>
               <fieldset className="legacy-form-fieldset boic-permit-details">
                 <legend className="cds--visually-hidden">Permit details</legend>
                 <dl className="detail-field-grid boic-permit-details__status">
@@ -1042,6 +1061,7 @@ const BlanketOicPermitCreateForm = ({
           <TabPanel className="application-detail-tab-panel">
             <Tile className="create-form-tile application-detail-section" aria-label="Applicant">
               <h2 className="detail-tile-title">Applicant details</h2>
+              <p className="boic-permit-required-hint">{requiredLabel('Required fields')}</p>
               <fieldset className="legacy-form-fieldset">
                 <legend className="cds--visually-hidden">Applicant</legend>
                 <div className="legacy-search-grid">
@@ -1186,6 +1206,7 @@ const BlanketOicPermitCreateForm = ({
           <TabPanel className="application-detail-tab-panel">
             <Tile className="create-form-tile application-detail-section" aria-label="Shipping">
               <h2 className="detail-tile-title">Shipping details</h2>
+              <p className="boic-permit-required-hint">{requiredLabel('Required fields')}</p>
               <fieldset className="legacy-form-fieldset">
                 <legend className="cds--visually-hidden">Shipping</legend>
                 <div className="legacy-search-grid">
