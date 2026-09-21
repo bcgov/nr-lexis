@@ -361,10 +361,10 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
   }
 
   /**
-   * Loads the most recently allocated persisted remark through the existing authoritative Oracle
-   * package. {@code INSERT_EXEMPTION_APP_REMARK} assigns
+   * Loads the most recently allocated persisted remark directly from
+   * {@code THE.EXPORT_EXEMPTION_APP_REMARKS}. {@code INSERT_EXEMPTION_APP_REMARK} assigns
    * {@code EXEMPTION_APP_REMARKS_SEQ.NEXTVAL}, so the greatest positive remark number is the latest
-   * inserted row without relying on the package cursor's unspecified order.
+   * inserted row without relying on the query's unspecified order.
    */
   @Transactional(readOnly = true)
   public Optional<ReviewRemarkRow> findLatestAuthoritativeRemark(Long applicationNumber) {
