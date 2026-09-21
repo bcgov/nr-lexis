@@ -82,8 +82,6 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
       LEXIS_CODES_PACKAGE + "FIND_CANDIDATE_EXCOL_COMBOS(?,?,?,?)";
   private static final String DELETE_APPLICATION_FILE_ATTACHMENT =
       LEXIS_GROUP_9_PACKAGE + "DELETE_APPL_FILE_ATTACHMENT(?)";
-  private static final String FIND_REMARKS_BY_APPLICATION =
-      LEXIS_GROUP_5_PACKAGE + "FIND_REMARKS_BY_APP(?,?)";
   private static final String INSERT_REMARK =
       LEXIS_GROUP_14_PACKAGE + "INSERT_EXEMPTION_APP_REMARK(?,?,?,?,?,?)";
   private static final String UPDATE_REMARK =
@@ -622,11 +620,10 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     if (applicationNumber == null || applicationNumber < 1) {
       return List.of();
     }
-    return queryCursorProcedureRequired(
-        FIND_REMARKS_BY_APPLICATION,
-        cs -> cs.setString(1, applicationNumber.toString()),
-        2,
-        this::mapRemarkRow);
+    return queryDirectRequired(
+        LexisRemarkQueries.REMARKS_BY_APPLICATION,
+        this::mapRemarkRow,
+        applicationNumber.toString());
   }
 
   public boolean updateRemark(

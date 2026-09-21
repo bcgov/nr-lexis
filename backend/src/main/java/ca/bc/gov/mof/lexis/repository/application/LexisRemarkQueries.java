@@ -20,5 +20,8 @@ public final class LexisRemarkQueries {
   public static final String REMARK_BY_NUMBER =
       REMARKS + " WHERE R.EXPORT_EXMPTN_APPL_REMARK_NMBR = ?";
 
+  public static final String REMARKS_BY_APPLICATION =
+      REMARKS + " WHERE R.APPLICATION_NUMBER = ?";
+
   private LexisRemarkQueries() {}
 }
