@@ -374,6 +374,7 @@ type PermitClientTileProps = {
   clientData: ApplicationClientData | null
   isLoading: boolean
   errorMessage: string
+  headerAction?: ReactNode
 }
 
 type PermitClientKind = 'owner' | 'agent'
@@ -396,10 +397,12 @@ const PermitClientTile = ({
   clientData,
   isLoading,
   errorMessage,
+  headerAction,
 }: PermitClientTileProps) => (
   <>
     <DetailFieldTile
       title={title}
+      headerAction={headerAction}
       fields={[
         { label: 'Client number', value: displayValue(clientNumber) },
         { label: 'Location', value: displayValue(locationCode) },
@@ -3197,6 +3200,12 @@ const ProvincialPermitDetailsPage = () => {
         return
       }
 
+      const isLatestRequest = tryBeginPermitMutation()
+      if (!isLatestRequest) {
+        setActionErrorMessage('Wait for the current permit change to finish before saving again.')
+        return
+      }
+
       setActionErrorMessage('')
       setActionInfoMessage('')
       setActionSuccessNotification(null)
@@ -3207,6 +3216,9 @@ const ProvincialPermitDetailsPage = () => {
           permitNumber: resolvedPermitNumber,
           attachInd,
         })
+        if (!isLatestRequest()) {
+          return
+        }
         if (!result.success) {
           setActionErrorMessage(
             result.errors[0] || result.message || 'Unable to update permit item rows.',
@@ -3221,13 +3233,23 @@ const ProvincialPermitDetailsPage = () => {
         await reloadPermitScaleState()
         setActionInfoMessage(result.message || 'Permit item rows were updated.')
       } catch (error) {
-        console.error(error)
-        setActionErrorMessage('Unable to update permit item rows.')
+        if (isLatestRequest()) {
+          console.error(error)
+          setActionErrorMessage('Unable to update permit item rows.')
+        }
       } finally {
+        endPermitMutation()
         setIsUpdatingScaleId(null)
       }
     },
-    [canEditNormalPermitScaleRows, detail?.permitNumber, permitNumber, reloadPermitScaleState],
+    [
+      canEditNormalPermitScaleRows,
+      detail?.permitNumber,
+      endPermitMutation,
+      permitNumber,
+      reloadPermitScaleState,
+      tryBeginPermitMutation,
+    ],
   )
 
   const onAddPermitApplication = useCallback(async () => {
@@ -3780,8 +3802,8 @@ const ProvincialPermitDetailsPage = () => {
       return
     }
 
-    beginPermitDocumentsRequest()
-    beginPermitInvoicesRequest()
+    const isCurrentDocumentsRequest = beginPermitDocumentsRequest()
+    const isCurrentInvoicesRequest = beginPermitInvoicesRequest()
     deferredPermitTabLoadsRef.current.delete('documents')
     deferredPermitTabLoadsRef.current.delete('invoices')
     setDeferredPermitTabLoading((current) => ({
@@ -3789,21 +3811,29 @@ const ProvincialPermitDetailsPage = () => {
       documents: false,
       invoices: false,
     }))
-    const [documentsResult, invoicesResult] = await Promise.all([
+    const [documentsResult, invoicesResult] = await Promise.allSettled([
       fetchPermitDocuments(resolvedPermitNumber),
       fetchPermitInvoices(resolvedPermitNumber),
     ])
-    setDocumentRows(documentsResult.rows)
-    setInvoiceRows(invoicesResult.rows)
-    loadedDeferredPermitTabsRef.current.add('documents')
-    loadedDeferredPermitTabsRef.current.add('invoices')
-    setDeferredPermitTabLoaded((current) => ({
-      ...current,
-      documents: true,
-      invoices: true,
-    }))
-    setDocumentsErrorMessage('')
-    setInvoicesErrorMessage('')
+    if (documentsResult.status === 'fulfilled' && isCurrentDocumentsRequest()) {
+      setDocumentRows(documentsResult.value.rows)
+      loadedDeferredPermitTabsRef.current.add('documents')
+      setDeferredPermitTabLoaded((current) => ({ ...current, documents: true }))
+      setDocumentsErrorMessage('')
+    } else if (documentsResult.status === 'rejected' && isCurrentDocumentsRequest()) {
+      setDocumentsErrorMessage('Unable to retrieve permit documents.')
+    }
+    if (invoicesResult.status === 'fulfilled' && isCurrentInvoicesRequest()) {
+      setInvoiceRows(invoicesResult.value.rows)
+      loadedDeferredPermitTabsRef.current.add('invoices')
+      setDeferredPermitTabLoaded((current) => ({ ...current, invoices: true }))
+      setInvoicesErrorMessage('')
+    } else if (invoicesResult.status === 'rejected' && isCurrentInvoicesRequest()) {
+      setInvoicesErrorMessage('Unable to retrieve permit invoice details.')
+    }
+    if (documentsResult.status === 'rejected' && isCurrentDocumentsRequest()) {
+      throw documentsResult.reason
+    }
   }, [beginPermitDocumentsRequest, beginPermitInvoicesRequest, detail?.permitNumber, permitNumber])
 
   const onCancelPermitDocumentEditing = useCallback(() => {
@@ -4017,31 +4047,8 @@ const ProvincialPermitDetailsPage = () => {
         }
 
         try {
-          beginPermitDocumentsRequest()
-          beginPermitInvoicesRequest()
-          deferredPermitTabLoadsRef.current.delete('documents')
-          deferredPermitTabLoadsRef.current.delete('invoices')
-          setDeferredPermitTabLoading((current) => ({
-            ...current,
-            documents: false,
-            invoices: false,
-          }))
-          const [documentsResult, invoicesResult] = await Promise.all([
-            fetchPermitDocuments(resolvedPermitNumber),
-            fetchPermitInvoices(resolvedPermitNumber),
-          ])
+          await refreshPermitDocuments()
           if (isLatestRequest()) {
-            setDocumentRows(documentsResult.rows)
-            setInvoiceRows(invoicesResult.rows)
-            loadedDeferredPermitTabsRef.current.add('documents')
-            loadedDeferredPermitTabsRef.current.add('invoices')
-            setDeferredPermitTabLoaded((current) => ({
-              ...current,
-              documents: true,
-              invoices: true,
-            }))
-            setDocumentsErrorMessage('')
-            setInvoicesErrorMessage('')
             setDocumentSuccessMessage(`${row.name || 'Document'} was deleted.`)
           }
         } catch (refreshError) {
@@ -4068,14 +4075,11 @@ const ProvincialPermitDetailsPage = () => {
     },
     [
       beginDocumentRefreshRequest,
-      beginPermitDocumentsRequest,
-      beginPermitInvoicesRequest,
       canDeleteInvoiceDocuments,
       canDeletePermitDocuments,
       detail?.permitNumber,
       permitNumber,
-      setDocumentRows,
-      setInvoiceRows,
+      refreshPermitDocuments,
     ],
   )
 
@@ -4184,23 +4188,34 @@ const ProvincialPermitDetailsPage = () => {
     const isLoading = isOwner ? isOwnerClientLookupLoading : isAgentClientLookupLoading
     const errorMessage = isOwner ? ownerClientLookupError : agentClientLookupError
     const label = isOwner ? 'Applicant' : 'Agent'
+    const reviewedClientDisplay = [clientData?.companyName, clientNumber]
+      .filter(Boolean)
+      .join(' · ')
+    const reviewedAddressFields = [
+      ['Address', clientData?.address],
+      ['City', clientData?.city],
+      ['Province', clientData?.province],
+      ['Country', clientData?.country],
+      ['Postal code', clientData?.postalCode],
+    ]
+    const reviewedContactFields = [
+      ['Phone', clientData?.phone],
+      ['Fax', clientData?.fax],
+      ['Email', clientData?.email],
+    ]
 
     return (
       <>
         <div className="legacy-search-grid">
           {usesReviewedPermitFlow ? (
-            <TextInput
-              id={`permit-${clientNumberField}`}
-              labelText={requiredLabel(`${label} client number`)}
-              aria-required="true"
-              value={clientNumber}
-              disabled={isDisabled}
-              readOnly
-              maxLength={8}
-              onBlur={(event) =>
-                void loadPermitClientLocations(kind, event.target.value, locationCode)
-              }
-            />
+            <dl className="detail-field-grid permit-client-editor__identity">
+              <div className="detail-field-item detail-field-item--full">
+                <dt className="detail-field-label">Client</dt>
+                <dd className="detail-field-value">
+                  {isLoading ? 'Loading…' : displayValue(reviewedClientDisplay)}
+                </dd>
+              </div>
+            </dl>
           ) : (
             <ForestClientComboBox
               id={`permit-${clientNumberField}`}
@@ -4224,7 +4239,8 @@ const ProvincialPermitDetailsPage = () => {
           )}
           <Select
             id={`permit-${locationField}`}
-            labelText={requiredLabel(`${label} location`)}
+            labelText={requiredLabel(usesReviewedPermitFlow ? 'Location' : `${label} location`)}
+            aria-label={`${label} location`}
             aria-required="true"
             value={locationCode}
             disabled={
@@ -4248,14 +4264,49 @@ const ProvincialPermitDetailsPage = () => {
             ))}
           </Select>
         </div>
-        <PermitClientTile
-          title={`${label} contact details`}
-          clientNumber={clientNumber || null}
-          locationCode={locationCode || null}
-          clientData={clientData}
-          isLoading={isLoading}
-          errorMessage={errorMessage}
-        />
+        {usesReviewedPermitFlow ? (
+          <>
+            <dl className="detail-field-grid permit-client-editor__address-fields">
+              {reviewedAddressFields.map(([fieldLabel, value]) => (
+                <div key={fieldLabel} className="detail-field-item">
+                  <dt className="detail-field-label">{fieldLabel}</dt>
+                  <dd className="detail-field-value">
+                    {isLoading ? 'Loading…' : displayValue(value)}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+            <dl className="detail-field-grid permit-client-editor__contact-fields">
+              {reviewedContactFields.map(([fieldLabel, value]) => (
+                <div key={fieldLabel} className="detail-field-item">
+                  <dt className="detail-field-label">{fieldLabel}</dt>
+                  <dd className="detail-field-value">
+                    {isLoading ? 'Loading…' : displayValue(value)}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+            {errorMessage && (
+              <InlineNotification
+                className="detail-context-notification"
+                kind="warning"
+                lowContrast
+                hideCloseButton
+                title="Client details unavailable"
+                subtitle={errorMessage}
+              />
+            )}
+          </>
+        ) : (
+          <PermitClientTile
+            title={`${label} contact details`}
+            clientNumber={clientNumber || null}
+            locationCode={locationCode || null}
+            clientData={clientData}
+            isLoading={isLoading}
+            errorMessage={errorMessage}
+          />
+        )}
       </>
     )
   }
@@ -5634,7 +5685,7 @@ const ProvincialPermitDetailsPage = () => {
                                   setIsEditingPermit(true)
                                 }}
                               >
-                                Edit permit
+                                Edit permit details
                               </Button>
                             )}
                           </div>
@@ -5737,7 +5788,7 @@ const ProvincialPermitDetailsPage = () => {
                                   setIsEditingPermit(true)
                                 }}
                               >
-                                Edit permit
+                                Edit permit details
                               </Button>
                             )}
                           </div>
@@ -6124,6 +6175,13 @@ const ProvincialPermitDetailsPage = () => {
                           clientData={ownerClientData}
                           isLoading={isClientDataLoading}
                           errorMessage={activePermitTabId === 'owner' ? clientDataErrorMessage : ''}
+                          headerAction={
+                            usesReviewedPermitFlow && canEditPermitClients ? (
+                              <Button kind="tertiary" size="sm" onClick={startPermitClientEdit}>
+                                Edit applicant details
+                              </Button>
+                            ) : undefined
+                          }
                         />
                         <Checkbox
                           id="permit-agent-used"
@@ -6150,6 +6208,9 @@ const ProvincialPermitDetailsPage = () => {
                         <Tile>
                           <h2 className="detail-tile-title">Applicant details</h2>
                           {renderPermitClientEditor('owner', invoiceMaterialLocked)}
+                          {usesReviewedPermitFlow && (
+                            <hr className="permit-client-editor__agent-divider" />
+                          )}
                           <Checkbox
                             id="permit-agent-used"
                             labelText="I'm an agent"
@@ -6201,11 +6262,11 @@ const ProvincialPermitDetailsPage = () => {
                                 Cancel
                               </Button>
                             </>
-                          ) : (
+                          ) : !usesReviewedPermitFlow ? (
                             <Button kind="tertiary" size="sm" onClick={startPermitClientEdit}>
                               Edit applicant
                             </Button>
-                          )}
+                          ) : null}
                         </div>
                       </Column>
                     )}
@@ -6941,7 +7002,7 @@ const ProvincialPermitDetailsPage = () => {
                                               checked={row.includedInPermit}
                                               disabled={
                                                 !canEditNormalPermitScaleRows ||
-                                                isUpdatingScaleId === row.id
+                                                isUpdatingScaleId !== null
                                               }
                                               onChange={(_, { checked }) =>
                                                 void onToggleScaleAttachment(

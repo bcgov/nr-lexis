@@ -9,6 +9,40 @@
   margin-block: 1.5rem;
 }
 
+.permit-client-editor__identity .detail-field-value {
+  padding-block: 0.5rem;
+}
+
+.detail-field-grid.permit-client-editor__address-fields {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin-block-start: 1.5rem;
+}
+
+.detail-field-grid.permit-client-editor__contact-fields {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-block-start: 1rem;
+}
+
+@media (max-width: 1055px) {
+  .detail-field-grid.permit-client-editor__address-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 671px) {
+  .detail-field-grid.permit-client-editor__address-fields,
+  .detail-field-grid.permit-client-editor__contact-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.permit-client-editor__agent-divider {
+  inline-size: 100%;
+  margin: 1.5rem 0 0;
+  border: 0;
+  border-block-start: 1px solid var(--cds-border-subtle-01);
+}
+
 .ministerial-permit-details__status,
 .ministerial-permit-details__static-fields,
 .ministerial-permit-details__dates,

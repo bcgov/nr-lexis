@@ -836,18 +836,18 @@ test.describe('Provincial permit parity regressions', () => {
     await expect(page.getByText('Owner Forestry Ltd.', { exact: true })).toBeVisible()
     await expect(page.getByText('1 Owner Street', { exact: true })).toBeVisible()
 
-    await page.getByRole('button', { name: 'Edit applicant', exact: true }).click()
+    await page.getByRole('button', { name: 'Edit applicant details', exact: true }).click()
     const ownerLocation = page.getByLabel('Applicant location', { exact: true })
     await expect(ownerLocation).toHaveValue('03')
     await expect(
       page.getByRole('option', { name: '03 - Owner office', exact: true }),
     ).toBeAttached()
     await expect(page.getByRole('option', { name: '04 - Owner mill', exact: true })).toBeAttached()
-    await expect(page.getByText('Owner Forestry Ltd.', { exact: true })).toBeVisible()
+    await expect(page.getByText('Owner Forestry Ltd. · 00067890', { exact: true })).toBeVisible()
     await expect(page.getByText('1 Owner Street', { exact: true })).toBeVisible()
 
     await ownerLocation.selectOption('04')
-    await expect(page.getByText('Owner Mill Ltd.', { exact: true })).toBeVisible()
+    await expect(page.getByText('Owner Mill Ltd. · 00067890', { exact: true })).toBeVisible()
     await expect(page.getByText('4 Mill Road', { exact: true })).toBeVisible()
     await page.getByRole('button', { name: 'Save permit', exact: true }).click()
 

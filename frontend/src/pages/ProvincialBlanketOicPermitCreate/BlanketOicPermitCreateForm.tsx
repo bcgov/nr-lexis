@@ -903,7 +903,12 @@ const BlanketOicPermitCreateForm = ({
               >
                 {label}
                 {outstanding > 0 && (
-                  <Tag type="red" size="sm" aria-hidden="true">
+                  <Tag
+                    className="boic-permit-tab-error-count"
+                    type="red"
+                    size="sm"
+                    aria-hidden="true"
+                  >
                     {outstanding}
                   </Tag>
                 )}
@@ -1036,6 +1041,7 @@ const BlanketOicPermitCreateForm = ({
           </TabPanel>
           <TabPanel className="application-detail-tab-panel">
             <Tile className="create-form-tile application-detail-section" aria-label="Applicant">
+              <h2 className="detail-tile-title">Applicant details</h2>
               <fieldset className="legacy-form-fieldset">
                 <legend className="cds--visually-hidden">Applicant</legend>
                 <div className="legacy-search-grid">
@@ -1179,6 +1185,7 @@ const BlanketOicPermitCreateForm = ({
           </TabPanel>
           <TabPanel className="application-detail-tab-panel">
             <Tile className="create-form-tile application-detail-section" aria-label="Shipping">
+              <h2 className="detail-tile-title">Shipping details</h2>
               <fieldset className="legacy-form-fieldset">
                 <legend className="cds--visually-hidden">Shipping</legend>
                 <div className="legacy-search-grid">

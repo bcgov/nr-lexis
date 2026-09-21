@@ -3,6 +3,23 @@
   gap: 1.25rem;
 }
 
+.provincial-blanket-oic-permit-create-page .cds--tag.boic-permit-tab-error-count {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  min-inline-size: 1.25rem;
+  min-block-size: 1.25rem;
+  block-size: 1.25rem;
+  margin: 0;
+  margin-inline-start: 0.5rem;
+  padding: 0;
+  border-radius: 50%;
+  background-color: var(--cds-support-error);
+  color: var(--cds-text-inverse);
+  line-height: 1;
+}
+
 .boic-permit-details__status,
 .boic-permit-details__pair,
 .boic-permit-details__dates {

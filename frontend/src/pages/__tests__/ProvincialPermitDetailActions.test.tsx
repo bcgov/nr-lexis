@@ -926,7 +926,9 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.getByText('owner@example.test')).toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: "I'm an agent" })).toBeChecked()
     expect(screen.getByRole('checkbox', { name: "I'm an agent" })).toBeDisabled()
-    expect(screen.queryByRole('button', { name: 'Edit applicant' })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /Edit applicant(?: details)?/ }),
+    ).not.toBeInTheDocument()
     await selectPermitDetailTab('Agent')
     expect(await screen.findByText('Agent Co')).toBeInTheDocument()
     expect(screen.getByText('agent@example.test')).toBeInTheDocument()
@@ -987,7 +989,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.getByText('The permit was saved.')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Permit 777 (Pending)' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Permit' })).toHaveAttribute('aria-selected', 'true')
-    expect(screen.getByRole('button', { name: 'Edit permit' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Edit permit details' })).toBeInTheDocument()
     for (const name of ['Scale', 'Documents', 'Fees']) {
       expect(screen.getByRole('tab', { name })).toBeEnabled()
     }
@@ -1000,7 +1002,13 @@ describe('Provincial Permit Detail Action Smoke', () => {
     view.rerender(<RouterProvider router={router} />)
     expect(screen.queryByText('Permit created')).not.toBeInTheDocument()
     await selectPermitDetailTab('Applicant')
-    expect(await screen.findByRole('button', { name: 'Edit applicant' })).toBeInTheDocument()
+    const applicantTile = (
+      await screen.findByRole('heading', { name: 'Applicant details', level: 2 })
+    ).closest('.detail-section-card')
+    expect(applicantTile).toBeTruthy()
+    expect(
+      within(applicantTile as HTMLElement).getByRole('button', { name: 'Edit applicant details' }),
+    ).toBeInTheDocument()
     await selectPermitDetailTab('Shipping')
     expect(await screen.findByRole('button', { name: 'Edit shipping details' })).toBeInTheDocument()
     expect(screen.queryByText('Permit created')).not.toBeInTheDocument()
@@ -1032,7 +1040,9 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     configureEditableBlanketOicPackage()
     await act(() => router.navigate(-1))
-    expect(await screen.findByRole('button', { name: 'Edit permit' })).toBeInTheDocument()
+    expect(
+      await screen.findByRole('button', { name: /Edit permit(?: details)?/ }),
+    ).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Permit 777 (Pending)' })).toBeInTheDocument()
     expect(screen.queryByText('Permit created')).not.toBeInTheDocument()
   })
@@ -1048,7 +1058,9 @@ describe('Provincial Permit Detail Action Smoke', () => {
       },
     )
     render(<RouterProvider router={router} />)
-    expect(await screen.findByRole('button', { name: 'Edit permit' })).toBeInTheDocument()
+    expect(
+      await screen.findByRole('button', { name: /Edit permit(?: details)?/ }),
+    ).toBeInTheDocument()
     await waitFor(() => expect(router.state.location.state).toEqual({}))
     expect(screen.queryByText('Permit created')).not.toBeInTheDocument()
   })
@@ -1092,18 +1104,20 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Scale' })).toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: 'Items' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Edit permit' })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /Edit permit(?: details)?/ }),
+    ).not.toBeInTheDocument()
 
     await selectPermitDetailTab('Applicant')
     expect(await screen.findByRole('heading', { name: 'Applicant details' })).toBeInTheDocument()
-    expect(screen.getByLabelText('Applicant client number')).toHaveAttribute('readonly')
-    expect(screen.getByLabelText('Agent client number')).toHaveAttribute('readonly')
+    expect(screen.queryByLabelText('Applicant client number')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Agent client number')).not.toBeInTheDocument()
     const agentUsedCheckbox = screen.getByRole('checkbox', { name: "I'm an agent" })
     expect(agentUsedCheckbox).toBeChecked()
     expect(agentUsedCheckbox).toBeDisabled()
     await userEvent.click(agentUsedCheckbox)
     expect(screen.getByRole('heading', { name: 'Agent information' })).toBeInTheDocument()
-    expect(screen.getByLabelText('Agent client number')).toHaveValue('00012345')
+    expect(screen.queryByLabelText('Agent client number')).not.toBeInTheDocument()
 
     await selectPermitDetailTab('Shipping')
     expect(await screen.findByLabelText('Purchaser')).toBeEnabled()
@@ -1115,10 +1129,12 @@ describe('Provincial Permit Detail Action Smoke', () => {
     renderPermitDetails()
 
     await selectPermitDetailTab('Applicant')
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit applicant' }))
+    await userEvent.click(
+      await screen.findByRole('button', { name: /Edit applicant(?: details)?/ }),
+    )
 
-    expect(screen.getByLabelText('Applicant client number')).toHaveAttribute('readonly')
-    expect(screen.getByLabelText('Agent client number')).toHaveAttribute('readonly')
+    expect(screen.queryByLabelText('Applicant client number')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Agent client number')).not.toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: "I'm an agent" })).toBeDisabled()
 
     const applicantLocation = screen.getByLabelText('Applicant location')
@@ -1400,7 +1416,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       })
     renderPermitDetails()
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
     const remarks = screen.getByLabelText('Remarks')
     await userEvent.type(remarks, 'Keep this draft remark')
     await userEvent.click(
@@ -1461,7 +1477,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     renderPermitDetails()
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
     await userEvent.type(screen.getByLabelText('Remarks'), 'Keep this draft remark')
     await userEvent.click(
       screen.getByRole('checkbox', { name: 'Include application APP-REFRESH in permit' }),
@@ -1616,7 +1632,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(within(permitSummaryTile).getByText('1000456, 1000457')).toBeInTheDocument()
     expect(within(permitSummaryTile).getByText('PKG-9, PKG-10')).toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Edit permit' }))
+    await userEvent.click(screen.getByRole('button', { name: /Edit permit(?: details)?/ }))
     expect(screen.getByLabelText('Application number(s)')).toHaveValue('1000456, 1000457')
     expect(screen.getByLabelText('Package number(s)')).toHaveValue('PKG-9, PKG-10')
   })
@@ -2003,7 +2019,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.getByLabelText('Calculated fee (CAD)')).toHaveValue('$37.50')
     expect(screen.queryByLabelText('Filter fee rows')).not.toBeInTheDocument()
     await selectPermitDetailTab('Permit')
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
     await userEvent.clear(screen.getByLabelText('Submit date'))
     await userEvent.type(screen.getByLabelText('Submit date'), '2026-04-11')
     await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
@@ -2062,7 +2078,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await selectPermitDetailTab('Fees')
     expect(screen.getByLabelText('Calculated fee (CAD)')).toHaveValue('$37.50')
     await selectPermitDetailTab('Permit')
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
     await userEvent.clear(screen.getByLabelText('Submit date'))
     await userEvent.type(screen.getByLabelText('Submit date'), '2026-04-11')
     await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
@@ -2490,7 +2506,9 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.queryByText('Loading provincial permit detail…')).not.toBeInTheDocument()
     expect(mockedFetchProvincialPermitExemptionContext).toHaveBeenCalledWith('EX-9')
     expect(mockedFetchProvincialPermitDetailTabs).not.toHaveBeenCalled()
-    expect(screen.queryByRole('button', { name: 'Edit permit' })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /Edit permit(?: details)?/ }),
+    ).not.toBeInTheDocument()
 
     await act(async () => {
       resolveExemptionContext?.({
@@ -2858,6 +2876,77 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(await screen.findByText('Scale detail was removed from the permit.')).toBeInTheDocument()
   })
 
+  it('disables every normal scale toggle until the current scale update has reloaded', async () => {
+    configureActivePermit()
+    let resolveUpdate!: (value: {
+      success: true
+      message: string
+      errors: string[]
+      warnings: string[]
+    }) => void
+    mockedUpdatePermitScaleAttachment.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveUpdate = resolve
+      }),
+    )
+    mockedFetchProvincialPermitDetailTabs.mockResolvedValue({
+      ...tabsResult,
+      items: [
+        {
+          id: 'SCALE-1',
+          timberMark: 'TM-1',
+          scaleType: '',
+          species: 'Fir',
+          grade: 'A',
+          pieces: 12,
+          volume: 34.5,
+          packageNumber: 'PKG-9',
+          permitNumber: '777',
+          includedInPermit: true,
+        },
+        {
+          id: 'SCALE-2',
+          timberMark: 'TM-2',
+          scaleType: '',
+          species: 'Cedar',
+          grade: 'B',
+          pieces: 4,
+          volume: 8.5,
+          packageNumber: 'PKG-9',
+          permitNumber: '',
+          includedInPermit: false,
+        },
+      ],
+    })
+
+    renderPermitDetails()
+    await selectPermitDetailTab('Items')
+    const includeFirst = await screen.findByRole('checkbox', {
+      name: 'Include scale SCALE-1 in permit',
+    })
+    const includeSecond = screen.getByRole('checkbox', {
+      name: 'Include scale SCALE-2 in permit',
+    })
+    await userEvent.click(includeSecond)
+
+    await waitFor(() => expect(mockedUpdatePermitScaleAttachment).toHaveBeenCalledOnce())
+    expect(includeFirst).toBeDisabled()
+    expect(includeSecond).toBeDisabled()
+
+    await userEvent.click(includeFirst)
+    expect(mockedUpdatePermitScaleAttachment).toHaveBeenCalledOnce()
+
+    await act(async () =>
+      resolveUpdate({
+        success: true,
+        message: 'Scale detail was added to the permit.',
+        errors: [],
+        warnings: [],
+      }),
+    )
+    await waitFor(() => expect(includeFirst).toBeEnabled())
+  })
+
   it('restores a Ministerial application after its last scale is removed', async () => {
     const initialDetail = configureMinisterialActivePermit({
       receiptNumber: null,
@@ -3202,7 +3291,9 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     expect(await screen.findByRole('heading', { name: 'Permit summary' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Email approval' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Edit permit' })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /Edit permit(?: details)?/ }),
+    ).not.toBeInTheDocument()
 
     await selectPermitDetailTab('Shipping')
     expect(screen.queryByRole('button', { name: 'Edit shipping' })).not.toBeInTheDocument()
@@ -4025,7 +4116,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
         </MemoryRouter>,
       )
 
-      await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+      await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
       if (previousLookup === 'failed') {
         expect(await screen.findByText(regionLookupError)).toBeInTheDocument()
         expect(screen.getByLabelText('Region')).toBeDisabled()
@@ -4050,7 +4141,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
         ),
       )
 
-      await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+      await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
       expect(screen.getByLabelText('Region')).toBeDisabled()
       expect(screen.queryByText(regionLookupError)).not.toBeInTheDocument()
       await act(async () => {
@@ -4372,7 +4463,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       })
 
       await selectPermitDetailTab('Permit')
-      await userEvent.click(screen.getByRole('button', { name: 'Edit permit' }))
+      await userEvent.click(screen.getByRole('button', { name: /Edit permit(?: details)?/ }))
       const regionSelect = screen.getByLabelText('Region')
       expect(regionSelect).toBeDisabled()
       expect(regionSelect).toHaveValue('1903')
@@ -5136,7 +5227,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       </MemoryRouter>,
     )
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
     const submitDate = screen.getByLabelText('Submit date')
     const issueDate = screen.getByLabelText('Issued date')
     const expiryDate = screen.getByLabelText('Expiry date')
@@ -5200,7 +5291,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
     renderPermitDetails()
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
     expect(screen.getByLabelText('Submit date')).toHaveValue('')
     expect(screen.getByLabelText('Submit date')).toBeDisabled()
     expect(screen.getByLabelText('Submit date')).not.toHaveAttribute('aria-required')
@@ -5223,7 +5314,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     configureActivePermit()
     renderPermitDetails()
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
     await userEvent.clear(screen.getByLabelText('Submit date'))
     await userEvent.clear(screen.getByLabelText('Issued date'))
     await userEvent.clear(screen.getByLabelText('Expiry date'))
@@ -5239,7 +5330,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
         }),
       )
     })
-    await userEvent.click(screen.getByRole('button', { name: 'Edit permit' }))
+    await userEvent.click(screen.getByRole('button', { name: /Edit permit(?: details)?/ }))
     expect(screen.getByLabelText('Submit date')).toHaveValue(permitDetail.applicationDate ?? '')
     expect(screen.getByLabelText('Issued date')).toHaveValue('')
     expect(screen.getByLabelText('Expiry date')).toHaveValue('')
@@ -5256,7 +5347,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
     renderPermitDetails()
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
     await userEvent.selectOptions(screen.getByLabelText('Status'), 'CAN')
     await userEvent.clear(screen.getByLabelText('Issued date'))
     await userEvent.clear(screen.getByLabelText('Expiry date'))
@@ -5271,7 +5362,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
         }),
       )
     })
-    await userEvent.click(screen.getByRole('button', { name: 'Edit permit' }))
+    await userEvent.click(screen.getByRole('button', { name: /Edit permit(?: details)?/ }))
     expect(screen.getByLabelText('Issued date')).toHaveValue(permitDetail.issueDate ?? '')
     expect(screen.getByLabelText('Expiry date')).toHaveValue(permitDetail.expiryDate ?? '')
   })
@@ -5287,7 +5378,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
     renderPermitDetails()
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
     expect(screen.getByLabelText('Submit date')).not.toHaveAttribute('aria-required')
     expect(screen.getByLabelText('Issued date')).not.toHaveAttribute('aria-required')
     expect(screen.getByLabelText('Expiry date')).not.toHaveAttribute('aria-required')
@@ -5315,7 +5406,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
         }),
       )
     })
-    await userEvent.click(screen.getByRole('button', { name: 'Edit permit' }))
+    await userEvent.click(screen.getByRole('button', { name: /Edit permit(?: details)?/ }))
     expect(screen.getByLabelText('Submit date')).toHaveValue(permitDetail.applicationDate ?? '')
     expect(screen.getByLabelText('Issued date')).toHaveValue('')
     expect(screen.getByLabelText('Expiry date')).toHaveValue('')
@@ -5326,9 +5417,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
     renderPermitDetails()
 
     await selectPermitDetailTab('Owner')
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit applicant' }))
-    expect(screen.getByLabelText('Applicant client number')).toHaveAttribute('readonly')
-    expect(screen.getByLabelText('Agent client number')).toHaveAttribute('readonly')
+    await userEvent.click(
+      await screen.findByRole('button', { name: /Edit applicant(?: details)?/ }),
+    )
+    expect(screen.queryByLabelText('Applicant client number')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Agent client number')).not.toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: "I'm an agent" })).toBeDisabled()
     await waitFor(() => {
       expect(screen.getByLabelText('Applicant location')).toBeEnabled()
@@ -5384,10 +5477,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
     renderPermitDetails()
 
     await selectPermitDetailTab('Owner')
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit applicant' }))
+    await userEvent.click(
+      await screen.findByRole('button', { name: /Edit applicant(?: details)?/ }),
+    )
     const saveButton = screen.getByRole('button', { name: 'Save permit' })
     expect(saveButton).toBeDisabled()
-    expect(screen.getByLabelText('Applicant client number')).toHaveAttribute('readonly')
 
     await act(async () =>
       resolveOwnerLocations?.([
@@ -5403,14 +5497,16 @@ describe('Provincial Permit Detail Action Smoke', () => {
     renderPermitDetails()
 
     await selectPermitDetailTab('Owner')
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit applicant' }))
+    await userEvent.click(
+      await screen.findByRole('button', { name: /Edit applicant(?: details)?/ }),
+    )
     const agentUsedCheckbox = screen.getByRole('checkbox', { name: "I'm an agent" })
     expect(agentUsedCheckbox).toBeChecked()
     expect(agentUsedCheckbox).toBeDisabled()
     await userEvent.click(agentUsedCheckbox)
     expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Agent information' })).toBeInTheDocument()
-    expect(screen.getByLabelText('Agent client number')).toHaveValue('00012345')
+    expect(screen.queryByLabelText('Agent client number')).not.toBeInTheDocument()
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
   })
 
@@ -5431,7 +5527,9 @@ describe('Provincial Permit Detail Action Smoke', () => {
     renderPermitDetails()
 
     await selectPermitDetailTab('Owner')
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit applicant' }))
+    await userEvent.click(
+      await screen.findByRole('button', { name: /Edit applicant(?: details)?/ }),
+    )
     const agentUsedCheckbox = screen.getByRole('checkbox', { name: "I'm an agent" })
     expect(agentUsedCheckbox).not.toBeChecked()
     expect(agentUsedCheckbox).toBeDisabled()
@@ -5461,7 +5559,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       .mockResolvedValue(persistedDetail)
     renderPermitDetails()
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
     await userEvent.clear(screen.getByLabelText('Remarks'))
     await userEvent.type(screen.getByLabelText('Remarks'), 'save and refresh clients')
     await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
@@ -5490,7 +5588,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await selectPermitDetailTab('Owner')
     expect(await screen.findByText('Owner Co')).toBeInTheDocument()
     await selectPermitDetailTab('Permit')
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
     await userEvent.clear(screen.getByLabelText('Remarks'))
     await userEvent.type(screen.getByLabelText('Remarks'), 'save without refreshed clients')
     await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
@@ -5521,7 +5619,9 @@ describe('Provincial Permit Detail Action Smoke', () => {
         'The permit was saved, but its current details could not be refreshed. Reload before making another change.',
       ),
     ).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Edit permit' })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /Edit permit(?: details)?/ }),
+    ).not.toBeInTheDocument()
 
     await selectPermitDetailTab('Shipping')
     expect(screen.queryByRole('button', { name: 'Edit shipping' })).not.toBeInTheDocument()
@@ -5567,7 +5667,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
     render(<RouterProvider router={router} />)
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
     await userEvent.clear(screen.getByLabelText('Submit date'))
     await userEvent.type(screen.getByLabelText('Submit date'), '2026-04-11')
     await userEvent.selectOptions(screen.getByLabelText('Permit status'), 'COM')
@@ -5595,7 +5695,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     renderPermitDetails()
 
     await selectPermitDetailTab('Fees')
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
     const receiptNumber = screen.getByLabelText('Receipt number')
     await selectPermitDetailTab('Permit')
     const remarks = screen.getByLabelText('Remarks')
@@ -5636,7 +5736,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     configureActivePermit()
     renderPermitDetails()
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
     await userEvent.selectOptions(screen.getByLabelText('Permit status'), 'EXP')
     await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
 
@@ -5654,7 +5754,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     configureActivePermit()
     renderPermitDetails()
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
 
     const submitDate = screen.getByLabelText('Submit date')
     expect(submitDate).toBeEnabled()
@@ -5690,7 +5790,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     configureActivePermit()
     renderPermitDetails()
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
 
     expect(screen.getByLabelText('Permit status')).toBeDisabled()
     expect(screen.getByLabelText('Submit date')).toBeDisabled()
@@ -5708,7 +5808,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
     renderPermitDetails()
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
     await userEvent.clear(screen.getByLabelText('Remarks'))
     await userEvent.type(screen.getByLabelText('Remarks'), 'normal permit update')
     await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
@@ -5726,7 +5826,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
   it('guards unload only after a permit field differs from its edit baseline', async () => {
     renderPermitDetails()
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
 
     const unchangedUnload = new Event('beforeunload', { cancelable: true })
     window.dispatchEvent(unchangedUnload)
@@ -5764,7 +5864,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
     render(<RouterProvider router={router} />)
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
     await userEvent.clear(screen.getByLabelText('Remarks'))
     await userEvent.type(screen.getByLabelText('Remarks'), 'Updated permit remarks')
     await selectPermitDetailTab('Shipping')
@@ -5798,7 +5898,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     configureActivePermit()
     renderPermitDetails()
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
     await userEvent.clear(screen.getByLabelText('Remarks'))
     await userEvent.type(screen.getByLabelText('Remarks'), 'Updated permit remarks')
     await selectPermitDetailTab('Shipping')
@@ -5823,7 +5923,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
     renderPermitDetails()
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
     await userEvent.clear(screen.getByLabelText('Remarks'))
     await userEvent.type(screen.getByLabelText('Remarks'), 'Slow permit save')
     await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
@@ -5881,12 +5981,16 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
       if (origin === 'Applicant') {
         await selectPermitDetailTab('Applicant')
-        await userEvent.click(await screen.findByRole('button', { name: 'Edit applicant' }))
+        await userEvent.click(
+          await screen.findByRole('button', { name: /Edit applicant(?: details)?/ }),
+        )
         const applicantLocation = screen.getByLabelText('Applicant location')
         await waitFor(() => expect(applicantLocation).toBeEnabled())
         await userEvent.selectOptions(applicantLocation, '04')
       } else {
-        await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+        await userEvent.click(
+          await screen.findByRole('button', { name: /Edit permit(?: details)?/ }),
+        )
         await userEvent.clear(screen.getByLabelText('Remarks'))
         await userEvent.type(screen.getByLabelText('Remarks'), 'Delayed permit save')
       }
@@ -5936,7 +6040,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.click(destinationCountry)
     await userEvent.click(await screen.findByRole('option', { name: 'United States (US)' }))
     await selectPermitDetailTab('Permit')
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
     expect(screen.getByLabelText('Region')).toBeDisabled()
     await userEvent.clear(screen.getByLabelText('Submit date'))
     await userEvent.type(screen.getByLabelText('Submit date'), '2026-04-11')
@@ -5984,7 +6088,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
     renderPermitDetails()
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
     const regionSelect = screen.getByLabelText('Region')
     expect(regionSelect).toBeEnabled()
     expect(regionSelect).toHaveValue('1903')
@@ -6021,7 +6125,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
     renderPermitDetails()
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
     await userEvent.selectOptions(screen.getByLabelText('Region'), '1904')
     await selectPermitDetailTab('Scale')
     await userEvent.click(screen.getByRole('button', { name: 'Create package' }))
@@ -6056,7 +6160,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       })
       renderPermitDetails()
 
-      await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+      await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
       const regionSelect = screen.getByLabelText('Region')
       await waitFor(() => expect(regionSelect).toHaveValue(String(orgUnitNumber)))
       expect(regionSelect).toBeDisabled()
@@ -6168,7 +6272,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       })
       renderPermitDetails()
 
-      await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+      await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
       const permitTile = screen
         .getByRole('heading', { name: 'Permit details' })
         .closest('.cds--tile') as HTMLElement
@@ -6226,7 +6330,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
     renderPermitDetails()
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
     await userEvent.clear(screen.getByLabelText('Permit Request Pieces'))
     await userEvent.clear(screen.getByLabelText('Permit Request Volume (m³)'))
     await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
@@ -6253,7 +6357,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
     renderPermitDetails()
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
     await userEvent.selectOptions(screen.getByLabelText('Status'), 'CAN')
     expect(screen.getByLabelText('Permit Request Pieces')).toHaveAttribute('aria-required', 'true')
     expect(screen.getByLabelText('Permit Request Volume (m³)')).toHaveAttribute(
@@ -6288,7 +6392,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
     renderPermitDetails()
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
     await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
 
     expect(
@@ -6311,7 +6415,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
     renderPermitDetails()
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
     await userEvent.clear(screen.getByLabelText('Permit Request Pieces'))
     await userEvent.type(screen.getByLabelText('Permit Request Pieces'), '-1')
     await userEvent.clear(screen.getByLabelText('Permit Request Volume (m³)'))
@@ -6361,7 +6465,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
     renderPermitDetails()
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
     await userEvent.selectOptions(screen.getByLabelText('Status'), 'COM')
     expect(screen.getByLabelText('Permit Request Pieces')).toHaveAttribute('aria-required', 'true')
     expect(screen.getByLabelText('Permit Request Volume (m³)')).toHaveAttribute(
@@ -6413,7 +6517,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       })
       renderPermitDetails()
 
-      await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+      await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
       const statusLabel = blanketOic ? 'Status' : 'Permit status'
       await userEvent.selectOptions(screen.getByLabelText(statusLabel), 'COM')
 
@@ -6494,7 +6598,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       })
       renderPermitDetails()
 
-      await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+      await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
 
       const requestPieces = screen.getByLabelText('Permit Request Pieces')
       const requestVolume = screen.getByLabelText('Permit Request Volume (m³)')
@@ -6531,7 +6635,9 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     expect(await screen.findByText('Permit Request Pieces')).toBeInTheDocument()
     expect(screen.getByText('Permit Request Volume (m³)')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Edit permit' })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /Edit permit(?: details)?/ }),
+    ).not.toBeInTheDocument()
     expect(screen.getByText('Another user is editing this permit.')).toBeInTheDocument()
   })
 
@@ -6543,7 +6649,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
     renderPermitDetails()
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
     await userEvent.selectOptions(screen.getByLabelText('Permit status'), 'ACT')
     await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
 
@@ -6579,7 +6685,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
     renderPermitDetails()
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
     await userEvent.selectOptions(screen.getByLabelText('Permit status'), 'COM')
     await selectPermitDetailTab('Fees')
     await userEvent.clear(screen.getByLabelText('Receipt number'))
@@ -6608,7 +6714,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     renderPermitDetails()
 
     await selectPermitDetailTab('Fees')
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
     expect(screen.getByText(/select Completed on the Permit tab/i)).toBeInTheDocument()
     const receiptNumber = screen.getByLabelText('Receipt number')
     await userEvent.type(receiptNumber, 'R-2')
@@ -6617,7 +6723,9 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await selectPermitDetailTab('Owner')
     expect(screen.getByRole('heading', { name: 'Applicant details' })).toBeInTheDocument()
     expect(screen.queryByLabelText('Applicant client number')).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Edit applicant' })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /Edit applicant(?: details)?/ }),
+    ).not.toBeInTheDocument()
     await selectPermitDetailTab('Permit')
 
     const financialTile = screen
@@ -6669,7 +6777,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     renderPermitDetails()
 
     expect((await screen.findAllByText('Payment Pending')).length).toBeGreaterThan(0)
-    await userEvent.click(screen.getByRole('button', { name: 'Edit permit' }))
+    await userEvent.click(screen.getByRole('button', { name: /Edit permit(?: details)?/ }))
 
     const permitStatusSelect = screen.getByLabelText('Permit status')
     expect(permitStatusSelect).toHaveValue('PPD')
@@ -6688,7 +6796,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     renderPermitDetails()
 
     await selectPermitDetailTab('Fees')
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
     expect(screen.getByLabelText('Receipt number')).toBeDisabled()
   })
 
@@ -6709,7 +6817,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     await selectPermitDetailTab('Fees')
     expect(screen.queryByText(/select Completed on the Permit tab/i)).not.toBeInTheDocument()
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
 
     expect(screen.getByLabelText('Receipt number')).toBeDisabled()
     expect(screen.queryByText(/select Completed on the Permit tab/i)).not.toBeInTheDocument()
@@ -6859,7 +6967,9 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
 
     expect(await screen.findByRole('heading', { name: 'Permit summary' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Edit permit' })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /Edit permit(?: details)?/ }),
+    ).not.toBeInTheDocument()
     await selectPermitDetailTab('Shipping')
     expect(await screen.findByRole('heading', { name: 'Shipping' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Edit shipping' })).not.toBeInTheDocument()
@@ -6885,7 +6995,9 @@ describe('Provincial Permit Detail Action Smoke', () => {
       ),
     ).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Email approval' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Edit permit' })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /Edit permit(?: details)?/ }),
+    ).not.toBeInTheDocument()
 
     await selectPermitDetailTab('Shipping')
     expect(screen.queryByRole('button', { name: 'Edit shipping' })).not.toBeInTheDocument()
@@ -6905,7 +7017,9 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     expect(await screen.findByRole('heading', { name: 'Permit summary' })).toBeInTheDocument()
     await waitFor(() => expect(mockedFetchPermitFeeOverrideContext).toHaveBeenCalled())
-    expect(screen.queryByRole('button', { name: 'Edit permit' })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /Edit permit(?: details)?/ }),
+    ).not.toBeInTheDocument()
     expect(screen.queryByRole('textbox', { name: 'Remarks' })).not.toBeInTheDocument()
 
     await selectPermitDetailTab('Shipping')
@@ -6927,7 +7041,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
   it('keeps completed permit details editable for authorized staff', async () => {
     renderPermitDetails()
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+    await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
     expect(screen.getByRole('textbox', { name: 'Remarks' })).toBeEnabled()
   })
 
@@ -7942,6 +8056,46 @@ describe('Provincial Permit Detail Action Smoke', () => {
       'cds--toast-notification--success',
     )
     expect(screen.getByText('permit-doc.pdf was deleted.')).toBeInTheDocument()
+  })
+
+  it('keeps refreshed permit documents visible when the independent invoice refresh fails', async () => {
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      permitStatusCode: 'ACT',
+      permitStatusDescription: 'Active',
+    })
+    mockedFetchPermitDocuments
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: '600',
+            name: 'permit-only.pdf',
+            description: 'Permit document',
+            type: 'Permit',
+            typeCode: 'PER',
+          },
+        ],
+        source: 'api',
+      })
+      .mockResolvedValueOnce({ rows: [], source: 'api' })
+    mockedFetchPermitInvoices.mockRejectedValueOnce(new Error('invoice lookup unavailable'))
+
+    renderPermitDetails()
+    await selectPermitDetailTab('Documents')
+    await enterPermitDocumentEditMode()
+    await userEvent.click(await screen.findByRole('button', { name: 'Delete' }))
+    await userEvent.click(
+      within(await screen.findByRole('dialog', { name: 'Delete document' })).getByRole('button', {
+        name: 'Delete',
+      }),
+    )
+
+    await waitFor(() => expect(mockedRemovePermitDocument).toHaveBeenCalledWith('600', '777'))
+    expect(screen.queryByText('permit-only.pdf')).not.toBeInTheDocument()
+    expect(screen.getByText('permit-only.pdf was deleted.')).toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', { name: 'Permit documents unavailable' }),
+    ).not.toBeInTheDocument()
   })
 
   it('keeps active invoice document delete independent from invoice upload permission', async () => {
