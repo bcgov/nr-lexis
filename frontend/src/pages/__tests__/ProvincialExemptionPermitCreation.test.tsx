@@ -25,6 +25,7 @@ import {
 } from '@/service/provincial-permit-documents-invoices-service'
 import { fetchProvincialExemptionOptions } from '@/service/search-options-service'
 import { fetchShippingReferenceOptions } from '@/service/shipping-reference-service'
+import { ReportRequestError, runReport } from '@/service/report-service'
 import { createTestAuthContext, createTestCapabilities } from '@/test-utils/auth'
 
 vi.mock('@/context/auth/useAuth', () => ({
@@ -1130,7 +1131,36 @@ describe('permit creation from an exemption', () => {
 
     expect(await screen.findByText('The exemption is no longer eligible.')).toBeInTheDocument()
     expect(router.state.location.pathname).toBe('/provincial/exemption/EX-205')
+
+    await userEvent.click(
+      within(screen.getByRole('dialog', { name: 'Apply for new permit' })).getByRole('button', {
+        name: 'Cancel',
+      }),
+    )
+    expect(screen.getByText('The exemption is no longer eligible.')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Apply for new permit' }))
+    expect(screen.queryByText('The exemption is no longer eligible.')).not.toBeInTheDocument()
+    expect(createPermitFromExemption).toHaveBeenCalledTimes(1)
   })
+
+  it.each([activeMinisterialExemption, activeBlanketOicExemption])(
+    'clears unrelated feedback before starting a permit for $exemptionTypeCode',
+    async (detail) => {
+      mockRole(['LEXIS_ADMIN'], ['createPermit', 'savePermit', '/approvedExemptionReport'])
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+      vi.mocked(runReport).mockRejectedValue(new ReportRequestError('Report unavailable.'))
+      renderPage(detail)
+      await userEvent.click(await screen.findByRole('button', { name: 'Print approved exemption' }))
+      expect(await screen.findByText('Report unavailable.')).toBeInTheDocument()
+      await openPermitsTab()
+      await userEvent.click(screen.getByRole('button', { name: 'Apply for new permit' }))
+      expect(screen.getByRole('dialog', { name: 'Apply for new permit' })).toBeInTheDocument()
+      expect(screen.queryByText('Report unavailable.')).not.toBeInTheDocument()
+      expect(createPermitFromExemption).not.toHaveBeenCalled()
+      expect(addPermitDetail).not.toHaveBeenCalled()
+      consoleError.mockRestore()
+    },
+  )
 
   it('treats a transport failure as an unknown outcome instead of inviting a retry', async () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)

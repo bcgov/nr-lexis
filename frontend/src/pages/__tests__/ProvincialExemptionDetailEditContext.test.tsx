@@ -1243,6 +1243,50 @@ describe('Provincial exemption edit context', () => {
     expect(vi.mocked(approveExemptions)).not.toHaveBeenCalled()
   })
 
+  it('clears a previous approval failure when reopening the confirmation', async () => {
+    vi.mocked(useAuth).mockReturnValue(
+      createTestAuthContext({ canPerform: (action: string) => action === 'approveExemption' }),
+    )
+    vi.mocked(fetchProvincialExemptionDetail).mockResolvedValue({
+      ...ministerialExemptionDetail,
+      exemptionStatusCode: 'NEW',
+      exemptionStatusDescription: 'New',
+    })
+    vi.mocked(approveExemptions).mockResolvedValue({
+      success: true,
+      valid: false,
+      sendGrid: [],
+      errorMessage: 'The exemption could not be approved.',
+      errors: [],
+      warnings: [],
+    })
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/EX-205']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+    await userEvent.click(await screen.findByRole('button', { name: 'Approve exemption' }))
+    const dialog = screen.getByRole('dialog', { name: 'Approve exemption' })
+    await userEvent.click(within(dialog).getByRole('checkbox'))
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Approve exemption' }))
+    expect(
+      await within(dialog).findByText('The exemption could not be approved.'),
+    ).toBeInTheDocument()
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    expect(screen.getByText('The exemption could not be approved.')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Approve exemption' }))
+    expect(screen.queryByText('The exemption could not be approved.')).not.toBeInTheDocument()
+    expect(
+      within(screen.getByRole('dialog', { name: 'Approve exemption' })).getByRole('checkbox'),
+    ).not.toBeChecked()
+    expect(approveExemptions).toHaveBeenCalledTimes(1)
+  })
+
   it('requires explicit certification before approving one exemption', async () => {
     vi.mocked(useAuth).mockReturnValue(
       createTestAuthContext({

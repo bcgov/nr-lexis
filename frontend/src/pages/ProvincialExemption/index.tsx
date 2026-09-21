@@ -696,6 +696,7 @@ const ProvincialExemptionPage = () => {
       return
     }
 
+    setApprovalStatus(null)
     setApprovalCertified(false)
     setApprovalDate(formatLocalIsoDate(new Date()))
     setApprovalConfirmationOpen(true)

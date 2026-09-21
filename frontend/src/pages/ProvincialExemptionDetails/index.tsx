@@ -1349,6 +1349,7 @@ const ProvincialExemptionDetailsPage = () => {
         permitTypeCode === 'B' &&
         permitStatusCode === 'ACT'
       ) {
+        setActionErrorMessage('')
         setPermitCreationConfirmationOpen(true)
         return
       }
@@ -1357,6 +1358,7 @@ const ProvincialExemptionDetailsPage = () => {
         (permitTypeCode === 'M' || permitTypeCode === 'O') &&
         permitStatusCode === 'ACT'
       ) {
+        setActionErrorMessage('')
         setPermitCreationConfirmationOpen(true)
       }
     },
@@ -1765,6 +1767,7 @@ const ProvincialExemptionDetailsPage = () => {
                     size="sm"
                     disabled={approving}
                     onClick={() => {
+                      setActionErrorMessage('')
                       setApprovalCertified(false)
                       setApprovalDate(formatLocalIsoDate(new Date()))
                       setApprovalConfirmationTarget(currentDetail.exemptionNumber)
