@@ -7704,12 +7704,10 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
     expect(screen.getByText('Document uploaded')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Add document' })).toBeInTheDocument()
-    const documentSection = screen
-      .getByRole('heading', { name: 'Documents', exact: true })
-      .closest('.cds--tile')
+    const documentSection = screen.getByRole('heading', { name: 'Documents' }).closest('.cds--tile')
     expect(documentSection).toBeTruthy()
     expect(
-      within(documentSection as HTMLElement).queryByRole('button', { name: 'Cancel', exact: true }),
+      within(documentSection as HTMLElement).queryByRole('button', { name: 'Cancel' }),
     ).not.toBeInTheDocument()
 
     const secondFile = new File(['second test'], 'second-ministerial.pdf', {
@@ -7729,7 +7727,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.getByText('Document uploaded')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Add document' })).toBeInTheDocument()
     expect(
-      within(documentSection as HTMLElement).queryByRole('button', { name: 'Cancel', exact: true }),
+      within(documentSection as HTMLElement).queryByRole('button', { name: 'Cancel' }),
     ).not.toBeInTheDocument()
   })
 
