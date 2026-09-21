@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.repository;
 
+import static ca.bc.gov.mof.lexis.repository.application.LexisRemarkQueries.REMARKS_BY_APPLICATION;
 import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_PRODUCT_TYPES;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -18,6 +19,7 @@ import ca.bc.gov.mof.lexis.repository.review.ApplicationReviewRepository;
 import java.sql.CallableStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
@@ -30,6 +32,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.aop.framework.ProxyFactory;
 import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.dao.DataRetrievalFailureException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -530,6 +533,61 @@ class ApplicationReviewRepositoryTest {
   }
 
   @Test
+  @SuppressWarnings("unchecked")
+  void latestAuthoritativeRemarkShouldSelectGreatestMatchingPositiveIdWhenDatesDisagree()
+      throws Exception {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    stubDirectRemarkRows(
+        jdbcTemplate,
+        reviewRemarkResultSet(41L, 900101L, "Newer timestamp", "idir\\reviewer", "2026-09-20 08:30:00"),
+        reviewRemarkResultSet(43L, 900101L, "Largest id", "idir\\reviewer", "2026-09-19 08:30:00"),
+        reviewRemarkResultSet(99L, 900999L, "Other application", "idir\\reviewer", "2026-09-21 08:30:00"),
+        reviewRemarkResultSet(0L, 900101L, "Not allocated", "idir\\reviewer", "2026-09-22 08:30:00"));
+    ApplicationReviewRepository repository = new ApplicationReviewRepository(jdbcTemplate);
+
+    assertThat(repository.findLatestAuthoritativeRemark(900101L))
+        .contains(
+            new ApplicationReviewRepository.ReviewRemarkRow(
+                43L, 900101L, "Largest id", "idir\\reviewer",
+                Timestamp.valueOf("2026-09-19 08:30:00").toInstant()));
+    ArgumentCaptor<Object[]> bindCaptor = ArgumentCaptor.forClass(Object[].class);
+    verify(jdbcTemplate).query(eq(REMARKS_BY_APPLICATION), any(RowMapper.class), bindCaptor.capture());
+    assertThat(bindCaptor.getValue()).containsExactly("900101");
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void latestAuthoritativeRemarkShouldPreserveEmptyResultsAndPropagateDirectFailures() {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    DataAccessResourceFailureException failure =
+        new DataAccessResourceFailureException("Oracle remarks unavailable");
+    when(jdbcTemplate.query(eq(REMARKS_BY_APPLICATION), any(RowMapper.class), any(Object[].class)))
+        .thenReturn(List.of())
+        .thenThrow(failure);
+    ApplicationReviewRepository repository = new ApplicationReviewRepository(jdbcTemplate);
+
+    assertThat(repository.findLatestAuthoritativeRemark(900101L)).isEmpty();
+    assertThatThrownBy(() -> repository.findLatestAuthoritativeRemark(900101L)).isSameAs(failure);
+  }
+
+  @Test
+  void latestAuthoritativeRemarkShouldFailWhenALaterRequiredDirectColumnCannotBeRead()
+      throws Exception {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    ResultSet badRow = reviewRemarkResultSet(43L, 900101L, "Broken row", "idir\\reviewer", null);
+    when(badRow.getLong("APPLICATION_NUMBER")).thenThrow(new SQLException("missing column"));
+    stubDirectRemarkRows(
+        jdbcTemplate,
+        reviewRemarkResultSet(42L, 900101L, "Good row", "idir\\reviewer", null),
+        badRow);
+    ApplicationReviewRepository repository = new ApplicationReviewRepository(jdbcTemplate);
+
+    assertThatThrownBy(() -> repository.findLatestAuthoritativeRemark(900101L))
+        .isInstanceOf(DataRetrievalFailureException.class)
+        .hasMessageContaining("APPLICATION_NUMBER");
+  }
+
+  @Test
   void statusRemarkShouldPreserveEnteredTextForStorageAndAuthoritativeEmail() {
     RemarkRoundTripReviewRepository repository = new RemarkRoundTripReviewRepository();
     String text = "A & B; <b>text</b>; literal &lt;";
@@ -879,13 +937,10 @@ class ApplicationReviewRepositoryTest {
 
     @Override
     @SuppressWarnings("unchecked")
-    protected <T> List<T> queryCursorProcedureRequired(
-        String procedureSignature,
-        SqlConsumer<CallableStatement> binder,
-        int cursorOutIndex,
-        SqlRowMapper<T> rowMapper) {
-      assertThat(procedureSignature).isEqualTo("LEXIS_GROUP_5.FIND_REMARKS_BY_APP(?,?)");
-      assertThat(cursorOutIndex).isEqualTo(2);
+    protected <T> List<T> queryDirectRequired(
+        String sql, SqlRowMapper<T> rowMapper, Object... bindValues) {
+      assertThat(sql).isEqualTo(REMARKS_BY_APPLICATION);
+      assertThat(bindValues).containsExactly("900101");
       return (List<T>) remarks;
     }
   }
@@ -942,6 +997,20 @@ class ApplicationReviewRepositoryTest {
     }
 
     @Override
+    @SuppressWarnings("unchecked")
+    protected <T> List<T> queryDirectRequired(
+        String sql, SqlRowMapper<T> rowMapper, Object... bindValues) {
+      assertThat(sql).isEqualTo(REMARKS_BY_APPLICATION);
+      assertThat(bindValues).containsExactly("900101");
+      try {
+        return List.of(
+            rowMapper.map(reviewRemarkResultSet(44L, 900101L, storedRemark, "idir\\jsmith", null)));
+      } catch (SQLException ex) {
+        throw new AssertionError(ex);
+      }
+    }
+
+    @Override
     protected void executeProcedureRequired(
         String procedureSignature, SqlConsumer<CallableStatement> binder) {
       statusWrites++;
@@ -991,6 +1060,36 @@ class ApplicationReviewRepositoryTest {
               return callback.doInCallableStatement(statement);
             });
     return jdbcTemplate;
+  }
+
+  @SuppressWarnings("unchecked")
+  private static void stubDirectRemarkRows(JdbcTemplate jdbcTemplate, ResultSet... resultSets) {
+    when(jdbcTemplate.query(eq(REMARKS_BY_APPLICATION), any(RowMapper.class), any(Object[].class)))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<ApplicationReviewRepository.ReviewRemarkRow> rowMapper =
+                  invocation.getArgument(1);
+              java.util.ArrayList<ApplicationReviewRepository.ReviewRemarkRow> rows =
+                  new java.util.ArrayList<>();
+              for (int index = 0; index < resultSets.length; index++) {
+                rows.add(rowMapper.mapRow(resultSets[index], index));
+              }
+              return rows;
+            });
+  }
+
+  private static ResultSet reviewRemarkResultSet(
+      long remarkId, long applicationNumber, String remark, String user, String timestamp)
+      throws SQLException {
+    ResultSet resultSet = mock(ResultSet.class);
+    when(resultSet.getLong("EXPORT_EXMPTN_APPL_REMARK_NMBR")).thenReturn(remarkId);
+    when(resultSet.getLong("APPLICATION_NUMBER")).thenReturn(applicationNumber);
+    when(resultSet.wasNull()).thenReturn(false);
+    when(resultSet.getString("REMARK")).thenReturn(remark);
+    when(resultSet.getString("ENTRY_USERID")).thenReturn(user);
+    when(resultSet.getTimestamp("ENTRY_TIMESTAMP"))
+        .thenReturn(timestamp == null ? null : Timestamp.valueOf(timestamp));
+    return resultSet;
   }
 
   private record EndUseInput(String speciesCode, String endUseCode) {}

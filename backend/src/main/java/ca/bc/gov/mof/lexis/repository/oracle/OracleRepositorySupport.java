@@ -332,6 +332,12 @@ public abstract class OracleRepositorySupport {
     }
   }
 
+  /** Executes a SELECT with nullable column mapping while propagating database failures. */
+  protected <T> List<T> queryDirectFailClosed(
+      String sql, SqlRowMapper<T> rowMapper, Object... bindValues) {
+    return jdbcTemplate.query(sql, (rs, rowNumber) -> rowMapper.map(rs), bindValues);
+  }
+
   /** Executes a bound SELECT with the same required-column contract as a required cursor read. */
   protected <T> List<T> queryDirectRequired(
       String sql, SqlRowMapper<T> rowMapper, Object... bindValues) {

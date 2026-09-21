@@ -161,8 +161,6 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
       LEXIS_GROUP_5_PACKAGE + "FIND_PACKAGE_BY_NUMBER(?,?)";
   private static final String FIND_PACKAGES_BY_APPLICATION =
       LEXIS_GROUP_5_PACKAGE + "FIND_PACKAGES_BY_APP(?,?)";
-  private static final String FIND_REMARKS_BY_APPLICATION =
-      LEXIS_GROUP_5_PACKAGE + "FIND_REMARKS_BY_APP(?,?)";
   private static final String FIND_PURCHASE_OFFERS_BY_APPLICATION =
       LEXIS_GROUP_5_PACKAGE + "FIND_PURCHASE_OFFERS_BY_APP(?,?)";
   private static final String FIND_SCALE_DETAIL_BY_APPLICATION =
@@ -685,11 +683,10 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
   }
 
   private List<LexisApplicationDetailDto.LexisRemarkDto> loadRemarksByApplication(Long applicationNumber) {
-    return queryCursorProcedureFailClosed(
-            FIND_REMARKS_BY_APPLICATION,
-            cs -> cs.setString(1, applicationNumber.toString()),
-            2,
-            this::mapRemarkRow)
+    return queryDirectFailClosed(
+            LexisRemarkQueries.REMARKS_BY_APPLICATION,
+            this::mapRemarkRow,
+            applicationNumber.toString())
         .stream()
         .sorted(
             Comparator.comparing(

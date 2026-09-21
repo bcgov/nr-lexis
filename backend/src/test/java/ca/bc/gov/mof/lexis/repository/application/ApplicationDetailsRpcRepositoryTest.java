@@ -1,5 +1,7 @@
 package ca.bc.gov.mof.lexis.repository.application;
 
+import static ca.bc.gov.mof.lexis.repository.application.LexisRemarkQueries.REMARKS_BY_APPLICATION;
+import static ca.bc.gov.mof.lexis.repository.application.LexisRemarkQueries.REMARK_BY_NUMBER;
 import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_PACKAGE_STATUSES;
 import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_SPECIES;
 import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ORG_UNIT_BY_NUMBER;
@@ -19,6 +21,7 @@ import java.io.ByteArrayOutputStream;
 import java.sql.CallableStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Arrays;
@@ -217,6 +220,326 @@ class ApplicationDetailsRpcRepositoryTest {
         .isInstanceOf(org.springframework.dao.DataRetrievalFailureException.class)
         .hasMessageContaining("ORG_UNIT_NO")
         .hasCause(failure);
+  }
+
+  @Test
+  void remarkByNumberDirectQueryShouldKeepTheArchivedFullProjectionAndKeyPredicate() {
+    String normalized = REMARK_BY_NUMBER.replaceAll("\\s+", " ").trim();
+
+    assertThat(normalized)
+        .contains(
+            "SELECT R.EXPORT_EXMPTN_APPL_REMARK_NMBR, R.REMARK_DATE, R.REMARK, "
+                + "R.ENTRY_USERID, R.ENTRY_TIMESTAMP, R.UPDATE_USERID, R.UPDATE_TIMESTAMP, "
+                + "R.APPLICATION_NUMBER")
+        .contains("FROM THE.EXPORT_EXEMPTION_APP_REMARKS R")
+        .endsWith("WHERE R.EXPORT_EXMPTN_APPL_REMARK_NMBR = ?");
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void remarkByNumberShouldRejectInvalidKeysWithoutQuerying() {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    ApplicationDetailsRpcRepository repository = new ApplicationDetailsRpcRepository(jdbcTemplate);
+
+    assertThat(repository.findRemarkByNumber(null)).isEmpty();
+    assertThat(repository.findRemarkByNumber(0L)).isEmpty();
+    assertThat(repository.findRemarkByNumber(-1L)).isEmpty();
+    assertThat(repository.findRemarkByNumberRequired(null)).isEmpty();
+    assertThat(repository.findRemarkByNumberRequired(0L)).isEmpty();
+    assertThat(repository.findRemarkByNumberRequired(-1L)).isEmpty();
+    verifyNoInteractions(jdbcTemplate);
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void remarkByNumberShouldPreserveLegitimateEmptyResultsInBothVariants() {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    when(jdbcTemplate.query(eq(REMARK_BY_NUMBER), any(RowMapper.class), eq(44L)))
+        .thenReturn(List.of());
+    ApplicationDetailsRpcRepository repository = new ApplicationDetailsRpcRepository(jdbcTemplate);
+
+    assertThat(repository.findRemarkByNumber(44L)).isEmpty();
+    assertThat(repository.findRemarkByNumberRequired(44L)).isEmpty();
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void remarkByNumberShouldBindLongAndPreserveTheFirstMappedRow() throws Exception {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    String expectedText = "first line &amp; literal\n" + "&lt;raw&gt; &#39;\n".repeat(80) + "last line";
+    String storedLiteral = "  " + expectedText + "  ";
+    ResultSet first = remarkRow(44L, 9999L, storedLiteral, " idir\\jsmith ", Instant.EPOCH);
+    ResultSet second = remarkRow(45L, 1000456L, "later", "idir\\other", Instant.now());
+    when(jdbcTemplate.query(eq(REMARK_BY_NUMBER), any(RowMapper.class), eq(44L)))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<ApplicationDetailsRpcRepository.RemarkRow> mapper = invocation.getArgument(1);
+              return List.of(mapper.mapRow(first, 0), mapper.mapRow(second, 1));
+            });
+    ApplicationDetailsRpcRepository repository = new ApplicationDetailsRpcRepository(jdbcTemplate);
+
+    assertThat(repository.findRemarkByNumber(44L))
+        .contains(
+            new ApplicationDetailsRpcRepository.RemarkRow(
+                44L,
+                9999L,
+                expectedText,
+                "idir\\jsmith",
+                Instant.EPOCH));
+    assertThat(repository.findRemarkByNumberRequired(44L))
+        .contains(
+            new ApplicationDetailsRpcRepository.RemarkRow(
+                44L,
+                9999L,
+                expectedText,
+                "idir\\jsmith",
+                Instant.EPOCH));
+    verify(jdbcTemplate, org.mockito.Mockito.times(2))
+        .query(eq(REMARK_BY_NUMBER), any(RowMapper.class), eq(44L));
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void remarkByNumberShouldPropagateOracleFailureInBothVariants() throws Exception {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    DataAccessResourceFailureException failure =
+        new DataAccessResourceFailureException("Oracle unavailable after first row");
+    ResultSet first = remarkRow(44L, 1000456L, "first", "idir\\jsmith", Instant.EPOCH);
+    when(jdbcTemplate.query(eq(REMARK_BY_NUMBER), any(RowMapper.class), eq(44L)))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<ApplicationDetailsRpcRepository.RemarkRow> mapper = invocation.getArgument(1);
+              mapper.mapRow(first, 0);
+              throw failure;
+            });
+    ApplicationDetailsRpcRepository repository = new ApplicationDetailsRpcRepository(jdbcTemplate);
+
+    assertThatThrownBy(() -> repository.findRemarkByNumber(44L)).isSameAs(failure);
+    assertThatThrownBy(() -> repository.findRemarkByNumberRequired(44L)).isSameAs(failure);
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void remarkByNumberShouldMaterializeLaterRowsBeforeRequiredFirstRowSelection()
+      throws Exception {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    ResultSet first = remarkRow(44L, 9999L, "first", "idir\\jsmith", Instant.EPOCH);
+    ResultSet later = remarkRow(45L, 1000456L, "later", "idir\\other", Instant.now());
+    SQLException cause = new SQLException("Invalid column name");
+    when(later.getString("REMARK")).thenThrow(cause);
+    when(jdbcTemplate.query(eq(REMARK_BY_NUMBER), any(RowMapper.class), eq(44L)))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<ApplicationDetailsRpcRepository.RemarkRow> mapper = invocation.getArgument(1);
+              return List.of(mapper.mapRow(first, 0), mapper.mapRow(later, 1));
+            });
+    ApplicationDetailsRpcRepository repository = new ApplicationDetailsRpcRepository(jdbcTemplate);
+
+    assertThat(repository.findRemarkByNumber(44L))
+        .contains(
+            new ApplicationDetailsRpcRepository.RemarkRow(
+                44L, 9999L, "first", "idir\\jsmith", Instant.EPOCH));
+    assertThatThrownBy(() -> repository.findRemarkByNumberRequired(44L))
+        .isInstanceOf(org.springframework.dao.DataRetrievalFailureException.class)
+        .hasMessageContaining("REMARK")
+        .hasCause(cause);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"REMARK", "EXPORT_EXMPTN_APPL_REMARK_NMBR"})
+  @SuppressWarnings("unchecked")
+  void remarkByNumberShouldKeepOptionalAndRequiredColumnContracts(String unreadableColumn)
+      throws Exception {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    ResultSet resultSet = remarkRow(44L, 1000456L, null, "idir\\jsmith", Instant.EPOCH);
+    SQLException cause = new SQLException("Invalid column name");
+    if ("REMARK".equals(unreadableColumn)) {
+      when(resultSet.getString(unreadableColumn)).thenThrow(cause);
+    } else {
+      when(resultSet.getLong(unreadableColumn)).thenThrow(cause);
+    }
+    when(jdbcTemplate.query(eq(REMARK_BY_NUMBER), any(RowMapper.class), eq(44L)))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<ApplicationDetailsRpcRepository.RemarkRow> mapper = invocation.getArgument(1);
+              return List.of(mapper.mapRow(resultSet, 0));
+            });
+    ApplicationDetailsRpcRepository repository = new ApplicationDetailsRpcRepository(jdbcTemplate);
+
+    ApplicationDetailsRpcRepository.RemarkRow nullableExpected =
+        "REMARK".equals(unreadableColumn)
+            ? new ApplicationDetailsRpcRepository.RemarkRow(
+                44L, 1000456L, "", "idir\\jsmith", Instant.EPOCH)
+            : new ApplicationDetailsRpcRepository.RemarkRow(
+                0L, 1000456L, "", "idir\\jsmith", Instant.EPOCH);
+    assertThat(repository.findRemarkByNumber(44L)).contains(nullableExpected);
+    assertThatThrownBy(() -> repository.findRemarkByNumberRequired(44L))
+        .isInstanceOf(org.springframework.dao.DataRetrievalFailureException.class)
+        .hasMessageContaining(unreadableColumn)
+        .hasCause(cause);
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void remarkByNumberShouldKeepNullRemarkAndUnreadableTimestampNullableInBothVariants()
+      throws Exception {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    ResultSet resultSet = remarkRow(44L, 1000456L, null, " idir\\jsmith ", null);
+    when(resultSet.getTimestamp("ENTRY_TIMESTAMP")).thenThrow(new SQLException("Invalid timestamp"));
+    when(jdbcTemplate.query(eq(REMARK_BY_NUMBER), any(RowMapper.class), eq(44L)))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<ApplicationDetailsRpcRepository.RemarkRow> mapper = invocation.getArgument(1);
+              return List.of(mapper.mapRow(resultSet, 0));
+            });
+    ApplicationDetailsRpcRepository repository = new ApplicationDetailsRpcRepository(jdbcTemplate);
+    ApplicationDetailsRpcRepository.RemarkRow expected =
+        new ApplicationDetailsRpcRepository.RemarkRow(44L, 1000456L, "", "idir\\jsmith", null);
+
+    assertThat(repository.findRemarkByNumber(44L)).contains(expected);
+    assertThat(repository.findRemarkByNumberRequired(44L)).contains(expected);
+  }
+
+  @Test
+  void remarksByApplicationDirectQueryShouldKeepTheArchivedFullProjectionAndApplicationPredicate() {
+    String normalized = REMARKS_BY_APPLICATION.replaceAll("\\s+", " ").trim();
+
+    assertThat(normalized)
+        .contains(
+            "SELECT R.EXPORT_EXMPTN_APPL_REMARK_NMBR, R.REMARK_DATE, R.REMARK, "
+                + "R.ENTRY_USERID, R.ENTRY_TIMESTAMP, R.UPDATE_USERID, R.UPDATE_TIMESTAMP, "
+                + "R.APPLICATION_NUMBER")
+        .contains("FROM THE.EXPORT_EXEMPTION_APP_REMARKS R")
+        .endsWith("WHERE R.APPLICATION_NUMBER = ?");
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void remarksByApplicationShouldRejectInvalidKeysAndPreserveEmptyResults() {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    ApplicationDetailsRpcRepository repository = new ApplicationDetailsRpcRepository(jdbcTemplate);
+
+    assertThat(repository.findRemarksByApplicationNumber(null)).isEmpty();
+    assertThat(repository.findRemarksByApplicationNumber(0L)).isEmpty();
+    assertThat(repository.findRemarksByApplicationNumber(-1L)).isEmpty();
+    verifyNoInteractions(jdbcTemplate);
+
+    when(jdbcTemplate.query(eq(REMARKS_BY_APPLICATION), any(RowMapper.class), eq("1000456")))
+        .thenReturn(List.of())
+        .thenThrow(new DataAccessResourceFailureException("Oracle unavailable"));
+    assertThat(repository.findRemarksByApplicationNumber(1000456L)).isEmpty();
+    assertOracleFailure(() -> repository.findRemarksByApplicationNumber(1000456L));
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void remarksByApplicationShouldBindStringAndPreserveEncounterOrderDuplicatesAndLiteralText()
+      throws Exception {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    String literal = "first &amp; line\n" + "&lt;raw&gt; &#39;\n".repeat(80) + "last line";
+    ResultSet first = remarkRow(44L, 1000456L, "  " + literal + "  ", " idir\\jsmith ", Instant.EPOCH);
+    ResultSet duplicate = remarkRow(44L, 1000456L, null, null, null);
+    Instant laterTimestamp = Instant.parse("2026-09-21T12:00:00Z");
+    ResultSet later = remarkRow(45L, 9999L, "later", " idir\\other ", laterTimestamp);
+    when(jdbcTemplate.query(eq(REMARKS_BY_APPLICATION), any(RowMapper.class), eq("1000456")))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<ApplicationDetailsRpcRepository.RemarkRow> mapper = invocation.getArgument(1);
+              return List.of(
+                  mapper.mapRow(first, 0), mapper.mapRow(duplicate, 1), mapper.mapRow(later, 2));
+            });
+    ApplicationDetailsRpcRepository repository = new ApplicationDetailsRpcRepository(jdbcTemplate);
+
+    assertThat(repository.findRemarksByApplicationNumber(1000456L))
+        .containsExactly(
+            new ApplicationDetailsRpcRepository.RemarkRow(
+                44L,
+                1000456L,
+                literal,
+                "idir\\jsmith",
+                Instant.EPOCH),
+            new ApplicationDetailsRpcRepository.RemarkRow(44L, 1000456L, "", null, null),
+            new ApplicationDetailsRpcRepository.RemarkRow(
+                45L, 9999L, "later", "idir\\other", laterTimestamp));
+    verify(jdbcTemplate).query(eq(REMARKS_BY_APPLICATION), any(RowMapper.class), eq("1000456"));
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"REMARK", "EXPORT_EXMPTN_APPL_REMARK_NMBR"})
+  @SuppressWarnings("unchecked")
+  void remarksByApplicationShouldPropagateUnreadableRequiredColumns(String unreadableColumn)
+      throws Exception {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    ResultSet resultSet = remarkRow(44L, 1000456L, "remark", "idir\\jsmith", Instant.EPOCH);
+    SQLException cause = new SQLException("Invalid column name");
+    if ("REMARK".equals(unreadableColumn)) {
+      when(resultSet.getString(unreadableColumn)).thenThrow(cause);
+    } else {
+      when(resultSet.getLong(unreadableColumn)).thenThrow(cause);
+    }
+    when(jdbcTemplate.query(eq(REMARKS_BY_APPLICATION), any(RowMapper.class), eq("1000456")))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<ApplicationDetailsRpcRepository.RemarkRow> mapper = invocation.getArgument(1);
+              return List.of(mapper.mapRow(resultSet, 0));
+            });
+    ApplicationDetailsRpcRepository repository = new ApplicationDetailsRpcRepository(jdbcTemplate);
+
+    assertThatThrownBy(() -> repository.findRemarksByApplicationNumber(1000456L))
+        .isInstanceOf(org.springframework.dao.DataRetrievalFailureException.class)
+        .hasMessageContaining(unreadableColumn)
+        .hasCause(cause);
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void remarksByApplicationShouldPropagateLaterRowFailureButKeepTimestampNullable()
+      throws Exception {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    ResultSet timestampFailure = remarkRow(44L, 1000456L, "first", "idir\\jsmith", null);
+    when(timestampFailure.getTimestamp("ENTRY_TIMESTAMP"))
+        .thenThrow(new SQLException("Invalid timestamp"));
+    when(jdbcTemplate.query(eq(REMARKS_BY_APPLICATION), any(RowMapper.class), eq("1000456")))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<ApplicationDetailsRpcRepository.RemarkRow> mapper = invocation.getArgument(1);
+              return List.of(mapper.mapRow(timestampFailure, 0));
+            });
+    ApplicationDetailsRpcRepository repository = new ApplicationDetailsRpcRepository(jdbcTemplate);
+
+    assertThat(repository.findRemarksByApplicationNumber(1000456L))
+        .containsExactly(
+            new ApplicationDetailsRpcRepository.RemarkRow(
+                44L, 1000456L, "first", "idir\\jsmith", null));
+
+    ResultSet first = remarkRow(44L, 1000456L, "first", "idir\\jsmith", Instant.EPOCH);
+    ResultSet later = remarkRow(45L, 1000456L, "later", "idir\\other", Instant.now());
+    SQLException cause = new SQLException("Invalid column name");
+    when(later.getString("REMARK")).thenThrow(cause);
+    when(jdbcTemplate.query(eq(REMARKS_BY_APPLICATION), any(RowMapper.class), eq("1000456")))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<ApplicationDetailsRpcRepository.RemarkRow> mapper = invocation.getArgument(1);
+              return List.of(mapper.mapRow(first, 0), mapper.mapRow(later, 1));
+            });
+
+    assertThatThrownBy(() -> repository.findRemarksByApplicationNumber(1000456L))
+        .isInstanceOf(org.springframework.dao.DataRetrievalFailureException.class)
+        .hasMessageContaining("REMARK")
+        .hasCause(cause);
+  }
+
+  private static ResultSet remarkRow(
+      long remarkId, long applicationNumber, String remark, String user, Instant timestamp)
+      throws SQLException {
+    ResultSet resultSet = mock(ResultSet.class);
+    when(resultSet.getLong("EXPORT_EXMPTN_APPL_REMARK_NMBR")).thenReturn(remarkId);
+    when(resultSet.getLong("APPLICATION_NUMBER")).thenReturn(applicationNumber);
+    when(resultSet.getString("REMARK")).thenReturn(remark);
+    when(resultSet.getString("ENTRY_USERID")).thenReturn(user);
+    when(resultSet.getTimestamp("ENTRY_TIMESTAMP"))
+        .thenReturn(timestamp == null ? null : Timestamp.from(timestamp));
+    return resultSet;
   }
 
   @ParameterizedTest
@@ -932,6 +1255,31 @@ class ApplicationDetailsRpcRepositoryTest {
     }
 
     @Override
+    protected <T> List<T> queryDirectFailClosed(
+        String sql, SqlRowMapper<T> rowMapper, Object... bindValues) {
+      return queryStoredRemark(rowMapper);
+    }
+
+    @Override
+    protected <T> List<T> queryDirectRequired(
+        String sql, SqlRowMapper<T> rowMapper, Object... bindValues) {
+      return queryStoredRemark(rowMapper);
+    }
+
+    private <T> List<T> queryStoredRemark(SqlRowMapper<T> rowMapper) {
+      try {
+        ResultSet rs = mock(ResultSet.class);
+        when(rs.getLong("EXPORT_EXMPTN_APPL_REMARK_NMBR")).thenReturn(44L);
+        when(rs.getLong("APPLICATION_NUMBER")).thenReturn(1000456L);
+        when(rs.getString("REMARK")).thenReturn(storedRemark);
+        when(rs.getString("ENTRY_USERID")).thenReturn("idir\\jsmith");
+        return List.of(rowMapper.map(rs));
+      } catch (SQLException ex) {
+        throw new AssertionError(ex);
+      }
+    }
+
+    @Override
     protected <T> List<T> queryCursorProcedureRequired(
         String procedureSignature,
         SqlConsumer<CallableStatement> binder,
@@ -1027,6 +1375,12 @@ class ApplicationDetailsRpcRepositoryTest {
     }
 
     @Override
+    protected <T> List<T> queryDirectFailClosed(
+        String sql, SqlRowMapper<T> rowMapper, Object... bindValues) {
+      throw new DataAccessResourceFailureException("Oracle unavailable");
+    }
+
+    @Override
     protected <T> List<T> queryCursorProcedureFailClosed(
         String procedureSignature,
         SqlConsumer<CallableStatement> binder,
@@ -1040,6 +1394,12 @@ class ApplicationDetailsRpcRepositoryTest {
       extends ApplicationDetailsRpcRepository {
     EmptyDocumentLookupRepository() {
       super(null);
+    }
+
+    @Override
+    protected <T> List<T> queryDirectFailClosed(
+        String sql, SqlRowMapper<T> rowMapper, Object... bindValues) {
+      return List.of();
     }
 
     @Override

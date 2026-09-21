@@ -202,6 +202,35 @@ class ExemptionExpiryServiceTest {
   }
 
   @Test
+  void shouldNotDuplicateAnExistingExpiryRemarkFromTheApplicationList() {
+    discoverApplications(101L);
+    when(exemptionRepository.findAllExpiringExemptionNumbers()).thenReturn(List.of("EX-100"));
+    when(exemptionRepository.findExemptionRecord("EX-100")).thenReturn(Optional.of(exemption()));
+    when(exemptionRepository.findApplicationSummariesByExemptionNumber("EX-100"))
+        .thenReturn(
+            List.of(
+                new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
+                    101L, 10, 10, null, "P", "T")));
+    when(applicationRepository.findApplicationUpdateRecord(101L))
+        .thenReturn(Optional.of(application("EXP")));
+    when(applicationRepository.findRemarksByApplicationNumber(101L))
+        .thenReturn(
+            List.of(
+                new ApplicationDetailsRpcRepository.RemarkRow(
+                    2L, 101L, "Ordinary note", "idir\\reviewer", NOW),
+                new ApplicationDetailsRpcRepository.RemarkRow(
+                    1L, 101L, " Exemption expired, 2026-07-09 ", " expiry_monitor ", NOW)));
+    when(exemptionRepository.findPermitsByExemptionNumber("EX-100")).thenReturn(List.of());
+    when(exemptionRepository.updateExemption(any())).thenReturn(true);
+
+    ExemptionExpiryService.ExpiryRunResult result = service.expireDueExemptions();
+
+    assertThat(result.expiredExemptions()).containsExactly("EX-100");
+    verify(applicationRepository, never()).updateApplication(any());
+    verify(applicationRepository, never()).insertRemark(any(), any(), any(), any());
+  }
+
+  @Test
   void shouldDeferBeforeWritingWhenRelatedApplicationHasInteractiveLock() {
     discoverApplications(101L);
     when(exemptionRepository.findAllExpiringExemptionNumbers()).thenReturn(List.of("EX-100"));
