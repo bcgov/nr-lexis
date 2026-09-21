@@ -9,6 +9,38 @@
   margin-block: 1.5rem;
 }
 
+.boic-package-summary__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.boic-package-selector {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 1rem;
+}
+
+.boic-package-selector .cds--dropdown__wrapper {
+  flex: 1 1 min(100%, 20rem);
+}
+
+#permit-detail-content .detail-tile-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+
+  > svg {
+    flex-shrink: 0;
+    fill: var(--cds-icon-secondary);
+  }
+}
+
+.boic-package-selector {
+  margin-block-end: 1.5rem;
+}
+
 .permit-client-editor__identity .detail-field-value {
   padding-block: 0.5rem;
 }
@@ -172,5 +204,13 @@
   .ministerial-permit-details__totals,
   .boic-permit-details__totals {
     grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.boic-package-summary__scale {
+  margin-block-start: 1.5rem;
+
+  .boic-permit-details__totals {
+    margin-block: 1rem 1.5rem;
   }
 }

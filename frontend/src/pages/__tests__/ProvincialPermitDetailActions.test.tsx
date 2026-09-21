@@ -501,11 +501,23 @@ const configureMinisterialActivePermit = (overrides: Partial<ProvincialPermitDet
   return ministerialPermitDetail
 }
 
+const findBlanketOicPackageCard = async (packageNumber = 'BOIC-9') => {
+  const title = `Package ${packageNumber.replace(/\s+$/, (spaces) => ` (${spaces.length} trailing space${spaces.length === 1 ? '' : 's'})`)}`
+  const heading = await screen.findByRole('heading', { name: title })
+  const card = heading.closest('.detail-section-card')
+  expect(card).toBeTruthy()
+  return card as HTMLElement
+}
+
+const getActiveSectionSaveButton = () =>
+  within(screen.getByRole('tabpanel')).getByRole('button', {
+    name: /^Save (?:changes|permit|shipping)$/,
+  })
+
 const openBlanketOicPackageDeleteConfirmation = async () => {
   await selectPermitDetailTab('Items')
-  const packageRow = (await screen.findByRole('cell', { name: 'BOIC-9' })).closest('tr')
-  expect(packageRow).toBeTruthy()
-  const deleteButton = within(packageRow as HTMLElement).getByRole('button', { name: 'Delete' })
+  const packageCard = await findBlanketOicPackageCard()
+  const deleteButton = within(packageCard).getByRole('button', { name: 'Delete package' })
   await waitFor(() => expect(deleteButton).toBeEnabled())
   await userEvent.click(deleteButton)
   return screen.findByRole('dialog', { name: 'Delete Blanket OIC package BOIC-9?' })
@@ -1772,7 +1784,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.getByLabelText('Calculated fee (CAD)')).toHaveValue('$37.50')
   })
 
-  it('separates BOIC permit fees from all package fees without changing authoritative totals', async () => {
+  it('shows only the selected BOIC package fees without changing authoritative totals', async () => {
     configureEditableBlanketOicPackage()
     mockedFetchProvincialPermitDetailTabs.mockResolvedValue({
       ...tabsResult,
@@ -1823,38 +1835,35 @@ describe('Provincial Permit Detail Action Smoke', () => {
       .closest('.cds--tile') as HTMLElement
     expect(permitFeesTile).not.toBe(packageFeesTile)
     for (const [label, value] of [
-      ['Receipt number', 'R-1'],
       ['Total volume (m³)', '5.1'],
-      ['Calculated fee (CAD)', '$8.12'],
-      ['Effective fee (CAD)', '$8.12'],
+      ['Total fees (CAD)', '$8.12'],
+      ['Override fees?', 'No'],
     ]) {
       const field = within(permitFeesTile)
         .getByText(label)
         .closest('.detail-field-item') as HTMLElement
       expect(within(field).getByText(value)).toBeInTheDocument()
     }
-    expect(within(permitFeesTile).getByRole('button', { name: 'Edit fee details' })).toBeEnabled()
     expect(within(permitFeesTile).getByRole('button', { name: 'Edit fee override' })).toBeEnabled()
     expect(within(packageFeesTile).queryByLabelText('Receipt number')).not.toBeInTheDocument()
 
-    const summaries = within(packageFeesTile).getByRole('region', {
-      name: 'Permit package fee summaries',
-    })
-    const maskedPackage = within(summaries).getByRole('row', { name: /BOIC-9 Old growth/ })
-    expect(within(maskedPackage).getByRole('cell', { name: '$' })).toBeVisible()
-    expect(within(maskedPackage).getByRole('link', { name: 'EX-9' })).toHaveAttribute(
-      'href',
-      '/provincial/exemption/EX-9',
+    const feeRows = within(packageFeesTile).getByRole('table')
+    expect(within(packageFeesTile).getByRole('combobox', { name: 'Package number' })).toHaveValue(
+      'BOIC-10',
     )
-    expect(
-      within(summaries).getByRole('row', { name: /BOIC-10 Second growth.*\$6\.04/ }),
-    ).toBeVisible()
-    const feeRows = within(packageFeesTile).getByRole('region', { name: 'Permit fee rows' })
-    expect(within(feeRows).getAllByRole('row')).toHaveLength(3)
-    expect(within(feeRows).getByRole('cell', { name: 'BOIC-9' })).toBeVisible()
-    expect(within(feeRows).getByRole('cell', { name: 'BOIC-10' })).toBeVisible()
-    expect(within(feeRows).getByRole('cell', { name: '$2.08' })).toBeVisible()
+    expect(within(feeRows).getAllByRole('row')).toHaveLength(2)
+    expect(within(feeRows).queryByRole('cell', { name: '$2.08' })).not.toBeInTheDocument()
     expect(within(feeRows).getByRole('cell', { name: '$6.04' })).toBeVisible()
+    await chooseComboBoxOption(
+      within(packageFeesTile).getByRole('combobox', { name: 'Package number' }),
+      'BOIC-9',
+    )
+    expect(within(packageFeesTile).getByRole('table')).toHaveTextContent('$2.08')
+    const packageFee = within(packageFeesTile)
+      .getByText('Package fee (CAD)')
+      .closest('.detail-field-item') as HTMLElement
+    expect(within(packageFee).getByText('$')).toBeVisible()
+    expect(within(permitFeesTile).getByText('$8.12')).toBeInTheDocument()
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
   })
 
@@ -2566,7 +2575,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
         const permitFeesTile = screen
           .getByRole('heading', { name: 'Permit fees' })
           .closest('.cds--tile') as HTMLElement
-        for (const label of ['Total volume (m³)', 'Calculated fee (CAD)', 'Effective fee (CAD)']) {
+        for (const label of ['Total volume (m³)', 'Total fees (CAD)']) {
           const field = within(permitFeesTile)
             .getByText(label)
             .closest('.detail-field-item') as HTMLElement
@@ -3679,6 +3688,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
           packageNumber: 'BOIC-9',
           region: 'Coast',
           speciesEndUseSort: 'HE/PL',
+          speciesCodes: ['AL', 'HE', 'PL'],
+          endUseCodes: ['LU'],
           ageClass: 'Old growth',
           packageVolume: '120.5',
           averageLength: '7.1',
@@ -3723,32 +3734,32 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.getByRole('tab', { name: 'Applicant' })).toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: 'Owner' })).not.toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: 'Items' })).not.toBeInTheDocument()
-    expect(screen.getByRole('group', { name: 'Summary of Scale' })).toBeInTheDocument()
-    expect(screen.getByRole('columnheader', { name: 'Package pieces' })).toBeInTheDocument()
-    expect(
-      screen.getByRole('columnheader', { name: 'Current package volume (m³)' }),
-    ).toBeInTheDocument()
-    const packageTable = screen.getByRole('region', { name: 'Permit packages' })
-    expect(
-      within(packageTable).queryByRole('columnheader', { name: 'Status' }),
-    ).not.toBeInTheDocument()
-    expect(
-      within(packageTable).queryByRole('columnheader', { name: 'Reprocessed' }),
-    ).not.toBeInTheDocument()
-    expect(
-      within(packageTable).queryByRole('cell', { name: 'APP - Approved' }),
-    ).not.toBeInTheDocument()
-    expect(within(packageTable).queryByRole('cell', { name: 'N' })).not.toBeInTheDocument()
-    expect(screen.getByRole('cell', { name: 'Current OIC package' })).toBeInTheDocument()
-    const packageRow = screen.getByRole('cell', { name: 'BOIC-9' }).closest('tr')
-    expect(packageRow).toBeTruthy()
-    expect(within(packageRow as HTMLElement).getByRole('cell', { name: '12' })).toBeInTheDocument()
-    expect(
-      within(packageRow as HTMLElement).getByRole('cell', { name: '120.5' }),
-    ).toBeInTheDocument()
-    expect(
-      within(packageRow as HTMLElement).getByRole('cell', { name: '118.5' }),
-    ).toBeInTheDocument()
+    expect(screen.getByText('Summary of scale')).toBeInTheDocument()
+    const packageCard = await findBlanketOicPackageCard()
+    expect(within(packageCard).queryByText('Comments')).not.toBeInTheDocument()
+    for (const [label, value] of [
+      ['Species list', 'AL, HE, PL'],
+      ['End use', 'LU'],
+    ]) {
+      const field = within(packageCard)
+        .getByText(label)
+        .closest('.detail-field-item') as HTMLElement
+      expect(within(field).getByText(value)).toBeInTheDocument()
+    }
+    expect(within(packageCard).getByText('Current package pieces')).toBeInTheDocument()
+    expect(within(packageCard).getByText('Current package volume (m³)')).toBeInTheDocument()
+    for (const [label, value] of [
+      ['Volume (m³)', '120.5'],
+      ['Current package pieces', '12'],
+      ['Current package volume (m³)', '118.5'],
+    ]) {
+      const field = within(packageCard)
+        .getAllByText(label)[0]
+        .closest('.detail-field-item') as HTMLElement
+      expect(within(field).getByText(value)).toBeInTheDocument()
+    }
+    expect(within(packageCard).queryByText('APP - Approved')).not.toBeInTheDocument()
+    expect(within(packageCard).queryByText('N')).not.toBeInTheDocument()
     expect(mockedFetchProvincialPermitDetailTabs).toHaveBeenCalledWith({
       permitNumber: '777',
       receiptNumber: 'R-1',
@@ -3774,11 +3785,10 @@ describe('Provincial Permit Detail Action Smoke', () => {
     renderPermitDetails()
     await selectPermitDetailTab('Scale')
 
-    const packageRow = (await screen.findByRole('cell', { name: 'T260917R1' })).closest('tr')
-    expect(packageRow).toBeTruthy()
-    expect(within(packageRow as HTMLElement).getByRole('cell', { name: '0' })).toBeInTheDocument()
-    expect(within(packageRow as HTMLElement).getByRole('cell', { name: '1.0' })).toBeInTheDocument()
-    expect(within(packageRow as HTMLElement).getByRole('cell', { name: '0.0' })).toBeInTheDocument()
+    const packageCard = await findBlanketOicPackageCard('T260917R1')
+    expect(within(packageCard).getByText('0')).toBeInTheDocument()
+    expect(within(packageCard).getByText('1.0')).toBeInTheDocument()
+    expect(within(packageCard).getByText('0.0')).toBeInTheDocument()
   })
 
   it('omits the Permit column from Blanket OIC scale rows', async () => {
@@ -3843,11 +3853,9 @@ describe('Provincial Permit Detail Action Smoke', () => {
     renderPermitDetails()
     await selectPermitDetailTab('Items')
 
-    const packageRow = (await screen.findByRole('cell', { name: 'BOIC-9' })).closest('tr')
-    expect(packageRow).toBeTruthy()
-    const packageRowElement = packageRow as HTMLElement
-    const deleteButton = within(packageRowElement).getByRole('button', { name: 'Delete' })
-    const deletionHelp = within(packageRowElement).getByText(
+    const packageCard = await findBlanketOicPackageCard()
+    const deleteButton = within(packageCard).getByRole('button', { name: 'Delete package' })
+    const deletionHelp = within(packageCard).getByText(
       'Delete unavailable while this package has scale details.',
     )
 
@@ -3980,8 +3988,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
       await userEvent.click(await screen.findByRole('button', { name: 'Open' }))
       expect(await screen.findByText('Unable to open permit document.')).toBeVisible()
       await selectPermitDetailTab('Items')
-      const packageRow = (await screen.findByRole('cell', { name: 'BOIC-9' })).closest('tr')!
-      await userEvent.click(within(packageRow).getByRole('button', { name: 'Edit' }))
+      const packageRow = await findBlanketOicPackageCard()
+      await userEvent.click(within(packageRow).getByRole('button', { name: 'Edit package' }))
 
       const loadError = 'Unable to load the Blanket OIC package for editing.'
       expect(await screen.findByText(loadError)).toBeVisible()
@@ -3991,12 +3999,14 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
       if (nextAction === 'Create package') {
         await userEvent.click(screen.getByRole('button', { name: 'Create package' }))
-        expect(
-          await screen.findByRole('heading', { name: 'Create Blanket OIC package' }),
-        ).toBeVisible()
-        expect(screen.queryByRole('button', { name: 'Save package' })).not.toBeInTheDocument()
+        expect(await screen.findByRole('heading', { name: 'Create package' })).toBeVisible()
+        const packageEditor = screen
+          .getByRole('heading', { name: 'Create package' })
+          .closest('.application-detail-edit-section') as HTMLElement
+        expect(within(packageEditor).getByLabelText('Package number')).toHaveValue('')
+        expect(within(packageEditor).getByLabelText('Comments')).toHaveValue('')
       } else {
-        await userEvent.click(within(packageRow).getByRole('button', { name: 'Edit' }))
+        await userEvent.click(within(packageRow).getByRole('button', { name: 'Edit package' }))
         const packageEditor = (await screen.findByRole('heading', { name: 'Edit BOIC-9' })).closest(
           '.application-detail-edit-section',
         ) as HTMLElement
@@ -4054,9 +4064,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
 
     await selectPermitDetailTab('Items')
-    const packageRow = (await screen.findByRole('cell', { name: 'BOIC-9' })).closest('tr')
-    expect(packageRow).toBeTruthy()
-    await userEvent.click(within(packageRow as HTMLElement).getByRole('button', { name: 'Edit' }))
+    const packageRow = await findBlanketOicPackageCard()
+    await userEvent.click(within(packageRow).getByRole('button', { name: 'Edit package' }))
     expect(await screen.findByText('Loading package…')).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Switch permit' }))
@@ -4165,13 +4174,13 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
     renderPermitDetails()
     await selectPermitDetailTab('Items')
-    const row = (await screen.findByRole('cell', { name: 'BOIC-9' })).closest('tr')!
-    await userEvent.click(within(row).getByRole('button', { name: 'Edit' }))
+    const row = await findBlanketOicPackageCard()
+    await userEvent.click(within(row).getByRole('button', { name: 'Edit package' }))
     expect(await screen.findByText('Loading package…')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Cancel edit' }))
     await userEvent.click(screen.getByRole('button', { name: 'Create package' }))
     const editor = screen
-      .getByRole('heading', { name: 'Create Blanket OIC package' })
+      .getByRole('heading', { name: 'Create package' })
       .closest('.application-detail-edit-section')!
     await userEvent.type(
       within(editor as HTMLElement).getByLabelText('Package number'),
@@ -4192,7 +4201,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
         speciesCodes: ['HE'],
       }),
     )
-    expect(screen.getByRole('heading', { name: 'Create Blanket OIC package' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Create package' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Edit BOIC-9' })).not.toBeInTheDocument()
     expect(within(editor as HTMLElement).getByLabelText('Package number')).toHaveValue('NEW-DRAFT')
     expect(screen.queryByText('Loading package…')).not.toBeInTheDocument()
@@ -4218,8 +4227,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
       })
     renderPermitDetails()
     await selectPermitDetailTab('Items')
-    const row = (await screen.findByRole('cell', { name: 'BOIC-9' })).closest('tr')!
-    await userEvent.click(within(row).getByRole('button', { name: 'Edit' }))
+    const row = await findBlanketOicPackageCard()
+    await userEvent.click(within(row).getByRole('button', { name: 'Edit package' }))
     const editor = (await screen.findByRole('heading', { name: 'Edit BOIC-9' })).closest(
       '.application-detail-edit-section',
     ) as HTMLElement
@@ -4239,7 +4248,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await waitFor(() =>
       expect(screen.getByRole('combobox', { name: 'Package number' })).toHaveValue('BOIC-NEW'),
     )
-    expect(await screen.findByRole('cell', { name: 'BOIC-NEW' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Package BOIC-NEW' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Edit BOIC-9' })).not.toBeInTheDocument()
   })
 
@@ -4282,9 +4291,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       await waitFor(() => expect(mockedFetchProvincialPermitDetail).toHaveBeenCalledWith('888'))
       await selectPermitDetailTab('Items')
       expect(await screen.findByRole('combobox', { name: 'Package number' })).toHaveValue('BOIC-9')
-      expect(
-        screen.queryByRole('heading', { name: 'Create Blanket OIC package' }),
-      ).not.toBeInTheDocument()
+      expect(screen.queryByRole('heading', { name: 'Create package' })).not.toBeInTheDocument()
     },
   )
 
@@ -4398,7 +4405,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       expect(screen.queryByRole('heading', { name: 'No package details' })).not.toBeInTheDocument()
       expect(screen.queryByRole('group', { name: 'Summary of Scale' })).not.toBeInTheDocument()
       await userEvent.click(screen.getByRole('button', { name: 'Create package' }))
-      const heading = await screen.findByRole('heading', { name: 'Create Blanket OIC package' })
+      const heading = await screen.findByRole('heading', { name: 'Create package' })
       const packageEditor = heading.closest('.application-detail-edit-section') as HTMLElement
       expect(packageEditor).toBeTruthy()
       expect(
@@ -4431,7 +4438,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
         within(packageEditor).getByLabelText('Average top diameter (rads)'),
         '20.0',
       )
-      await userEvent.click(within(packageEditor).getByRole('button', { name: 'Create package' }))
+      await userEvent.click(within(packageEditor).getByRole('button', { name: 'Save package' }))
 
       expect(
         await within(packageEditor).findByText('Average length must be greater than 0.'),
@@ -4440,7 +4447,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
       await userEvent.clear(averageLength)
       await userEvent.type(averageLength, '10.0')
-      await userEvent.click(within(packageEditor).getByRole('button', { name: 'Create package' }))
+      await userEvent.click(within(packageEditor).getByRole('button', { name: 'Save package' }))
 
       await waitFor(() => {
         expect(mockedAddBlanketOicPackage).toHaveBeenCalledWith({
@@ -4506,20 +4513,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
     renderPermitDetails()
 
     await selectPermitDetailTab('Items')
-    const packageTable = await screen.findByRole('region', { name: 'Permit packages' })
-    expect(
-      within(packageTable).queryByRole('columnheader', { name: 'Status' }),
-    ).not.toBeInTheDocument()
-    expect(
-      within(packageTable).queryByRole('columnheader', { name: 'Reprocessed' }),
-    ).not.toBeInTheDocument()
-    const packageRow = (await screen.findByRole('cell', { name: 'BOIC-9' })).closest('tr')!
-    expect(
-      within(packageRow).queryByRole('cell', { name: 'SHT - Shutout' }),
-    ).not.toBeInTheDocument()
-    expect(within(packageRow).queryByRole('cell', { name: 'Y' })).not.toBeInTheDocument()
+    const packageRow = await findBlanketOicPackageCard()
+    expect(within(packageRow).queryByText('SHT - Shutout')).not.toBeInTheDocument()
+    expect(within(packageRow).queryByText('Y')).not.toBeInTheDocument()
 
-    await userEvent.click(within(packageRow).getByRole('button', { name: 'Edit' }))
+    await userEvent.click(within(packageRow).getByRole('button', { name: 'Edit package' }))
     const packageEditor = (await screen.findByRole('heading', { name: 'Edit BOIC-9' })).closest(
       '.application-detail-edit-section',
     ) as HTMLElement
@@ -4563,8 +4561,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
     renderPermitDetails()
 
     await selectPermitDetailTab('Items')
-    const packageRow = (await screen.findByRole('cell', { name: 'BOIC-9' })).closest('tr')!
-    await userEvent.click(within(packageRow).getByRole('button', { name: 'Edit' }))
+    const packageRow = await findBlanketOicPackageCard()
+    await userEvent.click(within(packageRow).getByRole('button', { name: 'Edit package' }))
     const packageEditor = (await screen.findByRole('heading', { name: 'Edit BOIC-9' })).closest(
       '.application-detail-edit-section',
     ) as HTMLElement
@@ -4591,8 +4589,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
       configureEditableBlanketOicPackage()
       renderPermitDetails()
       await selectPermitDetailTab('Items')
-      const packageRow = (await screen.findByRole('cell', { name: 'BOIC-9' })).closest('tr')!
-      await userEvent.click(within(packageRow).getByRole('button', { name: 'Edit' }))
+      const packageRow = await findBlanketOicPackageCard()
+      await userEvent.click(within(packageRow).getByRole('button', { name: 'Edit package' }))
       const editor = (await screen.findByRole('heading', { name: 'Edit BOIC-9' })).closest(
         '.application-detail-edit-section',
       ) as HTMLElement
@@ -4641,8 +4639,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
     renderPermitDetails()
     await selectPermitDetailTab('Items')
-    const packageRow = (await screen.findByRole('cell', { name: 'BOIC-9' })).closest('tr')!
-    await userEvent.click(within(packageRow).getByRole('button', { name: 'Edit' }))
+    const packageRow = await findBlanketOicPackageCard()
+    await userEvent.click(within(packageRow).getByRole('button', { name: 'Edit package' }))
     await waitFor(() => expect(screen.getByLabelText('Comments')).toHaveValue(comments))
     expect(mockedUpdateBlanketOicPackage).not.toHaveBeenCalled()
   })
@@ -4672,8 +4670,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
     renderPermitDetails()
 
     await selectPermitDetailTab('Items')
-    const firstPackageRow = (await screen.findByRole('cell', { name: 'BOIC-9' })).closest('tr')!
-    await userEvent.click(within(firstPackageRow).getByRole('button', { name: 'Edit' }))
+    const firstPackageRow = await findBlanketOicPackageCard()
+    await userEvent.click(within(firstPackageRow).getByRole('button', { name: 'Edit package' }))
     const firstPackageEditor = (
       await screen.findByRole('heading', { name: 'Edit BOIC-9' })
     ).closest('.application-detail-edit-section') as HTMLElement
@@ -4692,15 +4690,15 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Create package' }))
     const newPackageEditor = (
-      await screen.findByRole('heading', { name: 'Create Blanket OIC package' })
+      await screen.findByRole('heading', { name: 'Create package' })
     ).closest('.application-detail-edit-section') as HTMLElement
     expect(within(newPackageEditor).queryByText(validationMessage)).not.toBeInTheDocument()
     await userEvent.click(within(newPackageEditor).getByRole('button', { name: 'Cancel' }))
 
     expect(packageSelect).toBeEnabled()
     await chooseComboBoxOption(packageSelect, 'BOIC-10')
-    const secondPackageRow = (await screen.findByRole('cell', { name: 'BOIC-10' })).closest('tr')!
-    await userEvent.click(within(secondPackageRow).getByRole('button', { name: 'Edit' }))
+    const secondPackageRow = await findBlanketOicPackageCard('BOIC-10')
+    await userEvent.click(within(secondPackageRow).getByRole('button', { name: 'Edit package' }))
     const secondPackageEditor = (
       await screen.findByRole('heading', { name: 'Edit BOIC-10' })
     ).closest('.application-detail-edit-section') as HTMLElement
@@ -4713,8 +4711,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
     renderPermitDetails()
 
     await selectPermitDetailTab('Items')
-    const packageRow = (await screen.findByRole('cell', { name: 'BOIC-9' })).closest('tr')!
-    await userEvent.click(within(packageRow).getByRole('button', { name: 'Edit' }))
+    const packageRow = await findBlanketOicPackageCard()
+    await userEvent.click(within(packageRow).getByRole('button', { name: 'Edit package' }))
     const packageEditor = (await screen.findByRole('heading', { name: 'Edit BOIC-9' })).closest(
       '.application-detail-edit-section',
     ) as HTMLElement
@@ -4749,8 +4747,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
       renderPermitDetails()
 
       await selectPermitDetailTab('Items')
-      const packageRow = (await screen.findByRole('cell', { name: 'BOIC-9' })).closest('tr')!
-      await userEvent.click(within(packageRow).getByRole('button', { name: 'Edit' }))
+      const packageRow = await findBlanketOicPackageCard()
+      await userEvent.click(within(packageRow).getByRole('button', { name: 'Edit package' }))
       const packageEditor = (await screen.findByRole('heading', { name: 'Edit BOIC-9' })).closest(
         '.application-detail-edit-section',
       ) as HTMLElement
@@ -4783,9 +4781,13 @@ describe('Provincial Permit Detail Action Smoke', () => {
       renderPermitDetails()
 
       await selectPermitDetailTab('Items')
-      const packageRow = (await screen.findByRole('cell', { name: 'BOIC-9' })).closest('tr')!
-      expect(within(packageRow).queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
-      expect(within(packageRow).queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+      const packageRow = await findBlanketOicPackageCard()
+      expect(
+        within(packageRow).queryByRole('button', { name: 'Edit package' }),
+      ).not.toBeInTheDocument()
+      expect(
+        within(packageRow).queryByRole('button', { name: 'Delete package' }),
+      ).not.toBeInTheDocument()
       expect(screen.queryByRole('button', { name: 'Create package' })).not.toBeInTheDocument()
     },
   )
@@ -4798,16 +4800,13 @@ describe('Provincial Permit Detail Action Smoke', () => {
     renderPermitDetails()
 
     await selectPermitDetailTab('Items')
-    const packageTable = await screen.findByRole('region', { name: 'Permit packages' })
+    const packageRow = await findBlanketOicPackageCard()
     expect(
-      within(packageTable).queryByRole('columnheader', { name: 'Status' }),
+      within(packageRow).queryByRole('button', { name: 'Edit package' }),
     ).not.toBeInTheDocument()
     expect(
-      within(packageTable).queryByRole('columnheader', { name: 'Reprocessed' }),
+      within(packageRow).queryByRole('button', { name: 'Delete package' }),
     ).not.toBeInTheDocument()
-    const packageRow = (await screen.findByRole('cell', { name: 'BOIC-9' })).closest('tr')!
-    expect(within(packageRow).queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
-    expect(within(packageRow).queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Create package' })).not.toBeInTheDocument()
   })
 
@@ -4824,9 +4823,13 @@ describe('Provincial Permit Detail Action Smoke', () => {
     renderPermitDetails()
 
     await selectPermitDetailTab('Items')
-    const packageRow = (await screen.findByRole('cell', { name: 'BOIC-9' })).closest('tr')!
-    expect(within(packageRow).queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
-    expect(within(packageRow).queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+    const packageRow = await findBlanketOicPackageCard()
+    expect(
+      within(packageRow).queryByRole('button', { name: 'Edit package' }),
+    ).not.toBeInTheDocument()
+    expect(
+      within(packageRow).queryByRole('button', { name: 'Delete package' }),
+    ).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Create package' })).not.toBeInTheDocument()
   })
 
@@ -4848,7 +4851,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Create package' }))
     const packageEditor = (
       await screen.findByRole('heading', {
-        name: 'Create Blanket OIC package',
+        name: 'Create package',
       })
     ).closest('.application-detail-edit-section') as HTMLElement
     await userEvent.type(within(packageEditor).getByLabelText('Package number'), 'boic-new')
@@ -4868,7 +4871,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       within(packageEditor).getByLabelText('Average top diameter (rads)'),
       '20.0',
     )
-    await userEvent.click(within(packageEditor).getByRole('button', { name: 'Create package' }))
+    await userEvent.click(within(packageEditor).getByRole('button', { name: 'Save package' }))
 
     await waitFor(() => expect(mockedAddBlanketOicPackage).toHaveBeenCalledTimes(1))
     expect(
@@ -4991,28 +4994,30 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     const packageSelect = await screen.findByRole('combobox', { name: 'Package number' })
     expect(packageSelect).toHaveValue('BOIC-9')
-    expect(screen.getByRole('cell', { name: 'BOIC-9' })).toBeInTheDocument()
-    expect(screen.queryByRole('cell', { name: 'BOIC-10' })).not.toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Package BOIC-9' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Package BOIC-10' })).not.toBeInTheDocument()
     expect(screen.getByRole('cell', { name: 'TM-9' })).toBeInTheDocument()
     expect(screen.queryByRole('cell', { name: 'TM-10' })).not.toBeInTheDocument()
 
     await chooseComboBoxOption(packageSelect, 'BOIC-10')
     expect(packageSelect).toHaveValue('BOIC-10')
-    expect(screen.getByRole('cell', { name: 'BOIC-10' })).toBeInTheDocument()
-    expect(screen.queryByRole('cell', { name: 'BOIC-9' })).not.toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Package BOIC-10' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Package BOIC-9' })).not.toBeInTheDocument()
     expect(screen.getByRole('cell', { name: 'TM-10' })).toBeInTheDocument()
     expect(screen.queryByRole('cell', { name: 'TM-9' })).not.toBeInTheDocument()
 
     await userEvent.type(await screen.findByLabelText('Timber mark'), 'TM-NEW')
     expect(packageSelect).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Create package' })).toBeDisabled()
-    const selectedPackageRow = screen.getByRole('cell', { name: 'BOIC-10' }).closest('tr')!
-    expect(within(selectedPackageRow).getByRole('button', { name: 'Edit' })).toBeDisabled()
-    expect(within(selectedPackageRow).getByRole('button', { name: 'Delete' })).toBeDisabled()
+    const selectedPackageRow = await findBlanketOicPackageCard('BOIC-10')
+    expect(within(selectedPackageRow).getByRole('button', { name: 'Edit package' })).toBeDisabled()
+    expect(
+      within(selectedPackageRow).getByRole('button', { name: 'Delete package' }),
+    ).toBeDisabled()
     await userEvent.click(screen.getByRole('button', { name: 'Cancel scale' }))
     expect(packageSelect).toBeEnabled()
     expect(screen.getByRole('button', { name: 'Create package' })).toBeEnabled()
-    expect(within(selectedPackageRow).getByRole('button', { name: 'Edit' })).toBeEnabled()
+    expect(within(selectedPackageRow).getByRole('button', { name: 'Edit package' })).toBeEnabled()
     expect(screen.getByLabelText('Timber mark')).toHaveValue('')
     await chooseComboBoxOption(
       await screen.findByRole('combobox', { name: 'Species' }),
@@ -5092,11 +5097,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.click(paddedOption)
 
     expect(packageSelect).toHaveValue('PKG-1 (1 trailing space)')
-    const paddedPackageCell = await screen.findByRole('cell', {
-      name: 'PKG-1 (1 trailing space)',
-    })
-    const paddedPackageRow = paddedPackageCell.closest('tr')!
-    await userEvent.click(within(paddedPackageRow).getByRole('button', { name: 'Edit' }))
+    const paddedPackageRow = await findBlanketOicPackageCard('PKG-1 ')
+    await userEvent.click(within(paddedPackageRow).getByRole('button', { name: 'Edit package' }))
     await waitFor(() => {
       expect(mockedFetchBlanketOicPackageEditContext).toHaveBeenCalledWith('PKG-1 ')
     })
@@ -5130,11 +5132,10 @@ describe('Provincial Permit Detail Action Smoke', () => {
       )
     })
 
-    const refreshedPaddedPackageCell = await screen.findByRole('cell', {
-      name: 'PKG-1 (1 trailing space)',
-    })
-    const refreshedPaddedPackageRow = refreshedPaddedPackageCell.closest('tr')!
-    await userEvent.click(within(refreshedPaddedPackageRow).getByRole('button', { name: 'Delete' }))
+    const refreshedPaddedPackageRow = await findBlanketOicPackageCard('PKG-1 ')
+    await userEvent.click(
+      within(refreshedPaddedPackageRow).getByRole('button', { name: 'Delete package' }),
+    )
     const dialog = await screen.findByRole('dialog', {
       name: 'Delete Blanket OIC package PKG-1 (1 trailing space)?',
     })
@@ -5144,7 +5145,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
   })
 
-  it('labels padded BOIC package keys distinctly in fee tables', async () => {
+  it('shows only the selected padded BOIC package fee row', async () => {
     mockedFetchProvincialPermitDetail.mockResolvedValue({
       ...permitDetail,
       exemptionTypeDescription: 'Blanket OIC',
@@ -5157,18 +5158,47 @@ describe('Provincial Permit Detail Action Smoke', () => {
         { packageNumber: 'PKG-1 ', growthType: 'Old growth', totalFeeForPackage: '$1.00' },
       ],
       fees: [
-        { ...calculatedPermitFees.fees[0], id: 'FEE-PLAIN', packageNumber: 'PKG-1' },
-        { ...calculatedPermitFees.fees[0], id: 'FEE-PADDED', packageNumber: 'PKG-1 ' },
+        {
+          ...calculatedPermitFees.fees[0],
+          id: 'FEE-PLAIN',
+          packageNumber: 'PKG-1',
+          timberMark: 'TM-PLAIN',
+          amountDisplay: '$1.00',
+        },
+        {
+          ...calculatedPermitFees.fees[0],
+          id: 'FEE-PADDED',
+          packageNumber: 'PKG-1 ',
+          timberMark: 'TM-PADDED',
+          amountDisplay: '$2.00',
+        },
+      ],
+    })
+    mockedFetchProvincialPermitDetailTabs.mockResolvedValue({
+      ...tabsResult,
+      packages: [
+        { ...editableBlanketOicPackage, packageNumber: 'PKG-1' },
+        { ...editableBlanketOicPackage, packageNumber: 'PKG-1 ' },
       ],
     })
 
     renderPermitDetails()
+    await selectPermitDetailTab('Scale')
+    await chooseComboBoxOption(
+      await screen.findByRole('combobox', { name: 'Package number' }),
+      'PKG-1 (1 trailing space)',
+    )
     await selectPermitDetailTab('Fees')
 
-    expect((await screen.findAllByRole('cell', { name: 'PKG-1' })).length).toBe(2)
-    expect((await screen.findAllByRole('cell', { name: 'PKG-1 (1 trailing space)' })).length).toBe(
-      2,
+    const packageFeesTile = (await screen.findByRole('heading', { name: 'Package fees' })).closest(
+      '.cds--tile',
+    ) as HTMLElement
+    expect(within(packageFeesTile).getByRole('combobox', { name: 'Package number' })).toHaveValue(
+      'PKG-1 (1 trailing space)',
     )
+    const feeRows = within(packageFeesTile).getByRole('table')
+    expect(within(feeRows).getByText('TM-PADDED')).toBeInTheDocument()
+    expect(within(feeRows).queryByText('TM-PLAIN')).not.toBeInTheDocument()
   })
 
   it('adds and removes Blanket OIC scale rows from the items tab', async () => {
@@ -5421,7 +5451,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.selectOptions(screen.getByLabelText('Status'), 'CAN')
     await userEvent.clear(screen.getByLabelText('Issued date'))
     await userEvent.clear(screen.getByLabelText('Expiry date'))
-    await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
+    await userEvent.click(getActiveSectionSaveButton())
 
     await waitFor(() => {
       expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
@@ -5464,7 +5494,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.clear(screen.getByLabelText('Submit date'))
     await userEvent.clear(screen.getByLabelText('Issued date'))
     await userEvent.clear(screen.getByLabelText('Expiry date'))
-    await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
+    await userEvent.click(getActiveSectionSaveButton())
 
     await waitFor(() => {
       expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
@@ -5499,7 +5529,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
     await userEvent.selectOptions(screen.getByLabelText('Applicant location'), '04')
     await userEvent.selectOptions(screen.getByLabelText('Agent location'), '02')
-    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    await userEvent.click(getActiveSectionSaveButton())
 
     await waitFor(() => {
       expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
@@ -5555,6 +5585,25 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.queryByRole('button', { name: 'Save permit' })).not.toBeInTheDocument()
   })
 
+  it('keeps reviewed shipping actions in Figma order', async () => {
+    configureEditableBlanketOicPackage()
+    renderPermitDetails()
+
+    await selectPermitDetailTab('Shipping')
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit shipping details' }))
+
+    const actions = screen
+      .getByRole('button', { name: 'Save changes' })
+      .closest('.legacy-search-actions')
+    expect(actions).toBeTruthy()
+    expect(
+      within(actions as HTMLElement)
+        .getAllByRole('button')
+        .map((button) => button.textContent),
+    ).toEqual(['Cancel', 'Save changes'])
+    expect(screen.queryByRole('button', { name: 'Save shipping' })).not.toBeInTheDocument()
+  })
+
   it('blocks Blanket OIC client saves until each selected client location is verified', async () => {
     configureEditableBlanketOicPackage()
     let resolveOwnerLocations:
@@ -5578,7 +5627,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.click(
       await screen.findByRole('button', { name: /Edit applicant(?: details)?/ }),
     )
-    const saveButton = screen.getByRole('button', { name: 'Save changes' })
+    const saveButton = getActiveSectionSaveButton()
     expect(saveButton).toBeDisabled()
 
     await act(async () =>
@@ -5660,7 +5709,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
     await userEvent.clear(screen.getByLabelText('Remarks'))
     await userEvent.type(screen.getByLabelText('Remarks'), 'save and refresh clients')
-    await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
+    await userEvent.click(getActiveSectionSaveButton())
 
     await waitFor(() => expect(mockedFetchProvincialPermitDetail).toHaveBeenCalledTimes(2))
     await selectPermitDetailTab('Owner')
@@ -5689,7 +5738,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
     await userEvent.clear(screen.getByLabelText('Remarks'))
     await userEvent.type(screen.getByLabelText('Remarks'), 'save without refreshed clients')
-    await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
+    await userEvent.click(getActiveSectionSaveButton())
 
     await waitFor(() => expect(mockedUpdatePermitDetail).toHaveBeenCalledOnce())
     expect(
@@ -5797,7 +5846,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     const receiptNumber = screen.getByLabelText('Receipt number')
     await selectPermitDetailTab('Permit')
     const remarks = screen.getByLabelText('Remarks')
-    const saveButton = screen.getByRole('button', { name: 'Save permit' })
+    const saveButton = getActiveSectionSaveButton()
 
     expect(receiptNumber).toHaveAttribute('maxlength', '50')
     fireEvent.change(receiptNumber, { target: { value: 'R'.repeat(51) } })
@@ -5836,7 +5885,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
     await userEvent.selectOptions(screen.getByLabelText('Permit status'), 'EXP')
-    await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
+    await userEvent.click(getActiveSectionSaveButton())
 
     await waitFor(() => {
       expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
@@ -5864,7 +5913,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.clear(submitDate)
     await userEvent.type(submitDate, '2026-04-09')
     expect(screen.getByLabelText('Received date')).toHaveValue('2026-04-09')
-    await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
+    await userEvent.click(getActiveSectionSaveButton())
 
     await waitFor(() => {
       expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
@@ -5909,7 +5958,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
     await userEvent.clear(screen.getByLabelText('Remarks'))
     await userEvent.type(screen.getByLabelText('Remarks'), 'normal permit update')
-    await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
+    await userEvent.click(getActiveSectionSaveButton())
 
     await waitFor(() => {
       expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
@@ -6004,7 +6053,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.clear(screen.getByLabelText('Purchaser'))
     await userEvent.type(screen.getByLabelText('Purchaser'), 'Updated Destination')
     await selectPermitDetailTab('Permit')
-    await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
+    await userEvent.click(getActiveSectionSaveButton())
 
     expect(await screen.findByText('Permit and shipping details saved')).toBeInTheDocument()
   })
@@ -6024,7 +6073,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
     await userEvent.clear(screen.getByLabelText('Remarks'))
     await userEvent.type(screen.getByLabelText('Remarks'), 'Slow permit save')
-    await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
+    await userEvent.click(getActiveSectionSaveButton())
     await waitFor(() => expect(mockedUpdatePermitDetail).toHaveBeenCalledTimes(1))
 
     await selectPermitDetailTab('Shipping')
@@ -6095,7 +6144,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
       await userEvent.click(
         screen.getByRole('button', {
-          name: origin === 'Applicant' ? 'Save changes' : 'Save permit',
+          name: 'Save changes',
         }),
       )
       await waitFor(() => expect(mockedUpdatePermitDetail).toHaveBeenCalledOnce())
@@ -6203,7 +6252,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       within(regionSelect).queryByRole('option', { name: /Skeena Natural Resource Region/ }),
     ).not.toBeInTheDocument()
     await userEvent.selectOptions(regionSelect, '1904')
-    await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
+    await userEvent.click(getActiveSectionSaveButton())
 
     await waitFor(() => {
       expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
@@ -6231,10 +6280,10 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.selectOptions(screen.getByLabelText('Region'), '1904')
     await selectPermitDetailTab('Scale')
     await userEvent.click(screen.getByRole('button', { name: 'Create package' }))
-    const packageEditor = (
-      await screen.findByRole('heading', { name: 'Create Blanket OIC package' })
-    ).closest('.application-detail-edit-section') as HTMLElement
-    await userEvent.click(within(packageEditor).getByRole('button', { name: 'Create package' }))
+    const packageEditor = (await screen.findByRole('heading', { name: 'Create package' })).closest(
+      '.application-detail-edit-section',
+    ) as HTMLElement
+    await userEvent.click(within(packageEditor).getByRole('button', { name: 'Save package' }))
 
     expect(
       await screen.findByText('Save or discard the Region change before saving a package.'),
@@ -6276,7 +6325,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       ).toBeInTheDocument()
       await userEvent.clear(screen.getByLabelText('Remarks'))
       await userEvent.type(screen.getByLabelText('Remarks'), 'Updated remarks')
-      await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
+      await userEvent.click(getActiveSectionSaveButton())
 
       await waitFor(() => {
         expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
@@ -6379,13 +6428,15 @@ describe('Provincial Permit Detail Action Smoke', () => {
         .getByRole('heading', { name: 'Permit details' })
         .closest('.cds--tile') as HTMLElement
       expect(screen.queryByRole('heading', { name: 'Volume and remarks' })).not.toBeInTheDocument()
-      expect(within(permitTile).getByLabelText('Exemption number')).toBeDisabled()
+      expect(within(permitTile).queryByLabelText('Exemption number')).not.toBeInTheDocument()
       expect(within(permitTile).getByLabelText('Submit date')).toBeEnabled()
-      expect(within(permitTile).getByLabelText('Received date')).toBeDisabled()
+      expect(within(permitTile).queryByLabelText('Received date')).not.toBeInTheDocument()
       expect(within(permitTile).getByLabelText('Region')).toHaveValue('1903')
       expect(within(permitTile).getByLabelText('Remarks')).toHaveValue('ok')
-      expect(within(permitTile).getByLabelText('Current permit volume (m³)')).toBeDisabled()
-      expect(within(permitTile).getByLabelText('Current permit pieces')).toBeDisabled()
+      expect(
+        within(permitTile).queryByLabelText('Current permit volume (m³)'),
+      ).not.toBeInTheDocument()
+      expect(within(permitTile).queryByLabelText('Current permit pieces')).not.toBeInTheDocument()
       expect(within(permitTile).getByLabelText('Permit Request Pieces')).toHaveAttribute(
         'aria-required',
         'true',
@@ -6408,7 +6459,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       if (volume) {
         await userEvent.type(screen.getByLabelText('Permit Request Volume (m³)'), volume)
       }
-      await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
+      await userEvent.click(getActiveSectionSaveButton())
 
       await waitFor(() => {
         expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
@@ -6435,7 +6486,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
     await userEvent.clear(screen.getByLabelText('Permit Request Pieces'))
     await userEvent.clear(screen.getByLabelText('Permit Request Volume (m³)'))
-    await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
+    await userEvent.click(getActiveSectionSaveButton())
 
     expect(
       (await screen.findAllByText('Permit Request Pieces is required.')).length,
@@ -6470,7 +6521,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.type(screen.getByLabelText('Permit Request Pieces'), '0')
     await userEvent.clear(screen.getByLabelText('Permit Request Volume (m³)'))
     await userEvent.type(screen.getByLabelText('Permit Request Volume (m³)'), '0')
-    await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
+    await userEvent.click(getActiveSectionSaveButton())
 
     await waitFor(() => {
       expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
@@ -6495,7 +6546,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     renderPermitDetails()
 
     await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
-    await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
+    await userEvent.click(getActiveSectionSaveButton())
 
     expect(
       (await screen.findAllByText('Permit Request Pieces is required.')).length,
@@ -6522,7 +6573,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.type(screen.getByLabelText('Permit Request Pieces'), '-1')
     await userEvent.clear(screen.getByLabelText('Permit Request Volume (m³)'))
     await userEvent.type(screen.getByLabelText('Permit Request Volume (m³)'), '-1')
-    await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
+    await userEvent.click(getActiveSectionSaveButton())
 
     expect(
       (await screen.findAllByText('Permit Request Pieces must be a whole number.')).length,
@@ -6534,7 +6585,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.type(screen.getByLabelText('Permit Request Pieces'), '10000000000')
     await userEvent.clear(screen.getByLabelText('Permit Request Volume (m³)'))
     await userEvent.type(screen.getByLabelText('Permit Request Volume (m³)'), '1.234')
-    await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
+    await userEvent.click(getActiveSectionSaveButton())
 
     expect(
       (await screen.findAllByText('Permit Request Pieces must be 9999999999 or less.')).length,
@@ -6548,7 +6599,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.type(screen.getByLabelText('Permit Request Pieces'), '250')
     await userEvent.clear(screen.getByLabelText('Permit Request Volume (m³)'))
     await userEvent.type(screen.getByLabelText('Permit Request Volume (m³)'), '1234567.89')
-    await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
+    await userEvent.click(getActiveSectionSaveButton())
 
     expect(
       (await screen.findAllByText('Permit Request Volume must be 9 characters or fewer.')).length,
@@ -6584,7 +6635,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.type(screen.getByLabelText('Permit Request Pieces'), '0')
     await userEvent.clear(screen.getByLabelText('Permit Request Volume (m³)'))
     await userEvent.type(screen.getByLabelText('Permit Request Volume (m³)'), '0')
-    await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
+    await userEvent.click(getActiveSectionSaveButton())
 
     expect(
       (await screen.findAllByText('Use a positive numeric value.')).length,
@@ -6647,7 +6698,9 @@ describe('Provincial Permit Detail Action Smoke', () => {
       await userEvent.tab()
       expect(await screen.findByText('Issued date is required.')).toBeInTheDocument()
       await userEvent.clear(expiryDate)
-      await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
+      await userEvent.click(
+        screen.getByRole('button', { name: blanketOic ? 'Save changes' : 'Save permit' }),
+      )
 
       expect(await screen.findByText('Submit date is required.')).toBeInTheDocument()
       expect(await screen.findByText('Expiry date is required.')).toBeInTheDocument()
@@ -6670,7 +6723,9 @@ describe('Provincial Permit Detail Action Smoke', () => {
       expect(issueDate).not.toHaveAttribute('aria-invalid', 'true')
       expect(expiryDate).not.toHaveAttribute('aria-invalid', 'true')
 
-      await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
+      await userEvent.click(
+        screen.getByRole('button', { name: blanketOic ? 'Save changes' : 'Save permit' }),
+      )
       await waitFor(() => {
         expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
           expect.objectContaining({
@@ -7975,9 +8030,9 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Open' }))
     await selectPermitDetailTab('Items')
     await userEvent.click(screen.getByRole('button', { name: 'Create package' }))
-    const packageEditor = (
-      await screen.findByRole('heading', { name: 'Create Blanket OIC package' })
-    ).closest('.application-detail-edit-section') as HTMLElement
+    const packageEditor = (await screen.findByRole('heading', { name: 'Create package' })).closest(
+      '.application-detail-edit-section',
+    ) as HTMLElement
 
     await act(() => rejectDocument(new Error('document unavailable')))
 
@@ -8020,8 +8075,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
       await userEvent.click(await screen.findByRole('button', { name: 'Open' }))
       expect(await screen.findByText('Unable to open permit document.')).toBeVisible()
       await selectPermitDetailTab('Items')
-      const packageRow = (await screen.findByRole('cell', { name: 'BOIC-9' })).closest('tr')!
-      await userEvent.click(within(packageRow).getByRole('button', { name: 'Edit' }))
+      const packageRow = await findBlanketOicPackageCard()
+      await userEvent.click(within(packageRow).getByRole('button', { name: 'Edit package' }))
       const packageEditor = (await screen.findByRole('heading', { name: 'Edit BOIC-9' })).closest(
         '.application-detail-edit-section',
       ) as HTMLElement
@@ -8709,9 +8764,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await selectPermitDetailTab('Scale')
 
     expect(await screen.findByText('Scale unavailable')).toBeInTheDocument()
-    expect(
-      screen.queryByRole('heading', { name: 'Create Blanket OIC package' }),
-    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Create package' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Create package' })).not.toBeInTheDocument()
   })
 })

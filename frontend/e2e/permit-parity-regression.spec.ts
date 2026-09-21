@@ -870,7 +870,7 @@ test.describe('Provincial permit parity regressions', () => {
     expect(fixture.unexpectedRequests).toEqual([])
   })
 
-  test('opens the Blanket OIC package form as a right panel without hiding the package table', async ({
+  test('opens the Blanket OIC package form as a right panel without hiding the package card', async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1440, height: 1000 })
@@ -887,15 +887,15 @@ test.describe('Provincial permit parity regressions', () => {
       transition: (element as HTMLElement).style.transition,
     }))
     const trigger = page.getByRole('button', { name: 'Create package', exact: true })
-    const packageRow = page.getByRole('row').filter({ hasText: 'BOIC-A' })
-    await expect(packageRow).toBeVisible()
+    const packageCard = page
+      .locator('.detail-section-card')
+      .filter({ has: page.getByRole('heading', { name: 'Package BOIC-A', exact: true }) })
+    await expect(packageCard).toBeVisible()
 
     await trigger.click()
     const panel = page.locator('.permit-package-panel')
     await expect(panel).toBeVisible()
-    await expect(
-      panel.getByRole('heading', { name: 'Create Blanket OIC package', exact: true }),
-    ).toBeVisible()
+    await expect(panel.getByRole('heading', { name: 'Create package', exact: true })).toBeVisible()
     await expect
       .poll(async () => {
         const [contentBox, panelBox] = await Promise.all([
@@ -907,7 +907,7 @@ test.describe('Provincial permit parity regressions', () => {
       .toBe(true)
 
     const packageNumber = panel.getByLabel('Package number', { exact: true })
-    await panel.getByRole('button', { name: 'Create package', exact: true }).click()
+    await panel.getByRole('button', { name: 'Save package', exact: true }).click()
     await expect(panel.getByText('Package number is required.', { exact: true })).toBeVisible()
     await expect(packageNumber).toBeFocused()
     await page.setViewportSize({ width: 390, height: 844 })
@@ -978,11 +978,9 @@ test.describe('Provincial permit parity regressions', () => {
     await expect(panel).toHaveCount(0)
     await expect(trigger).toBeFocused()
 
-    const packageRow = page.getByRole('row').filter({ hasText: 'BOIC-A' })
-    const editTrigger = packageRow.getByRole('button', { name: 'Edit', exact: true })
+    const editTrigger = page.getByRole('button', { name: 'Edit package', exact: true })
     await editTrigger.click()
     await expect(panel).toBeVisible()
-    await expect(editTrigger).toBeVisible()
     const editedPackageNumber = panel.getByLabel('Package number', { exact: true })
     await expect(editedPackageNumber).toHaveValue('BOIC-A')
     await expect(editedPackageNumber).toBeFocused()
@@ -1000,7 +998,7 @@ test.describe('Provincial permit parity regressions', () => {
     expect(fixture.unexpectedRequests).toEqual([])
   })
 
-  test('creates a Blanket OIC package, closes the panel, and reloads its package row', async ({
+  test('creates a Blanket OIC package, closes the panel, and reloads its package card', async ({
     page,
   }) => {
     const fixture = await installPermitParityFixtures(page, 'blanket-oic-empty')
@@ -1020,12 +1018,12 @@ test.describe('Provincial permit parity regressions', () => {
     await expect(panel.getByRole('combobox', { name: 'End use', exact: true })).toHaveValue(
       'LU - Lumber',
     )
-    await panel.getByRole('button', { name: 'Create package', exact: true }).click()
+    await panel.getByRole('button', { name: 'Save package', exact: true }).click()
 
     await expect(panel).toHaveCount(0)
     await expect(page.getByRole('button', { name: 'Create package', exact: true })).toBeFocused()
     await expect(page.getByText('Blanket OIC package was created.', { exact: true })).toBeVisible()
-    await expect(page.getByRole('row').filter({ hasText: 'BOIC-NEW' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Package BOIC-NEW', exact: true })).toBeVisible()
     expect(fixture.writes).toEqual([
       expect.objectContaining({
         method: 'POST',

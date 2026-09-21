@@ -1164,6 +1164,8 @@ class OraclePermitDetailsRpcServiceTest {
     when(repository.findCoreEndUseRows(List.of(1000456L), List.of("PKG-100", "PKG-100  ")))
         .thenReturn(List.of(
             new PermitRpcRepository.PermitCoreEndUseRow("PACKAGE", 1000456L, "PKG-100", "HE", "L", null),
+            new PermitRpcRepository.PermitCoreEndUseRow("PACKAGE", 1000456L, "PKG-100", "FI", "P", null),
+            new PermitRpcRepository.PermitCoreEndUseRow("PACKAGE", 1000456L, "PKG-100", "HE", "L", null),
             new PermitRpcRepository.PermitCoreEndUseRow("PACKAGE", 1000456L, "PKG-100  ", "FI", "P", null)));
 
     var response = service.getCoreTabs(7000123L, true, ignored -> true);
@@ -1175,7 +1177,11 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(response.packageList().get(0).packageDetails().scaledVolume()).isEqualTo(1d);
     assertThat(response.packageList().get(1).packageDetails().scaledVolume()).isEqualTo(2d);
     assertThat(response.packageList().get(0).packageInfo().enduse()).isEqualTo("HE/L\n");
+    assertThat(response.packageList().get(0).packageInfo().speciesCodes()).containsExactly("HE", "FI");
+    assertThat(response.packageList().get(0).packageInfo().endUseCodes()).containsExactly("L", "P");
     assertThat(response.packageList().get(1).packageInfo().enduse()).isEqualTo("FI/P\n");
+    assertThat(response.packageList().get(1).packageInfo().speciesCodes()).containsExactly("FI");
+    assertThat(response.packageList().get(1).packageInfo().endUseCodes()).containsExactly("P");
     verify(repository, never()).findEndUsesByPackageNumber(any());
   }
 
