@@ -1,5 +1,5 @@
 import { Button, Loading, TextInput } from '@carbon/react'
-import { useId } from 'react'
+import { useId, type ReactNode } from 'react'
 import Modal from '@/components/Modal'
 import { isValidEmail, normalizeTrimmedText } from '@/utils/text'
 import { requiredLabel } from '@/utils/required-label'
@@ -11,6 +11,7 @@ export type ExemptionApprovalRecipient = [string, string]
 type ExemptionApprovalEmailModalProps = {
   recipients: ExemptionApprovalRecipient[]
   sending: boolean
+  feedback?: ReactNode
   onRecipientsChange: (recipients: ExemptionApprovalRecipient[]) => void
   onSend: (recipients: ExemptionApprovalRecipient[]) => void
   onSkip: () => void
@@ -26,6 +27,7 @@ const SendingIcon = () => <Loading small withOverlay={false} description="" />
 const ExemptionApprovalEmailModal = ({
   recipients,
   sending,
+  feedback,
   onRecipientsChange,
   onSend,
   onSkip,
@@ -89,6 +91,7 @@ const ExemptionApprovalEmailModal = ({
           )
         })}
       </div>
+      {feedback}
       <div className="lexis-confirmation-modal__actions">
         <Button id={skipButtonId} kind="tertiary" disabled={sending} onClick={onSkip}>
           {recipients.length === 1 ? 'Skip notification' : 'Skip notifications'}

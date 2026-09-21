@@ -1030,22 +1030,23 @@ const ProvincialExemptionPage = () => {
                 </Button>
                 <SearchSubmitButton loading={loading} disabled={hasDateValidationError} />
               </div>
-              {approvalStatus && (
-                <AppNotification
-                  className="legacy-inline-notification"
-                  kind={approvalStatus.kind}
-                  title={
-                    approvalStatus.kind === 'error'
-                      ? 'Approval failed'
-                      : approvalStatus.kind === 'warning'
-                        ? 'Approval completed with warnings'
-                        : 'Approval completed'
-                  }
-                  subtitle={approvalStatus.message}
-                  autoDismissMs={approvalStatus.kind === 'success' ? 6000 : undefined}
-                  onCloseButtonClick={() => setApprovalStatus(null)}
-                />
-              )}
+              {approvalStatus &&
+                !approvalConfirmationOpen &&
+                approvalEmailRecipients.length === 0 && (
+                  <AppNotification
+                    className="legacy-inline-notification"
+                    kind={approvalStatus.kind}
+                    title={
+                      approvalStatus.kind === 'error'
+                        ? 'Approval failed'
+                        : approvalStatus.kind === 'warning'
+                          ? 'Approval completed with warnings'
+                          : 'Approval completed'
+                    }
+                    subtitle={approvalStatus.message}
+                    onCloseButtonClick={() => setApprovalStatus(null)}
+                  />
+                )}
             </form>
           </Tile>
         </section>
@@ -1249,6 +1250,8 @@ const ProvincialExemptionPage = () => {
           pendingLabel="Approving…"
           confirmDisabled={approving || !approvalCertified}
           onClose={closeApprovalConfirmation}
+          errorTitle="Approval failed"
+          errorMessage={approvalStatus?.kind === 'error' ? approvalStatus.message : undefined}
           onError={() => undefined}
           onConfirm={async () => {
             const approved = await onConfirmApproval()
@@ -1284,6 +1287,21 @@ const ProvincialExemptionPage = () => {
         <ExemptionApprovalEmailModal
           recipients={approvalEmailRecipients}
           sending={sendingApprovalEmail}
+          feedback={
+            approvalStatus && (
+              <AppNotification
+                kind={approvalStatus.kind}
+                title={
+                  approvalStatus.kind === 'error'
+                    ? 'Approval failed'
+                    : approvalStatus.kind === 'warning'
+                      ? 'Approval completed with warnings'
+                      : 'Approval completed'
+                }
+                subtitle={approvalStatus.message}
+              />
+            )
+          }
           onRecipientsChange={setApprovalEmailRecipients}
           onSend={(recipients) => void onSendApprovalEmails(recipients)}
           onSkip={closeApprovalEmail}

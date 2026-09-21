@@ -23,6 +23,7 @@ type ConfirmationModalProps = {
   className?: string
   launcherButtonRef?: RefObject<HTMLElement | null>
   errorTitle?: string
+  errorMessage?: string
   onConfirm: () => Promise<void> | void
   onCancel?: () => void
   onClose: () => void
@@ -49,6 +50,7 @@ const ConfirmationModal = ({
   className,
   launcherButtonRef,
   errorTitle = 'Action failed',
+  errorMessage,
   onConfirm,
   onCancel,
   onClose,
@@ -114,57 +116,55 @@ const ConfirmationModal = ({
   }
 
   return (
-    <>
-      <Modal
-        ref={modalRef}
-        open={open}
-        passiveModal
-        size={size}
-        modalHeading={title}
-        aria-label={title}
-        aria-describedby={description ? descriptionId : undefined}
-        className={['lexis-confirmation-modal', className].filter(Boolean).join(' ')}
-        launcherButtonRef={launcherButtonRef}
-        selectorPrimaryFocus={`#${cancelButtonId}`}
-        preventCloseOnClickOutside
-        onRequestClose={requestClose}
-      >
-        <div className="lexis-confirmation-modal__body">
-          {description ? (
-            <p id={descriptionId} className="lexis-confirmation-modal__description">
-              {description}
-            </p>
-          ) : null}
-          {children}
-        </div>
-        <div className="lexis-confirmation-modal__actions">
-          <Button
-            id={cancelButtonId}
-            kind={cancelDanger ? 'danger--tertiary' : 'tertiary'}
-            disabled={pending}
-            onClick={requestCancel}
-          >
-            {cancelLabel}
-          </Button>
-          <Button
-            kind={danger ? 'danger' : 'primary'}
-            disabled={pending || confirmDisabled}
-            renderIcon={pending ? PendingIcon : undefined}
-            onClick={() => void confirm()}
-          >
-            {pending ? (pendingLabel ?? `${confirmLabel}…`) : confirmLabel}
-          </Button>
-        </div>
-      </Modal>
-      {failureMessage ? (
+    <Modal
+      ref={modalRef}
+      open={open}
+      passiveModal
+      size={size}
+      modalHeading={title}
+      aria-label={title}
+      aria-describedby={description ? descriptionId : undefined}
+      className={['lexis-confirmation-modal', className].filter(Boolean).join(' ')}
+      launcherButtonRef={launcherButtonRef}
+      selectorPrimaryFocus={`#${cancelButtonId}`}
+      preventCloseOnClickOutside
+      onRequestClose={requestClose}
+    >
+      <div className="lexis-confirmation-modal__body">
+        {description ? (
+          <p id={descriptionId} className="lexis-confirmation-modal__description">
+            {description}
+          </p>
+        ) : null}
+        {children}
+      </div>
+      {errorMessage || failureMessage ? (
         <AppNotification
           kind="error"
           title={errorTitle}
-          subtitle={failureMessage}
-          onCloseButtonClick={() => setFailureMessage('')}
+          subtitle={errorMessage || failureMessage}
+          onCloseButtonClick={errorMessage ? undefined : () => setFailureMessage('')}
         />
       ) : null}
-    </>
+      <div className="lexis-confirmation-modal__actions">
+        <Button
+          id={cancelButtonId}
+          kind={cancelDanger ? 'danger--tertiary' : 'tertiary'}
+          disabled={pending}
+          onClick={requestCancel}
+        >
+          {cancelLabel}
+        </Button>
+        <Button
+          kind={danger ? 'danger' : 'primary'}
+          disabled={pending || confirmDisabled}
+          renderIcon={pending ? PendingIcon : undefined}
+          onClick={() => void confirm()}
+        >
+          {pending ? (pendingLabel ?? `${confirmLabel}…`) : confirmLabel}
+        </Button>
+      </div>
+    </Modal>
   )
 }
 

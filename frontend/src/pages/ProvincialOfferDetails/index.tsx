@@ -476,7 +476,6 @@ const ProvincialOfferDetailsPage = () => {
             title={status.title}
             subtitle={status.message}
             lowContrast
-            autoDismissMs={status.kind === 'success' ? 6000 : undefined}
             onCloseButtonClick={() => setStatus(null)}
           />
         </Column>

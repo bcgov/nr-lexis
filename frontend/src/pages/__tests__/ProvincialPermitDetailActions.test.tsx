@@ -995,8 +995,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
     const view = render(<RouterProvider router={router} />)
 
     const success = await screen.findByText('Permit created')
-    expect(success.closest('.cds--toast-notification')).toHaveClass(
-      'cds--toast-notification--success',
+    expect(success.closest('.cds--inline-notification')).toHaveClass(
+      'cds--inline-notification--success',
     )
     expect(screen.getByText('The permit was saved.')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Permit 777 (Pending)' })).toBeInTheDocument()
@@ -8387,8 +8387,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
       expect(screen.queryByText('permit-doc.pdf')).not.toBeInTheDocument()
     })
     const success = await screen.findByText('Document deleted')
-    expect(success.closest('.cds--toast-notification')).toHaveClass(
-      'cds--toast-notification--success',
+    expect(success.closest('.cds--inline-notification')).toHaveClass(
+      'cds--inline-notification--success',
     )
     expect(screen.getByText('permit-doc.pdf was deleted.')).toBeInTheDocument()
   })
@@ -8781,7 +8781,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     expect(
       await screen.findByText('Unable to retrieve provincial permit detail.', {
-        selector: '.detail-page-inline-error',
+        selector: '.app-inline-notification .cds--inline-notification__subtitle',
       }),
     ).toBeInTheDocument()
     expect(mockedFetchProvincialPermitDetailTabs).not.toHaveBeenCalled()

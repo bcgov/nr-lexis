@@ -5683,7 +5683,6 @@ const ProvincialPermitDetailsPage = () => {
                 title="Permit created"
                 subtitle="The permit was saved."
                 lowContrast
-                autoDismissMs={6000}
                 onCloseButtonClick={() => setCreatedBlanketOicPermitNumber('')}
               />
             </Column>
@@ -5695,7 +5694,6 @@ const ProvincialPermitDetailsPage = () => {
                 title="Action info"
                 subtitle={actionInfoMessage}
                 lowContrast
-                autoDismissMs={6000}
                 onCloseButtonClick={() => setActionInfoMessage('')}
               />
             </Column>
@@ -5708,7 +5706,6 @@ const ProvincialPermitDetailsPage = () => {
                 title={actionSuccessNotification.title}
                 subtitle={actionSuccessNotification.subtitle}
                 lowContrast
-                autoDismissMs={6000}
                 onCloseButtonClick={() => setActionSuccessNotification(null)}
               />
             </Column>
@@ -5721,13 +5718,12 @@ const ProvincialPermitDetailsPage = () => {
                 title="Document deleted"
                 subtitle={documentSuccessMessage}
                 lowContrast
-                autoDismissMs={6000}
                 onCloseButtonClick={() => setDocumentSuccessMessage('')}
               />
             </Column>
           )}
 
-          {!!actionErrorMessage && (
+          {!!actionErrorMessage && !permitApprovalEmailOpen && (
             <Column sm={4} md={8} lg={16} className="detail-page-error">
               <AppNotification
                 kind="error"
@@ -7958,6 +7954,7 @@ const ProvincialPermitDetailsPage = () => {
           pendingLabel="Sending…"
           confirmDisabled={!isValidEmail(permitApprovalEmailAddress)}
           onClose={() => setPermitApprovalEmailOpen(false)}
+          errorMessage={actionErrorMessage}
           onError={() => undefined}
           onConfirm={async () => {
             const sent = await onSendPermitEmail('approval', permitApprovalEmailAddress)

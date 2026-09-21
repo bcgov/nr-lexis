@@ -1,7 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { APP_NOTIFICATION_REGION_ID } from '@/components/AppNotification'
 import { useAuth } from '@/context/auth/useAuth'
 import RtmEmsLogAmvUploadPage from '@/pages/RTMEmsLogAmv/LegacyUploadWorkflow'
 import {
@@ -915,11 +914,11 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     )
 
     expect(hemlockTable).toBeVisible()
-    const savedToastTitle = screen.getByText('Values saved')
-    expect(savedToastTitle).toBeVisible()
-    const savedToast = savedToastTitle.closest('.cds--toast-notification') as HTMLElement
-    expect(savedToast).toHaveClass('cds--toast-notification--success')
-    expect(document.getElementById(APP_NOTIFICATION_REGION_ID)).toContainElement(savedToast)
+    const savedBannerTitle = screen.getByText('Values saved')
+    expect(savedBannerTitle).toBeVisible()
+    const savedBanner = savedBannerTitle.closest('.cds--inline-notification') as HTMLElement
+    expect(savedBanner).toHaveClass('cds--inline-notification--success')
+    expect(document.querySelector('.rtm-amv-values-content')).toContainElement(savedBanner)
     expect(screen.getByText(/They take effect on [A-Z][a-z]+ 1, \d{4}\./)).toBeVisible()
     expect(screen.getByText('Last saved')).toBeVisible()
     expect(screen.getByText('August 11, 2026, 6:21 PM by IDIR\\MGURJAOD')).toBeVisible()

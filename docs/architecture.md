@@ -40,6 +40,8 @@ over TCP rather than deploying a scanner workload of its own.
 | Keycloak and API gateway | Dedicated machine-to-machine authentication, scope enforcement, traffic controls, and routing for NEXCOL federal submissions.                                          |
 | Mail relay               | Delivery of post-commit workflow notifications from provincial and regional positional mailboxes to validated applicants and regional positional recipients.            |
 
+Prefer persistent inline banners for action success, warning, and failure feedback within the owning page, form, or dialog; use a toast only when no suitable inline location exists, such as session renewal.
+
 ## Identity and authorization
 
 Interactive users authenticate through FAM's Cognito integration. The backend validates the JWT,

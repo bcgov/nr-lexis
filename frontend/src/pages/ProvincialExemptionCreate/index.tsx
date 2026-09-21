@@ -1045,7 +1045,6 @@ const ProvincialExemptionCreatePage = () => {
             subtitle={`Loaded ${prefillState.selectedApplicationNumbers.length} ${prefillApplicationLabel} into this form.`}
             lowContrast
             onCloseButtonClick={() => setShowPrefillNotice(false)}
-            autoDismissMs={6000}
           />
         </Column>
       )}
@@ -1058,7 +1057,6 @@ const ProvincialExemptionCreatePage = () => {
             subtitle={status.message}
             lowContrast
             onCloseButtonClick={() => setStatus(null)}
-            autoDismissMs={status.kind === 'success' ? 6000 : undefined}
           />
         </Column>
       )}

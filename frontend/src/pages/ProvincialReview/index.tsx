@@ -1005,22 +1005,23 @@ const ProvincialReviewPage = () => {
 
       {optionsUnavailable && <AuthoritativeOptionsUnavailableNotification />}
 
-      {!!reviewActionStatus && (
-        <AppNotification
-          kind={reviewActionStatus.kind}
-          title={
-            reviewActionStatus.title ??
-            (reviewActionStatus.kind === 'success'
-              ? 'Action complete'
-              : reviewActionStatus.kind === 'warning'
-                ? 'Approval partially completed'
-                : 'Action failed')
-          }
-          subtitle={reviewActionStatus.message}
-          autoDismissMs={reviewActionStatus.kind === 'success' ? 6000 : undefined}
-          onCloseButtonClick={() => setReviewActionStatus(null)}
-        />
-      )}
+      {!!reviewActionStatus &&
+        approvalConfirmationNumbers.length === 0 &&
+        !rejectApplicationNumber && (
+          <AppNotification
+            kind={reviewActionStatus.kind}
+            title={
+              reviewActionStatus.title ??
+              (reviewActionStatus.kind === 'success'
+                ? 'Action complete'
+                : reviewActionStatus.kind === 'warning'
+                  ? 'Approval partially completed'
+                  : 'Action failed')
+            }
+            subtitle={reviewActionStatus.message}
+            onCloseButtonClick={() => setReviewActionStatus(null)}
+          />
+        )}
 
       <Column sm={4} md={8} lg={16}>
         <section className="legacy-search-section legacy-search-section--filters">
@@ -1122,6 +1123,8 @@ const ProvincialReviewPage = () => {
         className="provincial-review-approval-modal"
         onClose={() => setApprovalConfirmationNumbers([])}
         onConfirm={onConfirmApproveSelected}
+        errorTitle={reviewActionStatus?.title}
+        errorMessage={reviewActionStatus?.kind === 'error' ? reviewActionStatus.message : undefined}
         onError={() => undefined}
       >
         <p className="provincial-review-approval-modal__count">
@@ -1237,6 +1240,14 @@ const ProvincialReviewPage = () => {
               />
             )}
         </div>
+        {rejectApplicationNumber && reviewActionStatus?.kind === 'error' && (
+          <AppNotification
+            kind="error"
+            title={reviewActionStatus.title ?? 'Action failed'}
+            subtitle={reviewActionStatus.message}
+            onCloseButtonClick={() => setReviewActionStatus(null)}
+          />
+        )}
         <div className="review-reject-modal__actions">
           <Button kind="tertiary" disabled={submittingReject} onClick={closeRejectPanel}>
             Cancel

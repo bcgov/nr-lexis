@@ -4007,7 +4007,6 @@ const ProvincialApplicationDetailsPage = () => {
           title="Action complete"
           subtitle={creationSuccessMessage}
           lowContrast
-          autoDismissMs={6000}
           onCloseButtonClick={() => setCreationSuccessMessage('')}
         />
       )}
@@ -4055,7 +4054,7 @@ const ProvincialApplicationDetailsPage = () => {
               onCloseButtonClick={() => setClientLookupFailures(new Set())}
             />
           )}
-          {!!actionErrorMessage && (
+          {!!actionErrorMessage && !summaryAccuracyConfirmationOpen && !isEditingRemarks && (
             <AppNotification
               kind="error"
               title="Action failed"
@@ -4079,7 +4078,6 @@ const ProvincialApplicationDetailsPage = () => {
               title="Action completed"
               subtitle={actionInfoMessage}
               lowContrast
-              autoDismissMs={6000}
               onCloseButtonClick={() => setActionInfoMessage('')}
             />
           )}
@@ -5324,6 +5322,14 @@ const ProvincialApplicationDetailsPage = () => {
                                       }
                                     }}
                                   />
+                                  {actionErrorMessage && (
+                                    <AppNotification
+                                      kind="error"
+                                      title="Action failed"
+                                      subtitle={actionErrorMessage}
+                                      onCloseButtonClick={() => setActionErrorMessage('')}
+                                    />
+                                  )}
                                   <div className="application-remark-modal__actions">
                                     <Button
                                       kind="tertiary"
@@ -5388,6 +5394,7 @@ const ProvincialApplicationDetailsPage = () => {
             onConfirmedChange={setSummaryAccuracyConfirmed}
             onConfirm={onConfirmSummaryAccuracy}
             onClose={closeSummaryAccuracyConfirmation}
+            errorMessage={actionErrorMessage}
             onError={() => undefined}
           />
         )}

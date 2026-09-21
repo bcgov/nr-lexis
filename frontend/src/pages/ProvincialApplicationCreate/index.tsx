@@ -1600,7 +1600,6 @@ const ProvincialApplicationCreatePage = () => {
             title="Required options not configured"
             subtitle="A required product type, exemption reason, age class, or region list is empty. Save remains disabled."
             lowContrast
-            autoDismissMs={undefined}
             onCloseButtonClick={() => setShowMissingRequiredOptions(false)}
           />
         </Column>
@@ -1618,7 +1617,7 @@ const ProvincialApplicationCreatePage = () => {
         </Column>
       )}
 
-      {!!status && status.placement !== 'inline' && (
+      {!!status && status.placement !== 'inline' && !accuracyConfirmationOpen && (
         <Column sm={4} md={8} lg={16}>
           <AppNotification
             kind={status.kind}
@@ -1626,7 +1625,6 @@ const ProvincialApplicationCreatePage = () => {
             subtitle={status.message}
             lowContrast
             onCloseButtonClick={() => setStatus(null)}
-            autoDismissMs={status.kind === 'success' ? 6000 : undefined}
           />
         </Column>
       )}
@@ -2434,6 +2432,8 @@ const ProvincialApplicationCreatePage = () => {
           onConfirmedChange={setAccuracyConfirmed}
           onConfirm={onConfirmAccuracy}
           onClose={closeAccuracyConfirmation}
+          errorTitle={status?.title}
+          errorMessage={status?.kind === 'error' ? status.message : undefined}
           onError={() => undefined}
         />
       )}

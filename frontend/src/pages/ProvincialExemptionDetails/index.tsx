@@ -799,6 +799,10 @@ const ProvincialExemptionDetailsPage = () => {
     editContextLoaded &&
     !exemptionEditLocked &&
     !permitCreationRequiresReload
+  const showPermitCreationConfirmation =
+    permitCreationConfirmationOpen &&
+    (canCreateApplicationBackedPermit || canStartBlanketOicPermitCreation)
+
   const permitCreationActionBusy =
     creatingPermit ||
     saving ||
@@ -1835,22 +1839,24 @@ const ProvincialExemptionDetailsPage = () => {
               hideCloseButton
             />
           )}
-          {!!actionErrorMessage && (
-            <AppNotification
-              kind="error"
-              title="Action failed"
-              subtitle={actionErrorMessage}
-              lowContrast
-              onCloseButtonClick={() => setActionErrorMessage('')}
-            />
-          )}
-          {!!actionInfoMessage && (
+          {!!actionErrorMessage &&
+            !approvalConfirmationOpen &&
+            !showPermitCreationConfirmation &&
+            approvalEmailRecipients.length === 0 && (
+              <AppNotification
+                kind="error"
+                title="Action failed"
+                subtitle={actionErrorMessage}
+                lowContrast
+                onCloseButtonClick={() => setActionErrorMessage('')}
+              />
+            )}
+          {!!actionInfoMessage && approvalEmailRecipients.length === 0 && (
             <AppNotification
               kind="info"
               title="Action completed"
               subtitle={actionInfoMessage}
               lowContrast
-              autoDismissMs={6000}
               onCloseButtonClick={() => setActionInfoMessage('')}
             />
           )}
@@ -2763,6 +2769,7 @@ const ProvincialExemptionDetailsPage = () => {
             pendingLabel="Approving…"
             confirmDisabled={approving || !approvalCertified}
             onClose={closeApprovalConfirmation}
+            errorMessage={actionErrorMessage}
             onError={() => undefined}
             onConfirm={async () => {
               if (approvalConfirmationTarget === currentDetail?.exemptionNumber) {
@@ -2791,6 +2798,15 @@ const ProvincialExemptionDetailsPage = () => {
         <ExemptionApprovalEmailModal
           recipients={approvalEmailRecipients}
           sending={sendingApprovalEmail}
+          feedback={
+            (actionErrorMessage || actionInfoMessage) && (
+              <AppNotification
+                kind={actionErrorMessage ? 'error' : 'info'}
+                title={actionErrorMessage ? 'Action failed' : 'Action completed'}
+                subtitle={actionErrorMessage || actionInfoMessage}
+              />
+            )
+          }
           onRecipientsChange={setApprovalEmailRecipients}
           onSend={(recipients) => void onSendApprovalEmail(recipients)}
           onSkip={closeApprovalEmail}
@@ -2859,67 +2875,73 @@ const ProvincialExemptionDetailsPage = () => {
           </div>
         </Modal>
       )}
-      {permitCreationConfirmationOpen &&
-        (canCreateApplicationBackedPermit || canStartBlanketOicPermitCreation) &&
-        currentDetail && (
-          <Modal
-            open
-            passiveModal
-            size="sm"
-            modalHeading="Apply for new permit"
-            className="permit-creation-confirmation-modal"
-            aria-describedby="permit-creation-confirmation-description"
-            onRequestClose={closePermitCreationConfirmation}
-          >
-            <p id="permit-creation-confirmation-description">
-              {currentDetail.blanketOic ? (
-                <>
-                  You're about to start a new permit for Blanket OIC Exemption{' '}
-                  {currentDetail.exemptionNumber}. The permit is created when you save it, and
-                  cannot be deleted afterwards.
-                </>
-              ) : (
-                <>
-                  A new permit will be created for Exemption {currentDetail.exemptionNumber}. Once
-                  created, a permit cannot be deleted.
-                </>
-              )}
-            </p>
-            {(currentDetail.exemptionTypeCode ?? '').trim().toUpperCase() === 'O' && (
-              <p>Eligible application scales from this exemption will be added automatically.</p>
+      {showPermitCreationConfirmation && currentDetail && (
+        <Modal
+          open
+          passiveModal
+          size="sm"
+          modalHeading="Apply for new permit"
+          className="permit-creation-confirmation-modal"
+          aria-describedby="permit-creation-confirmation-description"
+          onRequestClose={closePermitCreationConfirmation}
+        >
+          <p id="permit-creation-confirmation-description">
+            {currentDetail.blanketOic ? (
+              <>
+                You're about to start a new permit for Blanket OIC Exemption{' '}
+                {currentDetail.exemptionNumber}. The permit is created when you save it, and cannot
+                be deleted afterwards.
+              </>
+            ) : (
+              <>
+                A new permit will be created for Exemption {currentDetail.exemptionNumber}. Once
+                created, a permit cannot be deleted.
+              </>
             )}
-            <div className="permit-creation-confirmation-modal__actions">
-              <Button
-                kind="tertiary"
-                disabled={creatingPermit}
-                onClick={closePermitCreationConfirmation}
-              >
-                Cancel
-              </Button>
-              <Button
-                kind="primary"
-                disabled={creatingPermit}
-                renderIcon={creatingPermit ? PendingIcon : undefined}
-                onClick={() => {
-                  if (currentDetail.blanketOic) {
-                    setPermitCreationConfirmationOpen(false)
-                    setPermitCreationDestination(
-                      `/provincial/exemption/${encodeURIComponent(currentDetail.exemptionNumber)}/permit/new`,
-                    )
-                  } else {
-                    void onCreatePermitFromExemption()
-                  }
-                }}
-              >
-                {creatingPermit
-                  ? 'Creating…'
-                  : currentDetail.blanketOic
-                    ? 'Continue'
-                    : 'Create permit'}
-              </Button>
-            </div>
-          </Modal>
-        )}
+          </p>
+          {(currentDetail.exemptionTypeCode ?? '').trim().toUpperCase() === 'O' && (
+            <p>Eligible application scales from this exemption will be added automatically.</p>
+          )}
+          {actionErrorMessage && (
+            <AppNotification
+              kind="error"
+              title="Action failed"
+              subtitle={actionErrorMessage}
+              onCloseButtonClick={() => setActionErrorMessage('')}
+            />
+          )}
+          <div className="permit-creation-confirmation-modal__actions">
+            <Button
+              kind="tertiary"
+              disabled={creatingPermit}
+              onClick={closePermitCreationConfirmation}
+            >
+              Cancel
+            </Button>
+            <Button
+              kind="primary"
+              disabled={creatingPermit}
+              renderIcon={creatingPermit ? PendingIcon : undefined}
+              onClick={() => {
+                if (currentDetail.blanketOic) {
+                  setPermitCreationConfirmationOpen(false)
+                  setPermitCreationDestination(
+                    `/provincial/exemption/${encodeURIComponent(currentDetail.exemptionNumber)}/permit/new`,
+                  )
+                } else {
+                  void onCreatePermitFromExemption()
+                }
+              }}
+            >
+              {creatingPermit
+                ? 'Creating…'
+                : currentDetail.blanketOic
+                  ? 'Continue'
+                  : 'Create permit'}
+            </Button>
+          </div>
+        </Modal>
+      )}
       <UnsavedChangesGuard
         isDirty={isExemptionDirty}
         isBusy={

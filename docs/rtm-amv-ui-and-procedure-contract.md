@@ -112,9 +112,9 @@ new-combination warnings. Final submission expands the reviewed values to direct
 and writes them in one Spring transaction. It does not call the legacy row procedures. If any
 target is not applied or the database write fails, the complete batch transaction rolls back.
 
-After an accepted save, the page removes the upload card, shows the saved confirmation in the
-fixed top-right toast region, and keeps the reviewed values editable. The confirmation does not
-change the user's scroll position. While a save is pending, the Save values button shows a spinner
+After an accepted save, the page removes the upload card, shows a persistent inline confirmation
+above the reviewed values, and keeps those values editable. The confirmation scrolls into view
+when outside the viewport. While a save is pending, the Save values button shows a spinner
 and changes its label to Saving values. Replace file first
 reveals a warning and the upload area together in one card above the unchanged saved review;
 opening it does not select a file or change any values.

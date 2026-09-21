@@ -737,6 +737,18 @@ const RTMEmsLogAmvPage = () => {
           </div>
         )}
 
+        {notification && !showWarningConfirmation && (
+          <AppNotification
+            kind={notification.kind}
+            role="status"
+            title={notification.title}
+            subtitle={notification.subtitle}
+            onCloseButtonClick={() => {
+              setNotification(null)
+            }}
+          />
+        )}
+
         {loadError && (
           <div className="admin-upload-validation admin-upload-validation--error" role="alert">
             <ErrorFilled size={20} className="admin-upload-validation__icon" aria-hidden="true" />
@@ -895,6 +907,7 @@ const RTMEmsLogAmvPage = () => {
           size="sm"
           className="rtm-amv-confirm-modal"
           onClose={() => setShowWarningConfirmation(false)}
+          errorMessage={notification?.kind === 'error' ? notification.subtitle : undefined}
           onError={() => undefined}
           onConfirm={async () => {
             const saved = await saveChanges()
@@ -920,20 +933,6 @@ const RTMEmsLogAmvPage = () => {
             </div>
           </div>
         </ConfirmationModal>
-      )}
-
-      {notification && (
-        <Column sm={4} md={8} lg={16}>
-          <AppNotification
-            kind={notification.kind}
-            role="status"
-            title={notification.title}
-            subtitle={notification.subtitle}
-            onCloseButtonClick={() => {
-              setNotification(null)
-            }}
-          />
-        </Column>
       )}
     </Grid>
   )

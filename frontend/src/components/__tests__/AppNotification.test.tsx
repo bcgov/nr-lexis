@@ -1,10 +1,7 @@
-import { act, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import {
-  APP_NOTIFICATION_REGION_ID,
-  AppNotification,
-  syncAppNotificationRegionTheme,
-} from '../AppNotification'
+import { AppNotification } from '../AppNotification'
+import { AppToastNotification, APP_NOTIFICATION_REGION_ID } from '../AppToastNotification'
 
 describe('AppNotification', () => {
   afterEach(() => {
@@ -12,182 +9,75 @@ describe('AppNotification', () => {
     document.getElementById(APP_NOTIFICATION_REGION_ID)?.remove()
   })
 
-  it('renders in the global toast notification region', () => {
+  it('keeps action feedback inside the page that owns it', () => {
     const { container } = render(
       <main>
         <AppNotification kind="error" title="Upload error" subtitle="Upload failed." />
       </main>,
     )
 
-    const notificationRegion = document.getElementById('lexis-toast-notification-region')
-
-    expect(notificationRegion).toBeTruthy()
-    expect(container.querySelector('main')).toBeEmptyDOMElement()
-    expect(notificationRegion).toContainElement(screen.getByText('Upload error'))
+    expect(container.querySelector('main')).toContainElement(screen.getByText('Upload error'))
+    expect(screen.getByRole('status')).toHaveClass(
+      'cds--inline-notification',
+      'cds--inline-notification--low-contrast',
+    )
+    expect(document.getElementById(APP_NOTIFICATION_REGION_ID)).toBeNull()
     expect(screen.queryByRole('button', { name: 'close notification' })).not.toBeInTheDocument()
   })
 
-  it('only renders a close control when the caller can dismiss the notification', () => {
-    render(
-      <AppNotification
-        kind="warning"
-        title="Lookup unavailable"
-        subtitle="Try again later."
-        onCloseButtonClick={vi.fn()}
-      />,
-    )
-
-    expect(screen.getByRole('button', { name: 'close notification' })).toBeInTheDocument()
-  })
-
-  it('uses low-contrast toast styling by default', () => {
-    render(<AppNotification kind="error" title="Upload error" subtitle="Upload failed." />)
-
-    expect(document.querySelector('.cds--toast-notification')).toHaveClass(
-      'cds--toast-notification--low-contrast',
-    )
-  })
-
-  it('allows high-contrast toast styling when explicitly requested', () => {
-    render(
-      <AppNotification
-        kind="error"
-        lowContrast={false}
-        title="Upload error"
-        subtitle="Upload failed."
-      />,
-    )
-
-    expect(document.querySelector('.cds--toast-notification')).not.toHaveClass(
-      'cds--toast-notification--low-contrast',
-    )
-  })
-
-  it('syncs the toast notification region to the selected app theme', () => {
-    const lightRegion = syncAppNotificationRegionTheme(false)!
-
-    expect(lightRegion).toHaveClass('app-notification-region')
-    expect(lightRegion).toHaveClass('cds--white')
-    expect(lightRegion).not.toHaveClass('cds--g100')
-
-    const darkRegion = syncAppNotificationRegionTheme(true)!
-
-    expect(darkRegion).toBe(lightRegion)
-    expect(darkRegion).toHaveClass('cds--g100')
-    expect(darkRegion).not.toHaveClass('cds--white')
-  })
-
-  it('auto-dismisses success notifications after the FSPTS timing and exit animation', () => {
+  it('keeps success feedback until the caller dismisses or replaces it', () => {
     vi.useFakeTimers()
     const onClose = vi.fn()
-
-    render(
-      <AppNotification
-        kind="success"
-        title="Saved"
-        subtitle="Changes saved."
-        onCloseButtonClick={onClose}
-      />,
-    )
-
-    act(() => {
-      vi.advanceTimersByTime(5699)
-    })
-    expect(onClose).not.toHaveBeenCalled()
-
-    act(() => {
-      vi.advanceTimersByTime(1)
-    })
-    expect(document.querySelector('.app-notification')).toHaveClass('app-notification--exiting')
-    expect(onClose).not.toHaveBeenCalled()
-
-    act(() => {
-      vi.advanceTimersByTime(299)
-    })
-    expect(onClose).not.toHaveBeenCalled()
-
-    act(() => {
-      vi.advanceTimersByTime(1)
-    })
-    expect(onClose).toHaveBeenCalledTimes(1)
-  })
-
-  it('honours a caller-provided success timeout without applying a minimum', () => {
-    vi.useFakeTimers()
-    const onClose = vi.fn()
-
-    render(
-      <AppNotification
-        kind="success"
-        title="Saved"
-        subtitle="Changes saved."
-        autoDismissMs={1000}
-        onCloseButtonClick={onClose}
-      />,
-    )
-
-    act(() => {
-      vi.advanceTimersByTime(700)
-    })
-    expect(document.querySelector('.app-notification')).toHaveClass('app-notification--exiting')
-
-    act(() => {
-      vi.advanceTimersByTime(300)
-    })
-    expect(onClose).toHaveBeenCalledTimes(1)
-  })
-
-  it('shows only the newest active notification without resurfacing the previous one', () => {
     const { rerender } = render(
+      <AppNotification kind="success" title="Saved" onCloseButtonClick={onClose} />,
+    )
+
+    act(() => vi.advanceTimersByTime(60_000))
+    expect(screen.getByText('Saved')).toBeVisible()
+    expect(onClose).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'close notification' }))
+    expect(onClose).toHaveBeenCalledTimes(1)
+
+    rerender(<AppNotification kind="error" title="Save failed" onCloseButtonClick={onClose} />)
+    expect(screen.getByText('Save failed')).toBeVisible()
+    expect(screen.queryByText('Saved')).not.toBeInTheDocument()
+  })
+
+  it('keeps independent page and dialog messages visible alongside a session toast', () => {
+    render(
       <>
-        <AppNotification kind="warning" title="Earlier warning" subtitle="First message." />
-        <AppNotification kind="error" title="Latest error" subtitle="Second message." />
+        <main>
+          <AppNotification kind="warning" title="Options unavailable" />
+          <AppNotification kind="success" title="Saved" />
+        </main>
+        <div role="dialog" aria-label="Upload">
+          <AppNotification kind="error" title="Upload failed" />
+        </div>
+        <AppToastNotification kind="success" title="Session extended" />
       </>,
     )
 
-    expect(screen.queryByText('Earlier warning')).not.toBeInTheDocument()
-    expect(screen.getByText('Latest error')).toBeVisible()
-
-    rerender(<AppNotification kind="warning" title="Earlier warning" subtitle="First message." />)
-
-    expect(screen.queryByText('Earlier warning')).not.toBeInTheDocument()
-    expect(screen.queryByText('Latest error')).not.toBeInTheDocument()
+    expect(screen.getByText('Options unavailable')).toBeVisible()
+    expect(screen.getByText('Saved')).toBeVisible()
+    expect(within(screen.getByRole('dialog')).getByText('Upload failed')).toBeVisible()
+    expect(document.getElementById(APP_NOTIFICATION_REGION_ID)).toContainElement(
+      screen.getByText('Session extended'),
+    )
   })
 
-  it('does not auto-dismiss error notifications', () => {
-    vi.useFakeTimers()
-    const onClose = vi.fn()
-
+  it('sanitizes technical errors and allows an urgent announcement', () => {
     render(
       <AppNotification
         kind="error"
-        title="Upload error"
-        subtitle="Upload failed."
-        autoDismissMs={1000}
-        onCloseButtonClick={onClose}
+        role="alert"
+        title="Save failed"
+        subtitle='{"status":500,"error":"Internal Server Error","path":"/api/lexis/example"}'
       />,
     )
 
-    act(() => {
-      vi.advanceTimersByTime(60_000)
-    })
-    expect(onClose).not.toHaveBeenCalled()
-  })
-
-  it('does not render raw technical response content', () => {
-    render(
-      <AppNotification
-        kind="error"
-        title="Submission failed"
-        subtitle='{"timestamp":"2026-06-16T18:13:00Z","status":500,"error":"Internal Server Error","path":"/api/v1/fsp/submissions"}'
-      />,
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Something went wrong. Please try again. If the problem persists, contact your administrator.',
     )
-
-    expect(screen.queryByText(/api\/v1\/fsp\/submissions/i)).not.toBeInTheDocument()
-    expect(
-      screen.getByText(
-        'Something went wrong. Please try again. If the problem persists, contact your administrator.',
-      ),
-    ).toBeInTheDocument()
+    expect(screen.queryByText(/Internal Server Error/)).not.toBeInTheDocument()
   })
 })

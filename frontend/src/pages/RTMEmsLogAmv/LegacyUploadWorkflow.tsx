@@ -1583,6 +1583,20 @@ const RtmEmsLogAmvUploadPage = () => {
         </div>
       </Column>
 
+      {notification && (
+        <Column sm={4} md={8} lg={16}>
+          <AppNotification
+            kind={notificationKind}
+            role="status"
+            title={notificationTitle}
+            subtitle={notification}
+            onCloseButtonClick={() => {
+              setNotification('')
+            }}
+          />
+        </Column>
+      )}
+
       <Column sm={4} md={8} lg={16} className="admin-upload-fspts-content rtm-amv-values-content">
         {savedUploadState && savedNotification && !replacementUploadOpen && (
           <AppNotification
@@ -1737,20 +1751,6 @@ const RtmEmsLogAmvUploadPage = () => {
           </>
         )}
       </Column>
-
-      {notification && (
-        <Column sm={4} md={8} lg={16}>
-          <AppNotification
-            kind={notificationKind}
-            role="status"
-            title={notificationTitle}
-            subtitle={notification}
-            onCloseButtonClick={() => {
-              setNotification('')
-            }}
-          />
-        </Column>
-      )}
 
       {discardConfirmation && (
         <ConfirmationModal

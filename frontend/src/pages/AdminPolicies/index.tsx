@@ -909,11 +909,10 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
           title={notificationTitle}
           subtitle={successMessage}
           lowContrast
-          autoDismissMs={6000}
           onCloseButtonClick={() => setSuccessMessage('')}
         />
       )}
-      {errorMessage && !isPolicyEditorOpen && (
+      {errorMessage && !isPolicyEditorOpen && !pendingDeletion && (
         <AppNotification
           kind="error"
           title={errorTitle}
@@ -1145,6 +1144,8 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
             return deleteExportSchedule(pendingDeletion.row)
           }}
           onClose={() => setPendingDeletion(null)}
+          errorTitle={errorTitle}
+          errorMessage={errorMessage}
           onError={(error) => {
             if (pendingDeletion.area !== 'schedule') {
               handlePolicyDeleteError(error, pendingDeletion.area)

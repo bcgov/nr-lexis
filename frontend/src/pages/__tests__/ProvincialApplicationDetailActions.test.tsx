@@ -2771,7 +2771,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     expect(
       await screen.findByText('Unable to retrieve provincial application detail.', {
-        selector: '.detail-page-inline-error',
+        selector: '.app-inline-notification .cds--inline-notification__subtitle',
       }),
     ).toBeInTheDocument()
     expect(mockedFetchApplicationDocuments).not.toHaveBeenCalled()
