@@ -2486,7 +2486,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(await screen.findByRole('cell', { name: 'A006654' })).toBeInTheDocument()
   })
 
-  it('shows the base permit detail while exemption context continues loading', async () => {
+  it('waits for delayed Blanket OIC context before rendering reviewed permit tabs and fees', async () => {
     configureActivePermit()
     mockedFetchProvincialPermitDetail.mockResolvedValue({
       ...permitDetail,
@@ -2496,6 +2496,9 @@ describe('Provincial Permit Detail Action Smoke', () => {
       exemptionVolumeRemaining: null,
       exemptionTypeDescription: null,
       blanketOic: false,
+      oicApplicationNumber: 1000999,
+      oicRequestPieces: 200,
+      oicRequestVolume: 120.5,
     })
     let resolveExemptionContext:
       | ((value: Awaited<ReturnType<typeof fetchProvincialPermitExemptionContext>>) => void)
@@ -2511,20 +2514,21 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     renderPermitDetails()
 
-    expect(await screen.findByRole('heading', { name: 'Permit summary' })).toBeInTheDocument()
-    expect(screen.queryByText('Loading provincial permit detail…')).not.toBeInTheDocument()
+    expect(await screen.findByText('Loading permit details…')).toBeInTheDocument()
     expect(mockedFetchProvincialPermitExemptionContext).toHaveBeenCalledWith('EX-9')
     expect(mockedFetchProvincialPermitDetailTabs).not.toHaveBeenCalled()
+    expect(screen.queryByRole('tab', { name: 'Items' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Fee calculation details')).not.toBeInTheDocument()
     expect(
-      screen.queryByRole('button', { name: /Edit permit(?: details)?/ }),
+      screen.queryByRole('heading', { name: 'No fee details available' }),
     ).not.toBeInTheDocument()
 
     await act(async () => {
       resolveExemptionContext?.({
         approvedExemptionVolume: 250,
         exemptionVolumeRemaining: 130,
-        exemptionTypeDescription: 'Standard exemption',
-        blanketOic: false,
+        exemptionTypeDescription: 'Blanket OIC',
+        blanketOic: true,
       })
     })
 
@@ -2532,9 +2536,38 @@ describe('Provincial Permit Detail Action Smoke', () => {
       expect(mockedFetchProvincialPermitDetailTabs).toHaveBeenCalledWith({
         permitNumber: '777',
         receiptNumber: 'R-1',
-        blanketOic: false,
+        blanketOic: true,
       }),
     )
+    expect(await screen.findByRole('tab', { name: 'Scale' })).toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'Items' })).not.toBeInTheDocument()
+    await selectPermitDetailTab('Fees')
+    expect(await screen.findByRole('heading', { name: 'Permit fees' })).toBeInTheDocument()
+  })
+
+  it('waits for Ministerial core tables before showing an empty scale state', async () => {
+    configureMinisterialActivePermit()
+    let resolveTabs:
+      | ((value: Awaited<ReturnType<typeof fetchProvincialPermitDetailCoreTabs>>) => void)
+      | undefined
+    mockedFetchProvincialPermitDetailTabs.mockImplementation(
+      () =>
+        new Promise<Awaited<ReturnType<typeof fetchProvincialPermitDetailCoreTabs>>>((resolve) => {
+          resolveTabs = resolve
+        }),
+    )
+
+    renderPermitDetails()
+    await selectPermitDetailTab('Scale')
+
+    expect(await screen.findByText('Loading permit items…')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'No scale yet' })).not.toBeInTheDocument()
+
+    await act(async () => {
+      resolveTabs?.(tabsResult)
+    })
+
+    expect(await screen.findByRole('heading', { name: 'No scale yet' })).toBeInTheDocument()
   })
 
   it('loads a missing exemption type when permit volumes are already available', async () => {

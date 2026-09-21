@@ -4416,6 +4416,8 @@ const ProvincialPermitDetailsPage = () => {
   const detailMatchesRoute =
     !!detail && !!permitNumber && String(detail.permitNumber) === permitNumber
   const isRefreshingDetail = loading && detailMatchesRoute
+  const isLoadingPermitExemptionContext =
+    detailMatchesRoute && isPermitTablesLoading && !permitExemptionContextReady
   const permitDisplayNumber = formatPermitNumber(
     detailMatchesRoute ? detail?.permitNumber : permitNumber,
     detailMatchesRoute ? (detail?.permitStatusCode ?? detail?.permitStatusDescription) : null,
@@ -5075,7 +5077,11 @@ const ProvincialPermitDetailsPage = () => {
     return (
       <fieldset
         className="legacy-form-fieldset"
-        hidden={blanketOicPackageCreationRequired || ministerialScaleEmpty}
+        hidden={
+          blanketOicPackageCreationRequired ||
+          ministerialScaleEmpty ||
+          (ministerialPermit && isPermitTablesLoading)
+        }
       >
         <legend>Summary of scale</legend>
         {detail.blanketOic && selectedBlanketOicPackage && (
@@ -5593,9 +5599,22 @@ const ProvincialPermitDetailsPage = () => {
         </Column>
       )}
 
+      {isLoadingPermitExemptionContext && (
+        <Column
+          sm={4}
+          md={8}
+          lg={16}
+          className="detail-page-loading"
+          role="status"
+          aria-live="polite"
+        >
+          <Loading description="Loading permit details…" withOverlay={false} />
+        </Column>
+      )}
+
       {!loading && !!errorMessage && <DetailLoadError message={errorMessage} />}
 
-      {detail && detailMatchesRoute && (
+      {detail && detailMatchesRoute && !isLoadingPermitExemptionContext && (
         <>
           {!!permitEditLockMessage && (
             <Column sm={4} md={8} lg={16} className="detail-page-error">
