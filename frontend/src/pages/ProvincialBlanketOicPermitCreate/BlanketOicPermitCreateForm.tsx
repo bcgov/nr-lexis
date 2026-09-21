@@ -384,7 +384,12 @@ const BlanketOicPermitCreateForm = ({
     new Set(
       [
         ...(showValidationErrors
-          ? [formErrors.permitIssueDate, formErrors.permitExpiryDate, formErrors.permitRemarks]
+          ? [
+              formErrors.permitSubmitDate,
+              formErrors.permitIssueDate,
+              formErrors.permitExpiryDate,
+              formErrors.permitRemarks,
+            ]
           : []),
         shippingReferencesError,
         regionContext.errorMessage,

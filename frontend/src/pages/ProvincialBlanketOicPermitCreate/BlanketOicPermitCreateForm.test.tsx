@@ -234,6 +234,24 @@ describe('BlanketOicPermitCreateForm', () => {
     expect(addPermitDetail).not.toHaveBeenCalled()
   })
 
+  it('includes a future submit date error in the validation summary', async () => {
+    const user = userEvent.setup()
+    renderForm()
+
+    await fillRequiredPermitAndShippingFields(user)
+    await user.click(screen.getByRole('tab', { name: 'Applicant' }))
+    await selectForestClient(user, 'Applicant client number', '12345678')
+    await waitFor(() => expect(screen.getByLabelText('Applicant location')).toHaveValue('00'))
+    await user.click(screen.getByRole('tab', { name: 'Permit' }))
+    await user.clear(screen.getByLabelText('Submit date'))
+    await user.type(screen.getByLabelText('Submit date'), '2099-01-01')
+    await user.click(screen.getByRole('button', { name: 'Save permit' }))
+
+    const summary = await screen.findByRole('group', { name: 'Permit needs attention' })
+    expect(within(summary).getByText("Submit date can't be in the future.")).toBeInTheDocument()
+    expect(addPermitDetail).not.toHaveBeenCalled()
+  })
+
   it('saves explicit zero request totals after correcting the required fields', async () => {
     const user = userEvent.setup()
     const { onCreated } = renderForm()
