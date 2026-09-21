@@ -4809,12 +4809,14 @@ const ProvincialPermitDetailsPage = () => {
                     ? 'Yes'
                     : 'No',
               ],
-            ].map(([label, value]) => (
-              <div key={label} className="detail-field-item">
-                <dt className="detail-field-label">{label}</dt>
-                <dd className="detail-field-value">{value}</dd>
-              </div>
-            ))}
+            ]
+              .filter(([label]) => !isEditingFeeOverride || label !== 'Override fees?')
+              .map(([label, value]) => (
+                <div key={label} className="detail-field-item">
+                  <dt className="detail-field-label">{label}</dt>
+                  <dd className="detail-field-value">{value}</dd>
+                </div>
+              ))}
           </dl>
         ) : (
           <div className="legacy-search-grid">
@@ -5043,7 +5045,7 @@ const ProvincialPermitDetailsPage = () => {
                   </>
                 )}
               </div>
-              {canEditFeeOverride && (
+              {!usesReviewedPermitFlow && canEditFeeOverride && (
                 <div className="legacy-search-actions">
                   <Button
                     kind="tertiary"
@@ -6107,6 +6109,7 @@ const ProvincialPermitDetailsPage = () => {
                               <Button
                                 kind="tertiary"
                                 size="sm"
+                                renderIcon={Edit}
                                 onClick={() => {
                                   resetPermitFormSection(false)
                                   setIsEditingPermit(true)
@@ -6213,6 +6216,7 @@ const ProvincialPermitDetailsPage = () => {
                               <Button
                                 kind="tertiary"
                                 size="sm"
+                                renderIcon={Edit}
                                 onClick={() => {
                                   resetPermitFormSection(false)
                                   setIsEditingPermit(true)
@@ -6629,7 +6633,12 @@ const ProvincialPermitDetailsPage = () => {
                           reviewedLayout={usesReviewedPermitFlow}
                           headerAction={
                             usesReviewedPermitFlow && canEditPermitClients ? (
-                              <Button kind="tertiary" size="sm" onClick={startPermitClientEdit}>
+                              <Button
+                                kind="tertiary"
+                                size="sm"
+                                renderIcon={Edit}
+                                onClick={startPermitClientEdit}
+                              >
                                 Edit applicant details
                               </Button>
                             ) : undefined
@@ -7015,6 +7024,7 @@ const ProvincialPermitDetailsPage = () => {
                                 <Button
                                   kind="tertiary"
                                   size="sm"
+                                  renderIcon={usesReviewedPermitFlow ? Edit : undefined}
                                   disabled={isShippingReferencesLoading || !shippingReferences}
                                   onClick={() => {
                                     resetPermitFormSection(true)
@@ -7264,6 +7274,7 @@ const ProvincialPermitDetailsPage = () => {
                                       type="button"
                                       kind="ghost"
                                       size="sm"
+                                      renderIcon={Edit}
                                       disabled={blanketOicPackageActionsDisabled}
                                       onClick={(event) => {
                                         packagePanelLauncherRef.current = event.currentTarget
@@ -7528,6 +7539,7 @@ const ProvincialPermitDetailsPage = () => {
                                 <Button
                                   kind="tertiary"
                                   size="sm"
+                                  renderIcon={Edit}
                                   onClick={() => {
                                     setFeeOverrideFieldErrors({})
                                     setIsEditingFeeOverride(true)
@@ -7551,6 +7563,7 @@ const ProvincialPermitDetailsPage = () => {
                                 <Button
                                   kind="tertiary"
                                   size="sm"
+                                  renderIcon={Edit}
                                   onClick={() => {
                                     resetPermitFormSection(false)
                                     setIsEditingPermit(true)

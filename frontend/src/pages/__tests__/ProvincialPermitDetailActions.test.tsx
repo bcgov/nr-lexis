@@ -7450,6 +7450,32 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
   })
 
+  it('keeps reviewed fee actions singular and hides the stale override summary while editing', async () => {
+    configureMinisterialActivePermit()
+    mockedFetchPermitFeeOverrideContext.mockResolvedValue({
+      overrideEnabled: false,
+      overrideFee: '',
+      overrideComment: '',
+      locked: false,
+      lockMessage: '',
+    })
+    renderPermitDetails()
+
+    await selectPermitDetailTab('Fees')
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit fee details' }))
+    expect(screen.getAllByRole('button', { name: 'Edit fee override' })).toHaveLength(1)
+
+    await userEvent.click(
+      within(screen.getByRole('tabpanel', { name: 'Fees' })).getByRole('button', {
+        name: 'Cancel',
+      }),
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Edit fee override' }))
+
+    expect(screen.queryByText('Override fees?', { selector: 'dt' })).not.toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: 'No', checked: true })).toBeEnabled()
+  })
+
   it('shows fee override fields only when Yes is selected', async () => {
     configureActivePermit()
 
