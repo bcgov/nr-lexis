@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.repository.application;
 
+import static ca.bc.gov.mof.lexis.repository.application.LexisRemarkQueries.REMARKS_BY_APPLICATION;
 import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_EXEMPTION_REASONS;
 import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_GROWTH_TYPES;
 import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_PRODUCT_TYPES;
@@ -704,6 +705,21 @@ class LexisApplicationRepositoryTest {
     verify(rs).getLong("EXPORT_EXMPTN_APPL_REMARK_NMBR");
   }
 
+  @Test
+  void mapRemarkRowShouldKeepNullableDirectColumnsNullable() throws Exception {
+    TestLexisApplicationRepository repository = new TestLexisApplicationRepository();
+    ResultSet rs = org.mockito.Mockito.mock(ResultSet.class);
+    when(rs.getLong("EXPORT_EXMPTN_APPL_REMARK_NMBR")).thenReturn(0L);
+    when(rs.wasNull()).thenReturn(true);
+
+    LexisApplicationDetailDto.LexisRemarkDto remark = repository.mapRemarkRow(rs);
+
+    assertThat(remark.remarkId()).isNull();
+    assertThat(remark.remark()).isNull();
+    assertThat(remark.user()).isNull();
+    assertThat(remark.date()).isNull();
+  }
+
   @ParameterizedTest
   @ValueSource(strings = {
     "Use &amp; in the document",
@@ -898,7 +914,7 @@ class LexisApplicationRepositoryTest {
   }
 
   @Test
-  void detailShouldSortRemarksByLegacyRemarkNumber() {
+  void detailShouldSortRemarksByLegacyRemarkNumberAndKeepDuplicateRows() {
     LexisApplicationRepository repository = new RemarkOrderingLexisApplicationRepository();
 
     assertThat(repository.findByApplicationNumber(900123L))
@@ -908,7 +924,7 @@ class LexisApplicationRepositoryTest {
             detail ->
                 assertThat(detail.remarks())
                     .extracting(LexisApplicationDetailDto.LexisRemarkDto::remarkId)
-                    .containsExactly(10L, 20L));
+                    .containsExactly(10L, 20L, 20L));
   }
 
   @ParameterizedTest
@@ -917,7 +933,6 @@ class LexisApplicationRepositoryTest {
         "LEXIS_GROUP_5.FIND_APPLICATION_BY_NUMBER(?,?)",
         "LEXIS_GROUP_5.FIND_SCALE_DETAIL_BY_APP(?,?)",
         "LEXIS_GROUP_5.FIND_PACKAGES_BY_APP(?,?)",
-        "LEXIS_GROUP_5.FIND_REMARKS_BY_APP(?,?)",
         "LEXIS_GROUP_5.FIND_PURCHASE_OFFERS_BY_APP(?,?)"
       })
   void detailShouldPropagateAuthoritativeCursorFailures(String failingProcedure) {
@@ -927,6 +942,16 @@ class LexisApplicationRepositoryTest {
     assertThatThrownBy(() -> repository.findByApplicationNumber(900123L))
         .isInstanceOf(DataAccessResourceFailureException.class)
         .hasMessageContaining(failingProcedure);
+  }
+
+  @Test
+  void detailShouldPropagateDirectRemarkFailures() {
+    DetailReadLexisApplicationRepository repository =
+        new DetailReadLexisApplicationRepository(REMARKS_BY_APPLICATION, true);
+
+    assertThatThrownBy(() -> repository.findByApplicationNumber(900123L))
+        .isInstanceOf(DataAccessResourceFailureException.class)
+        .hasMessageContaining(REMARKS_BY_APPLICATION);
   }
 
   @Test
@@ -1291,6 +1316,18 @@ class LexisApplicationRepositoryTest {
         throw new AssertionError(ex);
       }
     }
+
+    @Override
+    protected <T> List<T> queryDirectFailClosed(
+        String sql, SqlRowMapper<T> rowMapper, Object... bindValues) {
+      if (sql.equals(failingProcedure)) {
+        throw new DataAccessResourceFailureException(
+            "Oracle detail dependency unavailable: " + sql);
+      }
+      assertThat(sql).isEqualTo(REMARKS_BY_APPLICATION);
+      assertThat(bindValues).containsExactly("900123");
+      return List.of();
+    }
   }
 
   private static final class PackageKeyDetailLexisApplicationRepository
@@ -1399,10 +1436,22 @@ class LexisApplicationRepositoryTest {
         if ("LEXIS_GROUP_5.FIND_APPLICATION_BY_NUMBER(?,?)".equals(procedureSignature)) {
           return List.of(rowMapper.map(applicationDetailResultSet()));
         }
-        if ("LEXIS_GROUP_5.FIND_REMARKS_BY_APP(?,?)".equals(procedureSignature)) {
-          return List.of(rowMapper.map(remarkResultSet(20L)), rowMapper.map(remarkResultSet(10L)));
-        }
         return List.of();
+      } catch (SQLException ex) {
+        throw new AssertionError(ex);
+      }
+    }
+
+    @Override
+    protected <T> List<T> queryDirectFailClosed(
+        String sql, SqlRowMapper<T> rowMapper, Object... bindValues) {
+      try {
+        assertThat(sql).isEqualTo(REMARKS_BY_APPLICATION);
+        assertThat(bindValues).containsExactly("900123");
+        return List.of(
+            rowMapper.map(remarkResultSet(20L)),
+            rowMapper.map(remarkResultSet(10L)),
+            rowMapper.map(remarkResultSet(20L)));
       } catch (SQLException ex) {
         throw new AssertionError(ex);
       }

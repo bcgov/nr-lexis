@@ -11,6 +11,7 @@ import static ca.bc.gov.mof.lexis.util.ValueUtils.positiveOrNull;
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewSearchResultDto;
+import ca.bc.gov.mof.lexis.repository.application.LexisRemarkQueries;
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import java.sql.CallableStatement;
 import java.sql.ResultSet;
@@ -111,8 +112,6 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
       LEXIS_GROUP_5_PACKAGE + "FIND_END_USE_BY_APP(?,?)";
   private static final String FIND_CANDIDATE_EXCOL_VALUES =
       LEXIS_CODES_PACKAGE + "FIND_CANDIDATE_EXCOL_VALUES(?,?,?,?,?)";
-  private static final String FIND_REMARKS_BY_APPLICATION =
-      LEXIS_GROUP_5_PACKAGE + "FIND_REMARKS_BY_APP(?,?)";
   private static final String UPDATE_EXEMPTION_APPLICATION =
       LEXIS_GROUP_14_PACKAGE + "UPDATE_EXEMPTION_APPLICATION(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
   private static final String INSERT_EXEMPTION_APP_REMARK =
@@ -362,10 +361,10 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
   }
 
   /**
-   * Loads the most recently allocated persisted remark through the existing authoritative Oracle
-   * package. {@code INSERT_EXEMPTION_APP_REMARK} assigns
+   * Loads the most recently allocated persisted remark directly from
+   * {@code THE.EXPORT_EXEMPTION_APP_REMARKS}. {@code INSERT_EXEMPTION_APP_REMARK} assigns
    * {@code EXEMPTION_APP_REMARKS_SEQ.NEXTVAL}, so the greatest positive remark number is the latest
-   * inserted row without relying on the package cursor's unspecified order.
+   * inserted row without relying on the query's unspecified order.
    */
   @Transactional(readOnly = true)
   public Optional<ReviewRemarkRow> findLatestAuthoritativeRemark(Long applicationNumber) {
@@ -373,11 +372,10 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
       return Optional.empty();
     }
 
-    return queryCursorProcedureRequired(
-            FIND_REMARKS_BY_APPLICATION,
-            cs -> cs.setString(1, applicationNumber.toString()),
-            2,
-            this::mapReviewRemarkRow)
+    return queryDirectRequired(
+            LexisRemarkQueries.REMARKS_BY_APPLICATION,
+            this::mapReviewRemarkRow,
+            applicationNumber.toString())
         .stream()
         .filter(java.util.Objects::nonNull)
         .filter(row -> row.remarkId() > 0)
