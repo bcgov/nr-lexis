@@ -1,7 +1,112 @@
 .ministerial-permit-details.cds--tile,
+.boic-permit-details.cds--tile,
 .boic-permit-details-edit.cds--tile {
   display: grid;
   gap: 1.5rem;
+}
+
+.ministerial-package-summary.detail-field-grid {
+  margin-block: 1.5rem;
+}
+
+.boic-package-summary__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.boic-package-selector {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 1rem;
+}
+
+.boic-package-selector .cds--dropdown__wrapper {
+  flex: 1 1 min(100%, 20rem);
+}
+
+#permit-detail-content .detail-tile-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+
+  > svg {
+    flex-shrink: 0;
+    fill: var(--cds-icon-secondary);
+  }
+}
+
+.boic-package-selector {
+  margin-block-end: 1.5rem;
+}
+
+.permit-client-editor__identity .detail-field-value {
+  padding-block: 0.5rem;
+}
+
+.permit-client-tile .detail-field-grid.permit-client-tile__identity {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-block: 1.5rem;
+}
+
+.permit-client-tile .detail-field-grid.permit-client-tile__address-fields,
+.detail-field-grid.permit-client-editor__address-fields {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.permit-client-tile .detail-field-grid.permit-client-tile__contact-fields,
+.detail-field-grid.permit-client-editor__contact-fields {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.permit-client-tile .detail-field-grid.permit-client-tile__address-fields {
+  margin-block-start: 1.5rem;
+}
+
+.permit-client-tile .detail-field-grid.permit-client-tile__contact-fields {
+  margin-block-start: 1rem;
+}
+
+.permit-client-editor__required-hint {
+  margin: 0.5rem 0 1.5rem;
+}
+
+.permit-client-editor__actions {
+  justify-content: flex-end;
+  margin-block-start: 1.5rem;
+}
+
+.detail-field-grid.permit-client-editor__address-fields {
+  margin-block-start: 1.5rem;
+}
+
+.detail-field-grid.permit-client-editor__contact-fields {
+  margin-block-start: 1rem;
+}
+
+@media (max-width: 1055px) {
+  .permit-client-tile .detail-field-grid.permit-client-tile__address-fields,
+  .detail-field-grid.permit-client-editor__address-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 671px) {
+  .detail-field-grid.permit-client-editor__address-fields,
+  .detail-field-grid.permit-client-editor__contact-fields,
+  .permit-client-tile .detail-field-grid.permit-client-tile__identity,
+  .permit-client-tile .detail-field-grid.permit-client-tile__address-fields,
+  .permit-client-tile .detail-field-grid.permit-client-tile__contact-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.permit-client-editor__agent-divider {
+  inline-size: 100%;
+  margin: 1.5rem 0 0;
+  border: 0;
+  border-block-start: 1px solid var(--cds-border-subtle-01);
 }
 
 .ministerial-permit-details__status,
@@ -9,7 +114,13 @@
 .ministerial-permit-details__dates,
 .ministerial-permit-details__totals,
 .ministerial-permit-details__applications,
-.ministerial-permit-details__remarks {
+.ministerial-permit-details__remarks,
+.boic-permit-details__status,
+.boic-permit-details__static-fields,
+.boic-permit-details__dates,
+.boic-permit-details__totals,
+.boic-permit-details__request-totals,
+.boic-permit-details__remarks {
   min-inline-size: 0;
 }
 
@@ -17,9 +128,17 @@
   max-inline-size: 22rem;
 }
 
+.boic-permit-details__status {
+  max-inline-size: 22rem;
+}
+
 .ministerial-permit-details__static-fields,
 .ministerial-permit-details__dates,
-.ministerial-permit-details__totals {
+.ministerial-permit-details__totals,
+.boic-permit-details__static-fields,
+.boic-permit-details__dates,
+.boic-permit-details__totals,
+.boic-permit-details__request-totals {
   display: grid;
   gap: 1rem;
   grid-template-columns: minmax(0, 1fr);
@@ -55,7 +174,9 @@
 }
 
 .ministerial-permit-details__remarks .cds--text-area__wrapper,
-.ministerial-permit-details__remarks .cds--text-area {
+.ministerial-permit-details__remarks .cds--text-area,
+.boic-permit-details__remarks .cds--text-area__wrapper,
+.boic-permit-details__remarks .cds--text-area {
   inline-size: 100%;
   max-inline-size: 100%;
 }
@@ -63,18 +184,33 @@
 @media (min-width: 672px) {
   .ministerial-permit-details__static-fields,
   .ministerial-permit-details__dates,
-  .ministerial-permit-details__totals {
+  .ministerial-permit-details__totals,
+  .boic-permit-details__static-fields,
+  .boic-permit-details__dates,
+  .boic-permit-details__totals,
+  .boic-permit-details__request-totals {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (min-width: 1056px) {
   .ministerial-permit-details__static-fields,
-  .ministerial-permit-details__dates {
+  .ministerial-permit-details__dates,
+  .boic-permit-details__static-fields,
+  .boic-permit-details__dates {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
-  .ministerial-permit-details__totals {
+  .ministerial-permit-details__totals,
+  .boic-permit-details__totals {
     grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.boic-package-summary__scale {
+  margin-block-start: 1.5rem;
+
+  .boic-permit-details__totals {
+    margin-block: 1rem 1.5rem;
   }
 }

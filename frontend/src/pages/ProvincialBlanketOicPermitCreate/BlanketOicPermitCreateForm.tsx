@@ -17,13 +17,14 @@ import {
   Tile,
 } from '@carbon/react'
 import {
-  CurrencyDollar,
-  DataTable,
-  Delivery,
-  Document,
+  Box,
+  Certificate,
+  Currency,
   DocumentAttachment,
-  User,
+  EarthFilled,
+  Enterprise,
 } from '@carbon/icons-react'
+import { Link, useLocation } from 'react-router-dom'
 import EmptyState from '@/components/EmptyState'
 import ForestClientComboBox from '@/components/ForestClientComboBox'
 import IsoDatePicker from '@/components/IsoDatePicker'
@@ -37,6 +38,7 @@ import {
   resolveClientLocationCode,
 } from '@/pages/shared/application-form-utils'
 import { isValidIsoDate } from '@/pages/shared/create-form-utils'
+import { readDetailReturnTo } from '@/pages/shared/detail-navigation'
 import type { IdTextOption } from '@/pages/shared/search-query-utils'
 import {
   fetchExemptionClientData,
@@ -106,7 +108,7 @@ const MAX_OIC_REQUEST_VOLUME_LENGTH = 9
 const FORM_TABS = [
   {
     label: 'Permit',
-    icon: Document,
+    icon: Certificate,
     requiredFields: [
       'permitSubmitDate',
       'orgUnitNumber',
@@ -116,7 +118,7 @@ const FORM_TABS = [
   },
   {
     label: 'Applicant',
-    icon: User,
+    icon: Enterprise,
     requiredFields: [
       'ownerClientNumber',
       'ownerClientLocation',
@@ -126,7 +128,7 @@ const FORM_TABS = [
   },
   {
     label: 'Shipping',
-    icon: Delivery,
+    icon: EarthFilled,
     requiredFields: [
       'destinationCompanyName',
       'destinationCountry',
@@ -137,9 +139,9 @@ const FORM_TABS = [
       'otherPortOfExport',
     ],
   },
-  { label: 'Scale', icon: DataTable, requiredFields: [] },
+  { label: 'Scale', icon: Box, requiredFields: [] },
   { label: 'Documents', icon: DocumentAttachment, requiredFields: [] },
-  { label: 'Fees', icon: CurrencyDollar, requiredFields: [] },
+  { label: 'Fees', icon: Currency, requiredFields: [] },
 ] as const
 
 const withShippingDefaults = (
@@ -328,6 +330,8 @@ const BlanketOicPermitCreateForm = ({
   onCreated,
   onUnknownOutcome,
 }: BlanketOicPermitCreateFormProps) => {
+  const location = useLocation()
+  const exemptionReturnTo = readDetailReturnTo(location.state)
   const regionContext = resolveBlanketOicRegionContext(regionOptions, defaultRegionNumbers)
   const [form, setForm] = useState(() => initialForm(regionContext.defaultRegionNumber))
   const [agentUsed, setAgentUsed] = useState(false)
@@ -367,10 +371,26 @@ const BlanketOicPermitCreateForm = ({
   const agentPendingLookupRef = useRef<PendingClientLookup | null>(null)
   currentFormRef.current = form
   const formErrors = validateForm(form, agentUsed)
+  const invalidTabLabels = showValidationErrors
+    ? FORM_TABS.filter(({ requiredFields }) =>
+        requiredFields.some((field) => formErrors[field]),
+      ).map(({ label }) => label)
+    : []
+  const invalidTabsText =
+    invalidTabLabels.length > 1
+      ? `${invalidTabLabels.slice(0, -1).join(', ')} and ${invalidTabLabels.at(-1)}`
+      : invalidTabLabels[0]
   const errorMessages = Array.from(
     new Set(
       [
-        ...(showValidationErrors ? Object.values(formErrors) : []),
+        ...(showValidationErrors
+          ? [
+              formErrors.permitSubmitDate,
+              formErrors.permitIssueDate,
+              formErrors.permitExpiryDate,
+              formErrors.permitRemarks,
+            ]
+          : []),
         shippingReferencesError,
         regionContext.errorMessage,
         clientLookupFailures.size > 0 ? CLIENT_LOOKUP_UNAVAILABLE_MESSAGE : '',
@@ -832,20 +852,27 @@ const BlanketOicPermitCreateForm = ({
 
   return (
     <section aria-label="Blanket OIC permit details">
-      {errorMessages.length > 0 ? (
+      {invalidTabLabels.length > 0 || errorMessages.length > 0 ? (
         <div ref={errorSummaryRef} tabIndex={-1} role="group" aria-label="Permit needs attention">
           <InlineNotification
             kind="error"
             role="alert"
-            title="Permit needs attention"
+            title={invalidTabLabels.length > 0 ? 'Cannot save yet.' : 'Permit needs attention'}
+            subtitle={
+              invalidTabLabels.length > 0
+                ? `Complete the required fields in ${invalidTabsText} ${invalidTabLabels.length === 1 ? 'tab' : 'tabs'}.`
+                : undefined
+            }
             lowContrast
             hideCloseButton
           >
-            <ul>
-              {errorMessages.map((message) => (
-                <li key={message}>{message}</li>
-              ))}
-            </ul>
+            {errorMessages.length > 0 && (
+              <ul>
+                {errorMessages.map((message) => (
+                  <li key={message}>{message}</li>
+                ))}
+              </ul>
+            )}
           </InlineNotification>
         </div>
       ) : (
@@ -899,7 +926,12 @@ const BlanketOicPermitCreateForm = ({
               >
                 {label}
                 {outstanding > 0 && (
-                  <Tag type="red" size="sm" aria-hidden="true">
+                  <Tag
+                    className="boic-permit-tab-error-count"
+                    type="red"
+                    size="sm"
+                    aria-hidden="true"
+                  >
                     {outstanding}
                   </Tag>
                 )}
@@ -911,6 +943,7 @@ const BlanketOicPermitCreateForm = ({
           <TabPanel className="application-detail-tab-panel">
             <Tile className="create-form-tile application-detail-section" aria-label="Permit">
               <h2 className="detail-tile-title">Permit details</h2>
+              <p className="boic-permit-required-hint">{requiredLabel('Required fields')}</p>
               <fieldset className="legacy-form-fieldset boic-permit-details">
                 <legend className="cds--visually-hidden">Permit details</legend>
                 <dl className="detail-field-grid boic-permit-details__status">
@@ -922,7 +955,18 @@ const BlanketOicPermitCreateForm = ({
                 <dl className="detail-field-grid boic-permit-details__pair">
                   <div className="detail-field-item">
                     <dt className="detail-field-label">Exemption number</dt>
-                    <dd className="detail-field-value">{exemptionNumber}</dd>
+                    <dd className="detail-field-value">
+                      <Link
+                        className="cds--link"
+                        to={
+                          exemptionReturnTo?.to ??
+                          `/provincial/exemption/${encodeURIComponent(exemptionNumber)}`
+                        }
+                        state={exemptionReturnTo?.state}
+                      >
+                        {exemptionNumber}
+                      </Link>
+                    </dd>
                   </div>
                   <div className="detail-field-item">
                     <dt className="detail-field-label">Exemption type</dt>
@@ -973,16 +1017,6 @@ const BlanketOicPermitCreateForm = ({
                     onChange={(value) => setField('permitExpiryDate', value)}
                   />
                 </div>
-                <dl className="detail-field-grid boic-permit-details__pair">
-                  <div className="detail-field-item">
-                    <dt className="detail-field-label">Current permit pieces</dt>
-                    <dd className="detail-field-value">—</dd>
-                  </div>
-                  <div className="detail-field-item">
-                    <dt className="detail-field-label">Current permit volume (m³)</dt>
-                    <dd className="detail-field-value">—</dd>
-                  </div>
-                </dl>
                 <div className="boic-permit-details__pair">
                   <TextInput
                     id="boic-permit-request-pieces"
@@ -1003,6 +1037,16 @@ const BlanketOicPermitCreateForm = ({
                     onChange={(event) => setField('oicPermitTotalVolume', event.target.value)}
                   />
                 </div>
+                <dl className="detail-field-grid boic-permit-details__pair">
+                  <div className="detail-field-item">
+                    <dt className="detail-field-label">Current permit pieces</dt>
+                    <dd className="detail-field-value">0</dd>
+                  </div>
+                  <div className="detail-field-item">
+                    <dt className="detail-field-label">Current permit volume (m³)</dt>
+                    <dd className="detail-field-value">0</dd>
+                  </div>
+                </dl>
                 <div className="boic-permit-details__remarks">
                   <TextArea
                     id="boic-permit-remarks"
@@ -1021,6 +1065,8 @@ const BlanketOicPermitCreateForm = ({
           </TabPanel>
           <TabPanel className="application-detail-tab-panel">
             <Tile className="create-form-tile application-detail-section" aria-label="Applicant">
+              <h2 className="detail-tile-title">Applicant details</h2>
+              <p className="boic-permit-required-hint">{requiredLabel('Required fields')}</p>
               <fieldset className="legacy-form-fieldset">
                 <legend className="cds--visually-hidden">Applicant</legend>
                 <div className="legacy-search-grid">
@@ -1164,6 +1210,8 @@ const BlanketOicPermitCreateForm = ({
           </TabPanel>
           <TabPanel className="application-detail-tab-panel">
             <Tile className="create-form-tile application-detail-section" aria-label="Shipping">
+              <h2 className="detail-tile-title">Shipping details</h2>
+              <p className="boic-permit-required-hint">{requiredLabel('Required fields')}</p>
               <fieldset className="legacy-form-fieldset">
                 <legend className="cds--visually-hidden">Shipping</legend>
                 <div className="legacy-search-grid">

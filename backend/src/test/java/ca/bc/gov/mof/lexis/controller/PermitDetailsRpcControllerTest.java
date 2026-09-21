@@ -593,7 +593,16 @@ class PermitDetailsRpcControllerTest {
   void packageInfoShouldForwardRequestToService() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     PermitPackageInfoRpcResponseDto dto =
-        new PermitPackageInfoRpcResponseDto("Coast", "HE/UT", "Standing", "10.3", "5.5", "30.0", "Unmanufactured");
+        new PermitPackageInfoRpcResponseDto(
+            "Coast",
+            "HE/UT",
+            "Standing",
+            "10.3",
+            "5.5",
+            "30.0",
+            "Unmanufactured",
+            List.of("HE"),
+            List.of("UT"));
     when(service.getPackageInfo("PKG-903")).thenReturn(dto);
     when(service.packageBelongsToPermit("PKG-903", 7000123L)).thenReturn(true);
 

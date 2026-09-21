@@ -12,10 +12,10 @@ import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionAccessDto;
+import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchResultDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSummaryLookupDto;
-import java.sql.CallableStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
@@ -855,39 +855,91 @@ class ExemptionRepositoryTest {
   }
 
   @Test
-  void detailShouldKeepAnEmptyCursorAsNotFound() {
-    DetailReadExemptionRepository repository = new DetailReadExemptionRepository(false);
+  void detailShouldKeepAnEmptyResultAsNotFound() {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    ExemptionRepository repository = new ExemptionRepository(jdbcTemplate);
 
     assertThat(repository.findByExemptionNumber("EX-205")).isEmpty();
   }
 
-  @Test
-  void detailShouldPropagateOracleCursorFailure() {
-    DetailReadExemptionRepository repository = new DetailReadExemptionRepository(true);
+  @ParameterizedTest
+  @NullAndEmptySource
+  @ValueSource(strings = "   ")
+  void detailShouldSkipBlankExemptionNumbers(String number) {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
 
-    assertThatThrownBy(() -> repository.findByExemptionNumber("EX-205"))
-        .isInstanceOf(DataAccessResourceFailureException.class)
-        .hasMessageContaining("FIND_EXEMPTION_BY_NUMBER");
+    assertThat(new ExemptionRepository(jdbcTemplate).findByExemptionNumber(number)).isEmpty();
+    verifyNoInteractions(jdbcTemplate);
   }
 
   @Test
-  void detailShouldDeriveUsedVolumeLikeLegacy() throws Exception {
+  @SuppressWarnings("unchecked")
+  void detailShouldPropagateOracleQueryFailure() {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    when(jdbcTemplate.query(eq(ExemptionDetailQueries.BY_NUMBER), any(RowMapper.class), eq("EX-205")))
+        .thenThrow(new DataAccessResourceFailureException("Oracle detail dependency unavailable"));
+
+    assertThatThrownBy(() -> new ExemptionRepository(jdbcTemplate).findByExemptionNumber("EX-205"))
+        .isInstanceOf(DataAccessResourceFailureException.class)
+        .hasMessageContaining("Oracle detail dependency unavailable");
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void detailShouldMapCorrectedBalanceAndBindTrimmedExemptionNumber() throws Exception {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
     ResultSet resultSet = mock(ResultSet.class);
     when(resultSet.getString("EXEMPTION_NUMBER")).thenReturn("EX-205");
-    when(resultSet.getString("EXPORT_EXEMPTION_TYPE_CODE")).thenReturn("M");
+    when(resultSet.getString("EXPORT_EXEMPTION_TYPE_CODE")).thenReturn("B");
     when(resultSet.getString("ENTRY_USERID")).thenReturn("IDIR\\CREATOR");
     when(resultSet.getString("UPDATE_USERID")).thenReturn("IDIR\\EDITOR");
-    when(resultSet.getDouble("APPROVED_VOLUME")).thenReturn(500.0d);
-    when(resultSet.getDouble("VOLUME_REMAINING")).thenReturn(192.8d);
+    when(resultSet.getDouble("APPROVED_VOLUME")).thenReturn(100.0d);
+    when(resultSet.getDouble("VOLUME_REMAINING")).thenReturn(87.5d);
     when(resultSet.wasNull()).thenReturn(false);
-    MappingExemptionRepository repository = new MappingExemptionRepository(resultSet);
+    // These optional fields were absent from the legacy detail cursor too.
+    when(resultSet.getString("TYPE_DESCRIPTION")).thenThrow(new SQLException("Missing column"));
+    when(resultSet.getLong("APPLICATION_NUMBER")).thenThrow(new SQLException("Missing column"));
+    when(resultSet.getString("APPLICATION_STATUS")).thenThrow(new SQLException("Missing column"));
+    when(jdbcTemplate.query(eq(ExemptionDetailQueries.BY_NUMBER), any(RowMapper.class), eq("EX-205")))
+        .thenAnswer(invocation -> List.of(
+            ((RowMapper<ExemptionDetailDto>) invocation.getArgument(1)).mapRow(resultSet, 0)));
 
-    var detail = repository.findByExemptionNumber("EX-205").orElseThrow();
+    var detail = new ExemptionRepository(jdbcTemplate).findByExemptionNumber(" EX-205 ").orElseThrow();
 
-    assertThat(detail.approvedVolume()).isEqualTo(500.0d);
-    assertThat(detail.usedVolume()).isEqualTo(307.2d);
-    assertThat(detail.remainingVolume()).isEqualTo(192.8d);
+    assertThat(detail.approvedVolume()).isEqualTo(100.0d);
+    assertThat(detail.usedVolume()).isEqualTo(12.5d);
+    assertThat(detail.remainingVolume()).isEqualTo(87.5d);
+    assertThat(detail.blanketOic()).isTrue();
     assertThat(detail.author()).isEqualTo("IDIR\\EDITOR");
+    assertThat(detail.exemptionTypeDescription()).isNull();
+    assertThat(detail.applicationNumber()).isNull();
+    assertThat(detail.applicationStatus()).isNull();
+    verify(jdbcTemplate).query(eq(ExemptionDetailQueries.BY_NUMBER), any(RowMapper.class), eq("EX-205"));
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void detailShouldSelectOneApplicationUsingTheSameOrderAsSearch() {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    ExemptionDetailDto canonical = new ExemptionDetailDto(
+        "EX-205", "M", null, "ACT", null, "00000001", null, null, null,
+        null, null, 100, 12.5, 87.5, null, false, List.of(), List.of());
+    when(jdbcTemplate.query(eq(ExemptionDetailQueries.BY_NUMBER), any(RowMapper.class), eq("EX-205")))
+        .thenReturn(List.of(canonical));
+
+    assertThat(new ExemptionRepository(jdbcTemplate).findByExemptionNumber("EX-205"))
+        .contains(canonical);
+
+    ArgumentCaptor<String> query = ArgumentCaptor.forClass(String.class);
+    verify(jdbcTemplate).query(query.capture(), any(RowMapper.class), eq("EX-205"));
+    String sql = query.getValue().replaceAll("\\s+", " ");
+    assertThat(sql)
+        .contains("ROW_NUMBER() OVER ( PARTITION BY EEA.EXEMPTION_NUMBER "
+            + "ORDER BY ES.ADVERTISING_DATE DESC NULLS LAST, EEA.APPLICATION_NUMBER DESC "
+            + ") AS CANONICAL_RANK")
+        .contains("LEFT JOIN CANONICAL_EXEMPTION_APPLICATION EEA "
+            + "ON EEA.EXEMPTION_NUMBER = EE.EXEMPTION_NUMBER AND EEA.CANONICAL_RANK = 1")
+        .doesNotContain("LEFT JOIN THE.EXPORT_EXEMPTION_APPLICATION EEA");
   }
 
   private static ExemptionSearchResultDto exemptionResult(String exemptionNumber) {
@@ -1078,28 +1130,6 @@ class ExemptionRepositoryTest {
     }
   }
 
-  private static final class DetailReadExemptionRepository extends ExemptionRepository {
-    private final boolean fail;
-
-    DetailReadExemptionRepository(boolean fail) {
-      super(null);
-      this.fail = fail;
-    }
-
-    @Override
-    protected <T> List<T> queryCursorProcedureFailClosed(
-        String procedureSignature,
-        SqlConsumer<CallableStatement> binder,
-        int cursorOutIndex,
-        SqlRowMapper<T> rowMapper) {
-      if (fail) {
-        throw new DataAccessResourceFailureException(
-            "Oracle detail dependency unavailable: " + procedureSignature);
-      }
-      return List.of();
-    }
-  }
-
   private static final class MappingExemptionRepository extends ExemptionRepository {
     private final ResultSet resultSet;
 
@@ -1141,17 +1171,6 @@ class ExemptionRepositoryTest {
       }
     }
 
-    @Override
-    protected <T> List<T> queryCursorProcedureFailClosed(
-        String procedureSignature,
-        SqlConsumer<CallableStatement> binder,
-        int cursorOutIndex,
-        SqlRowMapper<T> rowMapper) {
-      try {
-        return List.of(rowMapper.map(resultSet));
-      } catch (SQLException ex) {
-        throw new DataRetrievalFailureException("Unable to map exemption cursor", ex);
-      }
-    }
+
   }
 }

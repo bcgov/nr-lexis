@@ -3260,7 +3260,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   }
 
   private PermitPackageInfoRpcResponseDto emptyPackageInfo() {
-    return new PermitPackageInfoRpcResponseDto("", "", "", "", "", "", "");
+    return new PermitPackageInfoRpcResponseDto("", "", "", "", "", "", "", List.of(), List.of());
   }
 
   private PermitPackageDetailsRpcResponseDto emptyPackageDetails() {
@@ -3284,7 +3284,9 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
           formatVolume(packageInfo.packageVolume()),
           formatVolume(packageInfo.averageLength()),
           formatVolume(packageInfo.averageDiameter()),
-          "");
+          "",
+          List.of(),
+          List.of());
     }
 
     boolean blanketOic =
@@ -3306,6 +3308,8 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         blanketOic
             ? resolveBlanketPackageEndUseSort(packageInfo.packageNumber(), lookupContext)
             : resolveApplicationEndUseSort(applicationInfo, lookupContext);
+    List<EndUsePairRow> packageEndUses =
+        getCorePackageEndUses(packageInfo.packageNumber(), lookupContext);
 
     return new PermitPackageInfoRpcResponseDto(
         nonNull(applicationInfo.regionName()),
@@ -3314,7 +3318,27 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         formatVolume(packageInfo.packageVolume()),
         formatVolume(packageInfo.averageLength()),
         formatVolume(packageInfo.averageDiameter()),
-        resolveProductTypeDescription(productTypeCode, lookupContext));
+        resolveProductTypeDescription(productTypeCode, lookupContext),
+        packageEndUses.stream()
+            .map(EndUsePairRow::speciesCode)
+            .map(value -> trimToNull(value))
+            .filter(java.util.Objects::nonNull)
+            .distinct()
+            .toList(),
+        packageEndUses.stream()
+            .map(EndUsePairRow::endUseCode)
+            .map(value -> trimToNull(value))
+            .filter(java.util.Objects::nonNull)
+            .distinct()
+            .toList());
+  }
+
+  private List<EndUsePairRow> getCorePackageEndUses(
+      String packageNumber, PermitCoreLookupContext lookupContext) {
+    String persistedPackageNumber = preservePackageNumber(packageNumber);
+    return persistedPackageNumber == null
+        ? List.of()
+        : lookupContext.packageEndUsesByNumber.getOrDefault(persistedPackageNumber, List.of());
   }
 
   private PermitPackageDetailsRpcResponseDto toPermitPackageDetails(

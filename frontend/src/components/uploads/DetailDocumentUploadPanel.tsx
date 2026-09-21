@@ -48,9 +48,11 @@ type DetailDocumentUploadPanelProps = {
   onBusyChange?: (isBusy: boolean) => void
   onDirtyChange?: (isDirty: boolean) => void
   onUploadComplete?: () => Promise<void> | void
+  /** Receives a fully refreshed upload result before this panel closes. */
+  onUploadSuccess?: (message: string) => void
   presentation?: 'modal' | 'side-panel'
   initiallyOpen?: boolean
-  /** User-requested close only; successful uploads keep their result notification mounted. */
+  /** Called after a user-requested close or a fully successful upload. */
   onClose?: () => void
 }
 
@@ -103,6 +105,7 @@ const DetailDocumentUploadPanel = ({
   onBusyChange,
   onDirtyChange,
   onUploadComplete,
+  onUploadSuccess,
   presentation = 'modal',
   initiallyOpen = false,
   onClose,
@@ -643,19 +646,23 @@ const DetailDocumentUploadPanel = ({
     }
 
     if (successCount > 0) {
+      let documentListRefreshed = true
       try {
         await onUploadComplete?.()
       } catch {
+        documentListRefreshed = false
         setErrorMessage('Documents uploaded, but the document list could not refresh.')
       }
-      setSuccessMessage(
+      const completedUploadMessage =
         successCount === 1
           ? lastSuccessMessage
-          : `${successCount} files uploaded. Verify updates in the document list.`,
-      )
-      if (failureCount === 0 && invalidUploadCount === 0) {
+          : `${successCount} files uploaded. Verify updates in the document list.`
+      setSuccessMessage(completedUploadMessage)
+      if (failureCount === 0 && invalidUploadCount === 0 && documentListRefreshed) {
         resetUploadAfterSuccess()
         setIsUploadModalOpen(false)
+        onUploadSuccess?.(completedUploadMessage)
+        onClose?.()
       }
     }
 

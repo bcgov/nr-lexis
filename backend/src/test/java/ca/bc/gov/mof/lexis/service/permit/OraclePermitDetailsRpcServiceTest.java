@@ -1097,15 +1097,14 @@ class OraclePermitDetailsRpcServiceTest {
     when(repository.findCorePackageContexts(7000123L, false))
         .thenReturn(
             List.of(
-                coreContext("PKG-100", 1000456L, true),
-                coreContext("PKG-200", 1000456L, true)));
-    when(repository.findCoreScaleRows(List.of("PKG-100", "PKG-200"), 7000123L, false))
+                coreContext("MIN-1", 1000456L, true),
+                coreContext("MIN-2", 1000456L, false)));
+    when(repository.findCoreScaleRows(List.of("MIN-1", "MIN-2"), 7000123L, false))
         .thenReturn(
             List.of(
-                coreScale(scale("200-current", "TM1", null, null, 1.0d, 1L, "7000123", "PKG-200", 1000456L)),
-                coreScale(scale("200-unassigned", "TM2", null, null, 2.0d, 2L, null, "PKG-200", 1000456L)),
-                coreScale(scale("200-other", "TM3", null, null, 3.0d, 3L, "7000999", "PKG-200", 1000456L)),
-                coreScale(scale("100-current", "TM4", null, null, 4.0d, 4L, "7000123", "PKG-100", 1000456L))));
+                coreScale(scale("m2-unassigned", "TM2", null, null, 2.0d, 2L, null, "MIN-2", 1000456L)),
+                coreScale(scale("m2-other-permit", "TM3", null, null, 3.0d, 3L, "7000999", "MIN-2", 1000456L)),
+                coreScale(scale("m1-current", "TM1", null, null, 1.0d, 1L, "7000123", "MIN-1", 1000456L))));
 
     AtomicReference<ApplicationAccessContextDto> accessContext = new AtomicReference<>();
     PermitCoreTabsRpcResponseDto response =
@@ -1120,14 +1119,14 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(response.applicationList()).containsExactly("1000456");
     assertThat(response.packageList())
         .extracting(corePackage -> corePackage.packageNumber())
-        .containsExactly("PKG-100", "PKG-200");
+        .containsExactly("MIN-1", "MIN-2");
     assertThat(response.packageList().get(0).packageDetails()).isNull();
     assertThat(response.packageList().get(1).scaleList())
         .extracting(scale -> scale.id())
-        .containsExactly("200-current", "200-unassigned");
+        .containsExactly("m2-unassigned");
     assertThat(response.packageList().get(0).scaleList())
         .extracting(scale -> scale.id())
-        .containsExactly("100-current");
+        .containsExactly("m1-current");
     assertThat(accessContext.get())
         .extracting(
             ApplicationAccessContextDto::applicationNumber,
@@ -1137,8 +1136,8 @@ class OraclePermitDetailsRpcServiceTest {
             ApplicationAccessContextDto::agentClientNumber)
         .containsExactly(1000456L, "P", 1835L, "00000001", "00000002");
     verify(repository).findCorePackageContexts(7000123L, false);
-    verify(repository).findCoreScaleRows(List.of("PKG-100", "PKG-200"), 7000123L, false);
-    verify(repository).findCoreEndUseRows(List.of(1000456L), List.of("PKG-100", "PKG-200"));
+    verify(repository).findCoreScaleRows(List.of("MIN-1", "MIN-2"), 7000123L, false);
+    verify(repository).findCoreEndUseRows(List.of(1000456L), List.of("MIN-1", "MIN-2"));
     verify(repository, never()).findPackageNumbersByPermitNumberRequired(7000123L);
     verify(repository, never()).findApplicationNumbersByPermitNumberRequired(7000123L);
     verify(repository, never()).findPackageNumbersByOicPermitNumber(7000123L);
@@ -1165,6 +1164,8 @@ class OraclePermitDetailsRpcServiceTest {
     when(repository.findCoreEndUseRows(List.of(1000456L), List.of("PKG-100", "PKG-100  ")))
         .thenReturn(List.of(
             new PermitRpcRepository.PermitCoreEndUseRow("PACKAGE", 1000456L, "PKG-100", "HE", "L", null),
+            new PermitRpcRepository.PermitCoreEndUseRow("PACKAGE", 1000456L, "PKG-100", "FI", "P", null),
+            new PermitRpcRepository.PermitCoreEndUseRow("PACKAGE", 1000456L, "PKG-100", "HE", "L", null),
             new PermitRpcRepository.PermitCoreEndUseRow("PACKAGE", 1000456L, "PKG-100  ", "FI", "P", null)));
 
     var response = service.getCoreTabs(7000123L, true, ignored -> true);
@@ -1176,7 +1177,11 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(response.packageList().get(0).packageDetails().scaledVolume()).isEqualTo(1d);
     assertThat(response.packageList().get(1).packageDetails().scaledVolume()).isEqualTo(2d);
     assertThat(response.packageList().get(0).packageInfo().enduse()).isEqualTo("HE/L\n");
+    assertThat(response.packageList().get(0).packageInfo().speciesCodes()).containsExactly("HE", "FI");
+    assertThat(response.packageList().get(0).packageInfo().endUseCodes()).containsExactly("L", "P");
     assertThat(response.packageList().get(1).packageInfo().enduse()).isEqualTo("FI/P\n");
+    assertThat(response.packageList().get(1).packageInfo().speciesCodes()).containsExactly("FI");
+    assertThat(response.packageList().get(1).packageInfo().endUseCodes()).containsExactly("P");
     verify(repository, never()).findEndUsesByPackageNumber(any());
   }
 

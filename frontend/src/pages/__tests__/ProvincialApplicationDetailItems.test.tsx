@@ -1036,6 +1036,124 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     expect(await screen.findByText('Package PKG-1 saved.')).toBeInTheDocument()
   })
 
+  it('caps package comments at 180 ASCII characters and saves the capped value', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationItemsForEditing()
+    const comments = await screen.findByLabelText('Package Comments')
+    expect(comments).toHaveAttribute('maxlength', '180')
+    await userEvent.clear(comments)
+    await userEvent.type(comments, 'A'.repeat(181))
+    expect(comments).toHaveValue('A'.repeat(180))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save Package' }))
+
+    await waitFor(() =>
+      expect(mockedUpdateApplicationPackage).toHaveBeenCalledWith(
+        expect.objectContaining({ comments: 'A'.repeat(180) }),
+      ),
+    )
+  })
+
+  it('blocks programmatically overlong package comments without calling the update service', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationItemsForEditing()
+    const comments = await screen.findByLabelText('Package Comments')
+    await act(async () => {
+      fireEvent.change(comments, {
+        target: { value: 'A'.repeat(181) },
+      })
+    })
+    await userEvent.click(screen.getByRole('button', { name: 'Save Package' }))
+
+    expect(comments).toHaveAttribute('aria-invalid', 'true')
+    expect(document.getElementById('applicationItemsPackageComments-error-msg')).toHaveTextContent(
+      'Package comments must be 180 characters or fewer.',
+    )
+    expect(mockedUpdateApplicationPackage).not.toHaveBeenCalled()
+  })
+
+  it('blocks non-ASCII package comments without calling the update service', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationItemsForEditing()
+    const comments = await screen.findByLabelText('Package Comments')
+    await act(async () => {
+      fireEvent.change(comments, {
+        target: { value: 'Réview' },
+      })
+    })
+    await userEvent.click(screen.getByRole('button', { name: 'Save Package' }))
+
+    expect(comments).toHaveAttribute('aria-invalid', 'true')
+    expect(document.getElementById('applicationItemsPackageComments-error-msg')).toHaveTextContent(
+      'Package comments contain unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
+    )
+    expect(mockedUpdateApplicationPackage).not.toHaveBeenCalled()
+  })
+
+  it('keeps a loaded historical package comment without truncating it', async () => {
+    const historicalComment = `Réview ${'A'.repeat(175)}`
+    mockedFetchApplicationPackageDetails.mockResolvedValue({
+      success: true,
+      packageNumber: 'PKG-1',
+      volume: '100.0',
+      scaledVolume: 20,
+      length: '12.0',
+      diameter: '24.0',
+      status: 'ACT',
+      comments: historicalComment,
+      statusDescription: 'Active',
+      reprocessed: 'N',
+      ageClass: 'O',
+      ageClassDescription: 'Old',
+      productType: 'LOG',
+      productTypeDescription: 'Logs',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationItemsForEditing()
+    expect(await screen.findByLabelText('Package Comments')).toHaveValue(historicalComment)
+  })
+
   it('keeps end use authoritative while dependent options are loading', async () => {
     let resolveCreateEndUseOptions: ((options: ApplicationCodeOption[]) => void) | undefined
     mockedFetchApplicationEndUsesForSpeciesRegion.mockImplementation((_region, speciesCodes) => {

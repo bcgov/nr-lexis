@@ -404,8 +404,6 @@ public class ExemptionRepository extends OracleRepositorySupport {
       INNER JOIN EXPORT_EXEMPTION_STATUS_CODE EESC
         ON EESC.EXPORT_EXEMPTION_STATUS_CODE = EE.EXPORT_EXEMPTION_STATUS_CODE
       """;
-  private static final String FIND_EXEMPTION_BY_NUMBER =
-      LEXIS_GROUP_5_PACKAGE + "FIND_EXEMPTION_BY_NUMBER(?,?)";
   private static final String FIND_EXEMPTION_ACCESS =
       """
       SELECT
@@ -823,37 +821,39 @@ public class ExemptionRepository extends OracleRepositorySupport {
         normalized);
     try {
       Optional<ExemptionDetailDto> detail =
-          queryCursorSingleFailClosed(
-              FIND_EXEMPTION_BY_NUMBER,
-              cs -> cs.setString(1, normalized),
-              2,
-              rs -> {
-                double approvedVolume =
-                    coalesce(getDouble(rs, "APPROVED_VOLUME"), 0.0d);
-                double remainingVolume =
-                    coalesce(getDouble(rs, "VOLUME_REMAINING"), 0.0d);
-                return new ExemptionDetailDto(
-                      getString(rs, "EXEMPTION_NUMBER"),
-                      getString(rs, "EXPORT_EXEMPTION_TYPE_CODE"),
-                      getString(rs, "TYPE_DESCRIPTION"),
-                      getString(rs, "EXPORT_EXEMPTION_STATUS_CODE"),
-                      getString(rs, "STATUS_DESCRIPTION"),
-                      getString(rs, "OWNER_CLIENT_NUMBER"),
-                      getString(rs, "AGENT_CLIENT_NUMBER"),
-                      getLong(rs, "APPLICATION_NUMBER"),
-                      getString(rs, "APPLICATION_STATUS"),
-                      getLocalDate(rs, "APPROVAL_DATE"),
-                      getLocalDate(rs, "EXPIRY_DATE"),
-                      approvedVolume,
-                      calculateUsedVolume(approvedVolume, remainingVolume),
-                      remainingVolume,
-                      getString(rs, "OTHER_CONDITIONS"),
-                      "B".equalsIgnoreCase(getString(rs, "EXPORT_EXEMPTION_TYPE_CODE")),
-                      List.of(),
-                      List.of(),
-                      firstNonNull(
-                          getString(rs, "UPDATE_USERID"), getString(rs, "ENTRY_USERID")));
-              });
+          jdbcTemplate
+              .query(
+                  ExemptionDetailQueries.BY_NUMBER,
+                  (rs, rowNumber) -> {
+                    double approvedVolume =
+                        coalesce(getDouble(rs, "APPROVED_VOLUME"), 0.0d);
+                    double remainingVolume =
+                        coalesce(getDouble(rs, "VOLUME_REMAINING"), 0.0d);
+                    return new ExemptionDetailDto(
+                          getString(rs, "EXEMPTION_NUMBER"),
+                          getString(rs, "EXPORT_EXEMPTION_TYPE_CODE"),
+                          getString(rs, "TYPE_DESCRIPTION"),
+                          getString(rs, "EXPORT_EXEMPTION_STATUS_CODE"),
+                          getString(rs, "STATUS_DESCRIPTION"),
+                          getString(rs, "OWNER_CLIENT_NUMBER"),
+                          getString(rs, "AGENT_CLIENT_NUMBER"),
+                          getLong(rs, "APPLICATION_NUMBER"),
+                          getString(rs, "APPLICATION_STATUS"),
+                          getLocalDate(rs, "APPROVAL_DATE"),
+                          getLocalDate(rs, "EXPIRY_DATE"),
+                          approvedVolume,
+                          calculateUsedVolume(approvedVolume, remainingVolume),
+                          remainingVolume,
+                          getString(rs, "OTHER_CONDITIONS"),
+                          "B".equalsIgnoreCase(getString(rs, "EXPORT_EXEMPTION_TYPE_CODE")),
+                          List.of(),
+                          List.of(),
+                          firstNonNull(
+                              getString(rs, "UPDATE_USERID"), getString(rs, "ENTRY_USERID")));
+                  },
+                  normalized)
+              .stream()
+              .findFirst();
       LOGGER.info(
           "event=lexis_exemption_detail_oracle operation=find_exemption_by_number outcome={} exemptionNumber={} durationMs={}",
           detail.isPresent() ? "found" : "not_found",
