@@ -243,7 +243,7 @@ class OracleLegacyJasperTableReportServiceTest {
                     "Active",
                     "999",
                     "",
-                    "Skeena",
+                    "Skeena,West Coast",
                     "",
                     "00002176")));
     LexisReportRequestDto request =
@@ -270,7 +270,13 @@ class OracleLegacyJasperTableReportServiceTest {
 
     assertThat(report).isPresent();
     assertThat(renderedText)
-        .contains("Exemption number", "EX-123", "Owner client number", "00002176")
+        .contains(
+            "Exemption number",
+            "EX-123",
+            "Region",
+            "Skeena,West Coast",
+            "Owner client number",
+            "00002176")
         .noneMatch(
             text -> text.contains("Additional Columns") || text.contains("EXEMPTION_NUMBER"));
   }

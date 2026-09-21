@@ -391,10 +391,12 @@ class OracleLegacyCsvReportServiceTest {
     when(metaData.getColumnName(1)).thenReturn("EXEMPTION_NUMBER");
     when(metaData.getColumnName(2)).thenReturn("APPROVED_VOLUME");
     when(metaData.getColumnName(3)).thenReturn("EXPORT_EXEMPTION_STATUS_CODE");
+    when(metaData.getColumnName(4)).thenReturn("ORG_UNIT_NAME");
     when(resultSet.next()).thenReturn(true, false);
     when(resultSet.getString(1)).thenReturn("EX-123");
     when(resultSet.getString(2)).thenReturn("1200");
     when(resultSet.getString(3)).thenReturn("ACT");
+    when(resultSet.getString(4)).thenReturn("Skeena,West Coast");
 
     OracleLegacyCsvReportService service = new OracleLegacyCsvReportService(dataSource);
 
@@ -408,17 +410,31 @@ class OracleLegacyCsvReportServiceTest {
                   List.of(
                       metadata.getColumnName(1),
                       metadata.getColumnName(2),
-                      metadata.getColumnName(3));
+                      metadata.getColumnName(3),
+                      metadata.getColumnName(4));
               assertThat(cursor.next()).isTrue();
               return Map.entry(
                   headers,
-                  List.of(cursor.getString(1), cursor.getString(2), cursor.getString(3)));
+                  List.of(
+                      cursor.getString(1),
+                      cursor.getString(2),
+                      cursor.getString(3),
+                      cursor.getString(4)));
             });
 
     assertThat(data).isPresent();
     assertThat(data.orElseThrow().getKey())
-        .containsExactly("EXEMPTION_NUMBER", "APPROVED_VOLUME", "EXPORT_EXEMPTION_STATUS_CODE");
-    assertThat(data.orElseThrow().getValue()).containsExactly("EX-123", "1200", "ACT");
+        .containsExactly(
+            "EXEMPTION_NUMBER", "APPROVED_VOLUME", "EXPORT_EXEMPTION_STATUS_CODE", "ORG_UNIT_NAME");
+    assertThat(data.orElseThrow().getValue())
+        .containsExactly("EX-123", "1200", "ACT", "Skeena,West Coast");
+
+    ArgumentCaptor<String> query = ArgumentCaptor.forClass(String.class);
+    verify(connection).prepareStatement(query.capture());
+    assertThat(query.getValue())
+        .contains("LISTAGG(ORG_UNIT_NAME, ',') WITHIN GROUP (ORDER BY ORG_UNIT_NO)")
+        .contains("SELECT EEA.EXEMPTION_NUMBER, OU.ORG_UNIT_NO, OU.ORG_UNIT_NAME")
+        .contains("SELECT OEO.EXEMPTION_NUMBER, OU.ORG_UNIT_NO, OU.ORG_UNIT_NAME");
 
     verify(preparedStatement).setString(1, "EX-123");
     verify(preparedStatement).setQueryTimeout(120);
