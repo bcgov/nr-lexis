@@ -4577,6 +4577,76 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(mockedUpdateBlanketOicPackage).not.toHaveBeenCalled()
   })
 
+  it.each([
+    { comments: 'A'.repeat(180), error: null },
+    { comments: 'A'.repeat(181), error: 'Package comments must be 180 characters or fewer.' },
+    {
+      comments: 'Review caf\u00e9',
+      error:
+        'Package comments contain unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
+    },
+  ])(
+    'validates Blanket OIC package comments before saving ($error)',
+    async ({ comments, error }) => {
+      configureEditableBlanketOicPackage()
+      renderPermitDetails()
+      await selectPermitDetailTab('Items')
+      const packageRow = (await screen.findByRole('cell', { name: 'BOIC-9' })).closest('tr')!
+      await userEvent.click(within(packageRow).getByRole('button', { name: 'Edit' }))
+      const editor = (await screen.findByRole('heading', { name: 'Edit BOIC-9' })).closest(
+        '.application-detail-edit-section',
+      ) as HTMLElement
+      const field = within(editor).getByLabelText('Comments')
+      const save = within(editor).getByRole('button', { name: 'Save package' })
+      await waitFor(() => expect(save).toBeEnabled())
+      expect(field).toHaveAttribute('maxlength', '180')
+      fireEvent.change(field, { target: { value: comments } })
+      expect(field).toHaveValue(comments)
+
+      if (!error) {
+        await userEvent.type(field, 'Z')
+        expect(field).toHaveValue(comments)
+        expect(within(editor).getByText('180/180')).toBeInTheDocument()
+      }
+      await userEvent.click(save)
+      if (error) {
+        expect(await within(editor).findByText(error)).toBeInTheDocument()
+        expect(field).toHaveAttribute('aria-invalid', 'true')
+        expect(mockedUpdateBlanketOicPackage).not.toHaveBeenCalled()
+      } else {
+        await waitFor(() =>
+          expect(mockedUpdateBlanketOicPackage).toHaveBeenCalledWith(
+            expect.objectContaining({ comments }),
+          ),
+        )
+      }
+    },
+  )
+
+  it('preserves loaded Blanket OIC package comments above the input limit', async () => {
+    configureEditableBlanketOicPackage()
+    const comments = 'A'.repeat(181)
+    mockedFetchBlanketOicPackageEditContext.mockResolvedValue({
+      packageNumber: 'BOIC-9',
+      volume: '120.5',
+      averageLength: '7.1',
+      averageDiameter: '16.2',
+      status: 'ACT',
+      comments,
+      reprocessed: 'N',
+      ageClass: 'O',
+      productType: 'H',
+      endUseCode: 'LU',
+      speciesCodes: ['HE'],
+    })
+    renderPermitDetails()
+    await selectPermitDetailTab('Items')
+    const packageRow = (await screen.findByRole('cell', { name: 'BOIC-9' })).closest('tr')!
+    await userEvent.click(within(packageRow).getByRole('button', { name: 'Edit' }))
+    await waitFor(() => expect(screen.getByLabelText('Comments')).toHaveValue(comments))
+    expect(mockedUpdateBlanketOicPackage).not.toHaveBeenCalled()
+  })
+
   it('clears invalid Blanket OIC package feedback when changing package drafts', async () => {
     configureEditableBlanketOicPackage()
     mockedFetchProvincialPermitDetailTabs.mockResolvedValue({

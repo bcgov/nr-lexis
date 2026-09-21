@@ -243,6 +243,7 @@ const MAX_OIC_REQUEST_VOLUME_LENGTH = 9
 const MAX_PERMIT_OVERRIDE_FEE = 9_999_999.99
 const MAX_PERMIT_OVERRIDE_COMMENT_LENGTH = 254
 const MAX_REVIEWED_PERMIT_REMARKS_LENGTH = 250
+const PACKAGE_COMMENTS_MAX_LENGTH = 180
 const ASCII_PATTERN = /^[\u0000-\u007f]*$/
 // Legacy allows an approver to move a permit to EXP; once expired, the record is read-only.
 const EDITABLE_PERMIT_STATUS_CODES = new Set(['ACT', 'COM', 'CAN', 'EXP'])
@@ -352,6 +353,16 @@ const validateBlanketOicPackage = (form: BlanketOicPackageForm): BlanketOicPacka
     productType: requiredFieldError(form.productType, 'Product type') ?? undefined,
     endUseCode: requiredFieldError(form.endUseCode, 'End use') ?? undefined,
     speciesCodes: speciesCodes.length > 0 ? undefined : 'Species is required.',
+    comments: firstValidationError(
+      () =>
+        ASCII_PATTERN.test(form.comments)
+          ? null
+          : 'Package comments contain unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
+      () =>
+        form.comments.length <= PACKAGE_COMMENTS_MAX_LENGTH
+          ? null
+          : `Package comments must be ${PACKAGE_COMMENTS_MAX_LENGTH} characters or fewer.`,
+    ),
   }
 }
 
@@ -7751,7 +7762,13 @@ const ProvincialPermitDetailsPage = () => {
             <TextArea
               id="boicPackageComments"
               labelText="Comments"
+              enableCounter
+              maxCount={PACKAGE_COMMENTS_MAX_LENGTH}
+              maxLength={PACKAGE_COMMENTS_MAX_LENGTH}
+              helperText="Use unaccented letters, numbers, spaces, or standard punctuation."
               value={boicPackageForm.comments}
+              invalid={!!boicPackageFieldErrors.comments}
+              invalidText={boicPackageFieldErrors.comments}
               disabled={isLoadingBoicPackage || isSavingBoicPackage}
               onChange={(event) => setBlanketOicPackageFormField('comments', event.target.value)}
             />

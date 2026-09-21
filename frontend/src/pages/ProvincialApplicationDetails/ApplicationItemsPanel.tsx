@@ -109,6 +109,7 @@ const displayScaleType = (cascadeSplitCode: string): string => {
 
 type ApplicationItemField =
   | 'packageNewPackageNumber'
+  | 'packageComments'
   | 'packageVolume'
   | 'packageAverageLength'
   | 'packageAverageDiameter'
@@ -186,6 +187,18 @@ const emptyScaleForm: ScaleFormState = {
 }
 
 const normalizePackageNumberInput = (value: string): string => value.toUpperCase()
+
+const PACKAGE_COMMENTS_MAX_LENGTH = 180
+const PACKAGE_COMMENTS_ASCII_PATTERN = /^[\u0000-\u007f]*$/
+
+const packageCommentsFieldError = (value: string): string | undefined => {
+  if (!PACKAGE_COMMENTS_ASCII_PATTERN.test(value)) {
+    return 'Package comments contain unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.'
+  }
+  return value.length > PACKAGE_COMMENTS_MAX_LENGTH
+    ? `Package comments must be ${PACKAGE_COMMENTS_MAX_LENGTH} characters or fewer.`
+    : undefined
+}
 
 const existingPackageNumberError = (
   value: string,
@@ -516,6 +529,7 @@ function ProvincialApplicationItemsPanel({
           packageNumbers,
           selectedPackageNumber,
         ),
+      packageComments: packageCommentsFieldError(packageForm.comments),
       packageVolume: firstValidationError(
         () => requiredNumericFieldError(packageForm.volume, 'Package volume'),
         () => greaterThanOrEqualFieldError(packageForm.volume, 'Package volume', 0),
@@ -597,6 +611,7 @@ function ProvincialApplicationItemsPanel({
 
   const hasPackageValidationError = Boolean(
     itemFieldErrors.packageNewPackageNumber ||
+    itemFieldErrors.packageComments ||
     itemFieldErrors.packageVolume ||
     itemFieldErrors.packageAverageLength ||
     itemFieldErrors.packageAverageDiameter ||
@@ -1237,6 +1252,7 @@ function ProvincialApplicationItemsPanel({
       setItemsErrorMessage(
         firstItemError(
           'packageNewPackageNumber',
+          'packageComments',
           'packageVolume',
           'packageAverageLength',
           'packageAverageDiameter',
@@ -1834,8 +1850,15 @@ function ProvincialApplicationItemsPanel({
                   <TextArea
                     id="applicationItemsPackageComments"
                     labelText="Package Comments"
+                    helperText="Use unaccented letters, numbers, spaces, or standard punctuation."
+                    enableCounter
+                    maxCount={PACKAGE_COMMENTS_MAX_LENGTH}
+                    maxLength={PACKAGE_COMMENTS_MAX_LENGTH}
                     value={packageForm.comments}
                     disabled={!canSaveSelectedPackage}
+                    invalid={!!packageFieldError('packageComments')}
+                    invalidText={packageFieldError('packageComments')}
+                    onBlur={() => markItemFieldTouched('packageComments')}
                     onChange={(event) => setPackageField('comments', event.target.value)}
                   />
                   <div className="legacy-search-actions">
