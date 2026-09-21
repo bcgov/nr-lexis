@@ -3698,7 +3698,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
           currentPackageVolume: '118.5',
           status: 'APP - Approved',
           reprocessed: 'N',
-          comments: 'Current OIC package',
+          comments: 'Current OIC package\nSecond line',
         },
       ],
       items: [
@@ -3736,7 +3736,6 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.queryByRole('tab', { name: 'Items' })).not.toBeInTheDocument()
     expect(screen.getByText('Summary of scale')).toBeInTheDocument()
     const packageCard = await findBlanketOicPackageCard()
-    expect(within(packageCard).queryByText('Comments')).not.toBeInTheDocument()
     for (const [label, value] of [
       ['Species list', 'AL, HE, PL'],
       ['End use', 'LU'],
@@ -3746,6 +3745,15 @@ describe('Provincial Permit Detail Action Smoke', () => {
         .closest('.detail-field-item') as HTMLElement
       expect(within(field).getByText(value)).toBeInTheDocument()
     }
+    const commentsField = within(packageCard)
+      .getByText('Comments')
+      .closest('.detail-field-item') as HTMLElement
+    expect(
+      within(commentsField).getByText(
+        (_, element) =>
+          element?.tagName === 'SPAN' && element.textContent === 'Current OIC package\nSecond line',
+      ),
+    ).toHaveStyle({ whiteSpace: 'pre-wrap' })
     expect(within(packageCard).getByText('Current package pieces')).toBeInTheDocument()
     expect(within(packageCard).getByText('Current package volume (m³)')).toBeInTheDocument()
     for (const [label, value] of [

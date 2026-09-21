@@ -7317,6 +7317,14 @@ const ProvincialPermitDetailsPage = () => {
                                   label: 'Average top diameter (rads)',
                                   value: selectedBlanketOicPackage.averageTopDiameter || '—',
                                 },
+                                {
+                                  label: 'Comments',
+                                  value: (
+                                    <span style={{ whiteSpace: 'pre-wrap' }}>
+                                      {selectedBlanketOicPackage.comments || '—'}
+                                    </span>
+                                  ),
+                                },
                               ]}
                             >
                               <div className="boic-package-summary__scale">

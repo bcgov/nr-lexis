@@ -434,7 +434,9 @@ class OracleLegacyCsvReportServiceTest {
     assertThat(query.getValue())
         .contains("LISTAGG(ORG_UNIT_NAME, ',') WITHIN GROUP (ORDER BY ORG_UNIT_NO)")
         .contains("SELECT EEA.EXEMPTION_NUMBER, OU.ORG_UNIT_NO, OU.ORG_UNIT_NAME")
-        .contains("SELECT OEO.EXEMPTION_NUMBER, OU.ORG_UNIT_NO, OU.ORG_UNIT_NAME");
+        .contains("SELECT OEO.EXEMPTION_NUMBER, OU.ORG_UNIT_NO, OU.ORG_UNIT_NAME")
+        .contains("LEFT JOIN CANONICAL_EXEMPTION_APPLICATION EEA")
+        .contains("AND EEA.CANONICAL_RANK = 1");
 
     verify(preparedStatement).setString(1, "EX-123");
     verify(preparedStatement).setQueryTimeout(120);

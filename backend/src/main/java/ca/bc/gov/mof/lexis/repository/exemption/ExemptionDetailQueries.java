@@ -5,12 +5,28 @@ public final class ExemptionDetailQueries {
 
   // Aggregate assigned scales before joining descriptive application/region rows. The legacy
   // detail procedure sums after those joins, multiplying consumption for multi-region exemptions.
+  // INTENTIONAL_LEGACY_DIVERGENCE(CANONICAL_EXEMPTION_DETAILS): use the same latest-application
+  // ordering as search for client/date context, while volumes and regions retain every application.
   public static final String BY_NUMBER =
       """
       WITH TARGET_EXEMPTION AS (
         SELECT *
         FROM THE.EXPORT_EXEMPTION
         WHERE EXEMPTION_NUMBER = ?
+      ), CANONICAL_EXEMPTION_APPLICATION AS (
+        SELECT EEA.EXEMPTION_NUMBER,
+               EEA.AGENT_CLIENT_NUMBER,
+               EEA.OWNER_CLIENT_NUMBER,
+               ES.ADVERTISING_DATE,
+               ROW_NUMBER() OVER (
+                 PARTITION BY EEA.EXEMPTION_NUMBER
+                 ORDER BY ES.ADVERTISING_DATE DESC NULLS LAST,
+                          EEA.APPLICATION_NUMBER DESC
+               ) AS CANONICAL_RANK
+        FROM TARGET_EXEMPTION EE
+        INNER JOIN THE.EXPORT_EXEMPTION_APPLICATION EEA
+          ON EEA.EXEMPTION_NUMBER = EE.EXEMPTION_NUMBER
+        LEFT JOIN THE.EXPORT_SCHEDULE ES ON ES.EXPORT_SCHEDULE_ID = EEA.EXPORT_SCHEDULE_ID
       ), ASSIGNED_SCALE_VOLUME AS (
         SELECT COALESCE(SUM(ESD.SPECIES_GRADE_VOLUME), 0) AS USED_VOLUME
         FROM TARGET_EXEMPTION EE
@@ -39,7 +55,7 @@ public final class ExemptionDetailQueries {
         )
         GROUP BY EXEMPTION_NUMBER
       )
-      SELECT DISTINCT EE.EXEMPTION_NUMBER,
+      SELECT EE.EXEMPTION_NUMBER,
              EE.APPROVED_VOLUME,
              EE.APPROVAL_DATE,
              EE.EXPIRY_DATE,
@@ -52,7 +68,7 @@ public final class ExemptionDetailQueries {
              EE.EXPORT_EXEMPTION_STATUS_CODE,
              EESC.DESCRIPTION AS STATUS_DESCRIPTION,
              EE.APPROVED_VOLUME - SV.USED_VOLUME AS VOLUME_REMAINING,
-             ES.ADVERTISING_DATE,
+             EEA.ADVERTISING_DATE,
              EO.ORG_UNIT_NAME,
              CASE WHEN EE.EXPORT_EXEMPTION_TYPE_CODE = 'M'
                THEN EEA.AGENT_CLIENT_NUMBER ELSE '' END AS AGENT_CLIENT_NUMBER,
@@ -62,9 +78,9 @@ public final class ExemptionDetailQueries {
       CROSS JOIN ASSIGNED_SCALE_VOLUME SV
       INNER JOIN THE.EXPORT_EXEMPTION_STATUS_CODE EESC
         ON EESC.EXPORT_EXEMPTION_STATUS_CODE = EE.EXPORT_EXEMPTION_STATUS_CODE
-      LEFT JOIN THE.EXPORT_EXEMPTION_APPLICATION EEA
+      LEFT JOIN CANONICAL_EXEMPTION_APPLICATION EEA
         ON EEA.EXEMPTION_NUMBER = EE.EXEMPTION_NUMBER
-      LEFT JOIN THE.EXPORT_SCHEDULE ES ON ES.EXPORT_SCHEDULE_ID = EEA.EXPORT_SCHEDULE_ID
+       AND EEA.CANONICAL_RANK = 1
       LEFT JOIN EXEMPTION_REGIONS EO ON EO.EXEMPTION_NUMBER = EE.EXEMPTION_NUMBER
       """;
 

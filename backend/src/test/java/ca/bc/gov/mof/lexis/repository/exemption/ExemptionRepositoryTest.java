@@ -919,19 +919,27 @@ class ExemptionRepositoryTest {
 
   @Test
   @SuppressWarnings("unchecked")
-  void detailShouldKeepFirstRowSelectionForMultipleApplicationContexts() {
+  void detailShouldSelectOneApplicationUsingTheSameOrderAsSearch() {
     JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
-    ExemptionDetailDto first = new ExemptionDetailDto(
+    ExemptionDetailDto canonical = new ExemptionDetailDto(
         "EX-205", "M", null, "ACT", null, "00000001", null, null, null,
         null, null, 100, 12.5, 87.5, null, false, List.of(), List.of());
-    ExemptionDetailDto second = new ExemptionDetailDto(
-        "EX-205", "M", null, "ACT", null, "00000002", null, null, null,
-        null, null, 100, 12.5, 87.5, null, false, List.of(), List.of());
     when(jdbcTemplate.query(eq(ExemptionDetailQueries.BY_NUMBER), any(RowMapper.class), eq("EX-205")))
-        .thenReturn(List.of(first, second));
+        .thenReturn(List.of(canonical));
 
     assertThat(new ExemptionRepository(jdbcTemplate).findByExemptionNumber("EX-205"))
-        .contains(first);
+        .contains(canonical);
+
+    ArgumentCaptor<String> query = ArgumentCaptor.forClass(String.class);
+    verify(jdbcTemplate).query(query.capture(), any(RowMapper.class), eq("EX-205"));
+    String sql = query.getValue().replaceAll("\\s+", " ");
+    assertThat(sql)
+        .contains("ROW_NUMBER() OVER ( PARTITION BY EEA.EXEMPTION_NUMBER "
+            + "ORDER BY ES.ADVERTISING_DATE DESC NULLS LAST, EEA.APPLICATION_NUMBER DESC "
+            + ") AS CANONICAL_RANK")
+        .contains("LEFT JOIN CANONICAL_EXEMPTION_APPLICATION EEA "
+            + "ON EEA.EXEMPTION_NUMBER = EE.EXEMPTION_NUMBER AND EEA.CANONICAL_RANK = 1")
+        .doesNotContain("LEFT JOIN THE.EXPORT_EXEMPTION_APPLICATION EEA");
   }
 
   private static ExemptionSearchResultDto exemptionResult(String exemptionNumber) {
