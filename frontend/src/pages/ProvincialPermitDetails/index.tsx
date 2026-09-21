@@ -1036,6 +1036,7 @@ const ProvincialPermitDetailsPage = () => {
   const loadedDeferredPermitTabsRef = useRef(new Set<DeferredPermitTabId>())
   const permitMutationInFlightRef = useRef(false)
   const packagePanelLauncherRef = useRef<HTMLButtonElement | null>(null)
+  const permitDocumentUploadLauncherRef = useRef<HTMLButtonElement | null>(null)
   const tryBeginPermitMutation = useCallback(() => {
     if (permitMutationInFlightRef.current) return null
     permitMutationInFlightRef.current = true
@@ -3917,7 +3918,11 @@ const ProvincialPermitDetailsPage = () => {
     setPermitDocumentUploadResetKey((current) => current + 1)
     setActionErrorMessage('')
     setIsEditingPermitDocuments(false)
-  }, [])
+    if (usesReviewedPermitFlow) {
+      // The Ministerial launcher remounts when the document editor closes.
+      window.setTimeout(() => permitDocumentUploadLauncherRef.current?.focus())
+    }
+  }, [usesReviewedPermitFlow])
 
   const onCancelInvoiceDocumentEditing = useCallback(() => {
     setInvoiceDocumentUploadDirty(false)
@@ -7659,6 +7664,9 @@ const ProvincialPermitDetailsPage = () => {
                               kind="tertiary"
                               size="sm"
                               disabled={permitDocumentUploadBusy}
+                              ref={
+                                usesReviewedPermitFlow ? permitDocumentUploadLauncherRef : undefined
+                              }
                               onClick={() => {
                                 setPermitDocumentUploadResetKey((current) => current + 1)
                                 setIsEditingPermitDocuments(true)
@@ -7683,6 +7691,11 @@ const ProvincialPermitDetailsPage = () => {
                                 kind="tertiary"
                                 size="sm"
                                 renderIcon={Edit}
+                                ref={
+                                  usesReviewedPermitFlow
+                                    ? permitDocumentUploadLauncherRef
+                                    : undefined
+                                }
                                 onClick={() => setIsEditingPermitDocuments(true)}
                               >
                                 {usesReviewedPermitFlow ? 'Add document' : 'Edit permit documents'}

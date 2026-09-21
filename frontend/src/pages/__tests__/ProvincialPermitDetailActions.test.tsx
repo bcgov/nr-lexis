@@ -7836,6 +7836,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await waitFor(() =>
       expect(screen.queryByRole('dialog', { name: 'Add document' })).not.toBeInTheDocument(),
     )
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Add document' })).toHaveFocus())
     await userEvent.click(screen.getByRole('button', { name: 'Add document' }))
     expect(await screen.findByRole('dialog', { name: 'Add document' })).toBeInTheDocument()
   })
@@ -7863,6 +7864,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
     expect(screen.getByText('Document uploaded')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Add document' })).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Add document' })).toHaveFocus())
     const documentSection = screen.getByRole('heading', { name: 'Documents' }).closest('.cds--tile')
     expect(documentSection).toBeTruthy()
     expect(
@@ -7953,6 +7955,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await waitFor(() =>
       expect(screen.queryByRole('dialog', { name: 'Add documents' })).not.toBeInTheDocument(),
     )
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Add document' })).toHaveFocus())
     expect(submitAdminUpload).not.toHaveBeenCalled()
     expect(screen.getByRole('button', { name: 'Delete' })).toBeEnabled()
   })
@@ -7982,6 +7985,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
     expect(mockedFetchPermitDocuments).toHaveBeenCalledTimes(2)
     expect(screen.getByText('Document uploaded')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Add document' })).toHaveFocus())
     await userEvent.click(screen.getByRole('button', { name: 'Add document' }))
     const secondPanel = await screen.findByRole('dialog', { name: 'Add documents' })
     expect(screen.queryByLabelText(/Document description for new.pdf/)).not.toBeInTheDocument()
@@ -8009,6 +8013,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
     expect(mockedFetchPermitDocuments).toHaveBeenCalledTimes(3)
     expect(screen.getByText('Document uploaded')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Add document' })).toHaveFocus())
   })
 
   it('opens Blanket OIC documents separately from Download using the authenticated permit target', async () => {
