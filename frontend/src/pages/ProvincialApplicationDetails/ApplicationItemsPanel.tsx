@@ -1286,10 +1286,17 @@ function ProvincialApplicationItemsPanel({
         previousPackageNumber: selectedPackageNumber,
         nextPackageNumber,
       })
-      setItemsFeedback({ kind: 'success', message: `Package ${nextPackageNumber} saved.` })
-      await onDetailChanged()
-      await loadApplicationScaleSummary()
-      await loadPackageItems(nextPackageNumber)
+      try {
+        await onDetailChanged()
+        await loadApplicationScaleSummary()
+        await loadPackageItems(nextPackageNumber)
+        setItemsFeedback({ kind: 'success', message: `Package ${nextPackageNumber} saved.` })
+      } catch {
+        setItemsFeedback({
+          kind: 'warning',
+          message: `Package ${nextPackageNumber} was saved, but application items could not be refreshed. Reload before changing packages again.`,
+        })
+      }
     } catch {
       setItemsErrorMessage('Unable to save package details.')
     } finally {
@@ -1344,10 +1351,17 @@ function ProvincialApplicationItemsPanel({
       const nextPackageNumber = result.packageNumber || createPackageForm.packageNumber
       dispatchPackageSelection({ type: 'add', packageNumber: nextPackageNumber })
       resetCreatePackageDraft()
-      setItemsFeedback({ kind: 'success', message: `Package ${nextPackageNumber} created.` })
-      await onDetailChanged()
-      await loadApplicationScaleSummary()
-      await loadPackageItems(nextPackageNumber)
+      try {
+        await onDetailChanged()
+        await loadApplicationScaleSummary()
+        await loadPackageItems(nextPackageNumber)
+        setItemsFeedback({ kind: 'success', message: `Package ${nextPackageNumber} created.` })
+      } catch {
+        setItemsFeedback({
+          kind: 'warning',
+          message: `Package ${nextPackageNumber} was created, but application items could not be refreshed. Reload before changing packages again.`,
+        })
+      }
     } catch {
       setItemsErrorMessage('Unable to create package.')
     } finally {

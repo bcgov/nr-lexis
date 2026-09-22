@@ -622,6 +622,7 @@ const RTMEmsLogAmvPage = () => {
   }
 
   const requestSave = () => {
+    setNotification(null)
     if (selectedDateIsPast) {
       setShowWarningConfirmation(true)
       return
