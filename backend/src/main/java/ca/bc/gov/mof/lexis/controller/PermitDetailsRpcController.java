@@ -569,7 +569,9 @@ public class PermitDetailsRpcController {
     }
 
     PermitMutationRequestDto mutationRequest = buildPermitMutationRequest(request);
-    if (requestsFeeOverrideMutation(mutationRequest)
+    if ((requestsFeeOverrideMutation(mutationRequest)
+            || hasText(mutationRequest.permitIssueDate())
+            || hasText(mutationRequest.permitExpiryDate()))
         && !canReviewPermits(authentication)) {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }

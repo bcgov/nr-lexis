@@ -995,7 +995,7 @@ const DetailDocumentUploadPanel = ({
           {uploadContent}
         </section>
       )}
-      {isUploadModalOpen && workflowType !== 'invoice' && (
+      {isUploadModalOpen && !isDiscardConfirmationOpen && workflowType !== 'invoice' && (
         <Modal
           open
           passiveModal

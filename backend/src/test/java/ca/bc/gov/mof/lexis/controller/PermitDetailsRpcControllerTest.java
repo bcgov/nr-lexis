@@ -81,6 +81,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
@@ -1325,6 +1326,51 @@ class PermitDetailsRpcControllerTest {
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
     verify(serviceProvider, never()).getIfAvailable();
     verifyNoInteractions(service);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"permitIssueDate", "permitExpiryDate"})
+  void addPermitShouldRejectMinistryDatesForScopedSubmitter(String field) {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameterMap())
+        .thenReturn(
+            Map.of(
+                "exemptionNumber", new String[] {"EX-700"},
+                field, new String[] {"2026-04-11"}));
+
+    ResponseEntity<PermitMutationRpcResponseDto> response =
+        controller.addPermit(request, scopedSubmitterWithSavePermit());
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    verify(service, never()).addPermit(any(), any());
+  }
+
+  @ParameterizedTest
+  @ValueSource(booleans = {false, true})
+  void addPermitShouldAllowBlankSubmitterDatesAndReviewerDates(boolean reviewer) {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    String issueDate = reviewer ? "2026-04-11" : "";
+    String expiryDate = reviewer ? "2027-01-01" : "";
+    when(request.getParameterMap())
+        .thenReturn(
+            Map.of(
+                "exemptionNumber", new String[] {"EX-700"},
+                "permitSubmitDate", new String[] {"2026-04-10"},
+                "permitIssueDate", new String[] {issueDate},
+                "permitExpiryDate", new String[] {expiryDate}));
+    TestingAuthenticationToken authentication =
+        reviewer ? authorizedSavePermit() : scopedSubmitterWithSavePermit();
+
+    ResponseEntity<PermitMutationRpcResponseDto> response =
+        controller.addPermit(request, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    ArgumentCaptor<PermitMutationRequestDto> mutation =
+        ArgumentCaptor.forClass(PermitMutationRequestDto.class);
+    verify(service).addPermit(mutation.capture(), eq(authentication.getName()));
+    assertThat(mutation.getValue().permitSubmitDate()).isEqualTo("2026-04-10");
+    assertThat(mutation.getValue().permitIssueDate()).isEqualTo(issueDate);
+    assertThat(mutation.getValue().permitExpiryDate()).isEqualTo(expiryDate);
   }
 
   @Test

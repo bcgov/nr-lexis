@@ -31,6 +31,7 @@ import IsoDatePicker from '@/components/IsoDatePicker'
 import PendingIcon from '@/components/PendingIcon'
 import PermitCountrySelect from '@/components/PermitCountrySelect'
 import UnsavedChangesGuard, { formValuesEqual } from '@/components/UnsavedChangesGuard'
+import { useAuth } from '@/context/auth/useAuth'
 import {
   CLIENT_LOOKUP_UNAVAILABLE_MESSAGE,
   clientLocationLabel,
@@ -330,6 +331,8 @@ const BlanketOicPermitCreateForm = ({
   onCreated,
   onUnknownOutcome,
 }: BlanketOicPermitCreateFormProps) => {
+  const { canPerform } = useAuth()
+  const canReviewPermits = canPerform('/permitsReview')
   const location = useLocation()
   const exemptionReturnTo = readDetailReturnTo(location.state)
   const regionContext = resolveBlanketOicRegionContext(regionOptions, defaultRegionNumbers)
@@ -1003,6 +1006,7 @@ const BlanketOicPermitCreateForm = ({
                   <IsoDatePicker
                     id="boic-permit-issue-date"
                     labelText="Issued date"
+                    disabled={!canReviewPermits}
                     value={form.permitIssueDate}
                     invalid={!!fieldError('permitIssueDate')}
                     invalidText={fieldError('permitIssueDate')}
@@ -1011,6 +1015,7 @@ const BlanketOicPermitCreateForm = ({
                   <IsoDatePicker
                     id="boic-permit-expiry-date"
                     labelText="Expiry date"
+                    disabled={!canReviewPermits}
                     value={form.permitExpiryDate}
                     invalid={!!fieldError('permitExpiryDate')}
                     invalidText={fieldError('permitExpiryDate')}

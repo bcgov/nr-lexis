@@ -2032,6 +2032,21 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     if (!validation.valid()) {
       return validationFailureResponse(validation, permitNumber);
     }
+    if (targetBlanketOic) {
+      List<ScaleValues> permitScales = linkedScales.stream().map(this::toScaleValues).toList();
+      Long submittedOicRequestPieces = parseNonNegativeLong(request.oicPermitTotalPieces());
+      if (submittedOicRequestPieces != null
+          && ScaleDomainValidator.exceedsPieces(permitScales, 0L, submittedOicRequestPieces)) {
+        numericErrors.add("The total scale pieces exceed the permit request pieces.");
+      }
+      if (submittedOicRequestVolume != null
+          && ScaleDomainValidator.exceedsVolume(permitScales, 0.0d, submittedOicRequestVolume)) {
+        numericErrors.add("The total scale volume exceeds the permit request volume.");
+      }
+      if (!numericErrors.isEmpty()) {
+        return failureMutationResponse(numericErrors, permitNumber);
+      }
+    }
     if (EXPORT_PERMIT_STATUS_COMPLETE.equals(submittedPermitStatusCode)
         && isEnteringInvoiceStatus(
             current.permitStatusCode(), submittedPermitStatusCode)) {

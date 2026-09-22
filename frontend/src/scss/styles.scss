@@ -3945,11 +3945,11 @@ $notification-types: 'error', 'info', 'success', 'warning';
 }
 
 .admin-upload-validation-table tbody tr:nth-child(odd) td {
-  background: var(--fds-layer-01, #ffffff);
+  background: var(--fds-layer-01, var(--csp-layer-01));
 }
 
 .admin-upload-validation-table tbody tr:nth-child(even) td {
-  background: var(--fds-table-zebra, #f3f3f5);
+  background: var(--fds-table-zebra, var(--csp-table-row-alt-bg));
 }
 
 .admin-upload-validation-table__issue,
@@ -4071,11 +4071,11 @@ $notification-types: 'error', 'info', 'success', 'warning';
 }
 
 .admin-upload-queue__table tbody tr:nth-child(odd) td {
-  background: var(--fds-layer-01, #ffffff);
+  background: var(--fds-layer-01, var(--csp-layer-01));
 }
 
 .admin-upload-queue__table tbody tr:nth-child(even) td {
-  background: var(--fds-table-zebra, #f3f3f5);
+  background: var(--fds-table-zebra, var(--csp-table-row-alt-bg));
 }
 
 .admin-upload-queue__table--generic th:nth-child(1),

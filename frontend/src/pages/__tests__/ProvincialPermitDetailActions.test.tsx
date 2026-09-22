@@ -7982,10 +7982,12 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.click(within(panel).getByRole('button', { name: 'Cancel' }))
     const discard = await screen.findByRole('dialog', { name: 'Discard changes?' })
     await userEvent.click(within(discard).getByRole('button', { name: 'Keep editing' }))
-    expect(within(panel).getByLabelText(/Document description for pending.pdf/)).toHaveValue(
-      'Keep this description',
-    )
-    await userEvent.click(within(panel).getByRole('button', { name: 'Cancel' }))
+    const reopenedPanel = await screen.findByRole('dialog', { name: 'Add documents' })
+    expect(within(reopenedPanel).getByText('pending.pdf')).toBeInTheDocument()
+    expect(
+      within(reopenedPanel).getByLabelText(/Document description for pending.pdf/),
+    ).toHaveValue('Keep this description')
+    await userEvent.click(within(reopenedPanel).getByRole('button', { name: 'Cancel' }))
     await userEvent.click(
       within(await screen.findByRole('dialog', { name: 'Discard changes?' })).getByRole('button', {
         name: 'Discard changes',
