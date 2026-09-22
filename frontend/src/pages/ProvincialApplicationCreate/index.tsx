@@ -1631,7 +1631,7 @@ const ProvincialApplicationCreatePage = () => {
       )}
 
       <Column sm={4} md={8} lg={16} className="application-detail-tabs-column">
-        {status?.placement === 'inline' && (
+        {status?.placement === 'inline' && !accuracyConfirmationOpen && (
           <AppNotification
             className="create-form-validation-notification"
             kind="error"
