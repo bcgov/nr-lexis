@@ -1893,6 +1893,39 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(mockedUpdateApplicationSummary.mock.calls[0][0]).not.toHaveProperty('applicantTypeCode')
   })
 
+  it('clears a failed summary save when reopening submitter accuracy confirmation', async () => {
+    mockApplicationDetailAuth(
+      (action: string) => action === 'createApplication',
+      ['LEXIS_PROVINCIAL_SUBMITTER_00011122'],
+    )
+    mockedUpdateApplicationSummary.mockRejectedValueOnce(new Error('Synthetic save failure'))
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+    await selectApplicationSummaryTile()
+    await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
+    const dialog = screen.getByRole('dialog', { name: 'Confirm application accuracy' })
+    await userEvent.click(within(dialog).getByRole('checkbox', { name: 'I Agree' }))
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save summary' }))
+    expect(await within(dialog).findByText('Unable to save application summary.')).toBeVisible()
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    expect(screen.getByText('Unable to save application summary.')).toBeVisible()
+    await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
+    const reopened = screen.getByRole('dialog', { name: 'Confirm application accuracy' })
+    expect(mockedUpdateApplicationSummary).toHaveBeenCalledTimes(1)
+    expect(
+      within(reopened).queryByText('Unable to save application summary.'),
+    ).not.toBeInTheDocument()
+    expect(within(reopened).getByRole('checkbox', { name: 'I Agree' })).not.toBeChecked()
+  })
+
   it('validates application item edits before saving', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>

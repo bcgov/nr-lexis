@@ -2312,6 +2312,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       const failure = dialog.locator('.app-inline-notification')
       await expect(failure).toContainText('This fee policy is in use.')
       await expect(failure).toBeInViewport()
+      await expect(dialog.locator('.cds--modal-content')).toHaveCSS('mask-image', 'none')
       await expect(page.locator('.cds--toast-notification')).toHaveCount(0)
       await expect(dialog.getByRole('button', { name: 'Delete', exact: true })).toBeEnabled()
       await testInfo.attach('dialog-error', {

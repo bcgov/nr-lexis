@@ -27,17 +27,31 @@ export function AppNotification({
   const isActionFeedback = Boolean(onCloseButtonClick)
 
   useEffect(() => {
-    if (!isActionFeedback) return
     const frame = requestAnimationFrame(() => {
       const notification = notificationRef.current
       if (!notification || notification.getClientRects().length === 0) return
+      const dialog = notification.closest('[role="dialog"]')
+      if (!isActionFeedback && !dialog) return
       // A page banner must not scroll the page behind an active dialog.
-      if (
-        document.querySelector('.cds--modal.is-visible') &&
-        !notification.closest('[role="dialog"]')
-      )
-        return
+      if (!dialog && document.querySelector('.cds--modal.is-visible')) return
       const bounds = notification.getBoundingClientRect()
+      if (dialog) {
+        const content = notification.closest<HTMLElement>('.cds--modal-content')
+        if (!content) return
+        const contentBounds = content.getBoundingClientRect()
+        const contentTop = contentBounds.top + content.clientTop
+        const visibleTop = Math.max(0, contentTop)
+        const visibleBottom = Math.min(window.innerHeight, contentTop + content.clientHeight)
+        // Reveal dialog feedback within its own scroll area, including non-dismissible errors.
+        if (bounds.top < visibleTop) {
+          content.scrollTop += Math.floor(bounds.top - visibleTop)
+        } else if (bounds.bottom > visibleBottom) {
+          content.scrollTop += Math.ceil(
+            Math.min(bounds.top - visibleTop, bounds.bottom - visibleBottom),
+          )
+        }
+        return
+      }
       const headerHeight =
         document.querySelector('.cds--header')?.getBoundingClientRect().height ?? 0
       if (bounds.top < headerHeight + 16 || bounds.bottom > window.innerHeight) {

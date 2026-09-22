@@ -1547,6 +1547,7 @@ const ProvincialApplicationCreatePage = () => {
       void onSave(false, true)
       return
     }
+    setStatus(null)
     setAccuracyConfirmed(false)
     setAccuracyConfirmationOpen(true)
   }

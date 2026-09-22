@@ -961,6 +961,7 @@ const ProvincialReviewPage = () => {
       return
     }
 
+    setReviewActionStatus(null)
     setApprovalConfirmationNumbers(selectedNumbers)
   }
 

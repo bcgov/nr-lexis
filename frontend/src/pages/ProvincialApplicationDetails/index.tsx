@@ -3163,6 +3163,7 @@ const ProvincialApplicationDetailsPage = () => {
         void completeSummarySave(source)
         return
       }
+      setActionErrorMessage('')
       setPendingSummarySaveSource(source)
       setSummaryAccuracyConfirmed(false)
       setSummaryAccuracyApplicationNumber(applicationNumber ?? null)
