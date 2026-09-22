@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -6519,6 +6520,336 @@ class OraclePermitDetailsRpcServiceTest {
     boolean changed = service.hasFormChanges(request);
 
     assertThat(changed).isTrue();
+  }
+
+  @Test
+  void updateScaleSelectionShouldReconcileAndRecalculateOnceAfterAllChanges() {
+    stubScaleSelection();
+    when(repository.updateScaleDetail(any(ScaleMutationRecord.class), eq("idir\\jsmith")))
+        .thenReturn(true);
+    when(repository.findApplicationStatusCodeByNumber(1000456L)).thenReturn(Optional.of("EXE"));
+    when(applicationReviewRepository.updateStatusWithRemarkFromAllowedSources(
+            1000456L, "PMT", null, "idir\\jsmith", List.of("EXE")))
+        .thenReturn(
+            new ApplicationReviewRepository.ApplicationStatusTransitionRow(
+                true, true, true, "EXE", null));
+    when(repository.findScaleDetailsByPermitNumber(7000123L))
+        .thenReturn(
+            List.of(
+                scale("101", "TEST", "HEM", "J", 1d, 1L, "7000123", "PKG-903"),
+                scale("102", "TEST", "HEM", "J", 2d, 3L, "7000123", "PKG-903")));
+    RecordingTransactionManager transactionManager = new RecordingTransactionManager();
+
+    PermitPersistenceRpcResponseDto result =
+        transactionalService(transactionManager)
+            .updateScaleSelection(7000123L, List.of("101", "102"), List.of(), "idir\\jsmith");
+
+    assertThat(result.success()).isTrue();
+    assertThat(transactionManager.commits).isEqualTo(1);
+    assertThat(transactionManager.rollbacks).isZero();
+    var order = inOrder(repository, applicationReviewRepository);
+    order.verify(repository, times(2))
+        .updateScaleDetail(any(ScaleMutationRecord.class), eq("idir\\jsmith"));
+    order.verify(applicationReviewRepository)
+        .updateStatusWithRemarkFromAllowedSources(
+            1000456L, "PMT", null, "idir\\jsmith", List.of("EXE"));
+    order.verify(repository).findScaleDetailsByPermitNumber(7000123L);
+    ArgumentCaptor<PermitMutationRow> totals = ArgumentCaptor.forClass(PermitMutationRow.class);
+    order.verify(repository).updatePermitDetail(totals.capture(), eq("idir\\jsmith"), eq(null));
+    assertThat(totals.getValue().permitVolume()).isEqualTo(3d);
+    assertThat(totals.getValue().numberOfPieces()).isEqualTo(4L);
+    verify(repository).findPackagesByExemptionNumberRequired("EX-700");
+    verify(repository).findApplicationStatusCodeByNumber(1000456L);
+    verify(repository).findScaleDetailsByPermitNumber(7000123L);
+    verify(repository).updatePermitDetail(any(), eq("idir\\jsmith"), eq(null));
+    verify(applicationReviewRepository)
+        .updateStatusWithRemarkFromAllowedSources(anyLong(), any(), any(), any(), any());
+  }
+
+  @Test
+  void updateScaleSelectionShouldKeepReplacementApplicationPermitted() {
+    stubScaleSelection();
+    when(repository.updateScaleDetail(any(ScaleMutationRecord.class), eq("idir\\jsmith")))
+        .thenReturn(true);
+    when(repository.findScaleMutationById("101"))
+        .thenReturn(
+            Optional.of(
+                scaleMutation("101", 1000456L, 7000123L, Timestamp.valueOf("2026-01-01 10:00:00"))));
+    when(repository.findScaleDetailsByPermitNumber(7000123L))
+        .thenReturn(List.of(scale("102", "TEST", "HEM", "J", 1d, 1L, "7000123", "PKG-903")));
+
+    PermitPersistenceRpcResponseDto result =
+        service.updateScaleSelection(7000123L, List.of("102"), List.of("101"), "idir\\jsmith");
+
+    assertThat(result.success()).isTrue();
+    ArgumentCaptor<ScaleMutationRecord> rows = ArgumentCaptor.forClass(ScaleMutationRecord.class);
+    verify(repository, times(2)).updateScaleDetail(rows.capture(), eq("idir\\jsmith"));
+    assertThat(rows.getAllValues())
+        .extracting(ScaleMutationRecord::scaleDetailId, ScaleMutationRecord::exportPermitDetailNumber)
+        .containsExactly(tuple("101", null), tuple("102", 7000123L));
+    verify(repository).findApplicationStatusCodeByNumber(1000456L);
+    verify(repository, never()).findScaleMutationDetailsByApplicationNumber(anyLong());
+    verifyNoInteractions(applicationReviewRepository);
+    verify(repository).findScaleDetailsByPermitNumber(7000123L);
+  }
+
+  @Test
+  void updateScaleSelectionShouldShareEligibilityAcrossDifferentApplications() {
+    stubScaleSelection();
+    when(repository.findScaleMutationById("102"))
+        .thenReturn(
+            Optional.of(
+                scaleMutation(
+                    "102", 1000457L, "PKG-904", null, Timestamp.valueOf("2026-01-01 10:00:00"))));
+    when(repository.findPackagesByExemptionNumberRequired("EX-700"))
+        .thenReturn(
+            List.of(
+                new PackageCandidateRow(1000456L, "PKG-903"),
+                new PackageCandidateRow(1000457L, "PKG-904")));
+    when(repository.findApplicationStatusCodeByNumber(1000457L)).thenReturn(Optional.of("PMT"));
+    when(repository.updateScaleDetail(any(ScaleMutationRecord.class), eq("idir\\jsmith")))
+        .thenReturn(true);
+
+    var result =
+        service.updateScaleSelection(7000123L, List.of("101", "102"), List.of(), "idir\\jsmith");
+
+    assertThat(result.success()).isTrue();
+    verify(repository).findPackagesByExemptionNumberRequired("EX-700");
+    verify(repository).findExemptionTypeCode("EX-700");
+    verify(repository, times(2)).updateScaleDetail(any(), eq("idir\\jsmith"));
+  }
+
+  @ParameterizedTest
+  @ValueSource(booleans = {false, true})
+  void updateScaleSelectionShouldPreserveExactPackageAndApplicationEligibility(
+      boolean wrongApplication) {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow()));
+    when(repository.findScaleMutationById("101"))
+        .thenReturn(
+            Optional.of(
+                scaleMutation(
+                    "101", 1000456L, "PKG-903  ", null, Timestamp.valueOf("2026-01-01 10:00:00"))));
+    when(repository.findPackagesByExemptionNumberRequired("EX-700"))
+        .thenReturn(
+            List.of(
+                new PackageCandidateRow(
+                    wrongApplication ? 1000457L : 1000456L,
+                    wrongApplication ? "PKG-903  " : "PKG-903")));
+
+    var result =
+        service.updateScaleSelection(7000123L, List.of("101"), List.of(), "idir\\jsmith");
+
+    assertThat(result.success()).isFalse();
+    assertThat(result.errors()).containsExactly("Scale detail is not eligible for this permit.");
+    verify(repository).findPackagesByExemptionNumberRequired("EX-700");
+    verify(repository, never()).updateScaleDetail(any(), any());
+    verify(repository, never()).findApplicationStatusCodeByNumber(anyLong());
+  }
+
+  @Test
+  void updateScaleSelectionShouldLoadBlanketOicEligibilityOnceForPaddedPackage() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(blanketOicPermitMutationRow()));
+    when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("B"));
+    stubOicApplicationBinding("EX-700");
+    when(repository.findPackageNumbersByOicPermitNumber(7000123L))
+        .thenReturn(List.of("PKG-903  "));
+    for (String id : List.of("101", "102")) {
+      when(repository.findScaleMutationById(id))
+          .thenReturn(
+              Optional.of(
+                  scaleMutation(
+                      id, 1000999L, "PKG-903  ", null, Timestamp.valueOf("2026-01-01 10:00:00"))));
+    }
+    when(repository.findApplicationStatusCodeByNumber(1000999L)).thenReturn(Optional.of("PMT"));
+    when(repository.updateScaleDetail(any(ScaleMutationRecord.class), eq("idir\\jsmith")))
+        .thenReturn(true);
+
+    var result =
+        service.updateScaleSelection(7000123L, List.of("101", "102"), List.of(), "idir\\jsmith");
+
+    assertThat(result.success()).isTrue();
+    verify(repository).findPackageNumbersByOicPermitNumber(7000123L);
+    verify(repository).findExemptionTypeCode("EX-700");
+    verify(repository).findApplicationInfoByNumber(1000999L);
+    verify(repository, never()).findPackagesByExemptionNumberRequired(any());
+    verify(repository, times(2)).updateScaleDetail(any(), eq("idir\\jsmith"));
+  }
+
+  @Test
+  void updateScaleSelectionShouldReconcileRemovedApplicationOnceAfterAllRemovals() {
+    permitTotalsUpdateSucceeds();
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow()));
+    when(repository.findScaleDetailsByPermitNumber(7000123L)).thenReturn(List.of());
+    for (String id : List.of("101", "102")) {
+      when(repository.findScaleMutationById(id))
+          .thenReturn(
+              Optional.of(
+                  scaleMutation(id, 1000456L, 7000123L, Timestamp.valueOf("2026-01-01 10:00:00"))));
+    }
+    when(repository.updateScaleDetail(any(), eq("idir\\jsmith"))).thenReturn(true);
+    when(repository.findApplicationStatusCodeByNumber(1000456L)).thenReturn(Optional.of("PMT"));
+    when(applicationReviewRepository.updateStatusWithRemarkFromAllowedSources(
+            1000456L, "EXE", null, "idir\\jsmith", List.of("PMT")))
+        .thenReturn(
+            new ApplicationReviewRepository.ApplicationStatusTransitionRow(
+                true, true, true, "PMT", null));
+
+    PermitPersistenceRpcResponseDto result =
+        service.updateScaleSelection(7000123L, List.of(), List.of("101", "102"), "idir\\jsmith");
+
+    assertThat(result.success()).isTrue();
+    var order = inOrder(repository, applicationReviewRepository);
+    order.verify(repository, times(2)).updateScaleDetail(any(), eq("idir\\jsmith"));
+    order.verify(repository).findScaleMutationDetailsByApplicationNumber(1000456L);
+    order.verify(applicationReviewRepository)
+        .updateStatusWithRemarkFromAllowedSources(
+            1000456L, "EXE", null, "idir\\jsmith", List.of("PMT"));
+    order.verify(repository).findScaleDetailsByPermitNumber(7000123L);
+    ArgumentCaptor<PermitMutationRow> totals = ArgumentCaptor.forClass(PermitMutationRow.class);
+    order.verify(repository).updatePermitDetail(totals.capture(), eq("idir\\jsmith"), eq(null));
+    assertThat(totals.getValue().permitVolume()).isEqualTo(0d);
+    assertThat(totals.getValue().numberOfPieces()).isEqualTo(0L);
+    verify(repository, never()).findPackagesByExemptionNumberRequired(any());
+    verify(repository, never()).findPackageNumbersByOicPermitNumber(anyLong());
+    verify(repository).findScaleMutationDetailsByApplicationNumber(1000456L);
+    verify(repository).findApplicationStatusCodeByNumber(1000456L);
+    verify(repository).findScaleDetailsByPermitNumber(7000123L);
+    verify(applicationReviewRepository)
+        .updateStatusWithRemarkFromAllowedSources(anyLong(), any(), any(), any(), any());
+  }
+
+  @Test
+  void updateScaleSelectionShouldRollBackEarlierWritesWhenAnotherRowIsRejected() {
+    stubScaleSelection();
+    when(repository.updateScaleDetail(any(ScaleMutationRecord.class), eq("idir\\jsmith")))
+        .thenReturn(true);
+    when(repository.findScaleMutationById("102")).thenReturn(Optional.empty());
+    RecordingTransactionManager transactionManager = new RecordingTransactionManager();
+
+    PermitPersistenceRpcResponseDto result =
+        transactionalService(transactionManager)
+            .updateScaleSelection(7000123L, List.of("101", "102"), List.of(), "idir\\jsmith");
+
+    assertThat(result.success()).isFalse();
+    assertThat(result.errors()).containsExactly("Scale detail not found.");
+    verify(repository).updateScaleDetail(any(ScaleMutationRecord.class), eq("idir\\jsmith"));
+    verify(repository, never()).findScaleDetailsByPermitNumber(anyLong());
+    verifyNoInteractions(applicationReviewRepository);
+    assertThat(transactionManager.commits).isZero();
+    assertThat(transactionManager.rollbacks).isEqualTo(1);
+  }
+
+  @Test
+  void updateScaleSelectionShouldRollBackWhenLaterWriteFails() {
+    stubScaleSelection();
+    when(repository.updateScaleDetail(any(ScaleMutationRecord.class), eq("idir\\jsmith")))
+        .thenReturn(true, false);
+    RecordingTransactionManager transactionManager = new RecordingTransactionManager();
+
+    PermitPersistenceRpcResponseDto result =
+        transactionalService(transactionManager)
+            .updateScaleSelection(7000123L, List.of("101", "102"), List.of(), "idir\\jsmith");
+
+    assertThat(result.success()).isFalse();
+    assertThat(result.errors()).containsExactly("Unable to update scale detail.");
+    verify(repository, times(2)).updateScaleDetail(any(), eq("idir\\jsmith"));
+    verify(repository, never()).findScaleDetailsByPermitNumber(anyLong());
+    verifyNoInteractions(applicationReviewRepository);
+    assertThat(transactionManager.commits).isZero();
+    assertThat(transactionManager.rollbacks).isEqualTo(1);
+  }
+
+  @Test
+  void updateScaleSelectionShouldRollBackWhenFinalReconciliationFails() {
+    stubScaleSelection();
+    when(repository.updateScaleDetail(any(ScaleMutationRecord.class), eq("idir\\jsmith")))
+        .thenReturn(true);
+    when(repository.findApplicationStatusCodeByNumber(1000456L)).thenReturn(Optional.of("EXE"));
+    when(applicationReviewRepository.updateStatusWithRemarkFromAllowedSources(
+            1000456L, "PMT", null, "idir\\jsmith", List.of("EXE")))
+        .thenReturn(ApplicationReviewRepository.ApplicationStatusTransitionRow.notAllowed("APP"));
+    RecordingTransactionManager transactionManager = new RecordingTransactionManager();
+
+    PermitPersistenceRpcResponseDto result =
+        transactionalService(transactionManager)
+            .updateScaleSelection(7000123L, List.of("101", "102"), List.of(), "idir\\jsmith");
+
+    assertThat(result.success()).isFalse();
+    assertThat(result.errors()).containsExactly("Unable to reconcile application 1000456 status.");
+    verify(repository, times(2)).updateScaleDetail(any(), eq("idir\\jsmith"));
+    verify(repository, never()).findScaleDetailsByPermitNumber(anyLong());
+    assertThat(transactionManager.commits).isZero();
+    assertThat(transactionManager.rollbacks).isEqualTo(1);
+  }
+
+  @Test
+  void updateScaleSelectionShouldRollBackWhenFinalTotalsWriteFails() {
+    stubScaleSelection();
+    when(repository.updateScaleDetail(any(ScaleMutationRecord.class), eq("idir\\jsmith")))
+        .thenReturn(true);
+    when(repository.findScaleDetailsByPermitNumber(7000123L)).thenReturn(List.of());
+    when(repository.updatePermitDetail(any(), eq("idir\\jsmith"), eq(null))).thenReturn(false);
+    RecordingTransactionManager transactionManager = new RecordingTransactionManager();
+
+    PermitPersistenceRpcResponseDto result =
+        transactionalService(transactionManager)
+            .updateScaleSelection(7000123L, List.of("101", "102"), List.of(), "idir\\jsmith");
+
+    assertThat(result.success()).isFalse();
+    assertThat(result.errors()).containsExactly("Unable to recalculate permit totals.");
+    verify(repository, times(2)).updateScaleDetail(any(), eq("idir\\jsmith"));
+    verify(repository).findScaleDetailsByPermitNumber(7000123L);
+    verify(repository).updatePermitDetail(any(), eq("idir\\jsmith"), eq(null));
+    assertThat(transactionManager.commits).isZero();
+    assertThat(transactionManager.rollbacks).isEqualTo(1);
+  }
+
+  @Test
+  void updateScaleSelectionShouldRejectContradictoryChangesBeforeWriting() {
+    PermitPersistenceRpcResponseDto result =
+        service.updateScaleSelection(7000123L, List.of("101"), List.of("101"), "idir\\jsmith");
+    assertThat(result.success()).isFalse();
+    verifyNoInteractions(repository);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"COM", "PPD", "EXP", "CAN"})
+  void updateScaleSelectionShouldPreserveLockedStatuses(String status) {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow(status)));
+    PermitPersistenceRpcResponseDto result =
+        service.updateScaleSelection(7000123L, List.of("101"), List.of(), "idir\\jsmith");
+    assertThat(result.success()).isFalse();
+    verify(repository, never()).updateScaleDetail(any(), any());
+  }
+
+  private void stubScaleSelection() {
+    permitTotalsUpdateSucceeds();
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow()));
+    when(repository.findPackagesByExemptionNumberRequired("EX-700"))
+        .thenReturn(List.of(new PackageCandidateRow(1000456L, "PKG-903")));
+    when(repository.findApplicationStatusCodeByNumber(1000456L)).thenReturn(Optional.of("PMT"));
+    for (String id : List.of("101", "102")) {
+      when(repository.findScaleMutationById(id))
+          .thenReturn(
+              Optional.of(
+                  new ScaleMutationRow(
+                      id,
+                      "TEST",
+                      1L,
+                      1d,
+                      "PKG-903",
+                      "HEM",
+                      "J",
+                      1000456L,
+                      null,
+                      "entry-user",
+                      Timestamp.valueOf("2026-01-01 10:00:00"))));
+    }
   }
 
   @Test

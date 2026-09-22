@@ -705,6 +705,29 @@ export const updatePermitScaleAttachment = async (
   }
 }
 
+export const updatePermitScaleSelection = async (request: {
+  permitNumber: string
+  includedScaleIds: string[]
+  excludedScaleIds: string[]
+}): Promise<UpdatePermitScaleAttachmentResult> => {
+  const response = await apiService.getAxiosInstance().post<unknown>(
+    '/lexis/rpc/permit-details/update-scale-selection',
+    toUrlEncodedParams({
+      permitNumber: request.permitNumber.trim(),
+      includedScaleIds: request.includedScaleIds.join(','),
+      excludedScaleIds: request.excludedScaleIds.join(','),
+    }),
+    { headers: { 'Content-Type': LEGACY_FORM_CONTENT_TYPE } },
+  )
+  const payload = recordOrEmpty(response.data)
+  return {
+    success: asBoolean(payload.success ?? payload.valid),
+    message: asString(payload.message),
+    errors: asStringArray(payload.errors),
+    warnings: asStringArray(payload.warnings),
+  }
+}
+
 export const addApplicationsToPermit = async (
   request: AddApplicationsToPermitRequest,
 ): Promise<UpdatePermitScaleAttachmentResult> => {
