@@ -2675,7 +2675,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     },
   )
 
-  it('keeps scale mutation success visible when detail refresh fails', async () => {
+  it('shows scale mutation partial success as a warning when detail refresh fails', async () => {
     const onDetailChanged = vi.fn().mockRejectedValue(new Error('refresh failed'))
     render(
       <ProvincialApplicationItemsPanel
@@ -2722,8 +2722,10 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       expect(onDetailChanged).toHaveBeenCalledTimes(1)
     })
     expect(
-      await screen.findByText('Scale 56 added. Reload before adding another scale row.'),
-    ).toBeInTheDocument()
+      (await screen.findByText('Scale 56 added. Reload before adding another scale row.')).closest(
+        '.cds--inline-notification',
+      ),
+    ).toHaveClass('cds--inline-notification--warning')
     expect(screen.queryByText('Unable to add scale.')).not.toBeInTheDocument()
 
     const scaleRow = screen.getByText('TM001').closest('tr')
@@ -2737,8 +2739,10 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       expect(onDetailChanged).toHaveBeenCalledTimes(2)
     })
     expect(
-      await screen.findByText('Scale 55 deleted. Reload before changing scale rows again.'),
-    ).toBeInTheDocument()
+      (
+        await screen.findByText('Scale 55 deleted. Reload before changing scale rows again.')
+      ).closest('.cds--inline-notification'),
+    ).toHaveClass('cds--inline-notification--warning')
     expect(screen.queryByText('Unable to delete scale.')).not.toBeInTheDocument()
   })
 

@@ -1273,13 +1273,7 @@ const RtmEmsLogAmvUploadPage = () => {
         rows: result.rows,
       }
 
-      setNotificationKind(
-        response.status === 'accepted'
-          ? 'success'
-          : response.status === 'validation_failed'
-            ? 'warning'
-            : 'error',
-      )
+      setNotificationKind(response.status === 'accepted' ? 'success' : 'error')
       if (response.status === 'accepted') {
         setSavedReviewValues({ ...reviewValues })
         setSavedPreviewResult(previewResult)

@@ -2158,9 +2158,10 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(mockedSaveFederalApplicationRemark).not.toHaveBeenCalled()
   })
 
-  it('removes federal documents and refreshes rows', async () => {
-    mockedFetchFederalApplicationDocuments
-      .mockResolvedValueOnce({
+  it.each([true, false])(
+    'reports federal document deletion with refreshed rows=%s',
+    async (refreshSucceeds) => {
+      mockedFetchFederalApplicationDocuments.mockResolvedValueOnce({
         rows: [
           {
             id: '800',
@@ -2171,41 +2172,57 @@ describe('Exemption and Federal Detail Document Actions', () => {
         ],
         source: 'api',
       })
-      .mockResolvedValueOnce({
-        rows: [],
-        source: 'api',
+      if (refreshSucceeds) {
+        mockedFetchFederalApplicationDocuments.mockResolvedValueOnce({
+          rows: [],
+          source: 'api',
+        })
+      } else {
+        mockedFetchFederalApplicationDocuments.mockRejectedValueOnce(
+          new Error('Refresh unavailable'),
+        )
+      }
+
+      render(
+        <MemoryRouter initialEntries={['/federal/888']}>
+          <Routes>
+            <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
+          </Routes>
+        </MemoryRouter>,
+      )
+
+      await selectDetailTab('Documents')
+      await enterDocumentEditMode()
+      const documentName = await screen.findByText('federal-doc.pdf')
+      const documentRow = documentName.closest('tr')
+      expect(documentRow).toBeTruthy()
+      const deleteButton = within(documentRow as HTMLElement).getByRole('button', {
+        name: 'Delete',
       })
+      await userEvent.click(deleteButton)
+      const confirmation = await screen.findByRole('dialog', { name: 'Delete document' })
+      expect(confirmation).toHaveTextContent(
+        'Permanently delete federal-doc.pdf? This cannot be undone.',
+      )
+      expect(mockedRemoveFederalApplicationDocument).not.toHaveBeenCalled()
+      await userEvent.click(within(confirmation).getByRole('button', { name: 'Delete' }))
 
-    render(
-      <MemoryRouter initialEntries={['/federal/888']}>
-        <Routes>
-          <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    await selectDetailTab('Documents')
-    await enterDocumentEditMode()
-    const documentName = await screen.findByText('federal-doc.pdf')
-    const documentRow = documentName.closest('tr')
-    expect(documentRow).toBeTruthy()
-    const deleteButton = within(documentRow as HTMLElement).getByRole('button', {
-      name: 'Delete',
-    })
-    await userEvent.click(deleteButton)
-    const confirmation = await screen.findByRole('dialog', { name: 'Delete document' })
-    expect(confirmation).toHaveTextContent(
-      'Permanently delete federal-doc.pdf? This cannot be undone.',
-    )
-    expect(mockedRemoveFederalApplicationDocument).not.toHaveBeenCalled()
-    await userEvent.click(within(confirmation).getByRole('button', { name: 'Delete' }))
-
-    await waitFor(() => {
-      expect(mockedRemoveFederalApplicationDocument).toHaveBeenCalledWith('800', '888')
-      expect(mockedFetchFederalApplicationDocuments).toHaveBeenCalledTimes(2)
-      expect(screen.queryByText('federal-doc.pdf')).not.toBeInTheDocument()
-    })
-  })
+      await waitFor(() => {
+        expect(mockedRemoveFederalApplicationDocument).toHaveBeenCalledWith('800', '888')
+        expect(mockedFetchFederalApplicationDocuments).toHaveBeenCalledTimes(2)
+      })
+      const feedback = await screen.findByText(
+        refreshSucceeds
+          ? 'federal-doc.pdf was deleted.'
+          : 'federal-doc.pdf was deleted. Reload before changing documents again.',
+      )
+      expect(feedback.closest('.cds--inline-notification')).toHaveClass(
+        refreshSucceeds ? 'cds--inline-notification--success' : 'cds--inline-notification--warning',
+      )
+      expect(mockedRemoveFederalApplicationDocument).toHaveBeenCalledTimes(1)
+      if (refreshSucceeds) expect(screen.queryByText('federal-doc.pdf')).not.toBeInTheDocument()
+    },
+  )
 
   it.each(['ADMIN', 'LEXIS_APPLICATION_APPROVER'])(
     'allows %s to add and delete expired federal documents while other edits stay read-only',

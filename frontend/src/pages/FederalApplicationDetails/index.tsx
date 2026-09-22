@@ -183,7 +183,10 @@ const FederalApplicationDetailsPage = () => {
   const [documentsErrorMessage, setDocumentsErrorMessage] = useState('')
   const [remarksErrorMessage, setRemarksErrorMessage] = useState('')
   const [actionErrorMessage, setActionErrorMessage] = useState('')
-  const [actionInfoMessage, setActionInfoMessage] = useState('')
+  const [actionFeedback, setActionFeedback] = useState<{
+    kind: 'success' | 'warning'
+    message: string
+  } | null>(null)
   const [statusCode, setStatusCode] = useState('')
   const [statusRemark, setStatusRemark] = useState('')
   const [remarkDraft, setRemarkDraft] = useState('')
@@ -563,7 +566,7 @@ const FederalApplicationDetailsPage = () => {
     )
       return false
     setActionErrorMessage('')
-    setActionInfoMessage('')
+    setActionFeedback(null)
     setIsSavingMutation(true)
     try {
       const result = await updateFederalApplicationStatus(
@@ -576,7 +579,10 @@ const FederalApplicationDetailsPage = () => {
         return false
       }
       await refreshDetail('status')
-      setActionInfoMessage(result.message || 'Federal application status updated.')
+      setActionFeedback({
+        kind: 'success',
+        message: result.message || 'Federal application status updated.',
+      })
       setIsEditingFederalStatus(false)
       return true
     } catch (error) {
@@ -611,7 +617,7 @@ const FederalApplicationDetailsPage = () => {
       return false
     }
     setActionErrorMessage('')
-    setActionInfoMessage('')
+    setActionFeedback(null)
     setIsSavingMutation(true)
     try {
       const result = await saveFederalPermit(applicationNumber, permitForm, !!detail?.federalPermit)
@@ -620,7 +626,7 @@ const FederalApplicationDetailsPage = () => {
         return false
       }
       await refreshDetail('permit')
-      setActionInfoMessage(result.message || 'Federal permit saved.')
+      setActionFeedback({ kind: 'success', message: result.message || 'Federal permit saved.' })
       return true
     } catch (error) {
       console.error(error)
@@ -675,7 +681,7 @@ const FederalApplicationDetailsPage = () => {
 
     setRemarkValidationMessage('')
     setActionErrorMessage('')
-    setActionInfoMessage('')
+    setActionFeedback(null)
     setIsSavingRemark(true)
     try {
       const result = await saveFederalApplicationRemark(
@@ -693,7 +699,10 @@ const FederalApplicationDetailsPage = () => {
       setRemarkDraft('')
       setRemarkValidationMessage('')
       setIsEditingFederalRemarks(false)
-      setActionInfoMessage(result.message || 'Federal application remark saved.')
+      setActionFeedback({
+        kind: 'success',
+        message: result.message || 'Federal application remark saved.',
+      })
       return true
     } catch (error) {
       console.error(error)
@@ -780,7 +789,10 @@ const FederalApplicationDetailsPage = () => {
           if (isLatestRequest()) {
             setDocumentRows(documentsResult.rows)
             setDocumentsErrorMessage('')
-            setActionInfoMessage(`${row.name || 'Document'} was deleted.`)
+            setActionFeedback({
+              kind: 'success',
+              message: `${row.name || 'Document'} was deleted.`,
+            })
           }
         } catch (refreshError) {
           if (isLatestRequest()) {
@@ -788,9 +800,10 @@ const FederalApplicationDetailsPage = () => {
             setDocumentsErrorMessage(
               'The document was deleted, but federal application documents could not be refreshed. Reload the page.',
             )
-            setActionInfoMessage(
-              `${row.name || 'Document'} was deleted. Reload before changing documents again.`,
-            )
+            setActionFeedback({
+              kind: 'warning',
+              message: `${row.name || 'Document'} was deleted. Reload before changing documents again.`,
+            })
           }
         }
       } catch (error) {
@@ -925,14 +938,16 @@ const FederalApplicationDetailsPage = () => {
               />
             </Column>
           )}
-          {!!actionInfoMessage && (
+          {!!actionFeedback && (
             <Column sm={4} md={8} lg={16}>
               <AppNotification
-                kind="success"
-                title="Action completed"
-                subtitle={actionInfoMessage}
+                kind={actionFeedback.kind}
+                title={
+                  actionFeedback.kind === 'success' ? 'Action completed' : 'Action needs attention'
+                }
+                subtitle={actionFeedback.message}
                 lowContrast
-                onCloseButtonClick={() => setActionInfoMessage('')}
+                onCloseButtonClick={() => setActionFeedback(null)}
               />
             </Column>
           )}

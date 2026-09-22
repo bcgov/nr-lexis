@@ -229,9 +229,26 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
 
     await userEvent.clear(value)
     await userEvent.type(value, '79.25')
+    mockedSaveBatch.mockResolvedValueOnce({
+      status: 'validation_failed',
+      message: 'Please correct the highlighted fields.',
+      errors: ['These values could not be saved.'],
+      rows: [],
+    })
     await userEvent.click(screen.getByRole('button', { name: 'Save values' }))
 
     await waitFor(() => expect(mockedSaveBatch).toHaveBeenCalledTimes(1))
+    expect(
+      (
+        await screen.findByText(/These values could not be saved/, {
+          selector: '.cds--inline-notification__subtitle',
+        })
+      ).closest('.cds--inline-notification'),
+    ).toHaveClass('cds--inline-notification--error')
+    expect(screen.queryByText('Values saved')).not.toBeInTheDocument()
+    expect(value).toHaveValue('79.25')
+    await userEvent.click(screen.getByRole('button', { name: 'Save values' }))
+    await waitFor(() => expect(mockedSaveBatch).toHaveBeenCalledTimes(2))
     expect(mockedSaveBatch.mock.calls[0][0].values).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
