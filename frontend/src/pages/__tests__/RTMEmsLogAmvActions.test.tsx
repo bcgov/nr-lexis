@@ -351,7 +351,7 @@ describe('RTM EMS Log AMV actions', () => {
     })
   })
 
-  it('keeps the past-month confirmation open and re-enables retry after rejection', async () => {
+  it('keeps rejected past-month saves retryable and clears the error on a fresh confirmation', async () => {
     const user = userEvent.setup()
     const pastMonth = monthOffset(CURRENT_MONTH, -1)
     mockRows([], [], pastMonth)
@@ -377,6 +377,30 @@ describe('RTM EMS Log AMV actions', () => {
     expect(await screen.findByText(/Balsam grade B is outside the allowed range/)).toBeVisible()
     expect(dialog).toBeVisible()
     expect(within(dialog).getByRole('button', { name: 'Confirm and save' })).toBeEnabled()
+
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Confirm AMV changes' })).not.toBeInTheDocument(),
+    )
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+    const reopened = await screen.findByRole('dialog', { name: 'Confirm AMV changes' })
+    expect(
+      within(reopened).queryByText(/Balsam grade B is outside the allowed range/),
+    ).not.toBeInTheDocument()
+    expect(mockedSaveBatch).toHaveBeenCalledTimes(1)
+    expect(amvCell('Balsam (BA)', 'B')).toHaveValue('10')
+
+    mockedSaveBatch.mockResolvedValue({
+      status: 'accepted',
+      message: 'Saved.',
+      errors: [],
+      rows: [],
+    })
+    await user.click(within(reopened).getByRole('button', { name: 'Confirm and save' }))
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Confirm AMV changes' })).not.toBeInTheDocument(),
+    )
+    expect(mockedSaveBatch).toHaveBeenCalledTimes(2)
   })
 
   it('blocks invalid values before a batch is sent', async () => {

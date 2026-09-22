@@ -918,7 +918,7 @@ test.describe('Provincial permit parity regressions', () => {
     await expect(
       page.getByText('The permit was updated successfully.', { exact: true }),
     ).toBeVisible()
-    const successNotice = page.locator('.cds--toast-notification--success')
+    const successNotice = page.locator('.app-inline-notification.cds--inline-notification--success')
     await expect(successNotice).toContainText('Applicant details saved')
     expect(fixture.writes).toEqual([
       expect.objectContaining({

@@ -692,7 +692,10 @@ const ProvincialApplicationDetailsPage = () => {
     },
     [],
   )
-  const [actionInfoMessage, setActionInfoMessage] = useState('')
+  const [actionFeedback, setActionFeedback] = useState<{
+    kind: 'success' | 'warning'
+    message: string
+  } | null>(null)
   const [creationSuccessMessage, setCreationSuccessMessage] = useState(() =>
     createdApplicationNumber ? `Created application ${createdApplicationNumber}.` : '',
   )
@@ -879,7 +882,7 @@ const ProvincialApplicationDetailsPage = () => {
         setPermitLookupAvailability('unavailable')
         setDocumentsErrorMessage('')
         setActionErrorMessage('')
-        setActionInfoMessage('')
+        setActionFeedback(null)
         setLoading(false)
         setSummaryForm(null)
         setSummaryBaselineForm(null)
@@ -908,7 +911,7 @@ const ProvincialApplicationDetailsPage = () => {
       setErrorMessage('')
       setDocumentsErrorMessage('')
       setActionErrorMessage('')
-      setActionInfoMessage('')
+      setActionFeedback(null)
       setPermitLookupAvailability('loading')
       if (!retainingCurrentDetail) {
         setIsEditingSummary(false)
@@ -2470,7 +2473,7 @@ const ProvincialApplicationDetailsPage = () => {
       }
 
       setActionErrorMessage('')
-      setActionInfoMessage('')
+      setActionFeedback(null)
 
       try {
         const result = await openApplicationDocument(row.id, row.name, applicationNumber)
@@ -2494,7 +2497,7 @@ const ProvincialApplicationDetailsPage = () => {
         isCurrentApplication() && documentRequestSequence === documentRequestSequenceRef.current
       setIsRemovingDocumentId(row.id)
       setActionErrorMessage('')
-      setActionInfoMessage('')
+      setActionFeedback(null)
 
       try {
         const removeResult = await removeApplicationDocument(row.id, applicationNumber)
@@ -2511,7 +2514,10 @@ const ProvincialApplicationDetailsPage = () => {
             setDocumentRows(documentsResult.rows)
             setDocumentLookupAvailability('available')
             setDocumentsErrorMessage('')
-            setActionInfoMessage(`${row.name || 'Document'} was deleted.`)
+            setActionFeedback({
+              kind: 'success',
+              message: `${row.name || 'Document'} was deleted.`,
+            })
           }
         } catch (refreshError) {
           if (isCurrentDocumentRequest()) {
@@ -2520,9 +2526,10 @@ const ProvincialApplicationDetailsPage = () => {
             setDocumentsErrorMessage(
               'The document was deleted, but application documents could not be refreshed. Reload the page.',
             )
-            setActionInfoMessage(
-              `${row.name || 'Document'} was deleted. Reload before changing documents again.`,
-            )
+            setActionFeedback({
+              kind: 'warning',
+              message: `${row.name || 'Document'} was deleted. Reload before changing documents again.`,
+            })
           }
         }
       } catch (error) {
@@ -2560,7 +2567,7 @@ const ProvincialApplicationDetailsPage = () => {
 
       setRemarkValidationMessage('')
       setActionErrorMessage('')
-      setActionInfoMessage('')
+      setActionFeedback(null)
       setIsSavingRemark(true)
       try {
         const result = await saveApplicationRemark({
@@ -2614,9 +2621,10 @@ const ProvincialApplicationDetailsPage = () => {
         setIsEditingRemarks(false)
         setRemarkBody('')
         setEditingRemarkId(null)
-        setActionInfoMessage(
-          editingRemarkId ? 'Application remark updated.' : 'Application remark saved.',
-        )
+        setActionFeedback({
+          kind: 'success',
+          message: editingRemarkId ? 'Application remark updated.' : 'Application remark saved.',
+        })
         return true
       } catch {
         setActionErrorMessage('Unable to save application remark.')
@@ -2948,7 +2956,7 @@ const ProvincialApplicationDetailsPage = () => {
       }
 
       setActionErrorMessage('')
-      setActionInfoMessage('')
+      setActionFeedback(null)
       setActionWarningMessage('')
       setIsSavingSummary(true)
       try {
@@ -3082,7 +3090,10 @@ const ProvincialApplicationDetailsPage = () => {
         }
         setShowSummaryValidationErrors(false)
         setSummaryVolumeWarningAccepted(false)
-        setActionInfoMessage(result.message || 'Application summary saved.')
+        setActionFeedback({
+          kind: 'success',
+          message: result.message || 'Application summary saved.',
+        })
         return true
       } catch {
         setActionErrorMessage('Unable to save application summary.')
@@ -3133,16 +3144,16 @@ const ProvincialApplicationDetailsPage = () => {
       if (saved && source === 'owner') {
         setIsEditingOwnerDetails(false)
         setIsTransitioningApplicantToAgent(false)
-        setActionInfoMessage('Applicant client details saved.')
+        setActionFeedback({ kind: 'success', message: 'Applicant client details saved.' })
       }
       if (saved && source === 'agent') {
         setIsEditingAgentDetails(false)
         setIsTransitioningApplicantToAgent(false)
-        setActionInfoMessage('Agent details saved.')
+        setActionFeedback({ kind: 'success', message: 'Agent details saved.' })
       }
       if (saved && source === 'items') {
         setIsEditingApplicationItems(false)
-        setActionInfoMessage('Application item details saved.')
+        setActionFeedback({ kind: 'success', message: 'Application item details saved.' })
       }
       return saved
     },
@@ -3163,6 +3174,8 @@ const ProvincialApplicationDetailsPage = () => {
         void completeSummarySave(source)
         return
       }
+      setActionErrorMessage('')
+      setActionFeedback(null)
       setPendingSummarySaveSource(source)
       setSummaryAccuracyConfirmed(false)
       setSummaryAccuracyApplicationNumber(applicationNumber ?? null)
@@ -3249,7 +3262,7 @@ const ProvincialApplicationDetailsPage = () => {
     }
 
     setActionErrorMessage('')
-    setActionInfoMessage('')
+    setActionFeedback(null)
     setReviewValidationMessage('')
     setIsSubmittingReviewAction(true)
     try {
@@ -3260,7 +3273,7 @@ const ProvincialApplicationDetailsPage = () => {
       }
 
       applyReviewStatusResult(result, reviewStatusRemark)
-      setActionInfoMessage(result.message || 'Application approved.')
+      setActionFeedback({ kind: 'success', message: result.message || 'Application approved.' })
       return true
     } catch {
       setActionErrorMessage('Unable to approve application.')
@@ -3295,7 +3308,7 @@ const ProvincialApplicationDetailsPage = () => {
       }
 
       setActionErrorMessage('')
-      setActionInfoMessage('')
+      setActionFeedback(null)
       setReviewValidationMessage('')
       setIsSubmittingReviewAction(true)
       try {
@@ -3326,11 +3339,12 @@ const ProvincialApplicationDetailsPage = () => {
         }
 
         applyReviewStatusResult(updateResult, payloadResult.payload.remark)
-        setActionInfoMessage(
-          sendEmail
+        setActionFeedback({
+          kind: 'success',
+          message: sendEmail
             ? 'Application status updated and email sent.'
             : updateResult.message || 'Application status updated.',
-        )
+        })
         return true
       } catch {
         setActionErrorMessage('Unable to update application status.')
@@ -4007,7 +4021,6 @@ const ProvincialApplicationDetailsPage = () => {
           title="Action complete"
           subtitle={creationSuccessMessage}
           lowContrast
-          autoDismissMs={6000}
           onCloseButtonClick={() => setCreationSuccessMessage('')}
         />
       )}
@@ -4055,7 +4068,7 @@ const ProvincialApplicationDetailsPage = () => {
               onCloseButtonClick={() => setClientLookupFailures(new Set())}
             />
           )}
-          {!!actionErrorMessage && (
+          {!!actionErrorMessage && !summaryAccuracyConfirmationOpen && !isEditingRemarks && (
             <AppNotification
               kind="error"
               title="Action failed"
@@ -4073,14 +4086,15 @@ const ProvincialApplicationDetailsPage = () => {
               onCloseButtonClick={() => setActionWarningMessage('')}
             />
           )}
-          {!!actionInfoMessage && (
+          {!!actionFeedback && (
             <AppNotification
-              kind="info"
-              title="Action completed"
-              subtitle={actionInfoMessage}
+              kind={actionFeedback.kind}
+              title={
+                actionFeedback.kind === 'success' ? 'Action completed' : 'Action needs attention'
+              }
+              subtitle={actionFeedback.message}
               lowContrast
-              autoDismissMs={6000}
-              onCloseButtonClick={() => setActionInfoMessage('')}
+              onCloseButtonClick={() => setActionFeedback(null)}
             />
           )}
           {!!detail.locked && !!detail.lockMessage && (
@@ -5182,7 +5196,11 @@ const ProvincialApplicationDetailsPage = () => {
                                                   : undefined
                                               }
                                               renderIcon={TrashCan}
-                                              onClick={() => setDocumentPendingDeletion(row)}
+                                              onClick={() => {
+                                                setActionErrorMessage('')
+                                                setActionFeedback(null)
+                                                setDocumentPendingDeletion(row)
+                                              }}
                                             >
                                               {isRemovingDocumentId === row.id
                                                 ? 'Deleting…'
@@ -5324,6 +5342,14 @@ const ProvincialApplicationDetailsPage = () => {
                                       }
                                     }}
                                   />
+                                  {actionErrorMessage && (
+                                    <AppNotification
+                                      kind="error"
+                                      title="Action failed"
+                                      subtitle={actionErrorMessage}
+                                      onCloseButtonClick={() => setActionErrorMessage('')}
+                                    />
+                                  )}
                                   <div className="application-remark-modal__actions">
                                     <Button
                                       kind="tertiary"
@@ -5388,6 +5414,7 @@ const ProvincialApplicationDetailsPage = () => {
             onConfirmedChange={setSummaryAccuracyConfirmed}
             onConfirm={onConfirmSummaryAccuracy}
             onClose={closeSummaryAccuracyConfirmation}
+            errorMessage={actionErrorMessage}
             onError={() => undefined}
           />
         )}

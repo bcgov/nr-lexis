@@ -1,6 +1,6 @@
 import { Theme } from '@carbon/react'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { syncAppNotificationRegionTheme } from '@/components/AppNotification'
+import { syncAppNotificationRegionTheme } from '@/components/AppToastNotification'
 import { ThemeContext, type UiTheme } from './ThemeContext'
 
 const THEME_PREFERENCE_KEY = 'lexis.ui.theme'

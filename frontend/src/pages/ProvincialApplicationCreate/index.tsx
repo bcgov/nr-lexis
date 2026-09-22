@@ -1547,6 +1547,7 @@ const ProvincialApplicationCreatePage = () => {
       void onSave(false, true)
       return
     }
+    setStatus(null)
     setAccuracyConfirmed(false)
     setAccuracyConfirmationOpen(true)
   }
@@ -1600,7 +1601,6 @@ const ProvincialApplicationCreatePage = () => {
             title="Required options not configured"
             subtitle="A required product type, exemption reason, age class, or region list is empty. Save remains disabled."
             lowContrast
-            autoDismissMs={undefined}
             onCloseButtonClick={() => setShowMissingRequiredOptions(false)}
           />
         </Column>
@@ -1618,7 +1618,7 @@ const ProvincialApplicationCreatePage = () => {
         </Column>
       )}
 
-      {!!status && status.placement !== 'inline' && (
+      {!!status && status.placement !== 'inline' && !accuracyConfirmationOpen && (
         <Column sm={4} md={8} lg={16}>
           <AppNotification
             kind={status.kind}
@@ -1626,16 +1626,16 @@ const ProvincialApplicationCreatePage = () => {
             subtitle={status.message}
             lowContrast
             onCloseButtonClick={() => setStatus(null)}
-            autoDismissMs={status.kind === 'success' ? 6000 : undefined}
           />
         </Column>
       )}
 
       <Column sm={4} md={8} lg={16} className="application-detail-tabs-column">
-        {status?.placement === 'inline' && (
-          <InlineNotification
+        {status?.placement === 'inline' && !accuracyConfirmationOpen && (
+          <AppNotification
             className="create-form-validation-notification"
             kind="error"
+            revealKey={status}
             title={status.title}
             subtitle={status.message}
             lowContrast
@@ -2434,6 +2434,8 @@ const ProvincialApplicationCreatePage = () => {
           onConfirmedChange={setAccuracyConfirmed}
           onConfirm={onConfirmAccuracy}
           onClose={closeAccuracyConfirmation}
+          errorTitle={status?.title}
+          errorMessage={status?.kind === 'error' ? status.message : undefined}
           onError={() => undefined}
         />
       )}

@@ -2675,7 +2675,91 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     },
   )
 
-  it('keeps scale mutation success visible when detail refresh fails', async () => {
+  it.each(['save', 'create'] as const)(
+    'preserves a committed package %s as a warning when detail refresh rejects',
+    async (operation) => {
+      const onDetailChanged = vi.fn().mockRejectedValue(new Error('refresh failed'))
+      render(
+        <ProvincialApplicationItemsPanel
+          detail={applicationDetail}
+          canEditPackages
+          canAddPackages
+          canAddScales
+          canUpdatePackageNumber
+          hideMutationActions={false}
+          authoritativeOptionsAvailability="available"
+          productTypeOptions={[{ code: 'H', description: 'Harvested Timber' }]}
+          growthTypeOptions={[{ code: 'S', description: 'Second Growth' }]}
+          onDetailChanged={onDetailChanged}
+        />,
+      )
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Edit items' }))
+      await screen.findByText('TM001')
+      if (operation === 'save') {
+        fireEvent.change(screen.getByLabelText('Package Comments'), {
+          target: { value: 'Saved before refresh failure' },
+        })
+        await userEvent.click(screen.getByRole('button', { name: 'Save Package' }))
+      } else {
+        const section = within(
+          screen.getByRole('heading', { name: 'Create Package' }).closest('section')!,
+        )
+        await chooseComboBoxOption(
+          section.getByRole('combobox', { name: 'Create Package Species' }),
+          'CE - Cedar',
+        )
+        await userEvent.click(section.getByRole('button', { name: 'Add species to new package' }))
+        fireEvent.change(section.getByLabelText('Package Number'), { target: { value: 'PKG-NEW' } })
+        fireEvent.change(section.getByLabelText('Package Volume (m³)'), {
+          target: { value: '25.0' },
+        })
+        fireEvent.change(section.getByLabelText('Average Length (m)'), {
+          target: { value: '12.0' },
+        })
+        fireEvent.change(section.getByLabelText('Average top diameter (rads)'), {
+          target: { value: '24.0' },
+        })
+        await chooseComboBoxOption(
+          section.getByRole('combobox', { name: 'Status Code' }),
+          'ACT - Active',
+        )
+        await chooseComboBoxOption(
+          section.getByRole('combobox', { name: 'Product Type' }),
+          'H - Harvested Timber',
+        )
+        await chooseComboBoxOption(
+          section.getByRole('combobox', { name: 'Age Class' }),
+          'S - Second Growth',
+        )
+        await waitFor(() =>
+          expect(section.getByRole('combobox', { name: 'End Use' })).toHaveValue('LU - Lumber'),
+        )
+        await userEvent.click(section.getByRole('button', { name: 'Create Package' }))
+      }
+
+      await waitFor(() => expect(onDetailChanged).toHaveBeenCalledTimes(1))
+      const expectedMessage =
+        operation === 'save'
+          ? 'Package PKG-1 was saved, but application items could not be refreshed. Reload before changing packages again.'
+          : 'Package PKG-NEW was created, but application items could not be refreshed. Reload before changing packages again.'
+      expect(
+        (await screen.findByText(expectedMessage)).closest('.cds--inline-notification'),
+      ).toHaveClass('cds--inline-notification--warning')
+      expect(screen.queryByText('Unable to save package details.')).not.toBeInTheDocument()
+      expect(screen.queryByText('Unable to create package.')).not.toBeInTheDocument()
+      expect(
+        screen.queryByText(
+          operation === 'save' ? 'Package PKG-1 saved.' : 'Package PKG-NEW created.',
+        ),
+      ).not.toBeInTheDocument()
+      expect(
+        operation === 'save' ? mockedUpdateApplicationPackage : mockedAddApplicationPackage,
+      ).toHaveBeenCalledTimes(1)
+    },
+  )
+
+  it('shows scale mutation partial success as a warning when detail refresh fails', async () => {
     const onDetailChanged = vi.fn().mockRejectedValue(new Error('refresh failed'))
     render(
       <ProvincialApplicationItemsPanel
@@ -2722,14 +2806,19 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       expect(onDetailChanged).toHaveBeenCalledTimes(1)
     })
     expect(
-      await screen.findByText('Scale 56 added. Reload before adding another scale row.'),
-    ).toBeInTheDocument()
+      (await screen.findByText('Scale 56 added. Reload before adding another scale row.')).closest(
+        '.cds--inline-notification',
+      ),
+    ).toHaveClass('cds--inline-notification--warning')
     expect(screen.queryByText('Unable to add scale.')).not.toBeInTheDocument()
 
     const scaleRow = screen.getByText('TM001').closest('tr')
     expect(scaleRow).toBeTruthy()
     await userEvent.click(within(scaleRow as HTMLElement).getByRole('button', { name: 'Delete' }))
     const confirmation = await screen.findByRole('dialog', { name: 'Delete scale' })
+    expect(
+      screen.queryByText('Scale 56 added. Reload before adding another scale row.'),
+    ).not.toBeInTheDocument()
     await userEvent.click(within(confirmation).getByRole('button', { name: 'Delete' }))
 
     await waitFor(() => {
@@ -2737,8 +2826,10 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       expect(onDetailChanged).toHaveBeenCalledTimes(2)
     })
     expect(
-      await screen.findByText('Scale 55 deleted. Reload before changing scale rows again.'),
-    ).toBeInTheDocument()
+      (
+        await screen.findByText('Scale 55 deleted. Reload before changing scale rows again.')
+      ).closest('.cds--inline-notification'),
+    ).toHaveClass('cds--inline-notification--warning')
     expect(screen.queryByText('Unable to delete scale.')).not.toBeInTheDocument()
   })
 

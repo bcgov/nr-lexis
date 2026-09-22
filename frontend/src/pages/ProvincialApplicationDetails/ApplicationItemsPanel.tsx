@@ -445,7 +445,10 @@ function ProvincialApplicationItemsPanel({
     useState<PackageDataAvailability>(unavailablePackageData)
   const [packageLoadWarning, setPackageLoadWarning] = useState('')
   const [itemsErrorMessage, setItemsErrorMessage] = useState('')
-  const [itemsInfoMessage, setItemsInfoMessage] = useState('')
+  const [itemsFeedback, setItemsFeedback] = useState<{
+    kind: 'success' | 'warning'
+    message: string
+  } | null>(null)
   const [isSavingPackage, setIsSavingPackage] = useState(false)
   const [isSavingScale, setIsSavingScale] = useState(false)
   const [deletingScaleId, setDeletingScaleId] = useState('')
@@ -1266,7 +1269,7 @@ function ProvincialApplicationItemsPanel({
 
     setIsSavingPackage(true)
     setItemsErrorMessage('')
-    setItemsInfoMessage('')
+    setItemsFeedback(null)
     try {
       const result = await updateApplicationPackage(
         buildPackageMutation(packageForm, selectedPackageNumber),
@@ -1283,10 +1286,17 @@ function ProvincialApplicationItemsPanel({
         previousPackageNumber: selectedPackageNumber,
         nextPackageNumber,
       })
-      setItemsInfoMessage(`Package ${nextPackageNumber} saved.`)
-      await onDetailChanged()
-      await loadApplicationScaleSummary()
-      await loadPackageItems(nextPackageNumber)
+      try {
+        await onDetailChanged()
+        await loadApplicationScaleSummary()
+        await loadPackageItems(nextPackageNumber)
+        setItemsFeedback({ kind: 'success', message: `Package ${nextPackageNumber} saved.` })
+      } catch {
+        setItemsFeedback({
+          kind: 'warning',
+          message: `Package ${nextPackageNumber} was saved, but application items could not be refreshed. Reload before changing packages again.`,
+        })
+      }
     } catch {
       setItemsErrorMessage('Unable to save package details.')
     } finally {
@@ -1317,7 +1327,7 @@ function ProvincialApplicationItemsPanel({
 
     setIsSavingPackage(true)
     setItemsErrorMessage('')
-    setItemsInfoMessage('')
+    setItemsFeedback(null)
     try {
       const result = await addApplicationPackage({
         packageNumber: createPackageForm.packageNumber,
@@ -1341,10 +1351,17 @@ function ProvincialApplicationItemsPanel({
       const nextPackageNumber = result.packageNumber || createPackageForm.packageNumber
       dispatchPackageSelection({ type: 'add', packageNumber: nextPackageNumber })
       resetCreatePackageDraft()
-      setItemsInfoMessage(`Package ${nextPackageNumber} created.`)
-      await onDetailChanged()
-      await loadApplicationScaleSummary()
-      await loadPackageItems(nextPackageNumber)
+      try {
+        await onDetailChanged()
+        await loadApplicationScaleSummary()
+        await loadPackageItems(nextPackageNumber)
+        setItemsFeedback({ kind: 'success', message: `Package ${nextPackageNumber} created.` })
+      } catch {
+        setItemsFeedback({
+          kind: 'warning',
+          message: `Package ${nextPackageNumber} was created, but application items could not be refreshed. Reload before changing packages again.`,
+        })
+      }
     } catch {
       setItemsErrorMessage('Unable to create package.')
     } finally {
@@ -1372,7 +1389,7 @@ function ProvincialApplicationItemsPanel({
 
     setIsSavingPackage(true)
     setItemsErrorMessage('')
-    setItemsInfoMessage('')
+    setItemsFeedback(null)
     try {
       const result = await deleteApplicationPackage(packageNumber, applicationNumber)
       if (!result.success) {
@@ -1380,7 +1397,7 @@ function ProvincialApplicationItemsPanel({
       }
 
       dispatchPackageSelection({ type: 'delete', packageNumber })
-      setItemsInfoMessage(`Package ${packageNumber} deleted.`)
+      setItemsFeedback({ kind: 'success', message: `Package ${packageNumber} deleted.` })
       try {
         await onDetailChanged()
         await loadApplicationScaleSummary()
@@ -1389,9 +1406,10 @@ function ProvincialApplicationItemsPanel({
         setItemsErrorMessage(
           `Package ${packageNumber} was deleted, but application items could not be refreshed. Reload the page.`,
         )
-        setItemsInfoMessage(
-          `Package ${packageNumber} was deleted. Reload before changing packages again.`,
-        )
+        setItemsFeedback({
+          kind: 'warning',
+          message: `Package ${packageNumber} was deleted. Reload before changing packages again.`,
+        })
       }
     } catch (error) {
       console.error(error)
@@ -1425,7 +1443,7 @@ function ProvincialApplicationItemsPanel({
 
     setIsSavingScale(true)
     setItemsErrorMessage('')
-    setItemsInfoMessage('')
+    setItemsFeedback(null)
     try {
       const result = await addApplicationScaleToPackage({
         timberMark: scaleForm.timberMark,
@@ -1445,7 +1463,7 @@ function ProvincialApplicationItemsPanel({
 
       setScales((current) => [...current, result.result as ApplicationPackageScaleRow])
       resetScaleDraft()
-      setItemsInfoMessage(`Scale ${result.result.id} added.`)
+      setItemsFeedback({ kind: 'success', message: `Scale ${result.result.id} added.` })
       setScaleLookupResult('')
       try {
         await onDetailChanged()
@@ -1456,9 +1474,10 @@ function ProvincialApplicationItemsPanel({
         setItemsErrorMessage(
           `Scale ${result.result.id} was added, but application items could not be refreshed. Reload the page.`,
         )
-        setItemsInfoMessage(
-          `Scale ${result.result.id} added. Reload before adding another scale row.`,
-        )
+        setItemsFeedback({
+          kind: 'warning',
+          message: `Scale ${result.result.id} added. Reload before adding another scale row.`,
+        })
       }
     } catch {
       setItemsErrorMessage('Unable to add scale.')
@@ -1475,14 +1494,14 @@ function ProvincialApplicationItemsPanel({
 
     setDeletingScaleId(row.id)
     setItemsErrorMessage('')
-    setItemsInfoMessage('')
+    setItemsFeedback(null)
     try {
       const result = await deleteApplicationScale(row.id, applicationNumber)
       if (!result.success) {
         throw new Error('Scale delete failed. Refresh and try again.')
       }
       setScales((current) => current.filter((item) => item.id !== row.id))
-      setItemsInfoMessage(`Scale ${row.id} deleted.`)
+      setItemsFeedback({ kind: 'success', message: `Scale ${row.id} deleted.` })
       setScaleLookupResult('')
       try {
         await onDetailChanged()
@@ -1493,7 +1512,10 @@ function ProvincialApplicationItemsPanel({
         setItemsErrorMessage(
           `Scale ${row.id} was deleted, but application items could not be refreshed. Reload the page.`,
         )
-        setItemsInfoMessage(`Scale ${row.id} deleted. Reload before changing scale rows again.`)
+        setItemsFeedback({
+          kind: 'warning',
+          message: `Scale ${row.id} deleted. Reload before changing scale rows again.`,
+        })
       }
     } catch (error) {
       console.error(error)
@@ -1509,7 +1531,7 @@ function ProvincialApplicationItemsPanel({
       return
     }
     setItemsErrorMessage('')
-    setItemsInfoMessage('')
+    setItemsFeedback(null)
     setScaleLookupResult('')
 
     const normalizedLookupValue = lookupValue.toUpperCase()
@@ -1646,13 +1668,17 @@ function ProvincialApplicationItemsPanel({
             onCloseButtonClick={() => setItemsErrorMessage('')}
           />
         )}
-        {!!itemsInfoMessage && (
+        {!!itemsFeedback && (
           <AppNotification
-            kind="success"
-            title="Item action completed"
-            subtitle={itemsInfoMessage}
+            kind={itemsFeedback.kind}
+            title={
+              itemsFeedback.kind === 'success'
+                ? 'Item action completed'
+                : 'Item action needs attention'
+            }
+            subtitle={itemsFeedback.message}
             lowContrast
-            onCloseButtonClick={() => setItemsInfoMessage('')}
+            onCloseButtonClick={() => setItemsFeedback(null)}
           />
         )}
       </section>
@@ -1884,7 +1910,11 @@ function ProvincialApplicationItemsPanel({
                       size="sm"
                       disabled={!canDeleteSelectedPackage}
                       renderIcon={TrashCan}
-                      onClick={() => setPackagePendingDeletion(selectedPackageNumber)}
+                      onClick={() => {
+                        setItemsErrorMessage('')
+                        setItemsFeedback(null)
+                        setPackagePendingDeletion(selectedPackageNumber)
+                      }}
                     >
                       Delete Package
                     </Button>
@@ -2376,7 +2406,11 @@ function ProvincialApplicationItemsPanel({
                                 row.permitted
                               }
                               renderIcon={deletingScaleId === row.id ? PendingIcon : TrashCan}
-                              onClick={() => setScalePendingDeletion(row)}
+                              onClick={() => {
+                                setItemsErrorMessage('')
+                                setItemsFeedback(null)
+                                setScalePendingDeletion(row)
+                              }}
                             >
                               {deletingScaleId === row.id ? 'Deleting…' : 'Delete'}
                             </Button>

@@ -267,6 +267,11 @@ describe('Provincial exemption edit context', () => {
         }),
       ),
     )
+    expect(
+      (await screen.findByText('The exemption was updated successfully.')).closest(
+        '.cds--inline-notification',
+      ),
+    ).toHaveClass('cds--inline-notification--success')
   })
 
   it('renames an ordinary OIC and refreshes the saved number while retaining the return context', async () => {
@@ -1002,8 +1007,10 @@ describe('Provincial exemption edit context', () => {
     expect(screen.queryByRole('button', { name: 'Edit exemption' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save exemption' })).not.toBeInTheDocument()
     expect(
-      screen.getByText(/The exemption was updated successfully.*could not be refreshed/),
-    ).toBeInTheDocument()
+      screen
+        .getByText(/The exemption was updated successfully.*could not be refreshed/)
+        .closest('.cds--inline-notification'),
+    ).toHaveClass('cds--inline-notification--warning')
     expect(vi.mocked(updateExemption)).toHaveBeenCalledTimes(1)
     const committedUnload = new Event('beforeunload', { cancelable: true })
     window.dispatchEvent(committedUnload)
@@ -1243,6 +1250,50 @@ describe('Provincial exemption edit context', () => {
     expect(vi.mocked(approveExemptions)).not.toHaveBeenCalled()
   })
 
+  it('clears a previous approval failure when reopening the confirmation', async () => {
+    vi.mocked(useAuth).mockReturnValue(
+      createTestAuthContext({ canPerform: (action: string) => action === 'approveExemption' }),
+    )
+    vi.mocked(fetchProvincialExemptionDetail).mockResolvedValue({
+      ...ministerialExemptionDetail,
+      exemptionStatusCode: 'NEW',
+      exemptionStatusDescription: 'New',
+    })
+    vi.mocked(approveExemptions).mockResolvedValue({
+      success: true,
+      valid: false,
+      sendGrid: [],
+      errorMessage: 'The exemption could not be approved.',
+      errors: [],
+      warnings: [],
+    })
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/EX-205']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+    await userEvent.click(await screen.findByRole('button', { name: 'Approve exemption' }))
+    const dialog = screen.getByRole('dialog', { name: 'Approve exemption' })
+    await userEvent.click(within(dialog).getByRole('checkbox'))
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Approve exemption' }))
+    expect(
+      await within(dialog).findByText('The exemption could not be approved.'),
+    ).toBeInTheDocument()
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    expect(screen.getByText('The exemption could not be approved.')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Approve exemption' }))
+    expect(screen.queryByText('The exemption could not be approved.')).not.toBeInTheDocument()
+    expect(
+      within(screen.getByRole('dialog', { name: 'Approve exemption' })).getByRole('checkbox'),
+    ).not.toBeChecked()
+    expect(approveExemptions).toHaveBeenCalledTimes(1)
+  })
+
   it('requires explicit certification before approving one exemption', async () => {
     vi.mocked(useAuth).mockReturnValue(
       createTestAuthContext({
@@ -1319,6 +1370,9 @@ describe('Provincial exemption edit context', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Approve exemption' }))
     const postApprovalDialog = screen.getByRole('dialog', { name: 'Approve exemption' })
     expect(
+      screen.queryByText('Exemption approved. No applicant notification recipient was returned.'),
+    ).not.toBeInTheDocument()
+    expect(
       within(postApprovalDialog).getByRole('checkbox', {
         name: 'I certify that this exemption has been approved.',
       }),
@@ -1393,7 +1447,9 @@ describe('Provincial exemption edit context', () => {
         ['EX-205', 'corrected@example.test'],
       ]),
     )
-    expect(await screen.findByText('Action completed')).toBeInTheDocument()
+    expect(
+      (await screen.findByText('Action needs attention')).closest('.cds--inline-notification'),
+    ).toHaveClass('cds--inline-notification--warning')
     expect(
       screen.getByText('Exemption approved. The notification service is unavailable.'),
     ).toBeInTheDocument()

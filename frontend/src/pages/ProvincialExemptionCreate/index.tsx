@@ -1045,7 +1045,6 @@ const ProvincialExemptionCreatePage = () => {
             subtitle={`Loaded ${prefillState.selectedApplicationNumbers.length} ${prefillApplicationLabel} into this form.`}
             lowContrast
             onCloseButtonClick={() => setShowPrefillNotice(false)}
-            autoDismissMs={6000}
           />
         </Column>
       )}
@@ -1058,16 +1057,16 @@ const ProvincialExemptionCreatePage = () => {
             subtitle={status.message}
             lowContrast
             onCloseButtonClick={() => setStatus(null)}
-            autoDismissMs={status.kind === 'success' ? 6000 : undefined}
           />
         </Column>
       )}
 
       <Column sm={4} md={8} lg={16} className="application-detail-tabs-column">
         {status?.placement === 'inline' && (
-          <InlineNotification
+          <AppNotification
             className="create-form-validation-notification"
             kind="error"
+            revealKey={status}
             title={status.title}
             subtitle={status.message}
             lowContrast

@@ -1273,13 +1273,7 @@ const RtmEmsLogAmvUploadPage = () => {
         rows: result.rows,
       }
 
-      setNotificationKind(
-        response.status === 'accepted'
-          ? 'success'
-          : response.status === 'validation_failed'
-            ? 'warning'
-            : 'error',
-      )
+      setNotificationKind(response.status === 'accepted' ? 'success' : 'error')
       if (response.status === 'accepted') {
         setSavedReviewValues({ ...reviewValues })
         setSavedPreviewResult(previewResult)
@@ -1583,6 +1577,20 @@ const RtmEmsLogAmvUploadPage = () => {
         </div>
       </Column>
 
+      {notification && (
+        <Column sm={4} md={8} lg={16}>
+          <AppNotification
+            kind={notificationKind}
+            role="status"
+            title={notificationTitle}
+            subtitle={notification}
+            onCloseButtonClick={() => {
+              setNotification('')
+            }}
+          />
+        </Column>
+      )}
+
       <Column sm={4} md={8} lg={16} className="admin-upload-fspts-content rtm-amv-values-content">
         {savedUploadState && savedNotification && !replacementUploadOpen && (
           <AppNotification
@@ -1737,20 +1745,6 @@ const RtmEmsLogAmvUploadPage = () => {
           </>
         )}
       </Column>
-
-      {notification && (
-        <Column sm={4} md={8} lg={16}>
-          <AppNotification
-            kind={notificationKind}
-            role="status"
-            title={notificationTitle}
-            subtitle={notification}
-            onCloseButtonClick={() => {
-              setNotification('')
-            }}
-          />
-        </Column>
-      )}
 
       {discardConfirmation && (
         <ConfirmationModal

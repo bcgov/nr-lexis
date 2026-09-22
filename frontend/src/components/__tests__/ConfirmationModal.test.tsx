@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { within, act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, vi } from 'vitest'
 
@@ -113,7 +113,7 @@ describe('ConfirmationModal', () => {
 
     await user.click(screen.getByRole('button', { name: 'Confirm' }))
 
-    expect(await screen.findByText('Action failed')).toBeVisible()
+    expect(await within(screen.getByRole('dialog')).findByText('Action failed')).toBeVisible()
     expect(screen.getByText('database unavailable')).toBeVisible()
     expect(onClose).not.toHaveBeenCalled()
     expect(screen.getByRole('dialog', { name: 'Approve exemption?' })).toBeVisible()
@@ -138,13 +138,16 @@ describe('ConfirmationModal', () => {
         onConfirm={() => Promise.reject(error)}
         onClose={vi.fn()}
         onError={onError}
+        errorMessage="The policy changed. Refresh and try again."
       />,
     )
 
     await user.click(screen.getByRole('button', { name: 'Confirm' }))
 
     await waitFor(() => expect(onError).toHaveBeenCalledWith(error))
-    expect(screen.queryByText('Action failed')).not.toBeInTheDocument()
+    expect(
+      within(screen.getByRole('dialog')).getByText('The policy changed. Refresh and try again.'),
+    ).toBeVisible()
     expect(screen.getByRole('dialog', { name: 'Delete policy?' })).toBeVisible()
     expect(screen.getByRole('button', { name: 'Confirm' })).toBeEnabled()
   })

@@ -640,6 +640,50 @@ describe('Create Page Core Flows', () => {
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
   }, 20_000)
 
+  it('shows create validation only in the accuracy dialog until it closes', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({
+          principal: 'bceid\\submitter',
+          roles: ['PROVINCIAL_SUBMITTER_00077881'],
+          forestClientNumber: '00077881',
+          orgUnitNo: '11',
+        }),
+      }),
+    )
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/create']}>
+        <Routes>
+          <Route
+            path="/provincial/application/create"
+            element={<ProvincialApplicationCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const saveButton = await screen.findByRole('button', { name: 'Save' })
+    await waitFor(() => expect(saveButton).toBeEnabled())
+    await userEvent.click(saveButton)
+    const dialog = screen.getByRole('dialog', { name: 'Confirm application accuracy' })
+    await userEvent.click(within(dialog).getByRole('checkbox', { name: 'I Agree' }))
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save application' }))
+
+    const dialogFeedback = await within(dialog).findByRole('status')
+    expect(dialogFeedback).toHaveTextContent('Validation error')
+    expect(screen.getAllByRole('status')).toEqual([dialogFeedback])
+    expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(dialog).not.toBeInTheDocument())
+    expect(screen.getByRole('status')).toHaveTextContent('Validation error')
+
+    await userEvent.click(saveButton)
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save application' })).toBeDisabled()
+  })
+
   it('requires and resets application accuracy confirmation for a provincial submitter', async () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
@@ -733,6 +777,14 @@ describe('Create Page Core Flows', () => {
     expect(screen.getByText('Application agent location does not exist.')).toBeVisible()
     expect(postSaveDialog).toBeVisible()
     expect(within(postSaveDialog).getByRole('button', { name: 'Save application' })).toBeEnabled()
+    const callsBeforeReopen = mockedSubmitProvincialApplicationCreate.mock.calls.length
+    await userEvent.click(within(postSaveDialog).getByRole('button', { name: 'Cancel' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    const cleanDialog = screen.getByRole('dialog', { name: 'Confirm application accuracy' })
+    expect(mockedSubmitProvincialApplicationCreate).toHaveBeenCalledTimes(callsBeforeReopen)
+    expect(
+      within(cleanDialog).queryByText('Application agent location does not exist.'),
+    ).not.toBeInTheDocument()
   }, 20_000)
 
   it('uses one application term field and submits its day value directly', async () => {

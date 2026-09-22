@@ -488,6 +488,14 @@ describe('Provincial Exemption Search Actions', () => {
       screen.queryByRole('dialog', { name: 'Send approval notification' }),
     ).not.toBeInTheDocument()
     expect(mockedSendExemptionApprovalEmails).not.toHaveBeenCalled()
+
+    await userEvent.click(within(approvalDialog).getByRole('button', { name: 'Cancel' }))
+    expect(screen.getByText('Approval failed')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Approve selected exemptions' }))
+    const reopenedDialog = screen.getByRole('dialog', { name: 'Approve selected exemptions' })
+    expect(within(reopenedDialog).queryByText('Approval failed')).not.toBeInTheDocument()
+    expect(within(reopenedDialog).getByRole('checkbox')).not.toBeChecked()
+    expect(mockedApproveExemptions).toHaveBeenCalledTimes(1)
   })
 
   it('approves selected exemptions one at a time with a freshly loaded version', async () => {

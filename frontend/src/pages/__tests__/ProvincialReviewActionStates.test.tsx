@@ -1235,6 +1235,11 @@ describe('Provincial Review Action State Smoke', () => {
     expect(dialog).toBeVisible()
     expect(within(dialog).getByRole('button', { name: 'Approve' })).toBeEnabled()
     expect(screen.getByRole('checkbox', { name: 'Select 1000456' })).toBeChecked()
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Approve Selected Applications' }))
+    const reopened = await screen.findByRole('dialog', { name: 'Approve application' })
+    expect(mockedApproveApplicationReview).toHaveBeenCalledTimes(1)
+    expect(within(reopened).queryByText('Application approval failed')).not.toBeInTheDocument()
   })
 
   it('sends selected region org unit numbers to the review search request', async () => {

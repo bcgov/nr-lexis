@@ -2452,6 +2452,33 @@ $notification-types: 'error', 'info', 'success', 'warning';
   }
 }
 
+// Action feedback participates in its owning page/form layout and never times out.
+.app-notification-container {
+  grid-column: 1 / -1;
+  min-inline-size: 0;
+  scroll-margin-block-start: calc(var(--csp-header-height, 3rem) + 1rem);
+}
+
+.app-inline-notification {
+  inline-size: 100%;
+  max-inline-size: none;
+  margin-block: 0 1rem;
+}
+
+.app-inline-notification .cds--inline-notification__subtitle {
+  overflow-wrap: anywhere;
+}
+
+// Carbon's scroll-edge fade must not obscure dialog feedback.
+// Carbon's Modal puts modal-content and modal-scroll-content on the same element.
+.cds--modal-content:has(.app-notification-container) {
+  mask-image: none;
+}
+
+.default-grid > .app-notification-container .app-inline-notification {
+  margin-block: 0;
+}
+
 .app-notification-region {
   position: fixed;
   z-index: 12000;
