@@ -7291,6 +7291,10 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
     expect(screen.getByText('Permit approval email sent.')).toBeInTheDocument()
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+    await userEvent.click(approvalButton)
+    expect(await screen.findByRole('dialog', { name: 'Email permit 777 approval?' })).toBeVisible()
+    expect(screen.queryByText('Permit approval email sent.')).not.toBeInTheDocument()
+    expect(mockedSendPermitApprovalEmail).toHaveBeenCalledTimes(1)
   })
 
   it('defaults Blanket OIC approval mail to the owner', async () => {

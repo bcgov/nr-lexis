@@ -10,6 +10,8 @@ type AppNotificationProps = Omit<
   'onClose' | 'onCloseButtonClick' | 'hideCloseButton'
 > & {
   onCloseButtonClick?: () => void
+  /** Change for a new action attempt that produces the same feedback text. */
+  revealKey?: unknown
 }
 
 /** Persistent feedback in the page, form, or dialog that owns the action. */
@@ -21,6 +23,7 @@ export function AppNotification({
   className,
   lowContrast = true,
   role = 'status',
+  revealKey,
   ...notificationProps
 }: AppNotificationProps) {
   const notificationRef = useRef<HTMLDivElement>(null)
@@ -59,7 +62,7 @@ export function AppNotification({
       }
     })
     return () => cancelAnimationFrame(frame)
-  }, [isActionFeedback, kind, subtitle, title])
+  }, [isActionFeedback, kind, revealKey, subtitle, title])
 
   return (
     <div className="app-notification-container" ref={notificationRef}>

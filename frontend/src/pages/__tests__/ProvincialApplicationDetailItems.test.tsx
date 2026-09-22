@@ -2816,6 +2816,9 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     expect(scaleRow).toBeTruthy()
     await userEvent.click(within(scaleRow as HTMLElement).getByRole('button', { name: 'Delete' }))
     const confirmation = await screen.findByRole('dialog', { name: 'Delete scale' })
+    expect(
+      screen.queryByText('Scale 56 added. Reload before adding another scale row.'),
+    ).not.toBeInTheDocument()
     await userEvent.click(within(confirmation).getByRole('button', { name: 'Delete' }))
 
     await waitFor(() => {

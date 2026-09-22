@@ -160,6 +160,30 @@ describe('AppNotification scrolling', () => {
     },
   )
 
+  it('reveals the same validation again only for a new action attempt', () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(
+      bounds(window.innerHeight + 100, window.innerHeight + 200),
+    )
+    const notification = (attempt: number) => (
+      <AppNotification
+        kind="error"
+        title="Validation error"
+        subtitle="A value is required."
+        revealKey={attempt}
+        onCloseButtonClick={() => {}}
+      />
+    )
+    const { rerender } = render(notification(1))
+    act(() => frames.splice(0).forEach((callback) => callback(0)))
+    expect(HTMLElement.prototype.scrollIntoView).toHaveBeenCalledTimes(1)
+    rerender(notification(1))
+    act(() => frames.splice(0).forEach((callback) => callback(0)))
+    expect(HTMLElement.prototype.scrollIntoView).toHaveBeenCalledTimes(1)
+    rerender(notification(2))
+    act(() => frames.splice(0).forEach((callback) => callback(0)))
+    expect(HTMLElement.prototype.scrollIntoView).toHaveBeenCalledTimes(2)
+  })
+
   it('leaves informational page banners in place', () => {
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(
       bounds(window.innerHeight + 100, window.innerHeight + 200),

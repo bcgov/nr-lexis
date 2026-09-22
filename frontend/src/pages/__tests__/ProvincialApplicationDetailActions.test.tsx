@@ -1895,6 +1895,39 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(mockedUpdateApplicationSummary.mock.calls[0][0]).not.toHaveProperty('applicantTypeCode')
   })
 
+  it('clears a successful summary save when reopening submitter accuracy confirmation', async () => {
+    mockApplicationDetailAuth(
+      (action: string) => action === 'createApplication',
+      ['LEXIS_PROVINCIAL_SUBMITTER_00011122'],
+    )
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+    await selectApplicationSummaryTile()
+    await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
+    const dialog = screen.getByRole('dialog', { name: 'Confirm application accuracy' })
+    await userEvent.click(within(dialog).getByRole('checkbox', { name: 'I Agree' }))
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save summary' }))
+    expect(await screen.findByText('The application was saved successfully.')).toBeVisible()
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('dialog', { name: 'Confirm application accuracy' }),
+      ).not.toBeInTheDocument(),
+    )
+    await selectApplicationSummaryTile()
+    await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
+    expect(screen.getByRole('dialog', { name: 'Confirm application accuracy' })).toBeVisible()
+    expect(screen.queryByText('The application was saved successfully.')).not.toBeInTheDocument()
+    expect(mockedUpdateApplicationSummary).toHaveBeenCalledTimes(1)
+  })
+
   it('clears a failed summary save when reopening submitter accuracy confirmation', async () => {
     mockApplicationDetailAuth(
       (action: string) => action === 'createApplication',

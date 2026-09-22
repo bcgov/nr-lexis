@@ -1371,6 +1371,7 @@ const ProvincialExemptionDetailsPage = () => {
         permitStatusCode === 'ACT'
       ) {
         setActionErrorMessage('')
+        setActionFeedback(null)
         setPermitCreationConfirmationOpen(true)
         return
       }
@@ -1380,6 +1381,7 @@ const ProvincialExemptionDetailsPage = () => {
         permitStatusCode === 'ACT'
       ) {
         setActionErrorMessage('')
+        setActionFeedback(null)
         setPermitCreationConfirmationOpen(true)
       }
     },
@@ -1402,6 +1404,8 @@ const ProvincialExemptionDetailsPage = () => {
     }
     setPermitCreationSaveFailed(false)
     setPermitCreationSavedRequiresReload(false)
+    setActionErrorMessage('')
+    setActionFeedback(null)
     if (isExemptionDirty) {
       setPermitCreationUnsavedChangesOpen(true)
       return
@@ -1801,6 +1805,7 @@ const ProvincialExemptionDetailsPage = () => {
                     disabled={approving}
                     onClick={() => {
                       setActionErrorMessage('')
+                      setActionFeedback(null)
                       setApprovalCertified(false)
                       setApprovalDate(formatLocalIsoDate(new Date()))
                       setApprovalConfirmationTarget(currentDetail.exemptionNumber)
@@ -2359,11 +2364,13 @@ const ProvincialExemptionDetailsPage = () => {
                                                     Boolean(applicationMutationNumber)
                                                   }
                                                   renderIcon={TrashCan}
-                                                  onClick={() =>
+                                                  onClick={() => {
+                                                    setActionErrorMessage('')
+                                                    setActionFeedback(null)
                                                     setApplicationPendingRemoval(
                                                       application.applicationNumber,
                                                     )
-                                                  }
+                                                  }}
                                                 >
                                                   {applicationMutationNumber ===
                                                   application.applicationNumber
@@ -2729,7 +2736,11 @@ const ProvincialExemptionDetailsPage = () => {
                                                 : undefined
                                             }
                                             renderIcon={TrashCan}
-                                            onClick={() => setDocumentPendingDeletion(row)}
+                                            onClick={() => {
+                                              setActionErrorMessage('')
+                                              setActionFeedback(null)
+                                              setDocumentPendingDeletion(row)
+                                            }}
                                           >
                                             {isRemovingDocumentId === row.id
                                               ? 'Deleting…'

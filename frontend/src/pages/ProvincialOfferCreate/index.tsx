@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Button, Column, Grid, InlineNotification, TextArea, TextInput } from '@carbon/react'
+import { Button, Column, Grid, TextArea, TextInput } from '@carbon/react'
 import { AppNotification } from '../../components/AppNotification'
 import IsoDatePicker from '../../components/IsoDatePicker'
 import OfferScaleDetailAction from '@/components/OfferScaleDetailAction'
@@ -866,9 +866,10 @@ const ProvincialOfferCreatePage = () => {
       <Column sm={4} md={8} lg={16}>
         <div className="provincial-offer-create create-form-tile provincial-offer-sections provincial-offer-section-stack">
           {status?.placement === 'inline' && (
-            <InlineNotification
+            <AppNotification
               className="create-form-validation-notification"
               kind="error"
+              revealKey={status}
               title={status.title}
               subtitle={status.message}
               lowContrast

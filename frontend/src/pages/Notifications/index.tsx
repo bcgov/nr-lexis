@@ -762,7 +762,10 @@ export default function NotificationsPage() {
                             size="sm"
                             renderIcon={TrashCan}
                             disabled={saving}
-                            onClick={() => setNotificationPendingDeletion(adminNotification)}
+                            onClick={() => {
+                              setMessage(null)
+                              setNotificationPendingDeletion(adminNotification)
+                            }}
                           >
                             Delete
                           </Button>

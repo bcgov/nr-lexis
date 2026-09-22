@@ -3175,6 +3175,7 @@ const ProvincialApplicationDetailsPage = () => {
         return
       }
       setActionErrorMessage('')
+      setActionFeedback(null)
       setPendingSummarySaveSource(source)
       setSummaryAccuracyConfirmed(false)
       setSummaryAccuracyApplicationNumber(applicationNumber ?? null)
@@ -5195,7 +5196,11 @@ const ProvincialApplicationDetailsPage = () => {
                                                   : undefined
                                               }
                                               renderIcon={TrashCan}
-                                              onClick={() => setDocumentPendingDeletion(row)}
+                                              onClick={() => {
+                                                setActionErrorMessage('')
+                                                setActionFeedback(null)
+                                                setDocumentPendingDeletion(row)
+                                              }}
                                             >
                                               {isRemovingDocumentId === row.id
                                                 ? 'Deleting…'

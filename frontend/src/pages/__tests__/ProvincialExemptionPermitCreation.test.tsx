@@ -1344,6 +1344,7 @@ describe('permit creation from an exemption', () => {
 
     await waitFor(() => expect(updateExemption).toHaveBeenCalledOnce())
     expect(await screen.findByRole('dialog', { name: 'Apply for new permit' })).toBeInTheDocument()
+    expect(screen.queryByText('The exemption was saved successfully.')).not.toBeInTheDocument()
     expect(createPermitFromExemption).not.toHaveBeenCalled()
   })
 

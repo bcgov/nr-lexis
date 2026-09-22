@@ -1632,9 +1632,10 @@ const ProvincialApplicationCreatePage = () => {
 
       <Column sm={4} md={8} lg={16} className="application-detail-tabs-column">
         {status?.placement === 'inline' && (
-          <InlineNotification
+          <AppNotification
             className="create-form-validation-notification"
             kind="error"
+            revealKey={status}
             title={status.title}
             subtitle={status.message}
             lowContrast

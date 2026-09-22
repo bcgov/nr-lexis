@@ -40,7 +40,7 @@ over TCP rather than deploying a scanner workload of its own.
 | Keycloak and API gateway | Dedicated machine-to-machine authentication, scope enforcement, traffic controls, and routing for NEXCOL federal submissions.                                          |
 | Mail relay               | Delivery of post-commit workflow notifications from provincial and regional positional mailboxes to validated applicants and regional positional recipients.            |
 
-Prefer persistent inline banners for action success, warning, and failure feedback within the owning page, form, or dialog; use a toast only when no suitable inline location exists, such as session renewal. Use blue for information, green for successful actions, red for failures, and amber for warnings or partial success that needs attention.
+Prefer persistent inline banners for action success, warning, and failure feedback within the owning page, form, or dialog; use a toast only when no suitable inline location exists, such as session renewal. Use blue for information, green for successful actions, red for failures, and amber for warnings or partial success that needs attention. Clear the previous action result when opening a new confirmation, reveal off-screen feedback after each action attempt, and distinguish a successful write from a failed refresh.
 
 ## Identity and authorization
 

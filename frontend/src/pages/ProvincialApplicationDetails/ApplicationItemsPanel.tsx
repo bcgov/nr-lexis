@@ -1910,7 +1910,11 @@ function ProvincialApplicationItemsPanel({
                       size="sm"
                       disabled={!canDeleteSelectedPackage}
                       renderIcon={TrashCan}
-                      onClick={() => setPackagePendingDeletion(selectedPackageNumber)}
+                      onClick={() => {
+                        setItemsErrorMessage('')
+                        setItemsFeedback(null)
+                        setPackagePendingDeletion(selectedPackageNumber)
+                      }}
                     >
                       Delete Package
                     </Button>
@@ -2402,7 +2406,11 @@ function ProvincialApplicationItemsPanel({
                                 row.permitted
                               }
                               renderIcon={deletingScaleId === row.id ? PendingIcon : TrashCan}
-                              onClick={() => setScalePendingDeletion(row)}
+                              onClick={() => {
+                                setItemsErrorMessage('')
+                                setItemsFeedback(null)
+                                setScalePendingDeletion(row)
+                              }}
                             >
                               {deletingScaleId === row.id ? 'Deleting…' : 'Delete'}
                             </Button>

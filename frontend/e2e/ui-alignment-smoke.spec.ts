@@ -1845,7 +1845,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     expect(hasHorizontalPageOverflow).toBe(false)
   })
 
-  test('centers initial detail loading and places toasts like FSPTS', async ({ page }) => {
+  test('centers initial detail loading and keeps errors in page banners', async ({ page }) => {
     await page.route('**/api/lexis/purchase-offers/81001', async (route) => {
       await new Promise((resolve) => setTimeout(resolve, 750))
       await route.fulfill({
@@ -2106,6 +2106,23 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     }
   })
 
+  test('reveals offer validation after each save from the bottom of a long form', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 780, height: 999 })
+    await gotoSyntheticRoute(page, '/provincial/offers/create', {
+      ready: page.getByRole('heading', { level: 1, name: 'Create provincial offer', exact: true }),
+    })
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      await page.getByRole('button', { name: 'Save new offer', exact: true }).click()
+      const banner = page.locator('.create-form-validation-notification')
+      await expect(banner).toContainText('Application number is required.')
+      await expect(banner).toBeInViewport({ ratio: 1 })
+      await expect(banner).toHaveClass(/cds--inline-notification--error/)
+      await expect(page.locator('.cds--toast-notification')).toHaveCount(0)
+    }
+  })
+
   test('keeps an impossible typed date visible for correction after blur', async ({ page }) => {
     await gotoSyntheticRoute(page, '/provincial/offers/create', {
       waitUntil: 'domcontentloaded',
@@ -2352,6 +2369,44 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       await expect(success).toHaveCount(0)
     })
   }
+
+  test('reveals an oversized error in the actual modal scroll container without fading it', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    const longError = 'This fee policy is in use. '.repeat(80).trim()
+    await page.route('**/api/lexis/admin/policies/fee/fee-policy-1', async (route) => {
+      await route.fulfill({ json: { success: false, errors: [longError] } })
+    })
+    await gotoSyntheticRoute(page, '/admin/policies/fee', {
+      ready: page.getByRole('button', { name: 'Delete', exact: true }),
+    })
+    await page.getByRole('button', { name: 'Delete', exact: true }).click()
+    const dialog = page.getByRole('dialog', { name: 'Delete fee policy?' })
+    await dialog.getByRole('button', { name: 'Delete', exact: true }).click()
+    const failure = dialog.locator('.app-inline-notification')
+    await expect(failure).toContainText(longError)
+    const scroller = dialog.locator('.cds--modal-scroll-content')
+    await expect(scroller).toBeVisible()
+    await expect(scroller).toHaveCSS('mask-image', 'none')
+    await expect(scroller).not.toHaveClass(/modal-scroll-content--no-fade/)
+    await expect
+      .poll(() => scroller.evaluate((element) => element.scrollHeight > element.clientHeight))
+      .toBe(true)
+    await expect
+      .poll(() =>
+        failure.evaluate((element) => {
+          const container = element.closest('.cds--modal-scroll-content')!
+          const bounds = element.getBoundingClientRect()
+          const visible = container.getBoundingClientRect()
+          return bounds.top >= visible.top - 1 && bounds.top < visible.bottom
+        }),
+      )
+      .toBe(true)
+    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()
+    await page.getByRole('button', { name: 'Delete', exact: true }).click()
+    await expect(dialog.locator('.app-inline-notification')).toHaveCount(0)
+  })
 
   test('places policy add actions in result toolbars and uses focused add dialogs', async ({
     page,

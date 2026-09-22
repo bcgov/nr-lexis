@@ -578,11 +578,19 @@ const FederalApplicationDetailsPage = () => {
         setActionErrorMessage(result.errors[0] || 'Unable to update federal application status.')
         return false
       }
-      await refreshDetail('status')
-      setActionFeedback({
-        kind: 'success',
-        message: result.message || 'Federal application status updated.',
-      })
+      try {
+        await refreshDetail('status')
+        setActionFeedback({
+          kind: 'success',
+          message: result.message || 'Federal application status updated.',
+        })
+      } catch {
+        setActionFeedback({
+          kind: 'warning',
+          message:
+            'Federal application status updated, but details could not be refreshed. Reload before making more changes.',
+        })
+      }
       setIsEditingFederalStatus(false)
       return true
     } catch (error) {
@@ -625,8 +633,17 @@ const FederalApplicationDetailsPage = () => {
         setActionErrorMessage(result.errors[0] || 'Unable to save federal permit.')
         return false
       }
-      await refreshDetail('permit')
-      setActionFeedback({ kind: 'success', message: result.message || 'Federal permit saved.' })
+      try {
+        await refreshDetail('permit')
+        setActionFeedback({ kind: 'success', message: result.message || 'Federal permit saved.' })
+      } catch {
+        setActionFeedback({
+          kind: 'warning',
+          message:
+            'Federal permit saved, but details could not be refreshed. Reload before making more changes.',
+        })
+      }
+      setIsEditingFederalPermit(false)
       return true
     } catch (error) {
       console.error(error)
@@ -693,16 +710,24 @@ const FederalApplicationDetailsPage = () => {
         setActionErrorMessage(result.errors[0] || 'Unable to save federal application remark.')
         return false
       }
-      setRemarkRows(await fetchFederalApplicationRemarks(applicationNumber))
-      setRemarksErrorMessage('')
+      try {
+        setRemarkRows(await fetchFederalApplicationRemarks(applicationNumber))
+        setRemarksErrorMessage('')
+        setActionFeedback({
+          kind: 'success',
+          message: result.message || 'Federal application remark saved.',
+        })
+      } catch {
+        setActionFeedback({
+          kind: 'warning',
+          message:
+            'Federal application remark saved, but remarks could not be refreshed. Reload before making more changes.',
+        })
+      }
       setEditingRemarkId(null)
       setRemarkDraft('')
       setRemarkValidationMessage('')
       setIsEditingFederalRemarks(false)
-      setActionFeedback({
-        kind: 'success',
-        message: result.message || 'Federal application remark saved.',
-      })
       return true
     } catch (error) {
       console.error(error)
@@ -1666,7 +1691,11 @@ const FederalApplicationDetailsPage = () => {
                                                 isRemovingDocumentId === row.id
                                               }
                                               renderIcon={TrashCan}
-                                              onClick={() => setDocumentPendingDeletion(row)}
+                                              onClick={() => {
+                                                setActionErrorMessage('')
+                                                setActionFeedback(null)
+                                                setDocumentPendingDeletion(row)
+                                              }}
                                             >
                                               {isRemovingDocumentId === row.id
                                                 ? 'Deleting…'

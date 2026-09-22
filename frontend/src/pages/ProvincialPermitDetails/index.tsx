@@ -932,6 +932,12 @@ const ProvincialPermitDetailsPage = () => {
     useState<ActionSuccessNotification | null>(null)
   const [createdBlanketOicPermitNumber, setCreatedBlanketOicPermitNumber] = useState('')
   const [documentSuccessMessage, setDocumentSuccessMessage] = useState('')
+  const clearActionNotifications = useCallback(() => {
+    setActionErrorMessage('')
+    setActionFeedback(null)
+    setActionSuccessNotification(null)
+    setDocumentSuccessMessage('')
+  }, [])
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
   const [documentPendingDeletion, setDocumentPendingDeletion] = useState<PermitDocumentRow | null>(
     null,
@@ -4106,7 +4112,7 @@ const ProvincialPermitDetailsPage = () => {
     if (!resolvedPermitNumber || !canSendPermitApproval || isSendingPermitEmail) {
       return
     }
-    setActionErrorMessage('')
+    clearActionNotifications()
     setIsSendingPermitEmail(true)
     try {
       const defaultEmail = await fetchPermitApprovalEmailDefault(resolvedPermitNumber)
@@ -4118,7 +4124,13 @@ const ProvincialPermitDetailsPage = () => {
     } finally {
       setIsSendingPermitEmail(false)
     }
-  }, [canSendPermitApproval, detail?.permitNumber, isSendingPermitEmail, permitNumber])
+  }, [
+    clearActionNotifications,
+    canSendPermitApproval,
+    detail?.permitNumber,
+    isSendingPermitEmail,
+    permitNumber,
+  ])
 
   const onRemoveDocument = useCallback(
     async (row: PermitDocumentRow) => {
@@ -4662,7 +4674,10 @@ const ProvincialPermitDetailsPage = () => {
                             size="sm"
                             disabled={isUpdatingPermitApplications}
                             renderIcon={TrashCan}
-                            onClick={() => setPermitApplicationPendingRemoval(applicationNumber)}
+                            onClick={() => {
+                              clearActionNotifications()
+                              setPermitApplicationPendingRemoval(applicationNumber)
+                            }}
                           >
                             {isRemovingPermitApplication === applicationNumber
                               ? 'Removing…'
@@ -5261,7 +5276,10 @@ const ProvincialPermitDetailsPage = () => {
                               size="sm"
                               disabled={blanketOicScaleActionsDisabled}
                               renderIcon={TrashCan}
-                              onClick={() => setBoicScalePendingRemoval(row)}
+                              onClick={() => {
+                                clearActionNotifications()
+                                setBoicScalePendingRemoval(row)
+                              }}
                             >
                               {isDeletingBoicScaleId === row.id ? 'Removing…' : 'Remove'}
                             </Button>
@@ -6537,9 +6555,10 @@ const ProvincialPermitDetailsPage = () => {
                                               isRemovingPermitApplication === applicationNumber
                                             }
                                             renderIcon={TrashCan}
-                                            onClick={() =>
+                                            onClick={() => {
+                                              clearActionNotifications()
                                               setPermitApplicationPendingRemoval(applicationNumber)
-                                            }
+                                            }}
                                           >
                                             {isRemovingPermitApplication === applicationNumber
                                               ? 'Removing…'
@@ -7312,11 +7331,12 @@ const ProvincialPermitDetailsPage = () => {
                                           ? `boic-package-delete-help-${encodeURIComponent(selectedBlanketOicPackage.packageNumber)}`
                                           : undefined
                                       }
-                                      onClick={() =>
+                                      onClick={() => {
+                                        clearActionNotifications()
                                         setBoicPackageNumberPendingDeletion(
                                           selectedBlanketOicPackage.packageNumber,
                                         )
-                                      }
+                                      }}
                                     >
                                       {isDeletingBoicPackageNumber ===
                                       selectedBlanketOicPackage.packageNumber
@@ -7530,9 +7550,10 @@ const ProvincialPermitDetailsPage = () => {
                                                 (item) => item.packageNumber === row.packageNumber,
                                               )
                                             }
-                                            onClick={() =>
+                                            onClick={() => {
+                                              clearActionNotifications()
                                               setBoicPackageNumberPendingDeletion(row.packageNumber)
-                                            }
+                                            }}
                                           >
                                             {isDeletingBoicPackageNumber === row.packageNumber
                                               ? 'Deleting…'
@@ -7845,7 +7866,10 @@ const ProvincialPermitDetailsPage = () => {
                                                   : undefined
                                               }
                                               renderIcon={TrashCan}
-                                              onClick={() => setDocumentPendingDeletion(row)}
+                                              onClick={() => {
+                                                clearActionNotifications()
+                                                setDocumentPendingDeletion(row)
+                                              }}
                                             >
                                               {isRemovingDocumentId === row.id
                                                 ? 'Deleting…'

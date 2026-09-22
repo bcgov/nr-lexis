@@ -511,9 +511,10 @@ const ProvincialOfferDetailsPage = () => {
             loadingDescription="Refreshing provincial offer detail…"
           />
           {status?.placement === 'inline' && (
-            <InlineNotification
+            <AppNotification
               className="detail-context-notification"
               kind="error"
+              revealKey={status}
               title={status.title}
               subtitle={status.message}
               lowContrast

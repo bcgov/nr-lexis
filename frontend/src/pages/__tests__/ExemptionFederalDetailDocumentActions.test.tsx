@@ -1460,6 +1460,59 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(screen.queryByRole('button', { name: 'Save and leave' })).not.toBeInTheDocument()
   })
 
+  it.each(['status', 'permit', 'remark'] as const)(
+    'keeps a committed federal %s save distinct from a failed refresh',
+    async (section) => {
+      if (section === 'status')
+        mockedFetchFederalApplicationDetail.mockResolvedValueOnce({
+          ...federalDetail,
+          statusCode: 'NEW',
+          statusDescription: 'New',
+        })
+      renderFederalDataRouter()
+      if (section === 'status') {
+        await selectDetailTab('Application')
+        await enterFederalStatusEditMode()
+        mockedFetchFederalApplicationDetail.mockRejectedValueOnce(new Error('Refresh failed'))
+        await userEvent.click(screen.getByRole('button', { name: 'Update status' }))
+      } else if (section === 'permit') {
+        await selectDetailTab('Shipping details')
+        await userEvent.click(screen.getByRole('button', { name: 'Edit shipping details' }))
+        await userEvent.clear(screen.getByLabelText('Transport name'))
+        await userEvent.type(screen.getByLabelText('Transport name'), 'Saved ship')
+        mockedFetchFederalApplicationDetail.mockRejectedValueOnce(new Error('Refresh failed'))
+        await userEvent.click(screen.getByRole('button', { name: 'Save federal permit' }))
+      } else {
+        await selectDetailTab('Remarks')
+        await enterFederalRemarkEditMode()
+        await userEvent.type(screen.getByLabelText('New Remark'), 'Saved remark')
+        mockedFetchFederalApplicationRemarks.mockRejectedValueOnce(new Error('Refresh failed'))
+        await userEvent.click(screen.getByRole('button', { name: 'Save Remark' }))
+      }
+      const message =
+        section === 'status'
+          ? 'Federal application status updated, but details could not be refreshed. Reload before making more changes.'
+          : section === 'permit'
+            ? 'Federal permit saved, but details could not be refreshed. Reload before making more changes.'
+            : 'Federal application remark saved, but remarks could not be refreshed. Reload before making more changes.'
+      expect((await screen.findByText(message)).closest('.cds--inline-notification')).toHaveClass(
+        'cds--inline-notification--warning',
+      )
+      expect(
+        screen.queryByText(
+          /Unable to (update federal application status|save federal permit|save federal application remark)\./,
+        ),
+      ).not.toBeInTheDocument()
+      const mutation =
+        section === 'status'
+          ? mockedUpdateFederalApplicationStatus
+          : section === 'permit'
+            ? mockedSaveFederalPermit
+            : mockedSaveFederalApplicationRemark
+      expect(mutation).toHaveBeenCalledTimes(1)
+    },
+  )
+
   it('keeps federal shipping details read-only until editing is requested', async () => {
     render(
       <MemoryRouter initialEntries={['/federal/888']}>

@@ -2470,6 +2470,7 @@ $notification-types: 'error', 'info', 'success', 'warning';
 }
 
 // Carbon's scroll-edge fade must not obscure dialog feedback.
+// Carbon's Modal puts modal-content and modal-scroll-content on the same element.
 .cds--modal-content:has(.app-notification-container) {
   mask-image: none;
 }

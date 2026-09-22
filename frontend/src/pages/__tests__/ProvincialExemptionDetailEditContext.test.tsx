@@ -1370,6 +1370,9 @@ describe('Provincial exemption edit context', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Approve exemption' }))
     const postApprovalDialog = screen.getByRole('dialog', { name: 'Approve exemption' })
     expect(
+      screen.queryByText('Exemption approved. No applicant notification recipient was returned.'),
+    ).not.toBeInTheDocument()
+    expect(
       within(postApprovalDialog).getByRole('checkbox', {
         name: 'I certify that this exemption has been approved.',
       }),
