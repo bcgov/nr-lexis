@@ -2,6 +2,8 @@ import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { useAuth } from '@/context/auth/useAuth'
+import { createTestAuthContext } from '@/test-utils/auth'
 import {
   fetchExemptionClientData,
   fetchExemptionClientLocations,
@@ -10,6 +12,8 @@ import { searchForestClients } from '@/service/client-search-service'
 import { addPermitDetail } from '@/service/provincial-permit-documents-invoices-service'
 import { fetchShippingReferenceOptions } from '@/service/shipping-reference-service'
 import BlanketOicPermitCreateForm from './BlanketOicPermitCreateForm'
+
+vi.mock('@/context/auth/useAuth', () => ({ useAuth: vi.fn() }))
 
 vi.mock('@/service/application-client-lookup-service', () => ({
   fetchExemptionClientData: vi.fn(),
@@ -111,6 +115,7 @@ const selectForestClient = async (
 describe('BlanketOicPermitCreateForm', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(useAuth).mockReturnValue(createTestAuthContext())
     vi.mocked(searchForestClients).mockImplementation(async (query) => [
       { clientNumber: query, companyName: 'Test client', clientAcronym: '' },
     ])
@@ -140,6 +145,22 @@ describe('BlanketOicPermitCreateForm', () => {
       permitNumber: '9001',
     })
   })
+
+  it.each([false, true])(
+    'restricts issue and expiry dates by permit review permission (%s)',
+    async (canReview) => {
+      vi.mocked(useAuth).mockReturnValue(
+        createTestAuthContext({ canPerform: (action) => action === '/permitsReview' && canReview }),
+      )
+      renderForm()
+
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Save permit' })).toBeEnabled())
+      expect(screen.getByLabelText('Submit date')).toBeEnabled()
+      for (const label of ['Issued date', 'Expiry date']) {
+        expect(screen.getByLabelText(label)).toHaveProperty('disabled', !canReview)
+      }
+    },
+  )
 
   it('shows the permit details and tab icons before validation is requested', async () => {
     renderForm()
@@ -253,6 +274,7 @@ describe('BlanketOicPermitCreateForm', () => {
   })
 
   it('saves explicit zero request totals after correcting the required fields', async () => {
+    vi.mocked(useAuth).mockReturnValue(createTestAuthContext({ canPerform: () => false }))
     const user = userEvent.setup()
     const { onCreated } = renderForm()
 
@@ -276,6 +298,8 @@ describe('BlanketOicPermitCreateForm', () => {
       expect.objectContaining({
         oicPermitTotalPieces: '0',
         oicPermitTotalVolume: '0',
+        permitIssueDate: '',
+        permitExpiryDate: '',
         orgUnitNumber: '1909',
       }),
     )
