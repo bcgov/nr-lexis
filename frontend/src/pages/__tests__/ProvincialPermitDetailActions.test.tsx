@@ -995,8 +995,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
     const view = render(<RouterProvider router={router} />)
 
     const success = await screen.findByText('Permit created')
-    expect(success.closest('.cds--toast-notification')).toHaveClass(
-      'cds--toast-notification--success',
+    expect(success.closest('.cds--inline-notification')).toHaveClass(
+      'cds--inline-notification--success',
     )
     expect(screen.getByText('The permit was saved.')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Permit 777 (Pending)' })).toBeInTheDocument()
@@ -1376,7 +1376,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
       })
     })
     await waitFor(() => {
-      expect(screen.getByText('Application was added to the permit.')).toBeInTheDocument()
+      expect(
+        screen
+          .getByText('Application was added to the permit.')
+          .closest('.cds--inline-notification'),
+      ).toHaveClass('cds--inline-notification--success')
     })
   })
 
@@ -5787,7 +5791,9 @@ describe('Provincial Permit Detail Action Smoke', () => {
         /The permit was updated successfully\. Current permit details could not be refreshed; reload before making another change\./i,
       ),
     ).toBeInTheDocument()
-    expect(screen.getByText('Action info')).toBeInTheDocument()
+    expect(
+      screen.getByText('Action needs attention').closest('.cds--inline-notification'),
+    ).toHaveClass('cds--inline-notification--warning')
     expect(screen.queryByText('Permit details saved')).not.toBeInTheDocument()
     expect(
       screen.getByText(
@@ -7285,6 +7291,10 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
     expect(screen.getByText('Permit approval email sent.')).toBeInTheDocument()
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+    await userEvent.click(approvalButton)
+    expect(await screen.findByRole('dialog', { name: 'Email permit 777 approval?' })).toBeVisible()
+    expect(screen.queryByText('Permit approval email sent.')).not.toBeInTheDocument()
+    expect(mockedSendPermitApprovalEmail).toHaveBeenCalledTimes(1)
   })
 
   it('defaults Blanket OIC approval mail to the owner', async () => {
@@ -8389,8 +8399,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
       expect(screen.queryByText('permit-doc.pdf')).not.toBeInTheDocument()
     })
     const success = await screen.findByText('Document deleted')
-    expect(success.closest('.cds--toast-notification')).toHaveClass(
-      'cds--toast-notification--success',
+    expect(success.closest('.cds--inline-notification')).toHaveClass(
+      'cds--inline-notification--success',
     )
     expect(screen.getByText('permit-doc.pdf was deleted.')).toBeInTheDocument()
   })
@@ -8783,7 +8793,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     expect(
       await screen.findByText('Unable to retrieve provincial permit detail.', {
-        selector: '.detail-page-inline-error',
+        selector: '.app-inline-notification .cds--inline-notification__subtitle',
       }),
     ).toBeInTheDocument()
     expect(mockedFetchProvincialPermitDetailTabs).not.toHaveBeenCalled()

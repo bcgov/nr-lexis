@@ -733,6 +733,14 @@ describe('Create Page Core Flows', () => {
     expect(screen.getByText('Application agent location does not exist.')).toBeVisible()
     expect(postSaveDialog).toBeVisible()
     expect(within(postSaveDialog).getByRole('button', { name: 'Save application' })).toBeEnabled()
+    const callsBeforeReopen = mockedSubmitProvincialApplicationCreate.mock.calls.length
+    await userEvent.click(within(postSaveDialog).getByRole('button', { name: 'Cancel' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    const cleanDialog = screen.getByRole('dialog', { name: 'Confirm application accuracy' })
+    expect(mockedSubmitProvincialApplicationCreate).toHaveBeenCalledTimes(callsBeforeReopen)
+    expect(
+      within(cleanDialog).queryByText('Application agent location does not exist.'),
+    ).not.toBeInTheDocument()
   }, 20_000)
 
   it('uses one application term field and submits its day value directly', async () => {

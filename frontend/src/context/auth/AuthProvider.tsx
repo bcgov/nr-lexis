@@ -6,7 +6,7 @@ import {
   isCognitoConfigured,
 } from '@/config/fam/config'
 import { isProdRtmOnlyMode, PROD_RTM_ONLY_ROUTE } from '@/config/features'
-import { AppNotification } from '@/components/AppNotification'
+import { AppToastNotification } from '@/components/AppToastNotification'
 import SessionTimeoutWarning from '@/components/SessionTimeoutWarning'
 import { AuthContext } from '@/context/auth/AuthContext'
 import { clearLoginDestination } from '@/context/auth/login-destination'
@@ -752,7 +752,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     <AuthContext value={contextValue}>
       {children}
       {showSessionExtendedMessage && (
-        <AppNotification
+        <AppToastNotification
           kind="success"
           title="You’re still logged in"
           subtitle="Your session has been extended."

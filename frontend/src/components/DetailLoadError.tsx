@@ -1,5 +1,4 @@
 import { Column } from '@carbon/react'
-import { useState } from 'react'
 import { AppNotification } from '@/components/AppNotification'
 
 type DetailLoadErrorProps = {
@@ -7,29 +6,11 @@ type DetailLoadErrorProps = {
   title?: string
 }
 
-/** Keeps the load failure in the page after the matching toast is dismissed. */
-const DetailLoadError = ({ message, title = 'Detail unavailable' }: DetailLoadErrorProps) => {
-  const [dismissedToastMessage, setDismissedToastMessage] = useState<string | null>(null)
-  const showToast = dismissedToastMessage !== message
-
-  return (
-    <>
-      <Column sm={4} md={8} lg={16} className="detail-page-error">
-        <p className="detail-page-inline-error" role="alert">
-          {message}
-        </p>
-      </Column>
-      {showToast ? (
-        <AppNotification
-          kind="error"
-          title={title}
-          subtitle={message}
-          lowContrast
-          onCloseButtonClick={() => setDismissedToastMessage(message)}
-        />
-      ) : null}
-    </>
-  )
-}
+/** A load failure stays visible until the detail can be loaded. */
+const DetailLoadError = ({ message, title = 'Detail unavailable' }: DetailLoadErrorProps) => (
+  <Column sm={4} md={8} lg={16} className="detail-page-error">
+    <AppNotification kind="error" role="alert" title={title} subtitle={message} />
+  </Column>
+)
 
 export default DetailLoadError

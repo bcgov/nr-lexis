@@ -1845,7 +1845,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     expect(hasHorizontalPageOverflow).toBe(false)
   })
 
-  test('centers initial detail loading and places toasts like FSPTS', async ({ page }) => {
+  test('centers initial detail loading and keeps errors in page banners', async ({ page }) => {
     await page.route('**/api/lexis/purchase-offers/81001', async (route) => {
       await new Promise((resolve) => setTimeout(resolve, 750))
       await route.fulfill({
@@ -1868,27 +1868,20 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(initialLoader).toHaveCSS('padding-top', '64px')
 
     await expect(page.getByText('Detail unavailable')).toBeVisible()
-    const inlineError = page.locator('.detail-page-inline-error')
-    const notificationRegion = page.locator('.app-notification-region')
-    const toast = notificationRegion.locator('.app-notification__toast')
-    await expect(inlineError).toHaveText('Unable to retrieve provincial offer detail.')
-    await expect(inlineError).toHaveCSS('padding', '16px 24px')
-    await expect(inlineError).toHaveCSS('font-size', '16px')
-    await expect(notificationRegion).toHaveCSS('width', '288px')
-    await expect(notificationRegion).toHaveCSS('top', '16px')
-    await expect(notificationRegion).toHaveCSS('right', '16px')
-    await expect(notificationRegion).toHaveCSS('z-index', '12000')
-    await expect(notificationRegion).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
-    await expect(toast).toHaveCSS('animation-name', 'app-notification-slide-in-right')
-    await expect(toast).toHaveCSS('animation-duration', '0.3s')
-    await expect(toast).toHaveCSS('opacity', '1')
-
-    await toast.getByRole('button', { name: 'close notification' }).click()
-    await expect(page.locator('.app-notification')).toHaveClass(/app-notification--exiting/)
-    await expect(toast).toHaveCSS('animation-name', 'app-notification-slide-out-right')
-    await expect(toast).toHaveCSS('opacity', '1')
-    await expect(toast).toBeHidden()
-    await expect(inlineError).toBeVisible()
+    const banner = page.locator('.detail-page-error .app-inline-notification')
+    await expect(banner).toContainText('Unable to retrieve provincial offer detail.')
+    await expect(banner).toHaveAttribute('role', 'alert')
+    await expect(banner).toHaveCSS('position', 'relative')
+    await expect(banner).toHaveCSS('animation-name', 'none')
+    await expect(banner.getByRole('button', { name: 'close notification' })).toHaveCount(0)
+    await expect(page.locator('.cds--toast-notification')).toHaveCount(0)
+    const fillsContent = await banner.evaluate((element) => {
+      const parent = element.parentElement!
+      return (
+        Math.abs(element.getBoundingClientRect().width - parent.getBoundingClientRect().width) < 2
+      )
+    })
+    expect(fillsContent).toBe(true)
   })
 
   test('bounds detail field cards to one, two, and three columns', async ({ page }) => {
@@ -2113,6 +2106,23 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     }
   })
 
+  test('reveals offer validation after each save from the bottom of a long form', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 780, height: 999 })
+    await gotoSyntheticRoute(page, '/provincial/offers/create', {
+      ready: page.getByRole('heading', { level: 1, name: 'Create provincial offer', exact: true }),
+    })
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      await page.getByRole('button', { name: 'Save new offer', exact: true }).click()
+      const banner = page.locator('.create-form-validation-notification')
+      await expect(banner).toContainText('Application number is required.')
+      await expect(banner).toBeInViewport({ ratio: 1 })
+      await expect(banner).toHaveClass(/cds--inline-notification--error/)
+      await expect(page.locator('.cds--toast-notification')).toHaveCount(0)
+    }
+  })
+
   test('keeps an impossible typed date visible for correction after blur', async ({ page }) => {
     await gotoSyntheticRoute(page, '/provincial/offers/create', {
       waitUntil: 'domcontentloaded',
@@ -2285,6 +2295,117 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
         () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
       ),
     ).toBe(false)
+  })
+
+  for (const scenario of [
+    { theme: 'white', width: 1440, height: 900 },
+    { theme: 'g100', width: 390, height: 844 },
+  ]) {
+    test(`keeps action banners in the dialog and page (${scenario.theme})`, async ({
+      page,
+    }, testInfo) => {
+      await page.setViewportSize({ width: scenario.width, height: scenario.height })
+      await page.addInitScript(
+        (theme) => localStorage.setItem('lexis.ui.theme', theme),
+        scenario.theme,
+      )
+      let attempts = 0
+      await page.route('**/api/lexis/admin/policies/fee/fee-policy-1', async (route) => {
+        expect(route.request().method()).toBe('DELETE')
+        attempts += 1
+        await route.fulfill({
+          json:
+            attempts === 1
+              ? { success: false, errors: ['This fee policy is in use.'] }
+              : { success: true },
+        })
+      })
+      await gotoSyntheticRoute(page, '/admin/policies/fee', {
+        ready: page.getByRole('button', { name: 'Delete', exact: true }),
+      })
+      await page.getByRole('button', { name: 'Delete', exact: true }).click()
+      const dialog = page.getByRole('dialog', { name: 'Delete fee policy?' })
+      await dialog.getByRole('button', { name: 'Delete', exact: true }).click()
+      const failure = dialog.locator('.app-inline-notification')
+      await expect(failure).toContainText('This fee policy is in use.')
+      await expect(failure).toBeInViewport()
+      await expect(dialog.locator('.cds--modal-content')).toHaveCSS('mask-image', 'none')
+      await expect(page.locator('.cds--toast-notification')).toHaveCount(0)
+      await expect(dialog.getByRole('button', { name: 'Delete', exact: true })).toBeEnabled()
+      await testInfo.attach('dialog-error', {
+        body: await page.screenshot(),
+        contentType: 'image/png',
+      })
+
+      await dialog.getByRole('button', { name: 'Delete', exact: true }).click()
+      await expect(dialog).toBeHidden()
+      const success = page.locator(
+        '.app-inline-notification--success, .app-inline-notification.cds--inline-notification--success',
+      )
+      await expect(success).toContainText('Fee policy deleted.')
+      await expect(success).toBeInViewport()
+      expect(attempts).toBe(2)
+      await page.clock.install()
+      await page.clock.fastForward(60_000)
+      await expect(success).toBeVisible()
+      await expect(success).toHaveCSS('animation-name', 'none')
+      expect(
+        await success.evaluate((element) => {
+          const grid = element.closest('.default-grid')!
+          const styles = getComputedStyle(grid)
+          const contentWidth =
+            grid.clientWidth - parseFloat(styles.paddingLeft) - parseFloat(styles.paddingRight)
+          return Math.abs(element.getBoundingClientRect().width - contentWidth) < 2
+        }),
+      ).toBe(true)
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+      ).toBe(true)
+      await testInfo.attach('page-success', {
+        body: await page.screenshot(),
+        contentType: 'image/png',
+      })
+      await success.getByRole('button', { name: 'close notification' }).click()
+      await expect(success).toHaveCount(0)
+    })
+  }
+
+  test('reveals an oversized error in the actual modal scroll container without fading it', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    const longError = 'This fee policy is in use. '.repeat(80).trim()
+    await page.route('**/api/lexis/admin/policies/fee/fee-policy-1', async (route) => {
+      await route.fulfill({ json: { success: false, errors: [longError] } })
+    })
+    await gotoSyntheticRoute(page, '/admin/policies/fee', {
+      ready: page.getByRole('button', { name: 'Delete', exact: true }),
+    })
+    await page.getByRole('button', { name: 'Delete', exact: true }).click()
+    const dialog = page.getByRole('dialog', { name: 'Delete fee policy?' })
+    await dialog.getByRole('button', { name: 'Delete', exact: true }).click()
+    const failure = dialog.locator('.app-inline-notification')
+    await expect(failure).toContainText(longError)
+    const scroller = dialog.locator('.cds--modal-scroll-content')
+    await expect(scroller).toBeVisible()
+    await expect(scroller).toHaveCSS('mask-image', 'none')
+    await expect(scroller).not.toHaveClass(/modal-scroll-content--no-fade/)
+    await expect
+      .poll(() => scroller.evaluate((element) => element.scrollHeight > element.clientHeight))
+      .toBe(true)
+    await expect
+      .poll(() =>
+        failure.evaluate((element) => {
+          const container = element.closest('.cds--modal-scroll-content')!
+          const bounds = element.getBoundingClientRect()
+          const visible = container.getBoundingClientRect()
+          return bounds.top >= visible.top - 1 && bounds.top < visible.bottom
+        }),
+      )
+      .toBe(true)
+    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()
+    await page.getByRole('button', { name: 'Delete', exact: true }).click()
+    await expect(dialog.locator('.app-inline-notification')).toHaveCount(0)
   })
 
   test('places policy add actions in result toolbars and uses focused add dialogs', async ({

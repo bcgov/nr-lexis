@@ -924,11 +924,20 @@ const ProvincialPermitDetailsPage = () => {
     EMPTY_DEFERRED_PERMIT_TAB_STATE,
   )
   const [actionErrorMessage, setActionErrorMessage] = useState('')
-  const [actionInfoMessage, setActionInfoMessage] = useState('')
+  const [actionFeedback, setActionFeedback] = useState<{
+    kind: 'success' | 'warning'
+    message: string
+  } | null>(null)
   const [actionSuccessNotification, setActionSuccessNotification] =
     useState<ActionSuccessNotification | null>(null)
   const [createdBlanketOicPermitNumber, setCreatedBlanketOicPermitNumber] = useState('')
   const [documentSuccessMessage, setDocumentSuccessMessage] = useState('')
+  const clearActionNotifications = useCallback(() => {
+    setActionErrorMessage('')
+    setActionFeedback(null)
+    setActionSuccessNotification(null)
+    setDocumentSuccessMessage('')
+  }, [])
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
   const [documentPendingDeletion, setDocumentPendingDeletion] = useState<PermitDocumentRow | null>(
     null,
@@ -2851,7 +2860,7 @@ const ProvincialPermitDetailsPage = () => {
       }
       setPermitDetailRefreshRequired(false)
       setActionErrorMessage('')
-      setActionInfoMessage('')
+      setActionFeedback(null)
       setIsSavingPermit(true)
       try {
         const resolvedPermitNumber = String(detail.permitNumber ?? permitNumber ?? '').trim()
@@ -3007,9 +3016,10 @@ const ProvincialPermitDetailsPage = () => {
                 : 'Permit details were saved.',
         )
         if (permitDetailRefreshFailed) {
-          setActionInfoMessage(
-            `${mutationMessage} Current permit details could not be refreshed; reload before making another change.`,
-          )
+          setActionFeedback({
+            kind: 'warning',
+            message: `${mutationMessage} Current permit details could not be refreshed; reload before making another change.`,
+          })
         } else {
           setActionSuccessNotification({
             title: includeShipping
@@ -3088,7 +3098,7 @@ const ProvincialPermitDetailsPage = () => {
       return false
     }
     setActionErrorMessage('')
-    setActionInfoMessage('')
+    setActionFeedback(null)
     setIsSavingShipping(true)
     try {
       const result = await updatePermitShipping(request)
@@ -3218,7 +3228,7 @@ const ProvincialPermitDetailsPage = () => {
       return false
     }
     setActionErrorMessage('')
-    setActionInfoMessage('')
+    setActionFeedback(null)
     setIsSavingFeeOverride(true)
     try {
       const result = await updatePermitDetail(permitMutationRequest(request, detail.blanketOic))
@@ -3283,7 +3293,7 @@ const ProvincialPermitDetailsPage = () => {
       }
 
       setActionErrorMessage('')
-      setActionInfoMessage('')
+      setActionFeedback(null)
       setActionSuccessNotification(null)
       setIsUpdatingScaleId(scaleId)
       try {
@@ -3307,7 +3317,10 @@ const ProvincialPermitDetailsPage = () => {
         setHasLoadedAvailablePermitApplications(false)
         setAvailablePermitApplicationsError('')
         await reloadPermitScaleState()
-        setActionInfoMessage(result.message || 'Permit item rows were updated.')
+        setActionFeedback({
+          kind: 'success',
+          message: result.message || 'Permit item rows were updated.',
+        })
       } catch (error) {
         if (isLatestRequest()) {
           console.error(error)
@@ -3346,7 +3359,7 @@ const ProvincialPermitDetailsPage = () => {
     }
 
     setActionErrorMessage('')
-    setActionInfoMessage('')
+    setActionFeedback(null)
     setActionSuccessNotification(null)
     setIsSavingPermitApplication(true)
     try {
@@ -3380,15 +3393,19 @@ const ProvincialPermitDetailsPage = () => {
       )
       try {
         await reloadPermitScaleState()
-        setActionInfoMessage(result.message || 'Application was added to the permit.')
+        setActionFeedback({
+          kind: 'success',
+          message: result.message || 'Application was added to the permit.',
+        })
       } catch (refreshError) {
         console.error(refreshError)
         setPermitTablesErrorMessage(
           'The application was added, but permit tables could not be refreshed. Reload the page.',
         )
-        setActionInfoMessage(
-          `${result.message || 'Application was added to the permit.'} Reload before changing application links again.`,
-        )
+        setActionFeedback({
+          kind: 'warning',
+          message: `${result.message || 'Application was added to the permit.'} Reload before changing application links again.`,
+        })
       }
     } catch (error) {
       if (isLatestRequest()) {
@@ -3426,7 +3443,7 @@ const ProvincialPermitDetailsPage = () => {
       }
 
       setActionErrorMessage('')
-      setActionInfoMessage('')
+      setActionFeedback(null)
       setActionSuccessNotification(null)
       setIsRemovingPermitApplication(applicationNumber)
       try {
@@ -3459,15 +3476,19 @@ const ProvincialPermitDetailsPage = () => {
         setAvailablePermitApplicationsError('')
         try {
           await reloadPermitScaleState()
-          setActionInfoMessage(result.message || 'Application was removed from the permit.')
+          setActionFeedback({
+            kind: 'success',
+            message: result.message || 'Application was removed from the permit.',
+          })
         } catch (refreshError) {
           console.error(refreshError)
           setPermitTablesErrorMessage(
             'The application was removed, but permit tables could not be refreshed. Reload the page.',
           )
-          setActionInfoMessage(
-            `${result.message || 'Application was removed from the permit.'} Reload before changing application links again.`,
-          )
+          setActionFeedback({
+            kind: 'warning',
+            message: `${result.message || 'Application was removed from the permit.'} Reload before changing application links again.`,
+          })
         }
       } catch (error) {
         if (isLatestRequest()) {
@@ -3623,7 +3644,7 @@ const ProvincialPermitDetailsPage = () => {
     }
 
     setBoicPackageErrorMessage('')
-    setActionInfoMessage('')
+    setActionFeedback(null)
     setIsSavingBoicPackage(true)
     try {
       const result = editingBoicPackageNumber
@@ -3650,15 +3671,19 @@ const ProvincialPermitDetailsPage = () => {
       resetBlanketOicPackageForm()
       try {
         await reloadPermitTabs()
-        setActionInfoMessage(result.message || 'Blanket OIC package was saved.')
+        setActionFeedback({
+          kind: 'success',
+          message: result.message || 'Blanket OIC package was saved.',
+        })
       } catch (refreshError) {
         console.error(refreshError)
         setPermitTablesErrorMessage(
           'The Blanket OIC package was saved, but permit tables could not be refreshed.',
         )
-        setActionInfoMessage(
-          `${result.message || 'Blanket OIC package was saved.'} Reload before making another package change.`,
-        )
+        setActionFeedback({
+          kind: 'warning',
+          message: `${result.message || 'Blanket OIC package was saved.'} Reload before making another package change.`,
+        })
       }
       return true
     } catch (error) {
@@ -3696,7 +3721,7 @@ const ProvincialPermitDetailsPage = () => {
         return
       }
       setActionErrorMessage('')
-      setActionInfoMessage('')
+      setActionFeedback(null)
       setActionSuccessNotification(null)
       setBoicPackageErrorMessage('')
       setIsDeletingBoicPackageNumber(packageNumberToDelete)
@@ -3712,7 +3737,10 @@ const ProvincialPermitDetailsPage = () => {
           resetBlanketOicPackageForm()
         }
         await reloadPermitTabs()
-        setActionInfoMessage(result.message || 'Blanket OIC package was deleted.')
+        setActionFeedback({
+          kind: 'success',
+          message: result.message || 'Blanket OIC package was deleted.',
+        })
       } catch (error) {
         if (!failureMessage) {
           console.error(error)
@@ -3777,7 +3805,7 @@ const ProvincialPermitDetailsPage = () => {
     }
 
     setActionErrorMessage('')
-    setActionInfoMessage('')
+    setActionFeedback(null)
     setIsSavingBoicScale(true)
     try {
       const result = await addBlanketOicScale(request)
@@ -3796,15 +3824,19 @@ const ProvincialPermitDetailsPage = () => {
       setBoicScaleBaselineForm(savedScaleBaseline)
       try {
         await reloadPermitScaleState()
-        setActionInfoMessage(result.message || 'Blanket OIC scale detail was added.')
+        setActionFeedback({
+          kind: 'success',
+          message: result.message || 'Blanket OIC scale detail was added.',
+        })
       } catch (refreshError) {
         console.error(refreshError)
         setPermitTablesErrorMessage(
           'The Blanket OIC scale detail was added, but permit tables could not be refreshed.',
         )
-        setActionInfoMessage(
-          `${result.message || 'Blanket OIC scale detail was added.'} Reload before adding another scale row.`,
-        )
+        setActionFeedback({
+          kind: 'warning',
+          message: `${result.message || 'Blanket OIC scale detail was added.'} Reload before adding another scale row.`,
+        })
       }
       return true
     } catch (error) {
@@ -3834,7 +3866,7 @@ const ProvincialPermitDetailsPage = () => {
       }
 
       setActionErrorMessage('')
-      setActionInfoMessage('')
+      setActionFeedback(null)
       setActionSuccessNotification(null)
       setIsDeletingBoicScaleId(row.id)
       try {
@@ -3850,15 +3882,19 @@ const ProvincialPermitDetailsPage = () => {
 
         try {
           await reloadPermitScaleState()
-          setActionInfoMessage(result.message || 'Blanket OIC scale detail was removed.')
+          setActionFeedback({
+            kind: 'success',
+            message: result.message || 'Blanket OIC scale detail was removed.',
+          })
         } catch (refreshError) {
           console.error(refreshError)
           setPermitTablesErrorMessage(
             'The Blanket OIC scale was removed, but permit tables could not be refreshed. Reload the page.',
           )
-          setActionInfoMessage(
-            `${result.message || 'Blanket OIC scale detail was removed.'} Reload before changing scale rows again.`,
-          )
+          setActionFeedback({
+            kind: 'warning',
+            message: `${result.message || 'Blanket OIC scale detail was removed.'} Reload before changing scale rows again.`,
+          })
         }
       } catch (error) {
         console.error(error)
@@ -3946,7 +3982,7 @@ const ProvincialPermitDetailsPage = () => {
         }
       }
       setActionErrorMessage('')
-      setActionInfoMessage('')
+      setActionFeedback(null)
       setActionSuccessNotification(null)
       try {
         if (preview) {
@@ -3988,7 +4024,7 @@ const ProvincialPermitDetailsPage = () => {
     }
 
     setActionErrorMessage('')
-    setActionInfoMessage('')
+    setActionFeedback(null)
     setActionSuccessNotification(null)
     setIsOpeningPermitReport(true)
     try {
@@ -4026,7 +4062,7 @@ const ProvincialPermitDetailsPage = () => {
         return false
       }
       setActionErrorMessage('')
-      setActionInfoMessage('')
+      setActionFeedback(null)
       setIsSendingPermitEmail(true)
       try {
         const result =
@@ -4034,7 +4070,7 @@ const ProvincialPermitDetailsPage = () => {
             ? await sendPermitReviewRequestEmail(resolvedPermitNumber)
             : await sendPermitApprovalEmail(resolvedPermitNumber, clientEmail)
         if (result.success) {
-          setActionInfoMessage(result.message || 'Permit email sent.')
+          setActionFeedback({ kind: 'success', message: result.message || 'Permit email sent.' })
           if (type === 'request' && result.permitRequestDate) {
             setDetail((current) =>
               current
@@ -4076,7 +4112,7 @@ const ProvincialPermitDetailsPage = () => {
     if (!resolvedPermitNumber || !canSendPermitApproval || isSendingPermitEmail) {
       return
     }
-    setActionErrorMessage('')
+    clearActionNotifications()
     setIsSendingPermitEmail(true)
     try {
       const defaultEmail = await fetchPermitApprovalEmailDefault(resolvedPermitNumber)
@@ -4088,7 +4124,13 @@ const ProvincialPermitDetailsPage = () => {
     } finally {
       setIsSendingPermitEmail(false)
     }
-  }, [canSendPermitApproval, detail?.permitNumber, isSendingPermitEmail, permitNumber])
+  }, [
+    clearActionNotifications,
+    canSendPermitApproval,
+    detail?.permitNumber,
+    isSendingPermitEmail,
+    permitNumber,
+  ])
 
   const onRemoveDocument = useCallback(
     async (row: PermitDocumentRow) => {
@@ -4108,7 +4150,7 @@ const ProvincialPermitDetailsPage = () => {
 
       const isLatestRequest = beginDocumentRefreshRequest()
       setActionErrorMessage('')
-      setActionInfoMessage('')
+      setActionFeedback(null)
       setActionSuccessNotification(null)
       setDocumentSuccessMessage('')
       setIsRemovingDocumentId(row.id)
@@ -4137,9 +4179,10 @@ const ProvincialPermitDetailsPage = () => {
             setDocumentsErrorMessage(
               'The document was deleted, but permit documents could not be refreshed. Reload the page.',
             )
-            setActionInfoMessage(
-              `${row.name || 'Document'} was deleted. Reload before changing documents again.`,
-            )
+            setActionFeedback({
+              kind: 'warning',
+              message: `${row.name || 'Document'} was deleted. Reload before changing documents again.`,
+            })
           }
         }
       } catch (error) {
@@ -4631,7 +4674,10 @@ const ProvincialPermitDetailsPage = () => {
                             size="sm"
                             disabled={isUpdatingPermitApplications}
                             renderIcon={TrashCan}
-                            onClick={() => setPermitApplicationPendingRemoval(applicationNumber)}
+                            onClick={() => {
+                              clearActionNotifications()
+                              setPermitApplicationPendingRemoval(applicationNumber)
+                            }}
                           >
                             {isRemovingPermitApplication === applicationNumber
                               ? 'Removing…'
@@ -5230,7 +5276,10 @@ const ProvincialPermitDetailsPage = () => {
                               size="sm"
                               disabled={blanketOicScaleActionsDisabled}
                               renderIcon={TrashCan}
-                              onClick={() => setBoicScalePendingRemoval(row)}
+                              onClick={() => {
+                                clearActionNotifications()
+                                setBoicScalePendingRemoval(row)
+                              }}
                             >
                               {isDeletingBoicScaleId === row.id ? 'Removing…' : 'Remove'}
                             </Button>
@@ -5683,20 +5732,20 @@ const ProvincialPermitDetailsPage = () => {
                 title="Permit created"
                 subtitle="The permit was saved."
                 lowContrast
-                autoDismissMs={6000}
                 onCloseButtonClick={() => setCreatedBlanketOicPermitNumber('')}
               />
             </Column>
           )}
-          {!!actionInfoMessage && (
+          {!!actionFeedback && (
             <Column sm={4} md={8} lg={16} className="detail-page-error">
               <AppNotification
-                kind="info"
-                title="Action info"
-                subtitle={actionInfoMessage}
+                kind={actionFeedback.kind}
+                title={
+                  actionFeedback.kind === 'success' ? 'Action completed' : 'Action needs attention'
+                }
+                subtitle={actionFeedback.message}
                 lowContrast
-                autoDismissMs={6000}
-                onCloseButtonClick={() => setActionInfoMessage('')}
+                onCloseButtonClick={() => setActionFeedback(null)}
               />
             </Column>
           )}
@@ -5708,7 +5757,6 @@ const ProvincialPermitDetailsPage = () => {
                 title={actionSuccessNotification.title}
                 subtitle={actionSuccessNotification.subtitle}
                 lowContrast
-                autoDismissMs={6000}
                 onCloseButtonClick={() => setActionSuccessNotification(null)}
               />
             </Column>
@@ -5721,13 +5769,12 @@ const ProvincialPermitDetailsPage = () => {
                 title="Document deleted"
                 subtitle={documentSuccessMessage}
                 lowContrast
-                autoDismissMs={6000}
                 onCloseButtonClick={() => setDocumentSuccessMessage('')}
               />
             </Column>
           )}
 
-          {!!actionErrorMessage && (
+          {!!actionErrorMessage && !permitApprovalEmailOpen && (
             <Column sm={4} md={8} lg={16} className="detail-page-error">
               <AppNotification
                 kind="error"
@@ -6508,9 +6555,10 @@ const ProvincialPermitDetailsPage = () => {
                                               isRemovingPermitApplication === applicationNumber
                                             }
                                             renderIcon={TrashCan}
-                                            onClick={() =>
+                                            onClick={() => {
+                                              clearActionNotifications()
                                               setPermitApplicationPendingRemoval(applicationNumber)
-                                            }
+                                            }}
                                           >
                                             {isRemovingPermitApplication === applicationNumber
                                               ? 'Removing…'
@@ -7283,11 +7331,12 @@ const ProvincialPermitDetailsPage = () => {
                                           ? `boic-package-delete-help-${encodeURIComponent(selectedBlanketOicPackage.packageNumber)}`
                                           : undefined
                                       }
-                                      onClick={() =>
+                                      onClick={() => {
+                                        clearActionNotifications()
                                         setBoicPackageNumberPendingDeletion(
                                           selectedBlanketOicPackage.packageNumber,
                                         )
-                                      }
+                                      }}
                                     >
                                       {isDeletingBoicPackageNumber ===
                                       selectedBlanketOicPackage.packageNumber
@@ -7501,9 +7550,10 @@ const ProvincialPermitDetailsPage = () => {
                                                 (item) => item.packageNumber === row.packageNumber,
                                               )
                                             }
-                                            onClick={() =>
+                                            onClick={() => {
+                                              clearActionNotifications()
                                               setBoicPackageNumberPendingDeletion(row.packageNumber)
-                                            }
+                                            }}
                                           >
                                             {isDeletingBoicPackageNumber === row.packageNumber
                                               ? 'Deleting…'
@@ -7816,7 +7866,10 @@ const ProvincialPermitDetailsPage = () => {
                                                   : undefined
                                               }
                                               renderIcon={TrashCan}
-                                              onClick={() => setDocumentPendingDeletion(row)}
+                                              onClick={() => {
+                                                clearActionNotifications()
+                                                setDocumentPendingDeletion(row)
+                                              }}
                                             >
                                               {isRemovingDocumentId === row.id
                                                 ? 'Deleting…'
@@ -7958,6 +8011,7 @@ const ProvincialPermitDetailsPage = () => {
           pendingLabel="Sending…"
           confirmDisabled={!isValidEmail(permitApprovalEmailAddress)}
           onClose={() => setPermitApprovalEmailOpen(false)}
+          errorMessage={actionErrorMessage}
           onError={() => undefined}
           onConfirm={async () => {
             const sent = await onSendPermitEmail('approval', permitApprovalEmailAddress)

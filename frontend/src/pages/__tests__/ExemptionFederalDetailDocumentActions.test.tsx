@@ -1460,6 +1460,59 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(screen.queryByRole('button', { name: 'Save and leave' })).not.toBeInTheDocument()
   })
 
+  it.each(['status', 'permit', 'remark'] as const)(
+    'keeps a committed federal %s save distinct from a failed refresh',
+    async (section) => {
+      if (section === 'status')
+        mockedFetchFederalApplicationDetail.mockResolvedValueOnce({
+          ...federalDetail,
+          statusCode: 'NEW',
+          statusDescription: 'New',
+        })
+      renderFederalDataRouter()
+      if (section === 'status') {
+        await selectDetailTab('Application')
+        await enterFederalStatusEditMode()
+        mockedFetchFederalApplicationDetail.mockRejectedValueOnce(new Error('Refresh failed'))
+        await userEvent.click(screen.getByRole('button', { name: 'Update status' }))
+      } else if (section === 'permit') {
+        await selectDetailTab('Shipping details')
+        await userEvent.click(screen.getByRole('button', { name: 'Edit shipping details' }))
+        await userEvent.clear(screen.getByLabelText('Transport name'))
+        await userEvent.type(screen.getByLabelText('Transport name'), 'Saved ship')
+        mockedFetchFederalApplicationDetail.mockRejectedValueOnce(new Error('Refresh failed'))
+        await userEvent.click(screen.getByRole('button', { name: 'Save federal permit' }))
+      } else {
+        await selectDetailTab('Remarks')
+        await enterFederalRemarkEditMode()
+        await userEvent.type(screen.getByLabelText('New Remark'), 'Saved remark')
+        mockedFetchFederalApplicationRemarks.mockRejectedValueOnce(new Error('Refresh failed'))
+        await userEvent.click(screen.getByRole('button', { name: 'Save Remark' }))
+      }
+      const message =
+        section === 'status'
+          ? 'Federal application status updated, but details could not be refreshed. Reload before making more changes.'
+          : section === 'permit'
+            ? 'Federal permit saved, but details could not be refreshed. Reload before making more changes.'
+            : 'Federal application remark saved, but remarks could not be refreshed. Reload before making more changes.'
+      expect((await screen.findByText(message)).closest('.cds--inline-notification')).toHaveClass(
+        'cds--inline-notification--warning',
+      )
+      expect(
+        screen.queryByText(
+          /Unable to (update federal application status|save federal permit|save federal application remark)\./,
+        ),
+      ).not.toBeInTheDocument()
+      const mutation =
+        section === 'status'
+          ? mockedUpdateFederalApplicationStatus
+          : section === 'permit'
+            ? mockedSaveFederalPermit
+            : mockedSaveFederalApplicationRemark
+      expect(mutation).toHaveBeenCalledTimes(1)
+    },
+  )
+
   it('keeps federal shipping details read-only until editing is requested', async () => {
     render(
       <MemoryRouter initialEntries={['/federal/888']}>
@@ -2158,9 +2211,10 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(mockedSaveFederalApplicationRemark).not.toHaveBeenCalled()
   })
 
-  it('removes federal documents and refreshes rows', async () => {
-    mockedFetchFederalApplicationDocuments
-      .mockResolvedValueOnce({
+  it.each([true, false])(
+    'reports federal document deletion with refreshed rows=%s',
+    async (refreshSucceeds) => {
+      mockedFetchFederalApplicationDocuments.mockResolvedValueOnce({
         rows: [
           {
             id: '800',
@@ -2171,41 +2225,57 @@ describe('Exemption and Federal Detail Document Actions', () => {
         ],
         source: 'api',
       })
-      .mockResolvedValueOnce({
-        rows: [],
-        source: 'api',
+      if (refreshSucceeds) {
+        mockedFetchFederalApplicationDocuments.mockResolvedValueOnce({
+          rows: [],
+          source: 'api',
+        })
+      } else {
+        mockedFetchFederalApplicationDocuments.mockRejectedValueOnce(
+          new Error('Refresh unavailable'),
+        )
+      }
+
+      render(
+        <MemoryRouter initialEntries={['/federal/888']}>
+          <Routes>
+            <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
+          </Routes>
+        </MemoryRouter>,
+      )
+
+      await selectDetailTab('Documents')
+      await enterDocumentEditMode()
+      const documentName = await screen.findByText('federal-doc.pdf')
+      const documentRow = documentName.closest('tr')
+      expect(documentRow).toBeTruthy()
+      const deleteButton = within(documentRow as HTMLElement).getByRole('button', {
+        name: 'Delete',
       })
+      await userEvent.click(deleteButton)
+      const confirmation = await screen.findByRole('dialog', { name: 'Delete document' })
+      expect(confirmation).toHaveTextContent(
+        'Permanently delete federal-doc.pdf? This cannot be undone.',
+      )
+      expect(mockedRemoveFederalApplicationDocument).not.toHaveBeenCalled()
+      await userEvent.click(within(confirmation).getByRole('button', { name: 'Delete' }))
 
-    render(
-      <MemoryRouter initialEntries={['/federal/888']}>
-        <Routes>
-          <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    await selectDetailTab('Documents')
-    await enterDocumentEditMode()
-    const documentName = await screen.findByText('federal-doc.pdf')
-    const documentRow = documentName.closest('tr')
-    expect(documentRow).toBeTruthy()
-    const deleteButton = within(documentRow as HTMLElement).getByRole('button', {
-      name: 'Delete',
-    })
-    await userEvent.click(deleteButton)
-    const confirmation = await screen.findByRole('dialog', { name: 'Delete document' })
-    expect(confirmation).toHaveTextContent(
-      'Permanently delete federal-doc.pdf? This cannot be undone.',
-    )
-    expect(mockedRemoveFederalApplicationDocument).not.toHaveBeenCalled()
-    await userEvent.click(within(confirmation).getByRole('button', { name: 'Delete' }))
-
-    await waitFor(() => {
-      expect(mockedRemoveFederalApplicationDocument).toHaveBeenCalledWith('800', '888')
-      expect(mockedFetchFederalApplicationDocuments).toHaveBeenCalledTimes(2)
-      expect(screen.queryByText('federal-doc.pdf')).not.toBeInTheDocument()
-    })
-  })
+      await waitFor(() => {
+        expect(mockedRemoveFederalApplicationDocument).toHaveBeenCalledWith('800', '888')
+        expect(mockedFetchFederalApplicationDocuments).toHaveBeenCalledTimes(2)
+      })
+      const feedback = await screen.findByText(
+        refreshSucceeds
+          ? 'federal-doc.pdf was deleted.'
+          : 'federal-doc.pdf was deleted. Reload before changing documents again.',
+      )
+      expect(feedback.closest('.cds--inline-notification')).toHaveClass(
+        refreshSucceeds ? 'cds--inline-notification--success' : 'cds--inline-notification--warning',
+      )
+      expect(mockedRemoveFederalApplicationDocument).toHaveBeenCalledTimes(1)
+      if (refreshSucceeds) expect(screen.queryByText('federal-doc.pdf')).not.toBeInTheDocument()
+    },
+  )
 
   it.each(['ADMIN', 'LEXIS_APPLICATION_APPROVER'])(
     'allows %s to add and delete expired federal documents while other edits stay read-only',
@@ -2496,7 +2566,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
 
     expect(
       await screen.findByText('Unable to retrieve provincial exemption detail.', {
-        selector: '.detail-page-inline-error',
+        selector: '.app-inline-notification .cds--inline-notification__subtitle',
       }),
     ).toBeInTheDocument()
     expect(mockedFetchExemptionDocuments).not.toHaveBeenCalled()
@@ -2515,7 +2585,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
 
     expect(
       await screen.findByText('Unable to retrieve federal application detail.', {
-        selector: '.detail-page-inline-error',
+        selector: '.app-inline-notification .cds--inline-notification__subtitle',
       }),
     ).toBeInTheDocument()
     expect(mockedFetchFederalApplicationDocuments).not.toHaveBeenCalled()

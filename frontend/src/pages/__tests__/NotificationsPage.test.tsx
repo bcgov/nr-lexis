@@ -332,6 +332,11 @@ describe('Notifications page', () => {
       )
     })
     await waitFor(() => expect(launcher).toHaveFocus())
+    expect(screen.getByText('Notification published')).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+    expect(await screen.findByRole('dialog', { name: 'Delete this notification?' })).toBeVisible()
+    expect(screen.queryByText('Notification published')).not.toBeInTheDocument()
+    expect(mockedDeleteNotification).not.toHaveBeenCalled()
   })
 
   it('clears and disables individual audiences when all roles are selected', async () => {
