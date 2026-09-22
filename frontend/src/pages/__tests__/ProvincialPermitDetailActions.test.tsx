@@ -1974,6 +1974,65 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(second).toBeChecked()
   })
 
+  it('keeps scale controls locked until the saved selection and totals finish refreshing', async () => {
+    const initialDetail = configureMinisterialActivePermit()
+    const initialTabs = {
+      ...tabsResult,
+      packages: [{ ...editableBlanketOicPackage, packageNumber: 'MIN-1' }],
+      items: [
+        {
+          id: 'SCALE-1',
+          packageNumber: 'MIN-1',
+          timberMark: 'TEST',
+          scaleType: 'C',
+          species: 'HE',
+          grade: 'U',
+          pieces: 1,
+          volume: 1,
+          permitNumber: '777',
+          includedInPermit: true,
+        },
+      ],
+    }
+    mockedFetchProvincialPermitDetailTabs.mockResolvedValue(initialTabs)
+    renderPermitDetails()
+    await selectPermitDetailTab('Scale')
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit scale selection' }))
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Include scale SCALE-1 in permit' }))
+
+    let resolveDetail!: (detail: ProvincialPermitDetail) => void
+    mockedFetchProvincialPermitDetail.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveDetail = resolve
+      }),
+    )
+    // The row refresh can finish before the permit totals refresh does.
+    mockedFetchProvincialPermitDetailTabs.mockResolvedValue({
+      ...initialTabs,
+      items: [{ ...initialTabs.items[0], permitNumber: '', includedInPermit: false }],
+    })
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    expect(await screen.findByRole('button', { name: 'Saving…' })).toBeDisabled()
+    const scaleSummary = screen.getByRole('group', { name: 'Summary of scale' })
+    expect(within(scaleSummary).getByRole('button', { name: 'Cancel' })).toBeDisabled()
+    expect(screen.getByRole('combobox', { name: 'Package number' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Edit scale selection' })).not.toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: 'Include scale SCALE-1 in permit' })).toBeDisabled()
+    expect(
+      screen.getByRole('checkbox', { name: 'Include scale SCALE-1 in permit' }),
+    ).not.toBeChecked()
+    expect(mockedUpdatePermitScaleSelection).toHaveBeenCalledTimes(1)
+
+    await act(async () => resolveDetail({ ...initialDetail, permitVolume: 0, numberOfPieces: 0 }))
+    expect(await screen.findByRole('button', { name: 'Edit scale selection' })).toBeEnabled()
+    expect(screen.getByRole('combobox', { name: 'Package number' })).toBeEnabled()
+    expect(screen.queryByRole('button', { name: 'Saving…' })).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('checkbox', { name: 'Include scale SCALE-1 in permit' }),
+    ).not.toBeChecked()
+    expect(mockedUpdatePermitScaleSelection).toHaveBeenCalledTimes(1)
+  })
+
   it.each(['COM', 'PPD', 'EXP', 'CAN'])(
     'keeps Ministerial Scale read-only for %s',
     async (permitStatusCode) => {

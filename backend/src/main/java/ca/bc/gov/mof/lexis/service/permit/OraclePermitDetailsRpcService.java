@@ -2364,119 +2364,15 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       return failurePersistenceResponse(List.of("A valid scale detail id is required."), permitNumber);
     }
 
-    Optional<PermitMutationRow> permit = repository.findPermitMutationByPermitNumber(permitNumber);
-    if (permit.isEmpty()) {
-      return failurePersistenceResponse(List.of("Permit not found."), permitNumber);
+    PermitPersistenceRpcResponseDto result =
+        updateScaleSelection(
+            permitNumber,
+            attachInd ? List.of(normalizedScaleDetailId) : List.of(),
+            attachInd ? List.of() : List.of(normalizedScaleDetailId),
+            normalizedUserId);
+    if (!result.success()) {
+      return result;
     }
-    if (isBlanketOicPermit(permit.get())
-        && !isOicApplicationBoundToExemption(
-            permit.get().oicApplicationNumber(), permit.get().exemptionNumber())) {
-      return failurePersistenceResponse(
-          List.of("The hidden OIC application does not belong to this permit's exemption."),
-          permitNumber);
-    }
-    if (isScaleAttachmentLockedStatus(permit.get().permitStatusCode())) {
-      return failurePersistenceResponse(
-          List.of(
-              "Scale rows cannot be changed for a completed, payment-pending, expired, or cancelled permit."),
-          permitNumber);
-    }
-
-    Optional<ScaleMutationRow> existing = repository.findScaleMutationById(normalizedScaleDetailId);
-    if (existing.isEmpty()) {
-      return failurePersistenceResponse(List.of("Scale detail not found."), permitNumber);
-    }
-
-    ScaleMutationRow scale = existing.get();
-    Long applicationNumber = scale.applicationNumber();
-    if (applicationNumber == null || applicationNumber < 1) {
-      return failurePersistenceResponse(
-          List.of("Scale detail application could not be verified."), permitNumber);
-    }
-
-    Long currentPermitNumber = scale.exportPermitDetailNumber();
-    Long targetPermitNumber;
-    String attachSourceStatus = null;
-    if (attachInd) {
-      if (currentPermitNumber != null && !permitNumber.equals(currentPermitNumber)) {
-        return failurePersistenceResponse(
-            List.of("Scale detail is already assigned to another permit."), permitNumber);
-      }
-      if (!isScaleEligibleForPermit(scale, permit.get())) {
-        return failurePersistenceResponse(
-            List.of("Scale detail is not eligible for this permit."), permitNumber);
-      }
-      attachSourceStatus =
-          repository
-              .findApplicationStatusCodeByNumber(applicationNumber)
-              .map(this::normalizeCode)
-              .filter(status -> !status.isBlank())
-              .orElse(null);
-      if (attachSourceStatus == null) {
-        return failurePersistenceResponse(
-            List.of("Application " + applicationNumber + " status could not be verified."),
-            permitNumber);
-      }
-      if (!APPLICATION_STATUS_EXEMPTED.equals(attachSourceStatus)
-          && !APPLICATION_STATUS_PERMITTED.equals(attachSourceStatus)) {
-        return failurePersistenceResponse(
-            List.of(
-                "Application "
-                    + applicationNumber
-                    + " must be exempted or permitted before a scale can be added to a permit."),
-            permitNumber);
-      }
-      targetPermitNumber = permitNumber;
-    } else {
-      if (currentPermitNumber == null || !permitNumber.equals(currentPermitNumber)) {
-        return failurePersistenceResponse(
-            List.of("Scale detail is not assigned to this permit."), permitNumber);
-      }
-      targetPermitNumber = null;
-    }
-
-    ScaleMutationRecord updatedScale =
-        new ScaleMutationRecord(
-            scale.scaleDetailId(),
-            scale.timberMark(),
-            scale.piecesCount(),
-            scale.speciesGradeVolume(),
-            scale.packageNumber(),
-            scale.exportSpeciesCode(),
-            scale.exportGradeCode(),
-            targetPermitNumber,
-            scale.entryUserId(),
-            scale.entryTimestamp());
-
-    if (!repository.updateScaleDetail(updatedScale, normalizedUserId)) {
-      markRollbackOnly();
-      return failurePersistenceResponse(List.of("Unable to update scale detail."), permitNumber);
-    }
-    if (attachInd
-        && APPLICATION_STATUS_EXEMPTED.equals(attachSourceStatus)
-        && !transitionApplicationStatus(
-            applicationNumber,
-            APPLICATION_STATUS_EXEMPTED,
-            APPLICATION_STATUS_PERMITTED,
-            normalizedUserId)) {
-      markRollbackOnly();
-      return failurePersistenceResponse(
-          List.of("Unable to reconcile application " + applicationNumber + " status."),
-          permitNumber);
-    }
-    if (!attachInd
-        && !synchronizeRemovedApplicationStatus(applicationNumber, normalizedUserId)) {
-      markRollbackOnly();
-      return failurePersistenceResponse(
-          List.of("Unable to reconcile application " + applicationNumber + " status."),
-          permitNumber);
-    }
-    if (!updatePermitTotals(permitNumber, normalizedUserId)) {
-      markRollbackOnly();
-      return failurePersistenceResponse(
-          List.of("Unable to recalculate permit totals."), permitNumber);
-    }
-
     return new PermitPersistenceRpcResponseDto(
         true,
         attachInd ? "Scale detail was added to the permit." : "Scale detail was removed from the permit.",
@@ -2503,17 +2399,133 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       return failurePersistenceResponse(
           List.of("A scale cannot be included and excluded in the same change."), permitNumber);
     }
-    // All rows use the existing domain checks in this transaction. Remove first so a
-    // replacement selection does not temporarily consume both the old and new volumes.
+    String normalizedUserId = trimToNull(userId);
+    if (normalizedUserId == null) {
+      return failurePersistenceResponse(List.of("A valid user identifier is required."), permitNumber);
+    }
+    if (permitNumber == null || permitNumber < 1) {
+      return failurePersistenceResponse(List.of("A valid permit number is required."), permitNumber);
+    }
+    PermitPersistenceRpcResponseDto result =
+        persistScaleSelection(permitNumber, included, excluded, normalizedUserId);
+    if (!result.success()) {
+      markRollbackOnly();
+    }
+    return result;
+  }
+
+  private PermitPersistenceRpcResponseDto persistScaleSelection(
+      Long permitNumber, List<String> included, List<String> excluded, String userId) {
+    Optional<PermitMutationRow> permit = repository.findPermitMutationByPermitNumber(permitNumber);
+    if (permit.isEmpty()) {
+      return failurePersistenceResponse(List.of("Permit not found."), permitNumber);
+    }
+    if (isBlanketOicPermit(permit.get())
+        && !isOicApplicationBoundToExemption(
+            permit.get().oicApplicationNumber(), permit.get().exemptionNumber())) {
+      return failurePersistenceResponse(
+          List.of("The hidden OIC application does not belong to this permit's exemption."),
+          permitNumber);
+    }
+    if (isScaleAttachmentLockedStatus(permit.get().permitStatusCode())) {
+      return failurePersistenceResponse(
+          List.of(
+              "Scale rows cannot be changed for a completed, payment-pending, expired, or cancelled permit."),
+          permitNumber);
+    }
+
+    Map<Long, String> includedApplicationStatuses = new LinkedHashMap<>();
+    Set<Long> removedApplicationNumbers = new LinkedHashSet<>();
     for (boolean attach : List.of(false, true)) {
       for (String scaleId : attach ? included : excluded) {
-        PermitPersistenceRpcResponseDto result =
-            updateScaleAttachment(scaleId, permitNumber, attach, userId);
-        if (!result.success()) {
-          markRollbackOnly();
-          return result;
+        Optional<ScaleMutationRow> existing = repository.findScaleMutationById(scaleId);
+        if (existing.isEmpty()) {
+          return failurePersistenceResponse(List.of("Scale detail not found."), permitNumber);
+        }
+
+        ScaleMutationRow scale = existing.get();
+        Long applicationNumber = scale.applicationNumber();
+        if (applicationNumber == null || applicationNumber < 1) {
+          return failurePersistenceResponse(
+              List.of("Scale detail application could not be verified."), permitNumber);
+        }
+
+        Long currentPermitNumber = scale.exportPermitDetailNumber();
+        Long targetPermitNumber;
+        if (attach) {
+          if (currentPermitNumber != null && !permitNumber.equals(currentPermitNumber)) {
+            return failurePersistenceResponse(
+                List.of("Scale detail is already assigned to another permit."), permitNumber);
+          }
+          if (!isScaleEligibleForPermit(scale, permit.get())) {
+            return failurePersistenceResponse(
+                List.of("Scale detail is not eligible for this permit."), permitNumber);
+          }
+          String attachSourceStatus = includedApplicationStatuses.get(applicationNumber);
+          if (attachSourceStatus == null) {
+            attachSourceStatus =
+                repository
+                    .findApplicationStatusCodeByNumber(applicationNumber)
+                    .map(this::normalizeCode)
+                    .filter(status -> !status.isBlank())
+                    .orElse(null);
+          }
+          if (attachSourceStatus == null) {
+            return failurePersistenceResponse(
+                List.of("Application " + applicationNumber + " status could not be verified."),
+                permitNumber);
+          }
+          if (!APPLICATION_STATUS_EXEMPTED.equals(attachSourceStatus)
+              && !APPLICATION_STATUS_PERMITTED.equals(attachSourceStatus)) {
+            return failurePersistenceResponse(
+                List.of(
+                    "Application "
+                        + applicationNumber
+                        + " must be exempted or permitted before a scale can be added to a permit."),
+                permitNumber);
+          }
+          includedApplicationStatuses.put(applicationNumber, attachSourceStatus);
+          targetPermitNumber = permitNumber;
+        } else {
+          if (currentPermitNumber == null || !permitNumber.equals(currentPermitNumber)) {
+            return failurePersistenceResponse(
+                List.of("Scale detail is not assigned to this permit."), permitNumber);
+          }
+          removedApplicationNumbers.add(applicationNumber);
+          targetPermitNumber = null;
+        }
+
+        if (!updateScalePermitAssignment(scale, targetPermitNumber, userId)) {
+          return failurePersistenceResponse(List.of("Unable to update scale detail."), permitNumber);
         }
       }
+    }
+
+    // Reconcile each application once against the final selection. A replacement row keeps
+    // its application permitted without an intermediate exempted transition.
+    for (Map.Entry<Long, String> application : includedApplicationStatuses.entrySet()) {
+      if (APPLICATION_STATUS_EXEMPTED.equals(application.getValue())
+          && !transitionApplicationStatus(
+              application.getKey(),
+              APPLICATION_STATUS_EXEMPTED,
+              APPLICATION_STATUS_PERMITTED,
+              userId)) {
+        return failurePersistenceResponse(
+            List.of("Unable to reconcile application " + application.getKey() + " status."),
+            permitNumber);
+      }
+    }
+    for (Long applicationNumber : removedApplicationNumbers) {
+      if (!includedApplicationStatuses.containsKey(applicationNumber)
+          && !synchronizeRemovedApplicationStatus(applicationNumber, userId)) {
+        return failurePersistenceResponse(
+            List.of("Unable to reconcile application " + applicationNumber + " status."),
+            permitNumber);
+      }
+    }
+    if (!updatePermitTotals(permitNumber, userId)) {
+      return failurePersistenceResponse(
+          List.of("Unable to recalculate permit totals."), permitNumber);
     }
     return new PermitPersistenceRpcResponseDto(
         true, "Scale selection was saved.", List.of(), List.of(), permitNumber);

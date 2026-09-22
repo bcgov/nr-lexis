@@ -3161,13 +3161,13 @@ const ProvincialPermitDetailsPage = () => {
   ])
 
   const onSaveScaleSelection = useCallback(async (): Promise<boolean> => {
+    if (isSavingScaleSelection) return false
     if (!ministerialScaleSelectionDirty) {
       setMinisterialScaleSelectionDraft(null)
       return true
     }
     const resolvedPermitNumber = String(detail?.permitNumber ?? permitNumber ?? '').trim()
-    if (!canEditNormalPermitScaleRows || !resolvedPermitNumber || isSavingScaleSelection)
-      return false
+    if (!canEditNormalPermitScaleRows || !resolvedPermitNumber) return false
     const isLatestRequest = tryBeginPermitMutation()
     if (!isLatestRequest) {
       setActionErrorMessage('Wait for the current permit change to finish before saving again.')
@@ -3196,13 +3196,13 @@ const ProvincialPermitDetailsPage = () => {
         return false
       }
       saved = true
-      setMinisterialScaleSelectionDraft(null)
       setAvailablePermitApplications([])
       setAvailablePermitApplicationItems(null)
       setHasLoadedAvailablePermitApplications(false)
       setAvailablePermitApplicationsError('')
       await reloadPermitScaleState()
       if (!isLatestRequest()) return false
+      setMinisterialScaleSelectionDraft(null)
       setActionSuccessNotification({ title: 'Scale selection saved', subtitle: result.message })
       return true
     } catch (error) {
