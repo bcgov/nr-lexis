@@ -126,7 +126,19 @@ describe('DetailDocumentUploadPanel', () => {
 
     const confirmation = screen.getByRole('dialog', { name: 'Discard changes?' })
     expect(onClose).not.toHaveBeenCalled()
-    await userEvent.click(within(confirmation).getByRole('button', { name: 'Keep editing' }))
+    expect(screen.getAllByRole('dialog')).toHaveLength(1)
+    const keepEditing = within(confirmation).getByRole('button', { name: 'Keep editing' })
+    await waitFor(() => expect(keepEditing).toHaveFocus())
+    await userEvent.tab()
+    expect(within(confirmation).getByRole('button', { name: 'Discard changes' })).toHaveFocus()
+    await userEvent.tab({ shift: true })
+    expect(keepEditing).toHaveFocus()
+    await userEvent.keyboard('{Enter}')
+    await waitFor(() =>
+      expect(screen.getByRole('dialog', { name: 'Add documents' })).toContainElement(
+        document.activeElement as HTMLElement,
+      ),
+    )
     expect(screen.getByLabelText(/Document description/)).toHaveValue('Keep this description')
     expect(screen.getByText('pending.pdf')).toBeInTheDocument()
 

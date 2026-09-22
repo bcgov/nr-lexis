@@ -50,6 +50,7 @@ const installPermitParityFixtures = async (
   scenario: PermitScenario,
   delayedGrade = false,
   delayedShipping = false,
+  role: 'ADMIN' | 'PROVINCIAL_SUBMITTER' = 'ADMIN',
 ): Promise<PermitParityFixture> => {
   await installSyntheticCognitoSession(page, {
     username: 'PERMIT.PARITY.TESTER',
@@ -250,7 +251,7 @@ const installPermitParityFixtures = async (
           body = {
             authenticated: true,
             principal: 'PERMIT.PARITY.TESTER',
-            roles: ['ADMIN'],
+            roles: [role],
             welcomeTarget: '/provincial/review',
             legacyPath: null,
             orgUnitNo: '1903',
@@ -561,15 +562,24 @@ const chooseComboBoxOption = async (
 }
 
 test.describe('Provincial permit parity regressions', () => {
-  test('shows live BOIC validation, country choices and client details before opening the saved permit', async ({
+  test('shows submitter BOIC validation, country choices and client details before opening the saved permit', async ({
     page,
   }) => {
-    const fixture = await installPermitParityFixtures(page, 'blanket-oic-empty')
+    const fixture = await installPermitParityFixtures(
+      page,
+      'blanket-oic-empty',
+      false,
+      false,
+      'PROVINCIAL_SUBMITTER',
+    )
     await gotoSyntheticRoute(page, '/provincial/exemption/EX-BOIC-91002/permit/new', {
       ready: page.getByRole('heading', { level: 1, name: 'Apply for new permit', exact: true }),
     })
     const save = page.getByRole('button', { name: 'Save permit', exact: true })
     await expect(save).toBeEnabled()
+    await expect(page.getByLabel('Issued date', { exact: true })).toBeDisabled()
+    await expect(page.getByLabel('Expiry date', { exact: true })).toBeDisabled()
+    await expect(page.getByLabel('Submit date', { exact: true })).toBeEnabled()
     await selectTab(page, 'Shipping')
     const country = page.getByRole('combobox', { name: 'Final destination country', exact: true })
     await expect(country).toHaveValue('United States (US)')
@@ -694,6 +704,59 @@ test.describe('Provincial permit parity regressions', () => {
         }),
       }),
     ])
+    expect(fixture.writes[0]?.body).not.toHaveProperty('permitIssueDate')
+    expect(fixture.writes[0]?.body).not.toHaveProperty('permitExpiryDate')
+    expect(fixture.unexpectedRequests).toEqual([])
+  })
+
+  test('keeps keyboard focus in document discard confirmation and restores the retained draft', async ({
+    page,
+  }) => {
+    const fixture = await installPermitParityFixtures(page, 'blanket-oic-empty')
+    await page.route('**/api/lexis/admin/uploads/permits/validation', (route) =>
+      route.fulfill({ json: { status: 'validated', message: 'Validated.' } }),
+    )
+    await gotoSyntheticRoute(page, '/provincial/permit/91002', {
+      ready: page.getByRole('heading', { level: 1, name: 'Permit 91002 (Pending)', exact: true }),
+    })
+    await selectTab(page, 'Documents')
+    const addDocument = page.getByRole('button', { name: 'Add document', exact: true })
+    await addDocument.click()
+    const upload = page.getByRole('dialog', { name: 'Add documents', exact: true })
+    await upload.getByLabel('Document File', { exact: true }).setInputFiles({
+      name: 'synthetic-document.txt',
+      mimeType: 'text/plain',
+      buffer: Buffer.from('Synthetic test document'),
+    })
+    await upload.getByLabel(/Document description/).fill('Retain this draft')
+    await upload.getByRole('button', { name: 'Cancel', exact: true }).click()
+
+    const confirmation = page.getByRole('dialog', { name: 'Discard changes?', exact: true })
+    const keepEditing = confirmation.getByRole('button', { name: 'Keep editing', exact: true })
+    const discard = confirmation.getByRole('button', { name: 'Discard changes', exact: true })
+    const close = confirmation.getByRole('button', { name: 'Close', exact: true })
+    await expect(page.getByRole('dialog')).toHaveCount(1)
+    await expect(keepEditing).toBeFocused()
+    for (const button of [discard, close, keepEditing]) {
+      await page.keyboard.press('Tab')
+      await expect(button).toBeFocused()
+    }
+    for (const button of [close, discard, keepEditing]) {
+      await page.keyboard.press('Shift+Tab')
+      await expect(button).toBeFocused()
+    }
+    await page.keyboard.press('Enter')
+    await expect(upload.locator(':focus')).toHaveCount(1)
+    await expect(upload.getByLabel(/Document description/)).toHaveValue('Retain this draft')
+    await expect(upload.getByText('synthetic-document.txt', { exact: true })).toBeVisible()
+    await upload.getByRole('button', { name: 'Cancel', exact: true }).click()
+    await expect(keepEditing).toBeFocused()
+    await page.keyboard.press('Tab')
+    await expect(discard).toBeFocused()
+    await page.keyboard.press('Enter')
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    await expect(addDocument).toBeFocused()
+    expect(fixture.writes).toEqual([])
     expect(fixture.unexpectedRequests).toEqual([])
   })
 
