@@ -945,6 +945,66 @@ public class PermitDetailsRpcController {
         });
   }
 
+  @PostMapping("/update-scale-selection")
+  public ResponseEntity<PermitPersistenceRpcResponseDto> updateScaleSelection(
+      @RequestParam(name = "permitNumber") Long permitNumber,
+      @RequestParam(name = "includedScaleIds", defaultValue = "") List<String> includedScaleIds,
+      @RequestParam(name = "excludedScaleIds", defaultValue = "") List<String> excludedScaleIds,
+      Authentication authentication) {
+    if (!canSavePermit(authentication)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+    if (permitNumber == null || permitNumber < 1) {
+      return ResponseEntity.badRequest().build();
+    }
+    PermitDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      return ResponseEntity.noContent().build();
+    }
+    requirePermitAccess(permitNumber, authentication);
+    List<String> scaleIds =
+        java.util.stream.Stream.concat(includedScaleIds.stream(), excludedScaleIds.stream())
+            .map(String::trim)
+            .distinct()
+            .toList();
+    List<Long> affectedApplications =
+        scaleIds.stream()
+            .flatMap(id -> service.getApplicationNumberForScaleMutation(id).stream())
+            .distinct()
+            .sorted()
+            .toList();
+    affectedApplications.forEach(
+        applicationNumber -> requireApplicationAccess(applicationNumber, authentication));
+    return permitOperationMutex.executeAggregate(
+        affectedApplications,
+        List.of(permitNumber),
+        () -> {
+          requirePermitAccess(permitNumber, authentication);
+          requirePermitEditable(permitNumber, authentication);
+          List<Long> actualApplications =
+              scaleIds.stream()
+                  .flatMap(id -> service.getApplicationNumberForScaleMutation(id).stream())
+                  .distinct()
+                  .sorted()
+                  .toList();
+          if (!affectedApplications.equals(actualApplications)) {
+            throw new DataRetrievalFailureException(
+                "The scale application relationship changed during mutation.");
+          }
+          actualApplications.forEach(
+              applicationNumber -> requireApplicationAccess(applicationNumber, authentication));
+          List<Long> applicationLocksToRelease =
+              acquireApplicationLocksForMutation(actualApplications, authentication);
+          try {
+            return ResponseEntity.ok(
+                service.updateScaleSelection(
+                    permitNumber, includedScaleIds, excludedScaleIds, userId(authentication)));
+          } finally {
+            releaseApplicationLocks(applicationLocksToRelease, authentication);
+          }
+        });
+  }
+
   @PostMapping("/add-applications-to-permit")
   public ResponseEntity<PermitPersistenceRpcResponseDto> addApplicationsToPermit(
       @RequestParam(name = "permitNumber", required = false) Long permitNumber,

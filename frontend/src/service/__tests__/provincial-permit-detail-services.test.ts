@@ -14,6 +14,7 @@ import {
   removeApplicationFromPermit,
   updateBlanketOicPackage,
   updatePermitScaleAttachment,
+  updatePermitScaleSelection,
 } from '@/service/provincial-permit-detail-tabs-service'
 import {
   addPermitDetail,
@@ -56,6 +57,23 @@ const response = (data: unknown, status = 200) => ({
 describe('provincial permit detail services', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+  })
+
+  it('submits scale selection changes together as one form request', async () => {
+    postMock.mockResolvedValue(
+      response({ success: true, message: 'Saved', errors: [], warnings: [] }),
+    )
+    const result = await updatePermitScaleSelection({
+      permitNumber: ' 777 ',
+      includedScaleIds: ['101'],
+      excludedScaleIds: ['102', '103'],
+    })
+    expect(result.success).toBe(true)
+    const [path, body] = postMock.mock.calls[0]
+    expect(path).toBe('/lexis/rpc/permit-details/update-scale-selection')
+    expect(body.get('permitNumber')).toBe('777')
+    expect(body.get('includedScaleIds')).toBe('101')
+    expect(body.get('excludedScaleIds')).toBe('102,103')
   })
 
   it('loads permit detail tab rows from permit RPC endpoints', async () => {

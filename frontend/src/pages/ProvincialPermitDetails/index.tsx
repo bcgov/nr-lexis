@@ -154,6 +154,7 @@ import {
   removeApplicationFromPermit,
   updateBlanketOicPackage,
   updatePermitScaleAttachment,
+  updatePermitScaleSelection,
   type BlanketOicPackageMutationRequest,
   type PermitAvailableApplicationItem,
   type ProvincialPermitDetailTabsData,
@@ -933,6 +934,12 @@ const ProvincialPermitDetailsPage = () => {
   const [documentPendingDeletion, setDocumentPendingDeletion] = useState<PermitDocumentRow | null>(
     null,
   )
+  // INTENTIONAL_LEGACY_DIVERGENCE(MINISTERIAL_SCALE_SELECTION_EDIT): selection stays local until Save changes.
+  const [ministerialScaleSelectionDraft, setMinisterialScaleSelectionDraft] = useState<Record<
+    string,
+    boolean
+  > | null>(null)
+  const [isSavingScaleSelection, setIsSavingScaleSelection] = useState(false)
   const [isUpdatingScaleId, setIsUpdatingScaleId] = useState<string | null>(null)
   const [isDeletingBoicScaleId, setIsDeletingBoicScaleId] = useState<string | null>(null)
   const [boicScalePendingRemoval, setBoicScalePendingRemoval] =
@@ -1072,6 +1079,8 @@ const ProvincialPermitDetailsPage = () => {
     setBoicScaleCodeOptionsReady(false)
     setSelectedBlanketOicPackageNumberState('')
     setSelectedMinisterialPackageNumberState('')
+    setMinisterialScaleSelectionDraft(null)
+    setIsSavingScaleSelection(false)
     setActionSuccessNotification(null)
     setDocumentSuccessMessage('')
     setCreatedBlanketOicPermitNumber('')
@@ -2024,6 +2033,7 @@ const ProvincialPermitDetailsPage = () => {
   const permitTablesAvailable =
     !isPermitTablesLoading && tabsData !== null && !permitTablesErrorMessage
   const canEditPermitApplications =
+    ministerialScaleSelectionDraft === null &&
     permitTablesAvailable &&
     canSavePermit &&
     !!detail?.permitNumber &&
@@ -2111,6 +2121,12 @@ const ProvincialPermitDetailsPage = () => {
     !!feeOverrideForm &&
     !!feeOverrideContext &&
     !formValuesEqual(feeOverrideForm, feeOverrideContext)
+  const ministerialScaleSelectionChanges = (tabsData?.items ?? []).filter(
+    (row) =>
+      ministerialScaleSelectionDraft?.[row.id] !== undefined &&
+      ministerialScaleSelectionDraft[row.id] !== row.includedInPermit,
+  )
+  const ministerialScaleSelectionDirty = ministerialScaleSelectionChanges.length > 0
   const blanketOicPackageDirty =
     canEditBlanketOicPackages && !formValuesEqual(boicPackageForm, boicPackageBaselineForm)
   const blanketOicScaleDirty =
@@ -3144,6 +3160,80 @@ const ProvincialPermitDetailsPage = () => {
     tryBeginPermitMutation,
   ])
 
+  const onSaveScaleSelection = useCallback(async (): Promise<boolean> => {
+    if (!ministerialScaleSelectionDirty) {
+      setMinisterialScaleSelectionDraft(null)
+      return true
+    }
+    const resolvedPermitNumber = String(detail?.permitNumber ?? permitNumber ?? '').trim()
+    if (!canEditNormalPermitScaleRows || !resolvedPermitNumber || isSavingScaleSelection)
+      return false
+    const isLatestRequest = tryBeginPermitMutation()
+    if (!isLatestRequest) {
+      setActionErrorMessage('Wait for the current permit change to finish before saving again.')
+      return false
+    }
+    setIsSavingScaleSelection(true)
+    setActionErrorMessage('')
+    setActionInfoMessage('')
+    setActionSuccessNotification(null)
+    let saved = false
+    try {
+      const result = await updatePermitScaleSelection({
+        permitNumber: resolvedPermitNumber,
+        includedScaleIds: ministerialScaleSelectionChanges
+          .filter((row) => ministerialScaleSelectionDraft?.[row.id])
+          .map((row) => row.id),
+        excludedScaleIds: ministerialScaleSelectionChanges
+          .filter((row) => !ministerialScaleSelectionDraft?.[row.id])
+          .map((row) => row.id),
+      })
+      if (!isLatestRequest()) return false
+      if (!result.success) {
+        setActionErrorMessage(
+          result.errors[0] || result.message || 'Unable to save scale selection.',
+        )
+        return false
+      }
+      saved = true
+      setMinisterialScaleSelectionDraft(null)
+      setAvailablePermitApplications([])
+      setAvailablePermitApplicationItems(null)
+      setHasLoadedAvailablePermitApplications(false)
+      setAvailablePermitApplicationsError('')
+      await reloadPermitScaleState()
+      if (!isLatestRequest()) return false
+      setActionSuccessNotification({ title: 'Scale selection saved', subtitle: result.message })
+      return true
+    } catch (error) {
+      if (isLatestRequest()) {
+        console.error(error)
+        setPermitDetailRefreshRequired(true)
+        setEditContextLoaded(false)
+        setActionErrorMessage(
+          saved
+            ? 'Scale selection was saved, but the current totals could not be refreshed. Reload before making another change.'
+            : 'Unable to confirm whether scale selection was saved. Reload before making another change.',
+        )
+      }
+      return false
+    } finally {
+      endPermitMutation()
+      if (isLatestRequest()) setIsSavingScaleSelection(false)
+    }
+  }, [
+    canEditNormalPermitScaleRows,
+    detail?.permitNumber,
+    endPermitMutation,
+    isSavingScaleSelection,
+    ministerialScaleSelectionChanges,
+    ministerialScaleSelectionDirty,
+    ministerialScaleSelectionDraft,
+    permitNumber,
+    reloadPermitScaleState,
+    tryBeginPermitMutation,
+  ])
+
   const onSavePermit = useCallback(async (): Promise<boolean> => {
     setActionSuccessNotification(null)
     if (paymentPendingReceiptRequiresCompletion) {
@@ -3167,6 +3257,7 @@ const ProvincialPermitDetailsPage = () => {
       )
       return false
     }
+    if (ministerialScaleSelectionDirty && !(await onSaveScaleSelection())) return false
     const shippingSaved = permitShippingDirty ? await onSaveShipping() : true
     if (!shippingSaved) return false
 
@@ -3179,6 +3270,8 @@ const ProvincialPermitDetailsPage = () => {
     blanketOicRegionOptionsLoading,
     blanketOicRegionSelectionUnavailable,
     onSaveShipping,
+    onSaveScaleSelection,
+    ministerialScaleSelectionDirty,
     isPermitOptionsLoading,
     permitOptionsUnavailable,
     paymentPendingReceiptRequiresCompletion,
@@ -4164,6 +4257,7 @@ const ProvincialPermitDetailsPage = () => {
   )
 
   const isPermitDirty =
+    ministerialScaleSelectionDirty ||
     permitDetailDirty ||
     permitShippingDirty ||
     permitFeeOverrideDirty ||
@@ -4185,6 +4279,8 @@ const ProvincialPermitDetailsPage = () => {
       )
       return false
     }
+    if (!permitDetailDirty && ministerialScaleSelectionDirty && !(await onSaveScaleSelection()))
+      return false
     if (permitFeeOverrideDirty && !(await onSaveFeeOverride())) return false
     if (blanketOicPackageDirty && !(await onSaveBlanketOicPackage())) return false
     if (blanketOicScaleDirty && !(await onAddBlanketOicScale())) return false
@@ -4202,6 +4298,8 @@ const ProvincialPermitDetailsPage = () => {
     onSaveBlanketOicPackage,
     onSaveFeeOverride,
     onSavePermit,
+    onSaveScaleSelection,
+    ministerialScaleSelectionDirty,
     onSaveShipping,
     permitDetailDirty,
     permitDocumentUploadDirty,
@@ -4217,6 +4315,7 @@ const ProvincialPermitDetailsPage = () => {
     setIsEditingPermitClients(false)
     setIsEditingPermit(false)
     setIsEditingShipping(false)
+    setMinisterialScaleSelectionDraft(null)
     setTouchedPermitFields({})
     setShowPermitValidationErrors(false)
     setFeeOverrideForm(feeOverrideContext)
@@ -4891,6 +4990,18 @@ const ProvincialPermitDetailsPage = () => {
                 {isEditingPermit ? (
                   <>
                     <Button
+                      kind="tertiary"
+                      size="sm"
+                      disabled={isSavingPermit}
+                      onClick={() => {
+                        resetPermitFormSection(false)
+                        setIsEditingPermitClients(false)
+                        setIsEditingPermit(false)
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
                       kind="primary"
                       size="sm"
                       disabled={
@@ -4905,19 +5016,11 @@ const ProvincialPermitDetailsPage = () => {
                       renderIcon={isSavingPermit ? PendingIcon : undefined}
                       onClick={() => void onSavePermit()}
                     >
-                      {isSavingPermit ? 'Saving…' : 'Save permit'}
-                    </Button>
-                    <Button
-                      kind="tertiary"
-                      size="sm"
-                      disabled={isSavingPermit}
-                      onClick={() => {
-                        resetPermitFormSection(false)
-                        setIsEditingPermitClients(false)
-                        setIsEditingPermit(false)
-                      }}
-                    >
-                      Cancel
+                      {isSavingPermit
+                        ? 'Saving…'
+                        : usesReviewedPermitFlow
+                          ? 'Save changes'
+                          : 'Save permit'}
                     </Button>
                   </>
                 ) : (
@@ -5001,15 +5104,6 @@ const ProvincialPermitDetailsPage = () => {
               )}
               <div className="legacy-search-actions">
                 <Button
-                  kind="primary"
-                  size="sm"
-                  disabled={isSavingFeeOverride}
-                  renderIcon={isSavingFeeOverride ? PendingIcon : undefined}
-                  onClick={() => void onSaveFeeOverride()}
-                >
-                  {isSavingFeeOverride ? 'Saving…' : 'Save fee override'}
-                </Button>
-                <Button
                   kind="tertiary"
                   size="sm"
                   disabled={isSavingFeeOverride}
@@ -5020,6 +5114,19 @@ const ProvincialPermitDetailsPage = () => {
                   }}
                 >
                   Cancel
+                </Button>
+                <Button
+                  kind="primary"
+                  size="sm"
+                  disabled={isSavingFeeOverride}
+                  renderIcon={isSavingFeeOverride ? PendingIcon : undefined}
+                  onClick={() => void onSaveFeeOverride()}
+                >
+                  {isSavingFeeOverride
+                    ? 'Saving…'
+                    : usesReviewedPermitFlow
+                      ? 'Save changes'
+                      : 'Save fee override'}
                 </Button>
               </div>
             </>
@@ -5084,6 +5191,21 @@ const ProvincialPermitDetailsPage = () => {
         }
       >
         <legend>Summary of scale</legend>
+        {ministerialPermit &&
+          canEditNormalPermitScaleRows &&
+          ministerialScaleSelectionDraft === null &&
+          packageScopedItems.length > 0 && (
+            <div className="legacy-search-actions">
+              <Button
+                kind="tertiary"
+                size="sm"
+                renderIcon={Edit}
+                onClick={() => setMinisterialScaleSelectionDraft({})}
+              >
+                Edit scale selection
+              </Button>
+            </div>
+          )}
         {detail.blanketOic && selectedBlanketOicPackage && (
           <dl className="boic-permit-details__totals">
             <div className="detail-field-item">
@@ -5202,11 +5324,29 @@ const ProvincialPermitDetailsPage = () => {
                             id={`permit-scale-${row.id}`}
                             labelText={`Include scale ${row.id} in permit`}
                             hideLabel
-                            checked={row.includedInPermit}
-                            disabled={!canEditNormalPermitScaleRows || isUpdatingScaleId !== null}
-                            onChange={(_, { checked }) =>
-                              void onToggleScaleAttachment(row.id, Boolean(checked))
+                            checked={
+                              ministerialScaleSelectionDraft?.[row.id] ?? row.includedInPermit
                             }
+                            disabled={
+                              !canEditNormalPermitScaleRows ||
+                              isUpdatingScaleId !== null ||
+                              isSavingScaleSelection ||
+                              (ministerialPermit && ministerialScaleSelectionDraft === null)
+                            }
+                            onChange={(_, { checked }) => {
+                              if (ministerialPermit) {
+                                setMinisterialScaleSelectionDraft((current) =>
+                                  current === null
+                                    ? null
+                                    : {
+                                        ...current,
+                                        [row.id]: Boolean(checked),
+                                      },
+                                )
+                              } else {
+                                void onToggleScaleAttachment(row.id, Boolean(checked))
+                              }
+                            }}
                           />
                         </TableCell>
                       )}
@@ -5270,6 +5410,27 @@ const ProvincialPermitDetailsPage = () => {
               headingLevel={3}
             />
           ))}
+        {ministerialPermit && ministerialScaleSelectionDraft !== null && (
+          <div className="legacy-search-actions">
+            <Button
+              kind="tertiary"
+              size="sm"
+              disabled={isSavingScaleSelection}
+              onClick={() => setMinisterialScaleSelectionDraft(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              kind="primary"
+              size="sm"
+              disabled={isSavingScaleSelection || !canEditNormalPermitScaleRows}
+              renderIcon={isSavingScaleSelection ? PendingIcon : undefined}
+              onClick={() => void onSaveScaleSelection()}
+            >
+              {isSavingScaleSelection ? 'Saving…' : 'Save changes'}
+            </Button>
+          </div>
+        )}
       </fieldset>
     )
   }
@@ -5301,7 +5462,13 @@ const ProvincialPermitDetailsPage = () => {
                   value={selectedPackageNumber}
                   options={ministerialPermit ? ministerialPackageOptions : blanketOicPackageOptions}
                   placeholder="Select package"
-                  disabled={detail.blanketOic ? blanketOicPackageActionsDisabled : undefined}
+                  disabled={
+                    ministerialPermit
+                      ? ministerialScaleSelectionDraft !== null
+                      : detail.blanketOic
+                        ? blanketOicPackageActionsDisabled
+                        : undefined
+                  }
                   onChange={
                     ministerialPermit
                       ? setSelectedMinisterialPackageNumberState
@@ -7236,6 +7403,7 @@ const ProvincialPermitDetailsPage = () => {
                                 id="ministerialScalePackageNumber"
                                 labelText="Package number"
                                 value={selectedMinisterialPackageNumber}
+                                disabled={ministerialScaleSelectionDraft !== null}
                                 options={ministerialPackageOptions}
                                 placeholder="Select package"
                                 onChange={setSelectedMinisterialPackageNumberState}
@@ -7780,7 +7948,7 @@ const ProvincialPermitDetailsPage = () => {
                                       <TableCell>{row.type || row.typeCode || '-'}</TableCell>
                                       <TableCell>
                                         <div className="legacy-search-actions">
-                                          {detail.blanketOic && (
+                                          {usesReviewedPermitFlow && (
                                             <Button
                                               kind="ghost"
                                               size="sm"
@@ -8206,6 +8374,7 @@ const ProvincialPermitDetailsPage = () => {
           isSavingBoicPackage ||
           isSavingBoicScale ||
           isUpdatingScaleId !== null ||
+          isSavingScaleSelection ||
           isDeletingBoicScaleId !== null ||
           isDeletingBoicPackageNumber !== null ||
           isSavingPermitApplication ||

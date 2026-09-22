@@ -31,6 +31,7 @@ import {
   removeApplicationFromPermit,
   updateBlanketOicPackage,
   updatePermitScaleAttachment,
+  updatePermitScaleSelection,
   type ProvincialPermitDetailTabsData,
 } from '@/service/provincial-permit-detail-tabs-service'
 import {
@@ -104,6 +105,7 @@ vi.mock('@/service/provincial-permit-detail-tabs-service', () => ({
   removeApplicationFromPermit: vi.fn(),
   updateBlanketOicPackage: vi.fn(),
   updatePermitScaleAttachment: vi.fn(),
+  updatePermitScaleSelection: vi.fn(),
 }))
 
 vi.mock('@/service/provincial-permit-documents-invoices-service', () => ({
@@ -226,6 +228,7 @@ const mockedFetchProvincialPermitExemptionContext = vi.mocked(fetchProvincialPer
 const mockedFetchProvincialPermitDetailTabs = vi.mocked(fetchProvincialPermitDetailCoreTabs)
 const mockedFetchProvincialPermitGbmsEvents = vi.mocked(fetchProvincialPermitGbmsEvents)
 const mockedFetchProvincialPermitFees = vi.mocked(fetchProvincialPermitFees)
+const mockedUpdatePermitScaleSelection = vi.mocked(updatePermitScaleSelection)
 const mockedUpdatePermitScaleAttachment = vi.mocked(updatePermitScaleAttachment)
 const mockedFetchAvailablePermitApplications = vi.mocked(fetchAvailablePermitApplications)
 const mockedAddApplicationsToPermit = vi.mocked(addApplicationsToPermit)
@@ -592,6 +595,12 @@ describe('Provincial Permit Detail Action Smoke', () => {
     mockedFetchAvailablePermitApplications.mockResolvedValue({
       applicationList: [],
       errorMessage: '',
+    })
+    mockedUpdatePermitScaleSelection.mockResolvedValue({
+      success: true,
+      message: 'Scale selection was saved.',
+      errors: [],
+      warnings: [],
     })
     mockedUpdatePermitScaleAttachment.mockResolvedValue({
       success: true,
@@ -1867,6 +1876,182 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
   })
 
+  it('keeps Ministerial scale changes local until save and discards them on Cancel', async () => {
+    configureMinisterialActivePermit()
+    mockedFetchProvincialPermitDetailTabs.mockResolvedValue({
+      ...tabsResult,
+      packages: [{ ...editableBlanketOicPackage, packageNumber: 'MIN-1' }],
+      items: [
+        {
+          id: 'SCALE-1',
+          packageNumber: 'MIN-1',
+          timberMark: 'TEST',
+          scaleType: 'C',
+          species: 'HE',
+          grade: 'U',
+          pieces: 1,
+          volume: 1,
+          permitNumber: '777',
+          includedInPermit: true,
+        },
+      ],
+    })
+    renderPermitDetails()
+    await selectPermitDetailTab('Scale')
+    const checkbox = await screen.findByRole('checkbox', {
+      name: 'Include scale SCALE-1 in permit',
+    })
+    expect(checkbox).toBeDisabled()
+    await userEvent.click(screen.getByRole('button', { name: 'Edit scale selection' }))
+    await userEvent.click(checkbox)
+    expect(checkbox).not.toBeChecked()
+    expect(mockedUpdatePermitScaleSelection).not.toHaveBeenCalled()
+    expect(mockedUpdatePermitScaleAttachment).not.toHaveBeenCalled()
+    expect(screen.getByRole('combobox', { name: 'Package number' })).toBeDisabled()
+    await userEvent.click(
+      within(screen.getByRole('group', { name: 'Summary of scale' })).getByRole('button', {
+        name: 'Cancel',
+      }),
+    )
+    expect(checkbox).toBeChecked()
+    expect(checkbox).toBeDisabled()
+    expect(mockedUpdatePermitScaleSelection).not.toHaveBeenCalled()
+  })
+
+  it('keeps the Ministerial scale draft on rejection and submits one atomic selection', async () => {
+    configureMinisterialActivePermit()
+    mockedFetchProvincialPermitDetailTabs.mockResolvedValue({
+      ...tabsResult,
+      packages: [{ ...editableBlanketOicPackage, packageNumber: 'MIN-1' }],
+      items: ['SCALE-1', 'SCALE-2'].map((id) => ({
+        id,
+        packageNumber: 'MIN-1',
+        timberMark: 'TEST',
+        scaleType: 'C',
+        species: 'HE',
+        grade: 'U',
+        pieces: 1,
+        volume: 1,
+        permitNumber: '777',
+        includedInPermit: true,
+      })),
+    })
+    let resolveSave!: (result: Awaited<ReturnType<typeof updatePermitScaleSelection>>) => void
+    mockedUpdatePermitScaleSelection.mockReturnValue(
+      new Promise((resolve) => {
+        resolveSave = resolve
+      }),
+    )
+    renderPermitDetails()
+    await selectPermitDetailTab('Scale')
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit scale selection' }))
+    const first = screen.getByRole('checkbox', { name: 'Include scale SCALE-1 in permit' })
+    const second = screen.getByRole('checkbox', { name: 'Include scale SCALE-2 in permit' })
+    await userEvent.click(first)
+    await userEvent.click(second)
+    const save = screen.getByRole('button', { name: 'Save changes' })
+    await userEvent.dblClick(save)
+    expect(mockedUpdatePermitScaleSelection).toHaveBeenCalledTimes(1)
+    expect(mockedUpdatePermitScaleSelection).toHaveBeenCalledWith({
+      permitNumber: '777',
+      includedScaleIds: [],
+      excludedScaleIds: ['SCALE-1', 'SCALE-2'],
+    })
+    expect(first).toBeDisabled()
+    await act(async () =>
+      resolveSave({ success: false, message: '', errors: ['Selection rejected'], warnings: [] }),
+    )
+    expect(await screen.findByText('Selection rejected')).toBeInTheDocument()
+    expect(first).toBeEnabled()
+    expect(first).not.toBeChecked()
+    expect(second).not.toBeChecked()
+    await userEvent.click(
+      within(screen.getByRole('group', { name: 'Summary of scale' })).getByRole('button', {
+        name: 'Cancel',
+      }),
+    )
+    expect(first).toBeChecked()
+    expect(second).toBeChecked()
+  })
+
+  it.each(['COM', 'PPD', 'EXP', 'CAN'])(
+    'keeps Ministerial Scale read-only for %s',
+    async (permitStatusCode) => {
+      configureMinisterialActivePermit({ permitStatusCode })
+      mockedFetchProvincialPermitDetailTabs.mockResolvedValue({
+        ...tabsResult,
+        packages: [{ ...editableBlanketOicPackage, packageNumber: 'MIN-1' }],
+        items: [
+          {
+            id: 'SCALE-1',
+            packageNumber: 'MIN-1',
+            timberMark: 'TEST',
+            scaleType: 'C',
+            species: 'HE',
+            grade: 'U',
+            pieces: 1,
+            volume: 1,
+            permitNumber: '777',
+            includedInPermit: true,
+          },
+        ],
+      })
+      renderPermitDetails()
+      await selectPermitDetailTab('Scale')
+      expect(
+        await screen.findByRole('checkbox', { name: 'Include scale SCALE-1 in permit' }),
+      ).toBeDisabled()
+      expect(screen.queryByRole('button', { name: 'Edit scale selection' })).not.toBeInTheDocument()
+    },
+  )
+
+  it('saves a Ministerial scale draft before leaving through the unsaved changes guard', async () => {
+    configureMinisterialActivePermit()
+    mockedFetchProvincialPermitDetailTabs.mockResolvedValue({
+      ...tabsResult,
+      packages: [{ ...editableBlanketOicPackage, packageNumber: 'MIN-1' }],
+      items: [
+        {
+          id: 'SCALE-1',
+          packageNumber: 'MIN-1',
+          timberMark: 'TEST',
+          scaleType: 'C',
+          species: 'HE',
+          grade: 'U',
+          pieces: 1,
+          volume: 1,
+          permitNumber: '777',
+          includedInPermit: true,
+        },
+      ],
+    })
+    const router = createMemoryRouter(
+      [
+        {
+          path: '/provincial/permit/:permitNumber',
+          element: (
+            <>
+              <ProvincialPermitDetailsPage />
+              <Link to="/next">Leave permit</Link>
+            </>
+          ),
+        },
+        { path: '/next', element: <h1>Next page</h1> },
+      ],
+      { initialEntries: ['/provincial/permit/777'] },
+    )
+    render(<RouterProvider router={router} />)
+    await selectPermitDetailTab('Scale')
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit scale selection' }))
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Include scale SCALE-1 in permit' }))
+    await userEvent.click(screen.getByRole('link', { name: 'Leave permit' }))
+    expect(await screen.findByRole('dialog', { name: 'Unsaved changes' })).toBeVisible()
+    expect(mockedUpdatePermitScaleSelection).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('button', { name: 'Save and leave' }))
+    expect(await screen.findByRole('heading', { name: 'Next page' })).toBeVisible()
+    expect(mockedUpdatePermitScaleSelection).toHaveBeenCalledTimes(1)
+  })
+
   it('filters Ministerial scale and fees by the shared exact package selection', async () => {
     configureMinisterialActivePermit()
     mockedFetchProvincialPermitDetailTabs.mockResolvedValue({
@@ -2159,7 +2344,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Edit fee override' }))
     await userEvent.click(screen.getByRole('radio', { name: 'Yes' }))
     await userEvent.type(screen.getByLabelText('Override fee (CAD)'), '45.25')
-    await userEvent.click(screen.getByRole('button', { name: 'Save fee override' }))
+    await userEvent.click(screen.getByRole('button', { name: /^Save (?:fee override|changes)$/ }))
 
     await waitFor(() => expect(screen.getByLabelText('Calculated fee (CAD)')).toHaveValue('$'))
     expect(screen.getByText('Fee override saved')).toBeInTheDocument()
@@ -2167,7 +2352,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(within(screen.getByRole('row', { name: /TEST-FEE/ })).getByText('$')).toBeInTheDocument()
     await userEvent.click(await screen.findByRole('button', { name: 'Edit fee override' }))
     await userEvent.click(screen.getByRole('radio', { name: 'No' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Save fee override' }))
+    await userEvent.click(screen.getByRole('button', { name: /^Save (?:fee override|changes)$/ }))
 
     await waitFor(() => expect(screen.getByLabelText('Calculated fee (CAD)')).toHaveValue('$37.50'))
     expect(screen.getByLabelText('Effective fee (CAD)')).toHaveValue('$37.50')
@@ -2196,7 +2381,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Edit fee override' }))
     await userEvent.click(screen.getByRole('radio', { name: 'Yes' }))
     await userEvent.type(screen.getByLabelText('Override fee (CAD)'), '45.25')
-    await userEvent.click(screen.getByRole('button', { name: 'Save fee override' }))
+    await userEvent.click(screen.getByRole('button', { name: /^Save (?:fee override|changes)$/ }))
 
     await waitFor(() => expect(screen.getByLabelText('Calculated fee (CAD)')).toHaveValue('$'))
     await act(async () => resolveOriginalFees?.(calculatedPermitFees))
@@ -2269,7 +2454,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       await userEvent.click(await screen.findByRole('button', { name: 'Edit fee override' }))
       await userEvent.click(screen.getByRole('radio', { name: 'Yes' }))
       await userEvent.type(screen.getByLabelText('Override fee (CAD)'), '45.25')
-      await userEvent.click(screen.getByRole('button', { name: 'Save fee override' }))
+      await userEvent.click(screen.getByRole('button', { name: /^Save (?:fee override|changes)$/ }))
       expect(mockedFetchProvincialPermitFees).toHaveBeenCalledTimes(2)
 
       await selectPermitDetailTab('Items')
@@ -2313,7 +2498,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Edit fee override' }))
     await userEvent.click(screen.getByRole('radio', { name: 'Yes' }))
     await userEvent.type(screen.getByLabelText('Override fee (CAD)'), '45.25')
-    await userEvent.click(screen.getByRole('button', { name: 'Save fee override' }))
+    await userEvent.click(screen.getByRole('button', { name: /^Save (?:fee override|changes)$/ }))
 
     expect(await screen.findByText('The permit was updated successfully.')).toBeInTheDocument()
     expect(await screen.findByText('Unable to retrieve permit fee details.')).toBeInTheDocument()
@@ -3060,7 +3245,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
         ],
         errorMessage: '',
       })
-    mockedUpdatePermitScaleAttachment.mockResolvedValue({
+    mockedUpdatePermitScaleSelection.mockResolvedValue({
       success: true,
       message: 'Scale detail was removed from the permit.',
       errors: [],
@@ -3078,14 +3263,18 @@ describe('Provincial Permit Detail Action Smoke', () => {
     const includeScale = await screen.findByRole('checkbox', {
       name: 'Include scale SCALE-1 in permit',
     })
+    expect(includeScale).toBeDisabled()
+    await userEvent.click(screen.getByRole('button', { name: 'Edit scale selection' }))
     await waitFor(() => expect(includeScale).toBeEnabled())
     await userEvent.click(includeScale)
+    expect(mockedUpdatePermitScaleSelection).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() => {
-      expect(mockedUpdatePermitScaleAttachment).toHaveBeenCalledWith({
-        scaleId: 'SCALE-1',
+      expect(mockedUpdatePermitScaleSelection).toHaveBeenCalledWith({
         permitNumber: '777',
-        attachInd: false,
+        includedScaleIds: [],
+        excludedScaleIds: ['SCALE-1'],
       })
     })
     await selectPermitDetailTab('Permit')
@@ -3187,7 +3376,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       ],
       errorMessage: '',
     })
-    mockedUpdatePermitScaleAttachment.mockResolvedValue({
+    mockedUpdatePermitScaleSelection.mockResolvedValue({
       success: true,
       message: 'Scale detail was removed from the permit.',
       errors: [],
@@ -3203,14 +3392,18 @@ describe('Provincial Permit Detail Action Smoke', () => {
     const includeScale = await screen.findByRole('checkbox', {
       name: 'Include scale SCALE-1 in permit',
     })
+    expect(includeScale).toBeDisabled()
+    await userEvent.click(screen.getByRole('button', { name: 'Edit scale selection' }))
     await waitFor(() => expect(includeScale).toBeEnabled())
     await userEvent.click(includeScale)
+    expect(mockedUpdatePermitScaleSelection).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() => {
-      expect(mockedUpdatePermitScaleAttachment).toHaveBeenCalledWith({
-        scaleId: 'SCALE-1',
+      expect(mockedUpdatePermitScaleSelection).toHaveBeenCalledWith({
         permitNumber: '777',
-        attachInd: false,
+        includedScaleIds: [],
+        excludedScaleIds: ['SCALE-1'],
       })
     })
     await selectPermitDetailTab('Permit')
@@ -7476,7 +7669,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.type(screen.getByLabelText('Override fee (CAD)'), '45.25')
     await userEvent.clear(screen.getByLabelText('Override comment'))
     await userEvent.type(screen.getByLabelText('Override comment'), 'Reviewed calculation')
-    await userEvent.click(screen.getByRole('button', { name: 'Save fee override' }))
+    await userEvent.click(screen.getByRole('button', { name: /^Save (?:fee override|changes)$/ }))
 
     await waitFor(() => {
       expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
@@ -7515,6 +7708,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     expect(screen.queryByText('Override fees?', { selector: 'dt' })).not.toBeInTheDocument()
     expect(screen.getByRole('radio', { name: 'No', checked: true })).toBeEnabled()
+    const cancel = within(screen.getByRole('tabpanel', { name: 'Fees' })).getByRole('button', {
+      name: 'Cancel',
+    })
+    const save = screen.getByRole('button', { name: 'Save changes' })
+    expect(cancel.compareDocumentPosition(save) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it('shows fee override fields only when Yes is selected', async () => {
@@ -7554,7 +7752,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     expect(screen.queryByLabelText('Override fee (CAD)')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Override comment')).not.toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Save fee override' }))
+    await userEvent.click(screen.getByRole('button', { name: /^Save (?:fee override|changes)$/ }))
 
     await waitFor(() => {
       expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
@@ -7584,7 +7782,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     const overrideFee = screen.getByLabelText('Override fee (CAD)')
     const overrideComment = screen.getByLabelText('Override comment')
-    const saveButton = screen.getByRole('button', { name: 'Save fee override' })
+    const saveButton = screen.getByRole('button', { name: /^Save (?:fee override|changes)$/ })
     await userEvent.clear(overrideFee)
     await userEvent.click(saveButton)
 
@@ -7614,12 +7812,12 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Edit fee override' }))
     await userEvent.click(screen.getByRole('radio', { name: 'Yes' }))
     await userEvent.type(screen.getByLabelText('Override fee (CAD)'), '45.25')
-    await userEvent.click(screen.getByRole('button', { name: 'Save fee override' }))
+    await userEvent.click(screen.getByRole('button', { name: /^Save (?:fee override|changes)$/ }))
 
     expect(await screen.findByText('Fee override saved')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Edit fee override' }))
     await userEvent.clear(screen.getByLabelText('Override fee (CAD)'))
-    await userEvent.click(screen.getByRole('button', { name: 'Save fee override' }))
+    await userEvent.click(screen.getByRole('button', { name: /^Save (?:fee override|changes)$/ }))
 
     expect(screen.getByText('Override fee is required.')).toBeInTheDocument()
     expect(screen.queryByText('Fee override saved')).not.toBeInTheDocument()
@@ -7646,7 +7844,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     const overrideFee = screen.getByLabelText('Override fee (CAD)')
     const overrideComment = screen.getByLabelText('Override comment')
-    const saveButton = screen.getByRole('button', { name: 'Save fee override' })
+    const saveButton = screen.getByRole('button', { name: /^Save (?:fee override|changes)$/ })
 
     await userEvent.clear(overrideFee)
     await userEvent.type(overrideFee, '9999999.995')
@@ -7694,7 +7892,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Edit fee override' }))
     await userEvent.clear(screen.getByLabelText('Override fee (CAD)'))
     await userEvent.type(screen.getByLabelText('Override fee (CAD)'), '0.005')
-    await userEvent.click(screen.getByRole('button', { name: 'Save fee override' }))
+    await userEvent.click(screen.getByRole('button', { name: /^Save (?:fee override|changes)$/ }))
 
     await waitFor(() => {
       expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
@@ -8051,30 +8249,34 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Add document' })).toHaveFocus())
   })
 
-  it('opens Blanket OIC documents separately from Download using the authenticated permit target', async () => {
-    configureBlanketOicDocument()
-    const blob = new Blob(['%PDF-1.7'], { type: 'application/octet-stream' })
-    mockedOpenPermitDocument.mockResolvedValue({ source: 'api', blob, filename: 'permit.pdf' })
-    renderPermitDetails()
-    await selectPermitDetailTab('Documents')
-    await userEvent.click(await screen.findByRole('button', { name: 'Open' }))
-    await waitFor(() =>
-      expect(openDocumentPreview).toHaveBeenCalledWith(blob, 'permit.pdf', previewWindow),
-    )
-    expect(window.open).toHaveBeenCalledWith('about:blank', '_blank')
-    expect(previewWindow.opener).toBeNull()
-    expect(mockedOpenPermitDocument).toHaveBeenCalledWith(
-      'BOIC-DOC-1',
-      'permit-document.pdf',
-      '777',
-    )
-    expect(mockedTriggerBrowserDownload).not.toHaveBeenCalled()
-    await userEvent.click(screen.getByRole('button', { name: 'Download' }))
-    await waitFor(() =>
-      expect(mockedTriggerBrowserDownload).toHaveBeenCalledWith(blob, 'permit.pdf'),
-    )
-    expect(openDocumentPreview).toHaveBeenCalledTimes(1)
-  })
+  it.each(['BOIC', 'Ministerial'])(
+    'opens %s documents separately from Download using the authenticated permit target',
+    async (type) => {
+      configureBlanketOicDocument()
+      if (type === 'Ministerial') configureMinisterialActivePermit()
+      const blob = new Blob(['%PDF-1.7'], { type: 'application/octet-stream' })
+      mockedOpenPermitDocument.mockResolvedValue({ source: 'api', blob, filename: 'permit.pdf' })
+      renderPermitDetails()
+      await selectPermitDetailTab('Documents')
+      await userEvent.click(await screen.findByRole('button', { name: 'Open' }))
+      await waitFor(() =>
+        expect(openDocumentPreview).toHaveBeenCalledWith(blob, 'permit.pdf', previewWindow),
+      )
+      expect(window.open).toHaveBeenCalledWith('about:blank', '_blank')
+      expect(previewWindow.opener).toBeNull()
+      expect(mockedOpenPermitDocument).toHaveBeenCalledWith(
+        'BOIC-DOC-1',
+        'permit-document.pdf',
+        '777',
+      )
+      expect(mockedTriggerBrowserDownload).not.toHaveBeenCalled()
+      await userEvent.click(screen.getByRole('button', { name: 'Download' }))
+      await waitFor(() =>
+        expect(mockedTriggerBrowserDownload).toHaveBeenCalledWith(blob, 'permit.pdf'),
+      )
+      expect(openDocumentPreview).toHaveBeenCalledTimes(1)
+    },
+  )
 
   it('reports a Blanket OIC document open failure and closes its reserved tab without downloading', async () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)

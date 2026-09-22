@@ -6522,6 +6522,87 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
+  void updateScaleSelectionShouldCommitAllChangesTogether() {
+    stubScaleSelection();
+    RecordingTransactionManager transactionManager = new RecordingTransactionManager();
+
+    PermitPersistenceRpcResponseDto result =
+        transactionalService(transactionManager)
+            .updateScaleSelection(7000123L, List.of("101", "102"), List.of(), "idir\\jsmith");
+
+    assertThat(result.success()).isTrue();
+    assertThat(transactionManager.commits).isEqualTo(1);
+    assertThat(transactionManager.rollbacks).isZero();
+    verify(repository, times(2)).updateScaleDetail(any(ScaleMutationRecord.class), eq("idir\\jsmith"));
+  }
+
+  @Test
+  void updateScaleSelectionShouldRollBackEarlierWritesWhenAnotherRowIsRejected() {
+    stubScaleSelection();
+    when(repository.findScaleMutationById("102")).thenReturn(Optional.empty());
+    RecordingTransactionManager transactionManager = new RecordingTransactionManager();
+
+    PermitPersistenceRpcResponseDto result =
+        transactionalService(transactionManager)
+            .updateScaleSelection(7000123L, List.of("101", "102"), List.of(), "idir\\jsmith");
+
+    assertThat(result.success()).isFalse();
+    assertThat(result.errors()).containsExactly("Scale detail not found.");
+    verify(repository).updateScaleDetail(any(ScaleMutationRecord.class), eq("idir\\jsmith"));
+    assertThat(transactionManager.commits).isZero();
+    assertThat(transactionManager.rollbacks).isEqualTo(1);
+  }
+
+  @Test
+  void updateScaleSelectionShouldRejectContradictoryChangesBeforeWriting() {
+    PermitPersistenceRpcResponseDto result =
+        service.updateScaleSelection(7000123L, List.of("101"), List.of("101"), "idir\\jsmith");
+    assertThat(result.success()).isFalse();
+    verifyNoInteractions(repository);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"COM", "PPD", "EXP", "CAN"})
+  void updateScaleSelectionShouldPreserveLockedStatuses(String status) {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow(status)));
+    PermitPersistenceRpcResponseDto result =
+        service.updateScaleSelection(7000123L, List.of("101"), List.of(), "idir\\jsmith");
+    assertThat(result.success()).isFalse();
+    verify(repository, never()).updateScaleDetail(any(), any());
+  }
+
+  private void stubScaleSelection() {
+    permitTotalsUpdateSucceeds();
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow()));
+    when(repository.findPackagesByExemptionNumberRequired("EX-700"))
+        .thenReturn(List.of(new PackageCandidateRow(1000456L, "PKG-903")));
+    when(repository.findApplicationStatusCodeByNumber(1000456L)).thenReturn(Optional.of("PMT"));
+    for (String id : List.of("101", "102")) {
+      when(repository.findScaleMutationById(id))
+          .thenReturn(
+              Optional.of(
+                  new ScaleMutationRow(
+                      id,
+                      "TEST",
+                      1L,
+                      1d,
+                      "PKG-903",
+                      "HEM",
+                      "J",
+                      1000456L,
+                      null,
+                      "entry-user",
+                      Timestamp.valueOf("2026-01-01 10:00:00"))));
+    }
+    when(repository.updateScaleDetail(any(ScaleMutationRecord.class), eq("idir\\jsmith")))
+        .thenReturn(true);
+    when(repository.findScaleDetailsByPermitNumber(7000123L))
+        .thenReturn(List.of(scale("101", "TEST", "HEM", "J", 1d, 1L, "7000123", "PKG-903")));
+  }
+
+  @Test
   void updateScaleAttachmentShouldPersistScaleAndRecalculatePermitTotals() {
     permitTotalsUpdateSucceeds();
     Timestamp entryTimestamp = Timestamp.valueOf("2026-01-01 10:00:00");

@@ -2552,6 +2552,54 @@ class PermitDetailsRpcControllerTest {
   }
 
   @Test
+  void updateScaleSelectionShouldCheckEveryApplicationAndReleaseLocks() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    PermitPersistenceRpcResponseDto dto =
+        new PermitPersistenceRpcResponseDto(
+            true, "Scale selection was saved.", List.of(), List.of(), 7000123L);
+    when(service.updateScaleSelection(7000123L, List.of("101"), List.of("102"), "idir\\jsmith"))
+        .thenReturn(dto);
+    when(service.getApplicationNumberForScaleMutation("101")).thenReturn(Optional.of(1000456L));
+    when(service.getApplicationNumberForScaleMutation("102")).thenReturn(Optional.of(1000457L));
+    allowApplicationMutationLocks(1000456L, 1000457L);
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+
+    ResponseEntity<PermitPersistenceRpcResponseDto> response =
+        controller.updateScaleSelection(
+            7000123L, List.of("101"), List.of("102"), authentication);
+
+    assertThat(response.getBody()).isEqualTo(dto);
+    verify(provincialAuthorizationService, times(2)).requireApplication(authentication, 1000456L);
+    verify(provincialAuthorizationService, times(2)).requireApplication(authentication, 1000457L);
+    verify(editLockService).release(1000456L, "idir\\jsmith");
+    verify(editLockService).release(1000457L, "idir\\jsmith");
+  }
+
+  @Test
+  void updateScaleSelectionShouldRejectWithoutSavePermitAction() {
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken("idir\\jsmith", "unused");
+    ResponseEntity<PermitPersistenceRpcResponseDto> response =
+        controller.updateScaleSelection(7000123L, List.of("101"), List.of(), authentication);
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    verify(service, never()).updateScaleSelection(any(), any(), any(), any());
+  }
+
+  @Test
+  void updateScaleSelectionShouldRejectChangingApplicationRelationshipsBeforeWriting() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getApplicationNumberForScaleMutation("101"))
+        .thenReturn(Optional.of(1000456L), Optional.of(1000457L));
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+    assertThatThrownBy(
+            () ->
+                controller.updateScaleSelection(
+                    7000123L, List.of("101"), List.of(), authentication))
+        .isInstanceOf(org.springframework.dao.DataRetrievalFailureException.class);
+    verify(service, never()).updateScaleSelection(any(), any(), any(), any());
+  }
+
+  @Test
   void addApplicationsToPermitShouldForwardRequestToService() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     PermitPersistenceRpcResponseDto dto =

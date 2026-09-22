@@ -2487,6 +2487,40 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
 
   @Override
   @Transactional
+  public PermitPersistenceRpcResponseDto updateScaleSelection(
+      Long permitNumber, List<String> includedScaleIds, List<String> excludedScaleIds, String userId) {
+    if (includedScaleIds == null
+        || excludedScaleIds == null
+        || (includedScaleIds.isEmpty() && excludedScaleIds.isEmpty())
+        || java.util.stream.Stream.concat(includedScaleIds.stream(), excludedScaleIds.stream())
+            .anyMatch(id -> id == null || id.isBlank())) {
+      return failurePersistenceResponse(
+          List.of("Select at least one valid scale change."), permitNumber);
+    }
+    List<String> included = includedScaleIds.stream().map(String::trim).distinct().toList();
+    List<String> excluded = excludedScaleIds.stream().map(String::trim).distinct().toList();
+    if (included.stream().anyMatch(excluded::contains)) {
+      return failurePersistenceResponse(
+          List.of("A scale cannot be included and excluded in the same change."), permitNumber);
+    }
+    // All rows use the existing domain checks in this transaction. Remove first so a
+    // replacement selection does not temporarily consume both the old and new volumes.
+    for (boolean attach : List.of(false, true)) {
+      for (String scaleId : attach ? included : excluded) {
+        PermitPersistenceRpcResponseDto result =
+            updateScaleAttachment(scaleId, permitNumber, attach, userId);
+        if (!result.success()) {
+          markRollbackOnly();
+          return result;
+        }
+      }
+    }
+    return new PermitPersistenceRpcResponseDto(
+        true, "Scale selection was saved.", List.of(), List.of(), permitNumber);
+  }
+
+  @Override
+  @Transactional
   public PermitPersistenceRpcResponseDto addApplicationsToPermit(
       Long permitNumber, String selectedApplicationsCsv, String userId) {
     String normalizedUserId = trimToNull(userId);
