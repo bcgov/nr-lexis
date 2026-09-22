@@ -1376,7 +1376,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
       })
     })
     await waitFor(() => {
-      expect(screen.getByText('Application was added to the permit.')).toBeInTheDocument()
+      expect(
+        screen
+          .getByText('Application was added to the permit.')
+          .closest('.cds--inline-notification'),
+      ).toHaveClass('cds--inline-notification--success')
     })
   })
 
@@ -5787,7 +5791,9 @@ describe('Provincial Permit Detail Action Smoke', () => {
         /The permit was updated successfully\. Current permit details could not be refreshed; reload before making another change\./i,
       ),
     ).toBeInTheDocument()
-    expect(screen.getByText('Action info')).toBeInTheDocument()
+    expect(
+      screen.getByText('Action needs attention').closest('.cds--inline-notification'),
+    ).toHaveClass('cds--inline-notification--warning')
     expect(screen.queryByText('Permit details saved')).not.toBeInTheDocument()
     expect(
       screen.getByText(

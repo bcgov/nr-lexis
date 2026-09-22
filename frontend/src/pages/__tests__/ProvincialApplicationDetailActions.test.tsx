@@ -647,7 +647,9 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
         name: 'Edit applicant details',
       }),
     ).toBeInTheDocument()
-    expect(screen.getByText('Applicant client details saved.')).toBeInTheDocument()
+    expect(
+      screen.getByText('Applicant client details saved.').closest('.cds--inline-notification'),
+    ).toHaveClass('cds--inline-notification--success')
     expect(mockedCheckApplicationVolumeUsage).not.toHaveBeenCalled()
   })
 

@@ -267,6 +267,11 @@ describe('Provincial exemption edit context', () => {
         }),
       ),
     )
+    expect(
+      (await screen.findByText('The exemption was updated successfully.')).closest(
+        '.cds--inline-notification',
+      ),
+    ).toHaveClass('cds--inline-notification--success')
   })
 
   it('renames an ordinary OIC and refreshes the saved number while retaining the return context', async () => {
@@ -1002,8 +1007,10 @@ describe('Provincial exemption edit context', () => {
     expect(screen.queryByRole('button', { name: 'Edit exemption' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save exemption' })).not.toBeInTheDocument()
     expect(
-      screen.getByText(/The exemption was updated successfully.*could not be refreshed/),
-    ).toBeInTheDocument()
+      screen
+        .getByText(/The exemption was updated successfully.*could not be refreshed/)
+        .closest('.cds--inline-notification'),
+    ).toHaveClass('cds--inline-notification--warning')
     expect(vi.mocked(updateExemption)).toHaveBeenCalledTimes(1)
     const committedUnload = new Event('beforeunload', { cancelable: true })
     window.dispatchEvent(committedUnload)
@@ -1437,7 +1444,9 @@ describe('Provincial exemption edit context', () => {
         ['EX-205', 'corrected@example.test'],
       ]),
     )
-    expect(await screen.findByText('Action completed')).toBeInTheDocument()
+    expect(
+      (await screen.findByText('Action needs attention')).closest('.cds--inline-notification'),
+    ).toHaveClass('cds--inline-notification--warning')
     expect(
       screen.getByText('Exemption approved. The notification service is unavailable.'),
     ).toBeInTheDocument()

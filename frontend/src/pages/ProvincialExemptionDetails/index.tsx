@@ -365,7 +365,10 @@ const ProvincialExemptionDetailsPage = () => {
   const [permitsErrorMessage, setPermitsErrorMessage] = useState('')
   const [blanketOicTotalsErrorMessage, setBlanketOicTotalsErrorMessage] = useState('')
   const [actionErrorMessage, setActionErrorMessage] = useState('')
-  const [actionInfoMessage, setActionInfoMessage] = useState('')
+  const [actionFeedback, setActionFeedback] = useState<{
+    kind: 'success' | 'warning'
+    message: string
+  } | null>(null)
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
   const [documentPendingDeletion, setDocumentPendingDeletion] =
     useState<ProvincialExemptionDocumentRow | null>(null)
@@ -560,7 +563,7 @@ const ProvincialExemptionDetailsPage = () => {
         setPermitsErrorMessage('')
         setBlanketOicTotalsErrorMessage('')
         setActionErrorMessage('')
-        setActionInfoMessage('')
+        setActionFeedback(null)
         setLoading(false)
         return
       }
@@ -572,7 +575,7 @@ const ProvincialExemptionDetailsPage = () => {
       setPermitsErrorMessage('')
       setBlanketOicTotalsErrorMessage('')
       setActionErrorMessage('')
-      setActionInfoMessage('')
+      setActionFeedback(null)
       if (!isRefreshingCurrentExemption) {
         setEditing(false)
         setIsEditingDocuments(false)
@@ -1126,7 +1129,7 @@ const ProvincialExemptionDetailsPage = () => {
         return false
       setSaving(true)
       setActionErrorMessage('')
-      setActionInfoMessage('')
+      setActionFeedback(null)
       try {
         const nextExemptionNumber =
           currentTypeCode === 'O' && canEditSummaryFields
@@ -1171,7 +1174,7 @@ const ProvincialExemptionDetailsPage = () => {
         if (committedDetail.exemptionNumber !== detail.exemptionNumber) {
           // The old identifier no longer exists. Let the new route reload all linked data.
           if (followRenamedRecord) setRenamedExemptionNumber(committedDetail.exemptionNumber)
-          setActionInfoMessage(result.message)
+          setActionFeedback({ kind: 'success', message: result.message })
           return true
         }
         setDetail(committedDetail)
@@ -1179,15 +1182,16 @@ const ProvincialExemptionDetailsPage = () => {
         setEditForm(toEditForm(committedDetail, committedContext))
         try {
           await refreshEditableData()
-          setActionInfoMessage(result.message)
+          setActionFeedback({ kind: 'success', message: result.message })
         } catch (refreshError) {
           console.error(refreshError)
           setApplicationsErrorMessage(
             'Application links changed, but the current links could not be refreshed. Reload the page.',
           )
-          setActionInfoMessage(
-            `${result.message || 'The exemption was saved.'} Current data could not be refreshed; reload before making another change.`,
-          )
+          setActionFeedback({
+            kind: 'warning',
+            message: `${result.message || 'The exemption was saved.'} Current data could not be refreshed; reload before making another change.`,
+          })
           return true
         }
         onSaved?.(committedDetail)
@@ -1267,7 +1271,10 @@ const ProvincialExemptionDetailsPage = () => {
   const closeApprovalEmail = useCallback(() => {
     if (sendingApprovalEmail) return
     setApprovalEmailRecipients([])
-    setActionInfoMessage('Exemption approved. Approval notification was skipped.')
+    setActionFeedback({
+      kind: 'success',
+      message: 'Exemption approved. Approval notification was skipped.',
+    })
   }, [sendingApprovalEmail])
 
   const onSendApprovalEmail = useCallback(
@@ -1276,14 +1283,18 @@ const ProvincialExemptionDetailsPage = () => {
       setSendingApprovalEmail(true)
       try {
         const email = await sendExemptionApprovalEmails(recipients)
-        setActionInfoMessage(
-          email.success
+        setActionFeedback({
+          kind: email.success ? 'success' : 'warning',
+          message: email.success
             ? `Exemption approved. ${email.message || 'Approval email sent.'}`
             : `Exemption approved. ${email.message || 'The approval email could not be sent.'}`,
-        )
+        })
       } catch (error) {
         console.error(error)
-        setActionInfoMessage('Exemption approved. The approval email could not be sent.')
+        setActionFeedback({
+          kind: 'warning',
+          message: 'Exemption approved. The approval email could not be sent.',
+        })
       } finally {
         setSendingApprovalEmail(false)
         setApprovalEmailRecipients([])
@@ -1296,7 +1307,7 @@ const ProvincialExemptionDetailsPage = () => {
     if (!detail || approving || !approvalCertified) return false
     setApproving(true)
     setActionErrorMessage('')
-    setActionInfoMessage('')
+    setActionFeedback(null)
     try {
       const approval = await approveExemptions([detail.exemptionNumber])
       if (!approval.success || !approval.valid) {
@@ -1312,16 +1323,26 @@ const ProvincialExemptionDetailsPage = () => {
         ([number, email]): ExemptionApprovalRecipient => [number, email],
       )
       setApprovalEmailRecipients(recipients)
-      setActionInfoMessage(
-        recipients.length > 0
-          ? 'Exemption approved. Review the applicant recipient before sending the notification.'
-          : 'Exemption approved. No applicant notification recipient was returned.',
-      )
+      setActionFeedback({
+        kind: recipients.length > 0 ? 'success' : 'warning',
+        message:
+          recipients.length > 0
+            ? 'Exemption approved. Review the applicant recipient before sending the notification.'
+            : 'Exemption approved. No applicant notification recipient was returned.',
+      })
       try {
         await refreshEditableData(true)
       } catch (refreshError) {
         console.error(refreshError)
-        setActionInfoMessage((current) => `${current} Refresh the page to see the latest status.`)
+        setActionFeedback((current) =>
+          current
+            ? {
+                ...current,
+                kind: 'warning',
+                message: `${current.message} Refresh the page to see the latest status.`,
+              }
+            : null,
+        )
       }
       return true
     } catch (error) {
@@ -1453,7 +1474,7 @@ const ProvincialExemptionDetailsPage = () => {
     let newPermitPath: string | null = null
     setCreatingPermit(true)
     setActionErrorMessage('')
-    setActionInfoMessage('')
+    setActionFeedback(null)
     try {
       const result = await createPermitFromExemption(detail.exemptionNumber)
       if (!result.success) {
@@ -1494,7 +1515,7 @@ const ProvincialExemptionDetailsPage = () => {
     if (!detail || generatingReport) return
     setGeneratingReport(true)
     setActionErrorMessage('')
-    setActionInfoMessage('')
+    setActionFeedback(null)
     try {
       const result = await runReport({
         reportId: 'approvedExemptionReport',
@@ -1536,12 +1557,16 @@ const ProvincialExemptionDetailsPage = () => {
       setApplicationNumberToAdd('')
       try {
         await refreshEditableData(true)
-        setActionInfoMessage(`Application ${number} linked to the exemption.`)
+        setActionFeedback({
+          kind: 'success',
+          message: `Application ${number} linked to the exemption.`,
+        })
       } catch (refreshError) {
         console.error(refreshError)
-        setActionInfoMessage(
-          `Application ${number} was linked, but the page could not refresh. Reload before changing application links again.`,
-        )
+        setActionFeedback({
+          kind: 'warning',
+          message: `Application ${number} was linked, but the page could not refresh. Reload before changing application links again.`,
+        })
       }
     } catch (error) {
       console.error(error)
@@ -1574,15 +1599,19 @@ const ProvincialExemptionDetailsPage = () => {
         }
         try {
           await refreshEditableData(true)
-          setActionInfoMessage(`Application ${applicationNumber} removed from the exemption.`)
+          setActionFeedback({
+            kind: 'success',
+            message: `Application ${applicationNumber} removed from the exemption.`,
+          })
         } catch (refreshError) {
           console.error(refreshError)
           setApplicationsErrorMessage(
             'Application links changed, but the current links could not be refreshed. Reload the page.',
           )
-          setActionInfoMessage(
-            `Application ${applicationNumber} was removed, but the page could not refresh. Reload before changing application links again.`,
-          )
+          setActionFeedback({
+            kind: 'warning',
+            message: `Application ${applicationNumber} was removed, but the page could not refresh. Reload before changing application links again.`,
+          })
         }
       } catch (error) {
         console.error(error)
@@ -1621,7 +1650,7 @@ const ProvincialExemptionDetailsPage = () => {
       }
 
       setActionErrorMessage('')
-      setActionInfoMessage('')
+      setActionFeedback(null)
 
       try {
         const result = await openExemptionDocument(row.id, row.name, exemptionNumber)
@@ -1643,7 +1672,7 @@ const ProvincialExemptionDetailsPage = () => {
       const isLatestRequest = beginDetailRequest()
       setIsRemovingDocumentId(row.id)
       setActionErrorMessage('')
-      setActionInfoMessage('')
+      setActionFeedback(null)
 
       try {
         const removeResult = await removeExemptionDocument(row.id, exemptionNumber)
@@ -1659,7 +1688,10 @@ const ProvincialExemptionDetailsPage = () => {
           if (isLatestRequest()) {
             setDocumentRows(documentsResult.rows)
             setDocumentsErrorMessage('')
-            setActionInfoMessage(`${row.name || 'Document'} was deleted.`)
+            setActionFeedback({
+              kind: 'success',
+              message: `${row.name || 'Document'} was deleted.`,
+            })
           }
         } catch (refreshError) {
           if (isLatestRequest()) {
@@ -1667,9 +1699,10 @@ const ProvincialExemptionDetailsPage = () => {
             setDocumentsErrorMessage(
               'The document was deleted, but exemption documents could not be refreshed. Reload the page.',
             )
-            setActionInfoMessage(
-              `${row.name || 'Document'} was deleted. Reload before changing documents again.`,
-            )
+            setActionFeedback({
+              kind: 'warning',
+              message: `${row.name || 'Document'} was deleted. Reload before changing documents again.`,
+            })
           }
         }
       } catch (error) {
@@ -1854,13 +1887,15 @@ const ProvincialExemptionDetailsPage = () => {
                 onCloseButtonClick={() => setActionErrorMessage('')}
               />
             )}
-          {!!actionInfoMessage && approvalEmailRecipients.length === 0 && (
+          {!!actionFeedback && approvalEmailRecipients.length === 0 && (
             <AppNotification
-              kind="info"
-              title="Action completed"
-              subtitle={actionInfoMessage}
+              kind={actionFeedback.kind}
+              title={
+                actionFeedback.kind === 'success' ? 'Action completed' : 'Action needs attention'
+              }
+              subtitle={actionFeedback.message}
               lowContrast
-              onCloseButtonClick={() => setActionInfoMessage('')}
+              onCloseButtonClick={() => setActionFeedback(null)}
             />
           )}
           {editing && !!formValidationMessage && (
@@ -2802,11 +2837,17 @@ const ProvincialExemptionDetailsPage = () => {
           recipients={approvalEmailRecipients}
           sending={sendingApprovalEmail}
           feedback={
-            (actionErrorMessage || actionInfoMessage) && (
+            (actionErrorMessage || actionFeedback) && (
               <AppNotification
-                kind={actionErrorMessage ? 'error' : 'info'}
-                title={actionErrorMessage ? 'Action failed' : 'Action completed'}
-                subtitle={actionErrorMessage || actionInfoMessage}
+                kind={actionErrorMessage ? 'error' : actionFeedback?.kind}
+                title={
+                  actionErrorMessage
+                    ? 'Action failed'
+                    : actionFeedback?.kind === 'warning'
+                      ? 'Action needs attention'
+                      : 'Action completed'
+                }
+                subtitle={actionErrorMessage || actionFeedback?.message}
               />
             )
           }
