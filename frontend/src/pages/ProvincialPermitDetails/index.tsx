@@ -3185,6 +3185,7 @@ const ProvincialPermitDetailsPage = () => {
     }
     setIsSavingScaleSelection(true)
     setActionErrorMessage('')
+    setActionFeedback(null)
     setActionSuccessNotification(null)
     let saved = false
     try {

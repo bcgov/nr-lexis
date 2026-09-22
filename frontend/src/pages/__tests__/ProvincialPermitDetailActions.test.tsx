@@ -1978,6 +1978,71 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(second).toBeChecked()
   })
 
+  it.each([true, false])(
+    'clears previous action feedback when a scale save starts (success: %s)',
+    async (success) => {
+      configureMinisterialActivePermit()
+      mockedFetchAvailablePermitApplications.mockResolvedValue({
+        applicationList: ['APP-ELIGIBLE'],
+        errorMessage: '',
+      })
+      mockedFetchProvincialPermitDetailTabs.mockResolvedValueOnce(tabsResult).mockResolvedValue({
+        ...tabsResult,
+        applications: ['APP-ELIGIBLE'],
+        packages: [{ ...editableBlanketOicPackage, packageNumber: 'MIN-1' }],
+        items: [
+          {
+            id: 'SCALE-1',
+            packageNumber: 'MIN-1',
+            timberMark: 'TEST',
+            scaleType: 'C',
+            species: 'HE',
+            grade: 'U',
+            pieces: 1,
+            volume: 1,
+            permitNumber: '777',
+            includedInPermit: true,
+          },
+        ],
+      })
+      let resolveSave!: (result: Awaited<ReturnType<typeof updatePermitScaleSelection>>) => void
+      mockedUpdatePermitScaleSelection.mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveSave = resolve
+        }),
+      )
+      renderPermitDetails()
+      await userEvent.click(
+        await screen.findByRole('checkbox', { name: 'Include application APP-ELIGIBLE in permit' }),
+      )
+      await userEvent.click(screen.getByRole('button', { name: 'Add application' }))
+      expect(await screen.findByText('Application was added to the permit.')).toBeVisible()
+
+      await selectPermitDetailTab('Scale')
+      await userEvent.click(screen.getByRole('button', { name: 'Edit scale selection' }))
+      await userEvent.click(
+        screen.getByRole('checkbox', { name: 'Include scale SCALE-1 in permit' }),
+      )
+      await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+      expect(mockedUpdatePermitScaleSelection).toHaveBeenCalledTimes(1)
+      expect(screen.getByRole('button', { name: 'Saving…' })).toBeDisabled()
+      expect(screen.queryByText('Application was added to the permit.')).not.toBeInTheDocument()
+
+      await act(async () =>
+        resolveSave({
+          success,
+          message: success ? 'Scale selection was saved.' : '',
+          errors: success ? [] : ['Selection rejected'],
+          warnings: [],
+        }),
+      )
+      expect(
+        await screen.findByText(success ? 'Scale selection saved' : 'Selection rejected'),
+      ).toBeVisible()
+      expect(screen.queryByText('Application was added to the permit.')).not.toBeInTheDocument()
+    },
+  )
+
   it('keeps scale controls locked until the saved selection and totals finish refreshing', async () => {
     const initialDetail = configureMinisterialActivePermit()
     const initialTabs = {
