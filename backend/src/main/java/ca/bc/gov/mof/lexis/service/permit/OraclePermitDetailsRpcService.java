@@ -2420,7 +2420,8 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     if (permit.isEmpty()) {
       return failurePersistenceResponse(List.of("Permit not found."), permitNumber);
     }
-    if (isBlanketOicPermit(permit.get())
+    boolean blanketOic = isBlanketOicPermit(permit.get());
+    if (blanketOic
         && !isOicApplicationBoundToExemption(
             permit.get().oicApplicationNumber(), permit.get().exemptionNumber())) {
       return failurePersistenceResponse(
@@ -2436,6 +2437,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
 
     Map<Long, String> includedApplicationStatuses = new LinkedHashMap<>();
     Set<Long> removedApplicationNumbers = new LinkedHashSet<>();
+    Set<PackageCandidateRow> eligiblePackages = null;
     for (boolean attach : List.of(false, true)) {
       for (String scaleId : attach ? included : excluded) {
         Optional<ScaleMutationRow> existing = repository.findScaleMutationById(scaleId);
@@ -2457,7 +2459,16 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
             return failurePersistenceResponse(
                 List.of("Scale detail is already assigned to another permit."), permitNumber);
           }
-          if (!isScaleEligibleForPermit(scale, permit.get())) {
+          String packageNumber = preservePackageNumber(scale.packageNumber());
+          if (packageNumber == null) {
+            return failurePersistenceResponse(
+                List.of("Scale detail is not eligible for this permit."), permitNumber);
+          }
+          // Load once on the first inclusion; removal-only saves need no eligibility lookup.
+          if (eligiblePackages == null) {
+            eligiblePackages = findEligibleScalePackages(permit.get(), blanketOic);
+          }
+          if (!eligiblePackages.contains(new PackageCandidateRow(applicationNumber, packageNumber))) {
             return failurePersistenceResponse(
                 List.of("Scale detail is not eligible for this permit."), permitNumber);
           }
@@ -4359,36 +4370,19 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     return List.of();
   }
 
-  private boolean isScaleEligibleForPermit(
-      ScaleMutationRow scale, PermitMutationRow permit) {
-    if (scale == null || permit == null || scale.applicationNumber() == null) {
-      return false;
-    }
-    String packageNumber = preservePackageNumber(scale.packageNumber());
-    if (packageNumber == null) {
-      return false;
-    }
-    if (isBlanketOicPermit(permit)) {
-      return isOicApplicationBoundToExemption(
-              permit.oicApplicationNumber(), permit.exemptionNumber())
-          && scale.applicationNumber().equals(permit.oicApplicationNumber())
-          && repository.findPackageNumbersByOicPermitNumber(permit.permitNumber()).stream()
-              .anyMatch(packageNumber::equals);
+  private Set<PackageCandidateRow> findEligibleScalePackages(
+      PermitMutationRow permit, boolean blanketOic) {
+    if (blanketOic) {
+      return repository.findPackageNumbersByOicPermitNumber(permit.permitNumber()).stream()
+          .map(packageNumber -> new PackageCandidateRow(permit.oicApplicationNumber(), packageNumber))
+          .collect(java.util.stream.Collectors.toSet());
     }
 
     String exemptionNumber = trimToNull(permit.exemptionNumber());
     if (exemptionNumber == null) {
-      return false;
+      return Set.of();
     }
-    boolean belongsToExemption =
-        repository.findPackagesByExemptionNumberRequired(exemptionNumber).stream()
-            .anyMatch(
-                row ->
-                    scale.applicationNumber().equals(row.applicationNumber())
-                        && packageNumber.equals(row.packageNumber()));
-    return belongsToExemption
-        && (scale.exportPermitDetailNumber() == null
-            || permit.permitNumber().equals(scale.exportPermitDetailNumber()));
+    return new HashSet<>(repository.findPackagesByExemptionNumberRequired(exemptionNumber));
   }
 
   private boolean updateScalePermitAssignment(

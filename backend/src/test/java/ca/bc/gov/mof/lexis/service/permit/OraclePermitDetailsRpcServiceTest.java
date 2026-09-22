@@ -6558,6 +6558,7 @@ class OraclePermitDetailsRpcServiceTest {
     order.verify(repository).updatePermitDetail(totals.capture(), eq("idir\\jsmith"), eq(null));
     assertThat(totals.getValue().permitVolume()).isEqualTo(3d);
     assertThat(totals.getValue().numberOfPieces()).isEqualTo(4L);
+    verify(repository).findPackagesByExemptionNumberRequired("EX-700");
     verify(repository).findApplicationStatusCodeByNumber(1000456L);
     verify(repository).findScaleDetailsByPermitNumber(7000123L);
     verify(repository).updatePermitDetail(any(), eq("idir\\jsmith"), eq(null));
@@ -6590,6 +6591,90 @@ class OraclePermitDetailsRpcServiceTest {
     verify(repository, never()).findScaleMutationDetailsByApplicationNumber(anyLong());
     verifyNoInteractions(applicationReviewRepository);
     verify(repository).findScaleDetailsByPermitNumber(7000123L);
+  }
+
+  @Test
+  void updateScaleSelectionShouldShareEligibilityAcrossDifferentApplications() {
+    stubScaleSelection();
+    when(repository.findScaleMutationById("102"))
+        .thenReturn(
+            Optional.of(
+                scaleMutation(
+                    "102", 1000457L, "PKG-904", null, Timestamp.valueOf("2026-01-01 10:00:00"))));
+    when(repository.findPackagesByExemptionNumberRequired("EX-700"))
+        .thenReturn(
+            List.of(
+                new PackageCandidateRow(1000456L, "PKG-903"),
+                new PackageCandidateRow(1000457L, "PKG-904")));
+    when(repository.findApplicationStatusCodeByNumber(1000457L)).thenReturn(Optional.of("PMT"));
+    when(repository.updateScaleDetail(any(ScaleMutationRecord.class), eq("idir\\jsmith")))
+        .thenReturn(true);
+
+    var result =
+        service.updateScaleSelection(7000123L, List.of("101", "102"), List.of(), "idir\\jsmith");
+
+    assertThat(result.success()).isTrue();
+    verify(repository).findPackagesByExemptionNumberRequired("EX-700");
+    verify(repository).findExemptionTypeCode("EX-700");
+    verify(repository, times(2)).updateScaleDetail(any(), eq("idir\\jsmith"));
+  }
+
+  @ParameterizedTest
+  @ValueSource(booleans = {false, true})
+  void updateScaleSelectionShouldPreserveExactPackageAndApplicationEligibility(
+      boolean wrongApplication) {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow()));
+    when(repository.findScaleMutationById("101"))
+        .thenReturn(
+            Optional.of(
+                scaleMutation(
+                    "101", 1000456L, "PKG-903  ", null, Timestamp.valueOf("2026-01-01 10:00:00"))));
+    when(repository.findPackagesByExemptionNumberRequired("EX-700"))
+        .thenReturn(
+            List.of(
+                new PackageCandidateRow(
+                    wrongApplication ? 1000457L : 1000456L,
+                    wrongApplication ? "PKG-903  " : "PKG-903")));
+
+    var result =
+        service.updateScaleSelection(7000123L, List.of("101"), List.of(), "idir\\jsmith");
+
+    assertThat(result.success()).isFalse();
+    assertThat(result.errors()).containsExactly("Scale detail is not eligible for this permit.");
+    verify(repository).findPackagesByExemptionNumberRequired("EX-700");
+    verify(repository, never()).updateScaleDetail(any(), any());
+    verify(repository, never()).findApplicationStatusCodeByNumber(anyLong());
+  }
+
+  @Test
+  void updateScaleSelectionShouldLoadBlanketOicEligibilityOnceForPaddedPackage() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(blanketOicPermitMutationRow()));
+    when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("B"));
+    stubOicApplicationBinding("EX-700");
+    when(repository.findPackageNumbersByOicPermitNumber(7000123L))
+        .thenReturn(List.of("PKG-903  "));
+    for (String id : List.of("101", "102")) {
+      when(repository.findScaleMutationById(id))
+          .thenReturn(
+              Optional.of(
+                  scaleMutation(
+                      id, 1000999L, "PKG-903  ", null, Timestamp.valueOf("2026-01-01 10:00:00"))));
+    }
+    when(repository.findApplicationStatusCodeByNumber(1000999L)).thenReturn(Optional.of("PMT"));
+    when(repository.updateScaleDetail(any(ScaleMutationRecord.class), eq("idir\\jsmith")))
+        .thenReturn(true);
+
+    var result =
+        service.updateScaleSelection(7000123L, List.of("101", "102"), List.of(), "idir\\jsmith");
+
+    assertThat(result.success()).isTrue();
+    verify(repository).findPackageNumbersByOicPermitNumber(7000123L);
+    verify(repository).findExemptionTypeCode("EX-700");
+    verify(repository).findApplicationInfoByNumber(1000999L);
+    verify(repository, never()).findPackagesByExemptionNumberRequired(any());
+    verify(repository, times(2)).updateScaleDetail(any(), eq("idir\\jsmith"));
   }
 
   @Test
@@ -6627,6 +6712,8 @@ class OraclePermitDetailsRpcServiceTest {
     order.verify(repository).updatePermitDetail(totals.capture(), eq("idir\\jsmith"), eq(null));
     assertThat(totals.getValue().permitVolume()).isEqualTo(0d);
     assertThat(totals.getValue().numberOfPieces()).isEqualTo(0L);
+    verify(repository, never()).findPackagesByExemptionNumberRequired(any());
+    verify(repository, never()).findPackageNumbersByOicPermitNumber(anyLong());
     verify(repository).findScaleMutationDetailsByApplicationNumber(1000456L);
     verify(repository).findApplicationStatusCodeByNumber(1000456L);
     verify(repository).findScaleDetailsByPermitNumber(7000123L);

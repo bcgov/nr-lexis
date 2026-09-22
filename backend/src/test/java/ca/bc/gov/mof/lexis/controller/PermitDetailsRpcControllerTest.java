@@ -14,6 +14,9 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import ca.bc.gov.mof.lexis.dto.application.ApplicationEditLockDto;
 import ca.bc.gov.mof.lexis.dto.application.ApplicationAccessContextDto;
@@ -79,6 +82,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentCaptor;
@@ -87,9 +91,11 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 @ExtendWith(MockitoExtension.class)
@@ -2573,6 +2579,43 @@ class PermitDetailsRpcControllerTest {
     verify(provincialAuthorizationService, times(2)).requireApplication(authentication, 1000457L);
     verify(editLockService).release(1000456L, "idir\\jsmith");
     verify(editLockService).release(1000457L, "idir\\jsmith");
+  }
+
+  @ParameterizedTest
+  @CsvSource({"true,false", "false,false", "true,true", "false,true"})
+  void updateScaleSelectionShouldBindOmittedOrEmptySideAsEmptyList(
+      boolean include, boolean explicitEmpty) throws Exception {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    List<String> changedIds = List.of("101", "102");
+    List<String> includedIds = include ? changedIds : List.of();
+    List<String> excludedIds = include ? List.of() : changedIds;
+    when(service.updateScaleSelection(7000123L, includedIds, excludedIds, "idir\\jsmith"))
+        .thenReturn(
+            new PermitPersistenceRpcResponseDto(
+                true, "Scale selection was saved.", List.of(), List.of(), 7000123L));
+    when(service.getApplicationNumberForScaleMutation("101")).thenReturn(Optional.of(1000456L));
+    when(service.getApplicationNumberForScaleMutation("102")).thenReturn(Optional.of(1000456L));
+    allowApplicationMutationLocks(1000456L);
+    var form =
+        post("/api/lexis/rpc/permit-details/update-scale-selection")
+            .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+            .accept(MediaType.APPLICATION_JSON)
+            .param("permitNumber", "7000123")
+            .param(include ? "includedScaleIds" : "excludedScaleIds", "101,102")
+            .principal(authorizedSavePermit());
+    if (explicitEmpty) {
+      form.param(include ? "excludedScaleIds" : "includedScaleIds", "");
+    }
+
+    MockMvcBuilders.standaloneSetup(controller)
+        .build()
+        .perform(form)
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true));
+
+    verify(service).updateScaleSelection(7000123L, includedIds, excludedIds, "idir\\jsmith");
+    verify(service, never()).getApplicationNumberForScaleMutation("");
+    verify(editLockService).release(1000456L, "idir\\jsmith");
   }
 
   @Test

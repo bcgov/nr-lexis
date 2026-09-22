@@ -76,6 +76,26 @@ describe('provincial permit detail services', () => {
     expect(body.get('excludedScaleIds')).toBe('102,103')
   })
 
+  it.each(['includedScaleIds', 'excludedScaleIds'] as const)(
+    'omits the unused side of a scale selection containing only %s',
+    async (changedSide) => {
+      postMock.mockResolvedValue(
+        response({ success: true, message: 'Saved', errors: [], warnings: [] }),
+      )
+      const result = await updatePermitScaleSelection({
+        permitNumber: '777',
+        includedScaleIds: [],
+        excludedScaleIds: [],
+        [changedSide]: ['101', '102'],
+      })
+      const [, body] = postMock.mock.calls[0]
+      const emptySide = changedSide === 'includedScaleIds' ? 'excludedScaleIds' : 'includedScaleIds'
+      expect(result.success).toBe(true)
+      expect(body.get(changedSide)).toBe('101,102')
+      expect(body.has(emptySide)).toBe(false)
+    },
+  )
+
   it('loads permit detail tab rows from permit RPC endpoints', async () => {
     getCachedResponseMock.mockImplementation((path: string) => {
       switch (path) {
