@@ -41,6 +41,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import org.slf4j.Logger;
@@ -116,6 +117,7 @@ public class ApplicationDetailsRpcController {
   private static final String LEGACY_APPLICATION_LOCK_SESSION_KEY = "exemptionApplication";
   private static final String LEGACY_APPLICATION_NUMBER_SESSION_KEY = "applicationNumber";
   private static final String APPLICATION_APPLICANT_TYPE_OWNER = "O";
+  private static final String APPLICATION_STATUS_APPROVED = "APP";
   private static final String APPLICATION_STATUS_EXPIRED = "EXP";
   private static final String APPLICATION_STATUS_PERMITTED = "PMT";
   private static final int APPLICATION_REMARK_MAX_BYTES = 254;
@@ -780,6 +782,9 @@ public class ApplicationDetailsRpcController {
           if (currentLock.locked()) {
             return applicationPersistenceLockConflict(
                 currentLock, request.applicationNumber());
+          }
+          if (changesApprovedListDate(service, request, authentication)) {
+            return approvedListDateLocked(request.applicationNumber());
           }
           ApplicationDetailsRpcService.CreateApplicationResult result =
               service.updateApplicationSummary(request, userId);
@@ -1582,6 +1587,45 @@ public class ApplicationDetailsRpcController {
     return ResponseEntity.ok(
         new ApplicationPersistenceResponseDto(
             false, null, applicationNumber, List.of("Select a list date."), List.of()));
+  }
+
+  // Clients cannot change the list date once the application is approved.
+  private boolean changesApprovedListDate(
+      ApplicationDetailsRpcService service,
+      ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest request,
+      Authentication authentication) {
+    if (!request.saveSource().updatesSummaryFields() || !requiresListDate(authentication)) {
+      return false;
+    }
+    return service
+        .getApplicationSummarySnapshot(request.applicationNumber())
+        .filter(
+            snapshot ->
+                APPLICATION_STATUS_APPROVED.equalsIgnoreCase(snapshot.applicationStatusCode()))
+        .map(
+            snapshot -> {
+              // Summary saves clear a blank list date; full saves keep the stored value.
+              Long requested = request.exportScheduleId();
+              Long saved =
+                  request.saveSource()
+                              == ApplicationDetailsRpcService.ApplicationSummarySaveSource.SUMMARY
+                          || requested != null
+                      ? requested
+                      : snapshot.exportScheduleId();
+              return !Objects.equals(snapshot.exportScheduleId(), saved);
+            })
+        .orElse(false);
+  }
+
+  private ResponseEntity<ApplicationPersistenceResponseDto> approvedListDateLocked(
+      Long applicationNumber) {
+    return ResponseEntity.ok(
+        new ApplicationPersistenceResponseDto(
+            false,
+            null,
+            applicationNumber,
+            List.of("List date cannot be changed after the application is approved."),
+            List.of()));
   }
 
   private boolean canPerform(List<String> roles, String action) {

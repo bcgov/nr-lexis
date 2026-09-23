@@ -522,6 +522,7 @@ const normalizeSummaryAgentFields = (
         agentContactName: '',
       }
 
+const APPLICATION_STATUS_APPROVED = 'APP'
 const APPLICATION_STATUS_EXPIRED = 'EXP'
 const APPLICATION_STATUS_PERMITTED = 'PMT'
 const COMPLETE_PERMIT_STATUS_TEXT = 'COMPLETE'
@@ -1171,6 +1172,10 @@ const ProvincialApplicationDetailsPage = () => {
   )
   const canChangeApplicantType = canPerform('/changeApplicantType')
   const canReviewApplication = canPerform('/applicationsReview')
+  // Clients cannot change the list date once the application is approved.
+  const listDateLocked =
+    !canReviewApplication &&
+    detail?.applicationStatusCode?.trim().toUpperCase() === APPLICATION_STATUS_APPROVED
   const canEditApplicationReview =
     canReviewApplication &&
     !isApplicationExpired &&
@@ -4616,6 +4621,12 @@ const ProvincialApplicationDetailsPage = () => {
                                   disabled={
                                     summaryOptionsAvailability !== 'available' ||
                                     summaryScheduleOptions.length === 0
+                                  }
+                                  readOnly={listDateLocked}
+                                  helperText={
+                                    listDateLocked
+                                      ? 'List date cannot be changed after the application is approved.'
+                                      : undefined
                                   }
                                   onChange={(value) =>
                                     onSummaryFormChange(

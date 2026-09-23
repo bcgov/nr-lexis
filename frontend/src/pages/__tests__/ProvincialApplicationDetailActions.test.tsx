@@ -2316,10 +2316,13 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     )
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
       ...applicationDetail,
+      applicationStatusCode: 'NEW',
+      statusDescription: 'New',
       listingDate: null,
     })
     mockedFetchApplicationSummarySnapshot.mockResolvedValue({
       ...applicationSummarySnapshot,
+      applicationStatusCode: 'NEW',
       exportScheduleId: '',
     })
     mockedFetchProvincialApplicationOptions.mockResolvedValueOnce({
@@ -2384,6 +2387,49 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
         expect.objectContaining({
           applicationNumber: '321',
           exportScheduleId: '988',
+        }),
+      )
+    })
+  })
+
+  it('locks the list date for a submitter once the application is approved', async () => {
+    mockApplicationDetailAuth(
+      (action: string) => action === 'createApplication',
+      ['LEXIS_PROVINCIAL_SUBMITTER_00011122'],
+    )
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const summaryControls = within(await selectApplicationSummaryTile())
+    const listDate = await summaryControls.findByRole('group', { name: 'List date' })
+    await waitFor(() => {
+      expect(within(listDate).getByRole('radio', { checked: true })).toHaveAttribute('value', '987')
+    })
+    expect(
+      summaryControls.getByText('List date cannot be changed after the application is approved.'),
+    ).toBeVisible()
+    await userEvent.click(within(listDate).getAllByRole('radio', { checked: false })[0])
+    expect(within(listDate).getByRole('radio', { checked: true })).toHaveAttribute('value', '987')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
+    const dialog = screen.getByRole('dialog', { name: 'Confirm application accuracy' })
+    await userEvent.click(within(dialog).getByRole('checkbox', { name: 'I Agree' }))
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save summary' }))
+
+    await waitFor(() => {
+      expect(mockedUpdateApplicationSummary).toHaveBeenCalledWith(
+        expect.objectContaining({
+          applicationNumber: '321',
+          exportScheduleId: '987',
         }),
       )
     })
