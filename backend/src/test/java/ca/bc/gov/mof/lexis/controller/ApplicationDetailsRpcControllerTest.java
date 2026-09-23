@@ -1081,6 +1081,7 @@ class ApplicationDetailsRpcControllerTest {
     params.add("ownerClientNumber", "00099999");
     params.add("ownerClientLocationCode", "02");
     params.add("agentClientNumber", "00022222");
+    params.add("exportScheduleId", "987");
 
     ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
         controller.addApplicationLegacy(params, authentication);
@@ -1121,6 +1122,7 @@ class ApplicationDetailsRpcControllerTest {
     MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
     params.add("ownerClientNumber", "00099999");
     params.add("ownerClientLocationCode", "   ");
+    params.add("exportScheduleId", "987");
 
     ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
         controller.addApplicationLegacy(params, authentication);
@@ -1133,6 +1135,128 @@ class ApplicationDetailsRpcControllerTest {
             requestCaptor.capture(), org.mockito.ArgumentMatchers.eq("bceid\\submitter"));
     assertThat(requestCaptor.getValue().ownerClientNumber()).isEqualTo("00077881");
     assertThat(requestCaptor.getValue().ownerClientLocationCode()).isEqualTo("00");
+  }
+
+  @Test
+  void provincialSubmitterCannotCreateApplicationWithoutListDate() {
+    TestingAuthenticationToken authentication =
+        authenticatedWithActions(
+            "bceid\\submitter",
+            List.of("LEXIS_PROVINCIAL_SUBMITTER_00077881"),
+            "createApplication");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
+        controller.addApplicationLegacy(new LinkedMultiValueMap<>(), authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody().valid()).isFalse();
+    assertThat(response.getBody().errors()).containsExactly("Select a list date.");
+    verify(service, never()).addApplication(any(), any());
+  }
+
+  @Test
+  void provincialSubmitterCannotClearApplicationListDate() {
+    TestingAuthenticationToken authentication =
+        authenticatedWithActions(
+            "bceid\\submitter",
+            List.of("LEXIS_PROVINCIAL_SUBMITTER_00077881"),
+            "createApplication");
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("applicationNumber", "1000456");
+    params.add("saveSource", "summary");
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
+        controller.updateApplicationSummary(params, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody().valid()).isFalse();
+    assertThat(response.getBody().errors()).containsExactly("Select a list date.");
+    verify(service, never()).updateApplicationSummary(any(), any());
+  }
+
+  @Test
+  void provincialSubmitterCannotChangeApprovedApplicationListDate() {
+    TestingAuthenticationToken authentication =
+        authenticatedWithActions(
+            "bceid\\submitter",
+            List.of("LEXIS_PROVINCIAL_SUBMITTER_00011111"),
+            "createApplication");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getApplicationSummarySnapshot(1000456L))
+        .thenReturn(Optional.of(approvedSummarySnapshot()));
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
+        controller.updateApplicationSummary(
+            summaryListDateParams("summary", "5678"), authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody().valid()).isFalse();
+    assertThat(response.getBody().errors())
+        .containsExactly("List date cannot be changed after the application is approved.");
+    verify(service, never()).updateApplicationSummary(any(), any());
+  }
+
+  @Test
+  void provincialSubmitterCannotChangeApprovedApplicationListDateThroughFullSave() {
+    TestingAuthenticationToken authentication =
+        authenticatedWithActions(
+            "bceid\\submitter",
+            List.of("LEXIS_PROVINCIAL_SUBMITTER_00011111"),
+            "createApplication");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getApplicationSummarySnapshot(1000456L))
+        .thenReturn(Optional.of(approvedSummarySnapshot()));
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
+        controller.updateApplicationSummary(summaryListDateParams(null, "5678"), authentication);
+
+    assertThat(response.getBody().valid()).isFalse();
+    assertThat(response.getBody().errors())
+        .containsExactly("List date cannot be changed after the application is approved.");
+    verify(service, never()).updateApplicationSummary(any(), any());
+  }
+
+  @Test
+  void provincialSubmitterCanKeepApprovedApplicationListDate() {
+    TestingAuthenticationToken authentication =
+        authenticatedWithActions(
+            "bceid\\submitter",
+            List.of("LEXIS_PROVINCIAL_SUBMITTER_00011111"),
+            "createApplication");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getApplicationSummarySnapshot(1000456L))
+        .thenReturn(Optional.of(approvedSummarySnapshot()));
+    when(service.updateApplicationSummary(any(), any()))
+        .thenReturn(
+            new ApplicationDetailsRpcService.CreateApplicationResult(
+                true, "Saved", 1000456L, List.of(), List.of()));
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
+        controller.updateApplicationSummary(
+            summaryListDateParams("summary", "1234"), authentication);
+
+    assertThat(response.getBody().valid()).isTrue();
+    verify(service).updateApplicationSummary(any(), any());
+  }
+
+  @Test
+  void applicationApproverCanChangeApprovedApplicationListDate() {
+    TestingAuthenticationToken authentication = authorized("createApplication");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getApplicationSummarySnapshot(1000456L))
+        .thenReturn(Optional.of(approvedSummarySnapshot()));
+    when(service.updateApplicationSummary(any(), any()))
+        .thenReturn(
+            new ApplicationDetailsRpcService.CreateApplicationResult(
+                true, "Saved", 1000456L, List.of(), List.of()));
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
+        controller.updateApplicationSummary(
+            summaryListDateParams("summary", "5678"), authentication);
+
+    assertThat(response.getBody().valid()).isTrue();
+    verify(service).updateApplicationSummary(any(), any());
   }
 
   @Test
@@ -2735,6 +2859,46 @@ class ApplicationDetailsRpcControllerTest {
         "Agent Contact",
         "Owner Contact",
         "N");
+  }
+
+  private ApplicationDetailsRpcService.ApplicationSummarySnapshot approvedSummarySnapshot() {
+    ApplicationDetailsRpcService.ApplicationSummarySnapshot snapshot = summarySnapshot();
+    return new ApplicationDetailsRpcService.ApplicationSummarySnapshot(
+        snapshot.applicationNumber(),
+        snapshot.federalApplicationNumber(),
+        snapshot.applicationDate(),
+        snapshot.termDays(),
+        snapshot.receivedDate(),
+        snapshot.applicationVolume(),
+        snapshot.averageLogVolume(),
+        snapshot.productLocation(),
+        snapshot.exportScheduleId(),
+        snapshot.agentClientNumber(),
+        snapshot.agentClientLocationCode(),
+        snapshot.ownerClientNumber(),
+        snapshot.ownerClientLocationCode(),
+        snapshot.exemptionNumber(),
+        snapshot.exemptionReasonCode(),
+        "APP",
+        snapshot.applicantTypeCode(),
+        snapshot.orgUnitNumber(),
+        snapshot.productTypeCode(),
+        snapshot.jurisdictionCode(),
+        snapshot.growthTypeCode(),
+        snapshot.agentContactName(),
+        snapshot.ownerContactName(),
+        snapshot.oicIndicator());
+  }
+
+  private MultiValueMap<String, String> summaryListDateParams(
+      String saveSource, String exportScheduleId) {
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("applicationNumber", "1000456");
+    if (saveSource != null) {
+      params.add("saveSource", saveSource);
+    }
+    params.add("exportScheduleId", exportScheduleId);
+    return params;
   }
 
   private ApplicationDetailsRpcService.ApplicationSummarySnapshot summarySnapshotWithBlankOwnerContact() {

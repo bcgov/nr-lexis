@@ -6,6 +6,8 @@ import {
   DismissibleTag,
   Grid,
   InlineNotification,
+  RadioButton,
+  RadioButtonGroup,
   Tab,
   TabList,
   TabPanel,
@@ -27,6 +29,10 @@ import ApplicationAccuracyConfirmation, {
 } from '@/components/ApplicationAccuracyConfirmation'
 import UnsavedChangesGuard, { formValuesEqual } from '@/components/UnsavedChangesGuard'
 import { nonNegativeWholeNumberFieldError } from '@/pages/shared/application-term-utils'
+import {
+  applicationListDateOptions,
+  NO_LIST_DATE_VALUE,
+} from '@/pages/shared/application-list-date-options'
 import {
   CLIENT_LOOKUP_UNAVAILABLE_MESSAGE,
   averageLogVolumeFieldError,
@@ -95,7 +101,6 @@ type ProvincialApplicationCreateForm = {
   region: string
   applicationDate: string
   applicationTermDays: string
-  receivedDate: string
   exportScheduleId: string
   listingDate: string
   productLocation: string
@@ -190,7 +195,7 @@ const APPLICATION_CREATE_FIELD_TAB: Partial<
   region: 'application',
   applicationDate: 'application',
   applicationTermDays: 'application',
-  receivedDate: 'application',
+  exportScheduleId: 'application',
   ageClass: 'items',
   productLocation: 'items',
   applicationVolume: 'items',
@@ -214,7 +219,6 @@ const INITIAL_FORM: ProvincialApplicationCreateForm = {
   region: '',
   applicationDate: '',
   applicationTermDays: '180',
-  receivedDate: '',
   exportScheduleId: '',
   listingDate: '',
   productLocation: '',
@@ -269,9 +273,6 @@ const buildInitialFormFromQuery = (
       query.get('exemptionTerm') ??
       query.get('termDays') ??
       INITIAL_FORM.applicationTermDays,
-    // INTENTIONAL_LEGACY_DIVERGENCE(APPLICATION_RECEIVED_DATE_ENTRY): Business testing requires
-    // staff to enter the actual received date instead of silently stamping the current date.
-    receivedDate: query.get('receivedDate') ?? INITIAL_FORM.receivedDate,
     exportScheduleId: query.get('exportScheduleId') ?? query.get('legacyExportScheduleId') ?? '',
     listingDate: query.get('listingDate') ?? '',
     productLocation: query.get('productLocation') ?? query.get('logLocation') ?? '',
@@ -290,12 +291,13 @@ const buildInitialFormFromQuery = (
 const applyScheduleDefaults = (
   form: ProvincialApplicationCreateForm,
   schedules: SearchOption[],
+  defaultScheduleId: string | undefined,
 ): ProvincialApplicationCreateForm => {
   if (schedules.length === 0) {
     return form
   }
 
-  const nextListingSchedule = schedules.find((option) => option.value.trim())
+  const nextListingSchedule = schedules.find((option) => option.value === defaultScheduleId)
   if (!form.exportScheduleId && !form.listingDate && nextListingSchedule) {
     return {
       ...form,
@@ -503,14 +505,25 @@ const ProvincialApplicationCreatePage = () => {
     const loadOptions = async () => {
       try {
         const options = await fetchProvincialApplicationOptions()
-        const scheduleOptions = options.nextSchedules ?? options.currentSchedules
+        const nextSchedules = options.nextSchedules ?? options.currentSchedules
+        const scheduleOptions = applicationListDateOptions(
+          nextSchedules,
+          options.currentSchedules,
+          canReviewApplications,
+          formatBusinessIsoDate(),
+        )
+        const defaultScheduleId = nextSchedules.find((option) => option.value.trim())?.value
         setProductTypes(options.productTypes)
         setGrowthTypes(options.growthTypes)
         setExemptionReasons(options.exemptionReasons)
         setRegions(options.regions)
         setCurrentSchedules(scheduleOptions)
         setForm((current) => {
-          const withScheduleDefaults = applyScheduleDefaults(current, scheduleOptions)
+          const withScheduleDefaults = applyScheduleDefaults(
+            current,
+            scheduleOptions,
+            defaultScheduleId,
+          )
           if (!provincialSubmitterIdentityLocked) {
             return withScheduleDefaults
           }
@@ -533,7 +546,7 @@ const ProvincialApplicationCreatePage = () => {
     }
 
     void loadOptions()
-  }, [authoritativeOrgUnitNo, provincialSubmitterIdentityLocked])
+  }, [authoritativeOrgUnitNo, canReviewApplications, provincialSubmitterIdentityLocked])
 
   useEffect(() => {
     if (!provincialSubmitterIdentityLocked) {
@@ -1247,15 +1260,11 @@ const ProvincialApplicationCreatePage = () => {
         () => greaterThanFieldError(form.applicationTermDays, 'Exemption term days', 0),
         () => maxNumericValueFieldError(form.applicationTermDays, 99999, 'Exemption term days'),
       ),
-      receivedDate: firstValidationError(
-        () => requiredFieldError(form.receivedDate, 'Received date'),
-        () => isoDateFieldError(form.receivedDate),
-      ),
       exportScheduleId:
-        !form.exportScheduleId ||
+        (canReviewApplications && !form.exportScheduleId) ||
         currentSchedules.some((option) => option.value === form.exportScheduleId)
           ? undefined
-          : 'Select a valid listing date.',
+          : 'Select a valid list date.',
       productLocation: productTypeRequiresLogDetails(form.productTypeCode)
         ? applicationTextStorageFieldError(
             form.productLocation,
@@ -1280,6 +1289,7 @@ const ProvincialApplicationCreatePage = () => {
     [
       applicationSpeciesOptions.length,
       canViewRemarks,
+      canReviewApplications,
       currentSchedules,
       exemptionReasons,
       form,
@@ -2054,38 +2064,44 @@ const ProvincialApplicationCreatePage = () => {
                       setForm((current) => ({ ...current, applicationDate: value }))
                     }}
                   />
-                  <IsoDatePicker
-                    id="receivedDate"
-                    labelText={requiredLabel('Date received (YYYY-MM-DD)')}
-                    required
-                    value={form.receivedDate}
-                    invalid={!!fieldError('receivedDate')}
-                    invalidText={fieldError('receivedDate')}
-                    onBlur={() => markFieldTouched('receivedDate')}
-                    onChange={(value) => {
-                      markFormEdited()
-                      setForm((current) => ({ ...current, receivedDate: value }))
-                    }}
-                  />
-                  <SearchableSelect
-                    id="exportScheduleId"
-                    labelText="List date"
-                    value={form.exportScheduleId}
-                    options={currentSchedules}
-                    disabled={!optionsLoaded || optionsUnavailable}
-                    placeholder="Search list date"
-                    onBlur={() => markFieldTouched('exportScheduleId')}
-                    onChange={(value) => {
-                      markFormEdited()
-                      setForm((current) => ({
-                        ...current,
-                        exportScheduleId: value,
-                        listingDate: value
-                          ? (currentSchedules.find((option) => option.value === value)?.label ?? '')
-                          : '',
-                      }))
-                    }}
-                  />
+                  <div className="application-list-date-field">
+                    <RadioButtonGroup
+                      legendText={requiredLabel('List date')}
+                      name="exportScheduleId"
+                      valueSelected={
+                        form.exportScheduleId || (canReviewApplications ? NO_LIST_DATE_VALUE : '')
+                      }
+                      required
+                      orientation="horizontal"
+                      disabled={!optionsLoaded || optionsUnavailable}
+                      onChange={(value) => {
+                        markFormEdited()
+                        markFieldTouched('exportScheduleId')
+                        const selectedId = String(value)
+                        setForm((current) => ({
+                          ...current,
+                          exportScheduleId: selectedId === NO_LIST_DATE_VALUE ? '' : selectedId,
+                          listingDate:
+                            selectedId !== NO_LIST_DATE_VALUE
+                              ? (currentSchedules.find((option) => option.value === selectedId)
+                                  ?.label ?? '')
+                              : '',
+                        }))
+                      }}
+                    >
+                      {currentSchedules.map((option) => (
+                        <RadioButton
+                          key={option.value}
+                          id={`exportScheduleId-${option.value}`}
+                          value={option.value}
+                          labelText={option.label}
+                        />
+                      ))}
+                    </RadioButtonGroup>
+                    {fieldError('exportScheduleId') && (
+                      <p role="alert">{fieldError('exportScheduleId')}</p>
+                    )}
+                  </div>
                   <TextInput
                     id="applicationTermDays"
                     labelText={requiredLabel('Exemption term (days)')}

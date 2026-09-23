@@ -12,6 +12,7 @@ import ca.bc.gov.mof.lexis.service.ScaleDomainValidator;
 import ca.bc.gov.mof.lexis.service.ScaleDomainValidator.ScaleValues;
 import ca.bc.gov.mof.lexis.service.exemption.ExemptionService;
 import ca.bc.gov.mof.lexis.service.federal.FederalSubmissionPackagePolicy;
+import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import ca.bc.gov.mof.lexis.util.TextUtils;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -2584,11 +2585,12 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   private CreateApplicationRequest normalizePublicProvincialCreateRequest(
       CreateApplicationRequest input) {
     CreateApplicationRequest normalized = normalizeCreateApplicationRequest(input);
+    // Legacy stamps Date received when creating an application, independent of form input.
     return new CreateApplicationRequest(
         null,
         normalized.applicationDate(),
         normalized.termDays(),
-        normalized.receivedDate(),
+        LexisBusinessTime.today(),
         normalized.applicationVolume(),
         normalized.averageLogVolume(),
         normalized.productLocation(),

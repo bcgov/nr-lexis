@@ -8,6 +8,8 @@ import {
   InlineLoading,
   InlineNotification,
   Loading,
+  RadioButton,
+  RadioButtonGroup,
   Tab,
   TabList,
   TabPanel,
@@ -44,6 +46,11 @@ import ConfirmationModal from '@/components/ConfirmationModal'
 import Modal from '@/components/Modal'
 import { useAuth } from '@/context/auth/useAuth'
 import { hasProvincialSubmitterRole } from '@/context/auth/role-utils'
+import {
+  applicationListDateOptions,
+  NO_LIST_DATE_VALUE,
+} from '@/pages/shared/application-list-date-options'
+import { formatBusinessIsoDate } from '@/utils/date'
 import type { ProvincialApplicationDetail } from '@/interfaces/LexisDetails'
 import { formatDocumentSource } from '@/service/document-service-utils'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
@@ -383,7 +390,6 @@ const SUMMARY_SAVE_FIELDS: Record<SummarySaveSource, ApplicationSummaryField[]> 
     'orgUnitNumber',
     'exemptionReasonCode',
     'applicationDate',
-    'receivedDate',
     'exportScheduleId',
     'termDays',
     'oicIndicator',
@@ -516,6 +522,7 @@ const normalizeSummaryAgentFields = (
         agentContactName: '',
       }
 
+const APPLICATION_STATUS_APPROVED = 'APP'
 const APPLICATION_STATUS_EXPIRED = 'EXP'
 const APPLICATION_STATUS_PERMITTED = 'PMT'
 const COMPLETE_PERMIT_STATUS_TEXT = 'COMPLETE'
@@ -1165,6 +1172,10 @@ const ProvincialApplicationDetailsPage = () => {
   )
   const canChangeApplicantType = canPerform('/changeApplicantType')
   const canReviewApplication = canPerform('/applicationsReview')
+  // Clients cannot change the list date once the application is approved.
+  const listDateLocked =
+    !canReviewApplication &&
+    detail?.applicationStatusCode?.trim().toUpperCase() === APPLICATION_STATUS_APPROVED
   const canEditApplicationReview =
     canReviewApplication &&
     !isApplicationExpired &&
@@ -1299,12 +1310,11 @@ const ProvincialApplicationDetailsPage = () => {
       ? detail?.orgUnitName
       : undefined,
   )
+  // Keep the saved list date selectable while editing, as legacy checkListDate() did.
   const scheduleOptions = optionsWithCurrentValue(
     summaryScheduleOptions,
-    summaryForm?.exportScheduleId ?? '',
-    summaryForm?.exportScheduleId === summaryBaselineForm?.exportScheduleId
-      ? detail?.listingDate
-      : undefined,
+    summaryBaselineForm?.exportScheduleId ?? '',
+    detail?.listingDate,
   )
   const missingSummaryOptionLabelsForSource = useCallback(
     (source: SummarySaveSource): string[] => {
@@ -1537,19 +1547,16 @@ const ProvincialApplicationDetailsPage = () => {
             'Exemption term days',
           ),
       ),
-      receivedDate: firstValidationError(
-        () => requiredFieldError(summaryForm.receivedDate, 'Received date'),
-        () => isoDateFieldError(summaryForm.receivedDate),
-      ),
       exportScheduleId:
-        !summaryForm.exportScheduleId ||
-        isActiveOrUnchangedOption(
-          summaryScheduleOptions,
-          summaryForm.exportScheduleId,
-          summaryBaselineForm?.exportScheduleId,
-        )
+        (!summaryForm.exportScheduleId && canReviewApplication) ||
+        (Boolean(summaryForm.exportScheduleId) &&
+          isActiveOrUnchangedOption(
+            summaryScheduleOptions,
+            summaryForm.exportScheduleId,
+            summaryBaselineForm?.exportScheduleId,
+          ))
           ? undefined
-          : 'Select a valid listing date.',
+          : 'Select a valid list date.',
       productLocation: productTypeRequiresLogDetails(summaryForm.productTypeCode)
         ? applicationTextStorageFieldError(
             summaryForm.productLocation,
@@ -1581,6 +1588,7 @@ const ProvincialApplicationDetailsPage = () => {
       ),
     }
   }, [
+    canReviewApplication,
     detail,
     summaryExemptionReasonOptions,
     summaryForm,
@@ -2284,7 +2292,14 @@ const ProvincialApplicationDetailsPage = () => {
         setSummaryProductTypeOptions(options.productTypes)
         setSummaryGrowthTypeOptions(options.growthTypes)
         setSummaryRegionOptions(options.regions)
-        setSummaryScheduleOptions(options.currentSchedules)
+        setSummaryScheduleOptions(
+          applicationListDateOptions(
+            options.nextSchedules ?? options.currentSchedules,
+            options.currentSchedules,
+            canReviewApplication,
+            formatBusinessIsoDate(),
+          ),
+        )
         setSummaryOptionsAvailability('available')
       })
       .catch(() => {
@@ -2304,7 +2319,7 @@ const ProvincialApplicationDetailsPage = () => {
     return () => {
       isActive = false
     }
-  }, [hasSummaryForm, needsApplicationOptions])
+  }, [canReviewApplication, hasSummaryForm, needsApplicationOptions])
 
   useEffect(() => {
     if (!canEditSummary || !summaryForm?.orgUnitNumber || !summaryForm.productTypeCode) {
@@ -3045,7 +3060,6 @@ const ProvincialApplicationDetailsPage = () => {
           }),
           ...(source === 'summary' && {
             applicationDate: summaryRequestForm.applicationDate,
-            receivedDate: summaryRequestForm.receivedDate,
             termDays: summaryRequestForm.termDays.trim(),
             exemptionReasonCode: summaryRequestForm.exemptionReasonCode,
             exportScheduleId: summaryRequestForm.exportScheduleId,
@@ -4594,27 +4608,46 @@ const ProvincialApplicationDetailsPage = () => {
                                 invalidText={visibleSummaryFieldError('applicationDate')}
                                 onChange={(value) => onSummaryFormChange('applicationDate', value)}
                               />
-                              <IsoDatePicker
-                                id="applicationSummaryReceivedDate"
-                                labelText={requiredLabel('Received date')}
-                                required
-                                value={summaryForm.receivedDate}
-                                invalid={Boolean(visibleSummaryFieldError('receivedDate'))}
-                                invalidText={visibleSummaryFieldError('receivedDate')}
-                                onChange={(value) => onSummaryFormChange('receivedDate', value)}
-                              />
-                              <SearchableSelect
-                                id="applicationSummarySchedule"
-                                labelText="Listing date"
-                                value={summaryForm.exportScheduleId}
-                                disabled={
-                                  summaryOptionsAvailability !== 'available' ||
-                                  summaryScheduleOptions.length === 0
-                                }
-                                placeholder="Search listing date"
-                                options={scheduleOptions}
-                                onChange={(value) => onSummaryFormChange('exportScheduleId', value)}
-                              />
+                              <div className="application-list-date-field">
+                                <RadioButtonGroup
+                                  legendText={requiredLabel('List date')}
+                                  name="applicationSummarySchedule"
+                                  valueSelected={
+                                    summaryForm.exportScheduleId ||
+                                    (canReviewApplication ? NO_LIST_DATE_VALUE : '')
+                                  }
+                                  required
+                                  orientation="horizontal"
+                                  disabled={
+                                    summaryOptionsAvailability !== 'available' ||
+                                    summaryScheduleOptions.length === 0
+                                  }
+                                  readOnly={listDateLocked}
+                                  helperText={
+                                    listDateLocked
+                                      ? 'List date cannot be changed after the application is approved.'
+                                      : undefined
+                                  }
+                                  onChange={(value) =>
+                                    onSummaryFormChange(
+                                      'exportScheduleId',
+                                      value === NO_LIST_DATE_VALUE ? '' : String(value),
+                                    )
+                                  }
+                                >
+                                  {scheduleOptions.map((option) => (
+                                    <RadioButton
+                                      key={option.value}
+                                      id={`applicationSummarySchedule-${option.value}`}
+                                      value={option.value}
+                                      labelText={option.label}
+                                    />
+                                  ))}
+                                </RadioButtonGroup>
+                                {visibleSummaryFieldError('exportScheduleId') && (
+                                  <p role="alert">{visibleSummaryFieldError('exportScheduleId')}</p>
+                                )}
+                              </div>
                               <TextInput
                                 id="applicationSummaryTermDays"
                                 labelText={requiredLabel('Exemption term (days)')}
@@ -4683,7 +4716,7 @@ const ProvincialApplicationDetailsPage = () => {
                           <dl className="detail-field-grid">
                             {[
                               ['Region', displayValue(summaryRegionDescription)],
-                              ['Listing date', displayValue(detail.listingDate)],
+                              ['List date', displayValue(detail.listingDate)],
                               ['Jurisdiction', displayValue(summaryJurisdictionLabel)],
                               [
                                 'Order in Council indicator',
@@ -4691,7 +4724,6 @@ const ProvincialApplicationDetailsPage = () => {
                               ],
                               ['Exemption reason', displayValue(summaryExemptionReasonDescription)],
                               ['Application date', displayValue(detail.applicationDate)],
-                              ['Received date', displayValue(detail.receivedDate)],
                               ['Exemption term (days)', displayValue(detail.termDays)],
                             ].map(([label, value]) => (
                               <div key={label} className="detail-field-item">

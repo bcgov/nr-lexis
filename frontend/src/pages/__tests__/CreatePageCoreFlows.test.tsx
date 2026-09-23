@@ -473,8 +473,8 @@ describe('Create Page Core Flows', () => {
       'productTypeCode',
       'exemptionType',
       'applicationDate',
-      'receivedDate',
-      'exportScheduleId',
+      'exportScheduleId-987',
+      'exportScheduleId-no-list-date',
       'applicationTermDays',
     ])
 
@@ -510,7 +510,6 @@ describe('Create Page Core Flows', () => {
       region: '11',
       applicationDate: '2026-01-09',
       applicationTermDays: '30',
-      receivedDate: '2026-01-10',
       exportScheduleId: '987',
       listingDate: '2026-01-11',
       productLocation: 'Camp 1',
@@ -940,7 +939,6 @@ describe('Create Page Core Flows', () => {
       region: '11',
       applicationDate: '2026-01-09',
       applicationTermDays: '30',
-      receivedDate: '2026-01-10',
       exportScheduleId: '987',
       listingDate: '2026-01-11',
       productLocation: 'Camp 1',
@@ -1345,7 +1343,8 @@ describe('Create Page Core Flows', () => {
           forestClientNumber: '00077881',
           orgUnitNo: '11',
         }),
-        canPerform: (action: string) => action !== '/changeApplicantType',
+        canPerform: (action: string) =>
+          action !== '/changeApplicantType' && action !== '/applicationsReview',
       }),
     )
 
@@ -1503,8 +1502,10 @@ describe('Create Page Core Flows', () => {
         today,
       )
       expect(screen.getByRole('spinbutton', { name: 'Exemption term (days)' })).toHaveValue(180)
-      expect(screen.getByRole('textbox', { name: 'Date received (YYYY-MM-DD)' })).toHaveValue('')
-      expect(screen.getByRole('combobox', { name: 'List date' })).toHaveValue('2026-08-05')
+      expect(screen.queryByRole('textbox', { name: /Date received/i })).not.toBeInTheDocument()
+      expect(screen.getByRole('radio', { name: '2026-08-05' })).toBeChecked()
+      expect(screen.getByRole('radio', { name: '2026-08-12' })).not.toBeChecked()
+      expect(screen.getByRole('radio', { name: 'No list date' })).not.toBeChecked()
     })
 
     expect(screen.getByRole('combobox', { name: 'Region' })).toBeEnabled()
@@ -1521,7 +1522,8 @@ describe('Create Page Core Flows', () => {
           forestClientNumber: '00077881',
           orgUnitNo: '1910',
         }),
-        canPerform: (action: string) => action !== '/changeApplicantType',
+        canPerform: (action: string) =>
+          action !== '/changeApplicantType' && action !== '/applicationsReview',
       }),
     )
     mockedFetchProvincialApplicationOptions.mockResolvedValueOnce({
@@ -1535,6 +1537,11 @@ describe('Create Page Core Flows', () => {
         { value: '1910', label: 'West Coast Natural Resource Region' },
       ],
       currentSchedules: [{ value: '1001', label: '2026-07-01' }],
+      nextSchedules: [
+        { value: '1002', label: '2026-10-07' },
+        { value: '1003', label: '2026-10-14' },
+        { value: '', label: 'Blank' },
+      ],
     } satisfies Awaited<ReturnType<typeof fetchProvincialApplicationOptions>>)
 
     render(
@@ -1560,6 +1567,9 @@ describe('Create Page Core Flows', () => {
     })
     expect(screen.getByRole('combobox', { name: 'Region' })).toBeEnabled()
     expect(screen.getByRole('spinbutton', { name: 'Exemption term (days)' })).toHaveValue(180)
+    expect(screen.getByRole('radio', { name: '2026-10-07' })).toBeChecked()
+    expect(screen.getByRole('radio', { name: '2026-10-14' })).not.toBeChecked()
+    expect(screen.queryByRole('radio', { name: 'No list date' })).not.toBeInTheDocument()
 
     await selectApplicationCreateTab('Applicant')
     expect(screen.getByRole('textbox', { name: 'Client number' })).toHaveValue('00077881')

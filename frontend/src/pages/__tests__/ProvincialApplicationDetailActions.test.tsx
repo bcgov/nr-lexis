@@ -165,7 +165,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     )
 
     const summary = within(await selectApplicationSummaryTile())
-    const fields = ['Region', 'Listing date', 'Jurisdiction', 'Order in Council indicator']
+    const fields = ['Region', 'List date', 'Jurisdiction', 'Order in Council indicator']
     for (const field of fields) {
       expect(summary.getAllByText(field, { exact: true })).toHaveLength(1)
     }
@@ -1502,8 +1502,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       getSummaryComboBox(summaryControls, 'Region'),
       getSummaryComboBox(summaryControls, 'Exemption reason'),
       summaryControls.getByLabelText('Application date'),
-      summaryControls.getByLabelText('Received date'),
-      getSummaryComboBox(summaryControls, 'Listing date'),
+      summaryControls.getByRole('group', { name: 'List date' }),
       summaryControls.getByLabelText('Exemption term (days)'),
     ]
     legacyOrderedControls.slice(1).forEach((control, index) => {
@@ -1557,7 +1556,6 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
         applicationNumber: '321',
         saveSource: 'summary',
         applicationDate: '2026-01-01',
-        receivedDate: '2026-01-02',
         termDays: '430',
         exemptionReasonCode: 'S',
         exportScheduleId: '988',
@@ -2018,7 +2016,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       expect(getSummaryComboBox(summaryControls, 'Region')).toHaveValue(
         'Historic Natural Resource Region',
       )
-      expect(getSummaryComboBox(summaryControls, 'Listing date')).toHaveValue('2011-11-25')
+      expect(summaryControls.getByRole('radio', { name: '2011-11-25' })).toBeChecked()
     })
 
     fireEvent.change(termDaysInput, {
@@ -2031,6 +2029,60 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
         expect.objectContaining({
           termDays: '31',
           orgUnitNumber: '1834',
+          exportScheduleId: '31885',
+        }),
+      )
+    })
+  })
+
+  it('keeps the saved list date selectable after choosing another list date', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      listingDate: '2011-11-25',
+    })
+    mockedFetchApplicationSummarySnapshot.mockResolvedValue({
+      ...applicationSummarySnapshot,
+      exportScheduleId: '31885',
+    })
+    mockedFetchProvincialApplicationOptions.mockResolvedValueOnce({
+      exemptionTypes: [],
+      exemptionReasons: [{ value: 'U', label: 'Utilization' }],
+      applicationStatuses: [{ value: 'ACTIVE', label: 'Active' }],
+      productTypes: [{ value: 'H', label: 'Harvested Timber' }],
+      growthTypes: [{ value: 'O', label: 'Old Growth' }],
+      regions: [{ value: '12', label: 'Coast' }],
+      currentSchedules: [{ value: '987', label: '2026-01-11' }],
+      nextSchedules: [
+        { value: '987', label: '2026-01-11' },
+        { value: '988', label: '2026-01-25' },
+      ],
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const summaryControls = within(await selectApplicationSummaryTile())
+    await waitFor(() => {
+      expect(summaryControls.getByRole('radio', { name: '2011-11-25' })).toBeChecked()
+    })
+
+    await userEvent.click(summaryControls.getByRole('radio', { name: '2026-01-25' }))
+    expect(summaryControls.getByRole('radio', { name: '2026-01-25' })).toBeChecked()
+    await userEvent.click(summaryControls.getByRole('radio', { name: '2011-11-25' }))
+    await userEvent.click(summaryControls.getByRole('button', { name: 'Save Summary' }))
+
+    await waitFor(() => {
+      expect(mockedUpdateApplicationSummary).toHaveBeenCalledWith(
+        expect.objectContaining({
+          applicationNumber: '321',
           exportScheduleId: '31885',
         }),
       )
@@ -2206,7 +2258,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     })
   })
 
-  it('can clear application summary listing date with the blank schedule option', async () => {
+  it('lets an approver select No list date on an application summary', async () => {
     mockedFetchProvincialApplicationOptions.mockResolvedValueOnce({
       exemptionTypes: [],
       exemptionReasons: [{ value: 'U', label: 'Utilization' }],
@@ -2219,6 +2271,10 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
         { value: '988', label: '2026-01-25' },
         { value: '989', label: '2026-02-08' },
         { value: '', label: 'Blank' },
+      ],
+      nextSchedules: [
+        { value: '987', label: '2026-01-11' },
+        { value: '988', label: '2026-01-25' },
       ],
     })
 
@@ -2235,17 +2291,12 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     const summaryTile = await selectApplicationSummaryTile()
     const summaryControls = within(summaryTile)
-    const listingDateComboBox = getSummaryComboBox(summaryControls, 'Listing date')
-
     await waitFor(() => {
-      expect(listingDateComboBox).toHaveValue('2026-01-11')
+      expect(summaryControls.getByRole('radio', { name: '2026-01-11' })).toBeChecked()
     })
-
-    await chooseComboBoxOption(listingDateComboBox, '2026-02-08')
-    await waitFor(() => {
-      expect(listingDateComboBox).toHaveValue('2026-02-08')
-    })
-    await chooseComboBoxOption(listingDateComboBox, 'Blank')
+    await userEvent.click(summaryControls.getByRole('radio', { name: '2026-01-25' }))
+    expect(summaryControls.getByRole('radio', { name: '2026-01-25' })).toBeChecked()
+    await userEvent.click(summaryControls.getByRole('radio', { name: 'No list date' }))
     await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
 
     await waitFor(() => {
@@ -2253,6 +2304,132 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
         expect.objectContaining({
           applicationNumber: '321',
           exportScheduleId: '',
+        }),
+      )
+    })
+  })
+
+  it('requires a submitter to choose one of the next two list dates', async () => {
+    mockApplicationDetailAuth(
+      (action: string) => action === 'createApplication',
+      ['LEXIS_PROVINCIAL_SUBMITTER_00011122'],
+    )
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      applicationStatusCode: 'NEW',
+      statusDescription: 'New',
+      listingDate: null,
+    })
+    mockedFetchApplicationSummarySnapshot.mockResolvedValue({
+      ...applicationSummarySnapshot,
+      applicationStatusCode: 'NEW',
+      exportScheduleId: '',
+    })
+    mockedFetchProvincialApplicationOptions.mockResolvedValueOnce({
+      exemptionTypes: [],
+      exemptionReasons: [{ value: 'U', label: 'Utilization' }],
+      applicationStatuses: [{ value: 'ACTIVE', label: 'Active' }],
+      productTypes: [{ value: 'H', label: 'Harvested Timber' }],
+      growthTypes: [{ value: 'O', label: 'Old Growth' }],
+      regions: [{ value: '12', label: 'Coast' }],
+      currentSchedules: [
+        { value: '986', label: '2026-01-04' },
+        { value: '987', label: '2026-01-11' },
+        { value: '', label: 'Blank' },
+      ],
+      nextSchedules: [
+        { value: '987', label: '2026-01-11' },
+        { value: '988', label: '2026-01-25' },
+        { value: '', label: 'Blank' },
+      ],
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const summaryControls = within(await selectApplicationSummaryTile())
+    const listDate = await summaryControls.findByRole('group', { name: 'List date' })
+    await waitFor(() => {
+      expect(
+        within(listDate)
+          .getAllByRole('radio')
+          .map((radio) => radio.getAttribute('value')),
+      ).toEqual(['987', '988'])
+    })
+    within(listDate)
+      .getAllByRole('radio')
+      .forEach((radio) => expect(radio).not.toBeChecked())
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
+    const blockedDialog = screen.getByRole('dialog', { name: 'Confirm application accuracy' })
+    await userEvent.click(within(blockedDialog).getByRole('checkbox', { name: 'I Agree' }))
+    await userEvent.click(within(blockedDialog).getByRole('button', { name: 'Save summary' }))
+    expect(await within(blockedDialog).findByText('Select a valid list date.')).toBeVisible()
+    expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
+    await userEvent.click(within(blockedDialog).getByRole('button', { name: 'Cancel' }))
+
+    await userEvent.click(within(listDate).getByRole('radio', { name: '2026-01-25' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
+    const dialog = screen.getByRole('dialog', { name: 'Confirm application accuracy' })
+    await userEvent.click(within(dialog).getByRole('checkbox', { name: 'I Agree' }))
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save summary' }))
+
+    await waitFor(() => {
+      expect(mockedUpdateApplicationSummary).toHaveBeenCalledWith(
+        expect.objectContaining({
+          applicationNumber: '321',
+          exportScheduleId: '988',
+        }),
+      )
+    })
+  })
+
+  it('locks the list date for a submitter once the application is approved', async () => {
+    mockApplicationDetailAuth(
+      (action: string) => action === 'createApplication',
+      ['LEXIS_PROVINCIAL_SUBMITTER_00011122'],
+    )
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const summaryControls = within(await selectApplicationSummaryTile())
+    const listDate = await summaryControls.findByRole('group', { name: 'List date' })
+    await waitFor(() => {
+      expect(within(listDate).getByRole('radio', { checked: true })).toHaveAttribute('value', '987')
+    })
+    expect(
+      summaryControls.getByText('List date cannot be changed after the application is approved.'),
+    ).toBeVisible()
+    await userEvent.click(within(listDate).getAllByRole('radio', { checked: false })[0])
+    expect(within(listDate).getByRole('radio', { checked: true })).toHaveAttribute('value', '987')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
+    const dialog = screen.getByRole('dialog', { name: 'Confirm application accuracy' })
+    await userEvent.click(within(dialog).getByRole('checkbox', { name: 'I Agree' }))
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save summary' }))
+
+    await waitFor(() => {
+      expect(mockedUpdateApplicationSummary).toHaveBeenCalledWith(
+        expect.objectContaining({
+          applicationNumber: '321',
+          exportScheduleId: '987',
         }),
       )
     })
