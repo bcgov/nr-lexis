@@ -1747,6 +1747,48 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(screen.getAllByText('Approved').length).toBeGreaterThan(0)
   })
 
+  it('replaces prior action feedback when opening a federal document fails', async () => {
+    mockedFetchFederalApplicationDetail
+      .mockResolvedValueOnce({
+        ...federalDetail,
+        statusCode: 'NEW',
+        statusDescription: 'New',
+      })
+      .mockResolvedValue({
+        ...federalDetail,
+        statusCode: 'APP',
+        statusDescription: 'Approved',
+      })
+    mockedFetchFederalApplicationDocuments.mockResolvedValue({
+      rows: [{ id: '806', name: 'federal-doc.pdf', description: '', type: 'Attachment' }],
+      source: 'api',
+    })
+    mockedOpenFederalApplicationDocument.mockRejectedValueOnce(new Error('Open failed'))
+
+    render(
+      <MemoryRouter initialEntries={['/federal/888']}>
+        <Routes>
+          <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectDetailTab('Application')
+    await enterFederalStatusEditMode()
+    await userEvent.click(await screen.findByRole('button', { name: 'Update status' }))
+    expect(await screen.findByText('Federal application status updated.')).toBeInTheDocument()
+
+    await selectDetailTab('Documents')
+    const documentRow = (await screen.findByText('federal-doc.pdf')).closest('tr')
+    expect(documentRow).toBeTruthy()
+    await userEvent.click(within(documentRow as HTMLElement).getByRole('button', { name: 'Open' }))
+
+    expect(await screen.findByText('Unable to open the selected document.')).toBeInTheDocument()
+    expect(screen.queryByText('Federal application status updated.')).not.toBeInTheDocument()
+    expect(screen.getByText('Action failed')).toBeInTheDocument()
+    expect(document.querySelectorAll('.app-inline-notification')).toHaveLength(1)
+  })
+
   it('preserves an unsaved federal status draft when shipping details are saved', async () => {
     mockedFetchFederalApplicationDetail.mockResolvedValue({
       ...federalDetail,

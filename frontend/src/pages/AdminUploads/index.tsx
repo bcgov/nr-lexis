@@ -835,6 +835,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
       return
     }
     if (selectedWorkflowType === 'invoice' && files.length > 1) {
+      setSuccessMessage('')
       setErrorMessage('Choose one file per invoice.')
       setFileInputKey((current) => current + 1)
       return
@@ -1273,6 +1274,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
 
   const onReviewApplicationSubmissions = (): void => {
     setErrorMessage('')
+    setSuccessMessage('')
 
     if (validationErrors.length > 0) {
       setShowValidationErrors(true)
@@ -1292,7 +1294,6 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
       return
     }
 
-    setSuccessMessage('')
     setApplicationSubmissionStep('review')
   }
 
@@ -1689,22 +1690,23 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
 
       <Column sm={4} md={8} lg={16} className="admin-upload-fspts-content">
         <div className="admin-upload-workflow">
-          {successMessage && showGlobalUploadFeedback && (
+          {(successMessage || errorMessage) && showGlobalUploadFeedback && (
             <AppNotification
-              kind="success"
-              title={successTitle}
-              subtitle={successMessage}
+              kind={successMessage && errorMessage ? 'warning' : errorMessage ? 'error' : 'success'}
+              title={
+                successMessage && errorMessage
+                  ? 'Some uploads need attention'
+                  : errorMessage
+                    ? 'Upload error'
+                    : successTitle
+              }
+              subtitle={
+                successMessage && errorMessage
+                  ? `${successMessage} ${errorMessage}`
+                  : errorMessage || successMessage
+              }
               lowContrast
-              onCloseButtonClick={() => setSuccessMessage('')}
-            />
-          )}
-          {errorMessage && showGlobalUploadFeedback && (
-            <AppNotification
-              kind="error"
-              title="Upload error"
-              subtitle={errorMessage}
-              lowContrast
-              onCloseButtonClick={() => setErrorMessage('')}
+              onCloseButtonClick={clearUploadFeedback}
             />
           )}
 

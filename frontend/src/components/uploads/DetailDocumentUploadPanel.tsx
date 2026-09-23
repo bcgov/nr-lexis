@@ -400,6 +400,7 @@ const DetailDocumentUploadPanel = ({
       return
     }
     if (workflowType === 'invoice' && files.length > 1) {
+      setSuccessMessage('')
       setErrorMessage('Choose one file per invoice.')
       setFileInputKey((current) => current + 1)
       return
@@ -623,6 +624,7 @@ const DetailDocumentUploadPanel = ({
     let successCount = 0
     let failureCount = 0
     let lastSuccessMessage = ''
+    let documentListRefreshed = true
 
     for (const item of readyUploadItems) {
       setQueueItemStatus(item.id, 'uploading', '', lockedTargetSummary, undefined, true)
@@ -646,7 +648,6 @@ const DetailDocumentUploadPanel = ({
     }
 
     if (successCount > 0) {
-      let documentListRefreshed = true
       try {
         await onUploadComplete?.()
       } catch {
@@ -668,7 +669,7 @@ const DetailDocumentUploadPanel = ({
 
     if (failureCount > 0) {
       setErrorMessage(
-        `${failureCount} file${failureCount === 1 ? '' : 's'} failed. Review the queue for details.`,
+        `${failureCount} file${failureCount === 1 ? '' : 's'} failed. Review the queue for details.${documentListRefreshed ? '' : ' Documents uploaded, but the document list could not refresh.'}`,
       )
     }
 
@@ -749,6 +750,30 @@ const DetailDocumentUploadPanel = ({
   const documentNoun = workflowType === 'invoice' ? 'invoice' : 'document'
   const modalHeading = isSidePanel ? 'Add documents' : `Add ${documentNoun}`
   const modalInitialFocusId = `${inputId}UploadModalContent`
+  const uploadFeedback: {
+    kind: 'success' | 'warning' | 'error'
+    title: string
+    message: string
+  } | null =
+    successMessage || errorMessage
+      ? {
+          kind: successMessage && errorMessage ? 'warning' : errorMessage ? 'error' : 'success',
+          title:
+            successMessage && errorMessage
+              ? 'Upload needs attention'
+              : errorMessage
+                ? 'Upload error'
+                : 'Upload submitted',
+          message:
+            successMessage && errorMessage
+              ? `${successMessage} ${errorMessage}`
+              : errorMessage || successMessage,
+        }
+      : null
+  const dismissUploadFeedback = () => {
+    setErrorMessage('')
+    setSuccessMessage('')
+  }
 
   const inlineInvoiceFormRef = useRef<HTMLElement>(null)
   const uploadTriggerRef = useRef<HTMLButtonElement>(null)
@@ -765,22 +790,13 @@ const DetailDocumentUploadPanel = ({
 
   const uploadContent = (
     <>
-      {successMessage && (
+      {uploadFeedback && (
         <AppNotification
-          kind="success"
-          title="Upload submitted"
-          subtitle={successMessage}
+          kind={uploadFeedback.kind}
+          title={uploadFeedback.title}
+          subtitle={uploadFeedback.message}
           lowContrast
-          onCloseButtonClick={() => setSuccessMessage('')}
-        />
-      )}
-      {errorMessage && (
-        <AppNotification
-          kind="error"
-          title="Upload error"
-          subtitle={errorMessage}
-          lowContrast
-          onCloseButtonClick={() => setErrorMessage('')}
+          onCloseButtonClick={dismissUploadFeedback}
         />
       )}
 
@@ -949,22 +965,13 @@ const DetailDocumentUploadPanel = ({
 
   return (
     <div className="detail-document-upload" id={inputId}>
-      {!isUploadModalOpen && successMessage && (
+      {!isUploadModalOpen && uploadFeedback && (
         <AppNotification
-          kind="success"
-          title="Upload submitted"
-          subtitle={successMessage}
+          kind={uploadFeedback.kind}
+          title={uploadFeedback.title}
+          subtitle={uploadFeedback.message}
           lowContrast
-          onCloseButtonClick={() => setSuccessMessage('')}
-        />
-      )}
-      {!isUploadModalOpen && errorMessage && (
-        <AppNotification
-          kind="error"
-          title="Upload error"
-          subtitle={errorMessage}
-          lowContrast
-          onCloseButtonClick={() => setErrorMessage('')}
+          onCloseButtonClick={dismissUploadFeedback}
         />
       )}
       {!initiallyOpen && (!isUploadModalOpen || workflowType !== 'invoice') && (

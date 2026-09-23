@@ -240,6 +240,18 @@ type ActionSuccessNotification = {
   subtitle: string
 }
 
+type PageActionNotification = {
+  kind: 'error' | 'success' | 'warning'
+  title: string
+  subtitle: string
+  source:
+    | 'action-error'
+    | 'action-feedback'
+    | 'action-success'
+    | 'document-success'
+    | 'permit-created'
+}
+
 const MAX_OIC_REQUEST_PIECES = 9_999_999_999
 const MAX_OIC_REQUEST_VOLUME_LENGTH = 9
 const MAX_PERMIT_OVERRIDE_FEE = 9_999_999.99
@@ -924,20 +936,74 @@ const ProvincialPermitDetailsPage = () => {
   const [deferredPermitTabLoading, setDeferredPermitTabLoading] = useState(
     EMPTY_DEFERRED_PERMIT_TAB_STATE,
   )
-  const [actionErrorMessage, setActionErrorMessage] = useState('')
-  const [actionFeedback, setActionFeedback] = useState<{
-    kind: 'success' | 'warning'
-    message: string
-  } | null>(null)
-  const [actionSuccessNotification, setActionSuccessNotification] =
-    useState<ActionSuccessNotification | null>(null)
-  const [createdBlanketOicPermitNumber, setCreatedBlanketOicPermitNumber] = useState('')
-  const [documentSuccessMessage, setDocumentSuccessMessage] = useState('')
+  const [pageActionNotification, setPageActionNotification] =
+    useState<PageActionNotification | null>(null)
+  const [permitApprovalEmailErrorMessage, setPermitApprovalEmailErrorMessage] = useState('')
+  const clearPageActionNotification = useCallback((source: PageActionNotification['source']) => {
+    setPageActionNotification((current) => (current?.source === source ? null : current))
+  }, [])
+  const setActionErrorMessage = useCallback(
+    (message: string) => {
+      if (!message) {
+        clearPageActionNotification('action-error')
+        return
+      }
+      setPageActionNotification({
+        kind: 'error',
+        title: 'Action failed',
+        subtitle: message,
+        source: 'action-error',
+      })
+    },
+    [clearPageActionNotification],
+  )
+  const setActionFeedback = useCallback(
+    (feedback: { kind: 'success' | 'warning'; message: string } | null) => {
+      if (!feedback) {
+        clearPageActionNotification('action-feedback')
+        return
+      }
+      setPageActionNotification({
+        kind: feedback.kind,
+        title: feedback.kind === 'success' ? 'Action completed' : 'Action needs attention',
+        subtitle: feedback.message,
+        source: 'action-feedback',
+      })
+    },
+    [clearPageActionNotification],
+  )
+  const setActionSuccessNotification = useCallback(
+    (notification: ActionSuccessNotification | null) => {
+      if (!notification) {
+        clearPageActionNotification('action-success')
+        return
+      }
+      setPageActionNotification({
+        kind: 'success',
+        ...notification,
+        source: 'action-success',
+      })
+    },
+    [clearPageActionNotification],
+  )
+  const setDocumentSuccessMessage = useCallback(
+    (message: string) => {
+      if (!message) {
+        clearPageActionNotification('document-success')
+        return
+      }
+      setPageActionNotification({
+        kind: 'success',
+        title: 'Document deleted',
+        subtitle: message,
+        source: 'document-success',
+      })
+    },
+    [clearPageActionNotification],
+  )
   const clearActionNotifications = useCallback(() => {
-    setActionErrorMessage('')
-    setActionFeedback(null)
-    setActionSuccessNotification(null)
-    setDocumentSuccessMessage('')
+    setPageActionNotification(null)
+    setPermitApprovalEmailErrorMessage('')
   }, [])
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
   const [documentPendingDeletion, setDocumentPendingDeletion] = useState<PermitDocumentRow | null>(
@@ -1092,7 +1158,7 @@ const ProvincialPermitDetailsPage = () => {
     setIsSavingScaleSelection(false)
     setActionSuccessNotification(null)
     setDocumentSuccessMessage('')
-    setCreatedBlanketOicPermitNumber('')
+    clearPageActionNotification('permit-created')
     void beginAvailablePermitApplicationsRequest()
     setBoicPackageForm(EMPTY_BLANKET_OIC_PACKAGE_FORM)
     setBoicPackageBaselineForm(EMPTY_BLANKET_OIC_PACKAGE_FORM)
@@ -1151,6 +1217,9 @@ const ProvincialPermitDetailsPage = () => {
     beginPermitFeesRequest,
     beginPermitGbmsRequest,
     beginPermitInvoicesRequest,
+    clearPageActionNotification,
+    setActionSuccessNotification,
+    setDocumentSuccessMessage,
   ])
 
   const loadPermitGbmsEvents = useCallback(
@@ -2770,7 +2839,12 @@ const ProvincialPermitDetailsPage = () => {
     if (detail.blanketOic && location.state.blanketOicPermitCreated === permitNumber) {
       // Keep the one-time notice visible after consuming its navigation signal.
       // eslint-disable-next-line @eslint-react/set-state-in-effect
-      setCreatedBlanketOicPermitNumber(permitNumber)
+      setPageActionNotification({
+        kind: 'success',
+        title: 'Permit created',
+        subtitle: 'The permit was saved.',
+        source: 'permit-created',
+      })
     }
     const remainingState: Record<string, unknown> = { ...location.state }
     delete remainingState.blanketOicPermitCreated
@@ -3080,6 +3154,9 @@ const ProvincialPermitDetailsPage = () => {
       permitNumber,
       refreshLoadedPermitFees,
       activePermitTabId,
+      setActionErrorMessage,
+      setActionFeedback,
+      setActionSuccessNotification,
       tryBeginPermitMutation,
     ],
   )
@@ -3167,6 +3244,9 @@ const ProvincialPermitDetailsPage = () => {
     permitForm,
     refreshLoadedPermitFees,
     shippingReferences,
+    setActionErrorMessage,
+    setActionFeedback,
+    setActionSuccessNotification,
     tryBeginPermitMutation,
   ])
 
@@ -3241,6 +3321,9 @@ const ProvincialPermitDetailsPage = () => {
     ministerialScaleSelectionDraft,
     permitNumber,
     reloadPermitScaleState,
+    setActionErrorMessage,
+    setActionFeedback,
+    setActionSuccessNotification,
     tryBeginPermitMutation,
   ])
 
@@ -3290,6 +3373,8 @@ const ProvincialPermitDetailsPage = () => {
     permitShippingDirty,
     permitStatusTransitionDraft,
     savePermitMutation,
+    setActionErrorMessage,
+    setActionSuccessNotification,
   ])
 
   const onSaveFeeOverride = useCallback(async (): Promise<boolean> => {
@@ -3369,6 +3454,9 @@ const ProvincialPermitDetailsPage = () => {
     feeOverrideForm,
     isSavingFeeOverride,
     refreshLoadedPermitFees,
+    setActionErrorMessage,
+    setActionFeedback,
+    setActionSuccessNotification,
     tryBeginPermitMutation,
   ])
 
@@ -3430,6 +3518,9 @@ const ProvincialPermitDetailsPage = () => {
       endPermitMutation,
       permitNumber,
       reloadPermitScaleState,
+      setActionErrorMessage,
+      setActionFeedback,
+      setActionSuccessNotification,
       tryBeginPermitMutation,
     ],
   )
@@ -3518,6 +3609,9 @@ const ProvincialPermitDetailsPage = () => {
     permitNumber,
     reloadPermitScaleState,
     selectedPermitApplicationToAdd,
+    setActionErrorMessage,
+    setActionFeedback,
+    setActionSuccessNotification,
     tryBeginPermitMutation,
   ])
 
@@ -3601,6 +3695,9 @@ const ProvincialPermitDetailsPage = () => {
       endPermitMutation,
       permitNumber,
       reloadPermitScaleState,
+      setActionErrorMessage,
+      setActionFeedback,
+      setActionSuccessNotification,
       tryBeginPermitMutation,
     ],
   )
@@ -3800,6 +3897,8 @@ const ProvincialPermitDetailsPage = () => {
     permitNumber,
     reloadPermitTabs,
     resetBlanketOicPackageForm,
+    setActionFeedback,
+    setActionSuccessNotification,
   ])
 
   const onDeleteBlanketOicPackage = useCallback(
@@ -3852,6 +3951,9 @@ const ProvincialPermitDetailsPage = () => {
       permitNumber,
       reloadPermitTabs,
       resetBlanketOicPackageForm,
+      setActionErrorMessage,
+      setActionFeedback,
+      setActionSuccessNotification,
     ],
   )
 
@@ -3949,6 +4051,9 @@ const ProvincialPermitDetailsPage = () => {
     permitNumber,
     reloadPermitScaleState,
     selectedBlanketOicPackageNumber,
+    setActionErrorMessage,
+    setActionFeedback,
+    setActionSuccessNotification,
   ])
 
   const onDeleteBlanketOicScale = useCallback(
@@ -3998,7 +4103,15 @@ const ProvincialPermitDetailsPage = () => {
         setIsDeletingBoicScaleId(null)
       }
     },
-    [canEditBlanketOicScaleRows, detail?.permitNumber, permitNumber, reloadPermitScaleState],
+    [
+      canEditBlanketOicScaleRows,
+      detail?.permitNumber,
+      permitNumber,
+      reloadPermitScaleState,
+      setActionErrorMessage,
+      setActionFeedback,
+      setActionSuccessNotification,
+    ],
   )
 
   const refreshPermitDocuments = useCallback(async () => {
@@ -4051,7 +4164,7 @@ const ProvincialPermitDetailsPage = () => {
       // The Ministerial launcher remounts when the document editor closes.
       window.setTimeout(() => permitDocumentUploadLauncherRef.current?.focus())
     }
-  }, [usesReviewedPermitFlow])
+  }, [setActionErrorMessage, usesReviewedPermitFlow])
 
   const onCancelInvoiceDocumentEditing = useCallback(() => {
     setInvoiceDocumentUploadDirty(false)
@@ -4059,7 +4172,7 @@ const ProvincialPermitDetailsPage = () => {
     setInvoiceDocumentUploadResetKey((current) => current + 1)
     setActionErrorMessage('')
     setIsEditingInvoiceDocuments(false)
-  }, [])
+  }, [setActionErrorMessage])
 
   const onOpenDocument = useCallback(
     async (row: PermitDocumentRow, preview = false) => {
@@ -4107,7 +4220,14 @@ const ProvincialPermitDetailsPage = () => {
         if (previewTarget) pendingDocumentPreviewsRef.current.delete(previewTarget)
       }
     },
-    [canPerform, detail?.permitNumber, permitNumber],
+    [
+      canPerform,
+      detail?.permitNumber,
+      permitNumber,
+      setActionErrorMessage,
+      setActionFeedback,
+      setActionSuccessNotification,
+    ],
   )
 
   const onOpenPermitReport = useCallback(async () => {
@@ -4137,7 +4257,14 @@ const ProvincialPermitDetailsPage = () => {
     } finally {
       setIsOpeningPermitReport(false)
     }
-  }, [canOpenPermitReport, detail?.permitNumber, permitNumber])
+  }, [
+    canOpenPermitReport,
+    detail?.permitNumber,
+    permitNumber,
+    setActionErrorMessage,
+    setActionFeedback,
+    setActionSuccessNotification,
+  ])
 
   const onSendPermitEmail = useCallback(
     async (type: 'request' | 'approval', approvalEmailAddress = ''): Promise<boolean> => {
@@ -4148,13 +4275,15 @@ const ProvincialPermitDetailsPage = () => {
       ) {
         return false
       }
+      const setEmailActionError =
+        type === 'approval' ? setPermitApprovalEmailErrorMessage : setActionErrorMessage
       setActionSuccessNotification(null)
       const clientEmail = normalizeTrimmedText(approvalEmailAddress)
       if (type === 'approval' && !isValidEmail(clientEmail)) {
-        setActionErrorMessage('Enter one valid applicant email address.')
+        setEmailActionError('Enter one valid applicant email address.')
         return false
       }
-      setActionErrorMessage('')
+      setEmailActionError('')
       setActionFeedback(null)
       setIsSendingPermitEmail(true)
       try {
@@ -4186,18 +4315,26 @@ const ProvincialPermitDetailsPage = () => {
           }
           return true
         } else {
-          setActionErrorMessage(result.message || 'Permit email could not be sent.')
+          setEmailActionError(result.message || 'Permit email could not be sent.')
           return false
         }
       } catch (error) {
         console.error(error)
-        setActionErrorMessage('Unable to send permit email.')
+        setEmailActionError('Unable to send permit email.')
         return false
       } finally {
         setIsSendingPermitEmail(false)
       }
     },
-    [canSendPermitApproval, detail?.permitNumber, permitReviewReady, permitNumber],
+    [
+      canSendPermitApproval,
+      detail?.permitNumber,
+      permitReviewReady,
+      permitNumber,
+      setActionErrorMessage,
+      setActionFeedback,
+      setActionSuccessNotification,
+    ],
   )
 
   const onOpenPermitApprovalEmail = useCallback(async () => {
@@ -4223,6 +4360,7 @@ const ProvincialPermitDetailsPage = () => {
     detail?.permitNumber,
     isSendingPermitEmail,
     permitNumber,
+    setActionErrorMessage,
   ])
 
   const onRemoveDocument = useCallback(
@@ -4296,6 +4434,10 @@ const ProvincialPermitDetailsPage = () => {
       detail?.permitNumber,
       permitNumber,
       refreshPermitDocuments,
+      setActionErrorMessage,
+      setActionFeedback,
+      setActionSuccessNotification,
+      setDocumentSuccessMessage,
     ],
   )
 
@@ -4348,6 +4490,7 @@ const ProvincialPermitDetailsPage = () => {
     permitDocumentUploadDirty,
     permitFeeOverrideDirty,
     permitShippingDirty,
+    setActionErrorMessage,
   ])
 
   const onDiscardPermitChanges = useCallback(() => {
@@ -4375,7 +4518,13 @@ const ProvincialPermitDetailsPage = () => {
     setIsEditingPermitDocuments(false)
     setIsEditingInvoiceDocuments(false)
     setActionErrorMessage('')
-  }, [boicScaleBaselineForm, detail, feeOverrideContext, resetBlanketOicPackageForm])
+  }, [
+    boicScaleBaselineForm,
+    detail,
+    feeOverrideContext,
+    resetBlanketOicPackageForm,
+    setActionErrorMessage,
+  ])
 
   const renderPermitTextInput = (
     field: PermitDetailFormField,
@@ -5892,63 +6041,14 @@ const ProvincialPermitDetailsPage = () => {
               />
             </Column>
           )}
-          {createdBlanketOicPermitNumber === permitNumber && (
+          {pageActionNotification && (
             <Column sm={4} md={8} lg={16} className="detail-page-error">
               <AppNotification
-                kind="success"
-                title="Permit created"
-                subtitle="The permit was saved."
+                kind={pageActionNotification.kind}
+                title={pageActionNotification.title}
+                subtitle={pageActionNotification.subtitle}
                 lowContrast
-                onCloseButtonClick={() => setCreatedBlanketOicPermitNumber('')}
-              />
-            </Column>
-          )}
-          {!!actionFeedback && (
-            <Column sm={4} md={8} lg={16} className="detail-page-error">
-              <AppNotification
-                kind={actionFeedback.kind}
-                title={
-                  actionFeedback.kind === 'success' ? 'Action completed' : 'Action needs attention'
-                }
-                subtitle={actionFeedback.message}
-                lowContrast
-                onCloseButtonClick={() => setActionFeedback(null)}
-              />
-            </Column>
-          )}
-
-          {!!actionSuccessNotification && (
-            <Column sm={4} md={8} lg={16} className="detail-page-error">
-              <AppNotification
-                kind="success"
-                title={actionSuccessNotification.title}
-                subtitle={actionSuccessNotification.subtitle}
-                lowContrast
-                onCloseButtonClick={() => setActionSuccessNotification(null)}
-              />
-            </Column>
-          )}
-
-          {!!documentSuccessMessage && (
-            <Column sm={4} md={8} lg={16} className="detail-page-error">
-              <AppNotification
-                kind="success"
-                title="Document deleted"
-                subtitle={documentSuccessMessage}
-                lowContrast
-                onCloseButtonClick={() => setDocumentSuccessMessage('')}
-              />
-            </Column>
-          )}
-
-          {!!actionErrorMessage && !permitApprovalEmailOpen && (
-            <Column sm={4} md={8} lg={16} className="detail-page-error">
-              <AppNotification
-                kind="error"
-                title="Action failed"
-                subtitle={actionErrorMessage}
-                lowContrast
-                onCloseButtonClick={() => setActionErrorMessage('')}
+                onCloseButtonClick={() => setPageActionNotification(null)}
               />
             </Column>
           )}
@@ -8178,8 +8278,11 @@ const ProvincialPermitDetailsPage = () => {
           confirmLabel="Send approval"
           pendingLabel="Sending…"
           confirmDisabled={!isValidEmail(permitApprovalEmailAddress)}
-          onClose={() => setPermitApprovalEmailOpen(false)}
-          errorMessage={actionErrorMessage}
+          onClose={() => {
+            setPermitApprovalEmailOpen(false)
+            setPermitApprovalEmailErrorMessage('')
+          }}
+          errorMessage={permitApprovalEmailErrorMessage}
           onError={() => undefined}
           onConfirm={async () => {
             const sent = await onSendPermitEmail('approval', permitApprovalEmailAddress)

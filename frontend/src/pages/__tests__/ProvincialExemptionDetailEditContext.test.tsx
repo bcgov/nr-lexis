@@ -274,6 +274,67 @@ describe('Provincial exemption edit context', () => {
     ).toHaveClass('cds--inline-notification--success')
   })
 
+  it('replaces a previous action result and stays dismissed after rerender', async () => {
+    vi.mocked(fetchExemptionEditContext).mockResolvedValue({
+      rateOverrideEnabled: false,
+      fixedFeeRate: '',
+      regionNumbers: ['1903', '1904'],
+      locked: false,
+      lockMessage: '',
+    })
+    vi.mocked(updateExemption)
+      .mockResolvedValueOnce({
+        success: false,
+        message: 'The exemption could not be updated.',
+        exemptionNumber: 'BOIC-205',
+        errors: ['The first save failed.'],
+        warnings: [],
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        message: 'The exemption was updated successfully.',
+        exemptionNumber: 'BOIC-205',
+        errors: [],
+        warnings: [],
+      })
+
+    const page = (
+      <MemoryRouter initialEntries={['/provincial/exemption/BOIC-205']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>
+    )
+    const { rerender } = render(page)
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit exemption' }))
+    const conditions = screen.getByLabelText('Conditions')
+    await userEvent.type(conditions, ' first edit')
+    await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
+    expect(await screen.findByText('The first save failed.')).toBeInTheDocument()
+
+    await userEvent.clear(conditions)
+    await userEvent.type(conditions, 'Second edit')
+    await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
+
+    const success = await screen.findByText('The exemption was updated successfully.')
+    expect(success).toBeInTheDocument()
+    expect(screen.queryByText('The first save failed.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Action failed')).not.toBeInTheDocument()
+
+    await userEvent.click(
+      within(success.closest('.cds--inline-notification') as HTMLElement).getByRole('button', {
+        name: 'close notification',
+      }),
+    )
+    rerender(page)
+    expect(screen.queryByText('The exemption was updated successfully.')).not.toBeInTheDocument()
+    expect(screen.queryByText('The first save failed.')).not.toBeInTheDocument()
+  })
+
   it('renames an ordinary OIC and refreshes the saved number while retaining the return context', async () => {
     vi.mocked(fetchProvincialExemptionDetail).mockImplementation(async (number) => ({
       ...ministerialExemptionDetail,

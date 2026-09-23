@@ -704,6 +704,8 @@ const ProvincialReviewPage = () => {
 
   const loadRejectEmail = useCallback(async (applicationNumber: string) => {
     const requestId = ++rejectEmailRequestRef.current
+    setReviewActionStatus(null)
+    setRejectValidationMessage('')
     setLoadingRejectEmail(true)
 
     try {
@@ -1124,8 +1126,12 @@ const ProvincialReviewPage = () => {
         className="provincial-review-approval-modal"
         onClose={() => setApprovalConfirmationNumbers([])}
         onConfirm={onConfirmApproveSelected}
-        errorTitle={reviewActionStatus?.title}
-        errorMessage={reviewActionStatus?.kind === 'error' ? reviewActionStatus.message : undefined}
+        errorTitle={approvalConfirmationNumbers.length > 0 ? reviewActionStatus?.title : undefined}
+        errorMessage={
+          approvalConfirmationNumbers.length > 0 && reviewActionStatus?.kind === 'error'
+            ? reviewActionStatus.message
+            : undefined
+        }
         onError={() => undefined}
       >
         <p className="provincial-review-approval-modal__count">

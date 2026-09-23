@@ -677,7 +677,10 @@ const ProvincialApplicationDetailsPage = () => {
   const [loading, setLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
   const [documentsErrorMessage, setDocumentsErrorMessage] = useState('')
-  const [actionErrorMessage, setActionErrorMessage] = useState('')
+  const [partialLoadMessage, setPartialLoadMessage] = useState('')
+  // These setters also clear other action outcomes so only the latest remains.
+  // eslint-disable-next-line @eslint-react/use-state
+  const [actionErrorMessage, setActionErrorMessageState] = useState('')
   const [clientLookupFailures, setClientLookupFailures] = useState<
     ReadonlySet<ApplicationClientLookupFailure>
   >(() => new Set())
@@ -699,14 +702,44 @@ const ProvincialApplicationDetailsPage = () => {
     },
     [],
   )
-  const [actionFeedback, setActionFeedback] = useState<{
-    kind: 'success' | 'warning'
+  // eslint-disable-next-line @eslint-react/use-state
+  const [actionFeedback, setActionFeedbackState] = useState<{
+    kind: 'success' | 'warning' | 'error'
     message: string
-  } | null>(null)
-  const [creationSuccessMessage, setCreationSuccessMessage] = useState(() =>
-    createdApplicationNumber ? `Created application ${createdApplicationNumber}.` : '',
+    title?: string
+    createdFor?: string
+  } | null>(() =>
+    createdApplicationNumber
+      ? {
+          kind: 'success',
+          createdFor: createdApplicationNumber,
+          message: `Created application ${createdApplicationNumber}.`,
+        }
+      : null,
   )
-  const [actionWarningMessage, setActionWarningMessage] = useState('')
+  // eslint-disable-next-line @eslint-react/use-state
+  const [actionWarningMessage, setActionWarningMessageState] = useState('')
+  const setActionErrorMessage = useCallback((message: string) => {
+    if (message) {
+      setActionFeedbackState(null)
+      setActionWarningMessageState('')
+    }
+    setActionErrorMessageState(message)
+  }, [])
+  const setActionWarningMessage = useCallback((message: string) => {
+    if (message) {
+      setActionFeedbackState(null)
+      setActionErrorMessageState('')
+    }
+    setActionWarningMessageState(message)
+  }, [])
+  const setActionFeedback = useCallback((feedback: typeof actionFeedback) => {
+    if (feedback) {
+      setActionErrorMessageState('')
+      setActionWarningMessageState('')
+    }
+    setActionFeedbackState(feedback)
+  }, [])
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
   const [documentPendingDeletion, setDocumentPendingDeletion] =
     useState<ProvincialApplicationDocumentRow | null>(null)
@@ -888,6 +921,7 @@ const ProvincialApplicationDetailsPage = () => {
         setDocumentLookupAvailability('unavailable')
         setPermitLookupAvailability('unavailable')
         setDocumentsErrorMessage('')
+        setPartialLoadMessage('')
         setActionErrorMessage('')
         setActionFeedback(null)
         setLoading(false)
@@ -917,8 +951,11 @@ const ProvincialApplicationDetailsPage = () => {
       setLoading(true)
       setErrorMessage('')
       setDocumentsErrorMessage('')
+      setPartialLoadMessage('')
       setActionErrorMessage('')
-      setActionFeedback(null)
+      setActionFeedbackState((current) =>
+        current?.createdFor === applicationNumber ? current : null,
+      )
       setPermitLookupAvailability('loading')
       if (!retainingCurrentDetail) {
         setIsEditingSummary(false)
@@ -1008,7 +1045,7 @@ const ProvincialApplicationDetailsPage = () => {
             toSummarySnapshotFormState(summarySnapshotResult.value),
           )
         } else if (summarySnapshotResult.status === 'rejected') {
-          setActionErrorMessage('Unable to retrieve complete application summary fields.')
+          setPartialLoadMessage('Unable to retrieve complete application summary fields.')
         }
 
         if (applicationSpeciesResult.status === 'fulfilled' && editableSummaryForm) {
@@ -1017,7 +1054,7 @@ const ProvincialApplicationDetailsPage = () => {
             applicationSpeciesResult.value,
           )
         } else if (applicationSpeciesResult.status === 'rejected') {
-          setActionErrorMessage('Unable to retrieve species and end-use fields.')
+          setPartialLoadMessage('Unable to retrieve species and end-use fields.')
         }
 
         if (editableSummaryForm) {
@@ -1044,7 +1081,7 @@ const ProvincialApplicationDetailsPage = () => {
               setPermitRows([])
             }
             setPermitLookupAvailability('unavailable')
-            setActionErrorMessage('Unable to retrieve application permits.')
+            setPartialLoadMessage('Unable to retrieve application permits.')
           }
 
           if (detailDocumentRequestSequence !== documentRequestSequenceRef.current) {
@@ -1097,7 +1134,13 @@ const ProvincialApplicationDetailsPage = () => {
         }
       }
     },
-    [applicationNumber, beginDetailRequest, canAccessExemptionRoutes],
+    [
+      applicationNumber,
+      beginDetailRequest,
+      canAccessExemptionRoutes,
+      setActionErrorMessage,
+      setActionFeedback,
+    ],
   )
 
   useEffect(() => {
@@ -2497,7 +2540,7 @@ const ProvincialApplicationDetailsPage = () => {
         setActionErrorMessage('Unable to open the selected document.')
       }
     },
-    [applicationNumber],
+    [applicationNumber, setActionErrorMessage, setActionFeedback],
   )
 
   const onRemoveDocument = useCallback(
@@ -2558,7 +2601,7 @@ const ProvincialApplicationDetailsPage = () => {
         }
       }
     },
-    [applicationNumber],
+    [applicationNumber, setActionErrorMessage, setActionFeedback],
   )
 
   const onCancelDocumentEditing = useCallback(() => {
@@ -2659,6 +2702,8 @@ const ProvincialApplicationDetailsPage = () => {
       reviewStatusRemark,
       reviewStatusBaselineCode,
       reviewStatusRemarkBaseline,
+      setActionErrorMessage,
+      setActionFeedback,
       summaryBaselineForm,
       summaryForm,
     ],
@@ -2734,7 +2779,7 @@ const ProvincialApplicationDetailsPage = () => {
       setSummaryVolumeWarningAccepted(false)
       setActionWarningMessage('')
     },
-    [],
+    [setActionWarningMessage],
   )
 
   const onOwnerApplicantTypeChange = useCallback(
@@ -2763,7 +2808,7 @@ const ProvincialApplicationDetailsPage = () => {
       setSummaryVolumeWarningAccepted(false)
       setActionWarningMessage('')
     },
-    [isSummaryAgentApplicant, selectApplicationTab],
+    [isSummaryAgentApplicant, selectApplicationTab, setActionWarningMessage],
   )
 
   const onCancelOwnerDetails = useCallback(() => {
@@ -2793,7 +2838,7 @@ const ProvincialApplicationDetailsPage = () => {
     setSummaryAccuracyConfirmed(false)
     setSummaryAccuracyApplicationNumber(null)
     setPendingSummarySaveSource('summary')
-  }, [summaryBaselineForm])
+  }, [setActionErrorMessage, setActionWarningMessage, summaryBaselineForm])
 
   const onCancelAgentDetails = useCallback(() => {
     setSummaryForm((current) => {
@@ -2826,7 +2871,12 @@ const ProvincialApplicationDetailsPage = () => {
     setSummaryAccuracyConfirmed(false)
     setSummaryAccuracyApplicationNumber(null)
     setPendingSummarySaveSource('summary')
-  }, [isTransitioningApplicantToAgent, summaryBaselineForm])
+  }, [
+    isTransitioningApplicantToAgent,
+    setActionErrorMessage,
+    setActionWarningMessage,
+    summaryBaselineForm,
+  ])
 
   const onCancelSummaryDetails = useCallback(() => {
     setSummaryForm((current) => {
@@ -2857,7 +2907,7 @@ const ProvincialApplicationDetailsPage = () => {
     setSummaryAccuracyConfirmed(false)
     setSummaryAccuracyApplicationNumber(null)
     setPendingSummarySaveSource('summary')
-  }, [summaryBaselineForm])
+  }, [setActionErrorMessage, setActionWarningMessage, summaryBaselineForm])
 
   const onCancelApplicationItemDetails = useCallback(() => {
     setSummaryForm((current) => {
@@ -2886,7 +2936,7 @@ const ProvincialApplicationDetailsPage = () => {
     setSummaryAccuracyConfirmed(false)
     setSummaryAccuracyApplicationNumber(null)
     setPendingSummarySaveSource('summary')
-  }, [summaryBaselineForm])
+  }, [setActionErrorMessage, setActionWarningMessage, summaryBaselineForm])
 
   const onCancelRemarkEditing = useCallback(() => {
     setRemarkBody('')
@@ -2909,21 +2959,24 @@ const ProvincialApplicationDetailsPage = () => {
     })
     setSummaryVolumeWarningAccepted(false)
     setActionWarningMessage('')
-  }, [applicationSpeciesCandidate])
+  }, [applicationSpeciesCandidate, setActionWarningMessage])
 
-  const onRemoveApplicationSpecies = useCallback((speciesCode: string) => {
-    setSummaryForm((current) => {
-      if (!current) {
-        return current
-      }
-      return {
-        ...current,
-        speciesCodes: current.speciesCodes.filter((code) => code !== speciesCode),
-      }
-    })
-    setSummaryVolumeWarningAccepted(false)
-    setActionWarningMessage('')
-  }, [])
+  const onRemoveApplicationSpecies = useCallback(
+    (speciesCode: string) => {
+      setSummaryForm((current) => {
+        if (!current) {
+          return current
+        }
+        return {
+          ...current,
+          speciesCodes: current.speciesCodes.filter((code) => code !== speciesCode),
+        }
+      })
+      setSummaryVolumeWarningAccepted(false)
+      setActionWarningMessage('')
+    },
+    [setActionWarningMessage],
+  )
 
   const onSaveSummary = useCallback(
     async (
@@ -3135,6 +3188,9 @@ const ProvincialApplicationDetailsPage = () => {
       reviewStatusRemark,
       reviewStatusBaselineCode,
       reviewStatusRemarkBaseline,
+      setActionErrorMessage,
+      setActionFeedback,
+      setActionWarningMessage,
       summaryForm,
       summaryOptionsUnavailableForSource,
       summaryValidationErrorsForSource,
@@ -3171,7 +3227,7 @@ const ProvincialApplicationDetailsPage = () => {
       }
       return saved
     },
-    [onSaveSummary],
+    [onSaveSummary, setActionFeedback],
   )
 
   const onCancelReviewEditing = useCallback(() => {
@@ -3195,7 +3251,13 @@ const ProvincialApplicationDetailsPage = () => {
       setSummaryAccuracyApplicationNumber(applicationNumber ?? null)
       setSummaryAccuracyConfirmationOpen(true)
     },
-    [applicationNumber, completeSummarySave, requiresApplicationAccuracyAcknowledgement],
+    [
+      applicationNumber,
+      completeSummarySave,
+      requiresApplicationAccuracyAcknowledgement,
+      setActionErrorMessage,
+      setActionFeedback,
+    ],
   )
 
   const onConfirmSummaryAccuracy = useCallback(async () => {
@@ -3301,6 +3363,8 @@ const ProvincialApplicationDetailsPage = () => {
     detail,
     isSubmittingReviewAction,
     reviewStatusRemark,
+    setActionErrorMessage,
+    setActionFeedback,
   ])
 
   const onUpdateReviewStatus = useCallback(
@@ -3375,6 +3439,8 @@ const ProvincialApplicationDetailsPage = () => {
       isSubmittingReviewAction,
       reviewOptionsAvailability,
       reviewStatusOptions.length,
+      setActionErrorMessage,
+      setActionFeedback,
     ],
   )
 
@@ -3520,6 +3586,7 @@ const ProvincialApplicationDetailsPage = () => {
     remarkDirty,
     reviewDirty,
     selectApplicationTab,
+    setActionErrorMessage,
     summaryDirty,
   ])
 
@@ -3561,6 +3628,8 @@ const ProvincialApplicationDetailsPage = () => {
     detail,
     reviewStatusBaselineCode,
     reviewStatusRemarkBaseline,
+    setActionErrorMessage,
+    setActionWarningMessage,
     summaryBaselineForm,
   ])
 
@@ -4029,13 +4098,32 @@ const ProvincialApplicationDetailsPage = () => {
 
       {!loading && !!errorMessage && <DetailLoadError message={errorMessage} />}
 
-      {!!creationSuccessMessage && (
+      {!!actionFeedback && (
         <AppNotification
-          kind="success"
-          title="Action complete"
-          subtitle={creationSuccessMessage}
+          kind={actionFeedback.kind}
+          title={
+            actionFeedback.title ??
+            (actionFeedback.createdFor
+              ? 'Action complete'
+              : actionFeedback.kind === 'success'
+                ? 'Action completed'
+                : actionFeedback.kind === 'warning'
+                  ? 'Action needs attention'
+                  : 'Action failed')
+          }
+          subtitle={actionFeedback.message}
           lowContrast
-          onCloseButtonClick={() => setCreationSuccessMessage('')}
+          onCloseButtonClick={() => setActionFeedback(null)}
+        />
+      )}
+
+      {!!partialLoadMessage && (
+        <AppNotification
+          kind="error"
+          title="Application data unavailable"
+          subtitle={partialLoadMessage}
+          lowContrast
+          onCloseButtonClick={() => setPartialLoadMessage('')}
         />
       )}
 
@@ -4098,17 +4186,6 @@ const ProvincialApplicationDetailsPage = () => {
               subtitle={actionWarningMessage}
               lowContrast
               onCloseButtonClick={() => setActionWarningMessage('')}
-            />
-          )}
-          {!!actionFeedback && (
-            <AppNotification
-              kind={actionFeedback.kind}
-              title={
-                actionFeedback.kind === 'success' ? 'Action completed' : 'Action needs attention'
-              }
-              subtitle={actionFeedback.message}
-              lowContrast
-              onCloseButtonClick={() => setActionFeedback(null)}
             />
           )}
           {!!detail.locked && !!detail.lockMessage && (
@@ -5090,6 +5167,7 @@ const ProvincialApplicationDetailsPage = () => {
                         }
                         editingBlocked={isEditingApplicationItems}
                         onDetailChanged={refreshApplicationDetailPreservingDrafts}
+                        onActionFeedback={setActionFeedback}
                         onDirtyChange={setApplicationItemsDirty}
                         onBusyChange={setApplicationItemsBusy}
                         onEditingChange={setApplicationItemsEditing}

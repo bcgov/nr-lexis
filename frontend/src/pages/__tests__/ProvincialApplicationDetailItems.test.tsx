@@ -2052,7 +2052,14 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
 
   it('creates application packages with selected species and end use', async () => {
     render(
-      <MemoryRouter initialEntries={['/provincial/application/321']}>
+      <MemoryRouter
+        initialEntries={[
+          {
+            pathname: '/provincial/application/321',
+            state: { applicationCreationNotice: { applicationNumber: '321' } },
+          },
+        ]}
+      >
         <Routes>
           <Route
             path="/provincial/application/:applicationNumber"
@@ -2062,6 +2069,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       </MemoryRouter>,
     )
 
+    expect(await screen.findByText('Created application 321.')).toBeInTheDocument()
     await selectApplicationItemsForEditing()
     const createPackageSection = (
       await screen.findByRole('heading', { name: 'Create Package' })
@@ -2135,6 +2143,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       })
     })
     expect(await screen.findByText('Package PKG-NEW created.')).toBeInTheDocument()
+    expect(screen.queryByText('Created application 321.')).not.toBeInTheDocument()
     expect(createPackageControls.queryByText('Package number is required.')).not.toBeInTheDocument()
   })
 

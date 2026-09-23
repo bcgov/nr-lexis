@@ -524,7 +524,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     expect(screen.getByLabelText('New Remark')).toHaveValue('Keep this unsaved remark')
   })
 
-  it('approves an application from the detail review section and refreshes detail', async () => {
+  it('replaces the creation banner when approving an application', async () => {
     const detailAfterApproval: ProvincialApplicationDetail = {
       ...reviewableApplicationDetail,
       applicationStatusCode: 'APP',
@@ -535,7 +535,14 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
       .mockResolvedValueOnce(detailAfterApproval)
 
     render(
-      <MemoryRouter initialEntries={['/provincial/application/321']}>
+      <MemoryRouter
+        initialEntries={[
+          {
+            pathname: '/provincial/application/321',
+            state: { applicationCreationNotice: { applicationNumber: '321' } },
+          },
+        ]}
+      >
         <Routes>
           <Route
             path="/provincial/application/:applicationNumber"
@@ -545,6 +552,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
       </MemoryRouter>,
     )
 
+    expect(await screen.findByText('Created application 321.')).toBeInTheDocument()
     await selectApplicationReviewTile()
     expect(await screen.findByRole('heading', { name: /application review/i })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Approve Application' }))
@@ -554,7 +562,15 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
       expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(1)
     })
     expect(await screen.findByText('Application approved.')).toBeInTheDocument()
+    expect(screen.queryByText('Created application 321.')).not.toBeInTheDocument()
     expect(screen.getAllByText('Approved').length).toBeGreaterThan(0)
+
+    const actionBanner = screen.getByText('Application approved.').closest('[role="status"]')
+    expect(actionBanner).toBeTruthy()
+    await userEvent.click(
+      within(actionBanner as HTMLElement).getByRole('button', { name: 'close notification' }),
+    )
+    expect(screen.queryByText('Created application 321.')).not.toBeInTheDocument()
   })
 
   it('prefills application review email from the applicant client data', async () => {

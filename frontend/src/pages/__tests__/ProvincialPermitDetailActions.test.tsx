@@ -1035,6 +1035,36 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.queryByText('Permit created')).not.toBeInTheDocument()
   })
 
+  it('replaces the permit creation notice with a later action result without resurfacing it', async () => {
+    configureEditableBlanketOicPackage()
+    const router = createMemoryRouter(
+      [{ path: '/provincial/permit/:permitNumber', element: <ProvincialPermitDetailsPage /> }],
+      {
+        initialEntries: [
+          {
+            pathname: '/provincial/permit/777',
+            state: { blanketOicPermitCreated: '777' },
+          },
+        ],
+      },
+    )
+    const view = render(<RouterProvider router={router} />)
+
+    expect(await screen.findByText('Permit created')).toBeInTheDocument()
+    const dialog = await openBlanketOicPackageDeleteConfirmation()
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Delete package' }))
+
+    const latestAction = await screen.findByText('Blanket OIC package was deleted.')
+    expect(latestAction).toBeVisible()
+    expect(screen.queryByText('Permit created')).not.toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'close notification' })).toHaveLength(1)
+
+    await userEvent.click(screen.getByRole('button', { name: 'close notification' }))
+    expect(screen.queryByText('Blanket OIC package was deleted.')).not.toBeInTheDocument()
+    view.rerender(<RouterProvider router={router} />)
+    expect(screen.queryByText('Permit created')).not.toBeInTheDocument()
+  })
+
   it('does not carry Blanket OIC creation success to another record or a return visit', async () => {
     configureEditableBlanketOicPackage()
     const router = createMemoryRouter(
@@ -7680,7 +7710,9 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(
       await screen.findByText('Permit approval notification is unavailable.'),
     ).toBeInTheDocument()
-    expect(screen.getByRole('dialog', { name: 'Email permit 777 approval?' })).toBeInTheDocument()
+    expect(dialog).toBeInTheDocument()
+    expect(within(dialog).getByText('Action failed')).toBeVisible()
+    expect(screen.getAllByText('Action failed')).toHaveLength(1)
     expect(mockedSendPermitApprovalEmail).toHaveBeenCalledWith('777', 'agent@example.test')
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
     expect(mockedUpdatePermitShipping).not.toHaveBeenCalled()

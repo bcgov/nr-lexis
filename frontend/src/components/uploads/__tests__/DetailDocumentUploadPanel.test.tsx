@@ -210,6 +210,7 @@ describe('DetailDocumentUploadPanel', () => {
   it('keeps an initially open side panel mounted after a partial upload failure', async () => {
     const onClose = vi.fn()
     const onUploadSuccess = vi.fn()
+    const onUploadComplete = vi.fn().mockRejectedValue(new Error('Refresh failed'))
     mockedSubmitAdminUpload
       .mockResolvedValueOnce({ message: 'First document uploaded.' })
       .mockRejectedValueOnce(new Error('Second document failed.'))
@@ -224,6 +225,7 @@ describe('DetailDocumentUploadPanel', () => {
         initiallyOpen
         onClose={onClose}
         onUploadSuccess={onUploadSuccess}
+        onUploadComplete={onUploadComplete}
       />,
     )
 
@@ -232,8 +234,17 @@ describe('DetailDocumentUploadPanel', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save documents' }))
 
     expect(
-      await screen.findByText('1 file failed. Review the queue for details.'),
+      await screen.findByText(/1 file failed\. Review the queue for details\./),
     ).toBeInTheDocument()
+    expect(screen.getByText('Upload needs attention')).toBeInTheDocument()
+    expect(
+      screen.getByText(/Documents uploaded, but the document list could not refresh\./),
+    ).toBeInTheDocument()
+    expect(
+      screen
+        .getByRole('dialog', { name: 'Add documents' })
+        .querySelectorAll('.app-notification-container'),
+    ).toHaveLength(1)
     expect(screen.getByRole('dialog', { name: 'Add documents' })).toBeInTheDocument()
     expect(onUploadSuccess).not.toHaveBeenCalled()
     expect(onClose).not.toHaveBeenCalled()
@@ -324,7 +335,7 @@ describe('DetailDocumentUploadPanel', () => {
       await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
       await userEvent.click(screen.getByRole('button', { name: 'Submit upload' }))
 
-      await screen.findByText('1 file failed. Review the queue for details.')
+      await screen.findByText(/1 file failed\. Review the queue for details\./)
       expect(mockedSubmitAdminUpload).toHaveBeenCalledTimes(2)
       const completedDescription = screen.getByLabelText(/Document description for first.pdf/)
       const failedDescription = screen.getByLabelText(/Document description for second.pdf/)
@@ -590,9 +601,9 @@ describe('DetailDocumentUploadPanel', () => {
       expect(refreshDocuments).toHaveBeenCalledTimes(1)
     })
 
-    expect(await screen.findByText('Upload error')).toBeInTheDocument()
+    expect(await screen.findByText('Upload needs attention')).toBeInTheDocument()
     expect(
-      screen.getByText('Documents uploaded, but the document list could not refresh.'),
+      screen.getByText(/Documents uploaded, but the document list could not refresh\./),
     ).toBeInTheDocument()
   })
 

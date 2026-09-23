@@ -661,6 +661,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
   }
 
   const editFeePolicy = (row: FeePolicyRow): void => {
+    clearNotifications()
     if (!feeRegionOptions.some((option) => option.value === row.orgUnitNo)) {
       setErrorMessage(
         `Region ${row.orgUnitCode || row.orgUnitNo || 'unknown'} is not available in the authoritative region list and cannot be edited.`,
@@ -673,7 +674,6 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
     setFeePolicyPercentage(row.policyPercentage)
     setEditingFeePolicyId(row.id)
     setShowFeeValidationErrors(false)
-    clearNotifications()
     setIsPolicyEditorOpen(true)
   }
 
@@ -903,22 +903,23 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
         <PageHeader title={pageTitle} subtitle={pageSubtitle} />
       </Column>
 
-      {successMessage && (
+      {(successMessage || errorMessage) && !isPolicyEditorOpen && !pendingDeletion && (
         <AppNotification
-          kind="success"
-          title={notificationTitle}
-          subtitle={successMessage}
+          kind={successMessage && errorMessage ? 'warning' : errorMessage ? 'error' : 'success'}
+          title={
+            successMessage && errorMessage
+              ? `${notificationTitle} needs attention`
+              : errorMessage
+                ? errorTitle
+                : notificationTitle
+          }
+          subtitle={
+            successMessage && errorMessage
+              ? `${successMessage} ${errorMessage}`
+              : errorMessage || successMessage
+          }
           lowContrast
-          onCloseButtonClick={() => setSuccessMessage('')}
-        />
-      )}
-      {errorMessage && !isPolicyEditorOpen && !pendingDeletion && (
-        <AppNotification
-          kind="error"
-          title={errorTitle}
-          subtitle={errorMessage}
-          lowContrast
-          onCloseButtonClick={() => setErrorMessage('')}
+          onCloseButtonClick={clearNotifications}
         />
       )}
       {area === 'fee' && feeRegionOptionsError && (
