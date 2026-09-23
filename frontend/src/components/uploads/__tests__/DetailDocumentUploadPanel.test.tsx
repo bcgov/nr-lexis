@@ -204,7 +204,8 @@ describe('DetailDocumentUploadPanel', () => {
     expect(onUploadSuccess).toHaveBeenCalledExactlyOnceWith('Document uploaded.')
     expect(onClose).toHaveBeenCalledTimes(1)
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    expect(screen.getByText('Document uploaded.')).toBeInTheDocument()
+    // The host owns the handed-off result, so the panel must not show a second banner.
+    expect(screen.queryByText('Document uploaded.')).not.toBeInTheDocument()
   })
 
   it('keeps an initially open side panel mounted after a partial upload failure', async () => {
@@ -237,9 +238,7 @@ describe('DetailDocumentUploadPanel', () => {
       await screen.findByText(/1 file failed\. Review the queue for details\./),
     ).toBeInTheDocument()
     expect(screen.getByText('Upload needs attention')).toBeInTheDocument()
-    expect(
-      screen.getByText(/Documents uploaded, but the document list could not refresh\./),
-    ).toBeInTheDocument()
+    expect(screen.getByText(/The document list could not refresh\./)).toBeInTheDocument()
     expect(
       screen
         .getByRole('dialog', { name: 'Add documents' })
@@ -602,9 +601,7 @@ describe('DetailDocumentUploadPanel', () => {
     })
 
     expect(await screen.findByText('Upload needs attention')).toBeInTheDocument()
-    expect(
-      screen.getByText(/Documents uploaded, but the document list could not refresh\./),
-    ).toBeInTheDocument()
+    expect(screen.getByText(/The document list could not refresh\./)).toBeInTheDocument()
   })
 
   it('replaces selected documents with the same file name before submitting', async () => {

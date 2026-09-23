@@ -1098,6 +1098,24 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.queryByText('Permit created')).not.toBeInTheDocument()
   })
 
+  it('does not carry an action failure to another permit', async () => {
+    mockedRunReport.mockRejectedValueOnce(new Error('Report unavailable'))
+    const router = createMemoryRouter(
+      [{ path: '/provincial/permit/:permitNumber', element: <ProvincialPermitDetailsPage /> }],
+      { initialEntries: ['/provincial/permit/777'] },
+    )
+    render(<RouterProvider router={router} />)
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Print permit' }))
+    expect(await screen.findByText('Unable to generate permit report.')).toBeInTheDocument()
+
+    mockedFetchProvincialPermitDetail.mockResolvedValue({ ...permitDetail, permitNumber: 888 })
+    await act(() => router.navigate('/provincial/permit/888'))
+    expect(await screen.findByRole('heading', { name: /Permit 888/ })).toBeInTheDocument()
+    expect(screen.queryByText('Unable to generate permit report.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Action failed')).not.toBeInTheDocument()
+  })
+
   it('ignores a Blanket OIC creation signal for a different permit', async () => {
     configureEditableBlanketOicPackage()
     const router = createMemoryRouter(

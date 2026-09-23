@@ -63,7 +63,7 @@ import PermitCountrySelect from '@/components/PermitCountrySelect'
 import StatusTag from '@/components/StatusTag'
 import TableFrame from '@/components/TableFrame'
 import UnsavedChangesGuard, { formValuesEqual } from '@/components/UnsavedChangesGuard'
-import { AppNotification } from '../../components/AppNotification'
+import { ActionResultNotification } from '../../components/ActionResultNotification'
 import DetailDocumentUploadPanel from '../../components/uploads/DetailDocumentUploadPanel'
 import SearchableSelect from '../../components/SearchableSelect'
 import type { ProvincialPermitDetail } from '@/interfaces/LexisDetails'
@@ -173,6 +173,7 @@ import {
   shippingReferenceLabel,
   type ShippingReferenceOptions,
 } from '@/service/shipping-reference-service'
+import { withoutActionError, type ActionResult } from '@/utils/action-result'
 import { triggerBrowserDownload } from '@/utils/download'
 import { openDocumentPreview } from '@/utils/document-preview'
 import { formatPermitNumber, formatPermitStatus } from '@/utils/permit'
@@ -235,22 +236,13 @@ type BlanketOicPackageFieldErrors = Partial<Record<BlanketOicPackageField, strin
 type PermitFeeOverrideForm = PermitFeeOverrideContext
 type PermitFeeOverrideField = 'overrideFee' | 'overrideComment'
 type PermitFeeOverrideFieldErrors = Partial<Record<PermitFeeOverrideField, string>>
-type ActionSuccessNotification = {
-  title: string
-  subtitle: string
-}
 
-type PageActionNotification = {
-  kind: 'error' | 'success' | 'warning'
-  title: string
-  subtitle: string
-  source:
-    | 'action-error'
-    | 'action-feedback'
-    | 'action-success'
-    | 'document-success'
-    | 'permit-created'
-}
+/**
+ * Package failures stay in the package editor, so a package save only retires a stale page
+ * success and leaves an unrelated page failure visible until a new page result replaces it.
+ */
+const keepActionError = (current: ActionResult | null): ActionResult | null =>
+  current?.kind === 'error' ? current : null
 
 const MAX_OIC_REQUEST_PIECES = 9_999_999_999
 const MAX_OIC_REQUEST_VOLUME_LENGTH = 9
@@ -936,73 +928,10 @@ const ProvincialPermitDetailsPage = () => {
   const [deferredPermitTabLoading, setDeferredPermitTabLoading] = useState(
     EMPTY_DEFERRED_PERMIT_TAB_STATE,
   )
-  const [pageActionNotification, setPageActionNotification] =
-    useState<PageActionNotification | null>(null)
+  const [actionResult, setActionResult] = useState<ActionResult | null>(null)
   const [permitApprovalEmailErrorMessage, setPermitApprovalEmailErrorMessage] = useState('')
-  const clearPageActionNotification = useCallback((source: PageActionNotification['source']) => {
-    setPageActionNotification((current) => (current?.source === source ? null : current))
-  }, [])
-  const setActionErrorMessage = useCallback(
-    (message: string) => {
-      if (!message) {
-        clearPageActionNotification('action-error')
-        return
-      }
-      setPageActionNotification({
-        kind: 'error',
-        title: 'Action failed',
-        subtitle: message,
-        source: 'action-error',
-      })
-    },
-    [clearPageActionNotification],
-  )
-  const setActionFeedback = useCallback(
-    (feedback: { kind: 'success' | 'warning'; message: string } | null) => {
-      if (!feedback) {
-        clearPageActionNotification('action-feedback')
-        return
-      }
-      setPageActionNotification({
-        kind: feedback.kind,
-        title: feedback.kind === 'success' ? 'Action completed' : 'Action needs attention',
-        subtitle: feedback.message,
-        source: 'action-feedback',
-      })
-    },
-    [clearPageActionNotification],
-  )
-  const setActionSuccessNotification = useCallback(
-    (notification: ActionSuccessNotification | null) => {
-      if (!notification) {
-        clearPageActionNotification('action-success')
-        return
-      }
-      setPageActionNotification({
-        kind: 'success',
-        ...notification,
-        source: 'action-success',
-      })
-    },
-    [clearPageActionNotification],
-  )
-  const setDocumentSuccessMessage = useCallback(
-    (message: string) => {
-      if (!message) {
-        clearPageActionNotification('document-success')
-        return
-      }
-      setPageActionNotification({
-        kind: 'success',
-        title: 'Document deleted',
-        subtitle: message,
-        source: 'document-success',
-      })
-    },
-    [clearPageActionNotification],
-  )
   const clearActionNotifications = useCallback(() => {
-    setPageActionNotification(null)
+    setActionResult(null)
     setPermitApprovalEmailErrorMessage('')
   }, [])
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
@@ -1156,9 +1085,9 @@ const ProvincialPermitDetailsPage = () => {
     setSelectedMinisterialPackageNumberState('')
     setMinisterialScaleSelectionDraft(null)
     setIsSavingScaleSelection(false)
-    setActionSuccessNotification(null)
-    setDocumentSuccessMessage('')
-    clearPageActionNotification('permit-created')
+    // A result belongs to the permit that produced it.
+    setActionResult(null)
+    setPermitApprovalEmailErrorMessage('')
     void beginAvailablePermitApplicationsRequest()
     setBoicPackageForm(EMPTY_BLANKET_OIC_PACKAGE_FORM)
     setBoicPackageBaselineForm(EMPTY_BLANKET_OIC_PACKAGE_FORM)
@@ -1217,9 +1146,6 @@ const ProvincialPermitDetailsPage = () => {
     beginPermitFeesRequest,
     beginPermitGbmsRequest,
     beginPermitInvoicesRequest,
-    clearPageActionNotification,
-    setActionSuccessNotification,
-    setDocumentSuccessMessage,
   ])
 
   const loadPermitGbmsEvents = useCallback(
@@ -2839,11 +2765,10 @@ const ProvincialPermitDetailsPage = () => {
     if (detail.blanketOic && location.state.blanketOicPermitCreated === permitNumber) {
       // Keep the one-time notice visible after consuming its navigation signal.
       // eslint-disable-next-line @eslint-react/set-state-in-effect
-      setPageActionNotification({
+      setActionResult({
         kind: 'success',
         title: 'Permit created',
-        subtitle: 'The permit was saved.',
-        source: 'permit-created',
+        message: 'The permit was saved.',
       })
     }
     const remainingState: Record<string, unknown> = { ...location.state }
@@ -2911,7 +2836,7 @@ const ProvincialPermitDetailsPage = () => {
 
   const savePermitMutation = useCallback(
     async (includeShipping = false, deferStatusTransition = false): Promise<boolean> => {
-      setActionSuccessNotification(null)
+      setActionResult(null)
       const targetPermitStatus = permitForm?.permitStatus ?? ''
       const baseRequest: PermitDetailMutationRequest | null =
         detail && permitForm
@@ -2936,21 +2861,24 @@ const ProvincialPermitDetailsPage = () => {
         return false
       }
       if (isEditingPermitClients && !permitClientLookupCanSave) {
-        setActionErrorMessage(
-          'Select verified applicant and agent locations before saving the permit.',
-        )
+        setActionResult({
+          kind: 'error',
+          message: 'Select verified applicant and agent locations before saving the permit.',
+        })
         return false
       }
       let confirmedRequest: PermitDetailMutationRequest = request
 
       const isLatestRequest = tryBeginPermitMutation()
       if (!isLatestRequest) {
-        setActionErrorMessage('Wait for the current permit change to finish before saving again.')
+        setActionResult({
+          kind: 'error',
+          message: 'Wait for the current permit change to finish before saving again.',
+        })
         return false
       }
       setPermitDetailRefreshRequired(false)
-      setActionErrorMessage('')
-      setActionFeedback(null)
+      setActionResult(null)
       setIsSavingPermit(true)
       try {
         const resolvedPermitNumber = String(detail.permitNumber ?? permitNumber ?? '').trim()
@@ -3001,10 +2929,12 @@ const ProvincialPermitDetailsPage = () => {
         })
         if (hasPermitValidationError || (includeShipping && hasShippingValidationError)) {
           setShowPermitValidationErrors(true)
-          setActionErrorMessage(
-            Object.values(permitFieldErrors).find((error): error is string => !!error) ??
+          setActionResult({
+            kind: 'error',
+            message:
+              Object.values(permitFieldErrors).find((error): error is string => !!error) ??
               'Please fix validation errors before saving the permit.',
-          )
+          })
           return false
         }
 
@@ -3015,7 +2945,10 @@ const ProvincialPermitDetailsPage = () => {
           return false
         }
         if (!result.success) {
-          setActionErrorMessage(result.errors[0] || result.message || 'Unable to save permit.')
+          setActionResult({
+            kind: 'error',
+            message: result.errors[0] || result.message || 'Unable to save permit.',
+          })
           return false
         }
 
@@ -3106,18 +3039,19 @@ const ProvincialPermitDetailsPage = () => {
                 : 'Permit details were saved.',
         )
         if (permitDetailRefreshFailed) {
-          setActionFeedback({
+          setActionResult({
             kind: 'warning',
             message: `${mutationMessage} Current permit details could not be refreshed; reload before making another change.`,
           })
         } else {
-          setActionSuccessNotification({
+          setActionResult({
+            kind: 'success',
             title: includeShipping
               ? 'Permit and shipping details saved'
               : activePermitTabId === 'owner'
                 ? 'Applicant details saved'
                 : 'Permit details saved',
-            subtitle: mutationMessage,
+            message: mutationMessage,
           })
         }
         refreshLoadedPermitFees()
@@ -3126,7 +3060,7 @@ const ProvincialPermitDetailsPage = () => {
       } catch (error) {
         if (isLatestRequest()) {
           console.error(error)
-          setActionErrorMessage('Unable to save permit.')
+          setActionResult({ kind: 'error', message: 'Unable to save permit.' })
         }
         return false
       } finally {
@@ -3154,44 +3088,47 @@ const ProvincialPermitDetailsPage = () => {
       permitNumber,
       refreshLoadedPermitFees,
       activePermitTabId,
-      setActionErrorMessage,
-      setActionFeedback,
-      setActionSuccessNotification,
       tryBeginPermitMutation,
     ],
   )
 
   const onSaveShipping = useCallback(async (): Promise<boolean> => {
-    setActionSuccessNotification(null)
+    setActionResult(null)
     const request: PermitDetailMutationRequest | null =
       detail && permitForm
         ? mergePermitFormSection(buildPermitDetailForm(detail), permitForm, true)
         : null
     if (!detail || !request || !canEditShipping || !shippingReferences || isSavingShipping) {
       if (canEditShipping && !shippingReferences) {
-        setActionErrorMessage(
-          'Shipping reference options are unavailable. Reload the page before saving shipping.',
-        )
+        setActionResult({
+          kind: 'error',
+          message:
+            'Shipping reference options are unavailable. Reload the page before saving shipping.',
+        })
       }
       return false
     }
 
     if (hasShippingValidationError) {
       setShowPermitValidationErrors(true)
-      setActionErrorMessage(
-        Object.values(permitFieldErrors).find((error): error is string => !!error) ??
+      setActionResult({
+        kind: 'error',
+        message:
+          Object.values(permitFieldErrors).find((error): error is string => !!error) ??
           'Please fix validation errors before saving shipping.',
-      )
+      })
       return false
     }
 
     const isLatestRequest = tryBeginPermitMutation()
     if (!isLatestRequest) {
-      setActionErrorMessage('Wait for the current permit change to finish before saving again.')
+      setActionResult({
+        kind: 'error',
+        message: 'Wait for the current permit change to finish before saving again.',
+      })
       return false
     }
-    setActionErrorMessage('')
-    setActionFeedback(null)
+    setActionResult(null)
     setIsSavingShipping(true)
     try {
       const result = await updatePermitShipping(request)
@@ -3199,7 +3136,10 @@ const ProvincialPermitDetailsPage = () => {
         return false
       }
       if (!result.success) {
-        setActionErrorMessage(result.errors[0] || result.message || 'Unable to save shipping.')
+        setActionResult({
+          kind: 'error',
+          message: result.errors[0] || result.message || 'Unable to save shipping.',
+        })
         return false
       }
 
@@ -3218,16 +3158,17 @@ const ProvincialPermitDetailsPage = () => {
       setIsEditingShipping(false)
       setTouchedPermitFields({})
       setShowPermitValidationErrors(false)
-      setActionSuccessNotification({
+      setActionResult({
+        kind: 'success',
         title: 'Shipping details saved',
-        subtitle: permitMutationMessage(result, 'Shipping details were saved.'),
+        message: permitMutationMessage(result, 'Shipping details were saved.'),
       })
       refreshLoadedPermitFees()
       return true
     } catch (error) {
       if (isLatestRequest()) {
         console.error(error)
-        setActionErrorMessage('Unable to save shipping.')
+        setActionResult({ kind: 'error', message: 'Unable to save shipping.' })
       }
       return false
     } finally {
@@ -3244,9 +3185,6 @@ const ProvincialPermitDetailsPage = () => {
     permitForm,
     refreshLoadedPermitFees,
     shippingReferences,
-    setActionErrorMessage,
-    setActionFeedback,
-    setActionSuccessNotification,
     tryBeginPermitMutation,
   ])
 
@@ -3260,13 +3198,14 @@ const ProvincialPermitDetailsPage = () => {
     if (!canEditNormalPermitScaleRows || !resolvedPermitNumber) return false
     const isLatestRequest = tryBeginPermitMutation()
     if (!isLatestRequest) {
-      setActionErrorMessage('Wait for the current permit change to finish before saving again.')
+      setActionResult({
+        kind: 'error',
+        message: 'Wait for the current permit change to finish before saving again.',
+      })
       return false
     }
     setIsSavingScaleSelection(true)
-    setActionErrorMessage('')
-    setActionFeedback(null)
-    setActionSuccessNotification(null)
+    setActionResult(null)
     let saved = false
     try {
       const result = await updatePermitScaleSelection({
@@ -3280,9 +3219,10 @@ const ProvincialPermitDetailsPage = () => {
       })
       if (!isLatestRequest()) return false
       if (!result.success) {
-        setActionErrorMessage(
-          result.errors[0] || result.message || 'Unable to save scale selection.',
-        )
+        setActionResult({
+          kind: 'error',
+          message: result.errors[0] || result.message || 'Unable to save scale selection.',
+        })
         return false
       }
       saved = true
@@ -3293,18 +3233,19 @@ const ProvincialPermitDetailsPage = () => {
       await reloadPermitScaleState()
       if (!isLatestRequest()) return false
       setMinisterialScaleSelectionDraft(null)
-      setActionSuccessNotification({ title: 'Scale selection saved', subtitle: result.message })
+      setActionResult({ kind: 'success', title: 'Scale selection saved', message: result.message })
       return true
     } catch (error) {
       if (isLatestRequest()) {
         console.error(error)
         setPermitDetailRefreshRequired(true)
         setEditContextLoaded(false)
-        setActionErrorMessage(
-          saved
+        setActionResult({
+          kind: 'error',
+          message: saved
             ? 'Scale selection was saved, but the current totals could not be refreshed. Reload before making another change.'
             : 'Unable to confirm whether scale selection was saved. Reload before making another change.',
-        )
+        })
       }
       return false
     } finally {
@@ -3321,18 +3262,16 @@ const ProvincialPermitDetailsPage = () => {
     ministerialScaleSelectionDraft,
     permitNumber,
     reloadPermitScaleState,
-    setActionErrorMessage,
-    setActionFeedback,
-    setActionSuccessNotification,
     tryBeginPermitMutation,
   ])
 
   const onSavePermit = useCallback(async (): Promise<boolean> => {
-    setActionSuccessNotification(null)
+    setActionResult(null)
     if (paymentPendingReceiptRequiresCompletion) {
-      setActionErrorMessage(
-        'Select Completed on the Permit tab before saving a payment-pending receipt.',
-      )
+      setActionResult({
+        kind: 'error',
+        message: 'Select Completed on the Permit tab before saving a payment-pending receipt.',
+      })
       return false
     }
     if (
@@ -3341,13 +3280,14 @@ const ProvincialPermitDetailsPage = () => {
       blanketOicRegionSelectionUnavailable ||
       requiredPermitOptionsMissing
     ) {
-      setActionErrorMessage(
-        permitOptionsUnavailable
+      setActionResult({
+        kind: 'error',
+        message: permitOptionsUnavailable
           ? SEARCH_OPTIONS_UNAVAILABLE_MESSAGE
           : blanketOicRegionOptionsLoading
             ? 'Blanket OIC region options are still loading.'
             : 'Required permit status or region options are not configured.',
-      )
+      })
       return false
     }
     if (ministerialScaleSelectionDirty && !(await onSaveScaleSelection())) return false
@@ -3373,8 +3313,6 @@ const ProvincialPermitDetailsPage = () => {
     permitShippingDirty,
     permitStatusTransitionDraft,
     savePermitMutation,
-    setActionErrorMessage,
-    setActionSuccessNotification,
   ])
 
   const onSaveFeeOverride = useCallback(async (): Promise<boolean> => {
@@ -3382,13 +3320,13 @@ const ProvincialPermitDetailsPage = () => {
       return false
     }
 
-    setActionSuccessNotification(null)
+    setActionResult(null)
     const normalizedFee = feeOverrideForm.overrideFee.trim()
     const normalizedComment = feeOverrideForm.overrideComment.trim()
     const { fieldErrors, roundedFee } = validatePermitFeeOverride(feeOverrideForm)
     if (fieldErrors.overrideFee || fieldErrors.overrideComment) {
       setFeeOverrideFieldErrors(fieldErrors)
-      setActionErrorMessage('')
+      setActionResult(null)
       return false
     }
 
@@ -3402,11 +3340,13 @@ const ProvincialPermitDetailsPage = () => {
     }
     const isLatestRequest = tryBeginPermitMutation()
     if (!isLatestRequest) {
-      setActionErrorMessage('Wait for the current permit change to finish before saving again.')
+      setActionResult({
+        kind: 'error',
+        message: 'Wait for the current permit change to finish before saving again.',
+      })
       return false
     }
-    setActionErrorMessage('')
-    setActionFeedback(null)
+    setActionResult(null)
     setIsSavingFeeOverride(true)
     try {
       const result = await updatePermitDetail(permitMutationRequest(request, detail.blanketOic))
@@ -3414,9 +3354,10 @@ const ProvincialPermitDetailsPage = () => {
         return false
       }
       if (!result.success) {
-        setActionErrorMessage(
-          result.errors[0] || result.message || 'Unable to save the permit fee override.',
-        )
+        setActionResult({
+          kind: 'error',
+          message: result.errors[0] || result.message || 'Unable to save the permit fee override.',
+        })
         return false
       }
 
@@ -3431,16 +3372,17 @@ const ProvincialPermitDetailsPage = () => {
       setFeeOverrideForm(savedContext)
       setFeeOverrideFieldErrors({})
       setIsEditingFeeOverride(false)
-      setActionSuccessNotification({
+      setActionResult({
+        kind: 'success',
         title: 'Fee override saved',
-        subtitle: result.message || 'The fee override was saved.',
+        message: result.message || 'The fee override was saved.',
       })
       refreshLoadedPermitFees()
       return true
     } catch (error) {
       if (isLatestRequest()) {
         console.error(error)
-        setActionErrorMessage('Unable to save the permit fee override.')
+        setActionResult({ kind: 'error', message: 'Unable to save the permit fee override.' })
       }
       return false
     } finally {
@@ -3454,9 +3396,6 @@ const ProvincialPermitDetailsPage = () => {
     feeOverrideForm,
     isSavingFeeOverride,
     refreshLoadedPermitFees,
-    setActionErrorMessage,
-    setActionFeedback,
-    setActionSuccessNotification,
     tryBeginPermitMutation,
   ])
 
@@ -3469,13 +3408,14 @@ const ProvincialPermitDetailsPage = () => {
 
       const isLatestRequest = tryBeginPermitMutation()
       if (!isLatestRequest) {
-        setActionErrorMessage('Wait for the current permit change to finish before saving again.')
+        setActionResult({
+          kind: 'error',
+          message: 'Wait for the current permit change to finish before saving again.',
+        })
         return
       }
 
-      setActionErrorMessage('')
-      setActionFeedback(null)
-      setActionSuccessNotification(null)
+      setActionResult(null)
       setIsUpdatingScaleId(scaleId)
       try {
         const result = await updatePermitScaleAttachment({
@@ -3487,9 +3427,10 @@ const ProvincialPermitDetailsPage = () => {
           return
         }
         if (!result.success) {
-          setActionErrorMessage(
-            result.errors[0] || result.message || 'Unable to update permit item rows.',
-          )
+          setActionResult({
+            kind: 'error',
+            message: result.errors[0] || result.message || 'Unable to update permit item rows.',
+          })
           return
         }
 
@@ -3498,14 +3439,14 @@ const ProvincialPermitDetailsPage = () => {
         setHasLoadedAvailablePermitApplications(false)
         setAvailablePermitApplicationsError('')
         await reloadPermitScaleState()
-        setActionFeedback({
+        setActionResult({
           kind: 'success',
           message: result.message || 'Permit item rows were updated.',
         })
       } catch (error) {
         if (isLatestRequest()) {
           console.error(error)
-          setActionErrorMessage('Unable to update permit item rows.')
+          setActionResult({ kind: 'error', message: 'Unable to update permit item rows.' })
         }
       } finally {
         endPermitMutation()
@@ -3518,9 +3459,6 @@ const ProvincialPermitDetailsPage = () => {
       endPermitMutation,
       permitNumber,
       reloadPermitScaleState,
-      setActionErrorMessage,
-      setActionFeedback,
-      setActionSuccessNotification,
       tryBeginPermitMutation,
     ],
   )
@@ -3538,13 +3476,14 @@ const ProvincialPermitDetailsPage = () => {
 
     const isLatestRequest = tryBeginPermitMutation()
     if (!isLatestRequest) {
-      setActionErrorMessage('Wait for the current permit change to finish before saving again.')
+      setActionResult({
+        kind: 'error',
+        message: 'Wait for the current permit change to finish before saving again.',
+      })
       return
     }
 
-    setActionErrorMessage('')
-    setActionFeedback(null)
-    setActionSuccessNotification(null)
+    setActionResult(null)
     setIsSavingPermitApplication(true)
     try {
       const result = await addApplicationsToPermit({
@@ -3555,9 +3494,10 @@ const ProvincialPermitDetailsPage = () => {
         return
       }
       if (!result.success) {
-        setActionErrorMessage(
-          result.errors[0] || result.message || 'Unable to add application to the permit.',
-        )
+        setActionResult({
+          kind: 'error',
+          message: result.errors[0] || result.message || 'Unable to add application to the permit.',
+        })
         return
       }
 
@@ -3577,7 +3517,7 @@ const ProvincialPermitDetailsPage = () => {
       )
       try {
         await reloadPermitScaleState()
-        setActionFeedback({
+        setActionResult({
           kind: 'success',
           message: result.message || 'Application was added to the permit.',
         })
@@ -3586,7 +3526,7 @@ const ProvincialPermitDetailsPage = () => {
         setPermitTablesErrorMessage(
           'The application was added, but permit tables could not be refreshed. Reload the page.',
         )
-        setActionFeedback({
+        setActionResult({
           kind: 'warning',
           message: `${result.message || 'Application was added to the permit.'} Reload before changing application links again.`,
         })
@@ -3594,7 +3534,7 @@ const ProvincialPermitDetailsPage = () => {
     } catch (error) {
       if (isLatestRequest()) {
         console.error(error)
-        setActionErrorMessage('Unable to add application to the permit.')
+        setActionResult({ kind: 'error', message: 'Unable to add application to the permit.' })
       }
     } finally {
       endPermitMutation()
@@ -3609,9 +3549,6 @@ const ProvincialPermitDetailsPage = () => {
     permitNumber,
     reloadPermitScaleState,
     selectedPermitApplicationToAdd,
-    setActionErrorMessage,
-    setActionFeedback,
-    setActionSuccessNotification,
     tryBeginPermitMutation,
   ])
 
@@ -3625,13 +3562,11 @@ const ProvincialPermitDetailsPage = () => {
       const isLatestRequest = tryBeginPermitMutation()
       if (!isLatestRequest) {
         const message = 'Wait for the current permit change to finish before saving again.'
-        setActionErrorMessage(message)
+        setActionResult({ kind: 'error', message })
         throw new Error(message)
       }
 
-      setActionErrorMessage('')
-      setActionFeedback(null)
-      setActionSuccessNotification(null)
+      setActionResult(null)
       setIsRemovingPermitApplication(applicationNumber)
       try {
         const result = await removeApplicationFromPermit({
@@ -3663,7 +3598,7 @@ const ProvincialPermitDetailsPage = () => {
         setAvailablePermitApplicationsError('')
         try {
           await reloadPermitScaleState()
-          setActionFeedback({
+          setActionResult({
             kind: 'success',
             message: result.message || 'Application was removed from the permit.',
           })
@@ -3672,7 +3607,7 @@ const ProvincialPermitDetailsPage = () => {
           setPermitTablesErrorMessage(
             'The application was removed, but permit tables could not be refreshed. Reload the page.',
           )
-          setActionFeedback({
+          setActionResult({
             kind: 'warning',
             message: `${result.message || 'Application was removed from the permit.'} Reload before changing application links again.`,
           })
@@ -3695,9 +3630,6 @@ const ProvincialPermitDetailsPage = () => {
       endPermitMutation,
       permitNumber,
       reloadPermitScaleState,
-      setActionErrorMessage,
-      setActionFeedback,
-      setActionSuccessNotification,
       tryBeginPermitMutation,
     ],
   )
@@ -3788,7 +3720,7 @@ const ProvincialPermitDetailsPage = () => {
     ) {
       return false
     }
-    setActionSuccessNotification(null)
+    setActionResult(keepActionError)
     if (
       permitForm &&
       permitForm.orgUnitNumber.trim() !== detailValue(detail?.orgUnitNumber).trim()
@@ -3834,7 +3766,7 @@ const ProvincialPermitDetailsPage = () => {
     }
 
     setBoicPackageErrorMessage('')
-    setActionFeedback(null)
+    setActionResult(keepActionError)
     setIsSavingBoicPackage(true)
     try {
       const result = editingBoicPackageNumber
@@ -3861,7 +3793,7 @@ const ProvincialPermitDetailsPage = () => {
       resetBlanketOicPackageForm()
       try {
         await reloadPermitTabs()
-        setActionFeedback({
+        setActionResult({
           kind: 'success',
           message: result.message || 'Blanket OIC package was saved.',
         })
@@ -3870,7 +3802,7 @@ const ProvincialPermitDetailsPage = () => {
         setPermitTablesErrorMessage(
           'The Blanket OIC package was saved, but permit tables could not be refreshed.',
         )
-        setActionFeedback({
+        setActionResult({
           kind: 'warning',
           message: `${result.message || 'Blanket OIC package was saved.'} Reload before making another package change.`,
         })
@@ -3897,8 +3829,6 @@ const ProvincialPermitDetailsPage = () => {
     permitNumber,
     reloadPermitTabs,
     resetBlanketOicPackageForm,
-    setActionFeedback,
-    setActionSuccessNotification,
   ])
 
   const onDeleteBlanketOicPackage = useCallback(
@@ -3912,9 +3842,7 @@ const ProvincialPermitDetailsPage = () => {
       ) {
         return
       }
-      setActionErrorMessage('')
-      setActionFeedback(null)
-      setActionSuccessNotification(null)
+      setActionResult(null)
       setBoicPackageErrorMessage('')
       setIsDeletingBoicPackageNumber(packageNumberToDelete)
       let failureMessage = ''
@@ -3929,7 +3857,7 @@ const ProvincialPermitDetailsPage = () => {
           resetBlanketOicPackageForm()
         }
         await reloadPermitTabs()
-        setActionFeedback({
+        setActionResult({
           kind: 'success',
           message: result.message || 'Blanket OIC package was deleted.',
         })
@@ -3951,9 +3879,6 @@ const ProvincialPermitDetailsPage = () => {
       permitNumber,
       reloadPermitTabs,
       resetBlanketOicPackageForm,
-      setActionErrorMessage,
-      setActionFeedback,
-      setActionSuccessNotification,
     ],
   )
 
@@ -3971,7 +3896,7 @@ const ProvincialPermitDetailsPage = () => {
     ) {
       return false
     }
-    setActionSuccessNotification(null)
+    setActionResult(null)
 
     const request = {
       permitNumber: resolvedPermitNumber,
@@ -3984,7 +3909,10 @@ const ProvincialPermitDetailsPage = () => {
     }
 
     if (!detail?.oicApplicationNumber) {
-      setActionErrorMessage('The permit does not have an OIC application number.')
+      setActionResult({
+        kind: 'error',
+        message: 'The permit does not have an OIC application number.',
+      })
       return false
     }
     if (
@@ -3995,19 +3923,22 @@ const ProvincialPermitDetailsPage = () => {
       !request.speciesCode ||
       !request.gradeCode
     ) {
-      setActionErrorMessage('Enter package, timber mark, species, grade, pieces, and volume.')
+      setActionResult({
+        kind: 'error',
+        message: 'Enter package, timber mark, species, grade, pieces, and volume.',
+      })
       return false
     }
 
-    setActionErrorMessage('')
-    setActionFeedback(null)
+    setActionResult(null)
     setIsSavingBoicScale(true)
     try {
       const result = await addBlanketOicScale(request)
       if (!result.success) {
-        setActionErrorMessage(
-          result.errors[0] || result.message || 'Unable to add Blanket OIC scale detail.',
-        )
+        setActionResult({
+          kind: 'error',
+          message: result.errors[0] || result.message || 'Unable to add Blanket OIC scale detail.',
+        })
         return false
       }
 
@@ -4019,7 +3950,7 @@ const ProvincialPermitDetailsPage = () => {
       setBoicScaleBaselineForm(savedScaleBaseline)
       try {
         await reloadPermitScaleState()
-        setActionFeedback({
+        setActionResult({
           kind: 'success',
           message: result.message || 'Blanket OIC scale detail was added.',
         })
@@ -4028,7 +3959,7 @@ const ProvincialPermitDetailsPage = () => {
         setPermitTablesErrorMessage(
           'The Blanket OIC scale detail was added, but permit tables could not be refreshed.',
         )
-        setActionFeedback({
+        setActionResult({
           kind: 'warning',
           message: `${result.message || 'Blanket OIC scale detail was added.'} Reload before adding another scale row.`,
         })
@@ -4036,7 +3967,7 @@ const ProvincialPermitDetailsPage = () => {
       return true
     } catch (error) {
       console.error(error)
-      setActionErrorMessage('Unable to add Blanket OIC scale detail.')
+      setActionResult({ kind: 'error', message: 'Unable to add Blanket OIC scale detail.' })
       return false
     } finally {
       setIsSavingBoicScale(false)
@@ -4051,9 +3982,6 @@ const ProvincialPermitDetailsPage = () => {
     permitNumber,
     reloadPermitScaleState,
     selectedBlanketOicPackageNumber,
-    setActionErrorMessage,
-    setActionFeedback,
-    setActionSuccessNotification,
   ])
 
   const onDeleteBlanketOicScale = useCallback(
@@ -4063,9 +3991,7 @@ const ProvincialPermitDetailsPage = () => {
         throw new Error('This Blanket OIC scale is no longer available for removal.')
       }
 
-      setActionErrorMessage('')
-      setActionFeedback(null)
-      setActionSuccessNotification(null)
+      setActionResult(null)
       setIsDeletingBoicScaleId(row.id)
       try {
         const result = await deleteBlanketOicScale({
@@ -4080,7 +4006,7 @@ const ProvincialPermitDetailsPage = () => {
 
         try {
           await reloadPermitScaleState()
-          setActionFeedback({
+          setActionResult({
             kind: 'success',
             message: result.message || 'Blanket OIC scale detail was removed.',
           })
@@ -4089,7 +4015,7 @@ const ProvincialPermitDetailsPage = () => {
           setPermitTablesErrorMessage(
             'The Blanket OIC scale was removed, but permit tables could not be refreshed. Reload the page.',
           )
-          setActionFeedback({
+          setActionResult({
             kind: 'warning',
             message: `${result.message || 'Blanket OIC scale detail was removed.'} Reload before changing scale rows again.`,
           })
@@ -4103,15 +4029,7 @@ const ProvincialPermitDetailsPage = () => {
         setIsDeletingBoicScaleId(null)
       }
     },
-    [
-      canEditBlanketOicScaleRows,
-      detail?.permitNumber,
-      permitNumber,
-      reloadPermitScaleState,
-      setActionErrorMessage,
-      setActionFeedback,
-      setActionSuccessNotification,
-    ],
+    [canEditBlanketOicScaleRows, detail?.permitNumber, permitNumber, reloadPermitScaleState],
   )
 
   const refreshPermitDocuments = useCallback(async () => {
@@ -4158,21 +4076,21 @@ const ProvincialPermitDetailsPage = () => {
     setPermitDocumentUploadDirty(false)
     setPermitDocumentUploadBusy(false)
     setPermitDocumentUploadResetKey((current) => current + 1)
-    setActionErrorMessage('')
+    setActionResult(withoutActionError)
     setIsEditingPermitDocuments(false)
     if (usesReviewedPermitFlow) {
       // The Ministerial launcher remounts when the document editor closes.
       window.setTimeout(() => permitDocumentUploadLauncherRef.current?.focus())
     }
-  }, [setActionErrorMessage, usesReviewedPermitFlow])
+  }, [usesReviewedPermitFlow])
 
   const onCancelInvoiceDocumentEditing = useCallback(() => {
     setInvoiceDocumentUploadDirty(false)
     setInvoiceDocumentUploadBusy(false)
     setInvoiceDocumentUploadResetKey((current) => current + 1)
-    setActionErrorMessage('')
+    setActionResult(withoutActionError)
     setIsEditingInvoiceDocuments(false)
-  }, [setActionErrorMessage])
+  }, [])
 
   const onOpenDocument = useCallback(
     async (row: PermitDocumentRow, preview = false) => {
@@ -4187,9 +4105,7 @@ const ProvincialPermitDetailsPage = () => {
           previewTarget.close()
         }
       }
-      setActionErrorMessage('')
-      setActionFeedback(null)
-      setActionSuccessNotification(null)
+      setActionResult(null)
       try {
         if (preview) {
           // Reserve the tab during the click so slow document reads cannot lose popup permission.
@@ -4213,21 +4129,17 @@ const ProvincialPermitDetailsPage = () => {
         closePendingPreview()
         if (!isLatestRequest()) return
         console.error(error)
-        setActionErrorMessage(
-          preview ? 'Unable to open permit document.' : 'Unable to download permit document.',
-        )
+        setActionResult({
+          kind: 'error',
+          message: preview
+            ? 'Unable to open permit document.'
+            : 'Unable to download permit document.',
+        })
       } finally {
         if (previewTarget) pendingDocumentPreviewsRef.current.delete(previewTarget)
       }
     },
-    [
-      canPerform,
-      detail?.permitNumber,
-      permitNumber,
-      setActionErrorMessage,
-      setActionFeedback,
-      setActionSuccessNotification,
-    ],
+    [canPerform, detail?.permitNumber, permitNumber],
   )
 
   const onOpenPermitReport = useCallback(async () => {
@@ -4236,9 +4148,7 @@ const ProvincialPermitDetailsPage = () => {
       return
     }
 
-    setActionErrorMessage('')
-    setActionFeedback(null)
-    setActionSuccessNotification(null)
+    setActionResult(null)
     setIsOpeningPermitReport(true)
     try {
       const result = await runReport({
@@ -4251,20 +4161,15 @@ const ProvincialPermitDetailsPage = () => {
       }
     } catch (error) {
       console.error(error)
-      setActionErrorMessage(
-        error instanceof ReportRequestError ? error.message : 'Unable to generate permit report.',
-      )
+      setActionResult({
+        kind: 'error',
+        message:
+          error instanceof ReportRequestError ? error.message : 'Unable to generate permit report.',
+      })
     } finally {
       setIsOpeningPermitReport(false)
     }
-  }, [
-    canOpenPermitReport,
-    detail?.permitNumber,
-    permitNumber,
-    setActionErrorMessage,
-    setActionFeedback,
-    setActionSuccessNotification,
-  ])
+  }, [canOpenPermitReport, detail?.permitNumber, permitNumber])
 
   const onSendPermitEmail = useCallback(
     async (type: 'request' | 'approval', approvalEmailAddress = ''): Promise<boolean> => {
@@ -4275,16 +4180,17 @@ const ProvincialPermitDetailsPage = () => {
       ) {
         return false
       }
-      const setEmailActionError =
-        type === 'approval' ? setPermitApprovalEmailErrorMessage : setActionErrorMessage
-      setActionSuccessNotification(null)
+      const showEmailError = (message: string) =>
+        type === 'approval'
+          ? setPermitApprovalEmailErrorMessage(message)
+          : setActionResult({ kind: 'error', message })
+      setActionResult(null)
+      setPermitApprovalEmailErrorMessage('')
       const clientEmail = normalizeTrimmedText(approvalEmailAddress)
       if (type === 'approval' && !isValidEmail(clientEmail)) {
-        setEmailActionError('Enter one valid applicant email address.')
+        showEmailError('Enter one valid applicant email address.')
         return false
       }
-      setEmailActionError('')
-      setActionFeedback(null)
       setIsSendingPermitEmail(true)
       try {
         const result =
@@ -4292,7 +4198,7 @@ const ProvincialPermitDetailsPage = () => {
             ? await sendPermitReviewRequestEmail(resolvedPermitNumber)
             : await sendPermitApprovalEmail(resolvedPermitNumber, clientEmail)
         if (result.success) {
-          setActionFeedback({ kind: 'success', message: result.message || 'Permit email sent.' })
+          setActionResult({ kind: 'success', message: result.message || 'Permit email sent.' })
           if (type === 'request' && result.permitRequestDate) {
             setDetail((current) =>
               current
@@ -4315,26 +4221,18 @@ const ProvincialPermitDetailsPage = () => {
           }
           return true
         } else {
-          setEmailActionError(result.message || 'Permit email could not be sent.')
+          showEmailError(result.message || 'Permit email could not be sent.')
           return false
         }
       } catch (error) {
         console.error(error)
-        setEmailActionError('Unable to send permit email.')
+        showEmailError('Unable to send permit email.')
         return false
       } finally {
         setIsSendingPermitEmail(false)
       }
     },
-    [
-      canSendPermitApproval,
-      detail?.permitNumber,
-      permitReviewReady,
-      permitNumber,
-      setActionErrorMessage,
-      setActionFeedback,
-      setActionSuccessNotification,
-    ],
+    [canSendPermitApproval, detail?.permitNumber, permitReviewReady, permitNumber],
   )
 
   const onOpenPermitApprovalEmail = useCallback(async () => {
@@ -4350,7 +4248,10 @@ const ProvincialPermitDetailsPage = () => {
       setPermitApprovalEmailOpen(true)
     } catch (error) {
       console.error(error)
-      setActionErrorMessage('Unable to resolve the permit applicant notification email.')
+      setActionResult({
+        kind: 'error',
+        message: 'Unable to resolve the permit applicant notification email.',
+      })
     } finally {
       setIsSendingPermitEmail(false)
     }
@@ -4360,7 +4261,6 @@ const ProvincialPermitDetailsPage = () => {
     detail?.permitNumber,
     isSendingPermitEmail,
     permitNumber,
-    setActionErrorMessage,
   ])
 
   const onRemoveDocument = useCallback(
@@ -4380,10 +4280,7 @@ const ProvincialPermitDetailsPage = () => {
       }
 
       const isLatestRequest = beginDocumentRefreshRequest()
-      setActionErrorMessage('')
-      setActionFeedback(null)
-      setActionSuccessNotification(null)
-      setDocumentSuccessMessage('')
+      setActionResult(null)
       setIsRemovingDocumentId(row.id)
       try {
         const removeResult = invoiceDocument
@@ -4402,7 +4299,11 @@ const ProvincialPermitDetailsPage = () => {
         try {
           await refreshPermitDocuments()
           if (isLatestRequest()) {
-            setDocumentSuccessMessage(`${row.name || 'Document'} was deleted.`)
+            setActionResult({
+              kind: 'success',
+              title: 'Document deleted',
+              message: `${row.name || 'Document'} was deleted.`,
+            })
           }
         } catch (refreshError) {
           if (isLatestRequest()) {
@@ -4410,7 +4311,7 @@ const ProvincialPermitDetailsPage = () => {
             setDocumentsErrorMessage(
               'The document was deleted, but permit documents could not be refreshed. Reload the page.',
             )
-            setActionFeedback({
+            setActionResult({
               kind: 'warning',
               message: `${row.name || 'Document'} was deleted. Reload before changing documents again.`,
             })
@@ -4434,10 +4335,6 @@ const ProvincialPermitDetailsPage = () => {
       detail?.permitNumber,
       permitNumber,
       refreshPermitDocuments,
-      setActionErrorMessage,
-      setActionFeedback,
-      setActionSuccessNotification,
-      setDocumentSuccessMessage,
     ],
   )
 
@@ -4453,15 +4350,18 @@ const ProvincialPermitDetailsPage = () => {
 
   const onSaveUnsavedPermitChanges = useCallback(async (): Promise<boolean> => {
     if (permitDocumentUploadDirty || invoiceDocumentUploadDirty) {
-      setActionErrorMessage(
-        'Queued document uploads must be submitted or reset before leaving this permit.',
-      )
+      setActionResult({
+        kind: 'error',
+        message: 'Queued document uploads must be submitted or reset before leaving this permit.',
+      })
       return false
     }
     if (blanketOicPackageDirty && blanketOicScaleDirty) {
-      setActionErrorMessage(
-        'Save the Blanket OIC package before adding a scale row so the scale uses the final package number.',
-      )
+      setActionResult({
+        kind: 'error',
+        message:
+          'Save the Blanket OIC package before adding a scale row so the scale uses the final package number.',
+      })
       return false
     }
     if (!permitDetailDirty && ministerialScaleSelectionDirty && !(await onSaveScaleSelection()))
@@ -4490,7 +4390,6 @@ const ProvincialPermitDetailsPage = () => {
     permitDocumentUploadDirty,
     permitFeeOverrideDirty,
     permitShippingDirty,
-    setActionErrorMessage,
   ])
 
   const onDiscardPermitChanges = useCallback(() => {
@@ -4517,14 +4416,8 @@ const ProvincialPermitDetailsPage = () => {
     setInvoiceDocumentUploadResetKey((current) => current + 1)
     setIsEditingPermitDocuments(false)
     setIsEditingInvoiceDocuments(false)
-    setActionErrorMessage('')
-  }, [
-    boicScaleBaselineForm,
-    detail,
-    feeOverrideContext,
-    resetBlanketOicPackageForm,
-    setActionErrorMessage,
-  ])
+    setActionResult(withoutActionError)
+  }, [boicScaleBaselineForm, detail, feeOverrideContext, resetBlanketOicPackageForm])
 
   const renderPermitTextInput = (
     field: PermitDetailFormField,
@@ -6041,14 +5934,11 @@ const ProvincialPermitDetailsPage = () => {
               />
             </Column>
           )}
-          {pageActionNotification && (
+          {!!actionResult && (
             <Column sm={4} md={8} lg={16} className="detail-page-error">
-              <AppNotification
-                kind={pageActionNotification.kind}
-                title={pageActionNotification.title}
-                subtitle={pageActionNotification.subtitle}
-                lowContrast
-                onCloseButtonClick={() => setPageActionNotification(null)}
+              <ActionResultNotification
+                result={actionResult}
+                onClose={() => setActionResult(null)}
               />
             </Column>
           )}
@@ -8054,14 +7944,12 @@ const ProvincialPermitDetailsPage = () => {
                             onDirtyChange={setPermitDocumentUploadDirty}
                             onBusyChange={setPermitDocumentUploadBusy}
                             onUploadComplete={refreshPermitDocuments}
-                            onUploadSuccess={
-                              usesReviewedPermitFlow
-                                ? (message) =>
-                                    setActionSuccessNotification({
-                                      title: 'Document uploaded',
-                                      subtitle: message,
-                                    })
-                                : undefined
+                            onUploadSuccess={(message) =>
+                              setActionResult({
+                                kind: 'success',
+                                title: 'Document uploaded',
+                                message,
+                              })
                             }
                           />
                         )}
@@ -8213,6 +8101,13 @@ const ProvincialPermitDetailsPage = () => {
                             onDirtyChange={setInvoiceDocumentUploadDirty}
                             onBusyChange={setInvoiceDocumentUploadBusy}
                             onUploadComplete={refreshPermitDocuments}
+                            onUploadSuccess={(message) =>
+                              setActionResult({
+                                kind: 'success',
+                                title: 'Invoice uploaded',
+                                message,
+                              })
+                            }
                           />
                         )}
                         {deferredPermitTabLoading.invoices ? (

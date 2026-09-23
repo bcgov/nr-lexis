@@ -49,6 +49,7 @@ import TableFrame from '@/components/TableFrame'
 import UnsavedChangesGuard, { formValuesEqual } from '@/components/UnsavedChangesGuard'
 import { useAuth } from '@/context/auth/useAuth'
 import { hasProvincialSubmitterRole, hasRole } from '@/context/auth/role-utils'
+import { ActionResultNotification } from '../../components/ActionResultNotification'
 import { AppNotification } from '../../components/AppNotification'
 import DetailDocumentUploadPanel from '../../components/uploads/DetailDocumentUploadPanel'
 import type { ProvincialExemptionDetail } from '@/interfaces/LexisDetails'
@@ -77,6 +78,7 @@ import {
   type ProvincialExemptionDocumentRow,
 } from '@/service/provincial-exemption-documents-service'
 import { createPermitFromExemption } from '@/service/provincial-permit-documents-invoices-service'
+import { actionResultTitle, withoutActionError, type ActionResult } from '@/utils/action-result'
 import { triggerBrowserDownload } from '@/utils/download'
 import IsoDatePicker from '../../components/IsoDatePicker'
 import SearchableSelect from '../../components/SearchableSelect'
@@ -364,12 +366,8 @@ const ProvincialExemptionDetailsPage = () => {
   const [applicationsErrorMessage, setApplicationsErrorMessage] = useState('')
   const [permitsErrorMessage, setPermitsErrorMessage] = useState('')
   const [blanketOicTotalsErrorMessage, setBlanketOicTotalsErrorMessage] = useState('')
-  const [actionResult, setActionResult] = useState<{
-    kind: 'error' | 'success' | 'warning'
-    message: string
-  } | null>(null)
+  const [actionResult, setActionResult] = useState<ActionResult | null>(null)
   const actionErrorMessage = actionResult?.kind === 'error' ? actionResult.message : ''
-  const actionFeedback = actionResult && actionResult.kind !== 'error' ? actionResult : null
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
   const [documentPendingDeletion, setDocumentPendingDeletion] =
     useState<ProvincialExemptionDocumentRow | null>(null)
@@ -1224,7 +1222,7 @@ const ProvincialExemptionDetailsPage = () => {
     }
     setEditing(false)
     setIsEditingDocuments(false)
-    setActionResult(null)
+    setActionResult(withoutActionError)
     setDocumentUploadDirty(false)
     setDocumentUploadBusy(false)
     setDocumentUploadResetKey((current) => current + 1)
@@ -1652,7 +1650,7 @@ const ProvincialExemptionDetailsPage = () => {
     setDocumentUploadDirty(false)
     setDocumentUploadBusy(false)
     setDocumentUploadResetKey((current) => current + 1)
-    setActionResult(null)
+    setActionResult(withoutActionError)
     setIsEditingDocuments(false)
   }, [])
 
@@ -1886,29 +1884,16 @@ const ProvincialExemptionDetailsPage = () => {
               hideCloseButton
             />
           )}
-          {!!actionErrorMessage &&
-            !approvalConfirmationOpen &&
-            !showPermitCreationConfirmation &&
-            approvalEmailRecipients.length === 0 && (
-              <AppNotification
-                kind="error"
-                title="Action failed"
-                subtitle={actionErrorMessage}
-                lowContrast
-                onCloseButtonClick={() => setActionResult(null)}
+          {!!actionResult &&
+            approvalEmailRecipients.length === 0 &&
+            // An open confirmation shows its own failure instead of the page.
+            (actionResult.kind !== 'error' ||
+              (!approvalConfirmationOpen && !showPermitCreationConfirmation)) && (
+              <ActionResultNotification
+                result={actionResult}
+                onClose={() => setActionResult(null)}
               />
             )}
-          {!!actionFeedback && approvalEmailRecipients.length === 0 && (
-            <AppNotification
-              kind={actionFeedback.kind}
-              title={
-                actionFeedback.kind === 'success' ? 'Action completed' : 'Action needs attention'
-              }
-              subtitle={actionFeedback.message}
-              lowContrast
-              onCloseButtonClick={() => setActionResult(null)}
-            />
-          )}
           {editing && !!formValidationMessage && (
             <InlineNotification
               className="detail-context-notification"
@@ -2689,6 +2674,13 @@ const ProvincialExemptionDetailsPage = () => {
                             onDirtyChange={setDocumentUploadDirty}
                             onBusyChange={setDocumentUploadBusy}
                             onUploadComplete={refreshExemptionDocuments}
+                            onUploadSuccess={(message) =>
+                              setActionResult({
+                                kind: 'success',
+                                title: 'Document uploaded',
+                                message,
+                              })
+                            }
                           />
                         )}
                         {documentsErrorMessage ? (
@@ -2852,17 +2844,11 @@ const ProvincialExemptionDetailsPage = () => {
           recipients={approvalEmailRecipients}
           sending={sendingApprovalEmail}
           feedback={
-            (actionErrorMessage || actionFeedback) && (
+            actionResult && (
               <AppNotification
-                kind={actionErrorMessage ? 'error' : actionFeedback?.kind}
-                title={
-                  actionErrorMessage
-                    ? 'Action failed'
-                    : actionFeedback?.kind === 'warning'
-                      ? 'Action needs attention'
-                      : 'Action completed'
-                }
-                subtitle={actionErrorMessage || actionFeedback?.message}
+                kind={actionResult.kind}
+                title={actionResultTitle(actionResult)}
+                subtitle={actionResult.message}
               />
             )
           }

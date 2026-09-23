@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, TextArea, TextInput } from '@carbon/react'
 import { Add, ArrowRight } from '@carbon/icons-react'
-import { AppNotification } from '../AppNotification'
+import { ActionResultNotification } from '../ActionResultNotification'
 import Modal from '@/components/Modal'
 import ConfirmationModal from '@/components/ConfirmationModal'
+import { combineActionMessages } from '@/utils/action-result'
 import { requiredLabel } from '@/utils/required-label'
 import {
   buildUploadResultMessage,
@@ -48,7 +49,10 @@ type DetailDocumentUploadPanelProps = {
   onBusyChange?: (isBusy: boolean) => void
   onDirtyChange?: (isDirty: boolean) => void
   onUploadComplete?: () => Promise<void> | void
-  /** Receives a fully refreshed upload result before this panel closes. */
+  /**
+   * Receives a fully refreshed upload result before this panel closes. The host then shows
+   * it with its other action results, so this panel does not keep its own success banner.
+   */
   onUploadSuccess?: (message: string) => void
   presentation?: 'modal' | 'side-panel'
   initiallyOpen?: boolean
@@ -94,6 +98,13 @@ const uploadTargetSummary = (copy: UploadCopy, targetNumber: string): string =>
   targetNumber.trim() ? `${copy.targetLabel} ${targetNumber.trim()}` : `${copy.targetLabel} missing`
 
 const DOCUMENT_UPLOAD_VALIDATED_MESSAGE = 'File passed validation and virus scanning.'
+const DOCUMENT_LIST_REFRESH_FAILED_MESSAGE =
+  'The document list could not refresh. Reload before changing documents again.'
+const UPLOAD_RESULT_TITLES = {
+  error: 'Upload error',
+  success: 'Upload submitted',
+  warning: 'Upload needs attention',
+}
 
 const DetailDocumentUploadPanel = ({
   workflowType,
@@ -652,14 +663,18 @@ const DetailDocumentUploadPanel = ({
         await onUploadComplete?.()
       } catch {
         documentListRefreshed = false
-        setErrorMessage('Documents uploaded, but the document list could not refresh.')
+        setErrorMessage(DOCUMENT_LIST_REFRESH_FAILED_MESSAGE)
       }
       const completedUploadMessage =
         successCount === 1
           ? lastSuccessMessage
           : `${successCount} files uploaded. Verify updates in the document list.`
-      setSuccessMessage(completedUploadMessage)
-      if (failureCount === 0 && invalidUploadCount === 0 && documentListRefreshed) {
+      const uploadCompleted =
+        failureCount === 0 && invalidUploadCount === 0 && documentListRefreshed
+      if (!uploadCompleted || !onUploadSuccess) {
+        setSuccessMessage(completedUploadMessage)
+      }
+      if (uploadCompleted) {
         resetUploadAfterSuccess()
         setIsUploadModalOpen(false)
         onUploadSuccess?.(completedUploadMessage)
@@ -669,7 +684,7 @@ const DetailDocumentUploadPanel = ({
 
     if (failureCount > 0) {
       setErrorMessage(
-        `${failureCount} file${failureCount === 1 ? '' : 's'} failed. Review the queue for details.${documentListRefreshed ? '' : ' Documents uploaded, but the document list could not refresh.'}`,
+        `${failureCount} file${failureCount === 1 ? '' : 's'} failed. Review the queue for details.${documentListRefreshed ? '' : ` ${DOCUMENT_LIST_REFRESH_FAILED_MESSAGE}`}`,
       )
     }
 
@@ -750,26 +765,7 @@ const DetailDocumentUploadPanel = ({
   const documentNoun = workflowType === 'invoice' ? 'invoice' : 'document'
   const modalHeading = isSidePanel ? 'Add documents' : `Add ${documentNoun}`
   const modalInitialFocusId = `${inputId}UploadModalContent`
-  const uploadFeedback: {
-    kind: 'success' | 'warning' | 'error'
-    title: string
-    message: string
-  } | null =
-    successMessage || errorMessage
-      ? {
-          kind: successMessage && errorMessage ? 'warning' : errorMessage ? 'error' : 'success',
-          title:
-            successMessage && errorMessage
-              ? 'Upload needs attention'
-              : errorMessage
-                ? 'Upload error'
-                : 'Upload submitted',
-          message:
-            successMessage && errorMessage
-              ? `${successMessage} ${errorMessage}`
-              : errorMessage || successMessage,
-        }
-      : null
+  const uploadFeedback = combineActionMessages(successMessage, errorMessage, UPLOAD_RESULT_TITLES)
   const dismissUploadFeedback = () => {
     setErrorMessage('')
     setSuccessMessage('')
@@ -791,13 +787,7 @@ const DetailDocumentUploadPanel = ({
   const uploadContent = (
     <>
       {uploadFeedback && (
-        <AppNotification
-          kind={uploadFeedback.kind}
-          title={uploadFeedback.title}
-          subtitle={uploadFeedback.message}
-          lowContrast
-          onCloseButtonClick={dismissUploadFeedback}
-        />
+        <ActionResultNotification result={uploadFeedback} onClose={dismissUploadFeedback} />
       )}
 
       {uploadStep === 'upload' && (
@@ -966,13 +956,7 @@ const DetailDocumentUploadPanel = ({
   return (
     <div className="detail-document-upload" id={inputId}>
       {!isUploadModalOpen && uploadFeedback && (
-        <AppNotification
-          kind={uploadFeedback.kind}
-          title={uploadFeedback.title}
-          subtitle={uploadFeedback.message}
-          lowContrast
-          onCloseButtonClick={dismissUploadFeedback}
-        />
+        <ActionResultNotification result={uploadFeedback} onClose={dismissUploadFeedback} />
       )}
       {!initiallyOpen && (!isUploadModalOpen || workflowType !== 'invoice') && (
         <div className="detail-document-upload__trigger">

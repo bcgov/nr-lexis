@@ -1,3 +1,4 @@
+import { useState, type ComponentProps } from 'react'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import {
@@ -28,6 +29,7 @@ import {
   mockedDeleteApplicationPackage,
   mockedDeleteApplicationScale,
   mockedFetchApplicationDocuments,
+  mockedOpenApplicationDocument,
   mockedFetchApplicationEndUsesForSpeciesRegion,
   mockedFetchApplicationGradeCodes,
   mockedFetchApplicationPackageDetails,
@@ -50,8 +52,26 @@ import {
 } from './ProvincialApplicationDetailActions.support'
 import ProvincialApplicationDetailsPage from '@/pages/ProvincialApplicationDetails'
 import ProvincialApplicationItemsPanel from '@/pages/ProvincialApplicationDetails/ApplicationItemsPanel'
+import type { ActionResult } from '@/utils/action-result'
 
 Element.prototype.scrollIntoView = vi.fn()
+
+/** Stands in for the detail page, which owns the single action result the panel reports into. */
+function ItemsPanelWithActionResult(
+  props: Omit<
+    ComponentProps<typeof ProvincialApplicationItemsPanel>,
+    'actionResult' | 'onActionResult'
+  >,
+) {
+  const [actionResult, setActionResult] = useState<ActionResult | null>(null)
+  return (
+    <ProvincialApplicationItemsPanel
+      {...props}
+      actionResult={actionResult}
+      onActionResult={setActionResult}
+    />
+  )
+}
 
 describe.sequential('Provincial Application Detail Actions - items', () => {
   beforeEach(setupApplicationDetailTests)
@@ -875,7 +895,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
 
   it('keeps the item editor closed for standing timber when mutation permissions are supplied', () => {
     render(
-      <ProvincialApplicationItemsPanel
+      <ItemsPanelWithActionResult
         detail={{ ...applicationDetail, productTypeCode: 'S', packages: [] }}
         canEditPackages
         canAddPackages
@@ -894,7 +914,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
 
   it('keeps the item editor closed for Timber when only scale permission is supplied', () => {
     render(
-      <ProvincialApplicationItemsPanel
+      <ItemsPanelWithActionResult
         detail={{ ...applicationDetail, productTypeCode: 'T' }}
         canEditPackages={false}
         canAddPackages={false}
@@ -2144,7 +2164,47 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     })
     expect(await screen.findByText('Package PKG-NEW created.')).toBeInTheDocument()
     expect(screen.queryByText('Created application 321.')).not.toBeInTheDocument()
+    // Item results stay beside the item controls rather than the page header.
+    expect(
+      screen.getByText('Package PKG-NEW created.').closest('#application-items'),
+    ).not.toBeNull()
     expect(createPackageControls.queryByText('Package number is required.')).not.toBeInTheDocument()
+  })
+
+  it('replaces an item result with a later page action result', async () => {
+    mockedFetchApplicationDocuments.mockResolvedValue({
+      rows: [{ id: '900', name: 'app-doc.pdf', description: '', type: 'Attachment' }],
+      source: 'api',
+    })
+    mockedOpenApplicationDocument.mockRejectedValueOnce(new Error('Open failed'))
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationItemsForEditing()
+    fireEvent.change(await screen.findByLabelText('Package Comments'), {
+      target: { value: 'Updated comments' },
+    })
+    await userEvent.click(screen.getByRole('button', { name: 'Save Package' }))
+    expect(await screen.findByText('Package PKG-1 saved.')).toBeInTheDocument()
+
+    await selectApplicationDetailTab('Documents')
+    const documentRow = (await screen.findByText('app-doc.pdf')).closest('tr')
+    await userEvent.click(within(documentRow as HTMLElement).getByRole('button', { name: 'Open' }))
+    expect(await screen.findByText('Unable to open the selected document.')).toBeInTheDocument()
+
+    await selectApplicationDetailTab('Items')
+    expect(await screen.findByRole('heading', { name: 'Package Details' })).toBeInTheDocument()
+    expect(screen.queryByText('Package PKG-1 saved.')).not.toBeInTheDocument()
+    expect(screen.getByText('Unable to open the selected document.')).toBeInTheDocument()
   })
 
   it('deletes the selected application package', async () => {
@@ -2642,7 +2702,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       })
       mockedFetchApplicationPackageScales.mockResolvedValue([])
       render(
-        <ProvincialApplicationItemsPanel
+        <ItemsPanelWithActionResult
           detail={{
             ...applicationDetail,
             packages: [{ packageNumber: 'PKG-1', volume: packageVolume, pieceCount: 0 }],
@@ -2689,7 +2749,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     async (operation) => {
       const onDetailChanged = vi.fn().mockRejectedValue(new Error('refresh failed'))
       render(
-        <ProvincialApplicationItemsPanel
+        <ItemsPanelWithActionResult
           detail={applicationDetail}
           canEditPackages
           canAddPackages
@@ -2768,10 +2828,41 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     },
   )
 
+  it('clears a failed item save when item editing is cancelled', async () => {
+    render(
+      <ItemsPanelWithActionResult
+        detail={applicationDetail}
+        canEditPackages
+        canAddPackages
+        canAddScales
+        canUpdatePackageNumber
+        hideMutationActions={false}
+        authoritativeOptionsAvailability="available"
+        productTypeOptions={[]}
+        growthTypeOptions={[]}
+        onDetailChanged={vi.fn().mockResolvedValue(undefined)}
+      />,
+    )
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit items' }))
+    await screen.findByText('TM001')
+    fireEvent.change(screen.getByLabelText('Package Comments'), {
+      target: { value: 'Café delivery' },
+    })
+    await userEvent.click(screen.getByRole('button', { name: 'Save Package' }))
+    expect(await screen.findByText('Item action failed')).toBeInTheDocument()
+    expect(mockedUpdateApplicationPackage).not.toHaveBeenCalled()
+
+    const itemsHeader = document.querySelector('.application-items-panel__header') as HTMLElement
+    await userEvent.click(within(itemsHeader).getByRole('button', { name: 'Cancel' }))
+    expect(await screen.findByRole('button', { name: 'Edit items' })).toBeInTheDocument()
+    expect(screen.queryByText('Item action failed')).not.toBeInTheDocument()
+  })
+
   it('shows scale mutation partial success as a warning when detail refresh fails', async () => {
     const onDetailChanged = vi.fn().mockRejectedValue(new Error('refresh failed'))
     render(
-      <ProvincialApplicationItemsPanel
+      <ItemsPanelWithActionResult
         detail={{
           ...applicationDetail,
           packages: [{ packageNumber: 'PKG-1', volume: 100, pieceCount: 0 }],

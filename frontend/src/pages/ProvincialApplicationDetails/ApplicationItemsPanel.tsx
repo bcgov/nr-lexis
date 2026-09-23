@@ -1,4 +1,13 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from 'react'
 import {
   Button,
   InlineLoading,
@@ -13,6 +22,7 @@ import {
   TextInput,
 } from '@carbon/react'
 import { Add, Box, Edit, TrashCan } from '@carbon/icons-react'
+import { ActionResultNotification } from '../../components/ActionResultNotification'
 import { AppNotification } from '../../components/AppNotification'
 import ConfirmationModal from '../../components/ConfirmationModal'
 import PendingIcon from '../../components/PendingIcon'
@@ -56,6 +66,7 @@ import {
   type ApplicationScaleSummaryRow,
   type ApplicationPackageSpeciesRow,
 } from '@/service/provincial-application-items-service'
+import { withoutActionError, type ActionResult } from '@/utils/action-result'
 import { requiredLabel } from '@/utils/required-label'
 import { formatPackageNumberLabel } from '@/utils/text'
 
@@ -154,7 +165,10 @@ type ProvincialApplicationItemsPanelProps = {
   applicationGrowthTypeCode?: string
   editingBlocked?: boolean
   onDetailChanged: () => Promise<void>
-  onActionFeedback?: (feedback: ItemActionFeedback | null) => void
+  /** The page's latest action result when an item action produced it. */
+  actionResult: ActionResult | null
+  /** Replaces the page's single action result so item and page results never stack. */
+  onActionResult: Dispatch<SetStateAction<ActionResult | null>>
   onDirtyChange?: (dirty: boolean) => void
   onBusyChange?: (busy: boolean) => void
   onEditingChange?: (editing: boolean) => void
@@ -162,12 +176,6 @@ type ProvincialApplicationItemsPanelProps = {
   focusedPackageNumber?: string
   focusedPackageRequestId?: number
   focusScalesRequestId?: number
-}
-
-type ItemActionFeedback = {
-  kind: 'success' | 'warning' | 'error'
-  title: string
-  message: string
 }
 
 const emptyPackageForm = (productTypeCode: string | null | undefined): PackageFormState => ({
@@ -387,7 +395,8 @@ function ProvincialApplicationItemsPanel({
   applicationGrowthTypeCode,
   editingBlocked = false,
   onDetailChanged,
-  onActionFeedback,
+  actionResult,
+  onActionResult,
   onDirtyChange,
   onBusyChange,
   onEditingChange,
@@ -453,15 +462,10 @@ function ProvincialApplicationItemsPanel({
     useState<PackageDataAvailability>(unavailablePackageData)
   const [packageLoadWarning, setPackageLoadWarning] = useState('')
   const [itemsErrorMessage, setItemsErrorMessage] = useState('')
-  const [localActionFeedback, setLocalActionFeedback] = useState<ItemActionFeedback | null>(null)
-  const publishActionFeedback = (feedback: ItemActionFeedback | null) => {
-    if (onActionFeedback) onActionFeedback(feedback)
-    else setLocalActionFeedback(feedback)
-  }
   const showItemActionError = (message: string) =>
-    publishActionFeedback({ kind: 'error', title: 'Item action failed', message })
-  const showItemActionFeedback = (kind: 'success' | 'warning', message: string) =>
-    publishActionFeedback({
+    onActionResult({ kind: 'error', title: 'Item action failed', message })
+  const showItemActionResult = (kind: 'success' | 'warning', message: string) =>
+    onActionResult({
       kind,
       title: kind === 'success' ? 'Item action completed' : 'Item action needs attention',
       message,
@@ -693,9 +697,10 @@ function ProvincialApplicationItemsPanel({
         setPendingPackageSelection(packageNumber)
         return
       }
+      onActionResult(withoutActionError)
       dispatchPackageSelection({ type: 'select', packageNumber })
     },
-    [scaleDraftDirty, selectedPackageDraftDirty, selectedPackageNumber],
+    [onActionResult, scaleDraftDirty, selectedPackageDraftDirty, selectedPackageNumber],
   )
   const requestPackageSelectionRef = useRef(requestPackageSelection)
 
@@ -1159,6 +1164,7 @@ function ProvincialApplicationItemsPanel({
     resetCreatePackageDraft()
     resetScaleDraft()
     setItemsErrorMessage('')
+    onActionResult(withoutActionError)
     setIsEditingItems(false)
   }
 
@@ -1286,7 +1292,7 @@ function ProvincialApplicationItemsPanel({
 
     setIsSavingPackage(true)
     setItemsErrorMessage('')
-    publishActionFeedback(null)
+    onActionResult(null)
     try {
       const result = await updateApplicationPackage(
         buildPackageMutation(packageForm, selectedPackageNumber),
@@ -1307,9 +1313,9 @@ function ProvincialApplicationItemsPanel({
         await onDetailChanged()
         await loadApplicationScaleSummary()
         await loadPackageItems(nextPackageNumber)
-        showItemActionFeedback('success', `Package ${nextPackageNumber} saved.`)
+        showItemActionResult('success', `Package ${nextPackageNumber} saved.`)
       } catch {
-        showItemActionFeedback(
+        showItemActionResult(
           'warning',
           `Package ${nextPackageNumber} was saved, but application items could not be refreshed. Reload before changing packages again.`,
         )
@@ -1344,7 +1350,7 @@ function ProvincialApplicationItemsPanel({
 
     setIsSavingPackage(true)
     setItemsErrorMessage('')
-    publishActionFeedback(null)
+    onActionResult(null)
     try {
       const result = await addApplicationPackage({
         packageNumber: createPackageForm.packageNumber,
@@ -1372,9 +1378,9 @@ function ProvincialApplicationItemsPanel({
         await onDetailChanged()
         await loadApplicationScaleSummary()
         await loadPackageItems(nextPackageNumber)
-        showItemActionFeedback('success', `Package ${nextPackageNumber} created.`)
+        showItemActionResult('success', `Package ${nextPackageNumber} created.`)
       } catch {
-        showItemActionFeedback(
+        showItemActionResult(
           'warning',
           `Package ${nextPackageNumber} was created, but application items could not be refreshed. Reload before changing packages again.`,
         )
@@ -1406,7 +1412,7 @@ function ProvincialApplicationItemsPanel({
 
     setIsSavingPackage(true)
     setItemsErrorMessage('')
-    publishActionFeedback(null)
+    onActionResult(null)
     try {
       const result = await deleteApplicationPackage(packageNumber, applicationNumber)
       if (!result.success) {
@@ -1417,10 +1423,10 @@ function ProvincialApplicationItemsPanel({
       try {
         await onDetailChanged()
         await loadApplicationScaleSummary()
-        showItemActionFeedback('success', `Package ${packageNumber} deleted.`)
+        showItemActionResult('success', `Package ${packageNumber} deleted.`)
       } catch (refreshError) {
         console.error(refreshError)
-        showItemActionFeedback(
+        showItemActionResult(
           'warning',
           `Package ${packageNumber} was deleted. Reload before changing packages again.`,
         )
@@ -1457,7 +1463,7 @@ function ProvincialApplicationItemsPanel({
 
     setIsSavingScale(true)
     setItemsErrorMessage('')
-    publishActionFeedback(null)
+    onActionResult(null)
     try {
       const result = await addApplicationScaleToPackage({
         timberMark: scaleForm.timberMark,
@@ -1482,10 +1488,10 @@ function ProvincialApplicationItemsPanel({
         await onDetailChanged()
         await loadApplicationScaleSummary()
         await loadPackageItems(selectedPackageNumber)
-        showItemActionFeedback('success', `Scale ${result.result.id} added.`)
+        showItemActionResult('success', `Scale ${result.result.id} added.`)
       } catch (refreshError) {
         console.error(refreshError)
-        showItemActionFeedback(
+        showItemActionResult(
           'warning',
           `Scale ${result.result.id} added. Reload before adding another scale row.`,
         )
@@ -1505,7 +1511,7 @@ function ProvincialApplicationItemsPanel({
 
     setDeletingScaleId(row.id)
     setItemsErrorMessage('')
-    publishActionFeedback(null)
+    onActionResult(null)
     try {
       const result = await deleteApplicationScale(row.id, applicationNumber)
       if (!result.success) {
@@ -1517,10 +1523,10 @@ function ProvincialApplicationItemsPanel({
         await onDetailChanged()
         await loadApplicationScaleSummary()
         await loadPackageItems(selectedPackageNumber)
-        showItemActionFeedback('success', `Scale ${row.id} deleted.`)
+        showItemActionResult('success', `Scale ${row.id} deleted.`)
       } catch (refreshError) {
         console.error(refreshError)
-        showItemActionFeedback(
+        showItemActionResult(
           'warning',
           `Scale ${row.id} deleted. Reload before changing scale rows again.`,
         )
@@ -1539,7 +1545,7 @@ function ProvincialApplicationItemsPanel({
       return
     }
     setItemsErrorMessage('')
-    publishActionFeedback(null)
+    onActionResult(null)
     setScaleLookupResult('')
 
     const normalizedLookupValue = lookupValue.toUpperCase()
@@ -1676,14 +1682,8 @@ function ProvincialApplicationItemsPanel({
             onCloseButtonClick={() => setItemsErrorMessage('')}
           />
         )}
-        {!!localActionFeedback && (
-          <AppNotification
-            kind={localActionFeedback.kind}
-            title={localActionFeedback.title}
-            subtitle={localActionFeedback.message}
-            lowContrast
-            onCloseButtonClick={() => setLocalActionFeedback(null)}
-          />
+        {!!actionResult && (
+          <ActionResultNotification result={actionResult} onClose={() => onActionResult(null)} />
         )}
       </section>
 
@@ -1916,7 +1916,7 @@ function ProvincialApplicationItemsPanel({
                       renderIcon={TrashCan}
                       onClick={() => {
                         setItemsErrorMessage('')
-                        publishActionFeedback(null)
+                        onActionResult(null)
                         setPackagePendingDeletion(selectedPackageNumber)
                       }}
                     >
@@ -2412,7 +2412,7 @@ function ProvincialApplicationItemsPanel({
                               renderIcon={deletingScaleId === row.id ? PendingIcon : TrashCan}
                               onClick={() => {
                                 setItemsErrorMessage('')
-                                publishActionFeedback(null)
+                                onActionResult(null)
                                 setScalePendingDeletion(row)
                               }}
                             >
@@ -2483,6 +2483,7 @@ function ProvincialApplicationItemsPanel({
           const nextPackageNumber = pendingPackageSelection
           resetSelectedPackageDrafts()
           setPendingPackageSelection('')
+          onActionResult(withoutActionError)
           dispatchPackageSelection({ type: 'select', packageNumber: nextPackageNumber })
         }}
         onClose={() => setPendingPackageSelection('')}

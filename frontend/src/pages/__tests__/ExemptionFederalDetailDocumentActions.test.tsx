@@ -947,6 +947,40 @@ describe('Exemption and Federal Detail Document Actions', () => {
     })
   })
 
+  it('keeps an exemption delete result after leaving document edit mode', async () => {
+    mockedFetchExemptionDocuments
+      .mockResolvedValueOnce({
+        rows: [{ id: '700', name: 'exemption-doc.pdf', description: '', type: 'Attachment' }],
+        source: 'api',
+      })
+      .mockResolvedValueOnce({ rows: [], source: 'api' })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/EX-777']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectDetailTab('Documents')
+    await enterDocumentEditMode()
+    const documentRow = (await screen.findByText('exemption-doc.pdf')).closest('tr')
+    await userEvent.click(
+      within(documentRow as HTMLElement).getByRole('button', { name: 'Delete' }),
+    )
+    const confirmation = await screen.findByRole('dialog', { name: 'Delete document' })
+    await userEvent.click(within(confirmation).getByRole('button', { name: 'Delete' }))
+    expect(await screen.findByText('exemption-doc.pdf was deleted.')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.getByRole('button', { name: 'Edit documents' })).toBeInTheDocument()
+    expect(screen.getByText('exemption-doc.pdf was deleted.')).toBeInTheDocument()
+  })
+
   it('keeps linked application documents read-only on the exemption aggregate', async () => {
     mockedFetchExemptionDocuments.mockResolvedValue({
       rows: [
@@ -2318,6 +2352,58 @@ describe('Exemption and Federal Detail Document Actions', () => {
       if (refreshSucceeds) expect(screen.queryByText('federal-doc.pdf')).not.toBeInTheDocument()
     },
   )
+
+  it('keeps a federal delete result after leaving edit mode until an upload replaces it', async () => {
+    const remaining = { id: '801', name: 'kept.pdf', description: '', type: 'Attachment' }
+    mockedFetchFederalApplicationDocuments
+      .mockResolvedValueOnce({
+        rows: [
+          { id: '800', name: 'federal-doc.pdf', description: '', type: 'Attachment' },
+          remaining,
+        ],
+        source: 'api',
+      })
+      .mockResolvedValueOnce({ rows: [remaining], source: 'api' })
+      .mockResolvedValueOnce({ rows: [remaining], source: 'api' })
+    mockedValidateAdminUpload.mockResolvedValue({ status: 'validated' })
+    mockedSubmitAdminUpload.mockResolvedValue({ message: 'New federal document uploaded.' })
+
+    render(
+      <MemoryRouter initialEntries={['/federal/888']}>
+        <Routes>
+          <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectDetailTab('Documents')
+    await enterDocumentEditMode()
+    const documentRow = (await screen.findByText('federal-doc.pdf')).closest('tr')
+    await userEvent.click(
+      within(documentRow as HTMLElement).getByRole('button', { name: 'Delete' }),
+    )
+    const confirmation = await screen.findByRole('dialog', { name: 'Delete document' })
+    await userEvent.click(within(confirmation).getByRole('button', { name: 'Delete' }))
+    expect(await screen.findByText('federal-doc.pdf was deleted.')).toBeInTheDocument()
+
+    // Cancel is the only way out of document edit mode; it must not discard the delete result.
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.getByRole('button', { name: 'Edit documents' })).toBeInTheDocument()
+    expect(screen.getByText('federal-doc.pdf was deleted.')).toBeInTheDocument()
+
+    await openDocumentUploadModal()
+    const file = new File(['new'], 'new.pdf', { type: 'application/pdf' })
+    await userEvent.upload(screen.getByLabelText('Document File'), file)
+    await userEvent.type(screen.getByLabelText(/Document description/), 'New document')
+    await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Submit upload' }))
+
+    expect(await screen.findByText('New federal document uploaded.')).toBeInTheDocument()
+    expect(screen.getByText('Document uploaded')).toBeInTheDocument()
+    expect(screen.queryByText('federal-doc.pdf was deleted.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Upload submitted')).not.toBeInTheDocument()
+    expect(document.querySelectorAll('.app-inline-notification')).toHaveLength(1)
+  })
 
   it.each(['ADMIN', 'LEXIS_APPLICATION_APPROVER'])(
     'allows %s to add and delete expired federal documents while other edits stay read-only',

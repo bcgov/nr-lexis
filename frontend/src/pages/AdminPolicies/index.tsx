@@ -20,6 +20,7 @@ import {
 } from '@carbon/react'
 import { Add, TrashCan } from '@carbon/icons-react'
 import { useAuth } from '@/context/auth/useAuth'
+import { ActionResultNotification } from '../../components/ActionResultNotification'
 import { AppNotification } from '../../components/AppNotification'
 import ConfirmationModal from '@/components/ConfirmationModal'
 import EmptyState from '@/components/EmptyState'
@@ -63,6 +64,7 @@ import {
 import { fetchReportOptions, type SearchOption } from '@/service/search-options-service'
 import IsoDatePicker from '../../components/IsoDatePicker'
 import { toCarbonSortDirection } from '@/pages/shared/search-query-utils'
+import { combineActionMessages } from '@/utils/action-result'
 import { formatBusinessIsoDate } from '@/utils/date'
 import { getResponseMessage, getResponseStatus } from '@/utils/http-error'
 import { requiredLabel } from '@/utils/required-label'
@@ -278,6 +280,11 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
         : 'Loading fee policies…'
   const notificationTitle = area === 'schedule' ? 'Schedule update' : 'Policy update'
   const errorTitle = area === 'schedule' ? 'Schedule error' : 'Policy error'
+  const pageActionResult = combineActionMessages(successMessage, errorMessage, {
+    error: errorTitle,
+    success: notificationTitle,
+    warning: `${notificationTitle} needs attention`,
+  })
   const fieldErrors = useMemo<FieldErrors<PolicyField>>(
     () => ({
       feeEffectiveDate:
@@ -903,24 +910,8 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
         <PageHeader title={pageTitle} subtitle={pageSubtitle} />
       </Column>
 
-      {(successMessage || errorMessage) && !isPolicyEditorOpen && !pendingDeletion && (
-        <AppNotification
-          kind={successMessage && errorMessage ? 'warning' : errorMessage ? 'error' : 'success'}
-          title={
-            successMessage && errorMessage
-              ? `${notificationTitle} needs attention`
-              : errorMessage
-                ? errorTitle
-                : notificationTitle
-          }
-          subtitle={
-            successMessage && errorMessage
-              ? `${successMessage} ${errorMessage}`
-              : errorMessage || successMessage
-          }
-          lowContrast
-          onCloseButtonClick={clearNotifications}
-        />
+      {pageActionResult && !isPolicyEditorOpen && !pendingDeletion && (
+        <ActionResultNotification result={pageActionResult} onClose={clearNotifications} />
       )}
       {area === 'fee' && feeRegionOptionsError && (
         <AppNotification
