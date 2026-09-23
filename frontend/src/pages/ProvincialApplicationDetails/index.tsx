@@ -1305,12 +1305,11 @@ const ProvincialApplicationDetailsPage = () => {
       ? detail?.orgUnitName
       : undefined,
   )
+  // Keep the saved list date selectable while editing, as legacy checkListDate() did.
   const scheduleOptions = optionsWithCurrentValue(
     summaryScheduleOptions,
-    summaryForm?.exportScheduleId ?? '',
-    summaryForm?.exportScheduleId === summaryBaselineForm?.exportScheduleId
-      ? detail?.listingDate
-      : undefined,
+    summaryBaselineForm?.exportScheduleId ?? '',
+    detail?.listingDate,
   )
   const missingSummaryOptionLabelsForSource = useCallback(
     (source: SummarySaveSource): string[] => {

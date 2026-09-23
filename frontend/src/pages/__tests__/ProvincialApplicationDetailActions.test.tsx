@@ -2035,6 +2035,60 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     })
   })
 
+  it('keeps the saved list date selectable after choosing another list date', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      listingDate: '2011-11-25',
+    })
+    mockedFetchApplicationSummarySnapshot.mockResolvedValue({
+      ...applicationSummarySnapshot,
+      exportScheduleId: '31885',
+    })
+    mockedFetchProvincialApplicationOptions.mockResolvedValueOnce({
+      exemptionTypes: [],
+      exemptionReasons: [{ value: 'U', label: 'Utilization' }],
+      applicationStatuses: [{ value: 'ACTIVE', label: 'Active' }],
+      productTypes: [{ value: 'H', label: 'Harvested Timber' }],
+      growthTypes: [{ value: 'O', label: 'Old Growth' }],
+      regions: [{ value: '12', label: 'Coast' }],
+      currentSchedules: [{ value: '987', label: '2026-01-11' }],
+      nextSchedules: [
+        { value: '987', label: '2026-01-11' },
+        { value: '988', label: '2026-01-25' },
+      ],
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const summaryControls = within(await selectApplicationSummaryTile())
+    await waitFor(() => {
+      expect(summaryControls.getByRole('radio', { name: '2011-11-25' })).toBeChecked()
+    })
+
+    await userEvent.click(summaryControls.getByRole('radio', { name: '2026-01-25' }))
+    expect(summaryControls.getByRole('radio', { name: '2026-01-25' })).toBeChecked()
+    await userEvent.click(summaryControls.getByRole('radio', { name: '2011-11-25' }))
+    await userEvent.click(summaryControls.getByRole('button', { name: 'Save Summary' }))
+
+    await waitFor(() => {
+      expect(mockedUpdateApplicationSummary).toHaveBeenCalledWith(
+        expect.objectContaining({
+          applicationNumber: '321',
+          exportScheduleId: '31885',
+        }),
+      )
+    })
+  })
+
   it('removes application species through individually labelled dismiss controls', async () => {
     mockedFetchApplicationSummarySnapshot.mockResolvedValueOnce({
       ...applicationSummarySnapshot,
