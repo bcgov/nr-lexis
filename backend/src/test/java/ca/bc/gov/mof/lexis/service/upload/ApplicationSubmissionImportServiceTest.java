@@ -46,6 +46,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -362,10 +365,14 @@ class ApplicationSubmissionImportServiceTest {
         .addScaleToPackage(any(ScaleMutationRequest.class), anyString());
   }
 
-  @Test
-  void shouldRetainLegacyFederalHarvestedWithoutSummaryBoomRules() {
+  @ParameterizedTest
+  @ValueSource(strings = {"RSC", "RWC"})
+  void shouldRetainCoastalFederalHarvestedWithoutSummaryBoomRules(String regionCode) {
+    String xml = federalHarvestedWithoutSummaryXmlText()
+        .replace("<lexis:bcForestRegionCode>RSC</lexis:bcForestRegionCode>",
+            "<lexis:bcForestRegionCode>" + regionCode + "</lexis:bcForestRegionCode>");
     String withoutBoom =
-        federalHarvestedWithoutSummaryXmlText().replace(
+        xml.replace(
             "<lexis:boomNumber>FED26-700123</lexis:boomNumber>\n", "");
 
     ApplicationSubmissionImportResultDto missingBoomResult =
@@ -377,7 +384,7 @@ class ApplicationSubmissionImportServiceTest {
     ApplicationSubmissionImportResultDto suppliedBoomResult =
         service()
             .validateDedicatedFederalApplicationSubmission(
-                federalHarvestedWithoutSummaryXmlText().getBytes(StandardCharsets.UTF_8),
+                xml.getBytes(StandardCharsets.UTF_8),
                 "federal-without-summary.xml",
                 "FED-REF-WITH-BOOM");
 
@@ -387,6 +394,126 @@ class ApplicationSubmissionImportServiceTest {
     assertThat(suppliedBoomResult.errors())
         .contains(
             "Boom/package number must not be provided for federal harvested timber without summary of scale.");
+    verify(applicationDetailsServiceProvider, never()).getIfAvailable();
+  }
+
+  @ParameterizedTest
+  @CsvSource({
+    "RCB, 1903, 3", "RKB, 1904, 3",
+    "RNO, 1905, 3", "ROM, 1906, 3", "RTO, 1907, 3", "RSK, 1908, 3",
+    "RTO, 1907, 2", "RSK, 1908, 2"
+  })
+  void shouldValidateFederalInteriorHarvestedWithoutSummaryOrPackage(
+      String regionCode, long orgUnitNumber, int schemaVersion) {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationDetailsService.validateApplication(any(CreateApplicationRequest.class)))
+        .thenReturn(new CreateApplicationResult(true, null, null, List.of(), List.of()));
+    when(applicationDetailsService.validateApplicationSubmissionImport(
+        any(CreateApplicationRequest.class), isNull(), eq(List.of())))
+        .thenReturn(new SubmissionImportValidationResult(true, List.of(), List.of()));
+    String xml = federalHarvestedWithoutSummaryOrPackageXmlText(regionCode)
+        .replace("/lexis/2/xsd/", "/lexis/" + schemaVersion + "/xsd/");
+
+    ApplicationSubmissionImportResultDto result = service()
+        .validateDedicatedFederalApplicationSubmission(
+            xml.getBytes(StandardCharsets.UTF_8), "federal-interior.xml", "FED-INTERIOR");
+
+    assertThat(result.status()).as("validation errors: %s", result.errors()).isEqualTo("validated");
+    assertThat(result.errors()).isEmpty();
+    assertThat(result.packageNumber()).isNull();
+    assertThat(result.scaleRows()).isZero();
+    assertThat(result.submissionSummary().orgUnitNumber()).isEqualTo(orgUnitNumber);
+    assertThat(result.submissionSummary().productTypeCode()).isEqualTo("H");
+    assertThat(result.submissionSummary().applicationVolume()).isEqualTo(42.2d);
+    verify(applicationDetailsService, never()).isPackageValid(anyString());
+    verify(applicationDetailsService).validateApplicationSubmissionImport(
+        any(CreateApplicationRequest.class), isNull(), eq(List.of()));
+    verify(applicationDetailsService, never())
+        .addFederalImportedApplication(any(CreateApplicationRequest.class), anyString());
+  }
+
+  @ParameterizedTest
+  @CsvSource({"RTO, 1907", "RSK, 1908"})
+  void shouldImportFederalInteriorHarvestedWithoutCreatingPackageOrScale(
+      String regionCode, long orgUnitNumber) {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationDetailsService.validateApplicationSubmissionImport(
+        any(CreateApplicationRequest.class), isNull(), eq(List.of())))
+        .thenReturn(new SubmissionImportValidationResult(true, List.of(), List.of()));
+    when(applicationDetailsService.addFederalImportedApplication(
+        any(CreateApplicationRequest.class), eq("federal-user")))
+        .thenReturn(new CreateApplicationResult(true, "saved", 9004L, List.of(), List.of()));
+
+    ApplicationSubmissionImportResultDto result = service()
+        .importDedicatedFederalApplicationSubmission(
+            federalHarvestedWithoutSummaryOrPackageXmlText(regionCode)
+                .getBytes(StandardCharsets.UTF_8),
+            "federal-interior.xml", "federal-user", "FED-INTERIOR");
+
+    assertThat(result.status()).isEqualTo("accepted");
+    assertThat(result.applicationNumber()).isEqualTo(9004L);
+    assertThat(result.packageNumber()).isNull();
+    assertThat(result.scaleRows()).isZero();
+    ArgumentCaptor<CreateApplicationRequest> application =
+        ArgumentCaptor.forClass(CreateApplicationRequest.class);
+    verify(applicationDetailsService).addFederalImportedApplication(application.capture(), eq("federal-user"));
+    assertThat(application.getValue().orgUnitNumber()).isEqualTo(orgUnitNumber);
+    assertThat(application.getValue().productTypeCode()).isEqualTo("H");
+    assertThat(application.getValue().applicationStatusCode()).isEqualTo("APP");
+    assertThat(application.getValue().applicationVolume()).isEqualTo(42.2d);
+    assertThat(application.getValue().exportScheduleId()).isEqualTo(1016L);
+    verify(applicationDetailsService, never()).isPackageValid(anyString());
+    verify(applicationDetailsService, never()).addPackage(any(PackageMutationRequest.class), anyString());
+    verify(applicationDetailsService, never()).addScaleToPackage(any(ScaleMutationRequest.class), anyString());
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"RTO", "RSK"})
+  void shouldStillRejectSuppliedBoomForFederalInteriorWithoutSummary(String regionCode) {
+    String xml = federalHarvestedWithoutSummaryOrPackageXmlText(regionCode)
+        .replace("<lexis:exemptApplnVol>",
+            "<lexis:boomNumber>FED26-700123</lexis:boomNumber><lexis:exemptApplnVol>");
+
+    ApplicationSubmissionImportResultDto result = service()
+        .validateDedicatedFederalApplicationSubmission(
+            xml.getBytes(StandardCharsets.UTF_8), "federal-interior.xml", "FED-INTERIOR");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors()).contains(
+        "Boom/package number must not be provided for federal harvested timber without summary of scale.");
+    verify(applicationDetailsServiceProvider, never()).getIfAvailable();
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"RTO", "RSK"})
+  void shouldStillRequireBoomForFederalInteriorWithSummary(String regionCode) {
+    String xml = federalSampleXmlText()
+        .replace("<lexis:bcForestRegionCode>RSC</lexis:bcForestRegionCode>",
+            "<lexis:bcForestRegionCode>" + regionCode + "</lexis:bcForestRegionCode>")
+        .replace("<lexis:boomNumber>FED26-700123</lexis:boomNumber>", "");
+
+    ApplicationSubmissionImportResultDto result = service()
+        .validateDedicatedFederalApplicationSubmission(
+            xml.getBytes(StandardCharsets.UTF_8), "federal-interior.xml", "FED-INTERIOR");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors()).contains("Boom/package number is required.");
+    verify(applicationDetailsServiceProvider, never()).getIfAvailable();
+  }
+
+  @Test
+  void shouldStillRejectFederalInteriorReadvertisementWithoutSummary() {
+    String xml = federalHarvestedWithoutSummaryOrPackageXmlText("RTO")
+        .replace("<lexis:re-advertisement>false</lexis:re-advertisement>",
+            "<lexis:re-advertisement>true</lexis:re-advertisement>");
+
+    ApplicationSubmissionImportResultDto result = service()
+        .validateDedicatedFederalApplicationSubmission(
+            xml.getBytes(StandardCharsets.UTF_8), "federal-interior.xml", "FED-INTERIOR");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors()).contains(
+        "Federal re-advertisements require harvested timber with a summary of scale.");
     verify(applicationDetailsServiceProvider, never()).getIfAvailable();
   }
 
@@ -2513,6 +2640,13 @@ class ApplicationSubmissionImportServiceTest {
           </lexis:standingTimber>
         </lexis:productDetail>
         """);
+  }
+
+  private static String federalHarvestedWithoutSummaryOrPackageXmlText(String regionCode) {
+    return federalHarvestedWithoutSummaryXmlText()
+        .replace("<lexis:boomNumber>FED26-700123</lexis:boomNumber>\n", "")
+        .replace("<lexis:bcForestRegionCode>RSC</lexis:bcForestRegionCode>",
+            "<lexis:bcForestRegionCode>" + regionCode + "</lexis:bcForestRegionCode>");
   }
 
   private static String federalHarvestedWithoutSummaryXmlText() {

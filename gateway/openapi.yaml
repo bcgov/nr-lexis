@@ -351,9 +351,13 @@ components:
         Legacy ESF submission envelope containing one LEXIS schema-version-2 or schema-version-3
         `LexisSubmission`, or the inner `LexisSubmission` XML document.
         LEXIS selects the matching bundled legacy XSD from `xsi:schemaLocation` before
-        applying business and reference-data validation. Legacy federal standing-timber
-        submissions omit the boom/package number and may omit average length and average diameter;
-        their successful response has a null package number and zero scale rows. The example
+        applying business and reference-data validation. Federal Interior harvested applications
+        using `harvestedTimberWithoutSummaryOfScale` omit the boom/package number and create no
+        package or scale records. This exception applies to RCB, RKB, RNO, ROM, RTO,
+        and RSK. Harvested submissions with scale rows still require a boom/package number.
+        Legacy federal standing-timber submissions also omit the boom/package number and may
+        omit average length and average diameter. Successful submissions without a package return
+        a null package number and zero scale rows. The example
         is schema-valid but synthetic; replace environment reference data before live validation.
       content:
         application/xml:

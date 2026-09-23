@@ -18,6 +18,7 @@ import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.Pack
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.ScaleMutationRequest;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.ScalePersistenceResult;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.SubmissionImportValidationResult;
+import ca.bc.gov.mof.lexis.service.federal.FederalSubmissionPackagePolicy;
 import ca.bc.gov.mof.lexis.service.scan.VirusScanException;
 import ca.bc.gov.mof.lexis.service.scan.VirusScanService;
 import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService.OrgUnitConstraint;
@@ -1172,7 +1173,7 @@ public class ApplicationSubmissionImportService {
     String productLocation = text(productDetail, "productLocation", "Product location", errors);
     String ageClass = upper(text(productDetail, "ageClass", "Age class", errors));
     ParsedProduct product =
-        parseProductDetail(productDetail, productTypeCode, jurisdictionCode, errors);
+        parseProductDetail(productDetail, productTypeCode, jurisdictionCode, orgUnitNumber, errors);
     boolean federalStandingWithoutPackage =
         FEDERAL_JURISDICTION.equals(jurisdictionCode)
             && PRODUCT_TYPE_STANDING.equals(productTypeCode)
@@ -2268,6 +2269,7 @@ public class ApplicationSubmissionImportService {
       Element productDetail,
       String productTypeCode,
       String jurisdictionCode,
+      Long orgUnitNumber,
       List<String> errors) {
     if (productDetail == null) {
       return new ParsedProduct(null, null, null, List.of());
@@ -2314,7 +2316,8 @@ public class ApplicationSubmissionImportService {
           harvestedWithoutSummaryRows,
           "Harvested timber without summary",
           !federal,
-          true,
+          !FederalSubmissionPackagePolicy.allowsWithoutPackage(
+              jurisdictionCode, productTypeCode, orgUnitNumber, false),
           federal
               ? "Boom/package number must not be provided for federal harvested timber without summary of scale."
               : null,
