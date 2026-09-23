@@ -2255,6 +2255,86 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     })
   })
 
+  it('requires a submitter to choose one of the next two list dates', async () => {
+    mockApplicationDetailAuth(
+      (action: string) => action === 'createApplication',
+      ['LEXIS_PROVINCIAL_SUBMITTER_00011122'],
+    )
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      listingDate: null,
+    })
+    mockedFetchApplicationSummarySnapshot.mockResolvedValue({
+      ...applicationSummarySnapshot,
+      exportScheduleId: '',
+    })
+    mockedFetchProvincialApplicationOptions.mockResolvedValueOnce({
+      exemptionTypes: [],
+      exemptionReasons: [{ value: 'U', label: 'Utilization' }],
+      applicationStatuses: [{ value: 'ACTIVE', label: 'Active' }],
+      productTypes: [{ value: 'H', label: 'Harvested Timber' }],
+      growthTypes: [{ value: 'O', label: 'Old Growth' }],
+      regions: [{ value: '12', label: 'Coast' }],
+      currentSchedules: [
+        { value: '986', label: '2026-01-04' },
+        { value: '987', label: '2026-01-11' },
+        { value: '', label: 'Blank' },
+      ],
+      nextSchedules: [
+        { value: '987', label: '2026-01-11' },
+        { value: '988', label: '2026-01-25' },
+        { value: '', label: 'Blank' },
+      ],
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const summaryControls = within(await selectApplicationSummaryTile())
+    const listDate = await summaryControls.findByRole('group', { name: 'List date' })
+    await waitFor(() => {
+      expect(
+        within(listDate)
+          .getAllByRole('radio')
+          .map((radio) => radio.getAttribute('value')),
+      ).toEqual(['987', '988'])
+    })
+    within(listDate)
+      .getAllByRole('radio')
+      .forEach((radio) => expect(radio).not.toBeChecked())
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
+    const blockedDialog = screen.getByRole('dialog', { name: 'Confirm application accuracy' })
+    await userEvent.click(within(blockedDialog).getByRole('checkbox', { name: 'I Agree' }))
+    await userEvent.click(within(blockedDialog).getByRole('button', { name: 'Save summary' }))
+    expect(await within(blockedDialog).findByText('Select a valid list date.')).toBeVisible()
+    expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
+    await userEvent.click(within(blockedDialog).getByRole('button', { name: 'Cancel' }))
+
+    await userEvent.click(within(listDate).getByRole('radio', { name: '2026-01-25' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
+    const dialog = screen.getByRole('dialog', { name: 'Confirm application accuracy' })
+    await userEvent.click(within(dialog).getByRole('checkbox', { name: 'I Agree' }))
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save summary' }))
+
+    await waitFor(() => {
+      expect(mockedUpdateApplicationSummary).toHaveBeenCalledWith(
+        expect.objectContaining({
+          applicationNumber: '321',
+          exportScheduleId: '988',
+        }),
+      )
+    })
+  })
+
   it('validates application item volume ranges before saving', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
