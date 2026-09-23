@@ -2668,7 +2668,7 @@ test.describe('TEST IDIR admin regression', () => {
       /create provincial application/i,
     )
 
-    for (const tabName of ['Owner', 'Application', 'Items', 'Documents', 'Remarks', 'Offers']) {
+    for (const tabName of ['Applicant', 'Application', 'Items', 'Documents', 'Remarks', 'Offers']) {
       await expect(page.getByRole('tab', { name: tabName })).toBeVisible()
     }
     await expect(page.getByRole('tab', { name: 'Agent' })).toHaveCount(0)
@@ -4214,15 +4214,6 @@ test.describe('TEST IDIR admin regression', () => {
       expect(createdPermit.permitStatus).toBe('ACT')
       expect(asStringArray(createdPermit.errors)).toEqual([])
 
-      await test.step('find the linked permit by uppercase and lowercase package number', () =>
-        expectLowercasePackageSearch(page, packageNumber, {
-          pagePath: '/provincial/permit',
-          heading: /provincial permit search/i,
-          searchPath: '/api/lexis/permits/search',
-          numberField: 'permitNumber',
-          recordNumber: String(permitNumber),
-        }))
-
       await expectAccessiblePage(
         page,
         `/provincial/permit/${permitNumber}`,
@@ -4263,16 +4254,7 @@ test.describe('TEST IDIR admin regression', () => {
       )
       expectStaleRecordResponse(stalePermitUpdate, 'permit', String(permitNumber))
 
-      expect(await permitContainsApplication(page, permitNumber, lifecycleApplicationNumber)).toBe(
-        true,
-      )
-      const applicationAfterPermitCreation = await readVersionedJson<Record<string, unknown>>(
-        page,
-        `/api/lexis/applications/${lifecycleApplicationNumber}`,
-      )
-      expect(applicationAfterPermitCreation.payload.applicationStatusCode).toBe('EXE')
-
-      await detachRegressionPermitApplication(page, permitNumber, lifecycleApplicationNumber)
+      // Ministerial permits start empty; packages are added explicitly after creation.
       expect(await permitContainsApplication(page, permitNumber, lifecycleApplicationNumber)).toBe(
         false,
       )
@@ -4305,6 +4287,15 @@ test.describe('TEST IDIR admin regression', () => {
         `/api/lexis/applications/${lifecycleApplicationNumber}`,
       )
       expect(permittedApplication.payload.applicationStatusCode).toBe('PMT')
+
+      await test.step('find the linked permit by uppercase and lowercase package number', () =>
+        expectLowercasePackageSearch(page, packageNumber, {
+          pagePath: '/provincial/permit',
+          heading: /provincial permit search/i,
+          searchPath: '/api/lexis/permits/search',
+          numberField: 'permitNumber',
+          recordNumber: String(permitNumber),
+        }))
 
       const permitBeforeCompletion = await readPermitVersionedJson<Record<string, unknown>>(
         page,

@@ -9,6 +9,12 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.setup.MockMvcBuilders.standaloneSetup;
 
 import ca.bc.gov.mof.lexis.dto.report.LexisReportRequestDto;
 import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
@@ -65,6 +71,35 @@ class LexisReportControllerTest {
   @AfterEach
   void clearSecurityContext() {
     SecurityContextHolder.clearContext();
+  }
+
+  @Test
+  void tenureSpreadsheetShouldKeepItsMediaTypeThroughAsyncStreaming() throws Exception {
+    when(reportServiceProvider.getIfAvailable()).thenReturn(reportService);
+    byte[] workbook = new byte[] {(byte) 0xd0, (byte) 0xcf, 0x11, (byte) 0xe0};
+    when(reportService.generateReport(eq("tenureReport"), any(LexisReportRequestDto.class)))
+        .thenReturn(
+            Optional.of(
+                report("tenure-analysis-report.xls", "application/vnd.ms-excel", workbook)));
+    var mvc =
+        standaloneSetup(
+                new LexisReportController(
+                    reportServiceProvider, provincialAuthorizationService, principalService))
+            .build();
+    var result =
+        mvc.perform(
+                post("/api/lexis/reports/tenureReport")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        """
+                        {"parameters":{"legacyActionMapping":"generatePermitReport"},"format":"XLS"}
+                        """))
+            .andExpect(request().asyncStarted())
+            .andReturn();
+    mvc.perform(asyncDispatch(result))
+        .andExpect(status().isOk())
+        .andExpect(content().contentType("application/vnd.ms-excel"))
+        .andExpect(content().bytes(workbook));
   }
 
   @Test
