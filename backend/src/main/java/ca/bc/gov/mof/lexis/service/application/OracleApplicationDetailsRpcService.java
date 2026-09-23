@@ -11,6 +11,7 @@ import ca.bc.gov.mof.lexis.repository.client.ClientLookupRepository;
 import ca.bc.gov.mof.lexis.service.ScaleDomainValidator;
 import ca.bc.gov.mof.lexis.service.ScaleDomainValidator.ScaleValues;
 import ca.bc.gov.mof.lexis.service.exemption.ExemptionService;
+import ca.bc.gov.mof.lexis.service.federal.FederalSubmissionPackagePolicy;
 import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import ca.bc.gov.mof.lexis.util.TextUtils;
 import java.math.BigDecimal;
@@ -290,10 +291,11 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     validateApplicationStorageText(application, errors);
     validateFederalImportMetadata(application, errors);
     if (packageMutation == null) {
-      boolean legacyFederalStandingWithoutPackage =
-          JURISDICTION_FEDERAL.equals(trimToNull(application.jurisdictionCode()))
-              && EXPORT_PRODUCT_TYPE_STANDING.equals(trimToNull(application.productTypeCode()));
-      if (!legacyFederalStandingWithoutPackage || !scales.isEmpty()) {
+      if (!FederalSubmissionPackagePolicy.allowsWithoutPackage(
+          application.jurisdictionCode(),
+          application.productTypeCode(),
+          application.orgUnitNumber(),
+          !scales.isEmpty())) {
         errors.add(required("package number"));
       }
     } else {

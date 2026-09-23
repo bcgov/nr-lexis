@@ -27,6 +27,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
@@ -3337,6 +3338,55 @@ class OracleApplicationDetailsRpcServiceTest {
     assertThat(response.errors()).contains("A valid package number is required.");
   }
 
+  @ParameterizedTest
+  @ValueSource(longs = {1903L, 1904L, 1905L, 1906L, 1907L, 1908L})
+  void validateApplicationSubmissionImportShouldAcceptFederalInteriorHarvestedWithoutPackage(
+      long orgUnitNumber) {
+    ApplicationDetailsRpcService.SubmissionImportValidationResult response =
+        service.validateApplicationSubmissionImport(
+            importApplicationRequest("F", orgUnitNumber), null, List.of());
+
+    assertThat(response.valid()).isTrue();
+    assertThat(response.errors()).isEmpty();
+    verify(repository, never()).packageExists(anyString());
+    verify(repository, never()).insertApplication(any());
+  }
+
+  @ParameterizedTest
+  @NullSource
+  @ValueSource(longs = {1833L, 1834L, 1835L, 1909L, 1910L, 9999L})
+  void validateApplicationSubmissionImportShouldRejectPackageOmissionOutsideInterior(
+      Long orgUnitNumber) {
+    ApplicationDetailsRpcService.SubmissionImportValidationResult response =
+        service.validateApplicationSubmissionImport(
+            importApplicationRequest("F", orgUnitNumber), null, List.of());
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors()).contains("A valid package number is required.");
+  }
+
+  @Test
+  void validateApplicationSubmissionImportShouldRequirePackageForInteriorScaleRows() {
+    ApplicationDetailsRpcService.SubmissionImportValidationResult response =
+        service.validateApplicationSubmissionImport(
+            importApplicationRequest("F", 1907L), null,
+            List.of(new ApplicationDetailsRpcService.ScaleMutationRequest(
+                "TM001", null, "1", "FI", null, 10L, 10.0d)));
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors()).contains("A valid package number is required.");
+  }
+
+  @Test
+  void validateApplicationSubmissionImportShouldKeepProvincialPackageRules() {
+    ApplicationDetailsRpcService.SubmissionImportValidationResult response =
+        service.validateApplicationSubmissionImport(
+            importApplicationRequest("P", 1907L), null, List.of());
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors()).contains("A valid package number is required.");
+  }
+
   @Test
   void validateApplicationSubmissionImportShouldRejectUnknownScaleCodes() {
     ApplicationDetailsRpcRepository.TimberMarkRow federalTimberMark =
@@ -6293,6 +6343,11 @@ class OracleApplicationDetailsRpcServiceTest {
 
   private ApplicationDetailsRpcService.CreateApplicationRequest importApplicationRequest(
       String jurisdictionCode) {
+    return importApplicationRequest(jurisdictionCode, 11L);
+  }
+
+  private ApplicationDetailsRpcService.CreateApplicationRequest importApplicationRequest(
+      String jurisdictionCode, Long orgUnitNumber) {
     return new ApplicationDetailsRpcService.CreateApplicationRequest(
         "F".equals(jurisdictionCode) ? 700123L : null,
         LocalDate.of(2026, 3, 1),
@@ -6309,7 +6364,7 @@ class OracleApplicationDetailsRpcServiceTest {
         null,
         "S",
         "O",
-        11L,
+        orgUnitNumber,
         "H",
         jurisdictionCode,
         "S",
