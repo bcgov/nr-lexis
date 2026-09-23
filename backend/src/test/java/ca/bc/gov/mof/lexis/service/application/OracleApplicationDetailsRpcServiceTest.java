@@ -3339,7 +3339,7 @@ class OracleApplicationDetailsRpcServiceTest {
   }
 
   @ParameterizedTest
-  @ValueSource(longs = {1833L, 1834L, 1903L, 1904L, 1905L, 1906L, 1907L, 1908L})
+  @ValueSource(longs = {1903L, 1904L, 1905L, 1906L, 1907L, 1908L})
   void validateApplicationSubmissionImportShouldAcceptFederalInteriorHarvestedWithoutPackage(
       long orgUnitNumber) {
     ApplicationDetailsRpcService.SubmissionImportValidationResult response =
@@ -3354,7 +3354,7 @@ class OracleApplicationDetailsRpcServiceTest {
 
   @ParameterizedTest
   @NullSource
-  @ValueSource(longs = {1835L, 1909L, 1910L, 9999L})
+  @ValueSource(longs = {1833L, 1834L, 1835L, 1909L, 1910L, 9999L})
   void validateApplicationSubmissionImportShouldRejectPackageOmissionOutsideInterior(
       Long orgUnitNumber) {
     ApplicationDetailsRpcService.SubmissionImportValidationResult response =

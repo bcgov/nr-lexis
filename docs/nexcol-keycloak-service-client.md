@@ -257,7 +257,9 @@ boom/package number. This business-approved exception applies to `RCB`, `RKB`, `
 no package or scale rows; its response has a null package number and zero scale rows. Application
 volume, average log volume, species/end use, and the other required application fields remain
 validated. Average length and diameter retain their existing validation requirements, but are
-package fields and are not stored when no package is created.
+package fields and are not stored when no package is created. As with federal standing timber, the
+submitted timber mark is not stored, and a federal permit cannot be recorded for the application
+because LEXIS links federal permits to applications only through packages.
 
 Harvested submissions with a summary of scale still require a boom/package number. Coastal
 harvested submissions retain their existing requirements. Supplying a boom number with
