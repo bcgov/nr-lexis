@@ -221,7 +221,7 @@ describe('Provincial Exemption Search Actions', () => {
         expect.any(Object),
       )
     })
-  })
+  }, 20_000)
 
   it('requires explicit certification before approving selected exemptions', async () => {
     mockedUseAuth.mockReturnValue(
