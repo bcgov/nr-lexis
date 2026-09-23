@@ -728,6 +728,7 @@ class OracleApplicationDetailsRpcServiceTest {
     verify(repository).insertApplication(recordCaptor.capture());
     ApplicationDetailsRpcRepository.ApplicationInsertRecord record = recordCaptor.getValue();
     assertThat(record.applicationStatusCode()).isEqualTo("NEW");
+    assertThat(record.receivedDate()).isEqualTo(ca.bc.gov.mof.lexis.util.LexisBusinessTime.today());
     assertThat(record.jurisdictionCode()).isEqualTo("P");
     assertThat(record.oicIndicator()).isEqualTo("N");
     assertThat(record.applicantTypeCode()).isEqualTo("A");

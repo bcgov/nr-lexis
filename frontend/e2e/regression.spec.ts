@@ -2651,8 +2651,10 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(page.getByRole('textbox', { name: 'Application date (YYYY-MM-DD)' })).toHaveValue(
       today,
     )
-    await expect(page.getByRole('textbox', { name: 'Date received (YYYY-MM-DD)' })).toHaveValue('')
-    await expect(page.getByRole('combobox', { name: 'List date' })).toHaveValue(nextListDate)
+    await expect(page.getByRole('textbox', { name: /Date received/i })).toHaveCount(0)
+    const listDate = page.getByRole('group', { name: 'List date' })
+    await expect(listDate.getByRole('radio', { name: nextListDate })).toBeChecked()
+    await expect(listDate.getByRole('radio', { name: 'No list date' })).not.toBeChecked()
     await expect(page.getByRole('spinbutton', { name: 'Exemption term (days)' })).toHaveValue('180')
 
     await page.getByRole('tab', { name: 'Items' }).click()
