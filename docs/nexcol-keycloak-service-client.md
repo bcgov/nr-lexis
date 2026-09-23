@@ -236,8 +236,9 @@ LEXIS selects the bundled version-2 or version-3 legacy XSD from the declared
 `xsi:schemaLocation`, then applies the same business-validation path. The version-3 schema is the
 same schema distributed with legacy `lexisvc`; it increases `productLocation` from 56 to 250
 characters and removes the schema-level `speciesEndUseSort` enumeration while retaining its length
-constraint. The new authentication, HTTP and JSON response contracts do not intentionally change
-which submission data is accepted. Compatibility-sensitive rules include:
+constraint. The new authentication, HTTP and JSON response contracts preserve legacy acceptance
+rules except for the approved federal Interior harvested-timber exception described below.
+Compatibility-sensitive rules include:
 
 - exemption reason codes `E`, `S` and `U`;
 - applicant type codes `A`, `M` and `O`;
@@ -250,7 +251,20 @@ which submission data is accepted. Compatibility-sensitive rules include:
 - the effective legacy numeric limits, including up to `999,999,999` scale pieces, `99.0` for
   average length and `99.9` for average diameter.
 
-Federal harvested-timber submissions require summary-of-scale rows and a boom/package number.
+Federal Interior harvested applications may use `harvestedTimberWithoutSummaryOfScale` without a
+boom/package number. This business-approved exception applies to `RCB`, `RKB`, `RNO`,
+`ROM`, `RTO`, and `RSK`. It creates an approved application assigned to its export schedule, with
+no package or scale rows; its response has a null package number and zero scale rows. Application
+volume, average log volume, species/end use, and the other required application fields remain
+validated. Average length and diameter retain their existing validation requirements, but are
+package fields and are not stored when no package is created. As with federal standing timber, the
+submitted timber mark is not stored, and a federal permit cannot be recorded for the application
+because LEXIS links federal permits to applications only through packages.
+
+Harvested submissions with a summary of scale still require a boom/package number. Coastal
+harvested submissions retain their existing requirements. Supplying a boom number with
+`harvestedTimberWithoutSummaryOfScale` remains invalid for federal submissions. Re-advertisements
+still require harvested timber with a summary of scale and a boom/package number.
 As in legacy LEXIS, a federal standing-timber submission omits the boom/package number and may
 omit its average length and diameter; only the application record is created.
 
@@ -263,7 +277,8 @@ Federal payloads include:
 - federal applicant legal entity, contact and declaration fields;
 - `applicationDetail/officeUseOnly` reference, application date, biweekly list date, applicant
   user id and language;
-- harvested timber with summary-of-scale data, or standing timber; and
+- harvested timber with summary-of-scale data, federal Interior harvested timber without a summary,
+  or standing timber; and
 - version-2 or version-3 element names and structure.
 
 Permit and shipping details are outside the federal exemption-submission contract.
