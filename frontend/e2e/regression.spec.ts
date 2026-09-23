@@ -2216,11 +2216,29 @@ test.describe('TEST IDIR admin regression', () => {
 
       expect(headers['content-disposition'] ?? '').toContain(report.filename)
       expect(body.length, `${report.source} should not be empty`).toBeGreaterThan(100)
+      const contentType = headers['content-type']?.toLowerCase() ?? ''
+      const expectedContentType =
+        report.format === 'PDF' ? 'application/pdf' : 'application/vnd.ms-excel'
+      if (!contentType.includes(expectedContentType)) {
+        // Public CI must not print arbitrary response headers or report contents.
+        const knownContentTypes: Record<string, string> = {
+          'application/pdf': 'PDF',
+          'application/vnd.ms-excel': 'XLS/CSV',
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'XLSX',
+          'application/octet-stream': 'generic binary',
+          'application/json': 'JSON',
+          'text/html': 'HTML',
+          'text/plain': 'plain text',
+        }
+        const responseType = knownContentTypes[contentType.split(';')[0].trim()] ?? 'other/missing'
+        console.warn(
+          `[LEXIS report] ${report.source}: expected ${report.format}, received ${responseType} Content-Type.`,
+        )
+      }
+      expect(contentType).toContain(expectedContentType)
       if (report.format === 'PDF') {
-        expect(headers['content-type']?.toLowerCase() ?? '').toContain('application/pdf')
         expect(body.toString('utf8', 0, 4)).toBe('%PDF')
       } else {
-        expect(headers['content-type']?.toLowerCase() ?? '').toContain('application/vnd.ms-excel')
         expect(body.subarray(0, 8).toString('hex')).toBe('d0cf11e0a1b11ae1')
       }
     }
@@ -2670,7 +2688,7 @@ test.describe('TEST IDIR admin regression', () => {
       /create provincial application/i,
     )
 
-    for (const tabName of ['Owner', 'Application', 'Items', 'Documents', 'Remarks', 'Offers']) {
+    for (const tabName of ['Applicant', 'Application', 'Items', 'Documents', 'Remarks', 'Offers']) {
       await expect(page.getByRole('tab', { name: tabName })).toBeVisible()
     }
     await expect(page.getByRole('tab', { name: 'Agent' })).toHaveCount(0)
@@ -4216,15 +4234,6 @@ test.describe('TEST IDIR admin regression', () => {
       expect(createdPermit.permitStatus).toBe('ACT')
       expect(asStringArray(createdPermit.errors)).toEqual([])
 
-      await test.step('find the linked permit by uppercase and lowercase package number', () =>
-        expectLowercasePackageSearch(page, packageNumber, {
-          pagePath: '/provincial/permit',
-          heading: /provincial permit search/i,
-          searchPath: '/api/lexis/permits/search',
-          numberField: 'permitNumber',
-          recordNumber: String(permitNumber),
-        }))
-
       await expectAccessiblePage(
         page,
         `/provincial/permit/${permitNumber}`,
@@ -4265,16 +4274,7 @@ test.describe('TEST IDIR admin regression', () => {
       )
       expectStaleRecordResponse(stalePermitUpdate, 'permit', String(permitNumber))
 
-      expect(await permitContainsApplication(page, permitNumber, lifecycleApplicationNumber)).toBe(
-        true,
-      )
-      const applicationAfterPermitCreation = await readVersionedJson<Record<string, unknown>>(
-        page,
-        `/api/lexis/applications/${lifecycleApplicationNumber}`,
-      )
-      expect(applicationAfterPermitCreation.payload.applicationStatusCode).toBe('EXE')
-
-      await detachRegressionPermitApplication(page, permitNumber, lifecycleApplicationNumber)
+      // Ministerial permits start empty; packages are added explicitly after creation.
       expect(await permitContainsApplication(page, permitNumber, lifecycleApplicationNumber)).toBe(
         false,
       )
@@ -4307,6 +4307,15 @@ test.describe('TEST IDIR admin regression', () => {
         `/api/lexis/applications/${lifecycleApplicationNumber}`,
       )
       expect(permittedApplication.payload.applicationStatusCode).toBe('PMT')
+
+      await test.step('find the linked permit by uppercase and lowercase package number', () =>
+        expectLowercasePackageSearch(page, packageNumber, {
+          pagePath: '/provincial/permit',
+          heading: /provincial permit search/i,
+          searchPath: '/api/lexis/permits/search',
+          numberField: 'permitNumber',
+          recordNumber: String(permitNumber),
+        }))
 
       const permitBeforeCompletion = await readPermitVersionedJson<Record<string, unknown>>(
         page,
