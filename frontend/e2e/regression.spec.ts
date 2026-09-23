@@ -2216,11 +2216,29 @@ test.describe('TEST IDIR admin regression', () => {
 
       expect(headers['content-disposition'] ?? '').toContain(report.filename)
       expect(body.length, `${report.source} should not be empty`).toBeGreaterThan(100)
+      const contentType = headers['content-type']?.toLowerCase() ?? ''
+      const expectedContentType =
+        report.format === 'PDF' ? 'application/pdf' : 'application/vnd.ms-excel'
+      if (!contentType.includes(expectedContentType)) {
+        // Public CI must not print arbitrary response headers or report contents.
+        const knownContentTypes: Record<string, string> = {
+          'application/pdf': 'PDF',
+          'application/vnd.ms-excel': 'XLS/CSV',
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'XLSX',
+          'application/octet-stream': 'generic binary',
+          'application/json': 'JSON',
+          'text/html': 'HTML',
+          'text/plain': 'plain text',
+        }
+        const responseType = knownContentTypes[contentType.split(';')[0].trim()] ?? 'other/missing'
+        console.warn(
+          `[LEXIS report] ${report.source}: expected ${report.format}, received ${responseType} Content-Type.`,
+        )
+      }
+      expect(contentType).toContain(expectedContentType)
       if (report.format === 'PDF') {
-        expect(headers['content-type']?.toLowerCase() ?? '').toContain('application/pdf')
         expect(body.toString('utf8', 0, 4)).toBe('%PDF')
       } else {
-        expect(headers['content-type']?.toLowerCase() ?? '').toContain('application/vnd.ms-excel')
         expect(body.subarray(0, 8).toString('hex')).toBe('d0cf11e0a1b11ae1')
       }
     }
